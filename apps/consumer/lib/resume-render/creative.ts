@@ -294,5 +294,6 @@ export function performerBlocks(m: Measurer, model: PerformerInput, L: Level, pa
 
 export function layoutPerformer(model: PerformerInput, m: Measurer, opts: { draft?: boolean; trim?: PerformerTrim } = {}): { layout: Layout; fit: FitInfo } {
   const size = opts.trim === "letter" ? LETTER_PAGE : TRIM_8X10;
-  return pickLayout((L) => paginate(m, performerBlocks(m, model, L, size.w), L, model.header.name, !!opts.draft, 6, size));
+  // One page, always: the DRAFT mark sits in the top margin, so a page that fits finished fits as a draft (C-L3).
+  return pickLayout((L) => paginate(m, performerBlocks(m, model, L, size.w), L, model.header.name, !!opts.draft, 6, size, { draftInMargin: true }));
 }

@@ -84,7 +84,7 @@ describe("the performer page", () => {
   it("CR-08: union status exactly as held; an age range never an age; only confirmed skills", () => {
     const s: CreativeKindSettings = { ...withInside("true_title"), skills: [{ text: "Stage combat", confirmed: true }, { text: "Fire breathing", confirmed: false }] };
     const m = buildPerformerModel(ALL, s);
-    assert.deepEqual(m.header.unions, ["SAG-AFTRA Eligible"]);
+    assert.deepEqual(m.header.unions, ["SAG-AFTRA, eligible"]);
     assert.deepEqual(m.header.stats, ["Height 5'10\"", "Hair Brown", "Eyes Green", "Age range 25-35"]);
     const txt = performerPlainText(m);
     assert.match(txt, /SPECIAL SKILLS\nStage combat/);
@@ -99,7 +99,7 @@ describe("the performer page", () => {
     }
     for (const status of ["member", "candidate"] as const) {
       const u = { ...UNION, details: { status } };
-      assert.deepEqual(buildPerformerModel([PLAY, u], BASE).header.unions, [status === "member" ? "SAG-AFTRA Member" : "SAG-AFTRA Membership Candidate"]);
+      assert.deepEqual(buildPerformerModel([PLAY, u], BASE).header.unions, [status === "member" ? "SAG-AFTRA, member" : "SAG-AFTRA, membership candidate"]);
     }
     const noStatus = { ...UNION, details: {} };
     const m2 = buildPerformerModel([PLAY, noStatus], BASE);
@@ -205,7 +205,7 @@ describe("performer page: the slice 1 and 2 review lessons hold", () => {
   it("part of a hidden name (two words, or one distinctive word) in a typed line or a skill is held with a neutral BLOCK", () => {
     for (const extra of [
       { agent: "Rep since the San Quentin days" },
-      { discipline: "Actor (trained at Quentin)" },
+      { discipline: "Actor (trained at San Quentin)" },
       { voice: "Baritone, learned in San Quentin choir" },
       { skills: [{ text: "Stage combat (San Quentin)", confirmed: true }] },
     ] as CreativeKindSettings[]) {
@@ -220,17 +220,33 @@ describe("performer page: the slice 1 and 2 review lessons hold", () => {
     }
   });
 
+  it("one distinctive word alone in a typed line is one tap: it prints and the page stays a draft until answered (combined review)", () => {
+    const s = off({ discipline: "Actor (trained at Quentin)" });
+    const m = buildPerformerModel([PLAY, SQ], s);
+    assert.equal(m.header.discipline, "Actor (trained at Quentin)");
+    assert.ok(m.asks.some((a) => a.field === "discipline" && !a.held));
+    assert.equal(getPerformerStatus({ entries: [PLAY, SQ], settings: s, model: m, pages: 1 }).state, "draft");
+    // Next to an incarceration word it is held outright.
+    const m2 = buildPerformerModel([PLAY, SQ], off({ discipline: "Actor (did time at Quentin)" }));
+    assert.equal(m2.header.discipline, "");
+  });
+
   it("the name at the top: a whole hidden name is held (so the file name never carries it); part of one is asked, and a Yes holds it (s2r3)", () => {
     const s = off({ displayName: "Ray Example, San Quentin State Prison" });
     const m = buildPerformerModel([PLAY, SQ], s);
     assert.equal(m.header.name, "");
     assert.ok(m.heldFields.some((h) => h.field === "displayName" && h.reason === "names_hidden"));
-    // The person's own name field is never held for a part: it is asked about with one tap.
+    // Combined C-M2: a run of it in the person's own name is held until they answer (so the file name and the
+    // document title fall back to the generic ones), with one card. "No" puts it back; "Yes" keeps it off.
     const s2 = off({ displayName: "Ray Example of San Quentin" });
     const m2 = buildPerformerModel([PLAY, SQ], s2);
-    assert.deepEqual(m2.asks, [{ field: "displayName", phrase: "Ray Example of San Quentin" }]);
-    const ask = getPerformerStatus({ entries: [PLAY, SQ], settings: s2, model: m2 }).openItems.find((x) => x.answer === "facility_word")!;
-    assert.equal(ask.line, "(top of the page)");
+    assert.equal(m2.header.name, "");
+    assert.deepEqual(m2.asks.filter((a) => a.field === "displayName"), [{ field: "displayName", phrase: "Ray Example of San Quentin", held: true }]);
+    const st2 = getPerformerStatus({ entries: [PLAY, SQ], settings: s2, model: m2 });
+    const ask = st2.openItems.find((x) => x.answer === "facility_word" && x.line === "(top of the page)" && x.phrase === "Ray Example of San Quentin")!;
+    assert.equal(ask.severity, "BLOCK");
+    assert.ok(!st2.openItems.some((x) => x.rule === "STD-F05" && /name/.test(x.question)), "no 'what name' question while the name is held for an answer");
+    assert.equal(buildPerformerModel([PLAY, SQ], applyPhraseAnswer(s2, ask.phrase, "no")!).header.name, "Ray Example of San Quentin");
     assert.doesNotMatch(`${ask.line} ${ask.question} ${ask.why}`, leak);
     const yes = applyPhraseAnswer(s2, ask.phrase, "yes")!;
     const m3 = buildPerformerModel([PLAY, SQ], yes);
@@ -238,10 +254,10 @@ describe("performer page: the slice 1 and 2 review lessons hold", () => {
     assert.ok(m3.heldFields.some((h) => h.field === "displayName" && h.reason === "names_hidden"));
   });
 
-  it("a hidden venue is public only through a line THIS page prints with its true title (s2r2 N-M1)", () => {
+  it("a hidden venue is public only through a facility-named line THIS page prints with its true title (s2r2 N-M1, combined C-H1)", () => {
     // A credit at the same venue that the person did not pick for this page.
-    const other = entry({ section: "credit", title: "Example Revue", venue: "San Quentin State Prison", year: 2017, details: { medium: "theater" } });
-    const s = { ...off({ agent: "Rep since San Quentin State Prison" }), selection: [PLAY.id, SQ.id] };
+    const other = entry({ section: "credit", title: "Example Revue", venue: "San Quentin State Prison", year: 2017, details: { medium: "theater" }, names_facility: true });
+    const s = { ...applyTitleMode(off({ agent: "Rep since San Quentin State Prison" }), other.id, "true_title")!, selection: [PLAY.id, SQ.id] };
     const m = buildPerformerModel([PLAY, SQ, other], s);
     assert.doesNotMatch(performerPlainText(m), /Quentin/);
     assert.ok(m.heldFields.some((h) => h.field === "agent"));
@@ -252,9 +268,15 @@ describe("performer page: the slice 1 and 2 review lessons hold", () => {
     assert.doesNotMatch(performerPlainText(m3), /Quentin/);
     assert.equal(getPerformerStatus({ entries: [PLAY, SQ, ex], settings: s3, model: m3 }).state, "draft");
     // Once that credit is on the page with its true title, the venue is public.
-    const m2 = buildPerformerModel([PLAY, SQ, other], off({ agent: "Rep since San Quentin State Prison" }));
+    const s2 = applyTitleMode(off({ agent: "Rep since San Quentin State Prison" }), other.id, "true_title")!;
+    const m2 = buildPerformerModel([PLAY, SQ, other], s2);
     assert.match(performerPlainText(m2), /Example Revue \| {2}\| San Quentin State Prison/);
     assert.ok(!m2.heldFields.some((h) => h.field === "agent"));
+    // The same credit not marked as naming a facility is judged like any other line: held, and the venue stays hidden.
+    const plain = { ...other, names_facility: false };
+    const m4 = buildPerformerModel([PLAY, SQ, plain], off({ agent: "Rep since San Quentin State Prison" }));
+    assert.doesNotMatch(performerPlainText(m4), /Quentin/);
+    assert.ok(m4.omitted.some((o) => o.entryId === plain.id && o.reason === "names_hidden"));
   });
 
   it("venue only: the billing (a status word) stays; production, role and director never print", () => {
@@ -354,9 +376,13 @@ describe("record checks are scoped to the entries a lane reads; hidden names sti
     const ar2 = buildArtistResumeModel([AWARD, EX], s);
     assert.ok(getCreativeStatus({ entries: [AWARD, EX], settings: s, artistResume: { model: ar2 } }).openItems.some((x) => x.entryId === EX.id && x.severity === "BLOCK"));
   });
-  it("an unmarked CV entry or exhibition never holds up the performer page", () => {
+  it("an unmarked CV entry or exhibition never holds up the performer page (its words are only one-tap cards)", () => {
     const st = getPerformerStatus({ entries: [PLAY, LIC, EX], settings: BASE, pages: 1 });
-    assert.equal(st.state, "finished", JSON.stringify(st.openItems));
+    assert.ok(!st.openItems.some((x) => x.entryId === LIC.id || x.entryId === EX.id), JSON.stringify(st.openItems));
+    assert.ok(st.openItems.every((x) => x.answer === "facility_word"), JSON.stringify(st.openItems));
+    let s = BASE;
+    for (const it of st.openItems) s = applyPhraseAnswer(s, it.phrase, "no")!;
+    assert.equal(getPerformerStatus({ entries: [PLAY, LIC, EX], settings: s, pages: 1 }).state, "finished");
   });
 });
 
@@ -365,17 +391,16 @@ describe("performer page: the round 3 two-tier matcher (s2r3 N3-H1, N3-L1)", () 
   const FOL = entry({ section: "credit", title: "Inside Voices Showcase", venue: "Folsom State Prison", year: 2018, details: { medium: "theater", role: "Narrator", otherNames: ["Greystone"] }, names_facility: true });
   const off = (extra: CreativeKindSettings = {}) => ({ ...applyTitleMode(BASE, FOL.id, "leave_out")!, ...extra });
   const leak = /Folsom State|Greystone|Inside Voices|Narrator/i;
-  // Two words of the hidden name in another credit's role. (A part already on the page through a printed
-  // title or venue is public by design, so the role is where it can hide.)
-  const TWO = entry({ section: "credit", title: "Night Shift", venue: "Example Players", year: 2022, details: { medium: "theater", role: "Folsom State guard" } });
+  // The place's word next to a facility word, in another credit's role (combined review: held outright).
+  const TWO = entry({ section: "credit", title: "Night Shift", venue: "Example Players", year: 2022, details: { medium: "theater", role: "Folsom prison guard" } });
   // The name people use for it, in a class.
   const NICK = entry({ section: "training", title: "Voice", venue: "Greystone Studio", year: 2021, details: { teacher: "R. Coach" } });
   // The town word alone, in a role: printed and asked about with one tap.
   const LAKE = entry({ section: "credit", title: "Lake Songs", venue: "Lakeside Hall", year: 2023, details: { medium: "music", role: "Townie from Folsom" } });
   const ENTRIES = [PLAY, FOL, TWO, NICK, LAKE];
-  const S = off({ agent: "Rep since the Folsom State days", skills: [{ text: "Greystone choir solos", confirmed: true }, { text: "Stage combat", confirmed: true }] });
+  const S = off({ agent: "Rep since I did time at Folsom", skills: [{ text: "Greystone choir solos", confirmed: true }, { text: "Stage combat", confirmed: true }] });
 
-  it("two words of a hidden name and a name people use for it are held (tier 1); a lone town word prints and gets one card (tier 2)", () => {
+  it("a word next to a facility or incarceration word and a name people use for it are held (tier 1); a lone town word prints and gets one card (tier 2)", () => {
     const m = buildPerformerModel(ENTRIES, S);
     const txt = performerPlainText(m);
     assert.doesNotMatch(txt, leak, txt);
@@ -391,7 +416,7 @@ describe("performer page: the round 3 two-tier matcher (s2r3 N3-H1, N3-L1)", () 
     assert.equal(st.state, "draft");
     const ask = st.openItems.filter((x) => x.answer === "facility_word");
     assert.equal(ask.length, 1);
-    assert.equal(ask[0].severity, "FIX");
+    assert.equal(ask[0].severity, "BLOCK");
     assert.equal(ask[0].doc, "performer");
     assert.equal(ask[0].line, "2023  A line in your record");
     assert.equal(ask[0].phrase, "Lake Songs Townie from Folsom Lakeside Hall");
@@ -441,8 +466,12 @@ describe("performer page: the round 3 two-tier matcher (s2r3 N3-H1, N3-L1)", () 
     assert.match(performerPlainText(m), /Folsom Lake rowing/);
     assert.deepEqual(m.asks.map((a) => a.field).sort(), ["discipline", "skills"]);
     const st = getPerformerStatus({ entries: [PLAY, FOL], settings: s, model: m, pages: 1 });
-    assert.equal(st.state, "finished");
+    // Combined review: unanswered cards keep the page a draft.
+    assert.equal(st.state, "draft");
     assert.deepEqual(st.openItems.filter((x) => x.answer === "facility_word").map((x) => x.line).sort(), ["(top of the page)", "Special skills"]);
+    let n = s;
+    for (const a of m.asks) n = applyPhraseAnswer(n, a.phrase, "no")!;
+    assert.equal(getPerformerStatus({ entries: [PLAY, FOL], settings: n, pages: 1 }).state, "finished");
   });
 
   it("settled over the credits it prints: a credit hidden by the lane stays hidden while another credit prints its true title, and a dropped credit never makes its venue public", () => {

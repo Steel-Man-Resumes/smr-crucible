@@ -211,7 +211,7 @@ test("performer page: 8x10 trim and US Letter, three columns, years only when tu
   const pdf = await pdfText(pdfBytes);
   assert.equal(pdf.pages, 1);
   const flat = pdf.text.replace(/\s+/g, " ");
-  for (const w of ["RAY EXAMPLE", "SAG-AFTRA Member", "Our Town", "Emily Webb", "Dir. J. Sample", "Supporting", "Scene Study", "Stage combat", "Age range 25-35"]) assert.ok(flat.includes(w), `${w} in ${flat}`);
+  for (const w of ["RAY EXAMPLE", "SAG-AFTRA, member", "Our Town", "Emily Webb", "Dir. J. Sample", "Supporting", "Scene Study", "Stage combat", "Age range 25-35"]) assert.ok(flat.includes(w), `${w} in ${flat}`);
   assert.deepEqual(await pageSize(await renderCreativePdf({ doc: "performer", model, trim: "letter" })), [0, 0, 612, 792]);
 
   // Word: a borderless table per credit and the 8x10 page.
@@ -240,19 +240,19 @@ test("performer page: a long record runs past one page and says so", async () =>
   assert.ok(layout.pages.length > 1);
 });
 
-test("performer page (s2r3): a two-word part of a hidden name, a name people use for it and a lone town word, in every format, metadata and to-do page included", async () => {
+test("performer page (s2r3, combined review): the place's word next to a facility or incarceration word, a name people use for it and a lone town word, in every format, metadata and to-do page included", async () => {
   const { buildPerformerModel, performerShownIds } = await import("@crucible/core/src/performerShared");
   const { getPerformerStatus } = await import("@crucible/core/src/performerChecks");
   const { exportOpenItemLines } = await import("@crucible/core/src/creativeChecks");
   const { applyTitleMode, applyPhraseAnswer } = await import("@crucible/core/src/creativeLaneShared");
   const play = entry({ section: "credit", title: "Our Town", venue: "Example Street Theatre", year: 2024, details: { medium: "theater", role: "Emily Webb" } });
   const fol = entry({ section: "credit", title: "Inside Voices Showcase", venue: "Folsom State Prison", year: 2018, details: { medium: "theater", role: "Narrator", otherNames: ["Greystone"] }, names_facility: true });
-  const two = entry({ section: "credit", title: "Night Shift", venue: "Example Players", year: 2022, details: { medium: "theater", role: "Folsom State guard" } });
+  const two = entry({ section: "credit", title: "Night Shift", venue: "Example Players", year: 2022, details: { medium: "theater", role: "Folsom prison guard" } });
   const nick = entry({ section: "training", title: "Voice", venue: "Greystone Studio", year: 2021 });
   const lake = entry({ section: "credit", title: "Lake Songs", venue: "Lakeside Hall", year: 2023, details: { medium: "music", role: "Townie from Folsom" } });
   const entries = [play, fol, two, nick, lake];
   // The whole hidden name in the name field: held, so the title metadata (built from the printed name) never carries it.
-  const s0 = { ...applyTitleMode({ displayName: "Ray Example, Folsom State Prison", email: "ray@example.com" }, fol.id, "leave_out")!, agent: "Rep since the Folsom State days" };
+  const s0 = { ...applyTitleMode({ displayName: "Ray Example, Folsom State Prison", email: "ray@example.com" }, fol.id, "leave_out")!, agent: "Rep since I did time at Folsom" };
   const allParts = (buf: Buffer) => {
     const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
     let p = buf.readUInt32LE(eocd + 16);
@@ -308,5 +308,33 @@ test("performer page (s2r3): a two-word part of a hidden name, a name people use
   // "No, that's something else": it prints, and is never asked again.
   const n = await formats({ ...s0, ...applyPhraseAnswer(s0, ask.phrase, "no")! });
   for (const [k, v] of Object.entries(n.out)) assert.match(v, /Townie from Folsom/, k);
-  assert.ok(!n.status.openItems.some((x) => x.answer === "facility_word"));
+  assert.ok(!n.status.openItems.some((x) => x.answer === "facility_word" && x.entryId === lake.id));
+  // The whole hidden name in the name field is held for good, with no card (combined review ruling 2).
+  assert.ok(!a.status.openItems.some((x) => x.answer === "facility_word" && x.line === "(top of the page)"));
+  assert.ok(a.status.openItems.some((x) => x.rule === "STD-R03" && x.severity === "BLOCK" && x.line === "(top of the page)" && !x.answer));
+});
+
+test("performer page (combined C-L3): a page that fits one 8x10 page finished still fits as a DRAFT, in PDF and Word", async () => {
+  const { buildPerformerModel } = await import("@crucible/core/src/performerShared");
+  const { layoutPerformer } = await import("../resume-render/creative");
+  const m = fontMeasurer();
+  // As many credits as fit one 8x10 page finished.
+  let n = 10;
+  const at = (k: number) => buildPerformerModel(Array.from({ length: k }, (_, i) => entry({ section: "credit", title: `Example Play ${i}`, venue: "Example Street Theatre", year: 2000 + (i % 25), details: { medium: "theater", role: `Role ${i}` } })), { displayName: "Ray Example", email: "ray@example.com" });
+  while (layoutPerformer(at(n + 1), m).layout.pages.length === 1) n++;
+  const model = at(n);
+  assert.equal(layoutPerformer(model, m).layout.pages.length, 1);
+  const draft = layoutPerformer(model, m, { draft: true }).layout;
+  assert.equal(draft.pages.length, 1, `a full page (${n} credits) stays one page as a draft`);
+  assert.ok(draft.draftInMargin);
+  const mark = draft.pages[0].lines.find((l) => l.runs[0]?.text === "DRAFT")!;
+  assert.ok(mark && mark.top + mark.height <= draft.level.marginTop, "the DRAFT mark sits in the top margin");
+  const pdf = await pdfText(await renderCreativePdf({ doc: "performer", model, draft: true, openItems: ["x"] }));
+  assert.equal(pdf.pages, 2, "the page plus its to-do page");
+  assert.match(pdf.text, /DRAFT/);
+  const docx = await renderCreativeDocx({ doc: "performer", model, draft: true, openItems: ["x"] });
+  const all = docx.toString("latin1");
+  assert.ok(all.includes("word/header"), "Word carries DRAFT in the page header");
+  const html = renderCreativeHtml({ doc: "performer", model, draft: true, openItems: ["x"] });
+  assert.match(html, /class="pageline draft dm">DRAFT</);
 });

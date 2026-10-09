@@ -5,6 +5,8 @@
  */
 
 import { NextResponse } from "next/server";
+import { withCommonWords } from "@crucible/core/src/facilityDictionary";
+import { cleanEntryText } from "@crucible/core/src/practiceRecordShared";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import {
@@ -119,7 +121,7 @@ export interface PerformerContext {
  */
 export async function loadPerformerContext(userId: string, lane: CareerLane, pages?: number): Promise<PerformerContext> {
   const [entries, partnerRow] = await Promise.all([
-    listPracticeEntries(userId),
+    listMarkedEntries(userId),
     lane.pair_lane_id ? getLane(userId, lane.pair_lane_id) : Promise.resolve(null),
   ]);
   const partner = partnerRow && !partnerRow.archived_at ? partnerRow : null;
@@ -142,12 +144,22 @@ export interface CvContext {
 
 /** A CV lane's record, choices, assembled CV and open items, from the database, as the person. */
 export async function loadCvContext(userId: string, lane: CareerLane, pages?: number): Promise<CvContext> {
-  const entries = await listPracticeEntries(userId);
+  const entries = await listMarkedEntries(userId);
   const settings = readKindSettings(lane.kind_settings ?? {});
   const cvType: CvType = isCvType(lane.cv_type) ? lane.cv_type : "academic";
   const model = buildCvModel(entries, settings, cvType);
   const status = getCvStatus({ entries, settings, cvType, model, pages });
   return { lane, cvType, entries, settings, model, status };
+}
+
+/**
+ * The person's record as the lane screens and checks read it: each
+ * facility-named entry marked with the common English words of its names
+ * (server only, never stored; combined review burden ruling).
+ */
+async function listMarkedEntries(userId: string): Promise<PracticeEntry[]> {
+  // Invisible format characters read and print as spaces between words (C2-L2), even in rows saved before the clean.
+  return withCommonWords((await listPracticeEntries(userId)).map(cleanEntryText));
 }
 
 export function laneNotFound(): NextResponse {
@@ -196,7 +208,7 @@ export interface CreativeContext {
  */
 export async function loadCreativeContext(userId: string, lane: CareerLane, pages?: number): Promise<CreativeContext> {
   const [entries, docRows, partnerRow] = await Promise.all([
-    listPracticeEntries(userId),
+    listMarkedEntries(userId),
     listCreativeDocs(userId, lane.id),
     lane.pair_lane_id ? getLane(userId, lane.pair_lane_id) : Promise.resolve(null),
   ]);

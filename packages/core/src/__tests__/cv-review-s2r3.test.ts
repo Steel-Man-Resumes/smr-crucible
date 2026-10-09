@@ -44,6 +44,16 @@ const cv = (entries: PracticeEntry[], s: CreativeKindSettings) => {
   const model = buildCvModel(entries, s, "academic");
   return { model, text: cvPlainText(model), status: getCvStatus({ entries, settings: s, cvType: "academic", model }) };
 };
+/** The person answers "No, that's something else" to every one-tap card (combined review: a true fact costs at most one tap each). */
+const afterNo = (entries: PracticeEntry[], s: CreativeKindSettings) => {
+  let cur = s;
+  for (let i = 0; i < 8; i++) {
+    const asks = buildCvModel(entries, cur, "academic").asks;
+    if (!asks.length) break;
+    for (const a of asks) cur = applyPhraseAnswer(cur, a.phrase, "no")!;
+  }
+  return { ...cv(entries, cur), settings: cur };
+};
 
 describe("N3-H1: true words that only share a word with a facility print (no false holds)", () => {
   const cases: [venue: string, field: keyof CreativeKindSettings, text: string][] = [
@@ -77,12 +87,16 @@ describe("N3-H1: true words that only share a word with a facility print (no fal
     it(`${venue} kept off: ${field} "${text}" prints and the CV can finish`, () => {
       const { e, s } = hiddenAt(venue);
       const set = { ...s, [field]: text };
-      const r = cv([BA, e], set);
+      const r0 = cv([BA, e], set);
+      assert.deepEqual(r0.model.heldFields, []);
+      assert.ok(r0.text.includes(text.split(";")[0].trim()) || field === "email");
+      // Combined review: at most one tap. Until it is answered the page is a draft; after "No" it finishes.
+      assert.ok(r0.model.asks.every((a) => !a.held));
+      assert.ok(!r0.status.openItems.some((x) => x.rule === "STD-R03" && x.severity === "BLOCK" && x.answer !== "facility_word"));
+      const r = afterNo([BA, e], set);
       assert.deepEqual(r.model.heldFields, []);
       assert.equal(r.status.state, "finished");
       assert.ok(r.text.includes(text.split(";")[0].trim()) || field === "email");
-      // At most a one-tap question, never a BLOCK.
-      assert.ok(!r.status.openItems.some((x) => x.rule === "STD-R03" && x.severity === "BLOCK"));
     });
   }
   it("a real job in the prison's town prints, with at most a one-tap question", () => {
@@ -90,11 +104,15 @@ describe("N3-H1: true words that only share a word with a facility print (no fal
     const job = entry({ section: "appointment", title: "Line cook", venue: "Sample Diner", city: "Folsom", state: "CA", year: 2022 });
     const r = cv([BA, e, job], s);
     assert.match(r.text, /Line cook, Sample Diner, Folsom, CA/);
-    assert.equal(r.status.state, "finished");
-    const ask = r.status.openItems.find((x) => x.answer === "facility_word");
-    assert.equal(ask?.severity, "FIX");
+    // Combined review: an unanswered card keeps the page a draft (one tap clears it).
+    assert.equal(r.status.state, "draft");
+    const ask = r.status.openItems.find((x) => x.answer === "facility_word" && x.entryId === job.id);
+    assert.equal(ask?.severity, "BLOCK");
     assert.equal(ask?.question, FACILITY_ASK_QUESTION);
     assert.equal(ask?.phrase, "Folsom, CA");
+    const n = afterNo([BA, e, job], s);
+    assert.match(n.text, /Line cook, Sample Diner, Folsom, CA/);
+    assert.equal(n.status.state, "finished");
   });
   it("a job in San Rafael and a reference in Folsom Hall print", () => {
     const sq = hiddenAt("San Quentin State Prison");
@@ -102,7 +120,7 @@ describe("N3-H1: true words that only share a word with a facility print (no fal
     assert.match(cv([BA, sq.e, job], sq.s).text, /Line cook/);
     const fo = hiddenAt("Folsom State Prison");
     const ref = entry({ section: "reference", title: "Dr. Pat Sample", venue: "Sample State University", year: 2022, details: { role: "Professor", contact: "Folsom Hall, room 2, 555-0101", consent: true } });
-    const r = cv([BA, fo.e, ref], { ...fo.s, leadReference: ref.id });
+    const r = afterNo([BA, fo.e, ref], { ...fo.s, leadReference: ref.id });
     assert.match(r.text, /Pat Sample/);
     assert.equal(r.status.state, "finished");
   });
@@ -118,7 +136,8 @@ describe("N3-H1: true words that only share a word with a facility print (no fal
   it("a title's topic words stay free: 'Creative writing' prints when the title is kept off", () => {
     const f = entry({ section: "teaching", title: "Creative Writing Workshop, Sample State Prison", venue: "Sample Arts Council", year: 2022, names_facility: true });
     const s = { ...BASE, ...applyTitleMode(BASE, f.id, "venue_only")!, interests: "Creative writing; poetry" };
-    const r = cv([BA, f], s);
+    assert.deepEqual(cv([BA, f], s).model.heldFields, []);
+    const r = afterNo([BA, f], s);
     assert.match(r.text, /Creative writing; poetry/);
     assert.equal(r.status.state, "finished");
   });
@@ -127,7 +146,8 @@ describe("N3-H1: true words that only share a word with a facility print (no fal
     const prog = entry({ section: "arts_program", title: "College program", venue: "Ray County Correctional Facility College Program", year: 2020, names_facility: true });
     const pub = entry({ section: "publication", title: "Two Poems", venue: "Small Review", year: 2022, details: { status: "published", authors: "R. Ray" } });
     const s: CreativeKindSettings = { displayName: "Morgan Ray", email: "morgan@ray.test", website: "morganray.org", interests: "Poetry; write to morgan@ray.test" };
-    const r = cv([BA, prog, pub], s);
+    assert.deepEqual(cv([BA, prog, pub], s).model.heldFields, []);
+    const r = afterNo([BA, prog, pub], s);
     for (const t of ["Morgan Ray", "morgan@ray.test", "morganray.org", "R. Ray", "write to morgan@ray.test"]) assert.ok(r.text.includes(t), t);
     assert.deepEqual(r.model.heldFields, []);
     assert.ok(!r.model.omitted.some((o) => o.entryId === pub.id));
@@ -142,13 +162,11 @@ describe("N3-H1: true words that only share a word with a facility print (no fal
 describe("N3-H1: what a facility's name picks out is still held (no leaks)", () => {
   const holds: [venue: string, text: string][] = [
     ["San Quentin State Prison", "Shakespeare at San Quentin"],
-    ["San Quentin State Prison", "Shakespeare at Quentin"],
     ["San Quentin State Prison", "Shakespeare at SAN-QUENTIN"],
-    ["Rikers Island Correctional Facility", "Poetry on Rikers"],
-    ["Riker's Island", "the Rikers program"],
     ["Sing Sing Correctional Facility", "Sing Sing theater program"],
     ["Pelican Bay State Prison", "Art class at Pelican Bay"],
-    ["Stateville Correctional Center", "Stateville's book club"],
+    ["Rikers Island Correctional Facility", "Poetry readings for inmates on Rikers"],
+    ["Stateville Correctional Center", "I did time at Stateville"],
     ["Folsom State Prison", "Theater in Folsom prison"],
     ["Folsom State Prison", "the Folsom yard"],
     ["Huntsville Unit", "Huntsville prison choir"],
@@ -156,12 +174,34 @@ describe("N3-H1: what a facility's name picks out is still held (no leaks)", () 
     ["Sample State Prison, Badger Unit", "Badger Unit book club"],
     ["Valley State Prison", "Welding at Valley State Prison"],
     // N3-L5: soft hyphen, a word broken at a line end, fullwidth and Cyrillic letters.
+    ["San Quentin State Prison", "Shakespeare at San Quen­tin"],
+    ["San Quentin State Prison", "Shakespeare at San Quen-\ntin"],
+    ["San Quentin State Prison", "Shakespeare at San Quen- tin"],
+    ["San Quentin State Prison", "Shakespeare at San Ｑｕｅｎｔｉｎ"],
+    ["San Quentin State Prison", "Shakespeare at San Quеntin"],
+  ];
+  // Combined review: a single kept-off word alone is one tap. It is still found through every disguise, and the
+  // page is a draft until the person answers.
+  const asks: [venue: string, text: string][] = [
+    ["San Quentin State Prison", "Shakespeare at Quentin"],
+    ["Rikers Island Correctional Facility", "Poetry on Rikers"],
+    ["Riker's Island", "the Rikers program"],
+    ["Stateville Correctional Center", "Stateville's book club"],
     ["San Quentin State Prison", "Shakespeare at Quen­tin"],
     ["San Quentin State Prison", "Shakespeare at Quen-\ntin"],
     ["San Quentin State Prison", "Shakespeare at Quen- tin"],
     ["San Quentin State Prison", "Shakespeare at Ｑｕｅｎｔｉｎ"],
     ["San Quentin State Prison", "Shakespeare at Quеntin"],
   ];
+  for (const [venue, text] of asks) {
+    it(`${venue} kept off: "${JSON.stringify(text)}" in Interests is one tap and keeps the CV a draft`, () => {
+      const { e, s } = hiddenAt(venue);
+      const r = cv([BA, e], { ...s, interests: text });
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && !a.held), JSON.stringify(r.model.asks));
+      assert.equal(r.status.state, "draft");
+      assert.ok(r.status.openItems.some((x) => x.answer === "facility_word" && x.severity === "BLOCK" && x.line === "Interests"));
+    });
+  }
   for (const [venue, text] of holds) {
     it(`${venue} kept off: "${JSON.stringify(text)}" in Interests is held with a BLOCK`, () => {
       const { e, s } = hiddenAt(venue);
@@ -179,7 +219,8 @@ describe("N3-H1: what a facility's name picks out is still held (no leaks)", () 
     const { e, s } = hiddenAt("Folsom State Prison");
     const r = cv([BA, e], { ...s, interests: "Theater at Folsom" });
     assert.match(r.text, /Theater at Folsom/);
-    assert.ok(r.status.openItems.some((x) => x.answer === "facility_word" && x.severity === "FIX" && x.phrase === "Theater at Folsom"));
+    assert.ok(r.status.openItems.some((x) => x.answer === "facility_word" && x.severity === "BLOCK" && x.phrase === "Theater at Folsom"));
+    assert.equal(r.status.state, "draft");
     // The export's to-do page never quotes the phrase.
     for (const l of exportOpenItemLines(r.status, [BA, e], { ...s, interests: "Theater at Folsom" }, "cv", [BA.id])) assert.doesNotMatch(l, /Folsom/);
   });
@@ -211,11 +252,14 @@ describe("N3-H1 / N3-L5: other names people use for a place (typed by the person
       assert.deepEqual(cv([BA, plain.e], { ...plain.s, interests: text }).model.heldFields, [], "without the field it was not derivable");
     });
   }
-  it("a nickname in the person's home place only asks", () => {
+  it("a nickname in the person's home place is held until they answer (combined C-M2)", () => {
     const { e, s } = hiddenAt("San Quentin State Prison", { otherNames: ["SQ"] });
     const r = cv([BA, e], { ...s, basedIn: "SQ village" });
-    assert.deepEqual(r.model.heldFields, []);
-    assert.ok(r.model.asks.some((a) => a.field === "basedIn"));
+    assert.ok(r.model.heldFields.some((h) => h.field === "basedIn"));
+    assert.ok(r.model.asks.some((a) => a.field === "basedIn" && a.held));
+    assert.doesNotMatch(r.text, /SQ village/);
+    const n = cv([BA, e], applyPhraseAnswer({ ...s, basedIn: "SQ village" }, "SQ village", "no")!);
+    assert.match(n.text, /SQ village/);
   });
 });
 
@@ -246,7 +290,7 @@ describe("N3-H1: the one-tap answer, kept per phrase and lane", () => {
   });
   it('"No" never clears a tier 1 hold', () => {
     const sq = hiddenAt("San Quentin State Prison");
-    const next = applyPhraseAnswer({ ...sq.s, interests: "Shakespeare at Quentin" }, "Shakespeare at Quentin", "no")!;
+    const next = applyPhraseAnswer({ ...sq.s, interests: "Shakespeare at San Quentin" }, "Shakespeare at San Quentin", "no")!;
     assert.ok(cv([BA, sq.e], next).model.heldFields.some((h) => h.field === "interests"));
   });
   it("answers never arrive as a whole map, are capped, and keep settings under the database's 16,000 bytes", () => {
@@ -292,24 +336,31 @@ describe("N3-M1: a page that cannot say what it prints treats every hidden venue
       for (const l of exportOpenItemLines(st, [tutor, other], s, "bio")) assert.doesNotMatch(l, /Sample North/);
     });
   }
-  it("a bio's own record sentence (true title) does make its venue public on that bio", () => {
-    const show = entry({ section: "exhibition", title: "Open Studio", venue: VENUE, year: 2023, details: { kind: "group" } });
-    const s2 = { ...s, displayName: "Dana Sample" };
+  it("a bio's own record sentence (a facility-named entry the person shows with its true title) makes its venue public on that bio", () => {
+    const show = entry({ section: "exhibition", title: "Open Studio", venue: VENUE, year: 2023, details: { kind: "group" }, names_facility: true });
+    const s2 = { ...applyTitleMode(s, show.id, "true_title")!, displayName: "Dana Sample" };
     const fact = { id: "f1", text: `Dana Sample's work was in Open Studio, a group exhibition at ${VENUE}, in 2023.`, origin: "fact", sourceEntryId: show.id, approved: true };
     const own = { id: "s1", text: `I tutored at ${VENUE}.`, origin: "person_written", approved: true };
     const text = bioTextForLane([fact, own] as BioSentence[], [tutor, show], s2);
     assert.match(text, /I tutored at Sample North/);
   });
-  it("an unflagged work's own true title keeps its word on the list (designed trade, STD-R03 FIX asks)", () => {
+  it("a work never clears itself (combined C-H1): a kept-off word next to a facility word holds it; alone it is one tap", () => {
     const { e, s: s3 } = hiddenAt("San Quentin State Prison");
     const w = entry({ section: "work", title: "Untitled (Quentin yard)", year: 2023, details: { medium: "oil" } });
-    assert.deepEqual(buildWorkSampleList([e, w], null, s3).map((r) => r.title), ["Untitled (Quentin yard)"]);
+    assert.deepEqual(buildWorkSampleList([e, w], null, s3).map((r) => r.title), []);
+    const w2 = entry({ section: "work", title: "Untitled (Quentin)", year: 2023, details: { medium: "oil" } });
+    assert.deepEqual(buildWorkSampleList([e, w2], null, s3).map((r) => r.title), ["Untitled (Quentin)"]);
+    assert.ok(getCreativeStatus({ entries: [e, w2], settings: s3, workSamples: buildWorkSampleList([e, w2], null, s3) }).openItems.some((x) => x.answer === "facility_word" && x.severity === "BLOCK"));
   });
   it("hiddenFacilityTerms without shown ids: nothing is public", () => {
-    const shown = entry({ section: "appointment", title: "Clerk", venue: VENUE, year: 2020 });
-    const t = hiddenFacilityTerms([tutor, shown], s);
+    const shown = entry({ section: "appointment", title: "Clerk", venue: VENUE, year: 2020, names_facility: true });
+    const s4 = applyTitleMode(s, shown.id, "true_title")!;
+    const t = hiddenFacilityTerms([tutor, shown], s4);
     assert.ok(t.fullNames.includes("sample north correctional center"));
-    assert.ok(!hiddenFacilityTerms([tutor, shown], s, [shown.id]).fullNames.includes("sample north correctional center"));
+    assert.ok(!hiddenFacilityTerms([tutor, shown], s4, [shown.id]).fullNames.includes("sample north correctional center"));
+    // An unflagged line at the venue never makes it public (combined C-H1).
+    const plain = { ...shown, names_facility: false };
+    assert.ok(hiddenFacilityTerms([tutor, plain], s, [plain.id]).fullNames.includes("sample north correctional center"));
   });
   it("the export backstop replaces a line that is held or still asked about", () => {
     const fo = hiddenAt("Folsom State Prison");

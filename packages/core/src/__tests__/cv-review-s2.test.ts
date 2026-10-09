@@ -152,11 +152,18 @@ describe("H2: every typed field and record row is checked against what the lane 
     const tutor = entry({ section: "teaching", title: "Inside Teaching Program GED tutor", venue: "Example State Correctional Facility", year: 2019, names_facility: true });
     const s = { ...applyTitleMode(BASE, tutor.id, "leave_out")!, languages: "Spanish; tutoring (Inside Teaching Program)" };
     const m = buildCvModel([BA, tutor], s, "teaching");
-    assert.doesNotMatch(cvPlainText(m), /Inside Teaching Program/);
-    assert.ok(getCvStatus({ entries: [BA, tutor], settings: s, cvType: "teaching", model: m }).openItems.some((x) => x.severity === "BLOCK"));
-    // Two real words of it count now (review s2r2 N-H1).
+    // A run of a title that does not name the place describes the work: one tap, and a draft until answered
+    // (combined review rulings). The whole title is still held.
+    assert.ok(m.asks.some((a) => a.field === "languages" && a.phrase === "tutoring (Inside Teaching Program)"), JSON.stringify(m.asks));
+    assert.equal(getCvStatus({ entries: [BA, tutor], settings: s, cvType: "teaching", model: m }).state, "draft");
+    const whole = buildCvModel([BA, tutor], { ...s, languages: "Inside Teaching Program GED tutor" }, "teaching");
+    assert.doesNotMatch(cvPlainText(whole), /Inside Teaching Program/);
+    // Two words of it count (review s2r2 N-H1). A distinctive word with only a kind word ("program") is one
+    // tap (combined review rulings): the CV stays a draft until the person answers.
     const s1 = { ...applyTitleMode(BASE, tutor.id, "leave_out")!, languages: "Teaching program design" };
-    assert.doesNotMatch(cvPlainText(buildCvModel([BA, tutor], s1, "teaching")), /Teaching program/);
+    const m1 = buildCvModel([BA, tutor], s1, "teaching");
+    assert.ok(m1.asks.some((a) => a.field === "languages" && a.phrase === "Teaching program design"), JSON.stringify(m1.asks));
+    assert.equal(getCvStatus({ entries: [BA, tutor], settings: s1, cvType: "teaching", model: m1 }).state, "draft");
     // Stopword runs and mid-word overlaps never count.
     for (const ok of ["Spanish; GED tutoring", "Restart in prison reform research"]) {
       const s2 = { ...applyTitleMode(BASE, tutor.id, "leave_out")!, languages: ok };
@@ -172,6 +179,8 @@ describe("H2: every typed field and record row is checked against what the lane 
     const inside2 = entry({ section: "teaching", title: "Adult Basic Education Instructor", venue: FACILITY, year: 2019, names_facility: true });
     const m3 = buildCvModel([BA, outside, inside2], applyTitleMode(BASE, inside2.id, "leave_out")!, "teaching");
     assert.match(cvPlainText(m3), /Adult Basic Education Certificate/);
+    // It shares a run of the hidden title's words, so it costs one tap (combined review rulings).
+    assert.ok(m3.asks.some((a) => a.entryId === outside.id && !a.held));
   });
   it("the artist resume holds typed fields the same way", () => {
     const s = { ...hide, discipline: `Painter, ${FACILITY}` };

@@ -25,9 +25,9 @@ import type { PracticeEntry } from "./practiceRecordShared";
 import { yearsOf } from "./practiceRecordShared";
 import { type CreativeKindSettings, rowText, titleModeFor } from "./creativeLaneShared";
 import { type CvModel, buildCvModel, credentialConfirmed, cvPageCap, cvReads, cvRowParts, isPersonalDetail, rowHasIdNumber, rowHasPersonalDetail } from "./cvShared";
-import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine, facilityAskItem, openItemKey } from "./creativeChecks";
+import { type CreativeOpenItem, type CreativeStatus, CREATIVE_RULES_VERSION, checkRecord, entryLine, facilityAskItem, heldByAsk, openItemKey } from "./creativeChecks";
 
-export const CV_RULES_VERSION = `cv-2 (2026-10-08); ${CREATIVE_RULES_VERSION}`;
+export const CV_RULES_VERSION = `cv-3 (2026-10-09); ${CREATIVE_RULES_VERSION}`;
 
 /** The one-tap officer question (review s2r3 N3-M2). */
 export const OFFICER_ASK_QUESTION = "Is this person a corrections, probation or parole officer?";
@@ -119,7 +119,8 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
     items.push({ ...it, doc: "cv" });
   }
 
-  if (!model.header.name) {
+  const byAsk = heldByAsk(model.asks);
+  if (!model.header.name && !model.heldFields.some((h) => h.field === "displayName")) {
     items.push({ rule: "STD-F05", severity: "FIX", line: "(top of the page)", doc: "cv", question: "What name do you want at the top?", why: "The page needs your name, the way you use it." });
   }
   if (!model.header.contact.length) {
@@ -133,6 +134,7 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
   // Typed fields held off the page: personal details (CV-03) or a name this lane keeps off (STD-R03).
   // The line names the field, never its text.
   for (const h of model.heldFields) {
+    if (h.reason === "names_hidden" && byAsk.fields.has(h.field)) continue;
     items.push(
       h.reason === "personal"
         ? {
@@ -182,7 +184,7 @@ export function getCvStatus(input: CvStatusInput): CreativeStatus {
         question: "A line in your record looks like it has a birth date, age, family status or nationality in it. It's kept off the page. Take that part out?",
         why: "A CV here never carries those.",
       });
-    } else if (o.reason === "names_hidden") {
+    } else if (o.reason === "names_hidden" && !byAsk.entries.has(e.id.toLowerCase())) {
       items.push({
         rule: "STD-R03", severity: "BLOCK", line: `${yearsOf(e)}  A line in your record`, doc: "cv", entryId: e.id,
         question: "A line in your record names something you chose to keep off this lane. It's kept off the page. Change it, or change that choice?",

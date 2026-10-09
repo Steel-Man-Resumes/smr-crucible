@@ -136,6 +136,12 @@ export interface Layout {
   pageStartBlocks: number[];
   name: string;
   draft: boolean;
+  /**
+   * The DRAFT mark sits in the top margin and takes no room on the page
+   * (the one-page performer page, combined review C-L3): a page that fits
+   * finished fits as a draft too.
+   */
+  draftInMargin?: boolean;
   /** Absent: US Letter. */
   page?: PageSize;
 }
@@ -494,7 +500,17 @@ function pageExtras(m: Measurer, L: Level, name: string, pageNo: number, draft: 
   return out;
 }
 
-export function paginate(m: Measurer, blocks: BlockSpec[], L: Level, name: string, draft: boolean, extrasAfter = 6, size: PageSize = LETTER_PAGE): Layout {
+export function paginate(
+  m: Measurer,
+  blocks: BlockSpec[],
+  L: Level,
+  name: string,
+  draft: boolean,
+  extrasAfter = 6,
+  size: PageSize = LETTER_PAGE,
+  opts: { draftInMargin?: boolean } = {}
+): Layout {
+  const inMargin = draft && !!opts.draftInMargin;
   const bottom = size.h - L.marginBottom;
   const contentH = bottom - L.marginTop;
   const pages: PlacedPage[] = [];
@@ -531,8 +547,15 @@ export function paginate(m: Measurer, blocks: BlockSpec[], L: Level, name: strin
     page = { number: pages.length + 1, lines: [], bottomUsed: L.marginTop };
     pages.push(page);
     pageStartBlocks.push(firstBlockId);
+    if (inMargin) {
+      // The DRAFT line in the top margin: placed, but the page's content still starts at the margin.
+      const b = lineBox(m, "sansBold", SHAPE.pageLineSize, 1.3);
+      y = Math.max(4, L.marginTop - b.height - 4);
+      place({ runs: [{ text: "DRAFT", face: "sansBold", size: SHAPE.pageLineSize, color: COLORS.soft, x: 0 }], height: b.height, baseline: b.baseline, gapBefore: 0, extra: true }, -1);
+      page.bottomUsed = L.marginTop;
+    }
     y = L.marginTop;
-    const extras = pageExtras(m, L, name, page.number, draft);
+    const extras = pageExtras(m, L, name, page.number, draft && !inMargin);
     extras.forEach((e) => place(e, -1));
     if (extras.length) y += extrasAfter;
     atTop = true;
@@ -583,7 +606,7 @@ export function paginate(m: Measurer, blocks: BlockSpec[], L: Level, name: strin
     atTop = false;
     void contentH;
   }
-  return { level: L, pages, blocks, pageStartBlocks, name, draft, ...(size === LETTER_PAGE ? {} : { page: size }) };
+  return { level: L, pages, blocks, pageStartBlocks, name, draft, ...(inMargin ? { draftInMargin: true } : {}), ...(size === LETTER_PAGE ? {} : { page: size }) };
 }
 
 // ---------------------------------------------------------------------------

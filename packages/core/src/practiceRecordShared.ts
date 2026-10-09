@@ -204,6 +204,12 @@ export interface PracticeDetails {
    */
   otherNames?: string[];
   /**
+   * Set by the server when it hands an entry out, never stored or taken from
+   * a request (facilityDictionary.withCommonWords): the words of this entry's
+   * names that are common English words. Alone, those never ask a question.
+   */
+  commonWords?: string[];
+  /**
    * Set by the server only, never from a request: earlier titles and venues
    * of an entry that names a facility. A lane that keeps the entry off keeps
    * these off too, so a rename never lets an old name through.
@@ -270,10 +276,28 @@ export function isTitleMode(v: unknown): v is TitleMode {
   return typeof v === "string" && (TITLE_MODES as readonly string[]).includes(v);
 }
 
-/** Trim, drop control characters, collapse spaces, cap. Null when empty. */
+/**
+ * Invisible format characters (Unicode Cf: zero-width space and joiners, word
+ * joiner, byte-order mark, direction marks), combined review C2-L2. Between
+ * two letters or digits one reads as a space ("San\u200bQuentin" is "San
+ * Quentin", never "SanQuentin"); anywhere else it is dropped. A soft hyphen
+ * is always dropped (it only marks where a word may break).
+ */
+export function cleanFormatChars(text: string): string {
+  return text.replace(/\u00ad/g, "").replace(/([\p{L}\p{N}])\p{Cf}+(?=[\p{L}\p{N}])/gu, "$1 ").replace(/\p{Cf}/gu, "");
+}
+
+/** Every text an entry prints, with invisible format characters cleaned (C2-L2). Older rows saved before the clean get it on read. */
+export function cleanEntryText<T extends { title: string; venue: string | null; city: string | null; state: string | null; details: object }>(e: T): T {
+  const c = (v: unknown) => (typeof v === "string" ? cleanFormatChars(v) : v);
+  const details = Object.fromEntries(Object.entries(e.details).map(([k, v]) => [k, Array.isArray(v) ? v.map(c) : c(v)]));
+  return { ...e, title: cleanFormatChars(e.title), venue: c(e.venue) as string | null, city: c(e.city) as string | null, state: c(e.state) as string | null, details };
+}
+
+/** Trim, drop control and invisible format characters, collapse spaces, cap. Null when empty. */
 export function cleanLine(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
-  const s = v
+  const s = cleanFormatChars(v)
     .replace(/[\u0000-\u001f\u007f]/g, " ")
     .replace(/\s+/g, " ")
     .trim()

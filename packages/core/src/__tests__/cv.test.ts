@@ -129,8 +129,9 @@ describe("CV truth checks", () => {
   });
   it("STD-R03: an inside entry with no choice is a BLOCK; its line never shows the title", () => {
     const st = getCvStatus({ entries: ALL, settings: BASE, cvType: "academic" });
-    const r03 = st.openItems.filter((x) => x.rule === "STD-R03" && x.severity === "BLOCK");
-    assert.equal(r03.length, 2);
+    // The two choices (one-tap cards for a shared word "Example" are separate, combined review rulings).
+    const r03 = st.openItems.filter((x) => x.rule === "STD-R03" && x.severity === "BLOCK" && x.answer !== "facility_word");
+    assert.equal(r03.length, 2, JSON.stringify(r03));
     for (const l of exportOpenItemLines(st, ALL, BASE, "cv")) assert.ok(!/Example County|Associate of Arts|Peer Literacy/.test(l), l);
   });
   it("venue only: to-do lines show the venue-only rendering, never the title", () => {

@@ -14,10 +14,12 @@ import assert from "node:assert/strict";
 import { CV_TYPES } from "../careerLaneShared";
 import { cleanDetails, hasLicenseNumber, resolvePracticeEntry, type PracticeEntry } from "../practiceRecordShared";
 import {
+  applyPhraseAnswer,
   applyTitleMode,
   artistResumePlainText,
   buildArtistResumeModel,
   distinctiveWords,
+  facilityCheck,
   hiddenFacilityTerms,
   namesHiddenFacility,
   shownEntryIds,
@@ -56,9 +58,19 @@ describe("N-H1: part of a hidden facility name counts", () => {
         it(`${venue}: "${say}" in ${field} is held off the CV with a BLOCK`, () => {
           const { e, s } = hiddenAt(venue);
           const set = { ...s, [field]: `Theater; the program at ${say}` };
+          // Combined review rulings: a single kept-off word is one tap, and the CV is a draft until answered.
+          const single = !/\s|-/.test(say.replace(/'s.*$/, ""));
           for (const cvType of CV_TYPES) {
             const m = buildCvModel([BA, e], set, cvType);
             const text = cvPlainText(m);
+            if (single) {
+              if (!text.includes("Theater")) continue;
+              assert.ok(m.asks.some((a) => a.field === field), `${cvType}: asked`);
+              const st = getCvStatus({ entries: [BA, e], settings: set, cvType, model: m });
+              assert.equal(st.state, "draft");
+              for (const line of exportOpenItemLines(st, [BA, e], set, "cv", shownEntryIds(m))) assert.ok(!line.toLowerCase().includes(say.toLowerCase().slice(0, 5)));
+              continue;
+            }
             assert.ok(!text.toLowerCase().includes(say.toLowerCase().replace(/'s.*$/, "")), `${cvType}: never prints`);
             if (m.heldFields.some((h) => h.field === field)) {
               const st = getCvStatus({ entries: [BA, e], settings: set, cvType, model: m });
@@ -82,20 +94,34 @@ describe("N-H1: part of a hidden facility name counts", () => {
   it("a one-distinctive-word name: 'Stateville' alone counts", () => {
     assert.deepEqual(distinctiveWords("Stateville Correctional Center"), ["stateville"]);
     const { e, s } = hiddenAt("Stateville Correctional Center");
-    assert.equal(namesHiddenFacility("I taught at Stateville.", hiddenFacilityTerms([e], s)), "stateville");
+    // Alone it is one tap; next to a facility or incarceration word it is held (combined review rulings).
+    assert.equal(namesHiddenFacility("I taught at Stateville.", hiddenFacilityTerms([e], s)), null);
+    assert.equal(facilityCheck("I taught at Stateville.", hiddenFacilityTerms([e], s))?.tier, 2);
+    assert.ok(namesHiddenFacility("I did time at Stateville.", hiddenFacilityTerms([e], s)));
   });
   it("generic words, directions and numbers are never distinctive", () => {
     assert.deepEqual(distinctiveWords("North Central Federal Detention Unit 32 of the State"), []);
     assert.deepEqual(distinctiveWords("Example County Jail Annex II"), ["example"]);
   });
-  it("a word already on the page through a shown entry does not count", () => {
+  it("a run on the page through ANOTHER line the person chose to show is one tap, never nothing; a line never clears itself (combined C-H1)", () => {
     const { e, s } = hiddenAt("Example Valley State Prison");
-    const shown = entry({ section: "education", title: "Certificate in Welding", venue: "Example Valley College", year: 2021, details: { degree: false } });
-    const m = buildCvModel([BA, shown, e], { ...s, interests: "Welding; the Example Valley trail" }, "academic");
+    // An unflagged row that shares the run is judged like any other line: its own words never make it public.
+    const college = entry({ section: "education", title: "Certificate in Welding", venue: "Example Valley College", year: 2021, details: { degree: false } });
+    const m0 = buildCvModel([BA, college, e], { ...s, interests: "Welding; the Example Valley trail" }, "academic");
+    assert.doesNotMatch(cvPlainText(m0), /Example Valley/);
+    assert.ok(m0.omitted.some((o) => o.entryId === college.id && o.reason === "names_hidden"));
+    // A facility-named line the person chose to show with its true title puts the run on the page: elsewhere it is one tap.
+    const chosen = entry({ section: "teaching", title: "Welding Instructor", venue: "Example Valley Annex", year: 2021, names_facility: true });
+    const s2 = { ...applyTitleMode(s, chosen.id, "true_title")!, interests: "Welding; the Example Valley trail" };
+    const m = buildCvModel([BA, chosen, e], s2, "teaching");
     assert.match(cvPlainText(m), /Example Valley trail/);
-    // ...but the full name, or a run that is not on the page, still does.
-    const m2 = buildCvModel([BA, shown, e], { ...s, interests: "Welding at Valley State Prison" }, "academic");
-    assert.doesNotMatch(cvPlainText(m2), /Valley State Prison/);
+    assert.ok(m.asks.some((a) => a.field === "interests" && a.phrase === "the Example Valley trail"));
+    assert.equal(getCvStatus({ entries: [BA, chosen, e], settings: s2, cvType: "teaching", model: m }).state, "draft");
+    // ...but the full name, or a word next to a facility word, still holds.
+    for (const t of ["Welding at Example Valley State Prison", "Welding; the Example Valley prison shop"]) {
+      const m2 = buildCvModel([BA, chosen, e], { ...s2, interests: t }, "teaching");
+      assert.ok(m2.heldFields.some((h) => h.field === "interests"), t);
+    }
   });
   it("a title's single words count only where the title names the facility", () => {
     const t = entry({ section: "arts_program", title: "Theater program, Example Ridge Prison", venue: "Example Arts Council", year: 2025, names_facility: true, details: { status: "in_progress" } });
@@ -124,10 +150,17 @@ describe("N-H1: part of a hidden facility name counts", () => {
     // A whole hidden name is held in every field, the name field included.
     const m = buildCvModel([BA, e], { ...s, displayName: "Dana Sample, San Quentin State Prison" }, "academic");
     assert.equal(m.header.name, "");
-    // Part of one in the person's own name is only asked about (s2r3 N3-H1).
+    // A run of one in the person's own name is held until they answer (combined C-M2), so the file name
+    // and title fall back to the generic ones; "No" puts it back.
     const m2 = buildCvModel([BA, e], { ...s, displayName: "Dana Sample, San Quentin" }, "academic");
-    assert.equal(m2.header.name, "Dana Sample, San Quentin");
-    assert.ok(m2.asks.some((a) => a.field === "displayName"));
+    assert.equal(m2.header.name, "");
+    assert.ok(m2.asks.some((a) => a.field === "displayName" && a.held));
+    const no = applyPhraseAnswer({ ...s, displayName: "Dana Sample, San Quentin" }, "Dana Sample, San Quentin", "no")!;
+    assert.equal(buildCvModel([BA, e], no, "academic").header.name, "Dana Sample, San Quentin");
+    // A single word of it in the name prints, with a card (a draft until answered).
+    const m3 = buildCvModel([BA, e], { ...s, displayName: "Quentin Sample" }, "academic");
+    assert.equal(m3.header.name, "Quentin Sample");
+    assert.ok(m3.asks.some((a) => a.field === "displayName" && !a.held));
   });
 });
 
@@ -155,9 +188,14 @@ describe("N-M1: only an entry on THIS page, shown with its true title, makes a h
       for (const line of exportOpenItemLines(st, entries, s, "cv", shownEntryIds(m))) assert.doesNotMatch(line, /Example North/);
     });
   }
-  it("an entry this CV prints with its true title does make it public", () => {
+  it("an unflagged line at the venue never makes it public; a facility-named entry the person shows with its true title does (combined C-H1)", () => {
     const job = entry({ section: "appointment", title: "Library Assistant", venue: VENUE, year: 2019 });
-    const m = buildCvModel([BA, tutor, job], s, "teaching");
+    const m0 = buildCvModel([BA, tutor, job], s, "teaching");
+    assert.doesNotMatch(cvPlainText(m0), /Example North/);
+    assert.ok(m0.omitted.some((o) => o.entryId === job.id && o.reason === "names_hidden"));
+    const flagged = { ...job, names_facility: true };
+    const s2 = applyTitleMode(s, flagged.id, "true_title")!;
+    const m = buildCvModel([BA, tutor, flagged], s2, "teaching");
     assert.match(cvPlainText(m), /Library Assistant, Example North Correctional Center/);
     assert.match(cvPlainText(m), /tutoring at Example North/);
   });

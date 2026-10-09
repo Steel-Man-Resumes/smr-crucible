@@ -18,7 +18,8 @@ import { buildCreative } from "@/lib/resume-render";
 export const runtime = "nodejs";
 
 /** Paragraphs printed as the person's own words, and the lead reference: the person's alone, never an assist session. */
-const OWNER_ONLY_FIELDS = ["interests", "languages", "leadReference", "skills"] as const;
+// The person's own words about themselves and their body: an assist session never types them (combined review C-L6).
+const OWNER_ONLY_FIELDS = ["interests", "languages", "leadReference", "skills", "height", "hair", "eyes", "voice", "ageRange"] as const;
 
 /** The pair's plan card as the screens read it (creative and performer lanes alike). */
 function planPayload(lane: CareerLane, partner: CareerLane | null, plan: PairPlan | null) {

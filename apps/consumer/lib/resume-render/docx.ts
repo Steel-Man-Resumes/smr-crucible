@@ -16,6 +16,7 @@ import {
   AlignmentType,
   BorderStyle,
   Document,
+  Header,
   LevelFormat,
   LineRuleType,
   Packer,
@@ -98,7 +99,8 @@ export async function buildDocx(inp: DocxInput): Promise<Buffer> {
   const extras = (pageNo: number, breakBefore: boolean): Paragraph[] => {
     const out: Paragraph[] = [];
     const lines: string[] = [];
-    if (layout.draft) lines.push("DRAFT");
+    // A one-page performer page carries DRAFT in the page header instead (C-L3), so it takes no body room.
+    if (layout.draft && !layout.draftInMargin) lines.push("DRAFT");
     if (pageNo >= 2) lines.push(layout.name ? `${layout.name}, page ${pageNo}` : `Page ${pageNo}`);
     lines.forEach((t, i) => {
       out.push(
@@ -340,9 +342,30 @@ export async function buildDocx(inp: DocxInput): Promise<Buffer> {
         properties: {
           page: {
             size: { width: tw(pageW), height: tw(pageH) },
-            margin: { top: tw(L.marginTop), bottom: tw(L.marginBottom), left: tw(L.marginSide), right: tw(L.marginSide), header: 0, footer: 0 },
+            margin: {
+              top: tw(L.marginTop),
+              bottom: tw(L.marginBottom),
+              left: tw(L.marginSide),
+              right: tw(L.marginSide),
+              header: layout.draft && layout.draftInMargin ? tw(Math.max(4, L.marginTop - SHAPE.pageLineSize * 1.3 - 4)) : 0,
+              footer: 0,
+            },
           },
         },
+        ...(layout.draft && layout.draftInMargin
+          ? {
+              headers: {
+                default: new Header({
+                  children: [
+                    new Paragraph({
+                      spacing: { before: 0, after: 0, line: tw(SHAPE.pageLineSize * 1.3), lineRule: LineRuleType.EXACT },
+                      children: [new TextRun({ text: "DRAFT", font: WORD_FONT.sans, size: Math.round(SHAPE.pageLineSize * 2), bold: true, color: hex(COLORS.soft) })],
+                    }),
+                  ],
+                }),
+              },
+            }
+          : {}),
         children,
       },
     ],
