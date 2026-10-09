@@ -631,3 +631,31 @@ describe("CC rulings after combined review r3: more release wording; dictionary-
     assert.ok(!cv(mark([DEG, e]), { ...s, interests: "Mountain View Correctional Facility alumni" }).model.asks.some((a) => a.field === "interests"));
   });
 });
+
+describe("review r4 F1: time spent somewhere keeps its own card after a lane-wide County answer", () => {
+  const mark = (es: PracticeEntry[]) => withCommonWords(es);
+  it("'Eight months in Cook County.' stays held until answered after 'No' on the Cook County card", () => {
+    const { e, s } = hide("Cook County Jail");
+    const clerk = entry({ section: "appointment", title: "Records clerk", venue: "Cook County Clerk's Office", year: 2021 });
+    const es = mark([DEG, e, clerk]);
+    const no = applyPhraseAnswer(s, "Cook County", "no")!;
+    assert.match(cv(es, no).text, /Cook County Clerk/);
+    for (const text of ["Eight months in Cook County.", "8 months in cook county", "a year in Cook County"]) {
+      const set = { ...no, interests: text };
+      const r = cv(es, set);
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), text);
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && a.held && a.phrase !== "Cook County"), `${text}: its own card`);
+      assert.ok(cv(es, applyPhraseAnswer(set, text.replace(/\.$/, "."), "no")!).text.includes(text.replace(/\.$/, "")), `${text}: its own 'No' puts it back`);
+    }
+  });
+  it("F2: '<N> months in' a dictionary-only short name is held until answered", () => {
+    for (const [venue, text] of [["Pelican Bay State Prison", "8 months in the bay"], ["Lee Correctional Institution", "8 months in lee"]] as const) {
+      const { e, s } = hide(venue);
+      const r = cv(mark([DEG, e]), { ...s, interests: text });
+      assert.ok(r.model.asks.some((a) => a.field === "interests" && a.held), text);
+    }
+    // Plain time words with no kept-off word stay finished.
+    const { e, s } = hide("Lee Correctional Institution");
+    assert.equal(cv(mark([DEG, e]), { ...s, interests: "Six months in Spain" }).status.state, "finished");
+  });
+});
