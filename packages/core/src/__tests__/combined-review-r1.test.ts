@@ -346,3 +346,14 @@ describe("CC rulings after round 1 (burden and the last three calls)", () => {
     assert.equal(cleanDetails("teaching", { commonWords: ["folsom"] }).commonWords, undefined);
   });
 });
+
+describe("a hidden name split over a line break", () => {
+  it("is read joined and held: 'Shakespeare at San' / 'Quentin'", () => {
+    const { e, s } = hide("San Quentin State Prison");
+    for (const text of ["Shakespeare at San\nQuentin", "Debate team\nSan\r\nQuentin"]) {
+      const r = cv([DEG, e], { ...s, interests: text });
+      assert.ok(r.model.heldFields.some((h) => h.field === "interests"), JSON.stringify(text));
+      assert.doesNotMatch(r.text, /Quentin/);
+    }
+  });
+});

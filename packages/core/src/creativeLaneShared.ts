@@ -692,6 +692,11 @@ export function facilityCheck(
   const web: [string, FacilityFieldKind][] = [];
   const free = kind === "text" ? pre.replace(WEB_RE, (m) => (web.push([m, "name"]), " ")) : pre;
   const pieces: [string, FacilityFieldKind][] = [...piecesOf(free).map((p): [string, FacilityFieldKind] => [p, kind]), ...web];
+  // A name split over a line break ("San" / "Quentin") is read joined: a fixed hold across lines holds the text.
+  if (/[\r\n]/.test(free)) {
+    const across = pieceHit(free.replace(/\s*[\r\n]+\s*/g, " "), terms, kind, self);
+    if (across && across.tier === 1 && across.fixed) return { tier: 1, term: across.term, phrase: free.replace(/\s+/g, " ").trim().slice(0, PHRASE_MAX), ask: false };
+  }
   for (const [piece, k] of pieces) {
     const hit = pieceHit(piece, terms, k, self);
     if (!hit) continue;
