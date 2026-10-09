@@ -511,7 +511,10 @@ function ownJobs(sourceText: string): OwnJob[] {
     const raw = lines[i];
     const l = raw.trim().replace(/^\s*[-•*]\s*/, "");
     if (!l || CONTACT_RE.test(l)) continue;
-    if (l.includes("|") || raw.includes("\t")) {
+    // A section heading ("EDUCATION", "Certifications") ends an employer's block.
+    if (!hasYear(l) && l.split(/\s+/).length <= 4 && HEADING_WORDS.test(l)) { blockEmployer = []; continue; }
+    // Tab-separated only between parts: a duty indented with a tab is still read as a sentence.
+    if (l.includes("|") || l.includes("\t")) {
       pushParts(l.split(l.includes("|") ? "|" : /\t+/).map((x) => x.trim()).filter(Boolean), l, i, false);
       continue;
     }

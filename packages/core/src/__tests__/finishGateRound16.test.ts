@@ -116,3 +116,11 @@ test("R16 follow-up 2: a four-job dash-header paste clears an honest page", () =
   assert.deepEqual(titledLines(page, up), []);
   assert.deepEqual(titledLines(PAGE("SHIFT LEAD | Kroger | Toledo, OH | 2017 - 2021"), up), ["SHIFT LEAD | Kroger | Toledo, OH | 2017 - 2021"], "merged promotion");
 });
+
+test("R16 follow-up 2: an indented sentence is still read, and a heading ends an employer's block", () => {
+  assert.ok(!titled(LATE, `${C}Kroger\n\tI was the shift lead at Kroger from 2019 to 2023.`), "tab-indented sentence");
+  // "GED, 2014" under EDUCATION is never a job at the employer above it.
+  const src = C + "Kroger\nShift Lead, 2019 - 2023\nopened the store\n\nEDUCATION\nGED, 2014\n\nI was a shift lead at Kroger.";
+  assert.ok(!titled("SHIFT LEAD | Kroger | Toledo, OH | 2019 - 2023", src));
+  assert.ok(!titled("SHIFT LEAD | Kroger | Toledo, OH", C + "I was a shift lead at Kroger.\n\nEDUCATION\nGED, 2014"));
+});
