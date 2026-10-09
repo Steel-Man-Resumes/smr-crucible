@@ -405,7 +405,7 @@ function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: 
     if (!full) continue;
     // Round 7: the person's own whole title is theirs, and so is a title whose credential they
     // confirmed ("CNA | Meadowbrook" for a person who holds the CNA).
-    if (titleIsTheirs(full, sourceText) && !titleOfAnotherJob(l, full, sourceText)) continue;
+    if (headerTitleIsTheirs(l, full, sourceText)) continue;
     // Only a title that names a credential ("CNA", "CERTIFIED NURSING ASSISTANT") is sourced by confirming it.
     const credentialTitle = isCredentialTerm(full) || new RegExp(TITLE_CREDENTIAL_WORDS_RE.source, "i").test(full);
     if (credentialTitle && confirmedKeys.has(credentialKey(full))) continue;
@@ -415,7 +415,7 @@ function titlesNotTheirs(resumeText: string, sourceText: string, confirmedKeys: 
     // Round 13 (SF-9): their short form counts ("Customer Service Rep" for "CUSTOMER SERVICE REPRESENTATIVE").
     if (answers.some((a) => a.kind === "title_yes" && squash(a.line) === squash(l) && (squash(a.answer) === squash(full) || sameTitle(a.answer, full)))) continue;
     const rest = full.replace(TITLE_CREDENTIAL_WORDS_RE, " ").replace(/\s{2,}/g, " ").trim();
-    if (confirmedKeys.size && rest && rest !== full && titleIsTheirs(rest, sourceText)) continue;
+    if (confirmedKeys.size && rest && rest !== full && headerTitleIsTheirs(l, rest, sourceText)) continue;
     out.push(l);
   }
   return out;
@@ -429,24 +429,91 @@ export function roleTitleQuestion(title: string): string {
   return `Was "${clip(title, 50)}" your job title?`;
 }
 
+// ---- Round 15 (R15-B3): a header title is theirs only from their own title for that same job ------------------
+
+type OwnJob = { title: string; employer: string[]; from?: number; to?: number };
+const THIS_YEAR = new Date().getFullYear();
+const employerWords = (t: string) =>
+  (t || "").toLowerCase().replace(/\([^)]*\)/g, " ").replace(/[^a-z0-9& ]+/g, " ").split(/\s+/).filter((w) => w && !/^(?:inc|llc|co|corp|corporation|company|the|of|and|&|services?|ltd|group)$/.test(w));
+function yearSpan(t: string): { from?: number; to?: number } {
+  const ys = (t.match(/\b(?:19|20)\d{2}\b/g) ?? []).map(Number);
+  const open = /\b(?:present|now|current|currently|today)\b/i.test(t);
+  if (!ys.length) return {};
+  return { from: Math.min(...ys), to: open ? THIS_YEAR : Math.max(...ys) };
+}
+const PLACE_PART = /^[A-Z][a-zA-Z.]+(?:\s[A-Z][a-zA-Z.]+)*,\s*[A-Z]{2}$|^(?:remote)$/i;
+const YEARS_ONLY = /^[\s\d\-\u2013\u2014to/,.]*(?:(?:19|20)\d{2})[\s\d\-\u2013\u2014to/,.]*(?:present|now|current)?\s*$/i;
+/** The employer on a job header: the part that is not the title, a place or the years. */
+function headerEmployer(parts: string[], titleIndex: number): string[] {
+  for (let i = 0; i < parts.length; i++) {
+    if (i === titleIndex) continue;
+    const p = parts[i].trim();
+    if (!p || PLACE_PART.test(p) || YEARS_ONLY.test(p) || /^(?:19|20)\d{2}/.test(p)) continue;
+    return employerWords(p);
+  }
+  return [];
+}
+/** The person's own jobs: their job headers ("Cashier | Kroger | 2016 - 2019"), "Cashier, Kroger, 2016 - 2019", "Cashier at Kroger". */
+function ownJobs(sourceText: string): OwnJob[] {
+  const out: OwnJob[] = [];
+  for (const raw of withoutGoalText(sourceText).split("\n")) {
+    const l = raw.trim().replace(/^\s*[-•*]\s*/, "");
+    if (!l || /@|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}/.test(l)) continue;
+    if (l.includes("|")) {
+      const parts = l.split("|").map((x) => x.trim());
+      const at = parts[0].split(/\s+(?:at|@)\s+/i);
+      const employer = at.length > 1 ? employerWords(at[1]) : headerEmployer(parts, 0);
+      out.push({ title: at[0], employer, ...yearSpan(l) });
+      continue;
+    }
+    const comma = l.split(/\s*,\s*/);
+    if (comma.length >= 3 && /(?:19|20)\d{2}/.test(comma[comma.length - 1]) && comma[0].split(/\s+/).length <= 5) {
+      out.push({ title: comma[0], employer: employerWords(comma[1]), ...yearSpan(l) });
+      continue;
+    }
+    const at = l.match(/^([A-Za-z][A-Za-z'&/ -]{1,40}?)\s+(?:at|for)\s+([A-Z0-9][^,.;]*?)(?:[,(]?\s*((?:19|20)\d{2}[^.;]*))?(?:[.;]|$)/);
+    if (at && at[1].split(/\s+/).length <= 5) out.push({ title: at[1], employer: employerWords(at[2]), ...yearSpan(at[3] ?? "") });
+    for (const m of l.matchAll(/\b(?:worked|was|served|hired\s+on|started)\s+as\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z'&/ -]{1,40}?)\s+(?:at|for)\s+([A-Z0-9][^,.;]*?)(?=[,.;]|\s+(?:from|in|until|since)\b|$)/g)) {
+      out.push({ title: m[1], employer: employerWords(m[2]), ...(/(?:19|20)\d{2}\s*(?:-|\u2013|\u2014|to)\s*(?:(?:19|20)\d{2}|present|now)/i.test(l) ? yearSpan(l) : {}) });
+    }
+    // "I was a CNA at Meadowbrook from 2019 to 2023", "I worked at Midwest Distribution from 2019 to 2023 as a warehouse associate".
+    const range = /(?:19|20)\d{2}\s*(?:-|\u2013|\u2014|to|through|thru)\s*(?:(?:19|20)\d{2}|present|now)/i.test(l) ? yearSpan(l) : {};
+    for (const m of l.matchAll(/\bI\s+(?:was|am|'m)\s+(?:an?|the)\s+([A-Za-z][A-Za-z'&/ -]{1,40}?)\s+(?:at|for|with)\s+([A-Z0-9][^,.;]*?)(?=[,.;]|\s+(?:from|in|until|since|and|but)\b|$)/g)) {
+      out.push({ title: m[1], employer: employerWords(m[2]), ...range });
+    }
+    for (const m of l.matchAll(/\b(?:worked|was|started|employed)\s+at\s+([A-Z0-9][^,.;]*?)\s+(?:from\s+[^,.;]*?\s+)?as\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z'&/ -]{1,40}?)(?=[,.;]|\s+(?:from|in|until|since|and|but)\b|$)/g)) {
+      out.push({ title: m[2], employer: employerWords(m[1]), ...range });
+    }
+    // "I was hired on at Midwest Distribution in 2019 as a picker", "My job at Midwest Distribution was warehouse associate".
+    // A sentence gives a start year at most, not a span, so its years are left open.
+    for (const m of l.matchAll(/\bhired\s+on\s+at\s+([A-Z0-9][^,.;]*?)\s+as\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z'&/ -]{1,40}?)(?=[,.;]|\s+(?:from|in|until|since|and)\b|$)/g)) {
+      out.push({ title: m[2], employer: employerWords(m[1].replace(/\s+in\s+(?:19|20)\d{2}$/, "")) });
+    }
+    for (const m of l.matchAll(/\bmy\s+(?:job|title|position|role)\s+at\s+([A-Z0-9][^,.;]*?)\s+(?:was|is)\s+(?:an?\s+|the\s+)?([A-Za-z][A-Za-z'&/ -]{1,40}?)(?=[,.;]|$)/gi)) {
+      out.push({ title: m[2], employer: employerWords(m[1]) });
+    }
+  }
+  return out.filter((j) => j.title);
+}
+const sameEmployer = (a: string[], b: string[]) => a.length > 0 && b.length > 0 && (a.every((w) => b.includes(w)) || b.every((w) => a.includes(w)));
+const overlaps = (a: { from?: number; to?: number }, b: { from?: number; to?: number }) =>
+  a.from === undefined || b.from === undefined || (a.from <= (b.to as number) && b.from <= (a.to as number));
+const covers = (own: { from?: number; to?: number }, page: { from?: number; to?: number }) =>
+  own.from === undefined || page.from === undefined || ((own.from as number) <= (page.from as number) && (own.to as number) >= (page.to as number));
+
 /**
- * Round 14 (F3): true when this job header is one of the person's own jobs (same employer, or the same years)
- * and none of their headers for that job carries this title: a title from another of their jobs never covers it.
+ * Round 15 (R15-B3): a page job header's title is theirs only when one of their own jobs at the same employer, with
+ * years that cover the page's years, carries that title word for word (short forms aside). A promotion at the same
+ * employer never moves the higher title onto the earlier years or a merged span; no job of theirs, no clear.
  */
-function titleOfAnotherJob(pageHeader: string, title: string, sourceText: string): boolean {
-  const words = (t: string) => (t || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w && !/^(?:inc|llc|co|corp|the|of|and|company|services?)$/.test(w));
-  const years = (t: string) => (t.match(/\b(?:19|20)\d{2}\b/g) ?? []).join("-");
-  const parts = pageHeader.replace(/^\s*[-•*]\s*/, "").split("|").map((x) => x.trim());
-  const employer = words(parts[1] ?? "").join(" ");
-  const span = years(pageHeader);
-  const own = withoutGoalText(sourceText)
-    .split("\n")
-    .filter((x) => x.includes("|"))
-    .map((x) => x.replace(/^\s*[-•*]\s*/, "").split("|").map((y) => y.trim()))
-    .filter((ps) => ps.length >= 2);
-  const sameJob = own.filter((ps) => (employer && words(ps[1]).join(" ") === employer) || (span && years(ps.join(" | ")) === span));
-  if (!sameJob.length) return false;
-  return !sameJob.some((ps) => sameTitle(ps[0], title) || squash(ps[0]) === squash(title));
+function headerTitleIsTheirs(pageHeader: string, title: string, sourceText: string): boolean {
+  const body = pageHeader.replace(/^\s*[-•*]\s*/, "");
+  const parts = body.split("|").map((x) => x.trim());
+  const at = parts[0].split(/\s+(?:at|@)\s+/i);
+  const employer = at.length > 1 ? employerWords(at[1]) : headerEmployer(parts, parts.findIndex((p) => squash(p) === squash(title)) >= 0 ? parts.findIndex((p) => squash(p) === squash(title)) : 0);
+  const span = yearSpan(body);
+  const same = ownJobs(sourceText).filter((j) => sameEmployer(j.employer, employer) && overlaps(j, span));
+  return same.some((j) => (squash(j.title) === squash(title) || sameTitle(j.title, title)) && covers(j, span));
 }
 
 /** The person's rewrite of this line, when they typed it themselves. */

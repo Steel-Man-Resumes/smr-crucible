@@ -85,7 +85,9 @@ test("F2: a header title never gives up its rank words", () => {
   assert.ok(!titleInOwnHeaders("Store manager", h("Assistant Store Manager")));
   assert.ok(!titleInOwnHeaders("Electrician", h("Apprentice Electrician")));
   assert.ok(!titleInOwnHeaders("Shift supervisor", h("Acting Shift Supervisor")));
-  assert.ok(titleInOwnHeaders("Lead custodian", h("Night Shift Lead Custodian")));
+  // Round 15 (R15-B1): strict, word for word; a dropped department word is a card too.
+  assert.ok(!titleInOwnHeaders("Lead custodian", h("Night Shift Lead Custodian")));
+  assert.ok(titleInOwnHeaders("Lead custodian", h("Lead Custodian")));
   assert.ok(titleInOwnHeaders("Assistant manager", h("Assistant Manager")));
   for (const [header, line] of [["Assistant Manager", "Manager at Midwest Distribution."], ["Supervisor Trainee", "Supervisor at Midwest Distribution."], ["Manager in Training", "Manager with 4 years of warehouse experience."]]) {
     assert.ok(scopeHitsNotTheirs(line, h(header)).some((x) => x.role), header);
