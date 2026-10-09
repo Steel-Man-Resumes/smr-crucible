@@ -305,7 +305,7 @@ test("origin: every write must be same-origin JSON; a form post or a sibling sit
 
 test("origin: the page sends JSON on every write, DELETE included", () => {
   const src = readFileSync(join(APP, "app/(dashboard)/dashboard/record-check/page.tsx"), "utf8");
-  const fetches = Array.from(src.matchAll(/fetch\(([^;]*?)\)\s*;/gs)).map((m) => m[1]);
+  const fetches = Array.from(src.matchAll(/fetch\(([^;]*?)\)\s*;/g)).map((m) => m[1]);
   const writes = fetches.filter((f) => /method: "(POST|DELETE)"/.test(f));
   assert.ok(writes.length >= 5, `found ${writes.length} writes`);
   for (const f of writes) assert.match(f, /headers: JSON_HEADERS/, f);
