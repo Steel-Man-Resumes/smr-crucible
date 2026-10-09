@@ -640,6 +640,29 @@ function presentHeld(before0: string, after: string, goal: boolean, next = ""): 
   if (PRESENT_FRAME_AFTER.test(clause)) return true;
   return BARE_FRAME_NEXT.test(next);
 }
+// Round 16: words a past sentence uses for a time it already had ("when the store opened", "until 2019", "would
+// open the store"). They are lifted out before a past own-job sentence takes the same frame list.
+const PAST_TIME_WORDS = /\b(?:when|whenever|after|until|till|as\s+soon\s+as|this\s+(?:year|month|week|fall|summer|spring|winter)|or\s+so|would|(?:was|were|had)\s+once|start(?:ing|ed)?\s+(?:back\s+)?(?:in|on)\s+(?:(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\b|\bbut\s+I\s+(?:don'?t|do\s+not|didn'?t|never|just|only)\b/gi;
+/**
+ * Round 16 (R16 follow-up 1): an own-job sentence under a future, plan or condition frame is never their job
+ * ("I am the shift lead at Kroger starting Monday", "Shift lead at Kroger next year hopefully", "I'd be ... if they
+ * promote me"). `start`/`end` bound the title in `line`. A present or tenseless reading ("I am the ...", "Shift lead
+ * at Kroger") takes the round 14 present-tense test; a past reading ("I was the ...") takes the same frame list less
+ * the words a past sentence uses. An employer's own name ("Next Level Staffing") is never read as a frame.
+ */
+export function ownJobFramed(line: string, start: number, end: number, present: boolean, nextLine = ""): boolean {
+  const before = line.slice(0, start);
+  const sStart = Math.max(before.lastIndexOf(". "), before.lastIndexOf("! "), before.lastIndexOf("? ")) + 1;
+  const tail = line.slice(end);
+  const stop = tail.search(/[.!?](?:\s|$)/);
+  const sentenceEnd = stop >= 0 ? end + stop + 1 : line.length;
+  const before0 = line.slice(sStart, start);
+  const after = line.slice(end, sentenceEnd).replace(/\b[A-Z][A-Za-z0-9&'.-]*(?:\s+[A-Z][A-Za-z0-9&'.-]*)*/g, (w) => (/^I$/.test(w) ? w : " "));
+  const next = line.slice(sentenceEnd).trim() || nextLine.trim();
+  if (present) return presentHeld(before0, after, false, next);
+  const clause = `${(before0.split(/[,;]|\b(?:and|but|so)\b/).pop() as string)} ${after.split(/[,;]|\b(?:and|but|so)\b/)[0]}`;
+  return PRESENT_FRAME_AFTER.test(clause.replace(PAST_TIME_WORDS, " "));
+}
 // A line about the job they want: a present tense in it is a wish, not their work (R13-B1).
 const GOAL_PARAGRAPH_RE = /\b(?:looking\s+(?:for|to)|seeking|want(?:s|ed)?\s+(?:a|an|to|my|the)|would\s+(?:love|like)|'d\s+(?:love|like)|hop(?:e|es|ing)\s+(?:to|for|I)|dream\s+(?:job|role)|ideal\s+(?:job|role)|my\s+goals?|next\s+(?:job|role)|new\s+(?:job|role)|interested\s+in|see\s+myself|in\s+(?:\d+|five|ten|a\s+few)\s+years)\b|(?:^|[.!?:]\s+)(?:a\s+)?[A-Za-z]+\s+(?:job|role|position)\s*(?:[.!:]|$)/im;
 /** Round 13 (R13-B1): the goal box and other "what you're looking for" text, marked so a present tense in it never counts. */
