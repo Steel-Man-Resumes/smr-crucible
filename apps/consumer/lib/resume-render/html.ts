@@ -58,6 +58,8 @@ ${fontFaceCss(opts.fontUrls)}
 .rr li::before{content:"";display:inline-block;width:${pt(SHAPE.bulletSquare)};height:${pt(SHAPE.bulletSquare)};background:${COLORS.accent};margin:0 ${pt(SHAPE.bulletIndent - SHAPE.bulletSquare - 1)} 0 1pt;vertical-align:${pt(body * 0.12)}}
 .rr .pageline{font:400 ${pt(SHAPE.pageLineSize)}/1.3 ${sans};color:${COLORS.soft};margin:0 0 6pt 0}
 .rr .pageline.draft{font-weight:700}
+.rr .page.dmp{position:relative}
+.rr .pageline.dm{position:absolute;top:${pt(Math.max(4, L.marginTop - SHAPE.pageLineSize * 1.3 - 4))};left:${pt(L.marginSide)};margin:0}
 .rr .letter p{margin:0 0 ${pt((body + 0.5) * 0.75)} 0;font-size:${pt(body + 0.5)};line-height:${L.lineHeight + 0.03}}
 .rr .letter .closing .ln:nth-child(2){margin-top:${pt((body + 0.5) * 1.2)};font-weight:700}
 .rr .checklist h2{margin-top:0}
@@ -72,6 +74,7 @@ ${fontFaceCss(opts.fontUrls)}
 ${opts.standalone ? `@page{size:${opts.page ? `${pt(PW)} ${pt(PH)}` : "Letter"};margin:${pt(L.marginTop)} ${pt(L.marginSide)} ${pt(Math.max(0, L.marginBottom - 5))} ${pt(L.marginSide)}}\n` : ""}@media print{
 .rr .page{width:auto;min-height:0;padding:0;margin:0;box-shadow:none;break-after:page}
 .rr .page:last-child{break-after:auto}
+.rr .pageline.dm{top:0;left:auto;right:0}
 }
 ${opts.standalone ? "html,body{margin:0;background:#e9edf1}\n@media print{html,body{background:#fff}}" : ""}`;
   return css.trim();
@@ -103,7 +106,7 @@ function plain(b: BlockSpec): string {
 
 function pageLines(layout: Layout, pageNo: number): string {
   const out: string[] = [];
-  if (layout.draft) out.push(`<p class="pageline draft">DRAFT</p>`);
+  if (layout.draft) out.push(`<p class="pageline draft${layout.draftInMargin ? " dm" : ""}">DRAFT</p>`);
   if (pageNo >= 2) out.push(`<p class="pageline">${esc(layout.name ? `${layout.name}, page ${pageNo}` : `Page ${pageNo}`)}</p>`);
   return out.join("");
 }
@@ -182,7 +185,7 @@ export function pagesHtml(layout: Layout, kind: "resume" | "letter" = "resume"):
       html += blockHtml(b, letter);
     }
     if (inList) html += "</ul>";
-    pages.push(`<section class="page${letter ? " letter" : ""}" aria-label="Page ${k + 1}">${html}</section>`);
+    pages.push(`<section class="page${letter ? " letter" : ""}${layout.draftInMargin ? " dmp" : ""}" aria-label="Page ${k + 1}">${html}</section>`);
   });
   return pages.join("\n");
 }
