@@ -3,7 +3,7 @@
  *   GET    -> their saved checklists (the offense only where they kept it)
  *   POST   -> "Save this checklist"; the offense is kept only with keepOffense
  *   DELETE -> ?id= deletes one
- * Owner only (record_check_saved is row-level protected). Staff sessions are
+ * Owner only (the saved table is row-level protected). Staff sessions are
  * refused. Nothing here is shared with a program.
  */
 import {

@@ -13,7 +13,7 @@
  * - coach_conversation (AI coach memory -- full transcript erase)
  * - disclosure_rehearsal + interview_voice sessions/chunks (Phase 5.1
  *   encrypted, text-only transcripts, both purposes)
- * - record_check_saved (D11, saved record checks, owner only)
+ * - saved record checks (D11, owner only, via deleteAllRecordChecks)
  *
  * ACCOUNT vs DATA (Phase 7.4): by default this wipes the DATA above but KEEPS
  * the account/login, so the user can sign back in to an empty workspace. If the
