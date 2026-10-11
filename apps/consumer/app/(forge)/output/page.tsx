@@ -108,6 +108,12 @@ import { FinishTour, type TourStep } from "@/components/forge/finish/FinishTour"
 import { GroundingNote, groundingOpenCount, readGrounding } from "@/components/forge/finish/GroundingNote";
 import { NextStep, ReviewAsk } from "@/components/forge/finish/NextStep";
 import { StorySection, type ForgeOutput } from "@/components/forge/finish/StorySection";
+import { buildResumeTour, pageLines } from "@/lib/showstopper-tour";
+import { readChanges, type MarkupChange } from "@/lib/markup-changes";
+import { useReducedMotion } from "@/components/forge/showstopper/useReducedMotion";
+import { MarkupWalk } from "@/components/forge/markup/MarkupWalk";
+import { LiveFix } from "@/components/forge/markup/LiveFix";
+import { ChangesList } from "@/components/forge/markup/ChangesList";
 
 type DocGenState = "idle" | "generating" | "done" | "error";
 
@@ -194,6 +200,20 @@ function OutputPageInner() {
 
   const [docState, setDocState] = useState<DocGenState>("idle");
   const [resumeText, setResumeText] = useState<string>("");
+  // Phase 6 live markup (S3): the writer's verified changes to the person's
+  // own lines, and whether they are playing on screen right now.
+  const [changes, setChanges] = useState<MarkupChange[]>([]);
+  const [revealing, setRevealing] = useState(false);
+  const reduced = useReducedMotion();
+  const reducedRef = useRef(reduced);
+  reducedRef.current = reduced;
+  // The page the writer was given (the changes' old lines come from it).
+  // A page typed in the builder is not a "before", so it gets no walk.
+  const walkTour = useMemo(
+    () => (checkMode || session.resumeMethod === "guided" ? null : buildResumeTour(session.resumeText)),
+    [checkMode, session.resumeMethod, session.resumeText]
+  );
+  const liveFixLines = useMemo(() => pageLines(session.resumeText ?? ""), [session.resumeText]);
   // Lines about time inside that the writer held back (never silently), and
   // whether the person chose to put them back as written.
   const [withheldLines, setWithheldLines] = useState<string[]>([]);
@@ -292,6 +312,8 @@ function OutputPageInner() {
     setDocState("generating");
     setDocError("");
     setGrounding(null);
+    setChanges([]);
+    setRevealing(false);
 
     try {
       const response = await fetch("/api/forge/generate-docs", {
@@ -327,6 +349,11 @@ function OutputPageInner() {
 
       const data = await response.json();
       setResumeText(data.resume || "");
+      // Only changes whose old line is the person's and whose new line is in
+      // this finished resume. None (older server, nothing changed) = no reveal.
+      const verified = readChanges(data.changes, session.resumeText ?? "", data.resume || "");
+      setChanges(verified);
+      setRevealing(verified.length > 0 && reducedRef.current === false);
       // Lanes first (R2): the letter is the job route's. On the other routes it
       // waits behind "Add a cover letter" (written once, never forced on).
       if (offerLetterOnlyRef.current) {
@@ -568,8 +595,9 @@ function OutputPageInner() {
   const [celebrated, setCelebrated] = useState(false);
   useEffect(() => {
     if (mayAccount && !current) return; // wait for the server's answer
-    if (shouldCelebrate({ state: view.state, isDemo, docsReady: ready, alreadyCelebrated: celebrated })) setCelebrated(true);
-  }, [view.state, isDemo, ready, celebrated, mayAccount, current]);
+    // Not while the live fix is still playing: the finished page comes first.
+    if (shouldCelebrate({ state: view.state, isDemo, docsReady: ready && !revealing, alreadyCelebrated: celebrated })) setCelebrated(true);
+  }, [view.state, isDemo, ready, revealing, celebrated, mayAccount, current]);
 
   // Review ask: after a finished download, once per visit.
   const [finishedDownloadDone, setFinishedDownloadDone] = useState(false);
@@ -601,7 +629,7 @@ function OutputPageInner() {
   // The tour: once by itself, then from the button.
   const [tourOpen, setTourOpen] = useState(false);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || revealing) return;
     try {
       if (localStorage.getItem(TOUR_SEEN_KEY) === "1") return;
       localStorage.setItem(TOUR_SEEN_KEY, "1");
@@ -610,7 +638,7 @@ function OutputPageInner() {
     }
     const t = setTimeout(() => setTourOpen(true), 900);
     return () => clearTimeout(t);
-  }, [ready]);
+  }, [ready, revealing]);
 
   const tourSteps: TourStep[] = [
     view.state === "finished"
@@ -878,6 +906,10 @@ function OutputPageInner() {
     );
   }
 
+  // Phase 6 live markup (S3): the writer's real changes play on the person's
+  // own page once the finished documents are back.
+  const liveFixOn = docState === "done" && revealing && !checkMode && changes.length > 0;
+
   const headline =
     checkMode && (docState === "generating" || docState === "idle")
       ? "Opening your resume."
@@ -887,7 +919,9 @@ function OutputPageInner() {
       ? "t.ROY is writing your resume and cover letter."
       : docState === "error"
         ? "Your resume didn't come through."
-        : statusLine(view);
+        : liveFixOn
+          ? "Your new page is written. Here's what t.ROY changed."
+          : statusLine(view);
   const subline =
     checkMode && docState !== "done"
       ? ""
@@ -897,7 +931,9 @@ function OutputPageInner() {
       ? "This usually takes 30 to 60 seconds."
       : docState === "error"
         ? "Nothing you entered was lost. Try again below."
-        : view.state === "finished"
+        : liveFixOn
+          ? "Each old line, the new one, and why. Skip any time."
+          : view.state === "finished"
           ? "Download it below, or email it to yourself."
           : "Answer them with t.ROY. You can download a draft any time.";
 
@@ -988,13 +1024,21 @@ function OutputPageInner() {
       </div>
 
       {(docState === "generating" || docState === "idle") && !checkMode && (
-        <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
-          <div className="relative mx-auto mb-4 h-10 w-10">
-            <div className="absolute inset-0 border-[3px] border-t-line" />
-            <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
+        walkTour ? (
+          <MarkupWalk tour={walkTour} reduced={reduced} />
+        ) : (
+          <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
+            <div className="relative mx-auto mb-4 h-10 w-10">
+              <div className="absolute inset-0 border-[3px] border-t-line" />
+              <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
+            </div>
+            <p className="text-sm font-medium text-t-amber-bright">Writing your resume and cover letter...</p>
           </div>
-          <p className="text-sm font-medium text-t-amber-bright">Writing your resume and cover letter...</p>
-        </div>
+        )
+      )}
+
+      {liveFixOn && (
+        <LiveFix lines={liveFixLines} changes={changes} reduced={reduced} onDone={() => setRevealing(false)} />
       )}
 
       {docState === "error" && !checkMode && (
@@ -1012,11 +1056,12 @@ function OutputPageInner() {
         </div>
       )}
 
-      {docState === "done" && (
+      {docState === "done" && !liveFixOn && (
         <>
           {/* 2. The resume, with the fix questions beside it (under it on a phone) */}
           <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
             <div className="min-w-0">
+              {!checkMode && <ChangesList changes={changes} open={reduced !== false} />}
               <div id="finish-resume" className="scroll-mt-20 border border-t-line bg-t-bg p-3 sm:p-4" data-testid="finish-resume">
                 {resumeText ? (
                   <ResumePage text={resumeText} draft={view.state !== "finished"} />
