@@ -1143,7 +1143,7 @@ function OutputPageInner() {
 
       {(docState === "generating" || docState === "idle") && !checkMode && (
         walkTour ? (
-          <MarkupWalk tour={walkTour} reduced={reduced} />
+          <MarkupWalk tour={walkTour} reduced={reduced} startingPage={rebuilding} />
         ) : (
           <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
             <div className="relative mx-auto mb-4 h-10 w-10">

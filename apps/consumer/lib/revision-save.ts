@@ -241,7 +241,8 @@ export async function saveEditRevision(
   // may have walked to a parent), else this artifact's newest.
   const latest = opts.base !== undefined ? opts.base : await store.getLatestRevision(userId, artifactId);
   const base = latest ? inputFromRevision(latest) : null;
-  const c = editInput(base, resumeText, letterText as string | undefined);
+  // Integration r2 (H1): a base from another artifact (a Tailor's parent) is a fork: no writer eligibility carried.
+  const c = editInput(base, resumeText, letterText as string | undefined, { fork: !!latest && latest.artifact_id !== artifactId });
   if (!c.ok) return { ok: false, status: c.reason === "too long" ? 413 : 400, reason: c.reason };
   const verdict = computeRevision(c.input);
   const r = await store.insertRevision(userId, revisionRecord(artifactId, "refinery_edit", c.input, verdict));
