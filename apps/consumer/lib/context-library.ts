@@ -122,7 +122,7 @@ COMPETITIVE STANDARD: Every resume must compete at the highest professional leve
 
 ${resumeRulesBlock("truth")}
 
-RECORD DEFAULT: by default the record stays off the page and the person explains it in person, at the right time; never state charges, a sentence or supervision status. If the person chose to keep their own lines about work done inside, the writer's rules for that request say so. Employment gaps use years only, never explained.`,
+RECORD DEFAULT: by default the record stays off the page and the person explains it in person, at the right time; never state charges, a sentence or supervision status. If the person chose to keep their own lines about work done inside, the writer's rules for that request say so. Employment gaps are never explained, and every date stays in the form the person gave it.`,
 
   cover_letter: `RESEARCH-BACKED COVER LETTER STANDARDS:
 

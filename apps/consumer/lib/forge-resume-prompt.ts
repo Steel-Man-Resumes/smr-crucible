@@ -13,6 +13,7 @@ import { resumeRulesBlock, RESUME_RULES_VERSION } from "@crucible/core/src/resum
 import { buildFullContext, userContextFromForge } from "./context-library";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "./limits";
 import { withholdRecordLines } from "./record-lines";
+import { CHANGES_MARKER, CHANGES_MAX } from "./writer-changes";
 
 export interface GenerateDocsInput {
   narrative?: {
@@ -70,7 +71,7 @@ export function selfDisclosureDirective(input: GenerateDocsInput): string {
     );
   }
   const worries = new Set(input.resumeWorries || []);
-  if (worries.has("gaps")) bits.push("They worry about employment gaps: use years only (never months), never explain a gap, and let strengths carry the story.");
+  if (worries.has("gaps")) bits.push("They worry about employment gaps: keep every date exactly as they gave it (never shorten, round or change one), never explain a gap, and let strengths carry the story.");
   if (worries.has("job_changes")) bits.push("They worry about job changes: present varied roles plainly as the range of work they did, without adding claims.");
   if (worries.has("little_experience")) bits.push("They worry about limited experience: lead with the skills, training, programs and volunteer work they named, with their dates, and any real accomplishments they gave. Keep dated entries; never a dateless functional page.");
   return bits.length ? `\nSELF-DISCLOSURE (adapt accordingly, never invent):\n- ${bits.join("\n- ")}\n` : "";
@@ -104,32 +105,37 @@ ${resumeRulesBlock("page")}
 FORGE WRITER RULES:
 1. RECORD: ${input.keepInsideLines === true ? KEEP_INSIDE_RULE : WITHHOLD_RULE}
 2. Past roles in past tense, the current role in present tense.
-3. Start each bullet with a plain action verb the person's words support, then what was done, then a result only if the person gave one.
+3. REWORDING (reword freely, facts locked): every bullet starts with a strong, specific action verb, then what was done and its scale, then a result only if the person gave one. Rewrite every duty line ("responsible for", "duties included", "did", "dealt with", "in charge of", "worked with") into what it means, from the person's facts: "Responsible for 3rd shift." becomes "Supervised the 3rd shift crew." when the person ran that shift; "Did safety audits." becomes "Ran safety audits on the floor." only if they said where, otherwise "Ran safety audits." Locked in every reworded line: numbers, job titles, employers, dates, credentials (type and status) and scope ("helped" stays helped, never led or sole). Anything NEW (a number, a result, a tool, a skill the person never named) is never added.
 4. PAGE LENGTH: ${input.onePage === true ? "The person chose ONE page. Keep to one page by leading with the strongest true lines and shortening older roles to title, employer and years. Never drop a role, a date or a fact to make room." : "Two pages when the person's true history fills them, one page when it doesn't. Never add filler to reach a second page, and never more than two pages."}
-5. FORMAT: reverse-chronological, years on every entry. Use a hybrid only under the hybrid rule in the page rules above.
+5. FORMAT: reverse-chronological, dates on every entry. Use a hybrid only under the hybrid rule in the page rules above.
+6. NO OBJECTIVE, EVER. If the person's page opens with an objective, drop it: the headline and summary replace it, built from their facts.
+7. SKILLS are real and specific: tools, machines, equipment, software, methods and credentials the person named, grouped in short labeled lines when there are enough to group. Never list soft-skill words ("hard worker", "team player", "fast learner", "detail oriented", "good communication", "people person"), even when the person's page lists them.
+8. CHANGES: after the resume, list the lines you changed from the person's own page, in the CHANGES block described in the output format.
 
 DATA CLEANING (INPUT ERRORS):
 - If a job title doesn't seem to match the company, keep exactly what the person wrote. Never move a title to a different employer and never invent a new employer or role. The person checks it on the next screen.
 - If dates look wrong or overlapping, keep the dates exactly as the person gave them. Never change, merge, shift or guess a date. A date that is off by even a month reads as a discrepancy on a background check, so the person settles it, not you.
-- If the resume is bare, produce the strongest TRUE resume the facts support: real duties as plain action-verb bullets, skills the source supports, clean structure. An honest 3-bullet role beats a padded 5-bullet one.
+- Copy every date in the same form the person wrote it: "8/2021 - 12/2022" stays "8/2021 - 12/2022" (never "2021 - 2022" and never "Aug 2021"), and "2019 - 2023" stays "2019 - 2023".
+- If the resume is bare, produce the strongest TRUE resume the facts support: real duties as strong action-verb bullets, skills the source supports, clean structure. An honest 3-bullet role beats a padded 5-bullet one.
 
 ${isExploring ? `This person is exploring, not actively job searching. Frame the summary around who they are and what they have done, not a target.` : ""}
 ${selfDisclosureDirective(input)}
 SECTION ORDER (exact):
 1. FULL NAME (all caps)
 2. Contact line: City, State | Phone | Email (one line, pipe-separated). Include ONLY the pieces the source provides. Omit anything missing rather than inventing a placeholder for it.
-3. Headline (one line naming the work the person does or is aiming for, built only from their facts. Not an objective, not a slogan.)
+3. Headline (one line naming the work the person does or is aiming for, built only from their facts. Never an objective, never a slogan.)
 4. CAREER SUMMARY (2-4 plain sentences built only from the person's facts: what they have done and what they are aiming for. No sentence that could fit anyone.)
-5. CORE COMPETENCIES (one column, per the page rules: one comma-separated line, or a few short labeled lines such as "Equipment: ..." and "Tools: ...". Only terms the person said they did, used or learned. Typically 6 to 15, fewer for a short history.)
+5. CORE COMPETENCIES (one column, per the page rules: one comma-separated line, or a few short labeled lines such as "Equipment: ..." and "Tools: ...". Only real, specific terms the person said they did, used or learned; never soft-skill words. Typically 6 to 15, fewer for a short history.)
 6. PROFESSIONAL EXPERIENCE (reverse chronological)
-   - Format: JOB TITLE | Company Name | City, State | Start Year - End Year. Include City, State only if the source gives that job's city; otherwise leave that part out.
+   - Format: JOB TITLE | Company Name | City, State | Start - End, with both dates copied exactly as the person wrote them. Include City, State only if the source gives that job's city; otherwise leave that part out.
+   - Every line under a job is a bullet starting with "- ".
    - As many bullets as the role's real work supports (typically 2 to 6). Keep every number the person gave, as given; a true line without a number is complete.
    - No work history at all: the page is still dated, never a dateless functional page. Lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry.
 7. EDUCATION (only if the source gives any; otherwise leave the section off)
    - Institution, dates. City and state only if the source gives them. Add relevant coursework only if the source states it.
 8. CERTIFICATIONS (only if the source gives any; its own section. List each credential once, at its true type and status, never also under EDUCATION. A finished course or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.)
 
-OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders.`;
+OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders. The one exception is the CHANGES block after the resume, which is JSON as the output format shows.`;
 
   const parts: string[] = [];
 
@@ -155,7 +161,7 @@ OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No br
 
   if (input.resumeText) {
     const cleanedResume = withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept;
-    parts.push(`ORIGINAL RESUME TEXT (the person's own words; turn duty phrasing into plain action verbs only where these words support the action):\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.resumeText")}`);
+    parts.push(`ORIGINAL RESUME TEXT (the person's own words and the facts you work from. Reword every weak line into strong plain words that say what it means; keep every fact):\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.resumeText")}`);
   }
 
   if (input.goals?.length) {
@@ -188,7 +194,7 @@ City, State | Phone | Email
      finished resume goes to an employer looking like carelessness, and this is
      a document someone sends without re-reading it.
 
-Headline: one line naming the work, from the person's facts.
+One headline line naming the work, from the person's facts (no label in front of it, never an objective).
 
 CAREER SUMMARY
 2-4 plain sentences from the person's facts. NO generic filler.
@@ -199,16 +205,16 @@ Term, Term, Term, Term, Term, Term
 
 PROFESSIONAL EXPERIENCE
 
-JOB TITLE | Company Name | City, State | Start Year - End Year
-(City, State only if the source gives that job's city. Otherwise: JOB TITLE | Company Name | Start Year - End Year)
-- Plain action verb + what was done + a result only if the person gave one.
+JOB TITLE | Company Name | City, State | Start - End
+(Dates copied exactly as the person wrote them: 8/2021 - 12/2022 stays 8/2021 - 12/2022. City, State only if the source gives that job's city. Otherwise: JOB TITLE | Company Name | Start - End)
+- Strong action verb + what was done and its scale + a result only if the person gave one.
 - Keep shared or supervised work at its true scope ("Helped with X under the lead" when that is what they said).
 - As many bullets as the role's real work supports; write fewer rather than pad.
 
 (Repeat for each role, reverse chronological)
 
 EDUCATION
-Institution Name, City, State | Start Year - End Year
+Institution Name, City, State | Start - End (as the person wrote them)
 (City, State only if the source gives them.)
 Relevant coursework or focus area only if the source states it.
 
@@ -223,7 +229,16 @@ CRITICAL REMINDERS:
 - CERTIFICATIONS: include ONLY credentials the source states, exactly as stated. Never annotate "(Current)" unless the source says so.
 - NO placeholder brackets. NO [Company Name]. Use real data or omit.
 - If no work history exists: still a dated page, never a dateless functional one. Lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry; build only from what the person said.
-- Certifications get their OWN section, never buried in education.`;
+- Certifications get their OWN section, never buried in education.
+- No objective. No soft-skill words in the skills section. Every date in the form the person wrote it.
+
+CHANGES BLOCK (after the resume, on its own lines, exactly this shape):
+${CHANGES_MARKER}
+[{"old": "a line copied exactly from the ORIGINAL RESUME TEXT", "new": "the line it became, copied exactly from your resume above", "why": "one plain sentence", "rule": "duty_phrasing"}]
+
+- At most ${CHANGES_MAX} entries, only for lines that were weak on the person's page: an objective (rule "objective", new = your headline or first summary sentence), a soft-skill list (rule "soft_skill_list", new = your skills line), duty phrasing (rule "duty_phrasing"), a line that was not a bullet (rule "bullet"), a heading (rule "heading"), a missing or weak summary (rule "summary"), or a date written differently from its other dates (rule "date_format"; never change the date itself).
+- "why" is one short sentence, spoken to the person, that says what an employer reads in the old line and what the new one proves. Plain words, no dashes. Example: "\"Responsible for\" reads like a job description. Saying what you ran shows what you did."
+- "old" and "new" must be copied character for character. Leave out any entry you cannot copy exactly. If nothing changed, write ${CHANGES_MARKER} and then [].`;
 
   return { system, user };
 }
