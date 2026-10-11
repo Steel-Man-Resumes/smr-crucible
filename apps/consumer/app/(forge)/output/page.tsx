@@ -165,6 +165,8 @@ export default function OutputPage() {
   const [grounding, setGrounding] = useState<unknown>(null);
   // The writer's documents exactly as delivered; never edited (see finish-gate WrittenDocs).
   const [written, setWritten] = useState<WrittenDocs | null>(null);
+  // The server's receipt over the writer's documents and their check (review M1).
+  const [receipt, setReceipt] = useState<string>("");
   const [defendAnswers, setDefendAnswers] = useState<DefendAnswer[]>([]);
   // Skill terms the person added from a job posting; each is asked about.
   const [addedTerms, setAddedTerms] = useState<string[]>([]);
@@ -186,6 +188,8 @@ export default function OutputPage() {
   const [saved, setSaved] = useState<(SavedRevisionSummary & { mark: string }) | null>(null);
   // The state whose save last failed (its mark), so a failure is shown only for the state on screen.
   const [failedMark, setFailedMark] = useState<string | null>(null);
+  // A save the server refused for size (review L8): said plainly, never retried.
+  const [tooLarge, setTooLarge] = useState<{ mark: string; message: string } | null>(null);
 
   // Back on this page in the same run: show the same documents and answers
   // instead of writing new ones (a new AI call, and the answers would no
@@ -206,6 +210,7 @@ export default function OutputPage() {
     setKeepInsideLines(stored.docs.keepInsideLines);
     setGrounding(stored.docs.grounding);
     setWritten(stored.docs.written ?? null);
+    setReceipt(stored.docs.receipt ?? "");
     setDefendAnswers(stored.defendAnswers);
     setAddedTerms(stored.addedTerms ?? []);
     setKeptTerms(stored.keptTerms ?? []);
@@ -221,7 +226,7 @@ export default function OutputPage() {
       forgeFinish: {
         v: FINISH_STATE_VERSION,
         key: finishKey(session, keepInsideLines),
-        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written: written ?? undefined },
+        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written: written ?? undefined, ...(receipt ? { receipt } : {}) },
         defendAnswers,
         addedTerms,
         keptTerms,
@@ -233,7 +238,7 @@ export default function OutputPage() {
     });
     // session is read for its key fields only; writing must not loop on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, lengthChoice, runEvidence, updateSession]);
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, receipt, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, lengthChoice, runEvidence, updateSession]);
 
   const runIsMineRef = useRef(runIsMine);
   runIsMineRef.current = runIsMine;
@@ -281,6 +286,7 @@ export default function OutputPage() {
       setWithheldLines(Array.isArray(data.withheldLines) ? data.withheldLines.filter((l: unknown) => typeof l === "string") : []);
       setGrounding(data.grounding ?? null);
       setWritten({ resume: data.resume || "", letter: data.coverLetter || "" });
+      setReceipt(typeof data.receipt === "string" ? data.receipt : "");
       // New documents: earlier answers belonged to other lines.
       setDefendAnswers([]);
       setAddedTerms([]);
@@ -352,13 +358,13 @@ export default function OutputPage() {
       ready
         ? finishPayload(
             session,
-            { resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, lengthChoice },
+            { resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, lengthChoice, receipt },
             runEvidence
           )
         : null,
     // session is read for its run fields only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ready, resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, lengthChoice, runEvidence, session.resumeText, session.originalResumeText, session.goalNarrative, session.hookNarrative, session.challengeNarratives, session.credentialRows]
+    [ready, resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, lengthChoice, receipt, runEvidence, session.resumeText, session.originalResumeText, session.goalNarrative, session.hookNarrative, session.challengeNarratives, session.credentialRows]
   );
   const mark = useMemo(() => payloadMark(payload), [payload]);
   const mayAccount = signedIn && !isDemo;
@@ -374,8 +380,12 @@ export default function OutputPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "finish", finish: payload, laneTarget: careerPaths[0]?.title || "" }),
       });
-      const data = (await res.json().catch(() => null)) as { revision?: SavedRevisionSummary } | null;
+      const data = (await res.json().catch(() => null)) as { revision?: SavedRevisionSummary; error?: string } | null;
       if (mine !== saveSeq.current) return;
+      if (res.status === 413) {
+        setTooLarge({ mark: forMark, message: data?.error || "This version is too big to save to your account." });
+        return;
+      }
       if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
       setSaved({ ...data.revision, mark: forMark });
     } catch {
@@ -394,7 +404,7 @@ export default function OutputPage() {
   // The saved revision for exactly this state, or null while it saves.
   const current = saved && saved.mark === mark ? saved : null;
   // What the account line says: saved only for THIS state's revision.
-  const saveShown: "saved" | "failed" | "saving" = current ? "saved" : failedMark === mark ? "failed" : "saving";
+  const saveShown: "saved" | "failed" | "saving" | "too_large" = current ? "saved" : tooLarge?.mark === mark ? "too_large" : failedMark === mark ? "failed" : "saving";
 
   // D8: pages are part of status. The server's count for the saved version;
   // the renderer's count from the layout route while it saves (or signed out).
@@ -717,7 +727,21 @@ export default function OutputPage() {
           {ready && mayAccount && (
             <p role="status" className="mt-1 text-xs text-t-phos" data-testid="account-save" data-state={saveShown}>
               {current ? (
-                <>Saved to your account (version {current.number}).</>
+                <>
+                  Saved to your account (version {current.number}).
+                  {current.accountCopy === "kept_refinery" && (
+                    <span className="block" data-testid="account-copy-note">
+                      Your resume in the Refinery has changes you made there, so we kept it as it is. This finished version is saved beside it.
+                    </span>
+                  )}
+                  {current.accountCopy === "kept_earlier" && (
+                    <span className="block" data-testid="account-copy-note">
+                      Your account&apos;s earlier copy is kept{current.accountCopyRevision ? ` as version ${current.accountCopyRevision}` : ""}. Your resume in the Refinery now shows this finished version.
+                    </span>
+                  )}
+                </>
+              ) : saveShown === "too_large" ? (
+                <>{tooLarge?.message}</>
               ) : saveShown === "failed" ? (
                 <>
                   Not saved to your account yet. Your work is still on this page.{" "}

@@ -81,6 +81,10 @@ export function ResumeWorkspace() {
   const [exportRev, setExportRev] = useState<{ id: string; number: number; status: "draft" | "finished" } | null>(null);
   const [exportError, setExportError] = useState("");
   const artifactIdRef = useRef<string | null>(null);
+  // Review M3: the resume a Tailor output was made from (the approved base, or
+  // the Forge resume). Saved as its parent, so its version starts from the
+  // parent's settled answers: unchanged lines stay settled.
+  const tailorParentRef = useRef<string | null>(null);
   useEffect(() => {
     artifactIdRef.current = artifactId;
     setExportRev(null);
@@ -613,6 +617,8 @@ export function ResumeWorkspace() {
               resumes.find((a) => a.is_current) ||
               null;
             if (approvedBase?.id) approvedArtifactId = approvedBase.id;
+            const forgeBase = resumes.find((a) => (a.target_context as any)?.source === "forge");
+            tailorParentRef.current = approvedBase?.id || forgeBase?.id || null;
           }
         } catch {}
 
@@ -845,6 +851,7 @@ export function ResumeWorkspace() {
               content,
               scaffoldLevel: 0.5,
               ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
+              ...(tailorParentRef.current ? { parentArtifactId: tailorParentRef.current } : {}),
             }),
           });
           if (res.ok) {
@@ -1792,7 +1799,7 @@ export function ResumeWorkspace() {
                     ? exportError
                     : exportRev!.status === "finished"
                       ? `Version ${exportRev!.number}, finished. Downloads use this exact version.`
-                      : `Version ${exportRev!.number} is a draft, so its files are marked DRAFT. Finish it in the Forge, or fix what's open.`}
+                      : "Draft: check it before you send it."}
                 </p>
               )}
             </>

@@ -125,8 +125,10 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
   }
 
   // Plain-text export -- the most ATS-safe format (single column, no tables).
+  // Not a checked, finished version (Phase 5 R1, review L3): marked DRAFT,
+  // the same mark the server puts on raw text.
   function downloadTxt() {
-    const blob = new Blob([formatResumeDownload(doc)], { type: "text/plain;charset=utf-8" });
+    const blob = new Blob([`DRAFT\n\n${formatResumeDownload(doc)}`], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

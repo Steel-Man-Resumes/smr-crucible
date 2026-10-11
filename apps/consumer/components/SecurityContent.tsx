@@ -158,6 +158,11 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
             chats.
           </BulletItem>
           <BulletItem>
+            When you are signed in, each checked version of your resume is
+            saved to your account, with the answers you gave about its lines.
+            You can download or delete them in Settings.
+          </BulletItem>
+          <BulletItem>
             The record check is the only screen that asks for your offense,
             and it asks for your yes first. What you type there goes to
             Anthropic, which picks items for your checklist from our own
