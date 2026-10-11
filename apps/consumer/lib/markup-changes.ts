@@ -117,14 +117,12 @@ export const STRIKE_MS = 700;
 export const CHAR_MS = 28;
 /** ...but never longer than this. */
 export const TYPE_MAX_MS = 1800;
-/** A whole replay aims to fit in about this long; many changes play faster. */
-export const REPLAY_BUDGET_MS = 75_000;
-/** Floors, so even a fast change can be read. */
-const MIN_STRIKE_MS = 250;
-const MIN_TYPE_MS = 300;
-const MIN_READ_MS = 1300;
+/** At most this many changes play; the rest are in the list under the page. */
+export const REPLAY_MAX = 12;
+/** Each played change stays on screen at least this long, typing included. */
+export const MIN_STEP_MS = 4000;
 
-/** How long the reason sits at full pace. */
+/** How long the reason sits. */
 export function readMs(why: string): number {
   return Math.min(4800, Math.max(2200, why.length * 30));
 }
@@ -136,29 +134,37 @@ export interface StepPace {
   total: number;
 }
 
-const fullPace = (c: MarkupChange): StepPace => {
-  const strike = STRIKE_MS;
-  const type = Math.min(TYPE_MAX_MS, c.new.length * CHAR_MS);
-  const read = readMs(c.why);
-  return { strike, type, read, total: strike + type + read };
-};
-
 /**
- * The pace for each change. Full pace when the whole replay fits the budget;
- * otherwise every phase is scaled down (never below the floors), so even
- * forty changes finish in about a minute and a half.
+ * The pace for each played change: always the readable pace (never squeezed),
+ * and never under MIN_STEP_MS. With REPLAY_MAX changes at most, the whole
+ * replay stays under about ninety seconds.
  */
 export function paceFor(changes: MarkupChange[]): StepPace[] {
-  const full = changes.map(fullPace);
-  const sum = full.reduce((a, p) => a + p.total, 0);
-  const f = sum > REPLAY_BUDGET_MS ? REPLAY_BUDGET_MS / sum : 1;
-  return full.map((p) => {
-    if (f === 1) return p;
-    const strike = Math.max(MIN_STRIKE_MS, Math.round(p.strike * f));
-    const type = Math.max(MIN_TYPE_MS, Math.round(p.type * f));
-    const read = Math.max(MIN_READ_MS, Math.round(p.read * f));
+  return changes.map((c) => {
+    const strike = STRIKE_MS;
+    const type = Math.min(TYPE_MAX_MS, c.new.length * CHAR_MS);
+    const read = Math.max(readMs(c.why), MIN_STEP_MS - strike - type);
     return { strike, type, read, total: strike + type + read };
   });
+}
+
+/**
+ * Which changes play: one of each kind first (so the replay shows every kind
+ * of fix), then the rest in page order, up to `max`, shown top to bottom.
+ */
+export function pickForReplay<T extends { change: MarkupChange }>(steps: T[], max: number = REPLAY_MAX): T[] {
+  if (steps.length <= max) return steps;
+  const chosen = new Set<number>();
+  const kinds = new Set<string>();
+  steps.forEach((s, k) => {
+    if (chosen.size >= max) return;
+    const kind = s.change.rule || "other";
+    if (kinds.has(kind)) return;
+    kinds.add(kind);
+    chosen.add(k);
+  });
+  for (let k = 0; k < steps.length && chosen.size < max; k++) chosen.add(k);
+  return steps.filter((_, k) => chosen.has(k));
 }
 
 /** How many characters of `text` show after `elapsed` ms of a `duration` ms typing phase. */
@@ -168,7 +174,7 @@ export function typedChars(text: string, elapsed: number, duration: number = Mat
   return Math.min(text.length, Math.floor((elapsed / Math.max(1, duration)) * text.length));
 }
 
-/** The whole time one change takes on screen at full pace. */
+/** The whole time one change takes on screen. */
 export function stepMs(change: MarkupChange): number {
-  return fullPace(change).total;
+  return paceFor([change])[0].total;
 }

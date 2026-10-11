@@ -56,7 +56,7 @@ export interface ResumeTour {
 export const TOUR_CAP = 8;
 
 export const STRONG_NOTE = "This is already strong. I'll tighten it.";
-export const READ_NOTE = "I read it top to bottom. Here's what the new page tightens.";
+export const READ_NOTE = "I read it top to bottom. Nothing big jumped out. Your new page is coming.";
 
 const YEAR_RE = /\b(?:19[5-9]\d|20[0-4]\d)\b/;
 

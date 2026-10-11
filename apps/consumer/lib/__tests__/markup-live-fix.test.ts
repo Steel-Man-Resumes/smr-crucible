@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readChanges, planReveal, paceFor, typedChars, stepMs, readMs, MAX_CHANGES, CHAR_MS, TYPE_MAX_MS, REPLAY_BUDGET_MS, type MarkupChange } from "../markup-changes";
+import { readChanges, planReveal, paceFor, pickForReplay, typedChars, stepMs, readMs, MAX_CHANGES, CHAR_MS, TYPE_MAX_MS, REPLAY_MAX, MIN_STEP_MS, type MarkupChange } from "../markup-changes";
 import { pageLines, buildResumeTour } from "../showstopper-tour";
 import { LiveFix } from "../../components/forge/markup/LiveFix";
 import { ChangesList } from "../../components/forge/markup/ChangesList";
@@ -235,21 +235,33 @@ test("r1 L1: only whole lines match, so nothing is typed that sits on neither pa
   assert.equal(steps[0].after, "");
 });
 
-test("r1 L7: a full replay of forty changes stays within about ninety seconds", () => {
+test("r1 L7 / r2 L1: at most a dozen play, each readable, the whole replay under ninety seconds", () => {
+  const rules = ["duty_phrasing", "objective", "soft_skill_list", "heading", "summary"];
   const many: MarkupChange[] = Array.from({ length: MAX_CHANGES }, (_, k) => ({
     old: `Did task number ${k} on the floor.`,
-    new: `Finished task number ${k} on the floor for the morning crew and logged it.`,
-    why: "A strong verb shows the work, and a reader skims for the action first, so the line now leads with it.",
-    rule: "duty_phrasing",
+    new: `Finished task number ${k} on the floor for the morning crew and logged it for the next shift lead.`,
+    why: "A strong verb shows the work, and a reader skims for the action first, so the line now leads with it.".repeat(2),
+    rule: rules[k % 5] === "summary" && k > 30 ? "summary" : k > 30 ? rules[k % 4] : "duty_phrasing",
   }));
-  const pace = paceFor(many);
+  const lines = many.map((c) => `- ${c.old}`);
+  const steps = pickForReplay(planReveal(lines, many));
+  assert.equal(steps.length, REPLAY_MAX);
+  // Every kind of fix is in the replay, and it still reads top to bottom.
+  for (const r of new Set(many.map((c) => c.rule))) assert.ok(steps.some((s) => s.change.rule === r), r);
+  for (let k = 1; k < steps.length; k++) assert.ok(steps[k].lineIndex > steps[k - 1].lineIndex);
+  const pace = paceFor(steps.map((s) => s.change));
+  for (const p of pace) {
+    assert.ok(p.total >= MIN_STEP_MS, "at least about four seconds each");
+    assert.ok(p.read >= 2200, "the reason is never squeezed");
+  }
   const total = pace.reduce((a, p) => a + p.total, 0);
   assert.ok(total <= 90_000, `replay takes ${total} ms`);
-  for (const p of pace) assert.ok(p.read >= 1300, "each reason still gets time to read");
-  // A short replay plays at full pace.
-  const few = paceFor(many.slice(0, 3));
-  assert.deepEqual(few.map((p) => p.total), many.slice(0, 3).map(stepMs));
-  assert.ok(REPLAY_BUDGET_MS >= 60_000 && REPLAY_BUDGET_MS <= 90_000);
+  // A short replay plays everything.
+  assert.equal(pickForReplay(planReveal(lines, many.slice(0, 3))).length, 3);
+  // The finish says the rest are in the list.
+  const html = renderToStaticMarkup(React.createElement(LiveFix, { lines, changes: many, reduced: false, onDone: () => {} }));
+  assert.match(html, /1 of 12/);
+  assert.match(html, /and 28 more/);
 });
 
 test("r1 L5: the strike is a real line-through, so wrapped lines are struck on every row", () => {

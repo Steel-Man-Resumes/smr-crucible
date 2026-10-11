@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SkipForward } from "lucide-react";
 import { TroyMark } from "@crucible/consumer-ui";
-import { planReveal, paceFor, typedChars, type MarkupChange } from "@/lib/markup-changes";
+import { planReveal, paceFor, pickForReplay, typedChars, type MarkupChange } from "@/lib/markup-changes";
 import { ChangesList } from "./ChangesList";
 
 const TICK_MS = 40;
@@ -34,7 +34,10 @@ export function LiveFix({
   reduced: boolean | null;
   onDone: () => void;
 }) {
-  const steps = useMemo(() => planReveal(lines, changes), [lines, changes]);
+  // At most a dozen play, at a pace a person can read, covering each kind of
+  // fix top to bottom. The rest are in the list under the finished page.
+  const steps = useMemo(() => pickForReplay(planReveal(lines, changes)), [lines, changes]);
+  const more = changes.length - steps.length;
   const stepAt = useMemo(() => {
     const m = new Map<number, number>();
     steps.forEach((s, k) => {
@@ -43,8 +46,8 @@ export function LiveFix({
     return m;
   }, [steps]);
   const loose = steps.map((s, k) => ({ s, k })).filter(({ s }) => s.lineIndex < 0);
-  // A full replay stays around a minute, a minute and a half at most: with
-  // many changes each one plays faster.
+  // Never squeezed: each change at least about four seconds, and with a
+  // dozen at most the whole replay stays under about ninety seconds.
   const pace = useMemo(() => paceFor(steps.map((s) => s.change)), [steps]);
 
   const [i, setI] = useState(0);
@@ -160,12 +163,17 @@ export function LiveFix({
     <div className="mt-6 border border-t-line bg-t-panel p-4 sm:p-6" data-testid="live-fix" data-mode="play">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <p className="text-base text-t-white">
-          {done ? "That's every line I changed. Here's your finished page." : "Watch me fix your page, line by line."}
+          {done
+            ? more > 0
+              ? `Those are the main ones. ${more} more ${more === 1 ? "is" : "are"} in the list under your page.`
+              : "That's every line I changed. Here's your finished page."
+            : "Watch me fix your page, line by line."}
         </p>
         <div className="flex items-center gap-3">
           {!done && (
             <span className="font-term text-xs text-t-phos-dim" aria-hidden="true">
               {i + 1} of {steps.length}
+              {more > 0 ? ` (and ${more} more)` : ""}
             </span>
           )}
           <button

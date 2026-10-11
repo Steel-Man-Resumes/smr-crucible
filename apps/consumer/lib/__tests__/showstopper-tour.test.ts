@@ -321,3 +321,25 @@ Stocking`;
   assert.ok(step);
   assert.equal(step.lineIndex, lines.lastIndexOf("Cleaning"), "the job copy, not the skills copy");
 });
+
+// ---- Round 3 (review s3 r2) -----------------------------------------------
+
+test("r2 H1: the thin dollar-store page gets the neutral line, not praise", () => {
+  const page = `Pat Example
+Billings, MT | pat.example@example.com
+Stocker at a dollar store.
+
+EXPERIENCE
+Stocker | Dollar Spot | Billings, MT | 2021 - 2024
+- Stocked shelves
+- Helped customers
+- Cleaned`;
+  const tour = buildResumeTour(page)!;
+  assert.equal(tour.strongNote, undefined);
+  assert.equal(tour.readNote, READ_NOTE);
+});
+
+test("r2 L2: the neutral line does not point at a list that isn't there", () => {
+  assert.doesNotMatch(READ_NOTE, /here's what|below|these/i);
+  assert.doesNotMatch(READ_NOTE, /strong|great|clean/i);
+});
