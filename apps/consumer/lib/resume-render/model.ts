@@ -211,7 +211,12 @@ export function parseResume(text: string): ResumeModel {
       return;
     }
     if (role === "jobPart" && lastJob) {
-      lastJob.rest.push(clean(line));
+      // "Valley Care Center, 2019 - 2021" under "CNA": the employer joins the job, the dates sit beside the title.
+      const split = lastJob.years ? null : splitTrailingYears(line);
+      if (split) {
+        lastJob.rest.push(clean(split.title));
+        lastJob.years = clean(split.years);
+      } else lastJob.rest.push(clean(line));
       return;
     }
     if (role === "bullet") {

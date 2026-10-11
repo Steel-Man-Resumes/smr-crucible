@@ -219,8 +219,8 @@ export const SECTION_JOBS_RE = /EXPERIENCE|WORK HISTORY|EMPLOYMENT|PROFESSIONAL 
 // A contact or place line: never the headline (review M4).
 // Round 3 (review r2 M-C): a place is "City, ST" with a real state (code or name), optionally a ZIP; "Welder,
 // Fabricator" is not a place. A street address is contact too.
-const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|PR";
-const US_STATE_NAMES_RE = "Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming";
+export const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|PR";
+export const US_STATE_NAMES_RE = "Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming";
 const PLACE_ONLY_RE = new RegExp(`^[A-Za-z .'-]+,\\s*(?:(?:${US_STATE_CODES})\\.?|${US_STATE_NAMES_RE})(?:\\s+\\d{5}(?:-\\d{4})?)?$`, "i");
 const STREET_RE = /^\s*\d+\s+[A-Za-z0-9 .'#-]*\b(?:st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|boulevard|way|ct|court|hwy|highway|pl|place|apt|apartment|suite|ste|unit|po box|p\.o\. box)\b/i;
 const CONTACT_LIKE_RE = new RegExp(String.raw`@|https?:|www\.|linkedin\.com|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\b[A-Z]{2}\s+\d{5}\b`);
@@ -263,6 +263,12 @@ function headerish(l: string): boolean {
   if (!l || isBulletLine(l) || isSectionHeader(l) || /[.!?;:]$/.test(l)) return false;
   if (l.split(/\s+/).length > 8 || !/^[A-Z0-9]/.test(l)) return false;
   return true;
+}
+
+/** A line written like a title ("CNA", "Line Cook", "Shift Lead"): every word capitalized but the small ones. */
+function titleLike(l: string): boolean {
+  const ws = l.split(/\s+/).filter(Boolean);
+  return ws.length > 0 && ws.length <= 5 && ws.every((w) => /^[A-Z0-9]/.test(w) || /^(?:of|and|the|for|at|in|on|to|&)$/.test(w));
 }
 
 /** "Cashier at Quick Stop (2014 - 2015)" -> title and years; null when the line has no trailing dates. */
@@ -355,6 +361,17 @@ export function jobLineRoles(lines: string[]): JobLineRole[] {
       }
       const a = nextFilled(i);
       const b = a >= 0 ? nextFilled(a) : -1;
+      // Integration M4: "CNA" over "Valley Care Center, 2019 - 2021": the second line carries the employer and
+      // the dates of the same job, never a job of its own.
+      if (a >= 0 && titleLike(l) && !t[a].includes("|") && !isBulletLine(t[a]) && splitTrailingYears(t[a]) && !NOT_A_JOB_RE.test(l)) {
+        roles[i] = "job";
+        roles[a] = "jobPart";
+        underJob = true;
+        jobHasYears = true;
+        lastJobLine = i;
+        i = a;
+        continue;
+      }
       const isRange = (k: number) => isDateText(t[k]) && isDateRange(t[k]);
       const datesAt = NOT_A_JOB_RE.test(l) ? -1 : a >= 0 && isRange(a) ? a : b >= 0 && headerish(t[a]) && !isDateText(t[a]) && !NOT_A_JOB_RE.test(t[a]) && isRange(b) ? b : -1;
       if (datesAt >= 0) {

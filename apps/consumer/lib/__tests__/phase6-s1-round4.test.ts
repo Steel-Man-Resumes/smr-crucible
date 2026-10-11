@@ -54,14 +54,14 @@ test("M3: the probe-4 controls still hold (as given passes; a changed date or pl
   const caught: Array<[string, string, string]> = [
     [`WORK EXPERIENCE\nWarehouse Associate | Midstate Distribution | Aug 2021 - Present\nResponsible for loading trucks`, `Warehouse Associate | Midstate Distribution | Jun 2021 - Present\n- Load outbound trucks`, "Jun 2021"],
     [`WORK EXPERIENCE\nWarehouse Associate | Midstate Distribution | 8/2021 - Present\nResponsible for loading trucks`, `Warehouse Associate | Midstate Distribution | 8/2021 - Current\n- Load outbound trucks`, "Current"],
-    [`WORK EXPERIENCE\nWarehouse Associate | Midstate Distribution | 8/2021 - Present\nResponsible for loading trucks`, `Warehouse Associate | Midstate Distribution | Springfield, IL | 8/2021 - Present\n- Load outbound trucks`, "Springfield"],
+    [`WORK EXPERIENCE\nWarehouse Associate | Midstate Distribution | 8/2021 - Present\nResponsible for loading trucks`, `Warehouse Associate | Midstate Distribution | Springfield, IL | 8/2021 - Present\n- Load outbound trucks`, "Springfield, IL"],
   ];
   for (const [upload, body, shown] of caught) {
     const { after } = views(upload, body);
     assert.equal(after.state, "draft", body);
     const g = after.groups.find((x) => x.job?.changes);
     assert.ok(g, body);
-    // L3: shown as written on the page, case kept.
+    // L3: shown as written on the page, case kept (integration M3: a place is one fact, "Springfield, IL").
     assert.ok(g!.job!.changes!.includes(shown), `${body}: ${JSON.stringify(g!.job!.changes)}`);
   }
   // Probe 4: moved dates between two jobs and a neighbor's start month are still caught.

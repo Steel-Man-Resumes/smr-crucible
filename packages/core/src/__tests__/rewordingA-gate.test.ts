@@ -72,9 +72,16 @@ test("round 3: dates are read as written; a year is never a count", () => {
 });
 
 test("round 3: under factsLocked, a job header the gate cannot read gets the stricter reading, never zero checks", () => {
+  // Integration M4: a comma header is now read by the shared job resolver (the same reading as the renderer,
+  // the job card and people scope), so it is not "unread"; its facts are checked on the job card instead
+  // (consumer rewording-a-writer "integration M4: a comma header ... job card"). A plain line the resolver
+  // cannot place still gets the stricter reading.
   const comma = PAGE.replace("Line Cook | Lakeside Grill | 2019 - 2023", "Line Cook, Harbor Grill Group, 2019 - 2023");
   const s = getResumeStatus({ resumeText: comma, sourceText: SOURCE, factsLocked: true });
-  assert.ok(s.defendLines.some((d) => d.line.startsWith("Line Cook, Harbor Grill Group")), JSON.stringify(s.defendLines));
+  assert.ok(!s.defendLines.some((d) => d.line.startsWith("Line Cook, Harbor Grill Group")), JSON.stringify(s.defendLines));
+  const unread = PAGE.replace("Line Cook | Lakeside Grill | 2019 - 2023", "Worked the line and the grill for a group of places");
+  const u = getResumeStatus({ resumeText: unread, sourceText: SOURCE, factsLocked: true });
+  assert.ok(u.defendLines.some((d) => d.line.startsWith("Worked the line and the grill")), JSON.stringify(u.defendLines));
 });
 
 test("round 3: under factsLocked, a line the second check never read is asked when it is not in their words", () => {
