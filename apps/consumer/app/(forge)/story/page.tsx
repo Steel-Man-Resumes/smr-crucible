@@ -1,14 +1,16 @@
 "use client";
 
 /**
- * Page 4: Your Story (Hurdles)
+ * Page 4: "Want help with something getting in the way?" (optional).
  *
- * Reframed from "barriers" — narrative framing, not checkbox listing.
- * Criminal record: structured input (felony/misdemeanor, count, recency,
- * supervision, context narrative).
- * Free text where it matters — affect labeling IS the therapeutic
- * mechanism (Lieberman 2007).
- * Each barrier connects to real resources/orgs.
+ * Phase 5 lane R2 (Codex C, A2): this was the Story inventory, with a
+ * structured record form (charge type, count, recency, supervision). It is
+ * now an optional support step: the person ticks what would help and, if
+ * they want, says what kind of help. It never asks about an offense. Ticking
+ * "A record" asks nothing more; it only tells t.ROY to point toward
+ * employers and help for people with records. The privacy line below stays
+ * true to the code: the answers go to the AI services we use and are saved
+ * to the account when signed in.
  */
 
 import { useState, useEffect } from "react";
@@ -37,27 +39,24 @@ import {
   type PlannedQuestion,
 } from "@/lib/forge-path";
 
+// The ids are unchanged (stored answers and forge-path R5 read them); the
+// words name the help, not the person.
 const CHALLENGE_OPTIONS = [
-  { id: "criminal_record", label: "Criminal record" },
-  { id: "employment_gap", label: "Gap in employment" },
-  { id: "recovery", label: "Recovery journey" },
-  { id: "transportation", label: "Transportation challenges" },
+  { id: "transportation", label: "Getting to work" },
   // Brings the shift question to the top of preferences (forge-path R5).
   { id: "childcare", label: "Childcare or family care" },
-  { id: "housing", label: "Housing instability" },
-  { id: "no_degree", label: "No degree or diploma" },
-  { id: "health", label: "Health challenges" },
+  { id: "housing", label: "A place to stay" },
+  { id: "criminal_record", label: "A record (jobs and help for people with records)" },
+  { id: "employment_gap", label: "A gap in work" },
+  { id: "recovery", label: "Recovery" },
+  { id: "health", label: "Health" },
+  { id: "no_degree", label: "No diploma or degree" },
   { id: "career_change", label: "Changing careers" },
   { id: "other", label: "Something else" },
 ];
 
-interface CriminalRecordData {
-  type: string;
-  charge_count: string;
-  most_recent: string;
-  supervision: string;
-  context: string;
-}
+/** Options that ask nothing more when ticked: the record never gets a text box. */
+const NO_FOLLOW_UP = new Set(["criminal_record"]);
 
 export default function StoryPage() {
   const router = useRouter();
@@ -74,21 +73,6 @@ export default function StoryPage() {
       pagesVisited: Array.from(new Set([...(session.pagesVisited || []), "story"])),
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [crimRecord, setCrimRecord] = useState<CriminalRecordData>(
-    isDemo ? (DEMO_SESSION.criminalRecord || {
-      type: "",
-      charge_count: "",
-      most_recent: "",
-      supervision: "",
-      context: "",
-    }) : session.criminalRecord || {
-      type: "",
-      charge_count: "",
-      most_recent: "",
-      supervision: "",
-      context: "",
-    }
-  );
   const [narratives, setNarratives] = useState<Record<string, string>>(
     isDemo ? (DEMO_SESSION.challengeNarratives || {}) : (session.challengeNarratives || {})
   );
@@ -141,9 +125,9 @@ export default function StoryPage() {
     const nextNarratives = !asked ? narratives : rowsText ? { ...narratives, [CREDENTIALS_KEY]: rowsText } : withoutCredentials;
     const updates: Partial<typeof session> = {
       challenges: selected,
-      criminalRecord: selected.includes("criminal_record")
-        ? crimRecord
-        : undefined,
+      // Never asked here any more (no offense details). An answer from an
+      // older run is dropped the next time this screen is saved.
+      criminalRecord: undefined,
       challengeNarratives: nextNarratives,
       ...(asked ? { credentialRows: credRows.filter((r) => r.name.trim()) } : {}),
       lastPageVisited: "story",
@@ -274,22 +258,17 @@ export default function StoryPage() {
     return null;
   }
 
-  const hasCriminalRecord = selected.includes("criminal_record");
-
+  void tone;
   return (
     <FlowPage
-      title={tone === "open" && !isDemo ? "Anything making this harder?" : "What's in your way?"}
-      subtitle={
-        tone === "open" && !isDemo
-          ? "Tick what's true. Skip what isn't. You don't have to explain any of it."
-          : "Check what applies. Skip what doesn't."
-      }
+      title="Want help with something getting in the way?"
+      subtitle="Tick what would help. Skip anything. You don't have to explain any of it."
       actionLabel={isDemo ? "Next" : (selected.length > 0 || goalPrompts.length > 0 ? "Continue" : "Nothing right now, skip")}
       onAction={handleContinue}
       showBack
       onBack={() => {
         if (!isDemo) saveStory();
-        router.push(isDemo ? "/goals" : previousPath(plan, "story"));
+        router.push(isDemo ? "/goals" : previousPath(plan, "story", session));
       }}
       footer={
         <p>
@@ -307,14 +286,11 @@ export default function StoryPage() {
 
       {!isDemo && <ForgeAccumulator />}
 
-      {/* The trade -- why it's worth sharing */}
       {!isDemo && (
         <div className="bg-t-panel px-4 py-3 mb-4 border border-t-line">
           <p className="text-sm text-t-phos leading-relaxed">
-            <span className="font-semibold text-t-amber-bright">Here&apos;s the deal:</span> if you
-            tell me about your record, I find the specific laws that protect you
-            and resources in your area. If you skip it, I still work with
-            everything else. Your call.
+            We never ask what a charge was. If a record is in the way, tick it, and
+            t.ROY points you to employers and help for people with records.
           </p>
         </div>
       )}
@@ -373,91 +349,16 @@ export default function StoryPage() {
         })}
       </div>
 
-      {/* Criminal record structured input */}
-      {hasCriminalRecord && (
-        <div className="bg-t-panel p-5 border border-t-line mb-6 space-y-4">
-          <p className="text-sm text-t-white font-medium">
-            This helps us find resources specific to your situation.
-          </p>
-
-          <SelectField
-            label="Type of charge"
-            value={crimRecord.type}
-            onChange={(v) => setCrimRecord({ ...crimRecord, type: v })}
-            options={[
-              { value: "", label: "Select..." },
-              { value: "misdemeanor", label: "Misdemeanor" },
-              { value: "felony", label: "Felony" },
-              { value: "both", label: "Both" },
-            ]}
-          />
-
-          <SelectField
-            label="Number of charges"
-            value={crimRecord.charge_count}
-            onChange={(v) => setCrimRecord({ ...crimRecord, charge_count: v })}
-            options={[
-              { value: "", label: "Select..." },
-              { value: "1", label: "1" },
-              { value: "2-3", label: "2-3" },
-              { value: "4+", label: "4 or more" },
-            ]}
-          />
-
-          <SelectField
-            label="Most recent charge"
-            value={crimRecord.most_recent}
-            onChange={(v) => setCrimRecord({ ...crimRecord, most_recent: v })}
-            options={[
-              { value: "", label: "Select..." },
-              { value: "<1 year", label: "Less than 1 year ago" },
-              { value: "1-3 years", label: "1-3 years ago" },
-              { value: "3-5 years", label: "3-5 years ago" },
-              { value: "5-10 years", label: "5-10 years ago" },
-              { value: "10+ years", label: "More than 10 years ago" },
-            ]}
-          />
-
-          <SelectField
-            label="Currently on probation or parole?"
-            value={crimRecord.supervision}
-            onChange={(v) => setCrimRecord({ ...crimRecord, supervision: v })}
-            options={[
-              { value: "", label: "Select..." },
-              { value: "yes", label: "Yes, currently" },
-              { value: "completed", label: "Completed" },
-              { value: "no", label: "No" },
-            ]}
-          />
-
-          <div>
-            <label className="text-sm font-medium text-t-white block mb-1.5">
-              Anything else you want to share?{" "}
-              <span className="font-normal text-t-phos-dim">(optional)</span>
-            </label>
-            <textarea
-              value={crimRecord.context}
-              onChange={(e) =>
-                setCrimRecord({ ...crimRecord, context: e.target.value })
-              }
-              placeholder="In your own words. Say whatever feels right."
-              rows={3}
-              className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
-            />
-          </div>
-        </div>
-      )}
-
       {/* Narrative prompts for other selected challenges */}
       {selected
-        .filter((id) => id !== "criminal_record")
+        .filter((id) => !NO_FOLLOW_UP.has(id))
         .map((id) => {
           const opt = CHALLENGE_OPTIONS.find((o) => o.id === id);
           if (!opt) return null;
           return (
             <div key={id} className="mb-4">
               <label className="text-sm font-medium text-t-white block mb-1.5">
-                Tell us about your {opt.label.toLowerCase()}{" "}
+                {opt.label}: what kind of help would make a difference?{" "}
                 <span className="font-normal text-t-phos-dim">(optional)</span>
               </label>
               <textarea
@@ -465,7 +366,7 @@ export default function StoryPage() {
                 onChange={(e) =>
                   setNarratives({ ...narratives, [id]: e.target.value })
                 }
-                placeholder="In your own words. Tell us whatever you want us to know."
+                placeholder="For example: a ride to early shifts."
                 rows={2}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
               />
@@ -481,38 +382,5 @@ export default function StoryPage() {
         </div>
       )}
     </FlowPage>
-  );
-}
-
-// --- Helper Component ---
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <div>
-      <label className="text-sm font-medium text-t-white block mb-1.5">
-        {label}
-      </label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch appearance-none"
-      >
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }

@@ -15,7 +15,7 @@ import { GA_ID, trackGA } from "@/lib/ga";
 // Forge-flow routes (route group (forge) adds nothing to the URL). /output is
 // handled separately as the completion event; /mini-forge is excluded upstream.
 const FORGE_ROUTES = [
-  "/intro", "/welcome", "/resume", "/goals", "/story",
+  "/intro", "/start", "/welcome", "/resume", "/goals", "/story",
   "/preferences", "/processing", "/overview", "/rush",
 ];
 

@@ -9,6 +9,7 @@
  * - forge_writer_receipt (081; the newest writer's receipt nonce per run)
  * - refinery_artifact (resumes, disclosure plans, etc.)
  * - career_lane, lane_tool_intro (career lanes and dismissed tool notes)
+ * - lane_focus (today's task on the lane, 083; owner only, deleted before the lanes)
  * - practice_entry (the practice record behind creative lanes)
  * - forge_session
  * - consumer_profile
@@ -73,6 +74,7 @@ import {
   deleteUserConversations,
   deleteAllRecordChecks,
   deleteAllRevisions,
+  deleteLaneFocus,
   deleteAllWriterReceipts,
   leaveAllOrgs,
 } from "@crucible/core";
@@ -146,6 +148,8 @@ export async function DELETE(req: Request) {
     await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
     // Career lanes (074): after the artifacts that point at them. Owner-only
     // tables, so deleted AS the person; the lane screens only ever archive.
+    // Today's task (083) points at a lane: deleted first, AS the person.
+    await deleteLaneFocus(userId);
     await queryAsUser(userId, "DELETE FROM career_lane WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM lane_tool_intro WHERE user_id = $1", [userId]);
     // The practice record (076): owner only, deleted as the person.

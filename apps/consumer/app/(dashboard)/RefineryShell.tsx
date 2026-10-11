@@ -18,6 +18,9 @@ import { GuidedTour } from "@/components/GuidedTour";
 import { DevSwitcher } from "@/components/DevSwitcher";
 import { ImpersonationChrome } from "@/components/ImpersonationChrome";
 import { HighlightHost } from "@/components/SpotlightHighlight";
+import { RefineryLaneHeader } from "@/components/lanes/LaneHeader";
+import { useLaneFocus } from "@/components/lanes/useLaneFocus";
+import { refineryOpenWithoutResume } from "@/lib/lane-task";
 import {
   useUserTier,
   useRealTier,
@@ -98,7 +101,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
       { href: "/dashboard/employers", label: "Employers That Hire", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/resources", label: "Job Paths", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/resources", label: "Get support", minTier: "client", minState: "needs_profile" },
     ],
   },
   {
@@ -117,8 +120,8 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "My Stuff",
     items: [
-      { href: "/dashboard/vault", label: "Library", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/documents", label: "Vault", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/vault", label: "My resumes", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/documents", label: "Private documents", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
     ],
   },
@@ -427,6 +430,7 @@ export function RefineryShell({
   // They see the in-app "Start with The Forge" state instead; every other
   // gate stays real.
   const effectiveRole = useEffectiveRole();
+  const laneFocus = useLaneFocus();
   useEffect(() => {
     // While the "Is it yours?" card is open (or its "Yes" is still landing),
     // stay here: bouncing to the Forge would skip the person's answer. After
@@ -445,11 +449,18 @@ export function RefineryShell({
       !effectiveRole?.impersonating &&
       onboarding.state !== "loading" &&
       !onboarding.forgeComplete &&
-      pathname !== "/dashboard/settings"
+      pathname !== "/dashboard/settings" &&
+      // Lanes first (R2 review H1): support, job search and the documents
+      // open without a resume; only the resume and interview routes need one.
+      laneFocus.loaded &&
+      !refineryOpenWithoutResume(pathname, laneFocus.task)
     ) {
-      window.location.href = "https://forge.steelmanresumes.com";
+      // Lanes first (Phase 5 R2): to the Forge's first screen, "What do you
+      // need today?", on this same site so the sign-in comes along. Returning
+      // with a task picked, that page shows where the run is (no bounce back).
+      window.location.href = "/start?from=refinery";
     }
-  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id]);
+  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
@@ -993,6 +1004,8 @@ export function RefineryShell({
               viewing as someone else: the answer would be recorded for the admin. */}
           {!isOrgPartner && !effectiveRole?.impersonating && <JoinSharingPrompt />}
           {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
+          {/* Lanes first (Phase 5 R2): "Working toward ... Today ..." with Change. */}
+          {!isOrgPartner && <RefineryLaneHeader />}
           {derivedReady ? children : null}
         </main>
       </div>

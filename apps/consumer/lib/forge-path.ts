@@ -34,6 +34,13 @@
  *  R7 The record never shapes wording. The plan never reads the record
  *     details; the only record input is that the person ticked it.
  *  R8 Demo mode is a fixed walkthrough: the full path, default wording.
+ *  R9 Lanes first (Phase 5 lane R2, Codex C). A run that started from "What
+ *     do you need today?" (laneTask set) goes resume, then build: no
+ *     readiness screen, no short/full chooser, and no goals, story or
+ *     preferences before the first page. "Do more" after the first result
+ *     adds goals (and preferences) back; the story screen is the optional
+ *     "something getting in the way?" step, added only when asked for. Its
+ *     first screen goes back to the first screen (/start), not /welcome.
  */
 
 export type ScreenId = "resume" | "goals" | "story" | "preferences" | "processing" | "output";
@@ -41,7 +48,8 @@ export type ScreenId = "resume" | "goals" | "story" | "preferences" | "processin
 export const SCREENS: Record<ScreenId, { path: string; label: string }> = {
   resume: { path: "/resume", label: "Resume" },
   goals: { path: "/goals", label: "Goals" },
-  story: { path: "/story", label: "Story" },
+  // The optional support step (Phase 5 R2): no story inventory any more.
+  story: { path: "/story", label: "Support" },
   preferences: { path: "/preferences", label: "Preferences" },
   processing: { path: "/processing", label: "Build" },
   output: { path: "/output", label: "Results" },
@@ -114,6 +122,8 @@ export interface ForgePath {
 
 /** The parts of a Forge session the plan reads. Everything is optional: old runs have less. */
 export interface PathSession {
+  /** R9: set when the run started from "What do you need today?". */
+  laneTask?: string;
   readinessStage?: string;
   pathChoice?: "light" | "full";
   pathExtras?: string[];
@@ -127,6 +137,14 @@ export interface PathSession {
 }
 
 const READY_NOW = "action";
+
+/** R9: this run takes the lanes-first path. Demo mode keeps its fixed walkthrough. */
+export function isLanesFirst(s: Pick<PathSession, "laneTask" | "isDemo">): boolean {
+  return !s.isDemo && typeof s.laneTask === "string" && s.laneTask.length > 0;
+}
+
+/** R9: the extras "Do more" and the support step add, in the order they run. */
+export const LANE_EXTRAS = ["goals", "preferences", "story"] as const;
 
 /** R1: the depth a readiness answer starts with, before the person picks. */
 export function defaultDepth(readinessStage: string | undefined): "light" | "full" {
@@ -212,12 +230,17 @@ export function planForgePath(s: PathSession): ForgePath {
   const light = depth === "light";
   const goals = demo ? [] : Array.isArray(s.goals) ? s.goals : [];
   const challenges = demo ? [] : Array.isArray(s.challenges) ? s.challenges : [];
-  const storyOptedIn = light && Array.isArray(s.pathExtras) && s.pathExtras.includes("story");
+  const lanes = isLanesFirst(s);
+  const extras = Array.isArray(s.pathExtras) ? s.pathExtras : [];
+  const storyOptedIn = (light || lanes) && extras.includes("story");
 
   // Order of the question screens. Light: story only when they asked for it, after preferences.
-  const order: ScreenId[] = light
-    ? ["resume", "goals", "preferences", ...(storyOptedIn ? (["story"] as ScreenId[]) : [])]
-    : ["resume", "goals", "story", "preferences"];
+  // R9 lanes first: the resume, then whatever "Do more" or the support step added.
+  const order: ScreenId[] = lanes
+    ? ["resume", ...(LANE_EXTRAS.filter((x) => extras.includes(x)) as ScreenId[])]
+    : light
+      ? ["resume", "goals", "preferences", ...(storyOptedIn ? (["story"] as ScreenId[]) : [])]
+      : ["resume", "goals", "story", "preferences"];
 
   const placed = new Set<QuestionId>();
   const take = (list: PlannedQuestion[]) => {
@@ -271,7 +294,7 @@ export function planForgePath(s: PathSession): ForgePath {
     depth,
     tone,
     screens,
-    offers: light && !storyOptedIn ? ["story"] : [],
+    offers: lanes ? (LANE_EXTRAS.filter((x) => !extras.includes(x)) as ScreenId[]) : light && !storyOptedIn ? ["story"] : [],
   };
 }
 
@@ -296,9 +319,11 @@ export function nextPath(path: ForgePath, from: ScreenId): string {
 }
 
 /** Where Back goes from a screen. The first screen goes back to the readiness question. */
-export function previousPath(path: ForgePath, from: ScreenId): string {
+export function previousPath(path: ForgePath, from: ScreenId, s?: Pick<PathSession, "laneTask" | "isDemo">): string {
   const i = indexOf(path, from);
   if (i <= 0) {
+    // R9: the first screen of a lanes-first run is "What do you need today?".
+    if (s && isLanesFirst(s)) return i < 0 ? SCREENS.resume.path : "/start";
     // An offered screen opened from preferences goes back there.
     return i < 0 && path.offers.includes(from) ? SCREENS.preferences.path : "/welcome";
   }

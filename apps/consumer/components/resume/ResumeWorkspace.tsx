@@ -8,6 +8,7 @@
  * Handles: state management, save/load, auto-save, Forge/Rush import.
  */
 
+import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -1474,7 +1475,7 @@ export function ResumeWorkspace() {
           )}
           {saveStatus === "locked" && (
             <span className="text-xs text-t-amber-bright">
-              Locked baseline. Edits are not saved. Unlock it in your Library to change it.
+              Locked baseline. Edits are not saved. Unlock it in My resumes to change it.
             </span>
           )}
           <button
@@ -1804,6 +1805,16 @@ export function ResumeWorkspace() {
                         ? <>{RECHECK_LINE} <a href={RECHECK_HREF} className="underline underline-offset-2" data-testid="workspace-recheck">Check it again</a></>
                         : "Draft: check it before you send it."}
                 </p>
+              )}
+              {/* Phase 5 R2: the way out of DRAFT for a Tailor result: the same cards, saved as a revision of this resume. */}
+              {artifactId && (
+                <CheckAndFinish
+                  key={`${artifactId}:${exportRev?.id ?? ""}`}
+                  artifactId={artifactId}
+                  status={exportRev ? exportRev.status : null}
+                  showBadge={!exportRev}
+                  className="w-full"
+                />
               )}
             </>
           }

@@ -86,6 +86,7 @@ export const config = {
     // session only once the wall is up; before that authorized() lets them
     // through untouched. Exact paths: the public Forge pages, the free checker
     // and every /mini-forge path are never matched.
+    "/start",
     "/welcome",
     "/resume",
     "/goals",

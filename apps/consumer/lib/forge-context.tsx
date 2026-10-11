@@ -30,6 +30,18 @@ export interface ForgeSessionData {
   /** Offered screens the person chose to add to a short path ("story"). */
   pathExtras?: string[];
 
+  /**
+   * Lanes first (Phase 5 lane R2): what the person picked on "What do you
+   * need today?" (lib/lane-task.ts), and the job they are going after, in
+   * their own words, when they gave one. A run with a task takes the
+   * lanes-first path (lib/forge-path.ts R9). Signed in, the account holds
+   * the same pick (migration 083); this copy keeps it working signed out.
+   */
+  laneTask?: import("./lane-task").LaneTask;
+  laneTarget?: string;
+  /** Lanes first: the letter the writer made, kept for "Add a cover letter" off the job route. */
+  laneParkedLetter?: string;
+
   // Page 2: Resume
   resumeText?: string;
   /** The resume exactly as the person gave it (upload or paste), before any

@@ -57,7 +57,7 @@ const TOOL_OVERVIEW = [
     research: "SHRM fair-chance employer data, Granovetter weak ties",
   },
   {
-    title: "Job Paths",
+    title: "Get support",
     href: "/dashboard/resources",
     description:
       "Curated fair-chance opportunity lanes, employer signals, and handoffs into live listings, targeted resumes, interview practice, and disclosure planning.",

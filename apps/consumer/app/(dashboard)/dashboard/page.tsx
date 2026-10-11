@@ -19,7 +19,11 @@ import { MySharedTasks } from "@/components/MySharedTasks";
 import { MySuggestions } from "@/components/MySuggestions";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { TaskPicker } from "@/components/lanes/TaskPicker";
+import { LaneHome } from "@/components/lanes/LaneHome";
+import { useLaneFocus } from "@/components/lanes/useLaneFocus";
+import { routeHref, taskNeedsResume } from "@/lib/lane-task";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import { useUserTier } from "@/lib/useUserTier";
@@ -85,11 +89,11 @@ const ALL_TOOLS: ToolCard[] = [
   },
   {
     href: "/dashboard/resources",
-    title: "Job Paths",
-    description: "Job paths that are realistic with a record, and where to search for them.",
+    title: "Get support",
+    description: "Local help with rides, ID, housing and food, plus job paths that are realistic with a record.",
     color: "bg-t-panel border-t-amber",
     accent: "text-t-amber-bright",
-    // Same as the sidebar: Job Paths is open from the start.
+    // Same as the sidebar: Get support is open from the start.
     minState: "needs_profile",
   },
   {
@@ -186,6 +190,12 @@ export default function DashboardPage() {
   const onboarding = useOnboarding();
   // Shared-computer rule: only a local run marked as this user's is read.
   const ownerUid = useSession().data?.user?.id;
+  // Lanes first (Phase 5 R2): the first screen after sign-in asks what the
+  // person needs today; once picked, this page is their lane home.
+  const focus = useLaneFocus();
+  const router = useRouter();
+  const changeTask = useSearchParams().get("change") === "1";
+  const [picking, setPicking] = useState(false);
 
   // Forge data
   const [forgeData, setForgeData] = useState<DashboardData>({});
@@ -249,7 +259,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
       if (res.status === 409) {
         window.alert(
-          "This is a locked baseline. Unlock it in your Library before deleting."
+          "This is a locked baseline. Unlock it in My resumes before deleting."
         );
         return;
       }
@@ -332,15 +342,59 @@ export default function DashboardPage() {
     return <AdminHome />;
   }
 
+  // ─── Lanes first: "What do you need today?" ───────────────────────────
+  // Job seekers only (partners, observers and admins returned above). Viewing
+  // as someone reads their pick but never asks or saves one for them.
+  if (!effectiveRole?.impersonating) {
+    if (!focus.loaded) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
+        </div>
+      );
+    }
+    if (!focus.task || changeTask) {
+      return (
+        <div className="py-4">
+          <TaskPicker
+            current={focus.task}
+            busy={picking}
+            helpHref="/dashboard/resources#support"
+            onPick={async (t) => {
+              setPicking(true);
+              await focus.save(t);
+              setPicking(false);
+              router.push(routeHref(t, { signedIn: true, hasResume: onboarding.state === "full_access" }));
+            }}
+          />
+        </div>
+      );
+    }
+  }
+
   // ─── State: needs_profile ─────────────────────────────────────────────
   if (onboarding.state === "needs_profile" && !isAdmin) {
-    return <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />;
+    return (
+      <div className="space-y-10">
+        {focus.task && <LaneHome task={focus.task} profileFirst={taskNeedsResume(focus.task)} />}
+        <div id="profile-setup" className="scroll-mt-24">
+          <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />
+        </div>
+      </div>
+    );
   }
 
   // ─── State: needs_resume OR full_access ───────────────────────────────
   return (
     <div className="space-y-10">
       <MiniForgeBanner />
+      {/* Lanes first (R2): the lane home, then "All tools" below. */}
+      {focus.task && <LaneHome task={focus.task} />}
+      {focus.task && (
+        <h2 id="all-tools" className="border-t border-t-line pt-6 text-lg font-bold text-t-white">
+          All tools
+        </h2>
+      )}
       <JourneyHeader />
       <MySharedTasks />
       <MySuggestions />

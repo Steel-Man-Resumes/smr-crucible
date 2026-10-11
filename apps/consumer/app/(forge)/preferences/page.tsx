@@ -198,7 +198,7 @@ export default function PreferencesPage() {
       onBack={() => {
         // Back keeps what was picked here, so coming forward again loses nothing.
         if (!isDemo) savePreferences();
-        router.push(isDemo ? "/story" : previousPath(plan, "preferences"));
+        router.push(isDemo ? "/story" : previousPath(plan, "preferences", session));
       }}
     >
       <GhostGuide

@@ -143,6 +143,8 @@ export const FORGE_PUBLIC_PAGES = ["/intro", "/overview", "/partner", "/get-list
  * routes). Keep in step with the matcher in middleware.ts (a test checks).
  */
 export const FORGE_SIGN_IN_PAGES = [
+  // The first screen, "What do you need today?" (Phase 5 lane R2).
+  "/start",
   "/welcome",
   "/resume",
   "/goals",

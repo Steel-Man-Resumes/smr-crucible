@@ -23,8 +23,13 @@ import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { GroundingGauge } from "@/components/GroundingGauge";
 import { computeGrounding, jobsFromParsedProfile } from "@/lib/grounding";
 import { FORGE_UPLOAD_PICK_AGAIN_MESSAGE, forgeUploadAuthAction, forgeUploadErrorMessage, isUploadReturn } from "@/lib/forge-upload-error";
-import { datedJobs, nextPath, planForgePath, resumeVariant, type ConfirmJob } from "@/lib/forge-path";
+import { datedJobs, isLanesFirst, nextPath, planForgePath, resumeVariant, type ConfirmJob } from "@/lib/forge-path";
 import type { ForgeSessionData } from "@/lib/forge-context";
+import { useSession } from "next-auth/react";
+import { sessionPending } from "@/lib/session-policy";
+import { FirstReward, QuickBuild } from "@/components/forge/lanes/FirstSave";
+import { IntakeHelp, PasteInline } from "@/components/forge/lanes/IntakeExtras";
+import { INTAKE_BUILD, INTAKE_HAVE_ONE, INTAKE_TITLE } from "@/lib/lane-task";
 
 /**
  * "Is this right?": the jobs and dates we read, shown back so the person
@@ -68,7 +73,7 @@ const jobsFromDoc = (doc: ResumeDocument | undefined): ConfirmJob[] =>
     (doc?.experience ?? []).map((e) => ({ title: e.title, company: e.company, start: e.startDate, end: e.endDate }))
   );
 
-type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
+type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | "quick" | null;
 
 const ACCEPTED_TYPES = [
   ".pdf",
@@ -109,6 +114,13 @@ export default function ResumeIntakePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
+  // Lanes first (Phase 5 R2, lib/forge-path.ts R9): two choices, the first
+  // reward right away, and help tucked into a panel.
+  const lanes = isLanesFirst(session);
+  const { data: authData, status: authStatus } = useSession();
+  const signedIn = authStatus === "authenticated" && !!authData?.user && !sessionPending(authData.user as any);
+  // The page the person gave (paste), shown with its one fix (lanes first).
+  const [rewardText, setRewardText] = useState<string | null>(null);
 
   // Track page visit
   useEffect(() => {
@@ -249,6 +261,37 @@ export default function ResumeIntakePage() {
         initialDoc={builderDoc}
         onComplete={finishBuilder}
         onBack={() => setBuilderDoc(null)}
+      />
+    );
+  }
+
+  // Lanes first: the first reward. The page they gave, the one fix, saved.
+  if (lanes && !isDemo && (rewardText !== null || uploadSuccess)) {
+    const text = rewardText ?? session.resumeText ?? "";
+    return (
+      <FirstReward
+        text={text}
+        signedIn={signedIn}
+        onBack={() => {
+          setRewardText(null);
+          setUploadSuccess(false);
+          setActivePath("upload");
+        }}
+        onContinue={() => continueWith({ lastPageVisited: "resume" })}
+        onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "goals", "preferences"])), lastPageVisited: "resume" })}
+        onEditor={(t) => enterBuilder(t, { name: parsedName || undefined, email: parsedEmail || undefined, phone: parsedPhone || undefined }, rewardText === null ? parsedProfile : null)}
+      />
+    );
+  }
+
+  // Lanes first: "Build with me", one job and one true duty.
+  if (lanes && !isDemo && activePath === "quick") {
+    return (
+      <QuickBuild
+        signedIn={signedIn}
+        onBack={() => setActivePath(null)}
+        onContinue={() => continueWith({ lastPageVisited: "resume" })}
+        onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "goals", "preferences"])), lastPageVisited: "resume" })}
       />
     );
   }
@@ -486,7 +529,7 @@ export default function ResumeIntakePage() {
         actionLabel="Yes, keep going"
         onAction={() => continueWith({ lastPageVisited: "resume" })}
         showBack
-        onBack={() => router.push("/welcome")}
+        onBack={() => router.push(lanes ? "/start?change=1" : "/welcome")}
         footer={
           <button
             onClick={() => setReplacing(true)}
@@ -516,6 +559,38 @@ export default function ResumeIntakePage() {
             Something&apos;s off: open it in the editor
           </button>
         )}
+      </FlowPage>
+    );
+  }
+
+  // --- Path Selection, lanes first: two choices, help in a panel ---
+  if (!activePath && lanes) {
+    return (
+      <FlowPage
+        title={INTAKE_TITLE}
+        subtitle={session.laneTask === "interview" ? "Practice questions come from your real work history, so that comes first." : "Any format works, even a photo of a paper copy."}
+        showBack
+        onBack={() => (replacing ? setReplacing(false) : router.push("/start?change=1"))}
+      >
+        <div className="flex flex-col gap-3" data-testid="intake-choices">
+          <button
+            onClick={() => setActivePath("upload")}
+            className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
+            data-testid="intake-have-one"
+          >
+            <span className="font-medium text-t-white">{INTAKE_HAVE_ONE.label}</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">{INTAKE_HAVE_ONE.body}</p>
+          </button>
+          <button
+            onClick={() => setActivePath("quick")}
+            className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
+            data-testid="intake-build"
+          >
+            <span className="font-medium text-t-white">{INTAKE_BUILD.label}</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">{INTAKE_BUILD.body}</p>
+          </button>
+        </div>
+        <IntakeHelp />
       </FlowPage>
     );
   }
@@ -718,13 +793,16 @@ export default function ResumeIntakePage() {
           <div className="mt-4 p-4 bg-t-panel border border-t-red">
             <p className="text-sm text-t-red">{uploadError}</p>
             <button
-              onClick={handleNoResume}
+              onClick={lanes ? () => setActivePath("quick") : handleNoResume}
               className="text-sm text-t-amber-bright underline mt-2"
             >
               Or build one with our help instead
             </button>
           </div>
         )}
+
+        {/* Lanes first: paste sits on the same screen, so there is nothing more to choose. */}
+        {lanes && <PasteInline onDone={(text) => setRewardText(text)} />}
       </FlowPage>
     );
   }

@@ -16,7 +16,8 @@ export const CLIENT_PATH: PathOption = {
   id: "client",
   label: "Build my resume",
   subtitle: "Start to finish in one sitting.",
-  route: "/welcome",
+  // The first screen asks what you need today (Phase 5 lane R2).
+  route: "/start",
 };
 
 export const OTHER_PATHS: PathOption[] = [

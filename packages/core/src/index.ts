@@ -96,3 +96,6 @@ export * from './secondCheck';
 // Premium tools by entitlement, never payment (migration 079).
 export * from './premium';
 export * from './packageEmail';
+// Today's task on the person's lane (083, Phase 5 lane R2).
+export * from './laneFocusShared';
+export * from './laneFocus';

@@ -263,7 +263,7 @@ export default function VaultDocumentsPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">Vault</h1>
+      <h1 className="text-2xl font-bold text-t-white">Private documents</h1>
       <p className="text-t-phos-dim mt-1">
         A safe home for the documents that prove who you are and what you have earned: your ID,
         certificates, reference letters, records, and notes. It is encrypted and stays in your account

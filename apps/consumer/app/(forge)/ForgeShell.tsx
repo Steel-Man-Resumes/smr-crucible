@@ -19,6 +19,7 @@ import { useSession } from "next-auth/react";
 import { ForgeImport } from "@/components/forge/ForgeImport";
 import { SignInNotice } from "@/components/forge/SignInNotice";
 import { ForgeAccountBar } from "@/components/forge/ForgeAccountBar";
+import { ForgeLaneHeader } from "@/components/lanes/ForgeLaneHeader";
 
 /** Map pathname to page ID for assistant context */
 function getPageId(pathname: string): string {
@@ -126,6 +127,8 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
         {chrome.progress && <ForgeProgress />}
         {/* Whose account this is, with a way out (shown whenever signed in). */}
         <ForgeAccountBar />
+        {/* Lanes first (Phase 5 R2): where this person is headed, and today's task. */}
+        {!quiet && <ForgeLaneHeader />}
       </header>
       {/* The sign-in date notice: public pages only, and only while a date is set and ahead. */}
       {(FORGE_PUBLIC_PAGES as readonly string[]).includes(pathname) && <SignInNotice />}

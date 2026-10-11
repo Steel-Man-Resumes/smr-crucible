@@ -107,6 +107,14 @@ function WelcomePageInner() {
   const isDemo = searchParams.get("demo") === "true";
   const audience = session.audience || "client";
 
+  // Lanes first (Phase 5 lane R2): the readiness question is no longer on
+  // anyone's path. The first screen asks what you need today. Old links land
+  // there; the partner and observer walkthrough (?demo=true) keeps this page.
+  const toStart = !isDemo && !session.isDemo;
+  useEffect(() => {
+    if (toStart) router.replace("/start");
+  }, [toStart, router]);
+
   const [selected, setSelected] = useState<string>(
     isDemo && DEMO_SESSION.readinessStage
       ? REVERSE_STAGE_MAP[DEMO_SESSION.readinessStage] || ""
@@ -196,6 +204,8 @@ function WelcomePageInner() {
     setDepth("");
     setAcknowledged(false);
   }
+
+  if (toStart) return <div className="h-40" aria-busy="true" />;
 
   return (
     <FlowPage
