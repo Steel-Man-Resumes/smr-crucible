@@ -24,8 +24,8 @@
 
 import { NextResponse } from "next/server";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
-import { revisionCaller, REVISION_SAVES_PER_DAY } from "@/lib/revision-route";
-import { coreStore, saveEditRevision, saveFinishRevision, type SaveResult } from "@/lib/revision-save";
+import { revisionCaller, REVISION_SAVES_PER_DAY, REVISION_TOO_LARGE } from "@/lib/revision-route";
+import { coreStore, pickForgeArtifact, saveEditRevision, saveFinishRevision, type ArtifactLite, type SaveResult } from "@/lib/revision-save";
 import { ensureExportRevision } from "@/lib/revision-current";
 
 export const runtime = "nodejs";
@@ -35,7 +35,7 @@ const NO_STORE = { "Cache-Control": "no-store" } as const;
 
 export async function POST(request: Request) {
   const len = Number(request.headers.get("content-length") || 0);
-  if (len > 1_000_000) return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  if (len > 1_000_000) return NextResponse.json({ error: REVISION_TOO_LARGE, reason: "too large" }, { status: 413 });
   if (!isSameOriginJsonPost(request.headers)) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
   const caller = await revisionCaller();
   if (!caller.ok) return NextResponse.json({ error: caller.error }, { status: caller.status });
@@ -74,7 +74,12 @@ export async function POST(request: Request) {
             )
           : ({ ok: false, status: 400, reason: "kind must be finish or edit" } as const);
     if (!result.ok) {
-      const error = result.reason === "not_ready" ? "Saving to your account isn't ready here yet. Your work is still on this page." : "We couldn't save that version.";
+      const error =
+        result.status === 413
+          ? REVISION_TOO_LARGE
+          : result.reason === "not_ready"
+            ? "Saving to your account isn't ready here yet. Your work is still on this page."
+            : "We couldn't save that version.";
       return NextResponse.json({ error, reason: result.reason }, { status: result.status, headers: NO_STORE });
     }
     return NextResponse.json({ revision: result.revision }, { headers: NO_STORE });
@@ -92,7 +97,7 @@ export async function GET(request: Request) {
   let artifactId = url.searchParams.get("artifactId") || "";
   if (!artifactId && url.searchParams.get("forge") === "1") {
     const list = await core.listArtifacts(caller.userId, { type: "resume", examples: "hide", limit: 50 });
-    artifactId = list.find((a) => (a.target_context as { source?: unknown } | null)?.source === "forge")?.id ?? "";
+    artifactId = pickForgeArtifact(list as unknown as ArtifactLite[])?.id ?? "";
   }
   if (!artifactId) return NextResponse.json({ revision: null }, { headers: NO_STORE });
   const rev = await core.getLatestRevision(caller.userId, artifactId);

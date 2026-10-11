@@ -15,11 +15,15 @@
  *    on record (079 email_proof_source; 068's backfill does not count). No
  *    address in the request is read;
  *  - the person can turn it off (users.forge_package_email, 079);
- *  - once per revision: the version is a SHA-256 of the person, the revision
- *    id and the revision's content hash (texts, letter and confirmations),
- *    claimed in the database (forge_package_email_sent, 079) before anything
- *    is sent and given back if the email does not go out; before 079 is
- *    applied, once a day;
+ *  - the NEWEST version only, once it has settled (review L4): the request
+ *    names a revision, but what goes out is that resume's newest revision,
+ *    and only when it is finished and nothing newer was saved for about five
+ *    minutes (quick edits settle first). "Email me the latest" (now: true)
+ *    sends at once;
+ *  - at most one automatic email per resume per day (UTC), and never the
+ *    same revision twice: both are claims in forge_package_email_sent (079),
+ *    taken before anything is sent and given back if it does not go out;
+ *    before 079 is applied, a daily count;
  *  - the same per-address daily cap as the package box;
  *  - it delivers the actual files: the resume PDF and Word file and the
  *    letter in Word, from the same renderer as the downloads, as attachments
@@ -49,6 +53,10 @@ export interface AutoDeps {
   release: (userId: string, version: string) => Promise<void>;
   /** The person's own revision (packages/core getRevision). */
   getRevision: (userId: string, revisionId: string) => Promise<ArtifactRevision | null>;
+  /** The newest revision of one of the person's resumes (packages/core getLatestRevision). */
+  getLatestRevision: (userId: string, artifactId: string) => Promise<ArtifactRevision | null>;
+  /** The clock (tests pass their own). */
+  now?: () => number;
   /** The files to attach (lib/email-package-files.ts). */
   files: (resumeText: string, letterText: string) => Promise<MailAttachment[]>;
   /** null when email is not configured here. */
@@ -61,9 +69,22 @@ export function revisionVersion(userId: string, rev: Pick<ArtifactRevision, "id"
   return createHash("sha256").update(`${userId}\n${rev.id}\n${rev.content_hash}`).digest("hex");
 }
 
-/** The daily fallback key (079 not applied yet): the same revision once a day. */
-export function autoRunKey(userId: string, rev: Pick<ArtifactRevision, "id" | "content_hash">): string {
-  return "auto:" + revisionVersion(userId, rev).slice(0, 32);
+/** How long a finished version must stand before it is emailed by itself. */
+export const AUTO_SETTLE_MS = 5 * 60 * 1000;
+
+/** The UTC day, for the once-a-day claim. */
+export function utcDay(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/** The claim for "this resume was emailed today": SHA-256 hex of the person, the resume and the UTC day. */
+export function artifactDayVersion(userId: string, artifactId: string, day: string): string {
+  return createHash("sha256").update(`${userId}\nartifact-day\n${artifactId}\n${day}`).digest("hex");
+}
+
+/** The daily fallback key (079 not applied yet): the same resume once a day. */
+export function autoRunKey(userId: string, artifactId: string, day: string): string {
+  return "auto:" + artifactDayVersion(userId, artifactId, day).slice(0, 32);
 }
 
 const clip = (v: unknown, n: number) => (typeof v === "string" ? v.slice(0, n) : "");
@@ -75,14 +96,23 @@ export async function sendFinishedPackage(
 ): Promise<AutoResult> {
   const revisionId = typeof body.revisionId === "string" ? body.revisionId : "";
   if (!revisionId) return { sent: false, reason: "no_resume" };
-  const rev = await deps.getRevision(userId, revisionId);
-  if (!rev) return { sent: false, reason: "not_found" };
+  const named = await deps.getRevision(userId, revisionId);
+  if (!named) return { sent: false, reason: "not_found" };
+  // The newest version of that resume is what goes out (review L4).
+  const rev = (await deps.getLatestRevision(userId, named.artifact_id)) ?? named;
+  const nowMs = (deps.now ?? Date.now)();
+  const now = body.now === true;
 
   // Finished by the stored status AND by the gate run again on what is
   // stored, letter included. A draft sends nothing and claims nothing.
   if (rev.status !== "finished") return { sent: false, reason: "draft" };
   const input = inputFromRevision(rev);
   if (!input || computeRevision(input).status !== "finished") return { sent: false, reason: "draft" };
+  // Quick edits settle first, unless the person asked for it now.
+  const age = nowMs - Date.parse(rev.created_at);
+  if (!now && Number.isFinite(age) && age < AUTO_SETTLE_MS) {
+    return { sent: false, reason: "settling", retryInMs: Math.max(1000, AUTO_SETTLE_MS - age) };
+  }
 
   // The recipient comes from the account, never from the request.
   const t = await deps.target(userId);
@@ -92,15 +122,26 @@ export async function sendFinishedPackage(
   const to = t.email;
   if (!deps.transport) return { sent: false, reason: "not_configured", to };
 
-  // Once per revision.
+  // Never the same revision twice; at most one per resume per day.
   const version = revisionVersion(userId, rev);
-  const claimed = await deps.claim(userId, version);
-  if (claimed === false) return { sent: false, reason: "already", to };
-  if (claimed === null && (await deps.count(autoRunKey(userId, rev), AUTO_ENDPOINT)) > 1) {
-    return { sent: false, reason: "already", to };
+  const day = utcDay(nowMs);
+  const dayVersion = artifactDayVersion(userId, rev.artifact_id, day);
+  const claimedRev = await deps.claim(userId, version);
+  if (claimedRev === false) return { sent: false, reason: "already", to };
+  let claimedDay: boolean | null = null;
+  if (claimedRev === true) {
+    claimedDay = await deps.claim(userId, dayVersion);
+    if (claimedDay === false) {
+      await deps.release(userId, version).catch(() => {});
+      return { sent: false, reason: "already_today", to };
+    }
+  } else if ((await deps.count(autoRunKey(userId, rev.artifact_id, day), AUTO_ENDPOINT)) > 1) {
+    // 079 not applied: a daily count per resume.
+    return { sent: false, reason: "already_today", to };
   }
-  // From here a claimed version is given back unless the email went out
-  // (the cap, a provider refusal, or an error), so a later visit can send it.
+  const claimed = claimedRev === true;
+  // From here the claims are given back unless the email went out (the cap,
+  // a provider refusal, or an error), so a later visit can send it.
   let result: AutoResult = { sent: false, reason: "failed", to };
   try {
     if ((await deps.count(recipientKey(to), RECIPIENT_ENDPOINT)) > EMAIL_PACKAGE_PER_RECIPIENT_PER_DAY) {
@@ -131,6 +172,9 @@ export async function sendFinishedPackage(
     }
     return result;
   } finally {
-    if (!result.sent && claimed) await deps.release(userId, version).catch(() => {});
+    if (!result.sent && claimed) {
+      await deps.release(userId, version).catch(() => {});
+      if (claimedDay) await deps.release(userId, dayVersion).catch(() => {});
+    }
   }
 }

@@ -11,6 +11,7 @@
  * - Daily AI usage display
  */
 
+import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
@@ -681,6 +682,8 @@ function DataSection({
   // Read the role here rather than threading a prop through several layers.
   const dataSectionRole = useEffectiveRole();
   const isOrgStaff = !!dataSectionRole?.orgRole;
+  // The record check line shows only while that step is on (settings/layout.tsx).
+  const { recordStep } = useServerSwitches();
   const EXPORT_CATS: { key: keyof ExportCats; label: string }[] = [
     { key: "resumes", label: "Resumes and Forge results" },
     { key: "applications", label: "Job applications" },
@@ -712,6 +715,7 @@ function DataSection({
               Conversations with t.ROY are saved to your account so he can
               remember your recent work. Deleting your data clears them.
             </li>
+            {recordStep && (
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
               In the record check, what you type about your record goes to
@@ -720,9 +724,12 @@ function DataSection({
               you tick the box for it. Taking back your yes deletes your
               saved checklists.
             </li>
+            )}
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
-              We never sell or share your personal information
+              We never sell your personal information. It goes only to the
+              services that run the app, and to a program when you choose to
+              share with it
             </li>
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>

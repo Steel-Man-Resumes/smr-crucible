@@ -166,7 +166,7 @@ const JOURNEY = [
     name: "Interview Practice",
     time: "Ongoing",
     what: "Text or live voice mock interviews tailored to your target role. Behavioral, situational, and disclosure-specific questions. Real-time feedback on framing, specificity, and narrative arc.",
-    tech: "Text mode: Claude Sonnet. Voice mode: OpenAI Whisper (transcription) + Claude (feedback). Practice audio is never stored. Only the frame used and whether the point landed are kept.",
+    tech: "Text mode: Claude Sonnet. Voice mode: OpenAI Whisper (transcription) + Claude (feedback). We never store practice audio. Text practice keeps the feedback, not the conversation. Voice practice keeps a text transcript only when the person turns saving on.",
     color: "phos",
   },
   {
@@ -347,8 +347,8 @@ export default function OverviewPage() {
           <div className="space-y-3">
             {[
               {
-                title: "Practice tools store frames, not words",
-                detail: "The Disclosure Planner and Interview Practice tools store whether a coaching frame was used and whether the key point landed. They never store the user's actual answers, transcript, or audio. The system can show you progress without surveilling your process.",
+                title: "Practice transcripts are saved only by choice",
+                detail: "Text interview practice keeps the role, the frame practiced and the coach's feedback, not the conversation. Voice interview practice and disclosure rehearsal keep an encrypted text transcript only when the person turns saving on, and the person can delete it. Audio is never stored by us. Programs cannot read practice through sharing; with progress sharing on, they see a count of sessions.",
               },
               {
                 title: "Partner access is consent-gated",

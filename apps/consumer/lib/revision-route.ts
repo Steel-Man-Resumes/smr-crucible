@@ -23,5 +23,4 @@ export async function revisionCaller(): Promise<RevisionCaller> {
   return { ok: true, userId: real.id };
 }
 
-/** Saves per account per day: a finish page saves on each change; this only stops a loop or a script. */
-export const REVISION_SAVES_PER_DAY = 1000;
+export { REVISION_SAVES_PER_DAY, REVISION_TOO_LARGE } from "./revision-limits";

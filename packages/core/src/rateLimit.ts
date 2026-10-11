@@ -369,14 +369,20 @@ export async function getOrgMemberDailyLimit(userId: string): Promise<number | n
  * ("headshot_generate") IS a real AI call and is deliberately NOT excluded, so it
  * DOES count toward the displayed AI usage.
  */
-export async function getUserDailyUsage(userId: string): Promise<number> {
-  const row = await getOne<{ total: string }>(
-    `SELECT COALESCE(SUM(call_count), 0) as total
+/**
+ * Counters in ai_usage that are not AI calls, left out of the displayed usage:
+ * the photo upload ceiling and the text practice allowance counters (Phase 5
+ * review L2: one practice session is one AI call, not two).
+ */
+export const NON_AI_USAGE_ENDPOINTS = ["headshot_upload", "interview-text-session", "interview-text-turn"] as const;
+
+export const DAILY_USAGE_SQL = `SELECT COALESCE(SUM(call_count), 0) as total
      FROM ai_usage
      WHERE user_id = $1 AND usage_date = CURRENT_DATE
        AND endpoint NOT LIKE 'vault_%'
-       AND endpoint <> 'headshot_upload'`,
-    [userId]
-  );
+       AND endpoint NOT IN (${NON_AI_USAGE_ENDPOINTS.map((e) => `'${e}'`).join(", ")})`;
+
+export async function getUserDailyUsage(userId: string): Promise<number> {
+  const row = await getOne<{ total: string }>(DAILY_USAGE_SQL, [userId]);
   return parseInt(row?.total ?? "0", 10);
 }

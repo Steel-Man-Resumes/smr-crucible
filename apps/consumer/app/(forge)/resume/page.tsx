@@ -22,7 +22,7 @@ import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { GroundingGauge } from "@/components/GroundingGauge";
 import { computeGrounding, jobsFromParsedProfile } from "@/lib/grounding";
-import { forgeUploadErrorMessage } from "@/lib/forge-upload-error";
+import { FORGE_UPLOAD_PICK_AGAIN_MESSAGE, forgeUploadAuthAction, forgeUploadErrorMessage, isUploadReturn } from "@/lib/forge-upload-error";
 import { datedJobs, isLanesFirst, nextPath, planForgePath, resumeVariant, type ConfirmJob } from "@/lib/forge-path";
 import type { ForgeSessionData } from "@/lib/forge-context";
 import { useSession } from "next-auth/react";
@@ -145,6 +145,14 @@ export default function ResumeIntakePage() {
   // A saved resume is confirmed, not asked for again. "Use a different one"
   // opens the chooser without erasing the saved one until a new one lands.
   const [replacing, setReplacing] = useState(false);
+  // FU1: back from a sign-in step. Open the file step and ask for the file
+  // once more (a browser cannot keep it across the trip).
+  const [pickAgain, setPickAgain] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !isUploadReturn(window.location.search)) return;
+    setActivePath("upload");
+    setPickAgain(true);
+  }, []);
 
   /** Save, then go where this person's path goes next (not always goals). */
   function continueWith(updates: Partial<ForgeSessionData>) {
@@ -170,6 +178,13 @@ export default function ResumeIntakePage() {
         const data = await res.json();
 
         if (!res.ok) {
+          // FU1: a half-finished sign-in goes to the step it is waiting on and
+          // comes back to this file step (lib/forge-upload-error.ts).
+          const next = forgeUploadAuthAction(res.status, data);
+          if (next?.kind === "go") {
+            window.location.assign(next.url);
+            return;
+          }
           setUploadError(forgeUploadErrorMessage(res.status, data?.error));
           return;
         }
@@ -186,6 +201,7 @@ export default function ResumeIntakePage() {
         setParsedPhone(data.profile?.phone || "");
         setParsedProfile(data.profile || null);
         setUploadSuccess(true);
+        setPickAgain(false);
       } catch (err) {
         setUploadError("Couldn't read that file. Try a different one?");
       } finally {
@@ -766,6 +782,12 @@ export default function ResumeIntakePage() {
           className="hidden"
           aria-label="Upload resume file"
         />
+
+        {pickAgain && !uploadError && !uploading && (
+          <p role="status" className="mt-4 p-4 bg-t-panel border border-t-amber text-sm text-t-white" data-testid="upload-pick-again">
+            {FORGE_UPLOAD_PICK_AGAIN_MESSAGE}
+          </p>
+        )}
 
         {uploadError && (
           <div className="mt-4 p-4 bg-t-panel border border-t-red">

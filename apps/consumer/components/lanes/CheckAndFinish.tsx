@@ -15,7 +15,7 @@ import { CHECK_AND_FINISH_LABEL, DRAFT_BADGE } from "@/lib/lane-task";
 export const checkAndFinishHref = (artifactId: string) => `/output?check=${encodeURIComponent(artifactId)}`;
 
 /** The draft line and the link. `status` known: shown at once; unknown: read from the newest revision. */
-export function CheckAndFinish({ artifactId, status, className = "" }: { artifactId: string; status?: "draft" | "finished" | null; className?: string }) {
+export function CheckAndFinish({ artifactId, status, className = "", showBadge = true }: { artifactId: string; status?: "draft" | "finished" | null; className?: string; showBadge?: boolean }) {
   const [known, setKnown] = useState<"draft" | "finished" | null>(status ?? null);
   useEffect(() => {
     if (status) {
@@ -42,9 +42,11 @@ export function CheckAndFinish({ artifactId, status, className = "" }: { artifac
   }
   return (
     <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${className}`} data-testid="check-and-finish">
-      <span className="text-xs font-medium text-t-amber-bright" data-testid="draft-badge">
-        {DRAFT_BADGE}
-      </span>
+      {showBadge && (
+        <span className="text-xs font-medium text-t-amber-bright" data-testid="draft-badge">
+          {DRAFT_BADGE}
+        </span>
+      )}
       <Link href={checkAndFinishHref(artifactId)} className="t-focus inline-flex min-h-touch items-center text-sm font-semibold text-t-amber-bright underline underline-offset-2 hover:text-t-amber" data-testid="check-and-finish-link">
         {CHECK_AND_FINISH_LABEL}
       </Link>

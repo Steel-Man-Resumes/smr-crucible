@@ -9,6 +9,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { checkTextPracticeAllowance } from "@/lib/premium-server";
+import { refundUserUsage } from "@crucible/core";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
@@ -23,13 +25,17 @@ async function handlePost(request: Request) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
   }
 
+  // Declared outside the try so a failed AI call can still hand back the id
+  // of a session it already counted (review r2, I-b).
+  let practiceSession: string | undefined;
   try {
     // Route is mode:"user" in withRateLimit, so a session is guaranteed by
     // the time handlePost runs -- re-derive here to attribute the AI call.
     const session = await auth();
     const userId = session?.user?.id;
 
-    const { messages, config, exchangeCount, forgeContext, resume, jobDescription, endInterview } = await request.json();
+    const body = await request.json();
+    const { messages, config, exchangeCount, forgeContext, resume, jobDescription, endInterview } = body;
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -37,6 +43,22 @@ async function handlePost(request: Request) {
         { status: 500 }
       );
     }
+
+    // Text practice is free with an account (the premium split, Troy
+    // 2026-10-10), up to a daily number of sessions while the gate is on.
+    // A sponsor removes the allowance. Counted once per practice interview.
+    // A server-issued session id decides what counts as a new session (review
+    // L1). A refused turn gives back the daily AI call it was charged (I2).
+    if (userId) {
+      const verdict = await checkTextPracticeAllowance(userId, body);
+      if (verdict.refuse) {
+        await refundUserUsage(userId, "interview").catch(() => {});
+        return verdict.refuse;
+      }
+      practiceSession = verdict.session;
+    }
+    const reply = (payload: unknown) =>
+      NextResponse.json(practiceSession ? { ...(payload as Record<string, unknown>), practiceSession } : payload);
 
     const isDisclosure =
       config.interviewType === "disclosure" || config.includeDisclosure;
@@ -213,7 +235,7 @@ RULES:
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
-          return NextResponse.json(
+          return reply(
             plainPunctuation(
               {
                 response:
@@ -225,7 +247,7 @@ RULES:
           );
         } catch {
           // If JSON parse fails, return the text as closing with generic feedback
-          return NextResponse.json({
+          return reply({
             response: plainPunctuation(text.split("{")[0].trim() || "Thank you for your time today.", swapLog),
             feedback: {
               strengths: ["You completed the full practice interview"],
@@ -239,7 +261,7 @@ RULES:
           });
         }
       }
-      return NextResponse.json({
+      return reply({
         response: plainPunctuation(text, swapLog),
         feedback: {
           strengths: ["You showed up and practiced. That takes courage."],
@@ -270,14 +292,18 @@ RULES:
       console.error("Decision log failed (interview):", err);
     }
 
-    return NextResponse.json({ response: plainPunctuation(text, swapLog) });
+    return reply({ response: plainPunctuation(text, swapLog) });
   } catch (error: any) {
     console.error("Interview practice error:", error);
+    // The session was counted before the AI call: give its id back, so the
+    // retry continues this session instead of being charged a new one.
     return NextResponse.json(
-      { error: "Could not process interview" },
+      { error: "Could not process interview", ...(practiceSession ? { practiceSession } : {}) },
       { status: 500 }
     );
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "interview", requiredTier: "client", premium: "interview_coaching" });
+// Text practice is not a sponsored tool (lib/premium.ts, the split): no
+// `premium` here. Voice coaching stays sponsored at /api/interview-voice/token.
+export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "interview", requiredTier: "client" });

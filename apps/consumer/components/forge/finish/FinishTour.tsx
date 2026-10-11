@@ -8,6 +8,7 @@
  * part it talks about gets an outline.
  */
 
+import { TroyMark } from "@crucible/consumer-ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface TourStep {
@@ -105,7 +106,7 @@ export function FinishTour({
       className="fixed inset-x-4 bottom-4 z-[60] border border-t-amber bg-t-panel-2 p-4 shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:left-auto sm:right-6 sm:w-[360px]"
     >
       <div className="flex items-start gap-3">
-        <img src="/images/t-roy-icon-badge.webp" alt="" aria-hidden="true" className="mt-0.5 h-7 w-7 shrink-0 rounded-full" />
+        <TroyMark size={28} className="mt-0.5" />
         <div className="min-w-0">
           <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">
             t.ROY &middot; {i + 1} of {live.length}

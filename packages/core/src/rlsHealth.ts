@@ -60,7 +60,24 @@ export interface RlsHealth {
   checkedAt: string;
   /** Newest applied migration. Says WHICH database this is, without naming a host. */
   latestMigration: string | null;
+  /**
+   * Can this connection create temporary objects? Migration 082 takes TEMP away
+   * from the app (a planted temp type or function is how a definer function's
+   * search_path gets hijacked). null when the check itself could not run.
+   */
+  appCanCreateTemp: boolean | null;
   problems: string[];
+}
+
+/**
+ * The TEMP rule (review N6): once 082 is applied the app must not hold TEMP on
+ * the database; before 082 (a fresh database) holding it is the default and
+ * is not a problem. Pure, so it is unit tested.
+ */
+export function tempProblem(t: { canCreateTemp: boolean; migration082Applied: boolean }): string | null {
+  return t.canCreateTemp && t.migration082Applied
+    ? "the app role can create temporary objects (TEMP on the database), which migration 082 revoked: something granted it back"
+    : null;
 }
 
 export async function getRlsHealth(): Promise<RlsHealth> {
@@ -73,6 +90,19 @@ export async function getRlsHealth(): Promise<RlsHealth> {
   const [stamp] = await query<{ at: string; latest: string | null }>(
     `SELECT now()::text AS at, (SELECT max(filename) FROM _migrations) AS latest`
   );
+
+  let appCanCreateTemp: boolean | null = null;
+  try {
+    const [t] = await query<{ temp: boolean; m082: boolean }>(
+      `SELECT has_database_privilege(current_user, current_database(), 'TEMP') AS temp,
+              EXISTS (SELECT 1 FROM _migrations WHERE filename = '082_resource_app_view.sql') AS m082`
+    );
+    appCanCreateTemp = !!t?.temp;
+    const p = tempProblem({ canCreateTemp: !!t?.temp, migration082Applied: !!t?.m082 });
+    if (p) problems.push(p);
+  } catch {
+    problems.push("could not check whether the app role holds TEMP on the database");
+  }
 
   const flags = await query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
     `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class
@@ -118,6 +148,7 @@ export async function getRlsHealth(): Promise<RlsHealth> {
     scopedReadSeesRows,
     checkedAt: stamp?.at ?? "",
     latestMigration: stamp?.latest ?? null,
+    appCanCreateTemp,
     problems,
   };
 }

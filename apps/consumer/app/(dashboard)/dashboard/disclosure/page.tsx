@@ -33,6 +33,7 @@ import {
 } from "@/lib/hurdle-guidance";
 import { CheckCircle2 } from "lucide-react";
 import { RECORD_CHECK_COPY } from "@/lib/record-check/copy";
+import { useServerSwitches } from "@/components/ServerSwitches";
 
 type PlannerStep = "assess" | "deepen" | "plan" | "rehearse";
 
@@ -202,6 +203,7 @@ function DisclosurePlannerPage() {
 
   const hasForgeData = forge.strengths.length > 0 || !!forge.headline;
   const isRecord = isRecordHurdle(hurdle);
+  const { recordStep } = useServerSwitches();
   const hurdleGuidance = getHurdleGuidance(hurdle);
 
   // --- 5.2 Strength discovery: AI proposes, user confirms ---
@@ -647,8 +649,9 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
         )}
 
         {/* D11: the record check is its own screen with its own yes. This is
-            only a plain choice that opens it; nothing typed here goes there. */}
-        {isRecord && (
+            only a plain choice that opens it; nothing typed here goes there.
+            Hidden while the step is switched off (lib/server-switch.ts). */}
+        {isRecord && recordStep && (
           <div className="bg-t-panel p-5 border border-t-line mb-6" data-testid="record-check-entry">
             <h3 className="font-semibold text-t-white mb-2">{RECORD_CHECK_COPY.entryQuestion}</h3>
             <p className="text-sm text-t-phos-dim leading-relaxed mb-3">{RECORD_CHECK_COPY.entryBody}</p>
@@ -674,8 +677,8 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               and you get a generic template you will have to rewrite yourself.
             </p>
             <p className="text-xs text-t-phos-dim mb-4">
-              Your details are never put on paper, never shared, and you can delete
-              them anytime.
+              Your details go to the AI services that build the plan. No program or
+              employer can read them, and you can delete them anytime.
             </p>
             <div className="flex flex-wrap gap-3">
               <button
@@ -997,7 +1000,8 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
         <div className="flex items-center justify-between gap-3 bg-t-panel-2 px-4 py-3 border border-t-amber mb-6">
           <p className="text-sm text-t-amber-bright">
             <span className="font-semibold">Saved to your Library.</span> Come
-            back to it anytime. It is private to your account.
+            back to it anytime. No program or employer can read it. If you share your progress with a
+            program, it sees only that you have a plan.
           </p>
           <a
             href="/dashboard/vault"

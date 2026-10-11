@@ -16,8 +16,11 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const ROOT = join(import.meta.dirname, "..");
-const SCAN_DIRS = ["app", "components", "lib"];
+// Review I4 (2026-10-10): the shared UI package renders in the app too, and
+// t.ROY repeats the coaching skills' text, so both are scanned.
+const SCAN_DIRS = ["app", "components", "lib", "../../packages/consumer-ui/src"];
 const EXTENSIONS = [".ts", ".tsx", ".mts"];
+const MD_DIRS = ["lib/skills"];
 
 // Compared case-insensitively, whitespace-normalized.
 const BANNED_PHRASES = [
@@ -77,15 +80,39 @@ const BANNED_PHRASES = [
   "the offense never reaches ai",
   "offense is never sent to the ai",
   "never sent to an ai provider",
+  // 2026-10-10 Phase 5 R5.3: absolute privacy lines that were not true as
+  // written. Forge answers reach the AI services (and the account when signed
+  // in); a program with progress sharing sees counts and whether a plan
+  // exists; voice practice keeps a text transcript when saving is on; nothing
+  // in the code promises lifetime retention.
+  "everything here is private",
+  "everything stays private",
+  "your data is private",
+  "we never save your words or recordings",
+  "never shared unless you choose to connect a support partner",
+  "yours for life",
+  "you can redo it as many times as you want",
+  // 2026-10-10 Phase 5 R4/R5 review M2: practice and disclosure absolutes.
+  // Voice practice and disclosure rehearsal keep an encrypted text transcript
+  // when saving is on (conversationStore); text practice keeps the role, the
+  // frame and the feedback; the planner's details go to the AI services.
+  "they never store the user's actual answers",
+  "only the frame used and whether the point landed are kept",
+  "we never store your interview words or recordings",
+  "practice frames only, no transcript",
+  "never put on paper, never shared",
+  "we never store your words",
+  // personal information goes to the AI processors and, by choice, a program
+  "we never sell or share your personal information",
 ];
 
-function* walk(dir: string): Generator<string> {
+function* walk(dir: string, exts: string[] = EXTENSIONS): Generator<string> {
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
     if (statSync(full).isDirectory()) {
-      if (name === "node_modules" || name === ".next") continue;
-      yield* walk(full);
-    } else if (EXTENSIONS.some((e) => full.endsWith(e))) {
+      if (name === "node_modules" || name === ".next" || name === "dist") continue;
+      yield* walk(full, exts);
+    } else if (exts.some((e) => full.endsWith(e))) {
       yield full;
     }
   }
@@ -94,8 +121,12 @@ function* walk(dir: string): Generator<string> {
 const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, " ");
 const violations: string[] = [];
 
-for (const dir of SCAN_DIRS) {
-  for (const file of walk(join(ROOT, dir))) {
+const files = [
+  ...SCAN_DIRS.flatMap((d) => [...walk(join(ROOT, d))]),
+  ...MD_DIRS.flatMap((d) => [...walk(join(ROOT, d), [".md"])]),
+];
+{
+  for (const file of files) {
     const text = normalize(readFileSync(file, "utf8"));
     for (const phrase of BANNED_PHRASES) {
       if (text.includes(normalize(phrase))) {

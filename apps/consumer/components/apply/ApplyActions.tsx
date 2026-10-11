@@ -230,7 +230,15 @@ export function ApplyActions({
       } else if (res.status === 409 && data.error === "draft") {
         setAsIsDraftAsk(data.message || "This resume is still a draft.");
       } else {
-        setAsIsErr(data.error === "resume_not_found" ? "We could not find that resume." : "Could not attach your resume. Try again in a moment.");
+        // A locked or unavailable sponsored tool says why in plain words (lib/premium.ts).
+        const premiumWords = data.code === "premium_locked" || data.code === "premium_unavailable";
+        setAsIsErr(
+          data.error === "resume_not_found"
+            ? "We could not find that resume."
+            : premiumWords && typeof data.error === "string"
+              ? data.error
+              : "Could not attach your resume. Try again in a moment."
+        );
       }
     } catch {
       setAsIsErr("Could not attach your resume. Try again in a moment.");
@@ -369,10 +377,15 @@ export function ApplyActions({
             </span>
           ) : !oneClickOpen ? (
             <span className="text-[11px] text-t-phos-dim" data-testid="one-click-locked">
-              {PREMIUM_TOOL_LABELS.one_click_apply} isn&apos;t open for you yet.{" "}
+              {PREMIUM_TOOL_LABELS.one_click_apply} opens through your organization or SMR.{" "}
               <Link href="/dashboard/settings#premium" className="underline underline-offset-2 hover:text-t-white">
                 How to get it
               </Link>
+              {". "}You can still{" "}
+              <Link href={`/dashboard/application-tailor?job=${applicationId}`} className="underline underline-offset-2 hover:text-t-white">
+                tailor your resume for this job
+              </Link>
+              .
             </span>
           ) : (
             <button

@@ -39,6 +39,7 @@ export * from './partnerDashboard';
 export * from './orgInvite';
 export * from './systemHealth';
 export * from './employer';
+export * from './resourceDirectory';
 export * from './hiddenEmployers';
 export * from './currentBlock';
 export * from './platformChangelog';

@@ -218,7 +218,7 @@ function WelcomePageInner() {
       onBack={() => router.push("/intro")}
       footer={
         <p>
-          Everything here is private. You can change your answer at any time.
+          No employer or program sees this answer. You can change it any time.
         </p>
       }
     >

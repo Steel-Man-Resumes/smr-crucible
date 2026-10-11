@@ -38,6 +38,31 @@ export type RevisionStatus = "draft" | "finished";
 
 export const REVISION_MAX_TEXT = 60_000;
 
+/** Most revisions kept per artifact. Older ones are pruned; the newest finished one never is. */
+export const REVISION_KEEP_PER_ARTIFACT = 50;
+
+/** The table's size CHECKs, in bytes of JSON text (migration 081). */
+export const REVISION_JSON_LIMITS = {
+  keptTerms: 20_000,
+  confirmedCredentials: 60_000,
+  defendAnswers: 400_000,
+  evidence: 600_000,
+  openItems: 40_000,
+} as const;
+
+/** The page limit each kind may carry (the 081 CHECK artifact_revision_limit_by_kind). */
+export function pageLimitAllowed(kind: RevisionDocKind, limit: number | null): boolean {
+  if (kind === "cv_academic" || kind === "cv_clinical") return limit === null;
+  if (kind === "performer_resume") return limit === 1;
+  if (kind === "artist_resume") return limit === 1 || limit === 2 || limit === 4;
+  return limit === 1 || limit === 2;
+}
+
+/** Byte length of a value as the database will store it (JSON text, UTF-8). */
+function jsonBytes(v: unknown): number {
+  return Buffer.byteLength(JSON.stringify(v ?? null), "utf8");
+}
+
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** What the caller hands in: everything the server worked out, nothing from a client flag. */
@@ -133,6 +158,17 @@ export function revisionProblem(r: NewRevision): string | null {
   if (r.status !== "draft" && r.status !== "finished") return "bad status";
   if (!Number.isInteger(r.pageCount) || r.pageCount < 0 || r.pageCount > 99) return "bad page count";
   if (r.pageLimit !== null && (!Number.isInteger(r.pageLimit) || r.pageLimit < 1 || r.pageLimit > 99)) return "bad page limit";
+  if (!pageLimitAllowed(r.docKind, r.pageLimit)) return "page limit does not fit the kind";
+  // Over a size CHECK: refused here with a plain reason, never a retry loop.
+  if (
+    jsonBytes(r.keptTerms) > REVISION_JSON_LIMITS.keptTerms ||
+    jsonBytes(r.confirmedCredentials) > REVISION_JSON_LIMITS.confirmedCredentials ||
+    jsonBytes(r.defendAnswers) > REVISION_JSON_LIMITS.defendAnswers ||
+    jsonBytes(r.evidence) > REVISION_JSON_LIMITS.evidence ||
+    jsonBytes(r.openItems) > REVISION_JSON_LIMITS.openItems
+  ) {
+    return "too large";
+  }
   if (r.status === "finished") {
     if (r.pageCount < 1 || (r.pageLimit !== null && r.pageCount > r.pageLimit)) return "finished over the page limit";
     if (r.openItems.length > 0) return "finished with open items";
@@ -187,6 +223,24 @@ export const REVISION_LIST_SQL = `SELECT ${COLUMNS} FROM artifact_revision
 /** The artifact must be the person's own (read AS them, so a foreign one is simply not there). */
 export const REVISION_ARTIFACT_OWNED_SQL = `SELECT id FROM refinery_artifact WHERE id = $1 AND user_id = $2`;
 
+/**
+ * Keep at most REVISION_KEEP_PER_ARTIFACT revisions per artifact: the newest
+ * ones, and ALWAYS the newest finished one (it is left out of the ordered list,
+ * which keeps the newest 49 besides it). The newest revision is first in the
+ * list, so it is never pruned either.
+ */
+export const REVISION_PRUNE_SQL = `DELETE FROM artifact_revision
+  WHERE artifact_id = $1 AND user_id = $2 AND id IN (
+    SELECT r.id FROM artifact_revision r
+     WHERE r.artifact_id = $1 AND r.user_id = $2
+       AND r.id IS DISTINCT FROM (
+         SELECT f.id FROM artifact_revision f
+          WHERE f.artifact_id = $1 AND f.user_id = $2 AND f.status = 'finished'
+          ORDER BY f.revision_number DESC LIMIT 1)
+     ORDER BY r.revision_number DESC
+     OFFSET $3)
+  RETURNING id`;
+
 export const REVISION_DELETE_ALL_SQL = `DELETE FROM artifact_revision WHERE user_id = $1 RETURNING id`;
 
 function paramsFor(userId: string, r: NewRevision, hash: string): unknown[] {
@@ -233,7 +287,10 @@ export async function insertRevision(userId: string, r: NewRevision): Promise<In
     if (!owned) return { status: "invalid", reason: "artifact not found" };
     for (let attempt = 0; attempt < 4; attempt++) {
       const rows = await queryAsUser<ArtifactRevision>(userId, REVISION_INSERT_SQL, paramsFor(userId, r, hash));
-      if (rows[0]) return { status: "saved", revision: rows[0], reused: false };
+      if (rows[0]) {
+        await pruneRevisions(userId, r.artifactId);
+        return { status: "saved", revision: rows[0], reused: false };
+      }
       const newest = await getOneAsUser<ArtifactRevision>(userId, REVISION_LATEST_SQL, [r.artifactId, userId]);
       if (newest && newest.content_hash === hash) return { status: "saved", revision: newest, reused: true };
       // A concurrent save took the number; go again.
@@ -245,6 +302,12 @@ export async function insertRevision(userId: string, r: NewRevision): Promise<In
     if ((e as { code?: string } | null)?.code === "23503") return { status: "invalid", reason: "artifact not found" };
     throw e;
   }
+}
+
+/** Prune an artifact's oldest revisions past the keep count (never the newest, never the newest finished). */
+export async function pruneRevisions(userId: string, artifactId: string): Promise<number> {
+  const rows = await queryAsUser<{ id: string }>(userId, REVISION_PRUNE_SQL, [artifactId, userId, REVISION_KEEP_PER_ARTIFACT - 1]);
+  return rows.length;
 }
 
 /** One revision, only the owner's. Null when missing, foreign, malformed, or 081 is not applied. */

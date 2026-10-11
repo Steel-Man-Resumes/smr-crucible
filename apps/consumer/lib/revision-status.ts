@@ -37,9 +37,11 @@ import { completeCredentialRows, readCredentialRows } from "./credential-rows";
 import { isLengthChoice, lengthOpenItem, lengthOk, pageLimitFor, type LengthChoice, type RevisionDocKind } from "./length-rule";
 import { MAX_RENDER_CHARS, fitFor } from "./resume-render";
 import type { ArtifactRevision, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
+import { verifyWriterReceipt } from "./writer-receipt";
+import { lineKey } from "./revision-patch";
 
 /** Bump when the gate or the page rule changes in a way that can change a status. */
-export const CHECKER_VERSION = "finish-gate-1+pages-1";
+export const CHECKER_VERSION = "finish-gate-1+pages-1+receipt-1";
 
 const MAX_WORDS = 120_000;
 const MAX_GROUNDING_JSON = 300_000;
@@ -69,7 +71,33 @@ export interface RevisionEvidence {
   credentialsAnswer: string;
   credentialRows: unknown[];
   ownResumeText: string;
+  /** The writer's receipt over written + grounding (lib/writer-receipt.ts), as delivered. */
+  writerReceipt: string;
+  /**
+   * Set by the SERVER only: written and grounding are the writer's own (the
+   * receipt matched when this was saved). False: they count for nothing and
+   * the version cannot be finished.
+   */
+  writerVerified: boolean;
 }
+
+/** How to read what was sent. */
+export interface CleanOptions {
+  /**
+   * A row this server stored (a saved revision): its evidence was checked
+   * when it was saved, so it is taken as stored (a rotated secret never turns
+   * a saved version into a draft). Never set for anything a page sent.
+   */
+  trusted?: boolean;
+  /**
+   * The kind, decided by the SERVER (review M1). A page's docKind is never
+   * read. Default "resume": every Forge, import and Refinery revision is one.
+   */
+  docKind?: RevisionDocKind;
+}
+
+/** The open item for a version whose writer's documents and check have no matching receipt. */
+export const RECEIPT_OPEN_ITEM = "Fix before you send: this version needs its check on the finish page before it can be finished.";
 
 export type CleanResult = { ok: true; input: RevisionInput } | { ok: false; reason: string };
 
@@ -79,7 +107,7 @@ const str = (v: unknown, max: number): string => (typeof v === "string" ? v.slic
  * Clean what a page sent (the finish page's state, or the import's stored
  * finish). Never trusts a status or a "finished" flag: there is no field for one.
  */
-export function cleanRevisionInput(raw: unknown): CleanResult {
+export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): CleanResult {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, reason: "no finish state" };
   const r = raw as Record<string, unknown>;
   const resumeText = typeof r.resumeText === "string" ? r.resumeText : "";
@@ -118,8 +146,18 @@ export function cleanRevisionInput(raw: unknown): CleanResult {
     "revision"
   );
   if (!stored) return { ok: false, reason: "bad finish state" };
-  const docKind = (DOC_KINDS as readonly string[]).includes(r.docKind as string) ? (r.docKind as RevisionDocKind) : "resume";
+  // The kind is the server's: a stored row keeps its own; anything a page sent is a resume.
+  const docKind: RevisionDocKind = opts.trusted
+    ? (DOC_KINDS as readonly string[]).includes(r.docKind as string)
+      ? (r.docKind as RevisionDocKind)
+      : "resume"
+    : opts.docKind ?? "resume";
   const rows = completeCredentialRows(readCredentialRows(r.credentialRows));
+  // written and grounding count only with the writer's receipt (review M1).
+  const receipt = typeof r.writerReceipt === "string" ? r.writerReceipt.slice(0, 200) : "";
+  const writtenIn = stored.docs.written ?? null;
+  const groundingIn = stored.docs.grounding ?? null;
+  const verified = opts.trusted ? r.writerVerified === true : verifyWriterReceipt(receipt, writtenIn, groundingIn);
   return {
     ok: true,
     input: {
@@ -132,8 +170,11 @@ export function cleanRevisionInput(raw: unknown): CleanResult {
       confirmedCredentials: stored.confirmedCredentials ?? [],
       evidence: {
         ownWords: str(r.ownWords, MAX_WORDS),
-        written: stored.docs.written ?? null,
-        grounding: stored.docs.grounding ?? null,
+        // Without a matching receipt the writer's documents and check are not
+        // known: written counts for nothing (closed by default) and the version
+        // carries the receipt open item (gateRevision).
+        written: verified ? writtenIn : null,
+        grounding: verified ? groundingIn : null,
         withheldLines: stored.docs.withheldLines.slice(0, 100).map((l) => l.slice(0, 1000)),
         keepInsideLines: stored.docs.keepInsideLines,
         addedTerms: (stored.addedTerms ?? []).map((t) => t.slice(0, 200)),
@@ -141,6 +182,8 @@ export function cleanRevisionInput(raw: unknown): CleanResult {
         credentialsAnswer: str(r.credentialsAnswer, 20_000),
         credentialRows: rows as unknown[],
         ownResumeText: str(r.ownResumeText, MAX_WORDS),
+        writerReceipt: verified ? receipt : "",
+        writerVerified: verified,
       },
     },
   };
@@ -150,6 +193,7 @@ export function cleanRevisionInput(raw: unknown): CleanResult {
 export function inputFromRevision(rev: Pick<ArtifactRevision, "doc_kind" | "length_choice" | "resume_text" | "letter_text" | "defend_answers" | "kept_terms" | "confirmed_credentials" | "evidence">): RevisionInput | null {
   const ev = (rev.evidence ?? {}) as Partial<RevisionEvidence>;
   const c = cleanRevisionInput({
+    ...ev,
     docKind: rev.doc_kind,
     lengthChoice: rev.length_choice,
     resumeText: rev.resume_text,
@@ -157,8 +201,7 @@ export function inputFromRevision(rev: Pick<ArtifactRevision, "doc_kind" | "leng
     defendAnswers: rev.defend_answers,
     keptTerms: rev.kept_terms,
     confirmedCredentials: rev.confirmed_credentials,
-    ...ev,
-  });
+  }, { trusted: true });
   return c.ok ? c.input : null;
 }
 
@@ -194,8 +237,12 @@ export function gateRevision(input: RevisionInput, pageCount: number): RevisionV
   const pageLimit = pageLimitFor(input.docKind, input.lengthChoice);
   const fits = lengthOk(pageCount, pageLimit);
   const lengthItem = lengthOpenItem(pageCount, pageLimit, input.lengthChoice);
-  const status = view.state === "finished" && fits ? "finished" : "draft";
-  const openItems = status === "finished" ? [] : [...(lengthItem ? [lengthItem] : []), ...openItemsInPlainWords(view)].slice(0, 30).map((s) => s.slice(0, 300));
+  const receiptOk = e.writerVerified === true;
+  const status = view.state === "finished" && fits && receiptOk ? "finished" : "draft";
+  const openItems =
+    status === "finished"
+      ? []
+      : [...(lengthItem ? [lengthItem] : []), ...(receiptOk ? [] : [RECEIPT_OPEN_ITEM]), ...openItemsInPlainWords(view)].slice(0, 30).map((s) => s.slice(0, 300));
   // A draft with nothing listed still says why (the to-do page is never empty).
   if (status === "draft" && openItems.length === 0) openItems.push(pageCount < 1 ? "Fix before you send: the page came out empty." : "Fix before you send: answer the open questions on your finish page.");
   return { status, pageCount, pageLimit, openItems, lengthItem, view };
@@ -234,20 +281,49 @@ export function revisionRecord(artifactId: string, source: RevisionSource, input
 }
 
 /**
- * An edit on top of a saved revision (the Refinery workspace, a later change):
- * the new texts with the earlier evidence carried over by the SERVER. With no
- * earlier revision there is no evidence, so the gate finds none of the
- * person's words and the result is a draft. Raw text is never finished.
+ * An edit on top of a saved revision (the Refinery workspace, a Tailor copy,
+ * a later change): the new texts with the earlier evidence carried over by the
+ * SERVER (trusted: it came from a stored row). With no earlier revision there
+ * is no evidence, so the gate finds none of the person's words and the result
+ * is a draft. Raw text is never finished.
+ *
+ * Answers follow their line on a normalized key (review H1): a line whose
+ * words are the same, only spacing, punctuation, separators or order moved,
+ * keeps the answer the person already gave. A changed line is asked again,
+ * and only that line.
  */
 export function editInput(base: RevisionInput | null, resumeText: string, letterText?: string): CleanResult {
-  return cleanRevisionInput({
-    docKind: base?.docKind ?? "resume",
-    lengthChoice: base?.lengthChoice ?? "auto",
-    resumeText,
-    coverLetterText: letterText ?? base?.letterText ?? "",
-    defendAnswers: base?.defendAnswers ?? [],
-    keptTerms: base?.keptTerms ?? [],
-    confirmedCredentials: base?.confirmedCredentials ?? [],
-    ...(base?.evidence ?? {}),
+  const letter = letterText ?? base?.letterText ?? "";
+  return cleanRevisionInput(
+    {
+      ...(base?.evidence ?? {}),
+      docKind: base?.docKind ?? "resume",
+      lengthChoice: base?.lengthChoice ?? "auto",
+      resumeText,
+      coverLetterText: letter,
+      defendAnswers: remapAnswers(base?.defendAnswers ?? [], [resumeText, letter]),
+      keptTerms: base?.keptTerms ?? [],
+      confirmedCredentials: base?.confirmedCredentials ?? [],
+    },
+    { trusted: true }
+  );
+}
+
+/** Carried answers moved onto the new text's lines with the same words (lineKey). */
+export function remapAnswers(answers: DefendAnswer[], pages: string[]): DefendAnswer[] {
+  const lines = pages.flatMap((p) => p.split("\n").map((l) => l.trim()).filter(Boolean));
+  const exact = new Set(lines);
+  const byKey = new Map<string, string>();
+  for (const l of lines) {
+    const k = lineKey(l);
+    if (k && !byKey.has(k)) byKey.set(k, l);
+  }
+  return answers.map((a) => {
+    if (exact.has(a.line.trim())) return a;
+    const moved = byKey.get(lineKey(a.line));
+    if (!moved) return a; // the line changed: it is asked again
+    // A rewrite record is tied to its exact text; on a moved line it stands as the person's answer.
+    if (a.kind === "rewrite") return { line: moved, answer: a.answer, verdict: a.verdict ?? "stands" };
+    return { ...a, line: moved };
   });
 }

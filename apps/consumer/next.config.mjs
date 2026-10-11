@@ -1,3 +1,5 @@
+import { releaseCheck, formatReleaseCheck } from "./lib/release-check.mjs";
+
 /**
  * The extraction worker (lib/extract-worker.ts) loads mammoth and pdf.js by
  * path at run time, so the tracer cannot see what they need. Ship mammoth with
@@ -47,6 +49,9 @@ const nextConfig = {
     // with fs. Nothing imports the .ttf files, so the tracer must be told to ship them
     // with every function that renders a resume or measures its pages.
     "/api/forge/download": ["./public/fonts/resume/**/*"],
+    // The support search reads the Census place list with fs to find the
+    // counties a typed town or ZIP sits in (lib/support-place-index.ts).
+    "/api/resources-search": ["./public/forge-data/us-places-2020.v1.json"],
     "/api/resume/layout": ["./public/fonts/resume/**/*"],
     // Phase 5 R1: saving a revision measures its pages (the status counts
     // them), the Forge save stores one, and both package emails measure and
@@ -55,7 +60,7 @@ const nextConfig = {
     // Phase 5 R2: "Check and finish" measures pages the same way.
     "/api/revisions/check": ["./public/fonts/resume/**/*"],
     "/api/forge/save": ["./public/fonts/resume/**/*"],
-    "/api/forge/email-package": ["./public/fonts/resume/**/*"],
+    "/api/forge/email-package": ["./public/fonts/resume/**/*"], // measures pages (the finished check)
     "/api/forge/email-package/auto": ["./public/fonts/resume/**/*"],
     "/api/quick-apply": ["./public/fonts/resume/**/*"],
     // Creative lanes: the artist resume and bio card use the same renderer.
@@ -172,4 +177,23 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Every `next build` (preview and production alike) starts with the release
+ * check (lib/release-check.mjs): a release marked as requiring accounts
+ * (SMR_RELEASE_REQUIRES_ACCOUNTS=1) cannot build with the Forge sign-in wall
+ * switch anything but "on", and an unreadable switch value fails the build
+ * instead of quietly leaving something open. `next dev` skips it.
+ * Ship-day steps: docs/SHIP-DAY-GATES.md.
+ */
+export default function config(phase) {
+  if (phase === "phase-production-build") {
+    const result = releaseCheck(process.env);
+    const text = formatReleaseCheck(result);
+    if (!result.ok) {
+      console.error(text);
+      throw new Error("Release check failed: see [release-check] above.");
+    }
+    console.log(text);
+  }
+  return nextConfig;
+}

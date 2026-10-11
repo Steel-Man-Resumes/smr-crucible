@@ -118,3 +118,43 @@ test("publicRevision never carries the owner id", () => {
   const row = { ...base, id: ART, user_id: "00000000-0000-4000-8000-0000000000a1", artifact_id: ART, revision_number: 1, doc_kind: "resume", resume_text: "x", letter_text: "", kept_terms: [], confirmed_credentials: [], defend_answers: [], evidence: {}, checker_version: "g", page_count: 1, page_limit: 2, length_choice: "auto", open_items: [], content_hash: "0".repeat(64), created_at: "now" } as unknown as ArtifactRevision;
   assert.equal(JSON.stringify(publicRevision(row)).includes("0000000000a1"), false);
 });
+
+// ---- review round 1: kind and limit, sizes, pruning, parent links ----
+
+import { pageLimitAllowed, REVISION_PRUNE_SQL, REVISION_KEEP_PER_ARTIFACT, REVISION_JSON_LIMITS } from "../artifactRevision";
+import { ARTIFACT_SET_PARENT_SQL } from "../refineryArtifact";
+
+test("M1: the page limit follows the kind, in code and in the CHECK", () => {
+  assert.equal(revisionProblem({ ...base, docKind: "cv_academic", pageLimit: 2 }), "page limit does not fit the kind");
+  assert.equal(revisionProblem({ ...base, docKind: "resume", pageLimit: null, pageCount: 3 }), "page limit does not fit the kind");
+  assert.equal(revisionProblem({ ...base, docKind: "performer_resume", pageLimit: null }), "page limit does not fit the kind");
+  assert.equal(pageLimitAllowed("artist_resume", 4), true);
+  assert.equal(pageLimitAllowed("artist_resume", 3), false);
+  assert.match(MIG, /CONSTRAINT artifact_revision_limit_by_kind CHECK/);
+  assert.match(MIG, /doc_kind IN \('resume', 'cv_international'\) AND COALESCE\(page_limit, 0\) IN \(1, 2\)/);
+  assert.match(MIG, /doc_kind IN \('cv_academic', 'cv_clinical'\) AND page_limit IS NULL/);
+});
+
+test("L8: evidence over the table's size CHECK is refused with a plain reason before the database", () => {
+  const big = "x".repeat(REVISION_JSON_LIMITS.evidence);
+  assert.equal(revisionProblem({ ...base, evidence: { ownWords: big } }), "too large");
+  assert.equal(revisionProblem({ ...base, defendAnswers: [{ line: "x", answer: "y".repeat(REVISION_JSON_LIMITS.defendAnswers) }] }), "too large");
+});
+
+test("L6: pruning keeps the newest 50 and never the newest finished one", () => {
+  assert.equal(REVISION_KEEP_PER_ARTIFACT, 50);
+  assert.match(REVISION_PRUNE_SQL, /r\.id IS DISTINCT FROM \(\s*SELECT f\.id FROM artifact_revision f\s+WHERE f\.artifact_id = \$1 AND f\.user_id = \$2 AND f\.status = 'finished'\s+ORDER BY f\.revision_number DESC LIMIT 1\)/);
+  assert.match(REVISION_PRUNE_SQL, /ORDER BY r\.revision_number DESC\s+OFFSET \$3/);
+});
+
+test("M3: a parent link joins two rows of the same person only", () => {
+  assert.match(ARTIFACT_SET_PARENT_SQL, /a\.user_id = \$3/);
+  assert.match(ARTIFACT_SET_PARENT_SQL, /p\.user_id = \$3/);
+  assert.match(ARTIFACT_SET_PARENT_SQL, /a\.parent_artifact_id IS NULL/);
+});
+
+test("L1 and L7: the migration names the real lock and the data left behind", () => {
+  assert.match(MIG, /ACCESS EXCLUSIVE/);
+  assert.doesNotMatch(MIG, /SHARE lock \(writes wait; reads do not\)/);
+  assert.match(MIG, /--\s+UPDATE refinery_artifact SET content = content - '_revision' WHERE content \? '_revision';/);
+});

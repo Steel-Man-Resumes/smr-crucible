@@ -26,7 +26,8 @@ import { stripEmployerTaxCredit, plainPunctuation, plainPunctuationText, WOTC_RE
 import { letterClosingStyle, LETTER_CLOSING_STYLES } from "@/lib/letter-style";
 import { liveTestKeyAllowed, LIVE_TEST_DAILY_LIMIT, LIVE_TEST_MIN_KEY_LENGTH } from "@/lib/live-test-key";
 import { accountFlags, flagOutcome, normalizeForMatch } from "@/lib/grounding-accounting";
-import { numbersIn, unsupportedNumbers, RANGE_CHOICES, QUANTITY_UNITS, evidenceAnswerText } from "@/lib/number-truth";
+import * as numberTruth from "@/lib/number-truth";
+import { numbersIn, unsupportedNumbers, evidenceAnswerText } from "@/lib/number-truth";
 import { computeGrounding } from "@/lib/grounding";
 import {
   buildTrustedSource,
@@ -300,11 +301,9 @@ section("number truth");
   check("an invented number is caught", JSON.stringify(unsupportedNumbers("Loaded 40 trucks a day", "loaded trucks")) === '["40"]');
   check("a number written as a word in the answers matches digits", unsupportedNumbers("Trained 3 new hires", "trained three new people").length === 0);
   check("1,000 and 1000 are the same number", unsupportedNumbers("Picked 1,000 units a day", "about 500 to 1000 units a day").length === 0);
-  check("every unit has ranges", QUANTITY_UNITS.every((u) => RANGE_CHOICES[u].length >= 3));
-  const allFills = QUANTITY_UNITS.flatMap((u) => RANGE_CHOICES[u].flatMap((r) => [r.label, r.fill]));
-  check("range text has no dash punctuation", allFills.every((t) => !/\u2014|\u2013| -- /.test(t)), allFills.find((t) => /\u2014|\u2013| -- /.test(t)));
-  check("each fill carries its label's numbers", QUANTITY_UNITS.every((u) =>
-    RANGE_CHOICES[u].every((r) => unsupportedNumbers(r.label, r.fill).length === 0)));
+  // Troy's D2 (2026-10-07): t.ROY shows what to count; the person gives the number. No figure is ever offered,
+  // so the old range buttons are gone and must not come back.
+  check("no offered number ranges (D2)", !("RANGE_CHOICES" in numberTruth) && !("QUANTITY_UNITS" in numberTruth));
   const doc = { experience: [{ bullets: ["Trained 40 people"], evidence: [{ bullet: "Trained 40 people", did: "trained new hires", quantity: "about 6 to 10 people" }] }] };
   const answers = evidenceAnswerText(doc).join("\n");
   check("evidence answers include what the person gave", answers.includes("about 6 to 10 people") && answers.includes("trained new hires"));

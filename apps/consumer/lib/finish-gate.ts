@@ -94,6 +94,8 @@ export interface FinishDocs {
    * adds to the person's words (closed by default).
    */
   written?: WrittenDocs;
+  /** Phase 5 R1 (review M1): the server's receipt over `written` and `grounding` (lib/writer-receipt.ts). */
+  receipt?: string;
 }
 
 /** The writer's resume and letter, as delivered. */
@@ -214,6 +216,7 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
         d.written && typeof d.written.resume === "string"
           ? { resume: d.written.resume, letter: typeof d.written.letter === "string" ? d.written.letter : "" }
           : undefined,
+      ...(typeof d.receipt === "string" && d.receipt.length <= 200 ? { receipt: d.receipt } : {}),
     },
     defendAnswers: Array.isArray(s.defendAnswers)
       ? s.defendAnswers

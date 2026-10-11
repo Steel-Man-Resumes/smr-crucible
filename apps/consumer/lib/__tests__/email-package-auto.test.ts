@@ -21,6 +21,7 @@ import type { PackageMail } from "../email-package-send";
 import { cleanRevisionInput, computeRevision, revisionRecord } from "../revision-status";
 import { revisionContentHash, type ArtifactRevision } from "@crucible/core/src/artifactRevision";
 import { packageFiles } from "../email-package-files";
+import { writerReceipt } from "../writer-receipt";
 
 const UID = "00000000-0000-4000-8000-0000000000aa";
 const OWN = "morgan@example.com";
@@ -65,7 +66,7 @@ let revSeq = 0;
  * cleaned, the gate and the page count run, the verdict stored. `force`
  * overwrites the stored status (a row saved under an older checker).
  */
-function revision(extra: Record<string, unknown> = {}, force?: "finished"): ArtifactRevision {
+function revision(extra: Record<string, unknown> = {}, force?: "finished", artifactId = ART, createdAt = "2026-10-10T09:00:00Z"): ArtifactRevision {
   const resume = (extra.resumeText as string) ?? RESUME;
   const letter = (extra.coverLetterText as string) ?? LETTER;
   const c = cleanRevisionInput({
@@ -74,20 +75,23 @@ function revision(extra: Record<string, unknown> = {}, force?: "finished"): Arti
     defendAnswers: allAnswered(resume),
     ownWords: SOURCE,
     written: { resume, letter },
+    grounding: null,
+    writerReceipt: writerReceipt({ resume, letter }, null),
     keptTerms: [],
     ...extra,
   });
   if (!c.ok) throw new Error(c.reason);
+  void artifactId;
   const v = computeRevision(c.input);
-  const rec = revisionRecord(ART, "forge_finish", c.input, v);
+  const rec = revisionRecord(artifactId, "forge_finish", c.input, v);
   if (force) Object.assign(rec, { status: force, openItems: [] });
   return {
     id: `00000000-0000-4000-8000-00000000f${(++revSeq).toString(16).padStart(3, "0")}`,
-    user_id: UID, artifact_id: ART, revision_number: revSeq, source: rec.source, doc_kind: rec.docKind,
+    user_id: UID, artifact_id: artifactId, revision_number: revSeq, source: rec.source, doc_kind: rec.docKind,
     resume_text: rec.resumeText, letter_text: rec.letterText, kept_terms: rec.keptTerms, confirmed_credentials: rec.confirmedCredentials,
     defend_answers: rec.defendAnswers, evidence: rec.evidence, checker_version: rec.checkerVersion, status: rec.status,
     page_count: rec.pageCount, page_limit: rec.pageLimit, length_choice: rec.lengthChoice, open_items: rec.openItems,
-    content_hash: revisionContentHash(rec), created_at: "now",
+    content_hash: revisionContentHash(rec), created_at: createdAt,
   } as ArtifactRevision;
 }
 
@@ -106,6 +110,7 @@ function world(opts: {
   countThrows?: boolean;
   revisions?: ArtifactRevision[];
   filesThrow?: boolean;
+  now?: number;
 } = {}) {
   const sent: PackageMail[] = [];
   const claims = new Set<string>();
@@ -134,6 +139,9 @@ function world(opts: {
     },
     // Owner only, like the real read.
     getRevision: async (userId, id) => (userId === UID ? revs.find((r) => r.id === id) ?? null : null),
+    getLatestRevision: async (userId, artifactId) =>
+      userId === UID ? revs.filter((r) => r.artifact_id === artifactId).sort((a, b) => a.revision_number - b.revision_number).at(-1) ?? null : null,
+    now: () => opts.now ?? Date.parse("2026-10-10T12:00:00Z"),
     files: async (resume, letter) => {
       if (opts.filesThrow) throw new Error("render");
       return [{ filename: "Morgan-Sample.pdf", content: "UERG" }, { filename: "Morgan-Sample.docx", content: "UEs=" }, ...(letter.trim() ? [{ filename: "Morgan-Sample-CoverLetter.docx", content: "UEs=" }] : [])];
@@ -241,11 +249,15 @@ test("a changed finished resume is a new revision and is sent", async () => {
   assert.notEqual(edited, RESUME);
   const v2 = revision({ resumeText: edited });
   assert.equal(v2.status, "finished");
-  const w = world({ revisions: [FINISHED, v2] });
-  await sendFinishedPackage(UID, finishedBody(), w.deps);
+  // The next day (one automatic email per resume per day).
+  const w1 = world({ revisions: [FINISHED] });
+  await sendFinishedPackage(UID, finishedBody(), w1.deps);
+  const w = world({ revisions: [FINISHED, v2], now: Date.parse("2026-10-11T12:00:00Z") });
+  w.claims.forEach(() => {});
+  for (const k of w1.claims) w.claims.add(k);
   const r = await sendFinishedPackage(UID, finishedBody({}, v2), w.deps);
   assert.equal(r.sent, true);
-  assert.equal(w.sent.length, 2);
+  assert.equal(w1.sent.length + w.sent.length, 2);
 });
 
 test("versioned by revision: a changed letter alone is a new version (it was not)", async () => {
@@ -253,9 +265,10 @@ test("versioned by revision: a changed letter alone is a new version (it was not
   assert.equal(v2.status, "finished");
   assert.equal(v2.resume_text, FINISHED.resume_text);
   assert.notEqual(revisionVersion(UID, v2), revisionVersion(UID, FINISHED));
+  // Asked for the older one, the newest finished version (v2) is what goes out.
   const w = world({ revisions: [FINISHED, v2] });
   assert.equal((await sendFinishedPackage(UID, finishedBody(), w.deps)).sent, true);
-  assert.equal((await sendFinishedPackage(UID, finishedBody({}, v2), w.deps)).sent, true);
+  assert.match(w.sent[0].text, /most mornings/);
 });
 
 test("two tabs at once: one send", async () => {
@@ -279,7 +292,7 @@ test("a failed send gives the claim back, so a later visit can send it", async (
   const w = world({ transportOk: false });
   const r = await sendFinishedPackage(UID, finishedBody(), w.deps);
   assert.deepEqual(r, { sent: false, reason: "failed", to: OWN });
-  assert.equal(w.released.length, 1);
+  assert.equal(w.released.length, 2, "the revision claim and the day claim");
   assert.equal(w.claims.size, 0);
 });
 
@@ -309,7 +322,7 @@ test("the existing per-address daily cap applies, and a capped send is given bac
 test("before 079 is applied: once a day by the durable counter", async () => {
   const w = world({ claimTable: "missing" });
   assert.equal((await sendFinishedPackage(UID, finishedBody(), w.deps)).sent, true);
-  assert.deepEqual(await sendFinishedPackage(UID, finishedBody(), w.deps), { sent: false, reason: "already", to: OWN });
+  assert.deepEqual(await sendFinishedPackage(UID, finishedBody(), w.deps), { sent: false, reason: "already_today", to: OWN });
   assert.equal(w.sent.length, 1);
   assert.ok(Array.from(w.counts.keys()).some((k) => k.startsWith(`${AUTO_ENDPOINT}|auto:`)));
 });
@@ -391,4 +404,40 @@ test("the real file builder makes a real PDF and real Word files from the revisi
   assert.equal(Buffer.from(files[0].content, "base64").subarray(0, 5).toString(), "%PDF-");
   assert.equal(Buffer.from(files[1].content, "base64").subarray(0, 2).toString(), "PK");
   assert.equal(files[0].filename, "Morgan-Sample.pdf");
+});
+
+// ---- review L4: settle, newest only, one per resume per day, "Email me the latest" ----
+
+test("L4: a version saved under five minutes ago waits (settling), unless the person asks now", async () => {
+  const fresh = revision({}, undefined, ART, "2026-10-10T11:58:00Z");
+  const w = world({ revisions: [fresh], now: Date.parse("2026-10-10T12:00:00Z") });
+  const r = await sendFinishedPackage(UID, finishedBody({}, fresh), w.deps);
+  assert.equal(r.sent, false);
+  assert.equal(!r.sent && r.reason, "settling");
+  assert.ok(!r.sent && (r.retryInMs ?? 0) > 2 * 60 * 1000);
+  assert.equal(w.sent.length, 0);
+  assert.equal(w.claims.size, 0, "nothing claimed while it settles");
+  assert.equal((await sendFinishedPackage(UID, finishedBody({ now: true }, fresh), w.deps)).sent, true, "Email me the latest");
+});
+
+test("L4: one automatic email per resume per day, the button included; a different resume is its own", async () => {
+  const v2 = revision({ coverLetterText: "Dear hiring manager,\n\nI ran the grill at Harbor Street Diner, most mornings.\n\nMorgan Sample" });
+  assert.equal(v2.status, "finished");
+  const w = world({ revisions: [FINISHED] });
+  assert.equal((await sendFinishedPackage(UID, finishedBody(), w.deps)).sent, true);
+  const w2 = world({ revisions: [FINISHED, v2] });
+  for (const k of w.claims) w2.claims.add(k);
+  const again = await sendFinishedPackage(UID, finishedBody({ now: true }, v2), w2.deps);
+  assert.deepEqual(again, { sent: false, reason: "already_today", to: OWN });
+  assert.match(autoResultLine(again) ?? "", /already emailed this resume today/);
+  const other = revision({}, undefined, "00000000-0000-4000-8000-00000000a7a8");
+  const w3 = world({ revisions: [other] });
+  for (const k of w.claims) w3.claims.add(k);
+  assert.equal((await sendFinishedPackage(UID, finishedBody({}, other), w3.deps)).sent, true);
+});
+
+test("L4: a newer draft means nothing goes out (never an older version)", async () => {
+  const draft = revision({ defendAnswers: [] });
+  const w = world({ revisions: [FINISHED, draft] });
+  assert.deepEqual(await sendFinishedPackage(UID, finishedBody(), w.deps), { sent: false, reason: "draft" });
 });

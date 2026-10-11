@@ -47,10 +47,18 @@
 -- ADD ONLY and idempotent: one new table, one new UNIQUE constraint on
 -- refinery_artifact. Nothing existing changes. Old code ignores both.
 --
--- LOCKS. Adding the UNIQUE constraint builds an index on refinery_artifact
--- under a SHARE lock (writes wait; reads do not) for the length of the
--- transaction. The table is small. lock_timeout makes the file give up after
--- 5 seconds instead of queueing; if it times out, run it again.
+-- LOCKS. ALTER TABLE ... ADD CONSTRAINT ... UNIQUE takes an ACCESS EXCLUSIVE
+-- lock on refinery_artifact (plus a SHARE lock while the index builds): reads
+-- AND writes of that table wait until the transaction commits. The table is
+-- small (one row per saved resume or letter), and the (uuid, uuid) index
+-- builds in moments, so the block is brief. It cannot fail on data: id is the
+-- primary key and user_id is NOT NULL, so no (id, user_id) pair can repeat.
+-- lock_timeout bounds only the wait to GET the lock (5 seconds, then the file
+-- gives up instead of queueing every resume request behind it; run it again).
+-- If the table ever grows large, build the index first outside a transaction
+-- (CREATE UNIQUE INDEX CONCURRENTLY refinery_artifact_id_user_key ON
+-- refinery_artifact (id, user_id)) and this file then attaches it with
+-- ADD CONSTRAINT ... UNIQUE USING INDEX, which holds the lock only briefly.
 --
 -- APPLY in ONE transaction (psql -1 -v ON_ERROR_STOP=1, or the runner's BEGIN),
 -- BEFORE the code that reads artifact_revision deploys: /api/health/rls counts
@@ -68,6 +76,14 @@
 --        DROP TABLE IF EXISTS artifact_revision;
 --        ALTER TABLE refinery_artifact DROP CONSTRAINT IF EXISTS refinery_artifact_id_user_key;
 --        DELETE FROM _migrations WHERE filename = '081_artifact_revision.sql';
+--   4. Data the code left behind (old code ignores all of it; tidy, not needed):
+--        UPDATE refinery_artifact SET content = content - '_revision' WHERE content ? '_revision';
+--      This removes the marker key the revision code writes into a resume's
+--      content. Content the revision code REWROTE from a finished revision's
+--      text (the account's Forge resume) stays as rewritten: there is no
+--      earlier copy to go back to, and it holds the person's finished words.
+--      Claims in forge_package_email_sent (079) for revisions that are gone
+--      stay too; they are hashes only and stop nothing.
 
 SET LOCAL lock_timeout = '5s';
 
@@ -130,7 +146,17 @@ CREATE TABLE IF NOT EXISTS artifact_revision (
     CHECK (status <> 'finished' OR (page_count >= 1 AND (page_limit IS NULL OR page_count <= page_limit))),
   -- Finished means nothing left to fix.
   CONSTRAINT artifact_revision_finished_no_open
-    CHECK (status <> 'finished' OR open_items = '[]'::jsonb)
+    CHECK (status <> 'finished' OR open_items = '[]'::jsonb),
+  -- The page limit follows the kind (decisions D8 and C1), whatever code writes:
+  -- a resume or international CV is 1 or 2 pages, a performer resume 1, an
+  -- artist resume 1, 2 or 4, an academic or clinical CV has no limit.
+  -- COALESCE, because a CHECK that evaluates to NULL would pass.
+  CONSTRAINT artifact_revision_limit_by_kind CHECK (
+    (doc_kind IN ('resume', 'cv_international') AND COALESCE(page_limit, 0) IN (1, 2))
+    OR (doc_kind = 'performer_resume' AND COALESCE(page_limit, 0) = 1)
+    OR (doc_kind = 'artist_resume' AND COALESCE(page_limit, 0) IN (1, 2, 4))
+    OR (doc_kind IN ('cv_academic', 'cv_clinical') AND page_limit IS NULL)
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_artifact_revision_user_artifact

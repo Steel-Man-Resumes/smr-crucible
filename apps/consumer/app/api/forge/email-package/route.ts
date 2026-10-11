@@ -20,7 +20,8 @@
  *   finish page's whole state (`finish`), the server runs the same gate and
  *   page rule a saved revision gets (lib/revision-status.ts), the letter
  *   included, and a draft is refused. The resume and letter emailed are the
- *   ones that state holds, as attached PDF and Word files.
+ *   ones that state holds, as text in the email (no attachments: those go
+ *   only to a signed-in account's proven address).
  */
 
 import { NextResponse } from "next/server";
@@ -38,7 +39,6 @@ import {
 } from "@/lib/email-package-guard";
 import { buildPackageEmail, clipDocs, packageFrom, resendKey, resendTransport } from "@/lib/email-package-send";
 import { cleanRevisionInput, computeRevision } from "@/lib/revision-status";
-import { packageFiles } from "@/lib/email-package-files";
 
 async function handlePost(request: Request) {
   if (!originAllowed(request.headers.get("origin"), request.url)) {
@@ -137,10 +137,11 @@ async function handlePost(request: Request) {
     ? `https://www.steelmanresumes.com/unsubscribe?token=${letterToken}`
     : null;
 
-  const attachments = await packageFiles(docs.resumeText, docs.coverLetterText).catch(() => []);
-  const mail = buildPackageEmail(docs, { why: "asked", unsubUrl, attached: attachments.length > 0 });
+  // Text only, as before this lane (review L5): files are attached only for a
+  // signed-in account's own proven address (the automatic email).
+  const mail = buildPackageEmail(docs, { why: "asked", unsubUrl });
   try {
-    const res = await resendTransport(key)({ from: packageFrom(), to: email, ...mail, attachments });
+    const res = await resendTransport(key)({ from: packageFrom(), to: email, ...mail });
     if (!res.ok) {
       // The status only: a provider's error text can quote the address.
       console.error("email-package send failed:", res.status);

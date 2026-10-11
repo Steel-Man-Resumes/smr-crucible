@@ -15,6 +15,8 @@
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
+import { usePremium } from "@/components/premium/PremiumGate";
+import { PREMIUM_INCLUDED_LINE } from "@/lib/premium";
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 import {
   FALLBACK_TOUR_STATE,
@@ -56,6 +58,9 @@ export function GuidedTour({ held = false }: { held?: boolean } = {}) {
   const [closed, setClosed] = useState(false);
   const [saving, setSaving] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  // RL4: what is free says so plainly once the premium gate is on.
+  const { status: premium } = usePremium();
+  const premiumGate = !!premium?.gate;
 
   // The tour is a full-screen modal; only show it on the dashboard HOME so it can
   // never cover a tool page's form (F7 -- it was overlaying the disclosure planner).
@@ -222,11 +227,16 @@ export function GuidedTour({ held = false }: { held?: boolean } = {}) {
         {screen === 0 && (
           <div>
             <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
-              Every tool. For free. If you qualify.
+              {premiumGate ? "Free with your account." : "Every tool. For free."}
             </h2>
             <p className="text-base text-t-bone-dim leading-relaxed mb-3">
               Steel Man walks you from your resume to a job offer, one step at a time.
             </p>
+            {premiumGate && (
+              <p className="text-sm text-t-bone-dim leading-relaxed mb-3" data-testid="tour-included">
+                {PREMIUM_INCLUDED_LINE} You never pay for any of it.
+              </p>
+            )}
             <p className="text-base text-t-white font-medium">
               Here is how the pieces fit. It takes about a minute.
             </p>

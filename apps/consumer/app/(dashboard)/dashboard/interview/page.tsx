@@ -12,7 +12,8 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
-import { PremiumGate } from "@/components/premium/PremiumGate";
+import { PremiumGate, usePremium } from "@/components/premium/PremiumGate";
+import { textPracticeAllowanceLine, toolIsOpen } from "@/lib/premium";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
@@ -131,10 +132,10 @@ export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
       <OnboardingGate toolName="Interview Practice" previewFeature="interview">
-        {/* Interview coaching is a premium tool: open through an organization or a grant. */}
-        <PremiumGate tool="interview_coaching">
-          <Suspense><InterviewPracticePage /></Suspense>
-        </PremiumGate>
+        {/* Text practice is free with an account (a daily allowance while the
+            premium gate is on). Voice coaching is sponsored: only the voice
+            panel below sits behind the gate. */}
+        <Suspense><InterviewPracticePage /></Suspense>
       </OnboardingGate>
     </TierGate>
   );
@@ -156,6 +157,13 @@ function InterviewPracticePage() {
   const [exchangeCount, setExchangeCount] = useState(0);
   const [feedback, setFeedback] = useState<any>(null);
   const [rateLimitError, setRateLimitError] = useState("");
+  // The server's id for this practice interview (the daily allowance counts
+  // one per interview, lib/premium-server.ts). Sent back on every later turn.
+  const practiceSessionRef = useRef<string | null>(null);
+  // The daily text practice allowance applies while the premium gate is on
+  // and voice coaching is not open for this person (no sponsor).
+  const { status: premiumStatus } = usePremium();
+  const practiceAllowanceApplies = !!premiumStatus?.gate && toolIsOpen(premiumStatus, "interview_coaching") === false;
   const chatRef = useRef<HTMLDivElement>(null);
   // Phase 3: interview against a SPECIFIC saved resume + optional job posting.
   const [resumes, setResumes] = useState<
@@ -372,6 +380,7 @@ function InterviewPracticePage() {
     setMessages([{ role: "assistant", content: openingMessage }]);
     setStep("practice");
     setExchangeCount(0);
+    practiceSessionRef.current = null;
 
     // Track interview start
     try {
@@ -503,6 +512,7 @@ function InterviewPracticePage() {
           config,
           exchangeCount,
           endInterview: true,
+          practiceSession: practiceSessionRef.current ?? undefined,
           forgeContext: forgeContext || undefined,
           resume: buildResumePayload(),
           jobDescription: jobDescription.trim() || undefined,
@@ -551,6 +561,7 @@ function InterviewPracticePage() {
           messages: updatedMessages,
           config,
           exchangeCount: newExchangeCount,
+          practiceSession: practiceSessionRef.current ?? undefined,
           forgeContext: forgeContext || undefined,
           resume: buildResumePayload(),
           jobDescription: jobDescription.trim() || undefined,
@@ -562,6 +573,7 @@ function InterviewPracticePage() {
         setRateLimitError(data.error);
       } else if (res.ok) {
         const data = await res.json();
+        if (typeof data.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
 
         if (data.feedback) {
           // Interview complete — show feedback
@@ -578,6 +590,15 @@ function InterviewPracticePage() {
             { role: "assistant", content: data.response },
           ]);
         }
+      } else {
+        // A failed turn can still carry the session id it was counted under
+        // (the retry then continues this session, not a new one).
+        const data = await res.json().catch(() => null);
+        if (typeof data?.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "I had trouble with that response. Let's try again." },
+        ]);
       }
     } catch {
       setMessages((prev) => [
@@ -639,14 +660,14 @@ function InterviewPracticePage() {
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
 <h1>Interview Analysis${config.targetRole ? `: ${esc(config.targetRole)}` : ""}</h1>
-<p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date} &bull; Practice frames only, no transcript</p>
+<p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date} &bull; Analysis and your notes, no transcript</p>
 ${fb.frame ? `<h2>The Frame to Carry In</h2><blockquote>${esc(fb.frame)}</blockquote>` : ""}
 ${Array.isArray(fb.strengths) && fb.strengths.length ? `<h2>What You Did Well</h2><ul>${list(fb.strengths)}</ul>` : ""}
 ${Array.isArray(fb.improvements) && fb.improvements.length ? `<h2>Areas to Work On</h2><ul>${list(fb.improvements)}</ul>` : ""}
 ${Array.isArray(fb.better_answers) && fb.better_answers.length ? `<h2>Stronger Answers to Model</h2>${fb.better_answers.map((b: any) => `<p class="q">${esc(b.question)}</p><blockquote>${esc(b.model_answer)}</blockquote>`).join("")}` : ""}
 ${fb.overall ? `<h2>Overall</h2><p>${esc(fb.overall)}</p>` : ""}
 ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br/>")}</p>` : ""}
-<div class="footer">This analysis is yours. We only keep the frames you practiced. We never store your interview words or recordings.</div>
+<div class="footer">This analysis is yours. Text practice keeps this feedback, never a transcript. Voice practice keeps a text transcript only when you turn saving on. We never keep the audio.</div>
 </body></html>`;
     const w = window.open("", "_blank");
     if (!w) return;
@@ -859,15 +880,20 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               </label>
             )}
 
-          <VoicePracticePanel
-            config={config}
-            forgeContext={forgeContext}
-            enabled={!!config.interviewType}
-            jobDescription={jobDescription.trim() || undefined}
-            buildResumePayload={buildResumePayload}
-            onVoiceFeedback={handleVoiceFeedback}
-            onHistoryChange={loadVoiceHistory}
-          />
+          {/* Voice coaching is sponsored (an organization or SMR opens it).
+              Locked, it shows what's included and how to get it; the text
+              practice below keeps working either way. */}
+          <PremiumGate tool="interview_coaching" compact>
+            <VoicePracticePanel
+              config={config}
+              forgeContext={forgeContext}
+              enabled={!!config.interviewType}
+              jobDescription={jobDescription.trim() || undefined}
+              buildResumePayload={buildResumePayload}
+              onVoiceFeedback={handleVoiceFeedback}
+              onHistoryChange={loadVoiceHistory}
+            />
+          </PremiumGate>
 
           <button
             onClick={startInterview}
@@ -876,6 +902,11 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           >
             Start Practice Interview
           </button>
+          {practiceAllowanceApplies && (
+            <p className="text-xs text-t-phos-dim" data-testid="text-practice-allowance">
+              {textPracticeAllowanceLine()}
+            </p>
+          )}
         </div>
 
         <VoiceSessionHistory history={voiceHistory} />
@@ -980,7 +1011,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         <div className="bg-t-panel p-5 border border-t-line mb-4">
           <h2 className="font-semibold text-t-white mb-2">Your notes</h2>
           <p className="text-xs text-t-phos-dim mb-2">
-            Jot what you want to remember. These stay on your device. We never store your words.
+            Jot what you want to remember. These notes stay on this page and are not saved. Copy or download the analysis to keep them.
           </p>
           <textarea
             value={userNotes}
@@ -1128,11 +1159,12 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
       )}
 
       <p className="text-xs text-t-phos-dim text-center">
-        This is a safe space to practice. We never save your words or
-        recordings, only the frames you practice and whether your point lands, so
-        the app can coach you and track your progress. Your practice is private
-        to your account and never shared unless you choose to connect a support
-        partner.
+        This is a safe space to practice. In text practice we keep the role, the
+        kind of practice and t.ROY&apos;s feedback, never a transcript of your
+        answers, so the app can track your progress. In voice practice, what was said is kept as text
+        only when you turn saving on, and we never keep the audio. No program or
+        employer can read your practice. If you share your progress with a
+        program, it sees how many sessions you have done.
       </p>
     </div>
   );

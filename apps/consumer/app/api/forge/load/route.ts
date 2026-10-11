@@ -34,9 +34,8 @@ export async function GET() {
   let revision = null;
   const real = await realAuth();
   if (real?.user?.id === userId) {
-    const forge = (await listArtifacts(userId, { type: "resume", examples: "hide", limit: 50 })).find(
-      (a) => (a.target_context as { source?: unknown } | null)?.source === "forge"
-    );
+    const { pickForgeArtifact } = await import("@/lib/revision-save");
+    const forge = pickForgeArtifact((await listArtifacts(userId, { type: "resume", examples: "hide", limit: 50 })) as never[]) as { id: string } | null;
     const rev = forge ? await getLatestRevision(userId, forge.id) : null;
     revision = rev ? publicRevision(rev) : null;
   }

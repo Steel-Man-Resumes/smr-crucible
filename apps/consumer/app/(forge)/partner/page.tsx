@@ -12,6 +12,7 @@
  * that's the observer path. This is "how do I actually run this."
  */
 
+import { useServerSwitches } from "@/components/ServerSwitches";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { useEffect } from "react";
@@ -90,7 +91,16 @@ const WHAT_CLIENTS_GET = [
   { tool: "t.ROY (AI coach)", desc: "Available on every page. Research-grounded, 10 behavioral rules, never prescriptive" },
 ];
 
-const PARTNER_FAQ: Array<{ q: string; a: string; aUp?: string }> = [
+/**
+ * The record check (D11) is switched off until its public copy ships
+ * (lib/server-switch.ts). While off, the FAQ does not describe it.
+ */
+const RECORD_LINES = {
+  on: "The record check is the only screen that asks a client about their record, and only after the client says yes. Staff can't say yes for them, and a saved record check is never shared with your program. If a client mentions their record anywhere else, like the chat, that goes to the AI companies as well.",
+  off: "If a client mentions their record, for example in the chat, that goes to the AI companies as well.",
+};
+
+const PARTNER_FAQ: Array<{ q: string; a: string; aUp?: string; recordLines?: { on: string; off: string } }> = [
   {
     q: "How much does it cost?",
     a: "Free for nonprofit and community organizations during the launch period. No contracts. No per-seat licensing. If that ever changes, existing partners get advance notice.",
@@ -101,8 +111,9 @@ const PARTNER_FAQ: Array<{ q: string; a: string; aUp?: string }> = [
   },
   {
     q: "What data do you collect on my clients?",
-    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Without an account, the Forge keeps their work in their own web browser, not on our servers. To do the writing, their text goes to the AI companies that run t.ROY (Anthropic, and OpenAI for some steps). Nothing is sold, and there is no advertising. AGPL-3.0 open source, and the code is public. The record check is the only screen that asks a client about their record, and only after the client says yes. Staff can't say yes for them, and a saved record check is never shared with your program. If a client mentions their record anywhere else, like the chat, that goes to the AI companies as well.",
-    aUp: "Only what they give the platform directly: email, resume content, career goals, job applications. They sign in with a free account, and each person can download or delete their own data in Settings. Program staff see their resumes and letters only when they share them. To do the writing, their text goes to the AI companies that run t.ROY (Anthropic, and OpenAI for some steps). Nothing is sold, and there is no advertising. AGPL-3.0 open source, and the code is public. The record check is the only screen that asks a client about their record, and only after the client says yes. Staff can't say yes for them, and a saved record check is never shared with your program. If a client mentions their record anywhere else, like the chat, that goes to the AI companies as well.",
+    recordLines: RECORD_LINES,
+    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Without an account, the Forge keeps their work in their own web browser, not on our servers. To do the writing, their text goes to the AI companies that run t.ROY (Anthropic, and OpenAI for some steps). Nothing is sold, and there is no advertising. AGPL-3.0 open source, and the code is public.",
+    aUp: "Only what they give the platform directly: email, resume content, career goals, job applications. They sign in with a free account, and each person can download or delete their own data in Settings. Program staff see their resumes and letters only when they share them. To do the writing, their text goes to the AI companies that run t.ROY (Anthropic, and OpenAI for some steps). Nothing is sold, and there is no advertising. AGPL-3.0 open source, and the code is public.",
   },
   {
     q: "Can I self-host it for my program?",
@@ -118,6 +129,7 @@ export default function PartnerPage() {
   const router = useRouter();
   const { updateSession } = useForgeSession();
   const wall = useForgeWall();
+  const { recordStep } = useServerSwitches();
 
   useEffect(() => {
     updateSession({
@@ -233,7 +245,10 @@ export default function PartnerPage() {
             {PARTNER_FAQ.map((item, i) => (
               <div key={i} className="border border-t-line p-4">
                 <p className="font-semibold text-t-white text-sm mb-1">{item.q}</p>
-                <p className="text-sm text-t-phos-dim leading-relaxed">{byWall(wall, item.a, item.aUp)}</p>
+                <p className="text-sm text-t-phos-dim leading-relaxed">
+                  {byWall(wall, item.a, item.aUp)}
+                  {item.recordLines && wall !== null ? " " + (recordStep ? item.recordLines.on : item.recordLines.off) : ""}
+                </p>
               </div>
             ))}
           </div>

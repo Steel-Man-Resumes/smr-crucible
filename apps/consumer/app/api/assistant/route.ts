@@ -13,6 +13,7 @@
  * Every response logged to decision_log for observability.
  */
 
+import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
 import { auth } from "@/auth";
@@ -138,6 +139,9 @@ export async function POST(request: Request) {
   if (!context?.currentPage) {
     return new Response("No context provided", { status: 400 });
   }
+  // The server decides whether t.ROY may point to a switched-off step; the
+  // browser's value is ignored (lib/server-switch.ts).
+  context.recordStepOn = recordStepOn();
 
   const hasCriminalRecord = !!(context as any).hasCriminalRecord || !!(context as any).userFullContext?.forge?.hasCriminalRecord;
   const skillsContext = loadSkillsForContext(context.currentPage, hasCriminalRecord);

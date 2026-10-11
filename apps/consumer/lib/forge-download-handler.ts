@@ -133,8 +133,16 @@ async function decide(input: DownloadInput, deps: DownloadDeps): Promise<Decided
   const raw = typeof input.content === "string" ? input.content : "";
   const rawLetter = typeof input.coverLetter === "string" ? input.coverLetter : "";
   if (typeof input.revisionId === "string" && input.revisionId) {
-    const userId = await deps.userId().catch(() => null);
-    const rev = userId ? await deps.getRevision(userId, input.revisionId).catch(() => null) : null;
+    // A failure to read is said, and can be retried (review L2): never a
+    // silent fall back to "no revision".
+    let userId: string | null;
+    let rev: Awaited<ReturnType<DownloadDeps["getRevision"]>>;
+    try {
+      userId = await deps.userId();
+      rev = userId ? await deps.getRevision(userId, input.revisionId) : null;
+    } catch {
+      return { error: "We couldn't load your saved resume just now. Try again in a moment.", status: 503 };
+    }
     if (rev) {
       return {
         resume: rev.resume_text,
