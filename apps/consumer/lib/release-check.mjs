@@ -56,12 +56,23 @@ export function readOnOff(raw) {
  * @returns {{ required: boolean, malformed: boolean }}
  */
 export function readRequiresAccounts(raw) {
-  if (raw === undefined || raw === null) return { required: false, malformed: false };
+  if (raw === undefined || raw === null) return { required: false, malformed: false, set: false };
   const v = String(raw).trim();
-  if (!v) return { required: false, malformed: false };
-  if (v === "1") return { required: true, malformed: false };
-  if (v === "0") return { required: false, malformed: false };
-  return { required: false, malformed: true };
+  if (!v) return { required: false, malformed: false, set: false };
+  if (v === "1") return { required: true, malformed: false, set: true };
+  if (v === "0") return { required: false, malformed: false, set: true };
+  return { required: false, malformed: true, set: true };
+}
+
+/**
+ * A production build on the host (VERCEL_ENV=production) must SAY whether it
+ * requires accounts: SMR_RELEASE_REQUIRES_ACCOUNTS set to 0 or 1, never left
+ * unset (Phase 5 review L3, CC's call). Forgetting fails loudly instead of
+ * shipping the wall in whatever state the other switch happens to be.
+ * @param {Record<string, string | undefined>} env
+ */
+export function isProductionBuild(env) {
+  return String(env.VERCEL_ENV ?? "").trim().toLowerCase() === "production";
 }
 
 /**
@@ -81,6 +92,12 @@ export function releaseCheck(env) {
     errors.push(
       `${RELEASE_REQUIRES_ACCOUNTS_ENV}="${env[RELEASE_REQUIRES_ACCOUNTS_ENV]}" is not 1 or 0. ` +
         `Set it to 1 for a release that requires accounts, or remove it.`
+    );
+  }
+  if (isProductionBuild(env) && !req.set) {
+    errors.push(
+      `This is a production build (VERCEL_ENV=production) and ${RELEASE_REQUIRES_ACCOUNTS_ENV} is not set. ` +
+        `Set it to 1 (the Forge needs sign-in: also set ${RELEASE_WALL_ENV}=on) or 0 (no sign-in wall yet), on purpose.`
     );
   }
   if (wall.malformed) {
@@ -110,7 +127,8 @@ export function releaseCheck(env) {
   }
 
   summary.push(
-    `accounts required: ${req.malformed ? "UNREADABLE" : req.required ? "yes" : "no"}`,
+    `accounts required: ${req.malformed ? "UNREADABLE" : req.required ? "yes" : req.set ? "no (set to 0)" : "no (not set)"}`,
+    `production build: ${isProductionBuild(env) ? "yes" : "no"}`,
     `Forge sign-in wall switch: ${wall.malformed ? "UNREADABLE" : wall.value ?? "unset (the date in forge-access.ts decides; none is set, so open)"}`,
     `premium gate: ${premium.malformed ? "UNREADABLE" : premium.value === "on" ? "on" : "off"}`,
     `record check: ${recordsSwitch.malformed ? "UNREADABLE" : recordsSwitch.value === "on" ? "on" : "off"}`

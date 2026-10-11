@@ -78,6 +78,28 @@ describe("release check: accounts required means the wall is on", () => {
   });
 });
 
+describe("release check: production must choose (review L3)", () => {
+  it("VERCEL_ENV=production with the accounts flag unset fails", () => {
+    for (const env of [{ VERCEL_ENV: "production" }, { VERCEL_ENV: "production", SMR_RELEASE_REQUIRES_ACCOUNTS: "" }, { VERCEL_ENV: " Production " }]) {
+      const r = releaseCheck(env);
+      assert.equal(r.ok, false, JSON.stringify(env));
+      assert.match(r.errors.join(" "), /production build .* is not set/);
+    }
+  });
+
+  it("production with 0 passes (no wall yet), with 1 needs the wall on", () => {
+    assert.equal(releaseCheck({ VERCEL_ENV: "production", SMR_RELEASE_REQUIRES_ACCOUNTS: "0" }).ok, true);
+    assert.equal(releaseCheck({ VERCEL_ENV: "production", SMR_RELEASE_REQUIRES_ACCOUNTS: "1" }).ok, false);
+    assert.equal(releaseCheck({ VERCEL_ENV: "production", SMR_RELEASE_REQUIRES_ACCOUNTS: "1", NEXT_PUBLIC_FORGE_SIGN_IN_WALL: "on" }).ok, true);
+  });
+
+  it("previews and local builds are not asked", () => {
+    assert.equal(releaseCheck({ VERCEL_ENV: "preview" }).ok, true);
+    assert.equal(releaseCheck({ VERCEL_ENV: "development" }).ok, true);
+    assert.equal(releaseCheck({}).ok, true);
+  });
+});
+
 describe("release check: the other switches never fail silently", () => {
   it("an unreadable PREMIUM_GATE fails", () => {
     const r = releaseCheck({ PREMIUM_GATE: "true" });
@@ -117,7 +139,7 @@ describe("release check: readers", () => {
 
   it("blank is unset, never malformed", () => {
     assert.deepEqual(readOnOff("  "), { value: null, malformed: false });
-    assert.deepEqual(readRequiresAccounts(""), { required: false, malformed: false });
+    assert.deepEqual(readRequiresAccounts(""), { required: false, malformed: false, set: false });
   });
 });
 

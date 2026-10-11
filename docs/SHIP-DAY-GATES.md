@@ -9,6 +9,12 @@ there is a deploy and needs the owner's approval.
 The wall is a build-time switch. `FORGE_SIGN_IN_STARTS_AT` in
 `apps/consumer/lib/forge-access.ts` stays `null`; the switch raises the wall.
 
+Every production build must choose. With `VERCEL_ENV=production`, the
+release check fails unless `SMR_RELEASE_REQUIRES_ACCOUNTS` is set to `0` or
+`1`. BEFORE this branch reaches production, set
+`SMR_RELEASE_REQUIRES_ACCOUNTS=0` in the Production environment, or the next
+production build stops at the release check. Previews are not asked.
+
 Before ship day:
 1. Record the baseline usage numbers (read only).
 2. Get the public-site copy that drops "no account needed" ready to publish
@@ -40,6 +46,13 @@ unset there.
 Emergency: `NEXT_PUBLIC_FORGE_SIGN_IN_WALL=off` takes the wall down, but the
 release check refuses it while `SMR_RELEASE_REQUIRES_ACCOUNTS=1` is set. Set
 that to `0` too, on purpose, and redeploy.
+
+Rollback caveat: the wall switch is built into each deployment. An instant
+rollback or promote of an older deployment does not run `next build` or the
+release check, and it brings back that build's wall state. After any
+rollback, check the wall: signed out, `/welcome` on the production host must
+send you to sign-in. After ship day, never roll back to a deployment built
+before the wall went up unless you mean to take it down.
 
 ## 2. Premium split (decided 2026-10-10: Codex's split at launch)
 
