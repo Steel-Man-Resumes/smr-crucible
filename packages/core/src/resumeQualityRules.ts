@@ -595,11 +595,17 @@ function analyze(text: string): QualityFinding[] {
     // employer can the next lines be them ("Valley Supply | 2017 - 2024"
     // over "Forklift Operator"). A full job line has nothing left to add, so
     // what sits under it is the job's body.
-    if (held >= 2) continue;
     const run: number[] = [];
     while (j < ls.length && inExperience(j) && !isBullet(ls[j].text) && !ls[j].label && !isYearLine(j) && run.length < 3) run.push(j++);
     const nextOpensJob = j < ls.length && inExperience(j) && (isBullet(ls[j].text) || !!ls[j].label);
     const short = (r: number) => !sentenceSignal(ls[r].text) && words(ls[r].text).length <= 6;
+    if (held >= 2) {
+      // Under a full job line, one short line before the bullets is a detail
+      // ("Promoted to Lead Cook", "Seasonal", a parent company): left alone.
+      // Two or more bare lines are the job's body and get marked.
+      if (run.length === 1 && nextOpensJob && short(run[0])) header.add(run[0]);
+      continue;
+    }
     if (run.length >= 1 && run.length <= 2 && nextOpensJob && run.every(short)) {
       for (const r of run) header.add(r);
     } else if (run.length && short(run[0])) {
@@ -645,7 +651,8 @@ function analyze(text: string): QualityFinding[] {
       }
       continue;
     }
-    if (header.has(i) || isYearLine(i) || isContact(t) || isPlace(t) || /\|/.test(t) || TITLE_AT_RE.test(t)) {
+    // Never marked: a promotion line, a parenthetical, a work-type tag.
+    if (header.has(i) || isYearLine(i) || isContact(t) || isPlace(t) || /\|/.test(t) || TITLE_AT_RE.test(t) || DETAIL_LINE_RE.test(t)) {
       closeRun();
       continue;
     }
@@ -709,6 +716,11 @@ function analyze(text: string): QualityFinding[] {
     .map(([i, f]) => ({ ...f, occurrence: occurrenceAt.get(i) ?? 0 }));
   return findings;
 }
+
+// Detail lines under a job that are never bare words: a promotion, a note in
+// parentheses, or how the job was held ("Remote", "Seasonal, part-time").
+const WORK_TAG = "(?:remote|hybrid|on[- ]site|seasonal|part[- ]time|full[- ]time|contract(?:or)?|temporary|temp|per diem|on[- ]call|volunteer|internship)";
+const DETAIL_LINE_RE = new RegExp(`^(?:promoted\\b.*|\\(.*\\)|${WORK_TAG}(?:\\s*(?:[,/&]|and)\\s*${WORK_TAG})*\\.?)$`, "i");
 
 // "Cashier at Safeway", "Cook at the Elks Lodge": a title over its employer.
 const TITLE_AT_RE = /^[A-Z][A-Za-z'&./-]*(?:\s+[A-Z][A-Za-z'&./-]*){0,3}\s+(?:at|with|for)\s+(?:the\s+)?[A-Z]/;

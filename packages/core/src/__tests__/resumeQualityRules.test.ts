@@ -648,7 +648,8 @@ Inventory`,
 
 test("r3 H1: bare lines under a full job line are the job's body, so they are marked", () => {
   assert.deepEqual(lineOf(runQualityCheck(R4.tucked), "bullets"), ["Cooking"]);
-  assert.deepEqual(lineOf(runQualityCheck(R4.tuckedOne), "bullets"), ["Kitchen work and cleanup"]);
+  // Round 5: one short line under a full job line, before its bullets, is left alone (missed mark accepted).
+  assert.deepEqual(lineOf(runQualityCheck(R4.tuckedOne), "bullets"), []);
   // The title-under-the-dates layouts from round 3 are still header.
   assert.deepEqual(runQualityCheck(R3.H2_title_under), []);
   assert.deepEqual(runQualityCheck(R3.H2_dates_first), []);
@@ -662,4 +663,45 @@ test("r3 H2: an all-caps title / employer / city block over the dates is the job
 
 test("r3 M1: on a weak page the bare-words mark lands on the bare words, not the title", () => {
   assert.deepEqual(lineOf(runQualityCheck(R4.titleUnder), "bullets"), ["Shipping"]);
+});
+
+// ---- Round 5 (review s3 r4) -------------------------------------------------
+
+const fullJob = (detail: string) => `Cy Example
+Kalispell, MT | cy.example@example.com
+Line cook with five years on a busy dinner line.
+
+EXPERIENCE
+Line Cook | Harbor Grill | Kalispell, MT | 2019 - 2024
+${detail}
+- Cooked 200 covers a night on the grill station.
+- Trained 3 new cooks on the line.`;
+
+test("r4 H1: a single detail line under a full job line is never called bare words", () => {
+  for (const detail of [
+    "Promoted to Lead Cook",
+    "Remote",
+    "Seasonal",
+    "(contract through a staffing agency)",
+    "Harbor Hospitality Group",
+    "Part-time, seasonal",
+    "Full-time",
+    "Temporary",
+    "Per diem",
+    "Contract",
+  ]) {
+    assert.deepEqual(runQualityCheck(fullJob(detail)), [], detail);
+  }
+});
+
+test("r4 H1: promotions, parentheticals and work-type tags are never marked, even in a run", () => {
+  const page = fullJob("Promoted to Lead Cook\nSeasonal\n(through a staffing agency)");
+  assert.deepEqual(runQualityCheck(page), []);
+});
+
+test("r4 H1: two or more bare lines under a full job line are still marked", () => {
+  assert.deepEqual(lineOf(runQualityCheck(fullJob("Cooking\nCleaning")), "bullets"), ["Cooking"]);
+  assert.deepEqual(lineOf(runQualityCheck(R4.tucked), "bullets"), ["Cooking"]);
+  // A tag does not hide bare words after it.
+  assert.deepEqual(lineOf(runQualityCheck(fullJob("Seasonal\nCooking\nCleaning")), "bullets"), ["Cooking"]);
 });
