@@ -10,6 +10,15 @@
  *  - a bullet marker ("- ") becomes a drawn square;
  *  - en and em dashes become a plain spaced hyphen (house rule for resumes).
  * Name and section headings are drawn in capitals.
+ *
+ * Phase 6 (Q4, a page a hiring manager knows at a glance): every known heading
+ * spelling is a heading ("Work Experience" and "SKILLS" look the same), and in
+ * an experience section every line under a job is drawn as a bullet. A date
+ * line right under a job that has no dates of its own moves up beside the
+ * title, where the dates sit on every other job. A lone line between the
+ * contact line and the first heading (the writer puts its headline there,
+ * after a blank line) is drawn as the headline under the name; a "Headline:"
+ * label in front of it is layout, not wording, and is not drawn.
  */
 
 import {
@@ -21,6 +30,9 @@ import {
   splitResumeHeader,
 } from "@crucible/core/src/pageFitShared";
 import { SECTION_SKILLS_RE } from "./style";
+
+/** Sections whose entries are jobs: every line under a job there is a bullet. */
+export const SECTION_JOBS_RE = /EXPERIENCE|WORK HISTORY|EMPLOYMENT|PROFESSIONAL HISTORY|CAREER HISTORY|PROFESSIONAL BACKGROUND|MILITARY|VOLUNTEER/;
 
 export interface ModelHeader {
   name: string;
@@ -145,7 +157,31 @@ export function parseSkillsLine(line: string): { label: string; items: string[];
 }
 
 export function parseResume(text: string): ResumeModel {
-  const { header, headerLines, bodyLines } = splitResumeHeader(text);
+  const split = splitResumeHeader(text);
+  const { headerLines } = split;
+  const header = { ...split.header };
+  let bodyLines = split.bodyLines;
+  if (!header.headlineLine && header.nameLine) {
+    // The headline after a blank line: one short plain line, then the first heading.
+    const lines = bodyLines.map((l) => l.trim());
+    const first = lines.findIndex((l) => l);
+    const next = first >= 0 ? lines.findIndex((l, i) => i > first && l) : -1;
+    const cand = first >= 0 ? lines[first] : "";
+    if (
+      cand &&
+      next > first &&
+      isSectionHeader(lines[next]) &&
+      !isSectionHeader(cand) &&
+      !isBulletLine(cand) &&
+      !cand.includes("|") &&
+      cand.length <= 120 &&
+      !/[.!?]$/.test(cand)
+    ) {
+      header.headlineLine = cand.replace(/^headline:\s*/i, "");
+      headerLines.push(header.headlineLine);
+      bodyLines = bodyLines.slice(first + 1);
+    }
+  }
   const keyed: Array<["name" | "headline" | "contact" | "notes", string]> = [
     ["name", header.nameLine],
     ["headline", header.headlineLine],
@@ -159,6 +195,8 @@ export function parseResume(text: string): ResumeModel {
   const blocks: ModelBlock[] = [];
   let section = "";
   let prev: ModelBlock | null = null;
+  // The job the lines that follow sit under, in a jobs section.
+  let underJob: Extract<ModelBlock, { kind: "job" }> | null = null;
   const push = (b: ModelBlock) => {
     blocks.push(b);
     prev = b;
@@ -168,6 +206,7 @@ export function parseResume(text: string): ResumeModel {
     if (!line) continue;
     if (isSectionHeader(line)) {
       section = line.toUpperCase();
+      underJob = null;
       push({ kind: "section", text: clean(line).toUpperCase() });
       continue;
     }
@@ -187,7 +226,19 @@ export function parseResume(text: string): ResumeModel {
     }
     const job = parseJobLine(line, true);
     if (job) {
-      push({ kind: "job", title: clean(job.title), rest: job.rest.map(clean), years: clean(job.years) });
+      const block: ModelBlock = { kind: "job", title: clean(job.title), rest: job.rest.map(clean), years: clean(job.years) };
+      push(block);
+      underJob = SECTION_JOBS_RE.test(section) ? block : null;
+      continue;
+    }
+    if (underJob) {
+      // A date line right under a job with no dates goes beside the title, like every other job.
+      if (!underJob.years && (prev as ModelBlock | null) === underJob && isDateText(line)) {
+        underJob.years = clean(line);
+        continue;
+      }
+      // Every other line under a job is a bullet.
+      push({ kind: "bullet", text: clean(line) });
       continue;
     }
     // A pipe list outside a skills section (four or more short parts) is a skills line.
