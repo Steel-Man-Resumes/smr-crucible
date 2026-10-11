@@ -71,8 +71,19 @@ export const STAGE_WHY: Record<number, string> = {
 export function whyForNextStep(next: { stage: number; reason?: string }): string {
   if (next.reason === "default_matches") return "New listings come in often, so it pays to check back.";
   if (next.reason === "follow_up_due") return "A short follow-up keeps you on their radar.";
+  if (next.reason === "interview_upcoming") return "You have an interview coming up. A practice run now makes the real one feel familiar.";
   return STAGE_WHY[next.stage] ?? STAGE_WHY[2];
 }
+
+/** Reasons that mean "this has a date on it", which come before any lesson (Codex review A6). */
+export const DEADLINE_REASONS = ["interview_upcoming", "follow_up_due"] as const;
+
+export function isDeadlineStep(next: { reason?: string }): boolean {
+  return (DEADLINE_REASONS as readonly string[]).includes(next.reason ?? "");
+}
+
+/** The small label on the next-step card for a deadline step, in place of "Step N of 6". */
+export const DEADLINE_STEP_LABEL = "Do this first";
 
 /**
  * One plain line for a locked tool: what unlocks it. Pure, so the sidebar and the
@@ -126,7 +137,17 @@ export const TOUR_HREF = `/dashboard?${TOUR_PARAM}=1`;
  * tour is mandatory after two deferrals ("onboarding_required"), the ladder does
  * not say whether the Forge is done, so the arc stays at Foundation.
  */
-export function arcStageForNextStep(next: { stage: number; reason?: string }): number {
+export function arcStageForNextStep(next: {
+  stage: number;
+  reason?: string;
+  progressStage?: number;
+  progressReason?: string;
+}): number {
+  // A deadline step sits on top of the ladder: the arc shows the ladder's
+  // place underneath it (computeNextStep sets progressStage).
+  if (isDeadlineStep(next) && typeof next.progressStage === "number") {
+    return arcStageForNextStep({ stage: next.progressStage, reason: next.progressReason });
+  }
   // Every step is done: the engine reuses stage 2 ("check new matches") and
   // stage 6 ("follow up") for these. Show the whole arc complete, not "Step 2".
   if (next.reason === "default_matches" || next.reason === "follow_up_due") return 7;

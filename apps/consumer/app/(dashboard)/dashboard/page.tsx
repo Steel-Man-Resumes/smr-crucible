@@ -81,7 +81,7 @@ const ALL_TOOLS: ToolCard[] = [
     color: "bg-t-panel border-t-steel",
     accent: "text-t-steel",
     minState: "full_access",
-    requiresDisclosure: true,
+    // No disclosure plan needed first (Codex review A6).
   },
   {
     href: "/dashboard/resources",

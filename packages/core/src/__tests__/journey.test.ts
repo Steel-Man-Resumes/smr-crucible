@@ -22,6 +22,7 @@ function mkProfile(overrides: Partial<UserProfile> = {}): UserProfile {
     savedJobs: [] as SavedJobSummary[],
     hasResumeTailoredToTarget: false,
     hasDisclosurePlan: false,
+    disclosureNotNowAt: null,
     interviewSessionCount: 0,
     applicationCount: 0,
     practiceSessionsThisWeek: 0,

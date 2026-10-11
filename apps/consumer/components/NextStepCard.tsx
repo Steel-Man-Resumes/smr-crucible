@@ -13,7 +13,9 @@ import Link from "next/link";
 // Deep import: canonical stage vocabulary without dragging the core barrel
 // (db/pg) into the client bundle.
 import {
+  DEADLINE_STEP_LABEL,
   arcStageForNextStep,
+  isDeadlineStep,
   stepPositionLabel,
   whyForNextStep,
 } from "@crucible/core/src/journeyStages";
@@ -23,14 +25,36 @@ export interface NextStep {
   action: string;
   href: string;
   reason?: string;
+  progressStage?: number;
+  progressReason?: string;
 }
 
-export function NextStepCard({ next, why }: { next: NextStep; why?: string | null }) {
-  // The tour is stage 0, which is not one of the six steps: call it "Start here".
-  const position = stepPositionLabel(next.stage === 0 ? 0 : arcStageForNextStep(next));
-  const reasonLine = why || whyForNextStep(next);
+/** The disclosure step is optional; the card offers a way to say so. */
+export const DISCLOSURE_NOT_NOW_LABEL = "I don't need this now";
+export const DISCLOSURE_NOT_NOW_HINT = "You can still open the disclosure planner from the menu any time.";
 
-  return (
+export function NextStepCard({
+  next,
+  why,
+  onNotNow,
+  notNowBusy = false,
+}: {
+  next: NextStep;
+  why?: string | null;
+  /** Offered on the optional disclosure step only. */
+  onNotNow?: () => void;
+  notNowBusy?: boolean;
+}) {
+  // A deadline (interview coming up, follow-up due) comes before any lesson,
+  // so it is not "Step N of 6". The tour is stage 0, which is not one of the
+  // six steps: call it "Start here".
+  const position = isDeadlineStep(next)
+    ? DEADLINE_STEP_LABEL
+    : stepPositionLabel(next.stage === 0 ? 0 : arcStageForNextStep(next));
+  const reasonLine = why || whyForNextStep(next);
+  const offerNotNow = next.reason === "no_disclosure_plan" && !!onNotNow;
+
+  const card = (
     <Link
       href={next.href}
       className="t-focus block bg-t-amber text-white shadow-[0_3px_8px_rgba(22,26,21,0.15)] p-5 sm:p-6 hover:bg-t-amber-bright transition-colors"
@@ -60,5 +84,23 @@ export function NextStepCard({ next, why }: { next: NextStep; why?: string | nul
         </svg>
       </span>
     </Link>
+  );
+  if (!offerNotNow) return card;
+  return (
+    <div className="space-y-2">
+      {card}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1">
+        <button
+          type="button"
+          onClick={onNotNow}
+          disabled={notNowBusy}
+          data-testid="disclosure-not-now"
+          className="t-focus min-h-touch text-sm font-medium text-t-bone-dim underline underline-offset-4 hover:text-t-white disabled:opacity-60"
+        >
+          {notNowBusy ? "Saving..." : DISCLOSURE_NOT_NOW_LABEL}
+        </button>
+        <span className="text-xs text-t-phos-dim">{DISCLOSURE_NOT_NOW_HINT}</span>
+      </div>
+    </div>
   );
 }
