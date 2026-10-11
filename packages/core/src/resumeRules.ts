@@ -64,7 +64,7 @@ export const RESUME_RULES: readonly ResumeRule[] = [
     scope: "truth",
     std: ["STD-A01"],
     text:
-      "Reword freely, facts locked. Every bullet starts with a strong, specific action verb and says what was done and its scale, in plain words a coworker would use. Duty phrasing (\"responsible for\", \"duties included\", \"tasked with\", \"did\", \"dealt with\", \"in charge of\") is always rewritten into what the line means: \"In charge of the guys on my shift\" becomes \"Supervised the shift crew\"; \"Did safety audits\" becomes \"Ran safety audits\". A reworded line keeps every fact of the original: the same numbers, titles, employers, dates, credentials and scope. Use a bigger verb (led, managed, supervised, trained) only when the person's words support that action (\"in charge of\" or \"responsible for\" people supports supervised; \"helped\" never becomes led). Anything new (a number, a result, a tool, a skill) is never added; it is asked.",
+      "Reword freely, facts locked. Every bullet starts with a strong, specific action verb and says what was done, in plain words a coworker would use; any amount or size only in the person's own numbers and words, never an added size word (large, heavy, major, daily). Duty phrasing (\"responsible for\", \"duties included\", \"tasked with\", \"did\", \"dealt with\", \"in charge of\") is always rewritten into what the line means: \"In charge of the guys on my shift\" becomes \"Supervised the shift crew\"; \"Did safety audits\" becomes \"Ran safety audits\". A reworded line keeps every fact of the original: the same numbers, titles, employers, dates, credentials and scope. Use a bigger verb (led, managed, supervised, trained) only when the person's words support that action. Supervising people is scope: supervised, led, oversaw, directed or managed people only when that same job has a supervisor, lead, foreman or manager type title in their words, or their words say they were over people (\"in charge of employees on my shift\", \"my crew\", \"ran a crew of 4\"). \"Responsible for\" a shift, area, task or thing is never supervising people, and \"helped\" never becomes led. A fact belongs to its own job. Anything new (a number, a result, a tool, a skill) is never added; it is asked.",
   },
   {
     id: "dates-as-given",
@@ -133,7 +133,7 @@ export const RESUME_RULES: readonly ResumeRule[] = [
     scope: "page",
     std: ["STD-F01"],
     text:
-      "Format: reverse-chronological with years on every entry. A hybrid (a short skills block above the full dated history) fits only when both are true in the person's own words: their work history is uneven, and they are changing fields on the strength of their skills. Long stretches at one place or strong skills are examples of those two conditions, never extra conditions and never reasons on their own. In a hybrid every dated entry keeps its bullets and the skills block stays short labels.",
+      "Format: reverse-chronological with dates on every entry, in the form the person gave them. A hybrid (a short skills block above the full dated history) fits only when both are true in the person's own words: their work history is uneven, and they are changing fields on the strength of their skills. Long stretches at one place or strong skills are examples of those two conditions, never extra conditions and never reasons on their own. In a hybrid every dated entry keeps its bullets and the skills block stays short labels.",
   },
   {
     id: "no-objective",

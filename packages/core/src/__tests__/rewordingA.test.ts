@@ -12,9 +12,14 @@ import assert from "node:assert/strict";
 
 import { RESUME_RULES, RESUME_RULES_VERSION, resumeRulesBlock } from "../resumeRules";
 import { isSectionHeader } from "../pageFitShared";
-import { sameScopeMeaning, scopeHitsNotTheirs } from "../scopeWords";
+import { scopeHitsNotTheirs } from "../scopeWords";
 
 test("rulebook A: reword freely, facts locked; duty phrasing always rewritten", () => {
+  assert.match(resumeRulesBlock("truth"), /Supervising people is scope/);
+  assert.match(resumeRulesBlock("truth"), /"Responsible for\" a shift, area, task or thing is never supervising people|Responsible for" a shift, area, task or thing is never supervising people/);
+  assert.match(resumeRulesBlock("truth"), /never an added size word \(large, heavy, major, daily\)/);
+  assert.match(resumeRulesBlock("page"), /dates on every entry, in the form the person gave them/);
+  assert.doesNotMatch(resumeRulesBlock("page"), /years on every entry/);
   assert.equal(RESUME_RULES_VERSION, "resume-rules/2026-10-11.1");
   const truth = resumeRulesBlock("truth");
   assert.match(truth, /Reword freely, facts locked/);
@@ -22,7 +27,8 @@ test("rulebook A: reword freely, facts locked; duty phrasing always rewritten", 
     assert.ok(truth.includes(`\"${duty}\"`), duty);
   }
   assert.match(truth, /is always rewritten into what the line means/);
-  assert.match(truth, /strong, specific action verb and says what was done and its scale/);
+  assert.match(truth, /strong, specific action verb and says what was done, in plain words a coworker would use; any amount or size only in the person's own numbers and words/);
+  assert.doesNotMatch(truth, /its scale/);
   assert.match(truth, /same numbers, titles, employers, dates, credentials and scope/);
   assert.match(truth, /"helped" never becomes led/);
   assert.match(truth, /Anything new \(a number, a result, a tool, a skill\) is never added; it is asked/);
@@ -62,19 +68,59 @@ test("headings: every common spelling is a heading, in any case, with and or &",
   assert.equal(isSectionHeader("Ran the dish line"), false);
 });
 
-test("scope by meaning: in charge of / responsible for people clears supervised, same people", () => {
-  assert.equal(sameScopeMeaning("lead", "supervise"), true);
-  assert.equal(sameScopeMeaning("responsible", "supervise"), true);
-  assert.equal(sameScopeMeaning("lead", "manage"), false);
-  assert.equal(sameScopeMeaning("supervise", "train"), false);
-  assert.deepEqual(scopeHitsNotTheirs("Supervised the shift crew", "In charge of the guys on my shift."), []);
-  assert.deepEqual(scopeHitsNotTheirs("Supervised the 3rd shift crew", "Responsible for 3rd shift."), []);
+// ---- CC ruling H1 (round 2): supervising people is scope ------------------------------------------
+
+const RULING_FLAGGED: Array<[string, string]> = [
+  // Reviewer probes: each was flagged at base and must stay flagged.
+  ["Supervised the crew.", "Responsible for the crew's safety gear."],
+  ["Led the 3rd shift crew.", "Responsible for 3rd shift cleanup."],
+  ["Supervised the kitchen.", "Responsible for cleaning the kitchen."],
+  ["Oversaw store operations.", "I was responsible for opening the store."],
+  ["Directed the department.", "Responsible for the department's trash."],
+  ["Oversaw the night shift.", "Responsible for night shift paperwork."],
+  ["Supervised residents.", "Responsible for the safety of residents."],
+  ["Supervised the register.", "Took over the register when the cashier left."],
+  ["Supervised the line crew.", "Ran the line."],
+  ["Supervised forklift operators.", "Responsible for the forklift."],
+  ["Oversaw forklift operations.", "Responsible for the forklift."],
+  // The ruling's own cases.
+  ["Supervised third-shift production", "Machine Operator | Acme | 2019 - 2021\nResponsible for 3rd shift."],
+  ["Supervised the 3rd shift crew.", "Responsible for 3rd shift."],
+  ["Led the warehouse crew", "Helped the lead with the warehouse crew."],
+  ["Managed the kitchen", "I ran the kitchen at night."],
+  ["Trained the shift crew", "In charge of the guys on my shift."],
+  ["Supervised the nursing staff", "In charge of the guys on my shift."],
+];
+const RULING_CLEARED: Array<[string, string]> = [
+  ["Supervised the shift crew", "In charge of employees on my shift."],
+  ["Supervised the shift crew", "In charge of the guys on my shift."],
+  ["Supervised the crew", "I ran a crew of 4."],
+  ["Supervised the crew", "Me and my crew loaded trucks."],
+  ["Supervised third-shift production", "Production Supervisor | Acme | 2019 - 2021\nResponsible for 3rd shift."],
+  ["Supervised 4 workers.", "I supervised 4 workers."],
+];
+
+test("H1: supervising people needs people in their words or a supervisor title on that job", () => {
+  for (const [line, src] of RULING_FLAGGED) assert.ok(scopeHitsNotTheirs(line, src).length > 0, `should flag: ${line} <= ${src}`);
+  for (const [line, src] of RULING_CLEARED) assert.deepEqual(scopeHitsNotTheirs(line, src), [], `should clear: ${line} <= ${src}`);
 });
 
-test("scope by meaning: inflation is still caught (helped never becomes led, ran never becomes managed or trained)", () => {
-  assert.ok(scopeHitsNotTheirs("Led the warehouse crew", "Helped the lead with the warehouse crew.").length > 0);
-  assert.ok(scopeHitsNotTheirs("Managed the kitchen", "I ran the kitchen at night.").length > 0);
-  assert.ok(scopeHitsNotTheirs("Trained the shift crew", "In charge of the guys on my shift.").length > 0);
-  // The same verb about different people is still not theirs.
-  assert.ok(scopeHitsNotTheirs("Supervised the nursing staff", "In charge of the guys on my shift.").length > 0);
+test("H1: the title path is per job; a line that could belong to a non-supervisor job is never cleared", () => {
+  const two = "Production Supervisor | Acme | 2019 - 2021\nResponsible for 3rd shift.\nMachine Operator | Beta Works | 2016 - 2019\nRan the press on 3rd shift.";
+  assert.ok(scopeHitsNotTheirs("Supervised third-shift production", two).length > 0, "shift is in both jobs: ambiguous");
+  assert.deepEqual(scopeHitsNotTheirs("Supervised production for Acme", two), []);
+  assert.ok(scopeHitsNotTheirs("Supervised press operators at Beta Works", two).length > 0);
+  assert.ok(scopeHitsNotTheirs("Supervised production", "Supervisor Trainee | Acme | 2019 - 2021\nProduction work.").length > 0, "a trainee title is not over people");
+});
+
+test("H1: the mint check's skills reading agrees (scope words read the same everywhere)", async () => {
+  const { runMintCheck } = await import("../resumeMintCheckShared");
+  const page = (skills: string) => `DANA EXAMPLE\n\nSKILLS\n${skills}\n\nPROFESSIONAL EXPERIENCE\nWELDER | Shop | 2019 - 2023\n- Welded steel.`;
+  const flagged = (src: string, term: string) =>
+    runMintCheck({ output: page(term + ", Welding"), source: `Dana Example\nWelded steel.\n${src}`, kind: "resume" }).findings.some((f) => f.line === term && f.kind === "grid_scope_term");
+  assert.ok(flagged("I ran the kitchen at night.", "Kitchen supervision"));
+  assert.ok(flagged("Responsible for 3rd shift.", "Shift supervision"));
+  for (const [src, term] of [["In charge of the guys on my shift.", "Crew supervision"], ["I supervised the crew.", "Crew supervision"]]) {
+    assert.equal(flagged(src, term), scopeHitsNotTheirs(term, `Dana Example\nWelded steel.\n${src}`).length > 0, term);
+  }
 });
