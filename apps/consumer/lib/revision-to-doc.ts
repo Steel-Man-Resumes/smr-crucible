@@ -145,8 +145,11 @@ export function resumeTextToDocument(text: string, base?: { meta?: { targetJob?:
 /** Every word of the text is somewhere in the document (a test helper and a guard). */
 export function documentKeepsText(text: string, doc: Doc): boolean {
   const hay = JSON.stringify(doc).toLowerCase();
-  return parseResume(text).blocks.every((b) => {
-    const words = (b.kind === "job" ? [b.title, ...b.rest] : b.kind === "skills" ? b.items : b.kind === "section" ? [] : [b.text]).join(" ");
+  const model = parseResume(text);
+  // Review L6: the headline (drawn in the header since Phase 6) and each job's dates are checked too.
+  const extra: string[] = model.header.headline ? [model.header.headline] : [];
+  return [...extra.map((t) => ({ kind: "para" as const, text: t, role: "body" as const })), ...model.blocks].every((b) => {
+    const words = (b.kind === "job" ? [b.title, ...b.rest, b.years] : b.kind === "skills" ? b.items : b.kind === "section" ? [] : [b.text]).join(" ");
     return words
       .toLowerCase()
       .split(/[^a-z0-9]+/)

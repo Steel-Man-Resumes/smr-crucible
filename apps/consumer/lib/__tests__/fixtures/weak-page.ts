@@ -17,7 +17,7 @@ Hard worker, team player, fast learner, good communication
 
 Work Experience
 Forklift Driver | Northgate Supply | Libby, MT | 8/2021 - 12/2022
-Responsible for 3rd shift.
+In charge of the guys on my shift.
 Did safety audits.
 Drove forklift and loaded 6 trucks a night.
 Helped the lead with inventory counts.
@@ -36,7 +36,7 @@ Libby, MT | (406) 555-0147 | rory@example.com
 Forklift Driver and Stocker
 
 CAREER SUMMARY
-Forklift driver who supervised the 3rd shift crew at Northgate Supply and loaded 6 trucks a night. Ran safety audits and helped the lead with inventory counts. Earlier stocked shelves and served customers at the register at Corner Mart.
+Forklift driver who supervised the shift crew at Northgate Supply and loaded 6 trucks a night. Ran safety audits and helped the lead with inventory counts. Earlier stocked shelves and served customers at the register at Corner Mart.
 
 CORE COMPETENCIES
 Forklift operation, Truck loading, Inventory counts, Safety audits, Shelf stocking, Register and customer service
@@ -44,7 +44,7 @@ Forklift operation, Truck loading, Inventory counts, Safety audits, Shelf stocki
 PROFESSIONAL EXPERIENCE
 
 FORKLIFT DRIVER | Northgate Supply | Libby, MT | 8/2021 - 12/2022
-- Supervised the 3rd shift crew.
+- Supervised the shift crew.
 - Ran safety audits.
 - Drove a forklift and loaded 6 trucks a night.
 - Helped the lead with inventory counts.
@@ -60,7 +60,7 @@ Lincoln County High School | 2015`;
 export const MOCK_WRITER_CHANGES = [
   {
     old: "Looking for a job where I can use my skills and grow with a good company.",
-    new: "Forklift driver who supervised the 3rd shift crew at Northgate Supply and loaded 6 trucks a night.",
+    new: "Forklift driver who supervised the shift crew at Northgate Supply and loaded 6 trucks a night.",
     why: "An objective tells them what you want. A summary tells them what you bring.",
     rule: "objective",
   },
@@ -71,9 +71,9 @@ export const MOCK_WRITER_CHANGES = [
     rule: "soft_skill_list",
   },
   {
-    old: "Responsible for 3rd shift.",
-    new: "Supervised the 3rd shift crew.",
-    why: "\"Responsible for\" reads like a job description. Saying you supervised the crew shows what you did.",
+    old: "In charge of the guys on my shift.",
+    new: "Supervised the shift crew.",
+    why: "\"In charge of\" reads like a job description. Saying you supervised the crew shows what you did.",
     rule: "duty_phrasing",
   },
   {
@@ -95,7 +95,7 @@ export const MOCK_WRITER_CHANGES = [
     rule: "heading",
   },
   // Dropped by the server: this old line is not on the person's page.
-  { old: "Ran the whole warehouse.", new: "Supervised the 3rd shift crew.", why: "Made up.", rule: "duty_phrasing" },
+  { old: "Ran the whole warehouse.", new: "Supervised the shift crew.", why: "Made up.", rule: "duty_phrasing" },
   // Dropped by the server: this new line is not on the final resume.
   { old: "Stocked shelves.", new: "Stocked shelves for the entire store every night.", why: "Bigger.", rule: "duty_phrasing" },
 ];

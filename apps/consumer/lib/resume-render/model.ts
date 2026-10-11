@@ -28,11 +28,14 @@ import {
   isDateText,
   looksLikePlace,
   splitResumeHeader,
+  bodyHeadlineIndex,
+  jobLineRoles,
+  splitTrailingYears,
+  SECTION_JOBS_RE,
 } from "@crucible/core/src/pageFitShared";
 import { SECTION_SKILLS_RE } from "./style";
 
-/** Sections whose entries are jobs: every line under a job there is a bullet. */
-export const SECTION_JOBS_RE = /EXPERIENCE|WORK HISTORY|EMPLOYMENT|PROFESSIONAL HISTORY|CAREER HISTORY|PROFESSIONAL BACKGROUND|MILITARY|VOLUNTEER/;
+export { SECTION_JOBS_RE };
 
 export interface ModelHeader {
   name: string;
@@ -161,26 +164,12 @@ export function parseResume(text: string): ResumeModel {
   const { headerLines } = split;
   const header = { ...split.header };
   let bodyLines = split.bodyLines;
-  if (!header.headlineLine && header.nameLine) {
-    // The headline after a blank line: one short plain line, then the first heading.
-    const lines = bodyLines.map((l) => l.trim());
-    const first = lines.findIndex((l) => l);
-    const next = first >= 0 ? lines.findIndex((l, i) => i > first && l) : -1;
-    const cand = first >= 0 ? lines[first] : "";
-    if (
-      cand &&
-      next > first &&
-      isSectionHeader(lines[next]) &&
-      !isSectionHeader(cand) &&
-      !isBulletLine(cand) &&
-      !cand.includes("|") &&
-      cand.length <= 120 &&
-      !/[.!?]$/.test(cand)
-    ) {
-      header.headlineLine = cand.replace(/^headline:\s*/i, "");
-      headerLines.push(header.headlineLine);
-      bodyLines = bodyLines.slice(first + 1);
-    }
+  // The headline after a blank line (shared with the page-fit estimate; never a contact or inside-work line).
+  const hl = bodyHeadlineIndex(bodyLines, header);
+  if (hl >= 0) {
+    header.headlineLine = bodyLines[hl].trim().replace(/^headline:\s*/i, "");
+    headerLines.push(header.headlineLine);
+    bodyLines = bodyLines.slice(hl + 1);
   }
   const keyed: Array<["name" | "headline" | "contact" | "notes", string]> = [
     ["name", header.nameLine],
@@ -195,64 +184,77 @@ export function parseResume(text: string): ResumeModel {
   const blocks: ModelBlock[] = [];
   let section = "";
   let prev: ModelBlock | null = null;
-  // The job the lines that follow sit under, in a jobs section.
-  let underJob: Extract<ModelBlock, { kind: "job" }> | null = null;
   const push = (b: ModelBlock) => {
     blocks.push(b);
     prev = b;
   };
-  for (const raw of bodyLines) {
+  // What each line is in a jobs section (shared with the page-fit estimate).
+  const roles = jobLineRoles(bodyLines);
+  let lastJob: Extract<ModelBlock, { kind: "job" }> | null = null;
+  bodyLines.forEach((raw, i) => {
     const line = raw.trim();
-    if (!line) continue;
+    if (!line) return;
     if (isSectionHeader(line)) {
       section = line.toUpperCase();
-      underJob = null;
+      lastJob = null;
       push({ kind: "section", text: clean(line).toUpperCase() });
-      continue;
+      return;
+    }
+    const role = roles[i];
+    if (role === "years" && lastJob) {
+      // A dates line right under a job goes beside the title, like every other job.
+      if (!lastJob.years) lastJob.years = clean(line);
+      else lastJob.rest.push(clean(line));
+      return;
+    }
+    if (role === "jobPart" && lastJob) {
+      lastJob.rest.push(clean(line));
+      return;
+    }
+    if (role === "bullet") {
+      push({ kind: "bullet", text: clean(stripBulletMarker(line)) });
+      return;
+    }
+    if (role === "job" && !(line.includes("|") && !parseJobLine(line, true))) {
+      const piped = parseJobLine(line, true);
+      const unpiped = piped ? null : splitTrailingYears(line);
+      const job = piped ?? (unpiped ? { title: unpiped.title, rest: [], years: unpiped.years } : { title: line, rest: [], years: "" });
+      const block: Extract<ModelBlock, { kind: "job" }> = { kind: "job", title: clean(job.title), rest: job.rest.map(clean), years: clean(job.years) };
+      push(block);
+      lastJob = block;
+      return;
     }
     const inSkills = SECTION_SKILLS_RE.test(section);
     if (isBulletLine(line)) {
       push({ kind: "bullet", text: clean(stripBulletMarker(line)) });
-      continue;
+      return;
     }
     if (inSkills) {
       const sk = parseSkillsLine(line);
       if (sk) {
         push({ kind: "skills", label: clean(sk.label), items: sk.items.map(clean), sep: sk.sep });
-        continue;
+        return;
       }
       push({ kind: "para", text: clean(line), role: "body" });
-      continue;
+      return;
     }
     const job = parseJobLine(line, true);
     if (job) {
-      const block: ModelBlock = { kind: "job", title: clean(job.title), rest: job.rest.map(clean), years: clean(job.years) };
-      push(block);
-      underJob = SECTION_JOBS_RE.test(section) ? block : null;
-      continue;
-    }
-    if (underJob) {
-      // A date line right under a job with no dates goes beside the title, like every other job.
-      if (!underJob.years && (prev as ModelBlock | null) === underJob && isDateText(line)) {
-        underJob.years = clean(line);
-        continue;
-      }
-      // Every other line under a job is a bullet.
-      push({ kind: "bullet", text: clean(line) });
-      continue;
+      push({ kind: "job", title: clean(job.title), rest: job.rest.map(clean), years: clean(job.years) });
+      return;
     }
     // A pipe list outside a skills section (four or more short parts) is a skills line.
     if (/\s\|\s/.test(line)) {
       const sk = parseSkillsLine(line);
       if (sk) {
         push({ kind: "skills", label: clean(sk.label), items: sk.items.map(clean), sep: sk.sep });
-        continue;
+        return;
       }
     }
     const p = prev as ModelBlock | null;
     const overview = p !== null && p.kind === "job";
     push({ kind: "para", text: clean(line), role: overview ? "overview" : "body" });
-  }
+  });
   // Round 13 (SF-2): never print a heading with nothing under it (a cut can leave one).
   const kept = blocks.filter((b, i) => b.kind !== "section" || (i + 1 < blocks.length && blocks[i + 1].kind !== "section"));
   return {

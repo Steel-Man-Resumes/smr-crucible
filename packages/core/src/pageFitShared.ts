@@ -124,6 +124,8 @@ export const SECTION_HEADERS: ReadonlySet<string> = new Set([
 ]);
 
 export function isSectionHeader(text: string): boolean {
+  // Review L1: a line with a digit or a "|" is an entry ("Volunteer | 2019 - 2020"), never a heading.
+  if (/[\d|]/.test(text)) return false;
   const upper = text
     .toUpperCase()
     .replace(/[^A-Z\s&]/g, "")
@@ -207,6 +209,131 @@ export function isJobTitleLine(text: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Traditional page (Phase 6, Q4): shared by the resume renderer and the page-fit
+// estimate, so the estimate counts the page the renderer draws.
+// ---------------------------------------------------------------------------
+
+/** Sections whose entries are jobs: every line under a job there is a bullet. */
+export const SECTION_JOBS_RE = /EXPERIENCE|WORK HISTORY|EMPLOYMENT|PROFESSIONAL HISTORY|CAREER HISTORY|PROFESSIONAL BACKGROUND|MILITARY|VOLUNTEER/;
+
+// A contact or place line: never the headline (review M4).
+const CONTACT_LIKE_RE = /@|https?:|www\.|linkedin\.com|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\b[A-Z]{2}\s+\d{5}\b|^[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?$/;
+// Work inside or a record: never promoted to the headline (mirror of grounding-verify's justice test).
+const JUSTICE_LIKE_RE = /incarcerat|prison|jail|parole|probat|convict|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|felon|penitentiary|reformatory|house of correction|inmate|detention/i;
+
+/**
+ * The index in `bodyLines` of a lone headline line: the writer puts its headline after a blank line, between
+ * the contact line and the first heading. -1 when there is none, when the header already has a headline, or
+ * when the line is a contact, place or inside-work line, a sentence, a bullet or an entry.
+ */
+export function bodyHeadlineIndex(bodyLines: string[], header: Pick<ParsedResumeHeader, "nameLine" | "headlineLine">): number {
+  if (!header.nameLine || header.headlineLine) return -1;
+  const lines = bodyLines.map((l) => l.trim());
+  const first = lines.findIndex((l) => l);
+  if (first < 0) return -1;
+  const next = lines.findIndex((l, i) => i > first && l);
+  const cand = lines[first];
+  if (next < 0 || !isSectionHeader(lines[next])) return -1;
+  if (isSectionHeader(cand) || isBulletLine(cand) || cand.includes("|") || cand.length > 120 || /[.!?;]$/.test(cand)) return -1;
+  if (CONTACT_LIKE_RE.test(cand) || JUSTICE_LIKE_RE.test(cand)) return -1;
+  return first;
+}
+
+export type JobLineRole = "job" | "jobPart" | "years" | "bullet" | null;
+
+const YEARISH_RE = /\b(?:19|20)\d{2}\b|\b(?:present|current)\b/i;
+const TRAILING_YEARS_RE = /^(.*?\S)\s*(?:\(([^()]*)\)|,\s*([^,]*))\s*$/;
+
+/** A short line that names a job, a place or an employer, not a duty sentence. */
+function headerish(l: string): boolean {
+  if (!l || isBulletLine(l) || isSectionHeader(l) || /[.!?;:]$/.test(l)) return false;
+  if (l.split(/\s+/).length > 8 || !/^[A-Z0-9]/.test(l)) return false;
+  return true;
+}
+
+/** "Cashier at Quick Stop (2014 - 2015)" -> title and years; null when the line has no trailing dates. */
+export function splitTrailingYears(l: string): { title: string; years: string } | null {
+  const m = l.match(TRAILING_YEARS_RE);
+  const years = m ? (m[2] ?? m[3] ?? "").trim() : "";
+  return m && years && isDateText(years) ? { title: m[1].replace(/[,(]\s*$/, "").trim(), years } : null;
+}
+
+/**
+ * What each line is in a jobs section (review M5): a job header (with pipes, or without pipes when dates sit on
+ * it or right under it, as in "STOCKER" / "Corner Mart, Libby MT" / "2016 - 2018"), a part of that header, its
+ * dates, or a bullet under it. null: not in a jobs section, or not under a job (read the usual way).
+ */
+export function jobLineRoles(lines: string[]): JobLineRole[] {
+  const t = lines.map((l) => l.trim());
+  const roles: JobLineRole[] = t.map(() => null);
+  let section = "";
+  let underJob = false;
+  let jobHasYears = false;
+  let lastJobLine = -1;
+  const nextFilled = (i: number) => {
+    for (let k = i + 1; k < t.length; k++) if (t[k]) return k;
+    return -1;
+  };
+  for (let i = 0; i < t.length; i++) {
+    const l = t[i];
+    if (!l) continue;
+    if (isSectionHeader(l)) {
+      section = l.toUpperCase();
+      underJob = false;
+      continue;
+    }
+    if (!SECTION_JOBS_RE.test(section)) continue;
+    if (isBulletLine(l)) {
+      if (underJob) roles[i] = "bullet";
+      continue;
+    }
+    if (isJobTitleLine(l)) {
+      roles[i] = "job";
+      underJob = true;
+      jobHasYears = YEARISH_RE.test(l);
+      lastJobLine = i;
+      continue;
+    }
+    // A dates line right under a dateless job header sits beside its title.
+    if (underJob && !jobHasYears && isDateText(l) && lastJobLine >= 0 && nextFilledBack(t, i) === lastJobLine) {
+      roles[i] = "years";
+      jobHasYears = true;
+      continue;
+    }
+    if (headerish(l) && !isDateText(l)) {
+      // A header without pipes: dates on it, or a dates line within the next two lines (header-ish between).
+      if (splitTrailingYears(l)) {
+        roles[i] = "job";
+        underJob = true;
+        jobHasYears = true;
+        lastJobLine = i;
+        continue;
+      }
+      const a = nextFilled(i);
+      const b = a >= 0 ? nextFilled(a) : -1;
+      const datesAt = a >= 0 && isDateText(t[a]) ? a : b >= 0 && headerish(t[a]) && !isDateText(t[a]) && isDateText(t[b]) ? b : -1;
+      if (datesAt >= 0) {
+        roles[i] = "job";
+        if (datesAt === b) roles[a] = "jobPart";
+        roles[datesAt] = "years";
+        underJob = true;
+        jobHasYears = true;
+        lastJobLine = i;
+        i = datesAt;
+        continue;
+      }
+    }
+    if (underJob) roles[i] = "bullet";
+  }
+  return roles;
+}
+
+function nextFilledBack(t: string[], i: number): number {
+  for (let k = i - 1; k >= 0; k--) if (t[k]) return k;
+  return -1;
+}
+
+// ---------------------------------------------------------------------------
 // Block model
 // ---------------------------------------------------------------------------
 
@@ -268,9 +395,11 @@ export function parseResumeHeader(headerLines: string[]): ParsedResumeHeader {
   const cleaned = headerLines.map((l) => l.trim()).filter(Boolean);
   const nameLine = cleaned[0] || "";
   const isContact = (l: string) =>
-    l.includes("|") || l.includes("@") || l.includes("•");
-  const contactLine = cleaned.slice(1).find(isContact) || "";
-  const rest = cleaned.slice(1).filter((l) => l !== contactLine);
+    l.includes("|") || l.includes("@") || l.includes("\u2022");
+  // Review M4: a phone, a web address or a "City, ST" line alone is contact too, never the headline or the
+  // note. One line is the contact line; any other contact-like line goes on to the body (splitResumeHeader).
+  const contactLine = cleaned.slice(1).find(isContact) || cleaned.slice(1).find((l) => CONTACT_LIKE_RE.test(l)) || "";
+  const rest = cleaned.slice(1).filter((l) => l !== contactLine && !CONTACT_LIKE_RE.test(l));
   const headlineLine = rest[0] || "";
   const publicNotesLine = rest[1] || "";
   return { nameLine, headlineLine, contactLine, publicNotesLine };
@@ -383,6 +512,7 @@ export function parseResumeBlocks(content: string): Block[] {
   // --- Pass 2: body (route: main loop, skipping header lines) ---
   const headerSet = new Set(headerLines.map((l) => l.trim()));
   let pastHeader = false;
+  const body: string[] = [];
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -395,12 +525,36 @@ export function parseResumeBlocks(content: string): Block[] {
       }
       pastHeader = true;
     }
+    body.push(trimmed);
+  }
 
+  // Phase 6 (review L3): the same page the renderer draws. A lone headline line
+  // after a blank goes under the name; in a jobs section a job's dates line sits
+  // on its title row and every other line under a job is a bullet.
+  const hl = bodyHeadlineIndex(body, { nameLine, headlineLine });
+  if (hl >= 0) {
+    const nameAt = blocks.findIndex((b) => b.type === "name");
+    blocks.splice(nameAt + 1, 0, { type: "headline", text: body[hl], label: "Headline" });
+    body.splice(0, hl + 1);
+  }
+  const roles = jobLineRoles(body);
+
+  body.forEach((trimmed, i) => {
     if (!trimmed) {
       blocks.push({ type: "blank", text: "", label: "Spacing" });
-      continue;
+      return;
     }
-
+    const role = roles[i];
+    if (role === "years") return; // drawn on the job's title row
+    if (role === "bullet") {
+      const bulletText = stripBulletMarker(trimmed);
+      blocks.push({ type: "bullet", text: bulletText, label: shortLabel(bulletText) });
+      return;
+    }
+    if (role === "job") {
+      blocks.push({ type: "jobTitle", text: trimmed, label: shortLabel(trimmed) });
+      return;
+    }
     const type = classifyResumeLine(trimmed);
     if (type === "section") {
       blocks.push({ type, text: trimmed, label: trimmed.toUpperCase() });
@@ -410,7 +564,7 @@ export function parseResumeBlocks(content: string): Block[] {
     } else {
       blocks.push({ type, text: trimmed, label: shortLabel(trimmed) });
     }
-  }
+  });
 
   return blocks;
 }
