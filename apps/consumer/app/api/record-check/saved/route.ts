@@ -14,17 +14,23 @@ import {
   handleSavedPost,
 } from "@/lib/record-check/handler";
 import { realRecordCheckDeps } from "@/lib/record-check/deps";
+import { recordStepOn, switchedOffResponse } from "@/lib/server-switch";
 
 export const dynamic = "force-dynamic";
 
+// Every method answers 404 while the step is off (lib/server-switch.ts).
+
 export async function GET(request: Request) {
+  if (!recordStepOn()) return switchedOffResponse();
   return handleSavedGet(request, realRecordCheckDeps());
 }
 
 export async function POST(request: Request) {
+  if (!recordStepOn()) return switchedOffResponse();
   return handleSavedPost(request, realRecordCheckDeps());
 }
 
 export async function DELETE(request: Request) {
+  if (!recordStepOn()) return switchedOffResponse();
   return handleSavedDelete(request, realRecordCheckDeps());
 }

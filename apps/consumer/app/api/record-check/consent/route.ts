@@ -13,17 +13,23 @@ import {
   handleConsentPost,
 } from "@/lib/record-check/handler";
 import { realRecordCheckDeps } from "@/lib/record-check/deps";
+import { recordStepOn, switchedOffResponse } from "@/lib/server-switch";
 
 export const dynamic = "force-dynamic";
 
+// Every method answers 404 while the step is off (lib/server-switch.ts).
+
 export async function GET(request: Request) {
+  if (!recordStepOn()) return switchedOffResponse();
   return handleConsentGet(request, realRecordCheckDeps());
 }
 
 export async function POST(request: Request) {
+  if (!recordStepOn()) return switchedOffResponse();
   return handleConsentPost(request, realRecordCheckDeps());
 }
 
 export async function DELETE(request: Request) {
+  if (!recordStepOn()) return switchedOffResponse();
   return handleConsentDelete(request, realRecordCheckDeps());
 }

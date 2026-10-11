@@ -11,6 +11,7 @@
 import { withRateLimit } from "@/lib/withRateLimit";
 import { handleBuild } from "@/lib/record-check/handler";
 import { realRecordCheckDeps } from "@/lib/record-check/deps";
+import { recordStepOn, switchedOffResponse } from "@/lib/server-switch";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -19,10 +20,17 @@ async function handlePost(request: Request) {
   return handleBuild(request, realRecordCheckDeps());
 }
 
-export const POST = withRateLimit(handlePost, {
+const limited = withRateLimit(handlePost, {
   mode: "user",
   endpoint: "record-check",
   requiredTier: "client",
   // Partner usage is logged as org + endpoint + time only (security r1 F7).
   partnerUsageWithoutUser: true,
 });
+
+// Off until its public copy ships (lib/server-switch.ts): 404 before sign-in,
+// limits or anything else runs.
+export async function POST(request: Request) {
+  if (!recordStepOn()) return switchedOffResponse();
+  return limited(request);
+}

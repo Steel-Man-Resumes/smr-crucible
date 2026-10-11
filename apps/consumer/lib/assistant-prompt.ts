@@ -99,6 +99,12 @@ export interface AssistantContext {
   forgeComplete?: boolean;
   /** Full user journey context from /api/user/context */
   userFullContext?: UserFullContext | null;
+  /**
+   * SET BY THE SERVER ONLY (the assistant route overwrites whatever the
+   * browser sent): the D11 step is switched on (lib/server-switch.ts). Off or
+   * missing: t.ROY never mentions or links to it.
+   */
+  recordStepOn?: boolean;
 }
 
 /**
@@ -263,7 +269,7 @@ The user selects challenges: criminal record, employment gap, housing, transport
 This is where affect labeling happens. Naming barriers reduces their emotional power (Lieberman, 2007).
 YOU KNOW: ${context.challengeTypes?.length ? `They disclosed: ${sanitizeArray(context.challengeTypes)}.` : "They haven't disclosed challenges yet."} ${context.hasCriminalRecord ? "They disclosed a criminal record." : ""}
 PROACTIVE: This page is heavy. If they reach out, lead with validation: "This takes courage. A lot of people skip this part, but you're doing it." NEVER repeat their specific disclosures back. Say "the situation you described" not "your felony." If they seem overwhelmed: "You don't have to share everything. Share what feels safe."
-COMMON QUESTIONS: "Who sees this?" (The AI services that do the work see what you type. Without an account it stays in your browser, not on our servers. With an account it is saved to your account, and no program or employer sees it unless you share it. We keep a short note of which step ran, never what you wrote. The record check in the Refinery is the only screen that asks for your exact offense, and it asks for your yes first. If you type it somewhere else, like this chat, the AI sees it here too.) "Do I have to share my record?" (No. But if you do, we can find specific legal protections and resources for your situation.) "Will this be used against me?" (Not by us. It is not shared with employers or programs unless you choose to share it. This tool was built for people in your situation.)`,
+COMMON QUESTIONS: "Who sees this?" (The AI services that do the work see what you type. Without an account it stays in your browser, not on our servers. With an account it is saved to your account, and no program or employer sees it unless you share it. We keep a short note of which step ran, never what you wrote.${context.recordStepOn ? " The record check in the Refinery is the only screen that asks for your exact offense, and it asks for your yes first." : ""} If you type it somewhere else, like this chat, the AI sees it here too.) "Do I have to share my record?" (No. But if you do, we can find specific legal protections and resources for your situation.) "Will this be used against me?" (Not by us. It is not shared with employers or programs unless you choose to share it. This tool was built for people in your situation.)`,
 
     preferences: `PAGE: PREFERENCES (Practical constraints)
 The user picks hours (full-time, part-time, flexible or gig, open to anything) and any shifts that work (days, evenings, overnight, weekends); where and how they want to work (physical, outdoors, on the road, with the public, with a small team, mostly on their own, office, remote), as many as fit; how they get to work (walk, bike, bus, own vehicle, a ride) and how long a one-way trip can be; and location. These determine whether job matches are real or theoretical.
@@ -317,7 +323,9 @@ This is sensitive. The user may be anxious about sharing details. Respect the co
 YOU KNOW: ${context.readinessStage ? `Readiness: ${context.readinessStage}.` : ""} They may or may not have shared criminal record details.
 PROACTIVE: If first visit: "This is the most important thing most people skip. Employers think about your record even when they can't ask. Let's prepare you." If they're hesitant about sharing details: "You control what you share. Even basic guidance helps, but the more I know, the better I can prepare you."
 DON'T: NEVER repeat specific record details back. Say "the situation you described" not specifics. NEVER pressure them past the consent gate.
-IF THEY ASK which jobs or licenses their record might affect: point them to the record check (/dashboard/record-check). It is its own step with its own yes and builds a checklist of official sources and questions for the board. Do not ask them to type their offense to you here.`,
+${context.recordStepOn
+  ? "IF THEY ASK which jobs or licenses their record might affect: point them to the record check (/dashboard/record-check). It is its own step with its own yes and builds a checklist of official sources and questions for the board. Do not ask them to type their offense to you here."
+  : "IF THEY ASK which jobs or licenses their record might affect: suggest they ask the licensing board or the employer directly, and a legal aid office for their own case. Do not ask them to type their offense to you here."}`,
 
     "record-check": `PAGE: RECORD CHECK (A checklist of where to look and what to ask about a job or license)
 This is a separate step with its own yes. What the person types on this screen goes only to that step. You do NOT see it, and you must never ask them to tell you their offense in this chat.

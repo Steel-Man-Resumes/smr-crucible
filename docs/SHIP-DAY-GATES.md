@@ -60,3 +60,17 @@ To turn it on:
    503 means the entitlement tables are missing. The sponsored tools then
    answer "temporarily unavailable" (they never open by accident). Fix the
    migration, or set the gate back to `off`.
+
+## 3. Record check (decided 2026-10-10: off until its public copy ships)
+
+`RECORD_CHECK_ENABLED` (server, read per request), off by default. While
+off, every `/api/record-check` route answers 404, `/dashboard/record-check`
+is a 404, the entry card on the disclosure planner is hidden, and the partner
+FAQ and t.ROY do not describe or link to it. Saved checklists (if any) still
+come with a data export and go with a data delete.
+
+Turn it on only on the day the privacy page, partner FAQ, public site and
+funder answers ship with the same retention wording as
+`apps/consumer/lib/record-check/copy.ts`: set `RECORD_CHECK_ENABLED=on` in
+Production and redeploy (the host applies a settings change to new
+deployments only).
