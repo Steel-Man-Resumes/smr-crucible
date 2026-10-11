@@ -8,7 +8,9 @@ import {
   limitResetLabel,
   elapsedLabel,
   buildFailure,
+  pageLines,
   STRONG_NOTE,
+  READ_NOTE,
   TOUR_CAP,
 } from "../showstopper-tour";
 import { DEMO_SESSION } from "../demo-data";
@@ -259,4 +261,63 @@ test("other failures say what happened in plain words", () => {
     const f = buildFailure(c);
     assert.doesNotMatch(f.title + f.body, /[–—]|--|error code|exception|\d{3}/i, `${c}: ${f.body}`);
   }
+});
+
+// ---- Round 2 (review s3 r1) -----------------------------------------------
+
+test("r1 H1: a page of bare task lines is marked, never called strong", () => {
+  const page = `Pat Example
+Billings, MT | pat.example@example.com
+Cashier and stocker at Safeway for three years.
+
+EXPERIENCE
+Cashier at Safeway | 2019 - 2022
+Cooking
+Cleaning
+Register`;
+  const tour = buildResumeTour(page)!;
+  assert.equal(tour.strongNote, undefined);
+  assert.ok(tour.steps.some((s) => s.line === "Cooking"));
+});
+
+test("r1 H1: nothing marked but no proof of strength gets a neutral line, not praise", () => {
+  const page = `Pat Example
+Billings, MT | pat.example@example.com
+Cashier
+
+EXPERIENCE
+Cashier | Safeway | 2019 - 2022
+Cashier | Corner Mart | 2016 - 2019`;
+  const tour = buildResumeTour(page)!;
+  assert.equal(tour.steps.length, 0);
+  assert.equal(tour.strongNote, undefined);
+  assert.equal(tour.readNote, READ_NOTE);
+  assert.doesNotMatch(READ_NOTE, /strong|great|good|clean/i);
+});
+
+test("r1 L4: follow-up notes describe the line, never promise a fix", () => {
+  const tour = buildResumeTour(WEAK_RESUME)!;
+  const all = tour.steps.map((s) => s.note).join(" ");
+  assert.doesNotMatch(all, /\bIt gets\b|gets broken|\bwill be\b|I'll fix|I will fix/i);
+  const src = readFileSync(join(import.meta.dirname, "..", "showstopper-tour.ts"), "utf8");
+  assert.doesNotMatch(src, /It gets a real verb|gets broken into bullets/);
+});
+
+test("r1 L6: a mark lands on the copy of a repeated line it is about", () => {
+  const page = `Joy Example
+Havre, MT | joy.example@example.com
+Clerk
+
+SKILLS
+Cleaning
+
+EXPERIENCE
+Clerk | Hi-Line Market | Havre, MT | 2020 - 2024
+Cleaning
+Stocking`;
+  const tour = buildResumeTour(page)!;
+  const lines = pageLines(page);
+  const step = tour.steps.find((s) => s.line === "Cleaning")!;
+  assert.ok(step);
+  assert.equal(step.lineIndex, lines.lastIndexOf("Cleaning"), "the job copy, not the skills copy");
 });

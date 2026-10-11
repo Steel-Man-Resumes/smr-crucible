@@ -156,7 +156,7 @@ export default function ProcessingPage() {
   const building = isDemo || !failure;
   const intro = tour
     ? tour.steps.length
-      ? "Here's what I see on your page now, and what the new one does instead."
+      ? "Here's what I see on your page now, top to bottom."
       : "I looked over your page."
     : jobs.length
       ? building

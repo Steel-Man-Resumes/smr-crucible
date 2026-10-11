@@ -184,9 +184,9 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
 
       {/* t.ROY's notes, in reading order */}
       <section aria-label="What t.ROY sees" className="min-w-0 lg:col-start-2 lg:row-start-2">
-        {tour.strongNote ? (
+        {tour.strongNote || tour.readNote ? (
           <p className="border-l-4 border-ws-amber bg-t-panel-2 px-4 py-3 text-base text-t-white" role="status">
-            {tour.strongNote}
+            {tour.strongNote ?? tour.readNote}
           </p>
         ) : (
           <>

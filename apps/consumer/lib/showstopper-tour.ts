@@ -21,7 +21,7 @@ import {
   checkCredentialStatus,
   type MintFinding,
 } from "@crucible/core/src/resumeMintCheckShared";
-import { runQualityCheck, type QualityFinding } from "@crucible/core/src/resumeQualityRules";
+import { runQualityCheck, pageLooksStrong, type QualityFinding } from "@crucible/core/src/resumeQualityRules";
 
 export interface TourStep {
   /** Stable key for React lists. */
@@ -43,13 +43,20 @@ export interface ResumeTour {
   lines: string[];
   /** In page order, top to bottom. */
   steps: TourStep[];
-  /** Set only when neither checker found anything: an honest word, never a fake flaw. */
+  /**
+   * Set only when neither checker found anything AND the page shows positive
+   * signs of strength (a summary or headline, an experience heading, action
+   * bullets). Never shown on a page with weak lines.
+   */
   strongNote?: string;
+  /** Nothing marked, but no proof of strength either: a neutral word, no praise. */
+  readNote?: string;
 }
 
 export const TOUR_CAP = 8;
 
 export const STRONG_NOTE = "This is already strong. I'll tighten it.";
+export const READ_NOTE = "I read it top to bottom. Here's what the new page tightens.";
 
 const YEAR_RE = /\b(?:19[5-9]\d|20[0-4]\d)\b/;
 
@@ -118,6 +125,19 @@ export function pageLines(text: string): string[] {
 }
 
 /** Index of the raw line a finding is about, or -1 when it can't be placed. */
+/** Index of the nth exact copy of a line (quality findings say which copy). */
+function anchorNth(lines: string[], findingLine: string, nth: number): number {
+  const want = findingLine.trim();
+  if (!want) return -1;
+  let seen = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() !== want) continue;
+    if (seen === nth) return i;
+    seen++;
+  }
+  return anchorOf(lines, findingLine);
+}
+
 function anchorOf(lines: string[], findingLine: string): number {
   const want = findingLine.trim();
   if (!want) return -1;
@@ -145,12 +165,12 @@ function looksLikeFalseAlarm(f: MintFinding, lines: string[], at: number): boole
 // Short follow-ups when the same kind of weak line shows up again.
 const QUALITY_AGAIN: Record<string, string> = {
   duty_phrasing: "Same thing here: this says what the job was, not what you did.",
-  weak_bullet: "Same here: a task with no action. It gets a real verb.",
-  bullets: "Another block of words. It gets broken into bullets too.",
+  weak_bullet: "Same here: this line needs a real action.",
+  bullets: "Same here: words under a job, not bullets.",
   generic_summary: "This one could sit on anybody's page too.",
   heading: "Same with this heading.",
 };
-const QUALITY_AGAIN_DEFAULT = "Same kind of fix on this line.";
+const QUALITY_AGAIN_DEFAULT = "Same kind of weak spot on this line.";
 
 /** Truth problems that block first, then the quality marks, then truth fixes. */
 const RANK = { BLOCK: 0, weak: 1, missing: 1, FIX: 2 } as const;
@@ -185,7 +205,7 @@ export function buildResumeTour(resumeText: string | undefined | null, cap: numb
     placed.push({ at, key: noteKey(f), severity: f.severity, source: "truth", rule: f.rule });
   }
   for (const f of quality) {
-    const at = anchorOf(lines, f.line);
+    const at = anchorNth(lines, f.line, f.occurrence ?? 0);
     if (at < 0) continue;
     placed.push({ at, key: `q:${f.rule}`, severity: f.severity, source: "quality", why: f.why, rule: f.rule });
   }
@@ -231,7 +251,10 @@ export function buildResumeTour(resumeText: string | undefined | null, cap: numb
     };
   });
 
-  return steps.length ? { lines, steps } : { lines, steps, strongNote: STRONG_NOTE };
+  if (steps.length) return { lines, steps };
+  // Silence is not praise: "strong" only on positive evidence and no truth flags at all.
+  const strong = truth.length === 0 && pageLooksStrong(text);
+  return strong ? { lines, steps, strongNote: STRONG_NOTE } : { lines, steps, readNote: READ_NOTE };
 }
 
 // ---- Jobs the person typed (no page to mark up) ---------------------------

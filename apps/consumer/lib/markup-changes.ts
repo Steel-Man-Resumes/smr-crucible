@@ -34,27 +34,39 @@ const cleanWhy = (s: string) => normLine(s).replace(/\s*(?:[\u2013\u2014]|-{2})\
 
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 
+// A bullet mark at the start of a line: the only text allowed around a change.
+const BULLET_MARK_RE = /^[-*\u2022\u00b7\u25aa\u25cf\u25e6\u2023\u2013\u2014]\s*/;
+/** A line without its bullet mark, whitespace-normalized. */
+export const lineBody = (s: string) => normLine(s).replace(BULLET_MARK_RE, "").trim();
+
+/** The whole lines of a text, bullet marks off, as a set. */
+function wholeLines(text: string): Set<string> {
+  return new Set(text.replace(/\r\n?/g, "\n").split("\n").map(lineBody).filter(Boolean));
+}
+
 /**
- * The changes this page may show: right shape, `old` found in the person's
- * own text, `new` found in the finished resume, a real change, no repeats,
- * at most MAX_CHANGES. Anything else is dropped without a word.
+ * The changes this page may show: right shape, `old` is a whole line of the
+ * person's own text, `new` is a whole line of the finished resume (bullet
+ * marks aside), a real change, no repeats, at most MAX_CHANGES. Anything else
+ * is dropped without a word. Whole lines only, so nothing can be typed that
+ * sits on neither page.
  */
 export function readChanges(raw: unknown, personText: string, finalResume: string): MarkupChange[] {
   if (!Array.isArray(raw)) return [];
-  const person = normLine(personText ?? "");
-  const final = normLine(finalResume ?? "");
-  if (!person || !final) return [];
+  const person = wholeLines(personText ?? "");
+  const final = wholeLines(finalResume ?? "");
+  if (!person.size || !final.size) return [];
   const out: MarkupChange[] = [];
   const seen = new Set<string>();
   for (const item of raw) {
     if (out.length >= MAX_CHANGES) break;
     if (!item || typeof item !== "object") continue;
     const r = item as Record<string, unknown>;
-    const oldLine = normLine(str(r.old));
-    const newLine = normLine(str(r.new));
+    const oldLine = lineBody(str(r.old));
+    const newLine = lineBody(str(r.new));
     const why = cleanWhy(str(r.why));
     if (!oldLine || !newLine || !why || oldLine === newLine) continue;
-    if (!person.includes(oldLine) || !final.includes(newLine)) continue;
+    if (!person.has(oldLine) || !final.has(newLine)) continue;
     if (seen.has(oldLine)) continue;
     seen.add(oldLine);
     out.push({ old: oldLine, new: newLine, why, rule: normLine(str(r.rule)).slice(0, 40) });
@@ -66,39 +78,32 @@ export interface RevealStep {
   id: string;
   /** Index into the page lines, or -1 when the change could not be placed on one line. */
   lineIndex: number;
-  /** Text on the line before and after the changed part (the bullet mark, say). */
+  /** The bullet mark in front of the line, or "". */
   before: string;
+  /** Always "" now (whole lines only); kept for the renderer. */
   after: string;
   change: MarkupChange;
 }
 
 /**
- * Put each change on its line of the page, top to bottom. A change whose old
- * text is not on a single line (or whose line already holds a change) is
- * still shown, after the page, with no line of its own.
+ * Put each change on its line of the page, top to bottom. A change matches a
+ * line only as the whole line (its bullet mark aside). One that matches no
+ * free line is still shown, after the page, with no line of its own.
  */
 export function planReveal(lines: string[], changes: MarkupChange[]): RevealStep[] {
-  const normed = lines.map(normLine);
+  const bodies = lines.map(lineBody);
   const used = new Set<number>();
   const placed: RevealStep[] = [];
   const loose: RevealStep[] = [];
   changes.forEach((change, k) => {
-    let at = normed.findIndex((l, i) => !used.has(i) && l === change.old);
-    if (at < 0) at = normed.findIndex((l, i) => !used.has(i) && l.includes(change.old));
+    const at = bodies.findIndex((b, i) => !used.has(i) && b === change.old);
     if (at < 0) {
       loose.push({ id: `loose-${k}`, lineIndex: -1, before: "", after: "", change });
       return;
     }
     used.add(at);
-    const l = normed[at];
-    const start = l.indexOf(change.old);
-    placed.push({
-      id: `line-${at}`,
-      lineIndex: at,
-      before: l.slice(0, start),
-      after: l.slice(start + change.old.length),
-      change,
-    });
+    const mark = normLine(lines[at]).match(BULLET_MARK_RE)?.[0] ?? "";
+    placed.push({ id: `line-${at}`, lineIndex: at, before: mark, after: "", change });
   });
   placed.sort((a, b) => a.lineIndex - b.lineIndex);
   return [...placed, ...loose];
@@ -112,19 +117,58 @@ export const STRIKE_MS = 700;
 export const CHAR_MS = 28;
 /** ...but never longer than this. */
 export const TYPE_MAX_MS = 1800;
-/** Then the reason sits long enough to read. */
+/** A whole replay aims to fit in about this long; many changes play faster. */
+export const REPLAY_BUDGET_MS = 75_000;
+/** Floors, so even a fast change can be read. */
+const MIN_STRIKE_MS = 250;
+const MIN_TYPE_MS = 300;
+const MIN_READ_MS = 1300;
+
+/** How long the reason sits at full pace. */
 export function readMs(why: string): number {
   return Math.min(4800, Math.max(2200, why.length * 30));
 }
 
-/** How many characters of `text` show after `elapsed` ms of typing. */
-export function typedChars(text: string, elapsed: number): number {
-  if (elapsed <= 0) return 0;
-  const per = Math.min(CHAR_MS, TYPE_MAX_MS / Math.max(1, text.length));
-  return Math.min(text.length, Math.floor(elapsed / per));
+export interface StepPace {
+  strike: number;
+  type: number;
+  read: number;
+  total: number;
 }
 
-/** The whole time one change takes on screen. */
+const fullPace = (c: MarkupChange): StepPace => {
+  const strike = STRIKE_MS;
+  const type = Math.min(TYPE_MAX_MS, c.new.length * CHAR_MS);
+  const read = readMs(c.why);
+  return { strike, type, read, total: strike + type + read };
+};
+
+/**
+ * The pace for each change. Full pace when the whole replay fits the budget;
+ * otherwise every phase is scaled down (never below the floors), so even
+ * forty changes finish in about a minute and a half.
+ */
+export function paceFor(changes: MarkupChange[]): StepPace[] {
+  const full = changes.map(fullPace);
+  const sum = full.reduce((a, p) => a + p.total, 0);
+  const f = sum > REPLAY_BUDGET_MS ? REPLAY_BUDGET_MS / sum : 1;
+  return full.map((p) => {
+    if (f === 1) return p;
+    const strike = Math.max(MIN_STRIKE_MS, Math.round(p.strike * f));
+    const type = Math.max(MIN_TYPE_MS, Math.round(p.type * f));
+    const read = Math.max(MIN_READ_MS, Math.round(p.read * f));
+    return { strike, type, read, total: strike + type + read };
+  });
+}
+
+/** How many characters of `text` show after `elapsed` ms of a `duration` ms typing phase. */
+export function typedChars(text: string, elapsed: number, duration: number = Math.min(TYPE_MAX_MS, text.length * CHAR_MS)): number {
+  if (elapsed <= 0) return 0;
+  if (elapsed >= duration) return text.length;
+  return Math.min(text.length, Math.floor((elapsed / Math.max(1, duration)) * text.length));
+}
+
+/** The whole time one change takes on screen at full pace. */
 export function stepMs(change: MarkupChange): number {
-  return STRIKE_MS + Math.min(TYPE_MAX_MS, change.new.length * CHAR_MS) + readMs(change.why);
+  return fullPace(change).total;
 }

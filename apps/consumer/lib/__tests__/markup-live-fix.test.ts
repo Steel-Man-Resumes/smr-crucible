@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { readChanges, planReveal, typedChars, stepMs, readMs, MAX_CHANGES, CHAR_MS, TYPE_MAX_MS, type MarkupChange } from "../markup-changes";
+import { readChanges, planReveal, paceFor, typedChars, stepMs, readMs, MAX_CHANGES, CHAR_MS, TYPE_MAX_MS, REPLAY_BUDGET_MS, type MarkupChange } from "../markup-changes";
 import { pageLines, buildResumeTour } from "../showstopper-tour";
 import { LiveFix } from "../../components/forge/markup/LiveFix";
 import { ChangesList } from "../../components/forge/markup/ChangesList";
@@ -185,7 +185,8 @@ test("the walk while the writer works shows the person's page and t.ROY's marks"
   assert.ok(tour.steps.length >= 3);
   const html = renderToStaticMarkup(React.createElement(MarkupWalk, { tour, reduced: true }));
   assert.match(html, /data-testid="markup-walk"/);
-  assert.match(html, /what I(&#x27;|')m fixing/);
+  assert.match(html, /here(&#x27;|')s what I see/);
+  assert.doesNotMatch(html, /fixing/, "the walk describes, it does not promise (r1 L4)");
   assert.match(html, /Seeking a position/);
   assert.ok(tour.steps.some((s) => /what you want/i.test(s.note)), "the objective gets its note");
 });
@@ -211,4 +212,61 @@ test("copy a job seeker reads in the markup has no long dashes", () => {
       .replace(/^\s*\/\/.*$/gm, "");
     assert.doesNotMatch(visible, /[\u2013\u2014]/, f);
   }
+});
+
+// ---- Round 2 (review s3 r1) -----------------------------------------------
+
+test("r1 L1: only whole lines match, so nothing is typed that sits on neither page", () => {
+  const person = "Pat Example\n- Responsible for running the roller and paver on 3 crews";
+  const final = "Pat Example\n- Ran the roller and paver on 3 crews.";
+  // Part of a line, old or new: dropped.
+  assert.deepEqual(readChanges([{ old: "Responsible for", new: "Ran the roller", why: "w", rule: "r" }], person, final), []);
+  assert.deepEqual(readChanges([{ old: "Pat", new: "Ran", why: "w", rule: "r" }], person, final), []);
+  // Whole lines (bullet mark aside): kept, and the mark stays on the page.
+  const ok = readChanges(
+    [{ old: "- Responsible for running the roller and paver on 3 crews", new: "Ran the roller and paver on 3 crews.", why: "w", rule: "r" }],
+    person,
+    final
+  );
+  assert.equal(ok.length, 1);
+  const steps = planReveal(pageLines(person), ok);
+  assert.equal(steps[0].lineIndex, 1);
+  assert.equal(steps[0].before, "- ");
+  assert.equal(steps[0].after, "");
+});
+
+test("r1 L7: a full replay of forty changes stays within about ninety seconds", () => {
+  const many: MarkupChange[] = Array.from({ length: MAX_CHANGES }, (_, k) => ({
+    old: `Did task number ${k} on the floor.`,
+    new: `Finished task number ${k} on the floor for the morning crew and logged it.`,
+    why: "A strong verb shows the work, and a reader skims for the action first, so the line now leads with it.",
+    rule: "duty_phrasing",
+  }));
+  const pace = paceFor(many);
+  const total = pace.reduce((a, p) => a + p.total, 0);
+  assert.ok(total <= 90_000, `replay takes ${total} ms`);
+  for (const p of pace) assert.ok(p.read >= 1300, "each reason still gets time to read");
+  // A short replay plays at full pace.
+  const few = paceFor(many.slice(0, 3));
+  assert.deepEqual(few.map((p) => p.total), many.slice(0, 3).map(stepMs));
+  assert.ok(REPLAY_BUDGET_MS >= 60_000 && REPLAY_BUDGET_MS <= 90_000);
+});
+
+test("r1 L5: the strike is a real line-through, so wrapped lines are struck on every row", () => {
+  const src = read("components/forge/markup/LiveFix.tsx");
+  assert.match(src, /line-through/);
+  assert.doesNotMatch(src, /top-1\/2 h-\[2px\]/);
+});
+
+test("r1 L7: Skip is the obvious button while the replay plays", () => {
+  const html = renderToStaticMarkup(
+    React.createElement(LiveFix, { lines: pageLines(PERSON), changes: verified(), reduced: false, onDone: () => {} })
+  );
+  assert.match(html, /Skip to my finished page/);
+  assert.match(html, /data-testid="live-fix-skip"[^>]*>|class="[^"]*bg-t-amber[^"]*"[^>]*data-testid="live-fix-skip"/);
+});
+
+test("r1 L2: 'Show me around' is hidden while the live fix plays", () => {
+  const src = read("app/(forge)/output/page.tsx");
+  assert.match(src, /\{ready && !liveFixOn && \(\s*<button\s+onClick=\{\(\) => setTourOpen\(true\)\}/);
 });

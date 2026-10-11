@@ -15,7 +15,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SkipForward } from "lucide-react";
 import { TroyMark } from "@crucible/consumer-ui";
-import { planReveal, stepMs, typedChars, STRIKE_MS, CHAR_MS, TYPE_MAX_MS, type MarkupChange } from "@/lib/markup-changes";
+import { planReveal, paceFor, typedChars, type MarkupChange } from "@/lib/markup-changes";
 import { ChangesList } from "./ChangesList";
 
 const TICK_MS = 40;
@@ -43,6 +43,9 @@ export function LiveFix({
     return m;
   }, [steps]);
   const loose = steps.map((s, k) => ({ s, k })).filter(({ s }) => s.lineIndex < 0);
+  // A full replay stays around a minute, a minute and a half at most: with
+  // many changes each one plays faster.
+  const pace = useMemo(() => paceFor(steps.map((s) => s.change)), [steps]);
 
   const [i, setI] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -60,11 +63,11 @@ export function LiveFix({
 
   useEffect(() => {
     if (still || done) return;
-    if (elapsed >= stepMs(steps[i].change)) {
+    if (elapsed >= pace[i].total) {
       setI((n) => n + 1);
       setElapsed(0);
     }
-  }, [elapsed, still, done, i, steps]);
+  }, [elapsed, still, done, i, pace]);
 
   // After the last one, settle into the finished page.
   useEffect(() => {
@@ -103,29 +106,27 @@ export function LiveFix({
     );
   }
 
-  const typeMs = (c: MarkupChange) => Math.min(TYPE_MAX_MS, c.new.length * CHAR_MS);
-
   /** One changed line, in whatever state it is in right now. */
   const renderChange = (k: number) => {
     const s = steps[k];
     const c = s.change;
     if (k > i) return <>{s.before}{c.old}{s.after}</>;
     const current = k === i;
-    const strike = current ? Math.min(1, elapsed / STRIKE_MS) : 1;
-    const typed = current ? typedChars(c.new, elapsed - STRIKE_MS) : c.new.length;
-    const typing = current && elapsed >= STRIKE_MS && typed < c.new.length;
-    const showWhy = current && elapsed >= STRIKE_MS + typeMs(c);
+    const p = pace[k];
+    const struck = !current || elapsed > 0;
+    const typed = current ? typedChars(c.new, elapsed - p.strike, p.type) : c.new.length;
+    const typing = current && elapsed >= p.strike && typed < c.new.length;
+    const showWhy = current && elapsed >= p.strike + p.type;
     return (
       <>
         <span className={`block ${current ? "" : "text-[11px] opacity-60"}`}>
           {s.before}
-          <span className="relative">
+          {/* A real line-through, so a line that wraps on a phone is struck on every row. */}
+          <span
+            className={`line-through decoration-2 transition-[text-decoration-color] ${struck ? "decoration-ws-red-bright" : "decoration-transparent"}`}
+            style={{ transitionDuration: `${p.strike}ms` }}
+          >
             {c.old}
-            <span
-              aria-hidden="true"
-              className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 bg-ws-red-bright"
-              style={{ width: `${strike * 100}%` }}
-            />
           </span>
           {s.after}
         </span>
@@ -170,11 +171,11 @@ export function LiveFix({
           <button
             type="button"
             onClick={onDone}
-            className="t-focus inline-flex min-h-touch items-center gap-2 border border-t-line px-3 font-term text-xs text-t-white hover:border-ws-amber"
+            className="t-focus inline-flex min-h-touch items-center gap-2 bg-t-amber px-4 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright"
             data-testid="live-fix-skip"
           >
-            <SkipForward size={14} aria-hidden="true" />
-            {done ? "See my finished page" : "Skip"}
+            <SkipForward size={16} aria-hidden="true" />
+            {done ? "See my finished page" : "Skip to my finished page"}
           </button>
         </div>
       </div>

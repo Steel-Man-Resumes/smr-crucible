@@ -1012,7 +1012,7 @@ function OutputPageInner() {
             </p>
           )}
         </div>
-        {ready && (
+        {ready && !liveFixOn && (
           <button
             onClick={() => setTourOpen(true)}
             className="t-focus min-h-touch w-full shrink-0 border border-t-line px-3 py-2 text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white sm:w-auto"
