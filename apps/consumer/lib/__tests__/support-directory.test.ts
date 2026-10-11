@@ -14,7 +14,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { searchSupport, fromDirectory, directoryScope, requestedWants, type SupportSearchDeps } from "../support-search";
-import { resourceAppSql, type ResourceAppRow } from "@crucible/core/src/resourceDirectoryShared";
+import { resourceAppSql, RESOURCE_APP_LIMIT, type ResourceAppRow, type ResourcePlaceQuery } from "@crucible/core/src/resourceDirectoryShared";
+import { foldName } from "../location-search";
+import { countyKeyOf } from "../support-location";
 import type { CounselorResult } from "../hud-counselors";
 import { loadPlaceIndex, countiesIn, countiesOf, PLACE_FILE } from "../support-place-index";
 import { parsePlace } from "../support-location";
@@ -43,15 +45,33 @@ const ROWS: ResourceAppRow[] = [
   row({ service_id: "us-food-finder", area_id: "food", geo_scope: "national", state: "DC", org_name: "Sample Food Finder" }),
 ];
 
-/** The view's WHERE, as resourceAppSql writes it: the asked areas, and national or the person's state. */
+/**
+ * The view's WHERE and ORDER BY, as resourceAppSql writes them, in JS: the
+ * asked areas; national rows; the state's statewide rows; its county and
+ * city rows that match the place's counties, city or ZIP; closest first, then
+ * newest; at most RESOURCE_APP_LIMIT. The real SQL runs against the real
+ * view in the PGlite proof, including a 250-row state.
+ */
 function fakeReader(rows = ROWS) {
-  const calls: Array<{ state: string | null; areas: readonly string[] }> = [];
+  const calls: ResourcePlaceQuery[] = [];
   const read: NonNullable<SupportSearchDeps["readDirectory"]> = async (opts) => {
     calls.push(opts);
     const { params } = resourceAppSql(opts);
     const areas = params[0] as string[];
-    const state = params.length === 3 ? (params[1] as string) : null;
-    return rows.filter((r) => areas.includes(r.area_id) && (r.geo_scope === "national" || (state !== null && r.state === state)));
+    const state = params.length === 6 ? (params[1] as string) : null;
+    const keys = state ? (params[2] as string[]) : [];
+    const cityKey = state ? (params[3] as string | null) : null;
+    const zip = state ? (params[4] as string | null) : null;
+    const cityHit = (r: ResourceAppRow) => (!!r.city && foldName(r.city) === cityKey) || (!!r.zip && r.zip.slice(0, 5) === zip);
+    const rank: Record<string, number> = { city: 0, county: 1, multi_county: 1, statewide: 2, national: 3 };
+    return rows
+      .filter((r) => areas.includes(r.area_id) && (r.geo_scope === "national" || (state !== null && r.state === state && (
+        r.geo_scope === "statewide"
+        || (r.geo_scope === "city" && cityHit(r))
+        || ((r.geo_scope === "county" || r.geo_scope === "multi_county")
+            && ([r.county, ...(r.counties ?? [])].some((c) => !!c && keys.includes(countyKeyOf(c))) || cityHit(r)))))))
+      .sort((a, b) => rank[a.geo_scope] - rank[b.geo_scope] || b.last_checked.localeCompare(a.last_checked))
+      .slice(0, RESOURCE_APP_LIMIT);
   };
   return { read, calls };
 }
@@ -144,8 +164,8 @@ describe("directory first", () => {
     await run({ category: "employment", location: "Springfield" }, read);
     await run({ category: "nonsense", location: "Libby, MT" }, read);
     assert.deepEqual(calls, [
-      { state: "MT", areas: ["shelter"] },
-      { state: null, areas: ["jobs", "training"] },
+      { state: "MT", areas: ["shelter"], countyKeys: [], cityKey: "libby", zip: null },
+      { state: null, areas: ["jobs", "training"], countyKeys: [], cityKey: "springfield", zip: null },
     ]);
   });
 
@@ -212,7 +232,7 @@ describe("towns and ZIPs to counties (Census list)", () => {
     const cfg = readFileSync(join(CONSUMER, "next.config.mjs"), "utf8");
     assert.match(cfg, /"\/api\/resources-search": \["\.\/public\/forge-data\/us-places-2020\.v1\.json"\]/);
     const src = readFileSync(join(CONSUMER, "app", "api", "resources-search", "route.ts"), "utf8");
-    assert.match(src, /countiesOf \}/);
+    assert.match(src, /countiesOf, isPlaceIn \}/);
   });
 });
 
@@ -241,13 +261,18 @@ describe("pieces", () => {
   });
 
   test("the SQL keeps place and areas as parameters", () => {
-    const { sql, params } = resourceAppSql({ state: "MT", areas: ["food", "x'; DROP"] });
+    const { sql, params } = resourceAppSql({ state: "MT", areas: ["food", "x'; DROP"], countyKeys: ["lincoln", "x'; DROP"], cityKey: "libby'--", zip: "5992" });
     assert.match(sql, /FROM resource_app_v/);
-    assert.doesNotMatch(sql, /MT|food|DROP/);
-    assert.deepEqual(params, [["food"], "MT", 200]);
+    assert.doesNotMatch(sql, /'MT'|'food'|DROP|lincoln|libby/);
+    assert.deepEqual(params, [["food"], "MT", ["lincoln"], null, null, 200]);
+    // The place match comes before the limit, closest first.
+    assert.ok(sql.indexOf("= ANY($3::text[])") < sql.indexOf("LIMIT"));
+    assert.match(sql, /ORDER BY CASE geo_scope WHEN 'city' THEN 0/);
     const none = resourceAppSql({ state: "Montana", areas: ["food"] });
     assert.match(none.sql, /geo_scope = 'national'/);
     assert.deepEqual(none.params, [["food"], 200]);
+    assert.deepEqual(resourceAppSql({ state: "MT", areas: ["food"], countyKeys: ["lincoln"], cityKey: "libby", zip: "59923" }).params,
+      [["food"], "MT", ["lincoln"], "libby", "59923", 200]);
   });
 
   test("the route reads the directory and keeps the premium hook", () => {

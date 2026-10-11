@@ -32,7 +32,31 @@ export function loadPlaceIndex(file = join(process.cwd(), PLACE_FILE)): Location
   return cached;
 }
 
-/** Folded county keys for a place's city or ZIP, in its own state only. */
+const prefixCounties = new WeakMap<LocationIndex, Map<string, Set<number>>>();
+
+/** Every county index seen among the listed ZIPs of each three-digit prefix. */
+function countiesByPrefix(index: LocationIndex): Map<string, Set<number>> {
+  let m = prefixCounties.get(index);
+  if (!m) {
+    m = new Map();
+    for (const [zip, [, c]] of index.zips) {
+      if (c < 0) continue;
+      const k = zip.slice(0, 3);
+      if (!m.has(k)) m.set(k, new Set());
+      m.get(k)!.add(c);
+    }
+    prefixCounties.set(index, m);
+  }
+  return m;
+}
+
+/**
+ * Folded county keys for a place's city or ZIP, in its own state only.
+ * A ZIP the Census list leaves out (PO-box-only and single-building ZIPs such
+ * as 20500) falls back to its three-digit prefix, but only when every listed
+ * ZIP with that prefix is in the same one county, so the answer is certain
+ * (review L2). Otherwise the county stays unknown.
+ */
 export function countiesIn(index: LocationIndex, place: Place): string[] {
   if (!place.state) return [];
   const out = new Set<string>();
@@ -43,6 +67,10 @@ export function countiesIn(index: LocationIndex, place: Place): string[] {
   if (place.zip) {
     const hit = index.zips.get(place.zip);
     if (hit) add(hit[1]);
+    else {
+      const seen = countiesByPrefix(index).get(place.zip.slice(0, 3));
+      if (seen && seen.size === 1) add([...seen][0]);
+    }
   }
   if (place.cityKey) {
     const placeIdx = new Set<number>();
@@ -52,7 +80,19 @@ export function countiesIn(index: LocationIndex, place: Place): string[] {
   return [...out];
 }
 
+/** Is this folded name a Census place (or county) in this state? */
+export function placeIn(index: LocationIndex, cityKey: string, state: string): boolean {
+  if (!cityKey || !state) return false;
+  return index.places.some((p) => p.st === state && p.key === cityKey)
+    || index.counties.some((c) => c.st === state && c.key === cityKey);
+}
+
 export function countiesOf(place: Place): string[] {
   const index = loadPlaceIndex();
   return index ? countiesIn(index, place) : [];
+}
+
+export function isPlaceIn(cityKey: string, state: string): boolean {
+  const index = loadPlaceIndex();
+  return index ? placeIn(index, cityKey, state) : false;
 }

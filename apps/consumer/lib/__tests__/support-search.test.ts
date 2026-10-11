@@ -10,10 +10,12 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { parsePlace, stateFromZip } from "../support-location";
+import { loadPlaceIndex, placeIn, countiesIn, PLACE_FILE } from "../support-place-index";
 import { searchSupport, scopeCovers, hudQueryFor, fromHud, requestedCategories } from "../support-search";
 import type { CounselorResult } from "../hud-counselors";
 
 const TODAY = "2026-10-10";
+const index = loadPlaceIndex(join(__dirname, "..", "..", PLACE_FILE));
 const noHud = async (_q: string) => [] as CounselorResult[];
 const run = (input: Record<string, unknown>, findHud = noHud) => searchSupport(input, { findHud, today: TODAY });
 const states = (rs: { state: string | null }[]) => new Set(rs.map((r) => r.state));
@@ -34,9 +36,14 @@ describe("reading the place", () => {
 
   test("typed shapes: a spelled-out state, a state with no comma, a state alone", () => {
     assert.equal(parsePlace("Libby, Montana").state, "MT");
-    assert.equal(parsePlace("libby mt").state, "MT");
-    assert.equal(parsePlace("libby mt").cityKey, "libby");
+    assert.equal(parsePlace("Libby MT").state, "MT", "a code in capitals counts");
+    assert.equal(parsePlace("Libby MT").cityKey, "libby");
+    const census = { isPlaceIn: (k: string, st: string) => index ? placeIn(index, k, st) : false };
+    assert.equal(parsePlace("libby mt", census).state, "MT", "lower case counts when Libby is a Montana place");
+    assert.equal(parsePlace("libby mt", census).cityKey, "libby");
+    assert.equal(parsePlace("libby mt").state, null, "without the Census check, lower case is not a state");
     assert.equal(parsePlace("Columbus Ohio").state, "OH");
+    assert.equal(parsePlace("columbus new york").state, "NY");
     const ohio = parsePlace("Ohio");
     assert.equal(ohio.state, "OH"); assert.equal(ohio.cityKey, null); assert.equal(ohio.label, "Ohio");
     assert.equal(parsePlace("New York").state, "NY");
@@ -54,12 +61,40 @@ describe("reading the place", () => {
     assert.equal(stateFromZip("abcde"), null);
   });
 
+  test("ordinary words are not states (review M2)", () => {
+    const census = { isPlaceIn: (k: string, st: string) => index ? placeIn(index, k, st) : false };
+    for (const text of ["near me", "food near me", "Libby in", "Hi", "hi", "help ok", "shelter or food", "jobs in", "me", "oh"]) {
+      const p = parsePlace(text, census);
+      assert.equal(p.state, null, `"${text}" read as ${p.state}`);
+    }
+    assert.equal(parsePlace("HI").state, "HI", "a code alone in capitals is a state");
+    assert.equal(parsePlace("Libby, in").state, "IN", "the comma form keeps its meaning");
+    assert.equal(parsePlace("Montana").state, "MT");
+  });
+
   test("an ambiguous city has no state, and nothing is guessed", () => {
     const p = parsePlace("Springfield");
     assert.equal(p.state, null); assert.equal(p.given, true); assert.equal(p.label, null);
     assert.equal(parsePlace("Portland or something").state, null);
     assert.equal(parsePlace("").given, false);
     assert.equal(parsePlace({ evil: true }).given, false);
+  });
+
+  test("ZIP edges: overrides, the Pacific prefix, DC, PO boxes (review L2, L3)", () => {
+    assert.equal(stateFromZip("06390"), "NY", "Fishers Island");
+    assert.equal(stateFromZip("06391"), "CT");
+    assert.equal(stateFromZip("96799"), "AS", "American Samoa");
+    assert.equal(stateFromZip("96813"), "HI");
+    assert.equal(stateFromZip("83414"), "WY", "Alta, WY");
+    assert.equal(stateFromZip("96910"), "GU");
+    assert.equal(stateFromZip("96950"), "MP");
+    assert.equal(stateFromZip("96940"), null, "Palau and the rest of 969 give no state");
+    const dc = parsePlace("20500");
+    assert.equal(dc.state, "DC"); assert.deepEqual(dc.countyKeys, ["district of columbia"]);
+    assert.deepEqual(parsePlace("Washington, DC").countyKeys, ["district of columbia"]);
+    const box = parsePlace("PO Box 12, Libby, MT 59923");
+    assert.equal(box.state, "MT"); assert.equal(box.cityKey, "libby"); assert.equal(box.label, "Libby, MT");
+    assert.equal(parsePlace("PO Box 12, MT 59923").cityKey, null);
   });
 
   test("a typed state beats a ZIP that points somewhere else", () => {
@@ -102,7 +137,7 @@ describe("who sees what", () => {
   });
 
   test("New York and Ohio: never Wisconsin or Montana; national services and a coverage line", async () => {
-    for (const location of ["New York, NY", "Columbus, OH", "10001", "Troy, NY"]) {
+    for (const location of ["New York, NY", "Columbus, OH", "Troy, NY"]) {
       for (const category of ["food", "housing", "legal", "employment", "mental_health", undefined]) {
         const r = await run({ category, location });
         for (const x of r.resources) assert.equal(x.scope, "national", `${location} / ${category}: ${x.id} is ${x.area}`);
@@ -111,6 +146,23 @@ describe("who sees what", () => {
         assert.match(r.coverage.line ?? "", /We don't have checked local listings for .+ yet\. These work anywhere\./);
       }
     }
+  });
+
+  test("a ZIP alone: placed in a county, or an honest state-level line, never a false 'nothing local' (review L2)", async () => {
+    const withCensus = (location: string, category: string) => searchSupport({ category, location },
+      { findHud: noHud, today: TODAY, countiesOf: (p) => (index ? countiesIn(index, p) : []), isPlaceIn: (k, st) => (index ? placeIn(index, k, st) : false) });
+    const ny = await withCensus("10001", "food");
+    assert.equal(ny.coverage.placeMatched, "county");
+    assert.match(ny.coverage.line ?? "", /We don't have checked local listings for NY 10001 yet\. These work anywhere\./);
+    const dc = await withCensus("20500", "food");
+    assert.equal(dc.coverage.placeMatched, "county", "20500 has no Census entry; its prefix is all DC");
+    const camp = await withCensus("42223", "legal");
+    assert.equal(camp.coverage.placeMatched, "state", "Fort Campbell's prefix spans several counties: county left unknown");
+    assert.match(camp.coverage.line ?? "", /We couldn't match ZIP 42223 to a county, so these cover Kentucky or work anywhere\./);
+    assert.doesNotMatch(camp.coverage.line ?? "", /don't have checked local listings/);
+    const near = await withCensus("near me", "housing");
+    assert.equal(near.coverage.placeMatched, "none");
+    assert.ok(near.resources.every((x) => x.scope === "national"), "no Maine listings for 'near me'");
   });
 
   test("national only: no place, or a place with no state", async () => {
@@ -190,10 +242,12 @@ describe("HUD counselors", () => {
     await run({ category: "housing", location: "Springfield" }, fn);
     await run({ category: "housing" }, fn);
     assert.deepEqual(asked, []);
-    await run({ category: "housing", location: "  libby   mt  " }, fn);
+    await run({ category: "housing", location: "  Libby   MT  " }, fn);
     await run({ category: "housing", location: "59923" }, fn);
     assert.deepEqual(asked, ["Libby, MT", "59923"]);
     assert.equal(hudQueryFor(parsePlace("Ohio")), null, "a whole state is too wide for a distance search");
+    await run({ category: "housing", location: "near me" }, fn);
+    assert.deepEqual(asked, ["Libby, MT", "59923"], "'near me' never reaches HUD as Maine");
   });
 
   test("HUD failing leaves the checked list standing", async () => {

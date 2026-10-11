@@ -33,6 +33,7 @@ import {
   isResourceArea,
   type ResourceArea,
   type ResourceAppRow,
+  type ResourcePlaceQuery,
 } from "@crucible/core/src/resourceDirectoryShared";
 
 // ─── Scope ──────────────────────────────────────────────────────────────────
@@ -198,8 +199,14 @@ export interface SupportResult {
 }
 
 export interface Coverage {
-  /** The closest level any result reaches for this place. */
+  /** The closest level any checked result reaches for this place. */
   level: ScopeLevel;
+  /**
+   * How precisely we could place the person: a county, a city we could not
+   * put in a county, only a state, or nowhere. "state" for a ZIP we could not
+   * match to a county, so the line never claims there is nothing local.
+   */
+  placeMatched: "county" | "city" | "state" | "none";
   place: string | null;
   /** Shown above the list when local coverage is missing; null when there is local help. */
   line: string | null;
@@ -357,36 +364,55 @@ function coverageFor(place: Place, all: SupportResult[]): Coverage {
   const results = all.filter((r) => r.source !== "hud");
   const hudNote = all.some((r) => r.source === "hud") ? " HUD's counselors near you are listed too." : "";
   const best = results.reduce<ScopeLevel>((acc, r) => (LEVEL_ORDER[r.scope] < LEVEL_ORDER[acc] ? r.scope : acc), "national");
+  const placeMatched: Coverage["placeMatched"] = !place.state ? "none"
+    : place.countyKeys.length ? "county"
+    : place.cityKey ? "city"
+    : "state";
   if (!place.given) {
-    return { level: best, place: null, line: "Add your city and state to see help near you. These work anywhere." };
+    return { level: best, placeMatched, place: null, line: "Add your city and state to see help near you. These work anywhere." };
   }
   if (!place.state) {
     return {
       level: best,
+      placeMatched,
       place: null,
       line: "We couldn't tell which state that is. Add it, like \"Libby, MT\", to see local help. These work anywhere.",
     };
   }
   const where = place.label ?? stateName(place.state) ?? place.state;
+  const stName = stateName(place.state) ?? place.state;
+  // A ZIP we could not put in a county: we only know the state, so say that,
+  // never "nothing local" (review L2).
+  if (placeMatched === "state" && place.zip && (best === "national" || best === "state")) {
+    return {
+      level: best,
+      placeMatched,
+      place: where,
+      line: `We couldn't match ZIP ${place.zip} to a county, so these cover ${stName} or work anywhere. Add your town to see local help.${hudNote}`,
+    };
+  }
   if (best === "national") {
-    return { level: best, place: where, line: `We don't have checked local listings for ${where} yet. These work anywhere.${hudNote}` };
+    return { level: best, placeMatched, place: where, line: `We don't have checked local listings for ${where} yet. These work anywhere.${hudNote}` };
   }
   if (best === "state" && (place.cityKey || place.countyKey || place.zip)) {
     return {
       level: best,
+      placeMatched,
       place: where,
-      line: `We don't have checked listings for ${where} itself yet. These cover ${stateName(place.state) ?? place.state} or work anywhere.${hudNote}`,
+      line: `We don't have checked listings for ${where} itself yet. These cover ${stName} or work anywhere.${hudNote}`,
     };
   }
-  return { level: best, place: where, line: null };
+  return { level: best, placeMatched, place: where, line: null };
 }
 
 export interface SupportSearchDeps {
   findHud: (location: string) => Promise<CounselorResult[]>;
-  /** resource_app_v rows for some areas, national plus the given state (core readResourceDirectory). */
-  readDirectory?: (opts: { state: string | null; areas: readonly string[] }) => Promise<ResourceAppRow[]>;
+  /** resource_app_v rows that reach the place, closest first (core readResourceDirectory). */
+  readDirectory?: (opts: ResourcePlaceQuery) => Promise<ResourceAppRow[]>;
   /** The counties a city or ZIP sits in, folded (lib/support-place-index.ts). */
   countiesOf?: (place: Place) => string[];
+  /** Is a folded name a Census place in a state (lib/support-place-index.ts)? Lets "libby mt" read as Montana. */
+  isPlaceIn?: (cityKey: string, state: string) => boolean;
   /** YYYY-MM-DD, injectable for tests. */
   today?: string;
 }
@@ -413,12 +439,12 @@ export interface SupportSearchResult extends SupportSearchResponse {
 
 export async function searchSupport(input: SupportSearchInput, deps: SupportSearchDeps): Promise<SupportSearchResult> {
   const today = deps.today ?? new Date().toISOString().slice(0, 10);
-  const parsed = parsePlace(input.location);
+  const parsed = parsePlace(input.location, { isPlaceIn: deps.isPlaceIn });
   let place = parsed;
   if (deps.countiesOf && parsed.state && !parsed.countyKey && (parsed.cityKey || parsed.zip)) {
     try {
       const found = deps.countiesOf(parsed).filter((k) => typeof k === "string" && k);
-      if (found.length) place = { ...parsed, countyKeys: [...new Set(found)] };
+      if (found.length) place = { ...parsed, countyKeys: [...new Set([...parsed.countyKeys, ...found])] };
     } catch {
       // No county lookup: city and ZIP matching still work.
     }
@@ -432,7 +458,9 @@ export async function searchSupport(input: SupportSearchInput, deps: SupportSear
   let directoryRead = !deps.readDirectory;
   if (deps.readDirectory && want.areas.length) {
     try {
-      const rows = await deps.readDirectory({ state: place.state, areas: want.areas });
+      const rows = await deps.readDirectory({
+        state: place.state, areas: want.areas, countyKeys: place.countyKeys, cityKey: place.cityKey, zip: place.zip,
+      });
       dirRows = rows.filter((r) => want.areas.includes(r.area_id as ResourceArea) && scopeCovers(directoryScope(r), place));
       directoryRead = true;
     } catch {

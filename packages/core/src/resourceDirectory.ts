@@ -3,11 +3,11 @@
  * See resourceDirectoryShared.ts for what the view holds and why.
  */
 import { query } from "./db";
-import { resourceAppSql, type ResourceAppRow } from "./resourceDirectoryShared";
+import { resourceAppSql, type ResourceAppRow, type ResourcePlaceQuery } from "./resourceDirectoryShared";
 
 export * from "./resourceDirectoryShared";
 
-export async function readResourceDirectory(opts: { state: string | null; areas: readonly string[] }): Promise<ResourceAppRow[]> {
+export async function readResourceDirectory(opts: ResourcePlaceQuery): Promise<ResourceAppRow[]> {
   const { sql, params } = resourceAppSql(opts);
   if (!(params[0] as string[]).length) return [];
   return query<ResourceAppRow>(sql, params);

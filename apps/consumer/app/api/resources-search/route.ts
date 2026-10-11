@@ -19,7 +19,7 @@ import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { findHudCounselors } from "@/lib/hud-counselors";
 import { searchSupport } from "@/lib/support-search";
-import { countiesOf } from "@/lib/support-place-index";
+import { countiesOf, isPlaceIn } from "@/lib/support-place-index";
 import { readResourceDirectory } from "@crucible/core";
 
 export const maxDuration = 15;
@@ -39,7 +39,7 @@ async function handlePost(request: Request) {
     // asked only for the normalised place (support-search hudQueryFor).
     const { resources, coverage, place, directoryRead } = await searchSupport(
       { category, barriers, location },
-      { findHud: (location) => findHudCounselors(location), readDirectory: readResourceDirectory, countiesOf }
+      { findHud: (location) => findHudCounselors(location), readDirectory: readResourceDirectory, countiesOf, isPlaceIn }
     );
 
     // Log for JBS compliance. IDs and counts only: no typed location and no
