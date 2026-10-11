@@ -22,7 +22,7 @@ import assert from "node:assert/strict";
 import { inflateRawSync } from "node:zlib";
 
 import { buildForgeResumePrompts, selfDisclosureDirective } from "../forge-resume-prompt";
-import { CHANGES_MARKER, CHANGES_MAX, isUsableResume, splitWriterOutput, validateWriterChanges } from "../writer-changes";
+import { CHANGES_MARKER, CHANGES_START, CHANGES_END, CHANGES_MAX, isUsableResume, splitWriterOutput, validateWriterChanges } from "../writer-changes";
 import { restoreDateForms } from "../date-form";
 import { untracedFacts, traceDocument, factsTraceBack, onlyRewordedFrom } from "../fact-trace";
 import { verifyGrounding, flagKindOf } from "../grounding-verify";
@@ -33,7 +33,13 @@ import { parseResume } from "../resume-render/model";
 import { renderDocx, renderHtml, renderPdf } from "../resume-render";
 import { runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
 import { scopeAllNotTheirsAnswered } from "@crucible/core/src/resumeStatus";
-import { parseResumeBlocks, isSectionHeader } from "@crucible/core/src/pageFitShared";
+import { parseResumeBlocks, isSectionHeader, parseResumeHeader } from "@crucible/core/src/pageFitShared";
+
+/** headline and contact from the shared header parser, for compact assertions. */
+function parseResumeHeaderFor(lines: string[]): [string, string] {
+  const h = parseResumeHeader(lines);
+  return [h.headlineLine, h.contactLine];
+}
 import { resumeTextToDocument, documentKeepsText } from "../revision-to-doc";
 import { readFileSync } from "node:fs";
 import { WEAK_PAGE, MOCK_WRITER_RESUME, MOCK_WRITER_CHANGES, mockWriterReply } from "./fixtures/weak-page";
@@ -56,8 +62,11 @@ test("prompt: rewording A, strong verbs, duty phrasing always rewritten, facts l
   assert.match(system, /"In charge of the guys on my shift\." becomes "Supervised the shift crew\."/);
   // CC ruling H1: supervising people is scope, tied to that job's title or people in their own words.
   assert.match(system, /SUPERVISING PEOPLE IS SCOPE/);
-  assert.match(system, /under the title Production Supervisor may become "Supervised third-shift production", but under the title Machine Operator it stays about the work/);
-  assert.match(system, /"Responsible for" a shift, an area, a task or a thing never becomes supervising/);
+  assert.match(system, /settled only when their own words for that job say it in so many words/);
+  assert.match(system, /A title, "my crew", a shift, a place or a task never says it/);
+  assert.match(system, /the person is asked one tap, "Were you over other people in this job\?"/);
+  assert.doesNotMatch(system, /manager type title|"ran a crew of 4"|\("in charge of employees on my shift", "my crew"/);
+  assert.match(system, /Never turn "responsible for" a task or thing \("the crew's safety gear", "cleaning the kitchen"\) into supervising/);
   assert.match(system, /Facts belong to their own job/);
   assert.doesNotMatch(system, /"Responsible for 3rd shift\." becomes "Supervised/);
   assert.match(system, /Locked in every reworded line: numbers, job titles, employers, dates, credentials \(type and status\) and scope/);
@@ -91,7 +100,8 @@ test("prompt: dates copied exactly as given; never the year-only job line format
 
 test("prompt: the writer ends with a CHANGES block the server can check", () => {
   const { system, user } = buildForgeResumePrompts(PROMPT_INPUT);
-  assert.ok(user.includes(CHANGES_MARKER));
+  assert.ok(user.includes(CHANGES_START) && user.includes(CHANGES_END));
+  assert.ok(!user.includes(CHANGES_MARKER), "the old marker is not taught any more");
   assert.match(user, new RegExp(`At most ${CHANGES_MAX} entries`));
   for (const rule of ["objective", "soft_skill_list", "duty_phrasing", "bullet", "heading", "summary", "date_format"]) {
     assert.ok(user.includes(`"${rule}"`), rule);
@@ -270,9 +280,8 @@ test("verifier: a wording flag on a provable rewording is not a fabrication; the
     hasFabrication: true,
     flags: [
       { claim: "Ran safety audits.", why: "source says did", kind: "wording" },
-      { claim: "Served customers at the register.", why: "source says dealt with", kind: "rephrased" },
     ],
-    cleaned: MOCK_WRITER_RESUME.replace("- Ran safety audits.", "- Did safety audits.").replace("- Served customers at the register.", "- Dealt with customers at the register."),
+    cleaned: MOCK_WRITER_RESUME.replace("- Ran safety audits.", "- Did safety audits."),
   };
   const r = await withVerifierReply(reply, () => verifyGrounding({ sourceText: WEAK_PAGE, output: MOCK_WRITER_RESUME, kind: "resume" }));
   assert.equal(r.verifierRan, true);
@@ -318,7 +327,17 @@ test("M1: a 'rephrased' flag on a plain-words invention stays a flag and the cut
 
 test("M1: what counts as a provable rewording", () => {
   const src = "Did safety audits.\nHelped the lead with inventory counts.\nHad a forklift card until 2019.\nIn charge of the guys on my shift.\nDealt with customers at the register.\nLoaded 6 trucks a night.";
-  for (const ok of ["Ran safety audits.", "Served customers at the register.", "Helped the lead run inventory counts."]) assert.equal(onlyRewordedFrom(ok, src), true, ok);
+  for (const ok of ["Ran safety audits.", "Completed safety audits.", "Performed safety audits."]) assert.equal(onlyRewordedFrom(ok, src), true, ok);
+  // Round 3 (r2 M-A): a closed list. Any other verb, or another object, keeps the flag.
+  for (const bad of ["Served customers at the register.", "Helped the lead run inventory counts.", "Managed safety audits.", "Ran safety audits and inventory counts."]) {
+    assert.equal(onlyRewordedFrom(bad, src), false, bad);
+  }
+  const s1 = "Drove the forklift.\nTook out trash on the dock.\nInventory counts on Fridays.\nHelped the lead with inventory counts.\nRode along on deliveries.";
+  for (const bad of ["Fixed the forklift.", "Built the forklift.", "Ran the dock.", "Kept the dock.", "Ran inventory counts.", "Handled inventory counts on Fridays.", "Made deliveries.", "Operated the dock.", "Ran the forklift on the dock."]) {
+    assert.equal(onlyRewordedFrom(bad, s1), false, bad);
+  }
+  // "helped" on ANY of their lines about the object is checked, not just the first one found.
+  assert.equal(onlyRewordedFrom("Handled inventory counts.", "Did inventory counts.\nHelped the lead with inventory counts."), false);
   for (const bad of [
     "Ran inventory counts.", // helped -> solo
     "Hold a forklift card.", // credential status
@@ -344,8 +363,9 @@ test("verifier: kinds are read leniently and the prompt traces facts, not words"
   assert.match(src, /Never flag a line only because its words differ from SOURCE/);
   assert.match(src, /Change ONLY the lines you flagged/);
   assert.match(src, /SUPERVISING PEOPLE IS SCOPE/);
-  assert.match(src, /"Responsible for 3rd shift" under the job title "Production Supervisor" written as "Supervised third-shift production"/);
-  assert.match(src, /"Responsible for 3rd shift" under the title "Machine Operator" written as "Supervised third-shift production" FAILS/);
+  assert.match(src, /flag it with kind "supervision" and do NOT rewrite or remove it/);
+  assert.match(src, /A job title of any kind, "my crew", a shift, a place or a task never says it/);
+  assert.doesNotMatch(src, /manager type title|"ran a crew of 4"/);
   assert.doesNotMatch(src, /SOURCE "Responsible for 3rd shift" written as "Supervised the 3rd shift crew"/);
 });
 
@@ -486,9 +506,12 @@ test("H1: fact trace, finish-gate scope cards and the mint check agree on superv
     ["Supervised the line crew.", "Ran the line.", true],
     ["Supervised the 3rd shift crew.", "Responsible for 3rd shift.", true],
     ["Supervised third-shift production.", "Machine Operator | Acme | 2019 - 2021\nResponsible for 3rd shift.", true],
-    ["Supervised third-shift production.", "Production Supervisor | Acme | 2019 - 2021\nResponsible for 3rd shift.", false],
+    ["Supervised third-shift production.", "Production Supervisor | Acme | 2019 - 2021\nResponsible for 3rd shift.", true],
+    ["Supervised the crew.", "My crew and I loaded trucks.", true],
+    ["Supervised 4 workers.", "I supervised 4 workers.", false],
+    ["Supervised the crew.", "I led a crew of 6.", false],
     ["Supervised the shift crew.", "In charge of employees on my shift.", false],
-    ["Supervised the crew.", "I ran a crew of 4.", false],
+    ["Supervised the crew.", "I ran a crew of 4.", true],
   ];
   for (const [line, src, flagged] of cases) {
     const trace = untracedFacts(`- ${line}`, src).some((f) => f.kind === "scope");
@@ -615,4 +638,124 @@ test("L6: the document guard checks the headline and job dates again", () => {
   // A job's dates are checked too.
   const noYears = JSON.parse(JSON.stringify(doc).replace(/2016/g, ""));
   assert.equal(documentKeepsText(text, noYears), false);
+});
+
+// ---- Round 3 (review r2 + CC ruling): regression tests for every r2 probe -------------------------------
+
+test("r2 ruling: being over people is one tap; Yes keeps the line for that job, No puts their words back", async () => {
+  const { buildFinishView, scopeYesResult, recordScopeYes, applyRewrite } = await import("../finish-gate");
+  const { OVER_PEOPLE_QUESTION, OVER_PEOPLE_YES } = await import("@crucible/core/src/scopeWords");
+  const own = "Rory Example\nForklift Driver | Northgate Supply | 2019 - 2021\nResponsible for 3rd shift.\nDrove forklift.";
+  const resume = "RORY EXAMPLE\nLibby, MT\n\nEXPERIENCE\nFORKLIFT DRIVER | Northgate Supply | 2019 - 2021\n- Supervised the 3rd shift crew.\n- Drove a forklift.";
+  const view = buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: [] });
+  const g = view.groups.find((x) => x.line === "- Supervised the 3rd shift crew.");
+  assert.ok(g && g.scope, JSON.stringify(view.groups.map((x) => x.line)));
+  assert.equal(g!.scope!.question, OVER_PEOPLE_QUESTION);
+  assert.equal(g!.scope!.overPeople?.yes, OVER_PEOPLE_YES);
+  assert.equal(g!.scope!.overPeople?.noLine, "- Responsible for 3rd shift.");
+  // Yes: one tap, settled for this line.
+  const doc = { target: "resume" as const, text: resume };
+  assert.equal(scopeYesResult(doc, g!.line, g!.scope!.families, OVER_PEOPLE_YES, view.source, []), "ok");
+  const answered = recordScopeYes([], g!.line, g!.scope!.families, OVER_PEOPLE_YES);
+  const after = buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: answered });
+  assert.ok(!after.groups.some((x) => x.line === g!.line && x.scope));
+  // No: their own words go back and nothing is left to ask on that line.
+  const r = applyRewrite(resume, [], g!.line, g!.scope!.overPeople!.noLine!);
+  assert.ok(r.changed && r.text.includes("- Responsible for 3rd shift."));
+  const noView = buildFinishView({ resumeText: r.text, ownWords: own, defendAnswers: r.answers });
+  assert.ok(!noView.groups.some((x) => x.scope && /3rd shift/.test(x.line)));
+  // A claim that is not about people keeps the old card.
+  const thing = buildFinishView({ resumeText: resume.replace("- Supervised the 3rd shift crew.", "- Trained new hires on the forklift."), ownWords: own, defendAnswers: [] });
+  const tg = thing.groups.find((x) => x.scope);
+  assert.ok(tg && !tg.scope!.overPeople && tg.scope!.question !== OVER_PEOPLE_QUESTION);
+});
+
+test("r2 ruling: fact trace reads each line against its own job's words", () => {
+  const src = "Shift Supervisor | Acme | 2019 - 2021\nSupervised 4 workers.\nStocker | Corner Mart | 2016 - 2019\nStocked shelves.";
+  const page = "R E\n\nEXPERIENCE\nSHIFT SUPERVISOR | Acme | 2019 - 2021\n- Supervised the workers.\nSTOCKER | Corner Mart | 2016 - 2019\n- Supervised the workers.";
+  const rows = traceDocument(page, src).filter((r) => r.line === "- Supervised the workers.");
+  assert.deepEqual(rows[0].untraced.filter((f) => f.kind === "scope"), []);
+  assert.ok(rows[1].untraced.some((f) => f.kind === "scope"));
+});
+
+test("r2 ruling: a 'supervision' flag is asked, not cut, when the scope card will ask it", async () => {
+  const source = "Rory Example\nForklift Driver | Northgate | 2019 - 2021\nResponsible for 3rd shift.";
+  const written = "RORY EXAMPLE\n\nEXPERIENCE\nFORKLIFT DRIVER | Northgate | 2019 - 2021\n- Supervised the 3rd shift crew.\n- More lines here so the page is long enough.";
+  const reply = { hasFabrication: true, flags: [{ claim: "Supervised the 3rd shift crew.", why: "no people in source", kind: "supervision" }], cleaned: written.replace("- Supervised the 3rd shift crew.\n", "") };
+  const r = await withVerifierReply(reply, () => verifyGrounding({ sourceText: source, output: written, kind: "resume" }));
+  assert.equal(r.applied, false);
+  assert.equal(r.text, written);
+  assert.ok(scopeAllNotTheirsAnswered("- Supervised the 3rd shift crew.", source, []).length > 0, "the card asks instead");
+});
+
+test("r2 M-B: the sentinel pair, and every leftover shape, never reaches the page", () => {
+  const R = "RORY EXAMPLE\nLibby, MT | r@example.com\n\nSKILLS\nForklift, pallet jack\n\nEXPERIENCE\nDriver | Northgate | 2021 - 2022\n- Drove.";
+  const J = JSON.stringify([{ old: "Did.", new: "Drove.", why: "x", rule: "duty_phrasing" }]);
+  const ok = (name: string, reply: string, n: number) => {
+    const out = splitWriterOutput(reply);
+    assert.equal(out.resume, R, name);
+    assert.equal((out.changes as unknown[]).length, n, name);
+  };
+  ok("sentinels after", `${R}\n${CHANGES_START}\n${J}\n${CHANGES_END}`, 1);
+  ok("sentinels first", `${CHANGES_START}\n${J}\n${CHANGES_END}\n${R}`, 1);
+  ok("sentinels, end missing", `${R}\n${CHANGES_START}\n${J}`, 1);
+  ok("sentinels, prose inside", `${R}\n${CHANGES_START}\nI changed the duty lines.\n${CHANGES_END}`, 0);
+  const mid = splitWriterOutput(`RORY EXAMPLE\nLibby, MT | r@example.com\n\nSKILLS\nForklift, pallet jack\n${CHANGES_START}\n${J}\n${CHANGES_END}\n\nEXPERIENCE\nDriver | Northgate | 2021 - 2022\n- Drove.`);
+  assert.equal(mid.resume, R, "both sides kept");
+  // The reviewer's r2 shapes.
+  ok("keys reordered", `${R}\n===CHANGES===\n[{"rule":"duty_phrasing","old":"Did.","new":"Drove.","why":"x"}]`, 1);
+  ok("bullet-list changes", `${R}\n===CHANGES===\n- "Did safety audits." -> "Ran safety audits." (duty_phrasing): Did is weak.\n- "Objective" -> removed (objective)`, 0);
+  ok("object wrapper", `${R}\n===CHANGES===\n{"changes":[{"old":"Did.","new":"Drove.","why":"x","rule":"r"}]}`, 1);
+  ok("Changes made prose", `${R}\n\nChanges made:\nI rewrote your duty lines and removed the objective.`, 0);
+  ok("single quotes", `${R}\n===CHANGES===\n[{'old': 'Did.', 'new': 'Drove.'}]`, 0);
+  ok("keys reordered, no marker", `${R}\n\n[{"why":"x","rule":"r","old":"Did.","new":"Drove."}]`, 1);
+  // Quoted old -> new pairs with no label at all.
+  ok("bare pairs", `${R}\n- "Did." -> "Drove."`, 0);
+  // An unclosed list mid-page leaves no usable page: the route refuses it (502) before any check.
+  const unclosed = splitWriterOutput(`RORY EXAMPLE\nLibby, MT | r@example.com\n===CHANGES===\n[{"old":"Did.","new":"Drove.","why":"x\n\nSKILLS\nForklift\n\nEXPERIENCE\nDriver | Northgate | 2021 - 2022\n- Drove.`);
+  assert.equal(isUsableResume(unclosed.resume), false);
+  for (const out of [unclosed.resume, splitWriterOutput(`${R}\n===CHANGES===\n[{'old': 'Did.', 'new': 'Drove.'}]`).resume]) {
+    assert.doesNotMatch(out, /["'](?:old|new|why|rule)["']\s*:|CHANGES|SMR-CHANGES/);
+  }
+});
+
+test("r2 M-C: the header parser keeps 'X, Y' headlines, stacked contact blocks and addresses straight", () => {
+  const H = (lines: string[]) => parseResumeHeaderFor(lines);
+  assert.deepEqual(H(["Rory Example", "Welder, Fabricator", "Libby, MT | (406) 555-0147"]).slice(0, 2), ["Welder, Fabricator", "Libby, MT | (406) 555-0147"]);
+  assert.deepEqual(H(["Rory Example", "Line Cook, Prep Cook", "r@example.com"]).slice(0, 2), ["Line Cook, Prep Cook", "r@example.com"]);
+  assert.deepEqual(H(["Rory Example", "Libby, MT", "(406) 555-0147", "r@example.com"]).slice(0, 2), ["", "Libby, MT | (406) 555-0147 | r@example.com"]);
+  assert.deepEqual(H(["Rory Example", "Warehouse Associate, Forklift Operator"]).slice(0, 2), ["Warehouse Associate, Forklift Operator", ""]);
+  assert.deepEqual(H(["Rory Example", "Forklift Operator", "Spokane, Washington"]).slice(0, 2), ["Forklift Operator", "Spokane, Washington"]);
+  assert.deepEqual(H(["Rory Example", "123 Main St, Apt 4", "Libby, MT 59923"]).slice(0, 2), ["", "123 Main St, Apt 4 | Libby, MT 59923"]);
+  assert.deepEqual(H(["Rory Example", "Certified Welder", "linkedin.com/in/rory-example"]).slice(0, 2), ["Certified Welder", "linkedin.com/in/rory-example"]);
+  // Rendered: the comma headline stays the headline, the stacked block is one contact line, nothing leaks to the body.
+  const m = parseResume("RORY EXAMPLE\nWelder, Fabricator\nLibby, MT\n(406) 555-0147\nr@example.com\n\nSUMMARY\nWelder.");
+  assert.equal(m.header.headline, "Welder, Fabricator");
+  assert.equal(m.header.contact, "Libby, MT | (406) 555-0147 | r@example.com");
+  assert.deepEqual(m.blocks.map((b) => b.kind), ["section", "para"]);
+  // A contact line after a blank under the name is still contact, never a body paragraph.
+  const blank = parseResume("RORY EXAMPLE\n\nrory@example.com\n\nCAREER SUMMARY\nDrove forklifts.");
+  assert.equal(blank.header.contact, "rory@example.com");
+  assert.deepEqual(blank.blocks.map((b) => b.kind), ["section", "para"]);
+});
+
+test("r2 M-D: a duty line ending in a year is never a new job", () => {
+  const a = parseResume("R E\nr@example.com\n\nEXPERIENCE\nCashier | Mart | 2016 - 2020\n- Ran the register.\nPromoted to Shift Lead (2019)\nTrained new cashiers\nForklift certified, 2018\nOpened the store\n\nEDUCATION\nGED, 2015");
+  assert.equal(a.blocks.filter((b) => b.kind === "job").length, 1);
+  for (const l of ["Promoted to Shift Lead (2019)", "Forklift certified, 2018"]) assert.ok(a.blocks.some((b) => b.kind === "bullet" && b.text === l), l);
+  const b = parseResume("R E\nr@example.com\n\nEXPERIENCE\nCook | Diner\nEmployee of the month\n2019\nMade food");
+  assert.equal(b.blocks.filter((x) => x.kind === "job").length, 1);
+  assert.ok(b.blocks.some((x) => x.kind === "bullet" && x.text === "Made food"), "the real job keeps its bullets");
+  // A real two-line job still is one.
+  const c = parseResume("R E\nr@example.com\n\nWORK HISTORY\nCook | Diner | 2018 - 2020\nMade food\nDishwasher\nCafe Rio\n2016 - 2018\nWashed dishes");
+  assert.deepEqual(c.blocks.filter((x) => x.kind === "job").map((x) => (x as { title: string }).title), ["Cook", "Dishwasher"]);
+});
+
+test("r2 L-2: an occupation is a headline; a place of confinement never is", () => {
+  for (const h of ["Corrections Officer", "Reentry Peer Specialist", "Parole Officer"]) {
+    assert.equal(parseResume(`R E\nr@example.com\n\n${h}\n\nSUMMARY\nx`).header.headline, h, h);
+  }
+  for (const h of ["Kitchen Worker, State Correctional Facility", "Cook at County Jail", "Inmate Porter"]) {
+    assert.equal(parseResume(`R E\nr@example.com\n\n${h}\n\nSUMMARY\nx`).header.headline, "", h);
+  }
 });

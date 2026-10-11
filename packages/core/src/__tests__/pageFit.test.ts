@@ -222,13 +222,12 @@ test("splitResumeHeader: a header line the header does not draw goes to the body
   assert.equal(r.header.nameLine, "JANE TESTER");
   const all = [r.header.nameLine, r.header.headlineLine, r.header.contactLine, r.header.publicNotesLine, ...r.bodyLines].join(" ");
   assert.ok(all.includes("Certified Welder"), "fourth header line kept");
-  // Phase 6 (review M4): the city is the contact line and the phone, a second contact line, goes on to the
-  // body; neither is ever the headline. "Certified Welder" is drawn once, as the headline.
-  assert.equal(r.header.contactLine, "Milwaukee, WI");
+  // Phase 6 (review M4, r2 M-C): the stacked city and phone are one contact line, never the headline or the
+  // body; "Certified Welder" is drawn once, as the headline.
+  assert.equal(r.header.contactLine, "Milwaukee, WI | (555) 010-0100");
   assert.equal(r.header.headlineLine, "Certified Welder");
   assert.equal(all.split("Certified Welder").length - 1, 1);
-  assert.equal(r.bodyLines.filter((l) => l === "(555) 010-0100").length, 1);
-  assert.ok(r.bodyLines.indexOf("(555) 010-0100") < r.bodyLines.indexOf("SUMMARY"));
+  assert.equal(r.bodyLines.filter((l) => l === "(555) 010-0100" || l === "Milwaukee, WI").length, 0);
   // a repeated line is not doubled or lost
   const d = splitResumeHeader("A B\nWelder\nWelder\na@b.com\n\nSUMMARY\nHi.\n");
   const words = [d.header.nameLine, d.header.headlineLine, d.header.contactLine, d.header.publicNotesLine, ...d.bodyLines].filter(Boolean);

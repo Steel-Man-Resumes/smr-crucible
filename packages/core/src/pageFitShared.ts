@@ -217,9 +217,22 @@ export function isJobTitleLine(text: string): boolean {
 export const SECTION_JOBS_RE = /EXPERIENCE|WORK HISTORY|EMPLOYMENT|PROFESSIONAL HISTORY|CAREER HISTORY|PROFESSIONAL BACKGROUND|MILITARY|VOLUNTEER/;
 
 // A contact or place line: never the headline (review M4).
-const CONTACT_LIKE_RE = /@|https?:|www\.|linkedin\.com|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\b[A-Z]{2}\s+\d{5}\b|^[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?$/;
+// Round 3 (review r2 M-C): a place is "City, ST" with a real state (code or name), optionally a ZIP; "Welder,
+// Fabricator" is not a place. A street address is contact too.
+const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|PR";
+const US_STATE_NAMES_RE = "Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming";
+const PLACE_ONLY_RE = new RegExp(`^[A-Za-z .'-]+,\\s*(?:(?:${US_STATE_CODES})\\.?|${US_STATE_NAMES_RE})(?:\\s+\\d{5}(?:-\\d{4})?)?$`, "i");
+const STREET_RE = /^\s*\d+\s+[A-Za-z0-9 .'#-]*\b(?:st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|boulevard|way|ct|court|hwy|highway|pl|place|apt|apartment|suite|ste|unit|po box|p\.o\. box)\b/i;
+const CONTACT_LIKE_RE = new RegExp(String.raw`@|https?:|www\.|linkedin\.com|\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}|\b[A-Z]{2}\s+\d{5}\b`);
+/** True for a contact or place line: email, phone, web address, "City, ST" (real state), ZIP, street address. */
+export function isContactLike(l: string): boolean {
+  const t = l.trim();
+  return CONTACT_LIKE_RE.test(t) || PLACE_ONLY_RE.test(t) || STREET_RE.test(t) || /^p\.?o\.?\s+box\b/i.test(t);
+}
 // Work inside or a record: never promoted to the headline (mirror of grounding-verify's justice test).
-const JUSTICE_LIKE_RE = /incarcerat|prison|jail|parole|probat|convict|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|felon|penitentiary|reformatory|house of correction|inmate|detention/i;
+// Round 3 (r2 L-2): a place of confinement or a record, never an occupation: "Corrections Officer" and
+// "Reentry Peer Specialist" are jobs and may be the headline; "Kitchen Worker, State Correctional Facility" may not.
+const JUSTICE_LIKE_RE = /incarcerat|inmate|prison|jail|penitentiary|reformatory|house of correction|correctional\s+(?:facility|institution|center|camp|complex)|detention\s+(?:center|facility)|department of corrections|\bDOC\b|convict|felon|justice[- ]involved/i;
 
 /**
  * The index in `bodyLines` of a lone headline line: the writer puts its headline after a blank line, between
@@ -235,7 +248,7 @@ export function bodyHeadlineIndex(bodyLines: string[], header: Pick<ParsedResume
   const cand = lines[first];
   if (next < 0 || !isSectionHeader(lines[next])) return -1;
   if (isSectionHeader(cand) || isBulletLine(cand) || cand.includes("|") || cand.length > 120 || /[.!?;]$/.test(cand)) return -1;
-  if (CONTACT_LIKE_RE.test(cand) || JUSTICE_LIKE_RE.test(cand)) return -1;
+  if (isContactLike(cand) || JUSTICE_LIKE_RE.test(cand)) return -1;
   return first;
 }
 
@@ -255,7 +268,20 @@ function headerish(l: string): boolean {
 export function splitTrailingYears(l: string): { title: string; years: string } | null {
   const m = l.match(TRAILING_YEARS_RE);
   const years = m ? (m[2] ?? m[3] ?? "").trim() : "";
-  return m && years && isDateText(years) ? { title: m[1].replace(/[,(]\s*$/, "").trim(), years } : null;
+  if (!m || !years || !isDateText(years)) return null;
+  const title = m[1].replace(/[,(]\s*$/, "").trim();
+  // Round 3 (r2 M-D): "Promoted to Shift Lead (2019)", "Forklift certified, 2018" are things that happened in
+  // a job, not jobs; and a single year alone never makes a job header.
+  if (NOT_A_JOB_RE.test(title) || !isDateRange(years)) return null;
+  return { title, years };
+}
+
+// A line that tells what happened in a job (a promotion, an award, a credential), never a job of its own.
+const NOT_A_JOB_RE = /^(?:promoted|earned|named|certified|received|completed|won|awarded|got|passed|became|moved|transferred|hired|recognized|graduated|trained|finished|started|selected|voted|nominated)\b|\b(?:certified|certification|certificate|licen[cs]e[ds]?|award(?:ed)?|employee of the (?:month|year|quarter)|promot(?:ed|ion)|honor|recognition|perfect attendance)\b/i;
+/** A range of dates ("2016 - 2018", "Jan 2019 - Present"), not a single year. */
+function isDateRange(t: string): boolean {
+  const years = t.match(/\b(?:19|20)\d{2}\b/g) ?? [];
+  return years.length >= 2 || (years.length === 1 && /\b(?:present|current|now)\b/i.test(t));
 }
 
 /**
@@ -311,7 +337,8 @@ export function jobLineRoles(lines: string[]): JobLineRole[] {
       }
       const a = nextFilled(i);
       const b = a >= 0 ? nextFilled(a) : -1;
-      const datesAt = a >= 0 && isDateText(t[a]) ? a : b >= 0 && headerish(t[a]) && !isDateText(t[a]) && isDateText(t[b]) ? b : -1;
+      const isRange = (k: number) => isDateText(t[k]) && isDateRange(t[k]);
+      const datesAt = NOT_A_JOB_RE.test(l) ? -1 : a >= 0 && isRange(a) ? a : b >= 0 && headerish(t[a]) && !isDateText(t[a]) && !NOT_A_JOB_RE.test(t[a]) && isRange(b) ? b : -1;
       if (datesAt >= 0) {
         roles[i] = "job";
         if (datesAt === b) roles[a] = "jobPart";
@@ -378,6 +405,8 @@ export interface ParsedResumeHeader {
   headlineLine: string;
   contactLine: string;
   publicNotesLine: string;
+  /** Round 3: the header lines joined into `contactLine`, when there was more than one. */
+  contactParts?: string[];
 }
 
 /**
@@ -396,13 +425,17 @@ export function parseResumeHeader(headerLines: string[]): ParsedResumeHeader {
   const nameLine = cleaned[0] || "";
   const isContact = (l: string) =>
     l.includes("|") || l.includes("@") || l.includes("\u2022");
-  // Review M4: a phone, a web address or a "City, ST" line alone is contact too, never the headline or the
-  // note. One line is the contact line; any other contact-like line goes on to the body (splitResumeHeader).
-  const contactLine = cleaned.slice(1).find(isContact) || cleaned.slice(1).find((l) => CONTACT_LIKE_RE.test(l)) || "";
-  const rest = cleaned.slice(1).filter((l) => l !== contactLine && !CONTACT_LIKE_RE.test(l));
+  // Round 3 (review r2 M-C): the contact line is the first "|"/"@" line, or else the first contact-like line,
+  // plus every other contact-like line (a stacked "City, ST" / phone / email block, a street address), joined
+  // in order. None of them is ever the headline or the note. A second "|" line that is not contact-like (a
+  // pipe headline) stays the headline.
+  const first = cleaned.slice(1).find(isContact) ?? cleaned.slice(1).find((l) => isContactLike(l));
+  const contactParts = cleaned.slice(1).filter((l) => l === first || isContactLike(l));
+  const contactLine = contactParts.join(" | ");
+  const rest = cleaned.slice(1).filter((l) => !contactParts.includes(l));
   const headlineLine = rest[0] || "";
   const publicNotesLine = rest[1] || "";
-  return { nameLine, headlineLine, contactLine, publicNotesLine };
+  return { nameLine, headlineLine, contactLine, publicNotesLine, ...(contactParts.length > 1 ? { contactParts } : {}) };
 }
 
 /**
@@ -412,6 +445,11 @@ export function parseResumeHeader(headerLines: string[]): ParsedResumeHeader {
  * Body lines keep their blank lines. The resume renderer uses this so the
  * header it draws is the header every other builder reads.
  */
+/** Room in the header block: four lines, plus contact lines (a stacked city, phone, email block) up to seven. */
+function headerRoom(headerLines: string[], t: string): boolean {
+  return headerLines.length < 4 || (isContactLike(t) && headerLines.length < 7);
+}
+
 export function splitResumeHeader(content: string): {
   header: ParsedResumeHeader;
   headerLines: string[];
@@ -433,10 +471,22 @@ export function splitResumeHeader(content: string): {
       end = i;
       break;
     }
-    if (headerLines.length < 4) headerLines.push(t);
+    if (headerRoom(headerLines, t)) headerLines.push(t);
     else {
       end = i;
       break;
+    }
+  }
+  // Round 3 (r2 M-C): contact lines right after a blank under the name are still the contact block.
+  if (headerLines.length > 0) {
+    let k = end;
+    while (k < lines.length) {
+      const t = lines[k].trim();
+      if (!t) { k++; continue; }
+      if (isSectionHeader(t) || !isContactLike(t) || !headerRoom(headerLines, t)) break;
+      headerLines.push(t);
+      k++;
+      end = k;
     }
   }
   const header = parseResumeHeader(headerLines);
@@ -446,7 +496,7 @@ export function splitResumeHeader(content: string): {
   // Count what the header will draw, and send every other line (a repeated line,
   // a fourth line, anything) on to the body.
   const leftover = [...headerLines];
-  for (const used of [header.nameLine, header.contactLine, header.headlineLine, header.publicNotesLine]) {
+  for (const used of [header.nameLine, ...(header.contactParts ?? [header.contactLine]), header.headlineLine, header.publicNotesLine]) {
     if (!used) continue;
     const at = leftover.indexOf(used);
     if (at >= 0) leftover.splice(at, 1);
@@ -483,10 +533,20 @@ export function parseResumeBlocks(content: string): Block[] {
       continue;
     }
     if (isSectionHeader(t)) break; // hit first section
-    if (headerLines.length < 4) {
+    if (headerRoom(headerLines, t)) {
       headerLines.push(t);
     } else {
       break;
+    }
+  }
+  // Round 3: the same contact block after a blank that splitResumeHeader takes.
+  {
+    const after = lines.findIndex((l, i) => i > 0 && headerLines.length > 0 && l.trim() === headerLines[headerLines.length - 1]);
+    for (let k = after + 1; after >= 0 && k < lines.length; k++) {
+      const t = lines[k].trim();
+      if (!t) continue;
+      if (isSectionHeader(t) || !isContactLike(t) || !headerRoom(headerLines, t)) break;
+      headerLines.push(t);
     }
   }
 

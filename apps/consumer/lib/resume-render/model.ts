@@ -177,9 +177,12 @@ export function parseResume(text: string): ResumeModel {
     ["contact", header.contactLine],
     ["notes", header.publicNotesLine],
   ];
+  // A joined contact block sits where its first line was.
+  const headerAt = ([k, v]: ["name" | "headline" | "contact" | "notes", string]) =>
+    headerLines.indexOf(k === "contact" && header.contactParts?.length ? header.contactParts[0] : v);
   const order = keyed
     .filter(([, v]) => v)
-    .sort((a, b) => headerLines.indexOf(a[1]) - headerLines.indexOf(b[1]))
+    .sort((a, b) => headerAt(a) - headerAt(b))
     .map(([k]) => k);
   const blocks: ModelBlock[] = [];
   let section = "";
