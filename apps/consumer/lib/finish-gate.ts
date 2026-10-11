@@ -216,7 +216,8 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
         d.written && typeof d.written.resume === "string"
           ? { resume: d.written.resume, letter: typeof d.written.letter === "string" ? d.written.letter : "" }
           : undefined,
-      ...(typeof d.receipt === "string" && d.receipt.length <= 200 ? { receipt: d.receipt } : {}),
+      // A real wr2 receipt is about 400 characters; the same cap as readReceipt.
+      ...(typeof d.receipt === "string" && d.receipt.length <= 2000 ? { receipt: d.receipt } : {}),
     },
     defendAnswers: Array.isArray(s.defendAnswers)
       ? s.defendAnswers

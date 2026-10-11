@@ -108,6 +108,12 @@ export interface ReceiptMeta {
   t: number;
   /** Signed out: SHA-256 hex of the run cookie this receipt is bound to. */
   c?: string;
+  /**
+   * "check": made by a signed-out Check it again, over a source the request
+   * chose. Good for that browser's own signed-out files; never imported into
+   * an account (signed in, the check uses the server-held source; review N2).
+   */
+  k?: "check";
 }
 
 /** The signed-out run cookie: server-set, HttpOnly, SameSite=Lax, renewed with every generation. */
@@ -171,7 +177,7 @@ function mac(key: Buffer, token: string, written: { resume: string; letter: stri
 export function writerReceipt(
   written: { resume: string; letter: string },
   grounding: unknown,
-  bind?: { userId: string | null; runId: string; source: WriterSource; now?: number; nonce?: string; cookie?: string }
+  bind?: { userId: string | null; runId: string; source: WriterSource; now?: number; nonce?: string; cookie?: string; kind?: "check" }
 ): string {
   const meta: ReceiptMeta = {
     v: 2,
@@ -181,6 +187,7 @@ export function writerReceipt(
     n: bind?.nonce ?? randomBytes(16).toString("hex"),
     t: bind?.now ?? Date.now(),
     ...(bind && !bind.userId && bind.cookie ? { c: runCookieHash(bind.cookie) } : {}),
+    ...(bind?.kind === "check" ? { k: "check" as const } : {}),
   };
   const token = b64(JSON.stringify(meta));
   return `${PREFIX}${token}.${mac(currentKey(), token, written, grounding)}`;
@@ -248,6 +255,8 @@ export function receiptAccepted(meta: ReceiptMeta, ctx: ReceiptContext): boolean
   if (ctx.newestNonce && ctx.newestNonce !== meta.n) return false;
   if (ctx.userId && meta.sub === `u:${ctx.userId}`) return true;
   if (meta.sub !== `r:${meta.run}`) return false;
+  // A signed-out check's receipt is never brought into an account (review N2).
+  if (ctx.userId && meta.k === "check") return false;
   // A signed-out receipt: only in the browser holding its (newest) run cookie,
   // and, signed in, only for the account's own run.
   if (!meta.c || !ctx.cookieHash || ctx.cookieHash !== meta.c) return false;

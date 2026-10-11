@@ -942,6 +942,12 @@ test("r3 I-1: the import comment about the original upload is true", () => {
 });
 
 const noFlags = async () => ({ text: "", hasFabrication: false, applied: false, flags: [], verifierRan: true });
+/** A store whose server-held own words are the fixture person's (their saved Forge run). */
+function heldStore() {
+  const f = fakeStore();
+  (f.store as any).serverSource = async () => writerSourceFrom({ resumeText: SOURCE, goalNarrative: "I want to keep cooking." });
+  return f;
+}
 let rnd = 0;
 const fixedRandom = () => (++rnd).toString(16).padStart(32, "0");
 
@@ -963,7 +969,7 @@ test("r3 M-1: a finish with no receipt is a draft with the re-check item; Check 
       runId: RUN.startedAt,
     },
     FIXTURE_CTX.userId,
-    { verify: noFlags as any, random: fixedRandom }
+    { verify: noFlags as any, random: fixedRandom, store: heldStore().store }
   );
   assert.ok(r.ok);
   const after: Record<string, any> = { ...pre, grounding: r.ok ? r.grounding : null, writerReceipt: r.ok ? r.receipt : "" };
@@ -983,7 +989,7 @@ test("r3 M-1: what the fresh check flags comes back as a card (still a draft, ne
   const r = await recheckDocs(
     { documents: { resume: pre.resumeText, letter: pre.coverLetterText }, written: pre.written, source: { resumeText: SOURCE, goalNarrative: "I want to keep cooking." }, runId: RUN.startedAt },
     FIXTURE_CTX.userId,
-    { verify: flagging as any, random: fixedRandom }
+    { verify: flagging as any, random: fixedRandom, store: heldStore().store }
   );
   assert.ok(r.ok);
   const outcomes = (r.ok ? (r.grounding as any).outcomes : []) as Array<{ status: string }>;
@@ -1067,9 +1073,87 @@ test("Check it again (finish): written, grounding and a receipt sent in the requ
       runId: RUN.startedAt,
     },
     UID,
-    { verify: flagging as any, random: fixedRandom }
+    { verify: flagging as any, random: fixedRandom, store: heldStore().store }
   );
   assert.ok(r.ok);
   assert.deepEqual(r.ok && r.written, { resume: pre.resumeText, letter: pre.coverLetterText }, "written is what was checked");
   assert.ok(r.ok && ((r.grounding as any).outcomes as Array<{ status: string }>).some((o) => o.status === "still_there"), "the real check ran");
+});
+
+// ---- combined final review: N1 (real-length receipts survive a reload), N2 (signed-in check uses server-held words), L-a ----
+
+import { readStoredFinish as readStored } from "../finish-gate";
+
+test("N1: a real-length receipt survives a reload: the page stays finished and the import carries it", async () => {
+  const { runCookieHash } = await import("../writer-receipt");
+  for (const signedOut of [false, true]) {
+    const st = finishState({}, { signedOut });
+    assert.ok(st.writerReceipt.length > 300, `real wr2 receipts are long (${st.writerReceipt.length})`);
+    // What the finish page keeps in the browser, and reads back after a reload.
+    const run: Record<string, any> = { ...RUN };
+    run.forgeFinish = {
+      v: FINISH_STATE_VERSION,
+      key: finishKey(run, false),
+      docs: { resumeText: st.resumeText, coverLetterText: st.coverLetterText, withheldLines: [], keepInsideLines: false, grounding: st.grounding, written: st.written, receipt: st.writerReceipt },
+      defendAnswers: st.defendAnswers,
+      keptTerms: st.keptTerms,
+    };
+    const restored = readStored(run.forgeFinish, finishKey(run, false));
+    assert.equal(restored?.docs.receipt, st.writerReceipt, "the receipt is kept on reload");
+    // The import carries it, and the server still finishes it.
+    const payload = importPayload(run).finish as Record<string, unknown>;
+    assert.equal(payload.writerReceipt, st.writerReceipt, "the sign-in import carries the receipt");
+    const ctx = signedOut ? { userId: null, runId: RUN.startedAt, cookieHash: runCookieHash(FIXTURE_COOKIE) } : FIXTURE_CTX;
+    const c = cleanRevisionInput(payload, { receipt: ctx });
+    assert.equal((c as any).input.evidence.writerVerified, true);
+    assert.equal(computeRevision((c as any).input).status, "finished");
+  }
+});
+
+test("N2 (reviewer probe): signed in, a check over request-chosen documents and words never finishes a page with zero cards", async () => {
+  const PAGE = RESUME.replace("- Showed incoming culinary staff the equipment.", "- Managed a team of 40 cooks across three sites.");
+  const f = heldStore();
+  // Step 1: Check it again, the page claimed as its own source.
+  const r = await recheckDocs(
+    { kind: "finish", documents: { resume: PAGE, letter: "" }, source: { resumeText: PAGE }, runId: "kit-run-1" },
+    UID,
+    { verify: noFlags as any, random: fixedRandom, store: f.store }
+  );
+  assert.ok(r.ok);
+  assert.equal(readReceipt(r.ok ? r.receipt : "")?.src, (await import("../writer-receipt")).sourceHash(await (f.store as any).serverSource()), "signed over the SERVER-held own words");
+  // Step 2: save, claiming the page as own words, zero cards answered.
+  const saved = await saveFinishRevision(
+    UID,
+    { resumeText: PAGE, coverLetterText: "", written: r.ok ? r.written : null, grounding: r.ok ? r.grounding : null, writerReceipt: r.ok ? r.receipt : "", ownWords: PAGE, ownResumeText: PAGE, defendAnswers: [], runId: "kit-run-1" },
+    { source: "forge_finish" },
+    f.store
+  );
+  assert.ok(saved.ok);
+  assert.equal(saved.ok && saved.revision.status, "draft");
+  const ev = f.revs.at(-1)!.evidence as any;
+  assert.notEqual(ev.ownWords, PAGE, "own words are the server's");
+  assert.ok((saved.ok ? saved.revision.openItems : []).some((i) => /team of 40/.test(i)));
+});
+
+test("N2: an 'artifact:' run is refused on the finish path; a signed-out check's receipt is never imported into an account", async () => {
+  const pre = finishState({ writerReceipt: "" }, { signedOut: true });
+  const refused = await recheckDocs({ kind: "finish", documents: { resume: pre.resumeText, letter: "" }, source: {}, runId: "artifact:00000000-0000-4000-8000-0000000000aa" }, UID, { verify: noFlags as any, random: fixedRandom, store: heldStore().store });
+  assert.equal(refused.ok, false);
+  const { runCookieHash } = await import("../writer-receipt");
+  const r = await recheckDocs(
+    { kind: "finish", documents: { resume: pre.resumeText, letter: pre.coverLetterText }, source: { resumeText: SOURCE, goalNarrative: "I want to keep cooking." }, runId: RUN.startedAt },
+    null,
+    { verify: noFlags as any, random: fixedRandom }
+  );
+  assert.ok(r.ok && readReceipt(r.receipt)?.k === "check");
+  const st = { ...pre, written: r.ok ? r.written : null, grounding: r.ok ? r.grounding : null, writerReceipt: r.ok ? r.receipt : "" };
+  const ch = runCookieHash(r.ok ? r.runCookie! : "");
+  // Signed out, in that browser: its own files only.
+  assert.equal((cleanRevisionInput(st, { receipt: { userId: null, runId: RUN.startedAt, cookieHash: ch } }) as any).input.evidence.writerVerified, true);
+  // Into an account (same browser, the account's own run): refused.
+  assert.equal((cleanRevisionInput(st, { receipt: { userId: UID, runId: RUN.startedAt, cookieHash: ch, runLinked: true } }) as any).input.evidence.writerVerified, false);
+});
+
+test("L-a: /api/forge/recheck takes same-origin JSON only", () => {
+  assert.match(src("app", "api", "forge", "recheck", "route.ts"), /if \(!isSameOriginJsonPost\(request\.headers\)\) return NextResponse\.json\(\{ error: "Invalid request" \}, \{ status: 403 \}\);/);
 });

@@ -23,8 +23,16 @@
  * source, nonce, time. Signed in, the nonce is recorded as the run's newest.
  *
  * NEVER TRUSTED FROM A REQUEST: written documents, grounding, or a receipt.
- * Whatever a request sends under those names is ignored. The receipt's
- * "written" documents are the documents that were checked.
+ * Whatever a request sends under those names is ignored.
+ *
+ * SIGNED IN, THE FINISH PATH USES WHAT THE SERVER HOLDS (review N2): the
+ * person's own words are the server-held source (their stored upload and
+ * answers, as /api/revisions uses), never the request's; the receipt's
+ * "written" documents are the server-held documents of that run (the newest
+ * verified version saved for it) where they exist, else the documents that
+ * were checked. An "artifact:" run is refused here. Signed out there is no
+ * server copy: the receipt is marked "check" and only ever serves that
+ * browser's own signed-out files; it is never imported into an account.
  *
  * The artifact path also saves the checked version as the artifact's new
  * revision (status from the gate, as always), so a second check that BLOCKs
@@ -43,7 +51,7 @@ import { MAX_RENDER_CHARS } from "./resume-render";
 import { writerReceipt, writerSourceFrom, type WriterSource } from "./writer-receipt";
 import { computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence } from "./revision-status";
 import { artifactText, baseRevisionFor, textFromBase } from "./revision-current";
-import type { RevisionStore, SavedRevisionSummary } from "./revision-save";
+import { pickForgeArtifact, type RevisionStore, type SavedRevisionSummary } from "./revision-save";
 
 export interface RecheckDeps {
   verify: typeof VerifyFn;
@@ -130,13 +138,24 @@ function sign(
   userId: string | null,
   runId: string,
   source: WriterSource,
-  deps: RecheckDeps
+  deps: RecheckDeps,
+  kind?: "check"
 ): { receipt: string; nonce: string; now: number; runCookie: string | null } {
   const nonce = deps.random();
   const now = (deps.now ?? Date.now)();
   const runCookie = userId ? null : deps.random();
-  const receipt = writerReceipt(written, grounding, { userId, runId, source, nonce, now, ...(runCookie ? { cookie: runCookie } : {}) });
+  const receipt = writerReceipt(written, grounding, { userId, runId, source, nonce, now, ...(runCookie ? { cookie: runCookie } : {}), ...(kind ? { kind } : {}) });
   return { receipt, nonce, now, runCookie };
+}
+
+/** The writer's documents the server holds for a run: the newest verified version saved for it. */
+async function heldDocumentsFor(userId: string, runId: string, store: RevisionStore): Promise<{ resume: string; letter: string } | null> {
+  const forge = pickForgeArtifact(await store.listResumeArtifacts(userId));
+  if (!forge) return null;
+  const rev = await store.getLatestRevision(userId, forge.id);
+  const ev = (rev?.evidence ?? null) as Partial<RevisionEvidence> | null;
+  if (!ev || ev.writerVerified !== true || ev.runId !== runId || !ev.written) return null;
+  return { resume: ev.written.resume, letter: ev.written.letter };
 }
 
 /** The run a stored artifact's check is bound to (an artifact has no Forge run of its own). */
@@ -158,14 +177,36 @@ export async function recheckDocs(input: unknown, userId: string | null, deps: R
   const source = (b.source && typeof b.source === "object" ? b.source : {}) as Record<string, unknown>;
   const runId = typeof b.runId === "string" ? b.runId.slice(0, 100) : "";
   if (!isDoc(docs) || !docs.resume.trim() || !runId) return { ok: false, status: 400, error: "Nothing to check yet." };
+  // An artifact's run is the artifact path's own (review N2).
+  if (runId.startsWith("artifact:")) return { ok: false, status: 400, error: "Nothing to check yet." };
   if (docs.resume.length > MAX_RENDER_CHARS || docs.letter.length > MAX_RENDER_CHARS) {
     return { ok: false, status: 413, error: "That is longer than a resume or letter can be." };
   }
-  const written = { resume: docs.resume, letter: docs.letter };
+  const checked = { resume: docs.resume, letter: docs.letter };
   const answers = Array.isArray(b.answers) ? b.answers.filter((a): a is string => typeof a === "string").slice(0, 400).map((a) => a.slice(0, 2000)) : [];
   const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+
+  if (userId) {
+    // Signed in: the server-held own words and, where it has them, the
+    // server-held documents of this run (review N2).
+    const store = deps.store;
+    if (!store) return { ok: false, status: 500, error: "We couldn't check it just now." };
+    const held: WriterSource =
+      (store.serverSource ? await store.serverSource(userId, source.keepInsideLines === true) : null) ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] };
+    const written = (await heldDocumentsFor(userId, runId, store)) ?? checked;
+    const grounding = await runCheck(
+      checked,
+      { resumeText: [held.ownResumeText, held.ownWords].filter(Boolean).join("\n\n"), credentialsNote: held.credentialsAnswer || undefined, extra: answers },
+      deps.verify
+    );
+    const signed = sign(written, grounding, userId, runId, held, deps);
+    if (deps.record) await deps.record(userId, runId, signed.nonce, signed.now);
+    return { ok: true, grounding, receipt: signed.receipt, written, runCookie: null };
+  }
+
+  // Signed out: no server copy. A "check" receipt, for this browser's own files only.
   const grounding = await runCheck(
-    written,
+    checked,
     {
       resumeText: str(source.resumeText),
       goalNarrative: str(source.goalNarrative),
@@ -175,9 +216,8 @@ export async function recheckDocs(input: unknown, userId: string | null, deps: R
     },
     deps.verify
   );
-  const signed = sign(written, grounding, userId, runId, writerSourceFrom(source), deps);
-  if (userId && deps.record) await deps.record(userId, runId, signed.nonce, signed.now);
-  return { ok: true, grounding, receipt: signed.receipt, written, runCookie: signed.runCookie };
+  const signed = sign(checked, grounding, null, runId, writerSourceFrom(source), deps, "check");
+  return { ok: true, grounding, receipt: signed.receipt, written: checked, runCookie: signed.runCookie };
 }
 
 async function recheckArtifact(b: Record<string, unknown>, userId: string | null, deps: RecheckDeps): Promise<RecheckResult> {
