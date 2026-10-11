@@ -52,7 +52,7 @@ import { writerReceipt, writerSourceFrom, type WriterSource } from "./writer-rec
 import { computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence } from "./revision-status";
 import { artifactText, baseRevisionFor, textFromBase } from "./revision-current";
 import { pickForgeArtifact, type RevisionStore, type SavedRevisionSummary } from "./revision-save";
-import { revisionKind, withRewording, type SourceKind } from "./source-kind";
+import { revisionKind, withRewording, writerOriginOf, type SourceKind } from "./source-kind";
 import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 
 export interface RecheckDeps {
@@ -295,6 +295,8 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
     writerReceipt: signed.receipt,
     writerVerified: true,
     runId,
+    // Phase 6 integration (H1): a check of the writer's own version of this resume keeps that origin.
+    ...(base && base.artifact_id === art.id && writerOriginOf(base) ? { writerOrigin: true } : { writerOrigin: undefined }),
   };
   const checked = { ...edited.input, evidence };
   const verdict = computeRevision(checked);

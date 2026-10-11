@@ -71,7 +71,7 @@ import {
 import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
 import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
 import { withholdRecordLines } from "./record-lines";
-import { countPromptsFor } from "./count-prompts";
+import { countPromptForLine } from "./count-prompts";
 
 export type { DefendAnswer, OpenItem, ResumeStatus };
 
@@ -533,12 +533,15 @@ export function applyRewrite(text: string, answers: DefendAnswer[], line: string
   const carried = answers
     .filter((a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && kept.has(before.get(a.family as string) ?? ""))
     .map((a) => ({ ...a, line: newLine }));
+  // Phase 6 integration (L1): "Fix this" on a job header carries the answers keyed to that job.
+  const oldJob = squash(stripBullet(line));
+  const rekey = (a: DefendAnswer): DefendAnswer => (typeof a.job === "string" && squash(stripBullet(a.job)) === oldJob ? { ...a, job: newLine } : a);
   return {
     text: next,
     answers: [
-      ...answers.filter((a) => squash(a.line) !== k),
+      ...answers.filter((a) => squash(a.line) !== k).map(rekey),
       { line: newLine, answer: typed, verdict: "stands", kind: "rewrite", replaced },
-      ...carried,
+      ...carried.map(rekey),
     ],
     changed: true,
   };
@@ -1521,13 +1524,13 @@ export interface NumberPrompt {
 
 /**
  * Up to three optional "add a number?" prompts: the first duty line of each
- * job that has no number yet and a clear thing to count. Lines with a card
+ * job that has no number yet, with the one thing to count that fits it (or a
+ * neutral "how many" when the line's work is unclear). Lines with a card
  * open are left to that card. The person types the number into the line
  * themselves; nothing here offers a figure.
  */
 export function optionalNumberPrompts(resumeText: string, skipLines: Iterable<string> = [], max = 3): NumberPrompt[] {
   const skip = new Set(Array.from(skipLines, (l) => squash(stripBullet(l))));
-  const general = new Set(countPromptsFor("", "", 10));
   const out: NumberPrompt[] = [];
   let inExperience = false;
   let job = "";
@@ -1547,9 +1550,8 @@ export function optionalNumberPrompts(resumeText: string, skipLines: Iterable<st
     }
     if (!job || asked || !/^\s*[-•*]/.test(l)) return;
     if (numbersIn(l).size > 0 || skip.has(squash(stripBullet(l)))) return;
-    const count = countPromptsFor(stripBullet(l), job, 1)[0];
-    if (!count || general.has(count)) return;
-    out.push({ line: l, count });
+    // Phase 6 integration (L6): the one thing to count that fits this job, else a neutral "how many".
+    out.push({ line: l, count: countPromptForLine(stripBullet(l), job) });
     asked = true;
   });
   return out;

@@ -194,7 +194,8 @@ test("the walk while the writer works shows the person's page and t.ROY's marks"
 test("the finish page plays only verified changes, after the documents arrive", () => {
   const src = read("app/(forge)/output/page.tsx");
   // Changes are read from the response only through the verifier, against the finished resume.
-  assert.match(src, /readChanges\(data\.changes, session\.resumeText \?\? "", data\.resume \|\| ""\)/);
+  // Integration round (M2): against the page the writer started from (the run's resume text, or a rebuild's saved page).
+  assert.match(src, /readChanges\(data\.changes, rebuildActive\(session\) \? session\.originalResumeText \?\? "" : session\.resumeText \?\? "", data\.resume \|\| ""\)/);
   // The reveal never starts while generating, only once the documents are done.
   assert.match(src, /const liveFixOn = docState === "done" && revealing && !checkMode && changes\.length > 0;/);
   // While it plays, the finished page waits; reduced motion never plays it.
@@ -288,7 +289,8 @@ test("r3 L1: the end line says where the list really is (above the page)", () =>
   assert.match(live, /in the list above your page/);
   assert.doesNotMatch(live, /under your page/);
   const page = read("app/(forge)/output/page.tsx");
-  const list = page.indexOf("<ChangesList changes={changes}");
+  // Integration round (L2): the recap renders the changes still on the page.
+  const list = page.indexOf("<ChangesList changes={recapChanges}");
   const resume = page.indexOf('<div id="finish-resume"');
   assert.ok(list > 0 && resume > list, "the recap list renders above the resume");
 });

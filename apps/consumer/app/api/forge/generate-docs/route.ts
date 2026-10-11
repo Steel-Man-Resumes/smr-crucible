@@ -24,6 +24,9 @@ import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
 import { runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
 import { isUsableResume, splitWriterOutput, validateWriterChanges } from "@/lib/writer-changes";
+import { changesNotAwaitingCards } from "@/lib/changes-gate";
+import { buildFinishView } from "@/lib/finish-gate";
+import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
 import { restoreDateForms } from "@/lib/date-form";
 import { randomBytes } from "node:crypto";
 import { revisionCaller } from "@/lib/revision-route";
@@ -213,7 +216,9 @@ async function handlePost(request: Request) {
     // only where the old line is the person's and the new line is on the
     // FINAL resume (after the truth check and every backstop). Display only:
     // not part of what the receipt signs, never used to save anything.
-    const changes = validateWriterChanges(rawChanges, {
+    // Phase 6 integration (M2): in a rebuild `input.resumeText` is the page the writer
+    // started from (never the person's own words); `old` lines are checked against it.
+    const validChanges = validateWriterChanges(rawChanges, {
       ownResumeText: withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept,
       finalResume: resume,
       keepInsideLines: input.keepInsideLines === true,
@@ -244,7 +249,7 @@ async function handlePost(request: Request) {
           cover_letter_length: coverLetter.length,
           grounding_flags: groundingFlags.length,
           grounding_applied: groundingApplied,
-          changes_count: changes.length,
+          changes_count: validChanges.length,
         },
         latencyMs,
       });
@@ -299,6 +304,23 @@ async function handlePost(request: Request) {
     // Signed out: a fresh run cookie with every generation (HttpOnly, set
     // below), and the receipt bound to it (review r3 L-1).
     const runCookie = userId ? undefined : randomBytes(16).toString("hex");
+    // Phase 6 integration (H3): a change whose new line waits on a card (a people
+    // claim set aside to ask, a fact to confirm) is not a finished fix and is not
+    // shown. Read from this server's own finish gate over the final documents,
+    // with the same own words the receipt is bound to.
+    const ownSource = writerSourceFrom(raw);
+    const cardView = buildFinishView({
+      resumeText: resume,
+      ownWords: ownSource.ownWords,
+      defendAnswers: [],
+      coverLetterText: coverLetter,
+      written: { resume, letter: coverLetter },
+      grounding,
+      credentialsAnswer: ownSource.credentialsAnswer || undefined,
+      credentialRows: completeCredentialRows(readCredentialRows(ownSource.credentialRows)),
+      ownResumeText: ownSource.ownResumeText || undefined,
+    });
+    const changes = changesNotAwaitingCards(validChanges, cardView);
     const receipt = writerReceipt({ resume, letter: coverLetter }, grounding, {
       userId: userId ?? null,
       runId,

@@ -119,6 +119,7 @@ import { NextStep, ReviewAsk } from "@/components/forge/finish/NextStep";
 import { StorySection, type ForgeOutput } from "@/components/forge/finish/StorySection";
 import { buildResumeTour, pageLines } from "@/lib/showstopper-tour";
 import { readChanges, type MarkupChange } from "@/lib/markup-changes";
+import { changesStillOnPage } from "@/lib/changes-gate";
 import { useReducedMotion } from "@/components/forge/showstopper/useReducedMotion";
 import { MarkupWalk } from "@/components/forge/markup/MarkupWalk";
 import { LiveFix } from "@/components/forge/markup/LiveFix";
@@ -223,11 +224,16 @@ function OutputPageInner() {
   reducedRef.current = reduced;
   // The page the writer was given (the changes' old lines come from it).
   // A page typed in the builder is not a "before", so it gets no walk.
+  // Phase 6 integration (M2): in a rebuild that is the saved page the writer
+  // started from (the same page the processing tour walked), never the run's
+  // older resume text. It is a starting page, not the person's own words.
+  const rebuilding = !!rebuildActive(session);
+  const startingPage = rebuilding ? session.originalResumeText ?? "" : session.resumeText ?? "";
   const walkTour = useMemo(
-    () => (checkMode || session.resumeMethod === "guided" ? null : buildResumeTour(session.resumeText)),
-    [checkMode, session.resumeMethod, session.resumeText]
+    () => (checkMode || (!rebuilding && session.resumeMethod === "guided") ? null : buildResumeTour(startingPage)),
+    [checkMode, rebuilding, session.resumeMethod, startingPage]
   );
-  const liveFixLines = useMemo(() => pageLines(session.resumeText ?? ""), [session.resumeText]);
+  const liveFixLines = useMemo(() => pageLines(startingPage), [startingPage]);
   // Lines about time inside that the writer held back (never silently), and
   // whether the person chose to put them back as written.
   const [withheldLines, setWithheldLines] = useState<string[]>([]);
@@ -368,7 +374,8 @@ function OutputPageInner() {
       setResumeText(data.resume || "");
       // Only changes whose old line is the person's and whose new line is in
       // this finished resume. None (older server, nothing changed) = no reveal.
-      const verified = readChanges(data.changes, session.resumeText ?? "", data.resume || "");
+      // M2: checked against the page the writer started from (the server checked the same).
+      const verified = readChanges(data.changes, rebuildActive(session) ? session.originalResumeText ?? "" : session.resumeText ?? "", data.resume || "");
       setChanges(verified);
       setRevealing(verified.length > 0 && reducedRef.current === false);
       // Lanes first (R2): the letter is the job route's. On the other routes it
@@ -916,9 +923,15 @@ function OutputPageInner() {
   // ---- check summaries -------------------------------------------------------------
   const mintBlocks = view.openItems.filter((i) => i.target === "resume" && !i.trace && i.rule !== "STD-C04" && i.severity === "BLOCK").length;
   const traceBlocks = view.openItems.filter((i) => i.trace && i.severity === "BLOCK").length;
+  // Phase 6 integration (L6): the older panels read the server's own words when
+  // the page has them (a rebuild, or a version restored from the account),
+  // never a rebuild's starting page or an older run's text.
+  const panelSource = runEvidence ? runEvidence.ownResumeText : session.resumeText;
+  // L2: the recap shows only changes whose new line is still on the resume as it reads now.
+  const recapChanges = useMemo(() => changesStillOnPage(changes, resumeText), [changes, resumeText]);
   const discrepancies = useMemo(
-    () => (resumeText.trim() ? findDiscrepancies(resumeText, { sourceText: session.resumeText }) : []),
-    [resumeText, session.resumeText]
+    () => (resumeText.trim() ? findDiscrepancies(resumeText, { sourceText: panelSource }) : []),
+    [resumeText, panelSource]
   );
   const samples = useMemo(() => pickSamplePostings(careerPaths.map((c) => c.title || ""), 4), [careerPaths]);
   // D2 (Phase 6): optional "add a number?" prompts, never an open item.
@@ -1166,7 +1179,7 @@ function OutputPageInner() {
           {/* 2. The resume, with the fix questions beside it (under it on a phone) */}
           <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
             <div className="min-w-0">
-              {!checkMode && <ChangesList changes={changes} open={reduced !== false} />}
+              {!checkMode && <ChangesList changes={recapChanges} open={reduced !== false} />}
               <div id="finish-resume" className="scroll-mt-20 border border-t-line bg-t-bg p-3 sm:p-4" data-testid="finish-resume">
                 {resumeText ? (
                   <ResumePage text={resumeText} draft={view.state !== "finished"} />
@@ -1328,7 +1341,7 @@ function OutputPageInner() {
                 }
                 testId="check-discrepancy"
               >
-                <DiscrepancyPanel resumeText={resumeText} sourceText={session.resumeText} readinessStage={readiness} onApply={setResumeText} />
+                <DiscrepancyPanel resumeText={resumeText} sourceText={panelSource} readinessStage={readiness} onApply={setResumeText} />
               </CheckSection>
 
               {(groundingNote || !verifierRan) && (
@@ -1364,7 +1377,7 @@ function OutputPageInner() {
               >
                 <AtsScorePanel
                   resumeText={resumeText}
-                  sourceText={session.resumeText}
+                  sourceText={panelSource}
                   onApply={setResumeText}
                   samplePostings={samples}
                   samplePostingLabel={SAMPLE_POSTING_LABEL}

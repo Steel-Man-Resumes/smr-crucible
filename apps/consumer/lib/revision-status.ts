@@ -40,6 +40,7 @@ import type { ArtifactRevision, NewRevision, RevisionSource } from "@crucible/co
 import { readReceipt, receiptAccepted, sourceHash, verifyWriterReceipt, type ReceiptContext, type WriterSource } from "./writer-receipt";
 import { stableJson } from "@crucible/core/src/artifactRevision";
 import { createHash } from "node:crypto";
+import { jobOfLine } from "@crucible/core/src/resumeStatus";
 import { lineKey } from "./revision-patch";
 
 /** Bump when the gate or the page rule changes in a way that can change a status. */
@@ -92,6 +93,14 @@ export interface RevisionEvidence {
    * the stored text still matches it (lib/rebuild-source.ts).
    */
   givenAsIs?: string;
+  /**
+   * Phase 6 integration (H1). Set by the SERVER only, on an artifact check
+   * ("Check and finish") of a version the writer made: the checked version
+   * keeps that origin, so the lane home keeps offering "Check and finish",
+   * never a rebuild that throws the person's answers away. Kept only on
+   * stored rows; never read from a request.
+   */
+  writerOrigin?: boolean;
 }
 
 /** The mark a page saved as given carries (sha256 over its exact text). Server only. */
@@ -293,6 +302,7 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
         runId: typeof r.runId === "string" ? r.runId.slice(0, 100) : "",
         // Only a stored row keeps the server's given-as-is mark; a request never sets it.
         ...(opts.trusted && typeof r.givenAsIs === "string" && /^[0-9a-f]{64}$/.test(r.givenAsIs) ? { givenAsIs: r.givenAsIs } : {}),
+        ...(opts.trusted && r.writerOrigin === true ? { writerOrigin: true } : {}),
       },
     },
   };
@@ -427,12 +437,19 @@ export function remapAnswers(answers: DefendAnswer[], pages: string[]): DefendAn
     const k = lineKey(l);
     if (k && !byKey.has(k)) byKey.set(k, l);
   }
+  // Phase 6 integration (L1): an answer keyed to a job follows that job's header
+  // when the header was edited (the header its line now sits under).
+  const rejob = (a: DefendAnswer): DefendAnswer => {
+    if (typeof a.job !== "string" || !a.job || exact.has(a.job.trim())) return a;
+    const job = byKey.get(lineKey(a.job)) ?? jobOfLine(pages[0] ?? "", a.line);
+    return job ? { ...a, job } : a;
+  };
   return answers.map((a) => {
-    if (exact.has(a.line.trim())) return a;
+    if (exact.has(a.line.trim())) return rejob(a);
     const moved = byKey.get(lineKey(a.line));
     if (!moved) return a; // the line changed: it is asked again
     // A rewrite record is tied to its exact text; on a moved line it stands as the person's answer.
     if (a.kind === "rewrite") return { line: moved, answer: a.answer, verdict: a.verdict ?? "stands" };
-    return { ...a, line: moved };
+    return rejob({ ...a, line: moved });
   });
 }
