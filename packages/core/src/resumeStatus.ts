@@ -79,6 +79,8 @@ export interface OpenItem {
   scopeFamilies?: string[];
   /** Round 13 (SF-4): a role used as a job title in the summary or letter ("shift supervisor"), asked on a title card. */
   roleTitle?: string;
+  /** Phase 6 round 4 (r3 M3-3): for a scope claim, the job header the line sits under; answers are kept per job. */
+  job?: string;
 }
 
 export interface DefendAnswer {
@@ -101,6 +103,8 @@ export interface DefendAnswer {
   ownTitle?: string;
   /** Round 11: for "scope_yes", the scope family the typed words answer ("train"). */
   family?: string;
+  /** Phase 6 round 4 (r3 M3-3): for "scope_yes", the job header of the line it answers; one Yes is one line in one job. */
+  job?: string;
   /** Round 11: a rewrite made by "I helped with it": the line is their shared form; never joins their words. */
   scopeHelp?: boolean;
   /** Round 12: the claim "I helped with it" was made for, and the sentence it changed (it settles only that one). */
@@ -667,7 +671,10 @@ export function scopeNotTheirsAnswered(line: string, sourceText: string, answers
 export function scopeAllNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[], ctx: ScopeContext = {}): NonNullable<ReturnType<typeof scopeNotTheirs>>[] {
   // Phase 6 (r2 ruling): "Yes, I was over other people in this job", tapped on this line, settles its
   // people-scope claims (that line only; it never joins their words anywhere else).
-  const overPeopleYes = answers.some((a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && a.answer === OVER_PEOPLE_YES);
+  // Round 4 (r3 M3-3): keyed by job and line, never by the line's text alone.
+  const overPeopleYes = answers.some(
+    (a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && a.answer === OVER_PEOPLE_YES && squash(a.job ?? "") === squash(ctx.job ?? "")
+  );
   const own = answers.filter(
     (a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && typeof a.family === "string" && a.answer !== OVER_PEOPLE_YES && isScopeWhoAnswer(a.answer) && !isScopeCopy(a.answer, line)
   );
@@ -1021,7 +1028,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     // never made is settled only by their own rewrite or a cut, never by an
     // answer.
     const scopeFindings: MintFinding[] = [];
-    const scopeOf = new Map<MintFinding, { family: string; families?: string[]; helped?: string }>();
+    const scopeOf = new Map<MintFinding, { family: string; families?: string[]; helped?: string; job?: string }>();
     const roleTitleOf = new Map<MintFinding, string>();
     // A credentials line is a credential, asked by its prompt; its name may hold a scope word ("ServSafe Manager").
     const credentialSectionLines = new Set(credentialMentionsOf(resumeText).filter((m) => m.where === "credentials").map((m) => m.context));
@@ -1042,7 +1049,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
       const finding: MintFinding = { rule: "STD-C04", severity: "BLOCK", line, why: scopeWhy(hit.word), kind: "scope_unsaid" };
       const families = Array.from(new Set(hits.map((h) => h.family)));
       // Round 13 (SF-3): never "I helped with it" for a title.
-      scopeOf.set(finding, { family: hit.family, families, helped: hits.length === 1 && !hit.role ? helpedForm(line, hit.word) : undefined });
+      scopeOf.set(finding, { family: hit.family, families, helped: hits.length === 1 && !hit.role ? helpedForm(line, hit.word) : undefined, ...(job ? { job } : {}) });
       scopeFindings.push(finding);
     }
     // A job title the person never used that claims scope ("SHIFT SUPERVISOR"): the same, on its job header.
@@ -1092,6 +1099,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
         items[items.length - 1].scopeFamily = sc.family;
         if (sc.families && sc.families.length > 1) items[items.length - 1].scopeFamilies = sc.families;
         if (sc.helped) items[items.length - 1].helped = sc.helped;
+        if (sc.job) items[items.length - 1].job = sc.job;
       }
     }
 

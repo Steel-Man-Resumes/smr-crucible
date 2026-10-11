@@ -154,7 +154,9 @@ test("r2 ruling: the one-tap answer settles that line only", async () => {
   assert.deepEqual(scopeAllNotTheirsAnswered(line, src, yes), []);
   assert.ok(scopeAllNotTheirsAnswered("- Supervised the dock crew.", src, yes).length > 0, "never another line");
   // "No, I did the work" puts their own line back.
-  assert.equal(ownLineFor(line, src), "Responsible for 3rd shift.");
+  assert.equal(ownLineFor(line, src, { job: "FORKLIFT DRIVER | Northgate | 2019 - 2021" }), "Responsible for 3rd shift.");
+  // Round 4 (r3 M3-2): never without knowing the job.
+  assert.equal(ownLineFor(line, src), undefined);
 });
 
 test("H1: the mint check's skills reading agrees (scope words read the same everywhere)", async () => {
@@ -167,4 +169,69 @@ test("H1: the mint check's skills reading agrees (scope words read the same ever
   for (const [src, term] of [["In charge of the guys on my shift.", "Crew supervision"], ["I supervised the crew.", "Crew supervision"]]) {
     assert.equal(flagged(src, term), scopeHitsNotTheirs(term, `Dana Example\nWelded steel.\n${src}`).length > 0, term);
   }
+});
+
+// ---- Round 4 (review r3, CC rulings) ------------------------------------------------------------------------
+
+test("r3 H3-1: the same verb clears people scope only with the very same object", () => {
+  const asked: Array<[string, string]> = [
+    ["I ran the line.", "- Ran the line crew."],
+    ["I ran the floor at night.", "- Ran the floor staff at night."],
+    ["I ran the store.", "- Ran the store crew."],
+    ["I managed the crew's schedule.", "- Managed the crew."],
+    ["I directed the crew's trucks into the dock.", "- Directed the crew."],
+    ["I led the team's safety huddle.", "- Led the team."],
+    ["I supervised the crew's lunch breaks.", "- Supervised the crew."],
+    ["I headed up the dock.", "- Headed up the dock crew."],
+    ["I ran the kitchen on weekends.", "- Ran the kitchen staff on weekends."],
+    ["I ran errands for the crew.", "- Ran the crew."],
+    ["I ran the register for the store.", "- Ran the store."],
+    ["I managed the night shift.", "- Managed the night shift crew."],
+    ["I led stretches for the crew every morning.", "- Led the crew every morning."],
+    ["I oversaw the trucks.", "- Oversaw the truck drivers."],
+  ];
+  for (const [src, line] of asked) assert.ok(scopeHitsNotTheirs(line, src).length > 0, `should ask: ${line} <= ${src}`);
+  assert.deepEqual(scopeHitsNotTheirs("- Ran the store.", "I ran the store."), []);
+  assert.deepEqual(scopeHitsNotTheirs("- Ran the dock crew on nights", "I basically ran the dock crew on nights."), []);
+});
+
+test("r3 M3-1: people scope is asked when the page job is not exactly one of theirs", () => {
+  const two = "Production Supervisor | Beta Works | 2019 - 2022\nSupervised 6 press operators.\nMachine Operator | Acme Plant | 2016 - 2019\nRan the press.";
+  for (const job of ["MACHINE OPERATOR | Acme Plant | 2016 - 2019", "MACHINE OPERATOR | Acme | 2016 - 2019", "PRESS OPERATOR | Acme Plant | 2016 - 2019", "MACHINE OPERATOR | Acme Plant, Inc. | 2016 - 2019", "FORKLIFT DRIVER | Nowhere | 2010 - 2011"]) {
+    assert.ok(scopeHitsNotTheirs("- Supervised the press operators.", two, { job }).length > 0, job);
+  }
+  assert.deepEqual(scopeHitsNotTheirs("- Supervised the press operators.", two, { job: "PRODUCTION SUPERVISOR | Beta Works | 2019 - 2022" }), []);
+  // A rehire: the dates tell the two stints apart; the stint without supervision is asked.
+  const same = "Stocker | Corner Mart | 2014 - 2015\nStocked shelves.\nStocker | Corner Mart | 2017 - 2019\nSupervised 3 pickers on nights.";
+  assert.ok(scopeHitsNotTheirs("- Supervised the pickers.", same, { job: "STOCKER | Corner Mart | 2014 - 2015" }).length > 0);
+  assert.deepEqual(scopeHitsNotTheirs("- Supervised the pickers.", same, { job: "STOCKER | Corner Mart | 2017 - 2019" }), []);
+  // The page's own copy of another job's sentence is not theirs for this job.
+  assert.ok(scopeHitsNotTheirs("- Supervised 6 press operators.", two, { job: "MACHINE OPERATOR | Acme Plant | 2016 - 2019" }).length > 0);
+});
+
+test("r3 M3-2: 'No, I did the work' comes only from the same job, never a people line, never a guess", async () => {
+  const { ownLineFor } = await import("../scopeWords");
+  const two = "Production Supervisor | Beta Works | 2019 - 2022\nSupervised 6 press operators.\nMachine Operator | Acme Plant | 2016 - 2019\nRan the press.";
+  assert.equal(ownLineFor("- Supervised the press operators.", two, { job: "MACHINE OPERATOR | Acme Plant | 2016 - 2019" }), "Ran the press.");
+  assert.equal(ownLineFor("- Supervised the press operators.", two, { job: "PRESS OPERATOR | Acme Plant | 2016 - 2019" }), undefined);
+  assert.equal(ownLineFor("- Supervised the press operators.", two, { job: "PRODUCTION SUPERVISOR | Beta Works | 2019 - 2022" }), undefined, "never a people line");
+  assert.equal(ownLineFor("- Led the crew.", "Laborer | X Co | 2020 - 2021\nDug trenches.", { job: "LABORER | X Co | 2020 - 2021" }), undefined);
+});
+
+test("r3 M3-3: one Yes is one line in one job", async () => {
+  const { scopeAllNotTheirsAnswered } = await import("../resumeStatus");
+  const { OVER_PEOPLE_YES } = await import("../scopeWords");
+  const src = "Forklift Driver | Northgate | 2021 - 2022\nDrove forklift.\nCashier | Mart | 2018 - 2020\nRan the register.";
+  const a = "FORKLIFT DRIVER | Northgate | 2021 - 2022";
+  const b = "CASHIER | Mart | 2018 - 2020";
+  const yes = [{ line: "- Supervised the crew.", answer: OVER_PEOPLE_YES, kind: "scope_yes" as const, family: "supervise", job: a }];
+  assert.deepEqual(scopeAllNotTheirsAnswered("- Supervised the crew.", src, yes, { job: a }), []);
+  assert.ok(scopeAllNotTheirsAnswered("- Supervised the crew.", src, yes, { job: b }).length > 0);
+});
+
+test("r3 L3-3: people behind any looking-after verb is a people claim", async () => {
+  const { scopeHits, isPeopleScopeHit } = await import("../scopeWords");
+  assert.ok(scopeHits("Handled the new hires.").some(isPeopleScopeHit));
+  assert.ok(scopeHitsNotTheirs("Handled the new hires.", "Responsible for the new hires.").length > 0);
+  assert.deepEqual(scopeHits("Took care of the kitchen.").filter(isPeopleScopeHit), []);
 });
