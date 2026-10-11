@@ -48,10 +48,21 @@ export function checkedFor(rev: Pick<ArtifactRevision, "evidence"> | null | unde
   return ev.writerVerified === true && ev.runId === artifactRunId(artifactId);
 }
 
-/** The newest version, when it is R1's check of this resume and the stored content still reads as it. */
+/**
+ * The newest version, when it is R1's check of this resume and the stored
+ * content still reads as it. Its text must be the text R1 actually checked,
+ * or a Check and finish save made on top of that check (the person's own
+ * card answers and changes, source "forge_finish"). An edit saved through
+ * the Refinery carries the old check forward (R1's editInput), so its changed
+ * lines were never second-checked: it goes back through R1's recheck
+ * (review r2 L-b).
+ */
 async function currentChecked(userId: string, art: ArtifactLite, store: RevisionStore): Promise<ArtifactRevision | null> {
   const newest = await store.getLatestRevision(userId, art.id);
   if (!newest || !checkedFor(newest, art.id)) return null;
+  const checkedText = ((newest.evidence ?? {}) as { written?: { resume?: unknown } | null }).written?.resume;
+  const isTheCheckedText = typeof checkedText === "string" && checkedText.trim() === newest.resume_text.trim();
+  if (!isTheCheckedText && newest.source !== "forge_finish") return null;
   // Edited in the Refinery since that check: it needs checking again.
   const now = artifactText(art.content) ? textFromBase(art.content, newest) : "";
   return now && now.trim() === newest.resume_text.trim() ? newest : null;
