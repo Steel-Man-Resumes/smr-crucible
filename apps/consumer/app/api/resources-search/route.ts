@@ -1,23 +1,18 @@
 /**
- * Resource Search API — Curated directory + live APIs
+ * Support search: local help for the place the person gave, honest about
+ * where our checked listings reach (lib/support-search.ts).
  *
- * Phase 1 (current): Return curated MILWAUKEE_RESOURCES filtered by category + barriers.
- * Phase 2: Augment housing results with live HUD API data.
- * Phase 3: Add CareerOneStop for education/training.
- * Falls back to Claude only for categories with zero curated data.
+ * Phase 5 lane R3 (Codex A4): the person's state, city or county and ZIP are
+ * read properly; each service shows only where its real scope reaches; a
+ * place we have not checked gets the services that work anywhere and a line
+ * saying so. HUD counselors keep the address and state HUD gave.
  */
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { findHudCounselors } from "@/lib/hud-counselors";
-import {
-  getResourcesByCategory,
-  getResourcesForBarriers,
-  RESOURCE_DIRECTORY,
-  type ResourceEntry,
-  type ResourceCategory,
-} from "@/lib/resource-directory";
+import { searchSupport } from "@/lib/support-search";
 
 export const maxDuration = 15;
 
@@ -28,104 +23,49 @@ async function handlePost(request: Request) {
   }
 
   try {
-    const { category, barriers, location } = await request.json();
+    const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
+    const { category, barriers, location } = body ?? {};
 
-    let resources: ResourceEntry[] = [];
-
-    if (category) {
-      // Category-specific search
-      resources = getResourcesByCategory(category as ResourceCategory);
-    } else if (barriers && Array.isArray(barriers) && barriers.length > 0) {
-      // Barrier-matched search
-      resources = getResourcesForBarriers(barriers);
-    } else {
-      // Return all resources
-      resources = [...RESOURCE_DIRECTORY];
-    }
-
-    // WHERE THE PERSON IS decides what "local" means. This used to sort
-    // Milwaukee first for everybody, which handed someone in Libby a list of
-    // Wisconsin shelters. A state we can recognise shows that state's entries
-    // and national ones, and nothing from another state. An unrecognised or
-    // missing location keeps the original Wisconsin-first behaviour, minus
-    // other states' local entries.
-    const where = String(location ?? "").toLowerCase();
-    const inMontana = /\bmontana\b|\bmt\b|,\s*mt\b/.test(where);
-    resources = resources.filter((r) =>
-      inMontana ? r.geo === "montana" || r.geo === "national" : r.geo !== "montana"
+    // A function call, not a fetch to our own URL (security review 3a Part 2
+    // r1, L5): this route is already signed in and premium-gated. HUD is
+    // asked only for the normalised place (support-search hudQueryFor).
+    const { resources, coverage, place } = await searchSupport(
+      { category, barriers, location },
+      { findHud: (location) => findHudCounselors(location) }
     );
-    const geoOrder: Record<string, number> = { montana: 0, milwaukee: 0, waukesha: 1, wisconsin: 2, national: 3 };
-    resources.sort((a, b) => (geoOrder[a.geo] ?? 9) - (geoOrder[b.geo] ?? 9));
 
-    // If housing category, augment with live HUD data
-    if (category === "housing") {
-      try {
-        // A function call, not a fetch to our own URL (security review 3a
-        // Part 2 r1, L5): this route is already signed in and premium-gated.
-        const counselors = await findHudCounselors(location);
-        {
-          // Convert HUD counselors to ResourceEntry format
-          const hudResources: ResourceEntry[] = counselors.map(
-            (c: {
-              name: string;
-              address: string;
-              city: string;
-              state: string;
-              phone: string;
-              services: string[];
-            }) => ({
-              id: `hud-${c.name.toLowerCase().replace(/\s+/g, "-").slice(0, 30)}`,
-              category: "housing" as ResourceCategory,
-              type: "curated" as const,
-              title: c.name,
-              provider: "HUD-Approved Counseling Agency",
-              description: c.services?.length
-                ? `Services: ${c.services.slice(0, 3).join(", ")}`
-                : "HUD-approved housing counseling agency. Free counseling for renters and homebuyers.",
-              phone: c.phone || undefined,
-              address: [c.address, c.city, c.state]
-                .filter(Boolean)
-                .join(", "),
-              geo: "milwaukee" as const,
-              verifiedAt: new Date().toISOString().split("T")[0],
-              tags: ["housing", "counseling", "hud"],
-            })
-          );
-          resources = [...resources, ...hudResources];
-        }
-      } catch {
-        // HUD augmentation failed — continue with curated data
-      }
-    }
-
-    // Log decision for JBS compliance
+    // Log for JBS compliance. IDs and counts only: no typed location and no
+    // barrier list (Codex E, privacy: support needs stay out of logs).
     try {
       const { logDecision, logLabel } = await import("@crucible/core");
       // Signed-in visitors get the row tied to them so "delete my data" removes it.
       const session = await auth().catch(() => null);
+      const bySource = (s: string) => resources.filter((r) => r.source === s).length;
       await logDecision({
         userId: session?.user?.id ?? null,
         contextPage: "resources-search",
         modelProvider: "curated-directory",
-        modelId: "resource-directory-v1",
-        input: JSON.stringify({ category, barriers, location }).slice(0, 500),
-        explanation: `Returned ${resources.length} curated resources for category: ${logLabel(category, "all")}.`,
+        modelId: "resource-directory-v2",
+        input: JSON.stringify({ category: logLabel(category, "all"), state: place.state, level: coverage.level }),
+        explanation: `Returned ${resources.length} resources for category: ${logLabel(category, "all")}; closest coverage: ${coverage.level}.`,
         outputSummary: {
           type: "resource_search",
           source: "curated",
           resources_count: resources.length,
+          curated_count: bySource("curated"),
+          hud_count: bySource("hud"),
+          coverage: coverage.level,
           category: logLabel(category, "all"),
-          hud_augmented: category === "housing",
         },
       });
     } catch (err) {
-      console.error("Decision log failed (resources):", err);
+      console.error("Decision log failed (resources):", (err as { name?: string })?.name || "error");
     }
 
-    return NextResponse.json({ resources });
+    return NextResponse.json({ resources, coverage });
   } catch (error) {
-    console.error("Resource search error:", error);
-    return NextResponse.json({ resources: [] });
+    console.error("Resource search error:", (error as { name?: string })?.name || "error");
+    return NextResponse.json({ resources: [], coverage: null });
   }
 }
 

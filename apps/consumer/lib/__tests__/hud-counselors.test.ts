@@ -21,7 +21,7 @@ test("the lookup only ever asks data.hud.gov, and shapes the answer", async () =
   assert.equal(asked.length, 1);
   assert.ok(asked[0].startsWith(HUD_SEARCH_URL + "?"));
   assert.equal(new URL(asked[0]).host, "data.hud.gov");
-  assert.deepEqual(out, [{ name: "Sample Housing Help", address: "1 Main St", city: "Libby", state: "MT", phone: "555-555-0100", services: ["Rental help"] }]);
+  assert.deepEqual(out, [{ name: "Sample Housing Help", address: "1 Main St", city: "Libby", state: "MT", zip: "59923", phone: "555-555-0100", website: "", services: ["Rental help"] }]);
 });
 
 test("a failure or odd input gives an empty list, never a throw", async () => {
@@ -31,9 +31,18 @@ test("a failure or odd input gives an empty list, never a throw", async () => {
   assert.deepEqual(await findHudCounselors({ evil: true } as unknown as string, throws), []);
 });
 
+test("no place, no search: a blank location never falls back to the home city (Phase 5 R3)", async () => {
+  const asked: string[] = [];
+  const fake = (async (url: string) => { asked.push(url); return new Response("[]", { status: 200 }); }) as unknown as typeof fetch;
+  assert.deepEqual(await findHudCounselors("", fake), []);
+  assert.deepEqual(await findHudCounselors(null, fake), []);
+  assert.deepEqual(await findHudCounselors("   ", fake), []);
+  assert.equal(asked.length, 0);
+});
+
 test("the housing search calls the function, not its own URL", () => {
   const src = readFileSync(join(CONSUMER, "app", "api", "resources-search", "route.ts"), "utf8");
-  assert.match(src, /await findHudCounselors\(location\)/);
+  assert.match(src, /findHud: \(location\) => findHudCounselors\(location\)/);
   assert.doesNotMatch(src, /\/api\/resources\/hud-counselors/);
   assert.doesNotMatch(src, /new URL\([^)]*request\.url/);
 });
