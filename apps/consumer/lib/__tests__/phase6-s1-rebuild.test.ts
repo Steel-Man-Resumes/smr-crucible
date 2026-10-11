@@ -106,7 +106,8 @@ test("Tailor page with no stored own words: page only; the AI credential is NOT 
 
 test("Tailor page with the person's stored own words: those are the source; the page is only shown", async () => {
   const own = writerSourceFrom({ resumeText: UPLOAD });
-  const f = await tailorWith({ ownWords: own.ownWords, ownResumeText: own.ownResumeText, writerVerified: true });
+  // Round 4 (review r2 M2): stored own words count with the kind their signer recorded.
+  const f = await tailorWith({ ownWords: own.ownWords, ownResumeText: own.ownResumeText, writerVerified: true, written: { resume: TAILOR_PAGE, letter: "" }, grounding: withRewording(GROUNDING, "own_words") });
   const rb = await loadRebuildSource(UID, TAILOR, f.store);
   assert.equal(rb!.origin, "own_words");
   assert.equal(rb!.ownResumeText, own.ownResumeText);

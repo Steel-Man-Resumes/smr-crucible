@@ -105,9 +105,10 @@ export default function ProcessingPage() {
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
           body: JSON.stringify({
-            // Phase 6 S1 (review r1 L4): a rebuild's analysis reads the saved page as
-            // starting text. The analysis is never anyone's own words.
-            resumeText: rebuildActive(session) ? session.originalResumeText : session.resumeText,
+            // Phase 6 S1 (review r1 L4, r2 L1): a rebuild's analysis reads the saved
+            // page as starting text only; its checks read the run's own text.
+            resumeText: session.resumeText,
+            startingText: rebuildActive(session) ? session.originalResumeText : undefined,
             readinessStage: session.readinessStage,
             goals: session.goals,
             goalNarrative: session.goalNarrative,

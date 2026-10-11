@@ -53,9 +53,15 @@ export function writtenByWriter(rev: Pick<ArtifactRevision, "evidence">): boolea
   return typeof ev.runId !== "string" || !ev.runId.startsWith("artifact:");
 }
 
-/** Any version in this resume's lineage was made by the writer. */
-export function fromWriterLineage(revs: ReadonlyArray<Pick<ArtifactRevision, "evidence">>): boolean {
-  return revs.some(writtenByWriter);
+/**
+ * Review r2 M1: the resume as it stands now was made by the writer: its
+ * NEWEST version. A raw "Build with me" section or a restored raw version
+ * saved on top of an older writer build is not (it goes to the writer again).
+ * Check-mode answers and Refinery edits on a writer version carry its
+ * evidence, so they still count as the writer's.
+ */
+export function fromWriterNewest(newest: Pick<ArtifactRevision, "evidence"> | null | undefined): boolean {
+  return !!newest && writtenByWriter(newest);
 }
 
 /** A first save the server marked as given, with exactly this text, somewhere in the lineage. */
@@ -74,7 +80,12 @@ export function revisionKind(rev: ArtifactRevision, lineage: ReadonlyArray<Artif
   const ev = inputFromRevision(rev)?.evidence;
   if (!ev || ev.writerVerified !== true || !ev.ownResumeText.trim()) return "page_only";
   const g = (ev.grounding ?? null) as { sourceKind?: unknown; startingPageOnly?: unknown } | null;
-  // What the signer recorded for that build; older builds marked only a page-only start.
-  if (g && (g.sourceKind === "page_only" || g.sourceKind === "unknown" || g.startingPageOnly === true)) return "page_only";
-  return "own_words";
+  // What the signer recorded for that build.
+  if (g && (g.sourceKind === "given" || g.sourceKind === "own_words")) return "own_words";
+  if (g && g.sourceKind !== undefined) return "page_only";
+  // Review r2 M2: a version from before kinds were recorded counts only when the
+  // writer made it (a generate-docs build that did not start from a page);
+  // a legacy check of a Tailor page, or anything else, the server cannot tell.
+  if (g?.startingPageOnly !== true && writtenByWriter(rev)) return "own_words";
+  return "unknown";
 }

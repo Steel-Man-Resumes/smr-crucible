@@ -1404,40 +1404,54 @@ export function jobPartsOf(line: string): { title: string; rest: string[] } {
 }
 
 /**
- * A job line's facts, one by one (title, employer, place, each date), lower
- * case: split at pipes, commas, dashes and the small words that join them in
- * a sentence ("Line cook at Harbor Street Diner from 2019 to 2023").
+ * A job line's facts, one by one (title, employer, place, each date), as
+ * written: split at pipes, commas, dashes with spaces and the small words that
+ * join them in a sentence ("Line cook at Harbor Street Diner from 2019 to 2023").
  */
 function jobAtoms(text: string): string[] {
   return stripBullet(text)
     .split(/\s*[|,;\t]\s*|\s+[-\u2013\u2014]\s+|\s+(?:at|to|through|until|from|since|in|for)\s+/i)
-    .map((a) => a.toLowerCase().replace(/\s+/g, " ").replace(/[.;:]+$/, "").replace(/^(?:a|an|the)\s+/, "").trim())
+    .map((a) => a.replace(/\s+/g, " ").replace(/[.;:]+$/, "").replace(/^(?:a|an|the)\s+/i, "").trim())
     .filter(Boolean);
 }
+const factKey = (a: string) => a.toLowerCase().replace(/\s+/g, " ").trim();
+const JOB_MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
+/** A date on a job line as written ("8/2021", "Aug 2021", "2021", "Present"), whatever the dash or spacing around it. */
+const JOB_DATE_RE = new RegExp(`\\b(?:${JOB_MONTH}\\s+)?(?:\\d{1,2}\\/)?(?:19|20)\\d{2}\\b|\\b(?:present|current|now)\\b`, "gi");
+const datesOn = (text: string) => (text.match(JOB_DATE_RE) ?? []).map((d) => d.replace(/\s+/g, " ").replace(/\.$/, ""));
+/** A part that is only dates and the dashes or words between them ("8/2021-Present", "Aug 2021 to now"). */
+const onlyDates = (a: string) => a.replace(JOB_DATE_RE, " ").replace(/[\s\-\u2013\u2014.,/]|\b(?:to|through|until)\b/gi, "") === "";
 
 /**
- * Review r1 M2: the facts on a job header that are not, word for word, on
- * the person's own lines for that job (the lines that name its title or its
- * employer, and the line on either side). A changed month ("3/2021" for
- * "8/2021"), an added place or a shortened employer comes back here; such a
- * header is a fact card, never settled by "Looks right".
+ * Review r1 M2 (r2 M3, L3): the facts on a job header that are not, as
+ * written, on the person's own lines for that job (the lines that name its
+ * title or its employer, and the line on either side). Dates are compared
+ * as dates ("8/2021-Present" and "8/2021 - Present" are the same); a changed
+ * month ("3/2021" for "8/2021"), an added place or a shortened employer
+ * comes back here, spelled as on the page. Such a header is a fact card,
+ * never settled by "Looks right".
  */
 export function jobHeaderChanges(header: string, ownText: string): string[] {
   const page = jobAtoms(header);
   // The title is checked by the title rule (its own card); here: employer, place and dates.
-  const anchors = new Set(page.slice(0, 2));
+  const anchors = new Set(page.slice(0, 2).map(factKey));
   const lines = linesOf(ownText || "");
-  const own = new Set<string>();
+  const ownFacts = new Set<string>();
+  const ownDates = new Set<string>();
   const take = (l: string | undefined) => {
-    if (l && !/^\s*[-•*]/.test(l)) for (const a of jobAtoms(l)) own.add(a);
+    if (!l || /^\s*[-•*]/.test(l)) return;
+    for (const a of jobAtoms(l)) ownFacts.add(factKey(a));
+    for (const d of datesOn(l)) ownDates.add(factKey(d));
   };
   lines.forEach((l, i) => {
-    if (!jobAtoms(l).some((a) => anchors.has(a))) return;
+    if (!jobAtoms(l).some((a) => anchors.has(factKey(a)))) return;
     take(l);
     take(lines[i + 1]);
     take(lines[i - 1]);
   });
-  return page.slice(1).filter((a) => !own.has(a));
+  const facts = page.slice(1).filter((a) => !onlyDates(a) && !ownFacts.has(factKey(a)));
+  const dates = datesOn(header).filter((d) => !ownDates.has(factKey(d)));
+  return [...facts, ...dates.filter((d, k) => dates.findIndex((x) => factKey(x) === factKey(d)) === k)];
 }
 
 /** "Looks right" on one job. Recorded for that header line only; never part of the person's words. */

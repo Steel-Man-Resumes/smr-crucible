@@ -273,7 +273,9 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
   // Round 3 (review r1 H2): the kind of the page being checked, worked out
   // the same way a rebuild does (lib/source-kind.ts), from the stored lineage.
   const lineage = base && store.listRevisions ? await store.listRevisions(userId, base.artifact_id).catch(() => [base]) : base ? [base] : [];
-  const kind: SourceKind = base ? revisionKind(base, lineage, resume) : "page_only";
+  // Review r2 L5: a page that is not the base version's own text is never classified from that version.
+  const baseKind: SourceKind = base ? revisionKind(base, lineage, resume) : "page_only";
+  const kind: SourceKind = baseKind === "own_words" && base && base.resume_text !== resume ? "unknown" : baseKind;
   const grounding = withRewording(await runCheck(written, { resumeText: [source.ownResumeText, source.ownWords].filter(Boolean).join("\n\n"), extra: answers }, deps.verify), kind);
   const runId = artifactRunId(art.id);
   const signed = sign(written, grounding, userId, runId, source, deps);

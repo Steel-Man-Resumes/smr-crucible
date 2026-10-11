@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { buildFinishView, factsLockedFor, jobHeaderChanges, jobHeaderLines, recordJobOk, statusLine, type DefendAnswer, type FinishView } from "../finish-gate";
 import { cleanRevisionInput, computeRevision, revisionRecord } from "../revision-status";
-import { fromWriterLineage, revisionKind, rewordingAFor, withRewording, writtenByWriter } from "../source-kind";
+import { fromWriterNewest, revisionKind, rewordingAFor, withRewording, writtenByWriter } from "../source-kind";
 import { loadRebuildSource, rebuildInputs } from "../rebuild-source";
 import { saveFirstSection } from "../lane-first-save";
 import { recheckDocs } from "../forge-recheck";
@@ -162,10 +162,10 @@ test("H1: the preview account's state (a raw first save later opened in check mo
   const checked = lineage.at(-1)!;
   assert.equal((checked.evidence as { writerVerified?: boolean }).writerVerified, true, "the check is verified...");
   assert.equal(writtenByWriter(checked), false, "...but it is an artifact check, not the writer");
-  assert.equal(fromWriterLineage(lineage), false);
+  assert.equal(fromWriterNewest(lineage.at(-1)), false);
   // Whatever that check decided (here it passed: the page is her own upload), the writer never made it.
   for (const status of [checked.status, "draft", "finished"] as const) {
-    assert.deepEqual(laneHomeNext("resume", { status, artifactId: raw.artifact_id, fromWriter: fromWriterLineage(lineage) }), {
+    assert.deepEqual(laneHomeNext("resume", { status, artifactId: raw.artifact_id, fromWriter: fromWriterNewest(lineage.at(-1)) }), {
       label: "Build it with t.ROY",
       href: `/resume?rebuild=${raw.artifact_id}`,
     });
@@ -173,10 +173,10 @@ test("H1: the preview account's state (a raw first save later opened in check mo
   assert.deepEqual(laneHomeNext("resume", { status: "finished", artifactId: "w", fromWriter: true }), { label: "Get your files in My resumes", href: "/dashboard/vault" });
   // A build the writer made is "from the writer", whatever is checked on top.
   const { f: g } = await forgeBuild("given");
-  assert.equal(fromWriterLineage(g.revs), true);
+  assert.equal(fromWriterNewest(g.revs.at(-1)), true);
   // The lane home reads the server's word for it.
   const route = read("app/api/revisions/route.ts");
-  assert.match(route, /fromWriter: fromWriterLineage\(lineage\)/);
+  assert.match(route, /fromWriter: fromWriterNewest\(rev\)/);
   assert.match(read("components/lanes/LaneHome.tsx"), /fromWriter: r\.fromWriter === true/);
 });
 
@@ -282,7 +282,8 @@ test("M3: a rebuild reads the stored upload with held-back lines kept, applies t
 test("M5: the writer starts from the page for every kind; own words stay the server's; page lines not in them are asked", async () => {
   const own = writerSourceFrom({ resumeText: UPLOAD });
   const f = fakeRevisionStore(UID, [{ id: TAILOR, artifact_type: "resume", target_context: { source: "tailor" }, content: {} }]);
-  const c = cleanRevisionInput({ resumeText: TAILOR_PAGE, coverLetterText: "", ...own, writerVerified: true }, { trusted: true });
+  // Round 4 (review r2 M2): a version counts as own words only with the kind its signer recorded.
+  const c = cleanRevisionInput({ resumeText: TAILOR_PAGE, coverLetterText: "", ...own, writerVerified: true, written: { resume: TAILOR_PAGE, letter: "" }, grounding: withRewording(BASE, "own_words") }, { trusted: true });
   assert.ok(c.ok);
   await f.store.insertRevision(UID, revisionRecord(TAILOR, "refinery_edit", c.input, computeRevision(c.input)));
   const rb = await loadRebuildSource(UID, TAILOR, f.store);
@@ -323,7 +324,8 @@ test("L3: a year in her words is never a count ('Loaded 2018 trucks in a year')"
 });
 
 test("L4: a rebuild's analysis reads the saved page as starting text (never as own words)", () => {
-  assert.match(read("app/(forge)/processing/page.tsx"), /resumeText: rebuildActive\(session\) \? session\.originalResumeText : session\.resumeText,/);
+  // Round 4 (review r2 L1): as separate starting text; tested in phase6-s1-round4.
+  assert.match(read("app/(forge)/processing/page.tsx"), /startingText: rebuildActive\(session\) \? session\.originalResumeText : undefined,/);
 });
 
 test("the probes' strict control: the same changed pages under the strict rule still ask", () => {
