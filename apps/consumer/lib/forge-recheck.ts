@@ -75,6 +75,12 @@ export type RecheckResult =
       /** Signed out: the new run cookie the route sets (HttpOnly). */
       runCookie: string | null;
       revision?: SavedRevisionSummary;
+      /**
+       * Signed in, the finish path: the server-held own words the receipt is
+       * bound to (Phase 6 S1 round 2), so the page checks against exactly
+       * those. The person's own words, to the person only.
+       */
+      evidence?: WriterSource;
     }
   | { ok: false; status: number; error: string };
 
@@ -201,7 +207,7 @@ export async function recheckDocs(input: unknown, userId: string | null, deps: R
     );
     const signed = sign(written, grounding, userId, runId, held, deps);
     if (deps.record) await deps.record(userId, runId, signed.nonce, signed.now);
-    return { ok: true, grounding, receipt: signed.receipt, written, runCookie: null };
+    return { ok: true, grounding, receipt: signed.receipt, written, runCookie: null, evidence: held };
   }
 
   // Signed out: no server copy. A "check" receipt, for this browser's own files only.

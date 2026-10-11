@@ -21,7 +21,7 @@
  */
 
 import type { ArtifactRevision, InsertRevisionResult, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
-import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence, type RevisionVerdict } from "./revision-status";
+import { cleanRevisionInput, computeRevision, editInput, givenTextMark, inputFromRevision, revisionRecord, type RevisionEvidence, type RevisionVerdict } from "./revision-status";
 import { readReceipt, writerSourceFrom, type WriterSource } from "./writer-receipt";
 import { resumeTextToDocument } from "./revision-to-doc";
 import { readMarker, withRevisionMarker } from "./revision-marker";
@@ -123,6 +123,8 @@ export async function saveFinishRevision(
     laneTarget?: string;
     /** The request's signed-out run cookie, hashed (lib/writer-receipt.ts runCookieHash). */
     cookieHash?: string | null;
+    /** Server code only (lib/lane-first-save.ts): this page was saved exactly as the person gave it. */
+    givenAsIs?: boolean;
   },
   store: RevisionStore
 ): Promise<SaveResult> {
@@ -155,6 +157,8 @@ export async function saveFinishRevision(
     knownNewestNonce,
   });
   if (!c.ok) return { ok: false, status: c.reason === "too long" ? 413 : 400, reason: c.reason };
+  // Phase 6 (S1 round 2): the server marks a page saved as given, from its own call, never a request.
+  if (opts.givenAsIs === true) c.input.evidence.givenAsIs = givenTextMark(c.input.resumeText);
   const verdict = computeRevision(c.input);
 
   let created = false;

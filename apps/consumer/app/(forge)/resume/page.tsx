@@ -174,18 +174,25 @@ export default function ResumeIntakePage() {
     let live = true;
     (async () => {
       try {
-        const res = await fetch(`/api/revisions?artifactId=${encodeURIComponent(rebuild.id)}`, { cache: "no-store" });
-        const data = (await res.json().catch(() => null)) as { revision?: { resumeText?: unknown } | null } | null;
-        const text = typeof data?.revision?.resumeText === "string" ? data.revision.resumeText : "";
+        // Round 2 (CC's truth ruling): the SERVER decides, owner only, what on
+        // this saved resume counts as the person's own words. The page is shown;
+        // only those own words are this run's resume text (and what the account
+        // keeps). Nothing on an AI-written page becomes theirs here.
+        const res = await fetch(`/api/revisions/rebuild?artifactId=${encodeURIComponent(rebuild.id)}`, { cache: "no-store" });
+        const data = (await res.json().catch(() => null)) as { pageText?: unknown; ownResumeText?: unknown } | null;
+        const page = typeof data?.pageText === "string" ? data.pageText : "";
+        const own = typeof data?.ownResumeText === "string" ? data.ownResumeText : "";
         if (!live) return;
-        if (!res.ok || !text.trim()) {
+        if (!res.ok || !page.trim()) {
           setRebuild({ id: rebuild.id, error: failed });
           return;
         }
         // A new build from these words: the documents of an earlier build no longer match.
         updateSession({
-          resumeText: text,
-          originalResumeText: text,
+          // No own words: the run's resume text is left out (never the page; an absent key keeps the account's).
+          resumeText: own || undefined,
+          originalResumeText: page,
+          rebuild: { id: rebuild.id, page, own },
           resumeMethod: "paste",
           resumeFileName: undefined,
           forgeOutput: undefined,

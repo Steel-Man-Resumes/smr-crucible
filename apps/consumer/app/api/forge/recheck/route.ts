@@ -49,6 +49,7 @@ async function handlePost(request: Request) {
     receipt: result.receipt,
     written: result.written,
     ...(result.revision ? { revision: result.revision } : {}),
+    ...(result.evidence ? { evidence: result.evidence } : {}),
   });
   if (result.runCookie) res.headers.append("Set-Cookie", runCookieHeader(result.runCookie));
   return res;

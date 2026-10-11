@@ -48,7 +48,7 @@ import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } fr
 import { useRouter, useSearchParams } from "next/navigation";
 import { CREDENTIALS_KEY, isLanesFirst } from "@/lib/forge-path";
 import { LaneDownloadBox, LaneNextAction } from "@/components/forge/finish/LaneFinish";
-import { CARDS_PARAM, CHECK_AS_IS_LABEL, REWRITE_WITH_TROY_LABEL, nextActionFor, rebuildHref } from "@/lib/lane-task";
+import { CARDS_PARAM, CHECK_AS_IS_LABEL, REWRITE_WITH_TROY_LABEL, nextActionFor, rebuildActive, rebuildHref } from "@/lib/lane-task";
 import { useForgeSession } from "@/lib/forge-context";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
@@ -318,6 +318,9 @@ function OutputPageInner() {
           career_paths: output.career_paths,
           barriers: output.barriers,
           resumeText: session.resumeText,
+          // Phase 6 (S1 round 2): a build from a saved resume. The server reads
+          // it and decides the own words itself; only the id is sent.
+          rebuildFrom: rebuildActive(session) ?? undefined,
           goals: session.goals,
           goalNarrative: session.goalNarrative,
           credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
@@ -361,7 +364,8 @@ function OutputPageInner() {
       setConfirmedCredentials([]);
       setCredentialCutRemnants([]);
       // New documents are written from this run: its own words, not a restored copy's.
-      setRunEvidence(null);
+      // A rebuild: exactly the own words the server bound the receipt to.
+      setRunEvidence(readRunEvidence(data.evidence));
       setDocState("done");
     } catch (err: unknown) {
       console.error("Doc generation error:", err);
@@ -369,7 +373,7 @@ function OutputPageInner() {
       setDocState("error");
       hasStarted.current = false;
     }
-  }, [docState, output, session.resumeText, session.goals, session.goalNarrative, session.preferences, session.readinessStage, session.resumeConfidence, session.resumeWorries, keepInsideLines]);
+  }, [docState, output, session.resumeText, session.rebuild, session.originalResumeText, session.goals, session.goalNarrative, session.preferences, session.readinessStage, session.resumeConfidence, session.resumeWorries, keepInsideLines]);
 
   // Write the documents when the page loads, unless this run already has them.
   useEffect(() => {
@@ -812,14 +816,15 @@ function OutputPageInner() {
           runId: session.startedAt,
         }),
       });
-      const data = (await res.json().catch(() => null)) as { grounding?: unknown; receipt?: string; written?: WrittenDocs; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { grounding?: unknown; receipt?: string; written?: WrittenDocs; evidence?: unknown; error?: string } | null;
       if (!res.ok || !data?.receipt) throw new Error(data?.error || "failed");
       // The receipt covers the documents that were checked: they are now "as delivered".
       if (data.written) setWritten(data.written);
       setGrounding(data.grounding ?? null);
       setReceipt(data.receipt);
-      // A restored copy's evidence is replaced by this run's own words.
-      setRunEvidence(null);
+      // A restored copy's evidence is replaced by this run's own words (signed in:
+      // the server-held words the new receipt is bound to).
+      setRunEvidence(readRunEvidence(data.evidence));
     } catch (err) {
       setCheckError(err instanceof Error && err.message !== "failed" ? err.message : "We couldn't check it just now. Try again in a moment.");
     } finally {

@@ -330,12 +330,14 @@ test("Q1: the lane home never sends a page saved as given into check mode; the w
 test("Q1: a saved resume opens for the writer as the person's own, read as them, and the build runs", () => {
   const page = read("app/(forge)/resume/page.tsx");
   const block = page.slice(page.indexOf("const [rebuild, setRebuild]"), page.indexOf("// Phase 6 (Q1): opening a saved resume for the writer."));
-  assert.match(block, /fetch\(`\/api\/revisions\?artifactId=\$\{encodeURIComponent\(rebuild\.id\)\}`/);
+  assert.match(block, /fetch\(`\/api\/revisions\/rebuild\?artifactId=\$\{encodeURIComponent\(rebuild\.id\)\}`/);
+  // Round 2: only the server-decided own words become the run's resume text; the page is shown.
+  assert.match(block, /resumeText: own \|\| undefined,\s+originalResumeText: page,/);
   assert.match(block, /if \(!signedIn\)/);
   assert.match(block, /forgeOutput: undefined,\s+forgeFinish: undefined/);
   assert.match(block, /router\.replace\("\/processing"\)/);
-  // The read is the owner-only revision route.
-  assert.match(read("app/api/revisions/route.ts"), /revisionCaller/);
+  // The read is an owner-only revision route.
+  assert.match(read("app/api/revisions/rebuild/route.ts"), /revisionCaller/);
 });
 
 test("Q1: check mode's main action is the writer; checking it as it is comes second", () => {

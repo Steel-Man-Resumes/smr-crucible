@@ -1428,8 +1428,10 @@ function jobConfirmed(answers: DefendAnswer[], line: string): boolean {
 export function factsLockedFor(written: WrittenDocs | null | undefined, grounding: unknown): boolean {
   if (!written || typeof written.resume !== "string" || !written.resume.trim()) return false;
   if (!grounding || typeof grounding !== "object") return false;
-  const g = grounding as { verifierRan?: unknown; verifierRanByDoc?: { resume?: unknown } | null };
+  const g = grounding as { verifierRan?: unknown; verifierRanByDoc?: { resume?: unknown } | null; startingPageOnly?: unknown };
   if (g.verifierRan === false) return false;
+  // Phase 6 (S1 round 2): a rebuild that started from a page that is not the person's own words.
+  if (g.startingPageOnly === true) return false;
   if (g.verifierRanByDoc && typeof g.verifierRanByDoc === "object" && g.verifierRanByDoc.resume === false) return false;
   return true;
 }

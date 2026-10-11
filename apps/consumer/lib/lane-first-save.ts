@@ -157,7 +157,8 @@ export async function saveFirstSection(
   const saved = await saveFinishRevision(
     userId,
     firstSaveState(text, typed),
-    { source: "forge_finish", laneTarget: typeof input.laneTarget === "string" ? input.laneTarget.slice(0, 200) : "" },
+    // Phase 6 (S1 round 2): saved exactly as the person gave it (their upload or their typed section).
+    { source: "forge_finish", laneTarget: typeof input.laneTarget === "string" ? input.laneTarget.slice(0, 200) : "", givenAsIs: true },
     store
   );
   if (!saved.ok) return saved;
