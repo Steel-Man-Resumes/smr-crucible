@@ -75,7 +75,7 @@ export function releaseCheck(env) {
   const req = readRequiresAccounts(env[RELEASE_REQUIRES_ACCOUNTS_ENV]);
   const wall = readOnOff(env[RELEASE_WALL_ENV]);
   const premium = readOnOff(env[RELEASE_PREMIUM_ENV]);
-  const recordCheck = readOnOff(env[RELEASE_RECORD_CHECK_ENV]);
+  const recordsSwitch = readOnOff(env[RELEASE_RECORD_CHECK_ENV]);
 
   if (req.malformed) {
     errors.push(
@@ -102,7 +102,7 @@ export function releaseCheck(env) {
         `At run time anything but "on" leaves every premium tool open.`
     );
   }
-  if (recordCheck.malformed) {
+  if (recordsSwitch.malformed) {
     errors.push(
       `${RELEASE_RECORD_CHECK_ENV}="${env[RELEASE_RECORD_CHECK_ENV]}" is not "on" or "off". ` +
         `At run time anything but "on" keeps the record check off.`
@@ -113,7 +113,7 @@ export function releaseCheck(env) {
     `accounts required: ${req.malformed ? "UNREADABLE" : req.required ? "yes" : "no"}`,
     `Forge sign-in wall switch: ${wall.malformed ? "UNREADABLE" : wall.value ?? "unset (the date in forge-access.ts decides; none is set, so open)"}`,
     `premium gate: ${premium.malformed ? "UNREADABLE" : premium.value === "on" ? "on" : "off"}`,
-    `record check: ${recordCheck.malformed ? "UNREADABLE" : recordCheck.value === "on" ? "on" : "off"}`
+    `record check: ${recordsSwitch.malformed ? "UNREADABLE" : recordsSwitch.value === "on" ? "on" : "off"}`
   );
 
   return { ok: errors.length === 0, errors, summary };

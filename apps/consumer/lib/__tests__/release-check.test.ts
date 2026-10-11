@@ -151,7 +151,7 @@ describe("release check: wired into the build", () => {
 
   it("the CLI exits 1 on failure and 0 on pass", () => {
     const script = join(root, "scripts", "release-check.mjs");
-    const base = { PATH: process.env.PATH ?? "" };
+    const base = { PATH: process.env.PATH ?? "", NODE_ENV: "test" } as NodeJS.ProcessEnv;
     const bad = spawnSync(process.execPath, [script], {
       env: { ...base, SMR_RELEASE_REQUIRES_ACCOUNTS: "1", NEXT_PUBLIC_FORGE_SIGN_IN_WALL: "off" },
       encoding: "utf8",
