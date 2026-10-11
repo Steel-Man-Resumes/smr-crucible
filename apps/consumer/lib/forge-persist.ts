@@ -88,7 +88,10 @@ export async function persistForgeSession(
       // that revision is the finished document. Never rebuild the account's
       // copy from the run's earlier inputs over it (a cut skill would come back).
       const { getLatestRevision } = await import("@crucible/core");
-      const hasRevision = forgeResume ? !!(await getLatestRevision(userId, forgeResume.id).catch(() => null)) : false;
+      // No catch (review L2): a read error is NOT "no revision". It fails this
+      // save (the outer catch logs it and the Forge save still stands), and the
+      // run's earlier inputs never overwrite a finished resume on a guess.
+      const hasRevision = forgeResume ? !!(await getLatestRevision(userId, forgeResume.id)) : false;
       if (forgeResume && hasRevision) {
         // The revision save below keeps the content in step with the finished text.
       } else if (forgeResume) {

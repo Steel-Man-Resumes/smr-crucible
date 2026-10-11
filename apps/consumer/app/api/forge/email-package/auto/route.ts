@@ -36,7 +36,7 @@ async function handlePost(request: Request) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
-  const { getPackageEmailTarget, incrementIpUsage, claimPackageEmailVersion, releasePackageEmailVersion, getRevision } =
+  const { getPackageEmailTarget, incrementIpUsage, claimPackageEmailVersion, releasePackageEmailVersion, getRevision, getLatestRevision } =
     await import("@crucible/core");
   const { packageFiles } = await import("@/lib/email-package-files");
   const key = resendKey();
@@ -46,6 +46,7 @@ async function handlePost(request: Request) {
     claim: claimPackageEmailVersion,
     release: releasePackageEmailVersion,
     getRevision,
+    getLatestRevision,
     files: packageFiles,
     transport: key ? resendTransport(key) : null,
     from: packageFrom(),

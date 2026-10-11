@@ -23,7 +23,8 @@
 import type { ArtifactRevision, InsertRevisionResult, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
 import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionVerdict } from "./revision-status";
 import { resumeTextToDocument } from "./revision-to-doc";
-import { withRevisionMarker } from "./revision-marker";
+import { readMarker, withRevisionMarker } from "./revision-marker";
+import { artifactText, ensureExportRevision } from "./revision-current";
 
 export interface ArtifactLite {
   id: string;
@@ -31,6 +32,8 @@ export interface ArtifactLite {
   target_context: unknown;
   content: unknown;
   is_locked?: boolean;
+  /** The artifact this one was made from (a fork or a Tailor output), the person's own. */
+  parent_artifact_id?: string | null;
 }
 
 export interface RevisionStore {
@@ -56,6 +59,16 @@ export interface SavedRevisionSummary {
   contentHash: string;
   reused: boolean;
   createdAt: string;
+  /**
+   * Review M2. "kept_refinery": the account's resume had edits made in the
+   * Refinery after its last saved version; they were saved as their own
+   * revision and the resume was NOT rewritten. "kept_earlier": an older copy
+   * (from before saved versions) was saved as a revision, then the resume was
+   * rewritten to this finished version. Absent: nothing to tell.
+   */
+  accountCopy?: "kept_refinery" | "kept_earlier";
+  /** The revision the Refinery content was saved as, when accountCopy is set. */
+  accountCopyRevision?: number;
 }
 
 export type SaveResult = { ok: true; revision: SavedRevisionSummary } | { ok: false; status: number; reason: string };
@@ -81,7 +94,7 @@ const isForge = (a: ArtifactLite) => a.artifact_type === "resume" && (a.target_c
 
 function failed(r: InsertRevisionResult): SaveResult {
   if (r.status === "not_ready") return { ok: false, status: 503, reason: "not_ready" };
-  if (r.status === "invalid") return { ok: false, status: r.reason === "artifact not found" ? 404 : 400, reason: r.reason };
+  if (r.status === "invalid") return { ok: false, status: r.reason === "artifact not found" ? 404 : r.reason === "too large" ? 413 : 400, reason: r.reason };
   return { ok: false, status: 500, reason: "failed" };
 }
 
@@ -104,17 +117,52 @@ export async function saveFinishRevision(
     forge = { id: made.id, artifact_type: "resume", target_context: { source: "forge" }, content };
     created = true;
   }
+  // Review M2, never erase: before anything rewrites the account's resume,
+  // whatever it holds that is not already a saved version is saved as one.
+  // Content the server itself wrote from a finish revision (marker kind
+  // "finish", still intact) is already saved, so it may be rewritten.
+  let accountCopy: SavedRevisionSummary["accountCopy"];
+  let accountCopyRevision: number | undefined;
+  let rewrite = true;
+  if (!created) {
+    const marker = readMarker(forge.content);
+    const serverWritten = !!marker && marker.hashOk && marker.kind === "finish";
+    if (marker && marker.hashOk && marker.kind === "edit") {
+      // The person's Refinery copy, already saved as its own revision: keep it.
+      accountCopy = "kept_refinery";
+      rewrite = false;
+    } else if (!serverWritten && artifactText(forge.content).trim()) {
+      const kept = await ensureExportRevision(userId, forge.id, store);
+      if (!kept.ok) return kept;
+      accountCopyRevision = kept.revision.revision_number;
+      if (marker) {
+        // Revision-era content the person edited in the Refinery: keep it as
+        // their working copy; this finished version is saved beside it.
+        accountCopy = "kept_refinery";
+        rewrite = false;
+      } else {
+        // An older copy from before saved versions: kept as a revision, then
+        // the resume shows the finished words.
+        accountCopy = "kept_earlier";
+      }
+    }
+  }
   const r = await store.insertRevision(userId, revisionRecord(forge.id, opts.source, c.input, verdict));
   if (r.status !== "saved") return failed(r);
   // The account's resume shows the saved words (lock-guarded by the write
   // itself), marked as exactly this revision so every Refinery export of it
   // uses this revision (lib/revision-current.ts).
-  if (!r.reused || created) {
+  if (rewrite && (!r.reused || created || accountCopy)) {
     const base = (forge.content ?? null) as { meta?: { targetJob?: string; targetCompany?: string; jobListingUrl?: string } } | null;
     const doc = resumeTextToDocument(c.input.resumeText, base) as unknown as Record<string, unknown>;
-    await store.updateArtifactContent(userId, forge.id, withRevisionMarker(doc, r.revision.id)).catch(() => "failed");
+    await store
+      .updateArtifactContent(userId, forge.id, withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" }))
+      .catch(() => "failed");
   }
-  return { ok: true, revision: summary(r.revision, verdict, r.reused) };
+  return {
+    ok: true,
+    revision: { ...summary(r.revision, verdict, r.reused), ...(accountCopy ? { accountCopy, accountCopyRevision } : {}) },
+  };
 }
 
 export async function saveEditRevision(
@@ -122,13 +170,16 @@ export async function saveEditRevision(
   artifactId: string,
   resumeText: unknown,
   letterText: unknown,
-  store: RevisionStore
+  store: RevisionStore,
+  opts: { base?: ArtifactRevision | null } = {}
 ): Promise<SaveResult> {
   if (typeof resumeText !== "string" || !resumeText.trim()) return { ok: false, status: 400, reason: "no resume" };
   if (letterText !== undefined && typeof letterText !== "string") return { ok: false, status: 400, reason: "bad letter" };
   const art = await store.getArtifact(userId, artifactId);
   if (!art || art.artifact_type !== "resume") return { ok: false, status: 404, reason: "artifact not found" };
-  const latest = await store.getLatestRevision(userId, artifactId);
+  // The revision this edit starts from: given by the caller (the export, which
+  // may have walked to a parent), else this artifact's newest.
+  const latest = opts.base !== undefined ? opts.base : await store.getLatestRevision(userId, artifactId);
   const base = latest ? inputFromRevision(latest) : null;
   const c = editInput(base, resumeText, letterText as string | undefined);
   if (!c.ok) return { ok: false, status: c.reason === "too long" ? 413 : 400, reason: c.reason };

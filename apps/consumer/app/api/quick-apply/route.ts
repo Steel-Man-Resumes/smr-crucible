@@ -105,7 +105,7 @@ async function handlePost(request: Request) {
       return NextResponse.json(
         {
           error: "draft",
-          message: "This resume is still a draft. Finish it first, or attach it marked as a draft.",
+          message: "Draft: check it before you send it.",
           revisionId: revision.id,
           openItems: Array.isArray(revision.open_items) ? revision.open_items : [],
         },

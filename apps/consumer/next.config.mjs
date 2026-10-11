@@ -53,7 +53,7 @@ const nextConfig = {
     // attach the rendered files.
     "/api/revisions": ["./public/fonts/resume/**/*"],
     "/api/forge/save": ["./public/fonts/resume/**/*"],
-    "/api/forge/email-package": ["./public/fonts/resume/**/*"],
+    "/api/forge/email-package": ["./public/fonts/resume/**/*"], // measures pages (the finished check)
     "/api/forge/email-package/auto": ["./public/fonts/resume/**/*"],
     "/api/quick-apply": ["./public/fonts/resume/**/*"],
     // Creative lanes: the artist resume and bio card use the same renderer.

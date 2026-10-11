@@ -158,8 +158,9 @@ test("C1: each kind keeps its own length rule", () => {
   assert.equal(pageLimitFor("artist_resume"), 2);
   assert.equal(pageLimitFor("artist_resume", "auto", { callAllowsFour: true }), 4);
   assert.equal(pageLimitFor("performer_resume"), 1);
-  assert.equal(gateRevision(input({ docKind: "cv_academic" }), 7).status, "finished");
-  assert.equal(gateRevision(input({ docKind: "performer_resume" }), 2).status, "draft");
+  // The kind is the server's (review M1): set on the input, never read from a page.
+  assert.equal(gateRevision({ ...input(), docKind: "cv_academic" }, 7).status, "finished");
+  assert.equal(gateRevision({ ...input(), docKind: "performer_resume" }, 2).status, "draft");
   assert.equal(lengthOpenItem(2, 2), null);
 });
 
@@ -357,7 +358,9 @@ test("export: an edit in the Refinery breaks the marker, and the server makes a 
   assert.ok(ex.ok);
   assert.equal(ex.ok && ex.revision.revision_number, 2);
   assert.equal(ex.ok && ex.revision.source, "refinery_edit");
-  assert.equal(ex.ok && ex.revision.resume_text, artifactText(content), "the stored content, never a request's text");
+  // The stored content's change, applied to the saved text: the new summary line is in, every untouched line keeps its saved form.
+  assert.ok(ex.ok && ex.revision.resume_text.includes("Line cook. I also managed a team of 40."), ex.ok ? ex.revision.resume_text : "");
+  assert.ok(ex.ok && ex.revision.resume_text.includes("LINE COOK | Harbor Street Diner | 2019 - 2023"));
   assert.equal(ex.ok && ex.revision.status, "draft", "a new unsupported claim is asked about again");
 });
 
@@ -389,4 +392,227 @@ test("never erase: an empty finish state saves nothing and touches nothing alrea
   assert.equal(f.updates.length, updates, "the account's resume was not rewritten");
   assert.equal((await saveEditRevision(UID, f.arts[0].id, "", "", f.store)).ok, false);
   assert.equal(importPayload({ ...RUN, forgeFinish: undefined }).finish, undefined, "no finish, nothing sent");
+});
+
+// ---- review H1: a Refinery edit keeps the saved version's text; only changed lines are asked again ----
+
+import { patchText, lineKey } from "../revision-patch";
+import { remapAnswers } from "../revision-status";
+
+async function finishedForge() {
+  const f = fakeStore();
+  const saved = await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  assert.ok(saved.ok && saved.revision.status === "finished");
+  const art = f.arts[0];
+  art.content = f.updates.at(-1)!.content;
+  return { f, art };
+}
+
+test("H1: text to document to text comes back identical (no edit)", async () => {
+  const { f, art } = await finishedForge();
+  const before = artifactText(art.content);
+  assert.equal(patchText(RESUME, before, before), RESUME);
+  // And through the export path, even when the marker is gone (an old client dropped it).
+  const { _revision, ...noMarker } = art.content as Record<string, unknown>;
+  void _revision;
+  art.content = noMarker;
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.resume_text, RESUME, "the saved text, exactly");
+  assert.equal(ex.ok && ex.revision.status, "finished");
+});
+
+test("H1: add a phone number stays finished", async () => {
+  const { f, art } = await finishedForge();
+  const c = art.content as Record<string, any>;
+  art.content = { ...c, contact: { ...c.contact, phone: "555-010-0199" } };
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.status, "finished", ex.ok ? JSON.stringify(ex.revision.open_items) : "");
+  assert.match(ex.ok ? ex.revision.resume_text : "", /555-010-0199/);
+  assert.ok(ex.ok && ex.revision.resume_text.includes("LINE COOK | Harbor Street Diner | 2019 - 2023"), "the job line keeps its saved form");
+});
+
+test("H1: spacing, punctuation and section order alone stay finished", async () => {
+  const { f, art } = await finishedForge();
+  const c = art.content as Record<string, any>;
+  const exp = c.experience.map((e: any) => ({ ...e, bullets: e.bullets.map((b: string, i: number) => (i === 0 ? b.replace(/\.$/, "") + " ." : b)) }));
+  art.content = { ...c, experience: exp, skills: [...c.skills].reverse() };
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.status, "finished", ex.ok ? JSON.stringify(ex.revision.open_items) + "\n" + ex.revision.resume_text : "");
+});
+
+test("H1: change a title re-asks only the title", async () => {
+  const { f, art } = await finishedForge();
+  const c = art.content as Record<string, any>;
+  art.content = { ...c, experience: [{ ...c.experience[0], title: "KITCHEN MANAGER" }] };
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.status, "draft");
+  const items = (ex.ok ? ex.revision.open_items : []) as string[];
+  assert.ok(items.length >= 1 && items.every((i) => /KITCHEN MANAGER/.test(i)), JSON.stringify(items));
+  // Every other line kept its saved form.
+  for (const line of ["- Ran the grill on the breakfast line.", "- Showed incoming culinary staff the equipment.", "Grill, Breakfast line, Vegetable prep, Kitchen closing, Inventory control"]) {
+    assert.ok(ex.ok && ex.revision.resume_text.includes(line), line);
+  }
+});
+
+test("H1: a new unsourced line is a draft on that line only", async () => {
+  const { f, art } = await finishedForge();
+  const c = art.content as Record<string, any>;
+  art.content = { ...c, experience: [{ ...c.experience[0], bullets: [...c.experience[0].bullets, "Managed a team of 40 cooks."] }] };
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.status, "draft");
+  const items = (ex.ok ? ex.revision.open_items : []) as string[];
+  assert.ok(items.length >= 1 && items.every((i) => /team of 40/.test(i)), JSON.stringify(items));
+});
+
+test("H1: carried answers follow their line on a normalized key; a changed line loses its answer", () => {
+  const a = [{ line: "- Showed incoming culinary staff the equipment.", answer: "Yes, most shifts.", verdict: "stands" as const }];
+  const moved = remapAnswers(a, ["- Showed incoming  culinary staff the equipment"]);
+  assert.equal(moved[0].line, "- Showed incoming  culinary staff the equipment");
+  const changed = remapAnswers(a, ["- Trained every new cook on the equipment."]);
+  assert.equal(changed[0].line, a[0].line, "no match: the answer stays on the old line, so the new line is asked");
+  assert.equal(lineKey("LINE COOK | Harbor Street Diner | 2019 - 2023"), lineKey("LINE COOK | Harbor Street Diner, 2019 - 2023"));
+});
+
+// ---- review M2: a finish-page save never silently overwrites Refinery edits ----
+
+test("M2: Refinery edits made after the last version are saved as their own revision, and kept", async () => {
+  const { f, art } = await finishedForge();
+  const c = art.content as Record<string, any>;
+  const edited = { ...c, contentBlocks: [{ kind: "custom", label: "Volunteer", items: [{ id: "v1", text: "Food bank, Saturdays" }] }] };
+  art.content = edited;
+  const r = await saveFinishRevision(UID, finishState({ coverLetterText: LETTER.replace("Diner.", "Diner, most mornings."), written: { resume: RESUME, letter: LETTER.replace("Diner.", "Diner, most mornings.") } }), { source: "forge_finish" }, f.store);
+  assert.ok(r.ok);
+  assert.equal(r.ok && r.revision.accountCopy, "kept_refinery");
+  // The Refinery copy is a saved revision, and the account's resume was not rewritten.
+  assert.ok(f.revs.some((x) => x.source === "refinery_edit" && x.resume_text.includes("Food bank, Saturdays")), f.revs.map((x) => x.source).join(","));
+  const last = f.updates.at(-1)!.content as Record<string, any>;
+  assert.ok(JSON.stringify(last).includes("Food bank, Saturdays"), "the working copy still holds the Refinery edit");
+  // A second finish-page change does not save the same Refinery copy again.
+  const n = f.revs.filter((x) => x.source === "refinery_edit").length;
+  art.content = last;
+  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  assert.equal(f.revs.filter((x) => x.source === "refinery_edit").length, n);
+});
+
+test("M2: an older copy from before saved versions is kept as a revision before the resume is rewritten", async () => {
+  const f = fakeStore([{ id: "00000000-0000-4000-8000-0000000000aa", artifact_type: "resume", target_context: { source: "forge" }, content: resumeTextToDocument(RESUME + "\n- Old line from an earlier run.") }]);
+  const r = await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  assert.ok(r.ok);
+  assert.equal(r.ok && r.revision.accountCopy, "kept_earlier");
+  assert.ok(f.revs.some((x) => x.source === "refinery_edit" && x.resume_text.includes("Old line from an earlier run.")));
+  assert.equal(JSON.stringify(f.updates.at(-1)!.content).includes("Old line from an earlier run."), false, "then rewritten to the finished words");
+});
+
+// ---- review M3: a Tailor output or fork starts from its parent's revision ----
+
+test("M3: an unchanged fork is finished; a changed line on a fork is asked again", async () => {
+  const { f, art } = await finishedForge();
+  const fork = { id: "00000000-0000-4000-8000-0000000000fa", artifact_type: "resume", target_context: { source: "job" }, content: JSON.parse(JSON.stringify(art.content)), parent_artifact_id: art.id };
+  f.arts.push(fork);
+  const same = await ensureExportRevision(UID, fork.id, f.store);
+  assert.ok(same.ok);
+  assert.equal(same.ok && same.revision.status, "finished");
+  assert.equal(same.ok && same.revision.artifact_id, fork.id);
+  assert.equal(same.ok && same.revision.resume_text, RESUME);
+  const fork2 = { ...fork, id: "00000000-0000-4000-8000-0000000000fb", content: { ...(art.content as any), summary: "Line cook who led a crew of 12." } };
+  f.arts.push(fork2);
+  const changed = await ensureExportRevision(UID, fork2.id, f.store);
+  assert.ok(changed.ok);
+  assert.equal(changed.ok && changed.revision.status, "draft");
+  assert.ok(((changed.ok ? changed.revision.open_items : []) as string[]).every((i) => /crew of 12/.test(i)));
+});
+
+test("M3: a parent that is not the person's gives nothing (the store reads as the person)", async () => {
+  const { f, art } = await finishedForge();
+  const orphan = { id: "00000000-0000-4000-8000-0000000000fc", artifact_type: "resume", target_context: {}, content: JSON.parse(JSON.stringify(art.content)), parent_artifact_id: "00000000-0000-4000-8000-0000000000dd" };
+  f.arts.push(orphan);
+  const ex = await ensureExportRevision(UID, orphan.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.status, "draft", "no parent evidence, no own words: raw text is never finished");
+});
+
+// ---- review M1: the client decides neither the kind nor the grounding ----
+
+test("M1: a page's docKind is ignored (a 3-page resume sent as cv_academic stays a 2-page-limit draft)", () => {
+  const { resume, source } = longResume();
+  const c = cleanRevisionInput({ ...finishState(), resumeText: resume, coverLetterText: "", ownWords: source, ownResumeText: source, defendAnswers: [], keptTerms: [], written: { resume, letter: "" }, docKind: "cv_academic", writerReceipt: undefined });
+  assert.ok(c.ok);
+  assert.equal(c.ok && c.input.docKind, "resume");
+  const v = computeRevision((c as any).input);
+  assert.equal(v.status, "draft");
+  assert.equal(v.pageLimit, 2);
+});
+
+test("M1 (reviewer P3): dropping or editing the grounding without the writer's receipt cannot finish", () => {
+  const flagged = { verifierRan: true, removed: 0, residual: 1, unmatched: 0, outcomes: [{ claim: "Ran the grill on the breakfast line", status: "still_there", doc: "resume" }] };
+  assert.equal(computeRevision(input({ grounding: flagged })).status, "draft", "the real flag (signed)");
+  // The page drops the flag, keeping the old receipt: the receipt no longer matches.
+  const signedForFlag = finishState({ grounding: flagged }).writerReceipt;
+  const dropped = cleanRevisionInput(finishState({ grounding: null, writerReceipt: signedForFlag }));
+  assert.ok(dropped.ok);
+  const v = computeRevision((dropped as any).input);
+  assert.equal(v.status, "draft");
+  assert.ok(v.openItems.some((i) => /needs its check on the finish page/.test(i)));
+  // No receipt at all: same.
+  assert.equal(computeRevision(input({ writerReceipt: "" })).status, "draft");
+  // A forged receipt: same.
+  assert.equal(computeRevision(input({ writerReceipt: "wr1." + "0".repeat(64) })).status, "draft");
+});
+
+// ---- review L2, L3, L5, L6, M4, I5 ----
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { REVISION_SAVES_PER_DAY, REVISION_TOO_LARGE } from "../revision-limits";
+const src = (...p: string[]) => readFileSync(join(__dirname, "..", "..", ...p), "utf8");
+
+test("L2: a revision read error is a retryable failure, never 'no revision' (download)", async () => {
+  const deps: DownloadDeps = { userId: async () => UID, getRevision: async () => { throw new Error("db down"); } };
+  const res = await post({ revisionId: REV, content: RESUME, type: "resume", format: "txt" }, deps);
+  assert.equal(res.status, 503);
+  assert.match(((await res.json()) as { error: string }).error, /Try again/);
+});
+
+test("L2: the Forge save never rebuilds over a finished resume on a read error", () => {
+  const s = src("lib", "forge-persist.ts");
+  assert.match(s, /const hasRevision = forgeResume \? !!\(await getLatestRevision\(userId, forgeResume\.id\)\) : false;/);
+  assert.doesNotMatch(s, /getLatestRevision\([^)]*\)\.catch/);
+});
+
+test("L3: the browser-made .txt files (ResumeBuilder, Rush and its docx fallback) carry the DRAFT mark", () => {
+  assert.match(src("components", "forge", "ResumeBuilder.tsx"), /new Blob\(\[`DRAFT\\n\\n\$\{formatResumeDownload\(doc\)\}`\]/);
+  const rush = src("app", "(forge)", "rush", "page.tsx");
+  assert.match(rush, /const text = `DRAFT\\n\\n\$\{buildResumeText\(\)\}`;/);
+  assert.match(rush, /\/\/ Fallback to txt\s+handleDownloadTxt\(\);/);
+});
+
+test("L5: the signed-out package email attaches nothing (files go only to a signed-in proven address)", () => {
+  const route = src("app", "api", "forge", "email-package", "route.ts");
+  assert.doesNotMatch(route.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""), /packageFiles|attachments/);
+  assert.match(src("app", "api", "forge", "email-package", "auto", "route.ts"), /files: packageFiles/);
+});
+
+test("L6 and L8: a sensible daily save cap and a plain, non-retry message for a version too big", () => {
+  assert.equal(REVISION_SAVES_PER_DAY, 200);
+  assert.match(REVISION_TOO_LARGE, /too big to save/);
+  assert.doesNotMatch(REVISION_TOO_LARGE, /try again/i);
+});
+
+test("M4: a draft reads 'Draft: check it before you send it.' in the Refinery and on quick-apply", () => {
+  assert.match(src("components", "resume", "ResumeWorkspace.tsx"), /"Draft: check it before you send it\."/);
+  assert.match(src("app", "api", "quick-apply", "route.ts"), /message: "Draft: check it before you send it\."/);
+});
+
+test("I5: the in-app security page says checked versions and answers are saved, and can be downloaded or deleted", () => {
+  assert.match(src("components", "SecurityContent.tsx"), /each checked version of your resume is\s+saved to your account, with the answers you gave about its lines\.\s+You can download or delete them in Settings\./);
+});
+
+test("M3: a Tailor output names its parent, and the server links it only when it is the person's own", () => {
+  assert.match(src("components", "resume", "ResumeWorkspace.tsx"), /parentArtifactId: tailorParentRef\.current/);
+  assert.match(src("app", "api", "artifacts", "route.ts"), /setArtifactParent\(userId, artifact\.id, body\.parentArtifactId\)/);
 });

@@ -5,6 +5,7 @@
  */
 
 import { buildFinishView, ownWordsFor, recordAnswer, type DefendAnswer } from "../../finish-gate";
+import { writerReceipt } from "../../writer-receipt";
 
 export const SOURCE = `Morgan Sample
 Toledo, OH | morgan@example.com
@@ -54,7 +55,20 @@ export function allAnswered(resume: string = RESUME, letter = ""): DefendAnswer[
 }
 
 /** The finish page's whole state for this run (what the page sends to save or download). */
-export function finishState(over: Record<string, unknown> = {}) {
+export const GROUNDING = { verifierRan: true, removed: 0, residual: 0, unmatched: 0, outcomes: [] };
+
+/**
+ * The finish page's whole state for this run (what the page sends to save or
+ * download), with the writer's receipt the server signs in generate-docs.
+ * The receipt is made for whatever written and grounding end up in the state.
+ */
+export function finishState(over: Record<string, unknown> = {}): Record<string, any> {
+  const s = finishStateRaw(over);
+  if ("writerReceipt" in over) return s;
+  return { ...s, writerReceipt: s.written ? writerReceipt(s.written as { resume: string; letter: string }, s.grounding) : "" };
+}
+
+function finishStateRaw(over: Record<string, unknown>) {
   return {
     resumeText: RESUME,
     coverLetterText: LETTER,
@@ -63,8 +77,8 @@ export function finishState(over: Record<string, unknown> = {}) {
     keptTerms: ["Inventory control"],
     confirmedCredentials: [],
     credentialCutRemnants: [],
-    written: { resume: RESUME, letter: LETTER },
-    grounding: { verifierRan: true, removed: 0, residual: 0, unmatched: 0, outcomes: [] },
+    written: { resume: RESUME, letter: LETTER } as unknown,
+    grounding: GROUNDING as unknown,
     withheldLines: [],
     keepInsideLines: false,
     ownWords: OWN_WORDS,

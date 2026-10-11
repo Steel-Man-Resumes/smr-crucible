@@ -31,7 +31,8 @@ export interface FinishPayload {
   credentialRows: unknown[];
   ownResumeText: string;
   lengthChoice: LengthChoice;
-  docKind: "resume";
+  /** The server's receipt over written + grounding, as generate-docs gave it. */
+  writerReceipt: string;
 }
 
 /** The run fields the evidence comes from. */
@@ -86,6 +87,7 @@ export function finishPayload(
     withheldLines?: string[];
     keepInsideLines: boolean;
     lengthChoice?: LengthChoice;
+    receipt?: string;
   },
   evidence?: RunEvidence | null
 ): FinishPayload {
@@ -114,7 +116,7 @@ export function finishPayload(
     credentialRows: ev.credentialRows,
     ownResumeText: ev.ownResumeText,
     lengthChoice: state.lengthChoice && isLengthChoice(state.lengthChoice) ? state.lengthChoice : "auto",
-    docKind: "resume",
+    writerReceipt: typeof state.receipt === "string" ? state.receipt : "",
   };
 }
 
@@ -153,6 +155,7 @@ export function storedFinishFromRevision(
       keepInsideLines: keep,
       grounding: ev.grounding ?? null,
       ...(ev.written ? { written: ev.written } : {}),
+      ...(typeof ev.writerReceipt === "string" && ev.writerReceipt ? { receipt: ev.writerReceipt } : {}),
     },
     defendAnswers: Array.isArray(rev.defendAnswers) ? rev.defendAnswers : [],
     addedTerms: Array.isArray(ev.addedTerms) ? ev.addedTerms : [],
@@ -187,6 +190,7 @@ export function finishPayloadFromRun(run: RunForPayload & { forgeFinish?: unknow
     withheldLines: s.docs.withheldLines,
     keepInsideLines: s.docs.keepInsideLines,
     lengthChoice: s.lengthChoice,
+    receipt: s.docs.receipt,
   }, s.evidence ?? null);
 }
 

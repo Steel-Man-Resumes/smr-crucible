@@ -19,10 +19,39 @@ export function contentMarkerHash(content: Record<string, unknown>): string {
   return createHash("sha256").update(stableJson(rest)).digest("hex");
 }
 
-/** Content plus a marker saying "this is revision <id>, exactly". */
-export function withRevisionMarker(content: Record<string, unknown>, revisionId: string): Record<string, unknown> {
-  const { [REVISION_MARKER_KEY]: _omit, ...rest } = content ?? {};
-  void _omit;
-  return { ...rest, [REVISION_MARKER_KEY]: { id: revisionId, hash: contentMarkerHash(rest) } };
+/** What a marker says about the content it sits in. */
+export interface RevisionMarker {
+  id: string;
+  hash: string;
+  /** The content as printed when the marker was written (the patch's "before"). */
+  formatted?: string;
+  /** "finish": the server wrote this content from a finish-page revision. "edit": the person's own Refinery content, saved. */
+  kind?: "finish" | "edit";
 }
 
+/** Content plus a marker saying "this is revision <id>, exactly". */
+export function withRevisionMarker(
+  content: Record<string, unknown>,
+  revisionId: string,
+  extra: { formatted?: string; kind?: "finish" | "edit" } = {}
+): Record<string, unknown> {
+  const { [REVISION_MARKER_KEY]: _omit, ...rest } = content ?? {};
+  void _omit;
+  const marker: RevisionMarker = { id: revisionId, hash: contentMarkerHash(rest), ...extra };
+  return { ...rest, [REVISION_MARKER_KEY]: marker };
+}
+
+/** The marker in a content, read loosely (it can be stale or hand-made; hashOk says whether it still vouches). */
+export function readMarker(content: unknown): (RevisionMarker & { hashOk: boolean }) | null {
+  if (!content || typeof content !== "object") return null;
+  const c = content as Record<string, unknown>;
+  const m = c[REVISION_MARKER_KEY] as Partial<RevisionMarker> | undefined;
+  if (!m || typeof m !== "object" || typeof m.id !== "string" || typeof m.hash !== "string") return null;
+  return {
+    id: m.id,
+    hash: m.hash,
+    ...(typeof m.formatted === "string" ? { formatted: m.formatted } : {}),
+    ...(m.kind === "finish" || m.kind === "edit" ? { kind: m.kind } : {}),
+    hashOk: m.hash === contentMarkerHash(c),
+  };
+}
