@@ -49,14 +49,17 @@ export function revisionIsCurrent(content: unknown, rev: Pick<ArtifactRevision, 
  * applied (lib/revision-patch.ts). Untouched lines keep their exact saved form,
  * so formatting alone never reopens an answered line.
  */
-export function textFromBase(content: unknown, base: Pick<ArtifactRevision, "id" | "resume_text">): string {
+export function textFromBase(content: unknown, base: Pick<ArtifactRevision, "id" | "resume_text"> & { evidence?: unknown }): string {
   const now = artifactText(content);
   if (!now) return "";
   const m = readMarker(content);
   // The printing of the content as it was when saved: the marker carries it;
   // otherwise the saved text's own document, printed.
   const before = m && m.id === base.id && typeof m.formatted === "string" ? m.formatted : artifactText(resumeTextToDocument(base.resume_text));
-  return patchText(base.resume_text, before, now);
+  // Lines the person already settled: the saved text and the writer's documents.
+  const w = ((base.evidence ?? {}) as { written?: { resume?: unknown; letter?: unknown } | null }).written;
+  const known = [w?.resume, w?.letter].filter((x): x is string => typeof x === "string").flatMap((t) => t.split("\n"));
+  return patchText(base.resume_text, before, now, known);
 }
 
 /** Most parents walked to find a revision to start from (a fork of a fork...). */

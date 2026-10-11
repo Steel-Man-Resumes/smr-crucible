@@ -25,15 +25,20 @@ export interface RevisionMarker {
   hash: string;
   /** The content as printed when the marker was written (the patch's "before"). */
   formatted?: string;
-  /** "finish": the server wrote this content from a finish-page revision. "edit": the person's own Refinery content, saved. */
-  kind?: "finish" | "edit";
+  /**
+   * "finish": the server wrote this content from a finish-page revision.
+   * "edit": the person's own Refinery content, saved as revision `id`.
+   * "derived": the server built this content from the run's earlier inputs
+   * (the Forge save, before any finish); id is "" (no revision behind it).
+   */
+  kind?: "finish" | "edit" | "derived";
 }
 
 /** Content plus a marker saying "this is revision <id>, exactly". */
 export function withRevisionMarker(
   content: Record<string, unknown>,
   revisionId: string,
-  extra: { formatted?: string; kind?: "finish" | "edit" } = {}
+  extra: { formatted?: string; kind?: "finish" | "edit" | "derived" } = {}
 ): Record<string, unknown> {
   const { [REVISION_MARKER_KEY]: _omit, ...rest } = content ?? {};
   void _omit;
@@ -51,7 +56,7 @@ export function readMarker(content: unknown): (RevisionMarker & { hashOk: boolea
     id: m.id,
     hash: m.hash,
     ...(typeof m.formatted === "string" ? { formatted: m.formatted } : {}),
-    ...(m.kind === "finish" || m.kind === "edit" ? { kind: m.kind } : {}),
+    ...(m.kind === "finish" || m.kind === "edit" || m.kind === "derived" ? { kind: m.kind } : {}),
     hashOk: m.hash === contentMarkerHash(c),
   };
 }

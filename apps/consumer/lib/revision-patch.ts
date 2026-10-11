@@ -59,7 +59,19 @@ function lcsMatch(a: string[], b: string[]): number[] {
  * keep their saved form; changed lines take their new form, in place; added
  * lines go after the line they follow; removed lines go.
  */
-export function patchText(saved: string, before: string, after: string): string {
+/** A line with its separators made the same ("|" "," "•" and spacing), case and words kept. */
+export function sepKey(line: string): string {
+  return line.replace(/\s*[|,•]\s*/g, "|").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * `known`: lines whose exact form the person already settled (the saved text
+ * and the writer's documents). A new or changed line that differs from one of
+ * them ONLY in separators takes that settled form, so a line put back the way
+ * it was, or merely reprinted, reads exactly as before. A real edit (a word,
+ * a number, punctuation) never matches and keeps the person's form.
+ */
+export function patchText(saved: string, before: string, after: string, known: string[] = []): string {
   if (before === after) return saved;
   const S = saved.split("\n");
   const A = before.split("\n");
@@ -107,10 +119,15 @@ export function patchText(saved: string, before: string, after: string): string 
   // A true move (the exact line removed in one place, added in another) keeps its saved form.
   const removedByText = new Map<string, number[]>();
   for (const h of hunks) for (const i of h.removed) if (toSaved[i] >= 0) removedByText.set(A[i], [...(removedByText.get(A[i]) ?? []), i]);
+  const settled = new Map<string, string>();
+  for (const l of [...S, ...known]) {
+    const k = sepKey(l);
+    if (k && !settled.has(k)) settled.set(k, l.trim() === l ? l : l.trim());
+  }
   const addedLine = (j: number): string => {
     const moved = removedByText.get(B[j]);
     if (moved && moved.length) return S[toSaved[moved.shift()!]];
-    return B[j];
+    return settled.get(sepKey(B[j])) ?? B[j];
   };
 
   // 3. Where each hunk's new lines go in the saved text. A changed line takes

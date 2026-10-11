@@ -92,6 +92,14 @@ function summary(rev: ArtifactRevision, v: RevisionVerdict | null, reused: boole
 
 const isForge = (a: ArtifactLite) => a.artifact_type === "resume" && (a.target_context as { source?: unknown } | null)?.source === "forge";
 
+/**
+ * The person's Forge resume: the original one. A fork of it copies its
+ * "forge" source tag, so the original (no parent) wins, then the newest.
+ */
+export function pickForgeArtifact<T extends ArtifactLite>(list: T[]): T | null {
+  return list.find((a) => isForge(a) && !a.parent_artifact_id) ?? list.find(isForge) ?? null;
+}
+
 function failed(r: InsertRevisionResult): SaveResult {
   if (r.status === "not_ready") return { ok: false, status: 503, reason: "not_ready" };
   if (r.status === "invalid") return { ok: false, status: r.reason === "artifact not found" ? 404 : r.reason === "too large" ? 413 : 400, reason: r.reason };
@@ -109,7 +117,7 @@ export async function saveFinishRevision(
   const verdict = computeRevision(c.input);
 
   const artifacts = await store.listResumeArtifacts(userId);
-  let forge = artifacts.find(isForge) ?? null;
+  let forge = pickForgeArtifact(artifacts);
   let created = false;
   if (!forge) {
     const content = resumeTextToDocument(c.input.resumeText) as unknown as Record<string, unknown>;
@@ -126,7 +134,10 @@ export async function saveFinishRevision(
   let rewrite = true;
   if (!created) {
     const marker = readMarker(forge.content);
-    const serverWritten = !!marker && marker.hashOk && marker.kind === "finish";
+    // Written by the server (from a finish revision, or derived from the run's
+    // earlier inputs by the Forge save) and untouched since: nothing of the
+    // person's would be lost, so it may be rewritten.
+    const serverWritten = !!marker && marker.hashOk && (marker.kind === "finish" || marker.kind === "derived");
     if (marker && marker.hashOk && marker.kind === "edit") {
       // The person's Refinery copy, already saved as its own revision: keep it.
       accountCopy = "kept_refinery";

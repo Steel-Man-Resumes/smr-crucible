@@ -25,7 +25,7 @@
 import { NextResponse } from "next/server";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { revisionCaller, REVISION_SAVES_PER_DAY, REVISION_TOO_LARGE } from "@/lib/revision-route";
-import { coreStore, saveEditRevision, saveFinishRevision, type SaveResult } from "@/lib/revision-save";
+import { coreStore, pickForgeArtifact, saveEditRevision, saveFinishRevision, type ArtifactLite, type SaveResult } from "@/lib/revision-save";
 import { ensureExportRevision } from "@/lib/revision-current";
 
 export const runtime = "nodejs";
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
   let artifactId = url.searchParams.get("artifactId") || "";
   if (!artifactId && url.searchParams.get("forge") === "1") {
     const list = await core.listArtifacts(caller.userId, { type: "resume", examples: "hide", limit: 50 });
-    artifactId = list.find((a) => (a.target_context as { source?: unknown } | null)?.source === "forge")?.id ?? "";
+    artifactId = pickForgeArtifact(list as unknown as ArtifactLite[])?.id ?? "";
   }
   if (!artifactId) return NextResponse.json({ revision: null }, { headers: NO_STORE });
   const rev = await core.getLatestRevision(caller.userId, artifactId);

@@ -616,3 +616,42 @@ test("M3: a Tailor output names its parent, and the server links it only when it
   assert.match(src("components", "resume", "ResumeWorkspace.tsx"), /parentArtifactId: tailorParentRef\.current/);
   assert.match(src("app", "api", "artifacts", "route.ts"), /setArtifactParent\(userId, artifact\.id, body\.parentArtifactId\)/);
 });
+
+test("the person's Forge resume is the original, never a fork that copied its 'forge' tag", async () => {
+  const { pickForgeArtifact } = await import("../revision-save");
+  const orig = { id: "o", artifact_type: "resume", target_context: { source: "forge" }, content: {}, parent_artifact_id: null };
+  const fork = { id: "f", artifact_type: "resume", target_context: { source: "forge" }, content: {}, parent_artifact_id: "o" };
+  assert.equal(pickForgeArtifact([fork, orig])?.id, "o");
+  assert.equal(pickForgeArtifact([fork])?.id, "f");
+  assert.equal(pickForgeArtifact([]), null);
+});
+
+test("H1: putting a changed title back is finished again (the settled form returns)", async () => {
+  const { f, art } = await finishedForge();
+  const c = art.content as Record<string, any>;
+  art.content = { ...c, experience: [{ ...c.experience[0], title: "KITCHEN MANAGER" }] };
+  const t = await ensureExportRevision(UID, art.id, f.store);
+  assert.equal(t.ok && t.revision.status, "draft");
+  // The person undoes it, from a copy that still carries the older marker (a stale tab).
+  art.content = c;
+  const back = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(back.ok);
+  assert.equal(back.ok && back.revision.status, "finished", back.ok ? JSON.stringify(back.revision.open_items) : "");
+  assert.ok(back.ok && back.revision.resume_text.includes("LINE COOK | Harbor Street Diner | 2019 - 2023"));
+});
+
+test("M2: content the Forge save derived from earlier inputs is replaced without keeping it (nothing of the person's)", async () => {
+  const { withRevisionMarker } = await import("../revision-marker");
+  const derived = withRevisionMarker(resumeTextToDocument(RESUME + "\n- Derived line.") as unknown as Record<string, unknown>, "", { kind: "derived" });
+  const f = fakeStore([{ id: "00000000-0000-4000-8000-0000000000aa", artifact_type: "resume", target_context: { source: "forge" }, content: derived }]);
+  const r = await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  assert.ok(r.ok);
+  assert.equal(r.ok && r.revision.accountCopy, undefined);
+  assert.equal(r.ok && r.revision.number, 1);
+  assert.equal(f.revs.length, 1);
+  // The same derived content edited by the person (hash broken) IS kept.
+  const edited = { ...(derived as any), summary: "My own words." };
+  const f2 = fakeStore([{ id: "00000000-0000-4000-8000-0000000000ab", artifact_type: "resume", target_context: { source: "forge" }, content: edited }]);
+  const r2 = await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f2.store);
+  assert.ok(r2.ok && r2.revision.accountCopy === "kept_refinery");
+});
