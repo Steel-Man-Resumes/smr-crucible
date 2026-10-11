@@ -38,7 +38,7 @@ const CLIENT_MESSAGES: Record<string, string> = {
   goals:
     "Pick what feels true to you right now. Nobody's grading this. I just want to know what matters to you.",
   story:
-    "This part takes courage. You only share what you want to. I'm here if you need to talk through it.",
+    "Only if it helps. Tick what's in the way and I point you to help that fits. I never ask about a charge.",
   preferences:
     "Almost done with this part. These details help me find opportunities that actually work for your life.",
   processing:
@@ -86,7 +86,7 @@ const PARTNER_MESSAGES: Record<string, string> = {
   goals:
     "We explore purpose before jumping to job titles, grounded in narrative identity theory and Ikigai. We start from what drives them, then look at what's available.",
   story:
-    "Structured barrier input with optional free-text. The criminal record section captures just enough for legal navigation without feeling like an intake form.",
+    "An optional support step. Clients tick what would help and can say what kind of help. It never asks for offense details.",
   preferences:
     "Real-world constraints that determine whether a job match is viable. Transportation, schedule, location: the practical stuff that breaks placements.",
   processing:

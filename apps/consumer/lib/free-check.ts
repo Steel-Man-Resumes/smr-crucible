@@ -52,7 +52,7 @@ export interface FreeCheckResult {
 export const FREE_CHECK_MAX_CHARS = 50_000;
 
 /** Section names a hiring system reads as the work history. */
-const EXPERIENCE_HEADING_RE =
+export const EXPERIENCE_HEADING_RE =
   /^(?:(?:professional |work |relevant )?experience|employment(?: history)?|work history|career history):?$/i;
 const OTHER_HEADING_RE =
   /^(?:education(?: (?:and|&) training)?|training|skills|(?:core |key )?(?:skills|competencies)|certifications?(?: (?:and|&) licenses?)?|licenses?(?: (?:and|&) certifications?)?):?$/i;
