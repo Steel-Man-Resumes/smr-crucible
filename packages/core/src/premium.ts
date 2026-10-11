@@ -108,6 +108,28 @@ export function resolvePremiumAccess(input: {
   };
 }
 
+/**
+ * Readiness (Codex review A8): are the entitlement tables there? Read with
+ * to_regclass, which never touches a row, so it needs no person's scope.
+ * The app's /api/health/premium reports this whenever the gate is on.
+ */
+export const PREMIUM_STORAGE_TABLES = ["premium_grant", "premium_access_request"] as const;
+
+export const PREMIUM_READY_SQL = `SELECT ${PREMIUM_STORAGE_TABLES.map(
+  (t, i) => `to_regclass('public.${t}') IS NOT NULL AS t${i}`
+).join(", ")}`;
+
+export async function premiumStorageReady(): Promise<boolean> {
+  const row = await getOne<Record<string, boolean>>(PREMIUM_READY_SQL);
+  return !!row && PREMIUM_STORAGE_TABLES.every((_, i) => row[`t${i}`] === true);
+}
+
+/** Pure: the readiness verdict. With the gate off nothing depends on the tables. */
+export function premiumReadiness(gateOn: boolean, storageReady: boolean | null): { ok: boolean; gate: boolean; ready: boolean | null } {
+  if (!gateOn) return { ok: true, gate: false, ready: storageReady };
+  return { ok: storageReady === true, gate: true, ready: storageReady };
+}
+
 /** Postgres "relation does not exist": 079 is not applied on this database yet. */
 export function isMissingTable(err: unknown): boolean {
   return (err as { code?: string } | null)?.code === "42P01";

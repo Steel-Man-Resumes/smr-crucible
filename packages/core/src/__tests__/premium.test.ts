@@ -178,3 +178,20 @@ describe("r2 N1: the 'recorded' marking trusts the ledger only at a real backfil
     for (const col of ["at_backfill_instant", "ledger_is_backfill_instant", "most_common_instant", "would_mark"]) assert.match(body, new RegExp(`AS ${col}\\b`));
   });
 });
+
+describe("Phase 5 R4.3: premium readiness (Codex review A8)", () => {
+  it("checks both entitlement tables with to_regclass, reading no rows", async () => {
+    const { PREMIUM_READY_SQL, PREMIUM_STORAGE_TABLES } = await import("../premium");
+    assert.deepEqual([...PREMIUM_STORAGE_TABLES], ["premium_grant", "premium_access_request"]);
+    assert.match(PREMIUM_READY_SQL, /to_regclass\('public\.premium_grant'\) IS NOT NULL AS t0/);
+    assert.match(PREMIUM_READY_SQL, /to_regclass\('public\.premium_access_request'\) IS NOT NULL AS t1/);
+    assert.doesNotMatch(PREMIUM_READY_SQL, /\bFROM\b/i);
+  });
+  it("gate on is ready only when storage is confirmed", async () => {
+    const { premiumReadiness } = await import("../premium");
+    assert.equal(premiumReadiness(true, true).ok, true);
+    assert.equal(premiumReadiness(true, false).ok, false);
+    assert.equal(premiumReadiness(true, null).ok, false);
+    assert.equal(premiumReadiness(false, false).ok, true);
+  });
+});

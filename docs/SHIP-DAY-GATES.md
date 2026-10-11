@@ -40,3 +40,23 @@ unset there.
 Emergency: `NEXT_PUBLIC_FORGE_SIGN_IN_WALL=off` takes the wall down, but the
 release check refuses it while `SMR_RELEASE_REQUIRES_ACCOUNTS=1` is set. Set
 that to `0` too, on purpose, and redeploy.
+
+## 2. Premium split (decided 2026-10-10: Codex's split at launch)
+
+Free with an account: the resume, support search, and text interview
+practice (`TEXT_PRACTICE_SESSIONS_PER_DAY`, 5 a day, in
+`apps/consumer/lib/premium.ts`). Sponsored (an organization's code or an
+admin grant): voice interview coaching and one-click apply. A sponsor also
+lifts the daily text practice limit. Locked tools say what is included and
+how to get access, and never show a price.
+
+The switch is `PREMIUM_GATE` (server, read at run time). Off by default:
+everything stays open and the allowance does not apply.
+
+To turn it on:
+1. Confirm migration 079 is applied on Production.
+2. Set `PREMIUM_GATE=on` in Production and deploy.
+3. `GET /api/health/premium` must return 200 `{"ok":true,"gate":true,"ready":true}`.
+   503 means the entitlement tables are missing. The sponsored tools then
+   answer "temporarily unavailable" (they never open by accident). Fix the
+   migration, or set the gate back to `off`.

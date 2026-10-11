@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { checkTextPracticeAllowance } from "@/lib/premium-server";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
@@ -29,13 +30,22 @@ async function handlePost(request: Request) {
     const session = await auth();
     const userId = session?.user?.id;
 
-    const { messages, config, exchangeCount, forgeContext, resume, jobDescription, endInterview } = await request.json();
+    const body = await request.json();
+    const { messages, config, exchangeCount, forgeContext, resume, jobDescription, endInterview } = body;
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
         { error: "AI not configured" },
         { status: 500 }
       );
+    }
+
+    // Text practice is free with an account (the premium split, Troy
+    // 2026-10-10), up to a daily number of sessions while the gate is on.
+    // A sponsor removes the allowance. Counted once per practice interview.
+    if (userId) {
+      const overAllowance = await checkTextPracticeAllowance(userId, body);
+      if (overAllowance) return overAllowance;
     }
 
     const isDisclosure =
@@ -280,4 +290,6 @@ RULES:
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "interview", requiredTier: "client", premium: "interview_coaching" });
+// Text practice is not a sponsored tool (lib/premium.ts, the split): no
+// `premium` here. Voice coaching stays sponsored at /api/interview-voice/token.
+export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "interview", requiredTier: "client" });

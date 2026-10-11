@@ -12,7 +12,8 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
-import { PremiumGate } from "@/components/premium/PremiumGate";
+import { PremiumGate, usePremium } from "@/components/premium/PremiumGate";
+import { textPracticeAllowanceLine, toolIsOpen } from "@/lib/premium";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
@@ -131,10 +132,10 @@ export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
       <OnboardingGate toolName="Interview Practice" previewFeature="interview">
-        {/* Interview coaching is a premium tool: open through an organization or a grant. */}
-        <PremiumGate tool="interview_coaching">
-          <Suspense><InterviewPracticePage /></Suspense>
-        </PremiumGate>
+        {/* Text practice is free with an account (a daily allowance while the
+            premium gate is on). Voice coaching is sponsored: only the voice
+            panel below sits behind the gate. */}
+        <Suspense><InterviewPracticePage /></Suspense>
       </OnboardingGate>
     </TierGate>
   );
@@ -156,6 +157,10 @@ function InterviewPracticePage() {
   const [exchangeCount, setExchangeCount] = useState(0);
   const [feedback, setFeedback] = useState<any>(null);
   const [rateLimitError, setRateLimitError] = useState("");
+  // The daily text practice allowance applies while the premium gate is on
+  // and voice coaching is not open for this person (no sponsor).
+  const { status: premiumStatus } = usePremium();
+  const practiceAllowanceApplies = !!premiumStatus?.gate && toolIsOpen(premiumStatus, "interview_coaching") === false;
   const chatRef = useRef<HTMLDivElement>(null);
   // Phase 3: interview against a SPECIFIC saved resume + optional job posting.
   const [resumes, setResumes] = useState<
@@ -859,15 +864,20 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               </label>
             )}
 
-          <VoicePracticePanel
-            config={config}
-            forgeContext={forgeContext}
-            enabled={!!config.interviewType}
-            jobDescription={jobDescription.trim() || undefined}
-            buildResumePayload={buildResumePayload}
-            onVoiceFeedback={handleVoiceFeedback}
-            onHistoryChange={loadVoiceHistory}
-          />
+          {/* Voice coaching is sponsored (an organization or SMR opens it).
+              Locked, it shows what's included and how to get it; the text
+              practice below keeps working either way. */}
+          <PremiumGate tool="interview_coaching" compact>
+            <VoicePracticePanel
+              config={config}
+              forgeContext={forgeContext}
+              enabled={!!config.interviewType}
+              jobDescription={jobDescription.trim() || undefined}
+              buildResumePayload={buildResumePayload}
+              onVoiceFeedback={handleVoiceFeedback}
+              onHistoryChange={loadVoiceHistory}
+            />
+          </PremiumGate>
 
           <button
             onClick={startInterview}
@@ -876,6 +886,11 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           >
             Start Practice Interview
           </button>
+          {practiceAllowanceApplies && (
+            <p className="text-xs text-t-phos-dim" data-testid="text-practice-allowance">
+              {textPracticeAllowanceLine()}
+            </p>
+          )}
         </div>
 
         <VoiceSessionHistory history={voiceHistory} />
