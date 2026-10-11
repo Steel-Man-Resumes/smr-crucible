@@ -23,6 +23,7 @@
 import type { ArtifactRevision, InsertRevisionResult, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
 import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionVerdict } from "./revision-status";
 import { resumeTextToDocument } from "./revision-to-doc";
+import { withRevisionMarker } from "./revision-marker";
 
 export interface ArtifactLite {
   id: string;
@@ -105,12 +106,13 @@ export async function saveFinishRevision(
   }
   const r = await store.insertRevision(userId, revisionRecord(forge.id, opts.source, c.input, verdict));
   if (r.status !== "saved") return failed(r);
-  // The account's resume shows the saved words (lock-guarded by the write itself).
-  if (!r.reused && !created) {
+  // The account's resume shows the saved words (lock-guarded by the write
+  // itself), marked as exactly this revision so every Refinery export of it
+  // uses this revision (lib/revision-current.ts).
+  if (!r.reused || created) {
     const base = (forge.content ?? null) as { meta?: { targetJob?: string; targetCompany?: string; jobListingUrl?: string } } | null;
-    await store
-      .updateArtifactContent(userId, forge.id, resumeTextToDocument(c.input.resumeText, base) as unknown as Record<string, unknown>)
-      .catch(() => "failed");
+    const doc = resumeTextToDocument(c.input.resumeText, base) as unknown as Record<string, unknown>;
+    await store.updateArtifactContent(userId, forge.id, withRevisionMarker(doc, r.revision.id)).catch(() => "failed");
   }
   return { ok: true, revision: summary(r.revision, verdict, r.reused) };
 }

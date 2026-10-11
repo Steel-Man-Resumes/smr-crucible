@@ -12,15 +12,19 @@ import { buildFinishView, recordAnswer, type DefendAnswer } from "../finish-gate
 import {
   AUTO_ENDPOINT,
   autoResultLine,
-  finishedVersion,
+  revisionVersion,
   sendFinishedPackage,
   type AutoDeps,
 } from "../email-package-auto";
 import { EMAIL_PACKAGE_PER_RECIPIENT_PER_DAY, RECIPIENT_ENDPOINT, recipientKey } from "../email-package-guard";
 import type { PackageMail } from "../email-package-send";
+import { cleanRevisionInput, computeRevision, revisionRecord } from "../revision-status";
+import { revisionContentHash, type ArtifactRevision } from "@crucible/core/src/artifactRevision";
+import { packageFiles } from "../email-package-files";
 
 const UID = "00000000-0000-4000-8000-0000000000aa";
 const OWN = "morgan@example.com";
+const ART = "00000000-0000-4000-8000-00000000a7a7";
 
 const SOURCE = `Morgan Sample
 Toledo, OH | morgan@example.com
@@ -41,6 +45,7 @@ LINE COOK | Harbor Street Diner | 2019 - 2023
 
 CORE COMPETENCIES
 Grill, Breakfast line, Vegetable prep, Kitchen closing`;
+const LETTER = "Dear hiring manager,\n\nI ran the grill at Harbor Street Diner.\n\nMorgan Sample";
 
 // The finish gate (round 2 on) asks nothing about lines already in the
 // person's own words, so the fixture's last bullet is reworded away from
@@ -54,11 +59,44 @@ function allAnswered(resume = RESUME): DefendAnswer[] {
   return answers;
 }
 
-function finishedBody(extra: Record<string, unknown> = {}) {
-  return { resumeText: RESUME, ownWords: SOURCE, defendAnswers: allAnswered(), coverLetterText: "Dear hiring manager,", ...extra };
+let revSeq = 0;
+/**
+ * A saved revision, made the way the server makes one: the finish state is
+ * cleaned, the gate and the page count run, the verdict stored. `force`
+ * overwrites the stored status (a row saved under an older checker).
+ */
+function revision(extra: Record<string, unknown> = {}, force?: "finished"): ArtifactRevision {
+  const resume = (extra.resumeText as string) ?? RESUME;
+  const letter = (extra.coverLetterText as string) ?? LETTER;
+  const c = cleanRevisionInput({
+    resumeText: resume,
+    coverLetterText: letter,
+    defendAnswers: allAnswered(resume),
+    ownWords: SOURCE,
+    written: { resume, letter },
+    keptTerms: [],
+    ...extra,
+  });
+  if (!c.ok) throw new Error(c.reason);
+  const v = computeRevision(c.input);
+  const rec = revisionRecord(ART, "forge_finish", c.input, v);
+  if (force) Object.assign(rec, { status: force, openItems: [] });
+  return {
+    id: `00000000-0000-4000-8000-00000000f${(++revSeq).toString(16).padStart(3, "0")}`,
+    user_id: UID, artifact_id: ART, revision_number: revSeq, source: rec.source, doc_kind: rec.docKind,
+    resume_text: rec.resumeText, letter_text: rec.letterText, kept_terms: rec.keptTerms, confirmed_credentials: rec.confirmedCredentials,
+    defend_answers: rec.defendAnswers, evidence: rec.evidence, checker_version: rec.checkerVersion, status: rec.status,
+    page_count: rec.pageCount, page_limit: rec.pageLimit, length_choice: rec.lengthChoice, open_items: rec.openItems,
+    content_hash: revisionContentHash(rec), created_at: "now",
+  } as ArtifactRevision;
 }
 
-/** Fake world: an account row, a durable claim table, daily counters, and a recording transport. */
+const FINISHED = revision();
+function finishedBody(extra: Record<string, unknown> = {}, rev: ArtifactRevision = FINISHED) {
+  return { revisionId: rev.id, narrativeHeadline: "A cook who runs the line", ...extra };
+}
+
+/** Fake world: an account row, saved revisions, a durable claim table, daily counters, and a recording transport. */
 function world(opts: {
   target?: { email: string | null; proven: boolean; on: boolean } | null;
   claimTable?: "ready" | "missing";
@@ -66,11 +104,14 @@ function world(opts: {
   transportThrows?: boolean;
   noTransport?: boolean;
   countThrows?: boolean;
+  revisions?: ArtifactRevision[];
+  filesThrow?: boolean;
 } = {}) {
   const sent: PackageMail[] = [];
   const claims = new Set<string>();
   const counts = new Map<string, number>();
   const released: string[] = [];
+  const revs = opts.revisions ?? [FINISHED];
   const deps: AutoDeps = {
     target: async () => (opts.target === undefined ? { email: OWN, proven: true, on: true } : opts.target),
     count: async (key, endpoint) => {
@@ -90,6 +131,12 @@ function world(opts: {
     release: async (userId, version) => {
       released.push(version);
       claims.delete(`${userId}|${version}`);
+    },
+    // Owner only, like the real read.
+    getRevision: async (userId, id) => (userId === UID ? revs.find((r) => r.id === id) ?? null : null),
+    files: async (resume, letter) => {
+      if (opts.filesThrow) throw new Error("render");
+      return [{ filename: "Morgan-Sample.pdf", content: "UERG" }, { filename: "Morgan-Sample.docx", content: "UEs=" }, ...(letter.trim() ? [{ filename: "Morgan-Sample-CoverLetter.docx", content: "UEs=" }] : [])];
     },
     transport: opts.noTransport
       ? null
@@ -111,7 +158,7 @@ test("the fixture really is finished (and without answers, a draft)", () => {
 test("a finished resume is sent once, to the account's own proven address", async () => {
   const w = world();
   const r = await sendFinishedPackage(UID, finishedBody(), w.deps);
-  assert.deepEqual(r, { sent: true, to: OWN });
+  assert.deepEqual(r, { sent: true, to: OWN, revision: FINISHED.revision_number });
   assert.equal(w.sent.length, 1);
   assert.equal(w.sent[0].to, OWN);
   assert.match(w.sent[0].text, /LINE COOK \| Harbor Street Diner/);
@@ -120,17 +167,20 @@ test("a finished resume is sent once, to the account's own proven address", asyn
 });
 
 test("a draft sends nothing and claims nothing", async () => {
-  const w = world();
-  const r = await sendFinishedPackage(UID, finishedBody({ defendAnswers: [] }), w.deps);
+  const draft = revision({ defendAnswers: [] });
+  assert.equal(draft.status, "draft");
+  const w = world({ revisions: [draft] });
+  const r = await sendFinishedPackage(UID, finishedBody({}, draft), w.deps);
   assert.deepEqual(r, { sent: false, reason: "draft" });
   assert.equal(w.sent.length, 0);
   assert.equal(w.claims.size, 0);
   assert.equal(w.counts.size, 0);
 });
 
-test("no resume, nothing sent", async () => {
+test("no revision id (raw text only), nothing sent; someone else's revision is not found", async () => {
   const w = world();
-  assert.deepEqual(await sendFinishedPackage(UID, { resumeText: "   " }, w.deps), { sent: false, reason: "no_resume" });
+  assert.deepEqual(await sendFinishedPackage(UID, { resumeText: RESUME }, w.deps), { sent: false, reason: "no_resume" });
+  assert.deepEqual(await sendFinishedPackage("00000000-0000-4000-8000-0000000000bb", finishedBody(), w.deps), { sent: false, reason: "not_found" });
   assert.equal(w.sent.length, 0);
 });
 
@@ -182,18 +232,30 @@ test("idempotent: the same finished version is never sent twice, even days apart
   assert.equal(autoResultLine(again), `We sent it to ${OWN}.`);
 });
 
-test("a changed finished resume is a new version and is sent", async () => {
-  const w = world();
-  await sendFinishedPackage(UID, finishedBody(), w.deps);
+test("a changed finished resume is a new revision and is sent", async () => {
   // Still all theirs: one bullet split into two lines in their own words.
   const edited = RESUME.replace(
     "- Prepped vegetables before open and closed the kitchen at night.",
     "- Prepped vegetables before open.\n- Closed the kitchen at night."
   );
   assert.notEqual(edited, RESUME);
-  const r = await sendFinishedPackage(UID, finishedBody({ resumeText: edited, defendAnswers: allAnswered(edited) }), w.deps);
+  const v2 = revision({ resumeText: edited });
+  assert.equal(v2.status, "finished");
+  const w = world({ revisions: [FINISHED, v2] });
+  await sendFinishedPackage(UID, finishedBody(), w.deps);
+  const r = await sendFinishedPackage(UID, finishedBody({}, v2), w.deps);
   assert.equal(r.sent, true);
   assert.equal(w.sent.length, 2);
+});
+
+test("versioned by revision: a changed letter alone is a new version (it was not)", async () => {
+  const v2 = revision({ coverLetterText: "Dear hiring manager,\n\nI ran the grill at Harbor Street Diner, most mornings.\n\nMorgan Sample" });
+  assert.equal(v2.status, "finished");
+  assert.equal(v2.resume_text, FINISHED.resume_text);
+  assert.notEqual(revisionVersion(UID, v2), revisionVersion(UID, FINISHED));
+  const w = world({ revisions: [FINISHED, v2] });
+  assert.equal((await sendFinishedPackage(UID, finishedBody(), w.deps)).sent, true);
+  assert.equal((await sendFinishedPackage(UID, finishedBody({}, v2), w.deps)).sent, true);
 });
 
 test("two tabs at once: one send", async () => {
@@ -206,10 +268,10 @@ test("two tabs at once: one send", async () => {
   assert.equal(w.sent.length, 1);
 });
 
-test("the version is a SHA-256 hex of the person and the text, never the text", () => {
-  const v = finishedVersion(UID, RESUME);
+test("the version is a SHA-256 hex of the person, the revision and its content hash, never the text", () => {
+  const v = revisionVersion(UID, FINISHED);
   assert.match(v, /^[0-9a-f]{64}$/);
-  assert.notEqual(v, finishedVersion("00000000-0000-4000-8000-0000000000bb", RESUME), "another person, another version");
+  assert.notEqual(v, revisionVersion("00000000-0000-4000-8000-0000000000bb", FINISHED), "another person, another version");
   assert.ok(!v.includes("MORGAN"));
 });
 
@@ -267,6 +329,8 @@ test("the route takes no address from the request and wires the real claim", () 
   assert.match(src, /claim: claimPackageEmailVersion/);
   assert.match(src, /release: releasePackageEmailVersion/);
   assert.match(src, /mode: "user"/);
+  assert.match(src, /getRevision,/);
+  assert.match(src, /files: packageFiles/);
   assert.match(src, /isSameOriginJsonPost\(request\.headers\)/);
   assert.doesNotMatch(src, /originAllowed/);
 });
@@ -278,4 +342,53 @@ test("the finished email says why it came and how to turn it off, with no price"
   assert.match(m.text, /You can turn these emails off in Settings/);
   assert.doesNotMatch(m.text + m.html, /\$\d|price|per month/i);
   assert.doesNotMatch(m.html, /<script/i);
+});
+
+// ---- Phase 5 R1: the email and the page agree, the letter counts, files go out ----
+
+test("A5 repro 1: a kept skill (D3) the page finished is emailed (the old email said draft)", async () => {
+  const withSkill = RESUME.replace("Kitchen closing", "Kitchen closing, Inventory control");
+  const kept = revision({ resumeText: withSkill, keptTerms: ["Inventory control"] });
+  assert.equal(kept.status, "finished", "the server, with the kept term, agrees with the page");
+  const w = world({ revisions: [kept] });
+  const r = await sendFinishedPackage(UID, finishedBody({}, kept), w.deps);
+  assert.equal(r.sent, true);
+  assert.match(w.sent[0].text, /Inventory control/);
+});
+
+test("A5 repro 2: an unsupported letter is never emailed, even on a row stored as finished", async () => {
+  const bad = "Dear hiring manager,\n\nI ran the grill at Harbor Street Diner. I managed 900 employees and hold a PhD in culinary science.\n\nMorgan Sample";
+  const honest = revision({ coverLetterText: bad });
+  assert.equal(honest.status, "draft", "the server stores it as a draft");
+  const forged = revision({ coverLetterText: bad }, "finished");
+  for (const rev of [honest, forged]) {
+    const w = world({ revisions: [rev] });
+    const r = await sendFinishedPackage(UID, finishedBody({}, rev), w.deps);
+    assert.deepEqual(r, { sent: false, reason: "draft" });
+    assert.equal(w.sent.length, 0);
+    assert.equal(w.claims.size, 0);
+  }
+  assert.match(autoResultLine({ sent: false, reason: "draft" }) ?? "", /still has something to fix/);
+});
+
+test("the actual files go out: resume PDF and Word, the letter in Word, attached", async () => {
+  const w = world();
+  await sendFinishedPackage(UID, finishedBody(), w.deps);
+  const names = (w.sent[0].attachments ?? []).map((a) => a.filename);
+  assert.deepEqual(names, ["Morgan-Sample.pdf", "Morgan-Sample.docx", "Morgan-Sample-CoverLetter.docx"]);
+  assert.match(w.sent[0].text, /attached as a PDF and a Word file, with your cover letter in Word/);
+});
+
+test("files that fail to build: nothing sent, the claim given back, a retry can send it", async () => {
+  const w = world({ filesThrow: true });
+  assert.deepEqual(await sendFinishedPackage(UID, finishedBody(), w.deps), { sent: false, reason: "failed", to: OWN });
+  assert.equal(w.claims.size, 0);
+});
+
+test("the real file builder makes a real PDF and real Word files from the revision", async () => {
+  const files = await packageFiles(FINISHED.resume_text, FINISHED.letter_text);
+  assert.equal(files.length, 3);
+  assert.equal(Buffer.from(files[0].content, "base64").subarray(0, 5).toString(), "%PDF-");
+  assert.equal(Buffer.from(files[1].content, "base64").subarray(0, 2).toString(), "PK");
+  assert.equal(files[0].filename, "Morgan-Sample.pdf");
 });

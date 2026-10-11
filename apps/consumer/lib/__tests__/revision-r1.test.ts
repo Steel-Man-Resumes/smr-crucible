@@ -16,6 +16,7 @@ import { importDecision, importPayload, afterSave } from "../forge-import";
 import { finishPayloadFromRun } from "../finish-payload";
 import { resumeTextToDocument, documentKeepsText } from "../revision-to-doc";
 import { saveEditRevision, saveFinishRevision, type RevisionStore, type ArtifactLite } from "../revision-save";
+import { ensureExportRevision, revisionIsCurrent, withRevisionMarker, artifactText } from "../revision-current";
 import { formatResumeDownload } from "../../components/resume/resumeModel";
 import type { ArtifactRevision, NewRevision, InsertRevisionResult } from "@crucible/core/src/artifactRevision";
 import { revisionContentHash } from "@crucible/core/src/artifactRevision";
@@ -325,4 +326,52 @@ test("save: a Refinery edit carries the evidence over on the server; with no ear
 
 test("the fixture's source is fictional", () => {
   assert.match(SOURCE, /example\.com/);
+});
+
+// ---- the Refinery: every export is a saved revision of what is STORED -------------------
+
+
+test("export: the Forge resume the server rebuilt from revision 1 exports as revision 1, exactly (marker)", async () => {
+  const f = fakeStore();
+  const saved = await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  assert.ok(saved.ok);
+  // The fake store keeps the content the server wrote.
+  const art = f.arts[0];
+  art.content = f.updates.at(-1)!.content;
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.id, saved.ok ? saved.revision.id : "");
+  assert.equal(ex.ok && ex.revision.status, "finished");
+  assert.equal(f.revs.length, 1, "no new revision");
+});
+
+test("export: an edit in the Refinery breaks the marker, and the server makes a new revision from the stored content", async () => {
+  const f = fakeStore();
+  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  const art = f.arts[0];
+  const content = { ...(f.updates.at(-1)!.content as Record<string, any>) };
+  content.summary = "Line cook. I also managed a team of 40.";
+  art.content = content;
+  assert.equal(revisionIsCurrent(art.content, f.revs[0]), false);
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.revision_number, 2);
+  assert.equal(ex.ok && ex.revision.source, "refinery_edit");
+  assert.equal(ex.ok && ex.revision.resume_text, artifactText(content), "the stored content, never a request's text");
+  assert.equal(ex.ok && ex.revision.status, "draft", "a new unsupported claim is asked about again");
+});
+
+test("export: a forged marker (wrong hash) vouches for nothing", () => {
+  const rev = { id: REV, resume_text: "x", letter_text: "" };
+  const good = withRevisionMarker({ contact: { name: "A" }, experience: [] }, REV);
+  assert.equal(revisionIsCurrent(good, rev), true);
+  const forged = { ...good, summary: "added later" };
+  assert.equal(revisionIsCurrent(forged, rev), false);
+  assert.equal(revisionIsCurrent({ ...good, _revision: { id: REV, hash: "0".repeat(64) } }, rev), false);
+});
+
+test("export: someone else's artifact, or one that is not a resume, gets nothing", async () => {
+  const f = fakeStore([{ id: "00000000-0000-4000-8000-0000000000ab", artifact_type: "cover_letter", target_context: {}, content: { text: "Dear" } }]);
+  assert.deepEqual(await ensureExportRevision(UID, "00000000-0000-4000-8000-0000000000ff", f.store), { ok: false, status: 404, reason: "artifact not found" });
+  assert.deepEqual(await ensureExportRevision(UID, "00000000-0000-4000-8000-0000000000ab", f.store), { ok: false, status: 409, reason: "not a resume" });
 });

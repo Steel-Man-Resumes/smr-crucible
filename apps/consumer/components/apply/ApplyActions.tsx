@@ -122,6 +122,10 @@ export function ApplyActions({
   const [applyingAsIs, setApplyingAsIs] = useState(false);
   const [asIsDone, setAsIsDone] = useState(false);
   const [asIsErr, setAsIsErr] = useState<string | null>(null);
+  // Phase 5 R1: the server says which version attaches and whether it is a
+  // draft. A draft attaches only after the person chooses it, and says so.
+  const [asIsDraftAsk, setAsIsDraftAsk] = useState<string | null>(null);
+  const [asIsResult, setAsIsResult] = useState<{ number: number; status: "draft" | "finished" } | null>(null);
 
   // Apply-ladder rung selection with honesty: prefer the direct apply link, but
   // only when it is READABLE. An unreadable link never renders -- fall to the
@@ -208,7 +212,7 @@ export function ApplyActions({
     setChecking(false);
   }
 
-  async function applyAsIs() {
+  async function applyAsIs(acceptDraft = false) {
     if (!resumeId) return;
     setApplyingAsIs(true);
     setAsIsErr(null);
@@ -216,11 +220,15 @@ export function ApplyActions({
       const res = await fetch("/api/quick-apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ applicationId, artifactId: resumeId }),
+        body: JSON.stringify({ applicationId, artifactId: resumeId, ...(acceptDraft ? { acceptDraft: true } : {}) }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setAsIsDone(true);
+        setAsIsDraftAsk(null);
+        if (data?.revision) setAsIsResult({ number: data.revision.number, status: data.revision.status });
+      } else if (res.status === 409 && data.error === "draft") {
+        setAsIsDraftAsk(data.message || "This resume is still a draft.");
       } else {
         setAsIsErr(data.error === "resume_not_found" ? "We could not find that resume." : "Could not attach your resume. Try again in a moment.");
       }
@@ -341,7 +349,24 @@ export function ApplyActions({
             {checking ? "Checking fit..." : "Check fit"}
           </button>
           {asIsDone ? (
-            <span className="text-[11px] text-t-amber-bright">Your current resume is attached to this job.</span>
+            <span className="text-[11px] text-t-amber-bright" data-testid="quick-apply-done">
+              {asIsResult
+                ? asIsResult.status === "finished"
+                  ? `Your finished resume (version ${asIsResult.number}) is attached to this job.`
+                  : `Your draft resume (version ${asIsResult.number}) is attached to this job, marked as a draft.`
+                : "Your current resume is attached to this job."}
+            </span>
+          ) : asIsDraftAsk ? (
+            <span className="text-[11px] text-t-phos" data-testid="quick-apply-draft">
+              {asIsDraftAsk}{" "}
+              <button
+                onClick={() => applyAsIs(true)}
+                disabled={applyingAsIs}
+                className="t-focus underline underline-offset-2 hover:text-t-white disabled:opacity-50"
+              >
+                Attach it marked as a draft
+              </button>
+            </span>
           ) : !oneClickOpen ? (
             <span className="text-[11px] text-t-phos-dim" data-testid="one-click-locked">
               {PREMIUM_TOOL_LABELS.one_click_apply} isn&apos;t open for you yet.{" "}
@@ -351,7 +376,7 @@ export function ApplyActions({
             </span>
           ) : (
             <button
-              onClick={applyAsIs}
+              onClick={() => applyAsIs()}
               disabled={applyingAsIs}
               className="t-focus px-3 py-1.5 bg-t-panel-2 border border-t-line text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors disabled:opacity-50"
             >
@@ -401,7 +426,7 @@ export function ApplyActions({
             {fit.recommendation === "as_is" ? (
               !asIsDone && oneClickOpen && (
                 <button
-                  onClick={applyAsIs}
+                  onClick={() => applyAsIs()}
                   disabled={applyingAsIs}
                   className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright transition-colors disabled:opacity-50"
                 >

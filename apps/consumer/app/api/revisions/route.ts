@@ -10,6 +10,11 @@
  * POST { kind: "edit", artifactId, resumeText, letterText? }
  *      An edit in the Refinery workspace: a new revision on top of the
  *      artifact's newest one, evidence carried over by the server.
+ * POST { kind: "export", artifactId, letterText? }
+ *      Before a Refinery download, print or attachment: the revision that IS
+ *      this artifact now (its newest, when the stored content is still
+ *      exactly that), or a new one the server makes from the STORED content
+ *      (lib/revision-current.ts). The text never comes from the request.
  * GET  ?artifactId=<id>  the newest revision of that artifact
  * GET  ?forge=1          the newest revision of the person's Forge resume
  *
@@ -20,7 +25,8 @@
 import { NextResponse } from "next/server";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { revisionCaller, REVISION_SAVES_PER_DAY } from "@/lib/revision-route";
-import { coreStore, saveEditRevision, saveFinishRevision } from "@/lib/revision-save";
+import { coreStore, saveEditRevision, saveFinishRevision, type SaveResult } from "@/lib/revision-save";
+import { ensureExportRevision } from "@/lib/revision-current";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -46,7 +52,17 @@ export async function POST(request: Request) {
   const b = body as Record<string, unknown>;
   try {
     const store = await coreStore();
-    const result =
+    if (b.kind === "export") {
+      if (b.letterText !== undefined && typeof b.letterText !== "string") return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+      const ex = await ensureExportRevision(userId, typeof b.artifactId === "string" ? b.artifactId : "", store, {
+        letterText: typeof b.letterText === "string" ? b.letterText : undefined,
+      });
+      if (!ex.ok) return NextResponse.json({ error: "We couldn't prepare that resume.", reason: ex.reason }, { status: ex.status, headers: NO_STORE });
+      const { publicRevision } = await import("@crucible/core");
+      const p = publicRevision(ex.revision);
+      return NextResponse.json({ revision: { id: p.id, artifactId: p.artifactId, number: p.number, status: p.status, pageCount: p.pageCount, pageLimit: p.pageLimit, openItems: p.openItems, reused: ex.reused } }, { headers: NO_STORE });
+    }
+    const result: SaveResult =
       b.kind === "edit"
         ? await saveEditRevision(userId, typeof b.artifactId === "string" ? b.artifactId : "", b.resumeText, b.letterText, store)
         : b.kind === "finish"

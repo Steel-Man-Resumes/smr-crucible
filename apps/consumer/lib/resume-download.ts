@@ -5,9 +5,12 @@
  *   downloadPackage({ resumeText, coverLetterText, draft, openItems })
  *
  * Both post to /api/forge/download, which builds every format from one layout
- * model (PDF, Word, HTML). The file is named with buildResumeFilename. The
- * caller decides draft versus finished (the finish page, from the engine's
- * getResumeStatus) and passes the flag; these helpers never decide it.
+ * model (PDF, Word, HTML). The file is named with buildResumeFilename.
+ *
+ * DRAFT is decided by the SERVER (Phase 5 R1): pass `revisionId` (a saved
+ * revision, signed in) or `finish` (the finish page's whole state, signed
+ * out). Text with neither is always marked DRAFT. The `draft` flag is only a
+ * hint for the to-do list and can never take a mark off.
  *
  * Both reject with an Error whose message is plain words the page can show
  * (for example the rate limit message). They resolve once the browser has been
@@ -16,9 +19,17 @@
 
 import { buildResumeFilename } from "./resume-filename";
 
-export type DownloadFormat = "pdf" | "docx" | "html";
+export type DownloadFormat = "pdf" | "docx" | "html" | "txt";
 
-export interface DownloadResumeOptions {
+/** Where the server reads the document and its status from. */
+export interface DownloadSource {
+  /** A saved revision (migration 081). The server uses ITS text and stored status. */
+  revisionId?: string | null;
+  /** Signed out: the finish page's whole state (lib/finish-payload.ts). */
+  finish?: unknown;
+}
+
+export interface DownloadResumeOptions extends DownloadSource {
   format: DownloadFormat;
   kind: "resume" | "cover_letter";
   text: string;
@@ -35,7 +46,7 @@ export interface DownloadResumeOptions {
   role?: string;
 }
 
-export interface DownloadPackageOptions {
+export interface DownloadPackageOptions extends DownloadSource {
   resumeText: string;
   coverLetterText?: string;
   draft: boolean;
@@ -68,6 +79,12 @@ function namingParts(o: { name?: string; lane?: string; company?: string; role?:
     role: o.role,
     name: name || undefined,
   };
+}
+
+function sourceOf(o: DownloadSource): Record<string, unknown> {
+  if (o.revisionId) return { revisionId: o.revisionId };
+  if (o.finish) return { finish: o.finish };
+  return {};
 }
 
 async function fetchFile(body: Record<string, unknown>): Promise<Blob> {
@@ -109,6 +126,7 @@ export async function downloadResume(opts: DownloadResumeOptions): Promise<void>
   if (!opts.text || !opts.text.trim()) throw new Error("There is nothing to download yet.");
   const naming = namingParts(opts, opts.kind === "cover_letter" ? opts.resumeText || "" : opts.text);
   const blob = await fetchFile({
+    ...sourceOf(opts),
     content: opts.text,
     type: opts.kind,
     format: opts.format,
@@ -127,6 +145,7 @@ export async function downloadPackage(opts: DownloadPackageOptions): Promise<voi
   if (!opts.resumeText || !opts.resumeText.trim()) throw new Error("There is nothing to download yet.");
   const naming = namingParts(opts, opts.resumeText);
   const blob = await fetchFile({
+    ...sourceOf(opts),
     content: opts.resumeText,
     type: "resume",
     format: "zip",

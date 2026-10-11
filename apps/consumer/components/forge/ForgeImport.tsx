@@ -28,6 +28,7 @@ import {
   type RunLevel,
 } from "@/lib/forge-import";
 import { sessionPending } from "@/lib/session-policy";
+import { storedFinishFromRevision } from "@/lib/finish-payload";
 import { signOutOfForge } from "./ForgeAccountBar";
 import { useImpersonating } from "./useImpersonating";
 
@@ -147,6 +148,11 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
         // Only this signed-in account's own saved run, never anyone else's
         // (the route answers for the effective account; M3).
         if (j?.userId !== user.id) return;
+        // Phase 5 R1: the saved finished version comes with it, so the finish
+        // page opens on that exact revision (text, letter, answers, confirmations).
+        if (j?.revision && typeof j.revision === "object" && typeof j.revision.id === "string") {
+          saved.forgeFinish = storedFinishFromRevision(j.revision, saved);
+        }
         // The account's own copy: marked as this account's and as saved, so
         // nothing here sends it back.
         updateSession({ ...saved, ...afterSave(saved, user.id, runLevel(saved)) } as any);

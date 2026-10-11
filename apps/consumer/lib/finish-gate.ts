@@ -116,6 +116,12 @@ export interface StoredFinish {
   confirmedCredentials?: CredentialConfirm[];
   /** What "No, take it off" left of longer sentences (round 6), held like a confirmed move's leftover. */
   credentialCutRemnants?: string[];
+  /** Phase 5 R1: the person's page choice ("one_page" or "auto"); read by the page, not by this file. */
+  lengthChoice?: string;
+  /** Phase 5 R1: restored from the account, the saved revision's own evidence (lib/finish-payload.ts). */
+  evidence?: unknown;
+  /** Phase 5 R1: the saved revision this copy came from, when restored from the account. */
+  revisionId?: string;
 }
 
 /** A credential the writer put on the page that the person confirmed holding, in their own words. */

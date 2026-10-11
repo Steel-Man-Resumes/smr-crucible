@@ -12,16 +12,19 @@
 
 import { useEffect, useRef, useState } from "react";
 
-const cache = new Map<string, string>();
+const cache = new Map<string, { words: string; pages: number | null }>();
 
 export function PageFitLine({
   text,
   kind = "resume",
   className = "",
+  onPages,
 }: {
   text: string;
   kind?: "resume" | "cover_letter";
   className?: string;
+  /** The measured page count (null until known, or when it could not be measured). */
+  onPages?: (pages: number | null) => void;
 }) {
   const [words, setWords] = useState<string>("");
   const [failed, setFailed] = useState(false);
@@ -32,15 +35,18 @@ export function PageFitLine({
     if (!body) {
       setWords("");
       setFailed(false);
+      onPages?.(null);
       return;
     }
     const key = `${kind}\u0000${body}`;
     const hit = cache.get(key);
     if (hit) {
-      setWords(hit);
+      setWords(hit.words);
       setFailed(false);
+      onPages?.(hit.pages);
       return;
     }
+    onPages?.(null);
     const mine = ++seq.current;
     const timer = setTimeout(async () => {
       try {
@@ -50,19 +56,21 @@ export function PageFitLine({
           body: JSON.stringify({ text, kind }),
         });
         if (!res.ok) throw new Error("layout failed");
-        const data = (await res.json()) as { words?: string };
+        const data = (await res.json()) as { words?: string; pages?: number };
         if (mine !== seq.current) return;
         if (typeof data.words === "string") {
-          cache.set(key, data.words);
+          const pages = typeof data.pages === "number" ? data.pages : null;
+          cache.set(key, { words: data.words, pages });
           setWords(data.words);
           setFailed(false);
+          onPages?.(pages);
         }
       } catch {
         if (mine === seq.current) setFailed(true);
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [text, kind]);
+  }, [text, kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!text.trim()) return null;
   return (

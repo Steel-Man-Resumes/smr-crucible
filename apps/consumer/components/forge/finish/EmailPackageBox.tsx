@@ -1,10 +1,11 @@
 "use client";
 
 /**
- * Email-me-my-package, moved from the output page unchanged in behaviour:
- * same /api/forge/email-package call, same address check, same Turnstile
- * widget (remounted after every attempt), same server limits. The newsletter
- * box starts unchecked; a yes is the person's own click.
+ * Email-me-my-package (signed out): same /api/forge/email-package call, same
+ * address check, same Turnstile widget (remounted after every attempt), same
+ * server limits. It sends the finish page's whole state, and the server
+ * decides whether it is finished (Phase 5 R1). The newsletter box starts
+ * unchecked; a yes is the person's own click.
  */
 
 import { useRef, useState } from "react";
@@ -16,11 +17,14 @@ export function EmailPackageBox({
   coverLetterText,
   narrativeHeadline,
   narrativeSummary,
+  finish,
 }: {
   resumeText: string;
   coverLetterText: string;
   narrativeHeadline: string;
   narrativeSummary: string;
+  /** The finish page's whole state (lib/finish-payload.ts): the server decides finished from it. */
+  finish: unknown;
 }) {
   const [email, setEmail] = useState("");
   const [letter, setLetter] = useState(NEWSLETTER_DEFAULT_CHECKED);
@@ -52,6 +56,7 @@ export function EmailPackageBox({
           coverLetterText,
           narrativeHeadline,
           narrativeSummary,
+          finish,
           turnstileToken,
           letter,
         }),

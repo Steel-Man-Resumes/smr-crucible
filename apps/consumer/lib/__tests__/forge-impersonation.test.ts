@@ -53,7 +53,10 @@ describe("M3: impersonation never moves a Forge run between accounts", () => {
     const checkAt = src.indexOf("if (j?.userId !== user.id) return;");
     const stampAt = src.indexOf("afterSave(saved, user.id");
     assert.ok(checkAt > 0 && checkAt < stampAt);
-    assert.match(code(read("app", "api", "forge", "load", "route.ts")), /NextResponse\.json\(\{ data: profile, userId \}\)/);
+    const load = code(read("app", "api", "forge", "load", "route.ts"));
+    assert.match(load, /NextResponse\.json\(\{ data: profile, userId, revision \}\)/);
+    // Phase 5 R1: the saved revision is read only for the person's own session, never while viewing as someone.
+    assert.match(load, /const real = await realAuth\(\);\s+if \(real\?\.user\?\.id === userId\)/);
   });
 
   it("the save route refuses while an admin is viewing as someone", () => {
