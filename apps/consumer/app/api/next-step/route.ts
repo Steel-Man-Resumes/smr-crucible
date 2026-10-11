@@ -31,6 +31,9 @@ export async function GET() {
   }
 }
 
+/** The words when "I don't need this now" has no profile to save to. */
+const NOT_NOW_NO_PROFILE_MESSAGE = "We couldn't save that yet. Finish your resume in the Forge first, then this choice will stick.";
+
 export async function POST(request: Request) {
   if (!isSameOriginJsonPost(request.headers)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 403 });
@@ -46,7 +49,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
   try {
-    await setDisclosureNotNow(userId, choice === "not_now");
+    const saved = await setDisclosureNotNow(userId, choice === "not_now");
+    if (!saved) {
+      // No profile row yet (review I3): say so plainly instead of pretending.
+      return NextResponse.json({ error: NOT_NOW_NO_PROFILE_MESSAGE, code: "no_profile" }, { status: 409 });
+    }
     await invalidateNextStep(userId);
     const next = await getNextStep(userId);
     return NextResponse.json({ data: next });

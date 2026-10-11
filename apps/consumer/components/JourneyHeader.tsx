@@ -20,24 +20,28 @@ export function JourneyHeader() {
   // Phase 4.4: the AI-phrased (or deterministic-fallback) WHY for this step.
   const [why, setWhy] = useState<string | null>(null);
   const [notNowBusy, setNotNowBusy] = useState(false);
+  const [notNowError, setNotNowError] = useState<string | null>(null);
 
   // "I don't need this now" on the optional disclosure step: the server
   // stamps it, recomputes, and the card moves on.
   async function disclosureNotNow() {
     setNotNowBusy(true);
+    setNotNowError(null);
     try {
       const r = await fetch("/api/next-step", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ disclosure: "not_now" }),
       });
-      const j = r.ok ? await r.json() : null;
-      if (j?.data) {
+      const j = await r.json().catch(() => null);
+      if (r.ok && j?.data) {
         setWhy(null);
         setNext(j.data as NextStep);
+      } else {
+        setNotNowError(typeof j?.error === "string" ? j.error : "That didn't save. Try again in a minute.");
       }
     } catch {
-      // Leave the card as it was; the person can try again.
+      setNotNowError("That didn't save. Try again in a minute.");
     } finally {
       setNotNowBusy(false);
     }
@@ -96,6 +100,11 @@ export function JourneyHeader() {
     <div className="space-y-3">
       <StageProgressBar currentStage={arcStageForNextStep(next)} />
       <NextStepCard next={next} why={plainWhy} onNotNow={disclosureNotNow} notNowBusy={notNowBusy} />
+      {notNowError && (
+        <p role="status" className="px-1 text-sm text-t-amber-bright" data-testid="not-now-error">
+          {notNowError}
+        </p>
+      )}
       {extraWhy && (
         <details className="group px-1">
           <summary className="t-focus inline-flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-t-bone-dim hover:text-t-white">

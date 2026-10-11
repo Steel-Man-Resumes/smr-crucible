@@ -185,3 +185,14 @@ test("Phase 5 R4.5 (A6): the next-step card offers 'I don't need this now' on th
   assert.match(route, /choice !== "not_now" && choice !== "undo"/);
   assert.ok(route.indexOf("setDisclosureNotNow(") < route.indexOf("invalidateNextStep(userId)"));
 });
+
+test("review I3: 'I don't need this now' with no profile row says so plainly (409), and the card shows it", () => {
+  const route = readFileSync(join(ROOT, "app", "api", "next-step", "route.ts"), "utf8");
+  assert.match(route, /const saved = await setDisclosureNotNow\(userId, choice === "not_now"\);\s*if \(!saved\) \{/);
+  assert.match(route, /code: "no_profile" \}, \{ status: 409 \}/);
+  assert.match(route, /Finish your resume in the Forge first/);
+  assert.ok(route.indexOf("if (!saved)") < route.indexOf("invalidateNextStep(userId)"));
+  const header = readFileSync(join(ROOT, "components", "JourneyHeader.tsx"), "utf8");
+  assert.match(header, /setNotNowError\(typeof j\?\.error === "string" \? j\.error/);
+  assert.match(header, /data-testid="not-now-error"/);
+});
