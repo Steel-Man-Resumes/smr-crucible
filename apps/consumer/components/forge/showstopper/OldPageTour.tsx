@@ -1,12 +1,13 @@
 "use client";
 
 /**
- * The person's current page with t.ROY walking it: a brass pointer moves from
- * one flagged line to the next, the line lights up, and t.ROY's note for it
- * appears beside the page like a text message.
+ * The person's current page with t.ROY walking it: a brass pointer reads down
+ * the page line by line, stops on each flagged line, the line lights up, and
+ * t.ROY's note for it appears beside the page like a text message.
  *
- * Every flag comes from the mint check run in this browser (see
- * lib/showstopper-tour.ts). Reduced motion: nothing moves or plays on its
+ * Every flag comes from the checks run in this browser (SMR quality rules
+ * plus the mint check, see lib/showstopper-tour.ts). A page with nothing to
+ * mark gets a neutral line (never praise, never a made-up flaw). Reduced motion: nothing moves or plays on its
  * own; every flagged line is marked and every note is listed. The notes are
  * an ordered list in reading order inside a polite live region, and the
  * person can pause, play or skip the walk.
@@ -16,7 +17,10 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Pause, Play, SkipForward } from "lucide-react";
 import type { ResumeTour } from "@/lib/showstopper-tour";
 
-const STEP_MS = 6000;
+/** How long a note stays current before the pointer reads on. */
+const STEP_MS = 5200;
+/** One line of reading. */
+const SCAN_MS = 110;
 const FIRST_NOTE_MS = 1400;
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
@@ -28,6 +32,8 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
   const { lines, steps } = tour;
   const [revealed, setRevealed] = useState(0);
   const [current, setCurrent] = useState(-1);
+  // The line the pointer is on while it reads down the page.
+  const [cursor, setCursor] = useState(-1);
   const [playing, setPlaying] = useState(true);
   const [arrowTop, setArrowTop] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -43,18 +49,21 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
     setPlaying(false);
   }, [motionPref, steps.length]);
 
-  // The walk: first note after t.ROY arrives, then one every few seconds.
+  // The walk: the pointer reads down line by line. On a flagged line it
+  // stops, the note shows, and after a beat it reads on.
   useEffect(() => {
     if (!known || reduced || !playing || finished) return;
-    const t = setTimeout(
-      () => {
-        setRevealed((r) => r + 1);
-        setCurrent(revealed);
-      },
-      revealed === 0 ? FIRST_NOTE_MS : STEP_MS
-    );
+    const target = steps[revealed].lineIndex;
+    if (cursor === target) {
+      setCurrent(revealed);
+      setRevealed(revealed + 1);
+      return;
+    }
+    const stoppedOnNote = current >= 0 && cursor === steps[current]?.lineIndex;
+    const delay = cursor < 0 ? FIRST_NOTE_MS : stoppedOnNote ? STEP_MS : SCAN_MS;
+    const t = setTimeout(() => setCursor((c) => (c < target ? c + 1 : target)), delay);
     return () => clearTimeout(t);
-  }, [known, reduced, playing, finished, revealed]);
+  }, [known, reduced, playing, finished, revealed, cursor, current, steps]);
 
   useEffect(() => {
     if (finished) setPlaying(false);
@@ -62,20 +71,20 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
 
   const lineIndexOf = (i: number) => (i >= 0 && i < steps.length ? steps[i].lineIndex : -1);
 
-  // Point at the current line and bring it into view inside the page box
+  // Point at the line being read and keep it in view inside the page box
   // (never scrolls the window).
+  const pointerLine = cursor >= 0 ? cursor : lineIndexOf(current);
   const place = useCallback(() => {
-    const li = lineIndexOf(current);
-    const el = li >= 0 ? lineRefs.current[li] : null;
+    const el = pointerLine >= 0 ? lineRefs.current[pointerLine] : null;
     if (!el) return setArrowTop(null);
     setArrowTop(el.offsetTop + el.offsetHeight / 2);
     const box = scrollRef.current;
     if (box) {
+      const visible = el.offsetTop >= box.scrollTop + box.clientHeight / 6 && el.offsetTop + el.offsetHeight <= box.scrollTop + (box.clientHeight * 2) / 3;
       const top = Math.max(0, el.offsetTop - box.clientHeight / 3);
-      if (typeof box.scrollTo === "function") box.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
+      if (!visible && typeof box.scrollTo === "function") box.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current, reduced, steps]);
+  }, [pointerLine, reduced]);
 
   useIsoLayoutEffect(() => {
     place();
@@ -100,7 +109,9 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
   const skip = () => {
     setRevealed(steps.length);
     setPlaying(false);
+    setCursor(-1);
   };
+  const reading = !reduced && playing && !finished && cursor >= 0;
 
   return (
     <>
@@ -122,7 +133,9 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
               <svg
                 aria-hidden="true"
                 viewBox="0 0 28 20"
-                className="pointer-events-none absolute left-0.5 top-0 h-4 w-[22px] text-ws-amber transition-transform duration-700 ease-[cubic-bezier(.22,.8,.3,1)]"
+                className={`pointer-events-none absolute left-0.5 top-0 h-4 w-[22px] text-ws-amber transition-transform ease-[cubic-bezier(.22,.8,.3,1)] ${
+                  reading ? "duration-100" : "duration-700"
+                }`}
                 style={{ transform: `translateY(${arrowTop - 8}px)` }}
               >
                 <path d="M1 10h17M12 3l8 7-8 7" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="square" />
@@ -132,6 +145,7 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
               const n = noteForLine.get(i);
               const flagged = n !== undefined;
               const on = i === currentLine || (flagged && (reduced || showAll) && currentLine < 0);
+              const scanned = reading && i === cursor && !on;
               const isName = i === nameLine;
               const heading = !isName && /^[A-Z][A-Z &/:,-]{3,}$/.test(line.trim());
               return (
@@ -142,7 +156,15 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
                   }}
                   className={`relative whitespace-pre-wrap break-words px-1.5 font-body text-[13px] leading-[1.55] text-ws-bg transition-colors duration-300 ${
                     isName ? "text-[17px] font-semibold" : heading ? "mt-1 font-semibold tracking-wide" : ""
-                  } ${on ? "bg-ws-amber-bright/55 outline outline-2 outline-ws-amber" : flagged ? "bg-ws-amber-bright/25" : ""}`}
+                  } ${
+                    on
+                      ? "bg-ws-amber-bright/55 outline outline-2 outline-ws-amber"
+                      : flagged
+                        ? "bg-ws-amber-bright/25"
+                        : scanned
+                          ? "bg-ws-amber-bright/15"
+                          : ""
+                  }`}
                 >
                   {flagged && (
                     <span
@@ -162,9 +184,9 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
 
       {/* t.ROY's notes, in reading order */}
       <section aria-label="What t.ROY sees" className="min-w-0 lg:col-start-2 lg:row-start-2">
-        {tour.cleanNote ? (
+        {tour.readNote ? (
           <p className="border-l-4 border-ws-amber bg-t-panel-2 px-4 py-3 text-base text-t-white" role="status">
-            {tour.cleanNote}
+            {tour.readNote}
           </p>
         ) : (
           <>
@@ -177,6 +199,7 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
                       type="button"
                       onClick={() => {
                         setCurrent(i);
+                        setCursor(s.lineIndex);
                         setPlaying(false);
                       }}
                       aria-current={isCurrent ? "true" : undefined}

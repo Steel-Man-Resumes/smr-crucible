@@ -1,6 +1,9 @@
 /**
- * The "Building your story" tour: turns mint-check findings on the person's
- * current page into short t.ROY notes, one per flagged line.
+ * The "Building your story" tour: turns what t.ROY finds on the person's
+ * current page into short t.ROY notes, one per flagged line, walked top to
+ * bottom. Two checkers feed it: the SMR quality rules (an objective, a list of
+ * character words, duty lines, job lines that are not bullets, headings) and
+ * the truth/format mint check (blanks, dates, titles, dashes, credentials).
  *
  * Pure: no I/O, no network, no model. Runs in the browser on the text the
  * person already gave (session.resumeText). The page shows a flaw only when
@@ -18,6 +21,7 @@ import {
   checkCredentialStatus,
   type MintFinding,
 } from "@crucible/core/src/resumeMintCheckShared";
+import { runQualityCheck, type QualityFinding } from "@crucible/core/src/resumeQualityRules";
 
 export interface TourStep {
   /** Stable key for React lists. */
@@ -26,7 +30,10 @@ export interface TourStep {
   lineIndex: number;
   /** The flagged line as it appears on the page. */
   line: string;
-  severity: "BLOCK" | "FIX";
+  /** BLOCK/FIX from the truth check; weak/missing from the quality rules. */
+  severity: "BLOCK" | "FIX" | "weak" | "missing";
+  /** Which checker raised it. */
+  source: "truth" | "quality";
   /** What t.ROY says about it. Plain words, no rule codes. */
   note: string;
 }
@@ -34,15 +41,18 @@ export interface TourStep {
 export interface ResumeTour {
   /** The page split into lines exactly as rendered (trailing spaces trimmed). */
   lines: string[];
+  /** In page order, top to bottom. */
   steps: TourStep[];
-  /** Set when the checker found nothing to show. */
-  cleanNote?: string;
+  /**
+   * Set when neither checker marked anything: a neutral word, never praise.
+   * (Troy's ruling, r3: the tour gives no strength verdict at all.)
+   */
+  readNote?: string;
 }
 
-export const TOUR_CAP = 6;
+export const TOUR_CAP = 8;
 
-export const CLEAN_NOTE =
-  "Your page is already clean on the basics.";
+export const READ_NOTE = "I read it top to bottom. Nothing big jumped out. Your new page is coming.";
 
 const YEAR_RE = /\b(?:19[5-9]\d|20[0-4]\d)\b/;
 
@@ -111,6 +121,19 @@ export function pageLines(text: string): string[] {
 }
 
 /** Index of the raw line a finding is about, or -1 when it can't be placed. */
+/** Index of the nth exact copy of a line (quality findings say which copy). */
+function anchorNth(lines: string[], findingLine: string, nth: number): number {
+  const want = findingLine.trim();
+  if (!want) return -1;
+  let seen = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() !== want) continue;
+    if (seen === nth) return i;
+    seen++;
+  }
+  return anchorOf(lines, findingLine);
+}
+
 function anchorOf(lines: string[], findingLine: string): number {
   const want = findingLine.trim();
   if (!want) return -1;
@@ -135,7 +158,27 @@ function looksLikeFalseAlarm(f: MintFinding, lines: string[], at: number): boole
   return false;
 }
 
-const SEVERITY_RANK = { BLOCK: 0, FIX: 1 } as const;
+// Short follow-ups when the same kind of weak line shows up again.
+const QUALITY_AGAIN: Record<string, string> = {
+  duty_phrasing: "Same thing here: this says what the job was, not what you did.",
+  weak_bullet: "Same here: this line needs a real action.",
+  bullets: "Same here: words under a job, not bullets.",
+  generic_summary: "This one could sit on anybody's page too.",
+  heading: "Same with this heading.",
+};
+const QUALITY_AGAIN_DEFAULT = "Same kind of weak spot on this line.";
+
+/** Truth problems that block first, then the quality marks, then truth fixes. */
+const RANK = { BLOCK: 0, weak: 1, missing: 1, FIX: 2 } as const;
+
+type Placed = {
+  at: number;
+  key: string;
+  severity: TourStep["severity"];
+  source: TourStep["source"];
+  why?: string;
+  rule: string;
+};
 
 /**
  * Build the tour for a page. Returns null when there is no page (no text), so
@@ -147,17 +190,22 @@ export function buildResumeTour(resumeText: string | undefined | null, cap: numb
   const lines = pageLines(text);
 
   const mint = runMintCheck({ output: text, source: text, kind: "resume" });
-  const findings = [...mint.findings, ...checkCredentialStatus(text, text)];
+  const truth: MintFinding[] = [...mint.findings, ...checkCredentialStatus(text, text)];
+  const quality: QualityFinding[] = runQualityCheck(text);
 
   // Place each finding on a line; one step per line (the more serious wins).
-  type Placed = { f: MintFinding; at: number; key: string };
   const placed: Placed[] = [];
-  for (const f of findings) {
+  for (const f of truth) {
     const at = anchorOf(lines, f.line);
     if (at < 0 || looksLikeFalseAlarm(f, lines, at)) continue;
-    placed.push({ f, at, key: noteKey(f) });
+    placed.push({ at, key: noteKey(f), severity: f.severity, source: "truth", rule: f.rule });
   }
-  placed.sort((a, b) => SEVERITY_RANK[a.f.severity] - SEVERITY_RANK[b.f.severity] || a.at - b.at);
+  for (const f of quality) {
+    const at = anchorNth(lines, f.line, f.occurrence ?? 0);
+    if (at < 0) continue;
+    placed.push({ at, key: `q:${f.rule}`, severity: f.severity, source: "quality", why: f.why, rule: f.rule });
+  }
+  placed.sort((a, b) => RANK[a.severity] - RANK[b.severity] || a.at - b.at);
   const byLine = new Map<number, Placed>();
   for (const p of placed) if (!byLine.has(p.at)) byLine.set(p.at, p);
   const unique = [...byLine.values()];
@@ -175,23 +223,33 @@ export function buildResumeTour(resumeText: string | undefined | null, cap: numb
     if (chosen.length >= cap) break;
     if (!chosen.includes(p)) chosen.push(p);
   }
-  chosen.sort((a, b) => SEVERITY_RANK[a.f.severity] - SEVERITY_RANK[b.f.severity] || a.at - b.at);
+  // The walk goes down the page, top to bottom.
+  chosen.sort((a, b) => a.at - b.at);
 
   const used = new Set<string>();
   const steps: TourStep[] = chosen.map((p) => {
-    const pair = NOTES[p.key] ?? GENERIC;
-    const note = used.has(p.key) ? pair.again : pair.first;
+    const again = used.has(p.key);
     used.add(p.key);
+    let note: string;
+    if (p.source === "quality") {
+      note = again ? QUALITY_AGAIN[p.rule] ?? QUALITY_AGAIN_DEFAULT : p.why!;
+    } else {
+      const pair = NOTES[p.key] ?? GENERIC;
+      note = again ? pair.again : pair.first;
+    }
     return {
       id: `${p.at}-${p.key}`,
       lineIndex: p.at,
       line: lines[p.at],
-      severity: p.f.severity,
+      severity: p.severity,
+      source: p.source,
       note,
     };
   });
 
-  return steps.length ? { lines, steps } : { lines, steps, cleanNote: CLEAN_NOTE };
+  if (steps.length) return { lines, steps };
+  // Silence is never praise: a page with no marks gets the neutral line.
+  return { lines, steps, readNote: READ_NOTE };
 }
 
 // ---- Jobs the person typed (no page to mark up) ---------------------------
