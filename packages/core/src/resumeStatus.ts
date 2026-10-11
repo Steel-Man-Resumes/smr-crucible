@@ -95,7 +95,7 @@ export interface DefendAnswer {
    * one). The caller may add rewrites to the person's own words; an ordinary
    * answer is never added to the source (no anchoring path, DEC-45).
    */
-  kind?: "rewrite" | "scope_yes" | "title_yes";
+  kind?: "rewrite" | "scope_yes" | "title_yes" | "job_ok";
   /** Round 13 (SF-4): a rewrite made by "Use my title" on a role in the summary or letter: the title they typed. */
   ownTitle?: string;
   /** Round 11: for "scope_yes", the scope family the typed words answer ("train"). */
@@ -144,6 +144,16 @@ export interface ResumeStatusInput {
   credentialRows?: ReadonlyArray<CredentialRow>;
   /** The person's own uploaded resume (record lines held back as they chose): whole lines of it may cover a credential. */
   ownResumeText?: string;
+  /**
+   * Rewording A (Troy 2026-10-11): t.ROY may reword any line; the facts are
+   * locked. When true, a line is never asked about just because it is
+   * reworded (no "far from your words" defend lines) or because it carries a
+   * number the person gave. Every fact check still runs: a number, year,
+   * title (with its employer), credential or scope claim the person never
+   * gave is still an open item. The caller sets it only when the writer's
+   * second check ran on the page, so a new result or tool is still caught.
+   */
+  factsLocked?: boolean;
 }
 
 export interface ResumeStatus {
@@ -866,6 +876,58 @@ function questionForDefend(line: string, reasons: DefendReason[], sourceText: st
   return DESCRIBE;
 }
 
+// ---- rewording A: numbers keep their meaning ---------------------------------
+
+// Small words skipped when reading what a number counts ("40 covers an hour", "about 12 of the trucks").
+const COUNT_SKIP = new Set(["a", "an", "the", "of", "per", "to", "and", "or", "in", "on", "at", "for", "about", "over", "around", "nearly", "almost", "than", "more", "plus", "up", "some"]);
+
+/** The stem of the first real word after a number (what it counts), or "" when none follows. */
+function countedAfter(text: string, end: number): string {
+  const words = text.slice(end).toLowerCase().match(/[a-z]+/g) ?? [];
+  const w = words.slice(0, 3).find((x) => !COUNT_SKIP.has(x));
+  return w ? stemOf(w) : "";
+}
+
+/** Every number value in a text, with what each one counts there. */
+function numberContexts(text: string): Map<string, Set<string>> {
+  const t = normalizeDigits(text || "");
+  const out = new Map<string, Set<string>>();
+  for (const tok of numberTokens(t)) {
+    const set = out.get(tok.value) ?? new Set<string>();
+    set.add(countedAfter(t, tok.index + tok.length));
+    out.set(tok.value, set);
+  }
+  return out;
+}
+
+/**
+ * Rewording A (Troy 2026-10-11): numbers are locked. True when every number
+ * on the line is one the person gave, counting the same thing they counted
+ * ("40 covers" from their "40 covers an hour"). A number moved onto another
+ * thing ("3 covers" when they said "3 years") is a changed fact.
+ *
+ * `rewrite`: the person's own retype of this line ("Add a number"). A number
+ * they typed into it themselves is theirs: its value is in their words (the
+ * caller adds only what a rewrite introduced) and was not on the line it
+ * replaced. A written number kept in a retype is still read in context.
+ */
+export function numbersInContext(line: string, sourceText: string, rewrite?: DefendAnswer): boolean {
+  const src = numberContexts(sourceText);
+  const t = normalizeDigits(stripBullet(line));
+  const own =
+    rewrite && rewrite.kind === "rewrite" && rewrite.verdict === "stands" && typeof rewrite.replaced === "string" && squash(stripBullet(rewrite.answer)) === squash(stripBullet(line))
+      ? numbersIn(rewrite.replaced)
+      : null;
+  for (const tok of numberTokens(t)) {
+    const ctx = src.get(tok.value);
+    if (!ctx) return false;
+    if (own && !own.has(tok.value)) continue;
+    const w = countedAfter(t, tok.index + tok.length);
+    if (w && !ctx.has(w)) return false;
+  }
+  return true;
+}
+
 // ---- defend step -----------------------------------------------------------
 
 /**
@@ -970,11 +1032,18 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
   }
 
   const picks = resumeText.trim() ? pickDefend(resumeText, sourceText) : { lines: [] as DefendLine[], allOwn: false, header: new Set<string>() };
-  const defendLines = picks.lines;
+  // Rewording A: a reworded line whose facts trace back needs no answer (the fact checks below still run).
+  // A number is a fact with its meaning: one that moved to another thing ("3 covers" for "3 years") is still asked.
+  const defendLines = input.factsLocked
+    ? picks.lines
+        .filter((d) => d.reasons.includes("number") && !numbersInContext(d.line, sourceText, rewriteOf(answers, d.line)))
+        .map((d) => ({ line: d.line, reasons: ["number"] as DefendReason[], question: questionForDefend(d.line, ["number"], sourceText) }))
+    : picks.lines;
   // Each answer belongs to its own line only; answers are never pooled into
   // the source. The page is always checked against the person's own words.
   // Round 11: a "Yes, I did this" answer settles only its own scope claim, never the line's other questions.
-  const byLine = new Map(answers.filter((a) => a.kind !== "scope_yes" && a.kind !== "title_yes").map((a) => [squash(a.line), a]));
+  // Phase 6: a "Looks right" on a job is the job's own confirmation, never an answer for the line.
+  const byLine = new Map(answers.filter((a) => a.kind !== "scope_yes" && a.kind !== "title_yes" && a.kind !== "job_ok").map((a) => [squash(a.line), a]));
   const standingFor = (line: string) => {
     const a = byLine.get(squash(line));
     if (!answerStands(a, line, sourceText)) return undefined;
@@ -1146,7 +1215,7 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     blockCount,
     fixCount: openItems.length - blockCount,
     defendLines,
-    allLinesInOwnWords: picks.allOwn && !defendLines.some((d) => d.reasons.includes("far_from_your_words")),
+    allLinesInOwnWords: picks.allOwn && !picks.lines.some((d) => d.reasons.includes("far_from_your_words")),
     rulesVersion: RESUME_RULES_VERSION,
   };
 }
