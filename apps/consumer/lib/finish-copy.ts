@@ -20,7 +20,7 @@ export function fixPanelIntro(view: { state: "finished" | "draft"; defendTotal: 
   if (view.state !== "finished" && view.jobsOpen && view.jobsOpen === view.fixCount) {
     return {
       heading: "Check your jobs",
-      subline: "Titles, employers and dates come from your own page. Tap Looks right on each one, or fix it.",
+      subline: "These are from your page. Check each one against your records: tap Looks right, or fix it.",
       showOwnWords: false,
     };
   }

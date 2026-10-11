@@ -12,7 +12,7 @@
  *                  clean first section, saved through the same save the
  *                  finish page uses (/api/lane-first, R1). The lane home
  *                  sends that section to the writer too, never to "Check and
- *                  finish" (lib/lane-task.ts writtenByTroy).
+ *                  finish" (the server reads its lineage: lib/source-kind.ts).
  *
  * The server builds the save and decides draft or finished. The page is never
  * its own evidence: only what the person typed here counts as their words, so

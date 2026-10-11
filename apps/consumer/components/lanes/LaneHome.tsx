@@ -19,7 +19,6 @@ import {
   DRAFT_BADGE,
   TASK_COPY,
   rebuildHref,
-  writtenByTroy,
   type LaneTask,
 } from "@/lib/lane-task";
 
@@ -28,7 +27,7 @@ interface ForgeRevision {
   artifactId: string;
   number: number;
   status: "draft" | "finished";
-  /** Phase 6: made by the writer (its receipt matched), not a page saved as given. */
+  /** Phase 6: made by the writer (the server checked its lineage for a generate-docs receipt), not a page saved as given. */
   fromWriter?: boolean;
 }
 
@@ -51,7 +50,8 @@ export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" |
   if (!rev && (task === "resume" || task === "interview")) return { label: "Start your resume", href: "/resume" };
   switch (task) {
     case "resume":
-      return rev!.status === "finished" ? { label: "Get your files in My resumes", href: "/dashboard/vault" } : draftNext(rev!);
+      // Round 3 (review r1 H1): a page the writer never made goes to the writer, even when a check of it passed.
+      return rev!.status === "finished" && rev!.fromWriter ? { label: "Get your files in My resumes", href: "/dashboard/vault" } : draftNext(rev!);
     case "job":
       return { label: "Pick a job to go after", href: "/dashboard/jobs" };
     case "interview":
@@ -75,7 +75,8 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
       .then((j) => {
         if (!live) return;
         const r = j?.revision;
-        setRev(r && typeof r.id === "string" ? { id: r.id, artifactId: r.artifactId, number: r.number, status: r.status, fromWriter: writtenByTroy(r) } : null);
+        // Review r1 H1: the server says whether the writer made it (its lineage), never this page.
+        setRev(r && typeof r.id === "string" ? { id: r.id, artifactId: r.artifactId, number: r.number, status: r.status, fromWriter: r.fromWriter === true } : null);
       })
       .catch(() => undefined)
       .finally(() => live && setLoaded(true));
@@ -106,7 +107,7 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
                 </p>
               )}
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                {rev.status !== "finished" && (
+                {(rev.status !== "finished" || !rev.fromWriter) && (
                   <Link href={draftNext(rev).href} className="t-focus min-h-touch inline-flex items-center font-medium text-t-amber-bright underline underline-offset-2" data-testid="lane-home-check">
                     {draftNext(rev).label}
                   </Link>

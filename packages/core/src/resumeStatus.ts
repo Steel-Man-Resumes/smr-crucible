@@ -154,6 +154,14 @@ export interface ResumeStatusInput {
    * second check ran on the page, so a new result or tool is still caught.
    */
   factsLocked?: boolean;
+  /**
+   * Rewording A only: the documents the second check read (the writer's
+   * documents as delivered). A line that is not one of them, nor the person's
+   * own retype of one, was never read by that check, so it is read the
+   * stricter way (asked when it is not in their words). Absent: every line
+   * counts as read (callers that have no documents never set factsLocked).
+   */
+  checkedText?: string;
 }
 
 export interface ResumeStatus {
@@ -928,6 +936,89 @@ export function numbersInContext(line: string, sourceText: string, rewrite?: Def
   return true;
 }
 
+// ---- rewording A: what still gets the stricter reading (Phase 6 S1 round 3) ----
+
+const MONTH_WORD = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
+const DATE_TOKEN_RE = new RegExp(`\\b(?:${MONTH_WORD}\\s+)?(?:\\d{1,2}\\/)?(?:19|20)\\d{2}\\b|(?<=(?:[-\\u2013\\u2014]|\\bto|\\bthrough|\\buntil)\\s*)(?:present|current|now)\\b`, "gi");
+
+/** The dates in a text as written ("8/2021", "aug 2021", "2021", "present"), lower case. */
+export function dateTokensOf(text: string): string[] {
+  return ((text || "").match(DATE_TOKEN_RE) ?? []).map((t) => t.toLowerCase().replace(/\s+/g, " ").replace(/\.$/, ""));
+}
+
+/** True when every date on the line is written exactly as in the person's words ("8/2021" never becomes "2021" or "3/2021"). */
+export function datesAsGiven(line: string, sourceText: string): boolean {
+  const src = new Set(dateTokensOf(sourceText));
+  return dateTokensOf(line).every((t) => src.has(t));
+}
+
+// A year followed by what it would count ("2018 trucks"), and the words that show it is a date instead.
+const YEAR_COUNT_RE = /\b((?:19|20)\d{2})\s+([a-z]{3,})/gi;
+const YEAR_NOT_COUNTED = new Set(["after", "before", "again", "to", "through", "thru", "until", "present", "now", "and", "the", "with", "when", "where", "while", "as", "for", "at", "in", "on", "from", "onward", "onwards", "season", "year", "years", "class", "cohort", "graduate", "graduated"]);
+const YEAR_DATE_BEFORE_RE = new RegExp(`(?:[/\\-\\u2013\\u2014]|\\b(?:in|since|from|by|of|during|until|through|thru|to|and|or|summer|fall|spring|winter|early|late|mid|${MONTH_WORD}))\\s*$`, "i");
+
+/** Every "YYYY thing" on a line that reads as a count, as value and stem. */
+function yearCounts(text: string): Array<{ year: string; stem: string }> {
+  const out: Array<{ year: string; stem: string }> = [];
+  for (const m of (text || "").matchAll(YEAR_COUNT_RE)) {
+    if (YEAR_DATE_BEFORE_RE.test(text.slice(0, m.index))) continue;
+    const word = m[2].toLowerCase();
+    if (YEAR_NOT_COUNTED.has(word)) continue;
+    out.push({ year: m[1], stem: stemOf(word) });
+  }
+  return out;
+}
+
+/**
+ * Rewording A (review r1 L3): a year in the person's words is a date, never
+ * a count. True when the line uses a year-like number as a count ("Loaded
+ * 2018 trucks") that the person did not give as that same count.
+ */
+export function yearUsedAsCount(line: string, sourceText: string): boolean {
+  const theirs = yearCounts(sourceText);
+  return yearCounts(stripBullet(line)).some((c) => !theirs.some((t) => t.year === c.year && t.stem === c.stem));
+}
+
+/**
+ * Rewording A: the lines that still get the stricter reading, each asked when
+ * it is not in the person's words (review r1 M1 and the carried-documents gap):
+ * - every line of a job whose header the gate cannot read as "Title |
+ *   Employer | Dates" (a comma, dash or two-line header), and any date in
+ *   that job not written exactly as the person wrote it;
+ * - a line the second check never read (not in `checkedText`, and not the
+ *   person's own retype of a line that was).
+ */
+function strictLinesUnderA(resumeText: string, sourceText: string, checkedText: string | undefined, answers: DefendAnswer[]): string[] {
+  const out: string[] = [];
+  const read = checkedText === undefined ? null : new Set(linesOf(checkedText).map((l) => squash(stripBullet(l))));
+  const wasRead = (l: string) => {
+    if (!read || read.has(squash(stripBullet(l)))) return true;
+    const rw = rewriteOf(answers, l);
+    return !!rw && rw.verdict === "stands" && squash(stripBullet(rw.answer)) === squash(stripBullet(l)) && read.has(squash(stripBullet(rw.replaced as string)));
+  };
+  const body = new Set(bodyLines(resumeText, sourceText).filter((b) => !b.inSkills).map((b) => b.line));
+  const isBulletLine = (l: string) => /^[-•*]/.test(l);
+  let inExperience = false;
+  let unparsed = false;
+  linesOf(resumeText).forEach((l, i) => {
+    if (i === 0) return;
+    if (isSectionEnd(l)) {
+      inExperience = EXPERIENCE_HEADING_RE.test(l.replace(/:$/, ""));
+      unparsed = false;
+      return;
+    }
+    if (inExperience) {
+      if (isEntryHeader(l)) unparsed = false;
+      else if (!isBulletLine(l)) unparsed = true;
+    }
+    const far = body.has(l) && distanceFromSource(l, sourceText) > 0;
+    const strictJob = inExperience && unparsed && (far || !datesAsGiven(l, sourceText));
+    const unread = body.has(l) && !wasRead(l) && far;
+    if ((strictJob || unread) && !out.includes(l)) out.push(l);
+  });
+  return out;
+}
+
 // ---- defend step -----------------------------------------------------------
 
 /**
@@ -1004,6 +1095,22 @@ function pickDefend(
 
 // ---- the contract ------------------------------------------------------------
 
+/** Rewording A's defend lines, in page order (see getResumeStatus). */
+function factsLockedDefend(resumeText: string, sourceText: string, picked: DefendLine[], answers: DefendAnswer[], checkedText: string | undefined): DefendLine[] {
+  const reasons = new Map<string, Set<DefendReason>>();
+  const add = (l: string, r: DefendReason) => {
+    if (!reasons.has(l)) reasons.set(l, new Set());
+    reasons.get(l)!.add(r);
+  };
+  for (const d of picked) if (d.reasons.includes("number") && !numbersInContext(d.line, sourceText, rewriteOf(answers, d.line))) add(d.line, "number");
+  for (const { line, inSkills } of bodyLines(resumeText, sourceText)) if (!inSkills && yearUsedAsCount(line, sourceText)) add(line, "number");
+  for (const l of strictLinesUnderA(resumeText, sourceText, checkedText, answers)) add(l, "far_from_your_words");
+  const order = linesOf(resumeText);
+  return Array.from(reasons.entries())
+    .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+    .map(([line, rs]) => ({ line, reasons: Array.from(rs), question: questionForDefend(line, Array.from(rs), sourceText) }));
+}
+
 /**
  * Finished or draft, with every open item and its question.
  * An open BLOCK always means "draft".
@@ -1034,11 +1141,8 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
   const picks = resumeText.trim() ? pickDefend(resumeText, sourceText) : { lines: [] as DefendLine[], allOwn: false, header: new Set<string>() };
   // Rewording A: a reworded line whose facts trace back needs no answer (the fact checks below still run).
   // A number is a fact with its meaning: one that moved to another thing ("3 covers" for "3 years") is still asked.
-  const defendLines = input.factsLocked
-    ? picks.lines
-        .filter((d) => d.reasons.includes("number") && !numbersInContext(d.line, sourceText, rewriteOf(answers, d.line)))
-        .map((d) => ({ line: d.line, reasons: ["number"] as DefendReason[], question: questionForDefend(d.line, ["number"], sourceText) }))
-    : picks.lines;
+  // Round 3: a year used as a count, a job header the gate cannot read, and a line the second check never read keep the stricter reading.
+  const defendLines = input.factsLocked ? factsLockedDefend(resumeText, sourceText, picks.lines, answers, input.checkedText) : picks.lines;
   // Each answer belongs to its own line only; answers are never pooled into
   // the source. The page is always checked against the person's own words.
   // Round 11: a "Yes, I did this" answer settles only its own scope claim, never the line's other questions.

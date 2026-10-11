@@ -191,22 +191,19 @@ export function rebuildHref(artifactId: string): string {
 
 /**
  * Phase 6 (S1 round 2): this run is still the build from that saved resume:
- * the page and the own text it was given have not been replaced by a new
- * upload, paste or section since. Only then is the writer sent its id.
+ * the page it was given is still the one shown, and the run's own resume text
+ * has not changed since (a new upload, paste or section ends it). Only then
+ * is the writer sent its id.
  */
-export function rebuildActive(s: { rebuild?: { id?: unknown; page?: unknown; own?: unknown } | null; originalResumeText?: string; resumeText?: string }): string | null {
+export function rebuildActive(s: { rebuild?: { id?: unknown; page?: unknown; resumeAt?: unknown } | null; originalResumeText?: string; resumeText?: string }): string | null {
   const rb = s.rebuild;
-  if (!rb || typeof rb.id !== "string" || !rb.id || typeof rb.page !== "string" || typeof rb.own !== "string") return null;
+  if (!rb || typeof rb.id !== "string" || !rb.id || typeof rb.page !== "string" || typeof rb.resumeAt !== "string") return null;
   if (s.originalResumeText !== rb.page) return null;
-  if ((s.resumeText ?? "") !== rb.own) return null;
+  // The run's own resume text is never touched by a rebuild (review r1 M3); a new one ends it.
+  if ((s.resumeText ?? "") !== rb.resumeAt) return null;
   return rb.id;
 }
 
-/** A saved version the writer made (its receipt matched when it was saved), not a page saved as given. */
-export function writtenByTroy(rev: { evidence?: unknown } | null | undefined): boolean {
-  const ev = (rev?.evidence ?? null) as { writerVerified?: unknown; written?: unknown } | null;
-  return !!ev && ev.writerVerified === true && !!ev.written;
-}
 
 /* ---------------------------------------------------------- decision count -- */
 

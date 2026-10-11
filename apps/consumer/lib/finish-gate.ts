@@ -1373,7 +1373,12 @@ export function cutScopeSentences(letter: string, line: string, source: string, 
 
 /** The answer "Looks right" records on a job header. It settles that job's card only. */
 export const JOB_OK_ANSWER = "Looks right";
-export const JOB_WHY = "The title, the employer and the dates come from your own page. Make sure they match your records.";
+export const JOB_WHY = "These are from your page. Check them against your records.";
+/** Review r1 M2: a job t.ROY changed (a month, a place, the employer's name). A tap never settles it. */
+export const JOB_CHANGED_QUESTION = "Fix it to match your records. A screener checks these against your paperwork.";
+export function jobChangedWhy(changes: string[]): string {
+  return `t.ROY changed this job. Not on your page: ${changes.map((c) => `"${c}"`).join(", ")}.`;
+}
 export const JOB_QUESTION = "Is this job right?";
 const JOB_HEADING_RE = /^(?:(?:professional |work |relevant )?experience|employment(?: history)?|work history)$/i;
 
@@ -1398,40 +1403,76 @@ export function jobPartsOf(line: string): { title: string; rest: string[] } {
   return { title: parts[0] ?? "", rest: parts.slice(1) };
 }
 
+/**
+ * A job line's facts, one by one (title, employer, place, each date), lower
+ * case: split at pipes, commas, dashes and the small words that join them in
+ * a sentence ("Line cook at Harbor Street Diner from 2019 to 2023").
+ */
+function jobAtoms(text: string): string[] {
+  return stripBullet(text)
+    .split(/\s*[|,;\t]\s*|\s+[-\u2013\u2014]\s+|\s+(?:at|to|through|until|from|since|in|for)\s+/i)
+    .map((a) => a.toLowerCase().replace(/\s+/g, " ").replace(/[.;:]+$/, "").replace(/^(?:a|an|the)\s+/, "").trim())
+    .filter(Boolean);
+}
+
+/**
+ * Review r1 M2: the facts on a job header that are not, word for word, on
+ * the person's own lines for that job (the lines that name its title or its
+ * employer, and the line on either side). A changed month ("3/2021" for
+ * "8/2021"), an added place or a shortened employer comes back here; such a
+ * header is a fact card, never settled by "Looks right".
+ */
+export function jobHeaderChanges(header: string, ownText: string): string[] {
+  const page = jobAtoms(header);
+  // The title is checked by the title rule (its own card); here: employer, place and dates.
+  const anchors = new Set(page.slice(0, 2));
+  const lines = linesOf(ownText || "");
+  const own = new Set<string>();
+  const take = (l: string | undefined) => {
+    if (l && !/^\s*[-•*]/.test(l)) for (const a of jobAtoms(l)) own.add(a);
+  };
+  lines.forEach((l, i) => {
+    if (!jobAtoms(l).some((a) => anchors.has(a))) return;
+    take(l);
+    take(lines[i + 1]);
+    take(lines[i - 1]);
+  });
+  return page.slice(1).filter((a) => !own.has(a));
+}
+
 /** "Looks right" on one job. Recorded for that header line only; never part of the person's words. */
 export function recordJobOk(answers: DefendAnswer[], line: string): DefendAnswer[] {
   const k = squash(stripBullet(line));
   return [...answers.filter((a) => !(a.kind === "job_ok" && squash(stripBullet(a.line)) === k)), { line, answer: JOB_OK_ANSWER, kind: "job_ok" }];
 }
 
-/**
- * A job the person has settled: "Looks right" on that exact header, their
- * title typed on its title card, or the header retyped by them ("Fix this").
- */
-function jobConfirmed(answers: DefendAnswer[], line: string): boolean {
+/** The header retyped by the person ("Fix this"): their own words, settled whatever it says. */
+function jobRetyped(answers: DefendAnswer[], line: string): boolean {
   const k = squash(stripBullet(line));
-  return answers.some(
-    (a) =>
-      squash(stripBullet(a.line)) === k &&
-      (a.kind === "job_ok" ||
-        a.kind === "title_yes" ||
-        (a.kind === "rewrite" && !a.scopeHelp && a.verdict === "stands" && squash(stripBullet(a.answer)) === k))
-  );
+  return answers.some((a) => squash(stripBullet(a.line)) === k && a.kind === "rewrite" && !a.scopeHelp && a.verdict === "stands" && squash(stripBullet(a.answer)) === k);
+}
+
+/** A job header whose facts are all on the person's page, settled by "Looks right" (or their title typed on its title card). */
+function jobTapped(answers: DefendAnswer[], line: string): boolean {
+  const k = squash(stripBullet(line));
+  return answers.some((a) => squash(stripBullet(a.line)) === k && (a.kind === "job_ok" || a.kind === "title_yes"));
 }
 
 /**
  * Rewording A (Troy 2026-10-11): a reworded line whose facts trace back is
- * not asked about. Only when the writer's documents are known and its second
- * check ran on the resume (that check is what catches a new result or tool);
- * otherwise the stricter rule stands and the furthest lines are asked about.
+ * not asked about. Only when the writer's documents are known, its second
+ * check ran on the resume (that check is what catches a new result or tool),
+ * and the signer marked the build eligible (rewordingA, from the server's own
+ * source kind); otherwise the stricter rule stands.
  */
 export function factsLockedFor(written: WrittenDocs | null | undefined, grounding: unknown): boolean {
   if (!written || typeof written.resume !== "string" || !written.resume.trim()) return false;
   if (!grounding || typeof grounding !== "object") return false;
-  const g = grounding as { verifierRan?: unknown; verifierRanByDoc?: { resume?: unknown } | null; startingPageOnly?: unknown };
+  const g = grounding as { verifierRan?: unknown; verifierRanByDoc?: { resume?: unknown } | null; rewordingA?: unknown };
+  // Round 3 (review r1 H2): opt-in. Only a grounding a server signer stamped
+  // with the positive marker (lib/source-kind.ts withRewording) qualifies.
+  if (g.rewordingA !== true) return false;
   if (g.verifierRan === false) return false;
-  // Phase 6 (S1 round 2): a rebuild that started from a page that is not the person's own words.
-  if (g.startingPageOnly === true) return false;
   if (g.verifierRanByDoc && typeof g.verifierRanByDoc === "object" && g.verifierRanByDoc.resume === false) return false;
   return true;
 }
@@ -1513,7 +1554,7 @@ export interface LineGroup {
   /** Round 13 (SF-4): `role` when the title is a role in the summary or letter, not a job header's title. */
   title?: { current: string; role?: boolean };
   /** Phase 6 (Q3): a job to confirm with one tap ("Looks right" or "Fix this"). */
-  job?: { title: string; rest: string[] };
+  job?: { title: string; rest: string[]; /** Review r1 M2: the facts t.ROY changed (no "Looks right" then). */ changes?: string[] };
 }
 
 /** An open item with the document it is in. */
@@ -1545,7 +1586,7 @@ export interface FinishView {
 
 /** Items an answer in the person's own words can settle. A second-check item is settled only by a change or a fresh check. */
 const ANSWERABLE = (i: OpenItem) =>
-  i.from !== "second_check" && i.kind !== "credential_remnant" && i.kind !== "scope_unsaid" && i.kind !== "job_confirm" && i.rule === "STD-C04";
+  i.from !== "second_check" && i.kind !== "credential_remnant" && i.kind !== "scope_unsaid" && i.kind !== "job_confirm" && i.kind !== "job_changed" && i.rule === "STD-C04";
 
 // Words that start a fragment, not a sentence: a joining word or a relative pronoun.
 const FRAGMENT_START_RE = /^(?:and|or|but|so|nor|yet|plus|who|whom|whose|which|that|where|while|as|with|because|since|although|though|than)\b/i;
@@ -1879,6 +1920,8 @@ export function buildFinishView(input: {
     credentialRows: input.credentialRows,
     ownResumeText: input.ownResumeText,
     factsLocked,
+    // What the second check read: lines outside it keep the stricter reading.
+    checkedText: input.written ? `${input.written.resume}\n${input.written.letter}` : undefined,
   });
 
   const resumeLines = pageLineSet(input.resumeText);
@@ -2047,8 +2090,15 @@ export function buildFinishView(input: {
   // title, employer or date that is not the person's; a header with anything
   // open is settled on that card. Every other job header asks only "Looks right?".
   for (const header of factsLocked ? jobHeaderLines(input.resumeText) : []) {
-    if (jobConfirmed(answers, header)) continue;
+    if (jobRetyped(answers, header)) continue;
     if (items.some((i) => i.target === "resume" && squash(stripBullet(i.line)) === squash(stripBullet(header)))) continue;
+    // Review r1 M2: a fact t.ROY changed is a fact card; "Looks right" never settles it.
+    const changes = jobHeaderChanges(header, source);
+    if (changes.length) {
+      items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_changed", why: jobChangedWhy(changes), question: JOB_CHANGED_QUESTION });
+      continue;
+    }
+    if (jobTapped(answers, header)) continue;
     items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_confirm", why: JOB_WHY, question: JOB_QUESTION });
   }
 
@@ -2090,6 +2140,7 @@ export function buildFinishView(input: {
         ? { terms: its.map((i) => i.line).filter((t, k, all) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === k) }
         : {}),
       ...(its.length === 1 && its[0].kind === "job_confirm" ? { job: jobPartsOf(its[0].line) } : {}),
+      ...(its.length === 1 && its[0].kind === "job_changed" ? { job: { ...jobPartsOf(its[0].line), changes: jobHeaderChanges(its[0].line, source) } } : {}),
       ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true, schoolKnown: !!attendedSchoolOf(its[0].line, source) } : {}) } : {}),
       ...(its.find((i) => i.kind === "title_unsaid" && i.roleTitle)
         ? { title: { current: its.find((i) => i.kind === "title_unsaid" && i.roleTitle)!.roleTitle as string, role: true } }
@@ -2146,7 +2197,7 @@ export function buildFinishView(input: {
     defendTotal,
     source,
     allLinesInOwnWords: status.allLinesInOwnWords,
-    jobsOpen: groups.filter((g) => g.job).length,
+    jobsOpen: groups.filter((g) => g.job && !g.job.changes).length,
   };
 }
 

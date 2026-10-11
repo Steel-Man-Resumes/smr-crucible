@@ -174,27 +174,23 @@ export default function ResumeIntakePage() {
     let live = true;
     (async () => {
       try {
-        // Round 2 (CC's truth ruling): the SERVER decides, owner only, what on
-        // this saved resume counts as the person's own words. The page is shown;
-        // only those own words are this run's resume text (and what the account
-        // keeps). Nothing on an AI-written page becomes theirs here.
+        // Round 2/3 (CC's truth rulings): the SERVER decides, owner only, what
+        // on this saved resume counts as the person's own words, and the writer
+        // reads them itself. The browser gets only the page (shown, and the
+        // build's starting text). The run's own resume text, the one the account
+        // keeps, is never changed by a rebuild (review r1 M3).
         const res = await fetch(`/api/revisions/rebuild?artifactId=${encodeURIComponent(rebuild.id)}`, { cache: "no-store" });
-        const data = (await res.json().catch(() => null)) as { pageText?: unknown; ownResumeText?: unknown } | null;
+        const data = (await res.json().catch(() => null)) as { pageText?: unknown } | null;
         const page = typeof data?.pageText === "string" ? data.pageText : "";
-        const own = typeof data?.ownResumeText === "string" ? data.ownResumeText : "";
         if (!live) return;
         if (!res.ok || !page.trim()) {
           setRebuild({ id: rebuild.id, error: failed });
           return;
         }
-        // A new build from these words: the documents of an earlier build no longer match.
+        // A new build from that page: the documents of an earlier build no longer match.
         updateSession({
-          // No own words: the run's resume text is left out (never the page; an absent key keeps the account's).
-          resumeText: own || undefined,
           originalResumeText: page,
-          rebuild: { id: rebuild.id, page, own },
-          resumeMethod: "paste",
-          resumeFileName: undefined,
+          rebuild: { id: rebuild.id, page, resumeAt: session.resumeText ?? "" },
           forgeOutput: undefined,
           forgeFinish: undefined,
           laneParkedLetter: undefined,

@@ -58,3 +58,28 @@ test("a job tap is never an answer for a line", () => {
   const s = getResumeStatus({ resumeText: moved, sourceText: SOURCE, factsLocked: true, defendAnswers: [{ line, answer: "Looks right", kind: "job_ok" }] });
   assert.ok(s.openItems.some((i) => i.line === line));
 });
+
+// ---- round 3 (review r1 M1, L3, unread lines) ----
+
+import { dateTokensOf, datesAsGiven, yearUsedAsCount } from "../resumeStatus";
+
+test("round 3: dates are read as written; a year is never a count", () => {
+  assert.deepEqual(dateTokensOf("Cook | Diner | 8/2021 - Present"), ["8/2021", "present"]);
+  assert.equal(datesAsGiven("3/2021 - Present", "8/2021 - Present\n3/2018 - 7/2021"), false);
+  assert.equal(datesAsGiven("2021 - Present", "8/2021 - Present"), false, "a dropped month is a changed date");
+  assert.equal(yearUsedAsCount("- Fed 2019 guests", SOURCE), true);
+  assert.equal(yearUsedAsCount("- Worked the grill since 2019", SOURCE), false);
+});
+
+test("round 3: under factsLocked, a job header the gate cannot read gets the stricter reading, never zero checks", () => {
+  const comma = PAGE.replace("Line Cook | Lakeside Grill | 2019 - 2023", "Line Cook, Harbor Grill Group, 2019 - 2023");
+  const s = getResumeStatus({ resumeText: comma, sourceText: SOURCE, factsLocked: true });
+  assert.ok(s.defendLines.some((d) => d.line.startsWith("Line Cook, Harbor Grill Group")), JSON.stringify(s.defendLines));
+});
+
+test("round 3: under factsLocked, a line the second check never read is asked when it is not in their words", () => {
+  const extra = `${PAGE}\n- Ran the fryer station for catering events`;
+  const s = getResumeStatus({ resumeText: extra, sourceText: SOURCE, factsLocked: true, checkedText: PAGE });
+  assert.ok(s.defendLines.some((d) => d.line === "- Ran the fryer station for catering events"));
+  assert.deepEqual(getResumeStatus({ resumeText: PAGE, sourceText: SOURCE, factsLocked: true, checkedText: PAGE }).defendLines, []);
+});

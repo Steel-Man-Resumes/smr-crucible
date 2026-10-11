@@ -15,12 +15,13 @@ import { join } from "node:path";
 import { buildFinishView, factsLockedFor, jobHeaderLines, recordJobOk, type DefendAnswer } from "../finish-gate";
 import { cleanRevisionInput, computeRevision, editInput, givenTextMark, inputFromRevision, revisionRecord } from "../revision-status";
 import { loadRebuildSource, rebuildInputs, type RebuildSource } from "../rebuild-source";
-import { saveFirstSection, type LaneFirstStore } from "../lane-first-save";
+import { saveFirstSection } from "../lane-first-save";
 import { writerSourceFrom } from "../writer-receipt";
 import { rebuildActive } from "../lane-task";
-import type { ArtifactLite, RevisionStore } from "../revision-save";
-import { revisionContentHash, type ArtifactRevision, type InsertRevisionResult, type NewRevision } from "@crucible/core/src/artifactRevision";
+import { withRewording } from "../source-kind";
+import type { ArtifactLite } from "../revision-save";
 import { finishState, FIXTURE_CTX } from "./fixtures/revision-run";
+import { fakeRevisionStore } from "./fixtures/fake-revision-store";
 
 const read = (p: string) => readFileSync(join(__dirname, "..", "..", p), "utf8");
 const UID = "00000000-0000-4000-8000-0000000000a1";
@@ -49,41 +50,8 @@ Forklift Certification, current`;
 
 const GROUNDING = { verifierRan: true, verifierRanByDoc: { resume: true, cover_letter: true }, removed: 0, residual: 0, unmatched: 0, outcomes: [] };
 
-/** A store the way R1's coreStore behaves: reads AS the person, one list of revisions. */
 function fakeStore(initial: ArtifactLite[] = [], serverText?: string) {
-  const arts = [...initial];
-  const revs: ArtifactRevision[] = [];
-  const store: LaneFirstStore = {
-    listResumeArtifacts: async () => arts,
-    getArtifact: async (u, id) => (u === UID ? arts.find((a) => a.id === id) ?? null : null),
-    createForgeArtifact: async (_u, content) => {
-      const a = { id: `00000000-0000-4000-8000-0000000000${(10 + arts.length).toString(16)}`, artifact_type: "resume", target_context: { source: "forge" }, content };
-      arts.push(a);
-      return { id: a.id };
-    },
-    updateArtifactContent: async () => "updated",
-    insertRevision: async (userId: string, r: NewRevision): Promise<InsertRevisionResult> => {
-      const mine = revs.filter((x) => x.artifact_id === r.artifactId);
-      const row = {
-        id: `00000000-0000-4000-8000-00000000f${(100 + revs.length).toString(16)}`, user_id: userId, artifact_id: r.artifactId, revision_number: mine.length + 1,
-        source: r.source, doc_kind: r.docKind, resume_text: r.resumeText, letter_text: r.letterText, kept_terms: r.keptTerms,
-        confirmed_credentials: r.confirmedCredentials, defend_answers: r.defendAnswers, evidence: r.evidence, checker_version: r.checkerVersion,
-        status: r.status, page_count: r.pageCount, page_limit: r.pageLimit, length_choice: r.lengthChoice, open_items: r.openItems, content_hash: revisionContentHash(r), created_at: "now",
-      } as ArtifactRevision;
-      revs.push(row);
-      return { status: "saved", revision: row, reused: false };
-    },
-    getLatestRevision: async (u, id) => (u === UID ? revs.filter((x) => x.artifact_id === id).at(-1) ?? null : null),
-    serverSource: async () => (serverText === undefined ? null : writerSourceFrom({ resumeText: serverText })),
-    createResumeArtifact: async (_u, targetContext, content) => {
-      const a = { id: `00000000-0000-4000-8000-0000000001${(10 + arts.length).toString(16)}`, artifact_type: "resume", target_context: targetContext, content };
-      arts.push(a);
-      return { id: a.id };
-    },
-    getRevision: async (_u, id) => revs.find((x) => x.id === id) ?? null,
-    listRevisions: async (_u, id) => revs.filter((x) => x.artifact_id === id),
-  };
-  return { store, arts, revs };
+  return fakeRevisionStore(UID, initial, serverText);
 }
 
 const tailorArtifact = (): ArtifactLite => ({ id: TAILOR, artifact_type: "resume", target_context: { source: "tailor", targetJob: "Stocker" }, content: {} });
@@ -101,7 +69,8 @@ async function tailorWith(evidence: Record<string, unknown>, source: "refinery_e
 function build(rb: RebuildSource, request: Record<string, unknown>, written: string, grounding: Record<string, unknown>) {
   const r = rebuildInputs({ ...request }, rb);
   const source = writerSourceFrom({ ...r.source, goalNarrative: "I want steady work." });
-  const g = r.startingPageOnly ? { ...grounding, startingPageOnly: true } : grounding;
+  // Round 3: the grounding is stamped the way generate-docs stamps it, from the server's kind.
+  const g = withRewording(grounding, rb.origin);
   const view = (answers: DefendAnswer[] = []) =>
     buildFinishView({ resumeText: written, ownWords: source.ownWords, ownResumeText: source.ownResumeText, defendAnswers: answers, written: { resume: written, letter: "" }, grounding: g });
   return { r, source, grounding: g, view };
@@ -142,7 +111,9 @@ test("Tailor page with the person's stored own words: those are the source; the 
   assert.equal(rb!.origin, "own_words");
   assert.equal(rb!.ownResumeText, own.ownResumeText);
   const b = build(rb!, { resumeText: TAILOR_PAGE }, TAILOR_PAGE, GROUNDING);
-  assert.equal(b.r.writer.resumeText, own.ownResumeText, "the writer's source is their own words, not the Tailor page");
+  // Round 3 (review r1 M5): the writer starts from the page; own words stay the stored ones.
+  assert.equal(b.r.writer.resumeText, TAILOR_PAGE);
+  assert.equal(b.source.ownResumeText, own.ownResumeText);
   assert.ok(!b.source.ownWords.includes("Forklift"));
   // A writer that put the credential back is asked about it.
   assert.ok(b.view().groups.some((g) => g.credentialName && /Forklift/i.test(g.credentialName)));
@@ -270,7 +241,8 @@ test("the writer route reads the rebuild itself, owner only, and binds the recei
   assert.match(route, /buildTrustedSource\(\{\s+resumeText: sourceInput\.resumeText,/);
   assert.match(route, /const raw = sourceInput as unknown as Record<string, unknown>;/);
   assert.match(route, /evidence: writerSourceFrom\(raw\)/);
-  assert.match(route, /startingPageOnly \? \{ startingPageOnly: true \} : \{\}/);
+  assert.match(route, /\}, sourceKind\);/);
+  assert.match(route, /if \(!isSameOriginJsonPost\(request\.headers\)\) return NextResponse\.json\(\{ error: "Not allowed" \}, \{ status: 403 \}\);/);
   assert.match(read("app/api/revisions/rebuild/route.ts"), /loadRebuildSource\(caller\.userId, artifactId, await rebuildStore\(\)\)/);
   // The page sends only the id, and takes the evidence the receipt is bound to.
   const page = read("app/(forge)/output/page.tsx");
@@ -279,10 +251,10 @@ test("the writer route reads the rebuild itself, owner only, and binds the recei
 });
 
 test("the rebuild ends as soon as the person gives a new resume", () => {
-  const rb = { id: "a1", page: TAILOR_PAGE, own: "" };
+  const rb = { id: "a1", page: TAILOR_PAGE, resumeAt: "" };
   assert.equal(rebuildActive({ rebuild: rb, originalResumeText: TAILOR_PAGE }), "a1");
   assert.equal(rebuildActive({ rebuild: rb, originalResumeText: "a new upload", resumeText: "a new upload" }), null);
   assert.equal(rebuildActive({ rebuild: rb, originalResumeText: TAILOR_PAGE, resumeText: "typed something" }), null);
-  assert.equal(rebuildActive({ rebuild: { id: "a2", page: RAW, own: RAW }, originalResumeText: RAW, resumeText: RAW }), "a2");
+  assert.equal(rebuildActive({ rebuild: { id: "a2", page: RAW, resumeAt: UPLOAD }, originalResumeText: RAW, resumeText: UPLOAD }), "a2");
   assert.equal(rebuildActive({}), null);
 });

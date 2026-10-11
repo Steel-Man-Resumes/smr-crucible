@@ -26,6 +26,8 @@ import { runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-r
 import { randomBytes } from "node:crypto";
 import { revisionCaller } from "@/lib/revision-route";
 import { loadRebuildSource, rebuildInputs, rebuildStore } from "@/lib/rebuild-source";
+import { withRewording, type SourceKind } from "@/lib/source-kind";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 export const maxDuration = 120;
 
@@ -78,9 +80,13 @@ async function handlePost(request: Request) {
     // check, the backstops and the receipt count as the person's own words.
     let input: GenerateDocsInput = body;
     let sourceInput: GenerateDocsInput = body;
-    let startingPageOnly = false;
+    // Round 3 (review r1 H2): the source kind this run is signed with. A Forge
+    // run's resume text is what the person gave; a rebuild's kind is the server's.
+    let sourceKind: SourceKind = "given";
     const rebuildFrom = (body as unknown as Record<string, unknown>).rebuildFrom;
     if (rebuildFrom !== undefined) {
+      // Review r1 L1: a rebuild reads stored data and records a newer receipt: same-origin JSON only.
+      if (!isSameOriginJsonPost(request.headers)) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
       const caller = await revisionCaller();
       if (!caller.ok || !userId || caller.userId !== userId) {
         return NextResponse.json({ error: "Sign in to build from a saved resume." }, { status: 401 });
@@ -90,7 +96,7 @@ async function handlePost(request: Request) {
       const r = rebuildInputs(body, rb);
       input = r.writer;
       sourceInput = r.source;
-      startingPageOnly = r.startingPageOnly;
+      sourceKind = rb.origin;
     }
 
     if (!input.narrative && !input.strengths && !input.skills?.length) {
@@ -222,7 +228,9 @@ async function handlePost(request: Request) {
     const { withheld: withheldLines } = withholdRecordLines(input.resumeText, input.keepInsideLines === true);
     const keptInsideLines = input.keepInsideLines === true;
 
-    const grounding = {
+    // Round 3 (review r1 H2): rewording A is opt-in, stamped here from the
+    // server's own source kind (lib/source-kind.ts); never carried in.
+    const grounding = withRewording({
         hasFabrication,
         applied: groundingApplied,
         removed: removedCount,
@@ -247,11 +255,7 @@ async function handlePost(request: Request) {
         },
         changed: accounting.changed,
         unmatched: accounting.unmatched,
-        // Phase 6 (S1 round 2): the writer started from a saved page that is
-        // not the person's own words. Signed into the receipt with the rest,
-        // so the gate keeps the stricter rule (finish-gate factsLockedFor).
-        ...(startingPageOnly ? { startingPageOnly: true } : {}),
-    };
+    }, sourceKind);
     // Phase 5 R1 (review M1): the server's signature over exactly what it
     // wrote and what its check found. A saved version counts these only
     // with a matching receipt (lib/writer-receipt.ts).

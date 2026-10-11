@@ -393,7 +393,8 @@ function OutputPageInner() {
   // development never drops the answer).
   const checkLoaded = useRef<string | null>(null);
   useEffect(() => {
-    if (!checkId || !signedIn || checkLoaded.current === checkId) return;
+    // Review r1 M4: nothing is checked or saved until the person picks "Check it as it is".
+    if (!checkId || !signedIn || !checkAsIs || checkLoaded.current === checkId) return;
     checkLoaded.current = checkId;
     hasStarted.current = true;
     hydrated.current = true;
@@ -444,7 +445,25 @@ function OutputPageInner() {
         setDocState("error");
       }
     })();
-  }, [checkId, signedIn]);
+  }, [checkId, signedIn, checkAsIs]);
+
+  // Review r1 M4: the choice screen shows the saved page from a read-only
+  // route; opening it saves nothing.
+  const [choicePage, setChoicePage] = useState<{ text: string } | { error: string } | null>(null);
+  useEffect(() => {
+    if (!checkId || !signedIn || checkAsIs) return;
+    let live = true;
+    fetch(`/api/revisions/rebuild?artifactId=${encodeURIComponent(checkId)}`, { cache: "no-store" })
+      .then(async (r) => ({ ok: r.ok, j: (await r.json().catch(() => null)) as { pageText?: unknown; error?: unknown } | null }))
+      .then(({ ok, j }) => {
+        if (!live) return;
+        setChoicePage(ok && typeof j?.pageText === "string" ? { text: j.pageText } : { error: typeof j?.error === "string" ? j.error : "We couldn't open that resume." });
+      })
+      .catch(() => live && setChoicePage({ error: "We couldn't open that resume. Try again." }));
+    return () => {
+      live = false;
+    };
+  }, [checkId, signedIn, checkAsIs]);
 
   // ---- the gate ----------------------------------------------------------------
   // Restored from the account: the saved revision's own words (runEvidence), so
@@ -748,8 +767,7 @@ function OutputPageInner() {
     const first =
       document.querySelector<HTMLElement>('[data-testid="fix-item"][data-blocking="true"]') ||
       document.getElementById("fix-item-0") ||
-      document.getElementById("fix-list") ||
-      document.querySelector<HTMLElement>('[data-testid="check-choice"]');
+      document.getElementById("fix-list");
     if (!first) return;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     first.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
@@ -882,6 +900,58 @@ function OutputPageInner() {
     );
   }
 
+  // Check mode (Phase 6 Q1, review r1 M4): the writer first; the cards only
+  // when the person picks them. Nothing is checked or saved before the pick.
+  if (checkChoosing && checkId) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:max-w-6xl" data-testid="finish-page">
+        <div className="flex flex-wrap items-start gap-3 border border-t-line border-l-[3px] border-l-t-amber bg-t-panel px-4 py-3" data-testid="finish-status">
+          <TroyMark size={32} className="mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg font-bold leading-snug text-t-white" data-testid="status-line">
+              {choicePage && "error" in choicePage ? choicePage.error : "Here's your resume. t.ROY can make it stronger."}
+            </h1>
+            <p className="text-xs text-t-phos-dim">t.ROY rewrites it from this page, or you check it as it is.</p>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+          <div className="min-w-0 border border-t-line bg-t-bg p-3 sm:p-4" data-testid="finish-resume">
+            {choicePage && "text" in choicePage ? <ResumePage text={choicePage.text} draft /> : <p className="text-sm text-t-phos">{choicePage ? "" : "Opening your resume."}</p>}
+          </div>
+          <aside>
+            <div className="border border-t-amber bg-t-panel p-4" data-testid="check-choice">
+              <p className="text-sm font-bold text-t-white">How do you want to finish this one?</p>
+              <p className="mt-1 text-xs leading-relaxed text-t-phos">
+                t.ROY writes a new version from this page, in strong plain words, and you check what it wrote. Checking it as it is keeps every line as it stands, and t.ROY asks about the lines it can&apos;t match to your words.
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => router.push(rebuildHref(checkId))}
+                  className="t-focus min-h-touch bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
+                  data-testid="check-rewrite"
+                >
+                  {REWRITE_WITH_TROY_LABEL}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCheckAsIs(true)}
+                  className="t-focus min-h-touch border border-t-line px-4 py-2.5 text-sm font-medium text-t-white hover:border-t-phos-dim"
+                  data-testid="check-as-is"
+                >
+                  {CHECK_AS_IS_LABEL}
+                </button>
+              </div>
+            </div>
+            <a href="/dashboard/vault" className="t-focus mt-4 inline-flex min-h-touch items-center text-sm text-t-phos underline underline-offset-2">
+              Back to My resumes
+            </a>
+          </aside>
+        </div>
+      </div>
+    );
+  }
+
   // If no output, redirect back
   if (!session.forgeOutput && !checkMode) {
     return (
@@ -907,8 +977,6 @@ function OutputPageInner() {
       ? "Opening your resume."
       : checkMode && docState === "error"
         ? openError || "We couldn't open that resume."
-        : checkChoosing && view.state !== "finished"
-          ? "Here's your resume. t.ROY can make it stronger."
         : docState === "generating" || docState === "idle"
       ? "t.ROY is writing your resume and cover letter."
       : docState === "error"
@@ -917,9 +985,7 @@ function OutputPageInner() {
   const subline =
     checkMode && docState !== "done"
       ? ""
-      : checkChoosing && view.state !== "finished"
-        ? "t.ROY rewrites it from what's on it, or you check it as it is."
-        : checkMode && view.state !== "finished"
+      : checkMode && view.state !== "finished"
         ? `Checking: ${checkTitle || "your resume"}. Answer each card, and it saves as a new version.`
         : docState === "generating" || docState === "idle"
       ? "This usually takes 30 to 60 seconds."
@@ -1086,34 +1152,6 @@ function OutputPageInner() {
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
-              {checkChoosing && checkId && view.state !== "finished" ? (
-                /* Phase 6 (Q1): the writer first; the cards only when they choose them. */
-                <div className="border border-t-amber bg-t-panel p-4" data-testid="check-choice">
-                  <p className="text-sm font-bold text-t-white">How do you want to finish this one?</p>
-                  <p className="mt-1 text-xs leading-relaxed text-t-phos">
-                    t.ROY writes a new version from this page, in strong plain words, and you check what it wrote. Checking it as it is keeps every line as it stands, and t.ROY asks about the lines it can&apos;t match to your words.
-                  </p>
-                  <div className="mt-3 flex flex-col gap-2">
-                    <button
-                      type="button"
-                      onClick={() => router.push(rebuildHref(checkId))}
-                      className="t-focus min-h-touch bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
-                      data-testid="check-rewrite"
-                    >
-                      {REWRITE_WITH_TROY_LABEL}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCheckAsIs(true)}
-                      className="t-focus min-h-touch border border-t-line px-4 py-2.5 text-sm font-medium text-t-white hover:border-t-phos-dim"
-                      data-testid="check-as-is"
-                    >
-                      {CHECK_AS_IS_LABEL}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-              <>
               {needsCheck && (
                 <div className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="recheck-card" data-blocking="true">
                   <p className="text-sm font-bold text-t-white">{RECHECK_LINE}</p>
@@ -1143,8 +1181,6 @@ function OutputPageInner() {
                 />
               )}
               <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} />
-              </>
-              )}
             </aside>
           </div>
 

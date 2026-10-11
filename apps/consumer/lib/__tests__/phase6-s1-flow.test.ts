@@ -1,8 +1,7 @@
 /**
  * Phase 6 lane S1 (plan Q1 + Q3): one path to a real resume, one tap per job.
  *
- * Fixture: a fictional person (Dana Reyes) with the kind of weak page Troy
- * ran on the preview: an objective, a soft-skill list, two jobs with
+ * Fixture: a fictional person (Dana Reyes) with a typical weak page: an objective, a soft-skill list, two jobs with
  * "Responsible for" duty lines, and education. The writer's page rewords
  * every line under rewording A (facts locked) and adds one skill term the
  * person never named. No AI, no real person. example.com only.
@@ -36,7 +35,6 @@ import {
   CHECK_AND_FINISH_LABEL,
   decisionsToFirstSave,
   rebuildHref,
-  writtenByTroy,
 } from "../lane-task";
 import { draftNext, laneHomeNext } from "../../components/lanes/LaneHome";
 
@@ -89,7 +87,8 @@ EDUCATION
 Diploma | Springfield High School | 2017`;
 
 /** The second check ran on both documents and flagged nothing. */
-const GROUNDING = { verifierRan: true, verifierRanByDoc: { resume: true, cover_letter: true }, removed: 0, residual: 0, unmatched: 0, outcomes: [] };
+/** Round 3: rewording A is opt-in; generate-docs stamps a Forge run's own resume text as "given". */
+const GROUNDING = { verifierRan: true, verifierRanByDoc: { resume: true, cover_letter: true }, removed: 0, residual: 0, unmatched: 0, outcomes: [], sourceKind: "given", rewordingA: true };
 
 function view(over: Partial<Parameters<typeof buildFinishView>[0]> = {}): FinishView {
   const resumeText = over.resumeText ?? WRITTEN;
@@ -317,13 +316,9 @@ test("Q1: the lane home never sends a page saved as given into check mode; the w
   assert.deepEqual(laneHomeNext("resume", { ...raw, fromWriter: true }), { label: CHECK_AND_FINISH_LABEL, href: "/output?check=a1&cards=1" });
   assert.deepEqual(draftNext({ artifactId: "a b", fromWriter: false }).href, "/resume?rebuild=a%20b");
   assert.equal(rebuildHref("x"), "/resume?rebuild=x");
-  // Made by the writer only when the server matched its receipt and kept its documents.
-  assert.equal(writtenByTroy({ evidence: { writerVerified: true, written: { resume: "x", letter: "" } } }), true);
-  assert.equal(writtenByTroy({ evidence: { writerVerified: false, written: null } }), false, "a first save");
-  assert.equal(writtenByTroy({ evidence: { writerVerified: true, written: null } }), false);
-  assert.equal(writtenByTroy(null), false);
+  // Round 3 (review r1 H1): the server says whether the writer made it (lib/source-kind.ts, tested in phase6-s1-rebuild).
   const home = read("components/lanes/LaneHome.tsx");
-  assert.match(home, /fromWriter: writtenByTroy\(r\)/);
+  assert.match(home, /fromWriter: r\.fromWriter === true/);
   assert.match(home, /draftNext\(rev\)\.href/);
 });
 
@@ -331,8 +326,11 @@ test("Q1: a saved resume opens for the writer as the person's own, read as them,
   const page = read("app/(forge)/resume/page.tsx");
   const block = page.slice(page.indexOf("const [rebuild, setRebuild]"), page.indexOf("// Phase 6 (Q1): opening a saved resume for the writer."));
   assert.match(block, /fetch\(`\/api\/revisions\/rebuild\?artifactId=\$\{encodeURIComponent\(rebuild\.id\)\}`/);
-  // Round 2: only the server-decided own words become the run's resume text; the page is shown.
-  assert.match(block, /resumeText: own \|\| undefined,\s+originalResumeText: page,/);
+  // Round 3 (review r1 M3): the run's own resume text is never touched; the page is shown and is the starting text.
+  assert.match(block, /updateSession\(\{\s+originalResumeText: page,\s+rebuild: \{ id: rebuild\.id, page, resumeAt: session\.resumeText \?\? "" \},/);
+  const write = block.slice(block.indexOf("// A new build from that page"), block.indexOf('router.replace("/processing")'));
+  assert.ok(write.length > 50);
+  assert.doesNotMatch(write, /\bresumeText: /, "the run's (and the account's) resume text is not written");
   assert.match(block, /if \(!signedIn\)/);
   assert.match(block, /forgeOutput: undefined,\s+forgeFinish: undefined/);
   assert.match(block, /router\.replace\("\/processing"\)/);
@@ -345,13 +343,13 @@ test("Q1: check mode's main action is the writer; checking it as it is comes sec
   const choice = page.slice(page.indexOf('data-testid="check-choice"'), page.indexOf('data-testid="check-as-is"'));
   assert.match(choice, /router\.push\(rebuildHref\(checkId\)\)/);
   assert.ok(choice.indexOf("REWRITE_WITH_TROY_LABEL") < choice.indexOf("setCheckAsIs(true)"), "rewrite is first");
-  assert.match(page, /checkChoosing && checkId && view\.state !== "finished" \?/);
+  assert.match(page, /if \(checkChoosing && checkId\) \{/);
   assert.match(page, /useState\(\(\) => searchParams\.get\(CARDS_PARAM\) === "1"\)/, "the writer's own draft opens on its cards");
   assert.match(page, /onJobOk: \(group\) => setDefendAnswers\(\(a\) => recordJobOk\(a, group\.line\)\)/);
 });
 
 test("the checker version moved with the gate", () => {
-  assert.match(read("lib/revision-status.ts"), /CHECKER_VERSION = "finish-gate-2\+pages-1\+receipt-1"/);
+  assert.match(read("lib/revision-status.ts"), /CHECKER_VERSION = "finish-gate-3\+pages-1\+receipt-1"/);
 });
 
 // gateRevision is the pure server gate; a version without the writer's receipt never finishes, taps or not.

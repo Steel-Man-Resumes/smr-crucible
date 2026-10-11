@@ -52,6 +52,8 @@ export interface RevisionStore {
   receiptState?(userId: string, runId: string): Promise<{ newestNonce: string | null; linked: boolean }>;
   /** The person's own words as the server holds them (review H2). The real store always has it. */
   serverSource?(userId: string, keepInsideLines: boolean): Promise<WriterSource | null>;
+  /** Every saved version of one of the person's resumes (Phase 6 S1 round 3: its lineage). The real store always has it. */
+  listRevisions?(userId: string, artifactId: string): Promise<ArtifactRevision[]>;
 }
 
 /** What the page is told about a saved revision. */
@@ -270,6 +272,7 @@ export async function coreStore(): Promise<RevisionStore> {
     updateArtifactContent: async (userId, id, content) => (await core.updateArtifact(id, userId, content)).status,
     insertRevision: (userId, rec) => core.insertRevision(userId, rec),
     getLatestRevision: (userId, id) => core.getLatestRevision(userId, id),
+    listRevisions: async (userId, artifactId) => (await core.exportRevisions(userId)).filter((r) => r.artifact_id === artifactId),
     receiptState: async (userId, runId) => ({
       newestNonce: await core.newestWriterReceiptNonce(userId, runId),
       linked: await core.runBelongsTo(userId, runId),

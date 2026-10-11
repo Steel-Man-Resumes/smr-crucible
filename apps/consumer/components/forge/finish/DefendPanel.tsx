@@ -370,7 +370,9 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
   useEffect(() => {
     if (fixing) field.current?.focus();
   }, [fixing]);
-  const job = group.job ?? { title: editableLine(group.line), rest: [] };
+  const job = group.job ?? { title: editableLine(group.line), rest: [] as string[] };
+  // Review r1 M2: a job t.ROY changed is fixed, never tapped through.
+  const changes = group.job?.changes ?? [];
   return (
     <li
       id={`fix-item-${index}`}
@@ -382,22 +384,30 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
       data-blocking="true"
       className="border border-t-amber bg-t-panel px-3 py-3"
     >
-      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Check this job</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{changes.length ? "t.ROY changed this job" : "Check this job"}</p>
       <p className="mt-1 text-sm font-semibold text-t-white">{job.title}</p>
       {job.rest.length > 0 && <p className="text-sm text-t-phos">{job.rest.join(" | ")}</p>}
-      <p className="mt-1.5 text-xs text-t-phos-dim">From your own page. A screener checks these against your records.</p>
+      {changes.length ? (
+        <p className="mt-1.5 text-xs text-t-amber-bright" data-testid="job-changes">
+          Not on your page: {changes.map((c) => `"${c}"`).join(", ")}. Fix it to match your records.
+        </p>
+      ) : (
+        <p className="mt-1.5 text-xs text-t-phos-dim">These are from your page. Check them against your records.</p>
+      )}
       {!fixing ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={() => actions.onJobOk?.(group)} className={BTN_MAIN} data-testid="job-ok">
-            Looks right
-          </button>
+          {!changes.length && (
+            <button onClick={() => actions.onJobOk?.(group)} className={BTN_MAIN} data-testid="job-ok">
+              Looks right
+            </button>
+          )}
           <button
             onClick={() => {
               setNotice("");
               setText(editableLine(group.line));
               setFixing(true);
             }}
-            className={BTN_SOFT}
+            className={changes.length ? BTN_MAIN : BTN_SOFT}
             data-testid="job-fix"
           >
             Fix this

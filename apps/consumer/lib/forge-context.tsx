@@ -44,11 +44,12 @@ export interface ForgeSessionData {
   /**
    * Phase 6 (S1 round 2): a build from a saved resume ("Build it with t.ROY").
    * Browser only (never sent with the account save). `page` is the saved page
-   * (shown), `own` the own resume text the SERVER decided ("" when nothing on
-   * the page counts as theirs). The writer is sent only the id and reads the
-   * rest itself; any new resume given here ends it (lib/lane-task.ts rebuildActive).
+   * (shown, and the build's starting text); `resumeAt` the run's own resume
+   * text when the rebuild began, which a rebuild never changes (review r1
+   * M3). The writer is sent only the id and reads the own words itself; any
+   * new resume given here ends it (lib/lane-task.ts rebuildActive).
    */
-  rebuild?: { id: string; page: string; own: string };
+  rebuild?: { id: string; page: string; resumeAt: string };
 
   // Page 2: Resume
   resumeText?: string;

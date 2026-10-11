@@ -112,5 +112,11 @@ export async function GET(request: Request) {
   }
   if (!artifactId) return NextResponse.json({ revision: null }, { headers: NO_STORE });
   const rev = await core.getLatestRevision(caller.userId, artifactId);
-  return NextResponse.json({ revision: rev ? core.publicRevision(rev) : null }, { headers: NO_STORE });
+  if (!rev) return NextResponse.json({ revision: null }, { headers: NO_STORE });
+  // Phase 6 S1 round 3 (review r1 H1): whether the WRITER made a version of
+  // this resume, worked out here from its stored lineage (a generate-docs
+  // receipt the server verified), never from what a page infers.
+  const { fromWriterLineage } = await import("@/lib/source-kind");
+  const lineage = (await core.exportRevisions(caller.userId)).filter((r) => r.artifact_id === artifactId);
+  return NextResponse.json({ revision: { ...core.publicRevision(rev), fromWriter: fromWriterLineage(lineage) } }, { headers: NO_STORE });
 }
