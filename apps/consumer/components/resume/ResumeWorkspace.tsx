@@ -22,6 +22,7 @@ import { parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
 import { PageFitCheck } from "./PageFitCheck";
 import { printResumePdf } from "./resumePrint";
+import { RECHECK_HREF, RECHECK_LINE, needsRecheck } from "@/lib/recheck-copy";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
 import { isSamePerson } from "@/lib/is-same-person";
@@ -79,7 +80,7 @@ export function ResumeWorkspace() {
   const lastSaved = useRef<string>("");
   // Phase 5 R1: every download and print goes through a saved revision. The
   // last one prepared for this resume, so the page can say which version.
-  const [exportRev, setExportRev] = useState<{ id: string; number: number; status: "draft" | "finished" } | null>(null);
+  const [exportRev, setExportRev] = useState<{ id: string; number: number; status: "draft" | "finished"; recheck?: boolean } | null>(null);
   const [exportError, setExportError] = useState("");
   const artifactIdRef = useRef<string | null>(null);
   // Review M3: the resume a Tailor output was made from (the approved base, or
@@ -951,7 +952,7 @@ export function ResumeWorkspace() {
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
-      setExportRev({ id: data.revision.id, number: data.revision.number, status: data.revision.status });
+      setExportRev({ id: data.revision.id, number: data.revision.number, status: data.revision.status, recheck: needsRecheck(data.revision.openItems) });
       return data.revision.id as string;
     } catch {
       setExportError("We couldn't save this version to your account, so the file is marked DRAFT.");
@@ -1800,7 +1801,9 @@ export function ResumeWorkspace() {
                     ? exportError
                     : exportRev!.status === "finished"
                       ? `Version ${exportRev!.number}, finished. Downloads use this exact version.`
-                      : "Draft: check it before you send it."}
+                      : exportRev!.recheck
+                        ? <>{RECHECK_LINE} <a href={RECHECK_HREF} className="underline underline-offset-2" data-testid="workspace-recheck">Check it again</a></>
+                        : "Draft: check it before you send it."}
                 </p>
               )}
               {/* Phase 5 R2: the way out of DRAFT for a Tailor result: the same cards, saved as a revision of this resume. */}

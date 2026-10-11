@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { auth as realAuth } from "@/auth";
 import { persistForgeSession } from "@/lib/forge-persist";
+import { readRunCookie, runCookieHash, runCookieHeader } from "@/lib/writer-receipt";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { incrementUserUsage } from "@crucible/core";
 
@@ -69,10 +70,15 @@ export async function POST(request: Request) {
   }
 
   try {
-    const saved = await persistForgeSession(userId, body as Record<string, any>);
+    const runCookie = readRunCookie(request.headers.get("cookie"));
+    const saved = await persistForgeSession(userId, body as Record<string, any>, { cookieHash: runCookie ? runCookieHash(runCookie) : null });
     // `revision`: the finished resume's saved version (081), when the run had
     // one. The page says "saved to your account" only on this 200.
-    return NextResponse.json({ success: true, revision: saved.revision, ...(saved.revisionProblem ? { revisionProblem: saved.revisionProblem } : {}) });
+    const res = NextResponse.json({ success: true, revision: saved.revision, ...(saved.revisionProblem ? { revisionProblem: saved.revisionProblem } : {}) });
+    // The signed-out run's receipt now belongs to this account: clear the run
+    // cookie so no other account in this browser can import it (review r3 L-1).
+    if (saved.usedRunReceipt) res.headers.append("Set-Cookie", runCookieHeader(null));
+    return res;
   } catch (err: any) {
     console.error("Forge save error:", err?.message || err);
     return NextResponse.json(

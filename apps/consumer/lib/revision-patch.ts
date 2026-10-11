@@ -18,15 +18,38 @@
  * contact line or a "|" turned into "," still finds its saved line.
  */
 
-/** The words of a line, order-free: what makes two lines "the same line". */
+/**
+ * What makes two lines "the same line": the words in any order, and the
+ * numbers in THEIR order (review M-A): "40 covers over 3 years" and "3 covers
+ * over 40 years" are different lines, so an answer never follows a swap.
+ */
 export function lineKey(line: string): string {
-  return line
+  const tokens = line
     .toLowerCase()
     .replace(/^\s*[-•*]\s+/, "")
     .split(/[^a-z0-9]+/)
-    .filter(Boolean)
-    .sort()
-    .join(" ");
+    .filter(Boolean);
+  if (!tokens.length) return "";
+  const numbers = tokens.filter((t) => /\d/.test(t));
+  return [...tokens].sort().join(" ") + "#" + numbers.join(",");
+}
+
+/** Each non-empty line's key, counted (a multiset), for comparing two printings. */
+export function lineKeyCounts(text: string): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const l of text.split("\n")) {
+    const k = lineKey(l);
+    if (k) m.set(k, (m.get(k) ?? 0) + 1);
+  }
+  return m;
+}
+
+export function sameLineKeys(a: string, b: string): boolean {
+  const x = lineKeyCounts(a);
+  const y = lineKeyCounts(b);
+  if (x.size !== y.size) return false;
+  for (const [k, n] of x) if (y.get(k) !== n) return false;
+  return true;
 }
 
 /** Longest common subsequence on exact lines: for each `a` line, the matching `b` index or -1. */
@@ -77,10 +100,21 @@ export function patchText(saved: string, before: string, after: string, known: s
   const A = before.split("\n");
   const B = after.split("\n");
 
-  // 1. Each `before` line to its saved line, by words, in order where possible.
+  // 1. Each `before` line to the saved line(s) it came from, by words, in
+  //    order where possible. One field can come from SEVERAL saved lines (a
+  //    multi-line summary, a skills list over two lines): a `before` line
+  //    whose words are exactly those of a run of consecutive saved lines owns
+  //    all of them (review H-A), so editing it changes or removes them together.
   const savedUsed = new Array<boolean>(S.length).fill(false);
-  const toSaved = new Array<number>(A.length).fill(-1);
+  const toSaved = new Array<number>(A.length).fill(-1); // the first saved line owned
+  const owns: number[][] = A.map(() => []);
   let cursor = 0;
+  const take = (i: number, lines: number[]) => {
+    for (const x of lines) savedUsed[x] = true;
+    owns[i] = lines;
+    toSaved[i] = lines[0];
+    cursor = lines[lines.length - 1] + 1;
+  };
   for (let i = 0; i < A.length; i++) {
     const k = lineKey(A[i]);
     if (!k) continue;
@@ -88,10 +122,23 @@ export function patchText(saved: string, before: string, after: string, known: s
     for (let s = cursor; s < S.length; s++) if (!savedUsed[s] && lineKey(S[s]) === k) { hit = s; break; }
     if (hit < 0) for (let s = 0; s < S.length; s++) if (!savedUsed[s] && lineKey(S[s]) === k) { hit = s; break; }
     if (hit >= 0) {
-      savedUsed[hit] = true;
-      toSaved[i] = hit;
-      cursor = hit + 1;
+      take(i, [hit]);
+      continue;
     }
+    // A run of 2 to 8 consecutive unused, non-empty saved lines with exactly these words.
+    let run: number[] | null = null;
+    for (let s0 = 0; s0 < S.length && !run; s0++) {
+      const lines: number[] = [];
+      for (let s = s0; s < S.length && lines.length < 8; s++) {
+        if (savedUsed[s] || !S[s].trim()) break;
+        lines.push(s);
+        if (lines.length >= 2 && lineKey(lines.map((x) => S[x]).join(" ")) === k) {
+          run = [...lines];
+          break;
+        }
+      }
+    }
+    if (run) take(i, run);
   }
 
   // 2. What changed between the two printings, as hunks: runs of removed
@@ -118,7 +165,7 @@ export function patchText(saved: string, before: string, after: string, known: s
   }
   // A true move (the exact line removed in one place, added in another) keeps its saved form.
   const removedByText = new Map<string, number[]>();
-  for (const h of hunks) for (const i of h.removed) if (toSaved[i] >= 0) removedByText.set(A[i], [...(removedByText.get(A[i]) ?? []), i]);
+  for (const h of hunks) for (const i of h.removed) if (owns[i].length === 1) removedByText.set(A[i], [...(removedByText.get(A[i]) ?? []), i]);
   const settled = new Map<string, string>();
   for (const l of [...S, ...known]) {
     const k = sepKey(l);
@@ -137,7 +184,7 @@ export function patchText(saved: string, before: string, after: string, known: s
   const inPlace = new Map<number, string[]>(); // saved index -> lines emitted in its place
   const placeAfterSaved = new Map<number, string[]>(); // saved index -> lines after it (-1 = top)
   for (const h of hunks) {
-    for (const i of h.removed) if (toSaved[i] >= 0) removedSaved.add(toSaved[i]);
+    for (const i of h.removed) for (const x of owns[i]) removedSaved.add(x);
     const lines = h.added.map(addedLine);
     if (!lines.length) continue;
     const firstSaved = h.removed.map((i) => toSaved[i]).find((x) => x >= 0);

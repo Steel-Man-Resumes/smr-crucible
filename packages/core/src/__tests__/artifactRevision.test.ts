@@ -98,7 +98,9 @@ test("migration 081: owner-only, FORCE, no UPDATE, composite owner key, add-only
   assert.match(MIG, /ALTER TABLE %I FORCE ROW LEVEL SECURITY/);
   assert.match(MIG, /FOREIGN KEY \(artifact_id, user_id\) REFERENCES refinery_artifact \(id, user_id\) ON DELETE CASCADE/);
   assert.match(MIG, /GRANT SELECT, INSERT, DELETE ON artifact_revision TO smr_app;/);
-  assert.doesNotMatch(MIG, /CREATE POLICY[^;]*FOR UPDATE/);
+  // artifact_revision itself has no UPDATE policy (forge_writer_receipt, later in the file, does).
+  const revPart = MIG.slice(0, MIG.indexOf("CREATE TABLE IF NOT EXISTS forge_writer_receipt"));
+  assert.doesNotMatch(revPart.slice(revPart.indexOf("CREATE TABLE IF NOT EXISTS artifact_revision")), /CREATE POLICY[^;]*FOR UPDATE/);
   // Add only: nothing outside the ROLLBACK comment drops anything.
   assert.doesNotMatch(MIG, /^\s*(DROP TABLE|ALTER TABLE \S+ DROP)/m);
   assert.match(MIG, /CREATE TABLE IF NOT EXISTS artifact_revision/);
@@ -157,4 +159,15 @@ test("L1 and L7: the migration names the real lock and the data left behind", ()
   assert.match(MIG, /ACCESS EXCLUSIVE/);
   assert.doesNotMatch(MIG, /SHARE lock \(writes wait; reads do not\)/);
   assert.match(MIG, /--\s+UPDATE refinery_artifact SET content = content - '_revision' WHERE content \? '_revision';/);
+});
+
+test("081: edited before ever applied, says so; the writer's receipt table is owner only and in the lists", () => {
+  assert.match(MIG, /EDITED BEFORE IT WAS EVER APPLIED/);
+  assert.match(MIG, /drop and re-apply it there/);
+  assert.match(MIG, /CREATE TABLE IF NOT EXISTS forge_writer_receipt/);
+  assert.match(MIG, /nonce ~ '\^\[0-9a-f\]\{32\}\$'/);
+  assert.match(MIG, /--\s+DROP TABLE IF EXISTS forge_writer_receipt;/);
+  assert.ok((RLS_PROTECTED_TABLES as readonly string[]).includes("forge_writer_receipt"));
+  const src = readFileSync(join(import.meta.dirname, "..", "..", "..", "..", "scripts", "lib", "restricted-grants.mjs"), "utf8");
+  assert.match(src, /forge_writer_receipt: \["SELECT", "INSERT", "UPDATE", "DELETE"\]/);
 });

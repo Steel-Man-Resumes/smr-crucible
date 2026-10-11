@@ -37,7 +37,8 @@ import { completeCredentialRows, readCredentialRows } from "./credential-rows";
 import { isLengthChoice, lengthOpenItem, lengthOk, pageLimitFor, type LengthChoice, type RevisionDocKind } from "./length-rule";
 import { MAX_RENDER_CHARS, fitFor } from "./resume-render";
 import type { ArtifactRevision, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
-import { verifyWriterReceipt } from "./writer-receipt";
+import { readReceipt, receiptAccepted, sourceHash, verifyWriterReceipt, type ReceiptContext, type WriterSource } from "./writer-receipt";
+import { stableJson } from "@crucible/core/src/artifactRevision";
 import { lineKey } from "./revision-patch";
 
 /** Bump when the gate or the page rule changes in a way that can change a status. */
@@ -73,6 +74,8 @@ export interface RevisionEvidence {
   ownResumeText: string;
   /** The writer's receipt over written + grounding (lib/writer-receipt.ts), as delivered. */
   writerReceipt: string;
+  /** The run this version was finished in (the Forge session's startedAt), as the page named it. */
+  runId?: string;
   /**
    * Set by the SERVER only: written and grounding are the writer's own (the
    * receipt matched when this was saved). False: they count for nothing and
@@ -94,10 +97,38 @@ export interface CleanOptions {
    * read. Default "resume": every Forge, import and Refinery revision is one.
    */
   docKind?: RevisionDocKind;
+  /**
+   * Who is asking and what the server knows about the receipt's run (reviews
+   * M-B, H2). Default: signed out, the run the page names.
+   */
+  receipt?: ReceiptContext;
+  /**
+   * Signed in: the person's own words as the SERVER holds them (their stored
+   * upload and typed answers). Used whenever the request's own words are not
+   * attested by a receipt. Signed out there is none: own words are empty.
+   */
+  serverSource?: WriterSource | null;
+  /**
+   * Signed in: the evidence of the person's newest verified revision, with
+   * the nonce its receipt carried. A request whose written documents and
+   * grounding match it exactly is trusted as that verified version (a
+   * rotated key never forces a regeneration; L-A), unless a newer generation
+   * of the run was recorded since.
+   */
+  known?: Pick<RevisionEvidence, "written" | "grounding" | "ownWords" | "ownResumeText" | "credentialsAnswer" | "credentialRows" | "writerReceipt"> | null;
+  /**
+   * The newest nonce recorded for the KNOWN revision's own receipt run (review
+   * r3 L-1): a newer generation since then means the known version no longer
+   * stands in, receipt or not.
+   */
+  knownNewestNonce?: string | null;
+  /** The clock, for the previous key's grace period (tests). */
+  now?: number;
 }
 
 /** The open item for a version whose writer's documents and check have no matching receipt. */
-export const RECEIPT_OPEN_ITEM = "Fix before you send: this version needs its check on the finish page before it can be finished.";
+export { RECEIPT_OPEN_ITEM, RECHECK_LINE, needsRecheck } from "./recheck-copy";
+import { RECEIPT_OPEN_ITEM } from "./recheck-copy";
 
 export type CleanResult = { ok: true; input: RevisionInput } | { ok: false; reason: string };
 
@@ -106,6 +137,14 @@ const str = (v: unknown, max: number): string => (typeof v === "string" ? v.slic
 /**
  * Clean what a page sent (the finish page's state, or the import's stored
  * finish). Never trusts a status or a "finished" flag: there is no field for one.
+ *
+ * OWN WORDS ARE THE SERVER'S (review H2). The request's ownWords,
+ * ownResumeText, licenses answer and rows count only when they hash to the
+ * source block the writer's receipt attests (worked out by the server in
+ * generate-docs from the writer's own inputs). Otherwise the server's own
+ * copy is used (signed in: the stored upload and answers; signed out:
+ * nothing). A request can therefore never ADD own words; claiming the whole
+ * page as "own words" leaves every card open.
  */
 export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): CleanResult {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, reason: "no finish state" };
@@ -152,12 +191,60 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
       ? (r.docKind as RevisionDocKind)
       : "resume"
     : opts.docKind ?? "resume";
-  const rows = completeCredentialRows(readCredentialRows(r.credentialRows));
-  // written and grounding count only with the writer's receipt (review M1).
-  const receipt = typeof r.writerReceipt === "string" ? r.writerReceipt.slice(0, 200) : "";
+  // written, grounding and the own-words source count only with the writer's
+  // receipt, made for this account (or run), this run's newest generation,
+  // and exactly this source (reviews M1, M-B, H2).
+  const receipt = typeof r.writerReceipt === "string" ? r.writerReceipt.slice(0, 2000) : "";
   const writtenIn = stored.docs.written ?? null;
   const groundingIn = stored.docs.grounding ?? null;
-  const verified = opts.trusted ? r.writerVerified === true : verifyWriterReceipt(receipt, writtenIn, groundingIn);
+  const requested: WriterSource = {
+    ownWords: str(r.ownWords, MAX_WORDS),
+    ownResumeText: str(r.ownResumeText, MAX_WORDS),
+    credentialsAnswer: str(r.credentialsAnswer, 20_000),
+    credentialRows: completeCredentialRows(readCredentialRows(r.credentialRows)) as unknown[],
+  };
+  let verified: boolean;
+  let source: WriterSource;
+  let receiptKept = "";
+  let writtenOut: WrittenDocs | null = writtenIn;
+  let groundingOut: unknown = groundingIn;
+  if (opts.trusted) {
+    // A stored row: as stored.
+    verified = r.writerVerified === true;
+    source = requested;
+    receiptKept = verified ? receipt : "";
+  } else {
+    const ctx: ReceiptContext = opts.receipt ?? { userId: null, runId: typeof r.runId === "string" ? r.runId : "" };
+    const meta = verifyWriterReceipt(receipt, writtenIn, groundingIn, opts.now);
+    const attested = !!meta && receiptAccepted(meta, ctx) && sourceHash(requested) === meta.src;
+    const known = opts.known;
+    const knownNonce = known ? readReceipt(known.writerReceipt)?.n : undefined;
+    const matchesKnown =
+      !!known &&
+      !!known.written &&
+      stableJson(known.written) === stableJson(writtenIn) &&
+      stableJson(known.grounding ?? null) === stableJson(groundingIn ?? null) &&
+      (!opts.knownNewestNonce || opts.knownNewestNonce === knownNonce) &&
+      (!ctx.newestNonce || ctx.newestNonce === knownNonce);
+    if (attested) {
+      verified = true;
+      source = requested;
+      receiptKept = receipt;
+    } else if (matchesKnown) {
+      // The person's own verified version: its own words, as the server stored them.
+      verified = true;
+      source = { ownWords: known!.ownWords, ownResumeText: known!.ownResumeText, credentialsAnswer: known!.credentialsAnswer, credentialRows: known!.credentialRows };
+      receiptKept = known!.writerReceipt;
+      writtenOut = known!.written;
+      groundingOut = known!.grounding;
+    } else {
+      // Not attested: the writer's documents and check count for nothing, and
+      // own words are only what the server itself holds.
+      verified = false;
+      source = opts.serverSource ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] };
+    }
+  }
+  const rows = completeCredentialRows(readCredentialRows(source.credentialRows));
   return {
     ok: true,
     input: {
@@ -169,21 +256,22 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
       keptTerms: (stored.keptTerms ?? []).map((t) => t.slice(0, 200)),
       confirmedCredentials: stored.confirmedCredentials ?? [],
       evidence: {
-        ownWords: str(r.ownWords, MAX_WORDS),
+        ownWords: str(source.ownWords, MAX_WORDS),
         // Without a matching receipt the writer's documents and check are not
         // known: written counts for nothing (closed by default) and the version
         // carries the receipt open item (gateRevision).
-        written: verified ? writtenIn : null,
-        grounding: verified ? groundingIn : null,
+        written: verified ? writtenOut : null,
+        grounding: verified ? groundingOut : null,
         withheldLines: stored.docs.withheldLines.slice(0, 100).map((l) => l.slice(0, 1000)),
         keepInsideLines: stored.docs.keepInsideLines,
         addedTerms: (stored.addedTerms ?? []).map((t) => t.slice(0, 200)),
         credentialCutRemnants: (stored.credentialCutRemnants ?? []).map((t) => t.slice(0, 2000)),
-        credentialsAnswer: str(r.credentialsAnswer, 20_000),
+        credentialsAnswer: str(source.credentialsAnswer, 20_000),
         credentialRows: rows as unknown[],
-        ownResumeText: str(r.ownResumeText, MAX_WORDS),
-        writerReceipt: verified ? receipt : "",
+        ownResumeText: str(source.ownResumeText, MAX_WORDS),
+        writerReceipt: verified ? receiptKept : "",
         writerVerified: verified,
+        runId: typeof r.runId === "string" ? r.runId.slice(0, 100) : "",
       },
     },
   };

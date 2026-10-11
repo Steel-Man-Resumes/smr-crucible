@@ -30,6 +30,7 @@ const FORGE_ROUTES = [
   "/api/analyze",
   "/api/rush-resume",
   "/api/forge/generate-docs",
+  "/api/forge/recheck",
   "/api/forge/download",
   "/api/forge/email-package",
   "/api/forge/resume-assist",

@@ -33,6 +33,8 @@ export interface FinishPayload {
   lengthChoice: LengthChoice;
   /** The server's receipt over written + grounding, as generate-docs gave it. */
   writerReceipt: string;
+  /** The run (the Forge session's startedAt): what a signed-out receipt is bound to. */
+  runId: string;
 }
 
 /** The run fields the evidence comes from. */
@@ -44,6 +46,7 @@ export interface RunForPayload {
   challengeNarratives?: Record<string, string>;
   credentialRows?: unknown;
   forgeOutput?: unknown;
+  startedAt?: string;
 }
 
 /**
@@ -96,7 +99,8 @@ export function finishPayload(
     ownWords: ownWordsFor(run, keep),
     credentialsAnswer: run.challengeNarratives?.[CREDENTIALS_KEY] ?? "",
     credentialRows: completeCredentialRows(readCredentialRows(run.credentialRows)) as unknown[],
-    ownResumeText: withholdRecordLines(run.originalResumeText ?? run.resumeText, keep).kept,
+    // The resume text the writer received (review r3 L-2), as generate-docs derives it.
+    ownResumeText: withholdRecordLines(run.resumeText, keep).kept,
   };
   const ev = evidence ?? fromRun;
   return {
@@ -117,6 +121,7 @@ export function finishPayload(
     ownResumeText: ev.ownResumeText,
     lengthChoice: state.lengthChoice && isLengthChoice(state.lengthChoice) ? state.lengthChoice : "auto",
     writerReceipt: typeof state.receipt === "string" ? state.receipt : "",
+    runId: typeof run.startedAt === "string" ? run.startedAt : "",
   };
 }
 

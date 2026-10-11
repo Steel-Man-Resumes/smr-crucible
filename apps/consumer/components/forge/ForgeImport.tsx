@@ -151,6 +151,9 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
         // Phase 5 R1: the saved finished version comes with it, so the finish
         // page opens on that exact revision (text, letter, answers, confirmations).
         if (j?.revision && typeof j.revision === "object" && typeof j.revision.id === "string") {
+          // The run it was finished in (the account copy carries no startedAt).
+          const runId = (j.revision.evidence as { runId?: unknown } | null)?.runId;
+          if (!saved.startedAt && typeof runId === "string" && runId) saved.startedAt = runId;
           saved.forgeFinish = storedFinishFromRevision(j.revision, saved);
         }
         // The account's own copy: marked as this account's and as saved, so

@@ -1,6 +1,12 @@
 -- 081_artifact_revision.sql
 -- One saved revision of a finished (or draft) resume, on the server.
 --
+-- EDITED BEFORE IT WAS EVER APPLIED (reviews of 2026-10-10 and 2026-10-11:
+-- the page-limit CHECK, the size notes, forge_writer_receipt). No production
+-- database has run any version of this file. A branch or preview database
+-- that ran an EARLIER 081 keeps the old table under CREATE TABLE IF NOT
+-- EXISTS: drop and re-apply it there (the ROLLBACK below, then this file).
+--
 -- WHY. Until now the Forge finish page kept the finished resume, its letter
 -- and the person's confirmations in the browser only. The account saved an
 -- earlier, reconstructed resume; downloads, print, quick-apply and the
@@ -20,6 +26,12 @@
 --                         (draft or finished), the page count the renderer
 --                         measured and the page limit that applied.
 --                         Rows are never edited: a change is a new revision.
+--   forge_writer_receipt  the newest writer's receipt per run, signed in:
+--                         one row per (person, Forge run) holding only the
+--                         nonce and time of the newest generate-docs answer,
+--                         so an older receipt cannot be replayed onto a newer
+--                         generation (apps/consumer/lib/writer-receipt.ts).
+--                         No text. Owner only; deleted by delete-my-data.
 --   refinery_artifact (id, user_id) UNIQUE
 --                         the target of the composite foreign key below, so
 --                         a revision can only ever hang off an artifact its
@@ -74,6 +86,7 @@
 --      Export first if anyone needs their revisions (Settings, export).
 --   3. Then, as the owner role, in one transaction:
 --        DROP TABLE IF EXISTS artifact_revision;
+--        DROP TABLE IF EXISTS forge_writer_receipt;
 --        ALTER TABLE refinery_artifact DROP CONSTRAINT IF EXISTS refinery_artifact_id_user_key;
 --        DELETE FROM _migrations WHERE filename = '081_artifact_revision.sql';
 --   4. Data the code left behind (old code ignores all of it; tidy, not needed):
@@ -185,5 +198,39 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     REVOKE ALL ON artifact_revision FROM smr_app;
     GRANT SELECT, INSERT, DELETE ON artifact_revision TO smr_app;
+  END IF;
+END $$;
+
+-- The newest writer's receipt per (person, run): nonce and time only.
+CREATE TABLE IF NOT EXISTS forge_writer_receipt (
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  run_id     TEXT NOT NULL CHECK (length(run_id) BETWEEN 1 AND 100),
+  nonce      TEXT NOT NULL CHECK (nonce ~ '^[0-9a-f]{32}$'),
+  issued_at  TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (user_id, run_id)
+);
+
+DO $$
+DECLARE t text := 'forge_writer_receipt';
+BEGIN
+  EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY', t);
+  EXECUTE format('ALTER TABLE %I FORCE ROW LEVEL SECURITY', t);
+  EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_owner_select', t);
+  EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_owner_insert', t);
+  EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_owner_update', t);
+  EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t || '_owner_delete', t);
+  EXECUTE format($p$CREATE POLICY %I ON %I FOR SELECT USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$p$, t || '_owner_select', t);
+  EXECUTE format($p$CREATE POLICY %I ON %I FOR INSERT WITH CHECK (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$p$, t || '_owner_insert', t);
+  EXECUTE format($p$CREATE POLICY %I ON %I FOR UPDATE USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)
+                                               WITH CHECK (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$p$, t || '_owner_update', t);
+  EXECUTE format($p$CREATE POLICY %I ON %I FOR DELETE USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)$p$, t || '_owner_delete', t);
+END $$;
+
+DO $$
+BEGIN
+  REVOKE ALL ON forge_writer_receipt FROM PUBLIC;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+    REVOKE ALL ON forge_writer_receipt FROM smr_app;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON forge_writer_receipt TO smr_app;
   END IF;
 END $$;

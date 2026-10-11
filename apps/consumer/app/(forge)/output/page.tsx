@@ -94,6 +94,7 @@ import { isLengthChoice, lengthOk, pageLimitFor, type LengthChoice } from "@/lib
 import { LengthCard, cuttableLines } from "@/components/forge/finish/LengthCard";
 import { printFromServer } from "@/components/resume/resumePrint";
 import type { SavedRevisionSummary } from "@/lib/revision-save";
+import { RECHECK_LINE, needsRecheck } from "@/lib/recheck-copy";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
 import { DefendPanel, type CardActions } from "@/components/forge/finish/DefendPanel";
@@ -306,6 +307,11 @@ function OutputPageInner() {
           goals: session.goals,
           goalNarrative: session.goalNarrative,
           credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
+          // For the writer's receipt only (review H2): the server works out the
+          // person's own words from these, as this page does, and signs them.
+          hookNarrative: session.hookNarrative,
+          credentialRows: session.credentialRows,
+          runId: session.startedAt,
           preferences: session.preferences,
           readinessStage: session.readinessStage,
           resumeConfidence: session.resumeConfidence,
@@ -415,8 +421,9 @@ function OutputPageInner() {
     [runEvidence, session.credentialRows]
   );
   const ownResumeText = useMemo(
-    () => (runEvidence ? runEvidence.ownResumeText : withholdRecordLines(session.originalResumeText ?? session.resumeText, keepInsideLines).kept),
-    [runEvidence, session.originalResumeText, session.resumeText, keepInsideLines]
+    // The resume text the writer received (review r3 L-2): the same block the server attests.
+    () => (runEvidence ? runEvidence.ownResumeText : withholdRecordLines(session.resumeText, keepInsideLines).kept),
+    [runEvidence, session.resumeText, keepInsideLines]
   );
   const gateView = useMemo(
     () =>
@@ -513,12 +520,16 @@ function OutputPageInner() {
     ? current.pageLimit !== null && current.pageCount > current.pageLimit
     : pages !== null && !lengthOk(pages, pageLimit);
   const shownPages = current ? current.pageCount : pages;
-  const localState: "finished" | "draft" = gateView.state === "finished" && !lengthOver ? "finished" : "draft";
+  // Review r3 M-1: a version without a writer's receipt (from before receipts,
+  // or one the server no longer accepts) cannot finish until it is checked
+  // again. The page says so and offers the check, instead of a silent DRAFT.
+  const needsCheck = ready && (!receipt || (!!current && needsRecheck(current.openItems)));
+  const localState: "finished" | "draft" = gateView.state === "finished" && !lengthOver && !needsCheck ? "finished" : "draft";
   // Signed in: the server's status for the saved version wins.
   const state: "finished" | "draft" = mayAccount && current ? current.status : localState;
   const view = useMemo(
-    () => ({ ...gateView, state, fixCount: gateView.fixCount + (lengthOver ? 1 : 0) }),
-    [gateView, state, lengthOver]
+    () => ({ ...gateView, state, fixCount: gateView.fixCount + (lengthOver ? 1 : 0) + (needsCheck ? 1 : 0) }),
+    [gateView, state, lengthOver, needsCheck]
   );
   const finished = ready && view.state === "finished";
   // Where every file comes from: the saved revision when there is one for
@@ -730,6 +741,67 @@ function OutputPageInner() {
       downloadResume({ format: "docx", kind: "cover_letter", text: coverLetterText, resumeText, ...downloadMode(view.state), openItems: draftItems(), ...fileSource() })
     );
   const handlePrint = () => printFromServer({ ...fileSource(), content: resumeText });
+  // "Check it again" (review r3 M-1): the second check runs again on the page
+  // as it is, and the server signs a fresh receipt. Nothing is rewritten; the
+  // answers stay. Anything newly flagged comes back as a card.
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState("");
+  const checkAgain = async () => {
+    if (checking) return;
+    setChecking(true);
+    setCheckError("");
+    try {
+      const res = await fetch("/api/forge/recheck", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: "finish",
+          documents: { resume: resumeText, letter: coverLetterText },
+          source: {
+            resumeText: session.resumeText,
+            goals: session.goals,
+            goalNarrative: session.goalNarrative,
+            hookNarrative: session.hookNarrative,
+            credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
+            credentialRows: session.credentialRows,
+            keepInsideLines,
+          },
+          answers: [
+            ...defendAnswers.map((a) => a.answer),
+            ...confirmedCredentials.map((c) => c.text),
+            ...keptTerms,
+          ],
+          runId: session.startedAt,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as { grounding?: unknown; receipt?: string; written?: WrittenDocs; error?: string } | null;
+      if (!res.ok || !data?.receipt) throw new Error(data?.error || "failed");
+      // The receipt covers the documents that were checked: they are now "as delivered".
+      if (data.written) setWritten(data.written);
+      setGrounding(data.grounding ?? null);
+      setReceipt(data.receipt);
+      // A restored copy's evidence is replaced by this run's own words.
+      setRunEvidence(null);
+    } catch (err) {
+      setCheckError(err instanceof Error && err.message !== "failed" ? err.message : "We couldn't check it just now. Try again in a moment.");
+    } finally {
+      setChecking(false);
+    }
+  };
+  // R2's "Check and finish" and the Refinery link here with ?check=1: run it once.
+  const autoChecked = useRef(false);
+  useEffect(() => {
+    if (!needsCheck || autoChecked.current) return;
+    try {
+      if (new URLSearchParams(window.location.search).get("check") !== "1") return;
+    } catch {
+      return;
+    }
+    autoChecked.current = true;
+    void checkAgain();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [needsCheck]);
+
   // Over the limit: the person picks a line; it is cut and recorded as their cut.
   const onLengthCut = (line: string) => {
     setResumeText((t) => cutLine(t, line));
@@ -965,6 +1037,24 @@ function OutputPageInner() {
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
+              {needsCheck && (
+                <div className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="recheck-card" data-blocking="true">
+                  <p className="text-sm font-bold text-t-white">{RECHECK_LINE}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-t-phos">
+                    This checks your page again, as it is now. Nothing on it is rewritten, and your answers stay.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => void checkAgain()}
+                    disabled={checking}
+                    className="t-focus mt-3 min-h-touch bg-t-amber px-4 py-2 text-sm font-bold text-white hover:bg-t-amber-bright disabled:opacity-60"
+                    data-testid="recheck-button"
+                  >
+                    {checking ? "Checking..." : "Check it again"}
+                  </button>
+                  {checkError && <p role="status" className="mt-2 text-xs text-t-amber-bright">{checkError}</p>}
+                </div>
+              )}
               {lengthOver && shownPages !== null && (
                 <LengthCard
                   pages={shownPages}
@@ -1010,6 +1100,7 @@ function OutputPageInner() {
             {canEmailPackage({ state: view.state, isDemo }) && authStatus === "loading" ? null : canEmailPackage({ state: view.state, isDemo }) && signedIn ? (
               <FinishedEmailLine
                 revisionId={current && current.status === "finished" ? current.id : null}
+                savedAt={current?.createdAt ?? null}
                 narrativeHeadline={narrative.headline || ""}
                 narrativeSummary={narrative.summary || ""}
                 mayUse={runIsMine}
