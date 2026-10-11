@@ -184,7 +184,8 @@ export default function OutputPage() {
   const [runEvidence, setRunEvidence] = useState<RunEvidence | null>(null);
   // The server's saved revision for the current state, and the save's state.
   const [saved, setSaved] = useState<(SavedRevisionSummary & { mark: string }) | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  // The state whose save last failed (its mark), so a failure is shown only for the state on screen.
+  const [failedMark, setFailedMark] = useState<string | null>(null);
 
   // Back on this page in the same run: show the same documents and answers
   // instead of writing new ones (a new AI call, and the answers would no
@@ -366,7 +367,7 @@ export default function OutputPage() {
     if (!mayAccount || !payload || !runIsMineRef.current()) return;
     const mine = ++saveSeq.current;
     const forMark = mark;
-    setSaveState("saving");
+    setFailedMark(null);
     try {
       const res = await fetch("/api/revisions", {
         method: "POST",
@@ -377,9 +378,8 @@ export default function OutputPage() {
       if (mine !== saveSeq.current) return;
       if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
       setSaved({ ...data.revision, mark: forMark });
-      setSaveState("saved");
     } catch {
-      if (mine === saveSeq.current) setSaveState("failed");
+      if (mine === saveSeq.current) setFailedMark(forMark);
     }
     // careerPaths only names the first lane.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -393,6 +393,8 @@ export default function OutputPage() {
   }, [mark, mayAccount]);
   // The saved revision for exactly this state, or null while it saves.
   const current = saved && saved.mark === mark ? saved : null;
+  // What the account line says: saved only for THIS state's revision.
+  const saveShown: "saved" | "failed" | "saving" = current ? "saved" : failedMark === mark ? "failed" : "saving";
 
   // D8: pages are part of status. The server's count for the saved version;
   // the renderer's count from the layout route while it saves (or signed out).
@@ -713,10 +715,10 @@ export default function OutputPage() {
             </p>
           )}
           {ready && mayAccount && (
-            <p role="status" className="mt-1 text-xs text-t-phos" data-testid="account-save" data-state={current ? "saved" : saveState}>
+            <p role="status" className="mt-1 text-xs text-t-phos" data-testid="account-save" data-state={saveShown}>
               {current ? (
                 <>Saved to your account (version {current.number}).</>
-              ) : saveState === "failed" ? (
+              ) : saveShown === "failed" ? (
                 <>
                   Not saved to your account yet. Your work is still on this page.{" "}
                   <button
