@@ -23,6 +23,7 @@ import { numberValues } from "@crucible/core/src/numberRead";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { namedCredentialRe } from "@crucible/core/src/credentialWords";
 import { isPeopleScopeHit, scopeHits, scopeHitsNotTheirs, straightQuotes } from "@crucible/core/src/scopeWords";
+import { numbersInContext } from "@crucible/core/src/resumeStatus";
 import { isSectionHeader } from "@crucible/core/src/pageFitShared";
 
 export type FactKind = "number" | "date" | "name" | "tool" | "skill" | "credential" | "result" | "scope" | "character";
@@ -288,6 +289,9 @@ const PEOPLE_NOUN_RE = /^(?:crews?|teams?|staff|employees?|workers?|hires?|peopl
 export function onlySupervisionUnsupported(claim: string, source: string): boolean {
   const people = scopeHitsNotTheirs(claim, source).filter(isPeopleScopeHit);
   if (!people.length) return false;
+  // Integration H2: every number on it must count what the person's number counted ("a crew of 3" needs
+  // their "crew of 3", not "Ran 3 presses"), read on both sides of the number; else it keeps its flag.
+  if (!numbersInContext(claim, source)) return false;
   const hitWords = new Set(people.flatMap((h) => words(h.word)));
   const facts = untracedFacts(claim, source);
   if (facts.some((f) => !(f.kind === "scope" && words(f.text).every((w) => hitWords.has(w))))) return false;

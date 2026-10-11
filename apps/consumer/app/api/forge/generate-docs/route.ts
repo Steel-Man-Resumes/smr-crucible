@@ -28,7 +28,7 @@ import { restoreDateForms } from "@/lib/date-form";
 import { randomBytes } from "node:crypto";
 import { revisionCaller } from "@/lib/revision-route";
 import { loadRebuildSource, rebuildInputs, rebuildStore } from "@/lib/rebuild-source";
-import { withRewording, type SourceKind } from "@/lib/source-kind";
+import { rewordingAFor, withRewording, type SourceKind } from "@/lib/source-kind";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 export const maxDuration = 120;
@@ -145,8 +145,9 @@ async function handlePost(request: Request) {
     const [resumeCheck, coverCheck] = await Promise.all([
       // Round 4 (r3 H3-2): only here, where the finish page shows the one-tap card, is a supervision-only
       // claim left in place and asked instead of cut.
-      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: true }),
-      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter", askSupervision: true }),
+      // Integration M1/L4: on exactly when this run's signed rewording A marker is (rewordingAFor(sourceKind)).
+      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: rewordingAFor(sourceKind) }),
+      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter", askSupervision: rewordingAFor(sourceKind) }),
     ]);
 
     // A prompt rule is an instruction, not a guarantee. The output format

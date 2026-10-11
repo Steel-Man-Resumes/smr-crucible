@@ -52,7 +52,7 @@ import { writerReceipt, writerSourceFrom, type WriterSource } from "./writer-rec
 import { computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence } from "./revision-status";
 import { artifactText, baseRevisionFor, textFromBase } from "./revision-current";
 import { pickForgeArtifact, type RevisionStore, type SavedRevisionSummary } from "./revision-save";
-import { revisionKind, withRewording, type SourceKind } from "./source-kind";
+import { revisionKind, rewordingAFor, withRewording, type SourceKind } from "./source-kind";
 import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 
 export interface RecheckDeps {
@@ -93,15 +93,21 @@ const isDoc = (v: unknown): v is { resume: string; letter: string } =>
 async function runCheck(
   docs: { resume: string; letter: string },
   own: { resumeText?: string; goalNarrative?: string; goals?: string[]; credentialsNote?: string; extra: string[] },
-  verify: typeof VerifyFn
+  verify: typeof VerifyFn,
+  /**
+   * Integration M1 (CC ruling): on exactly when the run's signed rewording A marker will be true
+   * (rewordingAFor(kind)), so a writer draft's supervision line stays the one-tap card after a recheck.
+   * Strict runs (no marker) never set it aside (L4).
+   */
+  askSupervision = false
 ): Promise<Record<string, unknown>> {
   const groundingSource = buildTrustedSource({
     resumeText: own.resumeText,
     userText: [own.goalNarrative, (own.goals ?? []).join(", ") || undefined, own.credentialsNote?.slice(0, 1000), ...own.extra],
   });
   const [rc, cc] = await Promise.all([
-    verify({ sourceText: groundingSource, output: docs.resume, kind: "resume" }),
-    verify({ sourceText: groundingSource, output: docs.letter, kind: "cover_letter" }),
+    verify({ sourceText: groundingSource, output: docs.resume, kind: "resume", askSupervision }),
+    verify({ sourceText: groundingSource, output: docs.letter, kind: "cover_letter", askSupervision }),
   ]);
   const accounting = accountFlags([
     { doc: "resume", flags: rc.flags, original: docs.resume, final: docs.resume },
@@ -211,7 +217,8 @@ export async function recheckDocs(input: unknown, userId: string | null, deps: R
       await runCheck(
         checked,
         { resumeText: [held.ownResumeText, held.ownWords].filter(Boolean).join("\n\n"), credentialsNote: held.credentialsAnswer || undefined, extra: answers },
-        deps.verify
+        deps.verify,
+        rewordingAFor(kind)
       ),
       kind
     );
@@ -276,7 +283,7 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
   // Review r2 L5: a page that is not the base version's own text is never classified from that version.
   const baseKind: SourceKind = base ? revisionKind(base, lineage, resume) : "page_only";
   const kind: SourceKind = baseKind === "own_words" && base && base.resume_text !== resume ? "unknown" : baseKind;
-  const grounding = withRewording(await runCheck(written, { resumeText: [source.ownResumeText, source.ownWords].filter(Boolean).join("\n\n"), extra: answers }, deps.verify), kind);
+  const grounding = withRewording(await runCheck(written, { resumeText: [source.ownResumeText, source.ownWords].filter(Boolean).join("\n\n"), extra: answers }, deps.verify, rewordingAFor(kind)), kind);
   const runId = artifactRunId(art.id);
   const signed = sign(written, grounding, userId, runId, source, deps);
   if (deps.record) await deps.record(userId, runId, signed.nonce, signed.now);
