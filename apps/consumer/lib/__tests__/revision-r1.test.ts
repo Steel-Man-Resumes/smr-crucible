@@ -655,3 +655,87 @@ test("M2: content the Forge save derived from earlier inputs is replaced without
   const r2 = await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f2.store);
   assert.ok(r2.ok && r2.revision.accountCopy === "kept_refinery");
 });
+
+// ---- review round 2: H-A (one field from several saved lines), M-A (number order) ----
+
+async function finishedWith(resume: string, own: string = OWN_WORDS) {
+  const f = fakeStore();
+  const s = await saveFinishRevision(UID, finishState({ resumeText: resume, ownWords: own, defendAnswers: allAnswered(resume), written: { resume, letter: LETTER } }), { source: "forge_finish" }, f.store);
+  assert.ok(s.ok, s.ok ? "" : s.reason);
+  const art = f.arts[0];
+  art.content = f.updates.at(-1)!.content;
+  return { f, art, s };
+}
+
+test("H-A: a shortened multi-line summary: the deleted line is gone", async () => {
+  const resume = RESUME.replace("Line cook\n", "PROFESSIONAL SUMMARY\nLine cook at Harbor Street Diner.\nI ran the grill on the breakfast line.\n");
+  const { f, art } = await finishedWith(resume, OWN_WORDS + "\nLine cook at Harbor Street Diner.");
+  art.content = { ...(art.content as any), summary: "I ran the grill on the breakfast line." };
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  const t = ex.ok ? ex.revision.resume_text : "";
+  assert.equal(t.includes("Line cook at Harbor Street Diner."), false, t);
+  assert.equal(t.split("\n").filter((l) => l.includes("I ran the grill on the breakfast line.")).length, 1, t);
+  assert.ok(t.includes("LINE COOK | Harbor Street Diner | 2019 - 2023"), "untouched lines keep their saved form");
+});
+
+test("H-A: a skill cut from a two-line skills section does not come back and is not doubled", async () => {
+  const resume = RESUME.replace("Grill, Breakfast line, Vegetable prep, Kitchen closing, Inventory control", "Grill, Breakfast line, Vegetable prep\nKitchen closing, Inventory control");
+  const { f, art } = await finishedWith(resume);
+  art.content = { ...(art.content as any), skills: (art.content as any).skills.filter((x: string) => x !== "Inventory control") };
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  const t = ex.ok ? ex.revision.resume_text : "";
+  assert.equal(t.includes("Inventory control"), false, t);
+  assert.equal(t.split("\n").filter((l) => /Kitchen closing/.test(l)).length, 1, t);
+  assert.equal(t.split("\n").filter((l) => /\bGrill\b/.test(l) && /Vegetable prep/.test(l)).length, 1, t);
+  assert.equal(ex.ok && ex.revision.status, "finished");
+});
+
+test("H-A: education lines and a custom block edited in the Refinery print what the editor shows", async () => {
+  const resume = RESUME + "\n\nEDUCATION\nGED | Toledo Adult Education  2015\n\nVOLUNTEER\nFood bank, Saturdays";
+  const { f, art } = await finishedWith(resume, OWN_WORDS + "\nGED from Toledo Adult Education in 2015.\nFood bank, Saturdays");
+  const c = art.content as any;
+  art.content = { ...c, education: [], contentBlocks: (c.contentBlocks ?? []).map((b: any) => ({ ...b, items: [] })) };
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.ok(ex.ok);
+  const t = ex.ok ? ex.revision.resume_text : "";
+  assert.equal(/GED/.test(t), false, t);
+  assert.equal(/Food bank/.test(t), false, t);
+});
+
+test("H-A: a Tailor copy with a removed line exports without it", async () => {
+  const { f, art } = await finishedForge();
+  const c = JSON.parse(JSON.stringify(art.content));
+  c.experience[0].bullets = c.experience[0].bullets.filter((b: string) => !b.includes("Showed incoming"));
+  const fork = { id: "00000000-0000-4000-8000-0000000000f9", artifact_type: "resume", target_context: { source: "job" }, content: c, parent_artifact_id: art.id };
+  f.arts.push(fork);
+  const ex = await ensureExportRevision(UID, fork.id, f.store);
+  assert.ok(ex.ok);
+  assert.equal(ex.ok && ex.revision.resume_text.includes("Showed incoming"), false);
+  assert.equal(ex.ok && ex.revision.status, "finished");
+});
+
+test("H-A invariant: whatever the saved text, the exported text prints exactly the lines the editor shows", async () => {
+  const { textFromBase } = await import("../revision-current");
+  const { sameLineKeys } = await import("../revision-patch");
+  const { art } = await finishedForge();
+  const now = artifactText(art.content);
+  for (const saved of ["ODD TEXT\nA line the document never held.", RESUME, RESUME.replace("Line cook\n", "PROFESSIONAL SUMMARY\nLine cook.\nSecond line.\n")]) {
+    const out = textFromBase(art.content, { id: "00000000-0000-4000-8000-00000000beef", resume_text: saved, evidence: {} });
+    assert.ok(sameLineKeys(artifactText(resumeTextToDocument(out)), now), out);
+  }
+});
+
+test("M-A: '40 covers over 3 years' changed to '3 covers over 40 years' is asked again", async () => {
+  const resume = RESUME.replace("- Ran the grill on the breakfast line.", "- Ran the grill for 40 covers an hour over 3 years.");
+  const { f, art, s } = await finishedWith(resume, OWN_WORDS + "\nI ran the grill, about 40 covers an hour, for 3 years.");
+  assert.equal(s.ok && s.revision.status, "finished");
+  const c = JSON.parse(JSON.stringify(art.content));
+  c.experience[0].bullets = c.experience[0].bullets.map((b: string) => b.replace("40 covers an hour over 3 years", "3 covers an hour over 40 years"));
+  art.content = c;
+  const ex = await ensureExportRevision(UID, art.id, f.store);
+  assert.equal(ex.ok && ex.revision.status, "draft");
+  assert.notEqual(lineKey("Ran the grill for 40 covers an hour over 3 years"), lineKey("Ran the grill for 3 covers an hour over 40 years"));
+  assert.equal(lineKey("Grill | Breakfast line"), lineKey("Breakfast line, Grill"));
+});

@@ -17,7 +17,7 @@
 import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 import { readMarker, withRevisionMarker } from "./revision-marker";
 export { REVISION_MARKER_KEY, contentMarkerHash, withRevisionMarker, readMarker } from "./revision-marker";
-import { patchText } from "./revision-patch";
+import { patchText, sameLineKeys } from "./revision-patch";
 import { resumeTextToDocument } from "./revision-to-doc";
 import { formatResumeDownload, type AnyResumeDocument } from "../components/resume/resumeModel";
 import { saveEditRevision, type RevisionStore, type SaveResult } from "./revision-save";
@@ -59,7 +59,12 @@ export function textFromBase(content: unknown, base: Pick<ArtifactRevision, "id"
   // Lines the person already settled: the saved text and the writer's documents.
   const w = ((base.evidence ?? {}) as { written?: { resume?: unknown; letter?: unknown } | null }).written;
   const known = [w?.resume, w?.letter].filter((x): x is string => typeof x === "string").flatMap((t) => t.split("\n"));
-  return patchText(base.resume_text, before, now, known);
+  const patched = patchText(base.resume_text, before, now, known);
+  // Invariant (review H-A): the patched text must print the same lines as the
+  // editor. If it does not (a field the patch could not map back), the
+  // editor's own text is used and the gate decides: never a file holding
+  // lines the person removed.
+  return sameLineKeys(artifactText(resumeTextToDocument(patched)), now) ? patched : now;
 }
 
 /** Most parents walked to find a revision to start from (a fork of a fork...). */
