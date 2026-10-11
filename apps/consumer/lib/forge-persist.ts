@@ -149,6 +149,10 @@ export async function persistForgeSession(
   // run). The server runs the gate itself; nothing here trusts a status.
   const finish = body.finish && typeof body.finish === "object" ? body.finish : finishPayloadFromRun(body);
   if (!finish) return { revision: null };
+  // A finished state the writer never signed (written before the receipt
+  // existed, or caught mid-write) is not saved from here: it could only be a
+  // draft, and the finish page saves its own version when it opens signed in.
+  if (typeof (finish as Record<string, unknown>).writerReceipt !== "string" || !(finish as Record<string, unknown>).writerReceipt) return { revision: null, revisionProblem: "no receipt" };
   const laneTarget = firstLaneTarget({}, body);
   const saved = await saveFinishRevision(userId, finish, { source: "forge_import", laneTarget }, await coreStore());
   if (saved.ok) return { revision: saved.revision };

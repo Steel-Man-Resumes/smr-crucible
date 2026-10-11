@@ -857,3 +857,12 @@ test("L-B: the email line says what really happens", async () => {
   assert.match(line, /if \(wait === 0\) \{\s+send\(props\.revisionId\);/, "a version already due is sent on the next visit");
   assert.doesNotMatch(src("app", "api", "forge", "email-package", "auto", "route.ts"), /cron/i);
 });
+
+test("M-B: generate-docs signs a bound receipt and keeps the newest nonce per run, signed in; the import never saves an unsigned finish", () => {
+  const route = src("app", "api", "forge", "generate-docs", "route.ts");
+  assert.match(route, /writerReceipt\(\{ resume, letter: coverLetter \}, grounding, \{\s+userId: userId \?\? null,\s+runId,\s+source: writerSourceFrom\(raw\),\s+nonce,\s+now: issuedAt,\s+\}\)/);
+  assert.match(route, /if \(userId && runId\) \{[\s\S]*recordWriterReceipt\(userId, runId, nonce, issuedAt\)/);
+  assert.match(src("lib", "forge-persist.ts"), /return \{ revision: null, revisionProblem: "no receipt" \}/);
+  const page = src("app", "(forge)", "output", "page.tsx");
+  assert.match(page, /runId: session\.startedAt,/);
+});
