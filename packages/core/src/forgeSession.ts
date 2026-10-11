@@ -73,21 +73,12 @@ export async function saveForgeSession(
     ]
   );
 
-  // Upsert forge_session
-  await query(
-    `INSERT INTO forge_session (session_id, user_id, current_page, page_data, resume_text, forge_output, status, started_at, last_activity_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
-     ON CONFLICT (session_id) DO UPDATE SET
-       user_id = COALESCE(EXCLUDED.user_id, forge_session.user_id),
-       current_page = EXCLUDED.current_page,
-       page_data = EXCLUDED.page_data,
-       resume_text = EXCLUDED.resume_text,
-       forge_output = COALESCE(EXCLUDED.forge_output, forge_session.forge_output),
-       status = EXCLUDED.status,
-       completed_at = CASE WHEN EXCLUDED.forge_output IS NOT NULL THEN now() ELSE forge_session.completed_at END,
-       last_activity_at = now()`,
-    [
-      sessionId,
+  // Upsert forge_session. A row that already belongs to another account is never
+  // updated or reassigned (the conflict update only runs for an unowned row or the
+  // caller's own row). If the session id is taken by someone else, this run is saved
+  // under the caller's own namespaced id instead, so their work is never lost.
+  const params = (id: string) => [
+      id,
       userId,
       data.pagesVisited?.[data.pagesVisited.length - 1] || "unknown",
       JSON.stringify({
@@ -102,8 +93,31 @@ export async function saveForgeSession(
       data.forgeOutput ? JSON.stringify(data.forgeOutput) : null,
       data.forgeOutput ? "completed" : "in_progress",
       data.startedAt || new Date().toISOString(),
-    ]
-  );
+    ];
+  const saved = await query(FORGE_SESSION_UPSERT_SQL, params(sessionId));
+  if (saved.length === 0) {
+    await query(FORGE_SESSION_UPSERT_SQL, params(ownedSessionId(sessionId, userId)));
+  }
+}
+
+/** The forge_session upsert. Exported for tests. */
+export const FORGE_SESSION_UPSERT_SQL = `INSERT INTO forge_session (session_id, user_id, current_page, page_data, resume_text, forge_output, status, started_at, last_activity_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now())
+     ON CONFLICT (session_id) DO UPDATE SET
+       user_id = COALESCE(forge_session.user_id, EXCLUDED.user_id),
+       current_page = EXCLUDED.current_page,
+       page_data = EXCLUDED.page_data,
+       resume_text = EXCLUDED.resume_text,
+       forge_output = COALESCE(EXCLUDED.forge_output, forge_session.forge_output),
+       status = EXCLUDED.status,
+       completed_at = CASE WHEN EXCLUDED.forge_output IS NOT NULL THEN now() ELSE forge_session.completed_at END,
+       last_activity_at = now()
+     WHERE forge_session.user_id IS NULL OR forge_session.user_id = EXCLUDED.user_id
+     RETURNING session_id`;
+
+/** The caller's own session id when the plain one already belongs to another account. */
+export function ownedSessionId(sessionId: string, userId: string): string {
+  return `${sessionId}#${userId}`;
 }
 
 /**
