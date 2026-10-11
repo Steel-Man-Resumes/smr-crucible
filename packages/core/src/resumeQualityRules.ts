@@ -89,6 +89,10 @@ interface PageLine {
   heading: boolean;
   /** A heading in the person's own words (not one a reader expects). */
   unknown?: boolean;
+  /** A sub-label inside a job ("Duties:", "Key results:"): part of the job, not a section. */
+  label?: boolean;
+  /** One line of an all-caps run of job text (see capsItemRun). */
+  capsItem?: boolean;
 }
 
 interface Page {
@@ -130,7 +134,20 @@ function readPage(text: string): Page {
     // Before the first known heading, a short all-caps line under the name is
     // a headline ("CERTIFIED WELDER"); only a trailing colon makes it a heading there.
     if (k > 0 && headingShape(l) && (firstHeading >= 0 || /:\s*$/.test(l))) {
-      const jobTitle = !/:\s*$/.test(l) && raw.slice(k + 1, k + 3).some((n) => YEAR_RE.test(n) && !headingShape(n));
+      const colon = /:\s*$/.test(l);
+      const jobTitle = !colon && raw.slice(k + 1, k + 3).some((n) => YEAR_RE.test(n) && !headingShape(n));
+      // Inside a job, "Duties:" or "Key results:" is a sub-label, not a new
+      // section: the job and the jobs after it are still read.
+      if (colon && section === "experience") {
+        lines.push({ text: l, section, heading: false, label: true });
+        continue;
+      }
+      // Inside a job, a run of all-caps lines with actions in it
+      // ("MACHINE OPERATOR / RUN MACHINES / PACK BOXES") is the job's text.
+      if (!colon && section === "experience" && capsItemRun(raw, k)) {
+        lines.push({ text: l, section, heading: false, capsItem: true });
+        continue;
+      }
       if (!jobTitle) {
         section = "other";
         if (firstHeading < 0) firstHeading = lines.length;
@@ -141,6 +158,20 @@ function readPage(text: string): Page {
     lines.push({ text: l, section, heading: false });
   }
   return { lines, firstHeading };
+}
+
+/**
+ * True when line k sits in a run of three or more all-caps short lines (no
+ * dates, no known heading) and at least one of them starts with an action.
+ */
+function capsItemRun(raw: string[], k: number): boolean {
+  const caps = (l: string | undefined) => !!l && isAllCaps(l) && !YEAR_RE.test(l) && !knownSection(l) && !l.includes("|") && words(l).length <= 5;
+  let a = k;
+  while (a > 0 && caps(raw[a - 1])) a--;
+  let b = k;
+  while (b + 1 < raw.length && caps(raw[b + 1])) b++;
+  if (b - a + 1 < 3) return false;
+  return raw.slice(a, b + 1).some((l) => startsWithVerb(l));
 }
 
 /** A place line: "Billings, MT" or "Billings, Montana". */
@@ -264,7 +295,9 @@ const GENERIC_RE = new RegExp(
 const OBJECTIVE_LINE_RE = /^(?:i am |i'm )?(?:seeking|looking for|to obtain|to secure|to gain|to find|obtain|secure) (?:a |an |the |employment|work|a position|position|full[- ]time|part[- ]time|entry[- ]level|challenging)/i;
 
 // Duty phrasing: the job description, not the work. These always read that way.
-const DUTY_RE = /\b(responsible for|duties (?:included|include|were|consisted of)|duties:|job (?:was|included) to)\b/i;
+const DUTY_RE = /\b(responsible for|duties (?:included|include|were|consisted of)|duties:|responsibilities(?: included| were)?:|job (?:was|included) to)(?=\W|$)/i;
+// A "Duties:" label over a job's lines.
+const DUTY_LABEL_RE = /^(?:job |main |key |daily )?(?:duties|responsibilities|tasks)(?: (?:and|&) (?:duties|responsibilities))?\s*:$/i;
 // These read that way only on a bare line. A count ("Worked with a 5-cook
 // line") or a second action ("...to plate the covers") makes it real work,
 // and being put in charge is a promotion, not a duty.
@@ -332,6 +365,8 @@ const WHY = {
   heading_mixed:
     "This heading looks different from your others. Matching headings read as careful, and mixed ones read as rushed.",
   did: "\"Did\" is a weak start. Lead with the action itself so a reader sees the work.",
+  duty_label:
+    "A duties label turns what's under it into a job description. A reader wants what you did, one bullet at a time.",
 } as const;
 
 function dutyWhy(phrase: string): string {
@@ -486,6 +521,10 @@ function analyze(text: string): Analysis {
     if (l.heading || isContact(l.text)) continue;
     if (!(inExperience(i) || l.section === "summary" || topIdx.includes(i) || isBullet(l.text))) continue;
     if (l.section === "skills" || l.section === "education" || l.section === "credentials") continue;
+    if (l.label) {
+      if (DUTY_LABEL_RE.test(l.text)) add(i, { rule: "duty_phrasing", line: l.text, why: WHY.duty_label, severity: "weak" });
+      continue;
+    }
     const body = bodyOf(l.text);
     const m = body.match(DUTY_RE);
     if (m) {
@@ -526,14 +565,27 @@ function analyze(text: string): Analysis {
     const reach = dateOnly(i) ? 2 : 1;
     for (let d = 1; d <= reach; d++) {
       const j = i - d;
-      if (j < 0 || !inExperience(j) || isBullet(ls[j].text) || isYearLine(j)) break;
+      // A sentence is never a header, however short the dated line is.
+      if (j < 0 || !inExperience(j) || isBullet(ls[j].text) || isYearLine(j) || ls[j].label || sentenceSignal(ls[j].text)) break;
       header.add(j);
+    }
+    // The title or employer can sit under the dates ("Valley Supply | 2017 -
+    // 2024" over "Forklift Operator"): one or two short lines that are not
+    // sentences, right before the job's first bullet or label.
+    const run: number[] = [];
+    let j = i + 1;
+    while (j < ls.length && inExperience(j) && !isBullet(ls[j].text) && !ls[j].label && !isYearLine(j) && run.length < 3) run.push(j++);
+    const nextOpensJob = j < ls.length && inExperience(j) && (isBullet(ls[j].text) || !!ls[j].label);
+    if (run.length >= 1 && run.length <= 2 && nextOpensJob && run.every((r) => !sentenceSignal(ls[r].text) && words(ls[r].text).length <= 6)) {
+      for (const r of run) header.add(r);
     }
     // A place line right under the dates belongs to the header too.
     if (i + 1 < ls.length && inExperience(i + 1) && isPlace(ls[i + 1].text)) header.add(i + 1);
   }
   const firstYear = exp.find((i) => isYearLine(i)) ?? -1;
   let actionBullets = 0;
+  let countedBullets = 0;
+  let shortBullets = 0;
   // One mark per run of non-bullet lines.
   let runStart = -1;
   const closeRun = () => {
@@ -549,13 +601,29 @@ function analyze(text: string): Analysis {
       closeRun();
       const body = bodyOf(t);
       if (startsWithVerb(body)) actionBullets++;
-      if (/\d/.test(body)) continue;
+      if (words(body).length < 3) shortBullets++;
+      if (/\d/.test(body)) {
+        countedBullets++;
+        continue;
+      }
       const w = words(body);
       const first = (w[0] ?? "").toLowerCase();
       if (first.length > 4 && first.endsWith("ing") && first !== "during") {
         add(i, { rule: "weak_bullet", line: t, why: WHY.gerund, severity: "weak" });
       } else if (w.length > 0 && w.length <= 3 && !startsWithVerb(body)) {
         add(i, { rule: "weak_bullet", line: t, why: WHY.weak_bullet, severity: "weak" });
+      }
+      continue;
+    }
+    if (ls[i].label) {
+      closeRun();
+      continue;
+    }
+    // An all-caps run of job text: the first line is the title, the rest are bare words.
+    if (ls[i].capsItem) {
+      if (i > 0 && ls[i - 1].capsItem && runStart < 0) {
+        runStart = i;
+        add(i, { rule: "bullets", line: t, why: WHY.bare, severity: "weak" });
       }
       continue;
     }
@@ -621,7 +689,12 @@ function analyze(text: string): Analysis {
   const findings = [...found.entries()]
     .sort((x, y) => x[0] - y[0])
     .map(([i, f]) => ({ ...f, occurrence: occurrenceAt.get(i) ?? 0 }));
-  const strong = findings.length === 0 && hasTop && hasExperienceHeading && actionBullets >= 2;
+  // Praise stays rare: a real top (four words or more), plain headings,
+  // action bullets, at least one with a count or size, and none thinner than
+  // three words. Anything less is not proof, so no praise.
+  const realTop = summaryLines.some((i) => words(ls[i].text).length >= 4);
+  const strong =
+    findings.length === 0 && realTop && hasExperienceHeading && actionBullets >= 2 && countedBullets >= 1 && shortBullets === 0;
   return { findings, strong };
 }
 

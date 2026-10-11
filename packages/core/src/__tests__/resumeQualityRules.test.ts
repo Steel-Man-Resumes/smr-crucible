@@ -482,3 +482,127 @@ test("r1: the new reasons are plain t.ROY too", () => {
     for (const d of f.why.match(/\d/g) ?? []) assert.ok(f.line.includes(d), `why adds digit ${d}`);
   }
 });
+
+// ---- Round 3 (review s3 r2) -------------------------------------------------
+const R3: Record<string, string> = {
+H1_thin: `Pat Example
+Billings, MT | pat.example@example.com
+Stocker at a dollar store.
+
+EXPERIENCE
+Stocker | Dollar Spot | Billings, MT | 2021 - 2024
+- Stocked shelves
+- Helped customers
+- Cleaned`,
+H2_title_under: `Lee Example
+Kalispell, MT | lee.example@example.com
+Forklift operator with seven years in distribution warehouses.
+
+EXPERIENCE
+Valley Distribution, Kalispell, MT | 2017 - 2024
+Forklift Operator
+- Loaded 30 trailers a shift on a sit-down forklift.
+- Ran cycle counts on the RF scanner.
+
+Big Box Store | 2015 - 2017
+Stocker
+- Stocked the hardware aisle overnight.
+- Built endcap displays for the weekly ad.`,
+H2_dates_first: `Lee Example
+Kalispell, MT | lee.example@example.com
+Warehouse lead with six years running a receiving crew.
+
+EXPERIENCE
+WAREHOUSE LEAD
+2018 - Present
+Valley Supply, Kalispell, MT
+- Led a 6-person receiving crew on day shift.
+- Checked in freight against the purchase orders.`,
+M1_duties: `Ann Example
+Butte, MT | ann.example@example.com
+Machine operator at a packing plant for five years.
+
+EXPERIENCE
+Machine Operator | Mountain Pack | Butte, MT | 2019 - 2024
+Duties:
+- Running machines
+- Packing
+- Cleaning
+
+Packer | Hilltop Foods | Butte, MT | 2016 - 2019
+Job Duties:
+Ran machines, packed boxes, cleaned the area`,
+M1_keyresults: `Ann Example
+Butte, MT | ann.example@example.com
+Machine operator at a packing plant for five years.
+
+EXPERIENCE
+Machine Operator | Mountain Pack | Butte, MT | 2019 - 2024
+Key results:
+- Cut changeover time on line 2 from 40 to 25 minutes.
+
+Packer | Hilltop Foods | Butte, MT | 2016 - 2019
+- Responsible for packing.`,
+L3_sentence: `Joe Example
+Libby, MT | joe.example@example.com
+Cook and stocker in Libby for six years.
+
+EXPERIENCE
+I cooked food and cleaned the kitchen for the lunch crowd
+Dollar Store, Stocker, 2017 to 2019
+- Stocked 4 aisles every night.`,
+L4_caps: `RAY EXAMPLE
+Libby, MT | ray.example@example.com
+OBJECTIVE
+To get a job.
+
+WORK HISTORY
+MACHINE OPERATOR
+RUN MACHINES
+PACK BOXES
+CLEAN UP`,
+};
+
+test("r2 H1: a thin page is never proof of strength (praise stays rare)", () => {
+  assert.equal(pageLooksStrong(R3.H1_thin), false, "one-line top, no counts, a one-word bullet");
+  // Each missing piece alone also blocks praise.
+  const noCount = STRONG_PAGE.replace("9-person", "third-shift").replace("Trained 6 new", "Trained new").replace("3-person", "small");
+  assert.equal(pageLooksStrong(noCount), false, "no bullet with a count or size");
+  const shortBullet = STRONG_PAGE.replace("- Checked returns against the pick sheet and restocked them.", "- Restocked");
+  assert.equal(pageLooksStrong(shortBullet), false, "a bullet under three words");
+  const shortTop = STRONG_PAGE.replace(/SUMMARY\n.*\n.*\n/, "").replace("rafael.ocampo@example.com\n", "rafael.ocampo@example.com\nShift Lead\n");
+  assert.equal(pageLooksStrong(shortTop), false, "a top line under four words");
+  assert.equal(pageLooksStrong(STRONG_PAGE), true);
+});
+
+test("r2 H2: the title or employer on the line under the dates is part of the job header", () => {
+  assert.deepEqual(runQualityCheck(R3.H2_title_under), []);
+  assert.deepEqual(runQualityCheck(R3.H2_dates_first), []);
+  // The r1 H1 bare-words page is still marked (three lines is not a header).
+  assert.deepEqual(lineOf(runQualityCheck(R2.H1_bare), "bullets"), ["Cooking"]);
+});
+
+test("r2 M1: a Duties: label never hides the job or the jobs after it", () => {
+  const fs = runQualityCheck(R3.M1_duties);
+  assert.deepEqual(lineOf(fs, "duty_phrasing"), ["Duties:", "Job Duties:"]);
+  assert.match(byRule(fs, "duty_phrasing")[0].why, /duties label/);
+  assert.deepEqual(lineOf(fs, "weak_bullet"), ["- Running machines", "- Packing", "- Cleaning"]);
+  assert.deepEqual(lineOf(fs, "bullets"), ["Ran machines, packed boxes, cleaned the area"]);
+  // "Key results:" is not marked and does not hide the next job.
+  assert.deepEqual(runQualityCheck(R3.M1_keyresults).map((f) => f.line), ["- Responsible for packing."]);
+  // A "Responsibilities" word in a summary is not a label.
+  const word = STRONG_PAGE.replace("Trained new packers", "Took on more responsibilities and trained new packers");
+  assert.deepEqual(runQualityCheck(word), []);
+});
+
+test("r2 L3: a sentence is never swallowed as a job header", () => {
+  assert.deepEqual(lineOf(runQualityCheck(R3.L3_sentence), "bullets"), ["I cooked food and cleaned the kitchen for the lunch crowd"]);
+});
+
+test("r2 L4: an all-caps run of job text under a job heading is still read", () => {
+  const fs = runQualityCheck(R3.L4_caps);
+  assert.deepEqual(lineOf(fs, "bullets"), ["RUN MACHINES"]);
+  // An all-caps list with no actions in it is left alone.
+  const list = R3.L4_caps.replace("RUN MACHINES\nPACK BOXES\nCLEAN UP", "SKID STEER\nTELEHANDLER\nEXCAVATOR");
+  assert.deepEqual(lineOf(runQualityCheck(list), "bullets"), []);
+});
