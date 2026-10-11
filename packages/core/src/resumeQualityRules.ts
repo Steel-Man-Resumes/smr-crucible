@@ -27,6 +27,11 @@ export interface QualityFinding {
   /** One or two plain t.ROY sentences: what a reader takes from it. */
   why: string;
   severity: QualitySeverity;
+  /**
+   * Which copy of `line` this is, when the same text sits on the page more
+   * than once (0 = the first). Lets a screen mark the right copy.
+   */
+  occurrence: number;
 }
 
 export const QUALITY_RULES = [
@@ -48,10 +53,10 @@ const SECTION_NAMES: Array<[Section, RegExp]> = [
   ["objective", /^(?:career |job |professional |employment )?objective$/],
   ["summary", /^(?:(?:career |professional |personal )?summary|(?:professional )?profile|about me|qualifications summary|summary of qualifications|headline)$/],
   ["experience", /^(?:(?:professional |work |relevant |job |employment |volunteer )?experience|employment(?: history)?|work history|job history|career history|experience and volunteer work)$/],
-  ["skills", /^(?:(?:core |key |technical |job |relevant )?(?:skills|competencies|abilities)(?: (?:and|&) (?:abilities|qualities|tools))?|areas of expertise)$/],
+  ["skills", /^(?:(?:core |key |technical |job |relevant |computer )?(?:skills|competencies|abilities)(?: (?:and|&) (?:abilities|qualities|tools|certifications?|equipment|training))?|areas of expertise|tools(?: (?:and|&) equipment)?|equipment(?: operated| (?:and|&) tools)?|machines(?: operated)?|software|technical)$/],
   ["education", /^(?:education(?: (?:and|&) (?:training|certifications?|credentials?|licen[cs]es?))?|training(?: (?:and|&) education)?|schooling)$/],
-  ["credentials", /^(?:certifications?(?: (?:and|&) licen[cs]es?)?|licen[cs]es?(?: (?:and|&) certifications?)?|credentials|certificates)$/],
-  ["other", /^(?:references|volunteer(?: work)?|projects|awards|languages|additional information|interests|hobbies|activities)$/],
+  ["credentials", /^(?:certifications?(?: (?:and|&) (?:licen[cs]es?|training))?|licen[cs]es?(?: (?:and|&) certifications?)?|credentials|certificates|training (?:and|&) certifications?)$/],
+  ["other", /^(?:references|volunteer(?: work)?|projects|awards|languages|additional information|interests|hobbies|activities|accomplishments|achievements|highlights|key achievements|honors|military(?: service| experience| history)?|community (?:service|involvement)|affiliations|memberships)$/],
 ];
 
 const BULLET_RE = /^[-*\u2022\u00b7\u25aa\u25cf\u25e6\u2023\u2013\u2014]\s*/;
@@ -70,9 +75,11 @@ function knownSection(l: string): Section | null {
 
 /** A line built like a heading: short, no digits, no "|", and set apart (all caps or a trailing colon). */
 function headingShape(l: string): boolean {
-  if (l.includes("|") || /\d/.test(l) || isBullet(l)) return false;
+  if (l.includes("|") || /[\d,@]/.test(l) || isBullet(l)) return false;
   const w = words(l);
   if (!w.length || w.length > 5) return false;
+  // Short acronyms ("CDL", "CPR") are items, not headings.
+  if (w.join("").length < 5) return false;
   return isAllCaps(l) || /:\s*$/.test(l);
 }
 
@@ -80,6 +87,8 @@ interface PageLine {
   text: string;
   section: Section | null;
   heading: boolean;
+  /** A heading in the person's own words (not one a reader expects). */
+  unknown?: boolean;
 }
 
 interface Page {
@@ -93,7 +102,8 @@ function readPage(text: string): Page {
   const lines: PageLine[] = [];
   let section: Section | null = null;
   let firstHeading = -1;
-  for (const l of raw) {
+  for (let k = 0; k < raw.length; k++) {
+    const l = raw[k];
     // "Objective: Seeking a ..." opens the objective section on its own line.
     const inline = l.match(/^([A-Za-z ]{3,30}):\s*\S/);
     const known = knownSection(l);
@@ -112,10 +122,30 @@ function readPage(text: string): Page {
       lines.push({ text: l, section, heading: false });
       continue;
     }
+    // A line built like a heading that no reader list knows ("EQUIPMENT
+    // RUN", "Places I've Worked:") still closes the section above it, so its
+    // items are never read as job bullets. An all-caps job title right over
+    // a dated line ("LINE COOK" / "Harbor Grill, 2019 - 2021") is a job
+    // header, not a heading.
+    // Before the first known heading, a short all-caps line under the name is
+    // a headline ("CERTIFIED WELDER"); only a trailing colon makes it a heading there.
+    if (k > 0 && headingShape(l) && (firstHeading >= 0 || /:\s*$/.test(l))) {
+      const jobTitle = !/:\s*$/.test(l) && raw.slice(k + 1, k + 3).some((n) => YEAR_RE.test(n) && !headingShape(n));
+      if (!jobTitle) {
+        section = "other";
+        if (firstHeading < 0) firstHeading = lines.length;
+        lines.push({ text: l, section, heading: true, unknown: true });
+        continue;
+      }
+    }
     lines.push({ text: l, section, heading: false });
   }
   return { lines, firstHeading };
 }
+
+/** A place line: "Billings, MT" or "Billings, Montana". */
+const PLACE_RE = /^[A-Za-z .'-]+,\s*[A-Za-z .]+$/;
+const isPlace = (l: string) => PLACE_RE.test(l) && words(l).length <= 4;
 
 /** A job line: carries a year and either a "|" or a comma ("Cook, Diner, 2019 - 2021"). */
 const looksLikeEntry = (l: string) => !isBullet(l) && YEAR_RE.test(l) && /[|,]|\s-\s|\bto\b/.test(l);
@@ -123,9 +153,11 @@ const looksLikeEntry = (l: string) => !isBullet(l) && YEAR_RE.test(l) && /[|,]|\
 // ---- Word lists -------------------------------------------------------------
 
 // Character words: true or not, nobody can test you on them. A skills list
-// made of these proves nothing a bullet doesn't prove better.
+// made of these proves nothing a bullet doesn't prove better. Matched against
+// the WHOLE skill term (after "good", "strong" and the like come off), so
+// "Patient care" and "Adobe Creative Cloud" stay real skills.
 const SOFT_SKILL_RE = new RegExp(
-  "\\b(?:" +
+  "^(?:" +
     [
       "hard[- ]?work(?:er|ing)?",
       "work ethic",
@@ -172,10 +204,23 @@ const SOFT_SKILL_RE = new RegExp(
       "works? well under pressure",
       "on time",
       "responsible",
+      "good with (?:people|customers|kids|children)",
+      "people person",
     ].join("|") +
-    ")\\b",
+    ")$",
   "i"
 );
+
+/** True when a skill term is only a character word ("Strong work ethic", "Team player"). */
+function isSoftTerm(term: string): boolean {
+  const t = term
+    .toLowerCase()
+    .replace(/[.!]+$/, "")
+    .replace(/^(?:very |extremely |highly |good |great |excellent |strong |effective |outstanding )+/, "")
+    .replace(/ skills?$/, "")
+    .trim();
+  return !!t && SOFT_SKILL_RE.test(t);
+}
 
 // Phrases that fit any page. A summary made of them says nothing about this person.
 const GENERIC_RE = new RegExp(
@@ -218,8 +263,15 @@ const GENERIC_RE = new RegExp(
 
 const OBJECTIVE_LINE_RE = /^(?:i am |i'm )?(?:seeking|looking for|to obtain|to secure|to gain|to find|obtain|secure) (?:a |an |the |employment|work|a position|position|full[- ]time|part[- ]time|entry[- ]level|challenging)/i;
 
-// Duty phrasing: the job description, not the work.
-const DUTY_RE = /\b(responsible for|duties (?:included|include|were|consisted of)|duties:|in charge of|dealt with|worked with|tasked with|job (?:was|included) to)\b/i;
+// Duty phrasing: the job description, not the work. These always read that way.
+const DUTY_RE = /\b(responsible for|duties (?:included|include|were|consisted of)|duties:|job (?:was|included) to)\b/i;
+// These read that way only on a bare line. A count ("Worked with a 5-cook
+// line") or a second action ("...to plate the covers") makes it real work,
+// and being put in charge is a promotion, not a duty.
+const SOFT_DUTY_RE = /\b(in charge of|dealt with|worked with|tasked with)\b/i;
+const PROMOTED_RE = /\b(?:put|placed|promoted|moved up|made|named)\s+(?:\w+\s+)?in charge of\b/i;
+// Vague lines that could sit under any job.
+const VAGUE_RE = /\b(?:as (?:assigned|needed|directed|required)|where(?:ver)? needed|various (?:tasks|duties|jobs|things)|other duties|odd jobs|general (?:duties|labor tasks)|helped out)\b/i;
 const DID_START_RE = /^(?:i\s+)?(did)\b/i;
 
 // Verbs a bullet may start with. A bullet that starts with one of these is
@@ -227,7 +279,7 @@ const DID_START_RE = /^(?:i\s+)?(did)\b/i;
 const VERBS = new Set(
   (
     "add adjust advise aid answer apply arrange assemble assess assist audit bake balance bill book bring build buy calibrate " +
-    "call care carry cashier change check clean clear close coach collect complete conduct connect cook coordinate count cover " +
+    "call care carry change check clean clear close coach collect complete conduct connect cook coordinate count cover " +
     "create cut deliver design detail develop diagnose direct dispatch distribute drive edit enter establish estimate fabricate " +
     "file fill finish fix follow form frame fuel grade greet grill guide handle haul help hire inspect install interview inventory " +
     "issue keep label lay lead learn lift load locate log maintain make manage measure meet mentor mix monitor mop move negotiate " +
@@ -265,8 +317,14 @@ const WHY = {
     "Anybody can type these words, so a reader skips right past them. Skills are things you could be tested on, like tools and machines; your bullets show the rest.",
   weak_bullet:
     "This names a task but not what you did with it. A bullet starts with the action, so a reader sees the work.",
+  gerund:
+    "This starts with an -ing word, so it reads like a list of chores. A bullet starts with the action itself, like Trained instead of Training.",
+  vague:
+    "This could sit under any job, so it tells a reader nothing. A bullet names one real thing you did.",
   bullets:
     "This is a block of words, not bullets. A hiring manager skims, so each thing you did gets its own bullet that starts with the action.",
+  bare:
+    "These are bare words under a job, not bullets. A reader can't tell what you did with them.",
   heading_missing:
     "Your jobs sit here with no heading over them. A reader and the hiring software look for a plain heading like EXPERIENCE to find them.",
   heading_odd:
@@ -284,18 +342,39 @@ function dutyWhy(phrase: string): string {
 
 // ---- The rules ----------------------------------------------------------------
 
+interface Analysis {
+  findings: QualityFinding[];
+  /** Positive evidence the page is strong (never inferred from silence). */
+  strong: boolean;
+}
+
 /**
  * Read a page and return what a Steel Man reader would mark, in page order.
- * One finding per line at most. An empty array means nothing weak was found.
+ * One finding per line at most. An empty array means nothing weak was found;
+ * it does NOT mean the page is strong (see `pageLooksStrong`).
  */
 export function runQualityCheck(text: string): QualityFinding[] {
-  if (typeof text !== "string" || !text.trim()) return [];
+  return analyze(text).findings;
+}
+
+/**
+ * True only on positive evidence: no quality findings, a summary or headline
+ * up top, an experience heading, and at least two bullets that start with an
+ * action. A page this cannot read well is never called strong.
+ */
+export function pageLooksStrong(text: string): boolean {
+  return analyze(text).strong;
+}
+
+function analyze(text: string): Analysis {
+  const none: Analysis = { findings: [], strong: false };
+  if (typeof text !== "string" || !text.trim()) return none;
   const page = readPage(text);
   const ls = page.lines;
-  if (ls.length < 3) return [];
+  if (ls.length < 3) return none;
 
-  const found = new Map<number, QualityFinding>();
-  const add = (i: number, f: QualityFinding) => {
+  const found = new Map<number, Omit<QualityFinding, "occurrence">>();
+  const add = (i: number, f: Omit<QualityFinding, "occurrence">) => {
     if (i >= 0 && i < ls.length && !found.has(i)) found.set(i, f);
   };
 
@@ -309,7 +388,13 @@ export function runQualityCheck(text: string): QualityFinding[] {
   // A job line not under a heading that would explain it (education and
   // credentials carry years and commas too).
   const ENTRY_SECTIONS = new Set<Section | null>([null, "objective", "summary", "other"]);
-  const entryIdx = ls.findIndex((l, i) => i > 0 && ENTRY_SECTIONS.has(l.section) && !isContact(l.text) && looksLikeEntry(l.text));
+  const entryIdx = ls.findIndex(
+    (l, i) => i > 0 && !l.heading && ENTRY_SECTIONS.has(l.section) && !isContact(l.text) && looksLikeEntry(l.text) && !(l.section === "other" && precededByKnownOther(i))
+  );
+  function precededByKnownOther(i: number): boolean {
+    for (let j = i - 1; j >= 0; j--) if (ls[j].heading) return ls[j].section === "other" && !ls[j].unknown;
+    return false;
+  }
   const hasJobs = hasExperienceHeading || entryIdx >= 0;
 
   // Experience lines: under an experience heading; with no heading at all,
@@ -349,12 +434,13 @@ export function runQualityCheck(text: string): QualityFinding[] {
   // 2. Summary: missing, or generic.
   const summaryLines: number[] = ls.map((l, i) => (l.section === "summary" && !l.heading ? i : -1)).filter((i) => i >= 0);
   if (!ls.some((l) => l.section === "summary")) {
-    // A headline or a summary sentence under the name counts.
-    for (const i of topIdx) if (words(ls[i].text).length >= 3 && i !== objectiveAt) summaryLines.push(i);
+    // A headline ("Certified Welder", "WELDER") or a summary sentence under
+    // the name counts. A city line does not.
+    for (const i of topIdx) if (i !== objectiveAt && !isPlace(ls[i].text) && words(ls[i].text).length >= 1) summaryLines.push(i);
   }
-  if (summaryLines.length === 0 && objectiveAt < 0 && hasJobs && page.firstHeading >= 0) {
-    add(page.firstHeading, { rule: "summary", line: ls[page.firstHeading].text, why: WHY.summary, severity: "missing" });
-  }
+  const hasTop = summaryLines.length > 0;
+  // A missing summary is marked last, so a heading mark on the same line wins.
+  const summaryMissing = !hasTop && objectiveAt < 0 && hasJobs && page.firstHeading >= 0;
   if (summaryLines.length) {
     // What only this person has: words from their job lines (titles, employers, tools).
     const own = new Set<string>();
@@ -374,7 +460,7 @@ export function runQualityCheck(text: string): QualityFinding[] {
     }
   }
 
-  // 3. Skills made of character words.
+  // 3. Skills made of character words (each term judged whole).
   const skillIdx = ls.map((l, i) => (l.section === "skills" && !l.heading ? i : -1)).filter((i) => i >= 0);
   if (skillIdx.length) {
     let total = 0;
@@ -383,7 +469,7 @@ export function runQualityCheck(text: string): QualityFinding[] {
     for (const i of skillIdx) {
       for (const term of skillTermsOf(ls[i].text)) {
         total++;
-        if (SOFT_SKILL_RE.test(term)) {
+        if (isSoftTerm(term)) {
           soft++;
           if (firstSoft < 0) firstSoft = i;
         }
@@ -394,52 +480,103 @@ export function runQualityCheck(text: string): QualityFinding[] {
     }
   }
 
-  // 4. Duty phrasing, anywhere but headings and contact lines.
+  // 4. Duty phrasing and vague lines, in the top block and under jobs.
   for (let i = 0; i < ls.length; i++) {
     const l = ls[i];
     if (l.heading || isContact(l.text)) continue;
+    if (!(inExperience(i) || l.section === "summary" || topIdx.includes(i) || isBullet(l.text))) continue;
+    if (l.section === "skills" || l.section === "education" || l.section === "credentials") continue;
     const body = bodyOf(l.text);
     const m = body.match(DUTY_RE);
     if (m) {
       add(i, { rule: "duty_phrasing", line: l.text, why: dutyWhy(m[1]), severity: "weak" });
       continue;
     }
+    const soft = body.match(SOFT_DUTY_RE);
+    if (soft && !/\d/.test(body) && !PROMOTED_RE.test(body) && !hasSecondAction(body)) {
+      add(i, { rule: "duty_phrasing", line: l.text, why: dutyWhy(soft[1]), severity: "weak" });
+      continue;
+    }
     if (DID_START_RE.test(body) && (l.section === "experience" || isBullet(l.text))) {
       add(i, { rule: "duty_phrasing", line: l.text, why: WHY.did, severity: "weak" });
+      continue;
+    }
+    if (inExperience(i) && VAGUE_RE.test(body) && !/\d/.test(body)) {
+      add(i, { rule: "weak_bullet", line: l.text, why: WHY.vague, severity: "weak" });
     }
   }
 
-  // 5. Job lines: written as a block instead of bullets, or bullets with no action.
-  let inRun = false;
+  // 5. Job lines. Inside experience, find each job's header (the lines up to
+  // its dates) and its body (the lines after). Header lines are never judged
+  // as sentences; body lines that are not bullets are.
+  const exp = ls.map((_, i) => i).filter((i) => inExperience(i));
+  const isYearLine = (i: number) => YEAR_RE.test(ls[i].text) && !isBullet(ls[i].text);
+  // A date-only line ("2019 - 2022", "Billings, MT | 2019 - 2022"): the lines
+  // right above it are that job's title and employer.
+  const dateOnly = (i: number) => {
+    const t = ls[i].text.replace(/\([^)]*\)/g, "");
+    const rest = t.replace(/\b(?:19|20)\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?|\b(?:present|current|now|to)\b|\d{1,2}\//gi, "");
+    return words(rest).length <= 3 && !/\|/.test(rest.replace(/\|[^|]*,\s*[A-Za-z]{2,}\s*\|?/g, ""));
+  };
+  const header = new Set<number>();
+  for (const i of exp) {
+    if (!isYearLine(i)) continue;
+    header.add(i);
+    // The line right above a dated line is always header; two above only for a date-only line.
+    const reach = dateOnly(i) ? 2 : 1;
+    for (let d = 1; d <= reach; d++) {
+      const j = i - d;
+      if (j < 0 || !inExperience(j) || isBullet(ls[j].text) || isYearLine(j)) break;
+      header.add(j);
+    }
+    // A place line right under the dates belongs to the header too.
+    if (i + 1 < ls.length && inExperience(i + 1) && isPlace(ls[i + 1].text)) header.add(i + 1);
+  }
+  const firstYear = exp.find((i) => isYearLine(i)) ?? -1;
+  let actionBullets = 0;
+  // One mark per run of non-bullet lines.
+  let runStart = -1;
+  const closeRun = () => {
+    runStart = -1;
+  };
   for (let i = 0; i < ls.length; i++) {
     if (!inExperience(i)) {
-      inRun = false;
+      closeRun();
       continue;
     }
     const t = ls[i].text;
     if (isBullet(t)) {
-      inRun = false;
+      closeRun();
       const body = bodyOf(t);
+      if (startsWithVerb(body)) actionBullets++;
       if (/\d/.test(body)) continue;
       const w = words(body);
       const first = (w[0] ?? "").toLowerCase();
-      const gerund = first.length > 4 && first.endsWith("ing") && first !== "during";
-      if (gerund || (w.length > 0 && w.length <= 3 && !startsWithVerb(body))) {
+      if (first.length > 4 && first.endsWith("ing") && first !== "during") {
+        add(i, { rule: "weak_bullet", line: t, why: WHY.gerund, severity: "weak" });
+      } else if (w.length > 0 && w.length <= 3 && !startsWithVerb(body)) {
         add(i, { rule: "weak_bullet", line: t, why: WHY.weak_bullet, severity: "weak" });
       }
       continue;
     }
-    // A sentence line under a job (no year, no "|"). Titles, employers and
-    // places are Title Case; a sentence has small words in it.
+    if (header.has(i) || isYearLine(i) || isContact(t) || isPlace(t) || /\|/.test(t) || TITLE_AT_RE.test(t)) {
+      closeRun();
+      continue;
+    }
+    // Before the first dated line there is no job yet: only a real sentence counts.
+    const inBody = firstYear >= 0 && i > firstYear;
     const w = words(t);
-    const small = w.filter((x) => /^[a-z]/.test(x)).length;
-    const sentence =
-      !YEAR_RE.test(t) && !t.includes("|") && !isContact(t) && ((w.length >= 4 && small >= 2) || (startsWithVerb(t) && small >= 1));
-    if (sentence) {
-      if (!inRun) add(i, { rule: "bullets", line: t, why: WHY.bullets, severity: "weak" });
-      inRun = true;
-    } else {
-      inRun = false;
+    let kind: "bare" | "block" | null = null;
+    if (sentenceSignal(t)) kind = "block";
+    else if (inBody && w.length >= 1 && w.length <= 4) kind = "bare";
+    else if (inBody && w.length >= 5) kind = "block";
+    if (!kind) {
+      closeRun();
+      continue;
+    }
+    if (runStart < 0) {
+      runStart = i;
+      add(i, { rule: "bullets", line: t, why: kind === "bare" ? WHY.bare : WHY.bullets, severity: "weak" });
     }
   }
 
@@ -449,15 +586,16 @@ export function runQualityCheck(text: string): QualityFinding[] {
     // is there but unclear; nothing there means it is missing.
     let odd = -1;
     for (let j = entryIdx - 1; j >= Math.max(1, entryIdx - 2); j--) {
-      if (!ls[j].heading && /:\s*$/.test(ls[j].text) && headingShape(ls[j].text) && !isContact(ls[j].text)) {
+      if (ls[j].heading && ls[j].unknown && /:\s*$/.test(ls[j].text)) {
         odd = j;
         break;
       }
+      if (ls[j].heading) break;
     }
     if (odd >= 0) add(odd, { rule: "heading", line: ls[odd].text, why: WHY.heading_odd, severity: "weak" });
     else add(entryIdx, { rule: "heading", line: ls[entryIdx].text, why: WHY.heading_missing, severity: "missing" });
   }
-  const known = ls.map((l, i) => (l.heading ? i : -1)).filter((i) => i >= 0);
+  const known = ls.map((l, i) => (l.heading && !l.unknown ? i : -1)).filter((i) => i >= 0);
   const caps = known.filter((i) => isAllCaps(ls[i].text));
   if (caps.length >= 2) {
     for (const i of known) {
@@ -468,5 +606,50 @@ export function runQualityCheck(text: string): QualityFinding[] {
     }
   }
 
-  return [...found.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f);
+  if (summaryMissing) {
+    add(page.firstHeading, { rule: "summary", line: ls[page.firstHeading].text, why: WHY.summary, severity: "missing" });
+  }
+
+  // Which copy of each line a finding is about.
+  const seen = new Map<string, number>();
+  const occurrenceAt = new Map<number, number>();
+  ls.forEach((l, i) => {
+    const n = seen.get(l.text) ?? 0;
+    occurrenceAt.set(i, n);
+    seen.set(l.text, n + 1);
+  });
+  const findings = [...found.entries()]
+    .sort((x, y) => x[0] - y[0])
+    .map(([i, f]) => ({ ...f, occurrence: occurrenceAt.get(i) ?? 0 }));
+  const strong = findings.length === 0 && hasTop && hasExperienceHeading && actionBullets >= 2;
+  return { findings, strong };
+}
+
+// "Cashier at Safeway", "Cook at the Elks Lodge": a title over its employer.
+const TITLE_AT_RE = /^[A-Z][A-Za-z'&./-]*(?:\s+[A-Z][A-Za-z'&./-]*){0,3}\s+(?:at|with|for)\s+(?:the\s+)?[A-Z]/;
+
+// Small words that join names ("Department of Fish, Wildlife and Parks"), not sentences.
+const CONNECTORS = new Set(["of", "and", "the", "at", "for", "in", "on", "a", "an", "to", "with", "by"]);
+
+/**
+ * A line reads as a sentence only on a real signal: "I", "my" or "we", a
+ * closing period, or eight or more words with at least two small words that
+ * are not name connectors.
+ */
+function sentenceSignal(t: string): boolean {
+  const w = words(t);
+  if (!w.length) return false;
+  if (w.some((x) => x === "I" || /^(?:my|we|our)$/i.test(x))) return true;
+  const small = w.filter((x) => /^[a-z]/.test(x) && !CONNECTORS.has(x)).length;
+  if (/[.;!]$/.test(t) && small >= 1 && w.length >= 3) return true;
+  return w.length >= 8 && small >= 2;
+}
+
+/** "...to plate 250 covers", "...and trained the new hires": a second action in the line. */
+function hasSecondAction(body: string): boolean {
+  const m = body.toLowerCase().match(/\b(?:to|and|then)\s+([a-z]+)/g) ?? [];
+  return m.some((x) => {
+    const v = x.split(/\s+/)[1];
+    return VERBS.has(v) || IRREGULAR.has(v) || (v.endsWith("ed") && v.length > 4);
+  });
 }
