@@ -194,18 +194,14 @@ export function SecurityContent({ showUserControls, recordStep = false }: Securi
             description="Download a copy of your data: your resume, Forge results, applications, chat history, and more. You can pick which parts to include. We ask you to confirm it's you first."
             showButton={showUserControls}
             buttonLabel="Export in Settings"
-            onClick={() => {
-              window.location.href = "/dashboard/settings";
-            }}
+            href="/dashboard/settings"
           />
           <ControlCard
             title="Delete Your Data or Account"
             description="You choose: delete just your data and keep your login, or delete your whole account. Either way it's a two-step action. You confirm it's you, then confirm again. It can't be undone. Short AI records from before you signed in are not tied to your account, so they stay. They hold no name and none of your words. Abuse-prevention counts are deleted after 30 days."
             showButton={showUserControls}
             buttonLabel="Delete in Settings"
-            onClick={() => {
-              window.location.href = "/dashboard/settings";
-            }}
+            href="/dashboard/settings"
             destructive
           />
           <ControlCard
@@ -448,12 +444,16 @@ function DenyItem({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * A card with an optional link. Links only, never an event handler: this
+ * component renders inside server pages (both security pages), and a server
+ * component cannot hand a function to an element (Phase 5 review r2, N1).
+ */
 function ControlCard({
   title,
   description,
   showButton,
   buttonLabel,
-  onClick,
   href,
   destructive,
 }: {
@@ -461,7 +461,6 @@ function ControlCard({
   description: string;
   showButton?: boolean;
   buttonLabel?: string;
-  onClick?: () => void;
   href?: string;
   destructive?: boolean;
 }) {
@@ -469,26 +468,15 @@ function ControlCard({
     <div className="bg-t-panel p-4 border border-t-line">
       <h3 className="text-sm font-semibold text-t-white mb-1">{title}</h3>
       <p className="text-xs text-t-phos-dim leading-relaxed mb-3">{description}</p>
-      {showButton && buttonLabel && (
-        href ? (
-          <a
-            href={href}
-            className="text-xs font-medium text-t-amber-bright hover:text-t-amber"
-          >
-            {buttonLabel} &rarr;
-          </a>
-        ) : (
-          <button
-            onClick={onClick}
-            className={`text-xs font-medium ${
-              destructive
-                ? "text-t-red hover:text-t-amber-bright"
-                : "text-t-amber-bright hover:text-t-amber"
-            }`}
-          >
-            {buttonLabel}
-          </button>
-        )
+      {showButton && buttonLabel && href && (
+        <a
+          href={href}
+          className={`text-xs font-medium ${
+            destructive ? "text-t-red hover:text-t-amber-bright" : "text-t-amber-bright hover:text-t-amber"
+          }`}
+        >
+          {buttonLabel} &rarr;
+        </a>
       )}
     </div>
   );
