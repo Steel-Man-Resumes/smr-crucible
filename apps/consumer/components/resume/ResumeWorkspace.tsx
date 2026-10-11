@@ -8,6 +8,7 @@
  * Handles: state management, save/load, auto-save, Forge/Rush import.
  */
 
+import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -1792,8 +1793,17 @@ export function ResumeWorkspace() {
                     ? exportError
                     : exportRev!.status === "finished"
                       ? `Version ${exportRev!.number}, finished. Downloads use this exact version.`
-                      : `Version ${exportRev!.number} is a draft, so its files are marked DRAFT. Finish it in the Forge, or fix what's open.`}
+                      : `Version ${exportRev!.number} is a draft, so its files are marked DRAFT.`}
                 </p>
+              )}
+              {/* Phase 5 R2: the way out of DRAFT for a Tailor result: the same cards, saved as a revision of this resume. */}
+              {artifactId && (
+                <CheckAndFinish
+                  key={`${artifactId}:${exportRev?.id ?? ""}`}
+                  artifactId={artifactId}
+                  status={exportRev ? exportRev.status : null}
+                  className="w-full"
+                />
               )}
             </>
           }

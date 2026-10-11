@@ -22,11 +22,25 @@
  * with Try again when it fails. Every download, the print and the email use
  * that revision's id. Signed out, the work stays in this browser and each
  * download sends the whole state, and the server decides from it.
+ *
+ * LANES FIRST (Phase 5 lane R2). A run that started from "What do you need
+ * today?" gets one next action chosen by its route, PDF as the main
+ * download (the other formats under "More formats"), and the cover letter
+ * only on the job route (offered, never forced, on the others). The cards
+ * and every finish-gate rule are the same.
+ *
+ * CHECK AND FINISH (?check=<artifactId>, R2). A resume that was never
+ * finished in the Forge (a Tailor result, an older saved resume) opens here
+ * with the same cards. The person's own words come from the server, never
+ * from this page (lib/revision-check.ts), and the save is a revision of that
+ * same resume.
  */
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { CREDENTIALS_KEY } from "@/lib/forge-path";
+import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { CREDENTIALS_KEY, isLanesFirst } from "@/lib/forge-path";
+import { LaneDownloadBox, LaneNextAction } from "@/components/forge/finish/LaneFinish";
+import { nextActionFor } from "@/lib/lane-task";
 import { useForgeSession } from "@/lib/forge-context";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
@@ -131,8 +145,29 @@ const READINESS_CONFIG: Record<string, {
 const thingWord = (n: number) => `${countWord(n).toLowerCase()} ${n === 1 ? "thing" : "things"}`;
 
 export default function OutputPage() {
+  return (
+    <Suspense>
+      <OutputPageInner />
+    </Suspense>
+  );
+}
+
+function OutputPageInner() {
   const router = useRouter();
   const { session, updateSession, runIsMine } = useForgeSession();
+  // Check and finish (R2): a saved resume opened here by id.
+  const checkId = useSearchParams().get("check");
+  const checkMode = !!checkId;
+  const checkModeRef = useRef(checkMode);
+  checkModeRef.current = checkMode;
+  // Lanes first (R2): the route decides the next action and the letter.
+  const lanes = !checkMode && isLanesFirst(session);
+  const offerLetterOnly = lanes && session.laneTask !== "job";
+  const offerLetterOnlyRef = useRef(offerLetterOnly);
+  offerLetterOnlyRef.current = offerLetterOnly;
+  const [parkedLetter, setParkedLetter] = useState<string>(session.laneParkedLetter ?? "");
+  const [checkTitle, setCheckTitle] = useState("");
+  const [checkError, setCheckError] = useState("");
   // Signed in (fully): a finished package is emailed to the account's own
   // proven address by itself (lib/email-package-auto.ts). Signed out (the
   // Forge before the wall): the person types an address, as before.
@@ -191,6 +226,7 @@ export default function OutputPage() {
   // instead of writing new ones (a new AI call, and the answers would no
   // longer match the lines).
   useEffect(() => {
+    if (checkModeRef.current) return;
     if (hydrated.current || !session.forgeOutput) return;
     hydrated.current = true;
     const raw = session.forgeFinish as { docs?: { keepInsideLines?: boolean }; lengthChoice?: unknown; evidence?: unknown } | undefined;
@@ -214,8 +250,10 @@ export default function OutputPage() {
     setDocState("done");
   }, [session]);
 
-  // Keep the documents and answers with the run (browser only).
+  // Keep the documents and answers with the run (browser only). Not in
+  // check mode: that resume lives in the account, not in this run.
   useEffect(() => {
+    if (checkModeRef.current) return;
     if (docState !== "done" || !resumeText) return;
     updateSession({
       forgeFinish: {
@@ -238,7 +276,7 @@ export default function OutputPage() {
   const runIsMineRef = useRef(runIsMine);
   runIsMineRef.current = runIsMine;
   const generateDocs = useCallback(async () => {
-    if (hasStarted.current) return;
+    if (hasStarted.current || checkModeRef.current) return;
     // Every caller, not only the effect below: never another person's run.
     // Through a ref, so this memoized callback asks with the current sign-in.
     if (!runIsMineRef.current()) return;
@@ -277,7 +315,15 @@ export default function OutputPage() {
 
       const data = await response.json();
       setResumeText(data.resume || "");
-      setCoverLetterText(data.coverLetter || "");
+      // Lanes first (R2): the letter is the job route's. On the other routes it
+      // waits behind "Add a cover letter" (written once, never forced on).
+      if (offerLetterOnlyRef.current) {
+        setParkedLetter(data.coverLetter || "");
+        updateSession({ laneParkedLetter: data.coverLetter || "" });
+        setCoverLetterText("");
+      } else {
+        setCoverLetterText(data.coverLetter || "");
+      }
       setWithheldLines(Array.isArray(data.withheldLines) ? data.withheldLines.filter((l: unknown) => typeof l === "string") : []);
       setGrounding(data.grounding ?? null);
       setWritten({ resume: data.resume || "", letter: data.coverLetter || "" });
@@ -300,6 +346,7 @@ export default function OutputPage() {
 
   // Write the documents when the page loads, unless this run already has them.
   useEffect(() => {
+    if (checkModeRef.current) return;
     if (!session.forgeOutput || docState !== "idle") return;
     // Let the stored-copy check run first. And never send a run that is not
     // this account's (security review 3a r2, L1: readOwnForgeSession).
@@ -308,6 +355,48 @@ export default function OutputPage() {
     }, 0);
     return () => clearTimeout(t);
   }, [session.forgeOutput, docState, generateDocs]);
+
+  // Check and finish (R2): load that resume and the person's own words from
+  // the server. The words never come from this page.
+  useEffect(() => {
+    if (!checkId || !signedIn || hasStarted.current) return;
+    hasStarted.current = true;
+    hydrated.current = true;
+    let live = true;
+    fetch(`/api/revisions/check?artifactId=${encodeURIComponent(checkId)}`, { cache: "no-store" })
+      .then(async (r) => ({ ok: r.ok, j: await r.json().catch(() => null) }))
+      .then(({ ok, j }) => {
+        if (!live) return;
+        const src = j?.source;
+        if (!ok || !src || typeof src.resumeText !== "string") {
+          setCheckError(typeof j?.error === "string" ? j.error : "We couldn't open that resume.");
+          setDocState("error");
+          return;
+        }
+        setCheckTitle(String(src.title || ""));
+        setResumeText(src.resumeText);
+        setCoverLetterText(src.letterText || "");
+        setWritten({ resume: src.resumeText, letter: src.letterText || "" });
+        setGrounding(null);
+        setWithheldLines([]);
+        setDefendAnswers(Array.isArray(src.defendAnswers) ? src.defendAnswers : []);
+        setKeptTerms(Array.isArray(src.keptTerms) ? src.keptTerms : []);
+        setConfirmedCredentials(Array.isArray(src.confirmedCredentials) ? src.confirmedCredentials : []);
+        setAddedTerms([]);
+        setCredentialCutRemnants([]);
+        if (isLengthChoice(src.lengthChoice)) setLengthChoice(src.lengthChoice);
+        setRunEvidence(readRunEvidence(src.evidence) ?? { ownWords: "", credentialsAnswer: "", credentialRows: [], ownResumeText: "" });
+        setDocState("done");
+      })
+      .catch(() => {
+        if (!live) return;
+        setCheckError("We couldn't open that resume. Try again.");
+        setDocState("error");
+      });
+    return () => {
+      live = false;
+    };
+  }, [checkId, signedIn]);
 
   // ---- the gate ----------------------------------------------------------------
   // Restored from the account: the saved revision's own words (runEvidence), so
@@ -364,16 +453,23 @@ export default function OutputPage() {
   const mayAccount = signedIn && !isDemo;
   const saveSeq = useRef(0);
   const saveRevision = useCallback(async () => {
-    if (!mayAccount || !payload || !runIsMineRef.current()) return;
+    // Check mode saves a resume from the account, not this browser's run.
+    if (!mayAccount || !payload || (!checkModeRef.current && !runIsMineRef.current())) return;
     const mine = ++saveSeq.current;
     const forMark = mark;
     setFailedMark(null);
     try {
-      const res = await fetch("/api/revisions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "finish", finish: payload, laneTarget: careerPaths[0]?.title || "" }),
-      });
+      const res = checkId
+        ? await fetch("/api/revisions/check", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ artifactId: checkId, finish: payload }),
+          })
+        : await fetch("/api/revisions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "finish", finish: payload, laneTarget: careerPaths[0]?.title || "" }),
+          });
       const data = (await res.json().catch(() => null)) as { revision?: SavedRevisionSummary } | null;
       if (mine !== saveSeq.current) return;
       if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
@@ -383,7 +479,7 @@ export default function OutputPage() {
     }
     // careerPaths only names the first lane.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mayAccount, payload, mark]);
+  }, [mayAccount, payload, mark, checkId]);
   // Every change saves a new version (the server keeps one per distinct version).
   useEffect(() => {
     if (!mayAccount || !payload || (saved && saved.mark === mark)) return;
@@ -481,7 +577,7 @@ export default function OutputPage() {
       ? { target: "finish-download", text: "Download your resume and cover letter here, or email them to yourself." }
       : { target: "finish-download", text: "Download here. Until it's finished, every file is marked DRAFT so nobody mistakes it for the final one." },
     { target: "finish-checks", text: "These checks read your page the way a screener would. Open one if you want the details." },
-    { target: "finish-story", text: "Your story: your strengths, skills and jobs that fit, from what you told us." },
+    ...(lanes || checkMode ? [] : [{ target: "finish-story", text: "Your story: your strengths, skills and jobs that fit, from what you told us." }]),
     { target: "finish-next", text: "When you're ready, the Refinery aims your resume at real jobs." },
   ];
 
@@ -640,8 +736,23 @@ export default function OutputPage() {
   );
   const samples = useMemo(() => pickSamplePostings(careerPaths.map((c) => c.title || ""), 4), [careerPaths]);
 
+  // Check mode needs the account the resume is saved in.
+  if (checkMode && authStatus !== "loading" && !signedIn) {
+    return (
+      <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center bg-t-bg px-4">
+        <h1 className="text-2xl font-bold mb-4 text-t-white">Sign in to check this resume</h1>
+        <a
+          href={`/login?callbackUrl=${encodeURIComponent(`/output?check=${checkId}`)}`}
+          className="t-focus px-8 py-4 bg-t-amber text-white text-lg font-bold hover:bg-t-amber-bright min-h-touch"
+        >
+          Sign in
+        </a>
+      </div>
+    );
+  }
+
   // If no output, redirect back
-  if (!session.forgeOutput) {
+  if (!session.forgeOutput && !checkMode) {
     return (
       <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center bg-t-bg">
         <h1 className="text-2xl font-bold mb-4 text-t-white">
@@ -651,7 +762,7 @@ export default function OutputPage() {
           It looks like we haven&apos;t analyzed your information yet.
         </p>
         <button
-          onClick={() => router.push("/welcome")}
+          onClick={() => router.push("/start")}
           className="t-focus px-8 py-4 bg-t-amber text-white text-lg font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
           Start The Forge
@@ -661,13 +772,21 @@ export default function OutputPage() {
   }
 
   const headline =
-    docState === "generating" || docState === "idle"
+    checkMode && (docState === "generating" || docState === "idle")
+      ? "Opening your resume."
+      : checkMode && docState === "error"
+        ? checkError || "We couldn't open that resume."
+        : docState === "generating" || docState === "idle"
       ? "t.ROY is writing your resume and cover letter."
       : docState === "error"
         ? "Your resume didn't come through."
         : statusLine(view);
   const subline =
-    docState === "generating" || docState === "idle"
+    checkMode && docState !== "done"
+      ? ""
+      : checkMode && view.state !== "finished"
+        ? `Checking: ${checkTitle || "your resume"}. Answer each card, and it saves as a new version.`
+        : docState === "generating" || docState === "idle"
       ? "This usually takes 30 to 60 seconds."
       : docState === "error"
         ? "Nothing you entered was lost. Try again below."
@@ -695,7 +814,7 @@ export default function OutputPage() {
         <div className="mb-6 border border-t-amber bg-t-panel-2 px-5 py-4 text-center">
           <p className="text-sm font-medium text-t-amber-bright">This is a sample output. Try it with your own data.</p>
           <button
-            onClick={() => router.push("/welcome")}
+            onClick={() => router.push("/start")}
             className="mt-2 text-sm text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
           >
             Start your own Forge session
@@ -747,7 +866,7 @@ export default function OutputPage() {
         )}
       </div>
 
-      {(docState === "generating" || docState === "idle") && (
+      {(docState === "generating" || docState === "idle") && !checkMode && (
         <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
           <div className="relative mx-auto mb-4 h-10 w-10">
             <div className="absolute inset-0 border-[3px] border-t-line" />
@@ -757,7 +876,7 @@ export default function OutputPage() {
         </div>
       )}
 
-      {docState === "error" && (
+      {docState === "error" && !checkMode && (
         <div className="mt-6 border border-t-red bg-t-panel p-6 text-center">
           <p className="mb-3 text-sm text-t-phos">{docError}</p>
           <button
@@ -834,17 +953,32 @@ export default function OutputPage() {
 
           {/* 3. One main action, with the email box and the explainer beside it */}
           <div className="mt-8 grid gap-4 lg:grid-cols-2 lg:items-start">
-            <DownloadBox
-              view={view}
-              busy={busy}
-              error={downloadError}
-              onDownloadPackage={handlePackage}
-              onDownloadFormat={handleFormat}
-              onPrint={handlePrint}
-              onFix={goFix}
-              onCopy={() => handleCopy(resumeText, "resume")}
-              copied={copied === "resume"}
-            />
+            {lanes || checkMode ? (
+              <LaneDownloadBox
+                view={view}
+                busy={busy}
+                error={downloadError}
+                onDownloadPackage={handlePackage}
+                onDownloadFormat={handleFormat}
+                onPrint={handlePrint}
+                onFix={goFix}
+                onCopy={() => handleCopy(resumeText, "resume")}
+                copied={copied === "resume"}
+                hasLetter={!!coverLetterText}
+              />
+            ) : (
+              <DownloadBox
+                view={view}
+                busy={busy}
+                error={downloadError}
+                onDownloadPackage={handlePackage}
+                onDownloadFormat={handleFormat}
+                onPrint={handlePrint}
+                onFix={goFix}
+                onCopy={() => handleCopy(resumeText, "resume")}
+                copied={copied === "resume"}
+              />
+            )}
             {canEmailPackage({ state: view.state, isDemo }) && authStatus === "loading" ? null : canEmailPackage({ state: view.state, isDemo }) && signedIn ? (
               <FinishedEmailLine
                 revisionId={current && current.status === "finished" ? current.id : null}
@@ -998,25 +1132,61 @@ export default function OutputPage() {
         </>
       )}
 
-      {/* 6. Your story (the narrative keeper) */}
-      <div className="mt-12">
-        <StorySection
-          output={output}
-          strengthsHeading={rc.strengthsHeading}
-          careersHeading={rc.careersHeading}
-          reportChecks={reportChecks}
-        />
-      </div>
+      {checkMode ? (
+        <div className="mt-12 border-t border-t-line pt-8" data-testid="check-next">
+          <a href="/dashboard/vault" className="t-focus inline-flex min-h-touch items-center text-sm font-medium text-t-amber-bright underline underline-offset-2">
+            Back to My resumes
+          </a>
+        </div>
+      ) : lanes ? (
+        /* Lanes first (R2): one next action by route; the rest behind "Something else". */
+        <div className="mt-12">
+          <LaneNextAction action={nextActionFor(session.laneTask, { signedIn, finished })}>
+            {parkedLetter && !coverLetterText && docState === "done" && (
+              <div data-testid="letter-offer">
+                <p className="mb-2 text-sm text-t-phos">Applying somewhere that wants a cover letter? t.ROY wrote one from your story. t.ROY checks it line by line with you, like the resume.</p>
+                <button
+                  type="button"
+                  onClick={() => setCoverLetterText(parkedLetter)}
+                  className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-2 text-sm font-medium text-t-white hover:border-t-phos-dim"
+                  data-testid="add-letter"
+                >
+                  Add a cover letter
+                </button>
+              </div>
+            )}
+            <StorySection
+              output={output}
+              strengthsHeading={rc.strengthsHeading}
+              careersHeading={rc.careersHeading}
+              reportChecks={reportChecks}
+            />
+            <NextStep isDemo={isDemo} audience={audience} refineryCta={rc.refineryCta} refinerySubtext={rc.refinerySubtext} />
+          </LaneNextAction>
+        </div>
+      ) : (
+        <>
+          {/* 6. Your story (the narrative keeper) */}
+          <div className="mt-12">
+            <StorySection
+              output={output}
+              strengthsHeading={rc.strengthsHeading}
+              careersHeading={rc.careersHeading}
+              reportChecks={reportChecks}
+            />
+          </div>
 
-      {/* 7. Next step */}
-      <div className="mt-12">
-        <NextStep
-          isDemo={isDemo}
-          audience={audience}
-          refineryCta={rc.refineryCta}
-          refinerySubtext={rc.refinerySubtext}
-        />
-      </div>
+          {/* 7. Next step */}
+          <div className="mt-12">
+            <NextStep
+              isDemo={isDemo}
+              audience={audience}
+              refineryCta={rc.refineryCta}
+              refinerySubtext={rc.refinerySubtext}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

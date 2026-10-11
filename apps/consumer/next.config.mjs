@@ -52,6 +52,8 @@ const nextConfig = {
     // them), the Forge save stores one, and both package emails measure and
     // attach the rendered files.
     "/api/revisions": ["./public/fonts/resume/**/*"],
+    // Phase 5 R2: "Check and finish" measures pages the same way.
+    "/api/revisions/check": ["./public/fonts/resume/**/*"],
     "/api/forge/save": ["./public/fonts/resume/**/*"],
     "/api/forge/email-package": ["./public/fonts/resume/**/*"],
     "/api/forge/email-package/auto": ["./public/fonts/resume/**/*"],

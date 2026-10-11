@@ -15,6 +15,7 @@
  * SEPARATE page at /dashboard/documents.
  */
 
+import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
@@ -248,7 +249,7 @@ export default function VaultPage() {
         body: JSON.stringify({ isDemo }),
       });
       if (res.ok) {
-        setStatusMsg(isDemo ? "Moved to examples." : "Back in your Library.");
+        setStatusMsg(isDemo ? "Moved to examples." : "Back in My resumes.");
         if (isDemo) {
           setItems((prev) => prev.filter((x) => x.id !== a.id));
           setTotal((t) => Math.max(0, t - 1));
@@ -713,6 +714,8 @@ ${body}
                 .docx opens in Word to edit. PDF keeps the formatting exactly.
               </p>
             )}
+            {/* Phase 5 R2: a resume never finished in the Forge downloads as a draft; this is the way out. */}
+            {isResume && <CheckAndFinish artifactId={a.id} className="mt-3" />}
           </div>
         )}
       </div>
@@ -772,13 +775,13 @@ ${body}
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">Library</h1>
+      <h1 className="text-2xl font-bold text-t-white">My resumes</h1>
       <p className="text-t-phos-dim mt-1 mb-6">
         Everything you have created, in one place. Private to your account and never shared
         unless you choose to. Pin your current resume, lock an approved baseline for each
         career lane (so tailoring sharpens it without ever downgrading it), save anything as a
         PDF or Word file, or delete it, anytime. Uploaded documents like your ID, certificates,
-        and reference letters live in your <Link href="/dashboard/documents" className="text-t-amber-bright hover:text-t-amber font-medium">Vault</Link>.
+        and reference letters live in your <Link href="/dashboard/documents" className="text-t-amber-bright hover:text-t-amber font-medium">Private documents</Link>.
       </p>
 
       {/* Career lanes (074): which lane's work is shown. */}
