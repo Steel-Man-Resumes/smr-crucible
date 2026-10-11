@@ -113,8 +113,10 @@ export default function StoryPage() {
       onBack={() => router.push("/goals")}
       footer={
         <p>
-          Nothing leaves your device. We use this to find resources, not to
-          judge.
+          What you share here helps t.ROY build your resume and find
+          resources. To do that, it goes to the AI services we use, and if you
+          sign in or make an account, it&apos;s saved there. It&apos;s never used to
+          judge you. Skip anything you don&apos;t want to share.
         </p>
       }
     >

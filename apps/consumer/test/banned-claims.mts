@@ -23,6 +23,8 @@ const EXTENSIONS = [".ts", ".tsx", ".mts"];
 const BANNED_PHRASES = [
   // disclosure rehearsal persisted via /api/assistant -> coach_conversation
   "never save your words from this practice",
+  // 2026-10-10 review: Story answers go to the AI and the account save
+  "nothing leaves your device",
   // forge_session syncs server-side
   "stored locally on your device",
   "on your device, not on our servers",
