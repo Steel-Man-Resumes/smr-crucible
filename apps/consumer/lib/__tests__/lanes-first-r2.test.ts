@@ -420,6 +420,10 @@ test("check and finish: a Tailor result is DRAFT; checking it with the same card
   assert.ok(saved.ok);
   assert.equal(saved.ok && saved.revision.status, "finished");
   assert.equal(saved.ok && saved.revision.artifactId, TAILOR, "a revision of the Tailor resume, not the Forge one");
+  // The delivered page is the stored resume the server read and signed, never the request's.
+  const ev = f.revs.at(-1)!.evidence as { written?: { resume?: string }; writerVerified?: boolean };
+  assert.equal(ev.writerVerified, true);
+  assert.equal(ev.written?.resume, text);
   // The Refinery's next export of that resume uses the finished revision (R1's marker).
   const again = await loadCheckSource(UID, TAILOR, f.store);
   assert.ok(again.ok && again.source.status === "finished");
@@ -428,12 +432,13 @@ test("check and finish: a Tailor result is DRAFT; checking it with the same card
 test("check and finish never takes the person's words from the request: a payload claiming the whole page as 'own words' stays draft", async () => {
   const f = fakeStore([tailorArtifact()]);
   // No Forge revision: the person has given us no words of their own yet.
-  const forged = finishState({ resumeText: RESUME, coverLetterText: "", written: null, grounding: null, defendAnswers: [], keptTerms: [], ownWords: RESUME, ownResumeText: RESUME });
+  const forged = finishState({ resumeText: RESUME, coverLetterText: "", written: { resume: "anything", letter: "" }, writerReceipt: "wr1.forged", grounding: null, defendAnswers: [], keptTerms: [], ownWords: RESUME, ownResumeText: RESUME });
   const r = await saveCheckRevision(UID, TAILOR, forged, f.store);
   assert.ok(r.ok);
   assert.equal(r.ok && r.revision.status, "draft");
   const stored = f.revs.at(-1)!;
   assert.equal((stored.evidence as { ownWords?: string }).ownWords, "", "the server's evidence replaced the request's");
+  assert.notEqual((stored.evidence as { written?: { resume?: string } }).written?.resume, "anything", "the request's 'written' is never used");
   assert.deepEqual(await ownEvidence(UID, f.store), { ownWords: "", credentialsAnswer: "", credentialRows: [], ownResumeText: "" });
 });
 
@@ -558,4 +563,14 @@ test("L4: a locked baseline is refused plainly on open and on save, so exports n
   assert.ok(text.ok);
   const r = await saveCheckRevision(UID, TAILOR, finishState({ resumeText: text.ok ? text.source.resumeText : "" }), g.store);
   assert.ok(!r.ok && r.reason === "locked");
+});
+
+test("H2 follow-through: Check and finish counts the words from every Forge version, so a typed-only first save never empties them", async () => {
+  const f = laneStore([tailorArtifact()]);
+  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  await saveFirstSection(UID, { text: "Morgan Sample\n\nWORK HISTORY\nCook | Lakeside Grill | 2024\n- I cooked.", typed: "I cooked.", keep: "replace" }, f.store);
+  const ev = await ownEvidence(UID, f.store);
+  assert.ok(ev.ownWords.includes("I cooked."), "the newest typed words");
+  assert.ok(ev.ownWords.includes(OWN_WORDS.split("\n")[0]), "and the words the person gave the Forge before");
+  assert.equal(ev.ownResumeText, SOURCE, "the newest non-empty own resume text");
 });

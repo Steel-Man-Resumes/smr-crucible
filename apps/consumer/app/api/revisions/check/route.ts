@@ -17,7 +17,7 @@
 import { NextResponse } from "next/server";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { revisionCaller, REVISION_SAVES_PER_DAY } from "@/lib/revision-route";
-import { coreStore } from "@/lib/revision-save";
+import { laneFirstStore } from "@/lib/lane-first-save";
 import { LOCKED_REASON, loadCheckSource, saveCheckRevision } from "@/lib/revision-check";
 
 /** Said plainly when the resume is a locked baseline (review L4). */
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   const artifactId = new URL(request.url).searchParams.get("artifactId") || "";
   if (!artifactId) return NextResponse.json({ error: "Which resume?" }, { status: 400, headers: NO_STORE });
   try {
-    const r = await loadCheckSource(caller.userId, artifactId, await coreStore());
+    const r = await loadCheckSource(caller.userId, artifactId, await laneFirstStore());
     if (!r.ok) return NextResponse.json({ error: r.reason === LOCKED_REASON ? LOCKED_MESSAGE : "We couldn't open that resume.", reason: r.reason }, { status: r.status, headers: NO_STORE });
     return NextResponse.json({ source: r.source }, { headers: NO_STORE });
   } catch (err: any) {
@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
   try {
-    const r = await saveCheckRevision(caller.userId, body.artifactId, body.finish, await coreStore());
+    const r = await saveCheckRevision(caller.userId, body.artifactId, body.finish, await laneFirstStore());
     if (!r.ok) {
       const error =
         r.reason === "not_ready"
