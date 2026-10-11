@@ -61,7 +61,16 @@ export function writtenByWriter(rev: Pick<ArtifactRevision, "evidence">): boolea
  * evidence, so they still count as the writer's.
  */
 export function fromWriterNewest(newest: Pick<ArtifactRevision, "evidence"> | null | undefined): boolean {
-  return !!newest && writtenByWriter(newest);
+  if (!newest) return false;
+  if (writtenByWriter(newest)) return true;
+  // Phase 6 integration (H1): a "Check and finish" check of a writer version keeps its origin (server-stamped).
+  const ev = evOf(newest);
+  return ev.writerVerified === true && ev.writerOrigin === true;
+}
+
+/** Phase 6 integration (H1): the version a check is about to be saved on top of was the writer's (its own resume's version). */
+export function writerOriginOf(base: Pick<ArtifactRevision, "evidence"> | null | undefined): boolean {
+  return fromWriterNewest(base);
 }
 
 /** A first save the server marked as given, with exactly this text, somewhere in the lineage. */

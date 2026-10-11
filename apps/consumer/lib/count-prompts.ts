@@ -26,7 +26,28 @@ const RULES: CountRule[] = [
   { match: /\b(?:call|phone|email|ticket|appointment|schedul)/i, prompts: ["calls or tickets in a day", "appointments you set in a week"] },
   { match: /\b(?:budget|cash|money|sale|revenue|cost|spend)/i, prompts: ["dollars you handled or tracked"] },
   { match: /\b(?:project|job site|site|install|repair|fix)/i, prompts: ["jobs or repairs in a week"] },
+  // Phase 6 integration (L6): a dishwasher's line is about dishes, not customers or tables.
+  { match: /\b(?:dish|dishes|dishwash\w*|pots?|pans?)\b/i, prompts: ["dishes or racks you washed in a shift"] },
 ];
+
+/** Phase 6 integration (L6): the neutral prompt when the line's work is unclear. Never a figure. */
+export const NEUTRAL_COUNT_PROMPT = "how many in a normal shift or week";
+
+/**
+ * The ONE thing to count for a finish-page "add a number?" prompt. It must fit
+ * the job: one rule matching the line's own words (or, with none on the line,
+ * exactly one matching the job title). Anything less sure gets the neutral
+ * prompt, so a dishwasher is never asked about customers or tables.
+ */
+export function countPromptForLine(lineText: string, jobTitle = ""): string {
+  const onLine = RULES.filter((r) => r.match.test(lineText));
+  if (onLine.length === 1) return onLine[0].prompts[0];
+  if (onLine.length === 0) {
+    const onTitle = RULES.filter((r) => r.match.test(jobTitle));
+    if (onTitle.length === 1) return onTitle[0].prompts[0];
+  }
+  return NEUTRAL_COUNT_PROMPT;
+}
 
 const FALLBACK = ["times you did this in a normal week", "people you worked with on it", "years you did this work"];
 

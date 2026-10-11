@@ -753,6 +753,16 @@ function headlinePartIsTheirs(part: string, titles: Set<string>, sourceText: str
  * credential in it, and every pipe part names a job title on the page or uses
  * only the person's own words.
  */
+/**
+ * Phase 6 integration (L1): the job header a line sits under, exactly as the
+ * status engine keys a people answer to it (bodyLines' `job`). Lets a moved
+ * or retyped header carry the answers keyed to it.
+ */
+export function jobOfLine(resumeText: string, line: string): string | undefined {
+  const k = squash(stripBullet(line));
+  return bodyLines(resumeText || "").find((b) => squash(stripBullet(b.line)) === k)?.job;
+}
+
 function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; inSkills: boolean; job?: string }> {
   const ls = linesOf(resumeText);
   const out: Array<{ line: string; inSkills: boolean; job?: string }> = [];
