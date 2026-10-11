@@ -1467,7 +1467,7 @@ export function ResumeWorkspace() {
           )}
           {saveStatus === "locked" && (
             <span className="text-xs text-t-amber-bright">
-              Locked baseline. Edits are not saved. Unlock it in your Library to change it.
+              Locked baseline. Edits are not saved. Unlock it in My resumes to change it.
             </span>
           )}
           <button

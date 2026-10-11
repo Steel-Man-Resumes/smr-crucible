@@ -308,7 +308,7 @@ function EditLaneForm({
       <div className="border-t border-t-line pt-3">
         {confirmArchive ? (
           <div className="space-y-2">
-            <p className="text-sm text-t-phos">Archive this lane? Its resumes stay in your Library. You can bring it back.</p>
+            <p className="text-sm text-t-phos">Archive this lane? Its resumes stay in My resumes. You can bring it back.</p>
             <div className="flex gap-2">
               <button
                 type="button"

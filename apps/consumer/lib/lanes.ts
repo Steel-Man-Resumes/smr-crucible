@@ -144,7 +144,7 @@ export function laneIntroLine(tool: LaneTool, laneName: string | null): string {
   }
   return laneName
     ? `This is everything you made in your ${laneName} lane. Pick "All lanes" to see the rest.`
-    : "Your Library keeps every resume and letter you made, sorted by lane.";
+    : "My resumes keeps every resume and letter you made, sorted by lane.";
 }
 
 export const LANE_ERROR_COPY: Record<
