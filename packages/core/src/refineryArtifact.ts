@@ -166,6 +166,26 @@ export async function updateArtifact(
 }
 
 /**
+ * Phase 5 R1 (review M3): record that a new artifact (a Tailor output) was
+ * made from another of the SAME person's artifacts, so its saved revision can
+ * start from the parent's settled answers. Both rows must be the person's
+ * (read and written AS them); a foreign or missing parent changes nothing.
+ * Only an artifact with no parent yet is linked.
+ */
+export const ARTIFACT_SET_PARENT_SQL = `UPDATE refinery_artifact a
+     SET parent_artifact_id = p.id,
+         origin_artifact_id = COALESCE(p.origin_artifact_id, p.id)
+    FROM refinery_artifact p
+   WHERE a.id = $1 AND a.user_id = $3 AND a.parent_artifact_id IS NULL
+     AND p.id = $2 AND p.user_id = $3 AND p.id <> a.id
+  RETURNING a.id`;
+
+export async function setArtifactParent(userId: string, artifactId: string, parentId: string): Promise<boolean> {
+  const rows = await queryAsUser<{ id: string }>(userId, ARTIFACT_SET_PARENT_SQL, [artifactId, parentId, userId]);
+  return rows.length > 0;
+}
+
+/**
  * Get a single artifact by ID. Ownership-checked.
  */
 export async function getArtifact(
