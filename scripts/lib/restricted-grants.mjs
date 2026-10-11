@@ -95,6 +95,9 @@ export const RESTRICTED_GRANTS = {
   resource_relationship_event_void: [],
   resource_service_tier_v: [],
   resource_chain_tier_v: [],
+  // The app's one read of the directory (082): approved, fresh, active services,
+  // public fields only. Built on resource_public_v; no base table is granted.
+  resource_app_v: ["SELECT"],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
@@ -110,6 +113,7 @@ export const DIRECTORY_OBJECTS = [
   "resource_chain_step_dep", "resource_public_v", "resource_chain_public_v", "resource_recheck_queue_v",
   "resource_chain_recheck_queue_v",
   "resource_corroboration", "resource_chain_step_corroboration", "resource_relationship", "resource_relationship_event", "resource_corroboration_void", "resource_relationship_event_void", "resource_service_tier_v", "resource_chain_tier_v",
+  "resource_app_v",
 ];
 
 /**
