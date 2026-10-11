@@ -23,7 +23,7 @@ import { withholdRecordLines } from "@/lib/record-lines";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
 import { runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
-import { splitWriterOutput, validateWriterChanges } from "@/lib/writer-changes";
+import { isUsableResume, splitWriterOutput, validateWriterChanges } from "@/lib/writer-changes";
 import { restoreDateForms } from "@/lib/date-form";
 import { randomBytes } from "node:crypto";
 
@@ -89,6 +89,12 @@ async function handlePost(request: Request) {
     // The block is cut off here, before any check reads the resume, and is
     // never part of what ships as the resume.
     const { resume: resumeRaw, changes: rawChanges } = splitWriterOutput(resumeReply);
+    // Review M3: never check, sign or return an empty page. A reply that was
+    // only a change list (or nothing) is an error the person can retry.
+    if (!isUsableResume(resumeRaw)) {
+      console.error("[generate-docs] the writer returned no resume text");
+      return NextResponse.json({ error: "The writer did not return a resume. Please try again." }, { status: 502 });
+    }
 
     // Post-generation grounding gate (F2): claim-trace each document back to what
     // the user actually gave us and strip/generalize anything invented. The prompt

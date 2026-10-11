@@ -74,33 +74,67 @@ function isDatedHeader(line: string): boolean {
   return new RegExp(String.raw`^(?:[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?[,\s]+)?${ONE}\s*(?:[-\u2012-\u2015]|to)\s*${END}$`, "i").test(t);
 }
 
+// ---- which entry a range belongs to (review M2) ---------------------------------------
+// A range is put back only on the written line of the SAME entry: the same title and
+// employer, or the same school. Years alone never decide (two jobs in the same years).
+
+const squash = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const PLACE_PART_RE = /^[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?$/;
+
+/** The names on an entry line: its "|" parts that are not dates or a "City, ST" place. */
+function entryNames(line: string): string[] {
+  const noDates = line.replace(new RegExp(RANGE_RE.source, "gi"), " ");
+  return noDates
+    .split("|")
+    .map((p) => p.trim().replace(/^[-*\u2022]\s*/, ""))
+    .filter((p) => /[A-Za-z]{2,}/.test(p) && !PLACE_PART_RE.test(p))
+    .map(squash)
+    .filter(Boolean);
+}
+
+/** Each line with the entry text it belongs to: itself, or for a dates-only line the line above it. */
+function entryLines(text: string): Array<{ line: string; entry: string }> {
+  const ls = text.split("\n");
+  return ls.map((line, i) => {
+    const t = line.trim();
+    const datesOnly = !!t && !t.includes("|") && isDatedHeader(t);
+    let above = "";
+    if (datesOnly) for (let k = i - 1; k >= 0; k--) if (ls[k].trim()) { above = ls[k].trim(); break; }
+    return { line, entry: datesOnly ? above : t };
+  });
+}
+
 /**
  * Put the person's own date form back on the written resume's job and school
  * lines. Returns the text and how many ranges were put back.
  */
 export function restoreDateForms(output: string, source: string): { text: string; restored: number } {
   if (!output || !source) return { text: output, restored: 0 };
-  const byYears = new Map<string, SourceRange | null>();
-  for (const r of rangesIn(source)) {
-    // Only ranges with a month on either side have a form to lose.
-    if (r.start.month === null && r.end.month === null) continue;
-    const k = yearsKey(r);
-    const had = byYears.get(k);
-    if (had === undefined) byYears.set(k, r);
-    else if (had && had.text !== r.text) byYears.set(k, null); // two different ranges, same years: ambiguous
+  // Every dated entry of theirs: its names and its ranges (year-only ones too).
+  const theirs: Array<{ names: string[]; range: SourceRange }> = [];
+  for (const { line, entry } of entryLines(source)) {
+    const names = entryNames(entry);
+    for (const r of rangesIn(line)) theirs.push({ names, range: r });
   }
-  if (!byYears.size) return { text: output, restored: 0 };
+  if (!theirs.some((t) => t.range.start.month !== null || t.range.end.month !== null)) return { text: output, restored: 0 };
   let restored = 0;
-  const lines = output.split("\n").map((line) => {
+  const lines = entryLines(output).map(({ line, entry }) => {
     if (!isDatedHeader(line)) return line;
+    const names = entryNames(entry);
+    if (!names.length) return line;
     let out = "";
     let last = 0;
     for (const r of rangesIn(line)) {
-      const theirs = byYears.get(yearsKey(r));
       out += line.slice(last, r.index);
       last = r.index + r.length;
-      if (theirs && theirs.text !== r.text && monthsAgree(r.start, theirs.start) && monthsAgree(r.end, theirs.end)) {
-        out += theirs.text;
+      // Their entries with every one of this line's names, and the same years.
+      const same = theirs.filter(
+        (t) => t.names.length > 0 && names.every((n) => t.names.some((m) => m === n || m.includes(n) || n.includes(m))) && yearsKey(t.range) === yearsKey(r)
+      );
+      const forms = Array.from(new Set(same.map((t) => t.range.text)));
+      const pick = forms.length === 1 ? same[0].range : null;
+      if (pick && pick.text !== r.text && (pick.start.month !== null || pick.end.month !== null) && monthsAgree(r.start, pick.start) && monthsAgree(r.end, pick.end)) {
+        out += pick.text;
         restored++;
       } else {
         out += line.slice(r.index, r.index + r.length);

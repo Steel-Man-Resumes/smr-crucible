@@ -37,45 +37,94 @@ export interface WriterChange {
   rule: string;
 }
 
-/**
- * Split the writer's raw reply into the resume and its change list. The
- * resume never carries any of the block: everything from the marker on is
- * cut, and a trailing JSON list the writer printed without the marker is cut
- * too, so a broken block can never reach a page.
- */
-export function splitWriterOutput(raw: string): { resume: string; changes: unknown } {
-  const text = typeof raw === "string" ? raw : "";
-  const lines = text.split("\n");
-  let at = -1;
-  for (let i = lines.length - 1; i >= 0; i--) {
-    if (lines[i].trim().replace(/^[`*#\s]+|[`*#\s]+$/g, "") === CHANGES_MARKER) {
-      at = i;
-      break;
+// A marker or label line for the block, however the writer dressed it: "===CHANGES===",
+// "=== CHANGES ===", "CHANGES:", "**CHANGES**", "## Changes", "CHANGES BLOCK", optionally with "[]".
+const MARKER_LINE_RE = /^[\s`*#=_~-]*(?:t\.?roy'?s?\s+)?changes(?:\s+(?:block|list|made))?[\s`*#=_~-]*:?[\s`*#=_~-]*(?:\[\s*\])?[\s`*#=_~-]*$/i;
+const FENCE_LINE_RE = /^\s*```[a-z]*\s*$/i;
+const LIST_START_RE = /\[\s*\{\s*"old"\s*:/g;
+
+/** The index just past the "]" that closes the "[" at `start` (string-aware), or the text's end when it never closes. */
+function closeOf(text: string, start: number): number {
+  let depth = 0;
+  let inStr = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inStr = false;
+      continue;
     }
+    if (ch === '"') inStr = true;
+    else if (ch === "[") depth++;
+    else if (ch === "]" && --depth === 0) return i + 1;
   }
-  let resumeLines = at >= 0 ? lines.slice(0, at) : lines;
-  let tail = at >= 0 ? lines.slice(at + 1).join("\n") : "";
-  if (at < 0) {
-    // No marker: a JSON list of changes printed at the very end still never ships.
-    const start = resumeLines.findIndex((l, i) => /^\s*\[\s*\{\s*"old"\s*:/.test(l) && resumeLines.slice(i).join("\n").trim().endsWith("]"));
-    if (start >= 0) {
-      tail = resumeLines.slice(start).join("\n");
-      resumeLines = resumeLines.slice(0, start);
-    }
-  }
-  const resume = resumeLines.join("\n").replace(/\s+$/, "");
-  return { resume, changes: parseList(tail) };
+  return text.length;
 }
 
-function parseList(tail: string): unknown {
-  const s = tail.indexOf("[");
-  const e = tail.lastIndexOf("]");
-  if (s < 0 || e <= s) return [];
-  try {
-    return JSON.parse(tail.slice(s, e + 1));
-  } catch {
-    return [];
+/**
+ * Split the writer's raw reply into the resume and its change list (review M3).
+ * Every JSON list of changes is cut out wherever it sits (after, before or in the
+ * middle of the resume; fenced, pretty-printed or on the marker's own line), with
+ * the marker or label line and fences around it, and any other marker line is
+ * removed. Text on both sides of the block stays the resume, so a block printed
+ * first or mid-page never empties or truncates it. A list that does not parse
+ * is still cut; the change list is then empty.
+ */
+export function splitWriterOutput(raw: string): { resume: string; changes: unknown } {
+  let text = typeof raw === "string" ? raw.replace(/\r\n?/g, "\n") : "";
+  let changes: unknown = [];
+  let found = false;
+  for (let guard = 0; guard < 5; guard++) {
+    LIST_START_RE.lastIndex = 0;
+    const m = LIST_START_RE.exec(text);
+    if (!m) break;
+    let start = m.index;
+    let end = closeOf(text, start);
+    if (!found) {
+      try {
+        changes = JSON.parse(text.slice(start, end));
+      } catch {
+        changes = [];
+      }
+      found = true;
+    }
+    // Back to the start of the line when only a marker, a fence or nothing sits before the list on it.
+    const lineStart = text.lastIndexOf("\n", start - 1) + 1;
+    const before = text.slice(lineStart, start);
+    if (!before.trim() || MARKER_LINE_RE.test(before) || FENCE_LINE_RE.test(before)) start = lineStart;
+    // Then back over the blank, fence and marker lines right above it.
+    while (start > 0) {
+      const prevStart = text.lastIndexOf("\n", start - 2) + 1;
+      const prev = text.slice(prevStart, start - 1);
+      if (!prev.trim() || FENCE_LINE_RE.test(prev) || MARKER_LINE_RE.test(prev)) start = prevStart;
+      else break;
+    }
+    // Forward over the rest of the closing line (fence marks) and fence lines right after it.
+    const lineEnd = text.indexOf("\n", end);
+    const restOfLine = lineEnd < 0 ? text.slice(end) : text.slice(end, lineEnd);
+    if (!restOfLine.replace(/`/g, "").trim()) end = lineEnd < 0 ? text.length : lineEnd;
+    while (end < text.length) {
+      const nextEnd = text.indexOf("\n", end + 1);
+      const next = text.slice(end + 1, nextEnd < 0 ? text.length : nextEnd);
+      if (FENCE_LINE_RE.test(next)) end = nextEnd < 0 ? text.length : nextEnd;
+      else break;
+    }
+    text = `${text.slice(0, start).replace(/\s+$/, "")}\n\n${text.slice(end).replace(/^\s+/, "")}`;
   }
+  // Any marker line left over (no list after it, or "CHANGES: []") never ships.
+  const resume = text
+    .split("\n")
+    .filter((l) => (!MARKER_LINE_RE.test(l) || !/changes/i.test(l)) && !/^\s*`*\s*\[\s*\]\s*`*\s*$/.test(l))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return { resume, changes };
+}
+
+/** A resume worth checking and signing: a name line and some body, not a stray label or an empty reply (review M3). */
+export function isUsableResume(text: string): boolean {
+  const t = (text || "").trim();
+  return t.length >= 40 && t.split("\n").filter((l) => /[A-Za-z]{2,}/.test(l)).length >= 3;
 }
 
 /** Spacing, bullet marks, curly quotes and dash look-alikes evened out, lower case. */
@@ -117,6 +166,15 @@ export function validateWriterChanges(
   if (!Array.isArray(raw)) return [];
   const own = ctx.ownResumeText || "";
   const ownN = normalizeChangeText(own);
+  // Review L2: `old` is a whole line of theirs (a "Label:" in front of it aside), never a fragment.
+  const ownLines = new Set<string>();
+  for (const l of own.split("\n")) {
+    const n = normalizeChangeText(l);
+    if (!n) continue;
+    ownLines.add(n);
+    const unlabeled = normalizeChangeText(l.replace(/^\s*[A-Za-z][A-Za-z &/]{1,30}:\s*/, ""));
+    if (unlabeled) ownLines.add(unlabeled);
+  }
   const finalN = normalizeChangeText(ctx.finalResume || "");
   if (!ownN || !finalN) return [];
   const out: WriterChange[] = [];
@@ -133,7 +191,7 @@ export function validateWriterChanges(
     const oldN = normalizeChangeText(oldRaw);
     const newN = normalizeChangeText(newRaw);
     if (oldN.length < 3 || newN.length < 3 || oldN === newN) continue;
-    if (!ownN.includes(oldN) || !finalN.includes(newN)) continue;
+    if (!ownLines.has(oldN) || !finalN.includes(newN)) continue;
     const why = plainPunctuationText(r.why.replace(/\s+/g, " ").trim()).text.trim().slice(0, WHY_MAX);
     if (!why) continue;
     // The reason is t.ROY talking about the page, never about a record.
