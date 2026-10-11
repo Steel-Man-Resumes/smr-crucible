@@ -7,7 +7,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runQualityCheck, pageLooksStrong, QUALITY_RULES, type QualityFinding } from "../resumeQualityRules";
+import * as rules from "../resumeQualityRules";
+import { runQualityCheck, QUALITY_RULES, type QualityFinding } from "../resumeQualityRules";
 
 // The kind of page Troy saw on the preview run: an objective, a list of
 // character words, duty lines, and job lines that are not bullets.
@@ -389,18 +390,9 @@ Valley Feed, Glasgow, MT
 - Took phone orders and wrote tickets.`,
 };
 
-test("r1 H1: bare task lines under a job are marked, and a weak page is never 'strong'", () => {
+test("r1 H1: bare task lines under a job are marked", () => {
   const fs = runQualityCheck(R2.H1_bare);
   assert.deepEqual(lineOf(fs, "bullets"), ["Cooking"], "one mark for the run of bare lines");
-  assert.equal(pageLooksStrong(R2.H1_bare), false);
-  // Silence alone is not strength: no experience heading, no action bullets.
-  const thin = `Pat Example
-Billings, MT | pat.example@example.com
-Cashier
-
-Cashier | Safeway | 2019 - 2022`;
-  assert.equal(pageLooksStrong(thin), false);
-  assert.equal(pageLooksStrong(STRONG_PAGE), true);
 });
 
 test("r1 H2: lists under headings it does not know (EQUIPMENT, SKILLS & CERTIFICATIONS, ACCOMPLISHMENTS) are not job bullets", () => {
@@ -447,7 +439,6 @@ test("r1 M4: vague lines that fit any job are marked", () => {
   const fs = runQualityCheck(R2.M4_vague);
   assert.deepEqual(lineOf(fs, "weak_bullet"), ["- Helped out where needed", "- Various tasks as assigned"]);
   assert.match(byRule(fs, "weak_bullet")[0].why, /any job/);
-  assert.equal(pageLooksStrong(R2.M4_vague), false);
 });
 
 test("r1 L3: an -ing bullet gets its own reason, not 'names a task'", () => {
@@ -563,16 +554,12 @@ PACK BOXES
 CLEAN UP`,
 };
 
-test("r2 H1: a thin page is never proof of strength (praise stays rare)", () => {
-  assert.equal(pageLooksStrong(R3.H1_thin), false, "one-line top, no counts, a one-word bullet");
-  // Each missing piece alone also blocks praise.
-  const noCount = STRONG_PAGE.replace("9-person", "third-shift").replace("Trained 6 new", "Trained new").replace("3-person", "small");
-  assert.equal(pageLooksStrong(noCount), false, "no bullet with a count or size");
-  const shortBullet = STRONG_PAGE.replace("- Checked returns against the pick sheet and restocked them.", "- Restocked");
-  assert.equal(pageLooksStrong(shortBullet), false, "a bullet under three words");
-  const shortTop = STRONG_PAGE.replace(/SUMMARY\n.*\n.*\n/, "").replace("rafael.ocampo@example.com\n", "rafael.ocampo@example.com\nShift Lead\n");
-  assert.equal(pageLooksStrong(shortTop), false, "a top line under four words");
-  assert.equal(pageLooksStrong(STRONG_PAGE), true);
+test("r4: the rules never praise a page (Troy's ruling: no strength verdict at all)", () => {
+  // Nothing here says a page is strong: the praise helper is gone for good.
+  assert.equal((rules as Record<string, unknown>).pageLooksStrong, undefined);
+  for (const page of [STRONG_PAGE, ...Object.values(R2), ...Object.values(R3)]) {
+    for (const f of runQualityCheck(page)) assert.doesNotMatch(f.why, /already strong|strong page|looks strong|great page/i);
+  }
 });
 
 test("r2 H2: the title or employer on the line under the dates is part of the job header", () => {
@@ -605,4 +592,74 @@ test("r2 L4: an all-caps run of job text under a job heading is still read", () 
   // An all-caps list with no actions in it is left alone.
   const list = R3.L4_caps.replace("RUN MACHINES\nPACK BOXES\nCLEAN UP", "SKID STEER\nTELEHANDLER\nEXCAVATOR");
   assert.deepEqual(lineOf(runQualityCheck(list), "bullets"), []);
+});
+
+// ---- Round 4 (review s3 r3) -------------------------------------------------
+
+const R4 = {
+  tucked: `Cy Example
+Bozeman, MT | cy.example@example.com
+Line cook with five years on a busy diner line.
+
+EXPERIENCE
+Cook | Main Street Diner | Bozeman, MT | 2019 - 2024
+Cooking
+Cleaning
+- Cooked 150 breakfasts a morning on the flat top.
+- Trained 3 new cooks on the line.`,
+  tuckedOne: `Cy Example
+Bozeman, MT | cy.example@example.com
+Line cook with five years on a busy diner line.
+
+EXPERIENCE
+Cook | Main Street Diner | Bozeman, MT | 2019 - 2024
+Kitchen work and cleanup
+- Cooked 150 breakfasts a morning on the flat top.
+- Trained 3 new cooks on the line.`,
+  capsHeader: `Bo Example
+Kalispell, MT | bo.example@example.com
+Lead cook with eight years running a dinner line.
+
+EXPERIENCE
+LEAD COOK
+HARBOR GRILL
+KALISPELL, MT
+2019 - 2024
+- Ran a 4-cook dinner line on weekends.
+- Wrote the prep list for 200 covers a night.
+
+LEAD JANITOR
+CLEAN SWEEP JANITORIAL
+MISSOULA, MT
+2016 - 2019
+- Cleaned 3 office buildings a night with a 2-person crew.
+- Trained new crew on the floor machines.`,
+  titleUnder: `Vi Example
+Libby, MT | vi.example@example.com
+Warehouse worker with four years in a supply yard.
+
+EXPERIENCE
+Valley Supply | 2018 - 2022
+Warehouse Worker
+Shipping
+Receiving
+Inventory`,
+};
+
+test("r3 H1: bare lines under a full job line are the job's body, so they are marked", () => {
+  assert.deepEqual(lineOf(runQualityCheck(R4.tucked), "bullets"), ["Cooking"]);
+  assert.deepEqual(lineOf(runQualityCheck(R4.tuckedOne), "bullets"), ["Kitchen work and cleanup"]);
+  // The title-under-the-dates layouts from round 3 are still header.
+  assert.deepEqual(runQualityCheck(R3.H2_title_under), []);
+  assert.deepEqual(runQualityCheck(R3.H2_dates_first), []);
+});
+
+test("r3 H2: an all-caps title / employer / city block over the dates is the job header", () => {
+  assert.deepEqual(runQualityCheck(R4.capsHeader), []);
+  // The all-caps weak page with no dates is still read as job text.
+  assert.deepEqual(lineOf(runQualityCheck(R3.L4_caps), "bullets"), ["RUN MACHINES"]);
+});
+
+test("r3 M1: on a weak page the bare-words mark lands on the bare words, not the title", () => {
+  assert.deepEqual(lineOf(runQualityCheck(R4.titleUnder), "bullets"), ["Shipping"]);
 });

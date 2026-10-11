@@ -7,7 +7,7 @@
  *
  * Every flag comes from the checks run in this browser (SMR quality rules
  * plus the mint check, see lib/showstopper-tour.ts). A page with nothing to
- * mark gets an honest "already strong" line, never a made-up flaw. Reduced motion: nothing moves or plays on its
+ * mark gets a neutral line (never praise, never a made-up flaw). Reduced motion: nothing moves or plays on its
  * own; every flagged line is marked and every note is listed. The notes are
  * an ordered list in reading order inside a polite live region, and the
  * person can pause, play or skip the walk.
@@ -184,9 +184,9 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
 
       {/* t.ROY's notes, in reading order */}
       <section aria-label="What t.ROY sees" className="min-w-0 lg:col-start-2 lg:row-start-2">
-        {tour.strongNote || tour.readNote ? (
+        {tour.readNote ? (
           <p className="border-l-4 border-ws-amber bg-t-panel-2 px-4 py-3 text-base text-t-white" role="status">
-            {tour.strongNote ?? tour.readNote}
+            {tour.readNote}
           </p>
         ) : (
           <>

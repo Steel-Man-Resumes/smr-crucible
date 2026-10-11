@@ -282,3 +282,13 @@ test("r1 L2: 'Show me around' is hidden while the live fix plays", () => {
   const src = read("app/(forge)/output/page.tsx");
   assert.match(src, /\{ready && !liveFixOn && \(\s*<button\s+onClick=\{\(\) => setTourOpen\(true\)\}/);
 });
+
+test("r3 L1: the end line says where the list really is (above the page)", () => {
+  const live = read("components/forge/markup/LiveFix.tsx");
+  assert.match(live, /in the list above your page/);
+  assert.doesNotMatch(live, /under your page/);
+  const page = read("app/(forge)/output/page.tsx");
+  const list = page.indexOf("<ChangesList changes={changes}");
+  const resume = page.indexOf('id="finish-resume"');
+  assert.ok(list > 0 && resume > list, "the recap list renders above the resume");
+});

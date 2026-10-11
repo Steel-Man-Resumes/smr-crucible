@@ -165,7 +165,7 @@ export function LiveFix({
         <p className="text-base text-t-white">
           {done
             ? more > 0
-              ? `Those are the main ones. ${more} more ${more === 1 ? "is" : "are"} in the list under your page.`
+              ? `Those are the main ones. ${more} more ${more === 1 ? "is" : "are"} in the list above your page.`
               : "That's every line I changed. Here's your finished page."
             : "Watch me fix your page, line by line."}
         </p>

@@ -135,7 +135,7 @@ function readPage(text: string): Page {
     // a headline ("CERTIFIED WELDER"); only a trailing colon makes it a heading there.
     if (k > 0 && headingShape(l) && (firstHeading >= 0 || /:\s*$/.test(l))) {
       const colon = /:\s*$/.test(l);
-      const jobTitle = !colon && raw.slice(k + 1, k + 3).some((n) => YEAR_RE.test(n) && !headingShape(n));
+      const jobTitle = !colon && datedJobFollows(raw, k);
       // Inside a job, "Duties:" or "Key results:" is a sub-label, not a new
       // section: the job and the jobs after it are still read.
       if (colon && section === "experience") {
@@ -161,8 +161,23 @@ function readPage(text: string): Page {
 }
 
 /**
+ * True when line k opens a job header: within the next three lines, through
+ * short title, employer or place lines, comes the job's dated line
+ * ("LEAD COOK / HARBOR GRILL / KALISPELL, MT / 2019 - 2024").
+ */
+function datedJobFollows(raw: string[], k: number): boolean {
+  for (let j = k + 1; j < raw.length && j <= k + 3; j++) {
+    const n = raw[j];
+    if (YEAR_RE.test(n) && !isBullet(n)) return true;
+    if (isBullet(n) || knownSection(n) || words(n).length > 6 || /:\s*$/.test(n)) return false;
+  }
+  return false;
+}
+
+/**
  * True when line k sits in a run of three or more all-caps short lines (no
  * dates, no known heading) and at least one of them starts with an action.
+ * A run with a dated line right after it is that job's header, not its text.
  */
 function capsItemRun(raw: string[], k: number): boolean {
   const caps = (l: string | undefined) => !!l && isAllCaps(l) && !YEAR_RE.test(l) && !knownSection(l) && !l.includes("|") && words(l).length <= 5;
@@ -171,6 +186,8 @@ function capsItemRun(raw: string[], k: number): boolean {
   let b = k;
   while (b + 1 < raw.length && caps(raw[b + 1])) b++;
   if (b - a + 1 < 3) return false;
+  const next = raw[b + 1];
+  if (next && YEAR_RE.test(next) && !isBullet(next)) return false;
   return raw.slice(a, b + 1).some((l) => startsWithVerb(l));
 }
 
@@ -377,32 +394,18 @@ function dutyWhy(phrase: string): string {
 
 // ---- The rules ----------------------------------------------------------------
 
-interface Analysis {
-  findings: QualityFinding[];
-  /** Positive evidence the page is strong (never inferred from silence). */
-  strong: boolean;
-}
-
 /**
  * Read a page and return what a Steel Man reader would mark, in page order.
  * One finding per line at most. An empty array means nothing weak was found;
- * it does NOT mean the page is strong (see `pageLooksStrong`).
+ * it never means "strong". Nothing in this module praises a page.
  */
 export function runQualityCheck(text: string): QualityFinding[] {
-  return analyze(text).findings;
+  if (typeof text !== "string" || !text.trim()) return [];
+  return analyze(text);
 }
 
-/**
- * True only on positive evidence: no quality findings, a summary or headline
- * up top, an experience heading, and at least two bullets that start with an
- * action. A page this cannot read well is never called strong.
- */
-export function pageLooksStrong(text: string): boolean {
-  return analyze(text).strong;
-}
-
-function analyze(text: string): Analysis {
-  const none: Analysis = { findings: [], strong: false };
+function analyze(text: string): QualityFinding[] {
+  const none: QualityFinding[] = [];
   if (typeof text !== "string" || !text.trim()) return none;
   const page = readPage(text);
   const ls = page.lines;
@@ -550,42 +553,62 @@ function analyze(text: string): Analysis {
   // as sentences; body lines that are not bullets are.
   const exp = ls.map((_, i) => i).filter((i) => inExperience(i));
   const isYearLine = (i: number) => YEAR_RE.test(ls[i].text) && !isBullet(ls[i].text);
-  // A date-only line ("2019 - 2022", "Billings, MT | 2019 - 2022"): the lines
-  // right above it are that job's title and employer.
-  const dateOnly = (i: number) => {
+  // How many of a job's name parts (title, employer) its dated line holds.
+  // "2019 - 2022" holds none, "Valley Supply | 2018 - 2022" one, "Cook |
+  // Main Street Diner | 2019 - 2024" and "Cashier at Safeway | 2019" two.
+  // Places and dates do not count.
+  const nameParts = (i: number): number => {
     const t = ls[i].text.replace(/\([^)]*\)/g, "");
-    const rest = t.replace(/\b(?:19|20)\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?|\b(?:present|current|now|to)\b|\d{1,2}\//gi, "");
-    return words(rest).length <= 3 && !/\|/.test(rest.replace(/\|[^|]*,\s*[A-Za-z]{2,}\s*\|?/g, ""));
+    const parts = t.includes("|") ? t.split("|") : t.split(",");
+    let n = 0;
+    for (let k = 0; k < parts.length; k++) {
+      let p = parts[k].trim();
+      const next = (parts[k + 1] ?? "").trim();
+      // "City, ST" split on commas: the city goes with the state after it.
+      if (!t.includes("|") && /^[A-Z]{2}\.?(?:\s|$)/.test(next) && !YEAR_RE.test(p)) continue;
+      p = p.replace(/,\s*[A-Za-z .'-]+,\s*[A-Za-z]{2,}\.?$/, "");
+      const rest = p.replace(/\b(?:19|20)\d{2}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?|\b(?:present|current|now|to)\b|\d{1,2}\/|[-\u2013\u2014]/gi, "").trim();
+      if (!words(rest).length || isPlace(p) || /^[A-Z]{2}\.?$/.test(rest)) continue;
+      n += TITLE_AT_RE.test(p) ? 2 : 1;
+    }
+    return n;
   };
   const header = new Set<number>();
   for (const i of exp) {
     if (!isYearLine(i)) continue;
     header.add(i);
-    // The line right above a dated line is always header; two above only for a date-only line.
-    const reach = dateOnly(i) ? 2 : 1;
+    const held = nameParts(i);
+    // Above the dates: the title and employer, up to three short lines for a
+    // date-only line, one line otherwise.
+    const reach = held === 0 ? 3 : 1;
     for (let d = 1; d <= reach; d++) {
       const j = i - d;
       // A sentence is never a header, however short the dated line is.
       if (j < 0 || !inExperience(j) || isBullet(ls[j].text) || isYearLine(j) || ls[j].label || sentenceSignal(ls[j].text)) break;
+      if (d > 1 && words(ls[j].text).length > 6) break;
       header.add(j);
     }
-    // The title or employer can sit under the dates ("Valley Supply | 2017 -
-    // 2024" over "Forklift Operator"): one or two short lines that are not
-    // sentences, right before the job's first bullet or label.
-    const run: number[] = [];
+    // A place line right under the dates belongs to the header too.
     let j = i + 1;
+    if (j < ls.length && inExperience(j) && isPlace(ls[j].text)) header.add(j++);
+    // Under the dates: only when the dated line is missing its title or
+    // employer can the next lines be them ("Valley Supply | 2017 - 2024"
+    // over "Forklift Operator"). A full job line has nothing left to add, so
+    // what sits under it is the job's body.
+    if (held >= 2) continue;
+    const run: number[] = [];
     while (j < ls.length && inExperience(j) && !isBullet(ls[j].text) && !ls[j].label && !isYearLine(j) && run.length < 3) run.push(j++);
     const nextOpensJob = j < ls.length && inExperience(j) && (isBullet(ls[j].text) || !!ls[j].label);
-    if (run.length >= 1 && run.length <= 2 && nextOpensJob && run.every((r) => !sentenceSignal(ls[r].text) && words(ls[r].text).length <= 6)) {
+    const short = (r: number) => !sentenceSignal(ls[r].text) && words(ls[r].text).length <= 6;
+    if (run.length >= 1 && run.length <= 2 && nextOpensJob && run.every(short)) {
       for (const r of run) header.add(r);
+    } else if (run.length && short(run[0])) {
+      // A longer run of bare lines: the first is the missing title, the rest
+      // are the body, so the mark lands on the bare words, not the title.
+      header.add(run[0]);
     }
-    // A place line right under the dates belongs to the header too.
-    if (i + 1 < ls.length && inExperience(i + 1) && isPlace(ls[i + 1].text)) header.add(i + 1);
   }
   const firstYear = exp.find((i) => isYearLine(i)) ?? -1;
-  let actionBullets = 0;
-  let countedBullets = 0;
-  let shortBullets = 0;
   // One mark per run of non-bullet lines.
   let runStart = -1;
   const closeRun = () => {
@@ -600,12 +623,7 @@ function analyze(text: string): Analysis {
     if (isBullet(t)) {
       closeRun();
       const body = bodyOf(t);
-      if (startsWithVerb(body)) actionBullets++;
-      if (words(body).length < 3) shortBullets++;
-      if (/\d/.test(body)) {
-        countedBullets++;
-        continue;
-      }
+      if (/\d/.test(body)) continue;
       const w = words(body);
       const first = (w[0] ?? "").toLowerCase();
       if (first.length > 4 && first.endsWith("ing") && first !== "during") {
@@ -689,13 +707,7 @@ function analyze(text: string): Analysis {
   const findings = [...found.entries()]
     .sort((x, y) => x[0] - y[0])
     .map(([i, f]) => ({ ...f, occurrence: occurrenceAt.get(i) ?? 0 }));
-  // Praise stays rare: a real top (four words or more), plain headings,
-  // action bullets, at least one with a count or size, and none thinner than
-  // three words. Anything less is not proof, so no praise.
-  const realTop = summaryLines.some((i) => words(ls[i].text).length >= 4);
-  const strong =
-    findings.length === 0 && realTop && hasExperienceHeading && actionBullets >= 2 && countedBullets >= 1 && shortBullets === 0;
-  return { findings, strong };
+  return findings;
 }
 
 // "Cashier at Safeway", "Cook at the Elks Lodge": a title over its employer.

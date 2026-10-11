@@ -9,7 +9,6 @@ import {
   elapsedLabel,
   buildFailure,
   pageLines,
-  STRONG_NOTE,
   READ_NOTE,
   TOUR_CAP,
 } from "../showstopper-tour";
@@ -59,12 +58,11 @@ test("no page means no tour (never a fake before)", () => {
   assert.equal(buildResumeTour(null), null);
 });
 
-test("a genuinely strong page gets the honest strong note and no steps", () => {
+test("a strong page gets no marks and the neutral line, never praise", () => {
   const tour = buildResumeTour(STRONG_RESUME)!;
   assert.ok(tour);
   assert.equal(tour.steps.length, 0);
-  assert.equal(tour.strongNote, STRONG_NOTE);
-  assert.equal(STRONG_NOTE, "This is already strong. I'll tighten it.");
+  assert.equal(tour.readNote, READ_NOTE);
 });
 
 test("the false 'clean on the basics' line is gone for good", () => {
@@ -76,7 +74,7 @@ test("the false 'clean on the basics' line is gone for good", () => {
 
 test("a page that is true but weak is never called strong (Troy's preview page)", () => {
   const tour = buildResumeTour(WEAK_RESUME)!;
-  assert.equal(tour.strongNote, undefined);
+  assert.equal((tour as unknown as Record<string, unknown>).strongNote, undefined);
   const flagged = tour.steps.map((s) => s.line.trim());
   assert.ok(flagged.includes("Seeking a position with a growing company where I can use my skills and grow."), "objective");
   assert.ok(flagged.includes("Hard worker, team player, fast learner, detail oriented"), "soft skills");
@@ -99,7 +97,7 @@ test("truth flaws and quality marks walk the same page together", () => {
 test("real flaws become steps, anchored to the right raw line", () => {
   const tour = buildResumeTour(FLAWED_RESUME)!;
   assert.ok(tour.steps.length >= 3, `expected at least 3 steps, got ${tour.steps.length}`);
-  assert.equal(tour.strongNote, undefined);
+  assert.equal((tour as unknown as Record<string, unknown>).strongNote, undefined);
   for (const s of tour.steps) {
     assert.equal(tour.lines[s.lineIndex], s.line);
     assert.ok(s.line.trim().length > 0);
@@ -200,7 +198,7 @@ test("a job whose dates sit on the next line is not called dateless", () => {
 
 test("the demo resume still gets a tour or the strong note", () => {
   const tour = buildResumeTour(DEMO_SESSION.resumeText)!;
-  assert.ok(tour.steps.length > 0 || tour.strongNote === STRONG_NOTE);
+  assert.ok(tour.steps.length > 0 || tour.readNote === READ_NOTE);
 });
 
 test("job cards come from what was entered, nothing added", () => {
@@ -276,7 +274,7 @@ Cooking
 Cleaning
 Register`;
   const tour = buildResumeTour(page)!;
-  assert.equal(tour.strongNote, undefined);
+  assert.equal((tour as unknown as Record<string, unknown>).strongNote, undefined);
   assert.ok(tour.steps.some((s) => s.line === "Cooking"));
 });
 
@@ -290,7 +288,7 @@ Cashier | Safeway | 2019 - 2022
 Cashier | Corner Mart | 2016 - 2019`;
   const tour = buildResumeTour(page)!;
   assert.equal(tour.steps.length, 0);
-  assert.equal(tour.strongNote, undefined);
+  assert.equal((tour as unknown as Record<string, unknown>).strongNote, undefined);
   assert.equal(tour.readNote, READ_NOTE);
   assert.doesNotMatch(READ_NOTE, /strong|great|good|clean/i);
 });
@@ -335,11 +333,43 @@ Stocker | Dollar Spot | Billings, MT | 2021 - 2024
 - Helped customers
 - Cleaned`;
   const tour = buildResumeTour(page)!;
-  assert.equal(tour.strongNote, undefined);
+  assert.equal((tour as unknown as Record<string, unknown>).strongNote, undefined);
   assert.equal(tour.readNote, READ_NOTE);
 });
 
 test("r2 L2: the neutral line does not point at a list that isn't there", () => {
   assert.doesNotMatch(READ_NOTE, /here's what|below|these/i);
   assert.doesNotMatch(READ_NOTE, /strong|great|clean/i);
+});
+
+// ---- Round 4 (review s3 r3): praise removed by Troy's ruling -----------------
+
+test("r4: no page, however strong, ever gets praise text", () => {
+  const pages = [STRONG_RESUME, WEAK_RESUME, FLAWED_RESUME, DEMO_SESSION.resumeText!];
+  for (const p of pages) {
+    const tour = buildResumeTour(p)!;
+    const said = [tour.readNote ?? "", ...tour.steps.map((s) => s.note)].join(" ");
+    assert.doesNotMatch(said, /already strong|this is strong|looks strong|great page|clean on the basics/i);
+    assert.equal((tour as unknown as Record<string, unknown>).strongNote, undefined);
+  }
+  for (const f of ["../showstopper-tour.ts", "../../components/forge/showstopper/OldPageTour.tsx", "../../components/forge/markup/MarkupWalk.tsx", "../../components/forge/markup/LiveFix.tsx", "../../app/(forge)/processing/page.tsx"]) {
+    const src = readFileSync(join(import.meta.dirname, f), "utf8");
+    assert.doesNotMatch(src, /already strong|STRONG_NOTE|strongNote|pageLooksStrong/, f);
+  }
+});
+
+test("r3 H1: a full job line with bare lines tucked under it is marked, not passed", () => {
+  const page = `Cy Example
+Bozeman, MT | cy.example@example.com
+Line cook with five years on a busy diner line.
+
+EXPERIENCE
+Cook | Main Street Diner | Bozeman, MT | 2019 - 2024
+Cooking
+Cleaning
+- Cooked 150 breakfasts a morning on the flat top.
+- Trained 3 new cooks on the line.`;
+  const tour = buildResumeTour(page)!;
+  assert.ok(tour.steps.some((s) => s.line === "Cooking"));
+  assert.equal(tour.readNote, undefined);
 });

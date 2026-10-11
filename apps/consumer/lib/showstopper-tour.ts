@@ -21,7 +21,7 @@ import {
   checkCredentialStatus,
   type MintFinding,
 } from "@crucible/core/src/resumeMintCheckShared";
-import { runQualityCheck, pageLooksStrong, type QualityFinding } from "@crucible/core/src/resumeQualityRules";
+import { runQualityCheck, type QualityFinding } from "@crucible/core/src/resumeQualityRules";
 
 export interface TourStep {
   /** Stable key for React lists. */
@@ -44,18 +44,14 @@ export interface ResumeTour {
   /** In page order, top to bottom. */
   steps: TourStep[];
   /**
-   * Set only when neither checker found anything AND the page shows positive
-   * signs of strength (a summary or headline, an experience heading, action
-   * bullets). Never shown on a page with weak lines.
+   * Set when neither checker marked anything: a neutral word, never praise.
+   * (Troy's ruling, r3: the tour gives no strength verdict at all.)
    */
-  strongNote?: string;
-  /** Nothing marked, but no proof of strength either: a neutral word, no praise. */
   readNote?: string;
 }
 
 export const TOUR_CAP = 8;
 
-export const STRONG_NOTE = "This is already strong. I'll tighten it.";
 export const READ_NOTE = "I read it top to bottom. Nothing big jumped out. Your new page is coming.";
 
 const YEAR_RE = /\b(?:19[5-9]\d|20[0-4]\d)\b/;
@@ -252,9 +248,8 @@ export function buildResumeTour(resumeText: string | undefined | null, cap: numb
   });
 
   if (steps.length) return { lines, steps };
-  // Silence is not praise: "strong" only on positive evidence and no truth flags at all.
-  const strong = truth.length === 0 && pageLooksStrong(text);
-  return strong ? { lines, steps, strongNote: STRONG_NOTE } : { lines, steps, readNote: READ_NOTE };
+  // Silence is never praise: a page with no marks gets the neutral line.
+  return { lines, steps, readNote: READ_NOTE };
 }
 
 // ---- Jobs the person typed (no page to mark up) ---------------------------
