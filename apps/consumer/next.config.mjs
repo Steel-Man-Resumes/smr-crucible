@@ -1,3 +1,5 @@
+import { releaseCheck, formatReleaseCheck } from "./lib/release-check.mjs";
+
 /**
  * The extraction worker (lib/extract-worker.ts) loads mammoth and pdf.js by
  * path at run time, so the tracer cannot see what they need. Ship mammoth with
@@ -165,4 +167,23 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Every `next build` (preview and production alike) starts with the release
+ * check (lib/release-check.mjs): a release marked as requiring accounts
+ * (SMR_RELEASE_REQUIRES_ACCOUNTS=1) cannot build with the Forge sign-in wall
+ * switch anything but "on", and an unreadable switch value fails the build
+ * instead of quietly leaving something open. `next dev` skips it.
+ * Ship-day steps: docs/SHIP-DAY-GATES.md.
+ */
+export default function config(phase) {
+  if (phase === "phase-production-build") {
+    const result = releaseCheck(process.env);
+    const text = formatReleaseCheck(result);
+    if (!result.ok) {
+      console.error(text);
+      throw new Error("Release check failed: see [release-check] above.");
+    }
+    console.log(text);
+  }
+  return nextConfig;
+}

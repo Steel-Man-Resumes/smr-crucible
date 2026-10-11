@@ -109,7 +109,9 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/cv", label: "CV", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/performer", label: "Performer", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access", requiresDisclosure: true },
+      // Interview prep never waits on a disclosure plan (Codex review A6):
+      // an interview can come before any lesson.
+      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access" },
     ],
   },
   {

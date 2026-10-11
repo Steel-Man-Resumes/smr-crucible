@@ -73,11 +73,12 @@ export default function AdminPremiumPage() {
         <Link href="/dashboard/admin" className="text-sm text-t-phos-dim underline">Back to admin</Link>
         <h1 className="mt-2 text-2xl font-bold text-t-white">Premium access</h1>
         <p className="mt-1 text-sm text-t-phos-dim">
-          Local resources, interview coaching and one-click apply. Members of a sponsoring organization have them already.
+          Voice interview coaching and one-click apply (support search and text practice are free with an account; a
+          voice coaching grant also lifts the daily text practice limit). Members of a sponsoring organization have them already.
           Grant them here, case by case. A reason is required; an end date is optional. Nobody is emailed.
         </p>
       </div>
-      {notReady && <p className="border border-t-amber p-3 text-sm text-t-amber-bright">Migration 079 is not applied on this database, so premium tools are open to everyone here.</p>}
+      {notReady && <p className="border border-t-amber p-3 text-sm text-t-amber-bright">Migration 079 is not applied on this database. With PREMIUM_GATE on, sponsored tools answer "temporarily unavailable" until it is.</p>}
       {error && <p className="text-sm text-t-red">{error}</p>}
       {msg && <p role="status" className="text-sm text-t-phos">{msg}</p>}
 

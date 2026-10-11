@@ -27,6 +27,16 @@ const ALL_OPEN = (): PremiumStatus => ({
   openRequest: null,
 });
 
+const UNAVAILABLE = (): PremiumStatus => ({
+  gate: true,
+  open: [],
+  orgMember: false,
+  orgName: null,
+  grantEndsAt: null,
+  openRequest: null,
+  unavailable: true,
+});
+
 export async function GET() {
   const user = forgeSessionUser(await auth());
   if (!user?.id) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -44,8 +54,9 @@ export async function GET() {
     };
     return NextResponse.json({ data });
   } catch (e) {
-    // 079 not applied yet: the tools stay open, as before (lib/premium.ts).
-    if ((e as { premiumNotReady?: boolean } | null)?.premiumNotReady) return NextResponse.json({ data: ALL_OPEN() });
+    // The gate is on but 079 is not applied: sponsored tools are shut and the
+    // page says so (fails closed, Codex review A8). Free tools stay open.
+    if ((e as { premiumNotReady?: boolean } | null)?.premiumNotReady) return NextResponse.json({ data: UNAVAILABLE() });
     console.error("[premium] status read failed:", (e as { code?: string })?.code || "error");
     return NextResponse.json({ error: "We couldn't check your tools right now." }, { status: 503 });
   }

@@ -141,7 +141,7 @@ test("a person who finished every step sees all steps done, not 'Step 2 of 6'", 
   assert.equal(arcStageForNextStep({ stage: 6, reason: "no_application" }), 6);
 });
 
-test("sidebar and dashboard cards share one gate: Interview needs the disclosure plan", () => {
+test("sidebar and dashboard cards share one gate (a tool that needs a disclosure plan stays locked without one)", () => {
   const interview = { minState: "full_access", requiresDisclosure: true };
   assert.equal(clientToolUnlocked({ state: "full_access", ...interview, disclosureComplete: false }), false);
   assert.equal(clientToolUnlocked({ state: "full_access", ...interview, disclosureComplete: true }), true);
@@ -158,4 +158,41 @@ test("Settings headings state what it does, with no comparison to other apps", (
   const dash = readFileSync(join(DASH, "page.tsx"), "utf8");
   const tour = readFileSync(join(ROOT, "components", "GuidedTour.tsx"), "utf8");
   for (const src of [dash, tour]) assert.ok(!/other apps|than most apps/i.test(src));
+});
+
+test("Phase 5 R4.5 (A6): Interview Prep no longer needs a disclosure plan, in the sidebar or on the dashboard", () => {
+  const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const shell = strip(readFileSync(join(ROOT, "app", "(dashboard)", "RefineryShell.tsx"), "utf8"));
+  const navItem = shell.slice(shell.indexOf('href: "/dashboard/interview"'), shell.indexOf("}", shell.indexOf('href: "/dashboard/interview"')));
+  assert.ok(navItem.length > 0);
+  assert.ok(!navItem.includes("requiresDisclosure"), navItem);
+  const dash = strip(readFileSync(join(DASH, "page.tsx"), "utf8"));
+  const card = dash.slice(dash.indexOf('href: "/dashboard/interview"'), dash.indexOf("}", dash.indexOf('href: "/dashboard/interview"')));
+  assert.ok(card.length > 0);
+  assert.ok(!card.includes("requiresDisclosure"), card);
+  // Unlocked at full access with no disclosure plan.
+  assert.equal(clientToolUnlocked({ state: "full_access", minState: "full_access", disclosureComplete: false }), true);
+});
+
+test("Phase 5 R4.5 (A6): the next-step card offers 'I don't need this now' on the disclosure step only, and labels deadlines", () => {
+  const card = readFileSync(join(ROOT, "components", "NextStepCard.tsx"), "utf8");
+  assert.match(card, /const offerNotNow = next\.reason === "no_disclosure_plan" && !!onNotNow;/);
+  assert.match(card, /isDeadlineStep\(next\)\s*\?\s*DEADLINE_STEP_LABEL/);
+  const header = readFileSync(join(ROOT, "components", "JourneyHeader.tsx"), "utf8");
+  assert.match(header, /body: JSON\.stringify\(\{ disclosure: "not_now" \}\)/);
+  const route = readFileSync(join(ROOT, "app", "api", "next-step", "route.ts"), "utf8");
+  assert.match(route, /isSameOriginJsonPost\(request\.headers\)/);
+  assert.match(route, /choice !== "not_now" && choice !== "undo"/);
+  assert.ok(route.indexOf("setDisclosureNotNow(") < route.indexOf("invalidateNextStep(userId)"));
+});
+
+test("review I3: 'I don't need this now' with no profile row says so plainly (409), and the card shows it", () => {
+  const route = readFileSync(join(ROOT, "app", "api", "next-step", "route.ts"), "utf8");
+  assert.match(route, /const saved = await setDisclosureNotNow\(userId, choice === "not_now"\);\s*if \(!saved\) \{/);
+  assert.match(route, /code: "no_profile" \}, \{ status: 409 \}/);
+  assert.match(route, /Finish your resume in the Forge first/);
+  assert.ok(route.indexOf("if (!saved)") < route.indexOf("invalidateNextStep(userId)"));
+  const header = readFileSync(join(ROOT, "components", "JourneyHeader.tsx"), "utf8");
+  assert.match(header, /setNotNowError\(typeof j\?\.error === "string" \? j\.error/);
+  assert.match(header, /data-testid="not-now-error"/);
 });

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
+  PREMIUM_INCLUDED_LINE,
   PREMIUM_ASK_ORG_HEADING,
   PREMIUM_ASK_ORG_LINE,
   PREMIUM_ASK_SENT_LINE,
@@ -22,6 +23,8 @@ import {
   PREMIUM_NEVER_PAY_LINE,
   PREMIUM_TOOL_LABELS,
   premiumLockedLine,
+  premiumUnavailableMessage,
+  isSponsoredTool,
   toolIsOpen,
   type PremiumStatus,
   type PremiumToolId,
@@ -136,6 +139,9 @@ export function PremiumLocked({ tool, status, compact = false }: { tool: Premium
       <p className="mt-1 text-sm leading-relaxed text-t-bone-dim">
         {premiumLockedLine(tool)} {PREMIUM_NEVER_PAY_LINE}
       </p>
+      <p className="mt-2 text-sm leading-relaxed text-t-phos-dim" data-testid="premium-included">
+        {PREMIUM_INCLUDED_LINE}
+      </p>
 
       <div className={compact ? "mt-3 space-y-3" : "mt-5 grid gap-4 sm:grid-cols-2"}>
         <div className="border border-t-line p-3">
@@ -184,13 +190,38 @@ export function PremiumLocked({ tool, status, compact = false }: { tool: Premium
   );
 }
 
-/** The tool when open; the locked card when not; nothing while loading. */
-export function PremiumGate({ tool, children }: { tool: PremiumToolId; children: ReactNode }) {
+/**
+ * The gate is on but the tool list can't be read (Codex review A8): the tool
+ * stays shut and says so. No "ask" form here: the request would fail too.
+ */
+export function PremiumUnavailable({ tool, compact = false }: { tool: PremiumToolId; compact?: boolean }) {
+  return (
+    <section
+      role="status"
+      data-testid={`premium-unavailable-${tool}`}
+      className={compact ? "border border-t-line bg-t-panel p-3" : "mx-auto max-w-2xl border border-t-line bg-t-panel p-5 sm:p-6"}
+    >
+      <p className="text-sm leading-relaxed text-t-bone-dim">{premiumUnavailableMessage(tool)}</p>
+    </section>
+  );
+}
+
+/**
+ * The tool when open; the locked card when not; nothing while loading.
+ * `compact` fits the card inside a page (for example the voice panel on the
+ * interview page) instead of replacing the whole page.
+ */
+export function PremiumGate({ tool, children, compact = false }: { tool: PremiumToolId; children: ReactNode; compact?: boolean }) {
   const { status, loaded } = usePremium();
-  if (!loaded) return <div className="px-4 py-12 text-sm text-t-phos-dim">Loading...</div>;
+  if (!isSponsoredTool(tool)) return <>{children}</>;
+  if (!loaded) return <div className={compact ? "py-3 text-sm text-t-phos-dim" : "px-4 py-12 text-sm text-t-phos-dim"}>Loading...</div>;
   // The status could not be read: show the tool; the server still checks every call.
   const open = status ? toolIsOpen(status, tool) : true;
   if (open) return <>{children}</>;
+  if (status?.unavailable) {
+    return compact ? <PremiumUnavailable tool={tool} compact /> : <div className="px-4 py-10"><PremiumUnavailable tool={tool} /></div>;
+  }
+  if (compact) return <PremiumLocked tool={tool} status={status} compact />;
   return (
     <div className="px-4 py-10">
       <PremiumLocked tool={tool} status={status} />
