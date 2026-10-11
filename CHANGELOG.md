@@ -2,6 +2,26 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## 2026-10 One finished resume, everywhere (saved revisions)
+
+- A finished resume is now saved on the server as a revision: the resume and letter text, the
+  person's confirmations (skills they kept, credentials they confirmed in their own words, their
+  answers about each line, title and scope answers), the checker version, and a status the server
+  works out itself. Owner only under row-level security (read, add, delete; never edited), in
+  export and delete-my-data. Migration 081.
+- Draft or finished is decided on the server, never by the page: the same finish gate with all of
+  the evidence, the cover letter included, plus the real page count from the renderer. An ordinary
+  resume over two pages (or over the person's one-page choice) stays a draft, and the person picks
+  which lines to cut; nothing comes off by itself. CVs, artist and performer resumes keep their own
+  length rules.
+- Every download, print, the letter, the package email and quick-apply now take a revision. Text
+  sent without one is always marked DRAFT. Drafts can still be downloaded, marked. Quick-apply
+  attaches a finished revision, or a draft only when the person chooses it, and records which.
+- Signed in, the finish page saves each change and says "Saved to your account" only after the
+  server answers, with Try again when it does not. A new browser opens the same saved version.
+- The automatic email sends the saved revision as attached PDF and Word files, once per version, and
+  says on the page when it did not send and why.
+
 ## 2026-10 Record check (a separate, consented step)
 
 - A new Refinery step helps a person work out which official sources to check for a job or license
