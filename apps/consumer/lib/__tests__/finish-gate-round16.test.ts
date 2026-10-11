@@ -16,6 +16,12 @@ const PH = "SAM ORTIZ\nToledo, OH | 419-555-0177 | sam.ortiz@example.com\n\nPROF
 const view = (upload: string, page: string) =>
   buildFinishView({ resumeText: page, ownWords: ownWordsFor({ resumeText: upload }, false), defendAnswers: [], coverLetterText: "", written: { resume: page, letter: "" }, ownResumeText: upload, keptTerms: [] } as unknown as Input);
 const titleCards = (upload: string, page: string) => view(upload, page).openItems.filter((i) => i.kind === "title_unsaid").map((i) => i.line);
+// Integration H4: a promotion merged into one range is a dates card with true words (the title is theirs; the
+// dates are not one job's), never a title card that a title tap could settle.
+const mergedCard = (upload: string, page: string) => {
+  const items = view(upload, page).openItems;
+  return items.filter((i) => i.kind === "title_unsaid").length === 0 && items.some((i) => i.kind === "job_changed" && /^t\.ROY changed the dates for this job\. Your page says/.test(i.why)) ? 1 : 0;
+};
 
 const MERGED = PH + "SHIFT LEAD | Kroger | Toledo, OH | 2016 - 2023\n- Opened the store and ran the register";
 const EARLY = PH + "SHIFT LEAD | Kroger | Toledo, OH | 2019 - 2023\n- Opened the store\nSHIFT LEAD | Kroger | Toledo, OH | 2016 - 2019\n- Ran the register";
@@ -23,7 +29,7 @@ const HONEST = PH + "SHIFT LEAD | Kroger | Toledo, OH | 2019 - 2023\n- Opened th
 
 test("R16-B1: a promotion pasted as 'Title at Employer' with the years on the next line asks", () => {
   const up = C + "Shift Lead at Kroger\n2019 - 2023\nopened the store, ran the register\n\nCashier at Kroger\n2016 - 2019\nran the register";
-  assert.equal(titleCards(up, MERGED).length, 1);
+  assert.equal(mergedCard(up, MERGED), 1);
   assert.deepEqual(titleCards(up, EARLY), ["SHIFT LEAD | Kroger | Toledo, OH | 2016 - 2019"]);
   assert.deepEqual(titleCards(up, HONEST), []);
   assert.equal(view(up, HONEST).state, "finished");
@@ -32,7 +38,7 @@ test("R16-B1: a promotion pasted as 'Title at Employer' with the years on the ne
 test("R16-B1: a no-year sentence naming the higher title never settles the merged header", () => {
   const promo = C + "Cashier | Kroger | 2016 - 2019\nran the register\n\nShift Lead | Kroger | 2019 - 2023\nopened the store";
   for (const s of ["I was a shift lead at Kroger.", "My job at Kroger was shift lead.", "I worked as a shift lead at Kroger.", "Shift lead at Kroger."]) {
-    assert.equal(titleCards(`${promo}\n${s}`, MERGED).length, 1, s);
+    assert.equal(mergedCard(`${promo}\n${s}`, MERGED), 1, s);
   }
   assert.deepEqual(titleCards(`${promo}\nI was a shift lead at Kroger.`, HONEST), []);
 });

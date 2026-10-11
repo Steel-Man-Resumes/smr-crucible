@@ -15,6 +15,7 @@
  */
 
 import { namedCredentialRe } from "./credentialWords";
+import { jobBlockText, resolvePageJob } from "./jobResolver";
 
 export type ScopeFamily =
   | "supervise"
@@ -864,34 +865,10 @@ type JobResolution = { kind: "none" } | { kind: "block"; text: string } | { kind
  * the dates cannot tell apart. People scope is then asked, never cleared by another job's words.
  */
 function resolveJob(sourceText: string, pageJob: string): JobResolution {
-  const parts = (l: string) =>
-    l
-      .split("|")
-      .map((p) => p.replace(/\b\d{1,2}\/(?:\d{1,2}\/)?(?:19|20)\d{2}\b|\b(?:19|20)\d{2}\b|\b(?:present|current|now)\b/gi, " ").toLowerCase().replace(/\b(?:inc|llc|co|corp|company|ltd)\b\.?/g, " ").replace(/[^a-z0-9]+/g, ""))
-      .filter((p) => p.length >= 2);
-  const yearsOf = (l: string) => (l.match(/\b(?:19|20)\d{2}\b/g) ?? []).join(",");
-  const lines = withoutGoalText(sourceText).split("\n");
-  const blocks: Array<{ head: string; body: string[] }> = [];
-  for (const raw of lines) {
-    const l = raw.trim();
-    const first = l.split("|")[0].trim();
-    if (l.includes("|") && !/^[-*\u2022]/.test(l) && /[A-Za-z]{2,}/.test(first) && !first.includes(":") && !l.includes("@")) blocks.push({ head: l, body: [] });
-    else if (blocks.length && l) blocks[blocks.length - 1].body.push(l);
-  }
-  if (!blocks.length) return { kind: "none" };
-  const [title, employer] = parts(pageJob);
-  if (!title) return { kind: "unresolved" };
-  let hit = blocks.filter((b) => {
-    const [t, e] = parts(b.head);
-    if (t !== title) return false;
-    if (!employer || !e) return !employer && !e;
-    return e === employer || e.includes(employer) || employer.includes(e);
-  });
-  if (hit.length > 1) {
-    const years = yearsOf(pageJob);
-    hit = years ? hit.filter((b) => yearsOf(b.head) === years) : [];
-  }
-  return hit.length === 1 ? { kind: "block", text: [hit[0].head, ...hit[0].body].join("\n") } : { kind: "unresolved" };
+  // Integration M4: the one shared resolver (jobResolver.ts) decides which of their jobs this is.
+  const m = resolvePageJob(pageJob, withoutGoalText(sourceText));
+  if (m.kind === "none") return { kind: "none" };
+  return m.kind === "one" ? { kind: "block", text: jobBlockText(m.job) } : { kind: "unresolved" };
 }
 
 /** Round 4 (H3-1): the object of a claim, from its verb on: articles and "my" off, cut at the first comma, semicolon or "and". */

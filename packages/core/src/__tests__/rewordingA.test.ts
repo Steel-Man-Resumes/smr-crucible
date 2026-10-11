@@ -16,7 +16,10 @@ import { scopeHitsNotTheirs } from "../scopeWords";
 
 test("rulebook A: reword freely, facts locked; duty phrasing always rewritten", () => {
   assert.match(resumeRulesBlock("truth"), /Supervising people is scope/);
-  assert.match(resumeRulesBlock("truth"), /"Responsible for\" a shift, area, task or thing is never supervising people|Responsible for" a shift, area, task or thing is never supervising people/);
+  // Integration L5: the rulebook and the writer prompt say the same thing about "responsible for" a shift.
+  assert.match(resumeRulesBlock("truth"), /"Responsible for" a shift or an area is not a people claim by itself/);
+  assert.match(resumeRulesBlock("truth"), /"Responsible for" a task or a thing \("the crew's safety gear", "cleaning the kitchen"\) never becomes supervising/);
+  assert.doesNotMatch(resumeRulesBlock("truth"), /a shift, area, task or thing is never supervising people/);
   assert.match(resumeRulesBlock("truth"), /never an added size word \(large, heavy, major, daily\)/);
   assert.match(resumeRulesBlock("page"), /dates on every entry, in the form the person gave them/);
   assert.doesNotMatch(resumeRulesBlock("page"), /years on every entry/);

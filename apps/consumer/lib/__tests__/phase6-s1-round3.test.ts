@@ -239,7 +239,9 @@ test("M2: a changed month, a shortened employer or an added city is a fact card 
     assert.ok(g && g.items.length && g.items.every((i) => i.kind !== "job_confirm"), `${name}: ${JSON.stringify(g?.items.map((i) => i.kind))}`);
     if (g!.job) {
       assert.ok(g!.job.changes?.length, `${name}: a changed-job card`);
-      assert.match(g!.items[0].why, /t\.ROY changed this job\. Not on your page:/);
+      // Integration H4: a changed date gets the dates copy, naming the person's own dates for that job.
+      if (/month|date/.test(name)) assert.match(g!.items[0].why, /^t\.ROY changed the dates for this job\. Your page says 8\/2021 - Present\./);
+      else assert.match(g!.items[0].why, /t\.ROY changed this job\. Not on your page:/);
     }
   }
   // Unchanged: the tap card, with true copy.

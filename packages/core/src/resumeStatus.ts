@@ -41,6 +41,8 @@ import {
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
 import { isPeopleScopeHit, OVER_PEOPLE_YES, type ScopeContext } from "./scopeWords";
+import { jobsIn } from "./jobResolver";
+import { jobLineRoles } from "./pageFitShared";
 import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm, typedCoversHit, isScopeCopy, sameTitle, employerWordsOf, withoutGoalText, ownJobFramed } from "./scopeWords";
 import { isCredentialTerm } from "./credentialWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
@@ -755,7 +757,12 @@ function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; i
   const ls = linesOf(resumeText);
   const out: Array<{ line: string; inSkills: boolean; job?: string }> = [];
   // Phase 6 (r2 ruling): the job header each line sits under, so its scope is read against that job's words.
+  // Integration M4: what a job header is comes from the shared resolver (a header without pipes, on one to
+  // three lines, is a job too); its key is the header line, or its lines joined for a multi-line header.
   let job: string | undefined;
+  const pageJobs = jobsIn(resumeText);
+  const jobKeyAt = new Map(pageJobs.map((j) => [j.lines[0], j.lines.length > 1 ? j.header : j.lines[0]] as [string, string]));
+  const headerPart = new Set(pageJobs.flatMap((j) => j.lines.slice(1)));
   const credLines = new Set(credentialMentionsOf(resumeText).filter((m) => !m.term).map((m) => m.line));
   const titles = pageJobTitles(resumeText);
   let inSkills = false;
@@ -765,6 +772,8 @@ function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; i
     if (SKILLS_HEADING_RE.test(l.replace(/:$/, ""))) { inSkills = true; seenHeading = true; job = undefined; return; }
     if (isSectionEnd(l)) { inSkills = false; seenHeading = true; job = undefined; return; }
     if (CONTACT_LINE_RE.test(l) || isDateLine(l)) return;
+    if (seenHeading && jobKeyAt.has(l)) { job = jobKeyAt.get(l); return; }
+    if (seenHeading && headerPart.has(l)) return;
     if (seenHeading && isEntryHeader(l)) { job = l; return; }
     if (!seenHeading) {
       // The header block's place line ("Dayton, OH") is contact, not a claim.
@@ -905,19 +914,50 @@ const COUNT_SKIP = new Set(["a", "an", "the", "of", "per", "to", "and", "or", "i
 
 /** The stem of the first real word after a number (what it counts), or "" when none follows. */
 function countedAfter(text: string, end: number): string {
-  const words = text.slice(end).toLowerCase().match(/[a-z]+/g) ?? [];
+  const rest = text.slice(end);
+  // "3rd" and "3-person": the word glued to the number is part of it, not what it counts ("3-person crew" counts the crew).
+  const words = (rest.replace(/^(?:st|nd|rd|th)\b/i, " ").replace(/^-[a-z]+/i, " ").toLowerCase().match(/[a-z]+/g) ?? []);
+  // Integration H2: a number followed by a place or time phrase ("3 on nights", "3 in the plant") counts
+  // nothing after it; its count is read before it ("a crew of 3 on nights").
+  for (const x of words.slice(0, 3)) {
+    if (COUNT_STOP.has(x)) return "";
+    if (!COUNT_SKIP.has(x)) return stemOf(x);
+  }
+  return "";
+}
+const COUNT_STOP = new Set(["on", "in", "at", "for", "to", "with", "during", "from", "by", "across", "into", "over", "around", "until", "since"]);
+
+/**
+ * Integration H2: the stem of the real word just BEFORE a number, when nothing counted follows it ("a crew
+ * of 3", "team: 4", "a 3-person crew" reads its word after). Small words skipped; a verb ending in -ed or
+ * -ing is not what a number counts.
+ */
+function countedBefore(text: string, start: number): string {
+  const words = (text.slice(0, start).toLowerCase().match(/[a-z]+/g) ?? []).reverse();
   const w = words.slice(0, 3).find((x) => !COUNT_SKIP.has(x));
-  return w ? stemOf(w) : "";
+  return w && !/(?:ed|ing)$/.test(w) ? stemOf(w) : "";
 }
 
-/** Every number value in a text, with what each one counts there. */
+/** What a number counts on a line: the word after it, else the word before it ("crew of 3"). */
+function countedAt(text: string, tok: { index: number; length: number }): string {
+  return countedAfter(text, tok.index + tok.length) || countedBefore(text, tok.index);
+}
+
+/** Every number value in a text, with what each one counts there (the word after it and the word before it). */
 function numberContexts(text: string): Map<string, Set<string>> {
   const t = normalizeDigits(text || "");
   const out = new Map<string, Set<string>>();
-  for (const tok of numberTokens(t)) {
-    const set = out.get(tok.value) ?? new Set<string>();
-    set.add(countedAfter(t, tok.index + tok.length));
-    out.set(tok.value, set);
+  // Per line, so "Ran 3 presses." never lends its 3 to the next line's words.
+  for (const ln of t.split("\n")) {
+    for (const tok of numberTokens(ln)) {
+      const set = out.get(tok.value) ?? new Set<string>();
+      const after = countedAfter(ln, tok.index + tok.length);
+      if (after) set.add(after);
+      const before = countedBefore(ln, tok.index);
+      if (before) set.add(before);
+      if (!after && !before) set.add("");
+      out.set(tok.value, set);
+    }
   }
   return out;
 }
@@ -944,8 +984,10 @@ export function numbersInContext(line: string, sourceText: string, rewrite?: Def
     const ctx = src.get(tok.value);
     if (!ctx) return false;
     if (own && !own.has(tok.value)) continue;
-    const w = countedAfter(t, tok.index + tok.length);
-    if (w && !ctx.has(w)) return false;
+    // Integration H2: what the number counts is read on both sides ("a crew of 3" counts the crew). A
+    // number that counts nothing readable is in context only when the person's number counted nothing either.
+    const w = countedAt(t, tok);
+    if (w ? !ctx.has(w) : !ctx.has("")) return false;
   }
   return true;
 }
@@ -1012,9 +1054,13 @@ function strictLinesUnderA(resumeText: string, sourceText: string, checkedText: 
   };
   const body = new Set(bodyLines(resumeText, sourceText).filter((b) => !b.inSkills).map((b) => b.line));
   const isBulletLine = (l: string) => /^[-•*]/.test(l);
+  // Integration M4: a job is "parsed" when the shared resolver reads its header (the same reading the job
+  // card, people scope and the renderer use). A plain line with no bullet mark still gets the stricter reading.
+  const all = linesOf(resumeText);
+  const roles = jobLineRoles(all);
   let inExperience = false;
   let unparsed = false;
-  linesOf(resumeText).forEach((l, i) => {
+  all.forEach((l, i) => {
     if (i === 0) return;
     if (isSectionEnd(l)) {
       inExperience = EXPERIENCE_HEADING_RE.test(l.replace(/:$/, ""));
@@ -1022,8 +1068,10 @@ function strictLinesUnderA(resumeText: string, sourceText: string, checkedText: 
       return;
     }
     if (inExperience) {
-      if (isEntryHeader(l)) unparsed = false;
-      else if (!isBulletLine(l)) unparsed = true;
+      if (isEntryHeader(l) || roles[i] === "job") unparsed = false;
+      else if (roles[i] === "jobPart" || roles[i] === "years") {
+        /* a line of a header the resolver read */
+      } else if (!isBulletLine(l)) unparsed = true;
     }
     const far = body.has(l) && distanceFromSource(l, sourceText) > 0;
     const strictJob = inExperience && unparsed && (far || !datesAsGiven(l, sourceText));

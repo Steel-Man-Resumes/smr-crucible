@@ -38,6 +38,7 @@ import {
 import { hasCredentialStatus, isEntryHeader, isSectionEnd, linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
 import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
 import { isSectionHeader } from "@crucible/core/src/pageFitShared";
+import { employerKey, employersMatch, jobsIn, matchOwnJob, placeKey, readJobHeader, sameDates, titleKey, type JobFacts } from "@crucible/core/src/jobResolver";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { namedCredentialRe, credentialInitialsRe } from "@crucible/core/src/credentialWords";
 import { scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion, markGoalText, sameTitle, isPeopleScopeHit, ownLineFor, OVER_PEOPLE_QUESTION, OVER_PEOPLE_YES } from "@crucible/core/src/scopeWords";
@@ -1400,20 +1401,22 @@ export function jobChangedWhy(changes: string[]): string {
   return `t.ROY changed this job. Not on your page: ${changes.map((c) => `"${c}"`).join(", ")}.`;
 }
 export const JOB_QUESTION = "Is this job right?";
+/** Integration H4: the dates of a job changed (merged stints, a moved start or end). A tap never settles it. */
+export function jobDatesWhy(own: string[], others: string[] = []): string {
+  const theirs = own.length ? own.join(" and ") : "no dates for this job";
+  const also = others.length ? ` Also not on your page: ${others.map((c) => `"${c}"`).join(", ")}.` : "";
+  return `t.ROY changed the dates for this job. Your page says ${theirs}.${also}`;
+}
 const JOB_HEADING_RE = /^(?:(?:professional |work |relevant )?experience|employment(?: history)?|work history)$/i;
 
-/** The job headers ("Title | Employer | Dates") under the experience heading, in page order. */
+/**
+ * The job headers in page order, from the shared job resolver (core jobResolver: the same reading as the
+ * renderer and people scope). A header written over two or three lines is named by its first line.
+ */
 export function jobHeaderLines(resumeText: string): string[] {
   const out: string[] = [];
-  let inExperience = false;
-  linesOf(resumeText || "").forEach((l, i) => {
-    if (i === 0) return; // the name
-    if (isSectionEnd(l)) {
-      inExperience = JOB_HEADING_RE.test(l.replace(/:$/, "").trim());
-      return;
-    }
-    if (inExperience && isEntryHeader(l) && !out.includes(l)) out.push(l);
-  });
+  const lines = linesOf(resumeText || "");
+  for (const j of jobsIn(lines.slice(1).join("\n"))) if (!out.includes(j.lines[0])) out.push(j.lines[0]);
   return out;
 }
 
@@ -1434,7 +1437,8 @@ function jobAtoms(text: string): string[] {
     .map((a) => a.replace(/\s+/g, " ").replace(/[.;:]+$/, "").replace(/^(?:a|an|the)\s+/i, "").trim())
     .filter(Boolean);
 }
-const factKey = (a: string) => a.toLowerCase().replace(/\s+/g, " ").trim();
+// Integration M3: punctuation and spacing are not facts ("Libby MT" and "Libby, MT" are one place).
+const factKey = (a: string) => a.toLowerCase().replace(/[^a-z0-9]+/g, "");
 const JOB_MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
 /** A date on a job line as written ("8/2021", "Aug 2021", "2021", "Present"), whatever the dash or spacing around it. */
 const JOB_DATE_RE = new RegExp(`\\b(?:${JOB_MONTH}\\s+)?(?:\\d{1,2}\\/)?(?:19|20)\\d{2}\\b|\\b(?:present|current|now)\\b`, "gi");
@@ -1451,7 +1455,68 @@ const onlyDates = (a: string) => a.replace(JOB_DATE_RE, " ").replace(/[\s\-\u201
  * comes back here, spelled as on the page. Such a header is a fact card,
  * never settled by "Looks right".
  */
-export function jobHeaderChanges(header: string, ownText: string): string[] {
+export function jobHeaderChanges(header: string, ownText: string, resumeText?: string): string[] {
+  return jobHeaderReview(header, ownText, resumeText).changes;
+}
+
+/**
+ * Integration M4/H4/M3: a page job header read against the person's own jobs through the shared resolver.
+ * `changes`: facts on the header that are not theirs for that job (employer, place, dates; the title too
+ * for a header without pipes, which the title rule does not read). `dates`: set when the dates are not that
+ * job's start/end pair (a moved start or end, or stints merged into one range): their dates, as written.
+ * Places compare without punctuation ("Libby MT" is "Libby, MT").
+ */
+export function jobHeaderReview(header: string, ownText: string, resumeText?: string): { changes: string[]; dates?: string[] } {
+  const pageJob = (resumeText ? jobsIn(linesOf(resumeText).slice(1).join("\n")).find((j) => j.lines[0] === header) : undefined) ?? readJobHeader(header);
+  const own = jobsIn(ownText || "", { own: true });
+  const m = matchOwnJob(pageJob, own);
+  if (m.kind === "one") {
+    const j = m.job;
+    const changes: string[] = [];
+    if (pageJob.employer && employerKey(pageJob.employer) !== employerKey(j.employer)) changes.push(pageJob.employer);
+    if (pageJob.place && placeKey(pageJob.place) !== placeKey(j.place) && !ownMentionsPlace(j, pageJob.place)) changes.push(pageJob.place);
+    // "Present" and "Current" are one date, but the page keeps the person's word for it.
+    // The page's dates are exactly another job of theirs at this employer (a higher title moved onto earlier
+    // years): that is the title changing, asked on the title card, not the dates.
+    const titleMoved = own.some((o) => o !== j && employersMatch(o.employer, pageJob.employer) && sameDates(o, pageJob));
+    if (!titleMoved && (!sameDates(pageJob, j) || (pageJob.present && j.present && pageJob.endText.toLowerCase() !== j.endText.toLowerCase()))) {
+      // The start and the end each as the page spells them, when that one changed.
+      const startChanged = !sameDate(pageJob.start, j.start);
+      const endChanged = pageJob.present !== j.present || (!pageJob.present && !sameDate(pageJob.end, j.end)) || (pageJob.present && pageJob.endText.toLowerCase() !== j.endText.toLowerCase());
+      const parts = [...(startChanged ? [pageJob.startText || "no start date"] : []), ...(endChanged ? [pageJob.endText || "no end date"] : [])];
+      return { changes: [...changes, ...parts.filter((p, k) => parts.indexOf(p) === k)], dates: [j.dates || "no dates"] };
+    }
+    return { changes };
+  }
+  if (m.kind === "several") {
+    // The same title and employer more than once, and the page's dates are none of them: merged stints.
+    return { changes: [pageJob.dates || "no dates"], dates: m.jobs.map((j) => j.dates || "no dates") };
+  }
+  const legacy = legacyJobHeaderChanges(pageJob.lines.length > 1 ? pageJob.header : header, ownText);
+  // A header without pipes is not read by the title rule: its title is checked here.
+  if (!header.includes("|") && pageJob.title && !own.some((j) => titleKey(j.title) === titleKey(pageJob.title)) && !factKeys(ownText).has(factKey(pageJob.title))) {
+    return { changes: [pageJob.title, ...legacy] };
+  }
+  return { changes: legacy };
+}
+
+const sameDate = (a?: { year: number; month?: number }, b?: { year: number; month?: number }) =>
+  (!a && !b) || (!!a && !!b && a.year === b.year && (a.month ?? 0) === (b.month ?? 0));
+
+/** True when the person's own lines for that job carry the place ("Corner Mart, Libby MT" under the header). */
+function ownMentionsPlace(j: JobFacts, place: string): boolean {
+  const k = placeKey(place);
+  return !!k && [...j.lines, ...j.body.slice(0, 1)].some((l) => placeKey(l).includes(k));
+}
+
+function factKeys(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const l of linesOf(text || "")) for (const a of jobAtoms(l)) out.add(factKey(a));
+  return out;
+}
+
+/** Before the shared resolver: the atoms on the person's lines that name the title or employer (free-text uploads). */
+function legacyJobHeaderChanges(header: string, ownText: string): string[] {
   const page = jobAtoms(header);
   // The title is checked by the title rule (its own card); here: employer, place and dates.
   const anchors = new Set(page.slice(0, 2).map(factKey));
@@ -2134,11 +2199,25 @@ export function buildFinishView(input: {
   // "explain this line" questions there). The fact checks above already hold a
   // title, employer or date that is not the person's; a header with anything
   // open is settled on that card. Every other job header asks only "Looks right?".
+  // Integration H4: in every mode, a job whose dates are not one of the person's start/end pairs (a moved
+  // date, stints merged into one range) is a dates card with true words, and never a title card: the title
+  // is theirs, it is the dates that changed. Only retyping the header ("Fix this") settles it.
+  for (const header of jobHeaderLines(input.resumeText)) {
+    if (jobRetyped(answers, header)) continue;
+    const review = jobHeaderReview(header, source, input.resumeText);
+    if (!review.dates) continue;
+    const k = squash(stripBullet(header));
+    for (let x = items.length - 1; x >= 0; x--) {
+      if (items[x].target === "resume" && squash(stripBullet(items[x].line)) === k && (items[x].kind === "title_unsaid" || items[x].kind === "job_confirm")) items.splice(x, 1);
+    }
+    const others = review.changes.filter((c) => !review.dates!.includes(c) && datesOn(c).length === 0);
+    items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_changed", why: jobDatesWhy(review.dates, others), question: JOB_CHANGED_QUESTION });
+  }
   for (const header of factsLocked ? jobHeaderLines(input.resumeText) : []) {
     if (jobRetyped(answers, header)) continue;
     if (items.some((i) => i.target === "resume" && squash(stripBullet(i.line)) === squash(stripBullet(header)))) continue;
     // Review r1 M2: a fact t.ROY changed is a fact card; "Looks right" never settles it.
-    const changes = jobHeaderChanges(header, source);
+    const changes = jobHeaderChanges(header, source, input.resumeText);
     if (changes.length) {
       items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_changed", why: jobChangedWhy(changes), question: JOB_CHANGED_QUESTION });
       continue;
@@ -2194,7 +2273,7 @@ export function buildFinishView(input: {
         ? { terms: its.map((i) => i.line).filter((t, k, all) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === k) }
         : {}),
       ...(its.length === 1 && its[0].kind === "job_confirm" ? { job: jobPartsOf(its[0].line) } : {}),
-      ...(its.length === 1 && its[0].kind === "job_changed" ? { job: { ...jobPartsOf(its[0].line), changes: jobHeaderChanges(its[0].line, source) } } : {}),
+      ...(its.length === 1 && its[0].kind === "job_changed" ? { job: { ...jobPartsOf(its[0].line), changes: jobHeaderChanges(its[0].line, source, input.resumeText) } } : {}),
       ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true, schoolKnown: !!attendedSchoolOf(its[0].line, source) } : {}) } : {}),
       ...(its.find((i) => i.kind === "title_unsaid" && i.roleTitle)
         ? { title: { current: its.find((i) => i.kind === "title_unsaid" && i.roleTitle)!.roleTitle as string, role: true } }

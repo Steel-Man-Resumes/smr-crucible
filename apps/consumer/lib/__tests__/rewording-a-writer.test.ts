@@ -785,10 +785,13 @@ test("r3 H3-2: the supervision set-aside is generate-docs only, and only when su
   assert.match(supervisionRule(true), /do NOT rewrite or remove it/);
   assert.doesNotMatch(supervisionRule(false), /do NOT rewrite or remove it/);
   assert.match(supervisionRule(false), /fix it like any other unsupported claim/);
-  // Only generate-docs opts in.
+  // Integration M1/L4 (CC ruling): on exactly when the run's signed rewording A marker is, on generate-docs and
+  // on every recheck path; never on the other routes.
   const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
-  assert.equal((read("../../app/api/forge/generate-docs/route.ts").match(/askSupervision: true/g) ?? []).length, 2);
-  for (const rel of ["../../app/api/fit-check/route.ts", "../../app/api/rush-resume/route.ts", "../../app/api/resume-fine-tune/route.ts", "../../app/api/resume-generate-full/route.ts", "../../app/api/forge/recheck/route.ts", "../forge-recheck.ts"]) {
+  assert.equal((read("../../app/api/forge/generate-docs/route.ts").match(/askSupervision: rewordingAFor\(sourceKind\)/g) ?? []).length, 2);
+  assert.doesNotMatch(read("../../app/api/forge/generate-docs/route.ts"), /askSupervision: true/);
+  assert.equal((read("../forge-recheck.ts").match(/deps\.verify,\s*rewordingAFor\(kind\)/g) ?? []).length, 2);
+  for (const rel of ["../../app/api/fit-check/route.ts", "../../app/api/rush-resume/route.ts", "../../app/api/resume-fine-tune/route.ts", "../../app/api/resume-generate-full/route.ts"]) {
     assert.doesNotMatch(read(rel), /askSupervision/, rel);
   }
 });
