@@ -41,10 +41,12 @@
 -- existing view or function, no data. Re-running it changes nothing.
 --
 -- ROLLBACK (no data is lost; the support search falls back to its earlier list
--- when the view is missing):
+-- when the view is missing). The first line restores TEMP for PUBLIC only if
+-- PUBLIC held it before 082 (the recorded state, see the last block); it must
+-- run before the function, which carries that record, is dropped:
+--   DO $r$ BEGIN IF coalesce(obj_description(to_regprocedure('public.resource_app_rows()'), 'pg_proc'), '') ~ 'public_had_temp=true' THEN EXECUTE format('GRANT TEMPORARY ON DATABASE %I TO PUBLIC', current_database()); END IF; END $r$;
 --   DROP VIEW IF EXISTS resource_app_v;
 --   DROP FUNCTION IF EXISTS public.resource_app_rows();
---   DO $r$ BEGIN EXECUTE format('GRANT TEMPORARY ON DATABASE %I TO PUBLIC', current_database()); END $r$;
 --   DELETE FROM _migrations WHERE filename = '082_resource_app_view.sql';
 --   and remove resource_app_v from scripts/lib/restricted-grants.mjs.
 
@@ -141,19 +143,57 @@ END $$;
 -- no per-role deny: while PUBLIC holds TEMP, revoking it from smr_app alone
 -- does nothing, so it is revoked from PUBLIC. The database owner keeps it
 -- (owner privileges), so migrations that use pg_temp still run. COST, stated:
--- any other non-owner role in this database loses TEMP too; none is defined in
--- this repo. Done only when the migrator owns the database (or is superuser);
--- otherwise a NOTICE says it was skipped, and nothing else changes.
+-- every other non-owner, non-superuser role loses TEMP too (production today:
+-- anonymous, authenticated, authenticator, smr_runner; none uses temp
+-- objects). A role that turns out to need it gets a targeted
+-- GRANT TEMPORARY ON DATABASE <db> TO <role>. Run the read-only preflight
+-- (migrations/dry-run/082_temp_preflight.sql) first and keep its output.
+--
+-- WHAT WAS THERE BEFORE (review N1) is recorded as the COMMENT on
+-- public.resource_app_rows(): "082 temp state: public_had_temp=<true|false>;
+-- revoke=<done|skipped>; recorded_on=<date>". It is written once, by the first
+-- run, before the revoke; a re-run keeps it (PUBLIC no longer has TEMP then, so
+-- re-reading would record the wrong answer). The rollback re-grants TEMP to
+-- PUBLIC only when it says public_had_temp=true.
+--
+-- NOT SKIPPED SILENTLY (review N2). If the migrator neither owns the database
+-- nor is superuser, the file stops with an EXCEPTION. For a database we
+-- deliberately do not own, the documented override is a setting on the
+-- migrating role, made before the run and removed after it:
+--   ALTER ROLE <migrator> SET smr.skip_082_temp_revoke = 'on';   -- then reconnect
+--   ... apply 082 ...
+--   ALTER ROLE <migrator> RESET smr.skip_082_temp_revoke;
+-- (or pass -c smr.skip_082_temp_revoke=on in the connection options). With the
+-- override the revoke is skipped with a WARNING and recorded as revoke=skipped.
 DO $$
-DECLARE db text := pg_catalog.current_database();
+DECLARE
+  db      text := pg_catalog.current_database();
+  fn      regprocedure := pg_catalog.to_regprocedure('public.resource_app_rows()');
+  prev    text := pg_catalog.obj_description(pg_catalog.to_regprocedure('public.resource_app_rows()'), 'pg_proc');
+  had     boolean;
+  can     boolean;
+  skip    boolean := COALESCE(pg_catalog.current_setting('smr.skip_082_temp_revoke', true), '') IN ('on', 'true', '1');
 BEGIN
-  IF EXISTS (SELECT 1 FROM pg_catalog.pg_database d JOIN pg_catalog.pg_roles r ON r.rolname = current_user
-              WHERE d.datname = db AND (d.datdba = r.oid OR r.rolsuper)) THEN
+  SELECT EXISTS (SELECT 1 FROM pg_catalog.aclexplode(COALESCE(d.datacl, pg_catalog.acldefault('d', d.datdba))) a
+                  WHERE a.grantee = 0 AND a.privilege_type = 'TEMPORARY')
+    INTO had FROM pg_catalog.pg_database d WHERE d.datname = db;
+  SELECT EXISTS (SELECT 1 FROM pg_catalog.pg_database d JOIN pg_catalog.pg_roles r ON r.rolname = current_user
+                  WHERE d.datname = db AND (d.datdba = r.oid OR r.rolsuper))
+    INTO can;
+  IF NOT can AND NOT skip THEN
+    RAISE EXCEPTION '082: % does not own database %, so TEMP cannot be revoked from PUBLIC. Run as the owner, or set smr.skip_082_temp_revoke = on for a database we deliberately do not own (see the header).', current_user, db;
+  END IF;
+  IF prev IS NULL OR prev !~ '^082 temp state: ' THEN
+    EXECUTE pg_catalog.format('COMMENT ON FUNCTION %s IS %L', fn,
+      pg_catalog.format('082 temp state: public_had_temp=%s; revoke=%s; recorded_on=%s',
+        CASE WHEN had THEN 'true' ELSE 'false' END, CASE WHEN can THEN 'done' ELSE 'skipped' END, (pg_catalog.now() AT TIME ZONE 'UTC')::pg_catalog.date));
+  END IF;
+  IF can THEN
     EXECUTE pg_catalog.format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC', db);
     IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'smr_app') THEN
       EXECUTE pg_catalog.format('REVOKE TEMPORARY ON DATABASE %I FROM smr_app', db);
     END IF;
   ELSE
-    RAISE NOTICE '082: TEMP not revoked: % does not own database %', current_user, db;
+    RAISE WARNING '082: TEMP NOT revoked (smr.skip_082_temp_revoke is on): % does not own database %', current_user, db;
   END IF;
 END $$;

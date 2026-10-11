@@ -14,7 +14,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { searchSupport, fromDirectory, directoryScope, requestedWants, type SupportSearchDeps } from "../support-search";
-import { resourceAppSql, RESOURCE_APP_LIMIT, type ResourceAppRow, type ResourcePlaceQuery } from "@crucible/core/src/resourceDirectoryShared";
+import { resourceAppSql, RESOURCE_APP_LEVEL_CAP, RESOURCE_APP_LIMIT, type ResourceAppRow, type ResourcePlaceQuery } from "@crucible/core/src/resourceDirectoryShared";
 import { foldName } from "../location-search";
 import { countyKeyOf } from "../support-location";
 import type { CounselorResult } from "../hud-counselors";
@@ -49,7 +49,7 @@ const ROWS: ResourceAppRow[] = [
  * The view's WHERE and ORDER BY, as resourceAppSql writes them, in JS: the
  * asked areas; national rows; the state's statewide rows; its county and
  * city rows that match the place's counties, city or ZIP; closest first, then
- * newest; at most RESOURCE_APP_LIMIT. The real SQL runs against the real
+ * newest; at most RESOURCE_APP_LEVEL_CAP per reach level. The real SQL runs against the real
  * view in the PGlite proof, including a 250-row state.
  */
 function fakeReader(rows = ROWS) {
@@ -71,7 +71,7 @@ function fakeReader(rows = ROWS) {
         || ((r.geo_scope === "county" || r.geo_scope === "multi_county")
             && ([r.county, ...(r.counties ?? [])].some((c) => !!c && keys.includes(countyKeyOf(c))) || cityHit(r)))))))
       .sort((a, b) => rank[a.geo_scope] - rank[b.geo_scope] || b.last_checked.localeCompare(a.last_checked))
-      .slice(0, RESOURCE_APP_LIMIT);
+      .filter((r, _i, all) => all.filter((x) => rank[x.geo_scope] === rank[r.geo_scope]).indexOf(r) < RESOURCE_APP_LEVEL_CAP);
   };
   return { read, calls };
 }
@@ -132,6 +132,15 @@ describe("directory first", () => {
     const oh = r.resources.find((x) => x.id === "dir-oh-expunge")!;
     assert.equal(oh.checkedLine, "Last checked Sep 20, 2026.");
     assert.equal(oh.sourceUrl, "https://ohrecords.example.org/clinic");
+  });
+
+  test("a state with hundreds of statewide rows still shows the national line and the person's county", async () => {
+    const big = [...ROWS];
+    for (let i = 0; i < 260; i++) big.push(row({ service_id: `mt-state-${i}`, area_id: "food", geo_scope: "statewide", state: "MT", last_checked: "2026-10-09" }));
+    const r = await run({ category: "food", location: "Libby, MT" }, fakeReader(big).read);
+    assert.ok(ids(r.resources).includes("dir-us-food-finder"), "national line kept");
+    assert.ok(ids(r.resources).includes("dir-mt-pantry"), "county pantry kept");
+    assert.equal(r.resources.filter((x) => x.scope === "state").length, RESOURCE_APP_LEVEL_CAP);
   });
 
   test("New York: national only, even when a careless reader hands back other states' rows", async () => {
@@ -264,15 +273,20 @@ describe("pieces", () => {
     const { sql, params } = resourceAppSql({ state: "MT", areas: ["food", "x'; DROP"], countyKeys: ["lincoln", "x'; DROP"], cityKey: "libby'--", zip: "5992" });
     assert.match(sql, /FROM resource_app_v/);
     assert.doesNotMatch(sql, /'MT'|'food'|DROP|lincoln|libby/);
-    assert.deepEqual(params, [["food"], "MT", ["lincoln"], null, null, 200]);
+    assert.deepEqual(params, [["food"], "MT", ["lincoln"], null, null, 50]);
     // The place match comes before the limit, closest first.
-    assert.ok(sql.indexOf("= ANY($3::text[])") < sql.indexOf("LIMIT"));
-    assert.match(sql, /ORDER BY CASE geo_scope WHEN 'city' THEN 0/);
+    assert.ok(sql.indexOf("= ANY($3::text[])") < sql.indexOf("r.rn <="));
+    assert.match(sql, /CASE geo_scope WHEN 'city' THEN 0/);
+    assert.match(sql, /ORDER BY r\.lvl, r\.last_checked DESC/);
     const none = resourceAppSql({ state: "Montana", areas: ["food"] });
     assert.match(none.sql, /geo_scope = 'national'/);
-    assert.deepEqual(none.params, [["food"], 200]);
+    assert.deepEqual(none.params, [["food"], 50]);
     assert.deepEqual(resourceAppSql({ state: "MT", areas: ["food"], countyKeys: ["lincoln"], cityKey: "libby", zip: "59923" }).params,
-      [["food"], "MT", ["lincoln"], "libby", "59923", 200]);
+      [["food"], "MT", ["lincoln"], "libby", "59923", 50]);
+    // Each reach level is capped on its own, and the caps add up to the page (review N3).
+    assert.equal(RESOURCE_APP_LEVEL_CAP * 4, RESOURCE_APP_LIMIT);
+    assert.match(sql, /row_number\(\) OVER \(PARTITION BY m\.lvl/);
+    assert.match(sql, /WHERE r\.rn <= \$6/);
   });
 
   test("the route reads the directory and keeps the premium hook", () => {
