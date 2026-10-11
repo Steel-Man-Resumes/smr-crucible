@@ -52,6 +52,8 @@ import { writerReceipt, writerSourceFrom, type WriterSource } from "./writer-rec
 import { computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence } from "./revision-status";
 import { artifactText, baseRevisionFor, textFromBase } from "./revision-current";
 import { pickForgeArtifact, type RevisionStore, type SavedRevisionSummary } from "./revision-save";
+import { revisionKind, withRewording, type SourceKind } from "./source-kind";
+import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 
 export interface RecheckDeps {
   verify: typeof VerifyFn;
@@ -75,6 +77,12 @@ export type RecheckResult =
       /** Signed out: the new run cookie the route sets (HttpOnly). */
       runCookie: string | null;
       revision?: SavedRevisionSummary;
+      /**
+       * Signed in, the finish path: the server-held own words the receipt is
+       * bound to (Phase 6 S1 round 2), so the page checks against exactly
+       * those. The person's own words, to the person only.
+       */
+      evidence?: WriterSource;
     }
   | { ok: false; status: number; error: string };
 
@@ -149,13 +157,13 @@ function sign(
 }
 
 /** The writer's documents the server holds for a run: the newest verified version saved for it. */
-async function heldDocumentsFor(userId: string, runId: string, store: RevisionStore): Promise<{ resume: string; letter: string } | null> {
+async function heldRevisionFor(userId: string, runId: string, store: RevisionStore): Promise<ArtifactRevision | null> {
   const forge = pickForgeArtifact(await store.listResumeArtifacts(userId));
   if (!forge) return null;
   const rev = await store.getLatestRevision(userId, forge.id);
   const ev = (rev?.evidence ?? null) as Partial<RevisionEvidence> | null;
-  if (!ev || ev.writerVerified !== true || ev.runId !== runId || !ev.written) return null;
-  return { resume: ev.written.resume, letter: ev.written.letter };
+  if (!rev || !ev || ev.writerVerified !== true || ev.runId !== runId || !ev.written) return null;
+  return rev;
 }
 
 /** The run a stored artifact's check is bound to (an artifact has no Forge run of its own). */
@@ -193,19 +201,28 @@ export async function recheckDocs(input: unknown, userId: string | null, deps: R
     if (!store) return { ok: false, status: 500, error: "We couldn't check it just now." };
     const held: WriterSource =
       (store.serverSource ? await store.serverSource(userId, source.keepInsideLines === true) : null) ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] };
-    const written = (await heldDocumentsFor(userId, runId, store)) ?? checked;
-    const grounding = await runCheck(
-      checked,
-      { resumeText: [held.ownResumeText, held.ownWords].filter(Boolean).join("\n\n"), credentialsNote: held.credentialsAnswer || undefined, extra: answers },
-      deps.verify
+    const heldRev = await heldRevisionFor(userId, runId, store);
+    const heldEv = (heldRev?.evidence ?? null) as Partial<RevisionEvidence> | null;
+    const written = heldEv?.written ? { resume: heldEv.written.resume, letter: heldEv.written.letter } : checked;
+    // Round 3 (review r1 H2): the kind of this run, from the version the server
+    // holds for it; with none, the server cannot tell ("unknown": stricter rule).
+    const kind: SourceKind = heldRev ? revisionKind(heldRev) : "unknown";
+    const grounding = withRewording(
+      await runCheck(
+        checked,
+        { resumeText: [held.ownResumeText, held.ownWords].filter(Boolean).join("\n\n"), credentialsNote: held.credentialsAnswer || undefined, extra: answers },
+        deps.verify
+      ),
+      kind
     );
     const signed = sign(written, grounding, userId, runId, held, deps);
     if (deps.record) await deps.record(userId, runId, signed.nonce, signed.now);
-    return { ok: true, grounding, receipt: signed.receipt, written, runCookie: null };
+    return { ok: true, grounding, receipt: signed.receipt, written, runCookie: null, evidence: held };
   }
 
-  // Signed out: no server copy. A "check" receipt, for this browser's own files only.
-  const grounding = await runCheck(
+  // Signed out: no server copy. A "check" receipt, for this browser's own files
+  // only, and never rewording A (the server holds nothing to tell the kind from).
+  const groundingOut = await runCheck(
     checked,
     {
       resumeText: str(source.resumeText),
@@ -216,6 +233,7 @@ export async function recheckDocs(input: unknown, userId: string | null, deps: R
     },
     deps.verify
   );
+  const grounding = withRewording(groundingOut, "unknown");
   const signed = sign(checked, grounding, null, runId, writerSourceFrom(source), deps, "check");
   return { ok: true, grounding, receipt: signed.receipt, written: checked, runCookie: signed.runCookie };
 }
@@ -252,7 +270,13 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
     ...(baseInput?.confirmedCredentials ?? []).map((c) => c.text),
     ...(baseInput?.keptTerms ?? []),
   ];
-  const grounding = await runCheck(written, { resumeText: [source.ownResumeText, source.ownWords].filter(Boolean).join("\n\n"), extra: answers }, deps.verify);
+  // Round 3 (review r1 H2): the kind of the page being checked, worked out
+  // the same way a rebuild does (lib/source-kind.ts), from the stored lineage.
+  const lineage = base && store.listRevisions ? await store.listRevisions(userId, base.artifact_id).catch(() => [base]) : base ? [base] : [];
+  // Review r2 L5: a page that is not the base version's own text is never classified from that version.
+  const baseKind: SourceKind = base ? revisionKind(base, lineage, resume) : "page_only";
+  const kind: SourceKind = baseKind === "own_words" && base && base.resume_text !== resume ? "unknown" : baseKind;
+  const grounding = withRewording(await runCheck(written, { resumeText: [source.ownResumeText, source.ownWords].filter(Boolean).join("\n\n"), extra: answers }, deps.verify), kind);
   const runId = artifactRunId(art.id);
   const signed = sign(written, grounding, userId, runId, source, deps);
   if (deps.record) await deps.record(userId, runId, signed.nonce, signed.now);

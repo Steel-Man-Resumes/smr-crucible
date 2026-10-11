@@ -33,7 +33,14 @@
  * finished in the Forge (a Tailor result, an older saved resume) opens here
  * with the same cards. The person's own words come from the server, never
  * from this page (lib/revision-check.ts), and the save is a revision of that
- * same resume.
+ * same resume. Phase 6 (plan Q1): the main action is "Rewrite it with t.ROY"
+ * (the writer, with this resume as its source); "Check it as it is" opens
+ * the cards.
+ *
+ * ONE TAP PER JOB (Phase 6, plan Q3). Where the writer's second check ran,
+ * a reworded line whose facts trace back raises no card (rewording A); each
+ * job asks "Looks right" or "Fix this"; numbers are an optional "add a
+ * number?" that never stops the finish (lib/finish-gate.ts).
  */
 
 import { TroyMark } from "@crucible/consumer-ui";
@@ -41,7 +48,7 @@ import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } fr
 import { useRouter, useSearchParams } from "next/navigation";
 import { CREDENTIALS_KEY, isLanesFirst } from "@/lib/forge-path";
 import { LaneDownloadBox, LaneNextAction } from "@/components/forge/finish/LaneFinish";
-import { nextActionFor } from "@/lib/lane-task";
+import { CARDS_PARAM, CHECK_AS_IS_LABEL, REWRITE_WITH_TROY_LABEL, nextActionFor, rebuildActive, rebuildHref } from "@/lib/lane-task";
 import { useForgeSession } from "@/lib/forge-context";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
@@ -87,6 +94,8 @@ import {
   applyConfirmation,
   isConfirmWhen,
   cutCredentialEverywhere,
+  optionalNumberPrompts,
+  recordJobOk,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
 import { finishPayload, payloadMark, readRunEvidence, type RunEvidence } from "@/lib/finish-payload";
@@ -164,7 +173,8 @@ function OutputPageInner() {
   const router = useRouter();
   const { session, updateSession, runIsMine } = useForgeSession();
   // Check and finish (R2): a saved resume opened here by id.
-  const checkId = useSearchParams().get("check");
+  const searchParams = useSearchParams();
+  const checkId = searchParams.get("check");
   const checkMode = !!checkId;
   const checkModeRef = useRef(checkMode);
   checkModeRef.current = checkMode;
@@ -175,6 +185,10 @@ function OutputPageInner() {
   offerLetterOnlyRef.current = offerLetterOnly;
   const [parkedLetter, setParkedLetter] = useState<string>(session.laneParkedLetter ?? "");
   const [checkTitle, setCheckTitle] = useState("");
+  // Phase 6 (Q1): in check mode the person picks the writer (main) or the cards as it is.
+  // A draft the writer already made opens straight on its cards (lane home, CARDS_PARAM).
+  const [checkAsIs, setCheckAsIs] = useState(() => searchParams.get(CARDS_PARAM) === "1");
+  const checkChoosing = checkMode && !checkAsIs;
   const [openError, setOpenError] = useState("");
   // Signed in (fully): a finished package is emailed to the account's own
   // proven address by itself (lib/email-package-auto.ts). Signed out (the
@@ -326,6 +340,9 @@ function OutputPageInner() {
           career_paths: output.career_paths,
           barriers: output.barriers,
           resumeText: session.resumeText,
+          // Phase 6 (S1 round 2): a build from a saved resume. The server reads
+          // it and decides the own words itself; only the id is sent.
+          rebuildFrom: rebuildActive(session) ?? undefined,
           goals: session.goals,
           goalNarrative: session.goalNarrative,
           credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
@@ -374,7 +391,8 @@ function OutputPageInner() {
       setConfirmedCredentials([]);
       setCredentialCutRemnants([]);
       // New documents are written from this run: its own words, not a restored copy's.
-      setRunEvidence(null);
+      // A rebuild: exactly the own words the server bound the receipt to.
+      setRunEvidence(readRunEvidence(data.evidence));
       setDocState("done");
     } catch (err: unknown) {
       console.error("Doc generation error:", err);
@@ -382,7 +400,7 @@ function OutputPageInner() {
       setDocState("error");
       hasStarted.current = false;
     }
-  }, [docState, output, session.resumeText, session.goals, session.goalNarrative, session.preferences, session.readinessStage, session.resumeConfidence, session.resumeWorries, keepInsideLines]);
+  }, [docState, output, session.resumeText, session.rebuild, session.originalResumeText, session.goals, session.goalNarrative, session.preferences, session.readinessStage, session.resumeConfidence, session.resumeWorries, keepInsideLines]);
 
   // Write the documents when the page loads, unless this run already has them.
   useEffect(() => {
@@ -402,7 +420,8 @@ function OutputPageInner() {
   // development never drops the answer).
   const checkLoaded = useRef<string | null>(null);
   useEffect(() => {
-    if (!checkId || !signedIn || checkLoaded.current === checkId) return;
+    // Review r1 M4: nothing is checked or saved until the person picks "Check it as it is".
+    if (!checkId || !signedIn || !checkAsIs || checkLoaded.current === checkId) return;
     checkLoaded.current = checkId;
     hasStarted.current = true;
     hydrated.current = true;
@@ -453,7 +472,25 @@ function OutputPageInner() {
         setDocState("error");
       }
     })();
-  }, [checkId, signedIn]);
+  }, [checkId, signedIn, checkAsIs]);
+
+  // Review r1 M4: the choice screen shows the saved page from a read-only
+  // route; opening it saves nothing.
+  const [choicePage, setChoicePage] = useState<{ text: string } | { error: string } | null>(null);
+  useEffect(() => {
+    if (!checkId || !signedIn || checkAsIs) return;
+    let live = true;
+    fetch(`/api/revisions/rebuild?artifactId=${encodeURIComponent(checkId)}`, { cache: "no-store" })
+      .then(async (r) => ({ ok: r.ok, j: (await r.json().catch(() => null)) as { pageText?: unknown; error?: unknown } | null }))
+      .then(({ ok, j }) => {
+        if (!live) return;
+        setChoicePage(ok && typeof j?.pageText === "string" ? { text: j.pageText } : { error: typeof j?.error === "string" ? j.error : "We couldn't open that resume." });
+      })
+      .catch(() => live && setChoicePage({ error: "We couldn't open that resume. Try again." }));
+    return () => {
+      live = false;
+    };
+  }, [checkId, signedIn, checkAsIs]);
 
   // ---- the gate ----------------------------------------------------------------
   // Restored from the account: the saved revision's own words (runEvidence), so
@@ -733,6 +770,8 @@ function OutputPageInner() {
       else setResumeText(r.text);
       setDefendAnswers(r.answers);
     },
+    // Phase 6 (Q3): one tap per job.
+    onJobOk: (group) => setDefendAnswers((a) => recordJobOk(a, group.line)),
     onKeepTerm: (term) => setKeptTerms((t) => (t.some((x) => x.toLowerCase() === term.toLowerCase()) ? t : [...t, term])),
     onCutTerm: (term) => {
       setResumeText((t) => cutTerm(t, term));
@@ -834,14 +873,15 @@ function OutputPageInner() {
           runId: session.startedAt,
         }),
       });
-      const data = (await res.json().catch(() => null)) as { grounding?: unknown; receipt?: string; written?: WrittenDocs; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { grounding?: unknown; receipt?: string; written?: WrittenDocs; evidence?: unknown; error?: string } | null;
       if (!res.ok || !data?.receipt) throw new Error(data?.error || "failed");
       // The receipt covers the documents that were checked: they are now "as delivered".
       if (data.written) setWritten(data.written);
       setGrounding(data.grounding ?? null);
       setReceipt(data.receipt);
-      // A restored copy's evidence is replaced by this run's own words.
-      setRunEvidence(null);
+      // A restored copy's evidence is replaced by this run's own words (signed in:
+      // the server-held words the new receipt is bound to).
+      setRunEvidence(readRunEvidence(data.evidence));
     } catch (err) {
       setCheckError(err instanceof Error && err.message !== "failed" ? err.message : "We couldn't check it just now. Try again in a moment.");
     } finally {
@@ -881,6 +921,8 @@ function OutputPageInner() {
     [resumeText, session.resumeText]
   );
   const samples = useMemo(() => pickSamplePostings(careerPaths.map((c) => c.title || ""), 4), [careerPaths]);
+  // D2 (Phase 6): optional "add a number?" prompts, never an open item.
+  const numberPrompts = useMemo(() => (ready ? optionalNumberPrompts(resumeText, view.groups.map((g) => g.line)) : []), [ready, resumeText, view.groups]);
 
   // Check mode needs the account the resume is saved in.
   if (checkMode && authStatus !== "loading" && !signedIn) {
@@ -893,6 +935,58 @@ function OutputPageInner() {
         >
           Sign in
         </a>
+      </div>
+    );
+  }
+
+  // Check mode (Phase 6 Q1, review r1 M4): the writer first; the cards only
+  // when the person picks them. Nothing is checked or saved before the pick.
+  if (checkChoosing && checkId) {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:max-w-6xl" data-testid="finish-page">
+        <div className="flex flex-wrap items-start gap-3 border border-t-line border-l-[3px] border-l-t-amber bg-t-panel px-4 py-3" data-testid="finish-status">
+          <TroyMark size={32} className="mt-0.5" />
+          <div className="min-w-0 flex-1">
+            <h1 className="text-lg font-bold leading-snug text-t-white" data-testid="status-line">
+              {choicePage && "error" in choicePage ? choicePage.error : "Here's your resume. t.ROY can make it stronger."}
+            </h1>
+            <p className="text-xs text-t-phos-dim">t.ROY rewrites it from this page, or you check it as it is.</p>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+          <div className="min-w-0 border border-t-line bg-t-bg p-3 sm:p-4" data-testid="finish-resume">
+            {choicePage && "text" in choicePage ? <ResumePage text={choicePage.text} draft /> : <p className="text-sm text-t-phos">{choicePage ? "" : "Opening your resume."}</p>}
+          </div>
+          <aside>
+            <div className="border border-t-amber bg-t-panel p-4" data-testid="check-choice">
+              <p className="text-sm font-bold text-t-white">How do you want to finish this one?</p>
+              <p className="mt-1 text-xs leading-relaxed text-t-phos">
+                t.ROY writes a new version from this page, in strong plain words, and you check what it wrote. Checking it as it is keeps every line as it stands, and t.ROY asks about the lines it can&apos;t match to your words.
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => router.push(rebuildHref(checkId))}
+                  className="t-focus min-h-touch bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
+                  data-testid="check-rewrite"
+                >
+                  {REWRITE_WITH_TROY_LABEL}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCheckAsIs(true)}
+                  className="t-focus min-h-touch border border-t-line px-4 py-2.5 text-sm font-medium text-t-white hover:border-t-phos-dim"
+                  data-testid="check-as-is"
+                >
+                  {CHECK_AS_IS_LABEL}
+                </button>
+              </div>
+            </div>
+            <a href="/dashboard/vault" className="t-focus mt-4 inline-flex min-h-touch items-center text-sm text-t-phos underline underline-offset-2">
+              Back to My resumes
+            </a>
+          </aside>
+        </div>
       </div>
     );
   }
@@ -1142,7 +1236,7 @@ function OutputPageInner() {
                   onChoice={setLengthChoice}
                 />
               )}
-              <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} actions={cardActions} />
+              <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} />
             </aside>
           </div>
 

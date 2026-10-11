@@ -39,10 +39,12 @@ import { MAX_RENDER_CHARS, fitFor } from "./resume-render";
 import type { ArtifactRevision, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
 import { readReceipt, receiptAccepted, sourceHash, verifyWriterReceipt, type ReceiptContext, type WriterSource } from "./writer-receipt";
 import { stableJson } from "@crucible/core/src/artifactRevision";
+import { createHash } from "node:crypto";
 import { lineKey } from "./revision-patch";
 
 /** Bump when the gate or the page rule changes in a way that can change a status. */
-export const CHECKER_VERSION = "finish-gate-1+pages-1+receipt-1";
+// finish-gate-3 (Phase 6 S1 round 3): rewording A is opt-in (a signed rewordingA marker), job facts compared word for word.
+export const CHECKER_VERSION = "finish-gate-3+pages-1+receipt-1";
 
 const MAX_WORDS = 120_000;
 const MAX_GROUNDING_JSON = 300_000;
@@ -82,6 +84,19 @@ export interface RevisionEvidence {
    * the version cannot be finished.
    */
   writerVerified: boolean;
+  /**
+   * Phase 6 (S1 round 2). Set by the SERVER only, on a page the person saved
+   * exactly as they gave it (the lanes-first first save: their upload or
+   * their "Build with me" section): givenTextMark of that text. Never read
+   * from a request. A rebuild counts the page as their own words only while
+   * the stored text still matches it (lib/rebuild-source.ts).
+   */
+  givenAsIs?: string;
+}
+
+/** The mark a page saved as given carries (sha256 over its exact text). Server only. */
+export function givenTextMark(text: string): string {
+  return createHash("sha256").update(`given-as-is\u0000${text}`).digest("hex");
 }
 
 /** How to read what was sent. */
@@ -276,6 +291,8 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
         writerReceipt: verified ? receiptKept : "",
         writerVerified: verified,
         runId: typeof r.runId === "string" ? r.runId.slice(0, 100) : "",
+        // Only a stored row keeps the server's given-as-is mark; a request never sets it.
+        ...(opts.trusted && typeof r.givenAsIs === "string" && /^[0-9a-f]{64}$/.test(r.givenAsIs) ? { givenAsIs: r.givenAsIs } : {}),
       },
     },
   };

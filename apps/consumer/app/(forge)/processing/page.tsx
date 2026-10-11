@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { rebuildActive } from "@/lib/lane-task";
 import { DEMO_OUTPUT, DEMO_SESSION } from "@/lib/demo-data";
 import { buildResumeTour, buildFailure, jobCardsFrom, type BuildFailure } from "@/lib/showstopper-tour";
 import { useQuietShell } from "../quiet-shell";
@@ -104,7 +105,10 @@ export default function ProcessingPage() {
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
           body: JSON.stringify({
+            // Phase 6 S1 (review r1 L4, r2 L1): a rebuild's analysis reads the saved
+            // page as starting text only; its checks read the run's own text.
             resumeText: session.resumeText,
+            startingText: rebuildActive(session) ? session.originalResumeText : undefined,
             readinessStage: session.readinessStage,
             goals: session.goals,
             goalNarrative: session.goalNarrative,

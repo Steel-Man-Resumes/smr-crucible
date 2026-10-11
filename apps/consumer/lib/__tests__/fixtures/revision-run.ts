@@ -4,7 +4,7 @@
  * real person. example.com only.
  */
 
-import { buildFinishView, ownWordsFor, recordAnswer, type DefendAnswer } from "../../finish-gate";
+import { buildFinishView, jobHeaderLines, ownWordsFor, recordAnswer, recordJobOk, type DefendAnswer } from "../../finish-gate";
 import { writerReceipt } from "../../writer-receipt";
 
 export const SOURCE = `Morgan Sample
@@ -46,11 +46,15 @@ export const RUN = {
 
 export const OWN_WORDS = ownWordsFor(RUN, false);
 
-/** Every defend line answered "true as written", in the person's words. */
+/**
+ * Every defend line answered "true as written", in the person's words, and
+ * (Phase 6) "Looks right" tapped on every job, as the finish page records it.
+ */
 export function allAnswered(resume: string = RESUME, letter = ""): DefendAnswer[] {
   let answers: DefendAnswer[] = [];
   const v = buildFinishView({ resumeText: resume, ownWords: OWN_WORDS, defendAnswers: [], coverLetterText: letter });
   for (const d of v.status.defendLines) answers = recordAnswer(answers, d.line, "Yes, I did that myself at that job, most shifts.", "stands");
+  for (const h of jobHeaderLines(resume)) answers = recordJobOk(answers, h);
   return answers;
 }
 

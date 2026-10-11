@@ -3,7 +3,8 @@
 /**
  * The lane home (Phase 5 lane R2): the top of the Refinery overview once a
  * task is picked. Three things, in order: the person's current resume (with
- * an honest draft line and "Check and finish"), the one next task for
+ * an honest draft line and its next step: "Check and finish" for a draft the
+ * writer made, "Build it with t.ROY" for a page saved as given), the one next task for
  * today's route, and the support that fits. "All tools" follows it on the
  * page, so every tool stays reachable.
  */
@@ -11,10 +12,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  BUILD_WITH_TROY_LABEL,
+  CARDS_PARAM,
   CHECK_AND_FINISH_LABEL,
   DOCUMENT_LINKS,
   DRAFT_BADGE,
   TASK_COPY,
+  rebuildHref,
   type LaneTask,
 } from "@/lib/lane-task";
 
@@ -23,15 +27,31 @@ interface ForgeRevision {
   artifactId: string;
   number: number;
   status: "draft" | "finished";
+  /** Phase 6: made by the writer (the server checked its lineage for a generate-docs receipt), not a page saved as given. */
+  fromWriter?: boolean;
+}
+
+/**
+ * Where a draft goes next (Phase 6, plan Q1). A draft the writer made goes to
+ * "Check and finish". A page saved as the person gave it (an older "I have
+ * one" save, or a "Build with me" first section) is never checked as it is
+ * here: it goes to the writer, with that page as the source.
+ */
+export function draftNext(rev: Pick<ForgeRevision, "artifactId" | "fromWriter">): { label: string; href: string } {
+  // The writer's own draft opens straight on its cards (no "rewrite it" offer for t.ROY's own page).
+  return rev.fromWriter
+    ? { label: CHECK_AND_FINISH_LABEL, href: `/output?check=${rev.artifactId}&${CARDS_PARAM}=1` }
+    : { label: BUILD_WITH_TROY_LABEL, href: rebuildHref(rev.artifactId) };
 }
 
 /** The one next task on the lane home, by route and by where the resume stands. */
-export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" | "artifactId"> | null): { label: string; href: string } {
+export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" | "artifactId" | "fromWriter"> | null): { label: string; href: string } {
   // Only the resume and interview routes need a resume first (review H1).
   if (!rev && (task === "resume" || task === "interview")) return { label: "Start your resume", href: "/resume" };
   switch (task) {
     case "resume":
-      return rev!.status === "finished" ? { label: "Get your files in My resumes", href: "/dashboard/vault" } : { label: CHECK_AND_FINISH_LABEL, href: `/output?check=${rev!.artifactId}` };
+      // Round 3 (review r1 H1): a page the writer never made goes to the writer, even when a check of it passed.
+      return rev!.status === "finished" && rev!.fromWriter ? { label: "Get your files in My resumes", href: "/dashboard/vault" } : draftNext(rev!);
     case "job":
       return { label: "Pick a job to go after", href: "/dashboard/jobs" };
     case "interview":
@@ -55,7 +75,8 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
       .then((j) => {
         if (!live) return;
         const r = j?.revision;
-        setRev(r && typeof r.id === "string" ? { id: r.id, artifactId: r.artifactId, number: r.number, status: r.status } : null);
+        // Review r1 H1: the server says whether the writer made it (its lineage), never this page.
+        setRev(r && typeof r.id === "string" ? { id: r.id, artifactId: r.artifactId, number: r.number, status: r.status, fromWriter: r.fromWriter === true } : null);
       })
       .catch(() => undefined)
       .finally(() => live && setLoaded(true));
@@ -86,9 +107,9 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
                 </p>
               )}
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-                {rev.status !== "finished" && (
-                  <Link href={`/output?check=${rev.artifactId}`} className="t-focus min-h-touch inline-flex items-center font-medium text-t-amber-bright underline underline-offset-2" data-testid="lane-home-check">
-                    {CHECK_AND_FINISH_LABEL}
+                {(rev.status !== "finished" || !rev.fromWriter) && (
+                  <Link href={draftNext(rev).href} className="t-focus min-h-touch inline-flex items-center font-medium text-t-amber-bright underline underline-offset-2" data-testid="lane-home-check">
+                    {draftNext(rev).label}
                   </Link>
                 )}
                 <Link href="/dashboard/vault" className="t-focus min-h-touch inline-flex items-center text-t-phos underline underline-offset-2">

@@ -112,5 +112,10 @@ export async function GET(request: Request) {
   }
   if (!artifactId) return NextResponse.json({ revision: null }, { headers: NO_STORE });
   const rev = await core.getLatestRevision(caller.userId, artifactId);
-  return NextResponse.json({ revision: rev ? core.publicRevision(rev) : null }, { headers: NO_STORE });
+  if (!rev) return NextResponse.json({ revision: null }, { headers: NO_STORE });
+  // Phase 6 S1 (review r1 H1, r2 M1): whether the WRITER made this resume as it
+  // stands, worked out here from its newest version (a generate-docs receipt
+  // the server verified), never from what a page infers.
+  const { fromWriterNewest } = await import("@/lib/source-kind");
+  return NextResponse.json({ revision: { ...core.publicRevision(rev), fromWriter: fromWriterNewest(rev) } }, { headers: NO_STORE });
 }

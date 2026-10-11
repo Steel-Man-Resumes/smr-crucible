@@ -21,7 +21,7 @@
  */
 
 import type { ArtifactRevision, InsertRevisionResult, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
-import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence, type RevisionVerdict } from "./revision-status";
+import { cleanRevisionInput, computeRevision, editInput, givenTextMark, inputFromRevision, revisionRecord, type RevisionEvidence, type RevisionVerdict } from "./revision-status";
 import { readReceipt, writerSourceFrom, type WriterSource } from "./writer-receipt";
 import { resumeTextToDocument } from "./revision-to-doc";
 import { readMarker, withRevisionMarker } from "./revision-marker";
@@ -52,6 +52,8 @@ export interface RevisionStore {
   receiptState?(userId: string, runId: string): Promise<{ newestNonce: string | null; linked: boolean }>;
   /** The person's own words as the server holds them (review H2). The real store always has it. */
   serverSource?(userId: string, keepInsideLines: boolean): Promise<WriterSource | null>;
+  /** Every saved version of one of the person's resumes (Phase 6 S1 round 3: its lineage). The real store always has it. */
+  listRevisions?(userId: string, artifactId: string): Promise<ArtifactRevision[]>;
 }
 
 /** What the page is told about a saved revision. */
@@ -123,6 +125,8 @@ export async function saveFinishRevision(
     laneTarget?: string;
     /** The request's signed-out run cookie, hashed (lib/writer-receipt.ts runCookieHash). */
     cookieHash?: string | null;
+    /** Server code only (lib/lane-first-save.ts): this page was saved exactly as the person gave it. */
+    givenAsIs?: boolean;
   },
   store: RevisionStore
 ): Promise<SaveResult> {
@@ -155,6 +159,8 @@ export async function saveFinishRevision(
     knownNewestNonce,
   });
   if (!c.ok) return { ok: false, status: c.reason === "too long" ? 413 : 400, reason: c.reason };
+  // Phase 6 (S1 round 2): the server marks a page saved as given, from its own call, never a request.
+  if (opts.givenAsIs === true) c.input.evidence.givenAsIs = givenTextMark(c.input.resumeText);
   const verdict = computeRevision(c.input);
 
   let created = false;
@@ -266,6 +272,7 @@ export async function coreStore(): Promise<RevisionStore> {
     updateArtifactContent: async (userId, id, content) => (await core.updateArtifact(id, userId, content)).status,
     insertRevision: (userId, rec) => core.insertRevision(userId, rec),
     getLatestRevision: (userId, id) => core.getLatestRevision(userId, id),
+    listRevisions: async (userId, artifactId) => (await core.exportRevisions(userId)).filter((r) => r.artifact_id === artifactId),
     receiptState: async (userId, runId) => ({
       newestNonce: await core.newestWriterReceiptNonce(userId, runId),
       linked: await core.runBelongsTo(userId, runId),

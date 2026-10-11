@@ -15,7 +15,15 @@ export interface FixPanelIntro {
   showOwnWords: boolean;
 }
 
-export function fixPanelIntro(view: { state: "finished" | "draft"; defendTotal: number; allLinesInOwnWords: boolean }): FixPanelIntro {
+export function fixPanelIntro(view: { state: "finished" | "draft"; defendTotal: number; allLinesInOwnWords: boolean; jobsOpen?: number; fixCount?: number }): FixPanelIntro {
+  // Phase 6: only job taps left. The lines were reworded from the person's own page with every fact kept.
+  if (view.state !== "finished" && view.jobsOpen && view.jobsOpen === view.fixCount) {
+    return {
+      heading: "Check your jobs",
+      subline: "These are from your page. Check each one against your records: tap Looks right, or fix it.",
+      showOwnWords: false,
+    };
+  }
   if (view.state !== "finished") {
     return {
       heading: "Fix these with t.ROY",

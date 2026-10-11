@@ -26,6 +26,10 @@ import { runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-r
 import { isUsableResume, splitWriterOutput, validateWriterChanges } from "@/lib/writer-changes";
 import { restoreDateForms } from "@/lib/date-form";
 import { randomBytes } from "node:crypto";
+import { revisionCaller } from "@/lib/revision-route";
+import { loadRebuildSource, rebuildInputs, rebuildStore } from "@/lib/rebuild-source";
+import { withRewording, type SourceKind } from "@/lib/source-kind";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 export const maxDuration = 120;
 
@@ -69,7 +73,33 @@ async function handlePost(request: Request) {
     // Never credited to a session that still owes its two-step code.
     const userId = forgeUserId(session);
 
-    const input: GenerateDocsInput = await request.json();
+    const body: GenerateDocsInput = await request.json();
+
+    // Phase 6 (S1 round 2): a rebuild from a saved resume. The server reads it
+    // AS the person and decides what counts as their own words
+    // (lib/rebuild-source.ts); the request's resume text is never used for
+    // it. `input` is what the writer reads; `sourceInput` is what the second
+    // check, the backstops and the receipt count as the person's own words.
+    let input: GenerateDocsInput = body;
+    let sourceInput: GenerateDocsInput = body;
+    // Round 3 (review r1 H2): the source kind this run is signed with. A Forge
+    // run's resume text is what the person gave; a rebuild's kind is the server's.
+    let sourceKind: SourceKind = "given";
+    const rebuildFrom = (body as unknown as Record<string, unknown>).rebuildFrom;
+    if (rebuildFrom !== undefined) {
+      // Review r1 L1: a rebuild reads stored data and records a newer receipt: same-origin JSON only.
+      if (!isSameOriginJsonPost(request.headers)) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+      const caller = await revisionCaller();
+      if (!caller.ok || !userId || caller.userId !== userId) {
+        return NextResponse.json({ error: "Sign in to build from a saved resume." }, { status: 401 });
+      }
+      const rb = typeof rebuildFrom === "string" && rebuildFrom ? await loadRebuildSource(caller.userId, rebuildFrom, await rebuildStore()) : null;
+      if (!rb) return NextResponse.json({ error: "We couldn't open that resume." }, { status: 404 });
+      const r = rebuildInputs(body, rb);
+      input = r.writer;
+      sourceInput = r.source;
+      sourceKind = rb.origin;
+    }
 
     if (!input.narrative && !input.strengths && !input.skills?.length) {
       return NextResponse.json(
@@ -104,11 +134,11 @@ async function handlePost(request: Request) {
     // Source = ONLY the user's own material (their resume text + their own words),
     // never the AI-derived narrative, so invention can't launder itself as source.
     const groundingSource = buildTrustedSource({
-      resumeText: input.resumeText,
+      resumeText: sourceInput.resumeText,
       userText: [
-        input.goalNarrative,
-        (input.goals || []).join(", "),
-        typeof input.credentialsNote === "string" ? input.credentialsNote.slice(0, 1000) : undefined,
+        sourceInput.goalNarrative,
+        (sourceInput.goals || []).join(", "),
+        typeof sourceInput.credentialsNote === "string" ? sourceInput.credentialsNote.slice(0, 1000) : undefined,
       ],
     });
 
@@ -227,7 +257,9 @@ async function handlePost(request: Request) {
     const { withheld: withheldLines } = withholdRecordLines(input.resumeText, input.keepInsideLines === true);
     const keptInsideLines = input.keepInsideLines === true;
 
-    const grounding = {
+    // Round 3 (review r1 H2): rewording A is opt-in, stamped here from the
+    // server's own source kind (lib/source-kind.ts); never carried in.
+    const grounding = withRewording({
         hasFabrication,
         applied: groundingApplied,
         removed: removedCount,
@@ -252,7 +284,7 @@ async function handlePost(request: Request) {
         },
         changed: accounting.changed,
         unmatched: accounting.unmatched,
-    };
+    }, sourceKind);
     // Phase 5 R1 (review M1): the server's signature over exactly what it
     // wrote and what its check found. A saved version counts these only
     // with a matching receipt (lib/writer-receipt.ts).
@@ -260,7 +292,7 @@ async function handlePost(request: Request) {
     // generation (a nonce) and the own-words source the SERVER works out from
     // the writer's own inputs (reviews M-B, H2). Signed in, the newest nonce
     // per run is kept, so an older receipt cannot stand in for this one.
-    const raw = input as unknown as Record<string, unknown>;
+    const raw = sourceInput as unknown as Record<string, unknown>;
     const runId = typeof raw.runId === "string" ? raw.runId.slice(0, 100) : "";
     const nonce = randomBytes(16).toString("hex");
     const issuedAt = Date.now();
@@ -287,6 +319,10 @@ async function handlePost(request: Request) {
       grounding,
       receipt,
       changes,
+      // A rebuild: the own-words source the receipt is bound to, so the finish
+      // page checks against exactly that (its run evidence), never the page.
+      // (For a rebuild `raw` is the server's source, never the request's.)
+      ...(rebuildFrom !== undefined ? { evidence: writerSourceFrom(raw) } : {}),
       generated_at: new Date().toISOString(),
     });
     if (runCookie) out.headers.append("Set-Cookie", runCookieHeader(runCookie));

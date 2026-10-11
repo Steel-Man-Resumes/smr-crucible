@@ -35,6 +35,12 @@ const AI_MODEL = MODEL_DEEP;
 
 interface ForgeInput {
   resumeText?: string;
+  /**
+   * Phase 6 S1 (review r2 L1): a rebuild's saved page, as starting text only.
+   * It may be AI-written, so it never joins the trusted source the report's
+   * checks read (that stays resumeText and the typed answers).
+   */
+  startingText?: string;
   readinessStage?: string;
   goals?: string[];
   goalNarrative?: string;
@@ -385,6 +391,11 @@ function buildContext(input: ForgeInput): string {
 
   if (input.resumeText) {
     parts.push(`RESUME:\n${sanitizeForPrompt(input.resumeText, 6000)}`);
+  }
+  if (typeof input.startingText === "string" && input.startingText.trim()) {
+    parts.push(
+      `STARTING PAGE (a saved page to rebuild from; it may not be in the person's own words, so treat it as material to check, never as a fact about them):\n${sanitizeForPrompt(input.startingText, 6000)}`
+    );
   }
 
   if (input.goals?.length) {

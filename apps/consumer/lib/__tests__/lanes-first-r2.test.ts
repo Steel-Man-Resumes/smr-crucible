@@ -424,7 +424,9 @@ test("Check and finish appears on the lane home, My resumes and the Tailor resul
   assert.match(read("components/lanes/LaneHome.tsx"), /\/output\?check=\$\{rev\.artifactId\}/);
   assert.match(read("app/(dashboard)/dashboard/vault/page.tsx"), /<CheckAndFinish artifactId=\{a\.id\}/);
   assert.match(read("components/resume/ResumeWorkspace.tsx"), /<CheckAndFinish/);
-  assert.deepEqual(laneHomeNext("resume", { status: "draft", artifactId: "x" }), { label: "Check and finish", href: "/output?check=x" });
+  // Phase 6 (plan Q1): "Check and finish" is for a draft the writer made; a page saved as given goes to the writer.
+  assert.deepEqual(laneHomeNext("resume", { status: "draft", artifactId: "x", fromWriter: true }), { label: "Check and finish", href: "/output?check=x&cards=1" });
+  assert.deepEqual(laneHomeNext("resume", { status: "draft", artifactId: "x" }), { label: "Build it with t.ROY", href: "/resume?rebuild=x" });
   assert.deepEqual(laneHomeNext("resume", null), { label: "Start your resume", href: "/resume" });
   const route = read("app/api/revisions/check/route.ts");
   assert.match(route, /revisionCaller/);

@@ -20,6 +20,7 @@ import {
   type CredentialType,
   type FinishView,
   type LineGroup,
+  type NumberPrompt,
   type OpenItem,
 } from "@/lib/finish-gate";
 
@@ -54,6 +55,8 @@ export interface CardActions {
   /** Round 12: "Yes, that was my title" (typed, must match) and "Use my title" (replaces only the title). */
   onTitleYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched";
   onOwnTitle?: (group: LineGroup, typed: string) => "ok" | "empty" | "not_a_title";
+  /** Phase 6 (Q3): "Looks right" on a job. One tap; nothing typed. */
+  onJobOk?: (group: LineGroup) => void;
 }
 
 /** D3: one card for every skill the person never said. One tap each. */
@@ -353,6 +356,178 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
         </div>
       )}
     </li>
+  );
+}
+
+/**
+ * Phase 6 (Q3): one tap per job. The title, employer and dates are the
+ * person's own (from their page). "Looks right" settles it; "Fix this" opens
+ * the line to edit, only then.
+ */
+function JobCard({ group, index, onChange, actions }: { group: LineGroup; index: number; onChange: GroupHandler<boolean>; actions: CardActions }) {
+  const [fixing, setFixing] = useState(false);
+  const [text, setText] = useState(() => editableLine(group.line));
+  const [notice, setNotice] = useState("");
+  const field = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (fixing) field.current?.focus();
+  }, [fixing]);
+  const job = group.job ?? { title: editableLine(group.line), rest: [] as string[] };
+  // Review r1 M2: a job t.ROY changed is fixed, never tapped through.
+  const changes = group.job?.changes ?? [];
+  return (
+    <li
+      id={`fix-item-${index}`}
+      tabIndex={-1}
+      data-testid="fix-item"
+      data-job-card="true"
+      data-line={group.line}
+      data-target={group.target}
+      data-blocking="true"
+      className="border border-t-amber bg-t-panel px-3 py-3"
+    >
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{changes.length ? "t.ROY changed this job" : "Check this job"}</p>
+      <p className="mt-1 text-sm font-semibold text-t-white">{job.title}</p>
+      {job.rest.length > 0 && <p className="text-sm text-t-phos">{job.rest.join(" | ")}</p>}
+      {changes.length ? (
+        <p className="mt-1.5 text-xs text-t-amber-bright" data-testid="job-changes">
+          Not on your page: {changes.map((c) => `"${c}"`).join(", ")}. Fix it to match your records.
+        </p>
+      ) : (
+        <p className="mt-1.5 text-xs text-t-phos-dim">These are from your page. Check them against your records.</p>
+      )}
+      {!fixing ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {!changes.length && (
+            <button onClick={() => actions.onJobOk?.(group)} className={BTN_MAIN} data-testid="job-ok">
+              Looks right
+            </button>
+          )}
+          <button
+            onClick={() => {
+              setNotice("");
+              setText(editableLine(group.line));
+              setFixing(true);
+            }}
+            className={changes.length ? BTN_MAIN : BTN_SOFT}
+            data-testid="job-fix"
+          >
+            Fix this
+          </button>
+        </div>
+      ) : (
+        <div className="mt-3">
+          <label htmlFor={`job-${index}`} className="block text-xs font-semibold text-t-white">
+            Title | Employer | Dates, the way your records show them
+          </label>
+          <input
+            ref={field}
+            id={`job-${index}`}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
+          />
+          {notice && (
+            <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="job-notice">
+              {notice}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                if (!text.trim()) return setNotice("Type the job the way it was.");
+                if (!onChange(group, text)) return setNotice("Nothing changed. Fix the line, or tap Back and Looks right.");
+                setFixing(false);
+              }}
+              className={BTN_MAIN}
+            >
+              Save
+            </button>
+            <button onClick={() => setFixing(false)} className={BTN_SOFT}>
+              Back
+            </button>
+          </div>
+        </div>
+      )}
+    </li>
+  );
+}
+
+/**
+ * D2 (Phase 6): optional "add a number?" prompts. t.ROY names what could be
+ * counted; the person types their own number into the line. Never required,
+ * never an open item, never a figure offered.
+ */
+function NumberPrompts({ prompts, onChange }: { prompts: NumberPrompt[]; onChange: GroupHandler<boolean> }) {
+  const [skipped, setSkipped] = useState<string[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [notice, setNotice] = useState("");
+  const shown = prompts.filter((p) => !skipped.includes(p.line));
+  if (!shown.length) return null;
+  return (
+    <div className="mt-4" data-testid="number-prompts">
+      <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Optional: add a number?</h3>
+      <p className="mb-2 text-xs text-t-phos-dim">A number sticks with the person reading. Only add one you know. These never stop you from finishing.</p>
+      <ol className="space-y-2">
+        {shown.map((p, n) => (
+          <li key={p.line} className="border border-t-line bg-t-panel px-3 py-3" data-testid="number-prompt">
+            <p className="text-sm text-t-white">&ldquo;{editableLine(p.line)}&rdquo;</p>
+            <p className="mt-1 text-xs text-t-phos">Something you could count here: {p.count}.</p>
+            {open === p.line ? (
+              <div className="mt-2">
+                <label htmlFor={`num-${n}`} className="block text-xs font-semibold text-t-white">
+                  Put your number in the line
+                </label>
+                <input
+                  id={`num-${n}`}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
+                />
+                {notice && (
+                  <p role="status" className="mt-1 text-xs text-t-amber-bright">
+                    {notice}
+                  </p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      const group: LineGroup = { line: p.line, target: "resume", items: [], blocking: false, answerable: false, checked: false };
+                      if (!onChange(group, text)) return setNotice("Nothing changed. Add your number to the line, or tap Back.");
+                      setOpen(null);
+                    }}
+                    className={BTN_MAIN}
+                  >
+                    Save
+                  </button>
+                  <button onClick={() => setOpen(null)} className={BTN_SOFT}>
+                    Back
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    setNotice("");
+                    setText(editableLine(p.line));
+                    setOpen(p.line);
+                  }}
+                  className={BTN_SOFT}
+                  data-testid="number-add"
+                >
+                  Add a number
+                </button>
+                <button onClick={() => setSkipped((s) => [...s, p.line])} className={BTN_SOFT}>
+                  Skip
+                </button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+    </div>
   );
 }
 
@@ -703,6 +878,8 @@ function Groups({
       {groups.map((g, i) =>
         g.target === "skillset" ? (
           <SkillsCard key="skillset" group={g} index={offset + i} actions={actions} />
+        ) : g.job && actions.onJobOk ? (
+          <JobCard key={`job:${g.line}`} group={g} index={offset + i} onChange={onChange} actions={actions} />
         ) : g.title && actions.onTitleYes ? (
           <TitleCard key={`title:${g.line}`} group={g} index={offset + i} actions={actions} />
         ) : g.credentialName ? (
@@ -730,6 +907,7 @@ export function DefendPanel({
   onChange,
   onCut,
   actions,
+  numberPrompts = [],
 }: {
   view: FinishView;
   onAnswer: GroupHandler;
@@ -737,6 +915,8 @@ export function DefendPanel({
   onChange: GroupHandler<boolean>;
   onCut: (group: LineGroup) => void;
   actions: CardActions;
+  /** D2 (Phase 6): optional "add a number?" prompts, after the cards. */
+  numberPrompts?: NumberPrompt[];
 }) {
   const progress = progressLine(view);
   const intro = fixPanelIntro(view);
@@ -793,6 +973,8 @@ export function DefendPanel({
           <Groups groups={letter} offset={resume.length + view.checkedLines.length + skills.length} {...common} />
         </div>
       )}
+
+      <NumberPrompts prompts={numberPrompts} onChange={onChange} />
     </section>
   );
 }

@@ -173,6 +173,38 @@ export function nextActionFor(task: LaneTask | null | undefined, ctx: { signedIn
 export const DRAFT_BADGE = "Draft: check it before you send it.";
 export const CHECK_AND_FINISH_LABEL = "Check and finish";
 
+/**
+ * Phase 6 (plan Q1): one path to a real resume. A page the person gave is the
+ * writer's source, never the finished page. These open the writer with a
+ * saved resume as the source: the resume screen loads it into the Forge run,
+ * then the build runs (/processing, then /output).
+ */
+export const BUILD_WITH_TROY_LABEL = "Build it with t.ROY";
+export const REWRITE_WITH_TROY_LABEL = "Rewrite it with t.ROY";
+export const CHECK_AS_IS_LABEL = "Check it as it is";
+export const REBUILD_PARAM = "rebuild";
+/** On /output?check=: open straight on the cards (a draft the writer already made). */
+export const CARDS_PARAM = "cards";
+export function rebuildHref(artifactId: string): string {
+  return `/resume?${REBUILD_PARAM}=${encodeURIComponent(artifactId)}`;
+}
+
+/**
+ * Phase 6 (S1 round 2): this run is still the build from that saved resume:
+ * the page it was given is still the one shown, and the run's own resume text
+ * has not changed since (a new upload, paste or section ends it). Only then
+ * is the writer sent its id.
+ */
+export function rebuildActive(s: { rebuild?: { id?: unknown; page?: unknown; resumeAt?: unknown } | null; originalResumeText?: string; resumeText?: string }): string | null {
+  const rb = s.rebuild;
+  if (!rb || typeof rb.id !== "string" || !rb.id || typeof rb.page !== "string" || typeof rb.resumeAt !== "string") return null;
+  if (s.originalResumeText !== rb.page) return null;
+  // The run's own resume text is never touched by a rebuild (review r1 M3); a new one ends it.
+  if ((s.resumeText ?? "") !== rb.resumeAt) return null;
+  return rb.id;
+}
+
+
 /* ---------------------------------------------------------- decision count -- */
 
 /**
@@ -196,8 +228,9 @@ export function decisionsToFirstSave(task: "resume" | "job" | "interview", intak
   // The interview route without a resume goes straight to the resume screen.
   steps.push({ screen: "/resume", question: INTAKE_TITLE, options: [INTAKE_HAVE_ONE.label, INTAKE_BUILD.label] });
   steps.push(
+    // Phase 6 (Q1): "I have one" never saves the page as given; it goes to the writer.
     intake === "have_one"
-      ? { screen: "/resume", question: "Save this fix?", options: ["Make this fix and save", "Save it as it is"] }
+      ? { screen: "/resume", question: "Make this fix first?", options: [HAVE_ONE_FIX_LABEL, HAVE_ONE_SKIP_LABEL] }
       : { screen: "/resume", question: "Save your first section?", options: ["Save my first section"] }
   );
   void task;
@@ -205,5 +238,9 @@ export function decisionsToFirstSave(task: "resume" | "job" | "interview", intak
 }
 
 export const INTAKE_TITLE = "Do you have a resume?";
+/** Phase 6 (Q1): the first reward's two ways on, both to the writer. */
+export const HAVE_ONE_FIX_LABEL = "Make this fix and build my resume";
+export const HAVE_ONE_SKIP_LABEL = "Skip it and build my resume";
+export const HAVE_ONE_BUILD_LABEL = "Build my resume with t.ROY";
 export const INTAKE_HAVE_ONE = { label: "I have one", body: "Upload a file or a photo, or paste the text." };
 export const INTAKE_BUILD = { label: "Build with me", body: "Start with one job and one thing you did there." };

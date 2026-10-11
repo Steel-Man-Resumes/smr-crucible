@@ -41,6 +41,15 @@ export interface ForgeSessionData {
   laneTarget?: string;
   /** Lanes first: the letter the writer made, kept for "Add a cover letter" off the job route. */
   laneParkedLetter?: string;
+  /**
+   * Phase 6 (S1 round 2): a build from a saved resume ("Build it with t.ROY").
+   * Browser only (never sent with the account save). `page` is the saved page
+   * (shown, and the build's starting text); `resumeAt` the run's own resume
+   * text when the rebuild began, which a rebuild never changes (review r1
+   * M3). The writer is sent only the id and reads the own words itself; any
+   * new resume given here ends it (lib/lane-task.ts rebuildActive).
+   */
+  rebuild?: { id: string; page: string; resumeAt: string };
 
   // Page 2: Resume
   resumeText?: string;
