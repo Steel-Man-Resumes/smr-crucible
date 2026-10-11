@@ -19,6 +19,8 @@ import {
   looksLikeExampleResume,
 } from "@crucible/core";
 import { buildForgeResumeContent } from "@/lib/forge-to-resume";
+import { finishPayloadFromRun } from "@/lib/finish-payload";
+import { coreStore, saveFinishRevision, type SavedRevisionSummary } from "@/lib/revision-save";
 
 /** Did the user build a structured base resume in the Forge (Phase 7)? */
 function isStructuredResumeDoc(d: any): boolean {
@@ -31,10 +33,21 @@ function isStructuredResumeDoc(d: any): boolean {
   );
 }
 
+/** What the save did with the finished resume, if the run had one. */
+export interface PersistResult {
+  /** The saved revision (081), or null when the run had no finished state. */
+  revision: SavedRevisionSummary | null;
+  /** The finished state was there but could not be saved as sent (it was not valid). */
+  revisionProblem?: string;
+}
+
+/** A save of the finished state that failed for a reason worth retrying. */
+export class RevisionSaveError extends Error {}
+
 export async function persistForgeSession(
   userId: string,
   body: Record<string, any>
-): Promise<void> {
+): Promise<PersistResult> {
   const sessionId = body.startedAt || new Date().toISOString();
 
   await saveForgeSession(userId, sessionId, {
@@ -71,7 +84,14 @@ export async function persistForgeSession(
         (a) => (a.target_context as any)?.source === "forge"
       );
 
-      if (forgeResume) {
+      // Phase 5 R1 (review A1): once the Forge resume has a saved revision,
+      // that revision is the finished document. Never rebuild the account's
+      // copy from the run's earlier inputs over it (a cut skill would come back).
+      const { getLatestRevision } = await import("@crucible/core");
+      const hasRevision = forgeResume ? !!(await getLatestRevision(userId, forgeResume.id).catch(() => null)) : false;
+      if (forgeResume && hasRevision) {
+        // The revision save below keeps the content in step with the finished text.
+      } else if (forgeResume) {
         // Lock-guarded: if the forge resume was locked as a baseline, the
         // update is refused server-side and we leave it untouched rather
         // than overwrite an approved document (Phase 0.1).
@@ -117,6 +137,20 @@ export async function persistForgeSession(
       // Non-fatal: the Forge save succeeded; artifact creation is best-effort.
     }
   }
+
+  // Phase 5 R1 (review A1): the finished resume itself, as a saved revision.
+  // The import sends it as `finish`; the Refinery's sync sends the whole run,
+  // whose stored finish is rebuilt the same way (only when it belongs to this
+  // run). The server runs the gate itself; nothing here trusts a status.
+  const finish = body.finish && typeof body.finish === "object" ? body.finish : finishPayloadFromRun(body);
+  if (!finish) return { revision: null };
+  const laneTarget = firstLaneTarget({}, body);
+  const saved = await saveFinishRevision(userId, finish, { source: "forge_import", laneTarget }, await coreStore());
+  if (saved.ok) return { revision: saved.revision };
+  // Not valid as sent: the rest of the run is saved; say so, never pretend.
+  // Before 081 is applied (503 not_ready) the run still saves as it always did.
+  if (saved.status === 400 || saved.status === 413 || saved.status === 404 || saved.status === 503) return { revision: null, revisionProblem: saved.reason };
+  throw new RevisionSaveError(saved.reason);
 }
 
 /** The target a first lane is named from: the resume's own target, else the Forge's first career path. */

@@ -1,0 +1,163 @@
+/**
+ * Saving a revision (migration 081, Phase 5 lane R1). Server only.
+ *
+ *   saveFinishRevision  the Forge finish page (and the import on sign-in)
+ *                       saves its whole state. The server cleans it, runs the
+ *                       finish gate and the page measurement itself
+ *                       (lib/revision-status.ts) and stores the result on the
+ *                       person's Forge resume, creating that resume if it is
+ *                       not there yet. The account's resume content is rebuilt
+ *                       from the saved text (lib/revision-to-doc.ts), so a
+ *                       skill cut on the finish page does not come back in the
+ *                       Refinery. A locked baseline keeps its content; the
+ *                       revision is still saved.
+ *   saveEditRevision    an edit in the Refinery workspace: the new texts on
+ *                       top of the artifact's newest revision, whose evidence
+ *                       the SERVER carries over. No earlier revision: no
+ *                       evidence, so the result is a draft.
+ *
+ * Same content as the newest revision: that revision comes back, no new row.
+ * The store is passed in so tests run without a database.
+ */
+
+import type { ArtifactRevision, InsertRevisionResult, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
+import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionVerdict } from "./revision-status";
+import { resumeTextToDocument } from "./revision-to-doc";
+
+export interface ArtifactLite {
+  id: string;
+  artifact_type: string;
+  target_context: unknown;
+  content: unknown;
+  is_locked?: boolean;
+}
+
+export interface RevisionStore {
+  listResumeArtifacts(userId: string): Promise<ArtifactLite[]>;
+  getArtifact(userId: string, artifactId: string): Promise<ArtifactLite | null>;
+  createForgeArtifact(userId: string, content: Record<string, unknown>, laneTarget: string): Promise<{ id: string }>;
+  updateArtifactContent(userId: string, artifactId: string, content: Record<string, unknown>): Promise<string>;
+  insertRevision(userId: string, rec: NewRevision): Promise<InsertRevisionResult>;
+  getLatestRevision(userId: string, artifactId: string): Promise<ArtifactRevision | null>;
+}
+
+/** What the page is told about a saved revision. */
+export interface SavedRevisionSummary {
+  id: string;
+  artifactId: string;
+  number: number;
+  status: "draft" | "finished";
+  pageCount: number;
+  pageLimit: number | null;
+  lengthChoice: string;
+  openItems: string[];
+  lengthItem: string | null;
+  contentHash: string;
+  reused: boolean;
+  createdAt: string;
+}
+
+export type SaveResult = { ok: true; revision: SavedRevisionSummary } | { ok: false; status: number; reason: string };
+
+function summary(rev: ArtifactRevision, v: RevisionVerdict | null, reused: boolean): SavedRevisionSummary {
+  return {
+    id: rev.id,
+    artifactId: rev.artifact_id,
+    number: rev.revision_number,
+    status: rev.status,
+    pageCount: rev.page_count,
+    pageLimit: rev.page_limit,
+    lengthChoice: rev.length_choice,
+    openItems: Array.isArray(rev.open_items) ? rev.open_items : [],
+    lengthItem: v?.lengthItem ?? null,
+    contentHash: rev.content_hash,
+    reused,
+    createdAt: rev.created_at,
+  };
+}
+
+const isForge = (a: ArtifactLite) => a.artifact_type === "resume" && (a.target_context as { source?: unknown } | null)?.source === "forge";
+
+function failed(r: InsertRevisionResult): SaveResult {
+  if (r.status === "not_ready") return { ok: false, status: 503, reason: "not_ready" };
+  if (r.status === "invalid") return { ok: false, status: r.reason === "artifact not found" ? 404 : 400, reason: r.reason };
+  return { ok: false, status: 500, reason: "failed" };
+}
+
+export async function saveFinishRevision(
+  userId: string,
+  raw: unknown,
+  opts: { source: Extract<RevisionSource, "forge_finish" | "forge_import">; laneTarget?: string },
+  store: RevisionStore
+): Promise<SaveResult> {
+  const c = cleanRevisionInput(raw);
+  if (!c.ok) return { ok: false, status: c.reason === "too long" ? 413 : 400, reason: c.reason };
+  const verdict = computeRevision(c.input);
+
+  const artifacts = await store.listResumeArtifacts(userId);
+  let forge = artifacts.find(isForge) ?? null;
+  let created = false;
+  if (!forge) {
+    const content = resumeTextToDocument(c.input.resumeText) as unknown as Record<string, unknown>;
+    const made = await store.createForgeArtifact(userId, content, (opts.laneTarget ?? "").slice(0, 200));
+    forge = { id: made.id, artifact_type: "resume", target_context: { source: "forge" }, content };
+    created = true;
+  }
+  const r = await store.insertRevision(userId, revisionRecord(forge.id, opts.source, c.input, verdict));
+  if (r.status !== "saved") return failed(r);
+  // The account's resume shows the saved words (lock-guarded by the write itself).
+  if (!r.reused && !created) {
+    const base = (forge.content ?? null) as { meta?: { targetJob?: string; targetCompany?: string; jobListingUrl?: string } } | null;
+    await store
+      .updateArtifactContent(userId, forge.id, resumeTextToDocument(c.input.resumeText, base) as unknown as Record<string, unknown>)
+      .catch(() => "failed");
+  }
+  return { ok: true, revision: summary(r.revision, verdict, r.reused) };
+}
+
+export async function saveEditRevision(
+  userId: string,
+  artifactId: string,
+  resumeText: unknown,
+  letterText: unknown,
+  store: RevisionStore
+): Promise<SaveResult> {
+  if (typeof resumeText !== "string" || !resumeText.trim()) return { ok: false, status: 400, reason: "no resume" };
+  if (letterText !== undefined && typeof letterText !== "string") return { ok: false, status: 400, reason: "bad letter" };
+  const art = await store.getArtifact(userId, artifactId);
+  if (!art || art.artifact_type !== "resume") return { ok: false, status: 404, reason: "artifact not found" };
+  const latest = await store.getLatestRevision(userId, artifactId);
+  const base = latest ? inputFromRevision(latest) : null;
+  const c = editInput(base, resumeText, letterText as string | undefined);
+  if (!c.ok) return { ok: false, status: c.reason === "too long" ? 413 : 400, reason: c.reason };
+  const verdict = computeRevision(c.input);
+  const r = await store.insertRevision(userId, revisionRecord(artifactId, "refinery_edit", c.input, verdict));
+  if (r.status !== "saved") return failed(r);
+  return { ok: true, revision: summary(r.revision, verdict, r.reused) };
+}
+
+/** The real store: packages/core, every call AS the person. */
+export async function coreStore(): Promise<RevisionStore> {
+  const core = await import("@crucible/core");
+  return {
+    listResumeArtifacts: (userId) => core.listArtifacts(userId, { type: "resume", examples: "hide", limit: 50 }) as Promise<ArtifactLite[]>,
+    getArtifact: (userId, id) => core.getArtifact(id, userId) as Promise<ArtifactLite | null>,
+    createForgeArtifact: async (userId, content, laneTarget) => {
+      const made = await core.createArtifact(userId, "resume", { source: "forge", targetJob: "" }, content, 1.0);
+      // The first finished Forge resume names the person's first lane, as the
+      // Forge save does (best effort; a lane problem never fails the save).
+      if (laneTarget && !core.looksLikeExampleResume(content)) {
+        try {
+          const lane = await core.ensureFirstLane(userId, laneTarget);
+          if (lane) await core.setArtifactLane(userId, made.id, lane.id);
+        } catch {
+          // fine
+        }
+      }
+      return { id: made.id };
+    },
+    updateArtifactContent: async (userId, id, content) => (await core.updateArtifact(id, userId, content)).status,
+    insertRevision: (userId, rec) => core.insertRevision(userId, rec),
+    getLatestRevision: (userId, id) => core.getLatestRevision(userId, id),
+  };
+}

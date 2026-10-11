@@ -74,11 +74,13 @@ test("download: the zip without a cover letter holds two files", async () => {
   assert.equal(unzip(Buffer.from(await res.arrayBuffer())).size, 2);
 });
 
-test("download: draft and open items pass through, so the PDF carries a to-do page", async () => {
+test("download: raw text is always a draft with its to-do page; a client draft:false never takes the mark off (P5 R1)", async () => {
   const res = await post(handleDownloadPost, { content: ONE_PAGE, type: "resume", format: "pdf", draft: true, openItems: ["Check the phone number."] });
   assert.equal((await PDFDocument.load(new Uint8Array(await res.arrayBuffer()))).getPageCount(), 2, "one resume page plus the to-do page");
+  assert.equal(res.headers.get("x-smr-status"), "draft");
   const fin = await post(handleDownloadPost, { content: ONE_PAGE, type: "resume", format: "pdf", draft: false, openItems: ["Check the phone number."] });
-  assert.equal((await PDFDocument.load(new Uint8Array(await fin.arrayBuffer()))).getPageCount(), 1, "finished: no to-do page");
+  assert.equal((await PDFDocument.load(new Uint8Array(await fin.arrayBuffer()))).getPageCount(), 2, "raw text, draft:false: still the to-do page");
+  assert.equal(fin.headers.get("x-smr-status"), "draft");
   const txt = await post(handleDownloadPost, { content: "Hello", type: "resume", format: "txt", draft: true });
   assert.match(await txt.text(), /^DRAFT\n\nHello$/);
 });
@@ -90,7 +92,7 @@ test("download: the existing safety limits still hold", async () => {
   assert.equal((await post(handleDownloadPost, { content: "x", type: "memo" })).status, 400);
   assert.equal((await post(handleDownloadPost, { content: "x", type: "resume", format: "exe" })).status, 400);
   assert.equal((await post(handleDownloadPost, { content: "x".repeat(40_001), type: "resume" })).status, 413);
-  assert.equal((await post(handleDownloadPost, { content: "x", type: "resume" }, { "content-length": "300000" })).status, 413);
+  assert.equal((await post(handleDownloadPost, { content: "x", type: "resume" }, { "content-length": "1000001" })).status, 413);
   assert.equal((await post(handleDownloadPost, { content: "x", type: "resume", headerText: 5 })).status, 400);
   // every text field has the same cap, with a plain message
   const big = "x".repeat(40_001);
