@@ -36,13 +36,15 @@
 -- later blanket grant on a fresh database cannot widen it.
 --
 -- ADD ONLY AND IDEMPOTENT. Creates one function and one view (CREATE OR
--- REPLACE, same signature and columns), revokes then grants. Touches no table,
--- no existing view or function, no data. Re-running it changes nothing.
+-- REPLACE, same signature and columns), revokes then grants, and takes TEMP on
+-- the database away from PUBLIC (see the last block). Touches no table, no
+-- existing view or function, no data. Re-running it changes nothing.
 --
 -- ROLLBACK (no data is lost; the support search falls back to its earlier list
 -- when the view is missing):
 --   DROP VIEW IF EXISTS resource_app_v;
 --   DROP FUNCTION IF EXISTS public.resource_app_rows();
+--   DO $r$ BEGIN EXECUTE format('GRANT TEMPORARY ON DATABASE %I TO PUBLIC', current_database()); END $r$;
 --   DELETE FROM _migrations WHERE filename = '082_resource_app_view.sql';
 --   and remove resource_app_v from scripts/lib/restricted-grants.mjs.
 
@@ -62,8 +64,22 @@ END $$;
 -- app role gets "permission denied for function resource_fields_hash" from
 -- resource_public_v itself, even with zero rows (found by this file's PGlite
 -- proof, 2026-10-10). Here the whole read runs as the owner, so 072's rule
--- that the app holds no EXECUTE on its functions stays true. No arguments
--- (nothing to inject), a pinned search_path, STABLE, read-only.
+-- that the app holds no EXECUTE on its functions stays true.
+--
+-- HARDENED (review H1, L1, 2026-10-10):
+--   * search_path ends in pg_temp. Left out, pg_temp is searched FIRST for
+--     relations and types, so a caller's temp type named "date" (with temp
+--     casts) ran the caller's code as the owner inside a $$ body.
+--   * The body is SQL-standard BEGIN ATOMIC: parsed once, here, as the owner,
+--     with every name and type resolved now (casts written ::pg_catalog.date),
+--     so nothing a caller creates later can change what it calls.
+--   * BEGIN ATOMIC also records a dependency on resource_public_v and
+--     resource_area: dropping 072's view while this exists is refused instead
+--     of silently breaking the app's read. A CREATE OR REPLACE of that view
+--     that keeps its columns still flows through (by design: one definition
+--     of "may be shown"), so any migration that touches resource_public_v must
+--     re-run the 082 PGlite proof before it is applied.
+--   No arguments (nothing to inject), STABLE, read-only.
 CREATE OR REPLACE FUNCTION public.resource_app_rows()
 RETURNS TABLE (
   service_id   uuid,
@@ -86,14 +102,15 @@ RETURNS TABLE (
   source_url   text,
   last_checked date
 )
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
+BEGIN ATOMIC
   SELECT p.service_id, p.org_name, p.service_name, p.description, p.eligibility,
          p.area_id, a.label, p.geo_scope, p.state, p.county, p.counties, p.city,
          p.address, p.zip, p.phone, p.hours, p.website, p.source_url, p.verified_on
   FROM public.resource_public_v p
   JOIN public.resource_area a ON a.area_id = p.area_id
-  WHERE p.expires_on > (now() AT TIME ZONE 'UTC')::date
-$$;
+  WHERE p.expires_on > (pg_catalog.now() AT TIME ZONE 'UTC')::pg_catalog.date;
+END;
 
 CREATE OR REPLACE VIEW resource_app_v WITH (security_barrier = true) AS
 SELECT r.service_id, r.org_name, r.service_name, r.description, r.eligibility,
@@ -113,5 +130,30 @@ BEGIN
     REVOKE ALL ON resource_app_v FROM smr_app;
     GRANT SELECT ON resource_app_v TO smr_app;
     GRANT EXECUTE ON FUNCTION public.resource_app_rows() TO smr_app;
+  END IF;
+END $$;
+
+-- No temporary objects for the app (review H1, defence in depth). The app
+-- never creates temp tables, types or functions (checked 2026-10-10: only
+-- migrations use pg_temp, and they run as the owner). Without TEMP a caller
+-- cannot plant a temp type or function at all, which also covers the older
+-- SECURITY DEFINER functions whose search_path lacks pg_temp. PostgreSQL has
+-- no per-role deny: while PUBLIC holds TEMP, revoking it from smr_app alone
+-- does nothing, so it is revoked from PUBLIC. The database owner keeps it
+-- (owner privileges), so migrations that use pg_temp still run. COST, stated:
+-- any other non-owner role in this database loses TEMP too; none is defined in
+-- this repo. Done only when the migrator owns the database (or is superuser);
+-- otherwise a NOTICE says it was skipped, and nothing else changes.
+DO $$
+DECLARE db text := pg_catalog.current_database();
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_catalog.pg_database d JOIN pg_catalog.pg_roles r ON r.rolname = current_user
+              WHERE d.datname = db AND (d.datdba = r.oid OR r.rolsuper)) THEN
+    EXECUTE pg_catalog.format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC', db);
+    IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'smr_app') THEN
+      EXECUTE pg_catalog.format('REVOKE TEMPORARY ON DATABASE %I FROM smr_app', db);
+    END IF;
+  ELSE
+    RAISE NOTICE '082: TEMP not revoked: % does not own database %', current_user, db;
   END IF;
 END $$;
