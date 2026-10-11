@@ -21,7 +21,7 @@ export function autoResultLine(r: AutoResult | null): string | null {
   if (r.sent) return `We sent it to ${r.to}.`;
   if (r.reason === "already") return r.to ? `We sent it to ${r.to}.` : "We already emailed you this resume.";
   if (r.reason === "already_today") return "We already emailed this resume today. Your download is right here.";
-  if (r.reason === "settling") return "We'll email it in a few minutes, once you've stopped changing it.";
+  if (r.reason === "settling") return "We'll email your finished resume a few minutes after you're done. Leaving early? Tap Email me the latest.";
   if (r.reason === "unproven") return UNPROVEN_LINE;
   if (r.reason === "limit") return "Your address already got its package today. Your download is right here.";
   if (r.reason === "failed") return "We couldn't email it just now. Your download is right here.";

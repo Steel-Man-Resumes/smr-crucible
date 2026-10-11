@@ -6,6 +6,7 @@
  *   underlying R2 ciphertext, via the deletion_task retry ledger
  * - artifact_revision (saved resume revisions, 081; owner only, deleted as the
  *   person before the artifacts they hang off)
+ * - forge_writer_receipt (081; the newest writer's receipt nonce per run)
  * - refinery_artifact (resumes, disclosure plans, etc.)
  * - career_lane, lane_tool_intro (career lanes and dismissed tool notes)
  * - practice_entry (the practice record behind creative lanes)
@@ -72,6 +73,7 @@ import {
   deleteUserConversations,
   deleteAllRecordChecks,
   deleteAllRevisions,
+  deleteAllWriterReceipts,
   leaveAllOrgs,
 } from "@crucible/core";
 
@@ -138,6 +140,8 @@ export async function DELETE(req: Request) {
     // with them; deleted explicitly, AS the person (owner-only table), so the
     // erase does not depend on a cascade. Before 081 there is nothing to do.
     await deleteAllRevisions(userId);
+    // The newest writer's receipt per run (081): nonces only, owner only.
+    await deleteAllWriterReceipts(userId);
     // refinery_artifact has CASCADE on user_id, but be explicit
     await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
     // Career lanes (074): after the artifacts that point at them. Owner-only

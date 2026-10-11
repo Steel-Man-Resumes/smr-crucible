@@ -22,7 +22,8 @@ import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
-import { writerReceipt } from "@/lib/writer-receipt";
+import { runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
+import { randomBytes } from "node:crypto";
 
 export const maxDuration = 120;
 
@@ -226,8 +227,30 @@ async function handlePost(request: Request) {
     // Phase 5 R1 (review M1): the server's signature over exactly what it
     // wrote and what its check found. A saved version counts these only
     // with a matching receipt (lib/writer-receipt.ts).
-    const receipt = writerReceipt({ resume, letter: coverLetter }, grounding);
-    return NextResponse.json({
+    // Bound to this account (or, signed out, this run), this run, this
+    // generation (a nonce) and the own-words source the SERVER works out from
+    // the writer's own inputs (reviews M-B, H2). Signed in, the newest nonce
+    // per run is kept, so an older receipt cannot stand in for this one.
+    const raw = input as unknown as Record<string, unknown>;
+    const runId = typeof raw.runId === "string" ? raw.runId.slice(0, 100) : "";
+    const nonce = randomBytes(16).toString("hex");
+    const issuedAt = Date.now();
+    // Signed out: a fresh run cookie with every generation (HttpOnly, set
+    // below), and the receipt bound to it (review r3 L-1).
+    const runCookie = userId ? undefined : randomBytes(16).toString("hex");
+    const receipt = writerReceipt({ resume, letter: coverLetter }, grounding, {
+      userId: userId ?? null,
+      runId,
+      source: writerSourceFrom(raw),
+      nonce,
+      now: issuedAt,
+      cookie: runCookie,
+    });
+    if (userId && runId) {
+      const { recordWriterReceipt } = await import("@crucible/core");
+      await recordWriterReceipt(userId, runId, nonce, issuedAt).catch((e: unknown) => console.error("writer receipt record failed:", (e as Error)?.message || e));
+    }
+    const out = NextResponse.json({
       resume,
       coverLetter,
       withheldLines,
@@ -236,6 +259,8 @@ async function handlePost(request: Request) {
       receipt,
       generated_at: new Date().toISOString(),
     });
+    if (runCookie) out.headers.append("Set-Cookie", runCookieHeader(runCookie));
+    return out;
   } catch (error: any) {
     console.error("Document generation error:", error);
     return NextResponse.json(

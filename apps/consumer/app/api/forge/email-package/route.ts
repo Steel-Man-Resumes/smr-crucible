@@ -39,6 +39,7 @@ import {
 } from "@/lib/email-package-guard";
 import { buildPackageEmail, clipDocs, packageFrom, resendKey, resendTransport } from "@/lib/email-package-send";
 import { cleanRevisionInput, computeRevision } from "@/lib/revision-status";
+import { readRunCookie, runCookieHash } from "@/lib/writer-receipt";
 
 async function handlePost(request: Request) {
   if (!originAllowed(request.headers.get("origin"), request.url)) {
@@ -89,7 +90,10 @@ async function handlePost(request: Request) {
   if (turnstile === "missing") console.error("email-package: Turnstile token missing (not enforced)");
 
   // Finished, decided here from the whole finish state; never from the page.
-  const finish = cleanRevisionInput(body.finish);
+  const runCookie = readRunCookie(request.headers.get("cookie"));
+  const finish = cleanRevisionInput(body.finish, {
+    receipt: { userId: null, runId: typeof body.finish?.runId === "string" ? body.finish.runId : "", cookieHash: runCookie ? runCookieHash(runCookie) : null },
+  });
   if (!finish.ok) {
     return NextResponse.json(
       { error: "No resume to send yet. Finish the Forge first." },

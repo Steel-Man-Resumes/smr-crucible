@@ -23,7 +23,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { queryAsUser, getOneAsUser } from "./db";
+import { queryAsUser, getOneAsUser, getOne } from "./db";
 
 export const REVISION_SOURCES = ["forge_finish", "forge_import", "refinery_edit"] as const;
 export type RevisionSource = (typeof REVISION_SOURCES)[number];
@@ -379,3 +379,55 @@ export function publicRevision(r: ArtifactRevision) {
   };
 }
 export type PublicRevision = ReturnType<typeof publicRevision>;
+
+/*
+ * The newest writer's receipt per (person, Forge run) (081, review M-B):
+ * nonce and time only. generate-docs records it; a save accepts only that one.
+ */
+export const WRITER_RECEIPT_RECORD_SQL = `INSERT INTO forge_writer_receipt (user_id, run_id, nonce, issued_at)
+  VALUES ($1, $2, $3, $4)
+  ON CONFLICT (user_id, run_id) DO UPDATE SET nonce = EXCLUDED.nonce, issued_at = EXCLUDED.issued_at
+   WHERE forge_writer_receipt.issued_at <= EXCLUDED.issued_at`;
+export const WRITER_RECEIPT_NEWEST_SQL = `SELECT nonce FROM forge_writer_receipt WHERE user_id = $1 AND run_id = $2`;
+export const WRITER_RECEIPT_DELETE_ALL_SQL = `DELETE FROM forge_writer_receipt WHERE user_id = $1 RETURNING run_id`;
+/** forge_session is not row-level protected; scoped by user_id in the statement. */
+export const RUN_BELONGS_SQL = `SELECT 1 AS ok FROM forge_session WHERE user_id = $1 AND session_id = $2`;
+
+const NONCE_RE = /^[0-9a-f]{32}$/;
+
+export async function recordWriterReceipt(userId: string, runId: string, nonce: string, issuedAtMs: number): Promise<void> {
+  if (!UUID_RE.test(userId) || !runId || runId.length > 100 || !NONCE_RE.test(nonce)) return;
+  try {
+    await queryAsUser(userId, WRITER_RECEIPT_RECORD_SQL, [userId, runId, nonce, new Date(issuedAtMs).toISOString()]);
+  } catch (e) {
+    if (!revisionTableMissing(e)) throw e;
+  }
+}
+
+/** The newest recorded nonce for the person's run, or null (none recorded, or 081 not applied). */
+export async function newestWriterReceiptNonce(userId: string, runId: string): Promise<string | null> {
+  if (!UUID_RE.test(userId) || !runId || runId.length > 100) return null;
+  try {
+    const row = await getOneAsUser<{ nonce: string }>(userId, WRITER_RECEIPT_NEWEST_SQL, [userId, runId]);
+    return row?.nonce ?? null;
+  } catch (e) {
+    if (revisionTableMissing(e)) return null;
+    throw e;
+  }
+}
+
+export async function deleteAllWriterReceipts(userId: string): Promise<number> {
+  try {
+    return (await queryAsUser<{ run_id: string }>(userId, WRITER_RECEIPT_DELETE_ALL_SQL, [userId])).length;
+  } catch (e) {
+    if (revisionTableMissing(e)) return 0;
+    throw e;
+  }
+}
+
+/** Is this Forge run (forge_session.session_id) the person's own? */
+export async function runBelongsTo(userId: string, runId: string): Promise<boolean> {
+  if (!UUID_RE.test(userId) || !runId || runId.length > 200) return false;
+  const row = await getOne<{ ok: number }>(RUN_BELONGS_SQL, [userId, runId]);
+  return !!row;
+}

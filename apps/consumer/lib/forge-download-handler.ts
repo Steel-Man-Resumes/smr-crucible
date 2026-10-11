@@ -34,6 +34,7 @@ import { buildResumeFilename } from "./resume-filename";
 import { MAX_RENDER_CHARS, MAX_RENDER_TOO_LARGE, cleanOpenItems, renderDocx, renderHtml, renderPdf, type RenderRequest } from "./resume-render";
 import { buildZip } from "./resume-render/zip";
 import { cleanRevisionInput, computeRevision } from "./revision-status";
+import { readReceipt, readRunCookie, runCookieHash, type ReceiptContext } from "./writer-receipt";
 
 /** Room for a finish page's whole state (its evidence), besides the text. */
 const MAX_DOWNLOAD_REQUEST_BYTES = 1_000_000;
@@ -115,6 +116,8 @@ export interface DownloadDeps {
     letter_text: string;
     open_items: unknown;
   } | null>;
+  /** Signed in: the newest writer's receipt nonce for a run, and whether the run is the person's (review M-B). */
+  receiptState?: (userId: string, runId: string) => Promise<{ newestNonce: string | null; linked: boolean }>;
 }
 
 const NO_ACCOUNT: DownloadDeps = { userId: async () => null, getRevision: async () => null };
@@ -129,7 +132,7 @@ interface Decided {
   basis: "revision" | "finish" | "raw";
 }
 
-async function decide(input: DownloadInput, deps: DownloadDeps): Promise<Decided | { error: string; status: number }> {
+async function decide(input: DownloadInput, deps: DownloadDeps, cookieHash: string | null = null): Promise<Decided | { error: string; status: number }> {
   const raw = typeof input.content === "string" ? input.content : "";
   const rawLetter = typeof input.coverLetter === "string" ? input.coverLetter : "";
   if (typeof input.revisionId === "string" && input.revisionId) {
@@ -158,7 +161,22 @@ async function decide(input: DownloadInput, deps: DownloadDeps): Promise<Decided
     return { resume: raw, letter: rawLetter, draft: true, openItems: cleanOpenItems(input.openItems), revisionId: null, basis: "raw" };
   }
   if (input.finish && typeof input.finish === "object" && !Array.isArray(input.finish)) {
-    const c = cleanRevisionInput(input.finish);
+    // Signed in, the receipt is checked against the account and its run's
+    // newest generation; signed out, against the run the page names.
+    const fin = input.finish as Record<string, unknown>;
+    const runId = typeof fin.runId === "string" ? fin.runId : "";
+    let ctx: ReceiptContext = { userId: null, runId, cookieHash };
+    try {
+      const userId = await deps.userId();
+      if (userId) {
+        const meta = readReceipt(fin.writerReceipt);
+        const st = meta?.run && deps.receiptState ? await deps.receiptState(userId, meta.run) : { newestNonce: null, linked: false };
+        ctx = { userId, runId, newestNonce: st.newestNonce, runLinked: st.linked, cookieHash };
+      }
+    } catch {
+      return { error: "We couldn't check your resume just now. Try again in a moment.", status: 503 };
+    }
+    const c = cleanRevisionInput(input.finish, { receipt: ctx });
     if (!c.ok) {
       if (c.reason === "too long") return { error: MAX_RENDER_TOO_LARGE, status: 413 };
       if (!raw.trim()) return { error: "content and type are required", status: 400 };
@@ -214,7 +232,8 @@ export async function handleDownloadPost(request: Request, deps: DownloadDeps = 
       return NextResponse.json({ error: "invalid format" }, { status: 400 });
     }
 
-    const d = await decide(input, deps);
+    const runCookie = readRunCookie(request.headers.get("cookie"));
+    const d = await decide(input, deps, runCookie ? runCookieHash(runCookie) : null);
     if ("error" in d) return NextResponse.json({ error: d.error }, { status: d.status });
     const { draft, openItems } = d;
     // What is rendered. A cover letter from a revision or a finish state is

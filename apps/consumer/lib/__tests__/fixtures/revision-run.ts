@@ -62,10 +62,22 @@ export const GROUNDING = { verifierRan: true, removed: 0, residual: 0, unmatched
  * download), with the writer's receipt the server signs in generate-docs.
  * The receipt is made for whatever written and grounding end up in the state.
  */
-export function finishState(over: Record<string, unknown> = {}): Record<string, any> {
+/** The fictional account the fixture's receipts are made for, and its run cookie when signed out. */
+export const FIXTURE_USER = "00000000-0000-4000-8000-0000000000a1";
+export const FIXTURE_COOKIE = "c".repeat(32);
+/** The context a save for that account, finishing that run, is checked in. */
+export const FIXTURE_CTX = { userId: FIXTURE_USER, runId: RUN.startedAt };
+
+export function finishState(over: Record<string, unknown> = {}, opts: { signedOut?: boolean } = {}): Record<string, any> {
   const s = finishStateRaw(over);
   if ("writerReceipt" in over) return s;
-  return { ...s, writerReceipt: s.written ? writerReceipt(s.written as { resume: string; letter: string }, s.grounding) : "" };
+  // Signed by "the server" for this run, for FIXTURE_USER (or, signed out,
+  // for the run, bound to FIXTURE_COOKIE), over exactly this state's own-words source.
+  const source = { ownWords: s.ownWords as string, ownResumeText: s.ownResumeText as string, credentialsAnswer: s.credentialsAnswer as string, credentialRows: s.credentialRows as unknown[] };
+  return {
+    ...s,
+    writerReceipt: s.written ? writerReceipt(s.written as { resume: string; letter: string }, s.grounding, { userId: opts.signedOut ? null : FIXTURE_USER, runId: s.runId as string, source, nonce: "0".repeat(32), now: Date.parse("2026-10-10T09:00:00Z"), ...(opts.signedOut ? { cookie: FIXTURE_COOKIE } : {}) }) : "",
+  };
 }
 
 function finishStateRaw(over: Record<string, unknown>) {
@@ -87,6 +99,7 @@ function finishStateRaw(over: Record<string, unknown>) {
     ownResumeText: SOURCE,
     lengthChoice: "auto",
     docKind: "resume",
+    runId: RUN.startedAt,
     ...over,
   };
 }

@@ -27,6 +27,7 @@ import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { revisionCaller, REVISION_SAVES_PER_DAY, REVISION_TOO_LARGE } from "@/lib/revision-route";
 import { coreStore, pickForgeArtifact, saveEditRevision, saveFinishRevision, type ArtifactLite, type SaveResult } from "@/lib/revision-save";
 import { ensureExportRevision } from "@/lib/revision-current";
+import { readRunCookie, runCookieHash, runCookieHeader } from "@/lib/writer-receipt";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -69,7 +70,14 @@ export async function POST(request: Request) {
           ? await saveFinishRevision(
               userId,
               b.finish,
-              { source: b.source === "forge_import" ? "forge_import" : "forge_finish", laneTarget: typeof b.laneTarget === "string" ? b.laneTarget : "" },
+              {
+                source: b.source === "forge_import" ? "forge_import" : "forge_finish",
+                laneTarget: typeof b.laneTarget === "string" ? b.laneTarget : "",
+                cookieHash: (() => {
+                  const v = readRunCookie(request.headers.get("cookie"));
+                  return v ? runCookieHash(v) : null;
+                })(),
+              },
               store
             )
           : ({ ok: false, status: 400, reason: "kind must be finish or edit" } as const);
@@ -82,7 +90,10 @@ export async function POST(request: Request) {
             : "We couldn't save that version.";
       return NextResponse.json({ error, reason: result.reason }, { status: result.status, headers: NO_STORE });
     }
-    return NextResponse.json({ revision: result.revision }, { headers: NO_STORE });
+    // A signed-out run's receipt was used for this account: no other account may import it.
+    const res = NextResponse.json({ revision: result.revision }, { headers: NO_STORE });
+    if (result.usedRunReceipt) res.headers.append("Set-Cookie", runCookieHeader(null));
+    return res;
   } catch (err: any) {
     console.error("Revision save error:", err?.message || err);
     return NextResponse.json({ error: "We couldn't save that version. Try again." }, { status: 500, headers: NO_STORE });

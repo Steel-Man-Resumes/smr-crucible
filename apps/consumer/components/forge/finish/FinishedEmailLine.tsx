@@ -12,7 +12,8 @@
  * whether this version was already sent, and the caps (one automatic email
  * per resume per day). Quick edits settle first (review L4): the page asks
  * about five minutes after the last finished save, and "Email me the latest"
- * asks at once. A server draft or a failure is said on the page, with Try
+ * asks at once. Nothing on the server sends it later (no scheduled job): a
+ * version that is due is sent the next time this page opens (review L-B). A server draft or a failure is said on the page, with Try
  * again where a retry can help. Nothing is kept in this browser.
  */
 
@@ -26,6 +27,8 @@ export const AUTO_EMAIL_DELAY_MS = 5 * 60 * 1000;
 export function FinishedEmailLine(props: {
   /** The saved revision the server called finished; null until it is saved. */
   revisionId: string | null;
+  /** When that revision was saved (server time). An older one is due now (the next visit sends it). */
+  savedAt?: string | null;
   narrativeHeadline: string;
   narrativeSummary: string;
   /** Checked by the page right before sending: the run is this account's. */
@@ -68,11 +71,19 @@ export function FinishedEmailLine(props: {
 
   // Each finished save restarts the wait; about five minutes after the last
   // one, the newest finished version is emailed (the server re-checks it).
+  // A version saved long enough ago (the next visit) is asked for at once;
+  // the server still decides whether it is due.
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     if (!props.revisionId || !props.mayUse()) return;
+    const age = props.savedAt ? Date.now() - Date.parse(props.savedAt) : 0;
+    const wait = Number.isFinite(age) ? Math.max(0, AUTO_EMAIL_DELAY_MS - age) : AUTO_EMAIL_DELAY_MS;
+    if (wait === 0) {
+      send(props.revisionId);
+      return;
+    }
     setResult({ sent: false, reason: "settling" });
-    timer.current = setTimeout(() => latestId.current && send(latestId.current), AUTO_EMAIL_DELAY_MS);
+    timer.current = setTimeout(() => latestId.current && send(latestId.current), wait);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
