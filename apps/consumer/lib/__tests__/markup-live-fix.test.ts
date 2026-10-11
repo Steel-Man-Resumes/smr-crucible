@@ -289,6 +289,6 @@ test("r3 L1: the end line says where the list really is (above the page)", () =>
   assert.doesNotMatch(live, /under your page/);
   const page = read("app/(forge)/output/page.tsx");
   const list = page.indexOf("<ChangesList changes={changes}");
-  const resume = page.indexOf('id="finish-resume"');
+  const resume = page.indexOf('<div id="finish-resume"');
   assert.ok(list > 0 && resume > list, "the recap list renders above the resume");
 });
