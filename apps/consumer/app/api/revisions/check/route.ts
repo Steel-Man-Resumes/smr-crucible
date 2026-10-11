@@ -4,7 +4,8 @@
  * resume (lib/revision-check.ts).
  *
  * GET  ?artifactId=<id>               the resume's current text and the
- *                                     person's own words (server side)
+ *                                     person's own words (server side).
+ *                                     Read only: nothing is written on a GET.
  * POST { artifactId, finish }         save; the server runs the gate and the
  *                                     page measurement, with its own evidence
  *
@@ -17,7 +18,10 @@ import { NextResponse } from "next/server";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { revisionCaller, REVISION_SAVES_PER_DAY } from "@/lib/revision-route";
 import { coreStore } from "@/lib/revision-save";
-import { loadCheckSource, saveCheckRevision } from "@/lib/revision-check";
+import { LOCKED_REASON, loadCheckSource, saveCheckRevision } from "@/lib/revision-check";
+
+/** Said plainly when the resume is a locked baseline (review L4). */
+const LOCKED_MESSAGE = "This resume is locked as a baseline, so it can't change here. Unlock it in My resumes, or tailor a copy and check that one.";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -31,7 +35,7 @@ export async function GET(request: Request) {
   if (!artifactId) return NextResponse.json({ error: "Which resume?" }, { status: 400, headers: NO_STORE });
   try {
     const r = await loadCheckSource(caller.userId, artifactId, await coreStore());
-    if (!r.ok) return NextResponse.json({ error: "We couldn't open that resume.", reason: r.reason }, { status: r.status, headers: NO_STORE });
+    if (!r.ok) return NextResponse.json({ error: r.reason === LOCKED_REASON ? LOCKED_MESSAGE : "We couldn't open that resume.", reason: r.reason }, { status: r.status, headers: NO_STORE });
     return NextResponse.json({ source: r.source }, { headers: NO_STORE });
   } catch (err: any) {
     console.error("Check source error:", err?.name || "error");
@@ -57,7 +61,12 @@ export async function POST(request: Request) {
   try {
     const r = await saveCheckRevision(caller.userId, body.artifactId, body.finish, await coreStore());
     if (!r.ok) {
-      const error = r.reason === "not_ready" ? "Saving to your account isn't ready here yet. Your work is still on this page." : "We couldn't save that version.";
+      const error =
+        r.reason === "not_ready"
+          ? "Saving to your account isn't ready here yet. Your work is still on this page."
+          : r.reason === LOCKED_REASON
+            ? LOCKED_MESSAGE
+            : "We couldn't save that version.";
       return NextResponse.json({ error, reason: r.reason }, { status: r.status, headers: NO_STORE });
     }
     return NextResponse.json({ revision: r.revision }, { headers: NO_STORE });

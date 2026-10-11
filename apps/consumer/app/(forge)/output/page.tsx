@@ -481,6 +481,11 @@ function OutputPageInner() {
         setTooLarge({ mark: forMark, message: data?.error || "This version is too big to save to your account." });
         return;
       }
+      // Check and finish on a locked baseline (R2 review L4): said plainly, no retry loop.
+      if (checkId && res.status === 409) {
+        setTooLarge({ mark: forMark, message: data?.error || "This resume is locked as a baseline, so it can't change here." });
+        return;
+      }
       if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
       setSaved({ ...data.revision, mark: forMark });
     } catch {

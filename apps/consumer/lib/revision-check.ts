@@ -23,7 +23,7 @@ import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 import { cleanRevisionInput, computeRevision, inputFromRevision, revisionRecord } from "./revision-status";
 import { resumeTextToDocument } from "./revision-to-doc";
 import { withRevisionMarker } from "./revision-marker";
-import { ensureExportRevision } from "./revision-current";
+import { artifactText, baseRevisionFor, revisionIsCurrent, textFromBase } from "./revision-current";
 import type { RevisionStore, SavedRevisionSummary } from "./revision-save";
 import type { RunEvidence } from "./finish-payload";
 
@@ -64,15 +64,39 @@ export interface CheckSource {
 
 export type CheckLoad = { ok: true; source: CheckSource } | { ok: false; status: number; reason: string };
 
-/** Load a resume for "Check and finish": its current text (the revision that IS it now) and the person's own words. */
+/** A locked baseline never changes in place, so Check and finish refuses it (review L4). */
+export const LOCKED_REASON = "locked";
+
+/**
+ * Load a resume for "Check and finish": its current text and the person's own
+ * words. READ ONLY (review L2): nothing is written on this read. When the
+ * stored content is exactly its newest revision, that revision; otherwise the
+ * stored text read the way R1's export reads it (lib/revision-current.ts),
+ * as a draft, with the answers R1 would carry over from its base revision.
+ */
 export async function loadCheckSource(userId: string, artifactId: string, store: RevisionStore): Promise<CheckLoad> {
   const art = await store.getArtifact(userId, artifactId);
   if (!art) return { ok: false, status: 404, reason: "artifact not found" };
   if (art.artifact_type !== "resume") return { ok: false, status: 409, reason: "not a resume" };
-  // The same revision a Refinery download of this resume would use (R1).
-  const ex = await ensureExportRevision(userId, artifactId, store);
-  if (!ex.ok) return ex;
-  const rev: ArtifactRevision = ex.revision;
+  if (art.is_locked) return { ok: false, status: 409, reason: LOCKED_REASON };
+  const newest = await store.getLatestRevision(userId, artifactId);
+  let rev: Pick<ArtifactRevision, "resume_text" | "letter_text" | "status" | "defend_answers" | "kept_terms" | "confirmed_credentials" | "length_choice">;
+  if (newest && revisionIsCurrent(art.content, newest)) {
+    rev = newest;
+  } else {
+    const base = newest ?? (await baseRevisionFor(userId, art, store));
+    const text = base ? textFromBase(art.content, base) : artifactText(art.content);
+    if (!text.trim()) return { ok: false, status: 409, reason: "no resume text" };
+    rev = {
+      resume_text: text,
+      letter_text: base?.letter_text ?? "",
+      status: "draft",
+      defend_answers: base?.defend_answers ?? [],
+      kept_terms: base?.kept_terms ?? [],
+      confirmed_credentials: base?.confirmed_credentials ?? [],
+      length_choice: base?.length_choice ?? "auto",
+    };
+  }
   const evidence = await ownEvidence(userId, store);
   const tc = (art.target_context ?? {}) as { targetJob?: unknown };
   return {
@@ -99,6 +123,9 @@ export async function saveCheckRevision(userId: string, artifactId: string, raw:
   const art = await store.getArtifact(userId, artifactId);
   if (!art) return { ok: false, status: 404, reason: "artifact not found" };
   if (art.artifact_type !== "resume") return { ok: false, status: 409, reason: "not a resume" };
+  // A locked baseline keeps its content, so a finished version saved here would
+  // differ from what its exports print (review L4): refused, never half-saved.
+  if (art.is_locked) return { ok: false, status: 409, reason: LOCKED_REASON };
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ok: false, status: 400, reason: "no finish state" };
   const ev = await ownEvidence(userId, store);
   // The person's words come from the server, never the request.
@@ -114,7 +141,11 @@ export async function saveCheckRevision(userId: string, artifactId: string, raw:
     // exactly this revision, so its downloads use it (R1's marker).
     const base = (art.content ?? null) as { meta?: { targetJob?: string; targetCompany?: string; jobListingUrl?: string } } | null;
     const doc = resumeTextToDocument(c.input.resumeText, base) as unknown as Record<string, unknown>;
-    await store.updateArtifactContent(userId, artifactId, withRevisionMarker(doc, r.revision.id)).catch(() => "failed");
+    const wrote = await store
+      .updateArtifactContent(userId, artifactId, withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" }))
+      .catch(() => "failed");
+    // Locked between the check above and now: say so, never claim the exports match.
+    if (wrote === "locked") return { ok: false, status: 409, reason: LOCKED_REASON };
   }
   const rev = r.revision;
   return {
