@@ -26,6 +26,8 @@
  * Pure: the component (components/forge/ForgeImport.tsx) does the I/O.
  */
 
+import { finishPayloadFromRun, payloadMark } from "./finish-payload";
+
 /**
  * How far a run has come. Saves happen when this goes up, so a person's
  * account gets the run when it first has a resume, and again when the Forge
@@ -111,7 +113,13 @@ export function importDecision(
   const level = runLevel(r);
   if (owner === user.id) {
     const synced = typeof r._syncedLevel === "number" ? r._syncedLevel : 0;
-    return level > synced ? { action: "save", level } : { action: "none" };
+    if (level > synced) return { action: "save", level };
+    // Phase 5 R1 (review A1): a change on the finish page inside the same
+    // stage is a new version too. The finished state that was last saved is
+    // marked; a different one is saved again (the server keeps one revision
+    // per distinct version).
+    if (level === 2 && finishMarkOf(r) && finishMarkOf(r) !== r._syncedFinish) return { action: "save", level };
+    return { action: "none" };
   }
 
   // Unclaimed from here on.
@@ -143,9 +151,13 @@ export function importYesLabel(email: string | null | undefined): string {
 
 /**
  * The fields the account save carries (persistForgeSession / saveForgeSession).
- * Only these are sent. The original upload text (originalResumeText) and the
- * finish page's own state (forgeFinish) are not part of the save contract:
- * they stay in this browser, as before.
+ * Only these are sent. The original upload text (originalResumeText) stays in
+ * this browser. The finish page's own state (forgeFinish) is NOT sent as is:
+ * importPayload sends it as `finish`, rebuilt by lib/finish-payload.ts from
+ * the stored copy that belongs to this run (finishKey), so the account gets a
+ * saved revision of the finished resume (Phase 5 R1, review A1). It is sent
+ * only where everything else is: after the person said the run is theirs, or
+ * when it is already this account's (importDecision above).
  */
 export const IMPORT_FIELDS = [
   "readinessStage",
@@ -170,12 +182,21 @@ export function importPayload(run: Record<string, any>): Record<string, unknown>
   for (const k of IMPORT_FIELDS) {
     if (run[k] !== undefined && run[k] !== null) out[k] = run[k];
   }
+  const finish = finishPayloadFromRun(run);
+  if (finish) out.finish = finish;
   return out;
+}
+
+/** Which finished state a run holds (empty when none), to tell a new one from the last saved. */
+export function finishMarkOf(run: Record<string, any>): string {
+  return payloadMark(finishPayloadFromRun(run));
 }
 
 /** What to write back onto the run after a save succeeded. */
 export function afterSave(run: Record<string, any>, userId: string, level: RunLevel): Record<string, unknown> {
   const marks: Record<string, unknown> = { _ownerUserId: userId, _syncedLevel: level };
+  const finish = finishMarkOf(run);
+  if (finish) marks._syncedFinish = finish;
   // Finished and saved: the Refinery's own sync has nothing left to send for
   // this run. Earlier levels leave those marks alone, so the Refinery still
   // saves the run once it is finished.

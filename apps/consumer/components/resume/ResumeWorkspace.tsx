@@ -76,6 +76,20 @@ export function ResumeWorkspace() {
   const [savedLoaded, setSavedLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error" | "locked">("idle");
   const lastSaved = useRef<string>("");
+  // Phase 5 R1: every download and print goes through a saved revision. The
+  // last one prepared for this resume, so the page can say which version.
+  const [exportRev, setExportRev] = useState<{ id: string; number: number; status: "draft" | "finished" } | null>(null);
+  const [exportError, setExportError] = useState("");
+  const artifactIdRef = useRef<string | null>(null);
+  // Review M3: the resume a Tailor output was made from (the approved base, or
+  // the Forge resume). Saved as its parent, so its version starts from the
+  // parent's settled answers: unchanged lines stay settled.
+  const tailorParentRef = useRef<string | null>(null);
+  useEffect(() => {
+    artifactIdRef.current = artifactId;
+    setExportRev(null);
+    setExportError("");
+  }, [artifactId]);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The artifact id whose content is currently loaded in the editor -- guards
   // the ?id= effect against re-fetch-and-clobber after a fork URL replace.
@@ -603,6 +617,8 @@ export function ResumeWorkspace() {
               resumes.find((a) => a.is_current) ||
               null;
             if (approvedBase?.id) approvedArtifactId = approvedBase.id;
+            const forgeBase = resumes.find((a) => (a.target_context as any)?.source === "forge");
+            tailorParentRef.current = approvedBase?.id || forgeBase?.id || null;
           }
         } catch {}
 
@@ -786,12 +802,12 @@ export function ResumeWorkspace() {
 
   // --- Save ---
   const save = useCallback(
-    async (isAutoSave = false) => {
+    async (isAutoSave = false): Promise<string | null> => {
       const content = doc;
       const contentStr = JSON.stringify(content);
       if (contentStr === lastSaved.current) {
         if (!isAutoSave) setSaveStatus("saved");
-        return;
+        return artifactId;
       }
 
       setSaveStatus("saving");
@@ -805,14 +821,18 @@ export function ResumeWorkspace() {
           if (res.ok) {
             lastSaved.current = contentStr;
             setSaveStatus("saved");
+            return artifactId;
           } else if (res.status === 409) {
             // Locked baseline: the server refused the write (Phase 0.1).
             // Do NOT touch lastSaved -- a manual Save after the user unlocks
             // it elsewhere must still send the real write. Autosave is
             // suppressed separately while status is "locked".
             setSaveStatus("locked");
+            // The stored (locked) content stands; an export uses that.
+            return artifactId;
           } else {
             setSaveStatus("error");
+            return null;
           }
         } else {
           const res = await fetch("/api/artifacts", {
@@ -831,6 +851,7 @@ export function ResumeWorkspace() {
               content,
               scaffoldLevel: 0.5,
               ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
+              ...(tailorParentRef.current ? { parentArtifactId: tailorParentRef.current } : {}),
             }),
           });
           if (res.ok) {
@@ -844,12 +865,16 @@ export function ResumeWorkspace() {
             setSavedResumes((prev) => [data, ...prev]);
             // Signal the nav to re-check unlock state
             window.dispatchEvent(new Event("resume-saved"));
+            artifactIdRef.current = data.id;
+            return data.id as string;
           } else {
             setSaveStatus("error");
+            return null;
           }
         }
       } catch {
         setSaveStatus("error");
+        return null;
       }
     },
     [doc, artifactId, router, targetApplicationId, coverLetterText, disclosureBrief]
@@ -905,14 +930,46 @@ export function ResumeWorkspace() {
   }
 
   // --- Download DOCX ---
+  /**
+   * Phase 5 R1: save, then get the revision that IS this resume as stored
+   * (the server makes one from the stored content when needed, and decides
+   * draft or finished). Every download and print here uses its id.
+   */
+  async function exportRevision(): Promise<string | null> {
+    setExportError("");
+    const id = (await save(false)) ?? artifactIdRef.current ?? artifactId;
+    if (!id) {
+      setExportError("Save your resume first, then download it.");
+      return null;
+    }
+    try {
+      const res = await fetch("/api/revisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "export", artifactId: id, ...(coverLetterText ? { letterText: coverLetterText } : {}) }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
+      setExportRev({ id: data.revision.id, number: data.revision.number, status: data.revision.status });
+      return data.revision.id as string;
+    } catch {
+      setExportError("We couldn't save this version to your account, so the file is marked DRAFT.");
+      return null;
+    }
+  }
+
   async function downloadDocx(type: "resume" | "cover_letter", content: string) {
     try {
+      const revisionId = await exportRevision();
       const res = await fetch("/api/forge/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Pass naming inputs so the download is a real slug
-        // (First-Last--Company--Role.docx), Phase 2.6.
+        // (First-Last--Company--Role.docx), Phase 2.6. The server takes the
+        // text and the DRAFT decision from the revision; without one the
+        // text sent is marked DRAFT.
         body: JSON.stringify({
+          ...(revisionId ? { revisionId } : {}),
           content,
           type,
           format: "docx",
@@ -1728,7 +1785,7 @@ export function ResumeWorkspace() {
                 Download .docx
               </button>
               <button
-                onClick={() => printResumePdf(doc)}
+                onClick={() => printResumePdf(doc, { prepare: exportRevision })}
                 className="t-focus px-4 py-3 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors min-h-touch text-sm"
               >
                 Save as PDF
@@ -1736,6 +1793,15 @@ export function ResumeWorkspace() {
               {/* Phase 2.5: page-fit estimate of the exact .docx the Download
                   button produces -- same content-derivation (formatResumeDownload). */}
               <PageFitCheck getContent={() => formatResumeDownload(doc)} />
+              {(exportRev || exportError) && (
+                <p className="w-full text-xs text-t-phos" role="status" data-testid="workspace-version">
+                  {exportError
+                    ? exportError
+                    : exportRev!.status === "finished"
+                      ? `Version ${exportRev!.number}, finished. Downloads use this exact version.`
+                      : "Draft: check it before you send it."}
+                </p>
+              )}
             </>
           }
           actionsHint=".docx = editable in Word. PDF = keeps the formatting exactly. Save both."

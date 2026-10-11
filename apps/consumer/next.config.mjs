@@ -53,6 +53,14 @@ const nextConfig = {
     // counties a typed town or ZIP sits in (lib/support-place-index.ts).
     "/api/resources-search": ["./public/forge-data/us-places-2020.v1.json"],
     "/api/resume/layout": ["./public/fonts/resume/**/*"],
+    // Phase 5 R1: saving a revision measures its pages (the status counts
+    // them), the Forge save stores one, and both package emails measure and
+    // attach the rendered files.
+    "/api/revisions": ["./public/fonts/resume/**/*"],
+    "/api/forge/save": ["./public/fonts/resume/**/*"],
+    "/api/forge/email-package": ["./public/fonts/resume/**/*"], // measures pages (the finished check)
+    "/api/forge/email-package/auto": ["./public/fonts/resume/**/*"],
+    "/api/quick-apply": ["./public/fonts/resume/**/*"],
     // Creative lanes: the artist resume and bio card use the same renderer.
     "/api/creative/layout": ["./public/fonts/resume/**/*"],
     "/api/creative/[laneId]/export": ["./public/fonts/resume/**/*"],

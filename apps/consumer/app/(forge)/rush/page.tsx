@@ -187,7 +187,9 @@ export default function RushPage() {
   }
 
   function handleDownloadTxt() {
-    const text = buildResumeText();
+    // Not a checked, finished version (Phase 5 R1, review L3): marked DRAFT,
+    // like every file the server makes from raw text. Also the docx fallback.
+    const text = `DRAFT\n\n${buildResumeText()}`;
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");

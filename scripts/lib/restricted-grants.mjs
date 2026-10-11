@@ -98,6 +98,9 @@ export const RESTRICTED_GRANTS = {
   // The app's one read of the directory (082): approved, fresh, active services,
   // public fields only. Built on resource_public_v; no base table is granted.
   resource_app_v: ["SELECT"],
+  // Phase 5 R1 (081). Saved resume revisions, owner only: never edited (a
+  // change is a new revision), so no UPDATE; deleted by delete-my-data.
+  artifact_revision: ["SELECT", "INSERT", "DELETE"],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */

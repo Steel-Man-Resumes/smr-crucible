@@ -16,6 +16,12 @@
  *   the address itself);
  * - Cloudflare Turnstile when TURNSTILE_SECRET_KEY is set (enforced for a
  *   missing token only with TURNSTILE_ENFORCE=1, same as signup).
+ * - FINISHED on the server (Phase 5 R1, review A3/A5): the body carries the
+ *   finish page's whole state (`finish`), the server runs the same gate and
+ *   page rule a saved revision gets (lib/revision-status.ts), the letter
+ *   included, and a draft is refused. The resume and letter emailed are the
+ *   ones that state holds, as text in the email (no attachments: those go
+ *   only to a signed-in account's proven address).
  */
 
 import { NextResponse } from "next/server";
@@ -32,6 +38,7 @@ import {
   recipientKey,
 } from "@/lib/email-package-guard";
 import { buildPackageEmail, clipDocs, packageFrom, resendKey, resendTransport } from "@/lib/email-package-send";
+import { cleanRevisionInput, computeRevision } from "@/lib/revision-status";
 
 async function handlePost(request: Request) {
   if (!originAllowed(request.headers.get("origin"), request.url)) {
@@ -81,13 +88,21 @@ async function handlePost(request: Request) {
   }
   if (turnstile === "missing") console.error("email-package: Turnstile token missing (not enforced)");
 
-  const docs = clipDocs(body);
-  if (!docs.resumeText.trim()) {
+  // Finished, decided here from the whole finish state; never from the page.
+  const finish = cleanRevisionInput(body.finish);
+  if (!finish.ok) {
     return NextResponse.json(
       { error: "No resume to send yet. Finish the Forge first." },
       { status: 400 }
     );
   }
+  if (computeRevision(finish.input).status !== "finished") {
+    return NextResponse.json(
+      { error: "This opens when your resume is finished, so the copy in your inbox is the final one." },
+      { status: 409 }
+    );
+  }
+  const docs = { ...clipDocs(body), resumeText: finish.input.resumeText, coverLetterText: finish.input.letterText };
 
   // Durable per-recipient cap, counted before the send so a burst cannot race it.
   const sentToday = await incrementIpUsage(recipientKey(email), RECIPIENT_ENDPOINT);
@@ -122,6 +137,8 @@ async function handlePost(request: Request) {
     ? `https://www.steelmanresumes.com/unsubscribe?token=${letterToken}`
     : null;
 
+  // Text only, as before this lane (review L5): files are attached only for a
+  // signed-in account's own proven address (the automatic email).
   const mail = buildPackageEmail(docs, { why: "asked", unsubUrl });
   try {
     const res = await resendTransport(key)({ from: packageFrom(), to: email, ...mail });

@@ -14,6 +14,14 @@
  *
  * Below: one main action, the checks (collapsed, one line each), the cover
  * letter, the person's story (the narrative reconstruction) and the next step.
+ *
+ * ONE VERSION, EVERYWHERE (Phase 5 lane R1). Signed in, every change saves a
+ * revision on the server (/api/revisions), and the server's status for that
+ * revision is the page's status: the gate with all the evidence plus the
+ * page count (D8). "Saved to your account" shows only after the save answers,
+ * with Try again when it fails. Every download, the print and the email use
+ * that revision's id. Signed out, the work stays in this browser and each
+ * download sends the whole state, and the server decides from it.
  */
 
 import { TroyMark } from "@crucible/consumer-ui";
@@ -67,6 +75,11 @@ import {
   cutCredentialEverywhere,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
+import { finishPayload, payloadMark, readRunEvidence, type RunEvidence } from "@/lib/finish-payload";
+import { isLengthChoice, lengthOk, pageLimitFor, type LengthChoice } from "@/lib/length-rule";
+import { LengthCard, cuttableLines } from "@/components/forge/finish/LengthCard";
+import { printFromServer } from "@/components/resume/resumePrint";
+import type { SavedRevisionSummary } from "@/lib/revision-save";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
 import { DefendPanel, type CardActions } from "@/components/forge/finish/DefendPanel";
@@ -153,6 +166,8 @@ export default function OutputPage() {
   const [grounding, setGrounding] = useState<unknown>(null);
   // The writer's documents exactly as delivered; never edited (see finish-gate WrittenDocs).
   const [written, setWritten] = useState<WrittenDocs | null>(null);
+  // The server's receipt over the writer's documents and their check (review M1).
+  const [receipt, setReceipt] = useState<string>("");
   const [defendAnswers, setDefendAnswers] = useState<DefendAnswer[]>([]);
   // Skill terms the person added from a job posting; each is asked about.
   const [addedTerms, setAddedTerms] = useState<string[]>([]);
@@ -165,6 +180,17 @@ export default function OutputPage() {
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState("");
   const [copied, setCopied] = useState("");
+  // D8: the person may choose one page. Measured pages come from the renderer.
+  const [lengthChoice, setLengthChoice] = useState<LengthChoice>("auto");
+  const [pages, setPages] = useState<number | null>(null);
+  // Restored from the account: the saved revision's own evidence (its own words).
+  const [runEvidence, setRunEvidence] = useState<RunEvidence | null>(null);
+  // The server's saved revision for the current state, and the save's state.
+  const [saved, setSaved] = useState<(SavedRevisionSummary & { mark: string }) | null>(null);
+  // The state whose save last failed (its mark), so a failure is shown only for the state on screen.
+  const [failedMark, setFailedMark] = useState<string | null>(null);
+  // A save the server refused for size (review L8): said plainly, never retried.
+  const [tooLarge, setTooLarge] = useState<{ mark: string; message: string } | null>(null);
 
   // Back on this page in the same run: show the same documents and answers
   // instead of writing new ones (a new AI call, and the answers would no
@@ -172,17 +198,20 @@ export default function OutputPage() {
   useEffect(() => {
     if (hydrated.current || !session.forgeOutput) return;
     hydrated.current = true;
-    const raw = session.forgeFinish as { docs?: { keepInsideLines?: boolean } } | undefined;
+    const raw = session.forgeFinish as { docs?: { keepInsideLines?: boolean }; lengthChoice?: unknown; evidence?: unknown } | undefined;
     const keep = raw?.docs?.keepInsideLines === true;
     const stored = readStoredFinish(raw, finishKey(session, keep));
     if (!stored) return;
     hasStarted.current = true;
+    if (isLengthChoice(raw?.lengthChoice)) setLengthChoice(raw!.lengthChoice as LengthChoice);
+    setRunEvidence(readRunEvidence(raw?.evidence));
     setResumeText(stored.docs.resumeText);
     setCoverLetterText(stored.docs.coverLetterText);
     setWithheldLines(stored.docs.withheldLines);
     setKeepInsideLines(stored.docs.keepInsideLines);
     setGrounding(stored.docs.grounding);
     setWritten(stored.docs.written ?? null);
+    setReceipt(stored.docs.receipt ?? "");
     setDefendAnswers(stored.defendAnswers);
     setAddedTerms(stored.addedTerms ?? []);
     setKeptTerms(stored.keptTerms ?? []);
@@ -198,17 +227,19 @@ export default function OutputPage() {
       forgeFinish: {
         v: FINISH_STATE_VERSION,
         key: finishKey(session, keepInsideLines),
-        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written: written ?? undefined },
+        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written: written ?? undefined, ...(receipt ? { receipt } : {}) },
         defendAnswers,
         addedTerms,
         keptTerms,
         confirmedCredentials,
         credentialCutRemnants,
+        lengthChoice,
+        ...(runEvidence ? { evidence: runEvidence } : {}),
       },
     });
     // session is read for its key fields only; writing must not loop on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, updateSession]);
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, receipt, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, lengthChoice, runEvidence, updateSession]);
 
   const runIsMineRef = useRef(runIsMine);
   runIsMineRef.current = runIsMine;
@@ -256,12 +287,15 @@ export default function OutputPage() {
       setWithheldLines(Array.isArray(data.withheldLines) ? data.withheldLines.filter((l: unknown) => typeof l === "string") : []);
       setGrounding(data.grounding ?? null);
       setWritten({ resume: data.resume || "", letter: data.coverLetter || "" });
+      setReceipt(typeof data.receipt === "string" ? data.receipt : "");
       // New documents: earlier answers belonged to other lines.
       setDefendAnswers([]);
       setAddedTerms([]);
       setKeptTerms([]);
       setConfirmedCredentials([]);
       setCredentialCutRemnants([]);
+      // New documents are written from this run: its own words, not a restored copy's.
+      setRunEvidence(null);
       setDocState("done");
     } catch (err: unknown) {
       console.error("Doc generation error:", err);
@@ -283,16 +317,21 @@ export default function OutputPage() {
   }, [session.forgeOutput, docState, generateDocs]);
 
   // ---- the gate ----------------------------------------------------------------
-  const ownWords = useMemo(() => ownWordsFor(session, keepInsideLines), [session, keepInsideLines]);
+  // Restored from the account: the saved revision's own words (runEvidence), so
+  // the page is that exact version. Otherwise this run's words, as before.
+  const ownWords = useMemo(() => runEvidence?.ownWords ?? ownWordsFor(session, keepInsideLines), [runEvidence, session, keepInsideLines]);
   // The licenses-and-training answer: a credential line exactly as typed there is not asked about.
-  const credentialsAnswer = session.challengeNarratives?.[CREDENTIALS_KEY];
+  const credentialsAnswer = runEvidence ? runEvidence.credentialsAnswer || undefined : session.challengeNarratives?.[CREDENTIALS_KEY];
   // Round 7: the structured rows are the typed exception; whole lines of their own resume are the other.
-  const credentialRows = useMemo(() => completeCredentialRows(readCredentialRows(session.credentialRows)), [session.credentialRows]);
-  const ownResumeText = useMemo(
-    () => withholdRecordLines(session.originalResumeText ?? session.resumeText, keepInsideLines).kept,
-    [session.originalResumeText, session.resumeText, keepInsideLines]
+  const credentialRows = useMemo(
+    () => completeCredentialRows(readCredentialRows(runEvidence ? runEvidence.credentialRows : session.credentialRows)),
+    [runEvidence, session.credentialRows]
   );
-  const view = useMemo(
+  const ownResumeText = useMemo(
+    () => (runEvidence ? runEvidence.ownResumeText : withholdRecordLines(session.originalResumeText ?? session.resumeText, keepInsideLines).kept),
+    [runEvidence, session.originalResumeText, session.resumeText, keepInsideLines]
+  );
+  const gateView = useMemo(
     () =>
       buildFinishView({
         resumeText,
@@ -312,7 +351,80 @@ export default function OutputPage() {
     [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer, credentialCutRemnants, credentialRows, ownResumeText]
   );
   const ready = docState === "done" && !!resumeText;
+
+  // ---- one saved version (Phase 5 R1) ------------------------------------------------
+  // The whole state the server's gate reads. Same builder as the import.
+  const payload = useMemo(
+    () =>
+      ready
+        ? finishPayload(
+            session,
+            { resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, lengthChoice, receipt },
+            runEvidence
+          )
+        : null,
+    // session is read for its run fields only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ready, resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, lengthChoice, receipt, runEvidence, session.resumeText, session.originalResumeText, session.goalNarrative, session.hookNarrative, session.challengeNarratives, session.credentialRows]
+  );
+  const mark = useMemo(() => payloadMark(payload), [payload]);
+  const mayAccount = signedIn && !isDemo;
+  const saveSeq = useRef(0);
+  const saveRevision = useCallback(async () => {
+    if (!mayAccount || !payload || !runIsMineRef.current()) return;
+    const mine = ++saveSeq.current;
+    const forMark = mark;
+    setFailedMark(null);
+    try {
+      const res = await fetch("/api/revisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "finish", finish: payload, laneTarget: careerPaths[0]?.title || "" }),
+      });
+      const data = (await res.json().catch(() => null)) as { revision?: SavedRevisionSummary; error?: string } | null;
+      if (mine !== saveSeq.current) return;
+      if (res.status === 413) {
+        setTooLarge({ mark: forMark, message: data?.error || "This version is too big to save to your account." });
+        return;
+      }
+      if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
+      setSaved({ ...data.revision, mark: forMark });
+    } catch {
+      if (mine === saveSeq.current) setFailedMark(forMark);
+    }
+    // careerPaths only names the first lane.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mayAccount, payload, mark]);
+  // Every change saves a new version (the server keeps one per distinct version).
+  useEffect(() => {
+    if (!mayAccount || !payload || (saved && saved.mark === mark)) return;
+    const t = setTimeout(() => void saveRevision(), 700);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mark, mayAccount]);
+  // The saved revision for exactly this state, or null while it saves.
+  const current = saved && saved.mark === mark ? saved : null;
+  // What the account line says: saved only for THIS state's revision.
+  const saveShown: "saved" | "failed" | "saving" | "too_large" = current ? "saved" : tooLarge?.mark === mark ? "too_large" : failedMark === mark ? "failed" : "saving";
+
+  // D8: pages are part of status. The server's count for the saved version;
+  // the renderer's count from the layout route while it saves (or signed out).
+  const pageLimit = pageLimitFor("resume", lengthChoice);
+  const lengthOver = current
+    ? current.pageLimit !== null && current.pageCount > current.pageLimit
+    : pages !== null && !lengthOk(pages, pageLimit);
+  const shownPages = current ? current.pageCount : pages;
+  const localState: "finished" | "draft" = gateView.state === "finished" && !lengthOver ? "finished" : "draft";
+  // Signed in: the server's status for the saved version wins.
+  const state: "finished" | "draft" = mayAccount && current ? current.status : localState;
+  const view = useMemo(
+    () => ({ ...gateView, state, fixCount: gateView.fixCount + (lengthOver ? 1 : 0) }),
+    [gateView, state, lengthOver]
+  );
   const finished = ready && view.state === "finished";
+  // Where every file comes from: the saved revision when there is one for
+  // this exact state; otherwise the whole state, and the server decides.
+  const fileSource = (): { revisionId?: string; finish?: unknown } => (mayAccount && current ? { revisionId: current.id } : { finish: payload });
 
   const groundingNote = useMemo(() => readGrounding(grounding), [grounding]);
   const g = grounding as { verifierRan?: boolean; verifierRanByDoc?: { resume?: boolean; cover_letter?: boolean } } | null;
@@ -324,8 +436,9 @@ export default function OutputPage() {
   // Celebrate once, only when the engine says finished.
   const [celebrated, setCelebrated] = useState(false);
   useEffect(() => {
+    if (mayAccount && !current) return; // wait for the server's answer
     if (shouldCelebrate({ state: view.state, isDemo, docsReady: ready, alreadyCelebrated: celebrated })) setCelebrated(true);
-  }, [view.state, isDemo, ready, celebrated]);
+  }, [view.state, isDemo, ready, celebrated, mayAccount, current]);
 
   // Review ask: after a finished download, once per visit.
   const [finishedDownloadDone, setFinishedDownloadDone] = useState(false);
@@ -491,7 +604,7 @@ export default function OutputPage() {
     first.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
   };
 
-  const draftItems = () => (view.state === "finished" ? undefined : openItemsInPlainWords(view));
+  const draftItems = () => (view.state === "finished" ? undefined : current?.openItems.length ? current.openItems : openItemsInPlainWords(view));
 
   async function runDownload(fn: () => Promise<void>) {
     setBusy(true);
@@ -509,14 +622,20 @@ export default function OutputPage() {
 
   const handlePackage = () =>
     runDownload(() =>
-      downloadPackage({ resumeText, coverLetterText: coverLetterText || undefined, ...downloadMode(view.state), openItems: draftItems() })
+      downloadPackage({ resumeText, coverLetterText: coverLetterText || undefined, ...downloadMode(view.state), openItems: draftItems(), ...fileSource() })
     );
   const handleFormat = (format: DownloadFormat) =>
-    runDownload(() => downloadResume({ format, kind: "resume", text: resumeText, ...downloadMode(view.state), openItems: draftItems() }));
+    runDownload(() => downloadResume({ format, kind: "resume", text: resumeText, ...downloadMode(view.state), openItems: draftItems(), ...fileSource() }));
   const handleLetter = () =>
     runDownload(() =>
-      downloadResume({ format: "docx", kind: "cover_letter", text: coverLetterText, resumeText, ...downloadMode(view.state), openItems: draftItems() })
+      downloadResume({ format: "docx", kind: "cover_letter", text: coverLetterText, resumeText, ...downloadMode(view.state), openItems: draftItems(), ...fileSource() })
     );
+  const handlePrint = () => printFromServer({ ...fileSource(), content: resumeText });
+  // Over the limit: the person picks a line; it is cut and recorded as their cut.
+  const onLengthCut = (line: string) => {
+    setResumeText((t) => cutLine(t, line));
+    setDefendAnswers((a) => recordAnswer(a, line, "", "cut"));
+  };
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard?.writeText(text).catch(() => undefined);
     setCopied(label);
@@ -606,6 +725,41 @@ export default function OutputPage() {
               Our second check didn&apos;t run this time. Read every line before you send it.
             </p>
           )}
+          {ready && mayAccount && (
+            <p role="status" className="mt-1 text-xs text-t-phos" data-testid="account-save" data-state={saveShown}>
+              {current ? (
+                <>
+                  Saved to your account (version {current.number}).
+                  {current.accountCopy === "kept_refinery" && (
+                    <span className="block" data-testid="account-copy-note">
+                      Your resume in the Refinery has changes you made there, so we kept it as it is. This finished version is saved beside it.
+                    </span>
+                  )}
+                  {current.accountCopy === "kept_earlier" && (
+                    <span className="block" data-testid="account-copy-note">
+                      Your account&apos;s earlier copy is kept{current.accountCopyRevision ? ` as version ${current.accountCopyRevision}` : ""}. Your resume in the Refinery now shows this finished version.
+                    </span>
+                  )}
+                </>
+              ) : saveShown === "too_large" ? (
+                <>{tooLarge?.message}</>
+              ) : saveShown === "failed" ? (
+                <>
+                  Not saved to your account yet. Your work is still on this page.{" "}
+                  <button
+                    type="button"
+                    onClick={() => void saveRevision()}
+                    className="t-focus min-h-touch font-medium text-t-white underline underline-offset-2"
+                    data-testid="account-save-retry"
+                  >
+                    Try again
+                  </button>
+                </>
+              ) : (
+                "Saving to your account..."
+              )}
+            </p>
+          )}
         </div>
         {ready && (
           <button
@@ -689,6 +843,16 @@ export default function OutputPage() {
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
+              {lengthOver && shownPages !== null && (
+                <LengthCard
+                  pages={shownPages}
+                  limit={current?.pageLimit ?? pageLimit ?? 2}
+                  choice={lengthChoice}
+                  lines={cuttableLines(resumeText)}
+                  onCut={onLengthCut}
+                  onChoice={setLengthChoice}
+                />
+              )}
               <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} actions={cardActions} />
             </aside>
           </div>
@@ -701,18 +865,16 @@ export default function OutputPage() {
               error={downloadError}
               onDownloadPackage={handlePackage}
               onDownloadFormat={handleFormat}
+              onPrint={handlePrint}
               onFix={goFix}
               onCopy={() => handleCopy(resumeText, "resume")}
               copied={copied === "resume"}
             />
             {canEmailPackage({ state: view.state, isDemo }) && authStatus === "loading" ? null : canEmailPackage({ state: view.state, isDemo }) && signedIn ? (
               <FinishedEmailLine
-                resumeText={resumeText}
-                coverLetterText={coverLetterText}
+                revisionId={current && current.status === "finished" ? current.id : null}
                 narrativeHeadline={narrative.headline || ""}
                 narrativeSummary={narrative.summary || ""}
-                ownWords={ownWords}
-                defendAnswers={defendAnswers}
                 mayUse={runIsMine}
               />
             ) : canEmailPackage({ state: view.state, isDemo }) ? (
@@ -721,6 +883,7 @@ export default function OutputPage() {
                 coverLetterText={coverLetterText}
                 narrativeHeadline={narrative.headline || ""}
                 narrativeSummary={narrative.summary || ""}
+                finish={payload}
               />
             ) : !isDemo ? (
               <div className="border border-t-line bg-t-panel p-4" data-testid="email-locked">
@@ -812,7 +975,16 @@ export default function OutputPage() {
 
               <div className="flex min-h-touch flex-wrap items-center justify-between gap-2 border border-t-line bg-t-panel px-4 py-3" data-testid="check-pagefit">
                 <span className="text-sm font-semibold text-t-white">Page length</span>
-                <PageFitLine text={resumeText} />
+                <PageFitLine text={resumeText} onPages={setPages} />
+                <label className="flex min-h-touch w-full items-center gap-2 text-xs text-t-phos">
+                  <input
+                    type="checkbox"
+                    checked={lengthChoice === "one_page"}
+                    onChange={(e) => setLengthChoice(e.target.checked ? "one_page" : "auto")}
+                    data-testid="length-one-page"
+                  />
+                  I want it on one page
+                </label>
               </div>
             </div>
           </section>

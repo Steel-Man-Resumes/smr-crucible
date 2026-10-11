@@ -13,7 +13,12 @@ import { type ResumeDocument, formatResumeDownload } from "./resumeModel";
 import { escapeHtml } from "../../lib/escape-html";
 import { buildResumeFilename } from "../../lib/resume-filename";
 
-/** Build the print-optimized HTML for a resume. Exposed for testing/reuse. */
+/**
+ * Build the print-optimized HTML for a resume. Exposed for testing/reuse.
+ * This is only the fallback when the server's page cannot be reached, so it
+ * can never know the version's status: it is always marked DRAFT (Phase 5
+ * R1). A finished print comes from the server, which decides.
+ */
 export function buildResumePrintHtml(doc: ResumeDocument): string {
   const text = formatResumeDownload(doc);
   const nameUpper = escapeHtml((doc.contact.name || "Resume").toUpperCase());
@@ -65,9 +70,11 @@ export function buildResumePrintHtml(doc: ResumeDocument): string {
   .bullet::before{content:"\\2022  ";color:#1B2A4A;font-weight:bold}
   .body-line{margin:2px 0;font-size:8.5pt;line-height:1.4}
   br{display:block;margin:3px 0}
+  .draft{font-size:8pt;font-weight:bold;color:#8a1c1c;text-align:center;margin:0 0 6px}
   @media print{@page{size:letter;margin:0.4in 0.45in} body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style></head>
 <body>
+<div class="draft">DRAFT: printed without its saved version. Download it from your account for the final copy.</div>
 <div class="name">${nameUpper}</div>
 ${job || company ? `<div class="subtitle">${[job, company].filter(Boolean).join(" | ")}</div>` : ""}
 ${bodyHtml}
@@ -82,7 +89,14 @@ ${bodyHtml}
  * If that cannot be reached, the older print page below is used so printing
  * still works.
  */
-export function printResumePdf(doc: ResumeDocument): void {
+export function printResumePdf(
+  doc: ResumeDocument,
+  source: {
+    revisionId?: string | null;
+    /** Runs after the window opens (it must open on the click): saves and returns the revision to print. */
+    prepare?: () => Promise<string | null>;
+  } = {}
+): void {
   // The window must open on the click itself, or the browser blocks it.
   const w = window.open("", "_blank");
   if (!w) return;
@@ -92,10 +106,14 @@ export function printResumePdf(doc: ResumeDocument): void {
   w.document.close();
   const text = formatResumeDownload(doc);
   const nameTokens = (doc.contact.name || "").trim().split(/\s+/).filter(Boolean);
-  fetch("/api/forge/download", {
+  const revision = source.prepare ? source.prepare().catch(() => null) : Promise.resolve(source.revisionId ?? null);
+  revision.then((revisionId) => fetch("/api/forge/download", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
+      // A saved revision: the server prints ITS text and decides DRAFT from
+      // its stored status. Without one, the text is printed as a draft.
+      ...(revisionId ? { revisionId } : {}),
       content: text,
       type: "resume",
       format: "html",
@@ -104,7 +122,7 @@ export function printResumePdf(doc: ResumeDocument): void {
       company: doc.meta.targetCompany || undefined,
       role: doc.meta.targetJob || undefined,
     }),
-  })
+  }))
     .then((res) => {
       if (!res.ok) throw new Error("html failed");
       return res.text();
@@ -124,6 +142,47 @@ export function printResumePdf(doc: ResumeDocument): void {
     .catch(() => {
       w.document.open();
       w.document.write(buildResumePrintHtml(doc));
+      w.document.close();
+    });
+}
+
+/**
+ * Print what the server renders for a download body (a saved revision, or a
+ * finish state signed out). Same window dance as printResumePdf: the window
+ * opens on the click, the page arrives, then the print dialog. If the server
+ * cannot be reached, nothing unmarked is printed: the window says so.
+ */
+export function printFromServer(body: Record<string, unknown>): void {
+  const w = window.open("", "_blank");
+  if (!w) return;
+  w.document.write(
+    '<!doctype html><meta charset="utf-8"><title>Resume</title><p style="font:16px sans-serif;padding:24px">Getting your page ready...</p>'
+  );
+  w.document.close();
+  fetch("/api/forge/download", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "resume", ...body, format: "html" }),
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error("html failed");
+      return res.text();
+    })
+    .then((html) => {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+      const go = () => {
+        w.focus();
+        w.print();
+      };
+      const fonts = (w.document as Document & { fonts?: { ready: Promise<unknown> } }).fonts;
+      if (fonts && fonts.ready) void fonts.ready.then(() => setTimeout(go, 150));
+      else setTimeout(go, 700);
+    })
+    .catch(() => {
+      w.document.open();
+      w.document.write('<!doctype html><meta charset="utf-8"><title>Resume</title><p style="font:16px sans-serif;padding:24px">We could not get your page ready. Close this window and try again, or download the PDF.</p>');
       w.document.close();
     });
 }

@@ -163,6 +163,11 @@ export function SecurityContent({ showUserControls, recordStep = false }: Securi
             that history anytime. Without an account, t.ROY does not save your
             chats.
           </BulletItem>
+          <BulletItem>
+            When you are signed in, each checked version of your resume is
+            saved to your account, with the answers you gave about its lines.
+            You can download or delete them in Settings.
+          </BulletItem>
           {recordStep ? (
             <BulletItem>
               The record check is the only screen that asks for your offense,

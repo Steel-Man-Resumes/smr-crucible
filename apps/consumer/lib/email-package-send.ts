@@ -20,12 +20,20 @@ export interface PackageDocs {
   summary: string;
 }
 
+/** A file on the email: base64 content, the way Resend takes it. */
+export interface MailAttachment {
+  filename: string;
+  content: string;
+}
+
 export interface PackageMail {
   from: string;
   to: string;
   subject: string;
   html: string;
   text: string;
+  /** The resume PDF and Word file, and the letter in Word (lib/email-package-files.ts). */
+  attachments?: MailAttachment[];
 }
 
 export type MailTransport = (msg: PackageMail) => Promise<{ ok: boolean; status: number }>;
@@ -59,7 +67,7 @@ export function mailingAddress(): string {
  */
 export function buildPackageEmail(
   docs: PackageDocs,
-  opts: { why: "asked" | "finished"; unsubUrl?: string | null; address?: string }
+  opts: { why: "asked" | "finished"; unsubUrl?: string | null; address?: string; attached?: boolean }
 ): { subject: string; html: string; text: string } {
   const address = opts.address ?? mailingAddress();
   const unsubUrl = opts.unsubUrl ?? null;
@@ -78,13 +86,17 @@ export function buildPackageEmail(
   if (docs.coverLetterText.trim()) {
     sections.push(
       `<h2 style="margin:24px 0 8px;font-size:18px;color:#1c1e1b;">Your cover letter</h2>` +
-        `<p style="color:#6d736d;font-size:12px;">Edit this for every job. That is why we send it as text you can copy instead of a locked file.</p>` +
+        `<p style="color:#6d736d;font-size:12px;">${opts.attached ? "Edit this for every job. The Word file is attached, and the text is here to copy." : "Edit this for every job. That is why we send it as text you can copy instead of a locked file."}</p>` +
         `<pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;color:#1c1e1b;background:#f5f6f4;padding:16px;border:1px solid #d3d8d1;">${esc(docs.coverLetterText)}</pre>`
     );
   }
 
+  const files = opts.attached
+    ? "Your resume is attached as a PDF and a Word file" + (docs.coverLetterText.trim() ? ", with your cover letter in Word. " : ". ")
+    : "";
   const intro =
-    opts.why === "finished"
+    esc(files) +
+    (opts.why === "finished"
       ? `This is the resume you finished in The Forge. It is yours. Print it, forward it, use it. ` +
         `Open The Refinery with the same account to aim it at real jobs: ` +
         `<a href="https://refinery.steelmanresumes.com/dashboard" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.`
@@ -92,7 +104,7 @@ export function buildPackageEmail(
         `forward it, use it. When you are ready for the next step (finding real jobs, ` +
         `tailoring this resume to them, practicing the hard questions), your free ` +
         `account in The Refinery is waiting at ` +
-        `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.`;
+        `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.`);
 
   const footer =
     opts.why === "finished"
@@ -118,6 +130,7 @@ export function buildPackageEmail(
 
   const text =
     `You did the work. Here it is.\n\n` +
+    (files ? `${files.trim()}\n\n` : "") +
     (docs.headline ? `${docs.headline}\n\n` : "") +
     (docs.summary ? `${docs.summary}\n\n` : "") +
     `=== YOUR RESUME ===\n\n${docs.resumeText}\n\n` +

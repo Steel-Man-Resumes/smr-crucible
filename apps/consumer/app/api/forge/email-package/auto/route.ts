@@ -1,11 +1,13 @@
 /**
  * POST /api/forge/email-package/auto
  *
- * The finish page calls this once a signed-in person's resume is FINISHED.
- * It emails the package to the account's own proven address, unless the
- * person turned that off. The request carries no address: anything in the
- * body that looks like one is ignored. All the rules are
- * in lib/email-package-auto.ts; this file only wires the real dependencies.
+ * The finish page calls this with the id of the revision it just saved
+ * (migration 081) once the server said it is FINISHED. It emails that
+ * revision, as attached PDF and Word files, to the account's own proven
+ * address, unless the person turned that off. The request carries no address:
+ * anything in the body that looks like one is ignored, and no status: the
+ * server re-checks the stored revision. All the rules are in
+ * lib/email-package-auto.ts; this file only wires the real dependencies.
  *
  * An account route: not on the Forge's anonymous list, so a session that
  * still owes its second step is held (lib/session-policy.ts).
@@ -34,14 +36,18 @@ async function handlePost(request: Request) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
-  const { getPackageEmailTarget, incrementIpUsage, claimPackageEmailVersion, releasePackageEmailVersion } =
+  const { getPackageEmailTarget, incrementIpUsage, claimPackageEmailVersion, releasePackageEmailVersion, getRevision, getLatestRevision } =
     await import("@crucible/core");
+  const { packageFiles } = await import("@/lib/email-package-files");
   const key = resendKey();
   const result = await sendFinishedPackage(user.id, body as Record<string, unknown>, {
     target: getPackageEmailTarget,
     count: incrementIpUsage,
     claim: claimPackageEmailVersion,
     release: releasePackageEmailVersion,
+    getRevision,
+    getLatestRevision,
+    files: packageFiles,
     transport: key ? resendTransport(key) : null,
     from: packageFrom(),
   });

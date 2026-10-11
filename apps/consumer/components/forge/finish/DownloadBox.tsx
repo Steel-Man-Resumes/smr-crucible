@@ -17,6 +17,7 @@ export function DownloadBox({
   error,
   onDownloadPackage,
   onDownloadFormat,
+  onPrint,
   onFix,
   onCopy,
   copied,
@@ -26,6 +27,8 @@ export function DownloadBox({
   error: string;
   onDownloadPackage: () => void;
   onDownloadFormat: (format: DownloadFormat) => void;
+  /** Print the same version (the server renders it and decides DRAFT). */
+  onPrint?: () => void;
   onFix: () => void;
   /** Copy the resume as plain text, for job sites with a paste box. */
   onCopy: () => void;
@@ -87,6 +90,7 @@ export function DownloadBox({
               ["pdf", "PDF"],
               ["docx", "Word (.docx)"],
               ["html", "Web page (.html)"],
+              ["txt", "Plain text (.txt)"],
             ] as [DownloadFormat, string][]
           ).map(([f, label]) => (
             <button
@@ -98,6 +102,16 @@ export function DownloadBox({
               {label}
             </button>
           ))}
+          {onPrint && (
+            <button
+              onClick={onPrint}
+              disabled={busy}
+              className="t-focus min-h-touch border border-t-line bg-t-panel px-3 py-2 text-xs font-medium text-t-phos transition-colors hover:border-t-phos-dim hover:text-t-white disabled:opacity-60"
+              data-testid="finish-print"
+            >
+              Print
+            </button>
+          )}
           {finished && (
           <button
             onClick={onCopy}

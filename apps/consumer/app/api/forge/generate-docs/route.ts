@@ -22,6 +22,7 @@ import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
+import { writerReceipt } from "@/lib/writer-receipt";
 
 export const maxDuration = 120;
 
@@ -196,12 +197,7 @@ async function handlePost(request: Request) {
     const { withheld: withheldLines } = withholdRecordLines(input.resumeText, input.keepInsideLines === true);
     const keptInsideLines = input.keepInsideLines === true;
 
-    return NextResponse.json({
-      resume,
-      coverLetter,
-      withheldLines,
-      keptInsideLines,
-      grounding: {
+    const grounding = {
         hasFabrication,
         applied: groundingApplied,
         removed: removedCount,
@@ -226,7 +222,18 @@ async function handlePost(request: Request) {
         },
         changed: accounting.changed,
         unmatched: accounting.unmatched,
-      },
+    };
+    // Phase 5 R1 (review M1): the server's signature over exactly what it
+    // wrote and what its check found. A saved version counts these only
+    // with a matching receipt (lib/writer-receipt.ts).
+    const receipt = writerReceipt({ resume, letter: coverLetter }, grounding);
+    return NextResponse.json({
+      resume,
+      coverLetter,
+      withheldLines,
+      keptInsideLines,
+      grounding,
+      receipt,
       generated_at: new Date().toISOString(),
     });
   } catch (error: any) {

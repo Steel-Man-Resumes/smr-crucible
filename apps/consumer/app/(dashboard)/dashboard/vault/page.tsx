@@ -349,15 +349,36 @@ export default function VaultPage() {
 
   // N4/F10: one-click editable DOCX for resumes + cover letters, reusing the
   // Forge DOCX generator (same file quality as the builder's export).
+  /**
+   * Phase 5 R1: the saved revision that IS this resume as stored (made by the
+   * server from the stored content when needed). Downloads and print use its
+   * id, so the server decides DRAFT. Null: the file is marked DRAFT.
+   */
+  async function exportRevisionFor(a: Artifact): Promise<string | null> {
+    if (a.artifact_type !== "resume") return null;
+    try {
+      const res = await fetch("/api/revisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "export", artifactId: a.id }),
+      });
+      const data = await res.json().catch(() => null);
+      return res.ok && typeof data?.revision?.id === "string" ? data.revision.id : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function downloadDocx(a: Artifact) {
     const type = a.artifact_type === "resume" ? "resume" : "cover_letter";
     const content = a.artifact_type === "resume" ? toText(a) : a.content?.text || toText(a);
     if (!content) return;
     try {
+      const revisionId = await exportRevisionFor(a);
       const res = await fetch("/api/forge/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, type, format: "docx" }),
+        body: JSON.stringify({ ...(revisionId ? { revisionId } : {}), content, type, format: "docx" }),
       });
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
@@ -391,7 +412,10 @@ export default function VaultPage() {
     let body = "";
     switch (a.artifact_type) {
       case "cover_letter":
-        body = paras(c.text);
+        // Phase 5 R1: a letter printed on its own has no saved, checked
+        // version behind it, so it is marked DRAFT (the finished letter
+        // downloads with its resume from the finish page or the Tailor).
+        body = `<p class="meta"><strong>DRAFT.</strong> Not checked as part of a finished version.</p>` + paras(c.text);
         break;
       case "follow_up":
         body =
@@ -669,7 +693,7 @@ ${body}
             <div className="flex flex-wrap items-center gap-3 mt-3">
               <button
                 onClick={() =>
-                  isResume ? printResumePdf(a.content as ResumeDocument) : downloadPDF(a)
+                  isResume ? printResumePdf(a.content as ResumeDocument, { prepare: () => exportRevisionFor(a) }) : downloadPDF(a)
                 }
                 className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
               >

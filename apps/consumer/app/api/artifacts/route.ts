@@ -11,6 +11,7 @@ import {
   queryAsUser,
   getOpenLane,
   laneKindOf,
+  setArtifactParent,
 } from "@crucible/core";
 import type { ArtifactType } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
@@ -193,6 +194,14 @@ export async function POST(request: Request) {
       typeof body.scaffoldLevel === "number" ? body.scaffoldLevel : 1.0,
       { laneId: laneId ?? null }
     );
+
+    // Phase 5 R1 (review M3): a Tailor output names the resume it was made
+    // from. Linked only when that resume is the person's own (the write runs
+    // AS them and checks both rows), so its saved version can start from the
+    // parent's settled answers. A foreign or bad id links nothing.
+    if (body.type === "resume" && typeof body.parentArtifactId === "string" && /^[0-9a-f-]{36}$/i.test(body.parentArtifactId)) {
+      await setArtifactParent(userId, artifact.id, body.parentArtifactId).catch((e: unknown) => console.error("Artifact parent link error:", (e as Error)?.message || e));
+    }
 
     // Journey instrumentation: link a tailored resume / disclosure plan back to
     // its target job application so computeNextStep() can see Stage 3/4 is done.

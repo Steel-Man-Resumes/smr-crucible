@@ -69,8 +69,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    await persistForgeSession(userId, body as Record<string, any>);
-    return NextResponse.json({ success: true });
+    const saved = await persistForgeSession(userId, body as Record<string, any>);
+    // `revision`: the finished resume's saved version (081), when the run had
+    // one. The page says "saved to your account" only on this 200.
+    return NextResponse.json({ success: true, revision: saved.revision, ...(saved.revisionProblem ? { revisionProblem: saved.revisionProblem } : {}) });
   } catch (err: any) {
     console.error("Forge save error:", err?.message || err);
     return NextResponse.json(
