@@ -30,6 +30,7 @@ import {
   START_PATH,
   TASK_COPY,
   isLaneTask,
+  keepGoingHref,
   routeHref,
   type LaneTask,
 } from "@/lib/lane-task";
@@ -213,7 +214,12 @@ function StartInner() {
   // ---- coming back before the resume is built: where the run is, one way on --
   if (!change && focus.task && (fromRefinery || isLaneTask(session.laneTask))) {
     const task = focus.task;
-    const next = session.forgeOutput ? "/output" : planForgePath({ ...session, laneTask: task }).screens[0].path;
+    const next = keepGoingHref(task, {
+      signedIn: focus.signedIn,
+      hasForgeOutput: !!session.forgeOutput,
+      hasResumeText: !!session.resumeText,
+      forgeNext: planForgePath({ ...session, laneTask: task }).screens[0].path,
+    });
     return (
       <div data-testid="lane-home">
         <LaneHeader task={focus.task} target={focus.target} />

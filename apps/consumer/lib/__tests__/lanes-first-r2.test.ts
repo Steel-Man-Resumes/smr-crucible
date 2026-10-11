@@ -33,6 +33,8 @@ import { laneHomeNext } from "../../components/lanes/LaneHome";
 import { loadCheckSource, saveCheckRevision, ownEvidence } from "../revision-check";
 import { saveFinishRevision, type ArtifactLite, type RevisionStore } from "../revision-save";
 import { resumeTextToDocument } from "../revision-to-doc";
+import { saveFirstSection, listVersions, restoreVersion, type LaneFirstStore } from "../lane-first-save";
+import { refineryOpenWithoutResume, keepGoingHref, taskNeedsResume } from "../lane-task";
 import { revisionContentHash, type ArtifactRevision, type InsertRevisionResult, type NewRevision } from "@crucible/core/src/artifactRevision";
 import { RESUME, SOURCE, finishState, allAnswered, OWN_WORDS } from "./fixtures/revision-run";
 import { FORGE_SIGN_IN_PAGES } from "../forge-access";
@@ -196,25 +198,84 @@ test("Build with me: one job and one true duty become a first section, word for 
   assert.equal(text, "Morgan Sample\nmorgan@example.com\n\nWORK HISTORY\nLine cook | Harbor Street Diner | 2019 to 2023\n- I ran the grill on the breakfast line.");
 });
 
-test("the first save goes through R1's save and is honestly a draft until every line is checked", async () => {
-  const f = fakeStore();
+test("H2: the first save is DRAFT: the page is never its own evidence; only what the person typed counts as theirs", async () => {
+  const f = laneStore();
+  // Build with me: the one duty is what they typed.
   const text = firstSectionText({ name: "Morgan Sample", contact: "morgan@example.com", title: "Line cook", employer: "Harbor Street Diner", years: "2019 to 2023", duty: "I ran the grill on the breakfast line." });
-  const { finishPayload } = await import("../finish-payload");
-  const payload = finishPayload({ resumeText: text, originalResumeText: text }, { resumeText: text, coverLetterText: "", defendAnswers: [], keepInsideLines: false });
-  const r = await saveFinishRevision(UID, payload, { source: "forge_finish" }, f.store);
+  const r = await saveFirstSection(UID, { text, typed: "I ran the grill on the breakfast line.", keep: undefined }, f.store);
   assert.ok(r.ok);
   assert.equal(r.ok && r.revision.number, 1);
-  // The server decides from the gate (every line here is the person's own words); the page shows its answer.
-  assert.ok(r.ok && (r.revision.status === "draft" || r.revision.status === "finished"));
-  // A page with words that are not theirs is a draft.
-  const notTheirs = finishPayload({ resumeText: text, originalResumeText: text }, { resumeText: text + "\n- Managed a team of 40.", coverLetterText: "", defendAnswers: [], keepInsideLines: false });
-  const d = await saveFinishRevision(UID, notTheirs, { source: "forge_finish" }, f.store);
-  assert.equal(d.ok && d.revision.status, "draft", "a line the person never said is never finished");
+  assert.equal(r.ok && r.revision.status, "draft", "a first section is a draft until its lines are answered on the finish page");
+  const ev = f.revs.at(-1)!.evidence as { ownWords?: string; ownResumeText?: string };
+  assert.equal(ev.ownWords, "I ran the grill on the breakfast line.", "only the typed duty is the person's words");
+  assert.equal(ev.ownResumeText, "");
+  assert.deepEqual(f.revs.at(-1)!.defend_answers, []);
+  // I have one, saved as it is (nothing typed): still a draft, never compared with itself.
+  const g = laneStore();
+  const asIs = await saveFirstSection(UID, { text: RESUME, typed: "", keep: undefined }, g.store);
+  assert.equal(asIs.ok && asIs.revision.status, "draft");
+  // The client cannot send the page as 'typed' and get more than a short field.
+  const h = laneStore();
+  await saveFirstSection(UID, { text: RESUME, typed: "x".repeat(5000), keep: undefined }, h.store);
+  assert.equal(((h.revs.at(-1)!.evidence as { ownWords?: string }).ownWords ?? "").length, 2000);
   const comp = read("components/forge/lanes/FirstSave.tsx");
-  assert.match(comp, /kind: "finish"/);
-  assert.match(comp, /\/api\/revisions/);
+  assert.match(comp, /\/api\/lane-first/);
+  assert.doesNotMatch(comp, /finishPayload/, "the client no longer builds the evidence");
   assert.match(comp, /Saved to your account \(version/);
   assert.match(comp, /DRAFT_BADGE/);
+  assert.doesNotMatch(comp, /Every line on it is in your own words/);
+});
+
+test("H3: someone with a saved resume is asked first; nothing is written until they pick", async () => {
+  const f = laneStore();
+  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  const before = JSON.stringify(f.arts);
+  const r = await saveFirstSection(UID, { text: "Morgan Sample\n\nWORK HISTORY\nCook | Lakeside Grill | 2024\n- I cooked.", typed: "I cooked.", keep: undefined }, f.store);
+  assert.ok(!r.ok && r.status === 409 && r.reason === "ask_keep");
+  assert.equal(JSON.stringify(f.arts), before, "no write before the answer");
+  assert.equal(f.revs.length, 1);
+});
+
+test("H3: 'Start a new resume' keeps the saved one, word for word and still finished, as its own item in My resumes", async () => {
+  const f = laneStore();
+  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  const oldRev = f.revs.at(-1)!;
+  assert.equal(oldRev.status, "finished");
+  const cook = "Morgan Sample\n\nWORK HISTORY\nCook | Lakeside Grill | 2024\n- I cooked.";
+  const r = await saveFirstSection(UID, { text: cook, typed: "I cooked.", keep: "new" }, f.store);
+  assert.ok(r.ok && r.keptCopyId);
+  const kept = f.arts.find((a) => a.id === (r.ok ? r.keptCopyId : ""))!;
+  assert.equal((kept.target_context as { source?: string }).source, "kept");
+  const keptRev = f.revs.filter((x) => x.artifact_id === kept.id).at(-1)!;
+  assert.equal(keptRev.resume_text, oldRev.resume_text, "the saved resume, word for word");
+  assert.equal(keptRev.status, "finished", "and still finished");
+  assert.deepEqual(keptRev.defend_answers, oldRev.defend_answers);
+  assert.ok(JSON.stringify(kept.content).includes("Harbor Street Diner"));
+  // The new work is the main resume, as a draft.
+  assert.equal(r.ok && r.revision.status, "draft");
+  // A second save in the same sitting updates the new one, never the kept copy.
+  const r2 = await saveFirstSection(UID, { text: cook + "\n- I cleaned.", typed: "I cooked.\nI cleaned.", keep: "replace" }, f.store);
+  assert.ok(r2.ok);
+  assert.equal(f.revs.filter((x) => x.artifact_id === kept.id).length, 1);
+});
+
+test("H3: 'Replace my current one' keeps the earlier version in its history, and it can be brought back with its status", async () => {
+  const f = laneStore();
+  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  const main = f.arts[0];
+  const r = await saveFirstSection(UID, { text: "Morgan Sample\n\nWORK HISTORY\nCook | Lakeside Grill | 2024\n- I cooked.", typed: "I cooked.", keep: "replace" }, f.store);
+  assert.ok(r.ok && !r.keptCopyId);
+  const versions = (await listVersions(UID, main.id, f.store))!;
+  assert.equal(versions.length, 2);
+  assert.equal(versions[1].status, "finished");
+  assert.match(versions[1].preview, /MORGAN SAMPLE/);
+  const back = await restoreVersion(UID, main.id, versions[1].id, f.store);
+  assert.ok(back.ok);
+  assert.equal(back.ok && back.revision.status, "finished", "same words, answers and evidence: the same status");
+  assert.equal(back.ok && back.revision.number, 3);
+  assert.ok(JSON.stringify(main.content).includes("Harbor Street Diner"), "the resume shows the earlier words again");
+  // Another person's version id, or a version of another resume, is refused.
+  assert.equal((await restoreVersion(UID, main.id, "00000000-0000-4000-8000-00000000ffff", f.store)).ok, false);
 });
 
 // ---- the support step: never offense details, the privacy line stays true ---------
@@ -316,6 +377,21 @@ function fakeStore(initial: ArtifactLite[] = []) {
   return { store, arts, revs, updates };
 }
 
+function laneStore(initial: ArtifactLite[] = []) {
+  const f = fakeStore(initial);
+  const store: LaneFirstStore = {
+    ...f.store,
+    createResumeArtifact: async (_u, targetContext, content) => {
+      const a = { id: `00000000-0000-4000-8000-0000000001${(10 + f.arts.length).toString(16)}`, artifact_type: "resume", target_context: targetContext, content };
+      f.arts.push(a);
+      return { id: a.id };
+    },
+    getRevision: async (_u, id) => f.revs.find((x) => x.id === id) ?? null,
+    listRevisions: async (_u, id) => f.revs.filter((x) => x.artifact_id === id),
+  };
+  return { ...f, store };
+}
+
 const TAILOR = "00000000-0000-4000-8000-0000000000bb";
 const tailorArtifact = (): ArtifactLite => ({
   id: TAILOR,
@@ -377,7 +453,7 @@ test("Check and finish appears on the lane home, My resumes and the Tailor resul
   assert.match(read("app/(dashboard)/dashboard/vault/page.tsx"), /<CheckAndFinish artifactId=\{a\.id\}/);
   assert.match(read("components/resume/ResumeWorkspace.tsx"), /<CheckAndFinish/);
   assert.deepEqual(laneHomeNext("resume", { status: "draft", artifactId: "x" }), { label: "Check and finish", href: "/output?check=x" });
-  assert.deepEqual(laneHomeNext("job", null), { label: "Start your resume", href: "/resume" });
+  assert.deepEqual(laneHomeNext("resume", null), { label: "Start your resume", href: "/resume" });
   const route = read("app/api/revisions/check/route.ts");
   assert.match(route, /revisionCaller/);
   assert.match(route, /isSameOriginJsonPost/);
@@ -415,4 +491,71 @@ test("Get support reads R3's fields: coverage line, last checked, source; older 
 
 test("the fixture is fictional", () => {
   assert.match(SOURCE, /example\.com/);
+});
+
+// ---- review round 1: H1, L1, L2, L4 ------------------------------------------------
+
+test("H1: without a resume, Get support, the job board and the documents open; only resume and interview need one", () => {
+  for (const p of ["/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv/abc", "/dashboard/performer"]) {
+    assert.equal(refineryOpenWithoutResume(p, null), true, p);
+  }
+  assert.equal(refineryOpenWithoutResume("/dashboard/interview", "interview"), false);
+  assert.equal(refineryOpenWithoutResume("/dashboard/application-tailor", "job"), false);
+  assert.equal(refineryOpenWithoutResume("/dashboard", "support"), true, "the lane home for a support lane");
+  assert.equal(refineryOpenWithoutResume("/dashboard", "resume"), false);
+  assert.equal(refineryOpenWithoutResume("/dashboard", null), false, "no task yet: the first screen asks");
+  assert.equal(taskNeedsResume("job"), false);
+  const shell = read("app/(dashboard)/RefineryShell.tsx");
+  assert.match(shell, /!refineryOpenWithoutResume\(pathname, laneFocus\.task\)/);
+  assert.match(shell, /laneFocus\.loaded &&/, "never bounces before the task is known");
+});
+
+test("H1: Keep going follows the route; the lane home's next step too", () => {
+  const ctx = { signedIn: true, hasForgeOutput: false, hasResumeText: false, forgeNext: "/resume" };
+  assert.equal(keepGoingHref("support", ctx), "/dashboard/resources#support");
+  assert.equal(keepGoingHref("documents", ctx), "/dashboard/creative");
+  assert.equal(keepGoingHref("explore", ctx), "/dashboard/resources#paths");
+  assert.equal(keepGoingHref("job", ctx), "/start?step=job");
+  assert.equal(keepGoingHref("job", { ...ctx, hasResumeText: true }), "/resume");
+  assert.equal(keepGoingHref("resume", ctx), "/resume");
+  assert.equal(keepGoingHref("interview", { ...ctx, hasForgeOutput: true }), "/output");
+  assert.deepEqual(laneHomeNext("job", null), { label: "Pick a job to go after", href: "/dashboard/jobs" });
+  assert.deepEqual(laneHomeNext("interview", null), { label: "Start your resume", href: "/resume" });
+  assert.match(read("app/(forge)/start/page.tsx"), /const next = keepGoingHref\(task,/);
+});
+
+test("L1: the lane home heading keeps the label's own casing", () => {
+  const h = read("components/lanes/LaneHome.tsx");
+  assert.match(h, /Today: \{TASK_COPY\[task\]\.label\}/);
+  assert.doesNotMatch(h, /label\.toLowerCase\(\)/);
+});
+
+test("L2: opening a resume for Check and finish writes nothing; only the same-origin POST saves", async () => {
+  const f = fakeStore([tailorArtifact()]);
+  const load = await loadCheckSource(UID, TAILOR, f.store);
+  assert.ok(load.ok && load.source.status === "draft");
+  assert.equal(f.revs.length, 0, "no revision written on the read");
+  assert.equal(f.updates.length, 0, "no content written on the read");
+  const route = read("app/api/revisions/check/route.ts");
+  const get = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function POST"));
+  assert.doesNotMatch(get, /saveCheckRevision|incrementUserUsage|insertRevision/);
+  assert.match(route.slice(route.indexOf("export async function POST")), /isSameOriginJsonPost/);
+});
+
+test("L4: a locked baseline is refused plainly on open and on save, so exports never differ from a 'finished' version", async () => {
+  const f = fakeStore([{ ...tailorArtifact(), is_locked: true }]);
+  const load = await loadCheckSource(UID, TAILOR, f.store);
+  assert.ok(!load.ok && load.status === 409 && load.reason === "locked");
+  const save = await saveCheckRevision(UID, TAILOR, finishState(), f.store);
+  assert.ok(!save.ok && save.reason === "locked");
+  assert.equal(f.revs.length, 0);
+  assert.match(read("app/api/revisions/check/route.ts"), /locked as a baseline, so it can't change here/);
+  // Locked between the check and the write: refused, never claimed.
+  const g = fakeStore([tailorArtifact()]);
+  g.store.updateArtifactContent = async () => "locked";
+  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, g.store);
+  const text = (await loadCheckSource(UID, TAILOR, g.store));
+  assert.ok(text.ok);
+  const r = await saveCheckRevision(UID, TAILOR, finishState({ resumeText: text.ok ? text.source.resumeText : "" }), g.store);
+  assert.ok(!r.ok && r.reason === "locked");
 });

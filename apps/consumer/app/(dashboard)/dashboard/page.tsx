@@ -23,7 +23,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { TaskPicker } from "@/components/lanes/TaskPicker";
 import { LaneHome } from "@/components/lanes/LaneHome";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
-import { routeHref } from "@/lib/lane-task";
+import { routeHref, taskNeedsResume } from "@/lib/lane-task";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import { useUserTier } from "@/lib/useUserTier";
@@ -376,7 +376,7 @@ export default function DashboardPage() {
   if (onboarding.state === "needs_profile" && !isAdmin) {
     return (
       <div className="space-y-10">
-        {focus.task && <LaneHome task={focus.task} profileFirst />}
+        {focus.task && <LaneHome task={focus.task} profileFirst={taskNeedsResume(focus.task)} />}
         <div id="profile-setup" className="scroll-mt-24">
           <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />
         </div>

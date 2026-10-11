@@ -104,6 +104,45 @@ export function routeHref(task: LaneTask, ctx: RouteContext): string {
   }
 }
 
+/** Only these routes need a resume first (review H1). */
+export function taskNeedsResume(task: LaneTask | null | undefined): boolean {
+  return task === "resume" || task === "interview";
+}
+
+/**
+ * Refinery pages a lane can open before any resume is built (review H1):
+ * support and job paths, the job board ("Find one"), and the creative, CV
+ * and performer documents. "A person needing food or transport should not
+ * have to finish a resume to find it" (Codex C).
+ */
+export const OPEN_WITHOUT_RESUME = ["/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
+
+/**
+ * The Refinery sends a person with no Forge resume to the first screen,
+ * except on the pages above, and on the overview (their lane home) when
+ * today's task does not need a resume. Before the task is known: stay put
+ * (the caller waits).
+ */
+export function refineryOpenWithoutResume(pathname: string, task: LaneTask | null | undefined): boolean {
+  if (OPEN_WITHOUT_RESUME.some((p) => pathname === p || pathname.startsWith(p + "/"))) return true;
+  return pathname === "/dashboard" && !!task && !taskNeedsResume(task);
+}
+
+/**
+ * "Keep going" on the Forge's lane home follows today's route (review H1):
+ * the resume and interview routes continue the resume; the job route
+ * continues a resume already started, or opens its job step; the
+ * "Something else" routes open their own page, which needs no resume.
+ */
+export function keepGoingHref(
+  task: LaneTask,
+  ctx: { signedIn: boolean; hasForgeOutput: boolean; hasResumeText: boolean; forgeNext: string }
+): string {
+  if (task === "resume" || task === "interview") return ctx.hasForgeOutput ? "/output" : ctx.forgeNext;
+  if (task === "job") return ctx.hasForgeOutput ? "/output" : ctx.hasResumeText ? ctx.forgeNext : `${START_PATH}?step=job`;
+  return routeHref(task, { signedIn: ctx.signedIn, hasResume: false });
+}
+
 /** The three document kinds behind "Creative work, a CV, or a performer page". */
 export const DOCUMENT_LINKS = [
   { href: "/dashboard/creative", label: "Creative work", body: "An artist resume, a bio, and your own statement." },

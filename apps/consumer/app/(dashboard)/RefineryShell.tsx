@@ -19,6 +19,8 @@ import { DevSwitcher } from "@/components/DevSwitcher";
 import { ImpersonationChrome } from "@/components/ImpersonationChrome";
 import { HighlightHost } from "@/components/SpotlightHighlight";
 import { RefineryLaneHeader } from "@/components/lanes/LaneHeader";
+import { useLaneFocus } from "@/components/lanes/useLaneFocus";
+import { refineryOpenWithoutResume } from "@/lib/lane-task";
 import {
   useUserTier,
   useRealTier,
@@ -428,6 +430,7 @@ export function RefineryShell({
   // They see the in-app "Start with The Forge" state instead; every other
   // gate stays real.
   const effectiveRole = useEffectiveRole();
+  const laneFocus = useLaneFocus();
   useEffect(() => {
     // While the "Is it yours?" card is open (or its "Yes" is still landing),
     // stay here: bouncing to the Forge would skip the person's answer. After
@@ -446,14 +449,18 @@ export function RefineryShell({
       !effectiveRole?.impersonating &&
       onboarding.state !== "loading" &&
       !onboarding.forgeComplete &&
-      pathname !== "/dashboard/settings"
+      pathname !== "/dashboard/settings" &&
+      // Lanes first (R2 review H1): support, job search and the documents
+      // open without a resume; only the resume and interview routes need one.
+      laneFocus.loaded &&
+      !refineryOpenWithoutResume(pathname, laneFocus.task)
     ) {
       // Lanes first (Phase 5 R2): to the Forge's first screen, "What do you
       // need today?", on this same site so the sign-in comes along. Returning
       // with a task picked, that page shows where the run is (no bounce back).
       window.location.href = "/start?from=refinery";
     }
-  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id]);
+  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {

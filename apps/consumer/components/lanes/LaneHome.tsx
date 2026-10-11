@@ -27,7 +27,8 @@ interface ForgeRevision {
 
 /** The one next task on the lane home, by route and by where the resume stands. */
 export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" | "artifactId"> | null): { label: string; href: string } {
-  if (!rev && (task === "resume" || task === "job" || task === "interview")) return { label: "Start your resume", href: "/resume" };
+  // Only the resume and interview routes need a resume first (review H1).
+  if (!rev && (task === "resume" || task === "interview")) return { label: "Start your resume", href: "/resume" };
   switch (task) {
     case "resume":
       return rev!.status === "finished" ? { label: "Get your files in My resumes", href: "/dashboard/vault" } : { label: CHECK_AND_FINISH_LABEL, href: `/output?check=${rev!.artifactId}` };
@@ -69,7 +70,7 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
   return (
     <section aria-labelledby="lane-home-heading" className="space-y-3" data-testid="lane-home">
       <h1 id="lane-home-heading" className="text-2xl font-bold text-t-white">
-        Today: {TASK_COPY[task].label.toLowerCase()}
+        Today: {TASK_COPY[task].label}
       </h1>
       <div className="grid gap-3 lg:grid-cols-3">
         <div className={box} data-testid="lane-home-resume">
