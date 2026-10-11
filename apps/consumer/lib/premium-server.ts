@@ -4,6 +4,7 @@
  * @crucible/core (it pulls in node:crypto and the database driver).
  */
 
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import {
   isSponsoredTool,
   premiumGateOn,
@@ -66,33 +67,68 @@ export async function checkPremium(
   return json({ error: premiumLockedMessage(tool), code: "premium_locked", tool }, 403);
 }
 
-/** The usage row that counts text practice sessions (one per practice interview). */
+/** The usage rows behind the text practice allowance (left out of displayed AI usage, core NON_AI_USAGE_ENDPOINTS). */
 export const TEXT_PRACTICE_ENDPOINT = "interview-text-session";
+export const TEXT_PRACTICE_TURN_ENDPOINT = "interview-text-turn";
 
 /**
- * Is this call to /api/interview-practice the start of a new practice
- * interview? The page builds the interviewer's opening line itself, so the
- * first call is the one carrying the person's first answer. Anything that
- * cannot be read counts as a start (the safe side for an allowance). This is
- * a usage allowance, not a security boundary: the ordinary per-day AI limit
- * on the route caps every call either way.
+ * Turns one practice interview can take: five answers, the wrap-up, and room
+ * to spare. With the daily session allowance this sets a daily turn ceiling
+ * for an unsponsored person, so reusing one session id all day gains nothing.
  */
-export function isTextPracticeStart(body: unknown): boolean {
-  const b = body as { messages?: unknown; endInterview?: unknown } | null;
-  if (!b || typeof b !== "object") return true;
-  if (b.endInterview === true) return false;
-  if (!Array.isArray(b.messages)) return true;
-  const answers = b.messages.filter(
-    (m) => !!m && typeof m === "object" && (m as { role?: unknown }).role === "user"
-  ).length;
-  return answers <= 1;
+export const TEXT_PRACTICE_TURNS_PER_SESSION = 8;
+
+/*
+ * A SERVER-ISSUED PRACTICE SESSION ID (Phase 5 review L1). The first call of
+ * a practice interview gets a signed id back: the account, the day (UTC) and
+ * a random part, sealed with an HMAC of AUTH_SECRET. Later turns send it
+ * back. Any call without a valid id for this account and this day counts as a
+ * new session, whatever its message history says and whether or not it is
+ * the wrap-up ("endInterview"). The id holds no words and is not stored.
+ */
+function utcDay(now: number): string {
+  return new Date(now).toISOString().slice(0, 10);
+}
+
+function hmac(secret: string, data: string): string {
+  return createHmac("sha256", secret).update(data).digest("base64url");
+}
+
+export function signPracticeSession(userId: string, now: number, secret: string, nonce?: string): string {
+  const n = nonce ?? randomBytes(12).toString("base64url");
+  const day = utcDay(now);
+  return `${day}.${n}.${hmac(secret, `practice|${userId}|${day}|${n}`)}`;
+}
+
+export function verifyPracticeSession(token: unknown, userId: string, now: number, secret: string): boolean {
+  if (typeof token !== "string" || token.length > 200) return false;
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  const [day, n, mac] = parts;
+  if (day !== utcDay(now) || !/^[A-Za-z0-9_-]{8,40}$/.test(n)) return false;
+  const want = hmac(secret, `practice|${userId}|${day}|${n}`);
+  if (want.length !== mac.length) return false;
+  return timingSafeEqual(Buffer.from(want), Buffer.from(mac));
+}
+
+/** The body field the page sends the id back in. */
+export function practiceSessionFrom(body: unknown): unknown {
+  return body && typeof body === "object" ? (body as { practiceSession?: unknown }).practiceSession : undefined;
+}
+
+export interface TextPracticeVerdict {
+  /** The 429 to send, or null to go ahead. */
+  refuse: Response | null;
+  /** A new session id to hand back with the reply (only when a session was counted). */
+  session?: string;
 }
 
 /**
  * The daily text practice allowance (the split: some interview practice is
- * free with an account). Applies only while the gate is on, only to a person
- * without sponsored interview coaching, and only counts the start of a
- * session. Returns null to go ahead, or the 429 to send.
+ * free with an account). Applies only while the gate is on, and only to a
+ * person without sponsored interview coaching.
+ *   - no valid session id: a new session is counted (and a new id issued);
+ *   - every turn also counts toward the daily turn ceiling.
  *
  * Entitlement storage missing: the person is treated as unsponsored, so the
  * free allowance still works and nothing extra opens (A8).
@@ -105,10 +141,11 @@ export async function checkTextPracticeAllowance(
     read?: AccessReader;
     increment?: (userId: string, endpoint: string) => Promise<number>;
     limit?: number;
+    secret?: string | null;
+    now?: number;
   } = {}
-): Promise<Response | null> {
-  if (!premiumGateOn(deps.gateRaw === undefined ? undefined : deps.gateRaw)) return null;
-  if (!isTextPracticeStart(body)) return null;
+): Promise<TextPracticeVerdict> {
+  if (!premiumGateOn(deps.gateRaw === undefined ? undefined : deps.gateRaw)) return { refuse: null };
   const core = deps.read && deps.increment ? null : await import("@crucible/core");
   const read = deps.read ?? core!.getPremiumAccess;
   const increment = deps.increment ?? core!.incrementUserUsage;
@@ -120,9 +157,22 @@ export async function checkTextPracticeAllowance(
     else console.error("[premium] access read failed for the practice allowance:", (e as { code?: string })?.code || "error");
     sponsored = false;
   }
-  if (sponsored) return null;
+  if (sponsored) return { refuse: null };
+
   const limit = deps.limit ?? TEXT_PRACTICE_SESSIONS_PER_DAY;
-  const count = await increment(userId, TEXT_PRACTICE_ENDPOINT);
-  if (count <= limit) return null;
-  return json({ error: textPracticeAllowanceMessage(limit), code: "practice_allowance_used", limit }, 429);
+  const now = deps.now ?? Date.now();
+  const secret = deps.secret === undefined ? process.env.AUTH_SECRET ?? null : deps.secret;
+  const used = () => json({ error: textPracticeAllowanceMessage(limit), code: "practice_allowance_used", limit }, 429);
+
+  // Without a secret no id can be checked: every call counts as a session.
+  const continuing = !!secret && verifyPracticeSession(practiceSessionFrom(body), userId, now, secret);
+  let session: string | undefined;
+  if (!continuing) {
+    const count = await increment(userId, TEXT_PRACTICE_ENDPOINT);
+    if (count > limit) return { refuse: used() };
+    if (secret) session = signPracticeSession(userId, now, secret);
+  }
+  const turns = await increment(userId, TEXT_PRACTICE_TURN_ENDPOINT);
+  if (turns > limit * TEXT_PRACTICE_TURNS_PER_SESSION) return { refuse: used() };
+  return { refuse: null, session };
 }

@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { checkTextPracticeAllowance } from "@/lib/premium-server";
+import { refundUserUsage } from "@crucible/core";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
@@ -43,10 +44,19 @@ async function handlePost(request: Request) {
     // Text practice is free with an account (the premium split, Troy
     // 2026-10-10), up to a daily number of sessions while the gate is on.
     // A sponsor removes the allowance. Counted once per practice interview.
+    // A server-issued session id decides what counts as a new session (review
+    // L1). A refused turn gives back the daily AI call it was charged (I2).
+    let practiceSession: string | undefined;
     if (userId) {
-      const overAllowance = await checkTextPracticeAllowance(userId, body);
-      if (overAllowance) return overAllowance;
+      const verdict = await checkTextPracticeAllowance(userId, body);
+      if (verdict.refuse) {
+        await refundUserUsage(userId, "interview").catch(() => {});
+        return verdict.refuse;
+      }
+      practiceSession = verdict.session;
     }
+    const reply = (payload: unknown) =>
+      NextResponse.json(practiceSession ? { ...(payload as Record<string, unknown>), practiceSession } : payload);
 
     const isDisclosure =
       config.interviewType === "disclosure" || config.includeDisclosure;
@@ -223,7 +233,7 @@ RULES:
       if (jsonMatch) {
         try {
           const parsed = JSON.parse(jsonMatch[0]);
-          return NextResponse.json(
+          return reply(
             plainPunctuation(
               {
                 response:
@@ -235,7 +245,7 @@ RULES:
           );
         } catch {
           // If JSON parse fails, return the text as closing with generic feedback
-          return NextResponse.json({
+          return reply({
             response: plainPunctuation(text.split("{")[0].trim() || "Thank you for your time today.", swapLog),
             feedback: {
               strengths: ["You completed the full practice interview"],
@@ -249,7 +259,7 @@ RULES:
           });
         }
       }
-      return NextResponse.json({
+      return reply({
         response: plainPunctuation(text, swapLog),
         feedback: {
           strengths: ["You showed up and practiced. That takes courage."],
@@ -280,7 +290,7 @@ RULES:
       console.error("Decision log failed (interview):", err);
     }
 
-    return NextResponse.json({ response: plainPunctuation(text, swapLog) });
+    return reply({ response: plainPunctuation(text, swapLog) });
   } catch (error: any) {
     console.error("Interview practice error:", error);
     return NextResponse.json(

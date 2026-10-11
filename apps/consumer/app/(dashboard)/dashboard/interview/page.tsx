@@ -157,6 +157,9 @@ function InterviewPracticePage() {
   const [exchangeCount, setExchangeCount] = useState(0);
   const [feedback, setFeedback] = useState<any>(null);
   const [rateLimitError, setRateLimitError] = useState("");
+  // The server's id for this practice interview (the daily allowance counts
+  // one per interview, lib/premium-server.ts). Sent back on every later turn.
+  const practiceSessionRef = useRef<string | null>(null);
   // The daily text practice allowance applies while the premium gate is on
   // and voice coaching is not open for this person (no sponsor).
   const { status: premiumStatus } = usePremium();
@@ -377,6 +380,7 @@ function InterviewPracticePage() {
     setMessages([{ role: "assistant", content: openingMessage }]);
     setStep("practice");
     setExchangeCount(0);
+    practiceSessionRef.current = null;
 
     // Track interview start
     try {
@@ -508,6 +512,7 @@ function InterviewPracticePage() {
           config,
           exchangeCount,
           endInterview: true,
+          practiceSession: practiceSessionRef.current ?? undefined,
           forgeContext: forgeContext || undefined,
           resume: buildResumePayload(),
           jobDescription: jobDescription.trim() || undefined,
@@ -556,6 +561,7 @@ function InterviewPracticePage() {
           messages: updatedMessages,
           config,
           exchangeCount: newExchangeCount,
+          practiceSession: practiceSessionRef.current ?? undefined,
           forgeContext: forgeContext || undefined,
           resume: buildResumePayload(),
           jobDescription: jobDescription.trim() || undefined,
@@ -567,6 +573,7 @@ function InterviewPracticePage() {
         setRateLimitError(data.error);
       } else if (res.ok) {
         const data = await res.json();
+        if (typeof data.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
 
         if (data.feedback) {
           // Interview complete — show feedback

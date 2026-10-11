@@ -26,7 +26,15 @@ import {
   premiumLockedMessage,
   toolIsOpen,
 } from "../premium";
-import { TEXT_PRACTICE_ENDPOINT, checkPremium, checkTextPracticeAllowance, isTextPracticeStart } from "../premium-server";
+import {
+  TEXT_PRACTICE_ENDPOINT,
+  TEXT_PRACTICE_TURN_ENDPOINT,
+  TEXT_PRACTICE_TURNS_PER_SESSION,
+  checkPremium,
+  checkTextPracticeAllowance,
+  signPracticeSession,
+  verifyPracticeSession,
+} from "../premium-server";
 
 const CONSUMER = join(__dirname, "..", "..");
 const read = (...p: string[]) => readFileSync(join(CONSUMER, ...p), "utf8");
@@ -229,84 +237,149 @@ describe("client bundles stay clean", () => {
 
 describe("text practice: free with an account, a daily allowance while the gate is on", () => {
   const person = "00000000-0000-4000-8000-0000000000bb";
+  const other = "00000000-0000-4000-8000-0000000000cc";
+  const SECRET = "test-secret-not-real";
+  const NOW = Date.parse("2026-10-10T15:00:00Z");
   const first = { messages: [{ role: "assistant", content: "Tell me about yourself." }, { role: "user", content: "I run a forklift." }] };
-  const later = { messages: [...first.messages, { role: "assistant", content: "Go on." }, { role: "user", content: "Five years." }] };
+  const padded = { messages: [...first.messages, { role: "user", content: "x" }, { role: "user", content: "y" }] };
 
   function counter() {
-    let n = 0;
-    const calls: string[] = [];
-    return { calls, get n() { return n; }, inc: async (_u: string, e: string) => { calls.push(e); return ++n; } };
+    const counts: Record<string, number> = {};
+    return { counts, inc: async (_u: string, e: string) => (counts[e] = (counts[e] ?? 0) + 1) };
   }
-
-  it("one named allowance, a sensible number", () => {
-    assert.equal(TEXT_PRACTICE_SESSIONS_PER_DAY, 5);
-    assert.equal(TEXT_PRACTICE_ENDPOINT, "interview-text-session");
+  const base = (c: ReturnType<typeof counter>, over: Record<string, unknown> = {}) => ({
+    gateRaw: "on", read: async () => ({ open: [] as string[] }), increment: c.inc, secret: SECRET, now: NOW, ...over,
   });
 
-  it("a session starts with the first answer; later turns and the wrap-up are not new sessions", () => {
-    assert.equal(isTextPracticeStart(first), true);
-    assert.equal(isTextPracticeStart(later), false);
-    assert.equal(isTextPracticeStart({ ...later, endInterview: true }), false);
-    assert.equal(isTextPracticeStart(null), true, "unreadable counts as a start");
-    assert.equal(isTextPracticeStart({ messages: "x" }), true);
+  it("one named allowance, a sensible number, and its counters", () => {
+    assert.equal(TEXT_PRACTICE_SESSIONS_PER_DAY, 5);
+    assert.equal(TEXT_PRACTICE_ENDPOINT, "interview-text-session");
+    assert.equal(TEXT_PRACTICE_TURN_ENDPOINT, "interview-text-turn");
+  });
+
+  it("the first call counts a session and hands back a signed id; turns that send it back are not new sessions", async () => {
+    const c = counter();
+    const v = await checkTextPracticeAllowance(person, first, base(c));
+    assert.equal(v.refuse, null);
+    assert.ok(v.session && verifyPracticeSession(v.session, person, NOW, SECRET));
+    for (let i = 0; i < 6; i++) {
+      const next = await checkTextPracticeAllowance(person, { ...padded, practiceSession: v.session }, base(c));
+      assert.equal(next.refuse, null);
+      assert.equal(next.session, undefined, "no new id mid-session");
+    }
+    assert.equal(c.counts[TEXT_PRACTICE_ENDPOINT], 1);
+  });
+
+  it("review L1: padding the history or sending endInterview without the id still counts a session", async () => {
+    const c = counter();
+    await checkTextPracticeAllowance(person, padded, base(c));
+    await checkTextPracticeAllowance(person, { ...padded, endInterview: true }, base(c));
+    await checkTextPracticeAllowance(person, { endInterview: true }, base(c));
+    assert.equal(c.counts[TEXT_PRACTICE_ENDPOINT], 3);
+  });
+
+  it("an id from another account, another day, or a forged one is not accepted", async () => {
+    const theirs = signPracticeSession(other, NOW, SECRET);
+    const yesterday = signPracticeSession(person, NOW - 86400000, SECRET);
+    const forged = signPracticeSession(person, NOW, "wrong-secret");
+    for (const tok of [theirs, yesterday, forged, "2026-10-10.abcdefgh.zzz", 42, ""]) {
+      assert.equal(verifyPracticeSession(tok, person, NOW, SECRET), false, String(tok));
+      const c = counter();
+      await checkTextPracticeAllowance(person, { ...padded, practiceSession: tok }, base(c));
+      assert.equal(c.counts[TEXT_PRACTICE_ENDPOINT], 1, `counted for ${String(tok)}`);
+    }
   });
 
   it("the sixth session in a day is refused with a 429 that says when more open, no price", async () => {
     const c = counter();
-    const deps = { gateRaw: "on", read: async () => ({ open: [] as string[] }), increment: c.inc };
     for (let i = 1; i <= TEXT_PRACTICE_SESSIONS_PER_DAY; i++) {
-      assert.equal(await checkTextPracticeAllowance(person, first, deps), null, `session ${i}`);
+      assert.equal((await checkTextPracticeAllowance(person, first, base(c))).refuse, null, `session ${i}`);
     }
-    const res = await checkTextPracticeAllowance(person, first, deps);
+    const res = (await checkTextPracticeAllowance(person, first, base(c))).refuse;
     assert.equal(res?.status, 429);
     const body = await res!.json();
     assert.equal(body.code, "practice_allowance_used");
     assert.match(body.error, /5 practice interviews for today\. More open tomorrow\./);
     assert.doesNotMatch(body.error, PRICE);
-    assert.ok(c.calls.every((e) => e === TEXT_PRACTICE_ENDPOINT));
   });
 
-  it("later turns in a session are never counted or refused", async () => {
+  it("reusing one id all day hits the daily turn ceiling", async () => {
     const c = counter();
-    const deps = { gateRaw: "on", read: async () => ({ open: [] as string[] }), increment: c.inc };
-    for (let i = 0; i < 20; i++) assert.equal(await checkTextPracticeAllowance(person, later, deps), null);
-    assert.equal(c.n, 0);
+    const v = await checkTextPracticeAllowance(person, first, base(c));
+    const ceiling = TEXT_PRACTICE_SESSIONS_PER_DAY * TEXT_PRACTICE_TURNS_PER_SESSION;
+    let refusedAt = 0;
+    for (let i = 2; i <= ceiling + 2; i++) {
+      const r = await checkTextPracticeAllowance(person, { ...padded, practiceSession: v.session }, base(c));
+      if (r.refuse) { refusedAt = i; break; }
+    }
+    assert.equal(refusedAt, ceiling + 1);
+  });
+
+  it("without a secret every call counts as a session (fails toward counting)", async () => {
+    const c = counter();
+    const v = await checkTextPracticeAllowance(person, first, base(c, { secret: null }));
+    assert.equal(v.session, undefined);
+    await checkTextPracticeAllowance(person, { ...first, practiceSession: "anything" }, base(c, { secret: null }));
+    assert.equal(c.counts[TEXT_PRACTICE_ENDPOINT], 2);
   });
 
   it("a sponsor (voice coaching open) removes the allowance", async () => {
     const c = counter();
-    const deps = { gateRaw: "on", read: async () => ({ open: ["interview_coaching"] }), increment: c.inc };
-    for (let i = 0; i < 10; i++) assert.equal(await checkTextPracticeAllowance(person, first, deps), null);
-    assert.equal(c.n, 0);
+    for (let i = 0; i < 10; i++) {
+      assert.equal((await checkTextPracticeAllowance(person, first, base(c, { read: async () => ({ open: ["interview_coaching"] }) }))).refuse, null);
+    }
+    assert.deepEqual(c.counts, {});
   });
 
   it("gate off: no allowance, nothing read or counted", async () => {
     const c = counter();
     let read = 0;
-    const deps = { gateRaw: null, read: async () => { read++; return { open: [] as string[] }; }, increment: c.inc };
-    for (let i = 0; i < 10; i++) assert.equal(await checkTextPracticeAllowance(person, first, deps), null);
-    assert.equal(c.n + read, 0);
+    for (let i = 0; i < 10; i++) {
+      await checkTextPracticeAllowance(person, first, base(c, { gateRaw: null, read: async () => { read++; return { open: [] as string[] }; } }));
+    }
+    assert.deepEqual(c.counts, {});
+    assert.equal(read, 0);
   });
 
   it("entitlement storage missing: treated as unsponsored (the free allowance still works, nothing extra opens)", async () => {
     const c = counter();
     const notReady = async () => { throw Object.assign(new Error("x"), { premiumNotReady: true }); };
-    const deps = { gateRaw: "on", read: notReady, increment: c.inc, limit: 1 };
-    assert.equal(await checkTextPracticeAllowance(person, first, deps), null);
-    assert.equal((await checkTextPracticeAllowance(person, first, deps))?.status, 429);
+    assert.equal((await checkTextPracticeAllowance(person, first, base(c, { read: notReady, limit: 1 }))).refuse, null);
+    assert.equal((await checkTextPracticeAllowance(person, first, base(c, { read: notReady, limit: 1 }))).refuse?.status, 429);
   });
 
-  it("the route checks the allowance after the body is read and before the AI call", () => {
+  it("the route checks after the body is read and before the AI call, refunds a refused turn (I2), and returns the id", () => {
     const r = code(read("app/api/interview-practice/route.ts"));
     const at = r.indexOf("checkTextPracticeAllowance(userId, body)");
     assert.ok(at > r.indexOf("await request.json()"));
     assert.ok(at < r.indexOf("callAI("));
+    const refuse = r.slice(at, r.indexOf("return verdict.refuse;", at));
+    assert.match(refuse, /await refundUserUsage\(userId, "interview"\)/);
+    assert.equal((r.match(/return reply\(/g) ?? []).length, 4, "every successful reply carries the id");
+    assert.match(r, /practiceSession \? \{ \.\.\.\(payload as Record<string, unknown>\), practiceSession \} : payload/);
+  });
+
+  it("the page keeps the id for the interview and sends it on every turn and the wrap-up", () => {
+    const page = code(read("app/(dashboard)/dashboard/interview/page.tsx"));
+    assert.equal((page.match(/practiceSession: practiceSessionRef\.current \?\? undefined/g) ?? []).length, 2);
+    assert.match(page, /if \(typeof data\.practiceSession === "string"\) practiceSessionRef\.current = data\.practiceSession;/);
+    assert.match(page, /setExchangeCount\(0\);\s*practiceSessionRef\.current = null;/);
   });
 
   it("the page shows the allowance line only while it applies", () => {
     const page = code(read("app/(dashboard)/dashboard/interview/page.tsx"));
     assert.match(page, /practiceAllowanceApplies = !!premiumStatus\?\.gate && toolIsOpen\(premiumStatus, "interview_coaching"\) === false/);
     assert.match(page, /\{practiceAllowanceApplies && \(/);
+  });
+
+  it("review L2: the allowance counters are not shown as AI calls", async () => {
+    const { NON_AI_USAGE_ENDPOINTS, DAILY_USAGE_SQL } = await import("@crucible/core");
+    for (const e of [TEXT_PRACTICE_ENDPOINT, TEXT_PRACTICE_TURN_ENDPOINT, "headshot_upload"]) {
+      assert.ok((NON_AI_USAGE_ENDPOINTS as readonly string[]).includes(e), e);
+      assert.ok(DAILY_USAGE_SQL.includes(`'${e}'`), e);
+    }
+    assert.match(DAILY_USAGE_SQL, /endpoint NOT IN \(/);
+    assert.match(DAILY_USAGE_SQL, /endpoint NOT LIKE 'vault_%'/);
   });
 });
 
