@@ -655,8 +655,8 @@ export default function OutputPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          kind: "finish",
           documents: { resume: resumeText, letter: coverLetterText },
-          written: written ?? { resume: resumeText, letter: coverLetterText },
           source: {
             resumeText: session.resumeText,
             goals: session.goals,
@@ -674,9 +674,10 @@ export default function OutputPage() {
           runId: session.startedAt,
         }),
       });
-      const data = (await res.json().catch(() => null)) as { grounding?: unknown; receipt?: string; error?: string } | null;
+      const data = (await res.json().catch(() => null)) as { grounding?: unknown; receipt?: string; written?: WrittenDocs; error?: string } | null;
       if (!res.ok || !data?.receipt) throw new Error(data?.error || "failed");
-      if (!written) setWritten({ resume: resumeText, letter: coverLetterText });
+      // The receipt covers the documents that were checked: they are now "as delivered".
+      if (data.written) setWritten(data.written);
       setGrounding(data.grounding ?? null);
       setReceipt(data.receipt);
       // A restored copy's evidence is replaced by this run's own words.

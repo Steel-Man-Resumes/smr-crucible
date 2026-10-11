@@ -1,11 +1,16 @@
 /**
  * POST /api/forge/recheck: "Check it again" (Phase 5 R1, review r3 M-1).
  *
- * Re-runs the second check on the finish page's current documents and signs a
- * fresh writer's receipt. No rewrite; the person's answers stay. The work is
- * in lib/forge-recheck.ts; this file wires the real verifier, the newest-nonce
- * record (signed in) and the run cookie (signed out). IP rate limited like the
- * other Forge routes; works signed out before the wall, as generate-docs does.
+ * The one server path that re-checks a version for real and signs a fresh
+ * writer's receipt. Body:
+ *   { kind: "finish", documents: { resume, letter }, source, answers?, runId }
+ *       -> { grounding, receipt, written }
+ *   { kind: "artifact", artifactId }   (signed in; the person's own resume)
+ *       -> { grounding, receipt, written, revision }
+ * written, grounding or a receipt in the body are ignored. No rewrite; the
+ * person's answers stay. The work is in lib/forge-recheck.ts; this file wires
+ * the real verifier, the store, the newest-nonce record (signed in) and the
+ * run cookie (signed out). IP rate limited like the other Forge routes.
  */
 
 import { NextResponse } from "next/server";
@@ -28,13 +33,20 @@ async function handlePost(request: Request) {
   const userId = forgeUserId(session) ?? null;
   const body = await request.json().catch(() => null);
   const { recordWriterReceipt } = await import("@crucible/core");
+  const { coreStore } = await import("@/lib/revision-save");
   const result = await recheckDocs(body, userId, {
     verify: verifyGrounding,
     record: recordWriterReceipt,
     random: () => randomBytes(16).toString("hex"),
+    store: await coreStore(),
   });
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
-  const res = NextResponse.json({ grounding: result.grounding, receipt: result.receipt });
+  const res = NextResponse.json({
+    grounding: result.grounding,
+    receipt: result.receipt,
+    written: result.written,
+    ...(result.revision ? { revision: result.revision } : {}),
+  });
   if (result.runCookie) res.headers.append("Set-Cookie", runCookieHeader(result.runCookie));
   return res;
 }

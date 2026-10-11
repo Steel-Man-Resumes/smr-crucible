@@ -1017,3 +1017,59 @@ test("r3 M-1: the page shows the re-check card and runs it from ?check=1; the Re
   assert.match(src("components", "resume", "ResumeWorkspace.tsx"), /href=\{RECHECK_HREF\}/);
   assert.match(src("lib", "session-policy.ts"), /"\/api\/forge\/recheck",/);
 });
+
+// ---- coordination: Check it again is the one server path, for a finish state OR an owned artifact ----
+
+test("Check it again (artifact): an owned resume whose second check BLOCKs stays a draft, with that line as its card", async () => {
+  const { f, art } = await finishedForge();
+  const flagging = async ({ kind }: { kind: string }) =>
+    kind === "resume"
+      ? { text: "", hasFabrication: true, applied: false, flags: [{ claim: "Ran the grill on the breakfast line", reason: "not in source" }], verifierRan: true }
+      : { text: "", hasFabrication: false, applied: false, flags: [], verifierRan: true };
+  const r = await recheckDocs({ kind: "artifact", artifactId: art.id }, UID, { verify: flagging as any, random: fixedRandom, store: f.store });
+  assert.ok(r.ok);
+  assert.equal(r.ok && r.revision?.status, "draft");
+  assert.ok(r.ok && (r.revision?.openItems ?? []).some((i) => /Ran the grill on the breakfast line/.test(i)), r.ok ? JSON.stringify(r.revision?.openItems) : "");
+  assert.equal(r.ok && needsRecheck(r.revision?.openItems), false, "the receipt is fresh; the card is the flagged line");
+  const saved = f.revs.at(-1)!;
+  assert.equal((saved.evidence as any).writerVerified, true);
+  assert.equal(saved.resume_text, RESUME, "the stored text, checked as it is (nothing rewritten)");
+});
+
+test("Check it again (artifact): a clean check on an owned resume finishes it; another person's or a signed-out call gets nothing", async () => {
+  const { f, art } = await finishedForge();
+  const r = await recheckDocs({ kind: "artifact", artifactId: art.id }, UID, { verify: noFlags as any, random: fixedRandom, store: f.store });
+  assert.ok(r.ok && r.revision?.status === "finished");
+  assert.equal(r.ok && readReceipt(r.receipt)?.sub, `u:${UID}`);
+  assert.equal(r.ok && readReceipt(r.receipt)?.run, `artifact:${art.id}`);
+  const foreign = await recheckDocs({ kind: "artifact", artifactId: "00000000-0000-4000-8000-0000000000dd" }, UID, { verify: noFlags as any, random: fixedRandom, store: f.store });
+  assert.deepEqual(foreign, { ok: false, status: 404, error: "We could not find that resume." });
+  const out = await recheckDocs({ kind: "artifact", artifactId: art.id }, null, { verify: noFlags as any, random: fixedRandom, store: f.store });
+  assert.equal(out.ok, false);
+  assert.equal(!out.ok && out.status, 401);
+});
+
+test("Check it again (finish): written, grounding and a receipt sent in the request are never trusted", async () => {
+  const pre = finishState({ writerReceipt: "" });
+  const flagging = async ({ kind }: { kind: string }) =>
+    kind === "resume"
+      ? { text: "", hasFabrication: true, applied: false, flags: [{ claim: "Ran the grill on the breakfast line", reason: "x" }], verifierRan: true }
+      : { text: "", hasFabrication: false, applied: false, flags: [], verifierRan: true };
+  const r = await recheckDocs(
+    {
+      kind: "finish",
+      documents: { resume: pre.resumeText, letter: pre.coverLetterText },
+      // A forged clean check and other written documents: ignored.
+      written: { resume: "SOMETHING ELSE", letter: "" },
+      grounding: { verifierRan: true, outcomes: [] },
+      writerReceipt: "wr2.forged",
+      source: { resumeText: SOURCE, goalNarrative: "I want to keep cooking." },
+      runId: RUN.startedAt,
+    },
+    UID,
+    { verify: flagging as any, random: fixedRandom }
+  );
+  assert.ok(r.ok);
+  assert.deepEqual(r.ok && r.written, { resume: pre.resumeText, letter: pre.coverLetterText }, "written is what was checked");
+  assert.ok(r.ok && ((r.grounding as any).outcomes as Array<{ status: string }>).some((o) => o.status === "still_there"), "the real check ran");
+});
