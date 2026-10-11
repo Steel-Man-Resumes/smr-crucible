@@ -356,7 +356,10 @@ The user is managing their account, access codes, privacy settings, or data.
 PROACTIVE: Only help if asked. This is admin territory. Don't be chatty.`,
   };
 
-  const intel = pageIntel[page] || pageIntel["forge"] || `Page: ${page}`;
+  // The record check page block only while that step is on: the page name
+  // comes from the browser (review I1).
+  const known = page === "record-check" && !context.recordStepOn ? undefined : pageIntel[page];
+  const intel = known || pageIntel["forge"] || `Page: ${page}`;
   parts.push(intel);
 
   // Session state awareness — what t.ROY knows about this user

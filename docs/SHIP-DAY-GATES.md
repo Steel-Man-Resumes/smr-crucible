@@ -63,14 +63,36 @@ To turn it on:
 
 ## 3. Record check (decided 2026-10-10: off until its public copy ships)
 
-`RECORD_CHECK_ENABLED` (server, read per request), off by default. While
-off, every `/api/record-check` route answers 404, `/dashboard/record-check`
-is a 404, the entry card on the disclosure planner is hidden, and the partner
-FAQ and t.ROY do not describe or link to it. Saved checklists (if any) still
-come with a data export and go with a data delete.
+`RECORD_CHECK_ENABLED` (server, read per request), off by default.
 
-Turn it on only on the day the privacy page, partner FAQ, public site and
-funder answers ship with the same retention wording as
-`apps/consumer/lib/record-check/copy.ts`: set `RECORD_CHECK_ENABLED=on` in
-Production and redeploy (the host applies a settings change to new
-deployments only).
+While off:
+- `POST /api/record-check`, and GET and POST on `/api/record-check/consent`
+  and `/api/record-check/saved`, answer 404 before sign-in or limits.
+- The two DELETE routes stay open so a person can always take back their yes
+  or delete one saved checklist (owner only, same-origin JSON, staff refused).
+- `/dashboard/record-check` is a 404.
+- Saved checklists (if any) still come with a data export and go with a data
+  delete.
+
+Every place in this app that describes the record check, and is hidden while
+it is off:
+1. `/security` and `/dashboard/security` (`components/SecurityContent.tsx`):
+   the "only screen that asks for your offense" line, "saved record checks"
+   in the sharing list, and the technical paragraph with the retention
+   wording (30 days, up to 2 years for flagged content).
+2. Settings, "How we handle your data": the record check line.
+3. The disclosure planner's entry card.
+4. The partner page FAQ ("What data do you collect on my clients?").
+5. t.ROY: the privacy answer on the Story page, the pointer on the
+   disclosure planner, and the record check page block.
+6. The coaching skill `strong-background-professional` (points there only
+   when t.ROY's page instructions say it is available).
+
+Left visible on purpose: the "Saved record checks" box in Settings' data
+export (data rights).
+
+Outside this app, the same wording must ship the same day: the privacy page
+on steelmanresumes.com, the partner FAQ, the public site and funder answers.
+They must match `apps/consumer/lib/record-check/copy.ts`. Then set
+`RECORD_CHECK_ENABLED=on` in Production and redeploy (the host applies a
+settings change to new deployments only).

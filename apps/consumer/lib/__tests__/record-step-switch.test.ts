@@ -11,6 +11,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { RECORD_CHECK_ENABLED_ENV, recordStepOn, serverSwitchOn, switchedOffResponse } from "../server-switch";
 import { buildSystemPrompt } from "../assistant-prompt";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+// SecurityContent uses the classic JSX runtime.
+(globalThis as { React?: unknown }).React = React;
 
 const CONSUMER = join(import.meta.dirname, "..", "..");
 const read = (p: string) => readFileSync(join(CONSUMER, p), "utf8");
@@ -46,11 +51,51 @@ describe("the switch", () => {
   });
 });
 
+describe("review L4: withdrawal always works, even while the step is off", () => {
+  for (const [file, handler] of [
+    ["app/api/record-check/consent/route.ts", "handleConsentDelete"],
+    ["app/api/record-check/saved/route.ts", "handleSavedDelete"],
+  ] as const) {
+    it(`${file} DELETE is outside the switch and goes straight to ${handler}`, () => {
+      const src = code(read(file));
+      const start = src.indexOf("export async function DELETE(request: Request) {");
+      assert.ok(start >= 0);
+      const body = src.slice(start, src.indexOf("\n}", start));
+      assert.doesNotMatch(body, /recordStepOn/);
+      assert.match(body, new RegExp(`return ${handler}\\(request, realRecordCheckDeps\\(\\)\\);`));
+    });
+  }
+
+  it("the handlers keep the owner, same-origin and staff checks (write gate)", () => {
+    const h = code(read("lib/record-check/handler.ts"));
+    for (const fn of ["handleConsentDelete", "handleSavedDelete"]) {
+      const at = h.indexOf(`export async function ${fn}(`);
+      const body = h.slice(at, h.indexOf("\n}", at));
+      assert.match(body, /gate\(req, deps, \{ needConsent: false, write: true, tier: false \}\)/, fn);
+    }
+  });
+
+  it("with the switch off, a staff session and a cross-site form are still refused on DELETE", async () => {
+    // Proven end to end in record-check.test.ts (staff 403, text/plain 403,
+    // sibling-site 403 on both DELETEs); this checks the switch is not consulted.
+    const saved = process.env.RECORD_CHECK_ENABLED;
+    try {
+      delete process.env.RECORD_CHECK_ENABLED;
+      assert.equal(recordStepOn(), false);
+      const t = read("lib/__tests__/record-check.test.ts");
+      assert.match(t, /handleConsentDelete\(req\("\/api\/record-check\/consent", "DELETE"\), staff\.deps\)\)\.status, 403/);
+      assert.match(t, /handleSavedDelete\(req\("\/api\/record-check\/saved\?id=00000000-0000-4000-8000-000000000001", "DELETE", "\{\}", h\), w\.deps\)\)\.status, 403/);
+    } finally {
+      if (saved !== undefined) process.env.RECORD_CHECK_ENABLED = saved;
+    }
+  });
+});
+
 describe("every route of the step answers 404 while off, first thing", () => {
   const ROUTES: Array<[string, string[]]> = [
     ["app/api/record-check/route.ts", ["POST"]],
-    ["app/api/record-check/consent/route.ts", ["GET", "POST", "DELETE"]],
-    ["app/api/record-check/saved/route.ts", ["GET", "POST", "DELETE"]],
+    ["app/api/record-check/consent/route.ts", ["GET", "POST"]],
+    ["app/api/record-check/saved/route.ts", ["GET", "POST"]],
   ];
   for (const [file, methods] of ROUTES) {
     for (const m of methods) {
@@ -104,6 +149,42 @@ describe("the screen and the entry points", () => {
   });
 });
 
+describe("review M1: the security page and Settings describe the step only while on", () => {
+  it("SecurityContent renders no record check copy while off, and all of it while on", async () => {
+    const { SecurityContent } = await import("../../components/SecurityContent");
+    const off = renderToStaticMarkup(React.createElement(SecurityContent, {})).toLowerCase();
+    const offExplicit = renderToStaticMarkup(React.createElement(SecurityContent, { recordStep: false })).toLowerCase();
+    const on = renderToStaticMarkup(React.createElement(SecurityContent, { recordStep: true })).toLowerCase();
+    for (const html of [off, offExplicit]) {
+      assert.ok(!html.includes("record check"), "no record check mention while off");
+      assert.ok(!html.includes("2 years"), "no retention exception while off");
+      assert.ok(html.includes("if you type your record in the chat or the disclosure planner"), "the plain line stays");
+    }
+    assert.ok(on.includes("the record check is the only screen"));
+    assert.ok(on.includes("saved record checks"));
+    assert.ok(on.includes("up to 2 years for flagged content"));
+  });
+
+  it("both security pages pass the server switch, read per request", () => {
+    for (const f of ["app/(forge)/security/page.tsx", "app/(dashboard)/dashboard/security/page.tsx"]) {
+      const src = code(read(f));
+      assert.match(src, /recordStep=\{recordStepOn\(\)\}/, f);
+      assert.match(src, /export const dynamic = "force-dynamic";/, f);
+      assert.doesNotMatch(src, /"use client"/, f);
+    }
+  });
+
+  it("Settings shows its record check line only while on", () => {
+    const page = code(read("app/(dashboard)/dashboard/settings/page.tsx"));
+    const at = page.indexOf("In the record check, what you type");
+    assert.ok(at > 0);
+    const before = page.slice(Math.max(0, at - 400), at);
+    assert.match(before, /\{recordStep && \(\s*<li/);
+    assert.match(page, /const \{ recordStep \} = useServerSwitches\(\);/);
+    assert.match(code(read("app/(dashboard)/dashboard/settings/layout.tsx")), /recordStep: recordStepOn\(\)/);
+  });
+});
+
 describe("t.ROY", () => {
   it("does not point to the step while off, and does when on", () => {
     const off = buildSystemPrompt({ currentPage: "disclosure" });
@@ -118,6 +199,11 @@ describe("t.ROY", () => {
     assert.ok(!off.includes("The record check in the Refinery"));
     const on = buildSystemPrompt({ currentPage: "story", recordStepOn: true });
     assert.ok(on.includes("The record check in the Refinery"));
+  });
+
+  it("a browser-sent page name cannot pull the step's page block while off (review I1)", () => {
+    assert.ok(!buildSystemPrompt({ currentPage: "record-check" }).includes("PAGE: RECORD CHECK"));
+    assert.ok(buildSystemPrompt({ currentPage: "record-check", recordStepOn: true }).includes("PAGE: RECORD CHECK"));
   });
 
   it("the assistant route sets the flag on the server, ignoring the browser", () => {

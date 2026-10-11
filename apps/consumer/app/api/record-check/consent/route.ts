@@ -17,7 +17,7 @@ import { recordStepOn, switchedOffResponse } from "@/lib/server-switch";
 
 export const dynamic = "force-dynamic";
 
-// Every method answers 404 while the step is off (lib/server-switch.ts).
+// GET and POST answer 404 while the step is off (lib/server-switch.ts).
 
 export async function GET(request: Request) {
   if (!recordStepOn()) return switchedOffResponse();
@@ -29,7 +29,10 @@ export async function POST(request: Request) {
   return handleConsentPost(request, realRecordCheckDeps());
 }
 
+// WITHDRAWAL ALWAYS WORKS (review L4): DELETE stays open while the step is
+// switched off. It only removes the person's own data and calls no AI; the
+// handler still requires the owner's session and same-origin JSON, and
+// refuses staff acting as the person.
 export async function DELETE(request: Request) {
-  if (!recordStepOn()) return switchedOffResponse();
   return handleConsentDelete(request, realRecordCheckDeps());
 }
