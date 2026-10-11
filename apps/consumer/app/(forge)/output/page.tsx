@@ -16,6 +16,7 @@
  * letter, the person's story (the narrative reconstruction) and the next step.
  */
 
+import { TroyMark } from "@crucible/consumer-ui";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { CREDENTIALS_KEY } from "@/lib/forge-path";
@@ -596,7 +597,7 @@ export default function OutputPage() {
 
       {/* 1. t.ROY's status line and the tour button */}
       <div className="flex flex-wrap items-start gap-3 border border-t-line border-l-[3px] border-l-t-amber bg-t-panel px-4 py-3" data-testid="finish-status">
-        <img src="/images/t-roy-icon-badge.webp" alt="" aria-hidden="true" className="mt-0.5 h-8 w-8 shrink-0 rounded-full" />
+        <TroyMark size={32} className="mt-0.5" />
         <div className="min-w-0 flex-1">
           <h1 className="text-lg font-bold leading-snug text-t-white" data-testid="status-line">{headline}</h1>
           <p className="text-xs text-t-phos-dim">{subline}</p>

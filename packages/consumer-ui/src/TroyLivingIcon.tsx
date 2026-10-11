@@ -15,6 +15,8 @@
 
 "use client";
 
+import { TROY_MARK_SRC } from "./TroyMark";
+
 interface TroyLivingIconProps {
   /** Rendered size in px (square footprint). Default 60. */
   size?: number;
@@ -37,7 +39,7 @@ export function TroyLivingIcon({
       <span className="troy-living__glow" />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/images/t-roy-figure.png"
+        src={TROY_MARK_SRC}
         alt=""
         className="troy-living__fig"
         draggable={false}

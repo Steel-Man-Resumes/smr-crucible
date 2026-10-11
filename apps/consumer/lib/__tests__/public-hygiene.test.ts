@@ -45,10 +45,36 @@ describe("public source hygiene", () => {
 
 describe("t.ROY living icon image", () => {
   it("points at the shared figure and the file is in public/images", () => {
-    const src = readFileSync(join(ROOT, "packages/consumer-ui/src/TroyLivingIcon.tsx"), "utf8");
-    const m = src.match(/src="(\/images\/[^"]+)"/);
-    assert.ok(m, "icon src not found");
+    const mark = readFileSync(join(ROOT, "packages/consumer-ui/src/TroyMark.tsx"), "utf8");
+    const m = mark.match(/TROY_MARK_SRC = "(\/images\/[^"]+)"/);
+    assert.ok(m, "mark src not found");
     assert.equal(m![1], "/images/t-roy-figure.png");
     assert.ok(existsSync(join(ROOT, "apps/consumer/public", m![1])), "image file missing");
+    const living = readFileSync(join(ROOT, "packages/consumer-ui/src/TroyLivingIcon.tsx"), "utf8");
+    assert.match(living, /src=\{TROY_MARK_SRC\}/);
+  });
+});
+
+describe("FL2: one t.ROY mark across the site and the Forge", () => {
+  it("the SMR site's figure file and ours are the same mark (same name, as shipped)", () => {
+    // The site shows /images/t-roy-figure.png on every page (chat button and
+    // reading figure). Same path here; the bytes were checked equal on 2026-10-10.
+    const mark = readFileSync(join(ROOT, "packages/consumer-ui/src/TroyMark.tsx"), "utf8");
+    assert.match(mark, /"\/images\/t-roy-figure\.png"/);
+  });
+
+  it("no screen shows the old gold badge as t.ROY", () => {
+    const hits: string[] = [];
+    const roots = ["apps/consumer/app", "apps/consumer/components", "apps/consumer/lib", "packages/consumer-ui/src"];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        if (["node_modules", "__tests__", ".next"].includes(name)) continue;
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) walk(p);
+        else if (/\.(tsx?|css)$/.test(name) && readFileSync(p, "utf8").includes("t-roy-icon-badge")) hits.push(p);
+      }
+    };
+    for (const r of roots) walk(join(ROOT, r));
+    assert.deepEqual(hits, []);
   });
 });
