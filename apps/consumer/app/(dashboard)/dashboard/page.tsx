@@ -259,7 +259,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
       if (res.status === 409) {
         window.alert(
-          "This is a locked baseline. Unlock it in your Library before deleting."
+          "This is a locked baseline. Unlock it in My resumes before deleting."
         );
         return;
       }
@@ -376,8 +376,10 @@ export default function DashboardPage() {
   if (onboarding.state === "needs_profile" && !isAdmin) {
     return (
       <div className="space-y-10">
-        {focus.task && <LaneHome task={focus.task} />}
-        <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />
+        {focus.task && <LaneHome task={focus.task} profileFirst />}
+        <div id="profile-setup" className="scroll-mt-24">
+          <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />
+        </div>
       </div>
     );
   }

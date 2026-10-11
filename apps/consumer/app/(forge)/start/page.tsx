@@ -24,6 +24,7 @@ import { LaneHeader } from "@/components/lanes/LaneHeader";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
 import { planForgePath } from "@/lib/forge-path";
 import {
+  DRAFT_BADGE,
   DOCUMENT_LINKS,
   LANE_HOME_HREF,
   START_PATH,
@@ -50,21 +51,28 @@ function StartInner() {
   const focus = useLaneFocus({ task: session.laneTask, target: session.laneTarget });
   const change = params.get("change") === "1";
   const step = params.get("step");
+  // Sent here by the Refinery because the resume is not built yet: show where
+  // the run is, never send them back (that would loop).
+  const fromRefinery = params.get("from") === "refinery";
   const [busy, setBusy] = useState(false);
-  const [accountResume, setAccountResume] = useState<boolean | null>(null);
+  // The account's saved resume (R1 revision), for the "welcome back" line.
+  const [accountRev, setAccountRev] = useState<{ number: number; status: string } | null>(null);
+  // The Refinery opens once the Forge resume is built (onboarding's forgeComplete).
+  const [forgeComplete, setForgeComplete] = useState<boolean>(false);
   const [target, setTarget] = useState<string>("");
 
-  // Does the account already hold a resume? (Interview and job routes skip the resume step when it does.)
+  // What the account already holds: a saved resume, and whether the Refinery is open to it.
   useEffect(() => {
-    if (!focus.signedIn) {
-      setAccountResume(false);
-      return;
-    }
+    if (!focus.signedIn) return;
     let live = true;
     fetch("/api/revisions?forge=1", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => live && setAccountResume(!!j?.revision))
-      .catch(() => live && setAccountResume(false));
+      .then((j) => live && j?.revision && setAccountRev({ number: Number(j.revision.number), status: String(j.revision.status) }))
+      .catch(() => undefined);
+    fetch("/api/user/journey", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => live && setForgeComplete(j?.snapshot?.metrics?.forgeComplete === true))
+      .catch(() => undefined);
     return () => {
       live = false;
     };
@@ -76,11 +84,12 @@ function StartInner() {
 
   // Returning and signed in, with a task already picked: the lane home.
   useEffect(() => {
-    if (!focus.loaded || change || step) return;
+    if (!focus.loaded || change || step || fromRefinery) return;
     if (focus.signedIn && focus.task) router.replace(LANE_HOME_HREF);
-  }, [focus.loaded, focus.signedIn, focus.task, change, step, router]);
+  }, [focus.loaded, focus.signedIn, focus.task, change, step, fromRefinery, router]);
 
-  const hasResume = !!session.resumeText || accountResume === true;
+  // Practice and tailoring live in the Refinery, which opens once the Forge resume is built.
+  const hasResume = !!session.forgeOutput || forgeComplete;
 
   /** Keep this browser's run in step with the pick (signed out, this IS the saved pick). */
   function keepInRun(task: LaneTask, laneTarget?: string | null) {
@@ -115,7 +124,7 @@ function StartInner() {
     router.push(focus.signedIn && hasResume ? `/dashboard/application-tailor${t ? `?role=${encodeURIComponent(t)}` : ""}` : "/resume");
   }
 
-  if (!focus.loaded || (focus.signedIn && focus.task && !change && !step)) {
+  if (!focus.loaded || (focus.signedIn && focus.task && !change && !step && !fromRefinery)) {
     return <div className="h-40" aria-busy="true" />;
   }
 
@@ -201,20 +210,35 @@ function StartInner() {
     );
   }
 
-  // ---- signed out, coming back: where the run is, one way on ------------------
-  if (!change && focus.task && isLaneTask(session.laneTask)) {
-    const next = session.forgeOutput ? "/output" : planForgePath(session).screens[0].path;
+  // ---- coming back before the resume is built: where the run is, one way on --
+  if (!change && focus.task && (fromRefinery || isLaneTask(session.laneTask))) {
+    const task = focus.task;
+    const next = session.forgeOutput ? "/output" : planForgePath({ ...session, laneTask: task }).screens[0].path;
     return (
       <div data-testid="lane-home">
         <LaneHeader task={focus.task} target={focus.target} />
         <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6">
           <h1 className="text-2xl font-bold text-t-white">Welcome back.</h1>
-          <p className="mt-1 text-sm text-t-phos-dim">
-            {session.forgeOutput ? "Your resume is waiting for you." : session.resumeText ? "Your resume is saved on this computer." : "Pick up where you left off."}
+          <p className="mt-1 text-sm text-t-phos-dim" data-testid="lane-home-resume">
+            {accountRev
+              ? `Your resume is saved to your account (version ${accountRev.number}).`
+              : session.forgeOutput
+                ? "Your resume is waiting for you."
+                : session.resumeText
+                  ? "Your resume is saved on this computer."
+                  : "Pick up where you left off."}
           </p>
+          {accountRev && accountRev.status !== "finished" && (
+            <p className="mt-1 text-sm text-t-amber-bright" data-testid="draft-badge">
+              {DRAFT_BADGE}
+            </p>
+          )}
           <button
             type="button"
-            onClick={() => router.push(next)}
+            onClick={() => {
+              if (session.laneTask !== task) keepInRun(task);
+              router.push(next);
+            }}
             className="t-focus mt-5 min-h-touch w-full bg-t-amber px-6 py-3 text-base font-bold text-white hover:bg-t-amber-bright sm:w-auto"
             data-testid="lane-home-continue"
           >

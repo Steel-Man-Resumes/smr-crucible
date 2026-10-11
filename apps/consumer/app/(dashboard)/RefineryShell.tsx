@@ -446,7 +446,10 @@ export function RefineryShell({
       !onboarding.forgeComplete &&
       pathname !== "/dashboard/settings"
     ) {
-      window.location.href = "https://forge.steelmanresumes.com";
+      // Lanes first (Phase 5 R2): to the Forge's first screen, "What do you
+      // need today?", on this same site so the sign-in comes along. Returning
+      // with a task picked, that page shows where the run is (no bounce back).
+      window.location.href = "/start?from=refinery";
     }
   }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id]);
 

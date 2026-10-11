@@ -44,7 +44,7 @@ export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" |
   }
 }
 
-export function LaneHome({ task }: { task: LaneTask }) {
+export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profileFirst?: boolean }) {
   const [rev, setRev] = useState<ForgeRevision | null>(null);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
@@ -63,7 +63,8 @@ export function LaneHome({ task }: { task: LaneTask }) {
     };
   }, []);
 
-  const next = laneHomeNext(task, rev);
+  // A new account saves its profile (name, phone) before the Refinery's tools open.
+  const next = profileFirst ? { label: "Save your profile below", href: "#profile-setup" } : laneHomeNext(task, rev);
   const box = "border border-t-line bg-t-panel p-4";
   return (
     <section aria-labelledby="lane-home-heading" className="space-y-3" data-testid="lane-home">
