@@ -171,7 +171,7 @@ export default function GoalsPage() {
       showBack
       onBack={() => {
         if (!isDemo) saveGoals();
-        router.push(previousPath(plan, "goals"));
+        router.push(previousPath(plan, "goals", session));
       }}
       footer={
         !isDemo ? (

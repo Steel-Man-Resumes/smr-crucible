@@ -14,8 +14,8 @@ import {
 const root = join(import.meta.dirname, "..", "..");
 const read = (p: string) => readFileSync(join(root, p), "utf8");
 
-test("job-seeker start sets the client audience and goes to /welcome", () => {
-  assert.equal(CLIENT_PATH.route, "/welcome");
+test("job-seeker start sets the client audience and goes to the first screen, /start (lanes first, P5 R2)", () => {
+  assert.equal(CLIENT_PATH.route, "/start");
   const s = sessionForPath(CLIENT_PATH);
   assert.equal(s.audience, "client");
   assert.equal(s.isDemo, false);

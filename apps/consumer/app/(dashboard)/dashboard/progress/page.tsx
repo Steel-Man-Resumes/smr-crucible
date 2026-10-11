@@ -682,6 +682,7 @@ function QuickWinCard({ win }: { win: QuickWin }) {
 // ─── Roadmap Node Card (expands in place) ───────────────────────────────────
 
 const TOOL_LABELS: Record<string, string> = {
+  "/start": "The Forge",
   "/welcome": "The Forge",
   "/intro": "The Forge",
   "/dashboard": "your dashboard",

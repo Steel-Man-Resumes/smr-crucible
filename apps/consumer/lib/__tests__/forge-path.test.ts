@@ -267,7 +267,7 @@ test("next and back follow the person's path; progress shows their real screens"
   const full = planForgePath({ readinessStage: "precontemplation" });
   assert.equal(nextPath(full, "goals"), "/story");
   assert.equal(previousPath(full, "preferences"), "/story");
-  assert.deepEqual(remainingScreens(full, "goals").map((x) => x.label), ["Story", "Preferences", "Build", "Results"]);
+  assert.deepEqual(remainingScreens(full, "goals").map((x) => x.label), ["Support", "Preferences", "Build", "Results"]);
   assert.deepEqual(remainingScreens(light, "goals").map((x) => x.label), ["Preferences", "Build", "Results"]);
 
   const steps = progressSteps(light, "/goals");
