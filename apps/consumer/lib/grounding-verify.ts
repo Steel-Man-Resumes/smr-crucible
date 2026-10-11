@@ -21,6 +21,7 @@
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { VERIFY_MAX } from "@/lib/limits";
 import { onlyRewordedFrom } from "@/lib/fact-trace";
+import { isPeopleScopeHit, scopeHitsNotTheirs } from "@crucible/core/src/scopeWords";
 
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
@@ -69,8 +70,8 @@ export interface GroundingFlag {
  */
 export type GroundingFlagKind =
   | "number" | "date" | "title" | "employer" | "tool" | "skill" | "credential"
-  | "result" | "scope" | "character" | "pronoun" | "other" | "wording";
-const FLAG_KINDS = new Set<string>(["number", "date", "title", "employer", "tool", "skill", "credential", "result", "scope", "character", "pronoun", "other", "wording"]);
+  | "result" | "scope" | "character" | "pronoun" | "other" | "wording" | "supervision";
+const FLAG_KINDS = new Set<string>(["number", "date", "title", "employer", "tool", "skill", "credential", "result", "scope", "character", "pronoun", "other", "wording", "supervision"]);
 const WORDING_KIND_RE = /^(?:wording|rewording|reworded|phrasing|rephras\w*|paraphras\w*|style|verb)$/i;
 
 /** The kind a flag names, read leniently ("rephrased" is wording; anything unknown is "other"). */
@@ -198,7 +199,7 @@ Scrutinize section headers and the employer/date/location lines too, not only th
 
 TRACE FACTS, NOT WORDS. The writer is allowed to reword any line into strong plain words that say what it means. A reworded line is NOT a fabrication when every fact in it traces back to SOURCE: the same numbers, dates, job titles, employers, tools, skills, credentials, results and scope. These PASS (never flag or rewrite them): SOURCE "In charge of the guys on my shift" written as "Supervised the shift crew"; SOURCE "Did safety audits" written as "Ran safety audits"; SOURCE "dealt with customers" written as "Served customers"; SOURCE "Responsible for 3rd shift" under the job title "Production Supervisor" written as "Supervised third-shift production". These FAIL (flag them): an added number ("Supervised a 12-person crew" when no 12 was given); an added result ("cutting errors 20%", "with zero incidents", "keeping a clean safety record"); an added tool or skill ("in SAP", "on a reach truck"); an added or upgraded credential; a changed or shortened date ("8/2021" written as "2021"); a different title or employer; and scope inflation ("helped" written as "led" or as done alone, "my shift" written as "the plant", one area written as all of them, an added size word such as "large", "heavy" or "major").
 
-SUPERVISING PEOPLE IS SCOPE. "Supervised", "led", "oversaw", "directed" or "managed" people is supported only when that same job's facts show the person was over people: a supervisor, lead, foreman or manager type title for that job, or their own words saying they were in charge of people ("in charge of employees on my shift", "my crew", "ran a crew of 4"). "Responsible for" a shift, an area, a task or a thing is never supervising people: "Responsible for 3rd shift" under the title "Machine Operator" written as "Supervised third-shift production" FAILS; "Responsible for the crew's safety gear" written as "Supervised the crew" FAILS; "Responsible for cleaning the kitchen" written as "Supervised the kitchen" FAILS; "Ran the line" written as "Supervised the line crew" FAILS unless people evidence as above exists. Facts belong to their own job: a fact from one job never supports a line under another.
+SUPERVISING PEOPLE IS SCOPE. A line saying the person was over people ("supervised", "led", "oversaw", "directed" or "managed" people) is supported only when the person's own words for that same job already say it in so many words: one of those verbs, or "was in charge of", with people as its object ("supervised 4 workers", "in charge of employees on my shift", "led a crew of 6"). A job title of any kind, "my crew", a shift, a place or a task never says it: "Responsible for 3rd shift", "Ran the line", "Shift Lead" or "Account Manager" alone does not. When such a line is not supported that way, flag it with kind "supervision" and do NOT rewrite or remove it: the person is asked one question about it ("Were you over other people in this job?"). "Managed" a thing (inventory, accounts, a budget) is not a people claim; check it like any other duty. Facts belong to their own job: a fact from one job never supports a line under another.
 
 Do NOT flag: strong action verbs, general professional framing, a reasonable summary of a duty the source states, or a reworded line whose facts all trace back. Never flag a line only because its words differ from SOURCE. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts. Never let the OUTPUT claim something just because a posting asked for it.
 
@@ -207,7 +208,7 @@ ONE EXCEPTION to "general professional framing", and it is not a small one. A cl
 Then rewrite OUTPUT so every remaining statement is grounded in SOURCE: remove each invented specific, or generalize it to exactly what the source supports. Change ONLY the lines you flagged; every other line stays exactly as written, word for word. Thin source means a shorter, sparser document. That is correct and required, never a reason to invent. Preserve the structure, section headers, formatting, tone, and every grounded line. Introduce NO new facts. If nothing needs changing, return OUTPUT verbatim. In any text you rewrite, never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 
 Return ONLY a JSON object:
-{"hasFabrication": boolean, "flags": [{"claim": "the exact invented phrase from OUTPUT", "why": "short reason", "kind": "number | date | title | employer | tool | skill | credential | result | scope | character | pronoun | other"}], "cleaned": "the full corrected OUTPUT text"}`;
+{"hasFabrication": boolean, "flags": [{"claim": "the exact invented phrase from OUTPUT", "why": "short reason", "kind": "number | date | title | employer | tool | skill | credential | result | scope | supervision | character | pronoun | other"}], "cleaned": "the full corrected OUTPUT text"}`;
 
   const user = `SOURCE (everything the person told us about themselves):
 """
@@ -293,7 +294,14 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   // onlyRewordedFrom). Anything else stays a flag, so the person is asked.
   // A truncated flag list (more than 25) keeps every wording flag too.
   const truncated = Array.isArray(parsed.flags) && parsed.flags.length > 25;
-  const factFlags = graded.filter((f) => !(f.kind === "wording" && !truncated && onlyRewordedFrom(f.claim, source)));
+  // Phase 6 (r2 ruling): a "supervision" flag is not cut; the person is asked one tap instead. It is set
+  // aside only when the deterministic scope check will raise that card for the same phrase; otherwise it
+  // stays a flag like any other.
+  const factFlags = graded.filter(
+    (f) =>
+      !(f.kind === "wording" && !truncated && onlyRewordedFrom(f.claim, source)) &&
+      !(f.kind === "supervision" && scopeHitsNotTheirs(f.claim, source).some(isPeopleScopeHit))
+  );
   const flags: GroundingFlag[] = factFlags.map((f) => ({ claim: f.claim, why: f.why }));
   const hasFabrication = flags.length > 0 || (parsed.hasFabrication === true && graded.length === 0);
   const cleaned = typeof parsed.cleaned === "string" ? parsed.cleaned.trim() : "";

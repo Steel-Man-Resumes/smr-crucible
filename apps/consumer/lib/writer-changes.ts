@@ -27,6 +27,9 @@ import { isJusticeSensitive } from "./grounding-verify";
 
 /** The line that starts the writer's change list. */
 export const CHANGES_MARKER = "===CHANGES===";
+/** The sentinel pair the writer puts around its change list (r2 M-B): unique, so nothing else matches it. */
+export const CHANGES_START = "<<<SMR-CHANGES>>>";
+export const CHANGES_END = "<<<END-SMR-CHANGES>>>";
 /** The most entries the server keeps. */
 export const CHANGES_MAX = 40;
 
@@ -41,7 +44,8 @@ export interface WriterChange {
 // "=== CHANGES ===", "CHANGES:", "**CHANGES**", "## Changes", "CHANGES BLOCK", optionally with "[]".
 const MARKER_LINE_RE = /^[\s`*#=_~-]*(?:t\.?roy'?s?\s+)?changes(?:\s+(?:block|list|made))?[\s`*#=_~-]*:?[\s`*#=_~-]*(?:\[\s*\])?[\s`*#=_~-]*$/i;
 const FENCE_LINE_RE = /^\s*```[a-z]*\s*$/i;
-const LIST_START_RE = /\[\s*\{\s*"old"\s*:/g;
+// A JSON list of change objects: "[{" with an "old" key anywhere in its first object (any key order).
+const LIST_START_RE = /\[\s*\{[^{}]{0,400}?["']old["']\s*:/g;
 
 /** The index just past the "]" that closes the "[" at `start` (string-aware), or the text's end when it never closes. */
 function closeOf(text: string, start: number): number {
@@ -55,25 +59,90 @@ function closeOf(text: string, start: number): number {
       continue;
     }
     if (ch === '"') inStr = true;
-    else if (ch === "[") depth++;
-    else if (ch === "]" && --depth === 0) return i + 1;
+    else if (ch === "[" || ch === "{") depth++;
+    else if ((ch === "]" || ch === "}") && --depth === 0) return i + 1;
   }
   return text.length;
 }
 
+function parseChangeList(block: string): unknown {
+  const t = block.trim();
+  for (const candidate of [t, t.slice(t.indexOf("["), t.lastIndexOf("]") + 1)]) {
+    if (!candidate) continue;
+    try {
+      const v = JSON.parse(candidate);
+      if (Array.isArray(v)) return v;
+      if (v && typeof v === "object" && Array.isArray((v as { changes?: unknown }).changes)) return (v as { changes: unknown[] }).changes;
+    } catch {
+      /* try the next shape */
+    }
+  }
+  return [];
+}
+
+// What a change list looks like when it slipped past the sentinels: a key of a change object, a line of only
+// brackets, braces and commas, a quoted old -> new pair, or an object wrapper.
+const LEFTOVER_LINE_RE = /["'](?:old|new|why|rule|changes)["']\s*:|^[\s[\]{}(),`]+$|^\s*[-*\u2022]?\s*["\u201C][^"\u201D]{1,300}["\u201D]\s*(?:->|=>|\u2192|became|to)\s*/i;
+
 /**
- * Split the writer's raw reply into the resume and its change list (review M3).
- * Every JSON list of changes is cut out wherever it sits (after, before or in the
- * middle of the resume; fenced, pretty-printed or on the marker's own line), with
- * the marker or label line and fences around it, and any other marker line is
- * removed. Text on both sides of the block stays the resume, so a block printed
- * first or mid-page never empties or truncates it. A list that does not parse
- * is still cut; the change list is then empty.
+ * Split the writer's raw reply into the resume and its change list.
+ *
+ * Round 3 (review r2 M-B): the writer puts its list between a unique sentinel pair; everything between them is
+ * cut, and from the start sentinel to the end of the reply when the end sentinel is missing. Replies in older
+ * shapes (a "CHANGES" marker or label, a bare or fenced list) are still handled: a marker or label line with a
+ * resume above it cuts everything from it to the end; a list printed first or mid-page is cut out with the
+ * resume kept on both sides. A last guard strips any line still shaped like the change list. The route
+ * refuses (502) a page that is not a usable resume after all of this, before any check or receipt.
  */
 export function splitWriterOutput(raw: string): { resume: string; changes: unknown } {
   let text = typeof raw === "string" ? raw.replace(/\r\n?/g, "\n") : "";
   let changes: unknown = [];
   let found = false;
+
+  // 1. The sentinel pair.
+  for (let guard = 0; guard < 5; guard++) {
+    const s = text.indexOf(CHANGES_START);
+    if (s < 0) break;
+    const e = text.indexOf(CHANGES_END, s + CHANGES_START.length);
+    const block = text.slice(s + CHANGES_START.length, e < 0 ? text.length : e);
+    if (!found) {
+      changes = parseChangeList(block);
+      found = true;
+    }
+    text = `${text.slice(0, s).replace(/\s+$/, "")}\n\n${e < 0 ? "" : text.slice(e + CHANGES_END.length).replace(/^\s+/, "")}`;
+  }
+  text = text.split(CHANGES_END).join("");
+
+  // 2. A marker or label line with a resume above it. When a JSON list or object follows it, the marker and
+  //    that block are cut and anything after stays (a block printed mid-page never drops the page's end);
+  //    when anything else follows (bullets, prose), everything from the marker to the end is the list.
+  const lines = text.split("\n");
+  const at = lines.findIndex((l, i) => MARKER_LINE_RE.test(l) && /changes/i.test(l) && isUsableResume(lines.slice(0, i).join("\n")));
+  if (at >= 0) {
+    const markerStart = lines.slice(0, at).join("\n").length + (at > 0 ? 1 : 0);
+    const afterMarker = markerStart + lines[at].length;
+    const rest = text.slice(afterMarker);
+    const lead = rest.match(/^(?:\s|```[a-z]*)*/i)?.[0] ?? "";
+    const opener = rest.charAt(lead.length);
+    if (opener === "[" || opener === "{") {
+      const blockStart = afterMarker + lead.length;
+      let end = closeOf(text, blockStart);
+      if (!found) {
+        changes = parseChangeList(text.slice(blockStart, end));
+        found = true;
+      }
+      const tail = text.slice(end).replace(/^[\s`]*\n/, "\n");
+      text = `${text.slice(0, markerStart).replace(/\s+$/, "")}\n\n${tail.replace(/^\s+/, "")}`;
+    } else {
+      if (!found) {
+        changes = parseChangeList(rest);
+        found = true;
+      }
+      text = lines.slice(0, at).join("\n");
+    }
+  }
+
+  // 3. A list printed first or mid-page (no usable resume above its marker): cut it, keep both sides.
   for (let guard = 0; guard < 5; guard++) {
     LIST_START_RE.lastIndex = 0;
     const m = LIST_START_RE.exec(text);
@@ -88,18 +157,15 @@ export function splitWriterOutput(raw: string): { resume: string; changes: unkno
       }
       found = true;
     }
-    // Back to the start of the line when only a marker, a fence or nothing sits before the list on it.
     const lineStart = text.lastIndexOf("\n", start - 1) + 1;
     const before = text.slice(lineStart, start);
     if (!before.trim() || MARKER_LINE_RE.test(before) || FENCE_LINE_RE.test(before)) start = lineStart;
-    // Then back over the blank, fence and marker lines right above it.
     while (start > 0) {
       const prevStart = text.lastIndexOf("\n", start - 2) + 1;
       const prev = text.slice(prevStart, start - 1);
       if (!prev.trim() || FENCE_LINE_RE.test(prev) || MARKER_LINE_RE.test(prev)) start = prevStart;
       else break;
     }
-    // Forward over the rest of the closing line (fence marks) and fence lines right after it.
     const lineEnd = text.indexOf("\n", end);
     const restOfLine = lineEnd < 0 ? text.slice(end) : text.slice(end, lineEnd);
     if (!restOfLine.replace(/`/g, "").trim()) end = lineEnd < 0 ? text.length : lineEnd;
@@ -111,10 +177,11 @@ export function splitWriterOutput(raw: string): { resume: string; changes: unkno
     }
     text = `${text.slice(0, start).replace(/\s+$/, "")}\n\n${text.slice(end).replace(/^\s+/, "")}`;
   }
-  // Any marker line left over (no list after it, or "CHANGES: []") never ships.
+
+  // 4. Last guard: no line shaped like the change list ships.
   const resume = text
     .split("\n")
-    .filter((l) => (!MARKER_LINE_RE.test(l) || !/changes/i.test(l)) && !/^\s*`*\s*\[\s*\]\s*`*\s*$/.test(l))
+    .filter((l) => !(MARKER_LINE_RE.test(l) && /changes/i.test(l)) && !LEFTOVER_LINE_RE.test(l) && !FENCE_LINE_RE.test(l))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();

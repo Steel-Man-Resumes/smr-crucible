@@ -107,7 +107,7 @@ const STOP = new Set(["and", "of", "the", "for", "with", "in", "on", "to", "a", 
  * `section` says whether the line sits under a skills heading (each term is a
  * skill claim there).
  */
-export function untracedFacts(line: string, source: string | SourceIndex, opts: { section?: "skills" | "other" } = {}): UntracedFact[] {
+export function untracedFacts(line: string, source: string | SourceIndex, opts: { section?: "skills" | "other"; job?: string } = {}): UntracedFact[] {
   const src = typeof source === "string" ? indexSource(source) : source;
   const out: UntracedFact[] = [];
   const t = line.trim();
@@ -133,7 +133,7 @@ export function untracedFacts(line: string, source: string | SourceIndex, opts: 
 
   // Scope: running people the person did not say they ran (meaning, not the exact verb),
   // and words that widen what the work covered.
-  for (const h of scopeHitsNotTheirs(t, src.text)) push("scope", h.word);
+  for (const h of scopeHitsNotTheirs(t, src.text, { job: opts.job })) push("scope", h.word);
   for (const m of hits(SIZE_RE, t)) {
     const w = m.toLowerCase();
     if (src.flat.includes(` ${w} `) || saidPhrase(src, m)) continue;
@@ -200,13 +200,17 @@ export function untracedFacts(line: string, source: string | SourceIndex, opts: 
 export function traceDocument(output: string, source: string): Array<{ line: string; untraced: UntracedFact[] }> {
   const src = indexSource(source);
   let section: "skills" | "other" = "other";
+  // The job header each line sits under: scope is read against that job's words (r2 ruling).
+  let job: string | undefined;
   return (output || "").split("\n").map((raw) => {
     const line = raw.trim();
     if (isSectionHeader(line) || SKILLS_HEADING_RE.test(line.replace(/:$/, ""))) {
       section = SKILLS_HEADING_RE.test(line.replace(/:$/, "")) ? "skills" : "other";
+      job = undefined;
       return { line, untraced: [] };
     }
-    return { line, untraced: line ? untracedFacts(line, src, { section }) : [] };
+    if (line.includes("|") && !/^[-*\u2022]/.test(line) && !line.includes("@")) job = line;
+    return { line, untraced: line ? untracedFacts(line, src, { section, job }) : [] };
   });
 }
 
@@ -215,49 +219,53 @@ export function factsTraceBack(line: string, source: string | SourceIndex, opts:
   return untracedFacts(line, source, opts).length === 0;
 }
 
-// ---- review M1: when a "wording" flag may be dropped ---------------------------------------
-
-// The plain action verbs a rewording may bring in: the verb is the rewording.
-// Scope verbs (supervised, led...) are not here: they are judged by the scope check.
-const PLAIN_VERBS = new Set(
-  ["ran", "run", "runs", "handled", "handle", "served", "serve", "operated", "operate", "performed", "perform", "completed",
-   "complete", "conducted", "conduct", "drove", "drive", "carried", "carry", "made", "make", "built", "build", "prepared",
-   "prepare", "worked", "work", "did", "do", "used", "use", "took", "take", "kept", "keep", "set", "fixed", "fix"]
-);
-// Words that keep a line at its true size. If the person's line has one, the reworded line keeps it.
-const LIMITING_RE = /\b(?:help(?:ed|ing|s)?|assist(?:ed|ing|s)?|with\s+(?:the|a|my|our)\s+\w+|under|alongside|until|expired|lapsed|former(?:ly)?|part\s+of|some|sometimes|occasionally|when\s+(?:needed|asked|assigned)|as\s+needed|backup|back-up|fill(?:ed)?\s+in|trainee|in\s+training|learning|class|course)\b/gi;
+// ---- review M1 / r2 M-A: when a "wording" flag may be dropped ------------------------------------------
+// A CLOSED list (CC ruling r2): duty phrasing on the person's line may become one of a few verbs that keep the
+// same work, about the very same object. Any other verb change keeps the flag.
+const DUTY_LEAD_RE = /^(?:i\s+)?(?:was\s+)?(?:responsible\s+for|did|do|does|dealt\s+with|deal\s+with|handled|handle|took\s+care\s+of|take\s+care\s+of|worked\s+on|work\s+on|duties\s+included)\s+(.+)$/i;
+const SAME_WORK_VERB_RE = /^(?:handled|completed|ran|performed|kept\s+up(?:\s+with)?)\s+(.+)$/i;
+// Words that keep a line at its true size. Wherever their words about this object carry one, the line keeps it.
+const LIMITING_RE = /\b(?:help(?:ed|ing|s)?|assist(?:ed|ing|s)?|under|alongside|along|rode|until|expired|lapsed|former(?:ly)?|part\s+of|some|sometimes|occasionally|when\s+(?:needed|asked|assigned)|as\s+needed|backup|back-up|fill(?:ed)?\s+in|trainee|in\s+training|learning|class|course)\b/gi;
 const FUNCTION_WORDS = new Set(["the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "for", "with", "by", "from", "as", "into", "per", "my", "our", "their", "his", "her", "its", "this", "that", "these", "those", "all", "each"]);
+const objectStems = (t: string) => words(t).filter((w) => !FUNCTION_WORDS.has(w)).map(stemOf);
+const sameSet = (a: string[], b: string[]) => {
+  const A = new Set(a);
+  const B = new Set(b);
+  return A.size > 0 && A.size === B.size && Array.from(A).every((x) => B.has(x));
+};
 
 /**
- * True only when `claim` is provably a rewording of ONE line of the person's own words: every fact on it
- * traces back (numbers too, to that same line), no scope claim is new, every limiting word of their line
- * (helped, under, until, expired...) is still there, and the only new words are plain action verbs. A new
- * duty, a new noun, a new size word or a lost "helped" means it is not, and the flag stays.
+ * True only when `claim` is provably a rewording of a line of the person's own words: their line is duty
+ * phrasing ("Did safety audits.", "Responsible for the dock paperwork.") and the claim is one of the same-work
+ * verbs (handled, completed, ran, performed, kept up) about exactly the same object, every fact traces back,
+ * and every limiting word in ANY of their lines about that object (helped, under, until, rode along...) is
+ * kept. Anything else (a new duty, a new verb, a lost "helped", a size word) keeps the flag.
  */
 export function onlyRewordedFrom(claim: string, source: string): boolean {
-  const c = claim.trim();
+  const c = claim.trim().replace(/^[-*\u2022]\s*/, "").replace(/[.!?;]+$/, "");
   if (!c || !factsTraceBack(c, source)) return false;
-  const cw = words(c).filter((w) => !FUNCTION_WORDS.has(w));
-  if (!cw.length) return false;
-  const cStems = new Set(cw.map(stemOf));
-  let best: { line: string; score: number } | null = null;
-  for (const raw of (source || "").split(/\n|(?<=[.!?;])\s+/)) {
-    const line = raw.trim();
-    if (!line) continue;
-    const ls = new Set(words(line).map(stemOf));
-    const score = Array.from(cStems).filter((x) => ls.has(x)).length;
-    if (score > 0 && (!best || score > best.score)) best = { line, score };
-  }
-  if (!best) return false;
-  const lineStems = new Set(words(best.line).map(stemOf));
-  // New words: only plain action verbs.
-  if (cw.some((w) => !lineStems.has(stemOf(w)) && !PLAIN_VERBS.has(w))) return false;
-  // Numbers come from that same line.
-  const ln = numbersOf(best.line);
-  for (const n of numbersOf(c)) if (!ln.has(n)) return false;
-  // Every limiting word of their line is kept.
-  for (const m of best.line.matchAll(new RegExp(LIMITING_RE.source, "gi"))) {
-    if (!new RegExp(`\\b${m[0].split(/\s+/)[0].replace(/[^a-z-]/gi, "")}`, "i").test(c)) return false;
+  const sentences = (source || "")
+    .split(/\n|(?<=[.!?;])\s+/)
+    .map((l) => l.trim().replace(/^[-*\u2022]\s*/, "").replace(/[.!?;]+$/, ""))
+    .filter(Boolean);
+  // Unchanged apart from case and punctuation: nothing to judge.
+  if (sentences.some((l) => l.toLowerCase() === c.toLowerCase())) return true;
+  const cv = c.match(SAME_WORK_VERB_RE);
+  if (!cv) return false;
+  const obj = objectStems(cv[1]);
+  const from = sentences.find((l) => {
+    const d = l.match(DUTY_LEAD_RE);
+    return !!d && sameSet(objectStems(d[1]), obj);
+  });
+  if (!from) return false;
+  // Every line of theirs that names this object: its limiting words must all be on the claim.
+  const nouns = new Set(obj.filter((x) => x.length >= 4));
+  for (const l of sentences) {
+    if (!objectStems(l).some((x) => nouns.has(x))) continue;
+    for (const m of l.matchAll(new RegExp(LIMITING_RE.source, "gi"))) {
+      const head = m[0].split(/\s+/)[0].toLowerCase();
+      if (!new RegExp(`\\b${head.replace(/[^a-z-]/g, "")}`, "i").test(c)) return false;
+    }
   }
   return true;
 }

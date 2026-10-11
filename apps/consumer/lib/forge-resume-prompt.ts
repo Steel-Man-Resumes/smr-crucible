@@ -13,7 +13,7 @@ import { resumeRulesBlock, RESUME_RULES_VERSION } from "@crucible/core/src/resum
 import { buildFullContext, userContextFromForge } from "./context-library";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "./limits";
 import { withholdRecordLines } from "./record-lines";
-import { CHANGES_MARKER, CHANGES_MAX } from "./writer-changes";
+import { CHANGES_START, CHANGES_END, CHANGES_MAX } from "./writer-changes";
 
 export interface GenerateDocsInput {
   narrative?: {
@@ -105,7 +105,7 @@ ${resumeRulesBlock("page")}
 FORGE WRITER RULES:
 1. RECORD: ${input.keepInsideLines === true ? KEEP_INSIDE_RULE : WITHHOLD_RULE}
 2. Past roles in past tense, the current role in present tense.
-3. REWORDING (reword freely, facts locked): every bullet starts with a strong, specific action verb, then what was done, with any amount or size only in the person's own numbers and words (never add a size word such as "large", "heavy", "major" or "daily"), then a result only if the person gave one. Rewrite every duty line ("responsible for", "duties included", "did", "dealt with", "in charge of", "worked with") into what it means, from the person's facts: "In charge of the guys on my shift." becomes "Supervised the shift crew."; "Did safety audits." becomes "Ran safety audits on the floor." only if they said where, otherwise "Ran safety audits." Locked in every reworded line: numbers, job titles, employers, dates, credentials (type and status) and scope ("helped" stays helped, never led or sole). SUPERVISING PEOPLE IS SCOPE: write "supervised", "led", "oversaw", "directed" or "managed" people only when that same job's facts show the person was over people, meaning a supervisor, lead, foreman or manager type title for that job, or their own words saying they were in charge of people ("in charge of employees on my shift", "my crew", "ran a crew of 4"). "Responsible for" a shift, an area, a task or a thing never becomes supervising: "Responsible for 3rd shift" under the title Production Supervisor may become "Supervised third-shift production", but under the title Machine Operator it stays about the work the person did on that shift, in their own words, never "supervised". Facts belong to their own job: never move a number, duty or scope from one job to another. Anything NEW (a number, a result, a tool, a skill the person never named) is never added.
+3. REWORDING (reword freely, facts locked): every bullet starts with a strong, specific action verb, then what was done, with any amount or size only in the person's own numbers and words (never add a size word such as "large", "heavy", "major" or "daily"), then a result only if the person gave one. Rewrite every duty line ("responsible for", "duties included", "did", "dealt with", "in charge of", "worked with") into what it means, from the person's facts: "In charge of the guys on my shift." becomes "Supervised the shift crew."; "Did safety audits." becomes "Ran safety audits on the floor." only if they said where, otherwise "Ran safety audits." Locked in every reworded line: numbers, job titles, employers, dates, credentials (type and status) and scope ("helped" stays helped, never led or sole). SUPERVISING PEOPLE IS SCOPE: a line saying the person was over people ("supervised", "led", "oversaw", "directed" or "managed" people) is settled only when their own words for that job say it in so many words ("supervised 4 workers", "in charge of employees on my shift", "led a crew of 6"). A title, "my crew", a shift, a place or a task never says it. You may still write such a line when that job's facts point to it (for example "Responsible for 3rd shift" under the title Production Supervisor becoming "Supervised third-shift production"); the person is asked one tap, "Were you over other people in this job?", and a No puts their own words back. Never turn "responsible for" a task or thing ("the crew's safety gear", "cleaning the kitchen") into supervising, and "helped" never becomes led. "Managed" a thing (inventory, accounts) is a duty, not people. Facts belong to their own job: never move a number, duty or scope from one job to another. Anything NEW (a number, a result, a tool, a skill the person never named) is never added.
 4. PAGE LENGTH: ${input.onePage === true ? "The person chose ONE page. Keep to one page by leading with the strongest true lines and shortening older roles to title, employer and years. Never drop a role, a date or a fact to make room." : "Two pages when the person's true history fills them, one page when it doesn't. Never add filler to reach a second page, and never more than two pages."}
 5. FORMAT: reverse-chronological, dates on every entry. Use a hybrid only under the hybrid rule in the page rules above.
 6. NO OBJECTIVE, EVER. If the person's page opens with an objective, drop it: the headline and summary replace it, built from their facts.
@@ -232,13 +232,14 @@ CRITICAL REMINDERS:
 - Certifications get their OWN section, never buried in education.
 - No objective. No soft-skill words in the skills section. Every date in the form the person wrote it.
 
-CHANGES BLOCK (after the resume, on its own lines, exactly this shape):
-${CHANGES_MARKER}
+CHANGES BLOCK (after the resume, on its own lines, exactly this shape, between these two marker lines):
+${CHANGES_START}
 [{"old": "a line copied exactly from the ORIGINAL RESUME TEXT", "new": "the line it became, copied exactly from your resume above", "why": "one plain sentence", "rule": "duty_phrasing"}]
+${CHANGES_END}
 
 - At most ${CHANGES_MAX} entries, only for lines that were weak on the person's page: an objective (rule "objective", new = your headline or first summary sentence), a soft-skill list (rule "soft_skill_list", new = your skills line), duty phrasing (rule "duty_phrasing"), a line that was not a bullet (rule "bullet"), a heading (rule "heading"), a missing or weak summary (rule "summary"), or a date written differently from its other dates (rule "date_format"; never change the date itself).
-- "why" is one short sentence, spoken to the person, that says what an employer reads in the old line and what the new one proves. Plain words, no dashes. Example: "\"Responsible for\" reads like a job description. Saying what you ran shows what you did."
-- "old" and "new" must be copied character for character. Leave out any entry you cannot copy exactly. If nothing changed, write ${CHANGES_MARKER} and then [].`;
+- "why" is one short sentence, spoken to the person, that says what an employer reads in the old line and what the new one proves. Plain words, no dashes. Example: "\"Did\" is a weak start. Saying you ran the audits shows the work was yours."
+- "old" and "new" must be copied character for character. Leave out any entry you cannot copy exactly. If nothing changed, write ${CHANGES_START}, then [], then ${CHANGES_END}. Nothing about the changes goes anywhere else in your reply.`;
 
   return { system, user };
 }
