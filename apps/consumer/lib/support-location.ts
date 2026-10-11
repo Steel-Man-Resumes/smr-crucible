@@ -25,8 +25,14 @@ export interface Place {
   state: string | null;
   /** Folded for matching (lib/location-search foldName). */
   cityKey: string | null;
-  /** Folded, without the word "county". */
+  /** Folded, without the word "county", when the person named a county. */
   countyKey: string | null;
+  /**
+   * Every county the place sits in, folded: the named county, or the counties
+   * a city or ZIP falls in (filled by the server from the Census list,
+   * lib/support-place-index.ts). Empty when unknown.
+   */
+  countyKeys: string[];
   zip: string | null;
   /** A short, normalised label to show back: "Libby, MT", "Lincoln County, MT", "MT 59923". Never the raw text. */
   label: string | null;
@@ -76,7 +82,7 @@ export function stateName(code: string | null): string | null {
   return code ? US_STATE_NAMES[code] ?? null : null;
 }
 
-const EMPTY: Place = { state: null, cityKey: null, countyKey: null, zip: null, label: null, given: false };
+const EMPTY: Place = { state: null, cityKey: null, countyKey: null, countyKeys: [], zip: null, label: null, given: false };
 
 export function parsePlace(location: unknown): Place {
   if (typeof location !== "string") return EMPTY;
@@ -125,5 +131,5 @@ export function parsePlace(location: unknown): Place {
   else if (state && zipKept) label = `${state} ${zipKept}`;
   else if (state) label = stateName(state) ?? state;
 
-  return { state, cityKey, countyKey, zip: zipKept, label, given: true };
+  return { state, cityKey, countyKey, countyKeys: countyKey ? [countyKey] : [], zip: zipKept, label, given: true };
 }

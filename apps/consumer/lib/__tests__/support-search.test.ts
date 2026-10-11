@@ -22,7 +22,7 @@ describe("reading the place", () => {
   test("the Forge's saved shapes", () => {
     assert.deepEqual(
       { ...parsePlace("Milwaukee, WI") },
-      { state: "WI", cityKey: "milwaukee", countyKey: null, zip: null, label: "Milwaukee, WI", given: true }
+      { state: "WI", cityKey: "milwaukee", countyKey: null, countyKeys: [], zip: null, label: "Milwaukee, WI", given: true }
     );
     const z = parsePlace("Libby, MT 59923");
     assert.equal(z.state, "MT"); assert.equal(z.cityKey, "libby"); assert.equal(z.zip, "59923");
@@ -180,6 +180,9 @@ describe("HUD counselors", () => {
     assert.equal(hud[0].lastChecked, null, "fetched today is not checked today");
     assert.match(hud[0].checkedLine, /HUD's live list\. We have not checked this one ourselves/);
     assert.ok(!JSON.stringify(r).toLowerCase().includes("milwaukee"));
+    // HUD's list is not our check: the place still reads as not covered, and the line says HUD is there.
+    assert.equal(r.coverage.level, "national");
+    assert.match(r.coverage.line ?? "", /We don't have checked local listings for Columbus, OH yet\. These work anywhere\. HUD's counselors near you are listed too\./);
   });
 
   test("HUD is not asked without a state, and gets the normalised place, never the raw text", async () => {

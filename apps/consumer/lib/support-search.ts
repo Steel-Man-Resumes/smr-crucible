@@ -8,8 +8,12 @@
  * person sees the services that work anywhere and a plain line saying so.
  * Nobody in New York is handed a Wisconsin shelter.
  *
- * Every result says where it came from and when it was last checked. A HUD
- * counselor fetched live is labelled as HUD's list, not as checked by us.
+ * Sources, in order: the checked resource directory (migration 082,
+ * resource_app_v: approved, fresh, active services only); the earlier
+ * hand-checked list, only where the directory has nothing as close to the
+ * person; and HUD's counselor list for housing. Every result says which one
+ * it came from and when it was last checked. A HUD counselor fetched live is
+ * labelled as HUD's list, not as checked by us.
  *
  * Pure apart from the injected lookups, so the route is tested end to end
  * with fake HUD answers and no network.
@@ -21,9 +25,15 @@ import {
   type ResourceCategory,
   type ResourceEntry,
 } from "./resource-directory";
-import { parsePlace, stateName, type Place } from "./support-location";
+import { countyKeyOf, parsePlace, stateName, type Place } from "./support-location";
 import { foldName } from "./location-search";
 import type { CounselorResult } from "./hud-counselors";
+import {
+  RESOURCE_AREAS,
+  isResourceArea,
+  type ResourceArea,
+  type ResourceAppRow,
+} from "@crucible/core/src/resourceDirectoryShared";
 
 // ─── Scope ──────────────────────────────────────────────────────────────────
 
@@ -50,7 +60,7 @@ export function scopeCovers(scope: ServiceScope, place: Place): boolean {
   const zipHit = !!place.zip && !!scope.zips?.includes(place.zip);
   const cityHit = !!place.cityKey && !!scope.cities?.includes(place.cityKey);
   if (scope.level === "city") return cityHit || zipHit;
-  const countyHit = !!place.countyKey && !!scope.counties?.includes(place.countyKey);
+  const countyHit = place.countyKeys.some((k) => !!scope.counties?.includes(k));
   return countyHit || cityHit || zipHit;
 }
 
@@ -100,6 +110,43 @@ function isCuratedCategory(s: unknown): s is ResourceCategory {
   return typeof s === "string" && (CURATED_CATEGORIES as readonly string[]).includes(s);
 }
 
+/** The directory areas (072 resource_area) behind each category of the earlier list. */
+export const CATEGORY_AREAS: Record<ResourceCategory, ResourceArea[]> = {
+  housing: ["shelter"],
+  transportation: ["transportation"],
+  legal: ["legal_aid", "expungement", "courts"],
+  id_documents: ["id_documents"],
+  mental_health: ["mental"],
+  substance: ["recovery"],
+  education: ["education", "training"],
+  financial: ["financial"],
+  employment: ["jobs", "training"],
+};
+
+/** The earlier-list categories an area answers (training answers two). */
+export function categoriesOfArea(area: string): ResourceCategory[] {
+  return CURATED_CATEGORIES.filter((c) => (CATEGORY_AREAS[c] as string[]).includes(area));
+}
+
+export interface Wanted {
+  categories: ResourceCategory[];
+  areas: ResourceArea[];
+}
+
+/**
+ * What a request asks about: categories of the earlier list (or barriers that
+ * map to them), or a directory area by its own name ("food"). Unknown words
+ * are dropped, never guessed; nothing asked for means everything.
+ */
+export function requestedWants(category: unknown, barriers: unknown): Wanted {
+  const cats = requestedCategories(category, barriers);
+  if (cats === "all") return { categories: [...CURATED_CATEGORIES], areas: [...RESOURCE_AREAS] };
+  const areas = new Set<ResourceArea>();
+  for (const c of cats) CATEGORY_AREAS[c].forEach((a) => areas.add(a));
+  if (!cats.length && isResourceArea(category)) areas.add(category);
+  return { categories: cats, areas: [...areas] };
+}
+
 /** Which categories a request asks about. Unknown words are dropped, never guessed. */
 export function requestedCategories(category: unknown, barriers: unknown): ResourceCategory[] | "all" {
   if (isCuratedCategory(category)) return [category];
@@ -117,7 +164,7 @@ export function requestedCategories(category: unknown, barriers: unknown): Resou
 
 // ─── Results ────────────────────────────────────────────────────────────────
 
-export type ResultSource = "curated" | "hud";
+export type ResultSource = "directory" | "curated" | "hud";
 
 export interface SupportResult {
   id: string;
@@ -217,6 +264,63 @@ function fromCurated(r: ResourceEntry, today: string): SupportResult {
   };
 }
 
+const SCOPE_LEVEL: Record<ResourceAppRow["geo_scope"], ScopeLevel> = {
+  city: "city", county: "county", multi_county: "county", statewide: "state", national: "national",
+};
+
+const titleCase = (s: string) => s.replace(/\b\w/g, (c) => c.toUpperCase());
+const countyWord = (s: string) => (/\s(county|parish|borough)$/i.test(s) ? s : `${s} County`);
+
+/** A directory row's real reach, from its geo_scope and place fields. */
+export function directoryScope(r: ResourceAppRow): ServiceScope {
+  const level = SCOPE_LEVEL[r.geo_scope] ?? "national";
+  const st = /^[A-Z]{2}$/.test(r.state) ? r.state : null;
+  if (level === "national") return { level, state: null, label: "Anywhere in the US" };
+  if (level === "state") return { level, state: st, label: stateName(st) ?? st ?? "One state" };
+  const zips = r.zip && /^\d{5}$/.test(r.zip.slice(0, 5)) ? [r.zip.slice(0, 5)] : [];
+  if (level === "city") {
+    return { level, state: st, cities: r.city ? [foldName(r.city)] : [], zips, label: [r.city ? titleCase(r.city) : null, st].filter(Boolean).join(", ") };
+  }
+  const named = [...(r.counties ?? []), ...(r.county ? [r.county] : [])].filter((c) => typeof c === "string" && c.trim());
+  const counties = [...new Set(named.map(countyKeyOf))];
+  const label = named.length === 1
+    ? `${titleCase(countyWord(named[0]))}, ${st}`
+    : named.length > 1
+      ? `${named.slice(0, -1).map((c) => titleCase(c.replace(/\s+county$/i, ""))).join(", ")} and ${titleCase(named[named.length - 1].replace(/\s+county$/i, ""))} counties, ${st}`
+      : `${stateName(st) ?? st}, some counties`;
+  return { level, state: st, counties, cities: r.city ? [foldName(r.city)] : [], zips, label };
+}
+
+export function fromDirectory(r: ResourceAppRow): SupportResult {
+  const scope = directoryScope(r);
+  const cats = categoriesOfArea(r.area_id);
+  const lastChecked = String(r.last_checked).slice(0, 10);
+  const stZip = [r.state, r.zip].filter(Boolean).join(" ");
+  return {
+    id: `dir-${r.service_id}`,
+    source: "directory",
+    sourceLabel: "Steel Man's checked directory",
+    category: cats[0] ?? r.area_id,
+    type: "curated",
+    title: r.service_name?.trim() || r.org_name,
+    provider: r.org_name,
+    description: r.description,
+    phone: r.phone || undefined,
+    address: r.address ? [r.address, r.city, stZip].filter(Boolean).join(", ") : undefined,
+    hours: r.hours || undefined,
+    eligibility: r.eligibility || undefined,
+    website: r.website && /^https?:\/\//i.test(r.website) ? r.website : undefined,
+    tags: [r.area_id],
+    scope: scope.level,
+    state: scope.state,
+    area: scope.label,
+    lastChecked,
+    checkedLine: `Last checked ${showDate(lastChecked)}.`,
+    sourceUrl: /^https?:\/\//i.test(r.source_url) ? r.source_url : null,
+    mayBeOutOfDate: false,
+  };
+}
+
 /** A HUD counselor keeps the address and state HUD gave. */
 export function fromHud(c: CounselorResult): SupportResult {
   const state = /^[A-Z]{2}$/.test(c.state) ? c.state : null;
@@ -245,7 +349,13 @@ export function fromHud(c: CounselorResult): SupportResult {
   };
 }
 
-function coverageFor(place: Place, results: SupportResult[]): Coverage {
+/**
+ * How close our CHECKED listings come. HUD's live list is not our check, so it
+ * never makes a place count as covered; when it is there the line says so.
+ */
+function coverageFor(place: Place, all: SupportResult[]): Coverage {
+  const results = all.filter((r) => r.source !== "hud");
+  const hudNote = all.some((r) => r.source === "hud") ? " HUD's counselors near you are listed too." : "";
   const best = results.reduce<ScopeLevel>((acc, r) => (LEVEL_ORDER[r.scope] < LEVEL_ORDER[acc] ? r.scope : acc), "national");
   if (!place.given) {
     return { level: best, place: null, line: "Add your city and state to see help near you. These work anywhere." };
@@ -259,13 +369,13 @@ function coverageFor(place: Place, results: SupportResult[]): Coverage {
   }
   const where = place.label ?? stateName(place.state) ?? place.state;
   if (best === "national") {
-    return { level: best, place: where, line: `We don't have checked local listings for ${where} yet. These work anywhere.` };
+    return { level: best, place: where, line: `We don't have checked local listings for ${where} yet. These work anywhere.${hudNote}` };
   }
   if (best === "state" && (place.cityKey || place.countyKey || place.zip)) {
     return {
       level: best,
       place: where,
-      line: `We don't have checked listings for ${where} itself yet. These cover ${stateName(place.state) ?? place.state} or work anywhere.`,
+      line: `We don't have checked listings for ${where} itself yet. These cover ${stateName(place.state) ?? place.state} or work anywhere.${hudNote}`,
     };
   }
   return { level: best, place: where, line: null };
@@ -273,6 +383,10 @@ function coverageFor(place: Place, results: SupportResult[]): Coverage {
 
 export interface SupportSearchDeps {
   findHud: (location: string) => Promise<CounselorResult[]>;
+  /** resource_app_v rows for some areas, national plus the given state (core readResourceDirectory). */
+  readDirectory?: (opts: { state: string | null; areas: readonly string[] }) => Promise<ResourceAppRow[]>;
+  /** The counties a city or ZIP sits in, folded (lib/support-place-index.ts). */
+  countiesOf?: (place: Place) => string[];
   /** YYYY-MM-DD, injectable for tests. */
   today?: string;
 }
@@ -291,15 +405,67 @@ export function hudQueryFor(place: Place): string | null {
   return null;
 }
 
-export async function searchSupport(input: SupportSearchInput, deps: SupportSearchDeps): Promise<SupportSearchResponse & { place: Place }> {
+export interface SupportSearchResult extends SupportSearchResponse {
+  place: Place;
+  /** false when the directory could not be read (missing view, outage): the earlier list stood in. */
+  directoryRead: boolean;
+}
+
+export async function searchSupport(input: SupportSearchInput, deps: SupportSearchDeps): Promise<SupportSearchResult> {
   const today = deps.today ?? new Date().toISOString().slice(0, 10);
-  const place = parsePlace(input.location);
+  const parsed = parsePlace(input.location);
+  let place = parsed;
+  if (deps.countiesOf && parsed.state && !parsed.countyKey && (parsed.cityKey || parsed.zip)) {
+    try {
+      const found = deps.countiesOf(parsed).filter((k) => typeof k === "string" && k);
+      if (found.length) place = { ...parsed, countyKeys: [...new Set(found)] };
+    } catch {
+      // No county lookup: city and ZIP matching still work.
+    }
+  }
   const cats = requestedCategories(input.category, input.barriers);
+  const want = requestedWants(input.category, input.barriers);
   const wanted = (c: string) => cats === "all" || (cats as string[]).includes(c);
 
-  let results: SupportResult[] = RESOURCE_DIRECTORY
+  // 1. The checked directory first.
+  let dirRows: ResourceAppRow[] = [];
+  let directoryRead = !deps.readDirectory;
+  if (deps.readDirectory && want.areas.length) {
+    try {
+      const rows = await deps.readDirectory({ state: place.state, areas: want.areas });
+      dirRows = rows.filter((r) => want.areas.includes(r.area_id as ResourceArea) && scopeCovers(directoryScope(r), place));
+      directoryRead = true;
+    } catch {
+      directoryRead = false;
+    }
+  } else if (deps.readDirectory) {
+    directoryRead = true;
+  }
+
+  // 2. The earlier list, only where the directory has nothing as close to the
+  // person for that kind of help (the category's main area: shelter for
+  // housing, jobs for employment): a directory county listing replaces earlier
+  // county, state and national ones; a directory national listing replaces
+  // only earlier national ones. A side area (training, expungement) adds to
+  // the earlier list rather than replacing it.
+  const directory = dirRows.map(fromDirectory);
+  const closest = new Map<ResourceCategory, number>();
+  for (const r of dirRows) {
+    for (const c of CURATED_CATEGORIES) {
+      if (CATEGORY_AREAS[c][0] !== r.area_id) continue;
+      const lvl = LEVEL_ORDER[directoryScope(r).level];
+      if (!closest.has(c) || lvl < (closest.get(c) as number)) closest.set(c, lvl);
+    }
+  }
+  const curated = RESOURCE_DIRECTORY
     .filter((r) => wanted(r.category) && scopeCovers(CURATED_SCOPES[r.geo], place))
+    .filter((r) => {
+      const dirBest = closest.get(r.category);
+      return dirBest === undefined || LEVEL_ORDER[CURATED_SCOPES[r.geo].level] < dirBest;
+    })
     .map((r) => fromCurated(r, today));
+
+  let results: SupportResult[] = [...directory, ...curated];
 
   // HUD's counselor search is by distance from a real place. Asked only when
   // the place has a state, and only counselors in that state are kept: the
@@ -316,7 +482,8 @@ export async function searchSupport(input: SupportSearchInput, deps: SupportSear
     }
   }
 
-  results.sort((a, b) => LEVEL_ORDER[a.scope] - LEVEL_ORDER[b.scope]);
-  return { resources: results, coverage: coverageFor(place, results), place };
+  const SOURCE_ORDER: Record<ResultSource, number> = { directory: 0, hud: 1, curated: 2 };
+  results.sort((a, b) => LEVEL_ORDER[a.scope] - LEVEL_ORDER[b.scope] || SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source]);
+  return { resources: results, coverage: coverageFor(place, results), place, directoryRead };
 }
 
