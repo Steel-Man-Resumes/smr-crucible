@@ -68,10 +68,10 @@ test("headings: every common spelling is a heading, in any case, with and or &",
   assert.equal(isSectionHeader("Ran the dish line"), false);
 });
 
-// ---- CC ruling H1 (round 2): supervising people is scope ------------------------------------------
+// ---- CC rulings H1 (round 2) and r2 (round 3): being over people is scope ---------------------------------
 
 const RULING_FLAGGED: Array<[string, string]> = [
-  // Reviewer probes: each was flagged at base and must stay flagged.
+  // r1 reviewer probes.
   ["Supervised the crew.", "Responsible for the crew's safety gear."],
   ["Led the 3rd shift crew.", "Responsible for 3rd shift cleanup."],
   ["Supervised the kitchen.", "Responsible for cleaning the kitchen."],
@@ -83,34 +83,78 @@ const RULING_FLAGGED: Array<[string, string]> = [
   ["Supervised the line crew.", "Ran the line."],
   ["Supervised forklift operators.", "Responsible for the forklift."],
   ["Oversaw forklift operations.", "Responsible for the forklift."],
-  // The ruling's own cases.
-  ["Supervised third-shift production", "Machine Operator | Acme | 2019 - 2021\nResponsible for 3rd shift."],
   ["Supervised the 3rd shift crew.", "Responsible for 3rd shift."],
   ["Led the warehouse crew", "Helped the lead with the warehouse crew."],
   ["Managed the kitchen", "I ran the kitchen at night."],
   ["Trained the shift crew", "In charge of the guys on my shift."],
   ["Supervised the nursing staff", "In charge of the guys on my shift."],
+  // r2 H-A: titles never say it, of any kind.
+  ["Supervised the abatement crew.", "Lead Abatement Worker | Acme Environmental | 2019 - 2021\nRemoved lead paint from homes."],
+  ["Led the paint removal crew in homes.", "Lead Abatement Worker | Acme Environmental | 2019 - 2021\nRemoved lead paint from homes."],
+  ["Managed prospects and directed the calling team.", "Lead Generation Specialist | Beta Marketing | 2020 - 2022\nCalled prospects."],
+  ["Managed the customer accounts team.", "Account Manager | Gamma Supply | 2018 - 2020\nKept customer accounts current."],
+  ["Supervised customer account staff.", "Account Manager | Gamma Supply | 2018 - 2020\nKept customer accounts current."],
+  ["Supervised client services staff.", "Case Manager | Delta Services | 2018 - 2020\nMet with clients weekly."],
+  ["Supervised the bell staff and carried bags.", "Bell Captain | Hotel Rio | 2017 - 2019\nCarried bags."],
+  ["Managed the entire Acme store and all shelf staff.", "Shift Lead | Acme | 2020 - 2022\nStocked shelves at Acme."],
+  ["Supervised all Acme store employees.", "Shift Lead | Acme | 2020 - 2022\nStocked shelves at Acme."],
+  ["Supervised third-shift production", "Production Supervisor | Acme | 2019 - 2021\nResponsible for 3rd shift."],
+  ["Supervised third-shift production", "Machine Operator | Acme | 2019 - 2021\nResponsible for 3rd shift."],
+  ["Supervised the press crew.", "Machine Operator | Acme Plant | 2016 - 2019\nRan the press.\nProduction Supervisor | Beta Works | 2019 - 2022\nScheduled orders for the press line."],
+  // r2 H-B: "my crew" never says it.
+  ["Supervised the crew loading trucks.", "My crew and I loaded trucks."],
+  ["Supervised the crew.", "My crew lead trained me on the forklift."],
+  ["Supervised the workers.", "I filed my workers' comp claim late."],
+  ["Led the crew cleaning the warehouse.", "Me and my crew cleaned the warehouse."],
+  ["Supervised the staff.", "I got along with my staff supervisor."],
+  ["Supervised the crew", "Me and my crew loaded trucks."],
+  // r2 ruling: "ran" is not one of the explicit verbs.
+  ["Supervised the crew", "I ran a crew of 4."],
 ];
 const RULING_CLEARED: Array<[string, string]> = [
   ["Supervised the shift crew", "In charge of employees on my shift."],
   ["Supervised the shift crew", "In charge of the guys on my shift."],
-  ["Supervised the crew", "I ran a crew of 4."],
-  ["Supervised the crew", "Me and my crew loaded trucks."],
-  ["Supervised third-shift production", "Production Supervisor | Acme | 2019 - 2021\nResponsible for 3rd shift."],
   ["Supervised 4 workers.", "I supervised 4 workers."],
+  ["Supervised the crew", "I led a crew of 6."],
+  ["Led the dock crew", "I was in charge of the dock crew."],
+  ["Supervised the new hires", "I managed 5 new hires."],
+  // Their own claim, the very same verb: not a rewording.
+  ["Ran the store when the manager was out", "I ran the store when the manager was out."],
 ];
 
-test("H1: supervising people needs people in their words or a supervisor title on that job", () => {
-  for (const [line, src] of RULING_FLAGGED) assert.ok(scopeHitsNotTheirs(line, src).length > 0, `should flag: ${line} <= ${src}`);
+test("r2 ruling: being over people clears only on an explicit verb with people in their own words", () => {
+  for (const [line, src] of RULING_FLAGGED) assert.ok(scopeHitsNotTheirs(line, src).length > 0, `should ask: ${line} <= ${src}`);
   for (const [line, src] of RULING_CLEARED) assert.deepEqual(scopeHitsNotTheirs(line, src), [], `should clear: ${line} <= ${src}`);
 });
 
-test("H1: the title path is per job; a line that could belong to a non-supervisor job is never cleared", () => {
-  const two = "Production Supervisor | Acme | 2019 - 2021\nResponsible for 3rd shift.\nMachine Operator | Beta Works | 2016 - 2019\nRan the press on 3rd shift.";
-  assert.ok(scopeHitsNotTheirs("Supervised third-shift production", two).length > 0, "shift is in both jobs: ambiguous");
-  assert.deepEqual(scopeHitsNotTheirs("Supervised production for Acme", two), []);
-  assert.ok(scopeHitsNotTheirs("Supervised press operators at Beta Works", two).length > 0);
-  assert.ok(scopeHitsNotTheirs("Supervised production", "Supervisor Trainee | Acme | 2019 - 2021\nProduction work.").length > 0, "a trainee title is not over people");
+test("r2 ruling: their words for THAT job; another job's supervision never clears this one", () => {
+  const two = "Shift Supervisor | Acme | 2019 - 2021\nSupervised 4 workers.\nStocker | Corner Mart | 2016 - 2019\nStocked shelves.";
+  assert.deepEqual(scopeHitsNotTheirs("Supervised the workers.", two, { job: "SHIFT SUPERVISOR | Acme | 2019 - 2021" }), []);
+  assert.ok(scopeHitsNotTheirs("Supervised the workers.", two, { job: "STOCKER | Corner Mart | 2016 - 2019" }).length > 0);
+});
+
+test("r2 ruling: managed a thing is not a people claim; managed people is", async () => {
+  const { isPeopleScopeHit, scopeHits } = await import("../scopeWords");
+  assert.equal(scopeHits("Managed inventory for the dock.").some(isPeopleScopeHit), false);
+  assert.equal(scopeHits("Managed 5 employees.").some(isPeopleScopeHit), true);
+  assert.equal(scopeHits("Supervised the shift crew.").some(isPeopleScopeHit), true);
+});
+
+test("r2 L-1: 'trained them' is a claim of training people", () => {
+  assert.ok(scopeHitsNotTheirs("Supervised the shift crew and trained them.", "In charge of the guys on my shift.").some((h) => h.family === "train"));
+});
+
+test("r2 ruling: the one-tap answer settles that line only", async () => {
+  const { scopeAllNotTheirsAnswered } = await import("../resumeStatus");
+  const { OVER_PEOPLE_YES, ownLineFor } = await import("../scopeWords");
+  const src = "Forklift Driver | Northgate | 2019 - 2021\nResponsible for 3rd shift.";
+  const line = "- Supervised the 3rd shift crew.";
+  assert.ok(scopeAllNotTheirsAnswered(line, src, []).length > 0);
+  const yes = [{ line, answer: OVER_PEOPLE_YES, kind: "scope_yes" as const, family: "supervise" }];
+  assert.deepEqual(scopeAllNotTheirsAnswered(line, src, yes), []);
+  assert.ok(scopeAllNotTheirsAnswered("- Supervised the dock crew.", src, yes).length > 0, "never another line");
+  // "No, I did the work" puts their own line back.
+  assert.equal(ownLineFor(line, src), "Responsible for 3rd shift.");
 });
 
 test("H1: the mint check's skills reading agrees (scope words read the same everywhere)", async () => {

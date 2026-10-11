@@ -40,6 +40,7 @@ import {
   type MintSeverity,
 } from "./resumeMintCheckShared";
 import { stemOf, acronymsOf } from "./wordStem";
+import { isPeopleScopeHit, OVER_PEOPLE_YES, type ScopeContext } from "./scopeWords";
 import { scopeNotTheirs, scopeHitsNotTheirs, scopeYesText, isScopeWhoAnswer, helpedForm, typedCoversHit, isScopeCopy, sameTitle, employerWordsOf, withoutGoalText, ownJobFramed } from "./scopeWords";
 import { isCredentialTerm } from "./credentialWords";
 import { normalizeDigits, numberTokens } from "./numberRead";
@@ -658,22 +659,26 @@ function personIntroduced(answers: DefendAnswer[], line: string, word: string): 
  * words>"), and a shared page claim on a line they turned into its shared
  * form ("I helped with it"). Nothing typed here joins their words elsewhere.
  */
-export function scopeNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[]): ReturnType<typeof scopeNotTheirs> {
-  return scopeAllNotTheirsAnswered(line, sourceText, answers)[0];
+export function scopeNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[], ctx: ScopeContext = {}): ReturnType<typeof scopeNotTheirs> {
+  return scopeAllNotTheirsAnswered(line, sourceText, answers, ctx)[0];
 }
 
 /** Every scope claim on a line still not theirs after their answers on that line (round 12: one card per line). */
-export function scopeAllNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[]): NonNullable<ReturnType<typeof scopeNotTheirs>>[] {
+export function scopeAllNotTheirsAnswered(line: string, sourceText: string, answers: DefendAnswer[], ctx: ScopeContext = {}): NonNullable<ReturnType<typeof scopeNotTheirs>>[] {
+  // Phase 6 (r2 ruling): "Yes, I was over other people in this job", tapped on this line, settles its
+  // people-scope claims (that line only; it never joins their words anywhere else).
+  const overPeopleYes = answers.some((a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && a.answer === OVER_PEOPLE_YES);
   const own = answers.filter(
-    (a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && typeof a.family === "string" && isScopeWhoAnswer(a.answer) && !isScopeCopy(a.answer, line)
+    (a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && typeof a.family === "string" && a.answer !== OVER_PEOPLE_YES && isScopeWhoAnswer(a.answer) && !isScopeCopy(a.answer, line)
   );
   const extra = own.map((a) => scopeYesText(a.family as string, a.answer)).join("\n");
   const help = rewriteOf(answers, line);
   const k = (h: { family: string; word: string }) => `${h.family}\u0000${h.word.toLowerCase()}`;
-  const withYes = new Set(scopeHitsNotTheirs(line, extra ? `${sourceText}\n${extra}` : sourceText).map(k));
+  const withYes = new Set(scopeHitsNotTheirs(line, extra ? `${sourceText}\n${extra}` : sourceText, ctx).map(k));
   const titleYes = answers.filter((a) => a.kind === "title_yes" && squash(a.line) === squash(line));
   const employers = employerWordsOf(sourceText);
-  return scopeHitsNotTheirs(line, sourceText).filter((h) => {
+  return scopeHitsNotTheirs(line, sourceText, ctx).filter((h) => {
+    if (overPeopleYes && isPeopleScopeHit(h)) return false;
     // Round 13 (SF-4): a title in the summary or letter is settled only by its title card ("Yes, that was my
     // title", "Use my title") or their own words, never by a "Yes, I did this" on the line.
     if (h.role) {
@@ -721,19 +726,21 @@ function headlinePartIsTheirs(part: string, titles: Set<string>, sourceText: str
  * credential in it, and every pipe part names a job title on the page or uses
  * only the person's own words.
  */
-function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; inSkills: boolean }> {
+function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; inSkills: boolean; job?: string }> {
   const ls = linesOf(resumeText);
-  const out: Array<{ line: string; inSkills: boolean }> = [];
+  const out: Array<{ line: string; inSkills: boolean; job?: string }> = [];
+  // Phase 6 (r2 ruling): the job header each line sits under, so its scope is read against that job's words.
+  let job: string | undefined;
   const credLines = new Set(credentialMentionsOf(resumeText).filter((m) => !m.term).map((m) => m.line));
   const titles = pageJobTitles(resumeText);
   let inSkills = false;
   let seenHeading = false;
   ls.forEach((l, i) => {
     if (i === 0) return; // the name (never a heading, even in capitals)
-    if (SKILLS_HEADING_RE.test(l.replace(/:$/, ""))) { inSkills = true; seenHeading = true; return; }
-    if (isSectionEnd(l)) { inSkills = false; seenHeading = true; return; }
+    if (SKILLS_HEADING_RE.test(l.replace(/:$/, ""))) { inSkills = true; seenHeading = true; job = undefined; return; }
+    if (isSectionEnd(l)) { inSkills = false; seenHeading = true; job = undefined; return; }
     if (CONTACT_LINE_RE.test(l) || isDateLine(l)) return;
-    if (seenHeading && isEntryHeader(l)) return;
+    if (seenHeading && isEntryHeader(l)) { job = l; return; }
     if (!seenHeading) {
       // The header block's place line ("Dayton, OH") is contact, not a claim.
       if (PLACE_LINE_RE.test(l) || /\bhttps?:|www\.|linkedin\.com/i.test(l)) return;
@@ -741,7 +748,7 @@ function bodyLines(resumeText: string, sourceText = ""): Array<{ line: string; i
       const short = parts.every((p) => p.split(/\s+/).length <= 6) && !/[.;]$/.test(l);
       if (short && !credLines.has(l) && parts.every((p) => headlinePartIsTheirs(p, titles, sourceText))) return;
     }
-    out.push({ line: l, inSkills });
+    out.push({ line: l, inSkills, ...(job ? { job } : {}) });
   });
   return out;
 }
@@ -1018,10 +1025,10 @@ export function getResumeStatus(input: ResumeStatusInput): ResumeStatus {
     const roleTitleOf = new Map<MintFinding, string>();
     // A credentials line is a credential, asked by its prompt; its name may hold a scope word ("ServSafe Manager").
     const credentialSectionLines = new Set(credentialMentionsOf(resumeText).filter((m) => m.where === "credentials").map((m) => m.context));
-    for (const { line, inSkills } of bodyLines(resumeText, sourceText)) {
+    for (const { line, inSkills, job } of bodyLines(resumeText, sourceText)) {
       if (inSkills || credentialSectionLines.has(line)) continue;
       // Round 12: ONE card per line, for every claim on it the person has not made.
-      const all = scopeAllNotTheirsAnswered(line, sourceText, answers).filter((h) => !personIntroduced(answers, line, h.word));
+      const all = scopeAllNotTheirsAnswered(line, sourceText, answers, { job }).filter((h) => !personIntroduced(answers, line, h.word));
       // Round 13 (SF-4): a role used as a title ("Shift supervisor with ...") gets its own title card.
       const role = all.find((h) => h.role && h.title);
       if (role) {
