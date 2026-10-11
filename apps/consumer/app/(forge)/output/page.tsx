@@ -169,7 +169,7 @@ function OutputPageInner() {
   offerLetterOnlyRef.current = offerLetterOnly;
   const [parkedLetter, setParkedLetter] = useState<string>(session.laneParkedLetter ?? "");
   const [checkTitle, setCheckTitle] = useState("");
-  const [checkError, setCheckError] = useState("");
+  const [openError, setOpenError] = useState("");
   // Signed in (fully): a finished package is emailed to the account's own
   // proven address by itself (lib/email-package-auto.ts). Signed out (the
   // Forge before the wall): the person types an address, as before.
@@ -379,20 +379,39 @@ function OutputPageInner() {
     checkLoaded.current = checkId;
     hasStarted.current = true;
     hydrated.current = true;
-    fetch(`/api/revisions/check?artifactId=${encodeURIComponent(checkId)}`, { cache: "no-store" })
-      .then(async (r) => ({ ok: r.ok, j: await r.json().catch(() => null) }))
-      .then(({ ok, j }) => {
-        const src = j?.source;
-        if (!ok || !src || typeof src.resumeText !== "string") {
-          setCheckError(typeof j?.error === "string" ? j.error : "We couldn't open that resume.");
+    // Read the checked version; with none current, ask R1's one re-check path
+    // to check the stored resume for real (it saves that version), then read it.
+    const read = () =>
+      fetch(`/api/revisions/check?artifactId=${encodeURIComponent(checkId)}`, { cache: "no-store" }).then(async (r) => ({ ok: r.ok, j: await r.json().catch(() => null) }));
+    (async () => {
+      try {
+        let got = await read();
+        if (!got.ok && got.j?.reason === "needs_check") {
+          const rc = await fetch("/api/forge/recheck", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ kind: "artifact", artifactId: checkId }),
+          });
+          if (!rc.ok) {
+            const e = await rc.json().catch(() => null);
+            setOpenError(typeof e?.error === "string" ? e.error : "We couldn't check that resume just now. Try again.");
+            setDocState("error");
+            return;
+          }
+          got = await read();
+        }
+        const src = got.j?.source;
+        if (!got.ok || !src || typeof src.resumeText !== "string") {
+          setOpenError(typeof got.j?.error === "string" ? got.j.error : "We couldn't open that resume.");
           setDocState("error");
           return;
         }
         setCheckTitle(String(src.title || ""));
         setResumeText(src.resumeText);
         setCoverLetterText(src.letterText || "");
-        setWritten({ resume: src.resumeText, letter: src.letterText || "" });
-        setGrounding(null);
+        // The documents R1 checked and its second check, for the same cards the server gates on.
+        setWritten(src.written && typeof src.written.resume === "string" ? src.written : { resume: src.resumeText, letter: src.letterText || "" });
+        setGrounding(src.grounding ?? null);
         setWithheldLines([]);
         setDefendAnswers(Array.isArray(src.defendAnswers) ? src.defendAnswers : []);
         setKeptTerms(Array.isArray(src.keptTerms) ? src.keptTerms : []);
@@ -402,11 +421,11 @@ function OutputPageInner() {
         if (isLengthChoice(src.lengthChoice)) setLengthChoice(src.lengthChoice);
         setRunEvidence(readRunEvidence(src.evidence) ?? { ownWords: "", credentialsAnswer: "", credentialRows: [], ownResumeText: "" });
         setDocState("done");
-      })
-      .catch(() => {
-        setCheckError("We couldn't open that resume. Try again.");
+      } catch {
+        setOpenError("We couldn't open that resume. Try again.");
         setDocState("error");
-      });
+      }
+    })();
   }, [checkId, signedIn]);
 
   // ---- the gate ----------------------------------------------------------------
@@ -523,7 +542,9 @@ function OutputPageInner() {
   // Review r3 M-1: a version without a writer's receipt (from before receipts,
   // or one the server no longer accepts) cannot finish until it is checked
   // again. The page says so and offers the check, instead of a silent DRAFT.
-  const needsCheck = ready && (!receipt || (!!current && needsRecheck(current.openItems)));
+  // Check and finish (R2): R1's artifact check already ran on the server and the
+  // server holds its receipt, so the page never runs a run-bound check of its own.
+  const needsCheck = !checkMode && ready && (!receipt || (!!current && needsRecheck(current.openItems)));
   const localState: "finished" | "draft" = gateView.state === "finished" && !lengthOver && !needsCheck ? "finished" : "draft";
   // Signed in: the server's status for the saved version wins.
   const state: "finished" | "draft" = mayAccount && current ? current.status : localState;
@@ -861,7 +882,7 @@ function OutputPageInner() {
     checkMode && (docState === "generating" || docState === "idle")
       ? "Opening your resume."
       : checkMode && docState === "error"
-        ? checkError || "We couldn't open that resume."
+        ? openError || "We couldn't open that resume."
         : docState === "generating" || docState === "idle"
       ? "t.ROY is writing your resume and cover letter."
       : docState === "error"

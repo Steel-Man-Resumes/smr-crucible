@@ -5,9 +5,12 @@
  * H2, NO CIRCULAR EVIDENCE. The page being saved is never its own evidence.
  * The server builds the save itself: the page, no card answers, and as the
  * person's own words ONLY what they typed on this screen (the duty they wrote
- * in "Build with me", the phone number they added as the one fix). The finish
- * gate then decides, and a first page with lines nobody has answered for is a
- * draft. The cards on the finish page are the way to "finished".
+ * in "Build with me", the phone number they added as the one fix). Since R1
+ * 335e68b the save works the person's words out on the server (their stored
+ * upload and answers) and trusts none from a request, so the typed words are
+ * at most a hint. Either way the page never counts as its own evidence, there
+ * is no writer's receipt, and the gate keeps a first page a draft. The cards
+ * on the finish page are the way to "finished".
  *
  * H3, NEVER LOSE A SAVED RESUME. Someone who already has a saved resume picks
  * what happens to it before anything is written:

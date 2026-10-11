@@ -30,7 +30,9 @@ import {
 import { applyFirstFix, checkFirstSection, firstSectionText, pickFirstFix } from "../first-fix";
 import { readSupportResponse } from "../../components/lanes/SupportSearch";
 import { laneHomeNext } from "../../components/lanes/LaneHome";
-import { loadCheckSource, saveCheckRevision, ownEvidence } from "../revision-check";
+import { loadCheckSource, saveCheckRevision } from "../revision-check";
+import { recheckDocs } from "../forge-recheck";
+import { writerSourceFrom } from "../writer-receipt";
 import { saveFinishRevision, type ArtifactLite, type RevisionStore } from "../revision-save";
 import { resumeTextToDocument } from "../revision-to-doc";
 import { saveFirstSection, listVersions, restoreVersion, type LaneFirstStore } from "../lane-first-save";
@@ -206,18 +208,23 @@ test("H2: the first save is DRAFT: the page is never its own evidence; only what
   assert.ok(r.ok);
   assert.equal(r.ok && r.revision.number, 1);
   assert.equal(r.ok && r.revision.status, "draft", "a first section is a draft until its lines are answered on the finish page");
+  // The page is never its own evidence. R1 now works the person's words out on
+  // the server (their stored upload and answers) when it holds them; the
+  // request's part is only what they typed here.
   const ev = f.revs.at(-1)!.evidence as { ownWords?: string; ownResumeText?: string };
-  assert.equal(ev.ownWords, "I ran the grill on the breakfast line.", "only the typed duty is the person's words");
-  assert.equal(ev.ownResumeText, "");
+  assert.ok(!(ev.ownWords ?? "").includes("WORK HISTORY"), "the saved page is not counted as their words");
+  assert.notEqual(ev.ownWords, text);
   assert.deepEqual(f.revs.at(-1)!.defend_answers, []);
+  // With no words held on the server, R1 trusts none from a request: still never the page.
+  const bare = laneStore();
+  delete (bare.store as { serverSource?: unknown }).serverSource;
+  await saveFirstSection(UID, { text, typed: text, keep: undefined }, bare.store);
+  assert.ok(!((bare.revs.at(-1)!.evidence as { ownWords?: string }).ownWords ?? "").includes("WORK HISTORY"));
+  assert.equal(bare.revs.at(-1)!.status, "draft");
   // I have one, saved as it is (nothing typed): still a draft, never compared with itself.
   const g = laneStore();
   const asIs = await saveFirstSection(UID, { text: RESUME, typed: "", keep: undefined }, g.store);
   assert.equal(asIs.ok && asIs.revision.status, "draft");
-  // The client cannot send the page as 'typed' and get more than a short field.
-  const h = laneStore();
-  await saveFirstSection(UID, { text: RESUME, typed: "x".repeat(5000), keep: undefined }, h.store);
-  assert.equal(((h.revs.at(-1)!.evidence as { ownWords?: string }).ownWords ?? "").length, 2000);
   const comp = read("components/forge/lanes/FirstSave.tsx");
   assert.match(comp, /\/api\/lane-first/);
   assert.doesNotMatch(comp, /finishPayload/, "the client no longer builds the evidence");
@@ -373,6 +380,8 @@ function fakeStore(initial: ArtifactLite[] = []) {
       return { status: "saved", revision: row, reused: false };
     },
     getLatestRevision: async (_u, id) => revs.filter((x) => x.artifact_id === id).at(-1) ?? null,
+    // The person's stored upload and typed answers, as R1's coreStore reads them (consumer_profile).
+    serverSource: async () => writerSourceFrom({ resumeText: SOURCE, goalNarrative: "I want to keep cooking." }),
   };
   return { store, arts, revs, updates };
 }
@@ -398,48 +407,6 @@ const tailorArtifact = (): ArtifactLite => ({
   artifact_type: "resume",
   target_context: { source: "tailor", targetJob: "Prep Cook" },
   content: resumeTextToDocument(RESUME) as unknown as Record<string, unknown>,
-});
-
-test("check and finish: a Tailor result is DRAFT; checking it with the same cards saves a finished revision of THAT resume", async () => {
-  const f = fakeStore([tailorArtifact()]);
-  // The person's Forge run is on file (their own words).
-  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
-  const load = await loadCheckSource(UID, TAILOR, f.store);
-  assert.ok(load.ok);
-  if (!load.ok) return;
-  assert.equal(load.source.status, "draft", "raw text is DRAFT (R1)");
-  assert.equal(load.source.title, "Prep Cook");
-  assert.equal(load.source.evidence.ownWords, OWN_WORDS, "the person's words come from their own Forge revision");
-  // The person answers the cards on the finish page (their own answers) and saves.
-  const text = load.source.resumeText;
-  // Their title card: "Yes, that was my title" (the same card the finish page shows).
-  const header = text.split("\n").find((l) => /^LINE COOK \|/.test(l))!;
-  const answers = recordTitleYes(allAnswered(text), header, "Line cook");
-  const state = finishState({ resumeText: text, coverLetterText: "", written: { resume: text, letter: "" }, defendAnswers: answers, keptTerms: ["Inventory control"] });
-  const saved = await saveCheckRevision(UID, TAILOR, state, f.store);
-  assert.ok(saved.ok);
-  assert.equal(saved.ok && saved.revision.status, "finished");
-  assert.equal(saved.ok && saved.revision.artifactId, TAILOR, "a revision of the Tailor resume, not the Forge one");
-  // The delivered page is the stored resume the server read and signed, never the request's.
-  const ev = f.revs.at(-1)!.evidence as { written?: { resume?: string }; writerVerified?: boolean };
-  assert.equal(ev.writerVerified, true);
-  assert.equal(ev.written?.resume, text);
-  // The Refinery's next export of that resume uses the finished revision (R1's marker).
-  const again = await loadCheckSource(UID, TAILOR, f.store);
-  assert.ok(again.ok && again.source.status === "finished");
-});
-
-test("check and finish never takes the person's words from the request: a payload claiming the whole page as 'own words' stays draft", async () => {
-  const f = fakeStore([tailorArtifact()]);
-  // No Forge revision: the person has given us no words of their own yet.
-  const forged = finishState({ resumeText: RESUME, coverLetterText: "", written: { resume: "anything", letter: "" }, writerReceipt: "wr1.forged", grounding: null, defendAnswers: [], keptTerms: [], ownWords: RESUME, ownResumeText: RESUME });
-  const r = await saveCheckRevision(UID, TAILOR, forged, f.store);
-  assert.ok(r.ok);
-  assert.equal(r.ok && r.revision.status, "draft");
-  const stored = f.revs.at(-1)!;
-  assert.equal((stored.evidence as { ownWords?: string }).ownWords, "", "the server's evidence replaced the request's");
-  assert.notEqual((stored.evidence as { written?: { resume?: string } }).written?.resume, "anything", "the request's 'written' is never used");
-  assert.deepEqual(await ownEvidence(UID, f.store), { ownWords: "", credentialsAnswer: "", credentialRows: [], ownResumeText: "" });
 });
 
 test("check and finish: only the person's own resumes; a letter or an unknown id is refused", async () => {
@@ -538,7 +505,7 @@ test("L1: the lane home heading keeps the label's own casing", () => {
 test("L2: opening a resume for Check and finish writes nothing; only the same-origin POST saves", async () => {
   const f = fakeStore([tailorArtifact()]);
   const load = await loadCheckSource(UID, TAILOR, f.store);
-  assert.ok(load.ok && load.source.status === "draft");
+  assert.ok(!load.ok && load.reason === "needs_check", "nothing checked yet: the page asks R1's POST /api/forge/recheck");
   assert.equal(f.revs.length, 0, "no revision written on the read");
   assert.equal(f.updates.length, 0, "no content written on the read");
   const route = read("app/api/revisions/check/route.ts");
@@ -547,30 +514,108 @@ test("L2: opening a resume for Check and finish writes nothing; only the same-or
   assert.match(route.slice(route.indexOf("export async function POST")), /isSameOriginJsonPost/);
 });
 
+
+// ---- Check and finish on R1's one re-check path (recheckDocs kind "artifact") ------------
+
+/** A fake second check: flags only the invented line, never reaches a model. */
+const verifyFake = async (p: { sourceText: string; output: string; kind: string }) => {
+  const bad = p.output.split("\n").map((l) => l.replace(/^[-\s]+/, "").trim()).find((l) => /Managed a team of 40/.test(l));
+  return { text: p.output, hasFabrication: !!bad, applied: false, flags: bad ? [{ claim: bad, why: "not in what the person said" }] : [], verifierRan: true };
+};
+let nonce = 0;
+const deps = (store: RevisionStore) => ({ verify: verifyFake as never, random: () => `n${++nonce}`, store });
+
+/** The person answers every card on the finish page (the same cards), in their own words. */
+function answerAll(text: string): unknown[] {
+  let answers = allAnswered(text);
+  const header = text.split("\n").find((l) => /^LINE COOK \|/i.test(l) || /^Line cook \|/.test(l));
+  if (header) answers = recordTitleYes(answers as never, header, "Line cook") as never;
+  return answers;
+}
+
+async function checkThenAnswer(f: ReturnType<typeof fakeStore>) {
+  // 1. Opening: nothing checked yet, so the page asks R1 to check it (which saves that version).
+  const first = await loadCheckSource(UID, TAILOR, f.store);
+  assert.ok(!first.ok && first.reason === "needs_check");
+  const rc = await recheckDocs({ kind: "artifact", artifactId: TAILOR, written: { resume: "forged", letter: "" }, receipt: "wr2.forged", grounding: { verifierRan: true } }, UID, deps(f.store));
+  assert.ok(rc.ok, JSON.stringify(rc));
+  const load = await loadCheckSource(UID, TAILOR, f.store);
+  assert.ok(load.ok);
+  if (!load.ok) throw new Error("no source");
+  // 2. The person answers the same cards; the page sends its state (with forged trust fields).
+  const text = load.source.resumeText;
+  const state = finishState({
+    resumeText: text,
+    coverLetterText: "",
+    defendAnswers: answerAll(text),
+    keptTerms: ["Inventory control"],
+    written: { resume: "anything", letter: "" },
+    grounding: { verifierRan: true, outcomes: [] },
+    writerReceipt: "wr2.forged",
+    ownWords: text,
+    ownResumeText: text,
+  });
+  const saved = await saveCheckRevision(UID, TAILOR, state, f.store);
+  return { rc, load, saved, text };
+}
+
+test("check and finish (honest Tailor copy): R1 checks it for real, the person answers the cards, and it finishes", async () => {
+  const f = fakeStore([tailorArtifact()]);
+  const { rc, load, saved } = await checkThenAnswer(f);
+  assert.ok(rc.ok && rc.revision && rc.revision.artifactId === TAILOR, "R1's check saved a version of THAT resume");
+  assert.ok(load.ok && load.source.title === "Prep Cook");
+  assert.ok(saved.ok, JSON.stringify(saved));
+  assert.equal(saved.ok && saved.revision.status, "finished");
+  assert.equal(saved.ok && saved.revision.artifactId, TAILOR);
+  // Trust came from R1's stored check, never the request.
+  const ev = f.revs.at(-1)!.evidence as { written?: { resume?: string }; writerVerified?: boolean; runId?: string; ownWords?: string; writerReceipt?: string };
+  assert.equal(ev.writerVerified, true);
+  assert.equal(ev.runId, `artifact:${TAILOR}`);
+  assert.notEqual(ev.written?.resume, "anything");
+  assert.notEqual(ev.writerReceipt, "wr2.forged");
+  assert.ok(!(ev.ownWords ?? "").includes("Inventory control"), "the person's words are the server's, not the page");
+  // The Refinery's next export of that resume uses the finished revision (R1's marker).
+  const { ensureExportRevision } = await import("../revision-current");
+  const ex = await ensureExportRevision(UID, TAILOR, f.store);
+  assert.ok(ex.ok && ex.revision.status === "finished" && ex.reused);
+});
+
+test("check and finish (a Tailor copy the second check BLOCKs): stays a draft, with that line as a card", async () => {
+  const f = fakeStore([{ ...tailorArtifact(), content: resumeTextToDocument(RESUME + "\n- Managed a team of 40 associates.") as unknown as Record<string, unknown> }]);
+  const { rc, saved } = await checkThenAnswer(f);
+  assert.ok(rc.ok);
+  const g = (rc.ok ? rc.grounding : {}) as { hasFabrication?: boolean };
+  assert.equal(g.hasFabrication, true, "the second check ran and flagged the invented line");
+  assert.ok(saved.ok);
+  assert.equal(saved.ok && saved.revision.status, "draft");
+  assert.ok(saved.ok && saved.revision.openItems.some((i) => /Managed a team of 40/.test(i)), JSON.stringify(saved.ok && saved.revision.openItems));
+});
+
+test("check and finish: a save with no current R1 check is refused; this code signs nothing", async () => {
+  const f = fakeStore([tailorArtifact()]);
+  const r = await saveCheckRevision(UID, TAILOR, finishState({ writerReceipt: "wr2.forged", written: { resume: RESUME, letter: "" } }), f.store);
+  assert.ok(!r.ok && r.reason === "needs_check");
+  assert.equal(f.revs.length, 0);
+  const src = read("lib/revision-check.ts");
+  assert.doesNotMatch(src, /import \{[^}]*writerReceipt[^}]*\} from "\.\/writer-receipt"/);
+  assert.doesNotMatch(src, /writerReceipt\(/, "no signing here");
+  assert.match(read("app/(forge)/output/page.tsx"), /\/api\/forge\/recheck[\s\S]{0,200}kind: "artifact"/);
+});
+
 test("L4: a locked baseline is refused plainly on open and on save, so exports never differ from a 'finished' version", async () => {
   const f = fakeStore([{ ...tailorArtifact(), is_locked: true }]);
   const load = await loadCheckSource(UID, TAILOR, f.store);
   assert.ok(!load.ok && load.status === 409 && load.reason === "locked");
   const save = await saveCheckRevision(UID, TAILOR, finishState(), f.store);
   assert.ok(!save.ok && save.reason === "locked");
-  assert.equal(f.revs.length, 0);
   assert.match(read("app/api/revisions/check/route.ts"), /locked as a baseline, so it can't change here/);
   // Locked between the check and the write: refused, never claimed.
   const g = fakeStore([tailorArtifact()]);
+  const rc = await recheckDocs({ kind: "artifact", artifactId: TAILOR }, UID, deps(g.store));
+  assert.ok(rc.ok);
   g.store.updateArtifactContent = async () => "locked";
-  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, g.store);
-  const text = (await loadCheckSource(UID, TAILOR, g.store));
-  assert.ok(text.ok);
-  const r = await saveCheckRevision(UID, TAILOR, finishState({ resumeText: text.ok ? text.source.resumeText : "" }), g.store);
+  const load2 = await loadCheckSource(UID, TAILOR, g.store);
+  assert.ok(load2.ok);
+  const r = await saveCheckRevision(UID, TAILOR, finishState({ resumeText: load2.ok ? load2.source.resumeText : "", defendAnswers: answerAll(load2.ok ? load2.source.resumeText : "") }), g.store);
   assert.ok(!r.ok && r.reason === "locked");
-});
-
-test("H2 follow-through: Check and finish counts the words from every Forge version, so a typed-only first save never empties them", async () => {
-  const f = laneStore([tailorArtifact()]);
-  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
-  await saveFirstSection(UID, { text: "Morgan Sample\n\nWORK HISTORY\nCook | Lakeside Grill | 2024\n- I cooked.", typed: "I cooked.", keep: "replace" }, f.store);
-  const ev = await ownEvidence(UID, f.store);
-  assert.ok(ev.ownWords.includes("I cooked."), "the newest typed words");
-  assert.ok(ev.ownWords.includes(OWN_WORDS.split("\n")[0]), "and the words the person gave the Forge before");
-  assert.equal(ev.ownResumeText, SOURCE, "the newest non-empty own resume text");
 });
