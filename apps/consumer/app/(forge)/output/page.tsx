@@ -685,6 +685,16 @@ function OutputPageInner() {
       setDefendAnswers(r.answers);
       return "ok";
     },
+    onScopeNo: (group) => {
+      const noLine = group.scope?.overPeople?.noLine;
+      if (!noLine) return;
+      const text = group.target === "letter" ? coverLetterText : resumeText;
+      const r = applyRewrite(text, defendAnswers, group.line, noLine);
+      if (!r.changed) return;
+      if (group.target === "letter") setCoverLetterText(r.text);
+      else setResumeText(r.text);
+      setDefendAnswers(r.answers);
+    },
     onScopeHelped: (group) => {
       if (!group.scope?.helped) return;
       const text = group.target === "letter" ? coverLetterText : resumeText;

@@ -40,7 +40,7 @@ import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
 import { isSectionHeader } from "@crucible/core/src/pageFitShared";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { namedCredentialRe, credentialInitialsRe } from "@crucible/core/src/credentialWords";
-import { scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion, markGoalText, sameTitle } from "@crucible/core/src/scopeWords";
+import { scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion, markGoalText, sameTitle, isPeopleScopeHit, ownLineFor, OVER_PEOPLE_QUESTION, OVER_PEOPLE_YES } from "@crucible/core/src/scopeWords";
 import { isStrictCredentialWhen } from "@crucible/core/src/credentialStatus";
 import {
   credentialHomes,
@@ -1221,6 +1221,23 @@ function unsaidName(i: OpenItem): string {
 
 const scopeItem = (its: GateItem[]) => its.find((i) => i.kind === "scope_unsaid" && i.scopeFamily);
 
+/** Phase 6 (r2 ruling): true when every claim the card asks about on this line is a claim of being over people. */
+function overPeopleCard(line: string, families: string[]): boolean {
+  const hits = scopeHits(stripBullet(line)).filter((h) => families.includes(h.family));
+  return hits.length > 0 && hits.every(isPeopleScopeHit);
+}
+
+/** The job header ("TITLE | Employer | ...") a resume line sits under, if any. */
+function jobHeaderFor(resumeText: string, line: string): string | undefined {
+  let job: string | undefined;
+  for (const l of linesOf(resumeText)) {
+    if (squash(l) === squash(line)) return job;
+    if (isSectionHeader(l)) job = undefined;
+    else if (l.includes("|") && !/^[-*\u2022]/.test(l) && !l.includes("@") && /[A-Za-z]{2,}/.test(l.split("|")[0])) job = l;
+  }
+  return undefined;
+}
+
 // ---- round 11: the one-tap scope card ------------------------------------------------------
 
 /** "Yes, I did this": their typed who or what, kept for this line's scope claim only. */
@@ -1393,7 +1410,18 @@ export interface LineGroup {
   /** Round 11 (SF-3): on an education card, true when the line's school is one the person named (no need to ask "What school?"). */
   schoolKnown?: boolean;
   /** Round 11: an unmatched scope claim: its family (for "Who did you train?") and the line's shared form. */
-  scope?: { family: string; families: string[]; question: string; helped?: string };
+  scope?: {
+    family: string;
+    families: string[];
+    question: string;
+    helped?: string;
+    /**
+     * Phase 6 (r2 ruling): a claim of being over people is one tap, "Were you over other people in this job?"
+     * `yes` is the answer "Yes, I was over people" records for this line; `noLine` is the person's own line
+     * "No, I did the work" puts back (absent when none of theirs matches; then only "Take it off").
+     */
+    overPeople?: { yes: string; noLine?: string };
+  };
   /** Round 12 (SF-2): a job title the person never used: "Yes, that was my title" or "Use my title". */
   /** Round 13 (SF-4): `role` when the title is a role in the summary or letter, not a job header's title. */
   title?: { current: string; role?: boolean };
@@ -1968,8 +1996,17 @@ export function buildFinishView(input: {
             scope: {
               family: scopeItem(its)!.scopeFamily as string,
               families: scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string],
-              question: Array.from(new Set((scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string]).map((f) => scopeWhoQuestion(f)))).join(" "),
+              question: overPeopleCard(its[0].line, scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string])
+                ? OVER_PEOPLE_QUESTION
+                : Array.from(new Set((scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string]).map((f) => scopeWhoQuestion(f)))).join(" "),
               ...(scopeItem(its)!.helped ? { helped: scopeItem(its)!.helped } : {}),
+              ...(overPeopleCard(its[0].line, scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string])
+                ? (() => {
+                    const noLine = its[0].target === "resume" ? ownLineFor(its[0].line, source, { job: jobHeaderFor(input.resumeText, its[0].line) }) : undefined;
+                    const bullet = its[0].line.match(/^\s*[-*\u2022]\s*/)?.[0] ?? "";
+                    return { overPeople: { yes: OVER_PEOPLE_YES, ...(noLine && squash(noLine) !== squash(stripBullet(its[0].line)) ? { noLine: `${bullet}${noLine}` } : {}) } };
+                  })()
+                : {}),
             },
           }
         : {}),
