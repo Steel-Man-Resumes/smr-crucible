@@ -59,6 +59,7 @@ const nextConfig = {
     "/api/revisions": ["./public/fonts/resume/**/*"],
     // Phase 5 R2: "Check and finish" measures pages the same way.
     "/api/revisions/check": ["./public/fonts/resume/**/*"],
+    "/api/lane-first": ["./public/fonts/resume/**/*"],
     "/api/forge/save": ["./public/fonts/resume/**/*"],
     "/api/forge/email-package": ["./public/fonts/resume/**/*"], // measures pages (the finished check)
     "/api/forge/email-package/auto": ["./public/fonts/resume/**/*"],

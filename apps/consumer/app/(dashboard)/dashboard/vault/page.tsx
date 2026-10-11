@@ -16,6 +16,7 @@
  */
 
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
+import { EarlierVersions } from "@/components/lanes/EarlierVersions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
@@ -716,6 +717,8 @@ ${body}
             )}
             {/* Phase 5 R2: a resume never finished in the Forge downloads as a draft; this is the way out. */}
             {isResume && <CheckAndFinish artifactId={a.id} className="mt-3" />}
+            {/* R2 review H3: every saved version stays reachable, and an earlier one can come back. */}
+            {isResume && <EarlierVersions artifactId={a.id} />}
           </div>
         )}
       </div>

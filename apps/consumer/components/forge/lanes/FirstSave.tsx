@@ -10,56 +10,112 @@
  *  "Build with me": one real job and one true duty in their words gives a
  *                  clean first section, saved the same way.
  *
- * The server decides draft or finished; a first page is honestly a draft
- * until every line is checked. Nothing here writes a fact for the person.
+ * The server builds the save and decides draft or finished. The page is never
+ * its own evidence: only what the person typed here counts as their words, so
+ * a first page stays a draft until its lines are checked on the finish page.
+ * Nothing here writes a fact for the person.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FlowPage } from "@crucible/consumer-ui";
 import { ResumePage } from "@/components/resume/ResumePage";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { useForgeSession, type ForgeSessionData } from "@/lib/forge-context";
-import { finishPayload } from "@/lib/finish-payload";
 import { applyFirstFix, checkFirstSection, firstSectionText, FIX_PROBLEM_COPY, pickFirstFix, type FirstSection } from "@/lib/first-fix";
 import { DRAFT_BADGE } from "@/lib/lane-task";
 import type { SavedRevisionSummary } from "@/lib/revision-save";
 
-type SaveState = { kind: "idle" } | { kind: "saving" } | { kind: "saved"; revision: SavedRevisionSummary | null } | { kind: "failed" };
+type Keep = "new" | "replace";
+type SaveState =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "ask" }
+  | { kind: "saved"; revision: SavedRevisionSummary | null; kept: Keep | null }
+  | { kind: "failed" };
 
-/** Save this text as a revision (signed in) or on this computer (signed out). */
+/**
+ * Save this text (signed in: to the account; signed out: on this computer).
+ *
+ * The server builds the save (/api/lane-first, review H2): the page with no
+ * answers, and only `typed` (what the person typed on this screen) as their
+ * own words, so the page is never its own evidence and the gate decides. A
+ * person who already has a saved resume is asked first (review H3): start a
+ * new resume (the saved one stays in My resumes as it is) or replace it (the
+ * earlier version stays in its history).
+ */
 function useFirstSave(signedIn: boolean) {
   const { session, updateSession, runIsMine } = useForgeSession();
   const [state, setState] = useState<SaveState>({ kind: "idle" });
-  async function save(text: string, extra: Partial<ForgeSessionData>) {
-    const run = { ...session, ...extra, resumeText: text };
+  // The last save asked for, so "Try again" and the keep question resend it.
+  const pending = useRef<{ text: string; extra: Partial<ForgeSessionData>; typed: string } | null>(null);
+  // After the first save in this sitting, later saves update that same new resume.
+  const sitting = useRef<Keep | null>(null);
+  const chosen = useRef<Keep | null>(null);
+
+  async function post(keep: Keep | null) {
+    const p = pending.current;
+    if (!p) return;
+    setState({ kind: "saving" });
+    try {
+      const res = await fetch("/api/lane-first", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "first", text: p.text, typed: p.typed, keep: keep ?? undefined, laneTarget: session.laneTarget || "" }),
+      });
+      const data = (await res.json().catch(() => null)) as { revision?: SavedRevisionSummary; reason?: string } | null;
+      if (res.status === 409 && data?.reason === "ask_keep") {
+        setState({ kind: "ask" });
+        return;
+      }
+      if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
+      if (!sitting.current) {
+        sitting.current = "replace";
+      }
+      setState({ kind: "saved", revision: data.revision, kept: chosen.current });
+    } catch {
+      setState({ kind: "failed" });
+    }
+  }
+
+  async function save(text: string, extra: Partial<ForgeSessionData>, typed: string) {
+    pending.current = { text, extra, typed };
     updateSession({ ...extra, resumeText: text, lastPageVisited: "resume" });
     if (!signedIn) {
-      setState({ kind: "saved", revision: null });
+      setState({ kind: "saved", revision: null, kept: null });
       return;
     }
     if (!runIsMine()) {
       setState({ kind: "failed" });
       return;
     }
-    setState({ kind: "saving" });
-    try {
-      const res = await fetch("/api/revisions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: "finish",
-          finish: finishPayload(run, { resumeText: text, coverLetterText: "", defendAnswers: [], keepInsideLines: false }),
-          laneTarget: session.laneTarget || "",
-        }),
-      });
-      const data = (await res.json().catch(() => null)) as { revision?: SavedRevisionSummary } | null;
-      if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
-      setState({ kind: "saved", revision: data.revision });
-    } catch {
-      setState({ kind: "failed" });
-    }
+    await post(sitting.current);
   }
-  return { state, save, reset: () => setState({ kind: "idle" }) };
+
+  async function choose(keep: Keep) {
+    chosen.current = keep;
+    await post(keep);
+  }
+
+  return { state, save, choose, retry: () => void post(sitting.current ?? chosen.current), reset: () => setState({ kind: "idle" }) };
+}
+
+/** "Start a new resume, or replace your current one?" Asked before anything is written. */
+function KeepQuestion({ onChoose }: { onChoose: (k: Keep) => void }) {
+  return (
+    <div className="border border-t-amber bg-t-panel p-4" data-testid="keep-question">
+      <p className="text-base font-semibold text-t-white">You already have a saved resume.</p>
+      <p className="mt-1 text-sm text-t-phos">Start a new resume, or replace your current one?</p>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <button type="button" onClick={() => onChoose("new")} className="t-focus min-h-touch bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright" data-testid="keep-new">
+          Start a new resume
+        </button>
+        <button type="button" onClick={() => onChoose("replace")} className="t-focus min-h-touch border border-t-line px-4 py-2.5 text-sm font-medium text-t-white hover:border-t-phos-dim" data-testid="keep-replace">
+          Replace my current one
+        </button>
+      </div>
+      <p className="mt-2 text-xs text-t-phos-dim">New: your saved resume stays in My resumes, just as it is. Replace: the earlier version stays in its history, and you can bring it back from My resumes.</p>
+    </div>
+  );
 }
 
 /** After the first save: the page, an honest status line, and one way on. */
@@ -67,6 +123,7 @@ function SavedFirst({
   text,
   state,
   onRetry,
+  onChoose,
   onContinue,
   onDoMore,
   onEditor,
@@ -75,6 +132,7 @@ function SavedFirst({
   text: string;
   state: SaveState;
   onRetry: () => void;
+  onChoose: (k: Keep) => void;
   onContinue: () => void;
   onDoMore: () => void;
   onEditor?: () => void;
@@ -82,6 +140,16 @@ function SavedFirst({
 }) {
   const rev = state.kind === "saved" ? state.revision : null;
   const finished = rev?.status === "finished";
+  if (state.kind === "ask") {
+    return (
+      <FlowPage title="Before we save it" subtitle="This won't change anything until you pick.">
+        <KeepQuestion onChoose={onChoose} />
+        <div className="mt-4 border border-t-line bg-t-bg p-3">
+          <ResumePage text={text} draft />
+        </div>
+      </FlowPage>
+    );
+  }
   return (
     <FlowPage title="Saved. That's a real start." subtitle="Here is your page as it stands." actionLabel="Build my full resume" onAction={onContinue}>
       <div className="mb-3 border border-t-line bg-t-panel px-4 py-3" data-testid="first-save-status" data-state={state.kind}>
@@ -100,11 +168,17 @@ function SavedFirst({
               {rev ? `Saved to your account (version ${rev.number}).` : "Saved on this computer. Sign in to keep it in your account."}
             </p>
             {finished ? (
-              <p className="mt-1 text-sm text-t-phos">Every line on it is in your own words.</p>
+              <p className="mt-1 text-sm text-t-phos">Checked: nothing left to fix.</p>
             ) : (
               <p className="mt-1 text-sm text-t-amber-bright" data-testid="draft-badge">
                 {DRAFT_BADGE}
               </p>
+            )}
+            {state.kept === "new" && (
+              <p className="mt-1 text-sm text-t-phos" data-testid="kept-line">Your earlier resume is in My resumes, just as it was.</p>
+            )}
+            {state.kept === "replace" && (
+              <p className="mt-1 text-sm text-t-phos" data-testid="kept-line">Your earlier version is in its history. You can bring it back from My resumes.</p>
             )}
           </>
         )}
@@ -112,7 +186,7 @@ function SavedFirst({
       <div className="mb-4 border border-t-line bg-t-bg p-3" data-testid="first-save-page">
         <ResumePage text={text} draft={!finished} />
       </div>
-      <p className="mb-2 text-sm text-t-phos">Next, t.ROY builds the full page from this and checks every line with you.</p>
+      <p className="mb-2 text-sm text-t-phos">{finished ? "Next, t.ROY builds the full page from this." : "Next, t.ROY builds the full page from this and checks every line with you. Until then it stays a draft."}</p>
       <div className="flex flex-col gap-2 text-sm">
         {onAnotherJob && (
           <button type="button" onClick={onAnotherJob} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-save-another-job">
@@ -154,9 +228,12 @@ export function FirstReward({
   const [savedText, setSavedText] = useState<string | null>(null);
   const saver = useFirstSave(signedIn);
 
+  // What the person typed here (the fix), the only words the save counts as theirs (review H2).
+  const typedOwn = useRef("");
   async function saveWith(fixIt: boolean) {
     setProblem(null);
     let next = text;
+    typedOwn.current = "";
     if (fixIt && fix.kind !== "none") {
       const r = applyFirstFix(text, fix, typed);
       if (!r.ok) {
@@ -164,9 +241,10 @@ export function FirstReward({
         return;
       }
       next = r.text;
+      typedOwn.current = r.typed;
     }
     setSavedText(next);
-    await saver.save(next, {});
+    await saver.save(next, {}, typedOwn.current);
   }
 
   if (savedText !== null) {
@@ -174,7 +252,8 @@ export function FirstReward({
       <SavedFirst
         text={savedText}
         state={saver.state}
-        onRetry={() => void saver.save(savedText, {})}
+        onRetry={saver.retry}
+        onChoose={(k) => void saver.choose(k)}
         onContinue={onContinue}
         onDoMore={onDoMore}
         onEditor={() => onEditor(savedText)}
@@ -259,6 +338,8 @@ export function QuickBuild({
   const [savedText, setSavedText] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const saver = useFirstSave(signedIn);
+  // The duties the person typed, the only words the save counts as theirs (review H2).
+  const duties = useRef<string[]>([]);
   const set = (k: keyof FirstSection, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   async function saveSection() {
@@ -278,7 +359,8 @@ export function QuickBuild({
     }
     setSavedText(text);
     setAdding(false);
-    await saver.save(text, { resumeMethod: "guided", originalResumeText: text });
+    duties.current = [...duties.current, form.duty.replace(/\s+/g, " ").trim()];
+    await saver.save(text, { resumeMethod: "guided", originalResumeText: text }, duties.current.join("\n"));
   }
 
   if (savedText !== null && !adding) {
@@ -286,7 +368,8 @@ export function QuickBuild({
       <SavedFirst
         text={savedText}
         state={saver.state}
-        onRetry={() => void saver.save(savedText, { resumeMethod: "guided", originalResumeText: savedText })}
+        onRetry={saver.retry}
+        onChoose={(k) => void saver.choose(k)}
         onContinue={onContinue}
         onDoMore={onDoMore}
         onAnotherJob={() => {
