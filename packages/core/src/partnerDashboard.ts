@@ -13,6 +13,7 @@
  */
 
 import { query, getOne, getOneAsUser, runScoped, runPerOrg, type OrgScope } from "./db";
+import { staffStepLabel } from "./journeyStages";
 
 /**
  * query(), but with the organization scope set so row-level policies pass.
@@ -198,7 +199,8 @@ export async function getPartnerCohort(
     name: string | null;
     email: string | null;
     current_stage: number | null;
-    next_step_action: string | null;
+    next_step_reason: string | null;
+    next_step_stage: string | null;
     applications: string;
     saved_jobs: string;
     practice_sessions: string;
@@ -214,7 +216,10 @@ export async function getPartnerCohort(
             csa.staff_user_id AS assigned_staff_id,
             su.name AS assigned_staff_name,
             COALESCE((SELECT SUM(atu.cost_usd) FROM ai_token_usage atu WHERE atu.user_id = u.id), 0)::text AS ai_cost_usd,
-            u.next_step_cache->>'action' AS next_step_action,
+            -- Never the action text: it can name an employer or a role, and
+            -- progress sharing does not include applications (review M3).
+            u.next_step_cache->>'reason' AS next_step_reason,
+            u.next_step_cache->>'stage' AS next_step_stage,
             -- Counts and dates come from staff_progress_counts, a view. The
             -- participant's own tables are owner-only under row-level security
             -- (migration 060); the view serves exactly these signals, for members
@@ -295,7 +300,7 @@ export async function getPartnerCohort(
       name: r.name,
       email: r.email,
       currentStage: r.current_stage ?? 0,
-      nextStepAction: r.next_step_action,
+      nextStepAction: staffStepLabel(r.next_step_reason, r.next_step_stage),
       applications: Number(r.applications),
       savedJobs: Number(r.saved_jobs),
       practiceSessions: Number(r.practice_sessions),

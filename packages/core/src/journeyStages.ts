@@ -82,6 +82,35 @@ export function isDeadlineStep(next: { reason?: string }): boolean {
   return (DEADLINE_REASONS as readonly string[]).includes(next.reason ?? "");
 }
 
+/**
+ * WHAT PROGRAM STAFF SEE AS SOMEONE'S NEXT STEP (Phase 5 review M3). The
+ * person's own card can name the employer and the role ("Get ready for your
+ * interview at ..."), but progress sharing does not include applications, so
+ * staff get a fixed label chosen by the step's reason, never the action text.
+ * The staff queries select the reason and stage only (orgClientView.ts,
+ * partnerDashboard.ts).
+ */
+export const STAFF_STEP_LABELS: Readonly<Record<string, string>> = {
+  onboarding_required: "Take the tour",
+  onboarding_pending: "Take the tour",
+  forge_incomplete: "Finish the Forge resume",
+  no_saved_jobs: "Pick a job to aim at",
+  resume_not_tailored: "Tailor a resume to a job",
+  no_disclosure_plan: "Plan what to say",
+  needs_practice: "Practice the interview",
+  no_application: "Apply and keep track",
+  follow_up_due: "Follow up on an application",
+  interview_upcoming: "Get ready for an interview",
+  default_matches: "Check new job matches",
+};
+
+export function staffStepLabel(reason: string | null | undefined, stage: number | string | null | undefined): string | null {
+  if (reason && Object.prototype.hasOwnProperty.call(STAFF_STEP_LABELS, reason)) return STAFF_STEP_LABELS[reason];
+  const n = typeof stage === "string" ? Number(stage) : stage;
+  if (typeof n === "number" && Number.isInteger(n)) return JOURNEY_STAGES[n]?.nextStepLabel ?? null;
+  return null;
+}
+
 /** The small label on the next-step card for a deadline step, in place of "Step N of 6". */
 export const DEADLINE_STEP_LABEL = "Do this first";
 
