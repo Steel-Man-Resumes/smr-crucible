@@ -32,6 +32,9 @@ import {
   TEXT_PRACTICE_TURNS_PER_SESSION,
   checkPremium,
   checkTextPracticeAllowance,
+  cachedPremiumStorageReady,
+  PREMIUM_READY_CACHE_MS,
+  resetPremiumReadyCache,
   signPracticeSession,
   verifyPracticeSession,
 } from "../premium-server";
@@ -392,11 +395,31 @@ describe("readiness (A8)", () => {
     assert.equal(premiumReadiness(true, null).ok, false, "could not check: not ok");
   });
 
-  it("/api/health/premium answers 503 when the gate is on and storage is not ready", () => {
+  it("/api/health/premium: platform admin only, before anything is read; 503 when the gate is on and storage is not ready", () => {
     const r = code(read("app/api/health/premium/route.ts"));
-    assert.match(r, /premiumReadiness\(true, ready\)/);
-    assert.match(r, /status: verdict\.ok \? 200 : 503/);
-    assert.match(r, /if \(!gate\) return/);
+    const get = r.slice(r.indexOf("export async function GET"));
+    assert.ok(get.indexOf("requirePlatformAdmin()") > 0);
+    assert.ok(get.indexOf("if (!admin.ok) return admin.response;") < get.indexOf("premiumGateOn()"));
+    assert.ok(get.indexOf("if (!admin.ok) return admin.response;") < get.indexOf("cachedPremiumStorageReady()"));
+    assert.match(get, /premiumReadiness\(true, await cachedPremiumStorageReady\(\)\)/);
+    assert.match(get, /status: verdict\.ok \? 200 : 503/);
+    assert.doesNotMatch(get, /premiumStorageReady\(\)/, "only the cached read");
+  });
+
+  it("review L5: the table check is asked at most once a minute", async () => {
+    resetPremiumReadyCache();
+    let calls = 0;
+    const read = async () => { calls++; return true; };
+    const t0 = 1_000_000;
+    assert.equal(await cachedPremiumStorageReady(read, t0), true);
+    assert.equal(await cachedPremiumStorageReady(read, t0 + 30_000), true);
+    assert.equal(await cachedPremiumStorageReady(read, t0 + PREMIUM_READY_CACHE_MS - 1), true);
+    assert.equal(calls, 1);
+    assert.equal(await cachedPremiumStorageReady(read, t0 + PREMIUM_READY_CACHE_MS), true);
+    assert.equal(calls, 2);
+    resetPremiumReadyCache();
+    assert.equal(await cachedPremiumStorageReady(async () => { throw new Error("db down"); }, t0), null, "could not check");
+    resetPremiumReadyCache();
   });
 });
 

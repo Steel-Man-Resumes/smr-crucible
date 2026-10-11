@@ -176,3 +176,35 @@ export async function checkTextPracticeAllowance(
   if (turns > limit * TEXT_PRACTICE_TURNS_PER_SESSION) return { refuse: used() };
   return { refuse: null, session };
 }
+
+/* ------------------------------------------------- readiness (A8, L5) -- */
+
+/** How long a readiness answer is reused, so the check never keeps the database awake. */
+export const PREMIUM_READY_CACHE_MS = 60_000;
+
+let readyCache: { at: number; ready: boolean | null } | null = null;
+
+/** Drop the cached readiness answer (tests). */
+export function resetPremiumReadyCache(): void {
+  readyCache = null;
+}
+
+/**
+ * premiumStorageReady, asked at most once a minute per server instance. A
+ * failed check is remembered as null ("could not check") for the same minute.
+ */
+export async function cachedPremiumStorageReady(
+  read?: () => Promise<boolean>,
+  now: number = Date.now()
+): Promise<boolean | null> {
+  if (readyCache && now - readyCache.at < PREMIUM_READY_CACHE_MS) return readyCache.ready;
+  const reader = read ?? (await import("@crucible/core")).premiumStorageReady;
+  let ready: boolean | null;
+  try {
+    ready = await reader();
+  } catch {
+    ready = null;
+  }
+  readyCache = { at: now, ready };
+  return ready;
+}

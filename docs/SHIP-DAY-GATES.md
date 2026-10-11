@@ -69,7 +69,9 @@ everything stays open and the allowance does not apply.
 To turn it on:
 1. Confirm migration 079 is applied on Production.
 2. Set `PREMIUM_GATE=on` in Production and deploy.
-3. `GET /api/health/premium` must return 200 `{"ok":true,"gate":true,"ready":true}`.
+3. Signed in as a platform admin, open `/api/health/premium`. It must return
+   200 `{"ok":true,"gate":true,"ready":true}`. Anyone else gets 401 or 403.
+   The table check is reused for a minute.
    503 means the entitlement tables are missing. The sponsored tools then
    answer "temporarily unavailable" (they never open by accident). Fix the
    migration, or set the gate back to `off`.
