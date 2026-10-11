@@ -227,8 +227,10 @@ const CONTACT_LIKE_RE = new RegExp(String.raw`@|https?:|www\.|linkedin\.com|\(?\
 /** True for a contact or place line: email, phone, web address, "City, ST" (real state), ZIP, street address. */
 export function isContactLike(l: string): boolean {
   const t = l.trim();
-  return CONTACT_LIKE_RE.test(t) || PLACE_ONLY_RE.test(t) || STREET_RE.test(t) || /^p\.?o\.?\s+box\b/i.test(t);
+  return CONTACT_LIKE_RE.test(t) || (PLACE_ONLY_RE.test(t) && !ROLE_WORD_RE.test(t.split(",")[0])) || STREET_RE.test(t) || /^p\.?o\.?\s+box\b/i.test(t);
 }
+// Round 4 (r3 L3-2): "Security Officer, PA" names a job, not a town: a role word before the comma is not a place.
+const ROLE_WORD_RE = /\b(?:officer|operator|driver|nurse|welder|technician|tech|assistant|cook|chef|clerk|manager|supervisor|specialist|associate|worker|lead|guard|mechanic|cashier|server|attendant|aide|electrician|plumber|carpenter|laborer|helper|agent|representative|rep|coordinator|counselor|teacher|trainer|installer|inspector|fabricator|machinist|painter|janitor|custodian|housekeeper|dishwasher|stocker|picker|packer|loader|handler)s?\b/i;
 // Work inside or a record: never promoted to the headline (mirror of grounding-verify's justice test).
 // Round 3 (r2 L-2): a place of confinement or a record, never an occupation: "Corrections Officer" and
 // "Reentry Peer Specialist" are jobs and may be the headline; "Kitchen Worker, State Correctional Facility" may not.
@@ -255,7 +257,6 @@ export function bodyHeadlineIndex(bodyLines: string[], header: Pick<ParsedResume
 export type JobLineRole = "job" | "jobPart" | "years" | "bullet" | null;
 
 const YEARISH_RE = /\b(?:19|20)\d{2}\b|\b(?:present|current)\b/i;
-const TRAILING_YEARS_RE = /^(.*?\S)\s*(?:\(([^()]*)\)|,\s*([^,]*))\s*$/;
 
 /** A short line that names a job, a place or an employer, not a duty sentence. */
 function headerish(l: string): boolean {
@@ -266,8 +267,13 @@ function headerish(l: string): boolean {
 
 /** "Cashier at Quick Stop (2014 - 2015)" -> title and years; null when the line has no trailing dates. */
 export function splitTrailingYears(l: string): { title: string; years: string } | null {
-  const m = l.match(TRAILING_YEARS_RE);
-  const years = m ? (m[2] ?? m[3] ?? "").trim() : "";
+  // Round 4: dates in brackets at the end first ("Certified Nursing Assistant, Valley Care (2018 - 2020)"),
+  // then after the last comma ("Cashier, Quick Stop, 2014 - 2015").
+  const m =
+    l.match(/^(.*\S)\s*\(([^()]*)\)\s*$/) ??
+    l.match(/^(.*\S)\s*,\s*([^,]*)$/) ??
+    l.match(/^(.*\S)\s+((?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}\s*(?:[-\u2012-\u2015]|to)\s*(?:(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))$/i);
+  const years = m ? (m[2] ?? "").trim() : "";
   if (!m || !years || !isDateText(years)) return null;
   const title = m[1].replace(/[,(]\s*$/, "").trim();
   // Round 3 (r2 M-D): "Promoted to Shift Lead (2019)", "Forklift certified, 2018" are things that happened in
@@ -277,7 +283,19 @@ export function splitTrailingYears(l: string): { title: string; years: string } 
 }
 
 // A line that tells what happened in a job (a promotion, an award, a credential), never a job of its own.
-const NOT_A_JOB_RE = /^(?:promoted|earned|named|certified|received|completed|won|awarded|got|passed|became|moved|transferred|hired|recognized|graduated|trained|finished|started|selected|voted|nominated)\b|\b(?:certified|certification|certificate|licen[cs]e[ds]?|award(?:ed)?|employee of the (?:month|year|quarter)|promot(?:ed|ion)|honor|recognition|perfect attendance)\b/i;
+// Round 4 (review r3 M3-4): an event verb at the start, or an award, never makes a job. A credential word
+// ("certified", "licensed") does only when no role noun follows it: "Certified Nursing Assistant" and
+// "Licensed Practical Nurse" are jobs; "Forklift certified" is a credential.
+const NOT_A_JOB_START_RE = /^(?:promoted|earned|named|received|completed|won|awarded|got|passed|became|moved|transferred|hired|recognized|graduated|trained|finished|started|selected|voted|nominated)\b/i;
+const AWARD_RE = /\b(?:employee of the (?:month|year|quarter)|perfect attendance|honor roll|award(?:ed)?|recognition)\b/i;
+const CRED_WORD_RE = /\b(?:certified|certification|certificate|licen[cs]e[ds]?)\b/i;
+const ROLE_AFTER_CRED_RE = /\b(?:certified|licen[cs]ed)\s+(?:[a-z]+\s+){0,2}(?:assistant|nurse|welder|electrician|technician|tech|operator|driver|mechanic|plumber|aide|attendant|specialist|inspector|trainer|counselor|cook|chef|officer|guard|therapist|pharmacist|practitioner|accountant|caregiver|installer|carpenter|cosmetologist|barber|paramedic|medic|phlebotomist|machinist|engineer|appraiser|agent|broker)\b/i;
+const NOT_A_JOB_RE = {
+  test(l: string): boolean {
+    if (NOT_A_JOB_START_RE.test(l) || AWARD_RE.test(l)) return true;
+    return CRED_WORD_RE.test(l) && !ROLE_AFTER_CRED_RE.test(l);
+  },
+};
 /** A range of dates ("2016 - 2018", "Jan 2019 - Present"), not a single year. */
 function isDateRange(t: string): boolean {
   const years = t.match(/\b(?:19|20)\d{2}\b/g) ?? [];
@@ -429,7 +447,9 @@ export function parseResumeHeader(headerLines: string[]): ParsedResumeHeader {
   // plus every other contact-like line (a stacked "City, ST" / phone / email block, a street address), joined
   // in order. None of them is ever the headline or the note. A second "|" line that is not contact-like (a
   // pipe headline) stays the headline.
-  const first = cleaned.slice(1).find(isContact) ?? cleaned.slice(1).find((l) => isContactLike(l));
+  // Round 4 (r3 L3-2): a contact-like line (email, phone, place) is the contact line before any other "|"
+  // line, so a pipe headline above the contact line stays the headline.
+  const first = cleaned.slice(1).find((l) => isContactLike(l)) ?? cleaned.slice(1).find(isContact);
   const contactParts = cleaned.slice(1).filter((l) => l === first || isContactLike(l));
   const contactLine = contactParts.join(" | ");
   const rest = cleaned.slice(1).filter((l) => !contactParts.includes(l));

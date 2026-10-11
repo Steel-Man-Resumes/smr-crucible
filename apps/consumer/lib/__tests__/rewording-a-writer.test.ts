@@ -655,8 +655,10 @@ test("r2 ruling: being over people is one tap; Yes keeps the line for that job, 
   assert.equal(g!.scope!.overPeople?.noLine, "- Responsible for 3rd shift.");
   // Yes: one tap, settled for this line.
   const doc = { target: "resume" as const, text: resume };
-  assert.equal(scopeYesResult(doc, g!.line, g!.scope!.families, OVER_PEOPLE_YES, view.source, []), "ok");
-  const answered = recordScopeYes([], g!.line, g!.scope!.families, OVER_PEOPLE_YES);
+  const job = g!.scope!.overPeople?.job;
+  assert.equal(job, "FORKLIFT DRIVER | Northgate Supply | 2019 - 2021");
+  assert.equal(scopeYesResult(doc, g!.line, g!.scope!.families, OVER_PEOPLE_YES, view.source, [], job), "ok");
+  const answered = recordScopeYes([], g!.line, g!.scope!.families, OVER_PEOPLE_YES, job);
   const after = buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: answered });
   assert.ok(!after.groups.some((x) => x.line === g!.line && x.scope));
   // No: their own words go back and nothing is left to ask on that line.
@@ -682,9 +684,13 @@ test("r2 ruling: a 'supervision' flag is asked, not cut, when the scope card wil
   const source = "Rory Example\nForklift Driver | Northgate | 2019 - 2021\nResponsible for 3rd shift.";
   const written = "RORY EXAMPLE\n\nEXPERIENCE\nFORKLIFT DRIVER | Northgate | 2019 - 2021\n- Supervised the 3rd shift crew.\n- More lines here so the page is long enough.";
   const reply = { hasFabrication: true, flags: [{ claim: "Supervised the 3rd shift crew.", why: "no people in source", kind: "supervision" }], cleaned: written.replace("- Supervised the 3rd shift crew.\n", "") };
-  const r = await withVerifierReply(reply, () => verifyGrounding({ sourceText: source, output: written, kind: "resume" }));
+  const r = await withVerifierReply(reply, () => verifyGrounding({ sourceText: source, output: written, kind: "resume", askSupervision: true }));
   assert.equal(r.applied, false);
   assert.equal(r.text, written);
+  // Round 4 (r3 H3-2): every other route (no opt-in) still cuts it.
+  const other = await withVerifierReply(reply, () => verifyGrounding({ sourceText: source, output: written, kind: "resume" }));
+  assert.equal(other.applied, true);
+  assert.doesNotMatch(other.text, /Supervised/);
   assert.ok(scopeAllNotTheirsAnswered("- Supervised the 3rd shift crew.", source, []).length > 0, "the card asks instead");
 });
 
@@ -758,4 +764,90 @@ test("r2 L-2: an occupation is a headline; a place of confinement never is", () 
   for (const h of ["Kitchen Worker, State Correctional Facility", "Cook at County Jail", "Inmate Porter"]) {
     assert.equal(parseResume(`R E\nr@example.com\n\n${h}\n\nSUMMARY\nx`).header.headline, "", h);
   }
+});
+
+// ---- Round 4 (review r3 + CC rulings): every r3 probe ---------------------------------------------------
+
+test("r3 H3-2: the supervision set-aside is generate-docs only, and only when supervision is the sole problem", async () => {
+  const { supervisionRule } = await import("../grounding-verify");
+  const src = "Forklift Driver | Northgate | 2021 - 2022\nDrove forklift.\nLoaded trucks.";
+  const out = "RORY\n\nEXPERIENCE\nFORKLIFT DRIVER | Northgate | 2021 - 2022\n- Supervised a crew of 12 and cut overtime 20%.\n- Drove forklift.\n- Loaded trucks.";
+  const cleaned = out.replace("- Supervised a crew of 12 and cut overtime 20%.\n", "");
+  for (const claim of ["Supervised a crew of 12 and cut overtime 20%.", "Supervised the crew and kept the dock accident-free."]) {
+    const o = out.replace("Supervised a crew of 12 and cut overtime 20%.", claim);
+    const r = await withVerifierReply({ hasFabrication: true, flags: [{ claim, why: "w", kind: "supervision" }], cleaned }, () =>
+      verifyGrounding({ sourceText: src, output: o, kind: "resume", askSupervision: true })
+    );
+    assert.equal(r.applied, true, claim);
+    assert.equal(r.flags.length, 1, claim);
+  }
+  // The prompt's "do NOT rewrite or remove it" is there only with the opt-in.
+  assert.match(supervisionRule(true), /do NOT rewrite or remove it/);
+  assert.doesNotMatch(supervisionRule(false), /do NOT rewrite or remove it/);
+  assert.match(supervisionRule(false), /fix it like any other unsupported claim/);
+  // Only generate-docs opts in.
+  const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
+  assert.equal((read("../../app/api/forge/generate-docs/route.ts").match(/askSupervision: true/g) ?? []).length, 2);
+  for (const rel of ["../../app/api/fit-check/route.ts", "../../app/api/rush-resume/route.ts", "../../app/api/resume-fine-tune/route.ts", "../../app/api/resume-generate-full/route.ts", "../../app/api/forge/recheck/route.ts", "../forge-recheck.ts"]) {
+    assert.doesNotMatch(read(rel), /askSupervision/, rel);
+  }
+});
+
+test("r3 M3-3: the same line in two jobs is two cards; one Yes settles one of them", async () => {
+  const { buildFinishView, recordScopeYes } = await import("../finish-gate");
+  const { OVER_PEOPLE_YES } = await import("@crucible/core/src/scopeWords");
+  const own = "Rory Example\nForklift Driver | Northgate | 2021 - 2022\nDrove forklift.\nCashier | Mart | 2018 - 2020\nRan the register.";
+  const resume = "RORY EXAMPLE\nLibby, MT\n\nEXPERIENCE\nFORKLIFT DRIVER | Northgate | 2021 - 2022\n- Supervised the crew.\n- Drove forklift.\nCASHIER | Mart | 2018 - 2020\n- Supervised the crew.\n- Ran the register.";
+  const view = buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: [] });
+  const cards = view.groups.filter((g) => g.line === "- Supervised the crew." && g.scope?.overPeople);
+  assert.deepEqual(cards.map((c) => c.scope!.overPeople!.job).sort(), ["CASHIER | Mart | 2018 - 2020", "FORKLIFT DRIVER | Northgate | 2021 - 2022"]);
+  const yes = recordScopeYes([], "- Supervised the crew.", ["supervise"], OVER_PEOPLE_YES, "FORKLIFT DRIVER | Northgate | 2021 - 2022");
+  const after = buildFinishView({ resumeText: resume, ownWords: own, defendAnswers: yes });
+  assert.deepEqual(after.groups.filter((g) => g.line === "- Supervised the crew." && g.scope).map((g) => g.scope!.overPeople!.job), ["CASHIER | Mart | 2018 - 2020"]);
+});
+
+test("r3 M3-4: a title or employer with a date range is a job, credential words and all", () => {
+  const m = parseResume("R E\nr@example.com\n\nWORK HISTORY\nHousekeeper | Valley Care | 2020 - 2022\n- Cleaned rooms.\nCertified Nursing Assistant, Valley Care (2018 - 2020)\nHelped residents bathe\nLicensed Practical Nurse\nMercy Home\n2016 - 2018\nPassed meds\nCertified Welder, Acme Fab, 2014 - 2016\nWelded frames\nLicensed Electrician at Volt Co 2012 - 2014\nWired panels");
+  const jobs = m.blocks.filter((b) => b.kind === "job") as Array<{ title: string; rest: string[]; years: string }>;
+  assert.deepEqual(jobs.map((j) => `${j.title}|${j.rest.join("/")}|${j.years}`), [
+    "Housekeeper|Valley Care|2020 - 2022",
+    "Certified Nursing Assistant, Valley Care||2018 - 2020",
+    "Licensed Practical Nurse|Mercy Home|2016 - 2018",
+    "Certified Welder, Acme Fab||2014 - 2016",
+    "Licensed Electrician at Volt Co||2012 - 2014",
+  ]);
+  for (const l of ["Helped residents bathe", "Passed meds", "Welded frames", "Wired panels"]) assert.ok(m.blocks.some((b) => b.kind === "bullet" && b.text === l), l);
+  // Still not jobs: events and credentials.
+  const f = parseResume("R E\nr@example.com\n\nEXPERIENCE\nCashier | Mart | 2016 - 2020\n- Ran the register.\nPromoted to Shift Lead (2019)\nForklift certified, 2018\nEmployee of the month (2017 - 2018)");
+  assert.equal(f.blocks.filter((b) => b.kind === "job").length, 1);
+});
+
+test("r3 L3-1: the change-list guard never deletes ordinary resume lines", () => {
+  const page = (extra: string) => `RORY EXAMPLE\nLibby, MT | r@example.com\n\nCAREER SUMMARY\nForklift driver with 4 years on the dock.\n\nEXPERIENCE\nDriver | Northgate | 2021 - 2022\n${extra}\n- Drove.\n\nEDUCATION\nGED | 2015`;
+  for (const extra of [
+    "- Moved freight from receiving -> shipping each night.",
+    "- Made schedule changes when drivers called out.",
+    '- "Driver of the Month" to close out 2022.',
+    '- "Safety first" became my crew motto.',
+    "- Loaded (and unloaded) trucks",
+    "(part-time)",
+    "Changes",
+    '- Said "new": every pallet gets a label.',
+  ]) {
+    assert.ok(splitWriterOutput(page(extra)).resume.includes(extra), extra);
+  }
+});
+
+test("r3 L3-2: a pipe headline above the contact line stays the headline; 'Security Officer, PA' is a headline", () => {
+  assert.deepEqual(parseResumeHeaderFor(["Rory Example", "Forklift Operator | Warehouse Lead", "Libby, MT | r@example.com"]), ["Forklift Operator | Warehouse Lead", "Libby, MT | r@example.com"]);
+  assert.deepEqual(parseResumeHeaderFor(["Rory Example", "Forklift Operator | OSHA 10", "r@example.com"]), ["Forklift Operator | OSHA 10", "r@example.com"]);
+  assert.deepEqual(parseResumeHeaderFor(["Rory Example", "Security Officer, PA", "r@example.com"]), ["Security Officer, PA", "r@example.com"]);
+  assert.deepEqual(parseResumeHeaderFor(["Rory Example", "Pittsburgh, PA", "r@example.com"]), ["", "Pittsburgh, PA | r@example.com"]);
+});
+
+test("r3 L3-3: 'Handled the new hires' keeps a wording flag and is asked", () => {
+  const s1 = "Responsible for the register.\nDid inventory counts.\nResponsible for the new hires.\nResponsible for 3rd shift.";
+  for (const c of ["Handled the new hires.", "Ran the new hires.", "Ran 3rd shift.", "Handled 3rd shift."]) assert.equal(onlyRewordedFrom(c, s1), false, c);
+  assert.equal(onlyRewordedFrom("Ran the register.", s1), true);
+  assert.ok(untracedFacts("- Handled the new hires.", s1).some((f) => f.kind === "scope"));
 });
