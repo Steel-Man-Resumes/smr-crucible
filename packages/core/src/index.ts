@@ -25,6 +25,7 @@ export * from './orgToday';
 export * from './orgOutcomes';
 export * from './forgeSession';
 export * from './refineryArtifact';
+export * from './artifactRevision';
 export * from './outcomeAggregate';
 export * from './partnerTracking';
 export * from './getUserProfile';

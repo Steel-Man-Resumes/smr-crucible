@@ -9,6 +9,8 @@
  *   career_paths, forge_output)
  * - forge_session content (all sessions ever linked to this user)
  * - refinery_artifact rows (resumes, cover letters, disclosure plans, etc.)
+ * - saved resume revisions (081): every version's resume and letter text, the
+ *   person's confirmations behind it, its status and page count
  * - career lanes (name, target, format and length settings)
  * - job_application rows (the tracker pipeline)
  * - coach_conversation messages (full AI coach transcript)
@@ -66,7 +68,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
-import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries, exportRecordChecks } from "@crucible/core";
+import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries, exportRecordChecks, exportRevisions, publicRevision } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -218,6 +220,9 @@ export async function POST(req: Request) {
       payload.consumerProfile = consumerProfileRows;
       payload.forgeSessions = forgeSessionRows;
       payload.refineryArtifacts = refineryArtifactRows;
+      // Saved resume revisions (081): every version, with the confirmations
+      // behind it. Owner only, read AS the person. Empty before 081.
+      payload.resumeRevisions = (await exportRevisions(userId)).map(publicRevision);
       // Career lanes (074), archived ones included: they are the person's too.
       // Everything a lane holds, including the person's own answers about
       // their history (the two hybrid conditions).

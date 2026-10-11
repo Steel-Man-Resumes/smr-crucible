@@ -4,6 +4,8 @@
  * Deletes all user data from Postgres:
  * - secure_object rows (Phase 1C vault/transcript/headshot platform) + the
  *   underlying R2 ciphertext, via the deletion_task retry ledger
+ * - artifact_revision (saved resume revisions, 081; owner only, deleted as the
+ *   person before the artifacts they hang off)
  * - refinery_artifact (resumes, disclosure plans, etc.)
  * - career_lane, lane_tool_intro (career lanes and dismissed tool notes)
  * - practice_entry (the practice record behind creative lanes)
@@ -69,6 +71,7 @@ import {
   enqueueDeletion,
   deleteUserConversations,
   deleteAllRecordChecks,
+  deleteAllRevisions,
   leaveAllOrgs,
 } from "@crucible/core";
 
@@ -131,6 +134,10 @@ export async function DELETE(req: Request) {
     await query("DELETE FROM secure_object WHERE owner_user_id = $1", [userId]);
 
     // Delete in dependency order (children first)
+    // Saved resume revisions (081) hang off the artifacts and would cascade
+    // with them; deleted explicitly, AS the person (owner-only table), so the
+    // erase does not depend on a cascade. Before 081 there is nothing to do.
+    await deleteAllRevisions(userId);
     // refinery_artifact has CASCADE on user_id, but be explicit
     await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
     // Career lanes (074): after the artifacts that point at them. Owner-only

@@ -69,6 +69,9 @@ export const RESTRICTED_GRANTS = {
   // D11 record check (080). Owner-only saved checks: never edited, so no
   // UPDATE; deleted by the owner, by revoking the yes, or by delete-my-data.
   record_check_saved: ["SELECT", "INSERT", "DELETE"],
+  // Phase 5 R1 (081). Saved resume revisions, owner only: never edited (a
+  // change is a new revision), so no UPDATE; deleted by delete-my-data.
+  artifact_revision: ["SELECT", "INSERT", "DELETE"],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
