@@ -358,15 +358,17 @@ function OutputPageInner() {
 
   // Check and finish (R2): load that resume and the person's own words from
   // the server. The words never come from this page.
+  // Once per resume id (a ref, not a cancel flag, so a second effect run in
+  // development never drops the answer).
+  const checkLoaded = useRef<string | null>(null);
   useEffect(() => {
-    if (!checkId || !signedIn || hasStarted.current) return;
+    if (!checkId || !signedIn || checkLoaded.current === checkId) return;
+    checkLoaded.current = checkId;
     hasStarted.current = true;
     hydrated.current = true;
-    let live = true;
     fetch(`/api/revisions/check?artifactId=${encodeURIComponent(checkId)}`, { cache: "no-store" })
       .then(async (r) => ({ ok: r.ok, j: await r.json().catch(() => null) }))
       .then(({ ok, j }) => {
-        if (!live) return;
         const src = j?.source;
         if (!ok || !src || typeof src.resumeText !== "string") {
           setCheckError(typeof j?.error === "string" ? j.error : "We couldn't open that resume.");
@@ -389,13 +391,9 @@ function OutputPageInner() {
         setDocState("done");
       })
       .catch(() => {
-        if (!live) return;
         setCheckError("We couldn't open that resume. Try again.");
         setDocState("error");
       });
-    return () => {
-      live = false;
-    };
   }, [checkId, signedIn]);
 
   // ---- the gate ----------------------------------------------------------------
