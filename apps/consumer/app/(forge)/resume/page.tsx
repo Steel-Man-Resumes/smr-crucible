@@ -29,7 +29,7 @@ import { useSession } from "next-auth/react";
 import { sessionPending } from "@/lib/session-policy";
 import { FirstReward, QuickBuild } from "@/components/forge/lanes/FirstSave";
 import { IntakeHelp, PasteInline } from "@/components/forge/lanes/IntakeExtras";
-import { INTAKE_BUILD, INTAKE_HAVE_ONE, INTAKE_TITLE } from "@/lib/lane-task";
+import { INTAKE_BUILD, INTAKE_HAVE_ONE, INTAKE_TITLE, REBUILD_PARAM } from "@/lib/lane-task";
 
 /**
  * "Is this right?": the jobs and dates we read, shown back so the person
@@ -154,6 +154,58 @@ export default function ResumeIntakePage() {
     setPickAgain(true);
   }, []);
 
+  // Phase 6 (plan Q1): "Build it with t.ROY" / "Rewrite it with t.ROY" on a
+  // saved resume (lib/lane-task.ts rebuildHref). The person's newest saved
+  // version (owner only, read as them) becomes the writer's source, and the
+  // build runs. The saved resume itself is never changed here.
+  const [rebuild, setRebuild] = useState<{ id: string; error?: string } | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get(REBUILD_PARAM);
+    if (id) setRebuild({ id });
+  }, []);
+  useEffect(() => {
+    if (!rebuild || rebuild.error || authStatus === "loading") return;
+    const failed = "We couldn't open that resume. Open it from My resumes and try again.";
+    if (!signedIn) {
+      setRebuild({ id: rebuild.id, error: "Sign in to build from a saved resume." });
+      return;
+    }
+    let live = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/revisions?artifactId=${encodeURIComponent(rebuild.id)}`, { cache: "no-store" });
+        const data = (await res.json().catch(() => null)) as { revision?: { resumeText?: unknown } | null } | null;
+        const text = typeof data?.revision?.resumeText === "string" ? data.revision.resumeText : "";
+        if (!live) return;
+        if (!res.ok || !text.trim()) {
+          setRebuild({ id: rebuild.id, error: failed });
+          return;
+        }
+        // A new build from these words: the documents of an earlier build no longer match.
+        updateSession({
+          resumeText: text,
+          originalResumeText: text,
+          resumeMethod: "paste",
+          resumeFileName: undefined,
+          forgeOutput: undefined,
+          forgeFinish: undefined,
+          laneParkedLetter: undefined,
+          laneTask: session.laneTask || "resume",
+          lastPageVisited: "resume",
+        });
+        router.replace("/processing");
+      } catch {
+        if (live) setRebuild({ id: rebuild.id, error: failed });
+      }
+    })();
+    return () => {
+      live = false;
+    };
+    // session is read for its lane only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rebuild, signedIn, authStatus]);
+
   /** Save, then go where this person's path goes next (not always goals). */
   function continueWith(updates: Partial<ForgeSessionData>) {
     updateSession(updates);
@@ -254,6 +306,20 @@ export default function ResumeIntakePage() {
     []
   );
 
+  // Phase 6 (Q1): opening a saved resume for the writer.
+  if (rebuild) {
+    return (
+      <FlowPage
+        title={rebuild.error ? "That didn't open." : "Getting your resume ready for t.ROY."}
+        subtitle={rebuild.error ?? "t.ROY builds a new version from it. You can always get the earlier one back from My resumes."}
+        showBack={!!rebuild.error}
+        onBack={() => router.push("/dashboard/vault")}
+      >
+        <div data-testid="rebuild-status" data-state={rebuild.error ? "error" : "loading"} />
+      </FlowPage>
+    );
+  }
+
   // Phase 7: the structured builder owns the screen once ingest produced material.
   if (builderDoc) {
     return (
@@ -265,19 +331,19 @@ export default function ResumeIntakePage() {
     );
   }
 
-  // Lanes first: the first reward. The page they gave, the one fix, saved.
+  // Lanes first: the first reward. The page they gave and the one fix, then
+  // the writer (Phase 6 Q1): the page is its source, never saved as the resume.
   if (lanes && !isDemo && (rewardText !== null || uploadSuccess)) {
     const text = rewardText ?? session.resumeText ?? "";
     return (
       <FirstReward
         text={text}
-        signedIn={signedIn}
         onBack={() => {
           setRewardText(null);
           setUploadSuccess(false);
           setActivePath("upload");
         }}
-        onContinue={() => continueWith({ lastPageVisited: "resume" })}
+        onBuild={() => continueWith({ lastPageVisited: "resume" })}
         onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "goals", "preferences"])), lastPageVisited: "resume" })}
         onEditor={(t) => enterBuilder(t, { name: parsedName || undefined, email: parsedEmail || undefined, phone: parsedPhone || undefined }, rewardText === null ? parsedProfile : null)}
       />

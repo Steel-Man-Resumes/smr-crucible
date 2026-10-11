@@ -42,7 +42,8 @@ import { stableJson } from "@crucible/core/src/artifactRevision";
 import { lineKey } from "./revision-patch";
 
 /** Bump when the gate or the page rule changes in a way that can change a status. */
-export const CHECKER_VERSION = "finish-gate-1+pages-1+receipt-1";
+// finish-gate-2 (Phase 6): rewording A (facts locked) and one "Looks right" per job where the second check ran.
+export const CHECKER_VERSION = "finish-gate-2+pages-1+receipt-1";
 
 const MAX_WORDS = 120_000;
 const MAX_GROUNDING_JSON = 300_000;

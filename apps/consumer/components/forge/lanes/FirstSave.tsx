@@ -4,11 +4,15 @@
  * The immediate reward (Phase 5 lane R2, Codex C "first reward"):
  *
  *  "I have one":   the person's real page right away, and the ONE most
- *                  useful fix (lib/first-fix.ts). They make it (or keep the
- *                  page as it is) and it is saved as a revision through the
- *                  same save the finish page uses (/api/revisions, R1).
+ *                  useful fix (lib/first-fix.ts). Phase 6 (plan Q1): the page
+ *                  is the writer's source, never the finished page. It goes
+ *                  straight to the writer; nothing is saved as their resume
+ *                  until the finish page saves the writer's version (R1).
  *  "Build with me": one real job and one true duty in their words gives a
- *                  clean first section, saved the same way.
+ *                  clean first section, saved through the same save the
+ *                  finish page uses (/api/lane-first, R1). The lane home
+ *                  sends that section to the writer too, never to "Check and
+ *                  finish" (lib/lane-task.ts writtenByTroy).
  *
  * The server builds the save and decides draft or finished. The page is never
  * its own evidence: only what the person typed here counts as their words, so
@@ -22,7 +26,7 @@ import { ResumePage } from "@/components/resume/ResumePage";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { useForgeSession, type ForgeSessionData } from "@/lib/forge-context";
 import { applyFirstFix, checkFirstSection, firstSectionText, FIX_PROBLEM_COPY, pickFirstFix, type FirstSection } from "@/lib/first-fix";
-import { DRAFT_BADGE } from "@/lib/lane-task";
+import { DRAFT_BADGE, HAVE_ONE_BUILD_LABEL, HAVE_ONE_FIX_LABEL, HAVE_ONE_SKIP_LABEL } from "@/lib/lane-task";
 import type { SavedRevisionSummary } from "@/lib/revision-save";
 
 type Keep = "new" | "replace";
@@ -206,112 +210,108 @@ function SavedFirst({
   );
 }
 
-/** "I have one": the page they gave, and the one most useful fix. */
+/**
+ * "I have one" (Phase 6, plan Q1): the page they gave and the one most useful
+ * fix, then t.ROY builds the resume from it. The page is the writer's source,
+ * never the finished page: nothing is saved here as "your resume". The fix
+ * (when they make it) goes into the source the writer reads; the finished
+ * version is saved after the writer and the finish page, as R1 does.
+ */
 export function FirstReward({
   text,
-  signedIn,
   onBack,
-  onContinue,
+  onBuild,
   onDoMore,
   onEditor,
 }: {
   text: string;
-  signedIn: boolean;
   onBack: () => void;
-  onContinue: () => void;
+  /** On to the writer (/processing, then /output). */
+  onBuild: () => void;
   onDoMore: () => void;
   onEditor: (text: string) => void;
 }) {
+  const { updateSession } = useForgeSession();
   const fix = pickFirstFix(text);
   const [typed, setTyped] = useState(fix.start);
   const [problem, setProblem] = useState<string | null>(null);
-  const [savedText, setSavedText] = useState<string | null>(null);
-  const saver = useFirstSave(signedIn);
+  const hasFix = fix.kind !== "none";
 
-  // What the person typed here (the fix), the only words the save counts as theirs (review H2).
-  const typedOwn = useRef("");
-  async function saveWith(fixIt: boolean) {
+  /** The writer's source: their page, with the fix when they made it. */
+  function go(fixIt: boolean, then: () => void) {
     setProblem(null);
     let next = text;
-    typedOwn.current = "";
-    if (fixIt && fix.kind !== "none") {
+    if (fixIt && hasFix) {
       const r = applyFirstFix(text, fix, typed);
       if (!r.ok) {
         setProblem(FIX_PROBLEM_COPY[r.problem]);
         return;
       }
       next = r.text;
-      typedOwn.current = r.typed;
     }
-    setSavedText(next);
-    await saver.save(next, {}, typedOwn.current);
+    updateSession({ resumeText: next, lastPageVisited: "resume" });
+    then();
   }
 
-  if (savedText !== null) {
-    return (
-      <SavedFirst
-        text={savedText}
-        state={saver.state}
-        onRetry={saver.retry}
-        onChoose={(k) => void saver.choose(k)}
-        onContinue={onContinue}
-        onDoMore={onDoMore}
-        onEditor={() => onEditor(savedText)}
-      />
-    );
-  }
-
-  const hasFix = fix.kind !== "none";
   return (
     <FlowPage
       title="Here's your page."
-      subtitle={hasFix ? "One fix makes the biggest difference. Make it, and we save your page." : "Save it, and t.ROY checks every line with you next."}
-      actionLabel={hasFix ? "Make this fix and save" : "Save my page"}
-      onAction={() => void saveWith(true)}
+      subtitle={hasFix ? "One fix first. Then t.ROY builds your resume from it, and you check it." : "Next, t.ROY builds your resume from it, and you check it."}
+      actionLabel={hasFix ? HAVE_ONE_FIX_LABEL : HAVE_ONE_BUILD_LABEL}
+      onAction={() => go(true, onBuild)}
       showBack
       onBack={onBack}
     >
-      <section className="mb-4 border border-t-amber bg-t-panel p-4" aria-labelledby="first-fix-title" data-testid="first-fix" data-kind={fix.kind}>
-        <h2 id="first-fix-title" className="text-base font-semibold text-t-white">
-          {fix.title}
-        </h2>
-        <p className="mt-1 text-sm text-t-phos">{fix.why}</p>
-        {fix.kind === "edit_line" && fix.line && (
-          <p className="mt-2 border-l-2 border-t-line pl-3 text-sm text-t-phos-dim" data-testid="first-fix-line">
-            &ldquo;{fix.line}&rdquo;
-          </p>
-        )}
-        {hasFix && (
-          <>
-            <label htmlFor="first-fix-input" className="mt-3 block text-xs font-semibold text-t-white">
-              {fix.label}
-            </label>
-            <input
-              id="first-fix-input"
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-              className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2.5 text-base text-t-white focus:border-t-amber focus:outline-none"
-              data-testid="first-fix-input"
-            />
-            {fix.kind === "edit_line" && <p className="mt-1 text-xs text-t-phos-dim">Empty the box to take the line off.</p>}
-            {problem && (
-              <p role="status" className="mt-2 text-sm text-t-amber-bright" data-testid="first-fix-problem">
-                {problem}
-              </p>
-            )}
-            <button
-              type="button"
-              onClick={() => void saveWith(false)}
-              className="t-focus mt-3 min-h-touch text-sm text-t-phos underline underline-offset-2 hover:text-t-white"
-              data-testid="first-fix-skip"
-            >
-              Save it as it is
-            </button>
-          </>
-        )}
-      </section>
+      {hasFix && (
+        <section className="mb-4 border border-t-amber bg-t-panel p-4" aria-labelledby="first-fix-title" data-testid="first-fix" data-kind={fix.kind}>
+          <h2 id="first-fix-title" className="text-base font-semibold text-t-white">
+            {fix.title}
+          </h2>
+          <p className="mt-1 text-sm text-t-phos">{fix.why}</p>
+          {fix.kind === "edit_line" && fix.line && (
+            <p className="mt-2 border-l-2 border-t-line pl-3 text-sm text-t-phos-dim" data-testid="first-fix-line">
+              &ldquo;{fix.line}&rdquo;
+            </p>
+          )}
+          <label htmlFor="first-fix-input" className="mt-3 block text-xs font-semibold text-t-white">
+            {fix.label}
+          </label>
+          <input
+            id="first-fix-input"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2.5 text-base text-t-white focus:border-t-amber focus:outline-none"
+            data-testid="first-fix-input"
+          />
+          {fix.kind === "edit_line" && <p className="mt-1 text-xs text-t-phos-dim">Empty the box to take the line off.</p>}
+          {problem && (
+            <p role="status" className="mt-2 text-sm text-t-amber-bright" data-testid="first-fix-problem">
+              {problem}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => go(false, onBuild)}
+            className="t-focus mt-3 min-h-touch text-sm text-t-phos underline underline-offset-2 hover:text-t-white"
+            data-testid="first-fix-skip"
+          >
+            {HAVE_ONE_SKIP_LABEL}
+          </button>
+        </section>
+      )}
+      <p className="mb-2 text-sm text-t-phos" data-testid="first-reward-next">
+        t.ROY turns this into a real resume from what is on it. You check each job before it is done, and nothing is saved as your resume until then.
+      </p>
       <div className="border border-t-line bg-t-bg p-3" data-testid="first-reward-page">
         <ResumePage text={text} draft />
+      </div>
+      <div className="mt-3 flex flex-col gap-2 text-sm">
+        <button type="button" onClick={() => go(false, onDoMore)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="do-more">
+          Do more first: tell t.ROY your goals
+        </button>
+        <button type="button" onClick={() => onEditor(text)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-reward-editor">
+          Fix lines yourself first, in the editor
+        </button>
       </div>
     </FlowPage>
   );
