@@ -519,7 +519,7 @@ test("L2: opening a resume for Check and finish writes nothing; only the same-or
 
 /** A fake second check: flags only the invented line, never reaches a model. */
 const verifyFake = async (p: { sourceText: string; output: string; kind: string }) => {
-  const bad = p.output.split("\n").map((l) => l.replace(/^[-\s]+/, "").trim()).find((l) => /Managed a team of 40/.test(l));
+  const bad = p.output.split("\n").map((l) => l.replace(/^[-\s]+/, "").trim()).find((l) => /Managed the warehouse budget/.test(l));
   return { text: p.output, hasFabrication: !!bad, applied: false, flags: bad ? [{ claim: bad, why: "not in what the person said" }] : [], verifierRan: true };
 };
 let nonce = 0;
@@ -581,14 +581,14 @@ test("check and finish (honest Tailor copy): R1 checks it for real, the person a
 });
 
 test("check and finish (a Tailor copy the second check BLOCKs): stays a draft, with that line as a card", async () => {
-  const f = fakeStore([{ ...tailorArtifact(), content: resumeTextToDocument(RESUME + "\n- Managed a team of 40 associates.") as unknown as Record<string, unknown> }]);
+  const f = fakeStore([{ ...tailorArtifact(), content: resumeTextToDocument(RESUME + "\n- Managed the warehouse budget.") as unknown as Record<string, unknown> }]);
   const { rc, saved } = await checkThenAnswer(f);
   assert.ok(rc.ok);
   const g = (rc.ok ? rc.grounding : {}) as { hasFabrication?: boolean };
   assert.equal(g.hasFabrication, true, "the second check ran and flagged the invented line");
   assert.ok(saved.ok);
   assert.equal(saved.ok && saved.revision.status, "draft");
-  assert.ok(saved.ok && saved.revision.openItems.some((i) => /Managed a team of 40/.test(i)), JSON.stringify(saved.ok && saved.revision.openItems));
+  assert.ok(saved.ok && saved.revision.openItems.some((i) => /Managed the warehouse budget/.test(i)), JSON.stringify(saved.ok && saved.revision.openItems));
 });
 
 test("check and finish: a save with no current R1 check is refused; this code signs nothing", async () => {
