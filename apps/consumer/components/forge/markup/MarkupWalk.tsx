@@ -12,10 +12,12 @@ import type { ResumeTour } from "@/lib/showstopper-tour";
 import { OldPageTour } from "@/components/forge/showstopper/OldPageTour";
 import { TroyArrival } from "@/components/forge/showstopper/TroyArrival";
 
-export function MarkupWalk({ tour, reduced }: { tour: ResumeTour; reduced: boolean | null }) {
+export function MarkupWalk({ tour, reduced, startingPage = false }: { tour: ResumeTour; reduced: boolean | null; /** A rebuild's saved page: not necessarily the page the person gave. */ startingPage?: boolean }) {
   const intro = tour.steps.length
     ? "While I write your new page, here's what I see on this one, top to bottom."
-    : "Here's your page as you gave it.";
+    : startingPage
+      ? "Here's the page we're starting from."
+      : "Here's your page as you gave it.";
   return (
     <div className="mt-6 border border-t-line bg-t-panel p-4 sm:p-6" data-testid="markup-walk">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-5">

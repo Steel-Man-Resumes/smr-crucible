@@ -29,7 +29,20 @@ export function changesNotAwaitingCards<T extends { new: string }>(changes: Read
       .map((g) => key(g.line))
   );
   for (const i of view.general) if (i.line) waiting.add(key(i.line));
-  return changes.filter((c) => !waiting.has(key(c.new)));
+  // Integration r2 (M2): a term an open card asks about (the D3 keep-or-cut
+  // skills card, a skills term, a credential's name) holds back any change
+  // whose new line carries it, as a whole word.
+  const terms = new Set<string>();
+  for (const g of view.groups) {
+    for (const t of g.terms ?? []) terms.add(t);
+    if (g.target === "skill") terms.add(g.line);
+    if (g.credentialName) terms.add(g.credentialName);
+  }
+  const res = Array.from(terms)
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((t) => new RegExp(`(?<![\\w])${t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w])`, "i"));
+  return changes.filter((c) => !waiting.has(key(c.new)) && !res.some((re) => re.test(c.new)));
 }
 
 /** L2: the changes whose new line is still on the resume as it reads now. */

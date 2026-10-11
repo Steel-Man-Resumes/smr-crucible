@@ -281,7 +281,8 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
   // the same way a rebuild does (lib/source-kind.ts), from the stored lineage.
   const lineage = base && store.listRevisions ? await store.listRevisions(userId, base.artifact_id).catch(() => [base]) : base ? [base] : [];
   // Review r2 L5: a page that is not the base version's own text is never classified from that version.
-  const baseKind: SourceKind = base ? revisionKind(base, lineage, resume) : "page_only";
+  // Integration r2 (H1): a page checked on another artifact's version (a Tailor fork) is page_only.
+  const baseKind: SourceKind = base && base.artifact_id === art.id ? revisionKind(base, lineage, resume) : "page_only";
   const kind: SourceKind = baseKind === "own_words" && base && base.resume_text !== resume ? "unknown" : baseKind;
   const grounding = withRewording(await runCheck(written, { resumeText: [source.ownResumeText, source.ownWords].filter(Boolean).join("\n\n"), extra: answers }, deps.verify, rewordingAFor(kind)), kind);
   const runId = artifactRunId(art.id);
@@ -289,7 +290,8 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
   if (deps.record) await deps.record(userId, runId, signed.nonce, signed.now);
 
   // Save the checked version (server-made evidence, so it is stored as verified).
-  const edited = editInput(baseInput, resume, letter);
+  // Integration r2 (H1): a base from another artifact (a Tailor's parent) is a fork.
+  const edited = editInput(baseInput, resume, letter, { fork: !!base && base.artifact_id !== art.id });
   if (!edited.ok) return { ok: false, status: edited.reason === "too long" ? 413 : 400, error: "We couldn't check it just now." };
   const evidence: RevisionEvidence = {
     ...edited.input.evidence,

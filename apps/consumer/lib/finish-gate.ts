@@ -623,8 +623,11 @@ export function cutTerm(text: string, term: string): string {
       }
       const m = l.match(/^(\s*(?:[-•*]\s*)?(?:[A-Za-z &/]+:\s*)?)(.*)$/);
       const prefix = m?.[1] ?? "";
-      const parts = (m?.[2] ?? l).split(/\s*(?:[,;|•·]|\s[-–]\s|\s\/\s|\/(?=[A-Za-z])|\band\b)\s*/i);
+      // Integration r2 (L3): a slash term ("Lockout/tagout") is one term: read the line
+      // with slash pairs whole first, and split at a slash only when the term is one half.
       const norm = (p: string) => p.replace(/^\(|\)$/g, "").trim().toLowerCase();
+      const whole = (m?.[2] ?? l).split(/\s*(?:[,;|•·]|\s[-–]\s|\s\/\s|\band\b)\s*/i);
+      const parts = whole.some((p) => norm(p) === t) ? whole : (m?.[2] ?? l).split(/\s*(?:[,;|•·]|\s[-–]\s|\s\/\s|\/(?=[A-Za-z])|\band\b)\s*/i);
       const kept = parts.filter((p) => p.trim() && norm(p) !== t);
       if (kept.length === parts.filter((p) => p.trim()).length) return l;
       return kept.length ? prefix + kept.join(", ") : "";
@@ -1427,6 +1430,18 @@ export function jobHeaderLines(resumeText: string): string[] {
 export function jobPartsOf(line: string): { title: string; rest: string[] } {
   const parts = stripBullet(line).split("|").map((p) => p.trim()).filter(Boolean);
   return { title: parts[0] ?? "", rest: parts.slice(1) };
+}
+
+/**
+ * Integration r2 (L1): the job card shows the whole header, also when the
+ * writer split it over two or three lines ("CNA" / "Valley Care Center,
+ * 2019 - 2021"): title, then employer, place and dates from the shared
+ * resolver. "Looks right" never settles a fact the card did not show.
+ */
+export function jobCardParts(header: string, resumeText: string): { title: string; rest: string[] } {
+  const facts = jobsIn(linesOf(resumeText || "").slice(1).join("\n")).find((j) => j.lines[0] === header);
+  if (!facts || facts.lines.length < 2) return jobPartsOf(header);
+  return { title: facts.title || jobPartsOf(header).title, rest: [facts.employer, facts.place, facts.dates].map((p) => (p || "").trim()).filter(Boolean) };
 }
 
 /**
@@ -2274,8 +2289,8 @@ export function buildFinishView(input: {
       ...(its[0].target === "skillset"
         ? { terms: its.map((i) => i.line).filter((t, k, all) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === k) }
         : {}),
-      ...(its.length === 1 && its[0].kind === "job_confirm" ? { job: jobPartsOf(its[0].line) } : {}),
-      ...(its.length === 1 && its[0].kind === "job_changed" ? { job: { ...jobPartsOf(its[0].line), changes: jobHeaderChanges(its[0].line, source, input.resumeText) } } : {}),
+      ...(its.length === 1 && its[0].kind === "job_confirm" ? { job: jobCardParts(its[0].line, input.resumeText) } : {}),
+      ...(its.length === 1 && its[0].kind === "job_changed" ? { job: { ...jobCardParts(its[0].line, input.resumeText), changes: jobHeaderChanges(its[0].line, source, input.resumeText) } } : {}),
       ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true, schoolKnown: !!attendedSchoolOf(its[0].line, source) } : {}) } : {}),
       ...(its.find((i) => i.kind === "title_unsaid" && i.roleTitle)
         ? { title: { current: its.find((i) => i.kind === "title_unsaid" && i.roleTitle)!.roleTitle as string, role: true } }

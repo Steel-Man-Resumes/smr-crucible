@@ -41,6 +41,12 @@ import { readReceipt, receiptAccepted, sourceHash, verifyWriterReceipt, type Rec
 import { stableJson } from "@crucible/core/src/artifactRevision";
 import { createHash } from "node:crypto";
 import { jobOfLine } from "@crucible/core/src/resumeStatus";
+import { matchOwnJob, readJobHeader } from "@crucible/core/src/jobResolver";
+
+/** Integration r2 (M1): two headers the shared job resolver reads as the same job (title, employer, and dates when it must choose). */
+export function sameJobHeader(oldHeader: string, newHeader: string): boolean {
+  return matchOwnJob(readJobHeader(newHeader), [readJobHeader(oldHeader)]).kind === "one";
+}
 import { lineKey } from "./revision-patch";
 
 /** Bump when the gate or the page rule changes in a way that can change a status. */
@@ -411,11 +417,11 @@ export function revisionRecord(artifactId: string, source: RevisionSource, input
  * keeps the answer the person already gave. A changed line is asked again,
  * and only that line.
  */
-export function editInput(base: RevisionInput | null, resumeText: string, letterText?: string): CleanResult {
+export function editInput(base: RevisionInput | null, resumeText: string, letterText?: string, opts: { fork?: boolean } = {}): CleanResult {
   const letter = letterText ?? base?.letterText ?? "";
   return cleanRevisionInput(
     {
-      ...(base?.evidence ?? {}),
+      ...(base ? (opts.fork ? forkEvidence(base.evidence) : base.evidence) : {}),
       docKind: base?.docKind ?? "resume",
       lengthChoice: base?.lengthChoice ?? "auto",
       resumeText,
@@ -426,6 +432,27 @@ export function editInput(base: RevisionInput | null, resumeText: string, letter
     },
     { trusted: true }
   );
+}
+
+/** A grounding stamped page_only (the same result as source-kind's withRewording(g, "page_only")). */
+export function pageOnlyGrounding(grounding: unknown): unknown {
+  if (!grounding || typeof grounding !== "object" || Array.isArray(grounding)) return grounding;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { rewordingA: _a, sourceKind: _k, startingPageOnly: _s, ...rest } = grounding as Record<string, unknown>;
+  return { ...rest, sourceKind: "page_only" };
+}
+
+/**
+ * Integration r2 (H1): the evidence a FORK (a Tailor result, or any version
+ * built on a base from another artifact) carries. Writer eligibility belongs
+ * to the artifact the writer made: the fork keeps the person's own words and
+ * the trust it had, but never the parent's origin, given mark or receipt, and
+ * its grounding is stamped page_only (the stricter rule).
+ */
+export function forkEvidence(ev: RevisionEvidence): RevisionEvidence {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { writerOrigin: _o, givenAsIs: _g, ...rest } = ev;
+  return { ...rest, writerReceipt: "", grounding: pageOnlyGrounding(ev.grounding) };
 }
 
 /** Carried answers moved onto the new text's lines with the same words (lineKey). */
@@ -439,10 +466,18 @@ export function remapAnswers(answers: DefendAnswer[], pages: string[]): DefendAn
   }
   // Phase 6 integration (L1): an answer keyed to a job follows that job's header
   // when the header was edited (the header its line now sits under).
+  // Integration r2 (M1): only to the SAME job (the same header with only its form
+  // moved, or a header the shared resolver reads as the same job). Otherwise the
+  // key is dropped and the card is asked again.
   const rejob = (a: DefendAnswer): DefendAnswer => {
     if (typeof a.job !== "string" || !a.job || exact.has(a.job.trim())) return a;
-    const job = byKey.get(lineKey(a.job)) ?? jobOfLine(pages[0] ?? "", a.line);
-    return job ? { ...a, job } : a;
+    const same = byKey.get(lineKey(a.job));
+    if (same) return { ...a, job: same };
+    const now = jobOfLine(pages[0] ?? "", a.line);
+    if (now && sameJobHeader(a.job, now)) return { ...a, job: now };
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { job: _dropped, ...rest } = a;
+    return rest;
   };
   return answers.map((a) => {
     if (exact.has(a.line.trim())) return rejob(a);
