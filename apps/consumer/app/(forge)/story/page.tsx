@@ -114,8 +114,8 @@ export default function StoryPage() {
       footer={
         <p>
           What you share here helps t.ROY build your resume and find
-          resources. To do that, it goes to the AI service we use, and if
-          you&apos;re signed in, it&apos;s saved to your account. It&apos;s never used to
+          resources. To do that, it goes to the AI services we use, and if you
+          sign in or make an account, it&apos;s saved there. It&apos;s never used to
           judge you. Skip anything you don&apos;t want to share.
         </p>
       }

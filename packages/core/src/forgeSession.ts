@@ -96,7 +96,8 @@ export async function saveForgeSession(
     ];
   const saved = await query(FORGE_SESSION_UPSERT_SQL, params(sessionId));
   if (saved.length === 0) {
-    await query(FORGE_SESSION_UPSERT_SQL, params(ownedSessionId(sessionId, userId)));
+    const fallback = await query(FORGE_SESSION_UPSERT_SQL, params(ownedSessionId(sessionId, userId)));
+    if (fallback.length === 0) throw new Error("forge session not saved: session id is held by another account");
   }
 }
 
