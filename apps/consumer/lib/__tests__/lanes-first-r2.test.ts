@@ -619,3 +619,40 @@ test("L4: a locked baseline is refused plainly on open and on save, so exports n
   const r = await saveCheckRevision(UID, TAILOR, finishState({ resumeText: load2.ok ? load2.source.resumeText : "", defendAnswers: answerAll(load2.ok ? load2.source.resumeText : "") }), g.store);
   assert.ok(!r.ok && r.reason === "locked");
 });
+
+test("review r2 L-b: after an edit saved through the Refinery, Check and finish asks R1 for a fresh check (never the old one)", async () => {
+  const f = fakeStore([tailorArtifact()]);
+  const rc = await recheckDocs({ kind: "artifact", artifactId: TAILOR }, UID, deps(f.store));
+  assert.ok(rc.ok);
+  assert.ok((await loadCheckSource(UID, TAILOR, f.store)).ok, "right after R1's check it opens on that check");
+  // A Refinery edit: the stored resume changes and is saved as a version (R1's export path).
+  const edited = RESUME.replace("- Ran the grill on the breakfast line.", "- Ran the grill and the fryer on the breakfast line.");
+  f.arts[0].content = resumeTextToDocument(edited) as unknown as Record<string, unknown>;
+  const { ensureExportRevision } = await import("../revision-current");
+  const ex = await ensureExportRevision(UID, TAILOR, f.store);
+  assert.ok(ex.ok && ex.revision.source === "refinery_edit");
+  assert.equal((ex.ok ? ex.revision.evidence : {} as never as Record<string, unknown>).runId, `artifact:${TAILOR}`, "the edit carried the old check forward");
+  // Opening (and saving) now asks for a fresh check.
+  const load = await loadCheckSource(UID, TAILOR, f.store);
+  assert.ok(!load.ok && load.reason === "needs_check");
+  const save = await saveCheckRevision(UID, TAILOR, finishState({ resumeText: edited }), f.store);
+  assert.ok(!save.ok && save.reason === "needs_check");
+  // R1 checks the edited text, and the page opens on that.
+  const again = await recheckDocs({ kind: "artifact", artifactId: TAILOR }, UID, deps(f.store));
+  assert.ok(again.ok && again.written.resume.includes("the fryer"));
+  const fresh = await loadCheckSource(UID, TAILOR, f.store);
+  assert.ok(fresh.ok && fresh.source.written?.resume.includes("the fryer"));
+});
+
+test("review r2 L-b: on the check page itself, a change then another answer still saves (saves on top of the check)", async () => {
+  const f = fakeStore([tailorArtifact()]);
+  await recheckDocs({ kind: "artifact", artifactId: TAILOR }, UID, deps(f.store));
+  const load = await loadCheckSource(UID, TAILOR, f.store);
+  assert.ok(load.ok);
+  const text = load.ok ? load.source.resumeText : "";
+  const changed = text.replace("- Showed incoming culinary staff the equipment.", "- Showed new cooks the grill.");
+  const one = await saveCheckRevision(UID, TAILOR, finishState({ resumeText: changed, defendAnswers: [] }), f.store);
+  assert.ok(one.ok, JSON.stringify(one));
+  const two = await saveCheckRevision(UID, TAILOR, finishState({ resumeText: changed, defendAnswers: answerAll(changed) }), f.store);
+  assert.ok(two.ok, JSON.stringify(two));
+});
