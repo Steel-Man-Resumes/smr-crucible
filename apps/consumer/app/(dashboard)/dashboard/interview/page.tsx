@@ -1143,11 +1143,12 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
       )}
 
       <p className="text-xs text-t-phos-dim text-center">
-        This is a safe space to practice. We never save your words or
-        recordings, only the frames you practice and whether your point lands, so
-        the app can coach you and track your progress. Your practice is private
-        to your account and never shared unless you choose to connect a support
-        partner.
+        This is a safe space to practice. In text practice we keep the role, the
+        kind of practice and t.ROY&apos;s feedback, never a transcript of your
+        answers, so the app can track your progress. In voice practice, what was said is kept as text
+        only when you turn saving on, and we never keep the audio. No program or
+        employer can read your practice. If you share your progress with a
+        program, it sees how many sessions you have done.
       </p>
     </div>
   );

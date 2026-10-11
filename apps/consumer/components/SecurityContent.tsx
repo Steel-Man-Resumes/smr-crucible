@@ -16,7 +16,7 @@ export function SecurityContent({ showUserControls }: SecurityContentProps) {
     <div className="max-w-2xl space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Your Data is Private
+          Your Data: Who Sees It
         </h1>
         <p className="text-base text-t-phos-dim leading-relaxed">
           We built this tool for people who need to trust it. Here&apos;s

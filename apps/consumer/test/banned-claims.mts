@@ -77,6 +77,18 @@ const BANNED_PHRASES = [
   "the offense never reaches ai",
   "offense is never sent to the ai",
   "never sent to an ai provider",
+  // 2026-10-10 Phase 5 R5.3: absolute privacy lines that were not true as
+  // written. Forge answers reach the AI services (and the account when signed
+  // in); a program with progress sharing sees counts and whether a plan
+  // exists; voice practice keeps a text transcript when saving is on; nothing
+  // in the code promises lifetime retention.
+  "everything here is private",
+  "everything stays private",
+  "your data is private",
+  "we never save your words or recordings",
+  "never shared unless you choose to connect a support partner",
+  "yours for life",
+  "you can redo it as many times as you want",
 ];
 
 function* walk(dir: string): Generator<string> {

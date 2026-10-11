@@ -1000,7 +1000,8 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
         <div className="flex items-center justify-between gap-3 bg-t-panel-2 px-4 py-3 border border-t-amber mb-6">
           <p className="text-sm text-t-amber-bright">
             <span className="font-semibold">Saved to your Library.</span> Come
-            back to it anytime. It is private to your account.
+            back to it anytime. No program or employer can read it. If you share your progress with a
+            program, it sees only that you have a plan.
           </p>
           <a
             href="/dashboard/vault"
