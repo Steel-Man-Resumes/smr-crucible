@@ -677,8 +677,8 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               and you get a generic template you will have to rewrite yourself.
             </p>
             <p className="text-xs text-t-phos-dim mb-4">
-              Your details are never put on paper, never shared, and you can delete
-              them anytime.
+              Your details go to the AI services that build the plan. No program or
+              employer can read them, and you can delete them anytime.
             </p>
             <div className="flex flex-wrap gap-3">
               <button

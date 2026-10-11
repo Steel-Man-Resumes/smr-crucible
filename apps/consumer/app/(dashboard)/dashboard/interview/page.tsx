@@ -644,14 +644,14 @@ function InterviewPracticePage() {
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
 <h1>Interview Analysis${config.targetRole ? `: ${esc(config.targetRole)}` : ""}</h1>
-<p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date} &bull; Practice frames only, no transcript</p>
+<p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date} &bull; Analysis and your notes, no transcript</p>
 ${fb.frame ? `<h2>The Frame to Carry In</h2><blockquote>${esc(fb.frame)}</blockquote>` : ""}
 ${Array.isArray(fb.strengths) && fb.strengths.length ? `<h2>What You Did Well</h2><ul>${list(fb.strengths)}</ul>` : ""}
 ${Array.isArray(fb.improvements) && fb.improvements.length ? `<h2>Areas to Work On</h2><ul>${list(fb.improvements)}</ul>` : ""}
 ${Array.isArray(fb.better_answers) && fb.better_answers.length ? `<h2>Stronger Answers to Model</h2>${fb.better_answers.map((b: any) => `<p class="q">${esc(b.question)}</p><blockquote>${esc(b.model_answer)}</blockquote>`).join("")}` : ""}
 ${fb.overall ? `<h2>Overall</h2><p>${esc(fb.overall)}</p>` : ""}
 ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br/>")}</p>` : ""}
-<div class="footer">This analysis is yours. We only keep the frames you practiced. We never store your interview words or recordings.</div>
+<div class="footer">This analysis is yours. Text practice keeps this feedback, never a transcript. Voice practice keeps a text transcript only when you turn saving on. We never keep the audio.</div>
 </body></html>`;
     const w = window.open("", "_blank");
     if (!w) return;
@@ -995,7 +995,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         <div className="bg-t-panel p-5 border border-t-line mb-4">
           <h2 className="font-semibold text-t-white mb-2">Your notes</h2>
           <p className="text-xs text-t-phos-dim mb-2">
-            Jot what you want to remember. These stay on your device. We never store your words.
+            Jot what you want to remember. These notes stay on this page and are not saved. Copy or download the analysis to keep them.
           </p>
           <textarea
             value={userNotes}
