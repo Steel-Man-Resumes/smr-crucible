@@ -216,7 +216,11 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
   } else {
     const ctx: ReceiptContext = opts.receipt ?? { userId: null, runId: typeof r.runId === "string" ? r.runId : "" };
     const meta = verifyWriterReceipt(receipt, writtenIn, groundingIn, opts.now);
-    const attested = !!meta && receiptAccepted(meta, ctx) && sourceHash(requested) === meta.src;
+    const accepted = !!meta && receiptAccepted(meta, ctx);
+    // Signed in, a check signs the SERVER-held source (review N2): a receipt
+    // over that source stands, with those own words, whatever the page sent.
+    const serverAttested = accepted && !!opts.serverSource && sourceHash(opts.serverSource) === meta!.src;
+    const attested = accepted && (sourceHash(requested) === meta!.src || serverAttested);
     const known = opts.known;
     const knownNonce = known ? readReceipt(known.writerReceipt)?.n : undefined;
     const matchesKnown =
@@ -228,7 +232,7 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
       (!ctx.newestNonce || ctx.newestNonce === knownNonce);
     if (attested) {
       verified = true;
-      source = requested;
+      source = sourceHash(requested) === meta!.src ? requested : opts.serverSource!;
       receiptKept = receipt;
     } else if (matchesKnown) {
       // The person's own verified version: its own words, as the server stored them.

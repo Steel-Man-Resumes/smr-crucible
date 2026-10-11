@@ -21,11 +21,14 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { verifyGrounding } from "@/lib/grounding-verify";
 import { recheckDocs } from "@/lib/forge-recheck";
 import { runCookieHeader } from "@/lib/writer-receipt";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 async function handlePost(request: Request) {
+  // This app's own origin and a JSON body only, like the other revision writes (review L-a).
+  if (!isSameOriginJsonPost(request.headers)) return NextResponse.json({ error: "Invalid request" }, { status: 403 });
   const len = Number(request.headers.get("content-length") || 0);
   if (len > 1_000_000) return NextResponse.json({ error: "Request too large" }, { status: 413 });
   const session = await auth();
