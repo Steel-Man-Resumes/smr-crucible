@@ -89,8 +89,8 @@ function fakeStore(initial: ArtifactLite[] = [], serverText?: string) {
 const tailorArtifact = (): ArtifactLite => ({ id: TAILOR, artifact_type: "resume", target_context: { source: "tailor", targetJob: "Stocker" }, content: {} });
 
 /** Store a Tailor revision of TAILOR_PAGE carrying `evidence` (as a stored row would). */
-async function tailorWith(evidence: Record<string, unknown>, source: "refinery_edit" | "forge_finish" = "refinery_edit") {
-  const f = fakeStore([tailorArtifact()]);
+async function tailorWith(evidence: Record<string, unknown>, source: "refinery_edit" | "forge_finish" = "refinery_edit", serverText?: string) {
+  const f = fakeStore([tailorArtifact()], serverText);
   const c = cleanRevisionInput({ resumeText: TAILOR_PAGE, coverLetterText: "", ...evidence }, { trusted: true });
   assert.ok(c.ok);
   await f.store.insertRevision(UID, revisionRecord(TAILOR, source, c.input, computeRevision(c.input)));
@@ -146,6 +146,39 @@ test("Tailor page with the person's stored own words: those are the source; the 
   assert.ok(!b.source.ownWords.includes("Forklift"));
   // A writer that put the credential back is asked about it.
   assert.ok(b.view().groups.some((g) => g.credentialName && /Forklift/i.test(g.credentialName)));
+});
+
+test("round 2b: page only, with a stored upload: the upload is their words, the page never is", async () => {
+  const f = await tailorWith({}, "refinery_edit", UPLOAD);
+  const rb = await loadRebuildSource(UID, TAILOR, f.store);
+  assert.equal(rb!.origin, "page_only");
+  assert.equal(rb!.ownResumeText, writerSourceFrom({ resumeText: UPLOAD }).ownResumeText, "the account's stored upload");
+  const written = `CASEY SAMPLE
+Dayton, OH | casey@example.com
+
+PROFESSIONAL EXPERIENCE
+Stocker | Valley Foods | 2020 - 2023
+- Stocked shelves and unloaded the truck
+- Kept the back room clean
+- Moved inbound freight with the warehouse team
+
+CERTIFICATIONS
+Forklift Certification, current`;
+  const b = build(rb!, { resumeText: TAILOR_PAGE }, written, GROUNDING);
+  assert.equal(b.r.writer.resumeText, TAILOR_PAGE, "the page is still only the starting point");
+  assert.ok(!b.source.ownWords.includes("Forklift"));
+  assert.equal(factsLockedFor({ resume: written, letter: "" }, b.grounding), false, "still the stricter rule");
+  const v = b.view();
+  // The AI credential is still asked.
+  assert.ok(v.groups.some((g) => g.credentialName && /Forklift/i.test(g.credentialName)), JSON.stringify(v.groups.map((g) => g.line)));
+  // Lines that match her upload are not; her title, employer and years are hers.
+  for (const line of ["- Stocked shelves and unloaded the truck", "- Kept the back room clean", "Stocker | Valley Foods | 2020 - 2023"]) {
+    assert.ok(!v.groups.some((g) => g.line === line), line);
+  }
+  assert.ok(!v.openItems.some((i) => i.rule === "STD-T05" || i.kind === "title_unsaid"));
+  // Fewer cards than with no stored upload at all.
+  const none = build((await loadRebuildSource(UID, TAILOR, (await tailorWith({})).store))!, { resumeText: TAILOR_PAGE }, written, GROUNDING).view();
+  assert.ok(v.groups.length < none.groups.length, `${v.groups.length} vs ${none.groups.length}`);
 });
 
 // ---- a raw "I have one" save ---------------------------------------------------------------------

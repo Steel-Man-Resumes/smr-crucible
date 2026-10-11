@@ -19,9 +19,11 @@
  *                Those are the writer's source and the gate's own words; the
  *                page is only shown.
  *   "page_only": neither. The page is the writer's starting point, but
- *                nothing on it counts as theirs: the build's own resume text
- *                is empty, its grounding says so (startingPageOnly, signed
- *                into the writer's receipt), and every line is confirmed the
+ *                nothing on it counts as theirs. The own resume text is the
+ *                account's stored upload when there is one (server-held, the
+ *                person's own words, as check mode's recheck uses; round 2b),
+ *                else empty. Its grounding says so (startingPageOnly, signed
+ *                into the writer's receipt), and lines are confirmed the
  *                stricter way (no rewording A).
  */
 
@@ -34,7 +36,7 @@ export interface RebuildSource {
   artifactId: string;
   /** The saved page, as it reads now. Shown to the person; the writer's material only for "page_only". */
   pageText: string;
-  /** What counts as the person's own resume text for this build ("" for "page_only"). */
+  /** What counts as the person's own resume text for this build (never the page; for "page_only" the stored upload or ""). */
   ownResumeText: string;
   origin: RebuildOrigin;
 }
@@ -43,7 +45,7 @@ export interface RebuildSource {
 export async function loadRebuildSource(
   userId: string,
   artifactId: string,
-  store: Pick<RevisionStore, "getArtifact" | "getLatestRevision">
+  store: Pick<RevisionStore, "getArtifact" | "getLatestRevision" | "serverSource">
 ): Promise<RebuildSource | null> {
   if (!userId || !artifactId) return null;
   const art = await store.getArtifact(userId, artifactId);
@@ -58,7 +60,9 @@ export async function loadRebuildSource(
   }
   const own = (ev?.ownResumeText ?? "").trim() ? (ev as { ownResumeText: string }).ownResumeText : "";
   if (own) return { artifactId, pageText, ownResumeText: own, origin: "own_words" };
-  return { artifactId, pageText, ownResumeText: "", origin: "page_only" };
+  // Round 2b: the account's stored upload (never the page), when the server holds one.
+  const held = store.serverSource ? await store.serverSource(userId, false).catch(() => null) : null;
+  return { artifactId, pageText, ownResumeText: held?.ownResumeText ?? "", origin: "page_only" };
 }
 
 /**
@@ -77,7 +81,7 @@ export function rebuildInputs<T extends { resumeText?: string }>(input: T, rb: R
 }
 
 /** The rebuild store: the revision store's reads, every one AS the person. */
-export async function rebuildStore(): Promise<Pick<RevisionStore, "getArtifact" | "getLatestRevision">> {
+export async function rebuildStore(): Promise<Pick<RevisionStore, "getArtifact" | "getLatestRevision" | "serverSource">> {
   const { coreStore } = await import("./revision-save");
   return coreStore();
 }
