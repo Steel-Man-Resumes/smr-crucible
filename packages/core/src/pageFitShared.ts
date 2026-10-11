@@ -111,10 +111,26 @@ export const SECTION_HEADERS: ReadonlySet<string> = new Set([
   "SKILLS", "MILITARY SERVICE", "VOLUNTEER EXPERIENCE",
   "JUSTICE ADVOCACY & COMMUNITY IMPACT", "COMMUNITY IMPACT",
   "TRAINING", "PROJECTS", "AWARDS", "PUBLICATIONS", "LEADERSHIP",
+  // Phase 6 (Q4): every heading a person's own page or the writer uses is
+  // styled the same. "Work Experience" printed plain while "SKILLS" was a
+  // heading, because only some spellings were known.
+  "WORK EXPERIENCE", "EMPLOYMENT", "EMPLOYMENT HISTORY", "PROFESSIONAL HISTORY", "CAREER HISTORY",
+  "PROFESSIONAL BACKGROUND", "VOLUNTEER WORK", "VOLUNTEER", "MILITARY EXPERIENCE",
+  "PROFILE", "PROFESSIONAL PROFILE", "SUMMARY OF QUALIFICATIONS", "QUALIFICATIONS", "OBJECTIVE", "CAREER OBJECTIVE",
+  "KEY SKILLS", "PROFESSIONAL SKILLS", "SKILLS & ABILITIES", "COMPETENCIES", "KEY COMPETENCIES", "SKILLS SUMMARY",
+  "CERTIFICATION", "LICENSES", "LICENSE", "CREDENTIALS", "CERTIFICATIONS & LICENSES", "LICENSES & CREDENTIALS",
+  "CERTIFICATES", "EDUCATION & TRAINING", "TRAINING & EDUCATION", "TRAINING & CERTIFICATIONS", "CERTIFICATIONS & TRAINING",
+  "EDUCATION & LICENSES", "LANGUAGES", "REFERENCES", "ADDITIONAL INFORMATION", "ACHIEVEMENTS", "ACCOMPLISHMENTS",
 ]);
 
 export function isSectionHeader(text: string): boolean {
-  const upper = text.toUpperCase().replace(/[^A-Z\s&]/g, "").trim();
+  const upper = text
+    .toUpperCase()
+    .replace(/[^A-Z\s&]/g, "")
+    .replace(/\bAND\b/g, "&")
+    .replace(/\s+/g, " ")
+    .replace(/\s*&\s*/g, " & ")
+    .trim();
   return SECTION_HEADERS.has(upper);
 }
 
@@ -147,6 +163,8 @@ export function isDateText(text: string): boolean {
   if (!new RegExp(`\\b${YEAR_RE}\\b|\\b(?:Present|Current|Now)\\b`, "i").test(t)) return false;
   const rest = t
     .replace(/\([^)]*\)/g, "")
+    // A numeric month before a year ("8/2021", "08/15/2021") is part of the date.
+    .replace(new RegExp(`\\b\\d{1,2}\\/(?:\\d{1,2}\\/)?(?=${YEAR_RE}\\b)`, "g"), "")
     .replace(new RegExp(`\\b${MONTH_RE}`, "gi"), "")
     .replace(new RegExp(YEAR_RE, "g"), "")
     .replace(

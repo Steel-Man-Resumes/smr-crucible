@@ -218,9 +218,12 @@ test("burden: the two-line minimum fills only with lines that differ from the pe
 
 test("burden: skills pass only on a real stem or phrase, and never on a scope word the person never used", () => {
   const welder = "Dana Example\nWelded steel for commercial construction projects.";
-  const r = `DANA EXAMPLE\n\nSKILLS\nCommunication, Commercial welding, Kitchen supervision\n\nPROFESSIONAL EXPERIENCE\nWELDER | Shop | 2019 - 2023\n- Welded steel.`;
+  const r = `DANA EXAMPLE\n\nSKILLS\nCommunication, Commercial welding, Kitchen supervision, Crew training\n\nPROFESSIONAL EXPERIENCE\nWELDER | Shop | 2019 - 2023\n- Welded steel.`;
   const terms = runMintCheck({ output: r, source: `${welder}\nI ran the kitchen at night.`, kind: "resume" }).findings.filter((f) => f.kind === "grid_term" || f.kind === "grid_scope_term").map((f) => f.line);
   assert.ok(terms.includes("Communication"), "commercial is not communication");
   assert.ok(!terms.includes("Commercial welding"));
-  assert.ok(terms.includes("Kitchen supervision"), "a scope word they never used");
+  // Phase 6, rewording A: "ran the kitchen" and "kitchen supervision" are one meaning (running those
+  // people), so it passes; training is a claim of its own the person never made.
+  assert.ok(!terms.includes("Kitchen supervision"), "ran the kitchen means supervised it");
+  assert.ok(terms.includes("Crew training"), "a scope word they never used");
 });

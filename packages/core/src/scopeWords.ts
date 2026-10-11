@@ -340,7 +340,9 @@ function peopleClasses(words: string[], re: RegExp): string[] {
 function scopeLevel(classes: string[], theirs = false): number {
   if (classes.includes(ALL_MARK)) return 3;
   // Round 10: on the person's side a bare plural ("I trained guys") is some people, never the whole group.
-  const group = classes.includes(GROUP_MARK) && !(theirs && classes.includes(BARE_MARK));
+  // Phase 6: a bare SINGULAR group ("responsible for 3rd shift", "ran night crew" is plural-marked and stays
+  // some people) names the group itself; only a bare plural reads as some of them.
+  const group = classes.includes(GROUP_MARK) && !(theirs && classes.includes(BARE_MARK) && classes.includes(PLURAL_MARK));
   if (group && !classes.includes(SUBSET_MARK) && !classes.includes(NEW_MARK)) return 2;
   return classes.includes(PLURAL_MARK) ? 1 : 0;
 }
@@ -778,6 +780,21 @@ export function isOwnLine(line: string, sourceText: string): boolean {
   return sentences.length > 1 && sentences.every((x) => own.has(x));
 }
 
+/**
+ * Phase 6, rewording A (Troy 2026-10-11): t.ROY may reword a line into what it
+ * means, facts locked. Running people is one meaning however it is said:
+ * "in charge of the guys on my shift", "responsible for 3rd shift", "oversaw
+ * the crew" and "supervised the shift crew" all say the person ran those
+ * people, so the one clears the other, still only about the same people, still
+ * only when the person did it (helped stays helped). Managing, training,
+ * scheduling, hiring and the rest stay their own claims: "managed" says more
+ * than "in charge of", and a different kind of work is a different fact.
+ */
+const RAN_PEOPLE: ReadonlySet<ScopeFamily> = new Set<ScopeFamily>(["supervise", "lead", "oversee", "direct", "responsible"]);
+export function sameScopeMeaning(theirs: ScopeFamily, page: ScopeFamily): boolean {
+  return theirs === page || (RAN_PEOPLE.has(theirs) && RAN_PEOPLE.has(page));
+}
+
 /** Every scope claim on a line that is not the person's, in page order (round 11). */
 export function scopeHitsNotTheirs(line: string, sourceText: string): ScopeHit[] {
   // Round 12: a line (or sentence) the person wrote word for word is theirs, every claim in it.
@@ -788,7 +805,7 @@ export function scopeHitsNotTheirs(line: string, sourceText: string): ScopeHit[]
       // Round 13 (SF-3): a role that is one of their own job titles ("Lead Custodian | Maumee Valley").
       !(h.role && h.title && titleInOwnHeaders(h.title, sourceText)) &&
       !theirs.some((c) => {
-        if (c.family !== h.family) return false;
+        if (!sameScopeMeaning(c.family, h.family)) return false;
         // Round 11: shared work clears only a shared page line; a solo page line needs their solo verb.
         // A role on the page ("as a shift lead") is cleared by their own role of that name.
         // Round 14 (F2): their own role clears the page's title only when they used it without a rank word
