@@ -362,6 +362,17 @@ describe("text practice: free with an account, a daily allowance while the gate 
     assert.match(r, /practiceSession \? \{ \.\.\.\(payload as Record<string, unknown>\), practiceSession \} : payload/);
   });
 
+  it("review r2 I-b: a failed AI call after a counted session still hands back the id, and the page keeps it", () => {
+    const r = code(read("app/api/interview-practice/route.ts"));
+    const handler = r.slice(r.indexOf("async function handlePost"));
+    assert.ok(handler.indexOf("let practiceSession: string | undefined;") < handler.indexOf("try {"), "declared outside the try");
+    const catchBlock = handler.slice(handler.indexOf("} catch (error: any) {"));
+    assert.match(catchBlock, /\{ error: "Could not process interview", \.\.\.\(practiceSession \? \{ practiceSession \} : \{\}\) \}/);
+    const page = code(read("app/(dashboard)/dashboard/interview/page.tsx"));
+    const send = page.slice(page.indexOf("async function sendMessage"), page.indexOf("function buildSummaryText"));
+    assert.equal((send.match(/if \(typeof data\??\.practiceSession === "string"\) practiceSessionRef\.current = data\.practiceSession;/g) ?? []).length, 2, "kept on success and on failure");
+  });
+
   it("the page keeps the id for the interview and sends it on every turn and the wrap-up", () => {
     const page = code(read("app/(dashboard)/dashboard/interview/page.tsx"));
     assert.equal((page.match(/practiceSession: practiceSessionRef\.current \?\? undefined/g) ?? []).length, 2);

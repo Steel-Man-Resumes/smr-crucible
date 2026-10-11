@@ -25,6 +25,9 @@ async function handlePost(request: Request) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
   }
 
+  // Declared outside the try so a failed AI call can still hand back the id
+  // of a session it already counted (review r2, I-b).
+  let practiceSession: string | undefined;
   try {
     // Route is mode:"user" in withRateLimit, so a session is guaranteed by
     // the time handlePost runs -- re-derive here to attribute the AI call.
@@ -46,7 +49,6 @@ async function handlePost(request: Request) {
     // A sponsor removes the allowance. Counted once per practice interview.
     // A server-issued session id decides what counts as a new session (review
     // L1). A refused turn gives back the daily AI call it was charged (I2).
-    let practiceSession: string | undefined;
     if (userId) {
       const verdict = await checkTextPracticeAllowance(userId, body);
       if (verdict.refuse) {
@@ -293,8 +295,10 @@ RULES:
     return reply({ response: plainPunctuation(text, swapLog) });
   } catch (error: any) {
     console.error("Interview practice error:", error);
+    // The session was counted before the AI call: give its id back, so the
+    // retry continues this session instead of being charged a new one.
     return NextResponse.json(
-      { error: "Could not process interview" },
+      { error: "Could not process interview", ...(practiceSession ? { practiceSession } : {}) },
       { status: 500 }
     );
   }

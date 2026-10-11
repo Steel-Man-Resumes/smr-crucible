@@ -590,6 +590,15 @@ function InterviewPracticePage() {
             { role: "assistant", content: data.response },
           ]);
         }
+      } else {
+        // A failed turn can still carry the session id it was counted under
+        // (the retry then continues this session, not a new one).
+        const data = await res.json().catch(() => null);
+        if (typeof data?.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "I had trouble with that response. Let's try again." },
+        ]);
       }
     } catch {
       setMessages((prev) => [
