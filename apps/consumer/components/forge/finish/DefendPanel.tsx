@@ -49,6 +49,8 @@ export interface CardActions {
   onScopeYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched" | "copy";
   /** Round 11: "I helped with it": the line becomes its shared form. */
   onScopeHelped?: (group: LineGroup) => void;
+  /** Phase 6: "No, I did the work" puts the person's own line back. */
+  onScopeNo?: (group: LineGroup) => void;
   /** Round 12: "Yes, that was my title" (typed, must match) and "Use my title" (replaces only the title). */
   onTitleYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched";
   onOwnTitle?: (group: LineGroup, typed: string) => "ok" | "empty" | "not_a_title";
@@ -447,6 +449,19 @@ function GroupCard({
           {mode === "idle" && scope && (
             // Round 11: one tap for an honest scope claim, a shared form, or take it off.
             <div className="mt-3 flex flex-wrap gap-2" data-testid="scope-card">
+              {scope.overPeople ? (
+                // Phase 6: one tap. Yes keeps the line as their word for this job; No puts their own line back.
+                <>
+                  <button ref={firstAction} onClick={() => actions?.onScopeYes?.(group, scope.overPeople!.yes)} className={BTN_MAIN} data-testid="scope-over-yes">
+                    Yes, I was over people
+                  </button>
+                  {scope.overPeople.noLine && (
+                    <button onClick={() => actions?.onScopeNo?.(group)} className={BTN_SOFT} data-testid="scope-over-no">
+                      No, I did the work
+                    </button>
+                  )}
+                </>
+              ) : (
               <button
                 ref={firstAction}
                 onClick={() => {
@@ -457,6 +472,7 @@ function GroupCard({
               >
                 Yes, I did this
               </button>
+              )}
               {scope.helped && (
                 <button onClick={() => actions?.onScopeHelped?.(group)} className={BTN_SOFT}>
                   I helped with it

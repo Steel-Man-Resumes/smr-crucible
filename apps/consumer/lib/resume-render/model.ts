@@ -10,6 +10,15 @@
  *  - a bullet marker ("- ") becomes a drawn square;
  *  - en and em dashes become a plain spaced hyphen (house rule for resumes).
  * Name and section headings are drawn in capitals.
+ *
+ * Phase 6 (Q4, a page a hiring manager knows at a glance): every known heading
+ * spelling is a heading ("Work Experience" and "SKILLS" look the same), and in
+ * an experience section every line under a job is drawn as a bullet. A date
+ * line right under a job that has no dates of its own moves up beside the
+ * title, where the dates sit on every other job. A lone line between the
+ * contact line and the first heading (the writer puts its headline there,
+ * after a blank line) is drawn as the headline under the name; a "Headline:"
+ * label in front of it is layout, not wording, and is not drawn.
  */
 
 import {
@@ -19,8 +28,14 @@ import {
   isDateText,
   looksLikePlace,
   splitResumeHeader,
+  bodyHeadlineIndex,
+  jobLineRoles,
+  splitTrailingYears,
+  SECTION_JOBS_RE,
 } from "@crucible/core/src/pageFitShared";
 import { SECTION_SKILLS_RE } from "./style";
+
+export { SECTION_JOBS_RE };
 
 export interface ModelHeader {
   name: string;
@@ -145,16 +160,29 @@ export function parseSkillsLine(line: string): { label: string; items: string[];
 }
 
 export function parseResume(text: string): ResumeModel {
-  const { header, headerLines, bodyLines } = splitResumeHeader(text);
+  const split = splitResumeHeader(text);
+  const { headerLines } = split;
+  const header = { ...split.header };
+  let bodyLines = split.bodyLines;
+  // The headline after a blank line (shared with the page-fit estimate; never a contact or inside-work line).
+  const hl = bodyHeadlineIndex(bodyLines, header);
+  if (hl >= 0) {
+    header.headlineLine = bodyLines[hl].trim().replace(/^headline:\s*/i, "");
+    headerLines.push(header.headlineLine);
+    bodyLines = bodyLines.slice(hl + 1);
+  }
   const keyed: Array<["name" | "headline" | "contact" | "notes", string]> = [
     ["name", header.nameLine],
     ["headline", header.headlineLine],
     ["contact", header.contactLine],
     ["notes", header.publicNotesLine],
   ];
+  // A joined contact block sits where its first line was.
+  const headerAt = ([k, v]: ["name" | "headline" | "contact" | "notes", string]) =>
+    headerLines.indexOf(k === "contact" && header.contactParts?.length ? header.contactParts[0] : v);
   const order = keyed
     .filter(([, v]) => v)
-    .sort((a, b) => headerLines.indexOf(a[1]) - headerLines.indexOf(b[1]))
+    .sort((a, b) => headerAt(a) - headerAt(b))
     .map(([k]) => k);
   const blocks: ModelBlock[] = [];
   let section = "";
@@ -163,45 +191,73 @@ export function parseResume(text: string): ResumeModel {
     blocks.push(b);
     prev = b;
   };
-  for (const raw of bodyLines) {
+  // What each line is in a jobs section (shared with the page-fit estimate).
+  const roles = jobLineRoles(bodyLines);
+  let lastJob: Extract<ModelBlock, { kind: "job" }> | null = null;
+  bodyLines.forEach((raw, i) => {
     const line = raw.trim();
-    if (!line) continue;
+    if (!line) return;
     if (isSectionHeader(line)) {
       section = line.toUpperCase();
+      lastJob = null;
       push({ kind: "section", text: clean(line).toUpperCase() });
-      continue;
+      return;
+    }
+    const role = roles[i];
+    if (role === "years" && lastJob) {
+      // A dates line right under a job goes beside the title, like every other job.
+      if (!lastJob.years) lastJob.years = clean(line);
+      else lastJob.rest.push(clean(line));
+      return;
+    }
+    if (role === "jobPart" && lastJob) {
+      lastJob.rest.push(clean(line));
+      return;
+    }
+    if (role === "bullet") {
+      push({ kind: "bullet", text: clean(stripBulletMarker(line)) });
+      return;
+    }
+    if (role === "job" && !(line.includes("|") && !parseJobLine(line, true))) {
+      const piped = parseJobLine(line, true);
+      const unpiped = piped ? null : splitTrailingYears(line);
+      const job = piped ?? (unpiped ? { title: unpiped.title, rest: [], years: unpiped.years } : { title: line, rest: [], years: "" });
+      const block: Extract<ModelBlock, { kind: "job" }> = { kind: "job", title: clean(job.title), rest: job.rest.map(clean), years: clean(job.years) };
+      push(block);
+      lastJob = block;
+      return;
     }
     const inSkills = SECTION_SKILLS_RE.test(section);
     if (isBulletLine(line)) {
       push({ kind: "bullet", text: clean(stripBulletMarker(line)) });
-      continue;
+      return;
     }
     if (inSkills) {
       const sk = parseSkillsLine(line);
       if (sk) {
         push({ kind: "skills", label: clean(sk.label), items: sk.items.map(clean), sep: sk.sep });
-        continue;
+        return;
       }
       push({ kind: "para", text: clean(line), role: "body" });
-      continue;
+      return;
     }
     const job = parseJobLine(line, true);
     if (job) {
       push({ kind: "job", title: clean(job.title), rest: job.rest.map(clean), years: clean(job.years) });
-      continue;
+      return;
     }
     // A pipe list outside a skills section (four or more short parts) is a skills line.
     if (/\s\|\s/.test(line)) {
       const sk = parseSkillsLine(line);
       if (sk) {
         push({ kind: "skills", label: clean(sk.label), items: sk.items.map(clean), sep: sk.sep });
-        continue;
+        return;
       }
     }
     const p = prev as ModelBlock | null;
     const overview = p !== null && p.kind === "job";
     push({ kind: "para", text: clean(line), role: overview ? "overview" : "body" });
-  }
+  });
   // Round 13 (SF-2): never print a heading with nothing under it (a cut can leave one).
   const kept = blocks.filter((b, i) => b.kind !== "section" || (i + 1 < blocks.length && blocks[i + 1].kind !== "section"));
   return {

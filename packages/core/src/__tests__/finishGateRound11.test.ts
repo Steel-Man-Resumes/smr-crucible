@@ -60,7 +60,9 @@ for (const [s, line] of [
   ["My boss had me train the new guys on the scanner.", "Trained new hires on the scanner"],
   ["I was put in charge of the night crew.", "In charge of the night crew"],
   ["picked orders, loaded trucks, trained new guys on the scanner", "Trained new hires on the scanner"],
-  ["I was a shift lead for 3 years and I ran the store when the manager was off.", "Ran the store when the manager was out"],
+  // Phase 6 round 4 (CC ruling H3-1): people scope restated with the same verb clears only with the same
+  // object, unchanged ("off" stays "off"); "was out" is a rewording of the object and is asked.
+  ["I was a shift lead for 3 years and I ran the store when the manager was off.", "Ran the store when the manager was off"],
 ] as const) {
   test(`R11 strict matcher: "${s}" clears "${line}"`, () => assert.equal(scopeNotTheirs(line, said(s)), undefined));
 }

@@ -16,7 +16,7 @@
  * Pure: no imports, no I/O, safe in the browser and on the server.
  */
 
-export const RESUME_RULES_VERSION = "resume-rules/2026-10-06.1";
+export const RESUME_RULES_VERSION = "resume-rules/2026-10-11.1";
 
 export type ResumeRuleScope = "truth" | "page" | "fix";
 
@@ -64,21 +64,21 @@ export const RESUME_RULES: readonly ResumeRule[] = [
     scope: "truth",
     std: ["STD-A01"],
     text:
-      "Turn duty phrasing (\"responsible for\", \"duties included\", \"tasked with\") into a plain action verb only when the person's words support that action. Use the verb the person would say out loud. Never use a bigger verb (led, managed, supervised, trained) than their words support.",
+      "Reword freely, facts locked. Every bullet starts with a strong, specific action verb and says what was done, in plain words a coworker would use; any amount or size only in the person's own numbers and words, never an added size word (large, heavy, major, daily). Duty phrasing (\"responsible for\", \"duties included\", \"tasked with\", \"did\", \"dealt with\", \"in charge of\") is always rewritten into what the line means: \"In charge of the guys on my shift\" becomes \"Supervised the shift crew\"; \"Did safety audits\" becomes \"Ran safety audits\". A reworded line keeps every fact of the original: the same numbers, titles, employers, dates, credentials and scope. Use a bigger verb (led, managed, supervised, trained) only when the person's words support that action. Supervising people is scope: a line saying the person supervised, led, oversaw, directed or managed people is settled only when their own words for that job say it in so many words (\"supervised 4 workers\", \"in charge of employees on my shift\"); a title, \"my crew\", a shift, a place or a task never says it, so such a line is asked as one question (\"Were you over other people in this job?\"). \"Responsible for\" a shift, area, task or thing is never supervising people, and \"helped\" never becomes led. \"Managed\" a thing (inventory, accounts) is a duty, not people. A fact belongs to its own job. Anything new (a number, a result, a tool, a skill) is never added; it is asked.",
   },
   {
     id: "dates-as-given",
     scope: "truth",
     std: ["STD-T05", "STD-C01"],
     text:
-      "Keep every employer, title and date exactly as the person gave them. Never move a title to another employer, and never change, merge, shift or guess a date. For gaps, use years only and never explain a gap.",
+      "Keep every employer, title and date exactly as the person gave them, in the same form: \"8/2021 - 12/2022\" stays \"8/2021 - 12/2022\", never \"2021 - 2022\", and a year-only date stays year-only. Never move a title to another employer, and never change, merge, shift, shorten or guess a date. Never explain a gap.",
   },
   {
     id: "dated-page",
     scope: "truth",
     std: ["STD-F01"],
     text:
-      "Dated history in reverse order, never a dateless functional page. With little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry. Every entry shows the calendar years it ran (2019 - 2023); never replace dates with how long a job lasted or a count of years worked.",
+      "Dated history in reverse order, never a dateless functional page. With little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry. Every entry shows the dates it ran, as the person gave them (2019 - 2023, or 8/2021 - 12/2022); never replace dates with how long a job lasted or a count of years worked.",
   },
   {
     id: "credential-truth",
@@ -126,14 +126,21 @@ export const RESUME_RULES: readonly ResumeRule[] = [
     scope: "page",
     std: ["STD-T01", "STD-T06"],
     text:
-      "Skills go in one column: either one comma-separated line, or a few short labeled lines (for example \"Equipment: forklift, pallet jack\"). Never a grid, columns or pipes between skills. Every term names something the person said they did, used or learned; no soft-skill filler they did not claim. Never invent a term to fill space, and never drop a real one.",
+      "Skills go in one column: either one comma-separated line, or a few short labeled lines (for example \"Equipment: forklift, pallet jack\"). Never a grid, columns or pipes between skills. Every term names a real, specific skill, tool, machine, method or credential the person said they did, used or learned, grouped when there are enough to group. Soft-skill words (hard worker, team player, fast learner, detail oriented, good communication, people person) never appear as skills, even when the person listed them; their substance shows in a bullet only when the person's facts support it. Never invent a term to fill space, and never drop a real one.",
   },
   {
     id: "dated-format",
     scope: "page",
     std: ["STD-F01"],
     text:
-      "Format: reverse-chronological with years on every entry. A hybrid (a short skills block above the full dated history) fits only when both are true in the person's own words: their work history is uneven, and they are changing fields on the strength of their skills. Long stretches at one place or strong skills are examples of those two conditions, never extra conditions and never reasons on their own. In a hybrid every dated entry keeps its bullets and the skills block stays short labels.",
+      "Format: reverse-chronological with dates on every entry, in the form the person gave them. A hybrid (a short skills block above the full dated history) fits only when both are true in the person's own words: their work history is uneven, and they are changing fields on the strength of their skills. Long stretches at one place or strong skills are examples of those two conditions, never extra conditions and never reasons on their own. In a hybrid every dated entry keeps its bullets and the skills block stays short labels.",
+  },
+  {
+    id: "no-objective",
+    scope: "page",
+    std: ["STD-F02"],
+    text:
+      "No objective statement, ever: it tells an employer what the person wants, not what they bring. The page opens with a headline (one line naming the work the person does or is going for) and a summary of 2 to 4 plain sentences built only from their facts.",
   },
   {
     id: "one-column-page",

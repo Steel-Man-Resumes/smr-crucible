@@ -20,6 +20,7 @@
 
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { VERIFY_MAX } from "@/lib/limits";
+import { onlyRewordedFrom, onlySupervisionUnsupported } from "@/lib/fact-trace";
 
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
@@ -59,6 +60,24 @@ export type GroundingKind = "resume" | "cover_letter" | "report" | "summary";
 export interface GroundingFlag {
   claim: string;
   why: string;
+}
+
+/**
+ * What kind of fact a flag is about, as the verifier names it (Phase 6,
+ * rewording A). "wording" means the verifier objected only to how a line is
+ * said; that is never a fabrication when every fact in it traces back.
+ */
+export type GroundingFlagKind =
+  | "number" | "date" | "title" | "employer" | "tool" | "skill" | "credential"
+  | "result" | "scope" | "character" | "pronoun" | "other" | "wording" | "supervision";
+const FLAG_KINDS = new Set<string>(["number", "date", "title", "employer", "tool", "skill", "credential", "result", "scope", "character", "pronoun", "other", "wording", "supervision"]);
+const WORDING_KIND_RE = /^(?:wording|rewording|reworded|phrasing|rephras\w*|paraphras\w*|style|verb)$/i;
+
+/** The kind a flag names, read leniently ("rephrased" is wording; anything unknown is "other"). */
+export function flagKindOf(raw: unknown): GroundingFlagKind {
+  const k = typeof raw === "string" ? raw.trim().toLowerCase() : "";
+  if (WORDING_KIND_RE.test(k)) return "wording";
+  return (FLAG_KINDS.has(k) ? k : "other") as GroundingFlagKind;
 }
 
 export interface GroundingVerifyResult {
@@ -110,6 +129,15 @@ export function verificationNoticeFor(agg: VerificationAggregate): string {
   return "We could not run the truth check on part of this document because the checker was unavailable. Do not finalize this as employer-ready until it verifies. You can review and attest each claim yourself before sending.";
 }
 
+/** The verifier's supervision rule (round 4: the "leave it in place" half only when the caller opts in). */
+export function supervisionRule(ask: boolean): string {
+  const base = `SUPERVISING PEOPLE IS SCOPE. A line saying the person was over people ("supervised", "led", "oversaw", "directed" or "managed" people) is supported only when the person's own words for that same job already say it in so many words: one of those verbs, or "was in charge of", with people as its object ("supervised 4 workers", "in charge of employees on my shift", "led a crew of 6"). A job title of any kind, "my crew", a shift, a place or a task never says it: "Responsible for 3rd shift", "Ran the line", "Shift Lead" or "Account Manager" alone does not.`;
+  const handling = ask
+    ? ` When such a line is not supported that way and being over people is the ONLY unsupported thing in it, flag it with kind "supervision" and do NOT rewrite or remove it: the person is asked one question about it ("Were you over other people in this job?"). If the line also adds anything else (a number, a result, a size, a tool), flag it with its own kind and fix it as usual.`
+    : ` Flag such a line with kind "scope" and fix it like any other unsupported claim.`;
+  return `${base}${handling} "Managed" a thing (inventory, accounts, a budget) is not a people claim; check it like any other duty. Facts belong to their own job: a fact from one job never supports a line under another.`;
+}
+
 const VERIFY_TIMEOUT_MS = 15000;
 const VERIFY_MODEL = "gpt-4o-mini";
 // The model only ever sees the first MAX_VERIFY_CHARS of source/output. A rewrite
@@ -145,8 +173,15 @@ export async function verifyGrounding(params: {
   sourceText: string;
   output: string;
   kind: GroundingKind;
+  /**
+   * Round 4 (review r3 H3-2): only /api/forge/generate-docs sets this. With it, a supervision line whose ONLY
+   * unsupported element is being over people is left in place and asked on the finish page's one-tap card.
+   * Every other caller leaves it off and supervision is flagged and cut as before Phase 6.
+   */
+  askSupervision?: boolean;
 }): Promise<GroundingVerifyResult> {
   const { sourceText, output, kind } = params;
+  const askSupervision = params.askSupervision === true;
   // verifierRan defaults TRUE: the input-guard early returns (trivial output,
   // thin source) are not outages -- there is simply nothing an outage-retry would
   // fix. Only the provider-outage branches below flip it to false.
@@ -177,14 +212,18 @@ Two more kinds of fabrication that are easy to miss. A credential stated as MORE
 
 Scrutinize section headers and the employer/date/location lines too, not only the bullets. A specific employer name, city, or date range the source never gives is just as much a fabrication as an invented metric.
 
-Do NOT flag: strong action verbs, general professional framing, or a reasonable summary of a duty the source states. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts. Never let the OUTPUT claim something just because a posting asked for it.
+TRACE FACTS, NOT WORDS. The writer is allowed to reword any line into strong plain words that say what it means. A reworded line is NOT a fabrication when every fact in it traces back to SOURCE: the same numbers, dates, job titles, employers, tools, skills, credentials, results and scope. These PASS (never flag or rewrite them): SOURCE "In charge of the guys on my shift" written as "Supervised the shift crew"; SOURCE "Did safety audits" written as "Ran safety audits"; SOURCE "dealt with customers" written as "Served customers"; SOURCE "Responsible for 3rd shift" under the job title "Production Supervisor" written as "Supervised third-shift production". These FAIL (flag them): an added number ("Supervised a 12-person crew" when no 12 was given); an added result ("cutting errors 20%", "with zero incidents", "keeping a clean safety record"); an added tool or skill ("in SAP", "on a reach truck"); an added or upgraded credential; a changed or shortened date ("8/2021" written as "2021"); a different title or employer; and scope inflation ("helped" written as "led" or as done alone, "my shift" written as "the plant", one area written as all of them, an added size word such as "large", "heavy" or "major").
+
+${supervisionRule(askSupervision)}
+
+Do NOT flag: strong action verbs, general professional framing, a reasonable summary of a duty the source states, or a reworded line whose facts all trace back. Never flag a line only because its words differ from SOURCE. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts. Never let the OUTPUT claim something just because a posting asked for it.
 
 ONE EXCEPTION to "general professional framing", and it is not a small one. A claim about the PERSON'S CHARACTER OR CONDUCT (attendance, punctuality, reliability, work ethic, safety record, honesty, initiative, how well they get along with people) IS flaggable whenever the source does not support it, even though it sounds like framing. A real run turned two sentences about washing dishes into "reliability and consistent attendance across every shift, on time and ready to work", which the person never said about themselves. These claims feel harmless because nothing on paper disproves them; that is exactly what makes them dangerous. A hiring manager asks "tell me about your attendance at that job" and the person is left defending a sentence they did not write. Flag it unless their own words support it.
 
-Then rewrite OUTPUT so every remaining statement is grounded in SOURCE: remove each invented specific, or generalize it to exactly what the source supports. Thin source means a shorter, sparser document. That is correct and required, never a reason to invent. Preserve the structure, section headers, formatting, tone, and every grounded line. Introduce NO new facts. If nothing needs changing, return OUTPUT verbatim. In any text you rewrite, never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
+Then rewrite OUTPUT so every remaining statement is grounded in SOURCE: remove each invented specific, or generalize it to exactly what the source supports. Change ONLY the lines you flagged; every other line stays exactly as written, word for word. Thin source means a shorter, sparser document. That is correct and required, never a reason to invent. Preserve the structure, section headers, formatting, tone, and every grounded line. Introduce NO new facts. If nothing needs changing, return OUTPUT verbatim. In any text you rewrite, never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 
 Return ONLY a JSON object:
-{"hasFabrication": boolean, "flags": [{"claim": "the exact invented phrase from OUTPUT", "why": "short reason"}], "cleaned": "the full corrected OUTPUT text"}`;
+{"hasFabrication": boolean, "flags": [{"claim": "the exact invented phrase from OUTPUT", "why": "short reason", "kind": "number | date | title | employer | tool | skill | credential | result | scope | supervision | character | pronoun | other"}], "cleaned": "the full corrected OUTPUT text"}`;
 
   const user = `SOURCE (everything the person told us about themselves):
 """
@@ -257,13 +296,29 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
     return { ...original, verifierRan: false };
   }
 
-  const flags: GroundingFlag[] = Array.isArray(parsed.flags)
+  const graded: Array<GroundingFlag & { kind: GroundingFlagKind }> = Array.isArray(parsed.flags)
     ? parsed.flags
         .filter((f: any) => f && typeof f.claim === "string")
         .slice(0, 25)
-        .map((f: any) => ({ claim: String(f.claim), why: String(f.why || "") }))
+        .map((f: any) => ({ claim: String(f.claim), why: String(f.why || ""), kind: flagKindOf(f.kind) }))
     : [];
-  const hasFabrication = parsed.hasFabrication === true || flags.length > 0;
+  // Rewording A (Phase 6, review M1): a flag about wording alone is dropped
+  // only when the flagged phrase is provably a rewording of the person's own
+  // words: every fact traces back, no scope claim is new, and it adds no new
+  // content word beyond a plain action verb (lib/fact-trace.ts
+  // onlyRewordedFrom). Anything else stays a flag, so the person is asked.
+  // A truncated flag list (more than 25) keeps every wording flag too.
+  const truncated = Array.isArray(parsed.flags) && parsed.flags.length > 25;
+  // Phase 6 (r2 ruling, r3 H3-2): with askSupervision (generate-docs only), a "supervision" flag is set aside
+  // when being over people is the ONLY unsupported thing in the phrase and the scope check will raise the
+  // one-tap card for it. Otherwise, and on every other route, it stays a flag and is cut as before.
+  const factFlags = graded.filter(
+    (f) =>
+      !(f.kind === "wording" && !truncated && onlyRewordedFrom(f.claim, source)) &&
+      !(askSupervision && f.kind === "supervision" && onlySupervisionUnsupported(f.claim, source))
+  );
+  const flags: GroundingFlag[] = factFlags.map((f) => ({ claim: f.claim, why: f.why }));
+  const hasFabrication = flags.length > 0 || (parsed.hasFabrication === true && graded.length === 0);
   const cleaned = typeof parsed.cleaned === "string" ? parsed.cleaned.trim() : "";
 
   // Guard the rewrite: apply ONLY when (a) fabrication was found, (b) the whole
@@ -279,14 +334,20 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
     !isDropMarker(cleaned) &&
     cleaned.length >= Math.max(40, lengthFloor);
 
+  // Review H2: the verifier's rewrite is applied whole, as it was before
+  // Phase 6. A line it rewrote without a flag is never put back: a quiet fix
+  // can be a correct scope or credential fix the code cannot see.
+  const text = applyRewrite ? cleaned : output;
+
   return {
-    text: applyRewrite ? cleaned : output,
+    text,
     hasFabrication,
     applied: applyRewrite,
     flags,
     verifierRan: true,
   };
 }
+
 
 export interface ResumeExperience {
   title?: string;

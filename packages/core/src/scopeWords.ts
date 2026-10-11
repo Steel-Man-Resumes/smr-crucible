@@ -36,6 +36,9 @@ const PEOPLE = String.raw`(?:crews?|teams?|shifts?|staff|staffers?|department|st
 // Up to three words before the people noun ("all of the new", "a group of new", "the entire overnight dish washing").
 const DET = String.raw`(?!(?:on|in|at|to|for|with|by|as|into|out|from|up|through|under|about|around|over|when|while|whenever|if|until|after|before|because|since|once|alongside|beside|among|like|next)\b)(?:(?:the|a|an|our|my|their|new|other|every|all|entire|whole)\s+){0,2}(?:(?:group|team|crew|bunch|handful)\s+of\s+(?:the\s+)?)?(?:of\s+the\s+)?(?:(?!(?:and|or)\s+(?:train|supervis|manag|lead|led|schedul|coordinat|mentor|direct|overs|hir|evaluat|onboard|coach|teach|taught|instruct|assign|ran|run)\w*\b)[a-z0-9-]+\s+){0,3}`;
 
+// People only: the PEOPLE words without places and stretches of time (shift, store, kitchen, department).
+const PEOPLE_ONLY = String.raw`(?:crews?|teams?|staff|staffers?|cooks?|workers?|employees?|hires?|associates?|people|persons?|operators?|drivers?|loaders?|aides?|nurses?|servers?|dishwashers?|volunteers?|interns?|techs?|technicians?|helpers?|laborers?|pickers?|packers?|men|guys|hands|reps?|agents?|cashiers?|clerks?|trainees?|apprentices?|co-?workers?|teammates?|temps?)`;
+
 const PATTERNS: Array<[RegExp, ScopeFamily]> = [
   [/\bsupervis\w*/gi, "supervise"],
   [/\bmanag(?:e|ed|es|ing|er|ers)\b(?!\s+to\b)/gi, "manage"],
@@ -64,6 +67,10 @@ const PATTERNS: Array<[RegExp, ScopeFamily]> = [
   [new RegExp(String.raw`\borgani[sz]\w*\s+${DET}${PEOPLE}\b`, "gi"), "coordinate"],
   [new RegExp(String.raw`\b(?:train(?:ed|s|ing)?|taught|teach(?:es|ing)?|coach\w*|onboard\w*|instruct\w*)(?!\s+(?:shifts?|sessions?|classes?|weeks?|days?|programs?|courses?)\b)\s+${DET}${PEOPLE}\b`, "gi"), "train"],
   [new RegExp(String.raw`\bshow\w*\s+${DET}${PEOPLE}\s+the\s+ropes\b`, "gi"), "train"],
+  // Phase 6 (r3 L-3): people as the object of any looking-after verb is a claim of being over them.
+  [new RegExp(String.raw`\b(?:handl(?:ed|es|ing)|took\s+care\s+of|tak(?:e|es|ing)\s+care\s+of|look(?:ed|s|ing)\s+after|watch(?:ed|es|ing)\s+over)\s+${DET}${PEOPLE_ONLY}\b`, "gi"), "supervise"],
+  // Phase 6 (r2 L-1): "trained them" claims training people as much as "trained the crew".
+  [/\b(?:train(?:ed|s|ing)?|taught|teach(?:es|ing)?|coach(?:ed|es|ing)?|onboard(?:ed|s|ing)?|instruct(?:ed|s|ing)?)\s+(?:them|him|her)\b/gi, "train"],
   [/\bowned\s+(?:the\s+)?(?:[a-z-]+\s+){0,2}schedul\w*/gi, "schedule"],
   [new RegExp(String.raw`\bschedul\w*\s+(?:for\s+)?${DET}${PEOPLE}\b`, "gi"), "schedule"],
   [/\b(?:wrote|write|writes|made|make|makes|built|build|did|set|sets)\s+(?:up\s+)?(?:the\s+)?(?:[a-z-]+\s+)?schedules?\b/gi, "schedule"],
@@ -516,6 +523,17 @@ interface Claim {
   shared: boolean;
   /** Their own role ("Shift Lead | Midwest", "I was the shift lead"): clears only the same role on the page, never a verb. */
   role?: boolean;
+  /**
+   * Phase 6 (rewording A, CC ruling H1): the claim says, in so many words, that the person was over PEOPLE:
+   * its own object names people ("in charge of employees on my shift", "ran a crew of 4", "my crew"),
+   * never a shift, place, task or thing ("responsible for 3rd shift", "responsible for cleaning the kitchen",
+   * "ran the line", "the crew's safety gear"), and its verb is not "took over", "boss" or "key holder".
+   */
+  overPeople?: boolean;
+  /** The words that matched, as they wrote them ("ran the dock crew", "in charge of"). */
+  word?: string;
+  /** Round 4: their sentence from the matched words on ("ran the store when the manager was out"). */
+  text?: string;
 }
 
 // Noun forms are never a claim of the person's ("my supervision", "management liked my work",
@@ -730,7 +748,7 @@ function personClaims(sourceText: string): Claim[] {
         const madeIt = family === "schedule" && !role ? sentence.slice(0, m.index).match(/\b(made|did|wrote|built|set|handled|ran|put\s+together|make|makes|do|does|write|writes|build|builds|handle|handles|run|runs|sets)\s+(?:up\s+)?(?:the|a|our|my)?\s*(?:[a-z-]+\s+)?$/i) : null;
         if (doer === "none" && madeIt) doer = doerOf(sentence.slice(0, (m.index ?? 0) - madeIt[0].length), madeIt[1].split(/\s+/)[0], sentence.slice(m.index! + m[0].length), goal, nextSentence);
         if (doer === "self" && SHARED_AFTER_RE.test(sentence.slice(m.index! + m[0].length))) doer = "shared";
-        out.push({ family, nouns: peopleFor(sentence, m), objects: objectWords(sentence, m), verbSelf: doer === "self", self: doer === "self", shared: doer === "shared", ...(role ? { role: true } : {}) });
+        out.push({ family, nouns: peopleFor(sentence, m), objects: objectWords(sentence, m), verbSelf: doer === "self", self: doer === "self", shared: doer === "shared", ...(role ? { role: true } : {}), ...(!role && doer === "self" && saysOverPeople(m[0], sentence.slice(m.index! + m[0].length)) ? { overPeople: true } : {}), word: m[0], text: sentence.slice(m.index!) });
       }
     }
     for (const [re, family] of LOOSE) {
@@ -739,7 +757,7 @@ function personClaims(sourceText: string): Claim[] {
         const nouns = objectPeople(sentence.slice(m.index! + m[0].length), PEOPLE_RE);
         let doer: Doer = doerOf(sentence.slice(0, m.index), m[0], sentence.slice(m.index! + m[0].length), goal, nextSentence);
         if (doer === "self" && SHARED_AFTER_RE.test(sentence.slice(m.index! + m[0].length))) doer = "shared";
-        if (nouns.length) out.push({ family, nouns, objects: objectWords(sentence, m), verbSelf: doer === "self", self: doer === "self", shared: doer === "shared" });
+        if (nouns.length) out.push({ family, nouns, objects: objectWords(sentence, m), verbSelf: doer === "self", self: doer === "self", shared: doer === "shared", ...(doer === "self" && saysOverPeople(m[0], sentence.slice(m.index! + m[0].length)) ? { overPeople: true } : {}), word: m[0], text: sentence.slice(m.index!) });
       }
     }
   }
@@ -757,8 +775,8 @@ export function scopeFamiliesIn(sourceText: string): Set<ScopeFamily> {
  * theirs has the same family, active and not denied, about the same people
  * (when the line names people).
  */
-export function scopeNotTheirs(line: string, sourceText: string): ScopeHit | undefined {
-  return scopeHitsNotTheirs(line, sourceText)[0];
+export function scopeNotTheirs(line: string, sourceText: string, ctx: ScopeContext = {}): ScopeHit | undefined {
+  return scopeHitsNotTheirs(line, sourceText, ctx)[0];
 }
 
 const plainWords = (t: string) => straightQuotes(t).toLowerCase().replace(/^\s*[-•*]\s*/, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -778,31 +796,215 @@ export function isOwnLine(line: string, sourceText: string): boolean {
   return sentences.length > 1 && sentences.every((x) => own.has(x));
 }
 
-/** Every scope claim on a line that is not the person's, in page order (round 11). */
-export function scopeHitsNotTheirs(line: string, sourceText: string): ScopeHit[] {
-  // Round 12: a line (or sentence) the person wrote word for word is theirs, every claim in it.
-  if (isOwnLine(line, sourceText)) return [];
-  const theirs = personClaims(sourceText);
-  return scopeHits(line).filter(
-    (h) =>
-      // Round 13 (SF-3): a role that is one of their own job titles ("Lead Custodian | Maumee Valley").
-      !(h.role && h.title && titleInOwnHeaders(h.title, sourceText)) &&
-      !theirs.some((c) => {
-        if (c.family !== h.family) return false;
-        // Round 11: shared work clears only a shared page line; a solo page line needs their solo verb.
-        // A role on the page ("as a shift lead") is cleared by their own role of that name.
-        // Round 14 (F2): their own role clears the page's title only when they used it without a rank word
-        // ("Assistant Manager" and "Supervisor Trainee" never make "Manager" or "Supervisor" theirs).
-        const doer = h.role && c.role ? !h.title || titleSaidPlain(h.title, sourceText) : h.shared ? c.self || c.shared : c.self;
-        if (!doer) return false;
-        // Round 12: "every week" alone is a time, not people; a claim with no people word reads its object.
-        return h.nouns.some((n) => !n.startsWith("~"))
-          ? peopleCovered(h.nouns, c.nouns)
-          : // Round 7: a claim that names no people is theirs only when they used the verb themselves,
-            // about the same thing ("I managed the stockroom" covers "Managed the stockroom", not "Managed inventory").
-            !(h.objects ?? []).length || c.objects.some((o) => (h.objects ?? []).includes(o));
-      })
+// ---- Phase 6 (rewording A; CC rulings H1 and r2, 2026-10-11) -----------------------------------------------
+// Being over people is scope, and scope is locked. A people-scope claim on the page (supervised, led, oversaw,
+// directed, or managed PEOPLE) is the person's only when their own words, for that job, already say it in so
+// many words: one of those verbs (or "was in charge of") with people as its object ("supervised 4 workers",
+// "in charge of employees on my shift", "led a crew of 6"). A title of any kind, a possessive ("my crew"), a
+// shift, a place or a task never says it. Every other people-scope claim is asked, one tap: "Were you over
+// other people in this job?" "Managed" a thing (inventory, accounts, a budget) is not a people claim.
+const RUN_PAGE: ReadonlySet<ScopeFamily> = new Set<ScopeFamily>(["supervise", "lead", "oversee", "direct", "manage"]);
+const RUN_THEIRS: ReadonlySet<ScopeFamily> = new Set<ScopeFamily>(["supervise", "lead", "oversee", "direct", "manage"]);
+// People words that are not places or stretches of time: "shift", "store", "kitchen", "department", "line",
+// "floor" name where or when, not whom.
+const PLACE_GROUP_RE = /^(?:shifts?|departments?|stores?|kitchens?|lines?|floors?|units?|areas?|members?|leads|starters?)$/i;
+// The explicit verbs: only these say it. Not "responsible for", "ran", "took over", "headed", "boss".
+const EXPLICIT_RUN_VERB_RE = /^(?:(?:was|were|i was)\s+)?(?:in charge of|supervis(?:e|ed|es|ing)|manag(?:e|ed|es|ing)|oversaw|oversee(?:s|ing)?|direct(?:ed|s|ing)|led|lead(?:s|ing)?)\b\s*/i;
+const OBJECT_LEAD_IN_RE = /^(?:(?:the|a|an|my|our|all|of|about|over|some|several|two|three|four|five|six|seven|eight|nine|ten|twelve|\d+|\d+(?:st|nd|rd|th)|first|second|third|new|night|day|overnight|other|full-time|part-time|seasonal|temp|crew|team|group)\s+){0,4}/i;
+
+/** True when the claim's own words are an explicit run verb with people as its object (see overPeople). */
+function saysOverPeople(word: string, after: string): boolean {
+  const w = word.trim();
+  const verb = w.match(EXPLICIT_RUN_VERB_RE);
+  if (!verb) return false;
+  const object = `${w.slice(verb[0].length)} ${after}`.replace(/^\s+/, "").toLowerCase();
+  if (!object) return false;
+  // "a crew of 6", "a team of 4": the group named with a count is people.
+  if (/^(?:a|an|the)\s+(?:crew|team|group|staff)\s+of\s+\d+\b/.test(object)) return true;
+  // The object's own words, up to the first preposition or joining word: "the dock crew", "4 new hires",
+  // "employees on my shift" (stops at "on"). One of them must be people, never a place or a possessive.
+  const ws = object.match(/[a-z][a-z'\u2019-]*|\d+/g) ?? [];
+  for (let i = 0; i < Math.min(ws.length, 6); i++) {
+    const x = ws[i];
+    if (i > 0 && OBJECT_STOP_WORDS.has(x)) break;
+    if (/['\u2019]s?$/.test(x)) return false; // "the crew's safety gear" is the gear, not the crew
+    if ((PEOPLE_RE.test(x) || /^hires?$/.test(x)) && !PLACE_GROUP_RE.test(x)) return true;
+  }
+  return false;
+}
+/** A verb's key for "the same verb": its base form ("ran", "runs" and "run" are one; "in charge of" is itself). */
+function verbKey(word: string): string {
+  const w = straightQuotes(word).toLowerCase().trim();
+  if (/^(?:was\s+|were\s+)?in charge\b/.test(w)) return "in charge";
+  const first = (w.match(/[a-z]+/) ?? [""])[0];
+  return BASE_OF[first] ?? first.replace(/(?:ed|es|s|ing)$/, "");
+}
+const OBJECT_STOP_WORDS = new Set(["on", "in", "at", "for", "with", "to", "from", "during", "while", "when", "and", "or", "but", "as", "by", "into", "across", "around", "after", "before"]);
+
+/**
+ * The page line is the person's own sentence, word for word (an "I" or "I was" in front aside): their own
+ * words, nothing reworded, so nothing new is claimed ("I ran the line on Saturdays" and "Ran the line on Saturdays").
+ */
+function ownSentence(line: string, sourceText: string): boolean {
+  const body = plainWords(line);
+  if (!body) return false;
+  return straightQuotes(withoutGoalText(sourceText))
+    .split(/\n|(?<=[.!?;])\s+/)
+    .map(plainWords)
+    .some((x) => x === body || x === `i ${body}` || x === `i was ${body}`);
+}
+
+type JobResolution = { kind: "none" } | { kind: "block"; text: string } | { kind: "unresolved" };
+
+/**
+ * Round 4 (review r3 M3-1): which of the person's own jobs the page's job header is. "none" when their words
+ * have no job headers at all (free text, read whole). "block" when exactly one of their jobs has the page's
+ * title and an employer that contains, or is contained in, the page's (dates break a tie between the same
+ * title and employer, as in a rehire). "unresolved" otherwise: a renamed employer, a changed title, two stints
+ * the dates cannot tell apart. People scope is then asked, never cleared by another job's words.
+ */
+function resolveJob(sourceText: string, pageJob: string): JobResolution {
+  const parts = (l: string) =>
+    l
+      .split("|")
+      .map((p) => p.replace(/\b\d{1,2}\/(?:\d{1,2}\/)?(?:19|20)\d{2}\b|\b(?:19|20)\d{2}\b|\b(?:present|current|now)\b/gi, " ").toLowerCase().replace(/\b(?:inc|llc|co|corp|company|ltd)\b\.?/g, " ").replace(/[^a-z0-9]+/g, ""))
+      .filter((p) => p.length >= 2);
+  const yearsOf = (l: string) => (l.match(/\b(?:19|20)\d{2}\b/g) ?? []).join(",");
+  const lines = withoutGoalText(sourceText).split("\n");
+  const blocks: Array<{ head: string; body: string[] }> = [];
+  for (const raw of lines) {
+    const l = raw.trim();
+    const first = l.split("|")[0].trim();
+    if (l.includes("|") && !/^[-*\u2022]/.test(l) && /[A-Za-z]{2,}/.test(first) && !first.includes(":") && !l.includes("@")) blocks.push({ head: l, body: [] });
+    else if (blocks.length && l) blocks[blocks.length - 1].body.push(l);
+  }
+  if (!blocks.length) return { kind: "none" };
+  const [title, employer] = parts(pageJob);
+  if (!title) return { kind: "unresolved" };
+  let hit = blocks.filter((b) => {
+    const [t, e] = parts(b.head);
+    if (t !== title) return false;
+    if (!employer || !e) return !employer && !e;
+    return e === employer || e.includes(employer) || employer.includes(e);
+  });
+  if (hit.length > 1) {
+    const years = yearsOf(pageJob);
+    hit = years ? hit.filter((b) => yearsOf(b.head) === years) : [];
+  }
+  return hit.length === 1 ? { kind: "block", text: [hit[0].head, ...hit[0].body].join("\n") } : { kind: "unresolved" };
+}
+
+/** Round 4 (H3-1): the object of a claim, from its verb on: articles and "my" off, cut at the first comma, semicolon or "and". */
+function objectKey(text: string): string {
+  const t = straightQuotes(text).toLowerCase().replace(/^\s*[-*\u2022]\s*/, "");
+  const rest = t.replace(/^(?:(?:was|were|i)\s+)*(?:in\s+charge\s+of|took\s+charge\s+of|took\s+care\s+of|take\s+care\s+of|looked\s+after|watched\s+over|headed\s+up|[a-z]+)\s*/, "");
+  return rest
+    .split(/[,;.!?]|\s+and\s+/)[0]
+    .split(/\s+/)
+    .filter((w) => w && !/^(?:the|a|an|my|our|their|his|her)$/.test(w))
+    .join(" ")
+    .trim();
+}
+
+export interface ScopeContext {
+  /** The page's job header line this line sits under ("FORKLIFT DRIVER | Northgate Supply | ..."), when known. */
+  job?: string;
+}
+
+/** The one-tap question for a people-scope claim (r2 ruling). */
+export const OVER_PEOPLE_QUESTION = "Were you over other people in this job?";
+/** The answer the "Yes, I was over people" tap records for that line (their word for that job only). */
+export const OVER_PEOPLE_YES = "Yes, I was over other people in this job.";
+
+/** True when a scope hit claims being over people (supervised, led, oversaw, directed, managed people). */
+export function isPeopleScopeHit(h: ScopeHit): boolean {
+  return RUN_PAGE.has(h.family) && !h.role && (h.family !== "manage" || h.nouns.some((n) => !n.startsWith("~")));
+}
+
+const OWN_LINE_STOP = new Set(["with", "from", "that", "this", "into", "over", "under", "each", "about", "after", "before", "work", "worked", "crew", "team", "staff", "people", "workers", "employees"]);
+const ownLineWords = (t: string) =>
+  new Set(
+    (straightQuotes(t).toLowerCase().match(/[a-z]+/g) ?? []).filter(
+      (w) => w.length >= 4 && !OWN_LINE_STOP.has(w) && !/^(?:supervis|manag|oversa|overse|direct|lead|led|charge|responsib)/.test(w)
+    )
   );
+
+/**
+ * "No, I did the work" (r2 ruling): the person's own line this page line was written from, from their words
+ * for that job when known: the line sharing the most content words with it (scope words aside). Undefined
+ * when no line of theirs shares a word with it; the card then offers only "Take it off".
+ */
+export function ownLineFor(line: string, sourceText: string, ctx: ScopeContext = {}): string | undefined {
+  // Round 4 (r3 M3-2): only from the same job, unambiguously; never a line that is itself a people claim.
+  if (!ctx.job) return undefined;
+  const job = resolveJob(sourceText, ctx.job);
+  if (job.kind !== "block") return undefined;
+  const want = ownLineWords(line.replace(/^\s*[-*\u2022]\s*/, ""));
+  if (!want.size) return undefined;
+  let best: { line: string; score: number } | undefined;
+  let tie = false;
+  for (const raw of job.text.split("\n")) {
+    const l = raw.trim().replace(/^[-*\u2022]\s*/, "");
+    if (!l || l.includes("|")) continue;
+    if (scopeHits(l).some(isPeopleScopeHit)) continue;
+    const have = ownLineWords(l);
+    const score = Array.from(want).filter((w) => have.has(w)).length;
+    if (score > 0 && (!best || score > best.score)) {
+      best = { line: l, score };
+      tie = false;
+    } else if (best && score === best.score && score > 0) tie = true;
+  }
+  return best && !tie ? best.line : undefined;
+}
+
+
+/** Every scope claim on a line that is not the person's, in page order (round 11). */
+export function scopeHitsNotTheirs(line: string, sourceText: string, ctx: ScopeContext = {}): ScopeHit[] {
+  // Round 12: a line (or sentence) the person wrote word for word is theirs, every claim in it.
+  const ownWhole = isOwnLine(line, sourceText) || ownSentence(line, sourceText);
+  // Round 4 (r3 M3-1): people scope is read against their words for THIS job only. Unresolved: asked.
+  const job: JobResolution = ctx.job ? resolveJob(sourceText, ctx.job) : { kind: "none" };
+  const peopleSrc = job.kind === "block" ? job.text : sourceText;
+  const ownJob = job.kind === "unresolved" ? false : job.kind === "block" ? isOwnLine(line, peopleSrc) || ownSentence(line, peopleSrc) : ownWhole;
+  const hits = scopeHits(line);
+  if (ownWhole && ownJob) return [];
+  const theirs = personClaims(sourceText);
+  const theirsPeople = job.kind === "unresolved" ? [] : job.kind === "block" ? personClaims(peopleSrc) : theirs;
+  const at = straightQuotes(line).toLowerCase();
+  return hits.filter((h) => {
+    // Round 13 (SF-3): a role that is one of their own job titles ("Lead Custodian | Maumee Valley").
+    if (h.role && h.title && titleInOwnHeaders(h.title, sourceText)) return false;
+    const peopleScope = isPeopleScopeHit(h);
+    if (peopleScope) {
+      if (ownJob) return false;
+      // Phase 6 (r2 ruling): cleared only by their explicit run verb over people for this job, about the same
+      // people; or (r3 H3-1) their own claim with the very same verb AND the very same object, unchanged.
+      const i = at.indexOf(straightQuotes(h.word).toLowerCase());
+      const pageObject = objectKey(i >= 0 ? line.slice(i) : h.word);
+      return !theirsPeople.some((c) => {
+        if (!(h.shared ? c.self || c.shared : c.self)) return false;
+        if (c.family === h.family && c.word && c.text && verbKey(c.word) === verbKey(h.word) && objectKey(c.text) === pageObject && pageObject) return true;
+        if (!(RUN_THEIRS.has(c.family) && c.overPeople === true)) return false;
+        return h.nouns.some((n) => !n.startsWith("~")) ? peopleCovered(h.nouns, c.nouns) : false;
+      });
+    }
+    if (ownWhole) return false;
+    return !theirs.some((c) => {
+      if (c.family !== h.family) return false;
+      // Round 11: shared work clears only a shared page line; a solo page line needs their solo verb.
+      // A role on the page ("as a shift lead") is cleared by their own role of that name.
+      // Round 14 (F2): their own role clears the page's title only when they used it without a rank word
+      // ("Assistant Manager" and "Supervisor Trainee" never make "Manager" or "Supervisor" theirs).
+      const doer = h.role && c.role ? !h.title || titleSaidPlain(h.title, sourceText) : h.shared ? c.self || c.shared : c.self;
+      if (!doer) return false;
+      // Round 12: "every week" alone is a time, not people; a claim with no people word reads its object.
+      return h.nouns.some((n) => !n.startsWith("~"))
+        ? peopleCovered(h.nouns, c.nouns)
+        : // Round 7: a claim that names no people is theirs only when they used the verb themselves,
+          // about the same thing ("I managed the stockroom" covers "Managed the stockroom", not "Managed inventory").
+          !(h.objects ?? []).length || c.objects.some((o) => (h.objects ?? []).includes(o));
+    });
+  });
 }
 
 /**

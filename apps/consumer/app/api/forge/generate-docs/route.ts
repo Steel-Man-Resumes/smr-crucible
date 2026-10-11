@@ -23,6 +23,8 @@ import { withholdRecordLines } from "@/lib/record-lines";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
 import { runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
+import { isUsableResume, splitWriterOutput, validateWriterChanges } from "@/lib/writer-changes";
+import { restoreDateForms } from "@/lib/date-form";
 import { randomBytes } from "node:crypto";
 
 export const maxDuration = 120;
@@ -79,10 +81,20 @@ async function handlePost(request: Request) {
     const startTime = Date.now();
 
     // Generate resume and cover letter in parallel
-    const [resumeRaw, coverLetterRaw] = await Promise.all([
+    const [resumeReply, coverLetterRaw] = await Promise.all([
       generateResume(input, userId),
       generateCoverLetter(input, userId),
     ]);
+    // Phase 6 (S2): the writer's reply is the resume, then its CHANGES block.
+    // The block is cut off here, before any check reads the resume, and is
+    // never part of what ships as the resume.
+    const { resume: resumeRaw, changes: rawChanges } = splitWriterOutput(resumeReply);
+    // Review M3: never check, sign or return an empty page. A reply that was
+    // only a change list (or nothing) is an error the person can retry.
+    if (!isUsableResume(resumeRaw)) {
+      console.error("[generate-docs] the writer returned no resume text");
+      return NextResponse.json({ error: "The writer did not return a resume. Please try again." }, { status: 502 });
+    }
 
     // Post-generation grounding gate (F2): claim-trace each document back to what
     // the user actually gave us and strip/generalize anything invented. The prompt
@@ -101,8 +113,10 @@ async function handlePost(request: Request) {
     });
 
     const [resumeCheck, coverCheck] = await Promise.all([
-      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume" }),
-      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter" }),
+      // Round 4 (r3 H3-2): only here, where the finish page shows the one-tap card, is a supervision-only
+      // claim left in place and asked instead of cut.
+      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: true }),
+      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter", askSupervision: true }),
     ]);
 
     // A prompt rule is an instruction, not a guarantee. The output format
@@ -121,7 +135,11 @@ async function handlePost(request: Request) {
       groundingSource,
       { homeLocation: typeof input.preferences?.location === "string" ? input.preferences.location : undefined }
     );
-    const resume = cityCheck.text;
+    // Dates stay in the form the person gave them ("8/2021" stays "8/2021"):
+    // a job line the writer shortened to years gets the person's form back.
+    const dateForms = restoreDateForms(cityCheck.text, groundingSource);
+    if (dateForms.restored) console.warn(`[date-form] generate-docs: put back ${dateForms.restored} date range(s) in the person's own form`);
+    const resume = dateForms.text;
     const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
     const credentialChecks = [
       ...findOverstatedCredentialLines(resume, statuses).map((claim) => ({ claim, doc: "resume" as const })),
@@ -161,6 +179,16 @@ async function handlePost(request: Request) {
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
     const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
 
+    // What t.ROY changed from the person's own page, for the live reveal. Kept
+    // only where the old line is the person's and the new line is on the
+    // FINAL resume (after the truth check and every backstop). Display only:
+    // not part of what the receipt signs, never used to save anything.
+    const changes = validateWriterChanges(rawChanges, {
+      ownResumeText: withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept,
+      finalResume: resume,
+      keepInsideLines: input.keepInsideLines === true,
+    });
+
     const latencyMs = Date.now() - startTime;
 
     // Log decision for JBS compliance
@@ -186,6 +214,7 @@ async function handlePost(request: Request) {
           cover_letter_length: coverLetter.length,
           grounding_flags: groundingFlags.length,
           grounding_applied: groundingApplied,
+          changes_count: changes.length,
         },
         latencyMs,
       });
@@ -257,6 +286,7 @@ async function handlePost(request: Request) {
       keptInsideLines,
       grounding,
       receipt,
+      changes,
       generated_at: new Date().toISOString(),
     });
     if (runCookie) out.headers.append("Set-Cookie", runCookieHeader(runCookie));
@@ -287,7 +317,8 @@ async function generateResume(input: GenerateDocsInput, userId: string | null | 
   // Prompt text lives in lib/forge-resume-prompt.ts, built from the shared
   // resume rulebook (truth rules via the context library, page rules there).
   const { system, user } = buildForgeResumePrompts(input);
-  return await callClaude(system, user, userId, 4500);
+  // Room for the resume and its CHANGES block (up to 40 short entries after it).
+  return await callClaude(system, user, userId, 6500);
 }
 
 // --- Cover Letter Generation ---

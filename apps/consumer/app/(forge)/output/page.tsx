@@ -687,8 +687,9 @@ function OutputPageInner() {
     onScopeYes: (group, typed) => {
       if (!group.scope) return "empty";
       const doc = group.target === "letter" ? { target: "letter" as const, text: coverLetterText } : { target: "resume" as const, text: resumeText };
-      const r = scopeYesResult(doc, group.line, group.scope.families, typed, view.source, defendAnswers);
-      if (r === "ok") setDefendAnswers((a) => recordScopeYes(a, group.line, group.scope!.families, typed));
+      const job = group.scope.overPeople?.job;
+      const r = scopeYesResult(doc, group.line, group.scope.families, typed, view.source, defendAnswers, job);
+      if (r === "ok") setDefendAnswers((a) => recordScopeYes(a, group.line, group.scope!.families, typed, job));
       return r;
     },
     onTitleYes: (group, typed) => {
@@ -712,6 +713,16 @@ function OutputPageInner() {
       else setResumeText(r.text);
       setDefendAnswers(r.answers);
       return "ok";
+    },
+    onScopeNo: (group) => {
+      const noLine = group.scope?.overPeople?.noLine;
+      if (!noLine) return;
+      const text = group.target === "letter" ? coverLetterText : resumeText;
+      const r = applyRewrite(text, defendAnswers, group.line, noLine);
+      if (!r.changed) return;
+      if (group.target === "letter") setCoverLetterText(r.text);
+      else setResumeText(r.text);
+      setDefendAnswers(r.answers);
     },
     onScopeHelped: (group) => {
       if (!group.scope?.helped) return;
