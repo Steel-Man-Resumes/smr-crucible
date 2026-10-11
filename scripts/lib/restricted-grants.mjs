@@ -72,6 +72,9 @@ export const RESTRICTED_GRANTS = {
   // Phase 5 R1 (081). Saved resume revisions, owner only: never edited (a
   // change is a new revision), so no UPDATE; deleted by delete-my-data.
   artifact_revision: ["SELECT", "INSERT", "DELETE"],
+  // 081: the newest writer's receipt nonce per run, owner only (moves forward
+  // by UPDATE; deleted by delete-my-data).
+  forge_writer_receipt: ["SELECT", "INSERT", "UPDATE", "DELETE"],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
