@@ -20,8 +20,7 @@
 
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { VERIFY_MAX } from "@/lib/limits";
-import { onlyRewordedFrom } from "@/lib/fact-trace";
-import { isPeopleScopeHit, scopeHitsNotTheirs } from "@crucible/core/src/scopeWords";
+import { onlyRewordedFrom, onlySupervisionUnsupported } from "@/lib/fact-trace";
 
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
@@ -130,6 +129,15 @@ export function verificationNoticeFor(agg: VerificationAggregate): string {
   return "We could not run the truth check on part of this document because the checker was unavailable. Do not finalize this as employer-ready until it verifies. You can review and attest each claim yourself before sending.";
 }
 
+/** The verifier's supervision rule (round 4: the "leave it in place" half only when the caller opts in). */
+export function supervisionRule(ask: boolean): string {
+  const base = `SUPERVISING PEOPLE IS SCOPE. A line saying the person was over people ("supervised", "led", "oversaw", "directed" or "managed" people) is supported only when the person's own words for that same job already say it in so many words: one of those verbs, or "was in charge of", with people as its object ("supervised 4 workers", "in charge of employees on my shift", "led a crew of 6"). A job title of any kind, "my crew", a shift, a place or a task never says it: "Responsible for 3rd shift", "Ran the line", "Shift Lead" or "Account Manager" alone does not.`;
+  const handling = ask
+    ? ` When such a line is not supported that way and being over people is the ONLY unsupported thing in it, flag it with kind "supervision" and do NOT rewrite or remove it: the person is asked one question about it ("Were you over other people in this job?"). If the line also adds anything else (a number, a result, a size, a tool), flag it with its own kind and fix it as usual.`
+    : ` Flag such a line with kind "scope" and fix it like any other unsupported claim.`;
+  return `${base}${handling} "Managed" a thing (inventory, accounts, a budget) is not a people claim; check it like any other duty. Facts belong to their own job: a fact from one job never supports a line under another.`;
+}
+
 const VERIFY_TIMEOUT_MS = 15000;
 const VERIFY_MODEL = "gpt-4o-mini";
 // The model only ever sees the first MAX_VERIFY_CHARS of source/output. A rewrite
@@ -165,8 +173,15 @@ export async function verifyGrounding(params: {
   sourceText: string;
   output: string;
   kind: GroundingKind;
+  /**
+   * Round 4 (review r3 H3-2): only /api/forge/generate-docs sets this. With it, a supervision line whose ONLY
+   * unsupported element is being over people is left in place and asked on the finish page's one-tap card.
+   * Every other caller leaves it off and supervision is flagged and cut as before Phase 6.
+   */
+  askSupervision?: boolean;
 }): Promise<GroundingVerifyResult> {
   const { sourceText, output, kind } = params;
+  const askSupervision = params.askSupervision === true;
   // verifierRan defaults TRUE: the input-guard early returns (trivial output,
   // thin source) are not outages -- there is simply nothing an outage-retry would
   // fix. Only the provider-outage branches below flip it to false.
@@ -199,7 +214,7 @@ Scrutinize section headers and the employer/date/location lines too, not only th
 
 TRACE FACTS, NOT WORDS. The writer is allowed to reword any line into strong plain words that say what it means. A reworded line is NOT a fabrication when every fact in it traces back to SOURCE: the same numbers, dates, job titles, employers, tools, skills, credentials, results and scope. These PASS (never flag or rewrite them): SOURCE "In charge of the guys on my shift" written as "Supervised the shift crew"; SOURCE "Did safety audits" written as "Ran safety audits"; SOURCE "dealt with customers" written as "Served customers"; SOURCE "Responsible for 3rd shift" under the job title "Production Supervisor" written as "Supervised third-shift production". These FAIL (flag them): an added number ("Supervised a 12-person crew" when no 12 was given); an added result ("cutting errors 20%", "with zero incidents", "keeping a clean safety record"); an added tool or skill ("in SAP", "on a reach truck"); an added or upgraded credential; a changed or shortened date ("8/2021" written as "2021"); a different title or employer; and scope inflation ("helped" written as "led" or as done alone, "my shift" written as "the plant", one area written as all of them, an added size word such as "large", "heavy" or "major").
 
-SUPERVISING PEOPLE IS SCOPE. A line saying the person was over people ("supervised", "led", "oversaw", "directed" or "managed" people) is supported only when the person's own words for that same job already say it in so many words: one of those verbs, or "was in charge of", with people as its object ("supervised 4 workers", "in charge of employees on my shift", "led a crew of 6"). A job title of any kind, "my crew", a shift, a place or a task never says it: "Responsible for 3rd shift", "Ran the line", "Shift Lead" or "Account Manager" alone does not. When such a line is not supported that way, flag it with kind "supervision" and do NOT rewrite or remove it: the person is asked one question about it ("Were you over other people in this job?"). "Managed" a thing (inventory, accounts, a budget) is not a people claim; check it like any other duty. Facts belong to their own job: a fact from one job never supports a line under another.
+${supervisionRule(askSupervision)}
 
 Do NOT flag: strong action verbs, general professional framing, a reasonable summary of a duty the source states, or a reworded line whose facts all trace back. Never flag a line only because its words differ from SOURCE. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts. Never let the OUTPUT claim something just because a posting asked for it.
 
@@ -294,13 +309,13 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   // onlyRewordedFrom). Anything else stays a flag, so the person is asked.
   // A truncated flag list (more than 25) keeps every wording flag too.
   const truncated = Array.isArray(parsed.flags) && parsed.flags.length > 25;
-  // Phase 6 (r2 ruling): a "supervision" flag is not cut; the person is asked one tap instead. It is set
-  // aside only when the deterministic scope check will raise that card for the same phrase; otherwise it
-  // stays a flag like any other.
+  // Phase 6 (r2 ruling, r3 H3-2): with askSupervision (generate-docs only), a "supervision" flag is set aside
+  // when being over people is the ONLY unsupported thing in the phrase and the scope check will raise the
+  // one-tap card for it. Otherwise, and on every other route, it stays a flag and is cut as before.
   const factFlags = graded.filter(
     (f) =>
       !(f.kind === "wording" && !truncated && onlyRewordedFrom(f.claim, source)) &&
-      !(f.kind === "supervision" && scopeHitsNotTheirs(f.claim, source).some(isPeopleScopeHit))
+      !(askSupervision && f.kind === "supervision" && onlySupervisionUnsupported(f.claim, source))
   );
   const flags: GroundingFlag[] = factFlags.map((f) => ({ claim: f.claim, why: f.why }));
   const hasFabrication = flags.length > 0 || (parsed.hasFabrication === true && graded.length === 0);

@@ -659,8 +659,9 @@ function OutputPageInner() {
     onScopeYes: (group, typed) => {
       if (!group.scope) return "empty";
       const doc = group.target === "letter" ? { target: "letter" as const, text: coverLetterText } : { target: "resume" as const, text: resumeText };
-      const r = scopeYesResult(doc, group.line, group.scope.families, typed, view.source, defendAnswers);
-      if (r === "ok") setDefendAnswers((a) => recordScopeYes(a, group.line, group.scope!.families, typed));
+      const job = group.scope.overPeople?.job;
+      const r = scopeYesResult(doc, group.line, group.scope.families, typed, view.source, defendAnswers, job);
+      if (r === "ok") setDefendAnswers((a) => recordScopeYes(a, group.line, group.scope!.families, typed, job));
       return r;
     },
     onTitleYes: (group, typed) => {

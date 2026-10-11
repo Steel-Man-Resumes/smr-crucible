@@ -22,7 +22,7 @@
 import { numberValues } from "@crucible/core/src/numberRead";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { namedCredentialRe } from "@crucible/core/src/credentialWords";
-import { scopeHitsNotTheirs, straightQuotes } from "@crucible/core/src/scopeWords";
+import { isPeopleScopeHit, scopeHits, scopeHitsNotTheirs, straightQuotes } from "@crucible/core/src/scopeWords";
 import { isSectionHeader } from "@crucible/core/src/pageFitShared";
 
 export type FactKind = "number" | "date" | "name" | "tool" | "skill" | "credential" | "result" | "scope" | "character";
@@ -223,6 +223,7 @@ export function factsTraceBack(line: string, source: string | SourceIndex, opts:
 // A CLOSED list (CC ruling r2): duty phrasing on the person's line may become one of a few verbs that keep the
 // same work, about the very same object. Any other verb change keeps the flag.
 const DUTY_LEAD_RE = /^(?:i\s+)?(?:was\s+)?(?:responsible\s+for|did|do|does|dealt\s+with|deal\s+with|handled|handle|took\s+care\s+of|take\s+care\s+of|worked\s+on|work\s+on|duties\s+included)\s+(.+)$/i;
+const PEOPLE_OBJECT_RE = /\b(?:crews?|teams?|staff|employees?|workers?|hires?|people|guys|men|associates?|operators?|drivers?|cooks?|cashiers?|clerks?|trainees?|helpers?|laborers?|shifts?)\b/i;
 const SAME_WORK_VERB_RE = /^(?:handled|completed|ran|performed|kept\s+up(?:\s+with)?)\s+(.+)$/i;
 // Words that keep a line at its true size. Wherever their words about this object carry one, the line keeps it.
 const LIMITING_RE = /\b(?:help(?:ed|ing|s)?|assist(?:ed|ing|s)?|under|alongside|along|rode|until|expired|lapsed|former(?:ly)?|part\s+of|some|sometimes|occasionally|when\s+(?:needed|asked|assigned)|as\s+needed|backup|back-up|fill(?:ed)?\s+in|trainee|in\s+training|learning|class|course)\b/gi;
@@ -252,6 +253,9 @@ export function onlyRewordedFrom(claim: string, source: string): boolean {
   if (sentences.some((l) => l.toLowerCase() === c.toLowerCase())) return true;
   const cv = c.match(SAME_WORK_VERB_RE);
   if (!cv) return false;
+  // Round 4 (r3 L-3): people or a shift as the object ("Handled the new hires", "Ran 3rd shift") is a claim of
+  // being over people: asked, never dropped as wording.
+  if (scopeHits(c).length || PEOPLE_OBJECT_RE.test(cv[1])) return false;
   const obj = objectStems(cv[1]);
   const from = sentences.find((l) => {
     const d = l.match(DUTY_LEAD_RE);
@@ -268,4 +272,27 @@ export function onlyRewordedFrom(claim: string, source: string): boolean {
     }
   }
   return true;
+}
+
+// ---- review r3 H3-2: when a "supervision" flag may wait for the one-tap card -----------------------------
+
+const PEOPLE_NOUN_RE = /^(?:crews?|teams?|staff|employees?|workers?|hires?|people|guys|men|associates?|operators?|drivers?|cooks?|cashiers?|clerks?|trainees?|helpers?|laborers?|stockers?|pickers?|packers?|loaders?|servers?)$/;
+
+/**
+ * True only when being over people is the ONLY unsupported thing in the phrase: the scope check raises a
+ * people-scope card for it, every untraced fact on it is that people claim (no number, result, size, tool,
+ * credential, name), and every other content word is in the person's own words or names people.
+ * "Supervised the 3rd shift crew" from "Responsible for 3rd shift" is; "Supervised a crew of 12 and cut
+ * overtime 20%" and "Supervised the crew and kept the dock accident-free" are not.
+ */
+export function onlySupervisionUnsupported(claim: string, source: string): boolean {
+  const people = scopeHitsNotTheirs(claim, source).filter(isPeopleScopeHit);
+  if (!people.length) return false;
+  const hitWords = new Set(people.flatMap((h) => words(h.word)));
+  const facts = untracedFacts(claim, source);
+  if (facts.some((f) => !(f.kind === "scope" && words(f.text).every((w) => hitWords.has(w))))) return false;
+  const src = indexSource(source);
+  return words(claim)
+    .filter((w) => w.length >= 3 && !FUNCTION_WORDS.has(w) && !hitWords.has(w) && !PEOPLE_NOUN_RE.test(w))
+    .every((w) => src.stems.has(stemOf(w)) || src.flat.includes(` ${w} `));
 }

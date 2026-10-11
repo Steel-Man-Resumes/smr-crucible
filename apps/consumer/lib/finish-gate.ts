@@ -244,7 +244,7 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
                 }
               : // Round 11: a "Yes, I did this" answer keeps its family; it settles only that claim on its line.
                 a.kind === "scope_yes" && typeof a.family === "string"
-                ? { line: a.line, answer: a.answer, kind: "scope_yes" as const, family: a.family }
+                ? { line: a.line, answer: a.answer, kind: "scope_yes" as const, family: a.family, ...(typeof a.job === "string" && a.job ? { job: a.job.slice(0, 300) } : {}) }
                 : a.kind === "title_yes"
                 ? { line: a.line, answer: a.answer, kind: "title_yes" as const }
                 : { line: a.line, answer: a.answer, verdict: a.verdict }
@@ -1241,12 +1241,14 @@ function jobHeaderFor(resumeText: string, line: string): string | undefined {
 // ---- round 11: the one-tap scope card ------------------------------------------------------
 
 /** "Yes, I did this": their typed who or what, kept for this line's scope claim only. */
-export function recordScopeYes(answers: DefendAnswer[], line: string, family: string | string[], typed: string): DefendAnswer[] {
+export function recordScopeYes(answers: DefendAnswer[], line: string, family: string | string[], typed: string, job?: string): DefendAnswer[] {
   const k = squash(line);
   const families = Array.isArray(family) ? family : [family];
+  // Round 4 (r3 M3-3): an answer belongs to one line in one job.
+  const j = squash(job ?? "");
   return [
-    ...answers.filter((a) => !(a.kind === "scope_yes" && squash(a.line) === k && families.includes(a.family as string))),
-    ...families.map((f) => ({ line, answer: typed.trim(), kind: "scope_yes" as const, family: f })),
+    ...answers.filter((a) => !(a.kind === "scope_yes" && squash(a.line) === k && squash(a.job ?? "") === j && families.includes(a.family as string))),
+    ...families.map((f) => ({ line, answer: typed.trim(), kind: "scope_yes" as const, family: f, ...(job ? { job } : {}) })),
   ];
 }
 
@@ -1262,17 +1264,18 @@ export function scopeYesResult(
   family: string | string[],
   typed: string,
   source: string,
-  answers: DefendAnswer[]
+  answers: DefendAnswer[],
+  job?: string
 ): "ok" | "empty" | "unmatched" | "copy" {
   if (!isScopeWhoAnswer(typed)) return "empty";
   // Round 12: the line pasted back is not their words.
   if (isScopeCopy(typed, line) || splitSentences(line).some((sent) => isScopeCopy(typed, sent))) return "copy";
   const families = Array.isArray(family) ? family : [family];
-  const next = recordScopeYes(answers, line, families, typed);
+  const next = recordScopeYes(answers, line, families, typed, job);
   // Round 12: one card per line; one answer must cover every claim it asked about.
   const still = (text: string) => {
     const own = next.map((a) => (squash(a.line) === squash(line) ? { ...a, line: text } : a));
-    return scopeAllNotTheirsAnswered(text, source, own).some((h) => families.includes(h.family));
+    return scopeAllNotTheirsAnswered(text, source, own, { job }).some((h) => families.includes(h.family));
   };
   if (doc.target === "letter") return splitSentences(line).some((sent) => still(sent)) ? "unmatched" : "ok";
   return still(line) ? "unmatched" : "ok";
@@ -1420,7 +1423,7 @@ export interface LineGroup {
      * `yes` is the answer "Yes, I was over people" records for this line; `noLine` is the person's own line
      * "No, I did the work" puts back (absent when none of theirs matches; then only "Take it off").
      */
-    overPeople?: { yes: string; noLine?: string };
+    overPeople?: { yes: string; noLine?: string; job?: string };
   };
   /** Round 12 (SF-2): a job title the person never used: "Yes, that was my title" or "Use my title". */
   /** Round 13 (SF-4): `role` when the title is a role in the summary or letter, not a job header's title. */
@@ -1957,10 +1960,19 @@ export function buildFinishView(input: {
   const lined = items.filter((i) => i.line && onItsPage(i));
 
   const byLine = new Map<string, GateItem[]>();
+  const seenLines = new Set<string>();
+  const dupLines = new Set<string>();
+  for (const l of linesOf(input.resumeText)) {
+    const k = squash(stripBullet(l));
+    if (seenLines.has(k)) dupLines.add(k);
+    seenLines.add(k);
+  }
   for (const item of lined) {
     // Every added skill is one card, not one card per term.
     // Round 10 (SF-2): each credential on a line is its own card; the line's other items ride with its first one.
     let k = item.target === "skillset" ? "skillset" : `${item.target}\u0000${item.line}`;
+    // Round 4 (r3 M3-3): the same line in two jobs is two scope cards, one per job.
+    if (item.kind === "scope_unsaid" && item.job && dupLines.has(squash(stripBullet(item.line)))) k = `${k}\u0000${item.job}`;
     if (item.kind === "credential_unsaid" && item.subject) {
       const first = lined.find((x) => x.kind === "credential_unsaid" && x.target === item.target && x.line === item.line);
       if (first && first !== item && first.subject !== item.subject) k = `${k}\u0000${item.subject}`;
@@ -2002,9 +2014,10 @@ export function buildFinishView(input: {
               ...(scopeItem(its)!.helped ? { helped: scopeItem(its)!.helped } : {}),
               ...(overPeopleCard(its[0].line, scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string])
                 ? (() => {
-                    const noLine = its[0].target === "resume" ? ownLineFor(its[0].line, source, { job: jobHeaderFor(input.resumeText, its[0].line) }) : undefined;
+                    const job = scopeItem(its)!.job ?? (its[0].target === "resume" ? jobHeaderFor(input.resumeText, its[0].line) : undefined);
+                    const noLine = its[0].target === "resume" ? ownLineFor(its[0].line, source, { job }) : undefined;
                     const bullet = its[0].line.match(/^\s*[-*\u2022]\s*/)?.[0] ?? "";
-                    return { overPeople: { yes: OVER_PEOPLE_YES, ...(noLine && squash(noLine) !== squash(stripBullet(its[0].line)) ? { noLine: `${bullet}${noLine}` } : {}) } };
+                    return { overPeople: { yes: OVER_PEOPLE_YES, ...(job ? { job } : {}), ...(noLine && squash(noLine) !== squash(stripBullet(its[0].line)) ? { noLine: `${bullet}${noLine}` } : {}) } };
                   })()
                 : {}),
             },

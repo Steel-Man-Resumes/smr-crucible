@@ -113,8 +113,10 @@ async function handlePost(request: Request) {
     });
 
     const [resumeCheck, coverCheck] = await Promise.all([
-      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume" }),
-      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter" }),
+      // Round 4 (r3 H3-2): only here, where the finish page shows the one-tap card, is a supervision-only
+      // claim left in place and asked instead of cut.
+      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: true }),
+      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter", askSupervision: true }),
     ]);
 
     // A prompt rule is an instruction, not a guarantee. The output format

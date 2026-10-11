@@ -82,7 +82,12 @@ function parseChangeList(block: string): unknown {
 
 // What a change list looks like when it slipped past the sentinels: a key of a change object, a line of only
 // brackets, braces and commas, a quoted old -> new pair, or an object wrapper.
-const LEFTOVER_LINE_RE = /["'](?:old|new|why|rule|changes)["']\s*:|^[\s[\]{}(),`]+$|^\s*[-*\u2022]?\s*["\u201C][^"\u201D]{1,300}["\u201D]\s*(?:->|=>|\u2192|became|to)\s*/i;
+// Round 4 (review r3 L3-1): only lines that clearly are the list: a change object's key at the start of the
+// line, a line with both an "old" and a "new" key, a line of only brackets and commas, or a quoted pair
+// joined by an arrow. Ordinary prose with quotes, "became", "to" or the word "new" stays.
+const LEFTOVER_LINE_RE = /^\s*[{[]*\s*["'](?:old|new|why|rule|changes)["']\s*:|["']old["']\s*:.*["']new["']\s*:|^[\s[\]{}(),`]+$|^\s*[-*\u2022]?\s*["\u201C][^"\u201D]{1,300}["\u201D]\s*(?:->|=>|\u2192)\s*["\u201C]/i;
+/** A marker or label line that is clearly the list's: decorated ("===CHANGES===", "CHANGES:", "**Changes**") or "Changes made/block/list". A bare "Changes" heading is not. */
+const isMarkerLine = (l: string) => MARKER_LINE_RE.test(l) && /changes/i.test(l) && (/[=*#:`_~]/.test(l) || /changes\s+(?:block|list|made)|t\.?roy/i.test(l));
 
 /**
  * Split the writer's raw reply into the resume and its change list.
@@ -117,7 +122,7 @@ export function splitWriterOutput(raw: string): { resume: string; changes: unkno
   //    that block are cut and anything after stays (a block printed mid-page never drops the page's end);
   //    when anything else follows (bullets, prose), everything from the marker to the end is the list.
   const lines = text.split("\n");
-  const at = lines.findIndex((l, i) => MARKER_LINE_RE.test(l) && /changes/i.test(l) && isUsableResume(lines.slice(0, i).join("\n")));
+  const at = lines.findIndex((l, i) => isMarkerLine(l) && isUsableResume(lines.slice(0, i).join("\n")));
   if (at >= 0) {
     const markerStart = lines.slice(0, at).join("\n").length + (at > 0 ? 1 : 0);
     const afterMarker = markerStart + lines[at].length;
@@ -181,7 +186,7 @@ export function splitWriterOutput(raw: string): { resume: string; changes: unkno
   // 4. Last guard: no line shaped like the change list ships.
   const resume = text
     .split("\n")
-    .filter((l) => !(MARKER_LINE_RE.test(l) && /changes/i.test(l)) && !LEFTOVER_LINE_RE.test(l) && !FENCE_LINE_RE.test(l))
+    .filter((l) => !isMarkerLine(l) && !LEFTOVER_LINE_RE.test(l) && !FENCE_LINE_RE.test(l))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
