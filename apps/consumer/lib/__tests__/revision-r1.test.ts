@@ -20,21 +20,22 @@ import { ensureExportRevision, revisionIsCurrent, withRevisionMarker, artifactTe
 import { formatResumeDownload } from "../../components/resume/resumeModel";
 import type { ArtifactRevision, NewRevision, InsertRevisionResult } from "@crucible/core/src/artifactRevision";
 import { revisionContentHash } from "@crucible/core/src/artifactRevision";
-import { BAD_LETTER, GROUNDING, LETTER, OWN_WORDS, RESUME, RUN, SOURCE, allAnswered, finishState, longResume } from "./fixtures/revision-run";
+import { BAD_LETTER, FIXTURE_COOKIE, FIXTURE_CTX, GROUNDING, LETTER, OWN_WORDS, RESUME, RUN, SOURCE, allAnswered, finishState, longResume } from "./fixtures/revision-run";
 
 const UID = "00000000-0000-4000-8000-0000000000a1";
 const OTHER = "00000000-0000-4000-8000-0000000000b2";
 const REV = "00000000-0000-4000-8000-00000000f001";
 
-function post(body: unknown, deps?: DownloadDeps) {
+function post(body: unknown, deps?: DownloadDeps, headers: Record<string, string> = {}) {
   return handleDownloadPost(
-    new Request("http://localhost/x", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    new Request("http://localhost/x", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) }),
     deps
   );
 }
+const COOKIE = { cookie: `smr_writer_run=${FIXTURE_COOKIE}` };
 const pages = async (res: Response) => (await PDFDocument.load(new Uint8Array(await res.arrayBuffer()))).getPageCount();
 function input(over: Record<string, unknown> = {}) {
-  const c = cleanRevisionInput(finishState(over));
+  const c = cleanRevisionInput(finishState(over), { receipt: FIXTURE_CTX });
   assert.ok(c.ok, c.ok ? "" : c.reason);
   return c.input;
 }
@@ -98,11 +99,11 @@ test("revision id: the cover letter and the zip come from the revision too", asy
 });
 
 test("signed out, the finish state: the server runs the gate itself and decides", async () => {
-  const fin = await post({ finish: finishState(), type: "resume", format: "txt", draft: true });
+  const fin = await post({ finish: finishState({}, { signedOut: true }), type: "resume", format: "txt", draft: true }, undefined, COOKIE);
   assert.equal(fin.headers.get("x-smr-status"), "finished");
   assert.equal(await fin.text(), RESUME);
   // Same state, the skill no longer kept: the server says draft, whatever the page claims.
-  const draft = await post({ finish: finishState({ keptTerms: [] }), type: "resume", format: "txt", draft: false });
+  const draft = await post({ finish: finishState({ keptTerms: [] }, { signedOut: true }), type: "resume", format: "txt", draft: false }, undefined, COOKIE);
   assert.equal(draft.headers.get("x-smr-status"), "draft");
   assert.match(await draft.text(), /^DRAFT\n\n/);
 });
@@ -130,7 +131,7 @@ test("A7 repro: a 3-page resume the old gate called finished stays a draft, with
   const { resume, source } = longResume();
   const view = buildFinishView({ resumeText: resume, ownWords: source, defendAnswers: [] });
   assert.equal(view.state, "finished", "the old gate alone");
-  const c = cleanRevisionInput({ ...finishState(), resumeText: resume, coverLetterText: "", ownWords: source, keptTerms: [], defendAnswers: [], written: { resume, letter: "" }, ownResumeText: source });
+  const c = cleanRevisionInput({ ...finishState(), resumeText: resume, coverLetterText: "", ownWords: source, keptTerms: [], defendAnswers: [], written: { resume, letter: "" }, ownResumeText: source }, { receipt: FIXTURE_CTX });
   assert.ok(c.ok);
   const v = computeRevision(c.input);
   assert.ok(v.pageCount >= 3, `pages ${v.pageCount}`);
@@ -167,13 +168,13 @@ test("C1: each kind keeps its own length rule", () => {
 // ---- the server never trusts a flag ------------------------------------------------------
 
 test("cleanRevisionInput has no field for a status: a sent 'finished' changes nothing", () => {
-  const withFlag = cleanRevisionInput({ ...finishState({ keptTerms: [] }), status: "finished", state: "finished", finished: true, draft: false });
+  const withFlag = cleanRevisionInput({ ...finishState({ keptTerms: [] }), status: "finished", state: "finished", finished: true, draft: false }, { receipt: FIXTURE_CTX });
   assert.ok(withFlag.ok);
   assert.equal(computeRevision(withFlag.input).status, "draft");
 });
 
 test("a confirmation for a credential the writer never named is dropped (the page's restore filter)", () => {
-  const c = cleanRevisionInput(finishState({ confirmedCredentials: [{ name: "CDL Class A", type: "license", when: "2020", text: "CDL Class A license, 2020" }] }));
+  const c = cleanRevisionInput(finishState({ confirmedCredentials: [{ name: "CDL Class A", type: "license", when: "2020", text: "CDL Class A license, 2020" }] }), { receipt: FIXTURE_CTX });
   assert.ok(c.ok);
   assert.equal(c.input.confirmedCredentials.length, 0);
 });
@@ -553,11 +554,11 @@ test("M1 (reviewer P3): dropping or editing the grounding without the writer's r
   assert.equal(computeRevision(input({ grounding: flagged })).status, "draft", "the real flag (signed)");
   // The page drops the flag, keeping the old receipt: the receipt no longer matches.
   const signedForFlag = finishState({ grounding: flagged }).writerReceipt;
-  const dropped = cleanRevisionInput(finishState({ grounding: null, writerReceipt: signedForFlag }));
+  const dropped = cleanRevisionInput(finishState({ grounding: null, writerReceipt: signedForFlag }), { receipt: FIXTURE_CTX });
   assert.ok(dropped.ok);
   const v = computeRevision((dropped as any).input);
   assert.equal(v.status, "draft");
-  assert.ok(v.openItems.some((i) => /needs its check on the finish page/.test(i)));
+  assert.ok(v.openItems.some((i) => /we need to re-check this version/.test(i)));
   // No receipt at all: same.
   assert.equal(computeRevision(input({ writerReceipt: "" })).status, "draft");
   // A forged receipt: same.
@@ -768,17 +769,28 @@ test("M-B (reviewer R2-R1): an older generation's clean receipt replayed onto ne
   assert.equal((g.revs.at(-1)!.evidence as any).writerVerified, true, "the newest generation's receipt is accepted");
 });
 
-test("M-B: a receipt made for another account, or another run, is not accepted", () => {
+test("M-B / r3 L-1: a receipt made for another account, another run, or another browser is not accepted", async () => {
+  const { runCookieHash } = await import("../writer-receipt");
   const src = { ownWords: OWN_WORDS, ownResumeText: SOURCE, credentialsAnswer: "", credentialRows: [] };
   const W = { resume: RESUME, letter: LETTER };
   const forOther = readReceipt(signReceipt(W, GROUNDING, { userId: OTHER, runId: "run-x", source: src }))!;
-  assert.equal(receiptAccepted(forOther, { userId: UID }), false);
-  assert.equal(receiptAccepted(forOther, { userId: OTHER }), true);
-  const runR = readReceipt(signReceipt(W, GROUNDING, { userId: null, runId: "run-x", source: src }))!;
-  assert.equal(receiptAccepted(runR, { userId: null, runId: "run-y" }), false, "signed out: another run");
-  assert.equal(receiptAccepted(runR, { userId: null, runId: "run-x" }), true);
-  assert.equal(receiptAccepted(runR, { userId: UID, runLinked: false }), false, "import: the run is not the account's");
-  assert.equal(receiptAccepted(runR, { userId: UID, runLinked: true }), true, "import: the account's own run");
+  assert.equal(receiptAccepted(forOther, { userId: UID, runId: "run-x" }), false);
+  assert.equal(receiptAccepted(forOther, { userId: OTHER, runId: "run-x" }), true);
+  assert.equal(receiptAccepted(forOther, { userId: OTHER, runId: "run-y" }), false, "signed in: the run being finished must be the receipt's run");
+  assert.equal(receiptAccepted(forOther, { userId: OTHER }), false, "no run named: refused");
+  const cookie = "a1".repeat(16);
+  const runR = readReceipt(signReceipt(W, GROUNDING, { userId: null, runId: "run-x", source: src, cookie }))!;
+  const ch = runCookieHash(cookie);
+  assert.equal(receiptAccepted(runR, { userId: null, runId: "run-y", cookieHash: ch }), false, "signed out: another run");
+  assert.equal(receiptAccepted(runR, { userId: null, runId: "run-x", cookieHash: ch }), true);
+  assert.equal(receiptAccepted(runR, { userId: null, runId: "run-x", cookieHash: runCookieHash("b2".repeat(16)) }), false, "another browser (another cookie)");
+  assert.equal(receiptAccepted(runR, { userId: null, runId: "run-x" }), false, "no cookie");
+  assert.equal(receiptAccepted(runR, { userId: UID, runId: "run-x", cookieHash: ch, runLinked: false }), false, "import: the run is not the account's");
+  assert.equal(receiptAccepted(runR, { userId: UID, runId: "run-x", cookieHash: ch, runLinked: true }), true, "import: the account's own run, this browser");
+  assert.equal(receiptAccepted(runR, { userId: UID, runId: "run-x", runLinked: true }), false, "import from another browser (no cookie)");
+  // A signed-out receipt made without a cookie (an old shape) is never accepted.
+  const noCookie = readReceipt(signReceipt(W, GROUNDING, { userId: null, runId: "run-x", source: src }))!;
+  assert.equal(receiptAccepted(noCookie, { userId: null, runId: "run-x", cookieHash: ch }), false);
 });
 
 test("H2: a request that sends the whole page as its own words saves as a DRAFT", async () => {
@@ -860,9 +872,148 @@ test("L-B: the email line says what really happens", async () => {
 
 test("M-B: generate-docs signs a bound receipt and keeps the newest nonce per run, signed in; the import never saves an unsigned finish", () => {
   const route = src("app", "api", "forge", "generate-docs", "route.ts");
-  assert.match(route, /writerReceipt\(\{ resume, letter: coverLetter \}, grounding, \{\s+userId: userId \?\? null,\s+runId,\s+source: writerSourceFrom\(raw\),\s+nonce,\s+now: issuedAt,\s+\}\)/);
+  assert.match(route, /writerReceipt\(\{ resume, letter: coverLetter \}, grounding, \{\s+userId: userId \?\? null,\s+runId,\s+source: writerSourceFrom\(raw\),\s+nonce,\s+now: issuedAt,\s+cookie: runCookie,\s+\}\)/);
+  assert.match(route, /if \(runCookie\) out\.headers\.append\("Set-Cookie", runCookieHeader\(runCookie\)\);/);
   assert.match(route, /if \(userId && runId\) \{[\s\S]*recordWriterReceipt\(userId, runId, nonce, issuedAt\)/);
   assert.match(src("lib", "forge-persist.ts"), /return \{ revision: null, revisionProblem: "no receipt" \}/);
   const page = src("app", "(forge)", "output", "page.tsx");
   assert.match(page, /runId: session\.startedAt,/);
+});
+
+// ---- review round 3: L-1 replay leftovers, L-2 writer-received text, M-1 Check it again, I-1 ----
+
+import { recheckDocs } from "../forge-recheck";
+import { RECHECK_LINE, RECHECK_HREF, RECEIPT_OPEN_ITEM as RECHECK_ITEM, needsRecheck } from "../recheck-copy";
+
+test("r3 L-1a: with the receipt omitted, the known-revision path still checks for a newer generation of its run", async () => {
+  const f = fakeStore();
+  const first = await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  assert.ok(first.ok && first.revision.status === "finished");
+  // A newer generation of that run was recorded since; the page sends no receipt.
+  (f.store as any).receiptState = async () => ({ newestNonce: "9".repeat(32), linked: true });
+  const replay = await saveFinishRevision(UID, { ...finishState(), writerReceipt: "", coverLetterText: LETTER + " Thanks." }, { source: "forge_finish" }, f.store);
+  assert.ok(replay.ok);
+  assert.equal((f.revs.at(-1)!.evidence as any).writerVerified, false);
+  assert.equal(replay.ok && replay.revision.status, "draft");
+  // Same, with no newer generation: the known version stands in (rotation-safe).
+  const g = fakeStore();
+  await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, g.store);
+  const ok = await saveFinishRevision(UID, { ...finishState(), writerReceipt: "", coverLetterText: LETTER + " Thanks." }, { source: "forge_finish" }, g.store);
+  assert.equal((g.revs.at(-1)!.evidence as any).writerVerified, true, ok.ok ? "" : "x");
+});
+
+test("r3 L-1b: signed in, run X's receipt does not finish run Y's page", async () => {
+  const f = fakeStore();
+  const r = await saveFinishRevision(UID, { ...finishState(), runId: "2026-10-01T00:00:00.000Z" }, { source: "forge_finish" }, f.store);
+  assert.ok(r.ok);
+  assert.equal((f.revs.at(-1)!.evidence as any).writerVerified, false);
+  assert.equal(r.ok && r.revision.status, "draft");
+});
+
+test("r3 L-1c: a signed-out receipt imports only in the browser holding its run cookie, and then the cookie is cleared", async () => {
+  const { runCookieHash } = await import("../writer-receipt");
+  const state = finishState({}, { signedOut: true });
+  const f = fakeStore();
+  const other = await saveFinishRevision(UID, state, { source: "forge_import" }, f.store);
+  assert.equal((f.revs.at(-1)!.evidence as any).writerVerified, false, "another browser (no cookie)");
+  assert.equal(other.ok && other.usedRunReceipt, undefined);
+  const g = fakeStore();
+  const mine = await saveFinishRevision(UID, state, { source: "forge_import", cookieHash: runCookieHash(FIXTURE_COOKIE) }, g.store);
+  assert.ok(mine.ok && mine.revision.status === "finished");
+  assert.equal(mine.ok && mine.usedRunReceipt, true, "the route clears the run cookie after this");
+  for (const route of [["app", "api", "forge", "save", "route.ts"], ["app", "api", "revisions", "route.ts"]]) {
+    assert.match(src(...route), /usedRunReceipt\) res\.headers\.append\("Set-Cookie", runCookieHeader\(null\)\)/, route.join("/"));
+  }
+  const { runCookieHeader } = await import("../writer-receipt");
+  assert.match(runCookieHeader("ab".repeat(16)), /smr_writer_run=abab.*; Path=\/; HttpOnly; SameSite=Lax; Max-Age=604800/);
+});
+
+test("r3 L-2: own resume lines are the text the writer received; a separate 'original' the writer never saw does not count", () => {
+  const s1 = writerSourceFrom({ resumeText: SOURCE, originalResumeText: SOURCE + "\nCDL Class A, 2020" } as any);
+  assert.equal(s1.ownResumeText.includes("CDL Class A"), false);
+  assert.equal(s1.ownResumeText, writerSourceFrom({ resumeText: SOURCE }).ownResumeText);
+  const page = src("app", "(forge)", "output", "page.tsx");
+  assert.doesNotMatch(page, /originalResumeText: session\.originalResumeText/, "the page does not send it to the writer");
+  assert.match(src("lib", "finish-payload.ts"), /ownResumeText: withholdRecordLines\(run\.resumeText, keep\)\.kept/);
+});
+
+test("r3 I-1: the import comment about the original upload is true", () => {
+  assert.match(src("lib", "forge-import.ts"), /stays in\n \* this browser: it is never sent, not here and not to the writer/);
+});
+
+const noFlags = async () => ({ text: "", hasFabrication: false, applied: false, flags: [], verifierRan: true });
+let rnd = 0;
+const fixedRandom = () => (++rnd).toString(16).padStart(32, "0");
+
+test("r3 M-1: a finish with no receipt is a draft with the re-check item; Check it again issues a receipt, rewrites nothing, and it finishes", async () => {
+  // A pre-receipt finish state (the page held it in the browser before receipts existed).
+  const pre = finishState({ writerReceipt: "" });
+  const c0 = cleanRevisionInput(pre, { receipt: FIXTURE_CTX });
+  const v0 = computeRevision((c0 as any).input);
+  assert.equal(v0.status, "draft");
+  assert.ok(needsRecheck(v0.openItems));
+  assert.equal(RECHECK_ITEM.startsWith("Fix before you send: we need to re-check this version"), true);
+  // Check it again: the current documents, the writer's documents, the person's source and answers.
+  const r = await recheckDocs(
+    {
+      documents: { resume: pre.resumeText, letter: pre.coverLetterText },
+      written: pre.written,
+      source: { resumeText: SOURCE, goalNarrative: "I want to keep cooking." },
+      answers: (pre.defendAnswers as Array<{ answer: string }>).map((a) => a.answer),
+      runId: RUN.startedAt,
+    },
+    FIXTURE_CTX.userId,
+    { verify: noFlags as any, random: fixedRandom }
+  );
+  assert.ok(r.ok);
+  const after: Record<string, any> = { ...pre, grounding: r.ok ? r.grounding : null, writerReceipt: r.ok ? r.receipt : "" };
+  assert.equal(after.resumeText, pre.resumeText, "nothing rewritten");
+  assert.deepEqual(after.defendAnswers, pre.defendAnswers, "answers kept");
+  const c1 = cleanRevisionInput(after, { receipt: FIXTURE_CTX });
+  assert.equal((c1 as any).input.evidence.writerVerified, true);
+  assert.equal(computeRevision((c1 as any).input).status, "finished");
+});
+
+test("r3 M-1: what the fresh check flags comes back as a card (still a draft, never silently finished)", async () => {
+  const pre = finishState({ writerReceipt: "" });
+  const flagging = async ({ kind }: { kind: string }) =>
+    kind === "resume"
+      ? { text: "", hasFabrication: true, applied: false, flags: [{ claim: "Ran the grill on the breakfast line", reason: "not in source" }], verifierRan: true }
+      : { text: "", hasFabrication: false, applied: false, flags: [], verifierRan: true };
+  const r = await recheckDocs(
+    { documents: { resume: pre.resumeText, letter: pre.coverLetterText }, written: pre.written, source: { resumeText: SOURCE, goalNarrative: "I want to keep cooking." }, runId: RUN.startedAt },
+    FIXTURE_CTX.userId,
+    { verify: flagging as any, random: fixedRandom }
+  );
+  assert.ok(r.ok);
+  const outcomes = (r.ok ? (r.grounding as any).outcomes : []) as Array<{ status: string }>;
+  assert.ok(outcomes.some((o) => o.status === "still_there"), JSON.stringify(outcomes));
+  const c = cleanRevisionInput({ ...pre, grounding: r.ok ? r.grounding : null, writerReceipt: r.ok ? r.receipt : "" }, { receipt: FIXTURE_CTX });
+  const v = computeRevision((c as any).input);
+  assert.equal(v.status, "draft");
+  assert.equal(needsRecheck(v.openItems), false, "the receipt is good now; the card is the flagged line");
+});
+
+test("r3 M-1: signed out, Check it again binds the fresh receipt to a new run cookie; bad input is refused", async () => {
+  const pre = finishState({ writerReceipt: "" }, { signedOut: true });
+  const r = await recheckDocs(
+    { documents: { resume: pre.resumeText, letter: pre.coverLetterText }, written: pre.written, source: { resumeText: SOURCE }, runId: RUN.startedAt },
+    null,
+    { verify: noFlags as any, random: fixedRandom }
+  );
+  assert.ok(r.ok && r.runCookie && /^[0-9a-f]{32}$/.test(r.runCookie));
+  assert.ok(r.ok && readReceipt(r.receipt)?.c, "bound to the cookie");
+  assert.equal((await recheckDocs({ documents: { resume: "x" }, runId: "r" }, null, { verify: noFlags as any, random: fixedRandom })).ok, false);
+  assert.equal((await recheckDocs({ documents: { resume: "x", letter: "" }, written: { resume: "x", letter: "" } }, null, { verify: noFlags as any, random: fixedRandom })).ok, false, "no run");
+});
+
+test("r3 M-1: the page shows the re-check card and runs it from ?check=1; the Refinery links there", () => {
+  const page = src("app", "(forge)", "output", "page.tsx");
+  assert.match(page, /data-testid="recheck-card"/);
+  assert.match(page, /\{RECHECK_LINE\}/);
+  assert.match(page, /get\("check"\) !== "1"/);
+  assert.equal(RECHECK_LINE, "We need to re-check this version before it can be finished.");
+  assert.equal(RECHECK_HREF, "/output?from=refinery&check=1");
+  assert.match(src("components", "resume", "ResumeWorkspace.tsx"), /href=\{RECHECK_HREF\}/);
+  assert.match(src("lib", "session-policy.ts"), /"\/api\/forge\/recheck",/);
 });

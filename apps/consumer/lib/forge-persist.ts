@@ -36,6 +36,8 @@ function isStructuredResumeDoc(d: any): boolean {
 
 /** What the save did with the finished resume, if the run had one. */
 export interface PersistResult {
+  /** A signed-out run's receipt was used for this account (the route clears the run cookie). */
+  usedRunReceipt?: boolean;
   /** The saved revision (081), or null when the run had no finished state. */
   revision: SavedRevisionSummary | null;
   /** The finished state was there but could not be saved as sent (it was not valid). */
@@ -47,7 +49,8 @@ export class RevisionSaveError extends Error {}
 
 export async function persistForgeSession(
   userId: string,
-  body: Record<string, any>
+  body: Record<string, any>,
+  opts: { cookieHash?: string | null } = {}
 ): Promise<PersistResult> {
   const sessionId = body.startedAt || new Date().toISOString();
 
@@ -154,8 +157,8 @@ export async function persistForgeSession(
   // draft, and the finish page saves its own version when it opens signed in.
   if (typeof (finish as Record<string, unknown>).writerReceipt !== "string" || !(finish as Record<string, unknown>).writerReceipt) return { revision: null, revisionProblem: "no receipt" };
   const laneTarget = firstLaneTarget({}, body);
-  const saved = await saveFinishRevision(userId, finish, { source: "forge_import", laneTarget }, await coreStore());
-  if (saved.ok) return { revision: saved.revision };
+  const saved = await saveFinishRevision(userId, finish, { source: "forge_import", laneTarget, cookieHash: opts.cookieHash ?? null }, await coreStore());
+  if (saved.ok) return { revision: saved.revision, ...(saved.usedRunReceipt ? { usedRunReceipt: true } : {}) };
   // Not valid as sent: the rest of the run is saved; say so, never pretend.
   // Before 081 is applied (503 not_ready) the run still saves as it always did.
   if (saved.status === 400 || saved.status === 413 || saved.status === 404 || saved.status === 503) return { revision: null, revisionProblem: saved.reason };

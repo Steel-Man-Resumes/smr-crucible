@@ -152,7 +152,8 @@ export function importYesLabel(email: string | null | undefined): string {
 /**
  * The fields the account save carries (persistForgeSession / saveForgeSession).
  * Only these are sent. The original upload text (originalResumeText) stays in
- * this browser. The finish page's own state (forgeFinish) is NOT sent as is:
+ * this browser: it is never sent, not here and not to the writer (the writer
+ * and its receipt use resumeText; review r3 L-2 and I-1). The finish page's own state (forgeFinish) is NOT sent as is:
  * importPayload sends it as `finish`, rebuilt by lib/finish-payload.ts from
  * the stored copy that belongs to this run (finishKey), so the account gets a
  * saved revision of the finished resume (Phase 5 R1, review A1). It is sent

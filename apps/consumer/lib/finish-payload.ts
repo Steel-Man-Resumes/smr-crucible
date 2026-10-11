@@ -99,7 +99,8 @@ export function finishPayload(
     ownWords: ownWordsFor(run, keep),
     credentialsAnswer: run.challengeNarratives?.[CREDENTIALS_KEY] ?? "",
     credentialRows: completeCredentialRows(readCredentialRows(run.credentialRows)) as unknown[],
-    ownResumeText: withholdRecordLines(run.originalResumeText ?? run.resumeText, keep).kept,
+    // The resume text the writer received (review r3 L-2), as generate-docs derives it.
+    ownResumeText: withholdRecordLines(run.resumeText, keep).kept,
   };
   const ev = evidence ?? fromRun;
   return {

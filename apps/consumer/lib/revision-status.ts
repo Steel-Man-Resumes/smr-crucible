@@ -74,6 +74,8 @@ export interface RevisionEvidence {
   ownResumeText: string;
   /** The writer's receipt over written + grounding (lib/writer-receipt.ts), as delivered. */
   writerReceipt: string;
+  /** The run this version was finished in (the Forge session's startedAt), as the page named it. */
+  runId?: string;
   /**
    * Set by the SERVER only: written and grounding are the writer's own (the
    * receipt matched when this was saved). False: they count for nothing and
@@ -114,12 +116,19 @@ export interface CleanOptions {
    * of the run was recorded since.
    */
   known?: Pick<RevisionEvidence, "written" | "grounding" | "ownWords" | "ownResumeText" | "credentialsAnswer" | "credentialRows" | "writerReceipt"> | null;
+  /**
+   * The newest nonce recorded for the KNOWN revision's own receipt run (review
+   * r3 L-1): a newer generation since then means the known version no longer
+   * stands in, receipt or not.
+   */
+  knownNewestNonce?: string | null;
   /** The clock, for the previous key's grace period (tests). */
   now?: number;
 }
 
 /** The open item for a version whose writer's documents and check have no matching receipt. */
-export const RECEIPT_OPEN_ITEM = "Fix before you send: this version needs its check on the finish page before it can be finished.";
+export { RECEIPT_OPEN_ITEM, RECHECK_LINE, needsRecheck } from "./recheck-copy";
+import { RECEIPT_OPEN_ITEM } from "./recheck-copy";
 
 export type CleanResult = { ok: true; input: RevisionInput } | { ok: false; reason: string };
 
@@ -215,6 +224,7 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
       !!known.written &&
       stableJson(known.written) === stableJson(writtenIn) &&
       stableJson(known.grounding ?? null) === stableJson(groundingIn ?? null) &&
+      (!opts.knownNewestNonce || opts.knownNewestNonce === knownNonce) &&
       (!ctx.newestNonce || ctx.newestNonce === knownNonce);
     if (attested) {
       verified = true;
@@ -261,6 +271,7 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
         ownResumeText: str(source.ownResumeText, MAX_WORDS),
         writerReceipt: verified ? receiptKept : "",
         writerVerified: verified,
+        runId: typeof r.runId === "string" ? r.runId.slice(0, 100) : "",
       },
     },
   };

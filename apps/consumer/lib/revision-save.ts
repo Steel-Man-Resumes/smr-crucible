@@ -80,7 +80,7 @@ export interface SavedRevisionSummary {
   accountCopyRevision?: number;
 }
 
-export type SaveResult = { ok: true; revision: SavedRevisionSummary } | { ok: false; status: number; reason: string };
+export type SaveResult = { ok: true; revision: SavedRevisionSummary; usedRunReceipt?: boolean } | { ok: false; status: number; reason: string };
 
 function summary(rev: ArtifactRevision, v: RevisionVerdict | null, reused: boolean): SavedRevisionSummary {
   return {
@@ -118,7 +118,12 @@ function failed(r: InsertRevisionResult): SaveResult {
 export async function saveFinishRevision(
   userId: string,
   raw: unknown,
-  opts: { source: Extract<RevisionSource, "forge_finish" | "forge_import">; laneTarget?: string },
+  opts: {
+    source: Extract<RevisionSource, "forge_finish" | "forge_import">;
+    laneTarget?: string;
+    /** The request's signed-out run cookie, hashed (lib/writer-receipt.ts runCookieHash). */
+    cookieHash?: string | null;
+  },
   store: RevisionStore
 ): Promise<SaveResult> {
   // What the server knows (reviews M-B, H2): the receipt's run (newest
@@ -132,10 +137,22 @@ export async function saveFinishRevision(
   let forge = pickForgeArtifact(artifacts);
   const newestOwn = forge ? await store.getLatestRevision(userId, forge.id) : null;
   const knownEv = newestOwn && (newestOwn.evidence as Record<string, unknown> | null)?.writerVerified === true ? (newestOwn.evidence as unknown as RevisionEvidence) : null;
+  // The known revision's own run: a newer generation recorded since then means
+  // it no longer stands in (review r3 L-1).
+  const knownRun = knownEv ? readReceipt(knownEv.writerReceipt)?.run : undefined;
+  const knownNewestNonce = knownRun && store.receiptState ? (await store.receiptState(userId, knownRun)).newestNonce : null;
   const c = cleanRevisionInput(raw, {
-    receipt: { userId, newestNonce: state.newestNonce, runLinked: state.linked },
+    receipt: {
+      userId,
+      // The run being finished, as the page names it; the receipt's run must equal it.
+      runId: typeof r0.runId === "string" ? r0.runId : "",
+      newestNonce: state.newestNonce,
+      runLinked: state.linked,
+      cookieHash: opts.cookieHash ?? null,
+    },
     serverSource,
     known: knownEv,
+    knownNewestNonce,
   });
   if (!c.ok) return { ok: false, status: c.reason === "too long" ? 413 : 400, reason: c.reason };
   const verdict = computeRevision(c.input);
@@ -192,9 +209,13 @@ export async function saveFinishRevision(
       .updateArtifactContent(userId, forge.id, withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" }))
       .catch(() => "failed");
   }
+  // A signed-out run's receipt, used for this account: the route clears the
+  // run cookie so no other account can import it (review r3 L-1).
+  const usedRunReceipt = c.input.evidence.writerVerified && (readReceipt(c.input.evidence.writerReceipt)?.sub ?? "").startsWith("r:");
   return {
     ok: true,
     revision: { ...summary(r.revision, verdict, r.reused), ...(accountCopy ? { accountCopy, accountCopyRevision } : {}) },
+    ...(usedRunReceipt ? { usedRunReceipt: true } : {}),
   };
 }
 

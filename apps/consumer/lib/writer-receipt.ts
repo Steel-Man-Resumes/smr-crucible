@@ -17,7 +17,14 @@
  *   src  a SHA-256 of the source block the SERVER worked out from the writer's
  *        own inputs (writerSourceFrom below);
  *   n    a random nonce: one generation;
- *   t    the time it was made.
+ *   t    the time it was made;
+ *   c    signed out only: a SHA-256 of a server-set, HttpOnly, SameSite=Lax
+ *        run cookie (RUN_COOKIE), set afresh with every generation. Only the
+ *        browser holding the newest cookie can use the receipt, so another
+ *        browser cannot import it and an older generation cannot stand in for
+ *        a newer one; the import clears the cookie, so a second account in
+ *        the same browser cannot import it either (review r3 L-1).
+ * The run being finished must be the receipt's run (r3 L-1).
  * Signed in, generate-docs also keeps the newest nonce per run on the server
  * (forge_writer_receipt, 081), so an older clean receipt cannot be replayed
  * onto a newer generation. On a sign-in import, a run receipt ("r:") counts
@@ -58,7 +65,6 @@ export interface WriterSource {
  */
 export function writerSourceFrom(input: {
   resumeText?: unknown;
-  originalResumeText?: unknown;
   goalNarrative?: unknown;
   hookNarrative?: unknown;
   credentialsNote?: unknown;
@@ -78,7 +84,9 @@ export function writerSourceFrom(input: {
       },
       keep
     ),
-    ownResumeText: withholdRecordLines(str(input.originalResumeText) ?? str(input.resumeText), keep).kept,
+    // The resume text the writer actually received (review r3 L-2), never a
+    // separate field the writer did not see.
+    ownResumeText: withholdRecordLines(str(input.resumeText), keep).kept,
     credentialsAnswer: credentials ?? "",
     credentialRows: completeCredentialRows(readCredentialRows(input.credentialRows)) as unknown[],
   };
@@ -98,6 +106,36 @@ export interface ReceiptMeta {
   src: string;
   n: string;
   t: number;
+  /** Signed out: SHA-256 hex of the run cookie this receipt is bound to. */
+  c?: string;
+}
+
+/** The signed-out run cookie: server-set, HttpOnly, SameSite=Lax, renewed with every generation. */
+export const RUN_COOKIE = "smr_writer_run";
+
+export function runCookieHash(value: string): string {
+  return createHash("sha256").update(`smr-writer-run:${value}`).digest("hex");
+}
+
+/** The run cookie's value from a request's Cookie header, or null. */
+export function readRunCookie(cookieHeader: string | null | undefined): string | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === RUN_COOKIE) {
+      const val = v.join("=");
+      return /^[0-9a-f]{32}$/.test(val) ? val : null;
+    }
+  }
+  return null;
+}
+
+/** The Set-Cookie header for a new run cookie (7 days), or to clear it. */
+export function runCookieHeader(value: string | null): string {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return value
+    ? `${RUN_COOKIE}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${secure}`
+    : `${RUN_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${secure}`;
 }
 
 /** The deploy environment the key is bound to (I-1). */
@@ -133,7 +171,7 @@ function mac(key: Buffer, token: string, written: { resume: string; letter: stri
 export function writerReceipt(
   written: { resume: string; letter: string },
   grounding: unknown,
-  bind?: { userId: string | null; runId: string; source: WriterSource; now?: number; nonce?: string }
+  bind?: { userId: string | null; runId: string; source: WriterSource; now?: number; nonce?: string; cookie?: string }
 ): string {
   const meta: ReceiptMeta = {
     v: 2,
@@ -142,6 +180,7 @@ export function writerReceipt(
     src: bind ? sourceHash(bind.source) : "",
     n: bind?.nonce ?? randomBytes(16).toString("hex"),
     t: bind?.now ?? Date.now(),
+    ...(bind && !bind.userId && bind.cookie ? { c: runCookieHash(bind.cookie) } : {}),
   };
   const token = b64(JSON.stringify(meta));
   return `${PREFIX}${token}.${mac(currentKey(), token, written, grounding)}`;
@@ -196,17 +235,21 @@ export interface ReceiptContext {
   newestNonce?: string | null;
   /** Signed in: the receipt's run is this account's (its saved Forge run). */
   runLinked?: boolean;
+  /** The request's run cookie, hashed (runCookieHash), when it carried one. */
+  cookieHash?: string | null;
 }
 
-/** Whether a verified receipt may be used here (account, run, newest generation). */
+/** Whether a verified receipt may be used here (account, run being finished, newest generation, browser). */
 export function receiptAccepted(meta: ReceiptMeta, ctx: ReceiptContext): boolean {
   if (!meta.run) return false;
+  // The run being finished must be the receipt's own run (review r3 L-1).
+  if (!ctx.runId || ctx.runId !== meta.run) return false;
   // An older generation of the same run never stands in for the newest one.
   if (ctx.newestNonce && ctx.newestNonce !== meta.n) return false;
-  if (ctx.userId) {
-    if (meta.sub === `u:${ctx.userId}`) return true;
-    // Made signed out, then imported: only for this account's own run.
-    return meta.sub === `r:${meta.run}` && ctx.runLinked === true;
-  }
-  return meta.sub === `r:${meta.run}` && !!ctx.runId && ctx.runId === meta.run;
+  if (ctx.userId && meta.sub === `u:${ctx.userId}`) return true;
+  if (meta.sub !== `r:${meta.run}`) return false;
+  // A signed-out receipt: only in the browser holding its (newest) run cookie,
+  // and, signed in, only for the account's own run.
+  if (!meta.c || !ctx.cookieHash || ctx.cookieHash !== meta.c) return false;
+  return ctx.userId ? ctx.runLinked === true : true;
 }
