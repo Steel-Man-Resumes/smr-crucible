@@ -4,6 +4,10 @@
  * housing search (security review 3a Part 2 r1, L5): no server fetch to its
  * own URL, and no URL built from the request's Host header. The only host
  * reached is data.hud.gov.
+ *
+ * No place, no search (Phase 5 R3, Codex A4): a blank location used to fall
+ * back to the tenant's home city, which handed Milwaukee counselors to
+ * someone who never said where they were.
  */
 
 import { getTenantConfig } from "@/lib/tenant-config";
@@ -27,7 +31,9 @@ export interface CounselorResult {
   address: string;
   city: string;
   state: string;
+  zip: string;
   phone: string;
+  website: string;
   services: string[];
 }
 
@@ -38,7 +44,8 @@ export async function findHudCounselors(
   fetchImpl: typeof fetch = fetch
 ): Promise<CounselorResult[]> {
   const geo = getTenantConfig().geo;
-  const searchLocation = (typeof location === "string" ? location.trim().slice(0, 120) : "") || geo.primaryLocations[0];
+  const searchLocation = typeof location === "string" ? location.trim().slice(0, 120) : "";
+  if (!searchLocation) return [];
   try {
     const url = new URL(HUD_SEARCH_URL);
     url.searchParams.set("Location", searchLocation);
@@ -54,8 +61,10 @@ export async function findHudCounselors(
       name: c.nme?.trim() || "Housing Counselor",
       address: [c.adr1, c.adr2].filter(Boolean).join(", ").trim(),
       city: c.city?.trim() || "",
-      state: c.statecd?.trim() || "",
+      state: c.statecd?.trim().toUpperCase() || "",
+      zip: c.zipcd?.trim() || "",
       phone: c.phone1?.trim() || "",
+      website: /^https?:\/\//i.test(c.weburl?.trim() || "") ? c.weburl.trim() : "",
       services: (c.services || []).slice(0, 5),
     }));
   } catch (error) {

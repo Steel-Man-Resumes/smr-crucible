@@ -47,6 +47,9 @@ const nextConfig = {
     // with fs. Nothing imports the .ttf files, so the tracer must be told to ship them
     // with every function that renders a resume or measures its pages.
     "/api/forge/download": ["./public/fonts/resume/**/*"],
+    // The support search reads the Census place list with fs to find the
+    // counties a typed town or ZIP sits in (lib/support-place-index.ts).
+    "/api/resources-search": ["./public/forge-data/us-places-2020.v1.json"],
     "/api/resume/layout": ["./public/fonts/resume/**/*"],
     // Creative lanes: the artist resume and bio card use the same renderer.
     "/api/creative/layout": ["./public/fonts/resume/**/*"],

@@ -69,6 +69,35 @@ export const RESTRICTED_GRANTS = {
   // D11 record check (080). Owner-only saved checks: never edited, so no
   // UPDATE; deleted by the owner, by revoking the yes, or by delete-my-data.
   record_check_saved: ["SELECT", "INSERT", "DELETE"],
+  // Local resource directory (072). Platform-admin tables, admin RLS, nothing is
+  // deleted. The app reads only the two public views, which show a row only when
+  // its newest check is PASS, fresh, unchanged, and not low confidence or dataset-only.
+  resource_area: [],
+  resource_org: [],
+  resource_service: [],
+  resource_check: [],
+  resource_contact: [],
+  resource_suppression: [],
+  resource_chain: [],
+  resource_chain_step: [],
+  resource_chain_step_review: [],
+  resource_chain_step_dep: [],
+  resource_public_v: ["SELECT"],
+  resource_chain_public_v: ["SELECT"],
+  resource_recheck_queue_v: [],
+  resource_chain_recheck_queue_v: [],
+  // Verification tiers (073). Admin-only; the app role holds nothing.
+  resource_corroboration: [],
+  resource_chain_step_corroboration: [],
+  resource_relationship: [],
+  resource_relationship_event: [],
+  resource_corroboration_void: [],
+  resource_relationship_event_void: [],
+  resource_service_tier_v: [],
+  resource_chain_tier_v: [],
+  // The app's one read of the directory (082): approved, fresh, active services,
+  // public fields only. Built on resource_public_v; no base table is granted.
+  resource_app_v: ["SELECT"],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
@@ -79,6 +108,12 @@ export const DIRECTORY_OBJECTS = [
   "directory_evidence_live", "directory_place_evidence", "employer_standing_v",
   "directory_public_v", "directory_public_evidence_v", "directory_mark_v", "directory_health_v",
   "employer_working_agreement", "employer_agreement_activity", "directory_tier_v",
+  "resource_area", "resource_org", "resource_service", "resource_check", "resource_contact",
+  "resource_suppression", "resource_chain", "resource_chain_step", "resource_chain_step_review",
+  "resource_chain_step_dep", "resource_public_v", "resource_chain_public_v", "resource_recheck_queue_v",
+  "resource_chain_recheck_queue_v",
+  "resource_corroboration", "resource_chain_step_corroboration", "resource_relationship", "resource_relationship_event", "resource_corroboration_void", "resource_relationship_event_void", "resource_service_tier_v", "resource_chain_tier_v",
+  "resource_app_v",
 ];
 
 /**
