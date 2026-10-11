@@ -12,6 +12,7 @@
  * - saved resume revisions (081): every version's resume and letter text, the
  *   person's confirmations behind it, its status and page count
  * - career lanes (name, target, format and length settings)
+ * - today's task on the lane (083): the task picked, its lane, its target
  * - job_application rows (the tracker pipeline)
  * - coach_conversation messages (full AI coach transcript)
  * - consent event history (current state per layer, from consumer_consent)
@@ -68,7 +69,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
-import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries, exportRecordChecks, exportRevisions, publicRevision } from "@crucible/core";
+import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries, exportRecordChecks, exportRevisions, publicRevision, getLaneFocus } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -246,6 +247,8 @@ export async function POST(req: Request) {
         archived_at: l.archived_at,
       }));
       payload.laneToolNotesDismissed = await listDismissedIntros(userId);
+      // Today's task (083): what the person picked on "What do you need today?".
+      payload.laneFocus = await getLaneFocus(userId);
       // The practice record (076): every entry, in the person's own words.
       payload.practiceRecord = await listPracticeEntries(userId);
     }

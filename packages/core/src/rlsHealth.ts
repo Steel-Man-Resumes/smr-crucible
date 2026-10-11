@@ -45,6 +45,8 @@ export const RLS_PROTECTED_TABLES = [
   "record_check_saved",
   // Phase 5 R1 (migration 081): saved resume revisions, owner only
   "artifact_revision",
+  // Phase 5 R2 (migration 083): today's task on the person's lane, owner only
+  "lane_focus",
 ] as const;
 
 export interface RlsHealth {
