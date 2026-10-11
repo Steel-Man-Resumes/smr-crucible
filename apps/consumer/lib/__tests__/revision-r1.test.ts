@@ -375,3 +375,18 @@ test("export: someone else's artifact, or one that is not a resume, gets nothing
   assert.deepEqual(await ensureExportRevision(UID, "00000000-0000-4000-8000-0000000000ff", f.store), { ok: false, status: 404, reason: "artifact not found" });
   assert.deepEqual(await ensureExportRevision(UID, "00000000-0000-4000-8000-0000000000ab", f.store), { ok: false, status: 409, reason: "not a resume" });
 });
+
+test("never erase: an empty finish state saves nothing and touches nothing already saved", async () => {
+  const f = fakeStore();
+  const ok = await saveFinishRevision(UID, finishState(), { source: "forge_finish" }, f.store);
+  assert.ok(ok.ok);
+  const updates = f.updates.length;
+  for (const empty of [finishState({ resumeText: "" }), finishState({ resumeText: "   " }), {}, null]) {
+    const r = await saveFinishRevision(UID, empty, { source: "forge_import" }, f.store);
+    assert.equal(r.ok, false);
+  }
+  assert.equal(f.revs.length, 1, "the saved revision stands");
+  assert.equal(f.updates.length, updates, "the account's resume was not rewritten");
+  assert.equal((await saveEditRevision(UID, f.arts[0].id, "", "", f.store)).ok, false);
+  assert.equal(importPayload({ ...RUN, forgeFinish: undefined }).finish, undefined, "no finish, nothing sent");
+});
