@@ -21,9 +21,11 @@
  */
 
 import type { ArtifactRevision, InsertRevisionResult, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
-import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionVerdict } from "./revision-status";
+import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence, type RevisionVerdict } from "./revision-status";
+import { readReceipt, writerSourceFrom, type WriterSource } from "./writer-receipt";
 import { resumeTextToDocument } from "./revision-to-doc";
 import { readMarker, withRevisionMarker } from "./revision-marker";
+import { CREDENTIALS_KEY } from "./forge-path";
 import { artifactText, ensureExportRevision } from "./revision-current";
 
 export interface ArtifactLite {
@@ -43,6 +45,13 @@ export interface RevisionStore {
   updateArtifactContent(userId: string, artifactId: string, content: Record<string, unknown>): Promise<string>;
   insertRevision(userId: string, rec: NewRevision): Promise<InsertRevisionResult>;
   getLatestRevision(userId: string, artifactId: string): Promise<ArtifactRevision | null>;
+  /**
+   * The newest writer's receipt nonce recorded for the person's run, and
+   * whether that run is theirs (reviews M-B). The real store always has it.
+   */
+  receiptState?(userId: string, runId: string): Promise<{ newestNonce: string | null; linked: boolean }>;
+  /** The person's own words as the server holds them (review H2). The real store always has it. */
+  serverSource?(userId: string, keepInsideLines: boolean): Promise<WriterSource | null>;
 }
 
 /** What the page is told about a saved revision. */
@@ -112,12 +121,25 @@ export async function saveFinishRevision(
   opts: { source: Extract<RevisionSource, "forge_finish" | "forge_import">; laneTarget?: string },
   store: RevisionStore
 ): Promise<SaveResult> {
-  const c = cleanRevisionInput(raw);
+  // What the server knows (reviews M-B, H2): the receipt's run (newest
+  // generation, is it the account's), the person's own words as stored, and
+  // their newest verified revision.
+  const r0 = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const meta = readReceipt(r0.writerReceipt);
+  const state = meta?.run && store.receiptState ? await store.receiptState(userId, meta.run) : { newestNonce: null, linked: !store.receiptState };
+  const serverSource = store.serverSource ? await store.serverSource(userId, r0.keepInsideLines === true) : null;
+  const artifacts = await store.listResumeArtifacts(userId);
+  let forge = pickForgeArtifact(artifacts);
+  const newestOwn = forge ? await store.getLatestRevision(userId, forge.id) : null;
+  const knownEv = newestOwn && (newestOwn.evidence as Record<string, unknown> | null)?.writerVerified === true ? (newestOwn.evidence as unknown as RevisionEvidence) : null;
+  const c = cleanRevisionInput(raw, {
+    receipt: { userId, newestNonce: state.newestNonce, runLinked: state.linked },
+    serverSource,
+    known: knownEv,
+  });
   if (!c.ok) return { ok: false, status: c.reason === "too long" ? 413 : 400, reason: c.reason };
   const verdict = computeRevision(c.input);
 
-  const artifacts = await store.listResumeArtifacts(userId);
-  let forge = pickForgeArtifact(artifacts);
   let created = false;
   if (!forge) {
     const content = resumeTextToDocument(c.input.resumeText) as unknown as Record<string, unknown>;
@@ -223,5 +245,21 @@ export async function coreStore(): Promise<RevisionStore> {
     updateArtifactContent: async (userId, id, content) => (await core.updateArtifact(id, userId, content)).status,
     insertRevision: (userId, rec) => core.insertRevision(userId, rec),
     getLatestRevision: (userId, id) => core.getLatestRevision(userId, id),
+    receiptState: async (userId, runId) => ({
+      newestNonce: await core.newestWriterReceiptNonce(userId, runId),
+      linked: await core.runBelongsTo(userId, runId),
+    }),
+    // The person's stored upload and typed answers (consumer_profile), worked
+    // out the same way the writer's inputs are.
+    serverSource: async (userId, keepInsideLines) => {
+      const p = await core.loadForgeProfile(userId);
+      if (!p) return null;
+      return writerSourceFrom({
+        resumeText: p.resumeText,
+        goalNarrative: p.goalNarrative,
+        credentialsNote: p.challengeNarratives?.[CREDENTIALS_KEY],
+        keepInsideLines,
+      });
+    },
   };
 }

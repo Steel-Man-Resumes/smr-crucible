@@ -23,6 +23,10 @@ const deps: DownloadDeps = {
     const { getRevision } = await import("@crucible/core");
     return getRevision(userId, revisionId);
   },
+  receiptState: async (userId, runId) => {
+    const { newestWriterReceiptNonce, runBelongsTo } = await import("@crucible/core");
+    return { newestNonce: await newestWriterReceiptNonce(userId, runId), linked: await runBelongsTo(userId, runId) };
+  },
 };
 
 export const POST = withRateLimit((request: Request) => handleDownloadPost(request, deps), {

@@ -65,7 +65,13 @@ export const GROUNDING = { verifierRan: true, removed: 0, residual: 0, unmatched
 export function finishState(over: Record<string, unknown> = {}): Record<string, any> {
   const s = finishStateRaw(over);
   if ("writerReceipt" in over) return s;
-  return { ...s, writerReceipt: s.written ? writerReceipt(s.written as { resume: string; letter: string }, s.grounding) : "" };
+  // Signed by "the server" for this run, signed out (the fixture's default
+  // context), over exactly this state's own-words source.
+  const source = { ownWords: s.ownWords as string, ownResumeText: s.ownResumeText as string, credentialsAnswer: s.credentialsAnswer as string, credentialRows: s.credentialRows as unknown[] };
+  return {
+    ...s,
+    writerReceipt: s.written ? writerReceipt(s.written as { resume: string; letter: string }, s.grounding, { userId: null, runId: s.runId as string, source, nonce: "0".repeat(32), now: Date.parse("2026-10-10T09:00:00Z") }) : "",
+  };
 }
 
 function finishStateRaw(over: Record<string, unknown>) {
@@ -87,6 +93,7 @@ function finishStateRaw(over: Record<string, unknown>) {
     ownResumeText: SOURCE,
     lengthChoice: "auto",
     docKind: "resume",
+    runId: RUN.startedAt,
     ...over,
   };
 }

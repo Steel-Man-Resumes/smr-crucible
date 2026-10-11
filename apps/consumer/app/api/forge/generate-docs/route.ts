@@ -22,7 +22,8 @@ import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
-import { writerReceipt } from "@/lib/writer-receipt";
+import { writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
+import { randomBytes } from "node:crypto";
 
 export const maxDuration = 120;
 
@@ -226,7 +227,25 @@ async function handlePost(request: Request) {
     // Phase 5 R1 (review M1): the server's signature over exactly what it
     // wrote and what its check found. A saved version counts these only
     // with a matching receipt (lib/writer-receipt.ts).
-    const receipt = writerReceipt({ resume, letter: coverLetter }, grounding);
+    // Bound to this account (or, signed out, this run), this run, this
+    // generation (a nonce) and the own-words source the SERVER works out from
+    // the writer's own inputs (reviews M-B, H2). Signed in, the newest nonce
+    // per run is kept, so an older receipt cannot stand in for this one.
+    const raw = input as unknown as Record<string, unknown>;
+    const runId = typeof raw.runId === "string" ? raw.runId.slice(0, 100) : "";
+    const nonce = randomBytes(16).toString("hex");
+    const issuedAt = Date.now();
+    const receipt = writerReceipt({ resume, letter: coverLetter }, grounding, {
+      userId: userId ?? null,
+      runId,
+      source: writerSourceFrom(raw),
+      nonce,
+      now: issuedAt,
+    });
+    if (userId && runId) {
+      const { recordWriterReceipt } = await import("@crucible/core");
+      await recordWriterReceipt(userId, runId, nonce, issuedAt).catch((e: unknown) => console.error("writer receipt record failed:", (e as Error)?.message || e));
+    }
     return NextResponse.json({
       resume,
       coverLetter,

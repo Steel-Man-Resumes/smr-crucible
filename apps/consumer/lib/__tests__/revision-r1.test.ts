@@ -20,7 +20,7 @@ import { ensureExportRevision, revisionIsCurrent, withRevisionMarker, artifactTe
 import { formatResumeDownload } from "../../components/resume/resumeModel";
 import type { ArtifactRevision, NewRevision, InsertRevisionResult } from "@crucible/core/src/artifactRevision";
 import { revisionContentHash } from "@crucible/core/src/artifactRevision";
-import { BAD_LETTER, LETTER, OWN_WORDS, RESUME, RUN, SOURCE, allAnswered, finishState, longResume } from "./fixtures/revision-run";
+import { BAD_LETTER, GROUNDING, LETTER, OWN_WORDS, RESUME, RUN, SOURCE, allAnswered, finishState, longResume } from "./fixtures/revision-run";
 
 const UID = "00000000-0000-4000-8000-0000000000a1";
 const OTHER = "00000000-0000-4000-8000-0000000000b2";
@@ -738,4 +738,122 @@ test("M-A: '40 covers over 3 years' changed to '3 covers over 40 years' is asked
   assert.equal(ex.ok && ex.revision.status, "draft");
   assert.notEqual(lineKey("Ran the grill for 40 covers an hour over 3 years"), lineKey("Ran the grill for 3 covers an hour over 40 years"));
   assert.equal(lineKey("Grill | Breakfast line"), lineKey("Breakfast line, Grill"));
+});
+
+// ---- review round 2: the receipt is bound (M-B), keys rotate (L-A), environments split (I-1), own words are the server's (H2) ----
+
+import { writerReceipt as signReceipt, verifyWriterReceipt as checkReceipt, readReceipt, receiptAccepted, writerSourceFrom } from "../writer-receipt";
+
+const FLAGGED = { verifierRan: true, removed: 0, residual: 1, unmatched: 0, outcomes: [{ claim: "Ran the grill on the breakfast line", status: "still_there", doc: "resume" }] };
+
+test("M-B (reviewer R2-R1): an older generation's clean receipt replayed onto newer text is not accepted", async () => {
+  const W1 = { resume: RESUME.replace("\n- Showed incoming culinary staff the equipment.", ""), letter: LETTER };
+  // The old unbound form (the reviewer's probe) is never accepted.
+  const legacy = signReceipt(W1, GROUNDING);
+  assert.equal(computeRevision(input({ written: W1, grounding: GROUNDING, writerReceipt: legacy })).status, "draft");
+  // A properly bound gen-1 receipt (same person, same run) after gen 2 was recorded as newest: refused.
+  const src = writerSourceFrom({ resumeText: SOURCE, goalNarrative: "I want to keep cooking." });
+  const r1 = signReceipt(W1, GROUNDING, { userId: UID, runId: RUN.startedAt, source: src, nonce: "a".repeat(32), now: 1 });
+  const replay = { ...finishState({ written: W1, grounding: GROUNDING, writerReceipt: r1 }), ownWords: src.ownWords, ownResumeText: src.ownResumeText, credentialsAnswer: src.credentialsAnswer, credentialRows: src.credentialRows };
+  const f = fakeStore();
+  (f.store as any).receiptState = async () => ({ newestNonce: "b".repeat(32), linked: true });
+  const r = await saveFinishRevision(UID, replay, { source: "forge_finish" }, f.store);
+  assert.ok(r.ok);
+  assert.equal(r.ok && r.revision.status, "draft");
+  // The same receipt while it IS the newest generation: accepted.
+  const g = fakeStore();
+  (g.store as any).receiptState = async () => ({ newestNonce: "a".repeat(32), linked: true });
+  const ok = await saveFinishRevision(UID, replay, { source: "forge_finish" }, g.store);
+  assert.ok(ok.ok);
+  assert.equal((g.revs.at(-1)!.evidence as any).writerVerified, true, "the newest generation's receipt is accepted");
+});
+
+test("M-B: a receipt made for another account, or another run, is not accepted", () => {
+  const src = { ownWords: OWN_WORDS, ownResumeText: SOURCE, credentialsAnswer: "", credentialRows: [] };
+  const W = { resume: RESUME, letter: LETTER };
+  const forOther = readReceipt(signReceipt(W, GROUNDING, { userId: OTHER, runId: "run-x", source: src }))!;
+  assert.equal(receiptAccepted(forOther, { userId: UID }), false);
+  assert.equal(receiptAccepted(forOther, { userId: OTHER }), true);
+  const runR = readReceipt(signReceipt(W, GROUNDING, { userId: null, runId: "run-x", source: src }))!;
+  assert.equal(receiptAccepted(runR, { userId: null, runId: "run-y" }), false, "signed out: another run");
+  assert.equal(receiptAccepted(runR, { userId: null, runId: "run-x" }), true);
+  assert.equal(receiptAccepted(runR, { userId: UID, runLinked: false }), false, "import: the run is not the account's");
+  assert.equal(receiptAccepted(runR, { userId: UID, runLinked: true }), true, "import: the account's own run");
+});
+
+test("H2: a request that sends the whole page as its own words saves as a DRAFT", async () => {
+  // The writer's receipt attests the real source; the request swaps in the page as "own words".
+  const page = RESUME + "\n" + LETTER;
+  const forged = { ...finishState(), ownWords: page, ownResumeText: page, defendAnswers: [] };
+  const f = fakeStore();
+  (f.store as any).serverSource = async () => writerSourceFrom({ resumeText: SOURCE, goalNarrative: "I want to keep cooking." });
+  const r = await saveFinishRevision(UID, forged, { source: "forge_finish" }, f.store);
+  assert.ok(r.ok);
+  assert.equal(r.ok && r.revision.status, "draft");
+  const saved = f.revs.at(-1)!;
+  assert.notEqual((saved.evidence as any).ownWords, page, "the page never becomes own words");
+  // With no receipt at all, own words are only what the server holds.
+  const noReceipt = await saveFinishRevision(UID, { ...forged, writerReceipt: "" }, { source: "forge_finish" }, f.store);
+  assert.equal(noReceipt.ok && noReceipt.revision.status, "draft");
+  assert.equal(((f.revs.at(-1)!.evidence) as any).ownWords, writerSourceFrom({ resumeText: SOURCE, goalNarrative: "I want to keep cooking." }).ownWords);
+});
+
+test("H2: a first save of a pasted resume with no writer's receipt stays a draft until the cards are answered", () => {
+  const pasted = "MORGAN SAMPLE\nToledo, OH | morgan@example.com\n\nEXPERIENCE\nLINE COOK | Harbor Street Diner | 2019 - 2023\n- Managed 40 cooks on the line.";
+  const c = cleanRevisionInput({ resumeText: pasted, coverLetterText: "", ownWords: pasted, ownResumeText: pasted, defendAnswers: [], runId: "r" }, { receipt: { userId: UID } });
+  assert.ok(c.ok);
+  assert.equal(computeRevision((c as any).input).status, "draft");
+  assert.equal((c as any).input.evidence.ownWords, "");
+});
+
+test("L-A: a key rotation keeps receipts working for 14 days through the previous secret, and the person's own verified version is trusted", async () => {
+  const keep = { ip: process.env.IP_HASH_SECRET, prev: process.env.WRITER_RECEIPT_PREVIOUS_SECRET };
+  try {
+    process.env.IP_HASH_SECRET = "old-key-0001";
+    const t0 = Date.parse("2026-10-10T09:00:00Z");
+    const W = { resume: RESUME, letter: LETTER };
+    const src = { ownWords: OWN_WORDS, ownResumeText: SOURCE, credentialsAnswer: "", credentialRows: [] };
+    const rec = signReceipt(W, GROUNDING, { userId: null, runId: "run", source: src, now: t0 });
+    process.env.IP_HASH_SECRET = "new-key-0002";
+    assert.equal(checkReceipt(rec, W, GROUNDING, t0 + 1000), null, "the new key alone does not verify it");
+    process.env.WRITER_RECEIPT_PREVIOUS_SECRET = "old-key-0001";
+    assert.ok(checkReceipt(rec, W, GROUNDING, t0 + 13 * 864e5), "within 14 days");
+    assert.equal(checkReceipt(rec, W, GROUNDING, t0 + 15 * 864e5), null, "after 14 days");
+    delete process.env.WRITER_RECEIPT_PREVIOUS_SECRET;
+    // Signed in: the person's own verified revision is trusted as a match, rotation or not.
+    const known = { written: W, grounding: GROUNDING, ownWords: OWN_WORDS, ownResumeText: SOURCE, credentialsAnswer: "", credentialRows: [], writerReceipt: rec };
+    const c = cleanRevisionInput(finishState({ writerReceipt: rec }), { receipt: { userId: UID }, known });
+    assert.ok(c.ok);
+    assert.equal((c as any).input.evidence.writerVerified, true);
+    assert.equal(computeRevision((c as any).input).status, "finished");
+    // ...but not once a newer generation of the run was recorded.
+    const c2 = cleanRevisionInput(finishState({ writerReceipt: rec }), { receipt: { userId: UID, newestNonce: "f".repeat(32) }, known });
+    assert.equal((c2 as any).input.evidence.writerVerified, false);
+  } finally {
+    if (keep.ip === undefined) delete process.env.IP_HASH_SECRET; else process.env.IP_HASH_SECRET = keep.ip;
+    if (keep.prev === undefined) delete process.env.WRITER_RECEIPT_PREVIOUS_SECRET; else process.env.WRITER_RECEIPT_PREVIOUS_SECRET = keep.prev;
+  }
+});
+
+test("I-1: a receipt made on a preview deployment never verifies on production", () => {
+  const keep = process.env.VERCEL_ENV;
+  try {
+    const W = { resume: RESUME, letter: LETTER };
+    const src = { ownWords: OWN_WORDS, ownResumeText: SOURCE, credentialsAnswer: "", credentialRows: [] };
+    process.env.VERCEL_ENV = "preview";
+    const rec = signReceipt(W, GROUNDING, { userId: null, runId: "run", source: src });
+    assert.ok(checkReceipt(rec, W, GROUNDING), "verifies where it was made");
+    process.env.VERCEL_ENV = "production";
+    assert.equal(checkReceipt(rec, W, GROUNDING), null);
+  } finally {
+    if (keep === undefined) delete process.env.VERCEL_ENV; else process.env.VERCEL_ENV = keep;
+  }
+});
+
+test("L-B: the email line says what really happens", async () => {
+  const { autoResultLine } = await import("../email-package-auto-line");
+  assert.equal(autoResultLine({ sent: false, reason: "settling" }), "We'll email your finished resume a few minutes after you're done. Leaving early? Tap Email me the latest.");
+  const line = src("components", "forge", "finish", "FinishedEmailLine.tsx");
+  assert.match(line, /if \(wait === 0\) \{\s+send\(props\.revisionId\);/, "a version already due is sent on the next visit");
+  assert.doesNotMatch(src("app", "api", "forge", "email-package", "auto", "route.ts"), /cron/i);
 });

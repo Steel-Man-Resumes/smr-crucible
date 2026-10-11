@@ -267,6 +267,12 @@ export default function OutputPage() {
           goals: session.goals,
           goalNarrative: session.goalNarrative,
           credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
+          // For the writer's receipt only (review H2): the server works out the
+          // person's own words from these, as this page does, and signs them.
+          originalResumeText: session.originalResumeText,
+          hookNarrative: session.hookNarrative,
+          credentialRows: session.credentialRows,
+          runId: session.startedAt,
           preferences: session.preferences,
           readinessStage: session.readinessStage,
           resumeConfidence: session.resumeConfidence,
@@ -872,6 +878,7 @@ export default function OutputPage() {
             {canEmailPackage({ state: view.state, isDemo }) && authStatus === "loading" ? null : canEmailPackage({ state: view.state, isDemo }) && signedIn ? (
               <FinishedEmailLine
                 revisionId={current && current.status === "finished" ? current.id : null}
+                savedAt={current?.createdAt ?? null}
                 narrativeHeadline={narrative.headline || ""}
                 narrativeSummary={narrative.summary || ""}
                 mayUse={runIsMine}

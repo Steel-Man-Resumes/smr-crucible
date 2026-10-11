@@ -76,7 +76,14 @@ function revision(extra: Record<string, unknown> = {}, force?: "finished", artif
     ownWords: SOURCE,
     written: { resume, letter },
     grounding: null,
-    writerReceipt: writerReceipt({ resume, letter }, null),
+    runId: "2026-10-08T12:00:00.000Z",
+    writerReceipt: writerReceipt({ resume, letter }, null, {
+      userId: null,
+      runId: "2026-10-08T12:00:00.000Z",
+      source: { ownWords: (extra.ownWords as string) ?? SOURCE, ownResumeText: "", credentialsAnswer: "", credentialRows: [] },
+      nonce: "1".repeat(32),
+      now: 0,
+    }),
     keptTerms: [],
     ...extra,
   });
