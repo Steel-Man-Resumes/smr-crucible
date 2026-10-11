@@ -84,6 +84,8 @@ const RESULT_RE = /\b(?:reduc\w*|increas\w*|improv\w*|boost\w*|sav(?:ed|es|ing|i
 const CHARACTER_RE = /\b(?:dependable|reliable|reliability|hard[\s-]?work\w*|trustworthy|punctual\w*|consistent\w*|fast[\s-]paced|high[\s-]volume|busy|peak|attendance|work\s+ethic|self[\s-]starter|motivated|dedicated|go[\s-]getter)\b/gi;
 // Words that widen how much the work covered.
 const SIZE_RE = /\b(?:all|entire|whole|every\s+(?:department|area|site|location|team|crew|employee)|plant[\s-]?wide|company[\s-]?wide|site[\s-]?wide|facility[\s-]?wide|department[\s-]?wide|plant|facility|facilities|department|departments|company|division|region\w*|district|multi[\s-]?site|multiple\s+(?:sites|locations|stores|crews|teams)|sole(?:ly)?|single[\s-]handed\w*|alone|independently|senior|head)\b/gi;
+// Size and scale words the person must have said (review L4): "a large crew", "heavy freight", "major accounts".
+const SCALE_RE = /\b(?:large|larger|huge|massive|heavy|heavy-duty|major|key|critical|extensive|numerous|multiple|many|dozens|hundreds|thousands|high-value|high-volume|big|biggest|largest|daily|weekly|constant(?:ly)?|always|every\s+day|regular(?:ly)?)\b/gi;
 // Equipment, machines and software a line can name in lower case.
 const TOOL_RE = /\b(?:forklifts?|reach\s+trucks?|order\s+pickers?|pallet\s+jacks?|electric\s+pallet\s+jacks?|scissor\s+lifts?|boom\s+lifts?|cherry\s+pickers?|skid\s+steers?|bobcats?|excavators?|backhoes?|loaders?|cranes?|hoists?|cnc|lathes?|mills?|press\s+brakes?|welders?|mig|tig|plasma\s+cutters?|torches?|grinders?|saws?|nail\s+guns?|compressors?|generators?|scanners?|rf\s+guns?|label\s+printers?|cash\s+registers?|pos(?:\s+systems?)?|fryers?|grills?|ovens?|slicers?|dish\s+machines?|floor\s+buffers?|scrubbers?|buffers?|excel|word|outlook|quickbooks|sap|oracle|salesforce|wms|erp|crm|ehr|emr|epic|spreadsheets?|software|computer\s+systems?)\b/gi;
 
@@ -137,6 +139,11 @@ export function untracedFacts(line: string, source: string | SourceIndex, opts: 
     if (src.flat.includes(` ${w} `) || saidPhrase(src, m)) continue;
     // "all" in a skills label or "head" in "head of lettuce" is noise; keep the size words that change scope.
     if (w === "head" && !/\bhead\s+(?:of\s+)?(?:the\s+)?(?:crew|team|shift|department|kitchen|cook|chef)/i.test(t)) continue;
+    push("scope", m);
+  }
+
+  for (const m of hits(SCALE_RE, t)) {
+    if (src.flat.includes(` ${m.toLowerCase()} `) || saidPhrase(src, m)) continue;
     push("scope", m);
   }
 
@@ -206,4 +213,51 @@ export function traceDocument(output: string, source: string): Array<{ line: str
 /** True when every fact on the line traces back to the person's words. */
 export function factsTraceBack(line: string, source: string | SourceIndex, opts: { section?: "skills" | "other" } = {}): boolean {
   return untracedFacts(line, source, opts).length === 0;
+}
+
+// ---- review M1: when a "wording" flag may be dropped ---------------------------------------
+
+// The plain action verbs a rewording may bring in: the verb is the rewording.
+// Scope verbs (supervised, led...) are not here: they are judged by the scope check.
+const PLAIN_VERBS = new Set(
+  ["ran", "run", "runs", "handled", "handle", "served", "serve", "operated", "operate", "performed", "perform", "completed",
+   "complete", "conducted", "conduct", "drove", "drive", "carried", "carry", "made", "make", "built", "build", "prepared",
+   "prepare", "worked", "work", "did", "do", "used", "use", "took", "take", "kept", "keep", "set", "fixed", "fix"]
+);
+// Words that keep a line at its true size. If the person's line has one, the reworded line keeps it.
+const LIMITING_RE = /\b(?:help(?:ed|ing|s)?|assist(?:ed|ing|s)?|with\s+(?:the|a|my|our)\s+\w+|under|alongside|until|expired|lapsed|former(?:ly)?|part\s+of|some|sometimes|occasionally|when\s+(?:needed|asked|assigned)|as\s+needed|backup|back-up|fill(?:ed)?\s+in|trainee|in\s+training|learning|class|course)\b/gi;
+const FUNCTION_WORDS = new Set(["the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "for", "with", "by", "from", "as", "into", "per", "my", "our", "their", "his", "her", "its", "this", "that", "these", "those", "all", "each"]);
+
+/**
+ * True only when `claim` is provably a rewording of ONE line of the person's own words: every fact on it
+ * traces back (numbers too, to that same line), no scope claim is new, every limiting word of their line
+ * (helped, under, until, expired...) is still there, and the only new words are plain action verbs. A new
+ * duty, a new noun, a new size word or a lost "helped" means it is not, and the flag stays.
+ */
+export function onlyRewordedFrom(claim: string, source: string): boolean {
+  const c = claim.trim();
+  if (!c || !factsTraceBack(c, source)) return false;
+  const cw = words(c).filter((w) => !FUNCTION_WORDS.has(w));
+  if (!cw.length) return false;
+  const cStems = new Set(cw.map(stemOf));
+  let best: { line: string; score: number } | null = null;
+  for (const raw of (source || "").split(/\n|(?<=[.!?;])\s+/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const ls = new Set(words(line).map(stemOf));
+    const score = Array.from(cStems).filter((x) => ls.has(x)).length;
+    if (score > 0 && (!best || score > best.score)) best = { line, score };
+  }
+  if (!best) return false;
+  const lineStems = new Set(words(best.line).map(stemOf));
+  // New words: only plain action verbs.
+  if (cw.some((w) => !lineStems.has(stemOf(w)) && !PLAIN_VERBS.has(w))) return false;
+  // Numbers come from that same line.
+  const ln = numbersOf(best.line);
+  for (const n of numbersOf(c)) if (!ln.has(n)) return false;
+  // Every limiting word of their line is kept.
+  for (const m of best.line.matchAll(new RegExp(LIMITING_RE.source, "gi"))) {
+    if (!new RegExp(`\\b${m[0].split(/\s+/)[0].replace(/[^a-z-]/gi, "")}`, "i").test(c)) return false;
+  }
+  return true;
 }

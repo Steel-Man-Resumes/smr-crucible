@@ -20,7 +20,7 @@
 
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { VERIFY_MAX } from "@/lib/limits";
-import { factsTraceBack, traceDocument } from "@/lib/fact-trace";
+import { onlyRewordedFrom } from "@/lib/fact-trace";
 
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
@@ -196,7 +196,9 @@ Two more kinds of fabrication that are easy to miss. A credential stated as MORE
 
 Scrutinize section headers and the employer/date/location lines too, not only the bullets. A specific employer name, city, or date range the source never gives is just as much a fabrication as an invented metric.
 
-TRACE FACTS, NOT WORDS. The writer is allowed to reword any line into strong plain words that say what it means. A reworded line is NOT a fabrication when every fact in it traces back to SOURCE: the same numbers, dates, job titles, employers, tools, skills, credentials, results and scope. These PASS (never flag or rewrite them): SOURCE "In charge of the guys on my shift" written as "Supervised the shift crew"; SOURCE "Responsible for 3rd shift" written as "Supervised the 3rd shift crew"; SOURCE "Did safety audits" written as "Ran safety audits"; SOURCE "dealt with customers" written as "Served customers". These FAIL (flag them): an added number ("Supervised a 12-person crew" when no 12 was given); an added result ("cutting errors 20%", "with zero incidents", "keeping a clean safety record"); an added tool or skill ("in SAP", "on a reach truck"); an added or upgraded credential; a changed or shortened date ("8/2021" written as "2021"); a different title or employer; and scope inflation ("helped" written as "led" or as done alone, "my shift" written as "the plant", one area written as all of them).
+TRACE FACTS, NOT WORDS. The writer is allowed to reword any line into strong plain words that say what it means. A reworded line is NOT a fabrication when every fact in it traces back to SOURCE: the same numbers, dates, job titles, employers, tools, skills, credentials, results and scope. These PASS (never flag or rewrite them): SOURCE "In charge of the guys on my shift" written as "Supervised the shift crew"; SOURCE "Did safety audits" written as "Ran safety audits"; SOURCE "dealt with customers" written as "Served customers"; SOURCE "Responsible for 3rd shift" under the job title "Production Supervisor" written as "Supervised third-shift production". These FAIL (flag them): an added number ("Supervised a 12-person crew" when no 12 was given); an added result ("cutting errors 20%", "with zero incidents", "keeping a clean safety record"); an added tool or skill ("in SAP", "on a reach truck"); an added or upgraded credential; a changed or shortened date ("8/2021" written as "2021"); a different title or employer; and scope inflation ("helped" written as "led" or as done alone, "my shift" written as "the plant", one area written as all of them, an added size word such as "large", "heavy" or "major").
+
+SUPERVISING PEOPLE IS SCOPE. "Supervised", "led", "oversaw", "directed" or "managed" people is supported only when that same job's facts show the person was over people: a supervisor, lead, foreman or manager type title for that job, or their own words saying they were in charge of people ("in charge of employees on my shift", "my crew", "ran a crew of 4"). "Responsible for" a shift, an area, a task or a thing is never supervising people: "Responsible for 3rd shift" under the title "Machine Operator" written as "Supervised third-shift production" FAILS; "Responsible for the crew's safety gear" written as "Supervised the crew" FAILS; "Responsible for cleaning the kitchen" written as "Supervised the kitchen" FAILS; "Ran the line" written as "Supervised the line crew" FAILS unless people evidence as above exists. Facts belong to their own job: a fact from one job never supports a line under another.
 
 Do NOT flag: strong action verbs, general professional framing, a reasonable summary of a duty the source states, or a reworded line whose facts all trace back. Never flag a line only because its words differ from SOURCE. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts. Never let the OUTPUT claim something just because a posting asked for it.
 
@@ -284,10 +286,14 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
         .slice(0, 25)
         .map((f: any) => ({ claim: String(f.claim), why: String(f.why || ""), kind: flagKindOf(f.kind) }))
     : [];
-  // Rewording A (Phase 6): a flag about wording alone is not a fabrication
-  // when every fact in the flagged phrase traces back to the person's words.
-  // A wording flag on a phrase with an untraced fact still counts.
-  const factFlags = graded.filter((f) => !(f.kind === "wording" && factsTraceBack(f.claim, source)));
+  // Rewording A (Phase 6, review M1): a flag about wording alone is dropped
+  // only when the flagged phrase is provably a rewording of the person's own
+  // words: every fact traces back, no scope claim is new, and it adds no new
+  // content word beyond a plain action verb (lib/fact-trace.ts
+  // onlyRewordedFrom). Anything else stays a flag, so the person is asked.
+  // A truncated flag list (more than 25) keeps every wording flag too.
+  const truncated = Array.isArray(parsed.flags) && parsed.flags.length > 25;
+  const factFlags = graded.filter((f) => !(f.kind === "wording" && !truncated && onlyRewordedFrom(f.claim, source)));
   const flags: GroundingFlag[] = factFlags.map((f) => ({ claim: f.claim, why: f.why }));
   const hasFabrication = flags.length > 0 || (parsed.hasFabrication === true && graded.length === 0);
   const cleaned = typeof parsed.cleaned === "string" ? parsed.cleaned.trim() : "";
@@ -305,10 +311,10 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
     !isDropMarker(cleaned) &&
     cleaned.length >= Math.max(40, lengthFloor);
 
-  // Rewording A (Phase 6): the rewrite may change only what it flagged. A
-  // line it rewrote or removed without naming it, whose facts all trace back
-  // to the person's words, was only reworded and stands as the writer wrote it.
-  const text = applyRewrite ? keepRewordedLines(output, cleaned, flags, source).text : output;
+  // Review H2: the verifier's rewrite is applied whole, as it was before
+  // Phase 6. A line it rewrote without a flag is never put back: a quiet fix
+  // can be a correct scope or credential fix the code cannot see.
+  const text = applyRewrite ? cleaned : output;
 
   return {
     text,
@@ -319,94 +325,6 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   };
 }
 
-const lineKey = (l: string) =>
-  l.trim().replace(/^[-*\u2022]\s+/, "").replace(/\s+/g, " ").toLowerCase();
-
-/** True when a flag's phrase names this line (contains it, sits in it, or shares most of its words). */
-function flagNamesLine(claim: string, line: string): boolean {
-  const c = lineKey(claim);
-  const l = lineKey(line);
-  if (c.length < 3 || !l) return false;
-  if (l.includes(c) || (l.length >= 8 && c.includes(l))) return true;
-  const cw = (c.match(/[a-z0-9]{4,}/g) ?? []);
-  if (cw.length < 2) return false;
-  const lw = new Set(l.match(/[a-z0-9]{4,}/g) ?? []);
-  return cw.filter((w) => lw.has(w)).length / cw.length >= 0.6;
-}
-
-/**
- * Rewording A (Phase 6): put back the writer's lines that the verifier
- * changed or removed WITHOUT flagging them, when every fact on the line traces
- * back to the person's words (lib/fact-trace.ts). A line a flag names keeps
- * the verifier's version. When any flag names no line of the document (the
- * flag cannot be placed), nothing is put back: the whole rewrite stands.
- *
- * Lines are matched with a longest-common-subsequence diff. In a changed run
- * of the same length, lines are judged one by one; in a run that changed
- * length, the writer's lines come back only when all of them may.
- */
-export function keepRewordedLines(original: string, cleaned: string, flags: GroundingFlag[], source: string): { text: string; kept: number } {
-  const a = original.split("\n");
-  const b = cleaned.split("\n");
-  if (a.length * b.length > 250_000) return { text: cleaned, kept: 0 };
-  if (flags.some((f) => !a.some((l) => flagNamesLine(f.claim, l)))) return { text: cleaned, kept: 0 };
-  const trace = traceDocument(original, source);
-  const restorable = (i: number) => {
-    const l = a[i];
-    if (!l.trim() || isDropMarker(l)) return false;
-    if (flags.some((f) => flagNamesLine(f.claim, l))) return false;
-    return trace[i].untraced.length === 0;
-  };
-  const ka = a.map(lineKey);
-  const kb = b.map(lineKey);
-  const n = a.length;
-  const m = b.length;
-  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = ka[i] === kb[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-  const out: string[] = [];
-  let kept = 0;
-  let dels: number[] = [];
-  let ins: number[] = [];
-  const flush = () => {
-    if (!dels.length) {
-      for (const j of ins) out.push(b[j]);
-    } else if (dels.length === ins.length) {
-      dels.forEach((i, k) => {
-        if (restorable(i)) {
-          out.push(a[i]);
-          kept++;
-        } else out.push(b[ins[k]]);
-      });
-    } else if (dels.every(restorable)) {
-      for (const i of dels) out.push(a[i]);
-      kept += dels.length;
-    } else {
-      for (const j of ins) out.push(b[j]);
-    }
-    dels = [];
-    ins = [];
-  };
-  let i = 0;
-  let j = 0;
-  while (i < n || j < m) {
-    if (i < n && j < m && ka[i] === kb[j]) {
-      flush();
-      out.push(b[j]);
-      i++;
-      j++;
-    } else if (j < m && (i >= n || dp[i][j + 1] >= dp[i + 1][j])) {
-      ins.push(j++);
-    } else {
-      dels.push(i++);
-    }
-  }
-  flush();
-  return { text: out.join("\n"), kept };
-}
 
 export interface ResumeExperience {
   title?: string;
