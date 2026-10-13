@@ -4,6 +4,7 @@ A dated, high-level history of what shipped, built from the commit log. Product 
 
 ## Unreleased: Forge and Refinery review repairs
 
+- Preserve the active Neon Auth role's existing temporary database access when the resource directory migration removes that access from the app role; record the grant for rollback and check the role boundary before applying it.
 - Check suggested interview wording against the person's source before showing it. Preserve skills that their own work history explicitly supports when an automated list check misses them.
 - End interview practice with specific, validated feedback; keep answers available when feedback fails. Keep tailoring dates and source evidence intact, distinguish unavailable job providers from zero matches, and keep dashboard career cards readable on phones.
 - Recognize already supplied school credentials in plain sentences, keep ordinary letter contractions and employer placeholders out of factual-warning cards, and display resume text while fonts load.

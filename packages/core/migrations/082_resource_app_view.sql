@@ -37,14 +37,15 @@
 --
 -- ADD ONLY AND IDEMPOTENT. Creates one function and one view (CREATE OR
 -- REPLACE, same signature and columns), revokes then grants, and takes TEMP on
--- the database away from PUBLIC (see the last block). Touches no table, no
--- existing view or function, no data. Re-running it changes nothing.
+-- the database away from PUBLIC while preserving an active Neon Auth role's
+-- prior access (see the last block). Touches no table, no existing view or
+-- function, no data. Re-running it changes nothing.
 --
 -- ROLLBACK (no data is lost; the support search falls back to its earlier list
 -- when the view is missing). The first line restores TEMP for PUBLIC only if
 -- PUBLIC held it before 082 (the recorded state, see the last block); it must
 -- run before the function, which carries that record, is dropped:
---   DO $r$ BEGIN IF coalesce(obj_description(to_regprocedure('public.resource_app_rows()'), 'pg_proc'), '') ~ 'public_had_temp=true' THEN EXECUTE format('GRANT TEMPORARY ON DATABASE %I TO PUBLIC', current_database()); END IF; END $r$;
+--   DO $r$ DECLARE state text := coalesce(obj_description(to_regprocedure('public.resource_app_rows()'), 'pg_proc'), ''); BEGIN IF state ~ 'public_had_temp=true' THEN EXECUTE format('GRANT TEMPORARY ON DATABASE %I TO PUBLIC', current_database()); END IF; IF state ~ 'auth_temp_grant_added=true' AND EXISTS (SELECT 1 FROM pg_roles WHERE rolname='neon_auth') THEN EXECUTE format('REVOKE TEMPORARY ON DATABASE %I FROM neon_auth', current_database()); END IF; END $r$;
 --   DROP VIEW IF EXISTS resource_app_v;
 --   DROP FUNCTION IF EXISTS public.resource_app_rows();
 --   DELETE FROM _migrations WHERE filename = '082_resource_app_view.sql';
@@ -143,15 +144,15 @@ END $$;
 -- no per-role deny: while PUBLIC holds TEMP, revoking it from smr_app alone
 -- does nothing, so it is revoked from PUBLIC. The database owner keeps it
 -- (owner privileges), so migrations that use pg_temp still run. COST, stated:
--- every other non-owner, non-superuser role loses TEMP too (production today:
--- anonymous, authenticated, authenticator, smr_runner; none uses temp
--- objects). A role that turns out to need it gets a targeted
--- GRANT TEMPORARY ON DATABASE <db> TO <role>. Run the read-only preflight
--- (migrations/dry-run/082_temp_preflight.sql) first and keep its output.
+-- other non-owner, non-superuser roles lose TEMP too. An active Neon Auth
+-- login role that owns its schema retains its prior effective TEMP through a
+-- direct grant; the app must not inherit that role. Other roles that need
+-- TEMP require a separately reviewed direct grant. Run the read-only
+-- preflight (migrations/dry-run/082_temp_preflight.sql) first and keep its output.
 --
 -- WHAT WAS THERE BEFORE (review N1) is recorded as the COMMENT on
 -- public.resource_app_rows(): "082 temp state: public_had_temp=<true|false>;
--- revoke=<done|skipped>; recorded_on=<date>". It is written once, by the first
+-- revoke=<done|skipped>; auth_temp_grant_added=<true|false>; recorded_on=<date>". It is written once, by the first
 -- run, before the revoke; a re-run keeps it (PUBLIC no longer has TEMP then, so
 -- re-reading would record the wrong answer). The rollback re-grants TEMP to
 -- PUBLIC only when it says public_had_temp=true.
@@ -172,6 +173,9 @@ DECLARE
   prev    text := pg_catalog.obj_description(pg_catalog.to_regprocedure('public.resource_app_rows()'), 'pg_proc');
   had     boolean;
   can     boolean;
+  auth_was_temp boolean := false;
+  auth_had_explicit boolean := false;
+  auth_grant_added boolean := false;
   skip    boolean := COALESCE(pg_catalog.current_setting('smr.skip_082_temp_revoke', true), '') IN ('on', 'true', '1');
 BEGIN
   SELECT EXISTS (SELECT 1 FROM pg_catalog.aclexplode(COALESCE(d.datacl, pg_catalog.acldefault('d', d.datdba))) a
@@ -183,15 +187,37 @@ BEGIN
   IF NOT can AND NOT skip THEN
     RAISE EXCEPTION '082: % does not own database %, so TEMP cannot be revoked from PUBLIC. Run as the owner, or set smr.skip_082_temp_revoke = on for a database we deliberately do not own (see the header).', current_user, db;
   END IF;
+  SELECT pg_catalog.has_database_privilege(r.oid, db, 'TEMP'),
+         EXISTS (SELECT 1 FROM pg_catalog.aclexplode(COALESCE(d.datacl, pg_catalog.acldefault('d', d.datdba))) a
+                 WHERE a.grantee = r.oid AND a.privilege_type = 'TEMPORARY')
+    INTO auth_was_temp, auth_had_explicit
+    FROM pg_catalog.pg_roles r JOIN pg_catalog.pg_database d ON d.datname = db
+    WHERE r.rolname = 'neon_auth';
+  auth_grant_added := can AND COALESCE(auth_was_temp, false) AND NOT COALESCE(auth_had_explicit, false);
+  IF auth_grant_added THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_roles r JOIN pg_catalog.pg_namespace n ON n.nspowner = r.oid
+                   WHERE r.rolname = 'neon_auth' AND r.rolcanlogin AND n.nspname = 'neon_auth') THEN
+      RAISE EXCEPTION '082: neon_auth role is not an active owner of its schema; inspect TEMP access before revoke';
+    END IF;
+  END IF;
+  IF can AND COALESCE(auth_was_temp, false)
+     AND EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'smr_app')
+     AND pg_catalog.pg_has_role('smr_app', 'neon_auth', 'USAGE') THEN
+    RAISE EXCEPTION '082: smr_app inherits neon_auth; TEMP boundary would fail';
+  END IF;
   IF prev IS NULL OR prev !~ '^082 temp state: ' THEN
     EXECUTE pg_catalog.format('COMMENT ON FUNCTION %s IS %L', fn,
-      pg_catalog.format('082 temp state: public_had_temp=%s; revoke=%s; recorded_on=%s',
-        CASE WHEN had THEN 'true' ELSE 'false' END, CASE WHEN can THEN 'done' ELSE 'skipped' END, (pg_catalog.now() AT TIME ZONE 'UTC')::pg_catalog.date));
+      pg_catalog.format('082 temp state: public_had_temp=%s; revoke=%s; auth_temp_grant_added=%s; recorded_on=%s',
+        CASE WHEN had THEN 'true' ELSE 'false' END, CASE WHEN can THEN 'done' ELSE 'skipped' END,
+        CASE WHEN auth_grant_added THEN 'true' ELSE 'false' END, (pg_catalog.now() AT TIME ZONE 'UTC')::pg_catalog.date));
   END IF;
   IF can THEN
     EXECUTE pg_catalog.format('REVOKE TEMPORARY ON DATABASE %I FROM PUBLIC', db);
     IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = 'smr_app') THEN
       EXECUTE pg_catalog.format('REVOKE TEMPORARY ON DATABASE %I FROM smr_app', db);
+    END IF;
+    IF auth_grant_added THEN
+      EXECUTE pg_catalog.format('GRANT TEMPORARY ON DATABASE %I TO neon_auth', db);
     END IF;
   ELSE
     RAISE WARNING '082: TEMP NOT revoked (smr.skip_082_temp_revoke is on): % does not own database %', current_user, db;

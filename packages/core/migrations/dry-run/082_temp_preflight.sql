@@ -17,8 +17,9 @@
 --      unless smr.skip_082_temp_revoke is set on purpose (see 082's header).
 --      public_has_temp_now is what 082 will record as public_had_temp.
 --   2. Every row with temp_now AND NOT rolsuper AND NOT owner_or_member AND NOT
---      explicit_temp loses TEMP. On 2026-10-10 that should be exactly:
---      anonymous, authenticated, authenticator, smr_app, smr_runner.
+--      explicit_temp loses TEMP, except an active neon_auth role that owns the
+--      neon_auth schema. 082 gives it a direct grant only if it already has
+--      effective TEMP. smr_app must not inherit neon_auth.
 --   3. Temp objects alive right now: expect none.
 --   4. Invoker-rights functions in public that create temp objects (they would
 --      break for non-owner callers): expect none, or only owner-run helpers.
@@ -49,6 +50,13 @@ FROM pg_roles r, db
 WHERE r.rolname !~ '^pg_'
 ORDER BY 1;
 
+-- 2a. Provider compatibility and the app isolation boundary.
+SELECT r.rolname, r.rolcanlogin,
+       EXISTS (SELECT 1 FROM pg_namespace n WHERE n.nspname='neon_auth' AND n.nspowner=r.oid) AS owns_auth_schema,
+       CASE WHEN EXISTS (SELECT 1 FROM pg_roles WHERE rolname='smr_app')
+            THEN pg_has_role('smr_app', r.oid, 'USAGE') ELSE false END AS app_inherits_auth
+FROM pg_roles r WHERE r.rolname='neon_auth';
+
 -- 3. Temp objects that exist right now (any live session using them).
 SELECT n.nspname, c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relpersistence = 't';
@@ -67,6 +75,7 @@ ROLLBACK;
 -- AFTER APPLYING 082 (also read-only; each must hold, or stop and ask):
 --   SELECT has_database_privilege('smr_app', current_database(), 'TEMP');      -- false
 --   SELECT has_database_privilege('smr_runner', current_database(), 'TEMP');   -- false
+--   SELECT has_database_privilege('neon_auth', current_database(), 'TEMP');    -- true when active before 082
 --   SELECT has_database_privilege(current_user, current_database(), 'TEMP');   -- true (owner)
 --   SELECT obj_description('public.resource_app_rows()'::regprocedure, 'pg_proc');
 --        -- "082 temp state: public_had_temp=true; revoke=done; ..."
