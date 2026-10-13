@@ -1127,22 +1127,27 @@ export function RefineryShell({
 
       {/* AI Assistant */}
       <AssistantDrawer>
-        <AssistantChat
-          context={{
-            currentPage: pathname === "/dashboard" ? "dashboard" : pathname.replace("/dashboard/", ""),
-            forgeComplete: onboarding.state !== "needs_profile",
-            readinessStage: userFullContext?.forge?.readinessStage ?? undefined,
-            skills: userFullContext?.forge?.skills?.map((s) => (typeof s === "string" ? s : (s as any).name)).filter(Boolean) ?? undefined,
-            barriers: userFullContext?.forge?.barriers ?? undefined,
-            hasCriminalRecord: userFullContext?.forge?.hasCriminalRecord ?? undefined,
-            userFullContext,
-          }}
-          // Org staff get t.ROY's caseload assistant (/api/assistant resolves
-          // their org server-side). The Refinery coach is a job-seeker's coach
-          // and answered a case manager as if they needed a resume.
-          coach={!isOrgPartner}
-          staff={isOrgPartner}
-        />
+        {effectiveRole === null ? (
+          <p role="status" className="p-5 text-sm text-t-bone-dim">Checking your account...</p>
+        ) : (
+          <AssistantChat
+            key={isOrgPartner ? "org-assistant" : "career-coach"}
+            context={{
+              currentPage: pathname === "/dashboard" ? "dashboard" : pathname.replace("/dashboard/", ""),
+              forgeComplete: onboarding.state !== "needs_profile",
+              readinessStage: userFullContext?.forge?.readinessStage ?? undefined,
+              skills: userFullContext?.forge?.skills?.map((s) => (typeof s === "string" ? s : (s as any).name)).filter(Boolean) ?? undefined,
+              barriers: userFullContext?.forge?.barriers ?? undefined,
+              hasCriminalRecord: userFullContext?.forge?.hasCriminalRecord ?? undefined,
+              userFullContext,
+            }}
+            // Org staff get t.ROY's caseload assistant (/api/assistant resolves
+            // their org server-side). The Refinery coach is a job-seeker's coach
+            // and answered a case manager as if they needed a resume.
+            coach={!isOrgPartner}
+            staff={isOrgPartner}
+          />
+        )}
       </AssistantDrawer>
 
       {/* Unlock toast */}
