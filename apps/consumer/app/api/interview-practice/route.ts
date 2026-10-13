@@ -16,9 +16,10 @@ import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
-import { interviewFeedbackMessages, parseInterviewFeedback } from "@/lib/interview-feedback";
+import { verifyGrounding } from "@/lib/grounding-verify";
+import { interviewFeedbackMessages, parseInterviewFeedback, screenInterviewExamples } from "@/lib/interview-feedback";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -242,7 +243,21 @@ RULES:
           ...(practiceSession ? { practiceSession } : {}),
         }, { status: 502 });
       }
-      return reply(plainPunctuation({ response: parsed.closing, feedback: parsed.feedback }, swapLog));
+      let feedback = parsed.feedback;
+      if (feedback.better_answers?.length) {
+        const sourceText = [
+          typeof resume?.text === "string" ? resume.text : "",
+          ...chatMessages.filter((m) => m.role === "user").map((m) => m.content),
+        ].filter(Boolean).join("\n");
+        const answerText = feedback.better_answers.map((answer) => answer.model_answer).join("\n\n");
+        if (answerText.trim().length < 20) {
+          feedback = { ...feedback, better_answers: [] };
+        } else {
+          const check = await verifyGrounding({ sourceText, output: answerText, kind: "report" });
+          feedback = screenInterviewExamples(feedback, check);
+        }
+      }
+      return reply(plainPunctuation({ response: parsed.closing, feedback }, swapLog));
     }
 
     // Log decision for JBS compliance

@@ -12,6 +12,15 @@ export interface InterviewFeedback {
   disclosure_notes?: string | null;
 }
 
+/** Suggested first-person wording is shown only after its claims pass the source check. */
+export function screenInterviewExamples(
+  feedback: InterviewFeedback,
+  check: { verifierRan: boolean; hasFabrication: boolean; applied: boolean },
+): InterviewFeedback {
+  if (check.verifierRan && !check.hasFabrication && !check.applied) return feedback;
+  return { ...feedback, better_answers: [] };
+}
+
 /** Reject malformed feedback instead of awarding a generic completion scorecard. */
 export function parseInterviewFeedback(text: string): { closing: string; feedback: InterviewFeedback } | null {
   try {
