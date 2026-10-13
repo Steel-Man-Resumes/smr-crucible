@@ -19,6 +19,7 @@
 
 import { tool, jsonSchema, type ToolSet } from "ai";
 import { runJobSearch, findCachedJob } from "@/lib/job-search-core";
+import { jobSourceForSave } from "@/lib/job-source";
 import {
   REFINERY_PAGES,
   FORGE_PAGES,
@@ -315,7 +316,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
           salary: job.salary || null,
           description: job.description || null,
           employment_type: job.employment_type || null,
-          source: "jsearch",
+          source: jobSourceForSave(job.id),
           source_id: job.id,
           apply_url: job.apply_url || null,
           status: "saved",
