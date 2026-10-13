@@ -232,7 +232,11 @@ export async function POST(request: Request) {
   const baseSystemPrompt =
     buildSystemPrompt(context) +
     skillsContext +
-    buildHandsSection(toolOptions) +
+    // The verified staff path below calls generateText without tools. Telling
+    // that model it has hands can make it print a fake <invoke> tag to users.
+    (context.org
+      ? "\n\nYou have no action tools in this staff conversation. Answer directly in ordinary language. Never print a tool call or invocation syntax."
+      : buildHandsSection(toolOptions)) +
     memorySection;
   const allowRoleplayOverride =
     !!userId &&
