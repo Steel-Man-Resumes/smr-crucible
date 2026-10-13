@@ -63,7 +63,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
       "Sample feedback for a pretend role of Chief Nap Officer at Rocketship Bagels: \"Strong, honest answer. Try naming one number next time, like how many people you trained.\" Sample only. Your real feedback uses your real answers.",
     trialTaste:
       "Sample interview question: \"Tell me about a time you had to learn something fast on the job. What did you do?\"",
-    requiredState: "full_access",
+    requiredState: "needs_profile",
     href: "/dashboard/interview",
   },
   jobs: {
@@ -99,7 +99,7 @@ export const FEATURE_PREVIEWS: Record<string, FeaturePreview> = {
       "Sample tracker row: \"Rocketship Bagels: Applied, follow up in 3 days.\" Sample only. Your tracker fills in from the real jobs you apply to.",
     trialTaste:
       "Sample reminder: \"It has been a week since you applied to Rocketship Bagels. A short follow-up note keeps you on their radar.\"",
-    requiredState: "full_access",
+    requiredState: "needs_profile",
     href: "/dashboard/applications",
   },
 };

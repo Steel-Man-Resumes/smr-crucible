@@ -122,7 +122,7 @@ export function AssistantDrawer({
   return (
     <>
       {/* Trigger — t.ROY himself, living in the corner. Never auto-opens.
-          The figure is the control; the label reveals on hover/focus. */}
+          The label stays visible so new users can identify the coach. */}
       {(
         <button
           ref={triggerRef}
@@ -130,10 +130,11 @@ export function AssistantDrawer({
           style={isOpen ? { display: "none" } : undefined}
           onClick={() => setIsOpen(true)}
           className="t-focus group fixed bottom-24 right-2 z-40 flex min-h-touch items-center gap-1 rounded-full bg-transparent p-1 sm:bottom-5 sm:right-4"
-          aria-label={`${triggerLabel}, open assistant`}
+          aria-label={`${triggerLabel}, your AI career coach, open assistant`}
         >
-          <span className="pointer-events-none hidden rounded-full border border-[#e4d9ff] bg-white/95 px-3 py-1.5 text-sm font-semibold text-[#4c1d95] opacity-0 shadow-sm transition-opacity duration-200 group-hover:opacity-100 group-focus-visible:opacity-100 sm:inline-block">
-            {triggerLabel}
+          <span className="pointer-events-none rounded-xl border border-[#e4d9ff] bg-white/95 px-3 py-2 text-left text-sm font-semibold leading-tight text-[#4c1d95] shadow-sm">
+            <span className="block">{triggerLabel}</span>
+            <span className="block text-xs font-normal">AI career coach</span>
           </span>
           <TroyLivingIcon size={62} attention={attention || nudge} />
         </button>
@@ -153,7 +154,7 @@ export function AssistantDrawer({
         ref={drawerRef}
         tabIndex={-1}
         role="dialog"
-        aria-label="AI Assistant"
+        aria-label="t.ROY, your AI career coach"
         aria-modal={isOpen ? true : undefined}
         aria-hidden={!isOpen}
         inert={!isOpen}
@@ -164,7 +165,7 @@ export function AssistantDrawer({
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-t-line bg-t-panel">
           <h2 className="text-base font-semibold text-t-white">
-            How can I help?
+            t.ROY, your AI career coach
           </h2>
           <button
             onClick={() => setIsOpen(false)}

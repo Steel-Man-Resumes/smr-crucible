@@ -13,13 +13,13 @@ const CLIENT_MESSAGES: Record<string, string> = {
   dashboard:
     "Your Forge results are loaded. Find a job you like and I'll build your resume for it.",
   "dashboard-no-forge":
-    "I'm t.ROY. Start with The Forge. It's one sitting, and then I'll have everything I need to build you a great resume.",
+    "I'm t.ROY, your AI career coach. Start with what you need today: a resume, a job, interview practice, or help with your next step.",
   "application-tailor":
     "Say what you did and what changed because of it, in your own words. If you counted something yourself, you can add it. I'll help.",
   jobs:
-    "Employers we checked for hiring people with records are marked and shown first. They know what you bring to the job. Find one that fits.",
+    "Look for work that fits. A marked employer has a published hiring signal; check the listing and requirements for the specific job.",
   disclosure:
-    "Most people skip this. The ones who don't get the job. Let's prepare what to say.",
+    "Choose what you want to discuss, then practice saying it in your own words. This is coaching, not legal advice.",
   interview:
     "Practice in writing to shape the answer. Practice out loud to make it hold under pressure.",
   resources:
@@ -47,82 +47,39 @@ const CLIENT_MESSAGES: Record<string, string> = {
     "This is yours. Read through it, save it, and when you're ready, The Refinery has tools to help you take the next step.",
 };
 
-const DEMO_MESSAGES: Record<string, string> = {
-  rush:
-    "Rush Mode is the single-page fast track. Paste + target job → rewritten resume in under 60 seconds. Same crucible rules: only real facts, never fabricated. Quick start before the full Forge.",
-  welcome:
-    "This page detects readiness using Prochaska's Stages of Change, with no clinical assessment needed. Clients pick where they are in plain words, and the guidance adjusts to match.",
-  resume:
-    "We accept anything: photos, PDFs, even a list of jobs. The AI extracts skills from whatever they give us. No perfect resume required.",
-  goals:
-    "Purpose exploration before job search. Grounded in Ikigai and Maruna's generative identity. We start from what matters to them, then look at what's available.",
-  story:
-    "This is where affect labeling happens. Free-text responses are data, and they are also therapeutic. Naming barriers reduces their power (Lieberman, 2007).",
-  preferences:
-    "Practical constraints matter. Transportation, schedule, and commute determine whether a job match is real or theoretical.",
-  processing:
-    "The pipeline runs 4 parallel AI analyses: skills extraction, narrative construction, career matching, and barrier-to-resource mapping.",
-  output:
-    "Narrative-first output. Not scored, not graded. Strengths \u2192 skills \u2192 barriers with resources \u2192 career paths. Redemption sequence framing (McAdams, 2013).",
-};
-
+// Describe visible behavior and its limits. Research ideas are not evidence
+// that this product improves hiring, clinical or reentry outcomes.
 const PARTNER_MESSAGES: Record<string, string> = {
   dashboard:
-    "The Refinery is where persistent career work happens. Clients build targeted resumes, practice interviews, and plan disclosure strategies. Each tool connects to the next.",
+    "The Refinery brings career work together: resumes, jobs, interviews, applications and support. The person can start with the task they need today.",
   "application-tailor":
-    "The Application Tailor scaffolds from Forge data. Bullets are built from the person's own facts: what they did and what changed. A number appears only when the person supplies it. Fading scaffold tracks iteration number for each user.",
+    "The Application Tailor uses the person's own facts and a target job. They review the draft and explain the lines before treating it as ready.",
   jobs:
-    "Real job listings from JSearch API. Fair-chance employers highlighted via known employer list + AI enrichment. 6-hour cache prevents API abuse.",
+    "Search job listings and inspect each employer's requirements. A published hiring signal does not guarantee eligibility or an offer.",
   disclosure:
-    "Two-tier system: basic guidance from public data, personalized strategy after consent gate. Draws on Maruna's (2001) research on agency.",
+    "Prepare an answer in the person's own words. They choose what to share. This is coaching, not legal advice.",
   interview:
-    "AI mock interviews adapted to role, industry, and disclosure needs. Built on Bandura's mastery experience framework: practice builds genuine confidence.",
+    "Practice interview questions and review feedback. A resume can add context, but it is not required to begin practice.",
   rush:
-    "Rush Mode is for urgent situations, like an interview tomorrow or an application due tonight. One page, paste + target job, rewritten resume in 60 seconds. Same integrity rules as the full Forge. Designed as an on-ramp to deeper engagement.",
+    "Rush starts with a pasted resume and target job. Review the resulting draft for facts and fit before using it. Processing time varies.",
   welcome:
-    "Your clients self-select their readiness stage here. It maps to Prochaska's Stages of Change model, and we adjust guidance intensity based on where they are.",
+    "The person chooses what they need today. They can change direction as their needs change.",
   resume:
-    "Multiple intake paths reduce friction. Upload, import, or build from scratch. The guided builder scaffolds without auto-generating, so the client does the work.",
+    "Bring an existing resume or build work history step by step. Check extracted text and supply missing facts in the person's own words.",
   goals:
-    "We explore purpose before jumping to job titles, grounded in narrative identity theory and Ikigai. We start from what drives them, then look at what's available.",
+    "Explore the work the person wants and what matters to them, then compare it with job requirements.",
   story:
-    "An optional support step. Clients tick what would help and can say what kind of help. It never asks for offense details.",
+    "An optional support step. Choose what would help without supplying offense details.",
   preferences:
-    "Real-world constraints that determine whether a job match is viable. Transportation, schedule, location: the practical stuff that breaks placements.",
+    "Location, transportation and schedule help narrow the search to work the person can realistically pursue.",
   processing:
-    "Four parallel AI pipelines: skills extraction, narrative construction, career matching, and barrier-to-resource mapping. Each logged for audit.",
+    "The system prepares career suggestions from the information supplied. AI suggestions need review against the person's actual experience.",
   output:
-    "Narrative-first output. Strengths and skills are presented before barriers. Career paths include specific next steps. Nothing is scored or graded.",
+    "Review the draft, check its facts and explain each line. Unresolved questions keep the document in draft. The person decides what represents them.",
 };
 
-const OBSERVER_MESSAGES: Record<string, string> = {
-  dashboard:
-    "The Refinery implements persistent scaffolded career services (Wood, Bruner, Ross, 1976). Progressive unlock ensures users build skills before advancing. Each tool's output feeds the next.",
-  "application-tailor":
-    "Resume generation with research-backed prompts. Generative identity framing (Maruna, 2001) transforms duties into achievements. Multi-level detection adapts output to user sophistication.",
-  jobs:
-    "Fair-chance employer matching uses JSearch API with AI enrichment. Ban-the-box compliance checking, WOTC tax credit awareness, and second-chance employer database.",
-  disclosure:
-    "Two-tier disclosure coaching. Tier 1: public data only. Tier 2: consent-gated private info. Grounded in Maruna's agency framework.",
-  interview:
-    "Mock interviews implement Bandura's self-efficacy (1977) via mastery experience. Disclosure rehearsal integrated at exchange 3-4. Process praise feedback (Dweck, 2006).",
-  rush:
-    "Rush Mode demonstrates the crucible principle at speed: AI enhances what's real, never fabricates. Same ethical constraints as the full pipeline: only facts from the original resume. Designed as a low-friction entry point that funnels into the full Forge flow.",
-  welcome:
-    "Readiness detection without clinical assessment. Based on Prochaska & DiClemente's Transtheoretical Model (1983). Each stage gets calibrated guidance intensity.",
-  resume:
-    "Multi-path intake reduces abandonment. AI extraction handles any format. The guided builder uses scaffolding (Wood, Bruner, Ross, 1976), which gives structure without doing the work for them.",
-  goals:
-    "Purpose-first, not job-first. Grounded in McAdams' narrative identity theory (2013) and Ikigai framework. Generative identity predicts better reentry outcomes (Maruna, 2001).",
-  story:
-    "Affect labeling (Lieberman et al., 2007): naming emotions reduces amygdala reactivity by up to 50%. Free-text narratives serve dual purpose: data collection and therapeutic processing.",
-  preferences:
-    "Constraint mapping ensures job matches are realistic, not aspirational. Transportation deserts and schedule rigidity are top reasons placements fail.",
-  processing:
-    "Observability-first pipeline. Most AI decisions are logged with input hash, model ID, explanation, and latency. Full audit trail for JBS compliance.",
-  output:
-    "Redemption sequence framing (McAdams, 2013). Narrative identity research shows bad\u2192good arcs predict higher well-being. Output is strengths-first, never deficit-focused.",
-};
+const DEMO_MESSAGES: Record<string, string> = { ...PARTNER_MESSAGES };
+const OBSERVER_MESSAGES: Record<string, string> = { ...PARTNER_MESSAGES };
 
 /**
  * Get the appropriate Opus guidance message for a page.

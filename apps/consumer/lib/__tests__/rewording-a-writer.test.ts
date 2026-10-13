@@ -348,6 +348,38 @@ test("M1: what counts as a provable rewording", () => {
   ]) assert.equal(onlyRewordedFrom(bad, src), false, bad);
 });
 
+test("live regression: bounded duty paraphrases retain participation and every qualifier", () => {
+  const source = "Did safety audits.\nAnswered phones and helped customers.";
+  for (const line of ["I ran safety audits", "running safety audits", "assist customers", "Assisted customers.", "Answer phones and assist customers."]) {
+    assert.equal(onlyRewordedFrom(line, source), true, line);
+  }
+  for (const line of ["Ran safety audits daily", "Assist customers daily", "Led the customer service team", "Answer phones and solve problems", "Assist customers independently"]) {
+    assert.equal(onlyRewordedFrom(line, source), false, line);
+  }
+  assert.equal(onlyRewordedFrom("Assisted customers", "Sometimes helped customers."), false);
+  assert.equal(onlyRewordedFrom("Answered phones", "Did not answer phones."), false);
+  for (const [claim, own] of [
+    ["Counted stock", "Did not pack orders and count stock."],
+    ["Restocked supplies", "Helped clean offices and restock supplies."],
+    ["Assisted customers", "I wanted to answer phones and help customers."],
+    ["Assisted customers", "Occasionally answered phones and helped customers."],
+    ["Counted stock", "I was learning to pack orders and count stock."],
+    ["Restocked supplies", "Answered phones and helped clean offices and restock supplies."],
+    ["Counted stock", "Cleaned offices and assisted packing orders and count stock."],
+    ["Counted stock", "Answered phones instead of packing orders and counting stock."],
+    ["Counted stock", "Cleaned offices rather than packing orders and counting stock."],
+  ]) assert.equal(onlyRewordedFrom(claim, own), false, own);
+});
+
+test("live regression: retain both proved duties when checker shortens a same-job line", async () => {
+  const source = "ALEX EXAMPLE\nEXPERIENCE\nCleaner | Example Services | 2023 - Present\nAnswered phones and helped customers.\nMopped floors.";
+  const written = "ALEX EXAMPLE\nEXPERIENCE\nCleaner | Example Services | 2023 - Present\n- Answer phones and assist customers.\n- Mopped floors daily.";
+  const cleaned = written.replace("Answer phones and assist customers.", "Answer phones.").replace("Mopped floors daily.", "Mopped floors.");
+  const result = await withVerifierReply({ hasFabrication: true, flags: [{ claim: "daily", why: "Frequency not supplied", kind: "other" }], cleaned }, () => verifyGrounding({ sourceText: source, output: written, kind: "resume" }));
+  assert.match(result.text, /Answer phones and assist customers\./);
+  assert.doesNotMatch(result.text, /daily/);
+});
+
 test("verifier: kinds are read leniently and the prompt traces facts, not words", async () => {
   assert.equal(flagKindOf("Wording"), "wording");
   assert.equal(flagKindOf("paraphrase"), "wording");

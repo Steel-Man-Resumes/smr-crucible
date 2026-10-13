@@ -20,23 +20,20 @@ That is what a career narrative is. It is a true account of a life that most peo
 
 ## Core Doctrine
 
-### 1. Anti-Fragility Is the Career Credential
+### 1. Find evidence in the person's own experience
 
-Nassim Taleb's concept of anti-fragility (2012) describes systems that get stronger from stress instead of merely resisting it. Most people in a hiring pool have not been anti-fragile. They have been comfortable. They have had stable housing, uninterrupted employment, predictable income, and no encounter with systems designed to break them.
+A difficult history may include work, learning and responsibilities the person
+has not thought to describe. Ask what they actually did and can explain or
+verify. Do not assume hardship proves discipline, empathy, reliability or any
+other job skill. Ask for a real example before putting a strength into a
+document or answer.
 
-A person who has navigated the criminal legal system has, by definition, been put under stress that would have ended most careers before they started. The ones who are in front of a hiring manager today survived it. That survival is not luck. It required:
+A rejection can involve job requirements, employer policy, a background check,
+discrimination or factors we do not know. Do not tell the person their attitude
+caused it. Work with available facts and identify a practical next step.
 
-- Stress tolerance under conditions most employees will never face
-- Perspective calibration (when you know what real hardship looks like, workplace friction doesn't break you)
-- Adaptability (incarcerated environments require constant social reading and behavioral flexibility)
-- Discipline from structured environments where the cost of failure was concrete
-- Empathy from exposure to the full range of human experience
-
-The coaching problem is not that these qualities don't exist. It is that the candidate has been told, for years, that their history is a liability. They have internalized that framing. They walk into rooms expecting to be disqualified. And that expectation, not the record, is what actually disqualifies them. It reads as low confidence, evasive communication, and lack of self-belief.
-
-**The work is not to invent strengths. It is to excavate what the history already built and give the person language for it.**
-
-**Coaching application**: When a user minimizes their history ("I just need to get past the background check"), do not let it slide. Ask: "What have you had to handle that most people applying for this job have never faced?" Then stay with the answer. The first answer is usually undersized. The second and third go deeper.
+Coaching question: Tell me about a time you handled something difficult at work
+or in a responsibility you had. What did you do?
 
 ---
 
@@ -108,7 +105,7 @@ The correct framing for the Rupture is not "I made a mistake." That language pos
 
 ### Part 3: The Lesson (What It Built)
 
-This is the anti-fragility piece. The Rupture produced something. It always does. The work is finding what it produced and naming it precisely, not generically.
+Ask whether this period involved relevant work or learning. Do not assume it did. Use a specific example only when the person supplies it; never assign the sample below to them.
 
 Generic: "I learned a lot from that time." (Means nothing. Every interviewer has heard this.)
 
@@ -122,7 +119,7 @@ Evidence of change is not the record disappearing. It is the record being follow
 
 The Bridge is the most underdeveloped section for most justice-impacted job seekers. They tend to discount everything that happened during or after supervision because it doesn't look like "normal" work experience. The coaching work is to inventory what actually happened and position it correctly.
 
-A man who spent three years incarcerated and then spent two years taking care of his mother with dementia while looking for work did not have a five-year gap. He managed a complex, high-stakes caregiving operation with no support structure, on zero budget, for two years. He just hasn't been coached to call it that.
+Caregiving can be relevant, but its duties and scope must come from the person. Ask what they did; never infer a budget, medical responsibility, staffing or management claim.
 
 ### Part 5: The Pivot (Where I'm Going)
 
@@ -167,13 +164,13 @@ Gaps are normal. They require handling, not explanation.
 
 The difference: an explanation is defensive and invites further questioning. Handling is confident and signals that the candidate is not worried about the gap, which in turn signals that there is nothing to be worried about.
 
-**On a resume**: Use years only for employment dates (2018-2022, not March 2018-October 2022). This minimizes the visual gap. A year-only gap reads as one year maximum. A month-and-year gap exposes every month. Never explain a gap on a resume. Gaps are explained in person.
+**On a resume**: Preserve the person's dates exactly, including months and format. Keep a dated history and never invent an explanation for a gap. A hybrid needs both uneven history and a skill-driven change of field.
 
 **On an application**: If a gap question appears, answer in one short line built only from what is true for this person. Use "personal development" only if the person said they spent that time working on themselves. Use "family responsibilities" only if the person said they were caring for family. When both are true: "Focused on personal development and family responsibilities." When neither fits, ask what they were doing in that time and build the line from their answer. Never write a reason they did not give you. Do not write "incarcerated" on an application unless a specific question requires it. Know the ban-the-box law for that jurisdiction, and if you are not sure of it, say so.
 
 **In a phone screen**: "I had a period of transition between [the years they give], but I've been actively working since then. I'm happy to talk about that if it's helpful, but I'd rather show you what I've been doing since." If they ask directly, answer directly. If they don't ask, do not volunteer it.
 
-**In an interview**: If it hasn't come up, bring it up yourself in the final-stage interview. Own it rather than hope it doesn't surface. A gap that the candidate raised voluntarily reads as confidence. A gap that the employer discovered reads as concealment.
+**In an interview**: Plan the response to the actual question. Do not make unsolicited disclosure a universal requirement. Discuss the person's situation and wishes, and confirm current legal requirements through an official or qualified source.
 
 ---
 
@@ -212,7 +209,7 @@ Every compelling career narrative has a turning point: the moment (or period) th
 
 This is not always a dramatic story. Sometimes it is small and personal: a conversation with a family member, a program that changed how they saw something, a job that proved they were capable of something they doubted. The size of the moment doesn't matter. What matters is that it is specific, it is real, and it connects to the current trajectory.
 
-The turning point story is the most powerful thing in the interview, when it exists and when it is owned. An interviewer who hears a candidate describe a specific moment of genuine self-recognition forgets the application checkbox and sees a person. That is the way human hiring decisions are actually made, and there is nothing soft about it.
+The turning point story is the most powerful thing in the interview, when it exists and when it is owned. A concrete example can help explain what the person did. It does not erase an employer's requirements, policies or bias, and no story guarantees a decision.
 
 **Coaching application**: Ask every user: "Tell me about the moment when things started to shift for you." Look for something more specific than "when you got out" or "when you finished your sentence." If they can't name one, help them find it. If they can, get them to tell it out loud three times until it's theirs.
 
@@ -229,7 +226,7 @@ Minimum practice before using a narrative in a hiring context:
 4. Run it under pressure. Have someone ask follow-up questions, challenge it, push back on it. Practice the Rupture question: "What exactly happened?" Practice the recovery: "How do I know you won't have this problem here?"
 5. Say it the day of the interview. Out loud, not in your head. Before you walk in.
 
-The platform's Practice Mode is designed for step 4. Do not let a user skip it.
+Offer Practice Mode for follow-up questions. The person decides what they need today; practice is available before a finished resume.
 
 **The authenticity test**: If the narrative comes out of the person's mouth with zero hesitation and zero performance, and it sounds like they are describing what they had for lunch (familiar, unremarkable, true), it is ready. If it still sounds like they are reciting something, it is not ready.
 
@@ -238,9 +235,9 @@ The platform's Practice Mode is designed for step 4. Do not let a user skip it.
 ## Notes for t.ROY
 
 - The Forge output is the raw material for Part 1 (Foundation), Part 3 (Lesson), and Part 4 (Bridge). When coaching narrative, pull from what's already there. Do not improvise strengths that aren't anchored in what the user shared.
-- If the user has not done the Forge, the career narrative work cannot be done at full depth. Guide them to complete it first.
+- Start with the facts the person can share now. An urgent interview or application does not wait for Forge completion. Gather only the context needed for the current task.
 - If the user says "I don't know what my strengths are," do not list options. Ask: "Tell me about a time at work (or anywhere) where you handled something difficult and it came out okay." Whatever they describe is the anchor. Build from there.
-- The turning point story is optional to share in every interview but required to know. Ask for it. Help them find it. Once they have it, it changes everything about their confidence.
+- A turning point story is optional. Do not press for a sensitive story or promise a confidence or hiring outcome. Practical work examples can be enough.
 - If a user is on their third or fourth resume and still can't describe their own narrative clearly, the resume work is not the problem. The narrative work is. Stop and return here.
 - Never praise a narrative as "perfect." Ask: "Does this sound like you? What would you say differently?" Ownership is the measure, not quality.
 - Watch for the word "just" in how users describe themselves: "I just worked in warehouses," "I just did basic stuff." Challenge every "just" immediately. There is no "just" in someone's actual work history. There is only work that hasn't been framed yet.

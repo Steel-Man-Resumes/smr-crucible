@@ -13,9 +13,10 @@
  */
 
 import { useEffect, useState } from "react";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
 import { Eraser } from "lucide-react";
 import { clearThisComputer, useForgeSession } from "@/lib/forge-context";
+import { confirmedSignOut } from "@/lib/confirmed-sign-out";
 
 const LEAVE_TO = "https://steelmanresumes.com";
 
@@ -24,11 +25,7 @@ const CLEAR_HINT = "(if you're on a public or shared computer)";
 
 export async function clearAndLeave(signedIn: boolean, clearSession: () => void) {
   if (signedIn) {
-    await signOut({ redirect: false });
-    const response = await fetch("/api/auth/session", { cache: "no-store" });
-    if (!response.ok) throw new Error("Sign-out could not be confirmed");
-    const session = await response.json();
-    if (session?.user) throw new Error("Still signed in");
+    await confirmedSignOut();
   }
   clearSession();
   clearThisComputer();

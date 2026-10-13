@@ -538,7 +538,8 @@ section("t.ROY current-block");
   check("needs_resume unblock targets application-tailor", needsResume?.targetPage === "application-tailor", needsResume?.targetPage);
   check("needs_resume CTA is a real page", !!needsResume && validPage(needsResume.targetPage));
   check("needs_resume no longer locks the Application Tailor", !needsResume?.lockedTools.includes("Application Tailor"));
-  check("needs_resume still locks Disclosure + Interview", !!needsResume?.lockedTools.includes("Disclosure Planner") && !!needsResume?.lockedTools.includes("Interview Practice"));
+  check("needs_resume still locks document-dependent Disclosure", !!needsResume?.lockedTools.includes("Disclosure Planner"));
+  check("urgent interview and applications stay open with no resume", [preForge, needsResume].every((b) => !b?.lockedTools.includes("Interview Practice") && !b?.lockedTools.includes("Applications")));
 
   const full = computeCurrentBlock({ forgeComplete: true, hasResumeTailoredToTarget: true });
   check("full access is NOT blocked", full === null);
@@ -548,7 +549,7 @@ section("t.ROY current-block");
   check("block section forbids pointing at a locked tool as open", /never point them at a locked tool/i.test(lockedSection));
 
   const clearSection = buildBlockSection(full);
-  check("no-block section says nothing is locked", /nothing is locked/i.test(clearSection));
+  check("no-block section distinguishes document prerequisites from sponsor access", /no document prerequisite/i.test(clearSection) && /sponsor requirements still apply/i.test(clearSection));
   check("no-block section does NOT invent a take_me_there unblock", !clearSection.includes("take_me_there"));
 }
 

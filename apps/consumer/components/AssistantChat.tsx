@@ -561,8 +561,8 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
           ) : (
             <div className="text-muted text-sm">
               <p className="mb-2">
-                I&apos;m your coach. Ask me anything, or I&apos;ll point you to your
-                next move.
+                I&apos;m t.ROY, your AI career coach. We can work on your resume,
+                job search, interview, or next move at work. What needs attention today?
               </p>
             </div>
           ))}
@@ -570,8 +570,8 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
         {messages.length === 0 && !coach && (
           <div className="text-muted text-sm">
             <p className="mb-2">
-              I&apos;m t.ROY. Ask me anything about this page, or just talk
-              through what you&apos;re thinking.
+              I&apos;m t.ROY, your AI career coach. Tell me what you need today,
+              or ask me to help you use this page.
             </p>
             <p>There are no wrong questions.</p>
           </div>

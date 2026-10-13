@@ -9,7 +9,13 @@
 
 /** Pages t.ROY may navigate to inside the Refinery (post-auth). */
 export const REFINERY_PAGES: Record<string, string> = {
+  start: "/start",
   dashboard: "/dashboard",
+  creative: "/dashboard/creative",
+  cv: "/dashboard/cv",
+  performer: "/dashboard/performer",
+  documents: "/dashboard/documents",
+  help: "/dashboard/help",
   jobs: "/dashboard/jobs",
   applications: "/dashboard/applications",
   "application-tailor": "/dashboard/application-tailor",
@@ -24,6 +30,7 @@ export const REFINERY_PAGES: Record<string, string> = {
 
 /** Pages t.ROY may navigate to inside the Forge (pre-auth safe). */
 export const FORGE_PAGES: Record<string, string> = {
+  start: "/start",
   welcome: "/welcome",
   resume: "/resume",
   goals: "/goals",

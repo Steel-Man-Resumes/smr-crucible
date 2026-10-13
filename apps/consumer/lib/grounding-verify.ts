@@ -217,11 +217,13 @@ TRACE FACTS, NOT WORDS. The writer is allowed to reword any line into strong pla
 
 ${supervisionRule(askSupervision)}
 
-Do NOT flag: strong action verbs, general professional framing, a reasonable summary of a duty the source states, or a reworded line whose facts all trace back. Never flag a line only because its words differ from SOURCE. Only flag assertions of specific fact a background check could disprove. The job posting (if referenced) is a TARGET, never a source of grantable facts. Never let the OUTPUT claim something just because a posting asked for it.
+Do NOT flag: strong action verbs, claim-free professional framing, a reasonable summary of a duty the source states, or a reworded line whose facts all trace back. Never flag a line only because its words differ from SOURCE. Check EVERY factual assertion about the person, including ordinary duties, circumstances, frequency, behavior, habits, skills, results and lessons learned. A fact need not be on a background-check report to require evidence. "Helped customers" and "assisted customers" describe the same participation; neither supports solving problems, multitasking or leading a team. "Did safety audits" supports "I ran safety audits" and "running safety audits", but not daily audits or a description of what was inspected. Packing orders does not establish accuracy or an organized personality. The job posting and any AI analysis are targeting context, never evidence about the person. Trace each duty to its OWN job; a fact from another employer cannot support it.
 
 ONE EXCEPTION to "general professional framing", and it is not a small one. A claim about the PERSON'S CHARACTER OR CONDUCT (attendance, punctuality, reliability, work ethic, safety record, honesty, initiative, how well they get along with people) IS flaggable whenever the source does not support it, even though it sounds like framing. A real run turned two sentences about washing dishes into "reliability and consistent attendance across every shift, on time and ready to work", which the person never said about themselves. These claims feel harmless because nothing on paper disproves them; that is exactly what makes them dangerous. A hiring manager asks "tell me about your attendance at that job" and the person is left defending a sentence they did not write. Flag it unless their own words support it.
 
 Then rewrite OUTPUT so every remaining statement is grounded in SOURCE: remove each invented specific, or generalize it to exactly what the source supports. Change ONLY the lines you flagged; every other line stays exactly as written, word for word. Thin source means a shorter, sparser document. That is correct and required, never a reason to invent. Preserve the structure, section headers, formatting, tone, and every grounded line. Introduce NO new facts. If nothing needs changing, return OUTPUT verbatim. In any text you rewrite, never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
+
+Before returning, check every sentence of the corrected text against SOURCE again. The correction must not add a new claim or leave unsupported ordinary job detail behind. Preserve all supported duties, including every supported clause of a sentence that needed one correction. Each flag's claim must quote the exact phrase in OUTPUT; classify the factual change, not an unfamiliar word.
 
 Return ONLY a JSON object. All three fields are required. Every flag MUST include claim, why and kind; use wording for a wording-only objection. Never omit kind:
 {"hasFabrication": boolean, "flags": [{"claim": "the exact invented phrase from OUTPUT", "why": "short reason", "kind": "number | date | title | employer | tool | skill | credential | result | scope | supervision | character | pronoun | wording | other"}], "cleaned": "the full corrected OUTPUT text"}`;
@@ -366,7 +368,8 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
       if (job && match?.kind !== "one") return line;
       const own = match?.kind === "one" ? match.job.body.join("\n") : source;
       const candidates = (oldJob ? oldJob.body : oldJobs.length ? [] : before).filter((originalLine) =>
-        originalLine.trim() !== line.trim() && onlyRewordedFrom(originalLine, own) && onlyRewordedFrom(originalLine, line));
+        originalLine.trim() !== line.trim() && onlyRewordedFrom(originalLine, own) &&
+        (onlyRewordedFrom(originalLine, line) || onlyRewordedFrom(line, originalLine)));
       return candidates.length === 1 ? candidates[0] : line;
     }).join("\n");
   }

@@ -46,7 +46,7 @@ export function draftNext(rev: Pick<ForgeRevision, "artifactId" | "fromWriter">)
 
 /** The one next task on the lane home, by route and by where the resume stands. */
 export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" | "artifactId" | "fromWriter"> | null): { label: string; href: string } {
-  // Only the resume and interview routes need a resume first (review H1).
+  // Interview practice and the other immediate tasks can start without a resume.
   if (!rev && task === "resume") return { label: "Start your resume", href: "/resume" };
   switch (task) {
     case "resume":
@@ -68,25 +68,34 @@ export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" |
 export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profileFirst?: boolean }) {
   const [rev, setRev] = useState<ForgeRevision | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let live = true;
+    setLoaded(false);
+    setLoadError(false);
     fetch("/api/revisions?forge=1", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
+      .then((r) => {
+        if (!r.ok) throw new Error("Could not load saved work");
+        return r.json();
+      })
       .then((j) => {
         if (!live) return;
         const r = j?.revision;
         // Review r1 H1: the server says whether the writer made it (its lineage), never this page.
         setRev(r && typeof r.id === "string" ? { id: r.id, artifactId: r.artifactId, number: r.number, status: r.status, fromWriter: r.fromWriter === true } : null);
       })
-      .catch(() => undefined)
+      .catch(() => live && setLoadError(true))
       .finally(() => live && setLoaded(true));
     return () => {
       live = false;
     };
-  }, []);
+  }, [retry]);
 
   // A new account saves its profile (name, phone) before the Refinery's tools open.
-  const next = profileFirst && task !== "interview" ? { label: "Save your profile below", href: "#profile-setup" } : laneHomeNext(task, rev);
+  const next = profileFirst && task !== "interview" ? { label: "Save your profile below", href: "#profile-setup" }
+    : task === "resume" && (!loaded || loadError) ? { label: "Open My resumes", href: "/dashboard/vault" }
+    : laneHomeNext(task, rev);
   const box = "border border-t-line bg-t-panel p-4";
   return (
     <section aria-labelledby="lane-home-heading" className="space-y-3" data-testid="lane-home">
@@ -98,6 +107,11 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
           <p className="text-xs font-semibold uppercase text-t-bone-dim">Your resume</p>
           {!loaded ? (
             <p className="mt-1 text-sm text-t-phos-dim">Loading...</p>
+          ) : loadError ? (
+            <div className="mt-1 text-sm">
+              <p role="alert" className="text-t-red">We couldn't load your saved resume. Try again to check your latest work.</p>
+              <button type="button" onClick={() => setRetry((n) => n + 1)} className="t-focus mt-2 min-h-touch text-t-amber-bright underline underline-offset-2">Try again</button>
+            </div>
           ) : rev ? (
             <>
               <p className="mt-1 text-sm font-semibold text-t-white">Version {rev.number}{rev.status === "finished" ? ", finished" : ""}</p>

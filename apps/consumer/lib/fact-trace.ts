@@ -225,7 +225,7 @@ export function factsTraceBack(line: string, source: string | SourceIndex, opts:
 // same work, about the very same object. Any other verb change keeps the flag.
 const DUTY_LEAD_RE = /^(?:i\s+)?(?:was\s+)?(?:responsible\s+for|did|do|does|dealt\s+with|deal\s+with|handled|handle|took\s+care\s+of|take\s+care\s+of|worked\s+on|work\s+on|duties\s+included)\s+(.+)$/i;
 const PEOPLE_OBJECT_RE = /\b(?:crews?|teams?|staff|employees?|workers?|hires?|people|guys|men|associates?|operators?|drivers?|cooks?|cashiers?|clerks?|trainees?|helpers?|laborers?|shifts?)\b/i;
-const SAME_WORK_VERB_RE = /^(?:handled|completed|ran|performed|kept\s+up(?:\s+with)?)\s+(.+)$/i;
+const SAME_WORK_VERB_RE = /^(?:i\s+)?(?:handled|handling|completed|completing|ran|running|performed|performing|kept\s+up(?:\s+with)?)\s+(.+)$/i;
 // Words that keep a line at its true size. Wherever their words about this object carry one, the line keeps it.
 const LIMITING_RE = /\b(?:help(?:ed|ing|s)?|assist(?:ed|ing|s)?|under|alongside|along|rode|until|expired|lapsed|former(?:ly)?|part\s+of|some|sometimes|occasionally|when\s+(?:needed|asked|assigned)|as\s+needed|backup|back-up|fill(?:ed)?\s+in|trainee|in\s+training|learning|class|course)\b/gi;
 const FUNCTION_WORDS = new Set(["the", "a", "an", "and", "or", "of", "to", "in", "on", "at", "for", "with", "by", "from", "as", "into", "per", "my", "our", "their", "his", "her", "its", "this", "that", "these", "those", "all", "each"]);
@@ -235,6 +235,29 @@ const sameSet = (a: string[], b: string[]) => {
   const B = new Set(b);
   return A.size > 0 && A.size === B.size && Array.from(A).every((x) => B.has(x));
 };
+
+// Closed, whole-clause equivalences. Keep the object and every qualifier,
+// including negation, frequency and degree of help. Split coordinated duties
+// only when the next clause starts with a recognized action, never noun lists.
+const DUTY_JOIN_RE = /\s+and\s+(?=(?:i\s+)?(?:answer(?:ed|ing|s)?|help(?:ed|ing|s)?|assist(?:ed|ing|s)?|pack(?:ed|ing|s)?|count(?:ed|ing|s)?|clean(?:ed|ing|s)?|restock(?:ed|ing|s)?)\s)/i;
+function dutyClauses(text: string): string[] {
+  const plain = text.trim().replace(/^i\s+/i, "");
+  const parts = plain.split(DUTY_JOIN_RE);
+  // A prefix can govern BOTH duties ("did not pack and count", "helped clean
+  // and restock", "occasionally answered and helped"). Never discard it.
+  // Only simple, closed verb/object shapes get this extra proof. Free-form
+  // grammar can put the second duty under "instead of", "wanted to", etc.
+  // Unrecognized clauses remain for the checker/person to resolve.
+  const direct = /^(?:(?:answer)(?:ed|ing|s)?\s+(?:the\s+)?(?:phones?|calls)|(?:pack)(?:ed|ing|s)?\s+(?:the\s+)?(?:orders|boxes)|(?:count)(?:ed|ing|s)?\s+(?:the\s+)?(?:stock|inventory)|(?:clean)(?:ed|ing|s)?\s+(?:the\s+)?(?:offices|floors)|(?:restock)(?:ed|ing|s)?\s+(?:the\s+)?supplies)$/i.test(parts[0]);
+  const limited = new RegExp(LIMITING_RE.source, "i").test(parts[0]) || /\b(?:not|never|no|only|rarely|occasionally)\b/i.test(parts[0]);
+  return (parts.length > 2 || (parts.length > 1 && (!direct || limited)) ? [plain] : parts).map((part) => part.trim());
+}
+function dutyWording(text: string): string {
+  return text.toLowerCase()
+    .replace(/^(?:help(?:ed|ing|s)?|assist(?:ed|ing|s)?)\s+/, "help ")
+    .replace(/^(answer|pack|count|clean|restock)(?:ed|ing|s)?\s+/, "$1 ")
+    .replace(/\s+/g, " ");
+}
 
 /**
  * True only when `claim` is provably a rewording of a line of the person's own words: their line is duty
@@ -252,6 +275,9 @@ export function onlyRewordedFrom(claim: string, source: string): boolean {
     .filter(Boolean);
   // Unchanged apart from case and punctuation: nothing to judge.
   if (sentences.some((l) => l.toLowerCase() === c.toLowerCase())) return true;
+  const sourceClauses = sentences.flatMap(dutyClauses);
+  const claimClauses = dutyClauses(c);
+  if (claimClauses.every((part) => sourceClauses.some((own) => dutyWording(part) === dutyWording(own)))) return true;
   const cv = c.match(SAME_WORK_VERB_RE);
   if (!cv) return false;
   // Round 4 (r3 L-3): people or a shift as the object ("Handled the new hires", "Ran 3rd shift") is a claim of

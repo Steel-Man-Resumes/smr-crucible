@@ -56,9 +56,9 @@ export const FORGE_VS_REFINERY_LINE =
  */
 export const STAGE_WHY: Record<number, string> = {
   0: "A short tour shows you where everything is, so the rest goes faster.",
-  1: "Every other tool starts from your resume, so it comes first.",
+  1: "Build your resume from your own work history. Interview practice, applications and support can start whenever you need them.",
   2: "The Refinery fits your resume to one real job. Pick the job first.",
-  3: "Your Forge resume is a general one. Tailoring it makes it fit this job and opens your other tools.",
+  3: "Your Forge resume is a general one. Tailoring it connects your real experience to this job.",
   4: "Planning what you will say about your record means you walk in ready.",
   5: "A little practice makes the real interview feel familiar.",
   6: "Applying and tracking keeps your search moving and tells you when to follow up.",

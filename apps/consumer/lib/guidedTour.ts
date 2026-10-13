@@ -100,4 +100,4 @@ export const TOUR_SETTINGS_PICKS: readonly TourSettingsPick[] = [
 ];
 
 export const TOUR_NOT_BUILT_YET =
-  "On the list, not built yet: one-click apply, an employer map, a resources map.";
+  "On the list, not built yet: an employer map and a resources map.";

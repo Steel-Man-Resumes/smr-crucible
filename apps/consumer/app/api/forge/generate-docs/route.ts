@@ -442,13 +442,13 @@ RULES:
 - The letter should work for any employer in their target career path(s).
 - Use [Company Name] and [Hiring Manager] as placeholders ONLY for the employer name and contact.
 - Everything else must use REAL data from the person's profile.
-- 250-350 words. Professional tone with warmth.
+- Two or three short paragraphs, with no minimum word count. A thin source should produce a brief letter, even under 100 words. Professional tone with warmth. Never add claims or repeat facts to fill space.
 - Do not raise a record, incarceration, supervision or any justice involvement in the letter, and never add or hint at it. That conversation is the person's to have in person. If the work history includes work done inside, you may describe the work itself (the duties and skills) without naming the facility.
 - Do NOT explain employment gaps. Simply focus on what the candidate brings.
 - TRUTH GATE: never fabricate achievements, experience, numbers, certifications, or personal facts (transportation, availability, physical capability, references). Every claim must come from the profile data provided.
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
 - FACTS AS GIVEN: state every fact the way the profile states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give ("so orders move without hold-ups", "during busy dinner service", "before a run turns into a bin of bad parts"). "I fixed the ice machine drain twice" stays exactly that size.
-- SOURCES: WORK HISTORY EXCERPT is the person's own words. ABOUT, SUMMARY, KEY STRENGTHS and TOP SKILLS were written by an earlier step and can overstate. When they differ, the person's words win. Never repeat a claim about character or reliability ("dependable", "someone you can count on", "shows up ready") unless the work history says it.
+- SOURCES: WORK HISTORY EXCERPT is the person's own words. ABOUT, SUMMARY, KEY STRENGTHS and TOP SKILLS are earlier AI analysis: targeting context, never evidence about the person, even when their own words are silent. Every duty, skill and trait must be supported by their own words. Never infer frequency, work habits, operating conditions, lessons learned, multitasking or results from a job title or an ordinary duty. "Did safety audits" supports "Ran safety audits", not what was inspected. "Answered phones and helped customers" supports those duties, not solving problems or staying calm under pressure. Never repeat a claim about character or reliability unless the work history says it.
 - CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "Thanks for reading", "asset to your team", "eager to bring", or "fast-paced environment". For THIS letter: ${closingStyle}
 - REPEATS: never repeat a sentence, a list or a phrase you already used in the letter.
 - CREDENTIAL STATUS: a finished course, class or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.
@@ -509,7 +509,7 @@ Sincerely,
 IMPORTANT:
 - Use [Company Name] and [Hiring Manager] as the ONLY placeholders.
 - Everything else must be real: real skills, real achievements, real strengths.
-- 250-350 words for the body.
+- Keep the body as short as the source requires. No minimum word count, invented detail or filler.
 - Do not mention barriers, gaps, or anything the person would have to explain. That conversation happens in person.`;
 
   return await callClaude(system, prompt, userId);

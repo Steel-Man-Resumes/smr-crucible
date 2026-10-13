@@ -4,6 +4,9 @@ A dated, high-level history of what shipped, built from the commit log. Product 
 
 ## Unreleased: Forge and Refinery review repairs
 
+- Keep cover letters proportional to the supplied facts, check ordinary duty and character claims, and preserve supported customer-service duties without losing qualifiers.
+- Identify t.ROY as an AI career coach throughout the interface. Align urgent-task guidance and navigation with available tools; remove unsupported outcome and therapeutic claims.
+- Show saved-work loading failures with a retry. Keep closed mobile navigation out of keyboard focus and confirm sign-out before clearing personal browser work.
 - Require completed truth checks before marking documents finished. Check factual claims inside polite letter sentences, keep rewording tied to the correct job, and reassess older saved versions before export or attachment.
 - Recover partial saves without losing the corrected version, and protect newer editor changes from delayed writes.
 - Open interview practice without a resume prerequisite. Carry a pasted posting into Tailor, retain unfinished quick-build fields, and remember the selected document in each lane.

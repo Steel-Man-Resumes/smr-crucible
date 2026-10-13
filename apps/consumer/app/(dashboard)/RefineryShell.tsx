@@ -7,7 +7,8 @@ import { PolicyAckBanner } from "@/components/PolicyAckBanner";
 import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
 import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { confirmedSignOut } from "@/lib/confirmed-sign-out";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { UiPrefsApplier } from "@/components/UiPrefsApplier";
@@ -363,6 +364,54 @@ export function RefineryShell({
   const onboarding = useOnboarding();
   const { context: userFullContext } = useUserContext();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const navTrigger = useRef<HTMLButtonElement>(null);
+  const navPanel = useRef<HTMLDivElement>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  async function leaveAccount() {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError("");
+    try {
+      await confirmedSignOut();
+      clearPersonalLocalStorage();
+      window.location.replace("/login");
+    } catch {
+      setSignOutError("We couldn't confirm sign-out. Stay here and try again before leaving this computer.");
+      setSigningOut(false);
+    }
+  }
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    navPanel.current?.focus();
+    const closeOnDesktop = () => {
+      if (window.matchMedia("(min-width: 768px)").matches) setDrawerOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setDrawerOpen(false); return; }
+      if (event.key !== "Tab") return;
+      const panel = navPanel.current;
+      if (!panel) return;
+      const items = Array.from(panel.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),[tabindex="0"]')).filter((el) => el.offsetParent !== null);
+      const first = items[0], last = items[items.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel || !panel.contains(document.activeElement))) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("resize", closeOnDesktop);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("resize", closeOnDesktop);
+      navTrigger.current?.focus();
+    };
+  }, [drawerOpen]);
   const [unlockToast, setUnlockToast] = useState<string | null>(null);
   // Shared-computer rule: the "Is it yours?" card for an unowned Forge run.
   const [forgePrompt, setForgePrompt] = useState<"none" | "ask" | "saving" | "saved" | "failed">("none");
@@ -412,7 +461,7 @@ export function RefineryShell({
       prevState.current = cur;
     }
     if (!prevDisclosure.current && onboarding.disclosureComplete && cur === "full_access") {
-      setUnlockToast("Interview Prep is now unlocked.");
+      setUnlockToast("Your disclosure plan is saved. Practice using it in Interview Prep.");
       setTimeout(() => setUnlockToast(null), 5000);
     }
     prevDisclosure.current = onboarding.disclosureComplete;
@@ -879,9 +928,12 @@ export function RefineryShell({
             {/* Left: hamburger (mobile) + logo */}
             <div className="flex items-center gap-3">
               <button
+                ref={navTrigger}
                 onClick={() => setDrawerOpen(true)}
                 className="t-focus -ml-2 flex h-11 w-11 items-center justify-center rounded-[4px] text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white md:hidden"
                 aria-label="Open navigation"
+                aria-expanded={drawerOpen}
+                aria-controls="refinery-mobile-navigation"
               >
                 <Menu size={21} aria-hidden="true" />
               </button>
@@ -911,19 +963,19 @@ export function RefineryShell({
                 <span className="hidden sm:inline">Settings</span>
               </Link>
               <button
-                onClick={() => {
-                  clearPersonalLocalStorage();
-                  signOut({ callbackUrl: "/login" });
-                }}
+                onClick={leaveAccount}
+                disabled={signingOut}
+                aria-label={signingOut ? "Signing out" : "Sign out"}
                 className="t-focus flex min-h-touch items-center gap-1.5 rounded-[4px] px-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
               >
                 <LogOut size={15} aria-hidden="true" />
-                <span className="hidden sm:inline">Sign out</span>
+                <span className="hidden sm:inline">{signingOut ? "Signing out..." : "Sign out"}</span>
               </button>
             </div>
           </div>
         </div>
       </nav>
+      {signOutError && !drawerOpen && <p role="alert" className="border-b border-t-red bg-t-panel px-4 py-3 text-sm text-t-red">{signOutError} <button type="button" onClick={leaveAccount} disabled={signingOut} className="t-focus min-h-touch underline">Try again</button></p>}
 
       {/* Body: sidebar + content */}
       <div className="flex min-h-[calc(100vh-72px)]">
@@ -1028,6 +1080,14 @@ export function RefineryShell({
 
       {/* Mobile drawer panel */}
       <div
+        ref={navPanel}
+        id="refinery-mobile-navigation"
+        role="dialog"
+        aria-label="Career workspace navigation"
+        aria-modal={drawerOpen ? true : undefined}
+        aria-hidden={!drawerOpen}
+        inert={!drawerOpen}
+        tabIndex={-1}
         className={`fixed bottom-0 left-0 top-0 z-50 w-[min(19rem,88vw)] overflow-y-auto border-r border-t-line bg-t-panel shadow-xl transition-transform duration-200 md:hidden ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
@@ -1045,6 +1105,7 @@ export function RefineryShell({
         <div className="px-2 py-4 space-y-1">
           {isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : renderNavItems(() => setDrawerOpen(false))}
           <div className="mt-3 pt-3 border-t border-t-line space-y-1">
+            {signOutError && <p role="alert" className="px-3 text-sm text-t-red">{signOutError}</p>}
             <a
               href="https://forge.steelmanresumes.com"
               target="_blank"
@@ -1054,13 +1115,11 @@ export function RefineryShell({
               The Forge <ExternalLink size={14} aria-hidden="true" />
             </a>
             <button
-              onClick={() => {
-                clearPersonalLocalStorage();
-                signOut({ callbackUrl: "/login" });
-              }}
+              onClick={leaveAccount}
+              disabled={signingOut}
               className="flex min-h-touch w-full items-center gap-1.5 rounded-[4px] px-3 py-2 text-left text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
             >
-              <LogOut size={14} aria-hidden="true" /> Sign out
+              <LogOut size={14} aria-hidden="true" /> {signingOut ? "Signing out..." : signOutError ? "Try sign-out again" : "Sign out"}
             </button>
           </div>
         </div>

@@ -428,9 +428,9 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-t-amber-bright mb-1">t.ROY</p>
                   <p className="text-sm text-t-phos leading-relaxed">
-                    I&apos;m t.ROY. The Refinery is where you aim your resume at real jobs and
-                    practice for the interview. It starts from the resume you build in the Forge,
-                    so that comes first. The Forge is built to finish in one sitting.
+                    I&apos;m t.ROY, your AI career coach. Build a resume, prepare for an interview,
+                    find work, or work through what is getting in your way. Start with what you
+                    need today. You can practice an interview before building a resume.
                   </p>
                 </div>
               </div>
