@@ -66,6 +66,55 @@ function world(initial: ArtifactLite[] = []) {
 const save = (f: ReturnType<typeof world>, state = finishState()) =>
   saveFinishRevision(FIXTURE_USER, state, { source: "forge_finish" }, f.store);
 
+test("rebuilding a document is independent of other requests and keeps distinct row IDs", () => {
+  const before = resumeTextToDocument(RESUME);
+  resumeTextToDocument(RESUME + "\nPROJECTS\nOne separate project.");
+  assert.deepEqual(resumeTextToDocument(RESUME), before);
+  const ids = [...before.experience, ...before.education, ...(before.contentBlocks ?? []).flatMap((b) => b.items)].map((r) => r.id);
+  assert.equal(new Set(ids).size, ids.length);
+});
+
+test("identical concurrent import and finish acknowledge the same installed revision", async () => {
+  const f = world();
+  assert.ok((await save(f)).ok);
+  let competing: Awaited<ReturnType<typeof save>> | undefined;
+  const before = f.attempts();
+  f.beforeWrite(async () => {
+    competing = await saveFinishRevision(FIXTURE_USER, cutState(), { source: "forge_import" }, f.store);
+  });
+  const result = await save(f, cutState());
+  assert.ok(result.ok && competing?.ok);
+  assert.equal(result.revision.id, competing.revision.id);
+  assert.equal(f.revs.length, 2);
+  assert.equal(f.attempts() - before, 2, "acknowledgement must not issue another write");
+  const exported = await ensureExportRevision(FIXTURE_USER, f.arts[0].id, f.store);
+  assert.ok(exported.ok);
+  assert.equal(exported.revision.id, result.revision.id);
+  assert.doesNotMatch(artifactText(f.arts[0].content), /Inventory control/);
+});
+
+test("identical words cannot acknowledge changed metadata, an edit marker, a newer revision or failed read", async () => {
+  for (const change of ["metadata", "edit-marker", "newer-revision", "read-failure"] as const) {
+    const f = world();
+    assert.ok((await save(f)).ok);
+    f.beforeWrite(async () => {
+      assert.ok((await saveFinishRevision(FIXTURE_USER, cutState(), { source: "forge_import" }, f.store)).ok);
+      const doc = f.arts[0].content as Record<string, unknown>;
+      if (change === "metadata") {
+        doc.meta = { ...(doc.meta as object), targetJob: "Another target" };
+        f.arts[0].content = withRevisionMarker(doc, f.revs.at(-1)!.id, { formatted: artifactText(doc), kind: "finish" });
+      } else if (change === "edit-marker") {
+        f.arts[0].content = withRevisionMarker(doc, f.revs.at(-1)!.id, { formatted: artifactText(doc), kind: "edit" });
+      } else if (change === "newer-revision") {
+        f.revs.push({ ...f.revs.at(-1)!, id: "00000000-0000-4000-8000-000000000098", revision_number: 3 });
+      } else {
+        f.store.getArtifact = async () => { throw new Error("Synthetic read outage"); };
+      }
+    });
+    assert.deepEqual(await save(f, cutState()), { ok: false, status: 503, reason: "working_copy_not_saved" }, change);
+  }
+});
+
 test("a failed finish write is retryable; retry reuses the revision and exports the cut page", async () => {
   const f = world();
   assert.ok((await save(f)).ok);

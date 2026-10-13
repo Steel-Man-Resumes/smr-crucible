@@ -4,6 +4,7 @@ A dated, high-level history of what shipped, built from the commit log. Product 
 
 ## Unreleased: Forge and Refinery review repairs
 
+- End interview practice with specific, validated feedback; keep answers available when feedback fails. Keep tailoring dates and source evidence intact, distinguish unavailable job providers from zero matches, and keep dashboard career cards readable on phones.
 - Recognize already supplied school credentials in plain sentences, keep ordinary letter contractions and employer placeholders out of factual-warning cards, and display resume text while fonts load.
 - Keep cover letters proportional to the supplied facts, check ordinary duty and character claims, and preserve supported customer-service duties without losing qualifiers.
 - Identify t.ROY as an AI career coach throughout the interface. Align urgent-task guidance and navigation with available tools; remove unsupported outcome and therapeutic claims.

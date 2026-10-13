@@ -84,7 +84,8 @@ export async function fetchAdzunaJobs(
 ): Promise<ProviderResult> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
-  if (!appId || !appKey) return { jobs: [], failed: false }; // not configured is not a failure
+  // No request ran. This cannot establish that the search has zero matches.
+  if (!appId || !appKey) return { jobs: [], failed: true };
 
   const url = new URL("https://api.adzuna.com/v1/api/jobs/us/search/1");
   url.searchParams.set("app_id", appId);
@@ -175,7 +176,7 @@ export async function fetchUsaJobs(
 ): Promise<ProviderResult> {
   const key = process.env.USAJOBS_API_KEY;
   const ua = process.env.USAJOBS_USER_AGENT;
-  if (!key || !ua || !stateFullName) return { jobs: [], failed: false };
+  if (!key || !ua || !stateFullName) return { jobs: [], failed: true };
 
   // VERIFIED 2026-09-19: LocationName with the FULL STATE NAME is the parameter
   // that actually constrains geography. `PositionLocationCountrySubdivision` and

@@ -482,9 +482,9 @@ function JobBoardPage() {
                 applied
               </span>
             </div>
-            <span className="text-xs text-t-phos-dim">
-              Application tracking coming soon
-            </span>
+            <Link href="/dashboard/applications" className="text-xs text-t-amber-bright underline">
+              Track applications
+            </Link>
           </div>
         </div>
       )}

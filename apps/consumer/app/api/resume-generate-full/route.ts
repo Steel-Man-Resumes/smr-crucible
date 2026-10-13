@@ -192,7 +192,7 @@ ABSOLUTE RULES (the truth gate: violating any = failure):
 9. Carry forward ALL education and certifications from the background. A certification becomes its own education entry. Never drop them; never add ones not stated.
 10. NEVER mention incarceration, criminal records, justice involvement, parole, probation, or a correctional facility name.
 11. If a title/company pairing looks garbled, keep exactly what the person wrote; never move a title to another employer and never invent a new employer or title. The person checks it.
-12. Years only (no months). Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
+12. Keep every date at the precision the person gave it, including months. Never guess a missing month or year. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
 13. If an APPROVED BASE RESUME is provided, it is the person's own reviewed resume and the PRIMARY source: restructure and re-target THAT document for this role. Preserve its real achievements and its wording where they already read well; never downgrade, weaken, or drop a true, approved point just because the original upload phrased it differently or omitted it. Still add nothing the person's background does not support.
 14. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give (no endings like ", freeing capacity for additional production", no "high-volume" or "fast-paced" unless they said it). Keep every result they did give, in their own terms.
 15. NO CHARACTER CLAIMS: no "dependable", "reliable", "consistent" or anything like them unless the person said it about themselves.${laneWriterNote(lane)}`;
@@ -221,9 +221,9 @@ CONTACT INFO:
 
 Return this exact JSON structure:
 {
-  "summary": "3-4 sentence summary targeted at the role. NO generic phrases.",
+  "summary": "A short summary using only supplied facts that fit the role. No minimum length or generic phrases.",
   "experience": [
-    { "title": "Job Title", "company": "Company Name", "startDate": "2020", "endDate": "", "bullets": ["Strong verb + achievement.", "Another achievement."] }
+    { "title": "Job Title", "company": "Company Name", "startDate": "Date exactly as supplied", "endDate": "Date exactly as supplied", "bullets": ["Plain action supported by their words."] }
   ],
   "education": [
     { "institution": "School or Program Name", "credential": "Degree, Certificate, or Training", "year": "2020" }
@@ -238,9 +238,9 @@ You write a targeted cover letter (plain text, no JSON). ${INJECTION_GUARD}
 
 RULES:
 - Address the SPECIFIC company. NO [Company Name]/[Hiring Manager] placeholders. Use "Dear Hiring Team" if unknown.
-- 250-350 words.
+- No minimum length. Use only as much space as the person's facts support. A short letter is complete; never pad it with invented detail.
 - TRUTH GATE: every claim comes from the background. NEVER invent achievements, numbers, certifications, or personal facts (transportation, availability, physical capability, references), even if the posting asks for it.
-- Open: who they are, what role, why this company. Middle: 2-3 real achievements matching the requirements. Close: grounded confidence.
+- Open with their real work and the target role. Include a company-specific motive only if the person gave it. Use whichever real duties or achievements match the requirements; fewer are fine when evidence is thin. Close with a modest invitation to talk.
 - NEVER mention incarceration, criminal records, justice involvement. NEVER "responsible for", "proven track record", "dedicated professional", "utilize", "leverage", "passionate".
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
 - FACTS AS GIVEN: state every fact the way the background states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give. "I fixed the ice machine drain twice" stays exactly that size.
@@ -259,7 +259,9 @@ Requirements: ${jobRequirements}
 </job_posting>
 
 APPLICANT: ${contactName || "Candidate"}${contactPlace ? ` from ${contactPlace}` : ""}
-BACKGROUND (the only source of facts): ${narrative}
+BACKGROUND (the only source of facts):
+${cleanedApprovedResume ? `APPROVED BASE RESUME (primary source):\n${cleanedApprovedResume}\n` : ""}ORIGINAL RESUME:\n${cleanedResume}
+NARRATIVE (use only details supported by the person's source material): ${narrative}
 KEY SKILLS: ${skills}
 ${strengths ? `STRENGTHS: ${strengths}` : ""}
 

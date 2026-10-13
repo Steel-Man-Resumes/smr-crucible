@@ -497,13 +497,13 @@ export default function DashboardPage() {
       {forgeData.career_paths && forgeData.career_paths.length > 0 && (
         <section>
           <h2 className="text-lg font-bold text-t-white mb-3">Career Paths</h2>
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid min-w-0 sm:grid-cols-2 gap-3">
             {forgeData.career_paths.slice(0, 4).map((cp, i) => (
-              <div key={i} className="bg-t-panel p-4 border border-t-line">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-t-white">{cp.title}</h3>
+              <div key={i} className="min-w-0 bg-t-panel p-4 border border-t-line">
+                <div className="flex min-w-0 flex-col items-start gap-1">
+                  <h3 className="max-w-full break-words font-semibold text-t-white">{cp.title}</h3>
                   {cp.salary_range && (
-                    <span className="text-xs font-medium text-t-amber-bright whitespace-nowrap">{cp.salary_range}</span>
+                    <span className="max-w-full break-words text-xs font-medium text-t-amber-bright">{cp.salary_range}</span>
                   )}
                 </div>
                 <p className="text-sm text-t-phos-dim mt-1 line-clamp-2">{cp.match_reason}</p>

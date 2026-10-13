@@ -503,6 +503,7 @@ function InterviewPracticePage() {
       return;
     }
     setSending(true);
+    setRateLimitError("");
     try {
       const res = await fetch("/api/interview-practice", {
         method: "POST",
@@ -518,24 +519,22 @@ function InterviewPracticePage() {
           jobDescription: jobDescription.trim() || undefined,
         }),
       });
-      if (res.status === 429) {
-        const data = await res.json();
-        setRateLimitError(data.error);
-      } else if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (typeof data?.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
+      if (res.ok && data) {
         if (data.feedback) {
           if (data.response) setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
           setFeedback(data.feedback);
           setStep("feedback");
           recordCompletion(data.feedback, exchangeCount);
         } else {
-          resetToSetup();
+          setRateLimitError("Your feedback could not be prepared. Your answers are still here. Try End & get feedback again.");
         }
       } else {
-        resetToSetup();
+        setRateLimitError(data?.error || "Your feedback could not be prepared. Your answers are still here. Try End & get feedback again.");
       }
     } catch {
-      resetToSetup();
+      setRateLimitError("The connection dropped. Your answers are still here. Try End & get feedback again.");
     } finally {
       setSending(false);
     }

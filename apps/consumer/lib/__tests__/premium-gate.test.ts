@@ -358,7 +358,10 @@ describe("text practice: free with an account, a daily allowance while the gate 
     assert.ok(at < r.indexOf("callAI("));
     const refuse = r.slice(at, r.indexOf("return verdict.refuse;", at));
     assert.match(refuse, /await refundUserUsage\(userId, "interview"\)/);
-    assert.equal((r.match(/return reply\(/g) ?? []).length, 4, "every successful reply carries the id");
+    assert.equal((r.match(/return reply\(/g) ?? []).length, 2, "the question and validated feedback replies both carry the id; malformed feedback is an error");
+    const invalidFeedback = r.slice(r.indexOf("if (!parsed)"), r.indexOf("return reply(plainPunctuation"));
+    assert.match(invalidFeedback, /status: 502/);
+    assert.match(invalidFeedback, /practiceSession \? \{ practiceSession \} : \{\}/);
     assert.match(r, /practiceSession \? \{ \.\.\.\(payload as Record<string, unknown>\), practiceSession \} : payload/);
   });
 

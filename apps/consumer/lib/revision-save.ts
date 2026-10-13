@@ -20,6 +20,7 @@
  * The store is passed in so tests run without a database.
  */
 
+import { stableJson } from "@crucible/core/src/artifactRevision";
 import type { ArtifactRevision, InsertRevisionResult, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
 import { cleanRevisionInput, computeRevision, editInput, givenTextMark, inputFromRevision, revisionRecord, type RevisionEvidence, type RevisionVerdict } from "./revision-status";
 import { readReceipt, writerSourceFrom, type WriterSource } from "./writer-receipt";
@@ -117,6 +118,27 @@ function failed(r: InsertRevisionResult): SaveResult {
   return { ok: false, status: 500, reason: "failed" };
 }
 
+/** A competing request may have installed this exact finish while our CAS waited. */
+async function sameFinishWasInstalled(
+  userId: string,
+  artifactId: string,
+  revisionId: string,
+  intendedContent: Record<string, unknown>,
+  store: RevisionStore
+): Promise<boolean> {
+  try {
+    const current = await store.getArtifact(userId, artifactId);
+    if (!current || current.id !== artifactId || current.artifact_type !== "resume" || current.is_locked) return false;
+    const marker = readMarker(current.content);
+    if (!marker?.hashOk || marker.kind !== "finish" || marker.id !== revisionId) return false;
+    if (stableJson(current.content) !== stableJson(intendedContent)) return false;
+    const latest = await store.getLatestRevision(userId, artifactId);
+    return latest?.id === revisionId && latest.artifact_id === artifactId;
+  } catch {
+    return false;
+  }
+}
+
 export async function saveFinishRevision(
   userId: string,
   raw: unknown,
@@ -211,9 +233,13 @@ export async function saveFinishRevision(
   if (rewrite && !forge.is_locked) {
     const base = (forge.content ?? null) as { meta?: { targetJob?: string; targetCompany?: string; jobListingUrl?: string } } | null;
     const doc = resumeTextToDocument(c.input.resumeText, base) as unknown as Record<string, unknown>;
-    const wrote = await store
-      .updateArtifactContent(userId, forge.id, withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" }), forge.content)
+    const intendedContent = withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" });
+    let wrote = await store
+      .updateArtifactContent(userId, forge.id, intendedContent, forge.content)
       .catch(() => "failed");
+    if (wrote === "conflict" && await sameFinishWasInstalled(userId, forge.id, r.revision.id, intendedContent, store)) {
+      wrote = "updated";
+    }
     if (wrote !== "updated") return { ok: false, status: wrote === "locked" ? 409 : 503, reason: wrote === "locked" ? "locked" : "working_copy_not_saved" };
   }
   // A signed-out run's receipt, used for this account: the route clears the

@@ -27,9 +27,6 @@ interface Doc {
   contentBlocks?: Array<{ kind: "custom"; label: string; items: Array<{ id: string; text: string }> }>;
 }
 
-let seq = 0;
-const nid = (p: string) => `${p}-rev-${(++seq).toString(36)}`;
-
 const EMAIL_RE = /[^\s|,]+@[^\s|,]+\.[a-z]{2,}/i;
 const PHONE_RE = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
 const CITY_STATE_RE = /^([A-Za-z .'-]+),\s*([A-Z]{2})$/;
@@ -63,6 +60,10 @@ const SKILLS_RE = /SKILL|COMPETENC|QUALIFICATION|EXPERTISE/;
 
 /** Rebuild the structured document from the text. `base` keeps the target fields. */
 export function resumeTextToDocument(text: string, base?: { meta?: { targetJob?: string; targetCompany?: string; jobListingUrl?: string } } | null): Doc {
+  // IDs belong to this document. Identical source and target metadata must
+  // rebuild identically, including when two saves run in different workers.
+  let seq = 0;
+  const nid = (p: string) => `${p}-rev-${(++seq).toString(36)}`;
   const { header, bodyLines } = splitResumeHeader(text);
   const name = header.nameLine.trim();
   const c = contactOf(header.contactLine || "");
