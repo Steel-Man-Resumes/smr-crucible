@@ -451,18 +451,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true;
     },
     async jwt({ token, user, trigger, account, profile }) {
-      // On sign-in or when user object is available, persist tier
-      if (user) {
-        token.tier = (user as any).tier || "client";
-      }
-      // On magic link sign-in, user object may not have tier — fetch it
-      if (trigger === "signIn" && !token.tier) {
+      // The email provider can return a user without tier. Do not stamp
+      // "client" first: that would make the database lookup below unreachable
+      // and send newly invited organization staff into the client journey.
+      const userTier = (user as { tier?: string } | undefined)?.tier;
+      if (userTier) token.tier = userTier;
+      if (trigger === "signIn" && (!token.tier || (user && !userTier))) {
         try {
           const client = await pool.connect();
           try {
             const result = await client.query(
               `SELECT tier FROM users WHERE id = $1`,
-              [token.sub]
+              [(user as { id?: string } | undefined)?.id ?? token.sub]
             );
             token.tier = result.rows[0]?.tier || "client";
           } finally {

@@ -493,6 +493,7 @@ export function RefineryShell({
     if (
       !holds &&
       authStatus === "authenticated" &&
+      effectiveRole !== null &&
       userTier === "client" &&
       getViewAs() === null &&
       !effectiveRole?.impersonating &&
@@ -509,7 +510,7 @@ export function RefineryShell({
       // with a task picked, that page shows where the run is (no bounce back).
       window.location.href = "/start?from=refinery";
     }
-  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
+  }, [authStatus, userTier, effectiveRole, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
