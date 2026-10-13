@@ -99,7 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Find Work",
     items: [
       { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/employers", label: "Employers That Hire", minTier: "client", minState: "full_access" },
       { href: "/dashboard/resources", label: "Get support", minTier: "client", minState: "needs_profile" },
     ],
@@ -114,7 +114,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
       // Interview prep never waits on a disclosure plan (Codex review A6):
       // an interview can come before any lesson.
-      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "needs_profile" },
     ],
   },
   {

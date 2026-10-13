@@ -94,8 +94,10 @@ export function useLaneFocus(fallback?: { task?: unknown; target?: unknown }) {
   const save = useCallback(
     async (task: LaneTask, target?: string | null): Promise<boolean> => {
       const nextTarget = target === undefined ? state.target : target && target.trim() ? target.trim() : null;
-      setState((s) => ({ ...s, loaded: true, task, target: nextTarget }));
-      if (!uid) return true;
+      if (!uid) {
+        setState((s) => ({ ...s, loaded: true, task, target: nextTarget }));
+        return true;
+      }
       try {
         const post = (laneId: string | null) =>
           fetch("/api/lane-focus", {
@@ -107,6 +109,8 @@ export function useLaneFocus(fallback?: { task?: unknown; target?: unknown }) {
         let r = await post(laneId);
         // A remembered lane that is no longer this account's: save on the main lane.
         if (r.status === 404 && laneId) r = await post(null);
+        if (!r.ok) return false;
+        setState((s) => ({ ...s, loaded: true, task, target: nextTarget }));
         cache = null;
         if (typeof window !== "undefined") window.dispatchEvent(new Event(LANE_FOCUS_CHANGED_EVENT));
         return r.ok;

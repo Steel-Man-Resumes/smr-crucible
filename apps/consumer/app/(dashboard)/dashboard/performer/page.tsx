@@ -100,9 +100,10 @@ function PerformerInner() {
     setLaneId((cur) => {
       if (cur && lanes.some((l) => l.id === cur)) return cur;
       if (wanted && lanes.some((l) => l.id === wanted)) return wanted;
+      if (lanes.some((l) => l.id === lanesApi.active)) return lanesApi.active;
       return lanes[0]?.id ?? null;
     });
-  }, [lanesApi.loaded, lanes, wanted]);
+  }, [lanesApi.loaded, lanes, wanted, lanesApi.active]);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 sm:py-10">
@@ -115,7 +116,7 @@ function PerformerInner() {
           {lanes.length > 0 && (
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
               <label htmlFor="performer-lane" className="text-xs font-mono uppercase tracking-wide text-t-phos-dim">Performer lane</label>
-              <select id="performer-lane" value={laneId ?? ""} onChange={(e) => setLaneId(e.target.value)} className="t-focus min-h-touch w-full sm:max-w-xs bg-t-bg border border-t-line px-2 py-1 text-sm font-semibold text-t-white" data-testid="performer-lane-select">
+              <select id="performer-lane" value={laneId ?? ""} onChange={(e) => { setLaneId(e.target.value); lanesApi.setActive(e.target.value); }} className="t-focus min-h-touch w-full sm:max-w-xs bg-t-bg border border-t-line px-2 py-1 text-sm font-semibold text-t-white" data-testid="performer-lane-select">
                 {lanes.map((l) => (
                   <option key={l.id} value={l.id}>{l.name}</option>
                 ))}

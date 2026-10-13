@@ -191,13 +191,13 @@ test("the walk while the writer works shows the person's page and t.ROY's marks"
   assert.ok(tour.steps.some((s) => /what you want/i.test(s.note)), "the objective gets its note");
 });
 
-test("the finish page plays only verified changes, after the documents arrive", () => {
+test("the finish page accepts checked resume progress before the whole package finishes", () => {
   const src = read("app/(forge)/output/page.tsx");
   // Changes are read from the response only through the verifier, against the finished resume.
   // Integration round (M2): against the page the writer started from (the run's resume text, or a rebuild's saved page).
   assert.match(src, /readChanges\(data\.changes, rebuildActive\(session\) \? session\.originalResumeText \?\? "" : session\.resumeText \?\? "", data\.resume \|\| ""\)/);
-  // The reveal never starts while generating, only once the documents are done.
-  assert.match(src, /const liveFixOn = docState === "done" && revealing && !checkMode && changes\.length > 0;/);
+  // Checked resume changes can arrive while the letter is still generating.
+  assert.match(src, /const liveFixOn = \(docState === "done" \|\| docState === "generating"\) && revealing && !checkMode && changes\.length > 0;/);
   // While it plays, the finished page waits; reduced motion never plays it.
   assert.match(src, /docState === "done" && !liveFixOn/);
   assert.match(src, /setRevealing\(verified\.length > 0 && reducedRef\.current === false\)/);

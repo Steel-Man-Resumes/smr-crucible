@@ -65,6 +65,7 @@ export function AssistantDrawer({
     };
   }, []);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
   // Close on Escape
@@ -82,7 +83,7 @@ export function AssistantDrawer({
   // within the panel's focusables, and restore focus to the trigger on close.
   useEffect(() => {
     if (isOpen) {
-      previouslyFocused.current = document.activeElement as HTMLElement | null;
+      previouslyFocused.current = triggerRef.current;
       drawerRef.current?.focus();
 
       const handleKeyDown = (e: KeyboardEvent) => {
@@ -98,7 +99,7 @@ export function AssistantDrawer({
         const first = focusables[0];
         const last = focusables[focusables.length - 1];
         if (e.shiftKey) {
-          if (document.activeElement === first || !panel.contains(document.activeElement)) {
+          if (document.activeElement === first || document.activeElement === panel || !panel.contains(document.activeElement)) {
             e.preventDefault();
             last.focus();
           }
@@ -122,8 +123,11 @@ export function AssistantDrawer({
     <>
       {/* Trigger — t.ROY himself, living in the corner. Never auto-opens.
           The figure is the control; the label reveals on hover/focus. */}
-      {!isOpen && (
+      {(
         <button
+          ref={triggerRef}
+          hidden={isOpen}
+          style={isOpen ? { display: "none" } : undefined}
           onClick={() => setIsOpen(true)}
           className="t-focus group fixed bottom-24 right-2 z-40 flex min-h-touch items-center gap-1 rounded-full bg-transparent p-1 sm:bottom-5 sm:right-4"
           aria-label={`${triggerLabel}, open assistant`}
@@ -150,7 +154,9 @@ export function AssistantDrawer({
         tabIndex={-1}
         role="dialog"
         aria-label="AI Assistant"
-        aria-modal="true"
+        aria-modal={isOpen ? true : undefined}
+        aria-hidden={!isOpen}
+        inert={!isOpen}
         className={`fixed right-0 top-0 z-50 flex h-full w-full max-w-md transform flex-col border-l border-t-line bg-t-panel font-body shadow-2xl transition-transform duration-300 ease-out ${
           isOpen ? "translate-x-0" : "translate-x-full"
         }`}

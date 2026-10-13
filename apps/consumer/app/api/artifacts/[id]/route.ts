@@ -150,6 +150,7 @@ export async function PATCH(request: Request, context: RouteContext) {
     );
   }
 
+  if (result.status === "conflict") return NextResponse.json({ error: "This resume changed. Reload it before saving." }, { status: 409 });
   return NextResponse.json({ data: result.artifact });
 }
 

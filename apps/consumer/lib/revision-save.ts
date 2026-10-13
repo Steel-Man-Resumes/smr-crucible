@@ -42,7 +42,7 @@ export interface RevisionStore {
   listResumeArtifacts(userId: string): Promise<ArtifactLite[]>;
   getArtifact(userId: string, artifactId: string): Promise<ArtifactLite | null>;
   createForgeArtifact(userId: string, content: Record<string, unknown>, laneTarget: string): Promise<{ id: string }>;
-  updateArtifactContent(userId: string, artifactId: string, content: Record<string, unknown>): Promise<string>;
+  updateArtifactContent(userId: string, artifactId: string, content: Record<string, unknown>, expectedContent?: unknown): Promise<string>;
   insertRevision(userId: string, rec: NewRevision): Promise<InsertRevisionResult>;
   getLatestRevision(userId: string, artifactId: string): Promise<ArtifactRevision | null>;
   /**
@@ -208,12 +208,13 @@ export async function saveFinishRevision(
   // The account's resume shows the saved words (lock-guarded by the write
   // itself), marked as exactly this revision so every Refinery export of it
   // uses this revision (lib/revision-current.ts).
-  if (rewrite && (!r.reused || created || accountCopy)) {
+  if (rewrite && !forge.is_locked) {
     const base = (forge.content ?? null) as { meta?: { targetJob?: string; targetCompany?: string; jobListingUrl?: string } } | null;
     const doc = resumeTextToDocument(c.input.resumeText, base) as unknown as Record<string, unknown>;
-    await store
-      .updateArtifactContent(userId, forge.id, withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" }))
+    const wrote = await store
+      .updateArtifactContent(userId, forge.id, withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" }), forge.content)
       .catch(() => "failed");
+    if (wrote !== "updated") return { ok: false, status: wrote === "locked" ? 409 : 503, reason: wrote === "locked" ? "locked" : "working_copy_not_saved" };
   }
   // A signed-out run's receipt, used for this account: the route clears the
   // run cookie so no other account can import it (review r3 L-1).
@@ -270,7 +271,7 @@ export async function coreStore(): Promise<RevisionStore> {
       }
       return { id: made.id };
     },
-    updateArtifactContent: async (userId, id, content) => (await core.updateArtifact(id, userId, content)).status,
+    updateArtifactContent: async (userId, id, content, expectedContent) => (await core.updateArtifact(id, userId, content, undefined, expectedContent)).status,
     insertRevision: (userId, rec) => core.insertRevision(userId, rec),
     getLatestRevision: (userId, id) => core.getLatestRevision(userId, id),
     listRevisions: async (userId, artifactId) => (await core.exportRevisions(userId)).filter((r) => r.artifact_id === artifactId),

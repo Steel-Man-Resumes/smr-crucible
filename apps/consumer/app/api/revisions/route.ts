@@ -22,6 +22,7 @@
  * (lib/revision-route.ts). Same-origin JSON writes only.
  */
 
+import { currentRevisionStatus } from "@/lib/revision-status";
 import { NextResponse } from "next/server";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { revisionCaller, REVISION_SAVES_PER_DAY, REVISION_TOO_LARGE } from "@/lib/revision-route";
@@ -117,5 +118,5 @@ export async function GET(request: Request) {
   // stands, worked out here from its newest version (a generate-docs receipt
   // the server verified), never from what a page infers.
   const { fromWriterNewest } = await import("@/lib/source-kind");
-  return NextResponse.json({ revision: { ...core.publicRevision(rev), fromWriter: fromWriterNewest(rev) } }, { headers: NO_STORE });
+  return NextResponse.json({ revision: { ...core.publicRevision(currentRevisionStatus(rev)), fromWriter: fromWriterNewest(rev) } }, { headers: NO_STORE });
 }

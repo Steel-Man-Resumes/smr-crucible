@@ -84,7 +84,7 @@ const ALL_TOOLS: ToolCard[] = [
     description: "Text or live voice mock interviews tailored to your target role.",
     color: "bg-t-panel border-t-steel",
     accent: "text-t-steel",
-    minState: "full_access",
+    minState: "needs_profile",
     // No disclosure plan needed first (Codex review A6).
   },
   {
@@ -102,7 +102,7 @@ const ALL_TOOLS: ToolCard[] = [
     description: "Track your job applications from saved to offered.",
     color: "bg-t-panel border-t-phos",
     accent: "text-t-phos",
-    minState: "full_access",
+    minState: "needs_profile",
   },
   {
     href: "/dashboard/progress",
@@ -196,6 +196,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const changeTask = useSearchParams().get("change") === "1";
   const [picking, setPicking] = useState(false);
+  const [pickError, setPickError] = useState("");
 
   // Forge data
   const [forgeData, setForgeData] = useState<DashboardData>({});
@@ -356,14 +357,17 @@ export default function DashboardPage() {
     if (!focus.task || changeTask) {
       return (
         <div className="py-4">
+          {pickError && <p role="alert" className="mb-3 text-t-red">{pickError}</p>}
           <TaskPicker
             current={focus.task}
             busy={picking}
             helpHref="/dashboard/resources#support"
             onPick={async (t) => {
               setPicking(true);
-              await focus.save(t);
+              setPickError("");
+              const saved = await focus.save(t);
               setPicking(false);
+              if (!saved) { setPickError("Your choice wasn't saved. Try again."); return; }
               router.push(routeHref(t, { signedIn: true, hasResume: onboarding.state === "full_access" }));
             }}
           />

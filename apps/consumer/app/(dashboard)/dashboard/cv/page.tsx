@@ -87,9 +87,10 @@ function CvInner() {
     setLaneId((cur) => {
       if (cur && cvs.some((l) => l.id === cur)) return cur;
       if (wanted && cvs.some((l) => l.id === wanted)) return wanted;
+      if (cvs.some((l) => l.id === lanesApi.active)) return lanesApi.active;
       return cvs[0]?.id ?? null;
     });
-  }, [lanesApi.loaded, cvs, wanted]);
+  }, [lanesApi.loaded, cvs, wanted, lanesApi.active]);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-8 sm:py-10">
@@ -102,7 +103,7 @@ function CvInner() {
           {cvs.length > 0 && (
             <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center">
               <label htmlFor="cv-lane" className="text-xs font-mono uppercase tracking-wide text-t-phos-dim">CV lane</label>
-              <select id="cv-lane" value={laneId ?? ""} onChange={(e) => setLaneId(e.target.value)} className="t-focus min-h-touch w-full sm:max-w-xs bg-t-bg border border-t-line px-2 py-1 text-sm font-semibold text-t-white" data-testid="cv-lane-select">
+              <select id="cv-lane" value={laneId ?? ""} onChange={(e) => { setLaneId(e.target.value); lanesApi.setActive(e.target.value); }} className="t-focus min-h-touch w-full sm:max-w-xs bg-t-bg border border-t-line px-2 py-1 text-sm font-semibold text-t-white" data-testid="cv-lane-select">
                 {cvs.map((l) => (
                   <option key={l.id} value={l.id}>{l.name}</option>
                 ))}

@@ -1,8 +1,7 @@
 "use client";
 
 /**
- * The live fix: once the finished documents are back (after the truth
- * check), t.ROY goes down the person's own page and makes each real change
+ * The live fix: as the checked resume arrives (while the letter and final checks continue), t.ROY goes down the person's own page and makes each real change
  * on screen. The old line is struck through, the new line types in its
  * place, and the reason sits under it. One change after another, at a pace
  * a person can read, with a Skip. Then the finished page takes over.
@@ -26,12 +25,14 @@ export function LiveFix({
   lines,
   changes,
   reduced,
+  pending = false,
   onDone,
 }: {
   /** The person's page, split into lines as they gave it. */
   lines: string[];
   changes: MarkupChange[];
   reduced: boolean | null;
+  pending?: boolean;
   onDone: () => void;
 }) {
   // At most a dozen play, at a pace a person can read, covering each kind of
@@ -103,7 +104,7 @@ export function LiveFix({
           onClick={onDone}
           className="t-focus min-h-touch bg-t-amber px-6 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright"
         >
-          See my finished page
+          {pending ? "Keep checking my documents" : "See my finished page"}
         </button>
       </div>
     );
@@ -166,7 +167,7 @@ export function LiveFix({
           {done
             ? more > 0
               ? `Those are the main ones. ${more} more ${more === 1 ? "is" : "are"} in the list above your page.`
-              : "That's every line I changed. Here's your finished page."
+              : pending ? "Those changes are checked. Checking the rest of your documents..." : "That's every line I changed. Here's your finished page."
             : "Watch me fix your page, line by line."}
         </p>
         <div className="flex items-center gap-3">
@@ -183,7 +184,7 @@ export function LiveFix({
             data-testid="live-fix-skip"
           >
             <SkipForward size={16} aria-hidden="true" />
-            {done ? "See my finished page" : "Skip to my finished page"}
+            {pending ? "Skip animation" : done ? "See my finished page" : "Skip to my finished page"}
           </button>
         </div>
       </div>
@@ -191,7 +192,7 @@ export function LiveFix({
       {/* What changed, for screen readers, one change at a time. */}
       <p className="sr-only" aria-live="polite">
         {done
-          ? "Done. Your finished page is next."
+          ? pending ? "Changes checked. Document checks are still running." : "Done. Your finished page is next."
           : `Change ${i + 1} of ${steps.length}. Was: ${cur.change.old}. Now: ${cur.change.new}. Why: ${cur.change.why}`}
       </p>
 

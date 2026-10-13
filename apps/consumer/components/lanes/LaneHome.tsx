@@ -47,7 +47,7 @@ export function draftNext(rev: Pick<ForgeRevision, "artifactId" | "fromWriter">)
 /** The one next task on the lane home, by route and by where the resume stands. */
 export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" | "artifactId" | "fromWriter"> | null): { label: string; href: string } {
   // Only the resume and interview routes need a resume first (review H1).
-  if (!rev && (task === "resume" || task === "interview")) return { label: "Start your resume", href: "/resume" };
+  if (!rev && task === "resume") return { label: "Start your resume", href: "/resume" };
   switch (task) {
     case "resume":
       // Round 3 (review r1 H1): a page the writer never made goes to the writer, even when a check of it passed.
@@ -86,7 +86,7 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
   }, []);
 
   // A new account saves its profile (name, phone) before the Refinery's tools open.
-  const next = profileFirst ? { label: "Save your profile below", href: "#profile-setup" } : laneHomeNext(task, rev);
+  const next = profileFirst && task !== "interview" ? { label: "Save your profile below", href: "#profile-setup" } : laneHomeNext(task, rev);
   const box = "border border-t-line bg-t-panel p-4";
   return (
     <section aria-labelledby="lane-home-heading" className="space-y-3" data-testid="lane-home">

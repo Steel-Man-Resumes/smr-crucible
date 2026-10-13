@@ -349,7 +349,7 @@ test("Q1: check mode's main action is the writer; checking it as it is comes sec
 });
 
 test("the checker version moved with the gate", () => {
-  assert.match(read("lib/revision-status.ts"), /CHECKER_VERSION = "finish-gate-3\+pages-1\+receipt-1"/);
+  assert.match(read("lib/revision-status.ts"), /CHECKER_VERSION = "finish-gate-4\+pages-1\+receipt-1"/);
 });
 
 // gateRevision is the pure server gate; a version without the writer's receipt never finishes, taps or not.

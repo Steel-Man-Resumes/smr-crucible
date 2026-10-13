@@ -38,6 +38,8 @@ export interface GenerateDocsInput {
   }>;
   resumeText?: string;
   goals?: string[];
+  /** Employer requirements only, never evidence about the person. */
+  jobPosting?: string;
   goalNarrative?: string;
   /** The Forge's licenses-and-training answer, in the person's own words. */
   credentialsNote?: string;
@@ -164,6 +166,7 @@ OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No br
     parts.push(`ORIGINAL RESUME TEXT (the person's own words and the facts you work from. Reword every weak line into strong plain words that say what it means; keep every fact):\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.resumeText")}`);
   }
 
+  if (input.jobPosting) parts.push(`TARGET JOB POSTING (employer requirements, NOT facts about the person; never copy its claims into their history):\n${input.jobPosting.slice(0, 4000)}`);
   if (input.goals?.length) {
     parts.push(`GOALS: ${input.goals.join(", ")}`);
   }

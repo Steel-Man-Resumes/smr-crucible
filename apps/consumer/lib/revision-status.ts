@@ -50,8 +50,8 @@ export function sameJobHeader(oldHeader: string, newHeader: string): boolean {
 import { lineKey } from "./revision-patch";
 
 /** Bump when the gate or the page rule changes in a way that can change a status. */
-// finish-gate-3 (Phase 6 S1 round 3): rewording A is opt-in (a signed rewordingA marker), job facts compared word for word.
-export const CHECKER_VERSION = "finish-gate-3+pages-1+receipt-1";
+// v4 requires completed truth checks and keeps factual letter clauses in scope.
+export const CHECKER_VERSION = "finish-gate-4+pages-1+receipt-1";
 
 const MAX_WORDS = 120_000;
 const MAX_GROUNDING_JSON = 300_000;
@@ -362,12 +362,15 @@ export function gateRevision(input: RevisionInput, pageCount: number): RevisionV
   const pageLimit = pageLimitFor(input.docKind, input.lengthChoice);
   const fits = lengthOk(pageCount, pageLimit);
   const lengthItem = lengthOpenItem(pageCount, pageLimit, input.lengthChoice);
-  const receiptOk = e.writerVerified === true;
+  const g = e.grounding as { verifierRan?: unknown; verifierRanByDoc?: Record<string, unknown> } | null;
+  const checked = (kind: string) => g?.verifierRanByDoc ? g.verifierRanByDoc[kind] === true : g?.verifierRan === true;
+  const checksOk = checked("resume") && (!input.letterText.trim() || checked("cover_letter"));
+  const receiptOk = e.writerVerified === true && checksOk;
   const status = view.state === "finished" && fits && receiptOk ? "finished" : "draft";
   const openItems =
     status === "finished"
       ? []
-      : [...(lengthItem ? [lengthItem] : []), ...(receiptOk ? [] : [RECEIPT_OPEN_ITEM]), ...openItemsInPlainWords(view)].slice(0, 30).map((s) => s.slice(0, 300));
+      : [...(lengthItem ? [lengthItem] : []), ...(e.writerVerified ? [] : [RECEIPT_OPEN_ITEM]), ...(checksOk ? [] : ["Fix before you send: run the truth check again. Part of this document has not been checked."]), ...openItemsInPlainWords(view)].slice(0, 30).map((s) => s.slice(0, 300));
   // A draft with nothing listed still says why (the to-do page is never empty).
   if (status === "draft" && openItems.length === 0) openItems.push(pageCount < 1 ? "Fix before you send: the page came out empty." : "Fix before you send: answer the open questions on your finish page.");
   return { status, pageCount, pageLimit, openItems, lengthItem, view };
@@ -382,6 +385,17 @@ export function computeRevision(input: RevisionInput): RevisionVerdict {
     pages = 0; // could not measure: never finished
   }
   return gateRevision(input, pages);
+}
+
+/** Reassess old finished rows without changing history or promoting a draft. */
+export function currentRevisionStatus<T extends Pick<ArtifactRevision,
+  "status" | "open_items" | "doc_kind" | "length_choice" | "resume_text" | "letter_text" |
+  "defend_answers" | "kept_terms" | "confirmed_credentials" | "evidence">>(rev: T): T {
+  if (rev.status !== "finished") return rev;
+  const input = inputFromRevision(rev);
+  const verdict = input ? computeRevision(input) : null;
+  if (verdict?.status === "finished") return rev;
+  return { ...rev, status: "draft", open_items: verdict?.openItems ?? ["Fix before you send: run the truth check again."] };
 }
 
 /** The row to store: the cleaned input plus the server's verdict. */

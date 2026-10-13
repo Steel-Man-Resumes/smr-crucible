@@ -16,7 +16,7 @@
  *   { revisionId }  a saved revision (migration 081). The server loads it as
  *                   the signed-in person (owner only), takes the resume and
  *                   letter text FROM THE REVISION, and marks DRAFT unless its
- *                   stored status, which the server computed, is finished.
+ *                   saved evidence still passes the current finish rules.
  *   { finish }      the finish page's whole state, signed out (the Forge
  *                   before the wall keeps its work in the browser). The server
  *                   runs the same gate and page measurement a saved revision
@@ -29,11 +29,12 @@
  * Safety limits, IP rate limiting and filename logic are unchanged.
  */
 
+import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 import { NextResponse } from "next/server";
 import { buildResumeFilename } from "./resume-filename";
 import { MAX_RENDER_CHARS, MAX_RENDER_TOO_LARGE, cleanOpenItems, renderDocx, renderHtml, renderPdf, type RenderRequest } from "./resume-render";
 import { buildZip } from "./resume-render/zip";
-import { cleanRevisionInput, computeRevision } from "./revision-status";
+import { cleanRevisionInput, computeRevision, currentRevisionStatus } from "./revision-status";
 import { readReceipt, readRunCookie, runCookieHash, type ReceiptContext } from "./writer-receipt";
 
 /** Room for a finish page's whole state (its evidence), besides the text. */
@@ -109,13 +110,8 @@ function attachment(body: BodyInit, contentType: string, fileName: string): Resp
 /** What the route hands in: who is signed in, and how to read their revision. */
 export interface DownloadDeps {
   userId: () => Promise<string | null>;
-  getRevision: (userId: string, revisionId: string) => Promise<{
-    id: string;
-    status: "draft" | "finished";
-    resume_text: string;
-    letter_text: string;
-    open_items: unknown;
-  } | null>;
+  getRevision: (userId: string, revisionId: string) => Promise<Pick<ArtifactRevision, "id" | "status" | "resume_text" | "letter_text" | "open_items" |
+    "doc_kind" | "length_choice" | "defend_answers" | "kept_terms" | "confirmed_credentials" | "evidence"> | null>;
   /** Signed in: the newest writer's receipt nonce for a run, and whether the run is the person's (review M-B). */
   receiptState?: (userId: string, runId: string) => Promise<{ newestNonce: string | null; linked: boolean }>;
 }
@@ -147,6 +143,7 @@ async function decide(input: DownloadInput, deps: DownloadDeps, cookieHash: stri
       return { error: "We couldn't load your saved resume just now. Try again in a moment.", status: 503 };
     }
     if (rev) {
+      rev = currentRevisionStatus(rev);
       return {
         resume: rev.resume_text,
         letter: rev.letter_text,

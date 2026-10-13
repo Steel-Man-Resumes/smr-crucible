@@ -75,9 +75,9 @@ function revision(extra: Record<string, unknown> = {}, force?: "finished", artif
     defendAnswers: allAnswered(resume),
     ownWords: SOURCE,
     written: { resume, letter },
-    grounding: null,
+    grounding: { verifierRan: true },
     runId: "2026-10-08T12:00:00.000Z",
-    writerReceipt: writerReceipt({ resume, letter }, null, {
+    writerReceipt: writerReceipt({ resume, letter }, { verifierRan: true }, {
       userId: UID,
       runId: "2026-10-08T12:00:00.000Z",
       source: { ownWords: (extra.ownWords as string) ?? SOURCE, ownResumeText: "", credentialsAnswer: "", credentialRows: [] },

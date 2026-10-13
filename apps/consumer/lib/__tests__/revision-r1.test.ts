@@ -57,14 +57,27 @@ test("A3: the Refinery's docx request shape (no draft, no evidence) is a draft t
 // ---- revisions decide the mark on the server ----------------------------------------------
 
 function revDeps(rev: Partial<ArtifactRevision> & { status: "draft" | "finished" }, owner = UID): DownloadDeps {
+  const checked = input();
   return {
     userId: async () => UID,
     getRevision: async (userId, id) =>
       userId === owner && id === REV
-        ? { id: REV, resume_text: RESUME, letter_text: LETTER, open_items: [], ...rev } as never
+        ? { id: REV, resume_text: RESUME, letter_text: LETTER, open_items: [],
+            doc_kind: checked.docKind, length_choice: checked.lengthChoice, evidence: checked.evidence,
+            defend_answers: checked.defendAnswers, kept_terms: checked.keptTerms,
+            confirmed_credentials: checked.confirmedCredentials, ...rev } as never
         : null,
   };
 }
+
+test("historical finished rows with an incomplete checker download as drafts", async () => {
+  const checked = input();
+  const res = await post({ revisionId: REV, type: "resume", format: "txt" }, revDeps({
+    status: "finished", evidence: { ...checked.evidence, grounding: { verifierRan: false } },
+  }));
+  assert.equal(res.headers.get("x-smr-status"), "draft");
+  assert.match(await res.text(), /^DRAFT/);
+});
 
 test("revision id: a finished revision downloads unmarked, with ITS text (not what the page sent)", async () => {
   const res = await post({ revisionId: REV, content: "SOMETHING ELSE ENTIRELY", type: "resume", format: "txt", draft: true }, revDeps({ status: "finished" }));

@@ -2,6 +2,13 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## Unreleased: Forge and Refinery review repairs
+
+- Require completed truth checks before marking documents finished. Check factual claims inside polite letter sentences, keep rewording tied to the correct job, and reassess older saved versions before export or attachment.
+- Recover partial saves without losing the corrected version, and protect newer editor changes from delayed writes.
+- Open interview practice without a resume prerequisite. Carry a pasted posting into Tailor, retain unfinished quick-build fields, and remember the selected document in each lane.
+- Show checked resume changes while remaining document checks finish. Keep failed generation and sign-out attempts retryable, and improve keyboard focus and mobile success screens.
+
 ## 2026-10 One finished resume, everywhere (saved revisions)
 
 - A finished resume is now saved on the server as a revision: the resume and letter text, the

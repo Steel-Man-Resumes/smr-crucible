@@ -84,8 +84,8 @@ export function NextStep({
             The Forge makes one general resume. In The Refinery you tailor it to one job at a time, practice
             interviews, plan what to say about your record, and use a job board that marks employers we checked for
             hiring people with records. When you create your free account, your story and the answers you gave in the
-            Forge carry over. The changes you made on this page don&apos;t carry over yet, so download your resume
-            first.
+            Forge can be saved there with your corrected resume. Check that this page says your version is saved
+            before you leave. You can also download a copy.
           </p>
           <TBtn onClick={() => router.push("/login?from=forge")} className="mb-2 w-full text-base">
             {refineryCta.toLowerCase()}

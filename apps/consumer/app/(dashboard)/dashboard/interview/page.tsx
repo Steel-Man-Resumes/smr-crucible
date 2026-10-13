@@ -131,7 +131,7 @@ const INTERVIEW_TYPES = [
 export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <OnboardingGate toolName="Interview Practice" previewFeature="interview">
+      <OnboardingGate requiredState="needs_profile" toolName="Interview Practice" previewFeature="interview">
         {/* Text practice is free with an account (a daily allowance while the
             premium gate is on). Voice coaching is sponsored: only the voice
             panel below sits behind the gate. */}

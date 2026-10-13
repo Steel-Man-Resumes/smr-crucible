@@ -15,5 +15,5 @@ export const RECHECK_HREF = "/output?from=refinery&check=1";
 
 /** True when a version's open items include the re-check item. */
 export function needsRecheck(openItems: unknown): boolean {
-  return Array.isArray(openItems) && openItems.some((i) => typeof i === "string" && i.startsWith("Fix before you send: we need to re-check this version"));
+  return Array.isArray(openItems) && openItems.some((i) => typeof i === "string" && (i.startsWith("Fix before you send: we need to re-check this version") || i.startsWith("Fix before you send: run the truth check again")));
 }

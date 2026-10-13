@@ -15,7 +15,7 @@
  * (?change=1) always opens the picker again.
  */
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
@@ -56,6 +56,8 @@ function StartInner() {
   // the run is, never send them back (that would loop).
   const fromRefinery = params.get("from") === "refinery";
   const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const navigating = useRef(false);
   // The account's saved resume (R1 revision), for the "welcome back" line.
   const [accountRev, setAccountRev] = useState<{ number: number; status: string } | null>(null);
   // The Refinery opens once the Forge resume is built (onboarding's forgeComplete).
@@ -80,12 +82,12 @@ function StartInner() {
   }, [focus.signedIn]);
 
   useEffect(() => {
-    if (focus.loaded && !target && focus.target) setTarget(focus.target);
+    if (focus.loaded && !target) setTarget(session.laneJobPosting || focus.target || "");
   }, [focus.loaded, focus.target]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Returning and signed in, with a task already picked: the lane home.
   useEffect(() => {
-    if (!focus.loaded || change || step || fromRefinery) return;
+    if (!focus.loaded || change || step || fromRefinery || navigating.current) return;
     if (focus.signedIn && focus.task) router.replace(LANE_HOME_HREF);
   }, [focus.loaded, focus.signedIn, focus.task, change, step, fromRefinery, router]);
 
@@ -108,21 +110,29 @@ function StartInner() {
   }
 
   async function pick(task: LaneTask) {
+    navigating.current = true;
     setBusy(true);
-    keepInRun(task);
-    await focus.save(task);
+    setSaveError("");
+    const saved = await focus.save(task);
     setBusy(false);
+    if (!saved) { navigating.current = false; setSaveError("Your choice wasn't saved. Try again."); return; }
+    keepInRun(task);
     router.push(routeHref(task, { signedIn: focus.signedIn, hasResume }));
   }
 
   async function continueJob() {
     setBusy(true);
-    const t = target.replace(/\s+/g, " ").trim().slice(0, 200);
-    keepInRun("job", t || null);
-    await focus.save("job", t || null);
+    setSaveError("");
+    const posting = target.trim().slice(0, 4000);
+    const firstLine = posting.split("\n")[0].replace(/\s+/g, " ").trim();
+    const t = firstLine.length <= 200 ? firstLine : "Your selected job";
+    const saved = await focus.save("job", t || null);
     setBusy(false);
+    if (!saved) { navigating.current = false; setSaveError("Your choice wasn't saved. Try again."); return; }
+    keepInRun("job", t || null);
+    updateSession({ laneJobPosting: posting });
     // A resume on file: aim it at this job. None yet: build only what this job needs.
-    router.push(focus.signedIn && hasResume ? `/dashboard/application-tailor${t ? `?role=${encodeURIComponent(t)}` : ""}` : "/resume");
+    router.push(focus.signedIn && hasResume ? "/dashboard/application-tailor?from=start" : "/resume");
   }
 
   if (!focus.loaded || (focus.signedIn && focus.task && !change && !step && !fromRefinery)) {
@@ -151,6 +161,7 @@ function StartInner() {
           className="mt-1 w-full border border-t-line bg-t-panel px-4 py-3 text-base text-t-white focus:border-t-amber focus:outline-none"
           data-testid="job-target"
         />
+        {saveError && <p role="alert" className="mt-3 text-t-red">{saveError}</p>}
         <button
           type="button"
           onClick={continueJob}
@@ -258,6 +269,7 @@ function StartInner() {
   // ---- the first screen ---------------------------------------------------------
   return (
     <div className="px-4 py-8 sm:px-6">
+      {saveError && <p role="alert" className="mb-3 text-t-red">{saveError}</p>}
       <TaskPicker
         current={focus.task}
         onPick={pick}

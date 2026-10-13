@@ -20,7 +20,7 @@
  * Nothing here writes a fact for the person.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FlowPage } from "@crucible/consumer-ui";
 import { ResumePage } from "@/components/resume/ResumePage";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
@@ -146,7 +146,7 @@ function SavedFirst({
   const finished = rev?.status === "finished";
   if (state.kind === "ask") {
     return (
-      <FlowPage title="Before we save it" subtitle="This won't change anything until you pick.">
+      <FlowPage focusTitle title="Before we save it" subtitle="This won't change anything until you pick.">
         <KeepQuestion onChoose={onChoose} />
         <div className="mt-4 border border-t-line bg-t-bg p-3">
           <ResumePage text={text} draft />
@@ -155,7 +155,7 @@ function SavedFirst({
     );
   }
   return (
-    <FlowPage title="Saved. That's a real start." subtitle="Here is your page as it stands." actionLabel="Build my full resume" onAction={onContinue}>
+    <FlowPage focusTitle title={state.kind === "failed" ? "Your section needs saving." : state.kind === "saving" ? "Saving your first section..." : "Saved. That's a real start."} subtitle="Here is your page as it stands." actionLabel="Build my full resume" onAction={onContinue}>
       <div className="mb-3 border border-t-line bg-t-panel px-4 py-3" data-testid="first-save-status" data-state={state.kind}>
         {state.kind === "saving" && <p className="text-sm text-t-phos">Saving to your account...</p>}
         {state.kind === "failed" && (
@@ -331,8 +331,12 @@ export function QuickBuild({
   onContinue: () => void;
   onDoMore: () => void;
 }) {
-  const { session } = useForgeSession();
-  const [form, setForm] = useState<FirstSection>(EMPTY);
+  const { session, updateSession } = useForgeSession();
+  const [form, setForm] = useState<FirstSection>(session.quickBuildDraft ?? EMPTY);
+  const touched = useRef(false);
+  useEffect(() => {
+    if (!touched.current && session.quickBuildDraft) setForm(session.quickBuildDraft);
+  }, [session.quickBuildDraft]);
   const [missing, setMissing] = useState<(keyof FirstSection)[]>([]);
   // Jobs already saved in this sitting ("Add another job first").
   const [savedText, setSavedText] = useState<string | null>(null);
@@ -340,7 +344,12 @@ export function QuickBuild({
   const saver = useFirstSave(signedIn);
   // The duties the person typed, the only words the save counts as theirs (review H2).
   const duties = useRef<string[]>([]);
-  const set = (k: keyof FirstSection, v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: keyof FirstSection, v: string) => {
+    touched.current = true;
+    const next = { ...form, [k]: v };
+    setForm(next);
+    updateSession({ quickBuildDraft: next });
+  };
 
   async function saveSection() {
     const check = checkFirstSection(adding ? { ...form, name: form.name || "x" } : form);
@@ -357,6 +366,7 @@ export function QuickBuild({
     } else {
       text = firstSectionText(form);
     }
+    updateSession({ quickBuildDraft: undefined });
     setSavedText(text);
     setAdding(false);
     duties.current = [...duties.current, form.duty.replace(/\s+/g, " ").trim()];

@@ -28,7 +28,7 @@
 import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence } from "./revision-status";
 import { resumeTextToDocument } from "./revision-to-doc";
-import { withRevisionMarker } from "./revision-marker";
+import { readMarker, withRevisionMarker } from "./revision-marker";
 import { artifactText, textFromBase } from "./revision-current";
 import { artifactRunId } from "./forge-recheck";
 import type { ArtifactLite, RevisionStore, SavedRevisionSummary } from "./revision-save";
@@ -64,6 +64,9 @@ async function currentChecked(userId: string, art: ArtifactLite, store: Revision
   const isTheCheckedText = typeof checkedText === "string" && checkedText.trim() === newest.resume_text.trim();
   if (!isTheCheckedText && newest.source !== "forge_finish") return null;
   // Edited in the Refinery since that check: it needs checking again.
+  const marker = readMarker(art.content);
+  if (newest.source === "forge_finish" && marker?.hashOk && marker.id !== newest.id &&
+      (marker.kind === "finish" || marker.kind === "derived")) return newest;
   const now = artifactText(art.content) ? textFromBase(art.content, newest) : "";
   return now && now.trim() === newest.resume_text.trim() ? newest : null;
 }
@@ -164,16 +167,17 @@ export async function saveCheckRevision(userId: string, artifactId: string, raw:
   const r = await store.insertRevision(userId, revisionRecord(artifactId, "forge_finish", input, verdict));
   if (r.status === "not_ready") return { ok: false, status: 503, reason: "not_ready" };
   if (r.status !== "saved") return { ok: false, status: r.status === "invalid" ? 400 : 500, reason: r.status === "invalid" ? r.reason : "failed" };
-  if (!r.reused) {
+  { // Reused revisions must retry a previously failed working-copy write too.
     // The resume in the Refinery now shows the checked words, marked as
     // exactly this revision, so its downloads use it (R1's marker).
     const baseDoc = (art.content ?? null) as { meta?: { targetJob?: string; targetCompany?: string; jobListingUrl?: string } } | null;
     const doc = resumeTextToDocument(input.resumeText, baseDoc) as unknown as Record<string, unknown>;
     const wrote = await store
-      .updateArtifactContent(userId, artifactId, withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" }))
+      .updateArtifactContent(userId, artifactId, withRevisionMarker(doc, r.revision.id, { formatted: artifactText(doc), kind: "finish" }), art.content)
       .catch(() => "failed");
     // Locked between the check above and now: say so, never claim the exports match.
     if (wrote === "locked") return { ok: false, status: 409, reason: LOCKED_REASON };
+    if (wrote !== "updated") return { ok: false, status: 503, reason: "working_copy_not_saved" };
   }
   const rev = r.revision;
   return {

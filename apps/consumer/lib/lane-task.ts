@@ -94,7 +94,7 @@ export function routeHref(task: LaneTask, ctx: RouteContext): string {
     case "interview":
       // Practice comes from the person's real history: with a resume on file,
       // straight to practice; without one, the resume first.
-      return ctx.signedIn && ctx.hasResume ? "/dashboard/interview" : "/resume";
+      return ctx.signedIn ? "/dashboard/interview" : "/login?from=forge&callbackUrl=%2Fdashboard%2Finterview";
     case "documents":
       return ctx.signedIn ? "/dashboard/creative" : `${START_PATH}?step=documents`;
     case "explore":
@@ -106,7 +106,7 @@ export function routeHref(task: LaneTask, ctx: RouteContext): string {
 
 /** Only these routes need a resume first (review H1). */
 export function taskNeedsResume(task: LaneTask | null | undefined): boolean {
-  return task === "resume" || task === "interview";
+  return task === "resume";
 }
 
 /**
@@ -115,7 +115,7 @@ export function taskNeedsResume(task: LaneTask | null | undefined): boolean {
  * and performer documents. "A person needing food or transport should not
  * have to finish a resume to find it" (Codex C).
  */
-export const OPEN_WITHOUT_RESUME = ["/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
+export const OPEN_WITHOUT_RESUME = ["/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
 
 /**
  * The Refinery sends a person with no Forge resume to the first screen,
@@ -138,7 +138,8 @@ export function keepGoingHref(
   task: LaneTask,
   ctx: { signedIn: boolean; hasForgeOutput: boolean; hasResumeText: boolean; forgeNext: string }
 ): string {
-  if (task === "resume" || task === "interview") return ctx.hasForgeOutput ? "/output" : ctx.forgeNext;
+  if (task === "interview") return routeHref(task, { signedIn: ctx.signedIn, hasResume: false });
+  if (task === "resume") return ctx.hasForgeOutput ? "/output" : ctx.forgeNext;
   if (task === "job") return ctx.hasForgeOutput ? "/output" : ctx.hasResumeText ? ctx.forgeNext : `${START_PATH}?step=job`;
   return routeHref(task, { signedIn: ctx.signedIn, hasResume: false });
 }

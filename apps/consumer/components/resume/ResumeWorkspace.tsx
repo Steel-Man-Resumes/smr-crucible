@@ -401,6 +401,16 @@ export function ResumeWorkspace() {
     return [];
   }
 
+  const startTargetLoaded = useRef(false);
+  useEffect(() => {
+    if (searchParams.get("from") !== "start" || !ownerUid || startTargetLoaded.current) return;
+    const run = readOwnForgeSession(ownerUid);
+    if (!run) return;
+    setJobDescription(run.laneJobPosting || "");
+    setDoc((d) => ({ ...d, meta: { ...d.meta, targetJob: run.laneTarget || "" } }));
+    startTargetLoaded.current = true;
+  }, [searchParams, ownerUid]);
+
   // --- Import from Rush (via sessionStorage) ---
   useEffect(() => {
     const from = searchParams.get("from");

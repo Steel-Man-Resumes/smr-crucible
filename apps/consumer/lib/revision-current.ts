@@ -14,6 +14,7 @@
  * The text always comes from the stored artifact, never from the request.
  */
 
+import { currentRevisionStatus } from "./revision-status";
 import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 import { readMarker, withRevisionMarker } from "./revision-marker";
 export { REVISION_MARKER_KEY, contentMarkerHash, withRevisionMarker, readMarker } from "./revision-marker";
@@ -107,7 +108,17 @@ export async function ensureExportRevision(
   if (!art) return { ok: false, status: 404, reason: "artifact not found" };
   if (art.artifact_type !== "resume") return { ok: false, status: 409, reason: "not a resume" };
   const newest = await store.getLatestRevision(userId, artifactId);
-  if (newest && revisionIsCurrent(art.content, newest, opts.letterText)) return { ok: true, revision: newest, reused: true };
+  if (newest && revisionIsCurrent(art.content, newest, opts.letterText)) return { ok: true, revision: currentRevisionStatus(newest), reused: true };
+  const marker = readMarker(art.content);
+  if (newest && !art.is_locked && marker?.hashOk && (marker.kind === "finish" || marker.kind === "derived") && marker.id !== newest.id &&
+      (newest.source === "forge_finish" || newest.source === "forge_import")) {
+    const doc = resumeTextToDocument(newest.resume_text, art.content as AnyResumeDocument) as unknown as Record<string, unknown>;
+    const wrote = await store.updateArtifactContent(userId, artifactId,
+      withRevisionMarker(doc, newest.id, { formatted: artifactText(doc), kind: "finish" }), art.content).catch(() => "failed");
+    if (wrote !== "updated") return { ok: false, status: 503, reason: "working_copy_not_saved" };
+    if (opts.letterText === undefined || opts.letterText === newest.letter_text) return { ok: true, revision: currentRevisionStatus(newest), reused: true };
+    art.content = withRevisionMarker(doc, newest.id, { formatted: artifactText(doc), kind: "finish" });
+  }
   if (!artifactText(art.content).trim()) {
     // Not a structured resume (an older plain-text artifact): nothing to print.
     return { ok: false, status: 409, reason: "no resume text" };
@@ -122,7 +133,7 @@ export async function ensureExportRevision(
   // The stored content is now exactly this revision: mark it, with its printing,
   // so the next export reuses it and the next edit patches from here.
   await store
-    .updateArtifactContent(userId, artifactId, withRevisionMarker(art.content as Record<string, unknown>, rev.id, { formatted: artifactText(art.content), kind: "edit" }))
+    .updateArtifactContent(userId, artifactId, withRevisionMarker(art.content as Record<string, unknown>, rev.id, { formatted: artifactText(art.content), kind: "edit" }), art.content)
     .catch(() => "failed");
-  return { ok: true, revision: rev, reused: saved.revision.reused };
+  return { ok: true, revision: currentRevisionStatus(rev), reused: saved.revision.reused };
 }

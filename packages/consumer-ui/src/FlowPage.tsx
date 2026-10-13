@@ -14,7 +14,7 @@
 
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
 import { TYPOGRAPHY } from "./theme";
 import { TBtn } from "./terminal";
@@ -22,6 +22,7 @@ import { TBtn } from "./terminal";
 interface FlowPageProps {
   /** The main question or prompt for this page */
   title: string;
+  focusTitle?: boolean;
   /** Optional supporting text (keep short — 6th grade reading level) */
   subtitle?: string;
   /** The input/interaction area */
@@ -48,6 +49,7 @@ function countWords(text: string): number {
 
 export function FlowPage({
   title,
+  focusTitle = false,
   subtitle,
   children,
   actionLabel,
@@ -58,6 +60,22 @@ export function FlowPage({
   footer,
   loading,
 }: FlowPageProps) {
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!focusTitle) return;
+    const frame = requestAnimationFrame(() => {
+      const heading = titleRef.current;
+      if (!heading) return;
+      const bottom = Array.from(document.querySelectorAll("header")).reduce((max, header) => {
+        const position = getComputedStyle(header).position;
+        return position === "sticky" || position === "fixed" ? Math.max(max, header.getBoundingClientRect().bottom) : max;
+      }, 0);
+      heading.style.scrollMarginTop = `${Math.max(16, bottom + 16)}px`;
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [title, focusTitle]);
   // Enforce max 50 words display text in development
   if (process.env.NODE_ENV === "development") {
     const totalWords =
@@ -90,7 +108,7 @@ export function FlowPage({
       <div className="flex flex-1 flex-col items-center px-4 py-10 sm:justify-center sm:px-6 sm:py-12">
         <div className="w-full max-w-flow">
           {/* Title */}
-          <h1 className="mb-3 text-3xl font-semibold leading-tight text-t-white">{title}</h1>
+          <h1 ref={titleRef} tabIndex={focusTitle ? -1 : undefined} style={{ scrollMarginTop: "12rem" }} className="mb-3 text-3xl font-semibold leading-tight text-t-white">{title}</h1>
 
           {/* Subtitle */}
           {subtitle && (

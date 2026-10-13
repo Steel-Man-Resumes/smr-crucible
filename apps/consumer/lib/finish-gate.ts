@@ -15,6 +15,7 @@
  * - Defend answers are stored per line, never pooled into the source.
  */
 
+import { untracedFacts } from "./fact-trace";
 import { CREDENTIALS_KEY } from "./forge-path";
 import {
   answerMentions,
@@ -1582,6 +1583,12 @@ function jobTapped(answers: DefendAnswer[], line: string): boolean {
  * and the signer marked the build eligible (rewordingA, from the server's own
  * source kind); otherwise the stricter rule stands.
  */
+export function verifierCheckedDocument(grounding: unknown, kind: "resume" | "cover_letter"): boolean {
+  if (!grounding || typeof grounding !== "object") return false;
+  const g = grounding as { verifierRan?: unknown; verifierRanByDoc?: Record<string, unknown> };
+  return g.verifierRanByDoc ? g.verifierRanByDoc[kind] === true : g.verifierRan === true;
+}
+
 export function factsLockedFor(written: WrittenDocs | null | undefined, grounding: unknown): boolean {
   if (!written || typeof written.resume !== "string" || !written.resume.trim()) return false;
   if (!grounding || typeof grounding !== "object") return false;
@@ -1846,7 +1853,7 @@ export function letterNote(name: string): string {
 const STATUS_LEFT_RE = /\b(current|currently|valid|active|expired|renewed|lapsed|in good standing|up to date|through|until)\b/i;
 
 // A courtesy sentence ("I would welcome the chance to talk") makes no claim.
-const COURTESY_RE = /\b(?:would|welcome|glad|talk|thank|thanks|look forward|appreciate|happy to|eager|excited|hear from|reach me|contact me|consideration|sincerely|regards|dear)\b/i;
+const COURTESY_RE = /^(?:dear (?:hiring manager|hiring team|sir or madam)|(?:sincerely|(?:best |kind )?regards)|thank you for (?:your time|your consideration|your time and consideration)|i (?:would welcome|look forward to|would appreciate) (?:the chance to |the opportunity to )?(?:talk(?:ing)?|speak(?:ing)?|discuss(?:ing)?)\s*(?:with you|the role|this opportunity)?|i am eager to join your (?:store|team|company))(?:[.!?,])?$/i;
 const SCOPE_RE = /\b(supervis\w*|manag\w*|led|lead\w*|oversaw|oversee\w*|direct\w*|train(?:ed|ing)?|mentor\w*|coordinat\w*)\b/gi;
 const LETTER_FAR = 0.5;
 
@@ -1857,12 +1864,7 @@ function letterSentences(letter: string): Array<{ line: string; sentence: string
     for (const sentence of splitSentences(line)) {
       const t = sentence.trim();
       if (!t || t.split(/\s+/).length < 4) continue;
-      // Round 15 (R15-B4): a courtesy sentence ("I am eager to bring my experience as a shift supervisor ...") is
-      // still read for a title it claims; nothing else in it is asked.
-      if (COURTESY_RE.test(t)) {
-        if (scopeHits(t).some((h) => h.role && h.title)) out.push({ line, sentence: t, courtesy: true });
-        continue;
-      }
+      if (COURTESY_RE.test(t)) continue;
       out.push({ line, sentence: t });
     }
   }
@@ -1883,7 +1885,8 @@ function letterItems(
   source: string,
   answers: DefendAnswer[],
   personText: { text: string; rows?: ReadonlyArray<CredentialRow>; backstop: string },
-  askedOnResume: Set<string>
+  askedOnResume: Set<string>,
+  checkedLetter?: string
 ): GateItem[] {
   const items: GateItem[] = [];
   const against = `${source}\n${resumeText}`;
@@ -1909,7 +1912,7 @@ function letterItems(
         roleTitle: role.title,
       });
     }
-    if (courtesy) continue;
+
     const hits = all.filter((h) => !(h.role && h.title));
     const hit = hits[0];
     const existing = items.find((i) => i.line === line && i.kind === "scope_unsaid");
@@ -1933,7 +1936,9 @@ function letterItems(
       });
     }
     // A sentence far from the person's words: settled by an answer, like a defend line.
-    if (distanceFromSource(sentence, against) <= LETTER_FAR) continue;
+    const newFacts = untracedFacts(sentence, source);
+    if (!newFacts.length && checkedLetter && pageLineSet(checkedLetter).has(squash(line))) continue;
+    if (!newFacts.length && distanceFromSource(sentence, against) <= LETTER_FAR) continue;
     if (answerStands(answerFor(answers, line), line, source)) continue;
     if (items.some((i) => i.line === line && i.rule === "STD-C04" && i.kind !== "scope_unsaid")) continue;
     items.push({
@@ -2086,7 +2091,7 @@ export function buildFinishView(input: {
     const backstopText = `${source}\n\n${input.credentialsAnswer ?? ""}`;
     const confirmedSet = new Set(heldConfirms.map((c) => c.key).filter((k): k is string => !!k));
     const askedOnResume = new Set([...credentialsToAsk(resumeForChecks, personText, confirmedSet, input.credentialRows, backstopText).map((m) => m.key), ...confirmedSet]);
-    items.push(...letterItems(letter, input.resumeText, source, answers, { text: personText, rows: input.credentialRows, backstop: backstopText }, askedOnResume));
+    items.push(...letterItems(letter, input.resumeText, source, answers, { text: personText, rows: input.credentialRows, backstop: backstopText }, askedOnResume, factsLocked && verifierCheckedDocument(input.grounding, "cover_letter") ? input.written?.letter : undefined));
   }
 
   // Skills added from a posting go on the same keep-or-cut card.

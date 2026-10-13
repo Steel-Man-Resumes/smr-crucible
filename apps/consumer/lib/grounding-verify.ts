@@ -18,6 +18,7 @@
  *   framing, and reasonable summaries of stated duties are left alone.
  */
 
+import { jobsIn, resolvePageJob } from "@crucible/core/src/jobResolver";
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { VERIFY_MAX } from "@/lib/limits";
 import { onlyRewordedFrom, onlySupervisionUnsupported } from "@/lib/fact-trace";
@@ -201,7 +202,7 @@ export async function verifyGrounding(params: {
   const source = (sourceText || "").trim();
   // With no source at all the model can't distinguish grounded from invented;
   // don't risk a destructive rewrite. (The gauge already warns the user here.)
-  if (source.length < 15) return original;
+  if (source.length < 15) return { ...original, verifierRan: false };
 
   const label = kindLabel(kind);
   const system = `You are a fact-grounding auditor for Steel Man Resumes. The product's promise to justice-impacted job seekers is absolute: a ${label} states ONLY what the person actually told us. It must survive a background-checked interview.
@@ -222,8 +223,8 @@ ONE EXCEPTION to "general professional framing", and it is not a small one. A cl
 
 Then rewrite OUTPUT so every remaining statement is grounded in SOURCE: remove each invented specific, or generalize it to exactly what the source supports. Change ONLY the lines you flagged; every other line stays exactly as written, word for word. Thin source means a shorter, sparser document. That is correct and required, never a reason to invent. Preserve the structure, section headers, formatting, tone, and every grounded line. Introduce NO new facts. If nothing needs changing, return OUTPUT verbatim. In any text you rewrite, never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
 
-Return ONLY a JSON object:
-{"hasFabrication": boolean, "flags": [{"claim": "the exact invented phrase from OUTPUT", "why": "short reason", "kind": "number | date | title | employer | tool | skill | credential | result | scope | supervision | character | pronoun | other"}], "cleaned": "the full corrected OUTPUT text"}`;
+Return ONLY a JSON object. All three fields are required. Every flag MUST include claim, why and kind; use wording for a wording-only objection. Never omit kind:
+{"hasFabrication": boolean, "flags": [{"claim": "the exact invented phrase from OUTPUT", "why": "short reason", "kind": "number | date | title | employer | tool | skill | credential | result | scope | supervision | character | pronoun | wording | other"}], "cleaned": "the full corrected OUTPUT text"}`;
 
   const user = `SOURCE (everything the person told us about themselves):
 """
@@ -291,7 +292,12 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string" || !content.trim()) throw new Error("empty verifier reply");
     parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.flags)) throw new Error("verifier reply has the wrong shape");
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.flags) ||
+        typeof parsed.hasFabrication !== "boolean" || typeof parsed.cleaned !== "string" ||
+        parsed.flags.some((f: any) => !f || typeof f.claim !== "string" || !f.claim.trim() ||
+          typeof f.why !== "string" || typeof f.kind !== "string" || !(FLAG_KINDS.has(f.kind) || WORDING_KIND_RE.test(f.kind)))) {
+      throw new Error("verifier reply has the wrong shape");
+    }
   } catch {
     return { ...original, verifierRan: false };
   }
@@ -312,10 +318,20 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   // Phase 6 (r2 ruling, r3 H3-2): with askSupervision (generate-docs only), a "supervision" flag is set aside
   // when being over people is the ONLY unsupported thing in the phrase and the scope check will raise the
   // one-tap card for it. Otherwise, and on every other route, it stays a flag and is cut as before.
+  const outputJobs = jobsIn(output);
+  const flagSource = (claim: string): string | null => {
+    const lines = output.split("\n").filter((line) => line.includes(claim));
+    if (lines.length !== 1) return null;
+    const owners = outputJobs.filter((job) => job.body.includes(lines[0].trim()));
+    if (!outputJobs.length) return source;
+    if (owners.length !== 1) return null;
+    const match = resolvePageJob(owners[0].header, source);
+    return match.kind === "one" ? match.job.body.join("\n") : null;
+  };
   const factFlags = graded.filter(
     (f) =>
-      !(f.kind === "wording" && !truncated && onlyRewordedFrom(f.claim, source)) &&
-      !(askSupervision && f.kind === "supervision" && onlySupervisionUnsupported(f.claim, source))
+      !(f.kind === "wording" && !truncated && flagSource(f.claim) !== null && onlyRewordedFrom(f.claim, flagSource(f.claim)!)) &&
+      !(askSupervision && f.kind === "supervision" && flagSource(f.claim) !== null && onlySupervisionUnsupported(f.claim, flagSource(f.claim)!))
   );
   const flags: GroundingFlag[] = factFlags.map((f) => ({ claim: f.claim, why: f.why }));
   const hasFabrication = flags.length > 0 || (parsed.hasFabrication === true && graded.length === 0);
@@ -334,10 +350,26 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
     !isDropMarker(cleaned) &&
     cleaned.length >= Math.max(40, lengthFloor);
 
-  // Review H2: the verifier's rewrite is applied whole, as it was before
-  // Phase 6. A line it rewrote without a flag is never put back: a quiet fix
-  // can be a correct scope or credential fix the code cannot see.
-  const text = applyRewrite ? cleaned : output;
+  // Keep quiet factual corrections. Restore only a uniquely matched whole
+  // line proven to be same-work wording within the same unchanged job.
+  let text: string = applyRewrite ? cleaned : output;
+  if (applyRewrite && kind === "resume") {
+    const before = output.split("\n");
+    const after: string[] = cleaned.split("\n");
+    const oldJobs = jobsIn(output);
+    const newJobs = jobsIn(cleaned);
+    text = after.map((line) => {
+      const job = newJobs.find((j) => j.body.includes(line.trim()));
+      const oldJob = job ? oldJobs.find((j) => j.header === job.header) : null;
+      if (job && !oldJob) return line;
+      const match = job ? resolvePageJob(job.header, source) : null;
+      if (job && match?.kind !== "one") return line;
+      const own = match?.kind === "one" ? match.job.body.join("\n") : source;
+      const candidates = (oldJob ? oldJob.body : oldJobs.length ? [] : before).filter((originalLine) =>
+        originalLine.trim() !== line.trim() && onlyRewordedFrom(originalLine, own) && onlyRewordedFrom(originalLine, line));
+      return candidates.length === 1 ? candidates[0] : line;
+    }).join("\n");
+  }
 
   return {
     text,
@@ -390,7 +422,7 @@ export async function verifyResumeBullets(params: {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { ...original, verifierRan: false };
   const source = (params.sourceText || "").trim();
-  if (source.length < 15) return original;
+  if (source.length < 15) return { ...original, verifierRan: false };
 
   const items: { id: string; role: string; text: string }[] = [];
   experience.forEach((e, ei) => {
@@ -579,7 +611,7 @@ export async function verifyStructuredLists(params: {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) return { ...original, verifierRan: false };
   const source = (params.sourceText || "").trim();
-  if (source.length < 15) return original;
+  if (source.length < 15) return { ...original, verifierRan: false };
   if (!skills.length && !education.length) return original;
 
   const eduLines = education.map(

@@ -22,6 +22,7 @@
  * the revision's exact text, so "what did I send" is the version itself.
  */
 
+import { currentRevisionStatus } from "@/lib/revision-status";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
@@ -100,6 +101,7 @@ async function handlePost(request: Request) {
       }
       revision = ex.revision;
     }
+    revision = currentRevisionStatus(revision);
     const draft = revision.status !== "finished";
     if (draft && body.acceptDraft !== true) {
       return NextResponse.json(

@@ -111,11 +111,11 @@ export async function createArtifact(
  * Exported as a constant so the adversarial suite can assert the predicate
  * never regresses out of the statement.
  */
-export const ARTIFACT_CONTENT_UPDATE_SQL = (scaffoldClause: string) =>
+export const ARTIFACT_CONTENT_UPDATE_SQL = (scaffoldClause: string, expectedParam?: number) =>
   `UPDATE refinery_artifact
      SET content = $1, updated_at = now()${scaffoldClause}
      WHERE id = $2 AND user_id = $3 AND is_locked = false
-       AND artifact_type NOT IN (${CREATIVE_TYPES_SQL})
+       AND artifact_type NOT IN (${CREATIVE_TYPES_SQL})${expectedParam ? ` AND content IS NOT DISTINCT FROM $${expectedParam}::jsonb` : ""}
      RETURNING *`;
 
 export const ARTIFACT_DELETE_SQL = `DELETE FROM refinery_artifact
@@ -126,7 +126,8 @@ export type ArtifactWriteResult =
   | { status: "updated"; artifact: RefineryArtifact }
   | { status: "locked" }
   | { status: "creative_doc" }
-  | { status: "not_found" };
+  | { status: "not_found" }
+  | { status: "conflict" };
 
 /**
  * Update an existing artifact in place. Ownership-checked, lock-guarded.
@@ -137,7 +138,8 @@ export async function updateArtifact(
   artifactId: string,
   userId: string,
   content: Record<string, unknown>,
-  scaffoldLevel?: number
+  scaffoldLevel?: number,
+  expectedContent?: unknown
 ): Promise<ArtifactWriteResult> {
   const scaffoldClause = scaffoldLevel !== undefined
     ? `, scaffold_level = $4`
@@ -151,8 +153,9 @@ export async function updateArtifact(
     params.push(scaffoldLevel);
   }
 
+  const expectedParam = expectedContent === undefined ? undefined : params.push(JSON.stringify(expectedContent));
   const rows = await queryAsUser<RefineryArtifact>(userId, 
-    ARTIFACT_CONTENT_UPDATE_SQL(scaffoldClause),
+    ARTIFACT_CONTENT_UPDATE_SQL(scaffoldClause, expectedParam),
     params
   );
   if (rows[0]) return { status: "updated", artifact: rows[0] };
@@ -162,7 +165,7 @@ export async function updateArtifact(
     [artifactId, userId]
   );
   if (existing && (CREATIVE_ARTIFACT_TYPES as readonly string[]).includes(existing.artifact_type)) return { status: "creative_doc" };
-  return existing ? { status: "locked" } : { status: "not_found" };
+  return existing ? { status: existing.is_locked ? "locked" : "conflict" } : { status: "not_found" };
 }
 
 /**

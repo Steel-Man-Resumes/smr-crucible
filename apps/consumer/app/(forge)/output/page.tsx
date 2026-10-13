@@ -122,6 +122,8 @@ import { readChanges, type MarkupChange } from "@/lib/markup-changes";
 import { changesStillOnPage } from "@/lib/changes-gate";
 import { useReducedMotion } from "@/components/forge/showstopper/useReducedMotion";
 import { MarkupWalk } from "@/components/forge/markup/MarkupWalk";
+import { verifierCheckedDocument } from "@/lib/finish-gate";
+import { readDocumentResponse } from "@/lib/document-response";
 import { LiveFix } from "@/components/forge/markup/LiveFix";
 import { ChangesList } from "@/components/forge/markup/ChangesList";
 
@@ -322,6 +324,7 @@ function OutputPageInner() {
 
   const runIsMineRef = useRef(runIsMine);
   runIsMineRef.current = runIsMine;
+  const [writeProgress, setWriteProgress] = useState("");
   const generateDocs = useCallback(async () => {
     if (hasStarted.current || checkModeRef.current) return;
     // Every caller, not only the effect below: never another person's run.
@@ -338,7 +341,7 @@ function OutputPageInner() {
     try {
       const response = await fetch("/api/forge/generate-docs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Accept: "application/x-ndjson" },
         body: JSON.stringify({
           narrative: output.narrative,
           strengths: output.strengths,
@@ -349,6 +352,7 @@ function OutputPageInner() {
           // Phase 6 (S1 round 2): a build from a saved resume. The server reads
           // it and decides the own words itself; only the id is sent.
           rebuildFrom: rebuildActive(session) ?? undefined,
+          jobPosting: session.laneJobPosting,
           goals: session.goals,
           goalNarrative: session.goalNarrative,
           credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
@@ -370,14 +374,22 @@ function OutputPageInner() {
         throw new Error(data.error || "Document generation failed");
       }
 
-      const data = await response.json();
+      let progressed = false;
+      const data = await readDocumentResponse(response, (event) => {
+        if (typeof event.message === "string") setWriteProgress(event.message);
+        if (event.type !== "resume" || typeof event.resume !== "string") return;
+        const checked = readChanges(event.changes, rebuildActive(session) ? session.originalResumeText ?? "" : session.resumeText ?? "", event.resume);
+        setChanges(checked);
+        setRevealing(checked.length > 0);
+        progressed = checked.length > 0;
+      });
       setResumeText(data.resume || "");
       // Only changes whose old line is the person's and whose new line is in
       // this finished resume. None (older server, nothing changed) = no reveal.
       // M2: checked against the page the writer started from (the server checked the same).
       const verified = readChanges(data.changes, rebuildActive(session) ? session.originalResumeText ?? "" : session.resumeText ?? "", data.resume || "");
       setChanges(verified);
-      setRevealing(verified.length > 0 && reducedRef.current === false);
+      if (!progressed) setRevealing(verified.length > 0 && reducedRef.current === false);
       // Lanes first (R2): the letter is the job route's. On the other routes it
       // waits behind "Add a cover letter" (written once, never forced on).
       if (offerLetterOnlyRef.current) {
@@ -615,7 +627,8 @@ function OutputPageInner() {
   // again. The page says so and offers the check, instead of a silent DRAFT.
   // Check and finish (R2): R1's artifact check already ran on the server and the
   // server holds its receipt, so the page never runs a run-bound check of its own.
-  const needsCheck = !checkMode && ready && (!receipt || (!!current && needsRecheck(current.openItems)));
+  const checkUnavailable = ready && (!verifierCheckedDocument(grounding, "resume") || (!!coverLetterText.trim() && !verifierCheckedDocument(grounding, "cover_letter")));
+  const needsCheck = ready && (checkUnavailable || (!checkMode && (!receipt || (!!current && needsRecheck(current.openItems)))));
   const localState: "finished" | "draft" = gateView.state === "finished" && !lengthOver && !needsCheck ? "finished" : "draft";
   // Signed in: the server's status for the saved version wins.
   const state: "finished" | "draft" = mayAccount && current ? current.status : localState;
@@ -857,11 +870,16 @@ function OutputPageInner() {
     setChecking(true);
     setCheckError("");
     try {
+      if (checkId) {
+        const saved = await fetch("/api/revisions/check", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ artifactId: checkId, finish: payload }) });
+        if (!saved.ok) throw new Error("Save this version before checking it again. Try saving once more.");
+      }
       const res = await fetch("/api/forge/recheck", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          kind: "finish",
+          ...(checkId ? { kind: "artifact", artifactId: checkId } : { kind: "finish" }),
           documents: { resume: resumeText, letter: coverLetterText },
           source: {
             resumeText: session.resumeText,
@@ -888,7 +906,7 @@ function OutputPageInner() {
       setReceipt(data.receipt);
       // A restored copy's evidence is replaced by this run's own words (signed in:
       // the server-held words the new receipt is bound to).
-      setRunEvidence(readRunEvidence(data.evidence));
+      if (!checkId) setRunEvidence(readRunEvidence(data.evidence));
     } catch (err) {
       setCheckError(err instanceof Error && err.message !== "failed" ? err.message : "We couldn't check it just now. Try again in a moment.");
     } finally {
@@ -1026,7 +1044,7 @@ function OutputPageInner() {
 
   // Phase 6 live markup (S3): the writer's real changes play on the person's
   // own page once the finished documents are back.
-  const liveFixOn = docState === "done" && revealing && !checkMode && changes.length > 0;
+  const liveFixOn = (docState === "done" || docState === "generating") && revealing && !checkMode && changes.length > 0;
 
   const headline =
     checkMode && (docState === "generating" || docState === "idle")
@@ -1034,7 +1052,7 @@ function OutputPageInner() {
       : checkMode && docState === "error"
         ? openError || "We couldn't open that resume."
         : docState === "generating" || docState === "idle"
-      ? "t.ROY is writing your resume and cover letter."
+      ? writeProgress || "t.ROY is writing your resume and cover letter."
       : docState === "error"
         ? "Your resume didn't come through."
         : liveFixOn
@@ -1141,8 +1159,10 @@ function OutputPageInner() {
         )}
       </div>
 
-      {(docState === "generating" || docState === "idle") && !checkMode && (
-        walkTour ? (
+      {(docState === "generating" || docState === "idle") && !checkMode && !liveFixOn && (
+        changes.length > 0 ? (
+          <div className="mt-6"><p role="status">Changes checked. Checking the rest of your documents...</p><ChangesList changes={changes} open /></div>
+        ) : walkTour ? (
           <MarkupWalk tour={walkTour} reduced={reduced} startingPage={rebuilding} />
         ) : (
           <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
@@ -1156,7 +1176,7 @@ function OutputPageInner() {
       )}
 
       {liveFixOn && (
-        <LiveFix lines={liveFixLines} changes={changes} reduced={reduced} onDone={() => setRevealing(false)} />
+        <LiveFix lines={liveFixLines} changes={changes} reduced={reduced} pending={docState === "generating"} onDone={() => setRevealing(false)} />
       )}
 
       {docState === "error" && !checkMode && (

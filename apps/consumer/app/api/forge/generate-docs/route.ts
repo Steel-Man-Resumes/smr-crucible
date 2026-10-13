@@ -22,7 +22,7 @@ import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
-import { runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
+import { readRunCookie, runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
 import { isUsableResume, splitWriterOutput, validateWriterChanges } from "@/lib/writer-changes";
 import { changesNotAwaitingCards } from "@/lib/changes-gate";
 import { buildFinishView } from "@/lib/finish-gate";
@@ -64,6 +64,31 @@ function stripContactPlaceholders(text: string): string {
 }
 
 async function handlePost(request: Request) {
+  // Existing anonymous receipts depend on this cookie. Keep the JSON path's
+  // success-only rotation so a failed retry cannot invalidate saved work.
+  if (!request.headers.get("accept")?.includes("application/x-ndjson") || readRunCookie(request.headers.get("cookie"))) return generateDocuments(request);
+  const cookie = randomBytes(16).toString("hex");
+  const encoder = new TextEncoder();
+  let cancelled = false;
+  const body = new ReadableStream({
+    async start(controller) {
+      const emit = (event: unknown) => { if (!cancelled) controller.enqueue(encoder.encode(JSON.stringify(event) + "\n")); };
+      try {
+        const response = await generateDocuments(request, emit, cookie);
+        const data = await response.json();
+        emit({ type: response.ok ? "done" : "error", ...data });
+      } catch {
+        emit({ type: "error", error: "Document generation failed. Please try again." });
+      } finally {
+        if (!cancelled) controller.close();
+      }
+    },
+    cancel() { cancelled = true; },
+  });
+  return new Response(body, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store", "Set-Cookie": runCookieHeader(cookie) } });
+}
+
+async function generateDocuments(request: Request, progress?: (event: unknown) => void, streamCookie?: string) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -114,10 +139,11 @@ async function handlePost(request: Request) {
     const startTime = Date.now();
 
     // Generate resume and cover letter in parallel
-    const [resumeReply, coverLetterRaw] = await Promise.all([
-      generateResume(input, userId),
-      generateCoverLetter(input, userId),
-    ]);
+    // Attach the failure handler immediately while resume generation/checking runs.
+    const coverPending = generateCoverLetter(input, userId).then(
+      (text) => ({ text, error: null as unknown }), (error: unknown) => ({ text: "", error }));
+    progress?.({ type: "stage", message: "Writing from your own work history." });
+    const resumeReply = await generateResume(input, userId);
     // Phase 6 (S2): the writer's reply is the resume, then its CHANGES block.
     // The block is cut off here, before any check reads the resume, and is
     // never part of what ships as the resume.
@@ -145,13 +171,12 @@ async function handlePost(request: Request) {
       ],
     });
 
-    const [resumeCheck, coverCheck] = await Promise.all([
-      // Round 4 (r3 H3-2): only here, where the finish page shows the one-tap card, is a supervision-only
-      // claim left in place and asked instead of cut.
-      // Integration M1/L4: on exactly when this run's signed rewording A marker is (rewordingAFor(sourceKind)).
-      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: rewordingAFor(sourceKind) }),
-      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter", askSupervision: rewordingAFor(sourceKind) }),
-    ]);
+    progress?.({ type: "stage", message: "Checking the resume against your facts." });
+    const coverCheckPending = coverPending.then(async (reply) => {
+      if (reply.error) throw reply.error;
+      return { raw: reply.text, check: await verifyGrounding({ sourceText: groundingSource, output: reply.text, kind: "cover_letter", askSupervision: rewordingAFor(sourceKind) }) };
+    }).then((result) => ({ result, error: null as unknown }), (error: unknown) => ({ result: null, error }));
+    const resumeCheck = await verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: rewordingAFor(sourceKind) });
 
     // A prompt rule is an instruction, not a guarantee. The output format
     // itself used to DEMONSTRATE "(XXX) XXX-XXXX | email@email.com", and when a
@@ -174,6 +199,24 @@ async function handlePost(request: Request) {
     const dateForms = restoreDateForms(cityCheck.text, groundingSource);
     if (dateForms.restored) console.warn(`[date-form] generate-docs: put back ${dateForms.restored} date range(s) in the person's own form`);
     const resume = dateForms.text;
+    const earlySource = writerSourceFrom(sourceInput as unknown as Record<string, unknown>);
+    const earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
+    const earlyGrounding = withRewording({
+      ...earlyAccounting, flags: resumeCheck.flags, hasFabrication: resumeCheck.hasFabrication,
+      verifierRan: resumeCheck.verifierRan, verifierRanByDoc: { resume: resumeCheck.verifierRan },
+    }, sourceKind);
+    const earlyView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
+      written: { resume, letter: "" }, grounding: earlyGrounding,
+      credentialsAnswer: earlySource.credentialsAnswer || undefined,
+      credentialRows: completeCredentialRows(readCredentialRows(earlySource.credentialRows)), ownResumeText: earlySource.ownResumeText || undefined });
+    const earlyChanges = resumeCheck.verifierRan ? changesNotAwaitingCards(validateWriterChanges(rawChanges, {
+      ownResumeText: withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept,
+      finalResume: resume, keepInsideLines: input.keepInsideLines === true,
+    }), earlyView) : [];
+    progress?.({ type: "resume", resume, changes: earlyChanges, message: "Your resume is written. Finishing the letter and final checks." });
+    const coverResult = await coverCheckPending;
+    if (!coverResult.result) throw coverResult.error;
+    const { raw: coverLetterRaw, check: coverCheck } = coverResult.result;
     const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
     const credentialChecks = [
       ...findOverstatedCredentialLines(resume, statuses).map((claim) => ({ claim, doc: "resume" as const })),
@@ -304,7 +347,7 @@ async function handlePost(request: Request) {
     const issuedAt = Date.now();
     // Signed out: a fresh run cookie with every generation (HttpOnly, set
     // below), and the receipt bound to it (review r3 L-1).
-    const runCookie = userId ? undefined : randomBytes(16).toString("hex");
+    const runCookie = userId ? undefined : streamCookie ?? randomBytes(16).toString("hex");
     // Phase 6 integration (H3): a change whose new line waits on a card (a people
     // claim set aside to ask, a fact to confirm) is not a finished fix and is not
     // shown. Read from this server's own finish gate over the final documents,

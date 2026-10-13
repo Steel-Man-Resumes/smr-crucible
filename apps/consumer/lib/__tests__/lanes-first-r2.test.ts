@@ -102,7 +102,7 @@ test("routes: resume goes to intake; the job route has one small step; interview
   const out = { signedIn: false, hasResume: false };
   assert.equal(routeHref("resume", out), "/resume");
   assert.equal(routeHref("job", out), "/start?step=job");
-  assert.equal(routeHref("interview", out), "/resume");
+  assert.equal(routeHref("interview", out), "/login?from=forge&callbackUrl=%2Fdashboard%2Finterview");
   assert.equal(routeHref("interview", { signedIn: true, hasResume: true }), "/dashboard/interview");
   assert.equal(routeHref("support", { signedIn: true, hasResume: false }), "/dashboard/resources#support");
   assert.equal(routeHref("support", out), "/start?step=support", "help without finishing a resume first");
@@ -469,11 +469,11 @@ test("the fixture is fictional", () => {
 
 // ---- review round 1: H1, L1, L2, L4 ------------------------------------------------
 
-test("H1: without a resume, Get support, the job board and the documents open; only resume and interview need one", () => {
+test("H1: without a resume, Get support, the job board and the documents open; interview and follow-up remain reachable", () => {
   for (const p of ["/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv/abc", "/dashboard/performer"]) {
     assert.equal(refineryOpenWithoutResume(p, null), true, p);
   }
-  assert.equal(refineryOpenWithoutResume("/dashboard/interview", "interview"), false);
+  assert.equal(refineryOpenWithoutResume("/dashboard/interview", "interview"), true);
   assert.equal(refineryOpenWithoutResume("/dashboard/application-tailor", "job"), false);
   assert.equal(refineryOpenWithoutResume("/dashboard", "support"), true, "the lane home for a support lane");
   assert.equal(refineryOpenWithoutResume("/dashboard", "resume"), false);
@@ -492,9 +492,9 @@ test("H1: Keep going follows the route; the lane home's next step too", () => {
   assert.equal(keepGoingHref("job", ctx), "/start?step=job");
   assert.equal(keepGoingHref("job", { ...ctx, hasResumeText: true }), "/resume");
   assert.equal(keepGoingHref("resume", ctx), "/resume");
-  assert.equal(keepGoingHref("interview", { ...ctx, hasForgeOutput: true }), "/output");
+  assert.equal(keepGoingHref("interview", { ...ctx, hasForgeOutput: true }), "/dashboard/interview");
   assert.deepEqual(laneHomeNext("job", null), { label: "Pick a job to go after", href: "/dashboard/jobs" });
-  assert.deepEqual(laneHomeNext("interview", null), { label: "Start your resume", href: "/resume" });
+  assert.deepEqual(laneHomeNext("interview", null), { label: "Practice for your interview", href: "/dashboard/interview" });
   assert.match(read("app/(forge)/start/page.tsx"), /const next = keepGoingHref\(task,/);
 });
 

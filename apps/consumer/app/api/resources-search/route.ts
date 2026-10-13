@@ -75,7 +75,7 @@ async function handlePost(request: Request) {
     return NextResponse.json({ resources, coverage });
   } catch (error) {
     console.error("Resource search error:", (error as { name?: string })?.name || "error");
-    return NextResponse.json({ resources: [], coverage: null });
+    return NextResponse.json({ error: "Support search is unavailable. Please try again." }, { status: 503 });
   }
 }
 

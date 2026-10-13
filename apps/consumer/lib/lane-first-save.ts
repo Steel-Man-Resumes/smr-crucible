@@ -22,13 +22,13 @@
  *              resumes (restoreVersion).
  * With no saved resume there is nothing to ask ("first").
  *
- * Built only from R1's pieces (cleanRevisionInput, computeRevision,
+ * Built only from R1's pieces (cleanRevisionInput, computeRevision, currentRevisionStatus,
  * revisionRecord, saveFinishRevision, the store); R1's own save, export and
  * email code is unchanged.
  */
 
 import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
-import { cleanRevisionInput, computeRevision, inputFromRevision, revisionRecord } from "./revision-status";
+import { cleanRevisionInput, computeRevision, currentRevisionStatus, inputFromRevision, revisionRecord } from "./revision-status";
 import { pickForgeArtifact, saveFinishRevision, type ArtifactLite, type RevisionStore, type SavedRevisionSummary } from "./revision-save";
 import { resumeTextToDocument } from "./revision-to-doc";
 import { artifactText, withRevisionMarker } from "./revision-current";
@@ -94,7 +94,7 @@ export async function savedMain(userId: string, store: RevisionStore): Promise<{
   const art = pickForgeArtifact(await store.listResumeArtifacts(userId));
   if (!art) return null;
   const rev = await store.getLatestRevision(userId, art.id);
-  return rev ? { art, rev } : null;
+  return rev ? { art, rev: currentRevisionStatus(rev) } : null;
 }
 
 /** Same words, same answers, same evidence: a new version computed again (so the same status). */
@@ -184,7 +184,7 @@ export async function listVersions(userId: string, artifactId: string, store: La
     .map((r) => ({
       id: r.id,
       number: r.revision_number,
-      status: r.status,
+      status: currentRevisionStatus(r).status,
       createdAt: r.created_at,
       preview: r.resume_text.split("\n").map((l) => l.trim()).filter(Boolean).slice(0, 3).join(" / ").slice(0, 160),
     }));
