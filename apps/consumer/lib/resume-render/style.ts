@@ -101,7 +101,7 @@ export function fontFaceCss(urlFor: (face: FaceKey) => string): string {
   return (Object.keys(FACE_FILES) as FaceKey[])
     .map((k) => {
       const c = FACE_CSS[k];
-      return `@font-face{font-family:'${c.family}';font-weight:${c.weight};font-style:${c.style};src:url(${urlFor(k)}) format('truetype');font-display:block}`;
+      return `@font-face{font-family:'${c.family}';font-weight:${c.weight};font-style:${c.style};src:url(${urlFor(k)}) format('truetype');font-display:swap}`;
     })
     .join("\n");
 }

@@ -1198,6 +1198,31 @@ function educationIsTheirs(m: CredentialMention, person: PersonLine[]): boolean 
   });
 }
 
+/** A plain school credential already supplied on one education row can be
+ * stated in a sentence. Prove the entire credential sentence and every named
+ * school/year; do not treat the surrounding paragraph as one credential. */
+function educationSentenceIsTheirs(m: CredentialMention, person: PersonLine[]): boolean {
+  if (!m.education || !/^(?:high school diploma|ged)$/i.test(m.name)) return false;
+  // Multiple mentions may attach different claims to the same credential.
+  if ((m.context.match(/\b(?:diploma|ged)\b/gi) ?? []).length !== 1) return false;
+  const sentences = m.context.split(/(?<=[.!?])\s+/);
+  const sentence = sentences.find((s) => /\b(?:high school diploma|ged)\b/i.test(s));
+  if (!sentence) return false;
+  const earned = sentence.trim().match(/^(?:I\s+)?(?:hold|have|earned)\s+(?:a\s+|my\s+)?(high school diploma|GED)(?:\s+from\s+([A-Za-z][A-Za-z .'-]*?))?(?:\s+in\s+((?:19|20)\d{2}))?\.?$/i);
+  if (!earned || normalizeTyped(earned[1]) !== normalizeTyped(m.name)) return false;
+  // Accept only an affirmative, complete source row. A subset comparison
+  // could discard "anticipated 2027" or "no diploma awarded" from that row.
+  const exact = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+  return person.some((p) => {
+    if (p.notHeld || /\b(?:no|not|never|without|working|progress|pending|expected|anticipated|due|studying|incomplete|unfinished|unearned|unawarded|awaiting|attended|attending|course|class|pursuing|failed)\b/i.test(p.text)) return false;
+    const own = p.text.trim().match(/^(high school diploma|GED)(?:\s*[|,]\s*([A-Za-z][A-Za-z .'-]*?))?(?:\s*[|,]\s*((?:19|20)\d{2}))?$/i);
+    if (!own || exact(own[1]) !== exact(earned[1])) return false;
+    if (own[2] && (!isSchoolName(own[2]) || cleanEducationPart(own[2]) !== own[2] || !/\b(?:school|academy|adult education)$/i.test(own[2]))) return false;
+    if (earned[2] && (!own[2] || exact(earned[2]) !== exact(own[2]))) return false;
+    return !earned[3] || earned[3] === own[3];
+  });
+}
+
 /** Kept for older callers: the person's lines, whole and normalised. */
 export function typedCredentialEntries(answer: string | undefined): Set<string> {
   return new Set(personCredentialLines(answer).map((p) => p.whole));
@@ -1430,6 +1455,7 @@ export function credentialsToAsk(
     if (rows?.some((r) => isCompleteCredentialRow(r) && liveCredentialCovers(m, r, { yearOnly: true }))) return false;
     // Round 9: an education line made only of parts of one line they wrote.
     if (educationIsTheirs(m, person)) return false;
+    if (educationSentenceIsTheirs(m, person)) return false;
     // A job title covers the title itself only: when the whole title is in one of their own job header lines.
     if (m.title) return !headerTitles.has(normalizeTyped(m.raw));
     return !mentionIsTheirs(m, person);

@@ -111,7 +111,7 @@ const STOP = new Set(["and", "of", "the", "for", "with", "in", "on", "to", "a", 
 export function untracedFacts(line: string, source: string | SourceIndex, opts: { section?: "skills" | "other"; job?: string } = {}): UntracedFact[] {
   const src = typeof source === "string" ? indexSource(source) : source;
   const out: UntracedFact[] = [];
-  const t = line.trim();
+  const t = straightQuotes(line.trim());
   if (!t || isSectionHeader(t)) return out;
   const push = (kind: FactKind, text: string) => {
     if (!out.some((f) => f.kind === kind && f.text.toLowerCase() === text.toLowerCase())) out.push({ kind, text });
@@ -184,7 +184,7 @@ export function untracedFacts(line: string, source: string | SourceIndex, opts: 
       // On a job line a lowercase word is part of a title or employer too.
       if (STOP.has(tok.toLowerCase()) || /^(?:present|current|now|to)$/i.test(tok)) continue;
     }
-    if (/^(?:present|current|now|i|a|an|the|and|of|to|in|on|at|for|with|by|or)$/i.test(tok)) continue;
+    if (/^(?:present|current|now|i(?:'m|'ve|'ll|'d)?|a|an|the|and|of|to|in|on|at|for|with|by|or)$/i.test(tok)) continue;
     if (!/[a-z]/i.test(tok) || tok.length < 2) continue;
     const w = tok.toLowerCase();
     if (src.flat.includes(` ${w} `) || saidStem(src, w) || saidPhrase(src, tok)) continue;

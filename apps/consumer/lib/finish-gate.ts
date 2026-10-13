@@ -1936,7 +1936,9 @@ function letterItems(
       });
     }
     // A sentence far from the person's words: settled by an answer, like a defend line.
-    const newFacts = untracedFacts(sentence, source);
+    // The supported employer placeholder is not a factual employer or scope
+    // claim. Check everything surrounding it, including any courtesy tail.
+    const newFacts = untracedFacts(sentence.replace(/\[Company Name\]/g, ""), source);
     if (!newFacts.length && checkedLetter && pageLineSet(checkedLetter).has(squash(line))) continue;
     if (!newFacts.length && distanceFromSource(sentence, against) <= LETTER_FAR) continue;
     if (answerStands(answerFor(answers, line), line, source)) continue;
