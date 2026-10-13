@@ -62,6 +62,10 @@ export const RESTRICTED_GRANTS = {
   directory_public_evidence_v: ["SELECT"],
   directory_mark_v: ["SELECT"],
   directory_health_v: ["SELECT"],
+  // Tier 3 (071). An activity is a dated record of a fact; it is never edited.
+  employer_working_agreement: ["SELECT", "INSERT", "UPDATE"],
+  employer_agreement_activity: ["SELECT", "INSERT"],
+  directory_tier_v: [],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
@@ -71,6 +75,7 @@ export const DIRECTORY_OBJECTS = [
   "employer_requirement", "employer_reply", "directory_proposal", "directory_import",
   "directory_evidence_live", "directory_place_evidence", "employer_standing_v",
   "directory_public_v", "directory_public_evidence_v", "directory_mark_v", "directory_health_v",
+  "employer_working_agreement", "employer_agreement_activity", "directory_tier_v",
 ];
 
 /**

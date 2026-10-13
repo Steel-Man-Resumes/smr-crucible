@@ -1,3 +1,14 @@
+/**
+ * The extraction worker (lib/extract-worker.ts) loads mammoth and pdf.js by
+ * path at run time, so the tracer cannot see what they need. Ship mammoth with
+ * its whole dependency tree, and pdf.js's package file, with the route that
+ * reads uploads. Keep in step with mammoth's dependencies (npm ls mammoth).
+ */
+const MAMMOTH_TREE = [
+  "../../node_modules/{mammoth,@xmldom/xmldom,sprintf-js,base64-js,bluebird,dingbat-to-unicode,jszip,lie,immediate,pako,readable-stream,core-util-is,inherits,process-nextick-args,safe-buffer,string_decoder,util-deprecate,setimmediate,lop,duck,underscore,option,path-is-absolute,xmlbuilder}/**/*",
+  "../../node_modules/pdfjs-dist/package.json",
+];
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@crucible/core", "@crucible/consumer-ui"],
@@ -15,7 +26,11 @@ const nextConfig = {
   // thread dies with MODULE_NOT_FOUND, and tesseract only listens through
   // `worker.onerror`, which Node ignores, so createWorker() never settles and
   // every image upload hung until the 60 s limit (504, found 2026-10-02).
-  serverExternalPackages: ["pdfjs-dist", "tesseract.js"],
+  //
+  // mammoth must stay external too: lib/extract-worker.ts runs it (and pdfjs)
+  // in a worker thread that loads it by path from node_modules, so it has to
+  // exist there in the function, traced from text-extraction.ts's own import.
+  serverExternalPackages: ["pdfjs-dist", "tesseract.js", "mammoth"],
   // The assistant route reads skill/doctrine .md files at runtime via fs. They
   // are NOT imported anywhere, so Next's file tracer has no static reference and
   // will not bundle them into the serverless function -- t.ROY then silently
@@ -33,6 +48,7 @@ const nextConfig = {
     // runtime downloads for executable assets. The pdfjs legacy build + its
     // worker .mjs are force-included so text extraction resolves the worker.
     "/api/parse": [
+      ...MAMMOTH_TREE,
       "../../node_modules/tesseract.js/**/*",
       "../../node_modules/tesseract.js-core/**/*",
       // The OCR worker thread is started from a file path, not an import, so

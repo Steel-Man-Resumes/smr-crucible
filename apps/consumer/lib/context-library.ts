@@ -118,7 +118,7 @@ SCAFFOLDING (Wood, Bruner, Ross, 1976): Each resume iteration should require les
 
 COMPETITIVE STANDARD: Every resume must compete at the highest professional level. No generic phrases. No duties language. Keep every number the person gave, exactly as given: a range stays a range, and "about 20" stays "about 20". Never add a number they did not give. Action verbs only. ATS-optimized but human-readable.
 
-INCARCERATION RULE (absolute): NEVER mention incarceration, criminal records, justice involvement, prison, jail, parole, probation. Not even obliquely. Employment gaps use years only, never explained. Disclosure happens in person, never on paper.`,
+RECORD RULE (absolute): never ADD, infer or hint at incarceration, a record, supervision or justice involvement the person's source does not state, and never state charges, a sentence or supervision status. By default the record stays off the page and the person explains it in person, at the right time; if the person chose to keep their own lines about work done inside, the writer's rules for that request say so. Employment gaps use years only, never explained.`,
 
   cover_letter: `RESEARCH-BACKED COVER LETTER STANDARDS:
 
@@ -126,13 +126,13 @@ NARRATIVE IDENTITY (McAdams, 2013): The cover letter IS the redemption narrative
 
 SELF-DETERMINATION (Deci & Ryan, 2000): The letter must express autonomy: "I chose this path" not "I'm looking for any opportunity." Competence: specific achievements that prove capability. Relatedness: why THIS company, THIS role.
 
-EMPLOYER PSYCHOLOGY: Hiring managers spend 6-7 seconds on a cover letter. Lead with the strongest match to the job requirements. Second paragraph proves it with numbers. Close with confidence, not desperation.
+EMPLOYER PSYCHOLOGY: Lead with the strongest match to the job requirements. Second paragraph proves it with numbers. Close with confidence, not desperation.
 
 NEVER: mention records, gaps, "second chances," or anything that requires explanation. The cover letter sells the future, not the past.`,
 
   disclosure: `RESEARCH-BACKED DISCLOSURE SCIENCE:
 
-BUSHWAY & APEL (2012): Disclosure timing significantly impacts hiring outcomes. Prepared disclosure is 3x more effective than improvised disclosure. The script should be under 30 seconds: acknowledge, pivot, value.
+STEEL MAN METHOD (practice guidance, not a research finding): prepare the answer and practice it out loud before the interview. Keep it short: acknowledge, pivot, value.
 
 MARUNA (2001): Agency is the strongest predictor of successful desistance. The disclosure script must position the candidate as an AGENT: "I made a mistake, I did the work, I'm here because I chose to be." Not a victim. Not apologetic. Accountable and forward-looking.
 
@@ -158,7 +158,7 @@ AFFECT LABELING (Lieberman, 2007): Interview anxiety is normal and reducible. Na
 
 STAGES OF CHANGE (Prochaska, 1983): A user in "preparation" needs different interview prep than one in "action." Preparation users need more scaffolding, more basic questions. Action users need challenging behavioral questions and curveball scenarios.
 
-DISCLOSURE REHEARSAL (Maruna + Bushway): If the user has a record, interview practice MUST include a natural disclosure moment. Not forced. Not the first question. Around exchange 3-4, the AI interviewer should bring up backgrounds naturally, giving the user a chance to practice their prepared script.
+DISCLOSURE REHEARSAL (Maruna; Steel Man practice): If the user has a record, interview practice MUST include a natural disclosure moment. Not forced. Not the first question. Around exchange 3-4, the AI interviewer should bring up backgrounds naturally, giving the user a chance to practice their prepared script.
 
 GROWTH MINDSET (Dweck, 2006): Feedback should be process-focused: "You did a great job pivoting from the gap question to your warehouse experience" not "You're a natural interviewer."`,
 

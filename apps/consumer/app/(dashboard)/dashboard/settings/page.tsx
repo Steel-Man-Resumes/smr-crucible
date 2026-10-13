@@ -30,6 +30,7 @@ import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { passwordProblem } from "@/lib/password-policy";
+import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
 
 interface UsageData {
   used: number;
@@ -45,6 +46,9 @@ interface RedeemedCode {
 }
 
 export default function SettingsPage() {
+  // Shared-computer rule: the export includes the local Forge run only when
+  // it is marked as this user's (lib/forge-carry.ts).
+  const ownerUid = useSession().data?.user?.id;
   const realTier = useRealTier();
   const effectiveRole = useEffectiveRole();
   const isAdmin = realTier === "admin";
@@ -240,8 +244,8 @@ export default function SettingsPage() {
 
       // Fold in the local-device keys so nothing is lost, under their own key
       // so they never collide with the server-side field names above.
-      const localDevice: Record<string, any> = {};
-      const keys = ["forge_session", "consumer_progress", "consent_record"];
+      const localDevice: Record<string, any> = { ...ownForgeRunExportEntry(ownerUid) };
+      const keys = ["consumer_progress", "consent_record"];
       for (const key of keys) {
         const val = localStorage.getItem(key);
         if (val) {
@@ -307,8 +311,8 @@ export default function SettingsPage() {
     // behind that quietly repopulate the next session: the last job search with
     // its full result list, and the pointer to an approved resume that the
     // generator uses as its tailoring base.
+    eraseLocalForgeRun();
     const keys = [
-      "forge_session",
       "consumer_progress",
       "consent_record",
       "hidden_jobs",

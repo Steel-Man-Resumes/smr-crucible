@@ -24,6 +24,8 @@ import { printResumePdf } from "./resumePrint";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
 import { isSamePerson } from "@/lib/is-same-person";
+import { useSession } from "next-auth/react";
+import { readOwnForgeSession } from "@/lib/forge-carry";
 
 interface SavedResume {
   id: string;
@@ -36,6 +38,11 @@ interface SavedResume {
 export function ResumeWorkspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  // The local Forge run is read only when it is marked as this user's
+  // (shared-computer rule, lib/forge-carry.ts readOwnForgeSession).
+  const ownerUid = useSession().data?.user?.id;
+  const ownerUidRef = useRef(ownerUid);
+  ownerUidRef.current = ownerUid;
 
   // Document state
   const [doc, setDoc] = useState<ResumeDocument>(createEmptyResume());
@@ -117,6 +124,9 @@ export function ResumeWorkspace() {
   const [generatingFull, setGeneratingFull] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [tailoringNotes, setTailoringNotes] = useState<string[]>([]);
+  // The tailor's truth check result. It used to be computed and then
+  // dropped here, so the person never saw a warning the server raised.
+  const [truthCheck, setTruthCheck] = useState<{ blocked: boolean; notice: string; flags: string[] } | null>(null);
 
   // The saved job application this resume is being tailored for, if any. When
   // set, the saved resume artifact is linked to it (Stage 3 journey gate).
@@ -185,16 +195,16 @@ export function ResumeWorkspace() {
 
   // --- Check for Forge data ---
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem("forge_session");
-      if (stored) {
-        const session = JSON.parse(stored);
-        if (session.forgeOutput || session.resumeText) {
-          setForgeAvailable(true);
-        }
+    const check = () => {
+      const session = readOwnForgeSession(ownerUid);
+      if (session && (session.forgeOutput || session.resumeText)) {
+        setForgeAvailable(true);
       }
-    } catch {}
-  }, []);
+    };
+    check();
+    window.addEventListener("forge-synced", check);
+    return () => window.removeEventListener("forge-synced", check);
+  }, [ownerUid]);
 
   // --- Load from URL param ?id= ---
   // A locked baseline must never be opened under its own id (Phase 0.1 keeps
@@ -321,7 +331,7 @@ export function ResumeWorkspace() {
   // application email (R8 rung 3). Never invents; empty is fine.
   function workspaceStrengths(): string[] {
     try {
-      const s = JSON.parse(localStorage.getItem("forge_session") || "{}");
+      const s = readOwnForgeSession(ownerUidRef.current) || {};
       const raw = s?.forgeOutput?.strengths;
       if (Array.isArray(raw)) {
         return raw.map((x: any) => (typeof x === "string" ? x : x?.title)).filter(Boolean);
@@ -435,9 +445,9 @@ export function ResumeWorkspace() {
 
         // Try localStorage first.
         //
-        // Cross-ACCOUNT isolation is enforced upstream: RefineryShell stamps
-        // `_ownerUserId` on sync and purges any blob belonging to a different
-        // account before this screen renders.
+        // Cross-ACCOUNT isolation: readOwnForgeSession returns the local run
+        // only when it is marked as this user's (`_ownerUserId`). An unowned
+        // run (a shared computer's previous person) is never read here.
         //
         // KNOWN LIMITATION, same account: if a newer Forge run was completed in
         // a different browser or origin, the database holds that run while this
@@ -448,9 +458,8 @@ export function ResumeWorkspace() {
         // (the login page clears prior-account state) or Settings -> delete my
         // data.
         try {
-          const stored = localStorage.getItem("forge_session");
-          if (stored) {
-            const session = JSON.parse(stored);
+          const session = readOwnForgeSession(ownerUidRef.current);
+          if (session) {
             forgeOutput = session.forgeOutput;
             resumeText = session.resumeText;
             challenges = session.challenges || [];
@@ -576,7 +585,15 @@ export function ResumeWorkspace() {
           throw new Error(errData.error || "Generation failed");
         }
 
-        const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes } = await res.json();
+        const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes, grounding, finalizationBlocked, verificationNotice } = await res.json();
+        const flagClaims: string[] = Array.isArray(grounding?.flags)
+          ? grounding.flags.map((f: any) => (typeof f?.claim === "string" ? f.claim.trim() : "")).filter(Boolean).slice(0, 8)
+          : [];
+        setTruthCheck(
+          finalizationBlocked || flagClaims.length || grounding?.hasFabrication
+            ? { blocked: !!finalizationBlocked, notice: typeof verificationNotice === "string" ? verificationNotice : "", flags: flagClaims }
+            : null
+        );
         const finalResume = resume as ResumeDocument;
         // Keep the typed job-listing URL on the tailored doc (the generator
         // response doesn't echo it back).
@@ -1284,6 +1301,36 @@ export function ResumeWorkspace() {
           </button>
         </div>
       </div>
+
+      {/* What the truth check found in this tailored version */}
+      {truthCheck && (
+        <div className="mb-4 bg-t-panel border border-t-amber px-4 py-3">
+          <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
+            Check these before you send
+          </p>
+          {truthCheck.blocked && truthCheck.notice && (
+            <p className="text-xs text-t-phos leading-relaxed mb-1">{truthCheck.notice}</p>
+          )}
+          {truthCheck.flags.length > 0 ? (
+            <>
+              <p className="text-xs text-t-phos leading-relaxed">
+                The truth check found {truthCheck.flags.length === 1 ? "something" : "some things"} we could not match to what you told us. Look for each one and make sure it is true before you send this:
+              </p>
+              <ul className="mt-1.5 space-y-1">
+                {truthCheck.flags.map((claim, i) => (
+                  <li key={i} className="text-[11px] leading-relaxed text-t-phos">&ldquo;{claim}&rdquo;</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            !truthCheck.blocked && (
+              <p className="text-xs text-t-phos leading-relaxed">
+                The truth check found something in this version it could not match to what you told us, but could not point to the exact words. Read every line before you send it.
+              </p>
+            )
+          )}
+        </div>
+      )}
 
       {/* What we tailored for this job */}
       {tailoringNotes.length > 0 && (
