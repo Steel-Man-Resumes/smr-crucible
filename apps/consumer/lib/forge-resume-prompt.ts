@@ -124,7 +124,7 @@ SECTION ORDER (exact):
 1. FULL NAME (all caps)
 2. Contact line: City, State | Phone | Email (one line, pipe-separated). Include ONLY the pieces the source provides. Omit anything missing rather than inventing a placeholder for it.
 3. Headline (one line naming the work the person does or is aiming for, built only from their facts. Never an objective, never a slogan.)
-4. CAREER SUMMARY (2-4 plain sentences built only from the person's facts: what they have done and what they are aiming for. No sentence that could fit anyone.)
+4. CAREER SUMMARY (2-4 plain sentences built only from the person's facts: the work they have done and the tools or duties that fit their general target field. No "seeking" or "looking for" sentence; the headline already names the field. No sentence that could fit anyone.)
 5. CORE COMPETENCIES (one column, per the page rules: one comma-separated line, or a few short labeled lines such as "Equipment: ..." and "Tools: ...". Only real, specific terms the person said they did, used or learned; never soft-skill words. Typically 6 to 15, fewer for a short history.)
 6. PROFESSIONAL EXPERIENCE (reverse chronological)
    - Format: JOB TITLE | Company Name | City, State | Start - End, with both dates copied exactly as the person wrote them. Include City, State only if the source gives that job's city; otherwise leave that part out.
@@ -132,7 +132,7 @@ SECTION ORDER (exact):
    - As many bullets as the role's real work supports (typically 2 to 6). Keep every number the person gave, as given; a true line without a number is complete.
    - No work history at all: the page is still dated, never a dateless functional page. Lead with what the person does have (education, training, programs, volunteer or informal work), each with the years the person gave. Never guess a year and never invent an entry.
 7. EDUCATION (only if the source gives any; otherwise leave the section off)
-   - Institution, dates. City and state only if the source gives them. Add relevant coursework only if the source states it.
+   - Lead with the diploma, degree, GED, school or program the person actually named. If they gave a credential but no institution, lead with that credential. Put its location and year after it on the same line when supplied. Never turn a location and date into a school name. Add relevant coursework only if the source states it.
 8. CERTIFICATIONS (only if the source gives any; its own section. List each credential once, at its true type and status, never also under EDUCATION. A finished course or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.)
 
 OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders. The one exception is the CHANGES block after the resume, which is JSON as the output format shows.`;
@@ -214,8 +214,8 @@ JOB TITLE | Company Name | City, State | Start - End
 (Repeat for each role, reverse chronological)
 
 EDUCATION
-Institution Name, City, State | Start - End (as the person wrote them)
-(City, State only if the source gives them.)
+Credential or Institution Name | City, State | Year or Start - End (as the person wrote them)
+(Use only the parts the source gives. A named credential comes first when no institution is supplied. Never place a location/date line before the credential.)
 Relevant coursework or focus area only if the source states it.
 
 CERTIFICATIONS
