@@ -130,6 +130,12 @@ export default function ResumeIntakePage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [activePath, setActivePath] = useState<IntakePath>(null);
+  // The first Forge decision already chose a way in. Do not ask it twice.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const entry = new URLSearchParams(window.location.search).get("entry");
+    if (entry === "upload" || entry === "quick") setActivePath(entry);
+  }, []);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -637,7 +643,7 @@ export default function ResumeIntakePage() {
     return (
       <FlowPage
         title={INTAKE_TITLE}
-        subtitle={session.laneTask === "interview" ? "Practice questions come from your real work history, so that comes first." : "Any format works, even a photo of a paper copy."}
+        subtitle="Bring any version you have. It gives t.ROY more of your real history to work with."
         showBack
         onBack={() => (replacing ? setReplacing(false) : router.push("/start?change=1"))}
       >
@@ -659,6 +665,7 @@ export default function ResumeIntakePage() {
             <p className="text-sm text-t-phos-dim mt-0.5">{INTAKE_BUILD.body}</p>
           </button>
         </div>
+        <p className="mt-5 text-sm text-t-phos-dim">PDF, Word, a phone photo, screenshot, copied email, pasted text, or your voice can get us started. Faxed copy? Photograph the page. Morse code? Translate it first, then paste it.</p>
         <IntakeHelp />
       </FlowPage>
     );
@@ -804,8 +811,15 @@ export default function ResumeIntakePage() {
         >
           {uploading ? (
             <>
-              <div className="w-8 h-8 border-2 border-t-amber border-t-transparent animate-spin" />
-              <p className="text-t-phos-dim">Reading your file...</p>
+              <div className="relative w-36 border border-t-amber bg-t-bg p-3 text-left shadow-[5px_5px_0_rgba(155,109,29,0.22)]" aria-hidden="true">
+                <div className="mb-2 h-1 w-16 bg-t-amber" />
+                <div className="mb-1 h-1 w-full bg-t-line" />
+                <div className="mb-1 h-1 w-3/4 bg-t-line" />
+                <div className="h-1 w-5/6 bg-t-line" />
+                <div className="absolute -right-3 -top-3 flex h-7 w-7 items-center justify-center border border-t-amber bg-t-panel motion-safe:animate-pulse"><span className="h-3 w-3 border-b-2 border-r-2 border-t-amber" /></div>
+              </div>
+              <p className="font-medium text-t-white">t.ROY is pulling the work off your page.</p>
+              <p className="text-sm text-t-phos-dim">Your jobs and dates are coming up for your review.</p>
             </>
           ) : (
             <>

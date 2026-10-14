@@ -1,25 +1,22 @@
 "use client";
 
 /**
- * The first screen: "What do you need today?" (Phase 5 lane R2; Troy
- * 2026-10-10; Codex review section C).
+ * The Forge's first decision: bring a resume or build one with t.ROY.
  *
- * Three main routes (a resume I can use, go after a job, get ready for an
- * interview), a quieter "Something else", and a quiet help link. The pick is
- * saved as today's task (migration 083 when signed in; this browser's run
- * otherwise) and decides the next screen. No readiness question, no
- * short/full chooser, no goals before the first page.
+ * The choice is saved as today's resume task (migration 083 when signed in;
+ * this browser's run otherwise) and selects the matching intake path. Job and
+ * interview routes remain compatible with saved runs and direct links, while
+ * the new entrance leaves those decisions to the Refinery.
  *
  * Coming back: signed in, the lane home is the Refinery overview; signed
  * out, this page shows where the run is with one "Keep going". "Change"
- * (?change=1) always opens the picker again.
+ * (?change=1) always opens the two resume choices again.
  */
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
-import { TaskPicker } from "@/components/lanes/TaskPicker";
 import { LaneHeader } from "@/components/lanes/LaneHeader";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
 import { planForgePath } from "@/lib/forge-path";
@@ -109,7 +106,7 @@ function StartInner() {
     });
   }
 
-  async function pick(task: LaneTask) {
+  async function pick(task: LaneTask, entry?: "upload" | "quick") {
     navigating.current = true;
     setBusy(true);
     setSaveError("");
@@ -117,7 +114,7 @@ function StartInner() {
     setBusy(false);
     if (!saved) { navigating.current = false; setSaveError("Your choice wasn't saved. Try again."); return; }
     keepInRun(task);
-    router.push(routeHref(task, { signedIn: focus.signedIn, hasResume }));
+    router.push(entry && task === "resume" ? `/resume?entry=${entry}` : routeHref(task, { signedIn: focus.signedIn, hasResume }));
   }
 
   async function continueJob() {
@@ -268,14 +265,30 @@ function StartInner() {
 
   // ---- the first screen ---------------------------------------------------------
   return (
-    <div className="px-4 py-8 sm:px-6">
+    <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6" data-testid="forge-start">
       {saveError && <p role="alert" className="mb-3 text-t-red">{saveError}</p>}
-      <TaskPicker
-        current={focus.task}
-        onPick={pick}
-        busy={busy}
-        helpHref={focus.signedIn ? "/dashboard/resources#support" : `${START_PATH}?step=support`}
-      />
+      <p className="font-term text-xs font-bold uppercase tracking-[0.16em] text-t-amber-bright">The Forge · first decision</p>
+      <h1 className="mt-2 font-display text-3xl font-bold text-t-white">What can we start with?</h1>
+      <p className="mt-3 max-w-2xl text-base text-t-phos">The Forge builds your general resume from what you actually did. Bring any old version if you can. Even a bad one saves you from rebuilding your history from memory.</p>
+      <div className="mt-7 grid gap-4 sm:grid-cols-2">
+        <button type="button" disabled={busy} onClick={() => void pick("resume", "upload")} className="t-focus min-h-[180px] border-2 border-t-amber bg-t-panel-2 p-5 text-left hover:bg-t-panel disabled:opacity-60" data-testid="forge-bring-resume">
+          <span className="font-term text-xs font-bold uppercase tracking-[0.14em] text-t-amber-bright">Recommended · less typing</span>
+          <span className="mt-4 block text-xl font-bold text-t-white">I have a resume, even a rough one</span>
+          <span className="mt-2 block text-sm text-t-phos">Upload, photograph, or paste it. t.ROY reads it, asks you to fix uncertain facts, then writes the strongest general page it can support.</span>
+          <span className="mt-4 block text-xs text-t-phos-dim">Time: shorter · Effort: review and correct · Output: general resume</span>
+        </button>
+        <button type="button" disabled={busy} onClick={() => void pick("resume", "quick")} className="t-focus min-h-[180px] border border-t-line bg-t-panel p-5 text-left hover:border-t-amber disabled:opacity-60" data-testid="forge-build-resume">
+          <span className="font-term text-xs font-bold uppercase tracking-[0.14em] text-t-phos-dim">No page yet · more talking</span>
+          <span className="mt-4 block text-xl font-bold text-t-white">Build one with t.ROY</span>
+          <span className="mt-2 block text-sm text-t-phos">Start with one real job and something you did there. Speak or type. t.ROY helps assemble a page, and you check every fact.</span>
+          <span className="mt-4 block text-xs text-t-phos-dim">Time: longer · Effort: tell us your history · Output: general resume</span>
+        </button>
+      </div>
+      <div className="mt-6 border-l-4 border-[#4f6b57] bg-t-panel px-5 py-4">
+        <h2 className="font-semibold text-t-white">Then comes The Refinery</h2>
+        <p className="mt-1 text-sm text-t-phos">Your general page is the foundation. Job-specific applications, employer research, and interview practice need more of your history and belong in The Refinery. You can make those decisions after this first step.</p>
+      </div>
+      <p className="mt-5 text-sm text-t-phos-dim">Want to look first? <Link href="/check" className="t-focus text-t-white underline underline-offset-2">Check a resume for free</Link>. The quick check is open to everyone.</p>
     </div>
   );
 }

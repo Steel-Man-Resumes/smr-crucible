@@ -30,12 +30,6 @@ import { JobCards } from "@/components/forge/showstopper/JobCards";
 import { TroyArrival } from "@/components/forge/showstopper/TroyArrival";
 import { useReducedMotion } from "@/components/forge/showstopper/useReducedMotion";
 
-const REFLECTION_PROMPTS = [
-  "While you wait, take a moment: What's one thing you're proud of?",
-  "Think about this: What's one skill you have that most people don't?",
-  "A question to sit with: What kind of person do you want to be at work?",
-];
-
 /** Stop waiting after this long; the server gives up well before it. */
 const HARD_STOP_MS = 180_000;
 /** A beat on "Done" so the person sees it finished before the page changes. */
@@ -52,7 +46,6 @@ export default function ProcessingPage() {
   const [phase, setPhase] = useState<BuildPhase>("sending");
   const [elapsed, setElapsed] = useState(0);
   const [failure, setFailure] = useState<BuildFailure | null>(null);
-  const [reflection, setReflection] = useState("");
   const startedRun = useRef(-1);
   const mounted = useRef(false);
 
@@ -149,13 +142,6 @@ export default function ProcessingPage() {
     return () => clearInterval(timer);
   }, [phase, failure, isDemo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Pick the reflection question once per visit, after mount, so server and
-  // browser markup match.
-  const [reflectionPrompt, setReflectionPrompt] = useState(REFLECTION_PROMPTS[0]);
-  useEffect(() => {
-    setReflectionPrompt(REFLECTION_PROMPTS[Math.floor(Math.random() * REFLECTION_PROMPTS.length)]);
-  }, []);
-
   // Nothing here claims work is going on once it has stopped.
   const building = isDemo || !failure;
   const intro = tour
@@ -246,21 +232,6 @@ export default function ProcessingPage() {
           ) : null}
         </div>
 
-        {/* Optional reflection, below the tour so it doesn't compete */}
-        <div className="mt-10 max-w-2xl border border-t-line bg-t-panel p-5">
-          <label htmlFor="reflection" className="mb-3 block text-sm font-medium text-t-white">
-            {reflectionPrompt}
-          </label>
-          <textarea
-            id="reflection"
-            value={reflection}
-            onChange={(e) => setReflection(e.target.value)}
-            placeholder="Take a moment to think... (optional)"
-            rows={2}
-            className="w-full resize-none border border-t-line bg-t-panel-2 px-4 py-3 text-sm text-t-white transition-colors focus:border-t-amber focus:outline-none"
-          />
-          <p className="mt-2 text-xs text-t-bone-dim">Just for you. This isn&apos;t saved or analyzed.</p>
-        </div>
       </div>
     </div>
   );

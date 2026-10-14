@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { GhostGuide, TBtn } from "@crucible/consumer-ui";
+import { ResumePage } from "@/components/resume/ResumePage";
 
 type Step = "input" | "processing" | "result";
 
@@ -341,7 +342,7 @@ export default function RushPage() {
             disabled={!resumeText.trim() || !targetJob.trim()}
             className="w-full text-lg"
           >
-            build my resume
+            rewrite my lines
           </TBtn>
         </div>
       </div>
@@ -357,18 +358,11 @@ export default function RushPage() {
             <div className="absolute inset-0 border-4 border-t-line" />
             <div className="absolute inset-0 border-4 border-t-amber border-t-transparent animate-spin" />
           </div>
-          <h1 className="text-2xl font-bold mb-2 text-t-white">Building your resume</h1>
+          <h1 className="text-2xl font-bold mb-2 text-t-white">Rewriting your lines</h1>
           <p className="text-base text-t-amber-bright transition-opacity duration-500">
             {PROCESSING_MESSAGES[processingMsg]}
           </p>
-          <div className="w-full h-1.5 bg-t-line mt-8 overflow-hidden">
-            <div
-              className="h-full bg-t-amber transition-all duration-1000 ease-out"
-              style={{
-                width: `${Math.min(90, ((processingMsg + 1) / PROCESSING_MESSAGES.length) * 100)}%`,
-              }}
-            />
-          </div>
+          <p className="mt-5 text-xs text-t-phos-dim">This is still working. We will show the text before you download it.</p>
         </div>
       </div>
     );
@@ -460,6 +454,14 @@ export default function RushPage() {
                 </div>
               </section>
             )}
+
+            <section className="mb-8" aria-labelledby="rush-preview-title">
+              <h2 id="rush-preview-title" className="mb-2 text-lg font-bold text-t-white">Preview the download</h2>
+              <p className="mb-3 text-sm text-t-phos-dim">This shows the rewritten lines as a draft page. It is not a complete resume.</p>
+              <div className="border border-t-line bg-t-bg p-3 sm:p-5" data-testid="rush-download-preview">
+                <ResumePage text={buildResumeText()} draft />
+              </div>
+            </section>
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 mb-4">

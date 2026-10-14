@@ -21,12 +21,12 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { FlowPage } from "@crucible/consumer-ui";
+import { FlowPage, TroyLivingIcon } from "@crucible/consumer-ui";
 import { ResumePage } from "@/components/resume/ResumePage";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { useForgeSession, type ForgeSessionData } from "@/lib/forge-context";
 import { applyFirstFix, checkFirstSection, firstSectionText, FIX_PROBLEM_COPY, pickFirstFix, type FirstSection } from "@/lib/first-fix";
-import { DRAFT_BADGE, HAVE_ONE_BUILD_LABEL, HAVE_ONE_FIX_LABEL, HAVE_ONE_SKIP_LABEL } from "@/lib/lane-task";
+import { DRAFT_BADGE, HAVE_ONE_BUILD_LABEL, HAVE_ONE_FIX_LABEL } from "@/lib/lane-task";
 import type { SavedRevisionSummary } from "@/lib/revision-save";
 
 type Keep = "new" | "replace";
@@ -291,11 +291,19 @@ export function FirstReward({
           )}
           <button
             type="button"
+            onClick={() => go(true, onBuild)}
+            className="t-focus mt-4 min-h-touch w-full bg-t-amber px-5 py-3 text-sm font-bold text-white hover:bg-t-amber-bright sm:w-auto"
+            data-testid="first-fix-continue"
+          >
+            Use this fix and build my resume
+          </button>
+          <button
+            type="button"
             onClick={() => go(false, onBuild)}
-            className="t-focus mt-3 min-h-touch text-sm text-t-phos underline underline-offset-2 hover:text-t-white"
+            className="t-focus mt-3 block min-h-touch text-sm text-t-phos underline underline-offset-2 hover:text-t-white"
             data-testid="first-fix-skip"
           >
-            {HAVE_ONE_SKIP_LABEL}
+            Skip this fix and build my resume
           </button>
         </section>
       )}
@@ -338,6 +346,7 @@ export function QuickBuild({
     if (!touched.current && session.quickBuildDraft) setForm(session.quickBuildDraft);
   }, [session.quickBuildDraft]);
   const [missing, setMissing] = useState<(keyof FirstSection)[]>([]);
+  const [helpMode, setHelpMode] = useState<"full" | "short" | "off">("full");
   // Jobs already saved in this sitting ("Add another job first").
   const [savedText, setSavedText] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -409,6 +418,14 @@ export function QuickBuild({
     </div>
   );
 
+  const nextPrompt = !form.name.trim() && !adding
+    ? "Start with the name you want on the page."
+    : !form.title.trim()
+      ? "What did you call this work? A job, a gig, volunteer work, or work for family all count. Use your own title."
+      : !form.duty.trim()
+        ? `At ${form.employer.trim() || "that place"}, what did you actually do? Say one thing out loud or type it as you would tell me.`
+        : "That's a real line to build from. Add the place and dates if you know them, then I'll organize what you gave me. You can add another job next.";
+
   return (
     <FlowPage
       title={adding ? "Add another job." : "Start with one job."}
@@ -418,6 +435,27 @@ export function QuickBuild({
       showBack
       onBack={adding ? () => setAdding(false) : onBack}
     >
+      <div className="mb-5 border-l-4 border-t-amber bg-t-panel-2 p-4" data-testid="quick-build-coach">
+        <div className="flex items-start gap-3">
+          <TroyLivingIcon size={38} />
+          <div className="min-w-0 flex-1">
+            <p className="font-term text-xs font-bold uppercase tracking-[0.14em] text-t-amber-bright">t.ROY is here with you</p>
+            {helpMode === "full" && (
+              <>
+                <p className="mt-2 text-sm text-t-white">I can do the organizing and writing. You tell me what happened. We can start small and build from there.</p>
+                <p className="mt-2 text-sm text-t-phos" aria-live="polite">{nextPrompt}</p>
+              </>
+            )}
+            {helpMode === "short" && <p className="mt-2 text-sm text-t-phos" aria-live="polite">{nextPrompt}</p>}
+            {helpMode === "off" && <p className="mt-2 text-sm text-t-phos">Help is hidden. Your answers stay here.</p>}
+            <div className="mt-2 flex flex-wrap gap-4 text-xs">
+              {helpMode !== "full" && <button type="button" onClick={() => setHelpMode("full")} className="t-focus min-h-touch text-t-amber-bright underline">More help</button>}
+              {helpMode === "full" && <button type="button" onClick={() => setHelpMode("short")} className="t-focus min-h-touch text-t-phos underline">Less help</button>}
+              {helpMode !== "off" && <button type="button" onClick={() => setHelpMode("off")} className="t-focus min-h-touch text-t-phos underline">Hide help</button>}
+            </div>
+          </div>
+        </div>
+      </div>
       <div className="space-y-4">
         {!adding && field("name", "Your name")}
         {!adding && field("contact", "Phone or email", { optional: true, placeholder: "So employers can reach you" })}

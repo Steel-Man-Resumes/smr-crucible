@@ -255,6 +255,7 @@ function OutputPageInner() {
   // What "No, take it off" left of longer sentences: held until reworded or cut.
   const [credentialCutRemnants, setCredentialCutRemnants] = useState<string[]>([]);
   const [docError, setDocError] = useState<string>("");
+  const [writerLimitReached, setWriterLimitReached] = useState(false);
   const [busy, setBusy] = useState(false);
   const [downloadError, setDownloadError] = useState("");
   const [copied, setCopied] = useState("");
@@ -334,10 +335,12 @@ function OutputPageInner() {
     hasStarted.current = true;
     setDocState("generating");
     setDocError("");
+    setWriterLimitReached(false);
     setGrounding(null);
     setChanges([]);
     setRevealing(false);
 
+    let limited = false;
     try {
       const response = await fetch("/api/forge/generate-docs", {
         method: "POST",
@@ -370,6 +373,11 @@ function OutputPageInner() {
 
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
+        if (response.status === 429) {
+          limited = true;
+          setWriterLimitReached(true);
+          throw new Error(typeof data.error === "string" ? data.error : "Today's writing limit has been reached. Your work is still here. Try again after the daily limit resets.");
+        }
         throw new Error(data.error || "Document generation failed");
       }
 
@@ -414,7 +422,9 @@ function OutputPageInner() {
       setDocState("done");
     } catch (err: unknown) {
       console.error("Doc generation error:", err);
-      setDocError("Something went wrong writing your documents.");
+      setDocError(limited
+        ? err instanceof Error ? err.message : "Today's writing limit has been reached."
+        : "The writer stopped before it made your resume. Your uploaded page is still here in this browser.");
       setDocState("error");
       hasStarted.current = false;
     }
@@ -1061,7 +1071,7 @@ function OutputPageInner() {
         : docState === "generating" || docState === "idle"
       ? writeProgress || "t.ROY is writing your resume and cover letter."
       : docState === "error"
-        ? "Your resume didn't come through."
+        ? writerLimitReached ? "Writing paused for today." : "We couldn't finish writing your resume."
         : liveFixOn
           ? "Your new page is written. Here's what t.ROY changed."
           : statusLine(view);
@@ -1073,7 +1083,7 @@ function OutputPageInner() {
         : docState === "generating" || docState === "idle"
       ? "This usually takes 30 to 60 seconds."
       : docState === "error"
-        ? "Nothing you entered was lost. Try again below."
+        ? writerLimitReached ? "Your uploaded resume and answers are still here. The writer cannot make another version until the daily allowance resets." : "Your uploaded resume and answers are still here. You can retry from this page."
         : liveFixOn
           ? "Each old line, the new one, and why. Skip any time."
           : view.state === "finished"
@@ -1187,17 +1197,26 @@ function OutputPageInner() {
       )}
 
       {docState === "error" && !checkMode && (
-        <div className="mt-6 border border-t-red bg-t-panel p-6 text-center">
+        <div className="mt-6 border border-t-red bg-t-panel p-6" role="alert">
           <p className="mb-3 text-sm text-t-phos">{docError}</p>
-          <button
-            onClick={() => {
-              hasStarted.current = false;
-              setDocState("idle");
-            }}
-            className="t-focus min-h-touch bg-t-amber px-6 py-3 text-sm font-bold text-white shadow-[0_3px_8px_rgba(22,26,21,0.15)] transition-colors hover:bg-t-amber-bright"
-          >
-            Try Again
-          </button>
+          <p className="mb-4 text-sm text-t-phos-dim">No new resume was made. Your original page is preserved in this browser.</p>
+          {!writerLimitReached && (
+            <button
+              onClick={() => {
+                hasStarted.current = false;
+                setDocState("idle");
+              }}
+              className="t-focus min-h-touch bg-t-amber px-6 py-3 text-sm font-bold text-white shadow-[0_3px_8px_rgba(22,26,21,0.15)] transition-colors hover:bg-t-amber-bright"
+            >
+              Try writing again
+            </button>
+          )}
+          {session.resumeText && (
+            <details className="mt-5 border-t border-t-line pt-4">
+              <summary className="t-focus cursor-pointer text-sm font-medium text-t-white">See the resume you gave us</summary>
+              <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs text-t-phos">{session.resumeText}</pre>
+            </details>
+          )}
         </div>
       )}
 

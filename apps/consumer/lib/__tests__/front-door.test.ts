@@ -32,11 +32,16 @@ test("partner and observer paths stay reachable and set the audience t.ROY recei
   assert.equal(sessionForPath(byId.observer).isDemo, true);
 });
 
-test("intro runs every path through sessionForPath and the shell passes session.audience to t.ROY", () => {
+test("intro offers one Forge start while the organization page stays reachable", () => {
   const intro = read("app/(forge)/intro/page.tsx");
   assert.match(intro, /updateSession\(sessionForPath\(path\)\)/);
   assert.match(intro, /handleSelect\(CLIENT_PATH\)/);
-  assert.match(intro, /OTHER_PATHS\.map/);
+  assert.doesNotMatch(intro, /OTHER_PATHS\.map|Show me what happens here/);
+  assert.match(read("app/page.tsx"), /href="\/partner"/);
+  const start = read("app/(forge)/start/page.tsx");
+  assert.match(start, /forge-bring-resume/);
+  assert.match(start, /forge-build-resume/);
+  assert.doesNotMatch(start, /<TaskPicker/);
   const shell = read("app/(forge)/ForgeShell.tsx");
   assert.match(shell, /audience: session\.audience/);
 });

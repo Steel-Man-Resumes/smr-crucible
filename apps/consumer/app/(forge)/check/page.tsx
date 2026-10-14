@@ -35,6 +35,21 @@ const VERDICT_STYLE: Record<CheckItem["verdict"], { icon: typeof CheckCircle2; c
   note: { icon: Info, className: "text-t-bone-dim", label: "Note" },
 };
 
+function markedPage(text: string, result: FreeCheckResult) {
+  const issues = result.sections.flatMap((section) => section.items)
+    .filter((item) => item.verdict !== "good" && typeof item.line === "string" && item.line.trim().length >= 6);
+  return text.split(/\r?\n/).map((line) => {
+    const ownLine = line.trim().toLowerCase();
+    const issue = ownLine.length >= 6
+      ? issues.find((item) => {
+          const quoted = item.line!.trim().toLowerCase();
+          return ownLine.includes(quoted) || quoted.includes(ownLine);
+        })
+      : undefined;
+    return { line, issue };
+  });
+}
+
 export default function FreeCheckPage() {
   const { data: authSession, status } = useSession();
   const signedIn = status === "authenticated" && !sessionPending(authSession?.user as any);
@@ -97,6 +112,7 @@ export default function FreeCheckPage() {
   }
 
   const ctaHref = signedIn ? "/welcome" : forgeSignInUrl("/welcome");
+  const pageWithNotes = checked ? markedPage(checked.text, checked.result) : [];
 
   return (
     <div className="font-body">
@@ -206,6 +222,19 @@ export default function FreeCheckPage() {
                   <PageFitLine text={checked.text} className="mt-1" />
                 </div>
               )}
+            </div>
+
+            <div className="mt-6 border border-t-line bg-t-bg p-4 sm:p-5" data-testid="free-check-marked-page">
+              <h2 className="text-lg font-semibold text-t-white">Your page, marked up</h2>
+              <p className="mt-1 text-sm text-t-bone-dim">These are your words. We mark lines we can match to a specific finding. The full check is below. Nothing on the page has been rewritten yet.</p>
+              <div className="mt-4 max-h-[34rem] space-y-1 overflow-y-auto border border-t-line bg-white p-3 font-term text-xs text-t-white sm:p-5">
+                {pageWithNotes.map(({ line, issue }, i) => (
+                  <div key={i} className={`grid gap-1 border-l-2 px-2 py-1 sm:grid-cols-[minmax(0,1fr)_12rem] ${issue ? "border-t-amber bg-t-panel-2" : "border-transparent"}`}>
+                    <span className="min-w-0 whitespace-pre-wrap break-words">{line || "\u00a0"}</span>
+                    {issue && <span className="text-t-amber-bright" aria-label={`Check this line: ${issue.title}`}>{issue.title}</span>}
+                  </div>
+                ))}
+              </div>
             </div>
 
             {checked.result.sections.map((section) => (
