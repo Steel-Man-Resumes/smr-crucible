@@ -111,7 +111,7 @@ export default function FreeCheckPage() {
     setError("");
   }
 
-  const ctaHref = signedIn ? "/welcome" : forgeSignInUrl("/welcome");
+  const ctaHref = signedIn ? "/start" : forgeSignInUrl("/start");
   const pageWithNotes = checked ? markedPage(checked.text, checked.result) : [];
 
   return (
