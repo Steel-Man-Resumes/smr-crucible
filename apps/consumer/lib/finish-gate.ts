@@ -2058,6 +2058,10 @@ export function buildFinishView(input: {
     .join("\n");
   // Rewording A: facts locked, one tap per job (only where the writer's second check ran).
   const factsLocked = factsLockedFor(input.written, input.grounding);
+  // A new Forge build has already checked each unchanged job against the
+  // person's own page. Asking for a tap on every matching header repeats the
+  // source they supplied. Older revisions and checks keep their existing rule.
+  const assistedForge = factsLocked && (input.grounding as { forgeAssisted?: unknown } | null)?.forgeAssisted === true;
   const status = getResumeStatus({
     resumeText: resumeForChecks,
     sourceText: source,
@@ -2261,6 +2265,10 @@ export function buildFinishView(input: {
       continue;
     }
     if (jobTapped(answers, header)) continue;
+    if (assistedForge) {
+      const pageJob = jobsIn(linesOf(input.resumeText).slice(1).join("\n")).find((j) => j.lines[0] === header);
+      if (pageJob && matchOwnJob(pageJob, jobsIn(input.ownResumeText ?? input.ownWords, { own: true })).kind === "one") continue;
+    }
     items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_confirm", why: JOB_WHY, question: JOB_QUESTION });
   }
 

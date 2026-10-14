@@ -28,6 +28,8 @@ import { changesNotAwaitingCards } from "@/lib/changes-gate";
 import { buildFinishView } from "@/lib/finish-gate";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
 import { restoreDateForms } from "@/lib/date-form";
+import { repairForgeResume } from "@/lib/forge-auto-repair";
+import { acceptForgeQualityRevision, forgeQualityIssues } from "@/lib/forge-quality-pass";
 import { randomBytes } from "node:crypto";
 import { revisionCaller } from "@/lib/revision-route";
 import { loadRebuildSource, rebuildInputs, rebuildStore } from "@/lib/rebuild-source";
@@ -147,7 +149,8 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
     // Phase 6 (S2): the writer's reply is the resume, then its CHANGES block.
     // The block is cut off here, before any check reads the resume, and is
     // never part of what ships as the resume.
-    const { resume: resumeRaw, changes: rawChanges } = splitWriterOutput(resumeReply);
+    const { resume: firstResume, changes: rawChanges } = splitWriterOutput(resumeReply);
+    let resumeRaw = firstResume;
     // Review M3: never check, sign or return an empty page. A reply that was
     // only a change list (or nothing) is an error the person can retry.
     if (!isUsableResume(resumeRaw)) {
@@ -176,7 +179,42 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
       if (reply.error) throw reply.error;
       return { raw: reply.text, check: await verifyGrounding({ sourceText: groundingSource, output: reply.text, kind: "cover_letter", askSupervision: rewordingAFor(sourceKind) }) };
     }).then((result) => ({ result, error: null as unknown }), (error: unknown) => ({ result: null, error }));
-    const resumeCheck = await verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: rewordingAFor(sourceKind) });
+    let resumeCheck = await verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: rewordingAFor(sourceKind) });
+    const initialQualityIssues = resumeCheck.verifierRan ? forgeQualityIssues(resumeCheck.text) : [];
+    let qualityImproved = false;
+    // A weak first draft gets one extra writing pass. The checked first draft
+    // stays the fallback: the retry must preserve job headers, credentials,
+    // every number and the number of bullets under each job, then pass the
+    // independent truth check again with fewer writing findings.
+    if (initialQualityIssues.length && rewordingAFor(sourceKind)) {
+      try {
+        progress?.({ type: "stage", message: "Polishing the wording against your work history." });
+        const sourceForPolish = buildTrustedSource({
+          resumeText: withholdRecordLines(sourceInput.resumeText, input.keepInsideLines === true).kept,
+          userText: [sourceInput.goalNarrative, (sourceInput.goals || []).join(", "), sourceInput.credentialsNote],
+        });
+        const qualityDeadline = new AbortController();
+        const qualityTimer = setTimeout(() => qualityDeadline.abort(), 25_000);
+        const polishedRaw = await callClaude(
+          "Improve the writing of this general resume. Keep every job header, date, employer, credential and number exactly as written. Keep the same number of bullets under each job. Rewrite weak summary and bullet wording using only the person's source. Do not invent a result, tool, skill, setting or scope. Return only the revised resume in plain text, with no commentary or change list.",
+          `PERSON'S SOURCE:\n${sliceWithWarn(sourceForPolish, RESUME_SOURCE_MAX, "generate-docs.qualitySource")}\n\nCURRENT RESUME:\n${resumeCheck.text}\n\nFIX THESE WRITING ISSUES:\n${initialQualityIssues.map((i) => `- ${i.line}: ${i.why}`).join("\n")}`,
+          userId,
+          5500,
+          qualityDeadline.signal
+        ).finally(() => clearTimeout(qualityTimer));
+        const polished = splitWriterOutput(polishedRaw).resume;
+        if (isUsableResume(polished)) {
+          const checked = await verifyGrounding({ sourceText: groundingSource, output: polished, kind: "resume", askSupervision: rewordingAFor(sourceKind) });
+          if (checked.verifierRan && acceptForgeQualityRevision(resumeCheck.text, checked.text, groundingSource)) {
+            resumeRaw = polished;
+            resumeCheck = checked;
+            qualityImproved = true;
+          }
+        }
+      } catch {
+        // The first checked resume remains available when the optional polish fails.
+      }
+    }
 
     // A prompt rule is an instruction, not a guarantee. The output format
     // itself used to DEMONSTRATE "(XXX) XXX-XXXX | email@email.com", and when a
@@ -198,12 +236,14 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
     // a job line the writer shortened to years gets the person's form back.
     const dateForms = restoreDateForms(cityCheck.text, groundingSource);
     if (dateForms.restored) console.warn(`[date-form] generate-docs: put back ${dateForms.restored} date range(s) in the person's own form`);
-    const resume = dateForms.text;
     const earlySource = writerSourceFrom(sourceInput as unknown as Record<string, unknown>);
+    const repaired = repairForgeResume(dateForms.text, earlySource.ownResumeText, earlySource.ownWords);
+    const resume = repaired.text;
     const earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
     const earlyGrounding = withRewording({
       ...earlyAccounting, flags: resumeCheck.flags, hasFabrication: resumeCheck.hasFabrication,
       verifierRan: resumeCheck.verifierRan, verifierRanByDoc: { resume: resumeCheck.verifierRan },
+      forgeAssisted: rewordingAFor(sourceKind),
     }, sourceKind);
     const earlyView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
       written: { resume, letter: "" }, grounding: earlyGrounding,
@@ -325,6 +365,9 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
         verifierRan: resumeCheck.verifierRan && coverCheck.verifierRan,
         // Per document, so the page can say which one went unchecked.
         verifierRanByDoc: { resume: resumeCheck.verifierRan, cover_letter: coverCheck.verifierRan },
+        forgeAssisted: rewordingAFor(sourceKind),
+        forgeRepairs: repaired.repairs,
+        qualityPass: { attempted: initialQualityIssues.length > 0, improved: qualityImproved, remaining: forgeQualityIssues(resume).length },
         hasFabricationByDoc: { resume: resumeCheck.hasFabrication, cover_letter: coverCheck.hasFabrication },
         // The check reported a problem in this document but named no phrase of its own.
         unnamedByDoc: {
@@ -408,9 +451,10 @@ async function callClaude(
   systemPrompt: string,
   userMessage: string,
   userId: string | null | undefined,
-  maxTokens = 4000
+  maxTokens = 4000,
+  signal?: AbortSignal
 ): Promise<string> {
-  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP, { userId, endpoint: "generate-docs" });
+  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP, { userId, endpoint: "generate-docs" }, signal);
 }
 
 // --- Resume Generation ---

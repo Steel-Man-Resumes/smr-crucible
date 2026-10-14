@@ -820,7 +820,8 @@ test("r3 H3-2: the supervision set-aside is generate-docs only, and only when su
   // Integration M1/L4 (CC ruling): on exactly when the run's signed rewording A marker is, on generate-docs and
   // on every recheck path; never on the other routes.
   const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8");
-  assert.equal((read("../../app/api/forge/generate-docs/route.ts").match(/askSupervision: rewordingAFor\(sourceKind\)/g) ?? []).length, 2);
+  // The optional writing retry gets the same source-kind supervision rule.
+  assert.equal((read("../../app/api/forge/generate-docs/route.ts").match(/askSupervision: rewordingAFor\(sourceKind\)/g) ?? []).length, 3);
   assert.doesNotMatch(read("../../app/api/forge/generate-docs/route.ts"), /askSupervision: true/);
   assert.equal((read("../forge-recheck.ts").match(/deps\.verify,\s*rewordingAFor\(kind\)/g) ?? []).length, 2);
   for (const rel of ["../../app/api/fit-check/route.ts", "../../app/api/rush-resume/route.ts", "../../app/api/resume-fine-tune/route.ts", "../../app/api/resume-generate-full/route.ts"]) {

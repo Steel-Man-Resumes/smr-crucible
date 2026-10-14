@@ -352,7 +352,6 @@ function OutputPageInner() {
           // Phase 6 (S1 round 2): a build from a saved resume. The server reads
           // it and decides the own words itself; only the id is sent.
           rebuildFrom: rebuildActive(session) ?? undefined,
-          jobPosting: session.laneJobPosting,
           goals: session.goals,
           goalNarrative: session.goalNarrative,
           credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
@@ -642,6 +641,13 @@ function OutputPageInner() {
   const fileSource = (): { revisionId?: string; finish?: unknown } => (mayAccount && current ? { revisionId: current.id } : { finish: payload });
 
   const groundingNote = useMemo(() => readGrounding(grounding), [grounding]);
+  const forgeRepairs = useMemo(() => {
+    const raw = (grounding as { forgeRepairs?: unknown } | null)?.forgeRepairs;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((r): r is { kind: "job" | "skill"; before: string; after: string } =>
+      !!r && (r.kind === "job" || r.kind === "skill") && typeof r.before === "string" && typeof r.after === "string"
+    );
+  }, [grounding]);
   const g = grounding as { verifierRan?: boolean; verifierRanByDoc?: { resume?: boolean; cover_letter?: boolean } } | null;
   // Absent means an older response shape, treated as "ran". An explicit false matters.
   const verifierRan = g?.verifierRan !== false;
@@ -1071,7 +1077,7 @@ function OutputPageInner() {
         : liveFixOn
           ? "Each old line, the new one, and why. Skip any time."
           : view.state === "finished"
-          ? "Download it below, or email it to yourself."
+          ? checkMode ? "Download it below, or email it to yourself." : "Download your general resume below. The Refinery helps you tailor it and practice."
           : "Answer them with t.ROY. You can download a draft any time.";
 
   return (
@@ -1208,6 +1214,24 @@ function OutputPageInner() {
                   <p className="text-sm text-t-phos">The resume came back empty. Try again below.</p>
                 )}
               </div>
+              {forgeRepairs.length > 0 && (
+                <details className="mt-3 border border-t-line bg-t-panel px-4 py-3" data-testid="forge-repairs">
+                  <summary className="cursor-pointer text-sm font-semibold text-t-white">
+                    What we corrected from your page ({forgeRepairs.length})
+                  </summary>
+                  <ul className="mt-2 space-y-2 text-xs leading-relaxed text-t-phos">
+                    {forgeRepairs.map((repair, i) => (
+                      <li key={`${repair.kind}-${i}`}>
+                        {repair.kind === "job" ? (
+                          <>We changed &ldquo;{repair.before}&rdquo; to &ldquo;{repair.after}&rdquo; to match your page.</>
+                        ) : (
+                          <>We left &ldquo;{repair.before}&rdquo; off the skills list because it wasn&apos;t in what you gave us. You can add it later in the Refinery if you have used it.</>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
 
               {withheldLines.length > 0 && !keepInsideLines && (
                 <div className="mt-3 border border-t-line bg-t-panel px-4 py-3">

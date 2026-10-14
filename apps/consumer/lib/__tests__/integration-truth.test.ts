@@ -235,7 +235,7 @@ test("M1: after a marked recheck, the writer draft's supervision line is the one
 
 test("L4: generate-docs sets supervision aside only for a marked run (rewordingAFor(sourceKind))", () => {
   const route = read("app/api/forge/generate-docs/route.ts");
-  assert.equal((route.match(/askSupervision: rewordingAFor\(sourceKind\)/g) ?? []).length, 2);
+  assert.equal((route.match(/askSupervision: rewordingAFor\(sourceKind\)/g) ?? []).length, 3);
   assert.match(route, /const grounding = withRewording\(\{[\s\S]*\}, sourceKind\)/);
 });
 
