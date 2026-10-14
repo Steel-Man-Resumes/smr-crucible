@@ -28,7 +28,7 @@ import {
   pendingSessionTreatment,
   safeLoginReturn,
 } from "../session-policy";
-import { SIGNED_IN_IP_FLOOR_PEOPLE, overLimit, planForgeLimit } from "../forge-rate-limit";
+import { SIGNED_IN_IP_FLOOR_PEOPLE, forgeLimitAction, overLimit, planForgeLimit } from "../forge-rate-limit";
 
 const root = join(import.meta.dirname, "..", "..");
 const read = (p: string) => readFileSync(join(root, p), "utf8");
@@ -274,6 +274,17 @@ describe("limits: per account when signed in, per IP as the floor", () => {
   it("signed out: refused on a walled route, per IP on an open one", () => {
     assert.deepEqual(planForgeLimit({ userId: null, needsSession: true, perPerson: 5, tierLimit: 5 }), { kind: "refuse" });
     assert.deepEqual(planForgeLimit({ userId: null, needsSession: false, perPerson: 400, tierLimit: 400 }), { kind: "ip", perIp: 400 });
+  });
+
+  it("Preview removes Forge daily buckets but keeps the sign-in wall; Production stays metered", () => {
+    const signedIn = planForgeLimit({ userId: "u1", needsSession: true, perPerson: 5, tierLimit: 30 });
+    const walled = planForgeLimit({ userId: null, needsSession: true, perPerson: 5, tierLimit: 5 });
+    const open = planForgeLimit({ userId: null, needsSession: false, perPerson: 5, tierLimit: 5 });
+    assert.equal(forgeLimitAction(signedIn, "preview"), "unmetered");
+    assert.equal(forgeLimitAction(open, "preview"), "unmetered");
+    assert.equal(forgeLimitAction(walled, "preview"), "refuse");
+    assert.equal(forgeLimitAction(signedIn, "production"), "metered");
+    assert.equal(forgeLimitAction(open, "development"), "metered");
   });
 
   it("over the limit only past it", () => {

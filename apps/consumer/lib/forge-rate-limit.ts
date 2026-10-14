@@ -31,6 +31,17 @@ export type ForgeLimitPlan =
   | { kind: "ip"; perIp: number }
   | { kind: "refuse" };
 
+/** Preview is for repeated end-to-end QA. Keep the Forge sign-in wall, but
+ * do not spend or enforce daily Forge buckets there. Production and local
+ * development still use their ordinary limits. */
+export function forgeLimitAction(
+  plan: ForgeLimitPlan,
+  deploymentEnv: string | undefined
+): "refuse" | "unmetered" | "metered" {
+  if (plan.kind === "refuse") return "refuse";
+  return deploymentEnv === "preview" ? "unmetered" : "metered";
+}
+
 export function planForgeLimit(input: {
   /** The signed-in, fully verified user (forgeSessionUser), or null. */
   userId: string | null;

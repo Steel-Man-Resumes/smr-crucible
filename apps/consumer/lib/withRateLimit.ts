@@ -26,7 +26,7 @@ import {
 import type { UserTier } from "@crucible/core";
 import { forgeApiNeedsSession, forgeUserId } from "./session-policy";
 import { FORGE_SIGN_IN_REQUIRED_MESSAGE, forgeWallState } from "./forge-access";
-import { codeSeats, decideSignedInCall, planForgeLimit } from "./forge-rate-limit";
+import { codeSeats, decideSignedInCall, forgeLimitAction, planForgeLimit } from "./forge-rate-limit";
 import type { PremiumToolId } from "./premium";
 import { checkPremium } from "./premium-server";
 import {
@@ -164,18 +164,21 @@ export function withRateLimit(
       const path = new URL(request.url).pathname;
       const userId = forgeUserId(await auth().catch(() => null)) ?? null;
       const perPerson = FORGE_IP_LIMITS[opts.endpoint] ?? 10;
+      const deploymentEnv = process.env.VERCEL_ENV;
       const plan = planForgeLimit({
         userId,
         needsSession: forgeApiNeedsSession(path, forgeWallState() === "up"),
         perPerson,
-        tierLimit: userId ? await getUserDailyLimit(userId) : perPerson,
+        tierLimit: userId && deploymentEnv !== "preview" ? await getUserDailyLimit(userId) : perPerson,
       });
-      if (plan.kind === "refuse") {
+      const action = forgeLimitAction(plan, deploymentEnv);
+      if (action === "refuse") {
         return NextResponse.json(
           { error: FORGE_SIGN_IN_REQUIRED_MESSAGE, signInRequired: true },
           { status: 401 }
         );
       }
+      if (action === "unmetered") return handler(request);
       if (plan.kind === "account") {
         // The account first, then the code's seat pool or the network ceiling
         // (lib/forge-rate-limit.ts, decideSignedInCall).
