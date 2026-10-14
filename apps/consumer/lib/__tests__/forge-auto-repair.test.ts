@@ -95,3 +95,14 @@ test("Forge leaves a single disputed sentence for the person to answer", () => {
   assert.equal(result.text, disputed);
   assert.deepEqual(result.repairs, []);
 });
+
+test("Forge uses an actual role headline and puts current volunteer work before older paid work", () => {
+  const source = `RILEY EXAMPLE\nMadison, WI | riley@example.com\nWORK EXPERIENCE\nCashier | Elm Market | 2023 - 2024\nHelped customers and handled cash.\nVOLUNTEER EXPERIENCE\nFood Pantry Helper | Community Pantry | 2025 - Present\nSorted donated food and packed grocery bags.`;
+  const draft = `RILEY EXAMPLE\nMadison, WI | riley@example.com\n\nRetail and warehouse support worker with customer and pantry experience\n\nCAREER SUMMARY\nHelped customers and sorted donated food.\n\nPROFESSIONAL EXPERIENCE\n\nCashier | Elm Market | 2023 - 2024\n- Helped customers and handled cash.\n\nFood Pantry Helper | Community Pantry | 2025 - Present\n- Sorts donated food and packs grocery bags.`;
+  const result = repairForgeResume(draft, source, source);
+  assert.match(result.text, /\nFood Pantry Helper\n\nCAREER SUMMARY/);
+  assert.ok(result.text.indexOf("Food Pantry Helper | Community Pantry") < result.text.indexOf("Cashier | Elm Market"));
+  assert.deepEqual(result.repairs.map((r) => r.kind), ["headline", "order"]);
+  const view = buildFinishView({ resumeText: result.text, ownWords: source, ownResumeText: source, defendAnswers: [], written: { resume: result.text, letter: "" }, grounding });
+  assert.equal(view.state, "finished", JSON.stringify(view.openItems));
+});

@@ -644,8 +644,8 @@ function OutputPageInner() {
   const forgeRepairs = useMemo(() => {
     const raw = (grounding as { forgeRepairs?: unknown } | null)?.forgeRepairs;
     if (!Array.isArray(raw)) return [];
-    return raw.filter((r): r is { kind: "job" | "skill" | "claim"; before: string; after: string } =>
-      !!r && (r.kind === "job" || r.kind === "skill" || r.kind === "claim") && typeof r.before === "string" && typeof r.after === "string"
+    return raw.filter((r): r is { kind: "job" | "skill" | "claim" | "order" | "headline"; before: string; after: string } =>
+      !!r && ["job", "skill", "claim", "order", "headline"].includes(r.kind) && typeof r.before === "string" && typeof r.after === "string"
     );
   }, [grounding]);
   const g = grounding as { verifierRan?: boolean; verifierRanByDoc?: { resume?: boolean; cover_letter?: boolean } } | null;
@@ -1226,8 +1226,12 @@ function OutputPageInner() {
                           <>We changed &ldquo;{repair.before}&rdquo; to &ldquo;{repair.after}&rdquo; to match your page.</>
                         ) : repair.kind === "skill" ? (
                           <>We left &ldquo;{repair.before}&rdquo; off the skills list because it wasn&apos;t in what you gave us. You can add it later in the Refinery if you have used it.</>
-                        ) : (
+                        ) : repair.kind === "claim" ? (
                           <>We left out &ldquo;{repair.before}&rdquo; because that sentence needed a fact you haven&apos;t given us. The rest of the document stays in place.</>
+                        ) : repair.kind === "headline" ? (
+                          <>We used your listed title &ldquo;{repair.after}&rdquo; in place of &ldquo;{repair.before}&rdquo;.</>
+                        ) : (
+                          <>We put your most recent listed work first: &ldquo;{repair.after}&rdquo;.</>
                         )}
                       </li>
                     ))}
