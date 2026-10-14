@@ -252,7 +252,8 @@ test("M2: a changed month, a shortened employer or an added city is a fact card 
   assert.equal(statusLine(same), "Check your two jobs, one tap each, and it's ready.");
   // The card shows no "Looks right" on a changed job.
   const ui = read("components/forge/finish/DefendPanel.tsx");
-  assert.match(ui, /\{!changes\.length && \(\s+<button onClick=\{\(\) => actions\.onJobOk\?\.\(group\)\}/);
+  assert.match(ui, /const changed = group\.items\.some\(\(item\) => item\.kind === "job_changed"\)/);
+  assert.match(ui, /\{!changed && \(\s+<button onClick=\{\(\) => actions\.onJobOk\?\.\(group\)\}/);
   assert.doesNotMatch(read("lib/finish-gate.ts"), /come from your own page/);
 });
 

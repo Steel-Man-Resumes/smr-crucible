@@ -19,6 +19,7 @@ import {
   factsLockedFor,
   jobHeaderLines,
   mainActionLabel,
+  ownJobHeaderForFix,
   optionalNumberPrompts,
   readStoredFinish,
   recordAnswer,
@@ -275,6 +276,25 @@ test("Fix this: the job line retyped by the person settles that job; her own typ
   const v = view({ resumeText: r.text, defendAnswers: r.answers });
   assert.ok(!v.groups.some((g) => g.line === "Prep Cook | Corner Diner | 3/2018 - 7/2021"), JSON.stringify(v.groups.map((g) => [g.line, g.items.map((i) => i.kind)])));
   assert.equal(v.jobsOpen, 1);
+});
+
+test("a changed job date offers the person's exact header and one tap restores it", () => {
+  const wrong = WRITTEN.replace("Line Cook | Corner Diner | 3/2018 - 7/2021", "Line Cook | Corner Diner | 3/2017 - 7/2021");
+  const header = "Line Cook | Corner Diner | 3/2017 - 7/2021";
+  const own = ownJobHeaderForFix(header, wrong, UPLOAD);
+  assert.equal(own, "Line Cook | Corner Diner | 3/2018 - 7/2021");
+  const before = view({ resumeText: wrong, written: { resume: wrong, letter: "" } });
+  assert.equal(before.groups.find((g) => g.line === header)?.job?.ownHeader, own);
+  const fixed = applyRewrite(wrong, [], header, own!);
+  assert.ok(fixed.changed);
+  const after = view({ resumeText: fixed.text, defendAnswers: fixed.answers, written: { resume: wrong, letter: "" } });
+  assert.ok(!after.groups.some((g) => g.line === own && g.job?.changes?.length), "the incorrect date no longer blocks");
+});
+
+test("an ambiguous job match offers no automatic replacement", () => {
+  const source = "WORK HISTORY\nCook | Corner Diner | 2018 - 2019\nCook | Corner Diner | 2021 - 2022";
+  const page = "WORK HISTORY\nCook | Corner Diner | 2018 - 2022";
+  assert.equal(ownJobHeaderForFix("Cook | Corner Diner | 2018 - 2022", page, source), undefined);
 });
 
 test("D2: a number she adds herself through 'Add a number' finishes; nothing offers a figure", () => {

@@ -749,10 +749,11 @@ function OutputPageInner() {
       if (r === "ok") setDefendAnswers((a) => recordScopeYes(a, group.line, group.scope!.families, typed, job));
       return r;
     },
-    onTitleYes: (group, typed) => {
-      const r = titleYesResult(group.line, typed, group.title?.role ? group.title.current : undefined);
-      if (r === "ok") setDefendAnswers((a) => recordTitleYes(a, group.line, typed));
-      return r;
+    onTitleYes: (group) => {
+      const shownTitle = group.title?.current ?? "";
+      if (titleYesResult(group.line, shownTitle, group.title?.role ? shownTitle : undefined) === "ok") {
+        setDefendAnswers((a) => recordTitleYes(a, group.line, shownTitle));
+      }
     },
     onOwnTitle: (group, typed) => {
       // Round 13 (SF-5): "idk", "no", "I don't remember" are not a title; the same title is a Yes.

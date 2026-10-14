@@ -1479,6 +1479,20 @@ export function jobHeaderChanges(header: string, ownText: string, resumeText?: s
 }
 
 /**
+ * Offer a one-tap correction only when this page job matches exactly one job
+ * on the person's own page. A split page header needs a separate edit path:
+ * replacing only its first line would leave the old facts underneath.
+ */
+export function ownJobHeaderForFix(header: string, resumeText: string, ownResumeText: string): string | undefined {
+  const page = jobsIn(linesOf(resumeText).slice(1).join("\n")).find((job) => job.lines[0] === header);
+  if (!page || page.lines.length !== 1) return undefined;
+  const match = matchOwnJob(page, jobsIn(ownResumeText, { own: true }));
+  if (match.kind !== "one" || !match.job.title || !match.job.employer) return undefined;
+  const sourceHeader = match.job.header.trim();
+  return squash(sourceHeader) === squash(stripBullet(header)) ? undefined : sourceHeader;
+}
+
+/**
  * Integration M4/H4/M3: a page job header read against the person's own jobs through the shared resolver.
  * `changes`: facts on the header that are not theirs for that job (employer, place, dates; the title too
  * for a header without pipes, which the title rule does not read). `dates`: set when the dates are not that
@@ -1688,7 +1702,7 @@ export interface LineGroup {
   /** Round 13 (SF-4): `role` when the title is a role in the summary or letter, not a job header's title. */
   title?: { current: string; role?: boolean };
   /** Phase 6 (Q3): a job to confirm with one tap ("Looks right" or "Fix this"). */
-  job?: { title: string; rest: string[]; /** Review r1 M2: the facts t.ROY changed (no "Looks right" then). */ changes?: string[] };
+  job?: { title: string; rest: string[]; /** Review r1 M2: the facts t.ROY changed (no "Looks right" then). */ changes?: string[]; /** One exact, uniquely matched header from the person's page. */ ownHeader?: string };
 }
 
 /** An open item with the document it is in. */
@@ -2297,7 +2311,7 @@ export function buildFinishView(input: {
         ? { terms: its.map((i) => i.line).filter((t, k, all) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === k) }
         : {}),
       ...(its.length === 1 && its[0].kind === "job_confirm" ? { job: jobCardParts(its[0].line, input.resumeText) } : {}),
-      ...(its.length === 1 && its[0].kind === "job_changed" ? { job: { ...jobCardParts(its[0].line, input.resumeText), changes: jobHeaderChanges(its[0].line, source, input.resumeText) } } : {}),
+      ...(its.length === 1 && its[0].kind === "job_changed" ? { job: { ...jobCardParts(its[0].line, input.resumeText), changes: jobHeaderChanges(its[0].line, source, input.resumeText), ownHeader: ownJobHeaderForFix(its[0].line, input.resumeText, input.ownResumeText ?? input.ownWords) } } : {}),
       ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true, schoolKnown: !!attendedSchoolOf(its[0].line, source) } : {}) } : {}),
       ...(its.find((i) => i.kind === "title_unsaid" && i.roleTitle)
         ? { title: { current: its.find((i) => i.kind === "title_unsaid" && i.roleTitle)!.roleTitle as string, role: true } }

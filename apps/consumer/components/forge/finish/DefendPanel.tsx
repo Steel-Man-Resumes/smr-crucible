@@ -52,8 +52,8 @@ export interface CardActions {
   onScopeHelped?: (group: LineGroup) => void;
   /** Phase 6: "No, I did the work" puts the person's own line back. */
   onScopeNo?: (group: LineGroup) => void;
-  /** Round 12: "Yes, that was my title" (typed, must match) and "Use my title" (replaces only the title). */
-  onTitleYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched";
+  /** Confirm the title shown on this card with one tap; changing it still takes the person's own words. */
+  onTitleYes?: (group: LineGroup) => void;
   onOwnTitle?: (group: LineGroup, typed: string) => "ok" | "empty" | "not_a_title";
   /** Phase 6 (Q3): "Looks right" on a job. One tap; nothing typed. */
   onJobOk?: (group: LineGroup) => void;
@@ -285,12 +285,12 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
 }
 
 /**
- * Round 12 (SF-2): a job title the person never used. They confirm it by
- * typing it as it was, or type their own title, which replaces only the title
- * (the employer, the city and the dates stay).
+ * A title we could not find in the person's source. They can confirm the
+ * displayed title with one tap, or type a correction. Confirmation is scoped
+ * to this exact line; it does not approve other claims in the documents.
  */
 function TitleCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
-  const [mode, setMode] = useState<"ask" | "yes" | "own">("ask");
+  const [mode, setMode] = useState<"ask" | "own">("ask");
   const [typed, setTyped] = useState("");
   const [notice, setNotice] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -302,21 +302,21 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
       <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
       <p className="mt-1 text-sm text-t-white">&ldquo;{editableLine(group.line)}&rdquo;</p>
       <p className="mt-1.5 text-sm text-t-phos">
-        Was &ldquo;{group.title?.current}&rdquo; your job title{group.title?.role ? "" : " there"}? A screener checks titles against your records.
+        We couldn&apos;t find &ldquo;{group.title?.current}&rdquo; in what you gave us. Was that your actual job title for this work?
       </p>
       {mode === "ask" ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={() => { setNotice(""); setTyped(""); setMode("yes"); }} className={BTN_MAIN}>
+          <button type="button" onClick={() => actions.onTitleYes?.(group)} className={BTN_MAIN} data-testid="title-yes">
             Yes, that was my title
           </button>
-          <button onClick={() => { setNotice(""); setTyped(""); setMode("own"); }} className={BTN_SOFT}>
-            Use my title
+          <button type="button" onClick={() => { setNotice(""); setTyped(""); setMode("own"); }} className={BTN_SOFT}>
+            Use my actual title
           </button>
         </div>
       ) : (
         <div className="mt-3">
           <label htmlFor={`title-${index}`} className="block text-xs font-semibold text-t-white">
-            {mode === "yes" ? "Type your title the way it was" : "Your title at this job, in your words"}
+            Your title at this job, in your words
           </label>
           <input
             ref={field}
@@ -333,16 +333,10 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               onClick={() => {
-                if (mode === "yes") {
-                  const r = actions.onTitleYes?.(group, typed) ?? "empty";
-                  if (r === "empty") return setNotice("Type your title.");
-                  if (r === "unmatched") return setNotice("That isn't the title on this line. Type it the way it was, or use your own title.");
-                } else {
-                  const r = actions.onOwnTitle?.(group, typed) ?? "empty";
-                  if (r === "empty") return setNotice("Type your title.");
-                  // Round 13 (SF-5): not a title ("idk", "no", "I don't remember").
-                  if (r === "not_a_title") return setNotice("If you're not sure of the exact title, type what you did there, like Warehouse worker.");
-                }
+                const r = actions.onOwnTitle?.(group, typed) ?? "empty";
+                if (r === "empty") return setNotice("Type your title.");
+                // Round 13 (SF-5): not a title ("idk", "no", "I don't remember").
+                if (r === "not_a_title") return setNotice("If you're not sure of the exact title, type what you did there, like Warehouse worker.");
                 setMode("ask");
               }}
               className={BTN_MAIN}
@@ -373,7 +367,9 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
     if (fixing) field.current?.focus();
   }, [fixing]);
   const job = group.job ?? { title: editableLine(group.line), rest: [] as string[] };
-  // Review r1 M2: a job t.ROY changed is fixed, never tapped through.
+  // Review r1 M2: a job t.ROY changed is fixed, never tapped through, even if
+  // a particular comparison could not name the changed atom.
+  const changed = group.items.some((item) => item.kind === "job_changed");
   const changes = group.job?.changes ?? [];
   return (
     <li
@@ -386,21 +382,40 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
       data-blocking="true"
       className="border border-t-amber bg-t-panel px-3 py-3"
     >
-      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{changes.length ? "t.ROY changed this job" : "Check this job"}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{changed ? "t.ROY changed this job" : "Check this job"}</p>
       <p className="mt-1 text-sm font-semibold text-t-white">{job.title}</p>
       {job.rest.length > 0 && <p className="text-sm text-t-phos">{job.rest.join(" | ")}</p>}
-      {changes.length ? (
-        <p className="mt-1.5 text-xs text-t-amber-bright" data-testid="job-changes">
-          Not on your page: {changes.map((c) => `"${c}"`).join(", ")}. Fix it to match your records.
-        </p>
+      {changed ? (
+        <>
+          <p className="mt-1.5 text-xs text-t-amber-bright" data-testid="job-changes">
+            {group.items[0]?.why || `Not on your page: ${changes.map((c) => `"${c}"`).join(", ")}.`}
+          </p>
+          {job.ownHeader && (
+            <p className="mt-1.5 text-xs text-t-phos" data-testid="job-own-header">
+              Your page says: &ldquo;{job.ownHeader}&rdquo;
+            </p>
+          )}
+        </>
       ) : (
         <p className="mt-1.5 text-xs text-t-phos-dim">These are from your page. Check them against your records.</p>
       )}
       {!fixing ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {!changes.length && (
+          {!changed && (
             <button onClick={() => actions.onJobOk?.(group)} className={BTN_MAIN} data-testid="job-ok">
               Looks right
+            </button>
+          )}
+          {changed && job.ownHeader && (
+            <button
+              type="button"
+              onClick={() => {
+                if (!onChange(group, job.ownHeader!)) setNotice("That line did not change. Use Fix this to edit it.");
+              }}
+              className={BTN_MAIN}
+              data-testid="job-use-own"
+            >
+              Use the details from my page
             </button>
           )}
           <button
@@ -409,11 +424,12 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
               setText(editableLine(group.line));
               setFixing(true);
             }}
-            className={changes.length ? BTN_MAIN : BTN_SOFT}
+            className={changed && !job.ownHeader ? BTN_MAIN : BTN_SOFT}
             data-testid="job-fix"
           >
             Fix this
           </button>
+          {notice && <p role="status" className="w-full text-xs text-t-amber-bright" data-testid="job-notice">{notice}</p>}
         </div>
       ) : (
         <div className="mt-3">
