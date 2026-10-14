@@ -28,7 +28,7 @@ import { changesNotAwaitingCards } from "@/lib/changes-gate";
 import { buildFinishView } from "@/lib/finish-gate";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
 import { restoreDateForms } from "@/lib/date-form";
-import { repairForgeResume } from "@/lib/forge-auto-repair";
+import { cutUnsupportedExtraSentences, repairForgeResume } from "@/lib/forge-auto-repair";
 import { acceptForgeQualityRevision, forgeQualityIssues } from "@/lib/forge-quality-pass";
 import { randomBytes } from "node:crypto";
 import { revisionCaller } from "@/lib/revision-route";
@@ -238,17 +238,32 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
     if (dateForms.restored) console.warn(`[date-form] generate-docs: put back ${dateForms.restored} date range(s) in the person's own form`);
     const earlySource = writerSourceFrom(sourceInput as unknown as Record<string, unknown>);
     const repaired = repairForgeResume(dateForms.text, earlySource.ownResumeText, earlySource.ownWords);
-    const resume = repaired.text;
-    const earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
-    const earlyGrounding = withRewording({
+    let resume = repaired.text;
+    let earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
+    let earlyGrounding = withRewording({
       ...earlyAccounting, flags: resumeCheck.flags, hasFabrication: resumeCheck.hasFabrication,
       verifierRan: resumeCheck.verifierRan, verifierRanByDoc: { resume: resumeCheck.verifierRan },
       forgeAssisted: rewordingAFor(sourceKind),
     }, sourceKind);
-    const earlyView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
+    let earlyView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
       written: { resume, letter: "" }, grounding: earlyGrounding,
       credentialsAnswer: earlySource.credentialsAnswer || undefined,
       credentialRows: completeCredentialRows(readCredentialRows(earlySource.credentialRows)), ownResumeText: earlySource.ownResumeText || undefined });
+    const resumeSentenceFix = cutUnsupportedExtraSentences(resume, earlyView.openItems, "resume", groundingSource);
+    if (resumeSentenceFix.repairs.length) {
+      resume = resumeSentenceFix.text;
+      repaired.repairs.push(...resumeSentenceFix.repairs);
+      earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
+      earlyGrounding = withRewording({
+        ...earlyAccounting, flags: resumeCheck.flags, hasFabrication: resumeCheck.hasFabrication,
+        verifierRan: resumeCheck.verifierRan, verifierRanByDoc: { resume: resumeCheck.verifierRan },
+        forgeAssisted: rewordingAFor(sourceKind),
+      }, sourceKind);
+      earlyView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
+        written: { resume, letter: "" }, grounding: earlyGrounding,
+        credentialsAnswer: earlySource.credentialsAnswer || undefined,
+        credentialRows: completeCredentialRows(readCredentialRows(earlySource.credentialRows)), ownResumeText: earlySource.ownResumeText || undefined });
+    }
     const earlyChanges = resumeCheck.verifierRan ? changesNotAwaitingCards(validateWriterChanges(rawChanges, {
       ownResumeText: withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept,
       finalResume: resume, keepInsideLines: input.keepInsideLines === true,
@@ -257,7 +272,20 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
     const coverResult = await coverCheckPending;
     if (!coverResult.result) throw coverResult.error;
     const { raw: coverLetterRaw, check: coverCheck } = coverResult.result;
-    const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
+    let coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
+    const letterView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
+      coverLetterText: coverLetter, written: { resume, letter: coverLetter },
+      grounding: withRewording({ ...earlyGrounding, flags: [...resumeCheck.flags, ...coverCheck.flags],
+        verifierRan: resumeCheck.verifierRan && coverCheck.verifierRan,
+        verifierRanByDoc: { resume: resumeCheck.verifierRan, cover_letter: coverCheck.verifierRan },
+        hasFabrication: resumeCheck.hasFabrication || coverCheck.hasFabrication }, sourceKind),
+      credentialsAnswer: earlySource.credentialsAnswer || undefined,
+      credentialRows: completeCredentialRows(readCredentialRows(earlySource.credentialRows)), ownResumeText: earlySource.ownResumeText || undefined });
+    const letterSentenceFix = cutUnsupportedExtraSentences(coverLetter, letterView.openItems, "letter", groundingSource);
+    if (letterSentenceFix.repairs.length) {
+      coverLetter = letterSentenceFix.text;
+      repaired.repairs.push(...letterSentenceFix.repairs);
+    }
     const credentialChecks = [
       ...findOverstatedCredentialLines(resume, statuses).map((claim) => ({ claim, doc: "resume" as const })),
       ...findOverstatedCredentials(coverLetter, statuses, { firstPerson: true }).map((claim) => ({ claim, doc: "cover_letter" as const })),
@@ -491,7 +519,7 @@ RULES:
 - Do NOT explain employment gaps. Simply focus on what the candidate brings.
 - TRUTH GATE: never fabricate achievements, experience, numbers, certifications, or personal facts (transportation, availability, physical capability, references). Every claim must come from the profile data provided.
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
-- FACTS AS GIVEN: state every fact the way the profile states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give ("so orders move without hold-ups", "during busy dinner service", "before a run turns into a bin of bad parts"). "I fixed the ice machine drain twice" stays exactly that size.
+- FACTS AS GIVEN: state every fact the way the profile states it, in every sentence, not only the opening. Do not build a scene around it, count jobs or achievements the person did not count, or add comparisons, metaphors, causes, consequences, settings or reactions the person did not give ("so orders move without hold-ups", "during busy dinner service", "before a run turns into a bin of bad parts"). "I fixed the ice machine drain twice" stays exactly that size. End a paragraph after its sourced duties instead of adding an interpretive wrap-up.
 - SOURCES: WORK HISTORY EXCERPT is the person's own words. ABOUT, SUMMARY, KEY STRENGTHS and TOP SKILLS are earlier AI analysis: targeting context, never evidence about the person, even when their own words are silent. Every duty, skill and trait must be supported by their own words. Never infer frequency, work habits, operating conditions, lessons learned, multitasking or results from a job title or an ordinary duty. "Did safety audits" supports "Ran safety audits", not what was inspected. "Answered phones and helped customers" supports those duties, not solving problems or staying calm under pressure. Never repeat a claim about character or reliability unless the work history says it.
 - CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "Thanks for reading", "asset to your team", "eager to bring", or "fast-paced environment". For THIS letter: ${closingStyle}
 - REPEATS: never repeat a sentence, a list or a phrase you already used in the letter.

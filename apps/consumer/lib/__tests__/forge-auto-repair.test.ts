@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { repairForgeResume } from "../forge-auto-repair";
+import { cutUnsupportedExtraSentences, repairForgeResume } from "../forge-auto-repair";
 import { buildFinishView } from "../finish-gate";
 import { buildForgeResumePrompts } from "../forge-resume-prompt";
 
@@ -66,4 +66,32 @@ test("older and unchecked documents retain the job confirmation gate", () => {
 test("the Forge writer stays general even if a job posting is supplied", () => {
   const prompt = buildForgeResumePrompts({ resumeText: own, jobPosting: "UNIQUE-POSTING-ONLY-TERM" } as Parameters<typeof buildForgeResumePrompts>[0]);
   assert.doesNotMatch(prompt.user, /UNIQUE-POSTING-ONLY-TERM/);
+});
+
+test("Forge cuts unsupported extra sentences while keeping the useful summary and letter", () => {
+  const source = `MORGAN SAMPLE\nToledo, OH | morgan@example.com\nWORK EXPERIENCE\nWarehouse Associate | Midstate Distribution | 8/2021 - Present\nLoaded outbound trucks and moved 40 pallets a night with a pallet jack.\nWarehouse Clerk | Riverbend Supply | 6/2018 - 7/2021\nChecked shipments and entered inventory counts.\nEDUCATION\nHigh School Diploma | Toledo, OH | 2018`;
+  const resume = `MORGAN SAMPLE\nToledo, OH | morgan@example.com\nCAREER SUMMARY\nWarehouse associate who loaded outbound trucks. High school diploma earned in 2018.\nPROFESSIONAL EXPERIENCE\nWarehouse Associate | Midstate Distribution | 8/2021 - Present\n- Loaded outbound trucks and moved 40 pallets a night with a pallet jack.\nWarehouse Clerk | Riverbend Supply | 6/2018 - 7/2021\n- Checked shipments and entered inventory counts.\nEDUCATION\nHigh School Diploma | Toledo, OH | 2018`;
+  const letter = `Dear [Hiring Manager],\n\nI loaded outbound trucks and moved 40 pallets a night with a pallet jack. Between the two jobs, I handled both ends of the work.\n\nSincerely,\nMorgan Sample`;
+  const first = buildFinishView({ resumeText: resume, ownWords: source, ownResumeText: source, defendAnswers: [], coverLetterText: letter, written: { resume, letter }, grounding });
+  assert.ok(first.openItems.some((item) => item.kind === "credential_unsaid"));
+  assert.ok(first.openItems.some((item) => item.rule === "STD-T02" && item.target === "letter"));
+  const fixedResume = cutUnsupportedExtraSentences(resume, first.openItems, "resume", source);
+  const fixedLetter = cutUnsupportedExtraSentences(letter, first.openItems, "letter", source);
+  assert.equal(fixedResume.repairs.length, 1);
+  assert.equal(fixedLetter.repairs.length, 1);
+  assert.match(fixedResume.text, /Warehouse associate who loaded outbound trucks\./);
+  assert.doesNotMatch(fixedResume.text, /diploma earned/);
+  assert.match(fixedLetter.text, /I loaded outbound trucks and moved 40 pallets/);
+  assert.doesNotMatch(fixedLetter.text, /Between the two jobs/);
+  const final = buildFinishView({ resumeText: fixedResume.text, ownWords: source, ownResumeText: source, defendAnswers: [], coverLetterText: fixedLetter.text, written: { resume: fixedResume.text, letter: fixedLetter.text }, grounding });
+  assert.equal(final.state, "finished", JSON.stringify(final.openItems));
+});
+
+test("Forge leaves a single disputed sentence for the person to answer", () => {
+  const disputed = "High school diploma earned in 2018.";
+  const result = cutUnsupportedExtraSentences(disputed, [{ rule: "STD-T03", severity: "BLOCK", line: disputed,
+    why: "Status not given", question: "Did you earn it?", kind: "credential_unsaid", subject: "High school diploma",
+    education: true, target: "resume" }], "resume", own);
+  assert.equal(result.text, disputed);
+  assert.deepEqual(result.repairs, []);
 });

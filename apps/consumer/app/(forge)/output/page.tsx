@@ -644,8 +644,8 @@ function OutputPageInner() {
   const forgeRepairs = useMemo(() => {
     const raw = (grounding as { forgeRepairs?: unknown } | null)?.forgeRepairs;
     if (!Array.isArray(raw)) return [];
-    return raw.filter((r): r is { kind: "job" | "skill"; before: string; after: string } =>
-      !!r && (r.kind === "job" || r.kind === "skill") && typeof r.before === "string" && typeof r.after === "string"
+    return raw.filter((r): r is { kind: "job" | "skill" | "claim"; before: string; after: string } =>
+      !!r && (r.kind === "job" || r.kind === "skill" || r.kind === "claim") && typeof r.before === "string" && typeof r.after === "string"
     );
   }, [grounding]);
   const g = grounding as { verifierRan?: boolean; verifierRanByDoc?: { resume?: boolean; cover_letter?: boolean } } | null;
@@ -1217,15 +1217,17 @@ function OutputPageInner() {
               {forgeRepairs.length > 0 && (
                 <details className="mt-3 border border-t-line bg-t-panel px-4 py-3" data-testid="forge-repairs">
                   <summary className="cursor-pointer text-sm font-semibold text-t-white">
-                    What we corrected from your page ({forgeRepairs.length})
+                    What we corrected in your documents ({forgeRepairs.length})
                   </summary>
                   <ul className="mt-2 space-y-2 text-xs leading-relaxed text-t-phos">
                     {forgeRepairs.map((repair, i) => (
                       <li key={`${repair.kind}-${i}`}>
                         {repair.kind === "job" ? (
                           <>We changed &ldquo;{repair.before}&rdquo; to &ldquo;{repair.after}&rdquo; to match your page.</>
-                        ) : (
+                        ) : repair.kind === "skill" ? (
                           <>We left &ldquo;{repair.before}&rdquo; off the skills list because it wasn&apos;t in what you gave us. You can add it later in the Refinery if you have used it.</>
+                        ) : (
+                          <>We left out &ldquo;{repair.before}&rdquo; because that sentence needed a fact you haven&apos;t given us. The rest of the document stays in place.</>
                         )}
                       </li>
                     ))}

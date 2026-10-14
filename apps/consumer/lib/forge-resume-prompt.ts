@@ -124,7 +124,7 @@ SECTION ORDER (exact):
 1. FULL NAME (all caps)
 2. Contact line: City, State | Phone | Email (one line, pipe-separated). Include ONLY the pieces the source provides. Omit anything missing rather than inventing a placeholder for it.
 3. Headline (one line naming the work the person does or is aiming for, built only from their facts. Never an objective, never a slogan.)
-4. CAREER SUMMARY (2-4 plain sentences built only from the person's facts: the work they have done and the tools or duties that fit their general target field. No "seeking" or "looking for" sentence; the headline already names the field. No sentence that could fit anyone.)
+4. CAREER SUMMARY (2-4 plain sentences built only from the person's facts: the work they have done and the tools or duties that fit their general target field. No "seeking" or "looking for" sentence; the headline already names the field. Keep education and credentials in their sections; do not add an earned or current status the person did not state. No sentence that could fit anyone.)
 5. CORE COMPETENCIES (one column, per the page rules: one comma-separated line, or a few short labeled lines such as "Equipment: ..." and "Tools: ...". Only real, specific terms the person said they did, used or learned; never soft-skill words. Typically 6 to 15, fewer for a short history.)
 6. PROFESSIONAL EXPERIENCE (reverse chronological)
    - Format: JOB TITLE | Company Name | City, State | Start - End, with both dates copied exactly as the person wrote them. Include City, State only if the source gives that job's city; otherwise leave that part out.
