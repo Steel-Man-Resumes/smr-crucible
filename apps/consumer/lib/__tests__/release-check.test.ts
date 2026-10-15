@@ -69,7 +69,7 @@ describe("release check: accounts required means the wall is on", () => {
     for (const v of ["yes", "true", "1", "up", "o n"]) {
       const r = releaseCheck({ NEXT_PUBLIC_FORGE_SIGN_IN_WALL: v });
       assert.equal(r.ok, false, `${JSON.stringify(v)} must fail`);
-      assert.match(r.errors.join(" "), /stay open/);
+      assert.match(r.errors.join(" "), /account requirement defaults to active/);
     }
   });
 

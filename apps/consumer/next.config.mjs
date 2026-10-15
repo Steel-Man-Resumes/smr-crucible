@@ -42,8 +42,8 @@ const nextConfig = {
   outputFileTracingIncludes: {
     // Every route that reads skill doctrine off disk needs the files traced
     // into ITS own Lambda. Keep in sync with the callers of loadSkillsForContext.
-    "/api/assistant": ["./lib/skills/**/*"],
-    "/api/coach": ["./lib/skills/**/*"],
+    "/api/assistant": ["./lib/skills/**/*", "./public/fonts/resume/**/*"],
+    "/api/coach": ["./lib/skills/**/*", "./public/fonts/resume/**/*"],
     "/api/health/skills": ["./lib/skills/**/*"],
     // The resume renderer reads its bundled fonts (Carlito, Caladea, public/fonts/resume)
     // with fs. Nothing imports the .ttf files, so the tracer must be told to ship them
@@ -63,6 +63,8 @@ const nextConfig = {
     "/api/forge/save": ["./public/fonts/resume/**/*"],
     "/api/forge/email-package": ["./public/fonts/resume/**/*"], // measures pages (the finished check)
     "/api/forge/email-package/auto": ["./public/fonts/resume/**/*"],
+    "/api/cron/voice-reconcile": ["./public/fonts/resume/**/*"],
+    "/api/assistant/correction": ["./public/fonts/resume/**/*"],
     "/api/quick-apply": ["./public/fonts/resume/**/*"],
     // Creative lanes: the artist resume and bio card use the same renderer.
     "/api/creative/layout": ["./public/fonts/resume/**/*"],

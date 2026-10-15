@@ -127,7 +127,7 @@ export function releaseCheck(env) {
   }
 
   summary.push(
-    `release requires explicit account flag: ${req.malformed ? "UNREADABLE" : req.required ? "yes" : req.set ? "no (set to 0)" : "no (not set)"}`,
+    `accounts required by release flag: ${req.malformed ? "UNREADABLE" : req.required ? "yes" : req.set ? "no (set to 0)" : "no (not set)"}`,
     `production build: ${isProductionBuild(env) ? "yes" : "no"}`,
     `Forge sign-in wall switch: ${wall.malformed ? "UNREADABLE" : wall.value ?? "unset (account requirement active by default)"}`,
     `premium gate: ${premium.malformed ? "UNREADABLE" : premium.value === "on" ? "on" : "off"}`,

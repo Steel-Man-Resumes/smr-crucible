@@ -93,6 +93,7 @@ export async function POST(request: Request) {
 
   const effective = await effectiveAuth();
   if (effective?.user?.id !== userId) return NextResponse.json({ error: "Coach is unavailable while viewing as someone." }, { status: 403 });
+  if (await (await import("@crucible/core")).isPlatformAdmin(userId)) return NextResponse.json({ error: "Use the platform assistant for owner operations." }, { status: 403 });
   const actor = await (await import("@crucible/core")).resolveOrgActor(userId);
   if (actor) return NextResponse.json({ error: "Use the staff assistant for organization work." }, { status: 403 });
 

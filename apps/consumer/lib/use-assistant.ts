@@ -16,6 +16,7 @@
 import { useSession } from "next-auth/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { assistantClientSelection } from "./assistant-client-selection";
 import { activeLaneStorageKey, LANES_CHANGED_EVENT } from "./lanes";
 import { useChat } from "ai/react";
 import type { AssistantContext } from "./assistant-prompt";
@@ -53,14 +54,7 @@ export function useAssistant({ context, sessionId, coach, onToolCall }: UseAssis
     window.addEventListener(LANES_CHANGED_EVENT, read);
     return () => window.removeEventListener(LANES_CHANGED_EVENT, read);
   }, [userId, pathname]);
-  const selectedWork = {
-    ...context.selectedWork,
-    ...(lane !== undefined ? { laneId: lane } : {}),
-    ...(search.get("laneId") ? { laneId: search.get("laneId")! } : {}),
-    ...(search.get("job") ? { applicationId: search.get("job")! } : {}),
-    ...(search.get("artifactId") ? { artifactId: search.get("artifactId")! } : {}),
-    ...(search.get("revisionId") ? { revisionId: search.get("revisionId")! } : {}),
-  };
+  const selectedWork = assistantClientSelection(context.selectedWork, search, lane);
   const chat = useChat({
     api: coach ? "/api/coach" : "/api/assistant",
     body: {

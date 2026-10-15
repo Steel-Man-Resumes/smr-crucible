@@ -7,6 +7,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { withAiOperation, type OperationContext } from "../ai-operation-context";
 
 import { mockSecondCheckProvider } from "@crucible/core/src/secondCheck";
 import { handleSecondCheckPost, readSecondCheckBody, secondCheckSource, type SecondCheckDeps } from "../second-check-handler";
@@ -183,4 +184,40 @@ test("second check: a body that is not JSON is refused", async () => {
   const { d } = deps();
   const res = await handleSecondCheckPost(new Request("http://localhost/x", { method: "POST", body: "{nope" }), d);
   assert.equal(res.status, 400);
+});
+
+
+test("second check: no-provider gates never admit an operation", async () => {
+  for (const over of [
+    { env: {} }, { provider: () => null }, { spentTodayUsd: async () => 5 },
+    { reserveAccount: async () => false }, { reserveIp: async () => false },
+  ]) {
+    let admitted = 0;
+    const { d, provider } = deps({ ...over, userIdOf: async () => "owner", runOperation: async (_id, run) => { admitted++; return run(); } });
+    await post(BODY, d);
+    assert.equal(admitted, 0); assert.equal(provider.calls.length, 0);
+  }
+  let admitted = 0;
+  const { d } = deps({ userIdOf: async () => "owner", runOperation: async (_id, run) => { admitted++; return run(); } });
+  await post({}, d); assert.equal(admitted, 0);
+});
+
+test("second check: policy refusal restores account quota and never calls provider", async () => {
+  const { d, calls, provider } = deps({ userIdOf: async () => "owner", runOperation: async (id) => {
+    assert.equal(id, "owner"); return Response.json({ code: "tool_allowance_used" }, { status: 429 });
+  } });
+  assert.equal((await post(BODY, d)).status, 429);
+  assert.deepEqual(calls.released, ["owner"]); assert.equal(provider.calls.length, 0); assert.equal(calls.recorded, 0);
+});
+
+test("second check: provider usage is awaited inside the admitted operation, including missing usage", async () => {
+  for (const fail of [false, true]) {
+    let inOperation = false, written = false;
+    const context: OperationContext = { operationId: "fixture", userId: "owner", endpoint: "second-check", pending: [] };
+    const { d } = deps({ userIdOf: async () => "owner",
+      runOperation: async (_id, run) => withAiOperation(context, async () => { inOperation = true; const response = await run(); assert.ok(written); assert.equal(!!context.failed, fail); inOperation = false; return response; }),
+      recordUsage: async (_provider, _model, usage, _userId, outcome) => { await Promise.resolve(); assert.ok(inOperation); assert.equal(outcome, fail ? "failed" : "succeeded"); if(fail) assert.ok(Number.isNaN(usage.inputTokens)); written = true; },
+    }, mockSecondCheckProvider({ fail, reply: FLAG_REPLY }));
+    await post(BODY, d); assert.ok(written);
+  }
 });

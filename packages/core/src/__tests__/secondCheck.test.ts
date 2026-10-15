@@ -264,7 +264,7 @@ test("adapter: OpenAI-compatible request shape, reply text and usage, error stat
   const p = openAICompatibleProvider({ baseUrl: "https://checker.example.test/v1/", model: "checker-model", apiKey: "test-key", fetchImpl });
   const r = await runSecondCheck({ resumeText: CLEAN, sourceText: SOURCE, ownResumeText: TYPED }, p);
   assert.equal(r.status, "ran");
-  assert.deepEqual(r.usage, { inputTokens: 900, outputTokens: 12 });
+  assert.deepEqual(r.usage, { inputTokens: 900, outputTokens: 12, cacheReadInputTokens: 0 });
   assert.equal(seen[0].url, "https://checker.example.test/v1/chat/completions");
   const headers = seen[0].init.headers as Record<string, string>;
   assert.equal(headers.authorization, "Bearer test-key");
@@ -352,4 +352,17 @@ test("harness: the mint check alone catches the invented number and misses the r
   const noisy = await scoreChecker(pairs, withSecondCheck(async () => [{ line: "- Made breakfast orders on the grill.", kind: "other", severity: "FIX", reason: "Hmm.", question: "Sure?" }]));
   assert.equal(noisy.clean.fromSecondCheck, 1);
   assert.equal(noisy.clean.secondCheckFix, 1);
+});
+
+
+test("adapter: missing token counts stay unknown and cached input is separated", async () => {
+  for (const usage of [undefined, { prompt_tokens: 900, completion_tokens: 12, prompt_tokens_details: { cached_tokens: 300 } }]) {
+    const p = openAICompatibleProvider({ baseUrl: "https://checker.example.test/v1", model: "gpt-4o-mini", apiKey: "fixture",
+      fetchImpl: (async () => new Response(JSON.stringify({ choices: [{ message: { content: '{"findings":[]}' } }], usage }))) as typeof fetch });
+    const result = await runSecondCheck({ resumeText: CLEAN, sourceText: SOURCE }, p);
+    assert.equal(result.status, "ran");
+    assert.ok(result.usage);
+    if (!usage) { assert.ok(Number.isNaN(result.usage.inputTokens)); assert.ok(Number.isNaN(result.usage.outputTokens)); }
+    else assert.deepEqual(result.usage, { inputTokens: 600, outputTokens: 12, cacheReadInputTokens: 300 });
+  }
 });

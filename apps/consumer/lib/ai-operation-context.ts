@@ -6,6 +6,8 @@ export interface OperationContext {
   endpoint: string;
   pending: Promise<unknown>[];
   accountingIncomplete?: boolean;
+  /** Provider work failed even when the product returns a soft fallback response. */
+  failed?: boolean;
 }
 const operations = new AsyncLocalStorage<OperationContext>();
 export function currentAiOperation(): OperationContext | undefined { return operations.getStore(); }

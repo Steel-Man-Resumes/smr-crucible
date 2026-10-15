@@ -182,6 +182,9 @@ export interface SupportResult {
   address?: string;
   hours?: string;
   eligibility?: string;
+  fees?: string;
+  whatToBring?: string;
+  limits?: string;
   website?: string;
   apiEndpoint?: string;
   tags: string[];
@@ -298,7 +301,14 @@ export function directoryScope(r: ResourceAppRow): ServiceScope {
   return { level, state: st, counties, cities: r.city ? [foldName(r.city)] : [], zips, label };
 }
 
-export function fromDirectory(r: ResourceAppRow): SupportResult {
+/** Older directory rows remain valid; published rows add practical visit details. */
+export interface SupportDirectoryRow extends ResourceAppRow {
+  fees?: string | null;
+  what_to_bring?: string | null;
+  limits?: string | null;
+}
+
+export function fromDirectory(r: SupportDirectoryRow): SupportResult {
   const scope = directoryScope(r);
   const cats = categoriesOfArea(r.area_id);
   const lastChecked = String(r.last_checked).slice(0, 10);
@@ -316,6 +326,9 @@ export function fromDirectory(r: ResourceAppRow): SupportResult {
     address: r.address ? [r.address, r.city, stZip].filter(Boolean).join(", ") : undefined,
     hours: r.hours || undefined,
     eligibility: r.eligibility || undefined,
+    fees: r.fees?.trim() || undefined,
+    whatToBring: r.what_to_bring?.trim() || undefined,
+    limits: r.limits?.trim() || undefined,
     website: r.website && /^https?:\/\//i.test(r.website) ? r.website : undefined,
     tags: [r.area_id],
     scope: scope.level,
@@ -408,7 +421,7 @@ function coverageFor(place: Place, all: SupportResult[]): Coverage {
 export interface SupportSearchDeps {
   findHud: (location: string) => Promise<CounselorResult[]>;
   /** resource_app_v rows that reach the place, closest first (core readResourceDirectory). */
-  readDirectory?: (opts: ResourcePlaceQuery) => Promise<ResourceAppRow[]>;
+  readDirectory?: (opts: ResourcePlaceQuery) => Promise<SupportDirectoryRow[]>;
   /** The counties a city or ZIP sits in, folded (lib/support-place-index.ts). */
   countiesOf?: (place: Place) => string[];
   /** Is a folded name a Census place in a state (lib/support-place-index.ts)? Lets "libby mt" read as Montana. */
@@ -454,7 +467,7 @@ export async function searchSupport(input: SupportSearchInput, deps: SupportSear
   const wanted = (c: string) => cats === "all" || (cats as string[]).includes(c);
 
   // 1. The checked directory first.
-  let dirRows: ResourceAppRow[] = [];
+  let dirRows: SupportDirectoryRow[] = [];
   let directoryRead = !deps.readDirectory;
   if (deps.readDirectory && want.areas.length) {
     try {

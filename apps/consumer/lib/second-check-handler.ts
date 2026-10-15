@@ -30,6 +30,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { currentAiOperation } from "./ai-operation-context";
 import { answerStands, type DefendAnswer } from "@crucible/core/src/resumeStatus";
 import { parseDailyUsd, secondCheckBudgetAllows } from "@crucible/core/src/secondCheckShared";
 import {
@@ -64,7 +65,9 @@ export interface SecondCheckDeps {
   /** Take one of today's slots for this IP; false when at the limit. */
   reserveIp: (ip: string) => Promise<boolean>;
   /** Record what the call cost (never throws). */
-  recordUsage: (provider: string, model: string, usage: SecondCheckUsage, userId: string | null) => void;
+  recordUsage: (provider: string, model: string, usage: SecondCheckUsage, userId: string | null, outcome?: "succeeded" | "failed") => void | Promise<void>;
+  /** Admit billable work only after the no-provider gates have passed. */
+  runOperation?: (userId: string, run: () => Promise<Response>) => Promise<Response>;
 }
 
 type Status = "ran" | "off" | "unavailable" | "capped" | "limited" | "invalid";
@@ -155,11 +158,22 @@ export async function handleSecondCheckPost(request: Request, deps: SecondCheckD
     return none("limited", 429);
   }
 
-  const result = await runSecondCheck({ resumeText: body.resumeText, sourceText }, provider);
-  if (result.usage) deps.recordUsage(provider.name, provider.model, result.usage, userId);
-  if (result.status !== "ran") {
-    if (userId) await deps.releaseAccount(userId).catch(() => undefined);
-    return none("unavailable");
+  let attempted = false;
+  const run = async () => {
+    attempted = true;
+    const result = await runSecondCheck({ resumeText: body.resumeText, sourceText }, provider);
+    await deps.recordUsage(provider.name, provider.model, result.usage ?? { inputTokens: NaN, outputTokens: NaN }, userId, result.status === "ran" ? "succeeded" : "failed");
+    if (result.status !== "ran") {
+      const operation = currentAiOperation();
+      if (operation) operation.failed = true;
+      if (userId) await deps.releaseAccount(userId).catch(() => undefined);
+      return none("unavailable");
+    }
+    return NextResponse.json({ status: "ran", findings: result.findings, dropped: result.dropped });
+  };
+  try {
+    return userId && deps.runOperation ? await deps.runOperation(userId, run) : await run();
+  } finally {
+    if (!attempted && userId) await deps.releaseAccount(userId).catch(() => undefined);
   }
-  return NextResponse.json({ status: "ran", findings: result.findings, dropped: result.dropped });
 }

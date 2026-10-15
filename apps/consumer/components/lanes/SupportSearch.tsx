@@ -43,6 +43,9 @@ export interface SupportResultView {
   checkedLine?: string;
   mayBeOutOfDate?: boolean;
   eligibility?: string;
+  fees?: string;
+  whatToBring?: string;
+  limits?: string;
   sourceUrl?: string;
 }
 
@@ -75,6 +78,9 @@ export function readSupportResponse(j: unknown): { results: SupportResultView[];
         checkedLine: str(x.checkedLine),
         mayBeOutOfDate: x.mayBeOutOfDate === true,
         eligibility: str(x.eligibility),
+        fees: str(x.fees),
+        whatToBring: str(x.whatToBring),
+        limits: str(x.limits),
         sourceUrl: str(x.sourceUrl) && /^https?:\/\//i.test(String(x.sourceUrl)) ? String(x.sourceUrl) : undefined,
       } as SupportResultView;
     })
@@ -103,7 +109,7 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     if(!id||!/^[0-9a-f-]{36}$/i.test(id))return;let live=true;
     fetch(`/api/directory/resources/${id}`,{cache:"no-store"}).then(async res=>{const body=await res.json();if(!live)return;
       if(!res.ok||!body.data){setError(res.status===404?"That listing is no longer current. Search for current help.":"That listing could not be checked. Try again shortly.");return;}
-      const r=body.data;setAnswer(readSupportResponse({resources:[{id:`dir-${r.service_id}`,title:r.service_name||r.org_name,provider:r.org_name,description:r.description,eligibility:r.eligibility,phone:r.phone,address:r.address,hours:r.hours,website:r.website,sourceUrl:r.source_url,sourceLabel:"Steel Man's checked directory",checkedLine:`Last checked ${r.last_checked}.`}]}));
+      const r=body.data;setAnswer(readSupportResponse({resources:[{id:`dir-${r.service_id}`,title:r.service_name||r.org_name,provider:r.org_name,description:r.description,eligibility:r.eligibility,fees:r.fees,whatToBring:r.what_to_bring,limits:r.limits,phone:r.phone,address:r.address,hours:r.hours,website:r.website,sourceUrl:r.source_url,sourceLabel:"Steel Man's checked directory",checkedLine:`Last checked ${r.last_checked}.`}]}));
     }).catch(()=>{if(live)setError("That listing could not be checked. Try searching again.");});return()=>{live=false;};
   },[]);
 
@@ -224,6 +230,9 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
                   {r.provider && r.provider !== r.title && <p className="text-sm text-t-phos-dim">{r.provider}</p>}
                   {r.description && <p className="mt-1 text-sm text-t-phos">{r.description}</p>}
                   {r.eligibility && <p className="mt-2 text-sm text-t-phos">Who can use it: {r.eligibility}</p>}
+                  {r.fees && <p className="mt-1 text-sm text-t-phos">Fees: {r.fees}</p>}
+                  {r.whatToBring && <p className="mt-1 text-sm text-t-phos">Bring: {r.whatToBring}</p>}
+                  {r.limits && <p className="mt-1 text-sm text-t-phos">Limits: {r.limits}</p>}
                   {r.sourceUrl && <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-t-steel underline">Check the source</a>}
                   {r.id.startsWith("dir-") && <button type="button" disabled={saving} onClick={()=>void save(r.id)} className="ml-3 min-h-touch text-sm text-t-steel underline disabled:opacity-60">Save this choice</button>}
                   <div className="mt-2 space-y-0.5 text-sm text-t-phos">

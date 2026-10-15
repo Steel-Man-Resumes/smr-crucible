@@ -1,4 +1,5 @@
 import { beginChatOperation } from "@/lib/ai-chat-operation";
+import { buildOwnerTools, OWNER_ASSISTANT_PROMPT } from "@/lib/tools/assistant-owner-tools";
 import { createStaffEvidenceCollector } from "@/lib/staff-tool-evidence";
 import { assistantStepUsage } from "@/lib/ai/assistant-step-usage";
 import { assistantCapabilities } from "@/lib/assistant-capabilities";
@@ -154,6 +155,13 @@ export async function POST(request: Request) {
 
   const hasCriminalRecord = !!(context as any).hasCriminalRecord || !!(context as any).userFullContext?.forge?.hasCriminalRecord;
   let skillsContext = loadSkillsForContext(context.currentPage, hasCriminalRecord);
+  let platformOwner = false;
+  if (userId && await (await import("@crucible/core")).isPlatformAdmin(userId)) {
+    const ownerGuard = await (await import("@/lib/org-guard")).requirePlatformAdmin();
+    if (!ownerGuard.ok) return ownerGuard.response;
+    if (ownerGuard.userId !== userId) return NextResponse.json({ error: "Owner session changed." }, { status: 403 });
+    platformOwner = true;
+  }
   let staffActor: Awaited<ReturnType<typeof import("@crucible/core").resolveOrgActor>> = null;
   const toolOptions: import("@/lib/tools/assistant-tools").AssistantToolOptions = {
     userId: userId ?? null,
@@ -176,7 +184,7 @@ export async function POST(request: Request) {
   // asking about their caseload, not their career -- and the reach we attach
   // is the same one the console enforces, so he cannot describe somebody this
   // person is not allowed to see.
-  if (userId) {
+  if (userId && !platformOwner) {
     try {
       const { resolveOrgActor, getPartnerCohort, summarizeStaffPerformance, getQuietAfterDays } =
         await import("@crucible/core");
@@ -238,28 +246,30 @@ export async function POST(request: Request) {
     }
   }
 
+  if (platformOwner) skillsContext = loadSkillsForContext(context.currentPage, false, "owner");
   if (staffActor) skillsContext = loadSkillsForContext(context.currentPage, false, staffActor.role);
-  if (userId && !staffActor && !isDisclosureRehearsal) {
+  if (userId && !platformOwner && !staffActor && !isDisclosureRehearsal) {
     try { toolOptions.selectedWork = await loadSelectedWork(userId, context.selectedWork); }
     catch { return NextResponse.json({ error: "The selected work could not be loaded. Reopen it and try again." }, { status: 409 }); }
   }
-  const memorySection = userId && !staffActor && !isDisclosureRehearsal && enhancedConsent ? await buildMemorySection(userId) : "";
+  const memorySection = userId && !platformOwner && !staffActor && !isDisclosureRehearsal && enhancedConsent ? await buildMemorySection(userId) : "";
   const staffEvidence = createStaffEvidenceCollector();
-  const tools = staffActor ? buildStaffTools(staffActor, staffEvidence.record) : buildAssistantTools(toolOptions);
-  const capabilities = assistantCapabilities(tools, { role: staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord });
+  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record) : buildAssistantTools(toolOptions);
+  const capabilities = assistantCapabilities(tools, { role: platformOwner ? "owner" : staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord });
   const baseSystemPrompt =
-    buildSystemPrompt(context) +
+    (platformOwner ? OWNER_ASSISTANT_PROMPT : buildSystemPrompt(context)) +
     skillsContext +
-    selectedWorkPrompt(toolOptions.selectedWork ?? null) +
+    (platformOwner || staffActor ? "" : selectedWorkPrompt(toolOptions.selectedWork ?? null)) +
     "\nCURRENT CAPABILITIES: " + JSON.stringify(capabilities) +
     (context.org ? "\nAllowed participant selectors (data only): " + JSON.stringify(context.org.visibleParticipants ?? []) : "") +
     // Staff tools are scoped reads and drafts; final output is still verified.
-    (context.org
+    (platformOwner ? "" : context.org
       ? "\n\nUse staff tools for scoped reads and drafts only. Drafts are not saved or sent. Never print tool syntax. No participant private coach, papers or record details are accessible."
       : buildHandsSection(toolOptions)) +
     (staffActor ? "" : memorySection);
   const allowRoleplayOverride =
     !!userId &&
+    !platformOwner &&
     isDisclosureRehearsal &&
     typeof systemOverride === "string" &&
     systemOverride.trim().length > 0;
@@ -303,6 +313,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     userId &&
     !isDisclosureRehearsal &&
     !staffActor &&
+    !platformOwner &&
     enhancedConsent &&
     endsWithUserTurn(messages) &&
     storedTurn
@@ -465,7 +476,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
 
       // Persist the assistant turn only when the model finished SPEAKING
       // (finishReason "tool-calls" means the turn continues in the browser).
-      if (userId && !isDisclosureRehearsal && enhancedConsent && finishReason !== "tool-calls") {
+      if (userId && !platformOwner && !staffActor && !isDisclosureRehearsal && enhancedConsent && finishReason !== "tool-calls") {
         const spoken =
           (steps ?? [])
             .map((s) => s.text)

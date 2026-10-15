@@ -12,7 +12,7 @@
 
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAssistant, type AssistantToolCall } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
@@ -40,6 +40,11 @@ interface AssistantChatProps {
 
 /** Human-friendly activity lines per tool -- shown instead of raw tool output */
 const TOOL_ACTIVITY: Record<string, string> = {
+  read_owner_ai_costs: "Reading recorded AI costs",
+  read_owner_directory_coverage: "Reading coverage suggestions",
+  read_staff_tasks: "Reading your scoped tasks",
+  read_participant_progress: "Reading shared progress",
+  draft_staff_check_in: "Preparing a check-in draft",
   search_verified_employers: "Checking employer evidence",
   get_verified_employer: "Reading employer details",
   search_verified_resources: "Finding checked support",
@@ -184,7 +189,11 @@ function getQuickPrompts(context: AssistantContext, coach?: boolean, staff?: boo
   }
 }
 
-export function AssistantChat({ context, sessionId, coach, staff }: AssistantChatProps) {
+export function AssistantChat(props: AssistantChatProps) {
+  return <Suspense fallback={<p className="p-4 text-sm" role="status">Loading chat...</p>}><AssistantChatContent {...props} /></Suspense>;
+}
+
+function AssistantChatContent({ context, sessionId, coach, staff }: AssistantChatProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -626,6 +635,10 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
             const inv = part.toolInvocation as
               | { toolName?: string; state?: string; args?: unknown; result?: unknown }
               | undefined;
+            if (inv?.state === "result" && (inv.result as { status?: string })?.status === "ok") {
+              if (inv.toolName === "read_owner_ai_costs") return [{ key: i, href: "/dashboard/admin", label: "owner cost controls" }];
+              if (inv.toolName === "read_owner_directory_coverage") return [{ key: i, href: "/dashboard/admin/directory-coverage", label: "coverage review" }];
+            }
             if (inv?.toolName === "contextual_handoff" && inv.state === "result") {
               const result = inv.result as { page?: string; selection?: { applicationId?: string; laneId?: string | null; artifactId?: string; revisionId?: string } };
               const href = result.page ? resolveAssistantPage(result.page, result.selection?.applicationId, result.selection) : null;

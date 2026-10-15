@@ -45,7 +45,7 @@ async function handlePost(request: Request) {
       if (!userId) return NextResponse.json({ error: "Sign in again" }, { status: 401 });
       const selected = await loadApplicationContext(userId, body.applicationId);
       if (!selected) return NextResponse.json({ error: "That saved job is unavailable in your account" }, { status: 404 });
-      jobDescription = selected.application.jd_full_text || selected.application.jd_excerpt || "";
+      jobDescription = selected.application.jd_full_text || selected.application.jd_excerpt || selected.application.description || "";
       let resumeText = selected.resumeSnapshot ? formatResumeDownload(selected.resumeSnapshot.content_snapshot as any) : selected.revision?.resume_text || "";
       if (body.resumeArtifactId && body.resumeArtifactId !== selected.application.resume_artifact_id) {
         const core = await import("@crucible/core");

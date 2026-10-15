@@ -191,37 +191,15 @@ export async function checkOrgClaimsWithModel(
   if (!key) return null;
   const prompt = buildOrgVerificationPrompt(text, facts, userSaid);
 
-  try {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        // MEASURED, not assumed. Five rounds on two true answers and one
-        // fabricated one: gpt-4o-mini false-flagged a true email 2/5 and a true
-        // list of the assistant's own limits 5/5. gpt-4.1-mini: 0 and 0, no
-        // fabrication missed, and faster. Override to re-measure a candidate.
-        model: process.env.ORG_VERIFY_MODEL || "gpt-4.1-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0,
-        max_tokens: 900,
-        response_format: { type: "json_object" },
-      }),
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const raw = data?.choices?.[0]?.message?.content ?? "";
-    // Classified per sentence and filtered HERE rather than asking the model
-    // for a free-form list of problems: asked for a list, it listed questions,
-    // offers and true statements alike, and every answer carried a warning.
-    const parsed = JSON.parse(raw) as { sentences?: unknown };
-    if (!Array.isArray(parsed?.sentences)) return null;
-    return (parsed.sentences as Array<{ text?: unknown; kind?: unknown; supported?: unknown }>)
-      .filter((x) => x?.kind === "claim" && x?.supported === false && typeof x?.text === "string")
-      .map((x) => x.text as string);
-  } catch {
-    return null;
-  }
+  const model = process.env.ORG_VERIFY_MODEL || "gpt-4.1-mini";
+  const { runOrgVerificationCall } = await import("./org-verification-call");
+  return runOrgVerificationCall(model, prompt, key, {
+    fetch,
+    async record(usage, result) {
+      const { recordTokenUsage } = await import("./ai-usage-log");
+      await recordTokenUsage("openai", model, usage, { endpoint: "assistant-org-verify", ...result });
+    },
+  });
 }
 
 /** Exposed for deterministic evidence-boundary tests; no network or model needed. */

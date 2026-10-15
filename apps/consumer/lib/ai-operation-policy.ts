@@ -2,10 +2,10 @@
  * never enter this registry. Existing quota and premium checks still apply. */
 export const AI_WORKFLOWS = [
   'assistant','coach','analyze','story-check','forge-package-story','generate-docs','forge-resume-assist',
-  'forge-suggest-fix','forge-recheck','forge-second-check','resume','resume-full',
-  'career-package','interview','interview-practice','interview-voice-token',
+  'forge-suggest-fix','forge-recheck','second-check','resume','resume-full',
+  'interview','interview-voice-token',
   'quick-apply','follow-up','intake-followups','disclosure','disclosure-takeaways',
-  'cover-letter','parse','rush-resume','resume-fine-tune','next-step-why','fit-check','disclosure-strengths',
+  'apply-email','parse','rush-resume','resume-fine-tune','next-step-why','fit-check','disclosure-strengths',
 ] as const;
 export type AiWorkflow = typeof AI_WORKFLOWS[number];
 export function isAiWorkflow(value: string): value is AiWorkflow {

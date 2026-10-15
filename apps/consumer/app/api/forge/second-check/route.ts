@@ -6,6 +6,8 @@
  * database, auth, provider and usage ledger.
  */
 
+import { runAiOperation } from "@/lib/ai-operation-server";
+import { forgeUserId } from "@/lib/session-policy";
 import { auth } from "@/auth";
 import {
   FORGE_IP_LIMITS,
@@ -29,7 +31,8 @@ const deps: SecondCheckDeps = {
     const got = secondCheckProviderFromEnv(process.env);
     return got.provider;
   },
-  userIdOf: async () => (await auth())?.user?.id ?? null,
+  userIdOf: async () => forgeUserId(await auth()) ?? null,
+  runOperation: (userId, run) => runAiOperation({ userId, endpoint: SECOND_CHECK_ENDPOINT }, run),
   ipOf: getClientIp,
   spentTodayUsd: async () => {
     const rows = await query<{ usd: string | null; unpriced: number }>(
@@ -48,8 +51,8 @@ const deps: SecondCheckDeps = {
   reserveAccount: async (userId, cap) => (await reserveEndpointSlot(userId, SECOND_CHECK_ENDPOINT, cap)).ok,
   releaseAccount: (userId) => releaseEndpointSlot(userId, SECOND_CHECK_ENDPOINT),
   reserveIp: async (ip) => (await incrementIpUsage(ip, SECOND_CHECK_ENDPOINT)) <= (FORGE_IP_LIMITS[SECOND_CHECK_ENDPOINT] ?? 5),
-  recordUsage: (provider, model, usage, userId) =>
-    recordTokenUsage(provider, model, usage, { userId, endpoint: SECOND_CHECK_ENDPOINT }),
+  recordUsage: (provider, model, usage, userId, outcome) =>
+    recordTokenUsage(provider, model, usage, { userId, endpoint: SECOND_CHECK_ENDPOINT, outcome }),
 };
 
 export async function POST(request: Request) {

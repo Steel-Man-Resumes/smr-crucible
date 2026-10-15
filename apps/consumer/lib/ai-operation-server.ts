@@ -85,7 +85,7 @@ export async function runAiOperation(input: {userId: string;endpoint: string}, h
   return withAiOperation(operation.context,async()=>{
     try {
       const response=await handler();
-      await operation.finish(response.ok?'succeeded':'failed');
+      await operation.finish(response.ok && !operation.context.failed ? 'succeeded' : 'failed');
       return response;
     } catch(error) {await operation.finish('failed');throw error;}
   });

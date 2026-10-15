@@ -77,7 +77,7 @@ async function handlePost(request: Request) {
   const selected = typeof applicationId === "string" && applicationId && userId ? await loadApplicationContext(userId, applicationId) : null;
   if (applicationId && !selected) return NextResponse.json({ error: "That saved job is unavailable in your account" }, { status: 404 });
   const targetJob = selected?.application.job_title || requestedTargetJob;
-  const posting = selected?.application.jd_full_text || selected?.application.jd_excerpt || "";
+  const posting = selected?.application.jd_full_text || selected?.application.jd_excerpt || selected?.application.description || "";
 
   // Affirmative, explicit consent to send the record to an AI provider. The
   // client sends this true ONLY when the user clicked "I understand -- let's

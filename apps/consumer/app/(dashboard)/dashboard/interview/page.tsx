@@ -352,7 +352,7 @@ function InterviewPracticePage() {
       if (selectionSequence.current !== seq) return;
       const app = context.application;
       setConfig(prev => ({ ...prev, targetRole: [app.job_title, app.company].filter(Boolean).join(" at ") }));
-      setJobDescription(pickJdSource(app.jd_full_text || app.jd_excerpt, "").text);
+      setJobDescription(pickJdSource(app.jd_full_text || app.jd_excerpt || app.description, "").text);
       setJdMeta({ age: formatSnapshotAge(app.jd_fetched_at), truncated: app.jd_truncated });
       if (context.resumeSnapshot) setSelectedSnapshot({ id: context.resumeSnapshot.id, content: context.resumeSnapshot.content_snapshot, applicationId: id });
       else if (context.revision) setSelectedSnapshot({ id: context.revision.id, content: null, applicationId: id, text: context.revision.resume_text } as any);

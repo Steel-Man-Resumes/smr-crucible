@@ -41,6 +41,7 @@ import {
 export interface SecondCheckUsage {
   inputTokens: number;
   outputTokens: number;
+  cacheReadInputTokens?: number;
 }
 
 export interface SecondCheckReply {
@@ -102,15 +103,16 @@ export function openAICompatibleProvider(cfg: OpenAICompatibleConfig): SecondChe
       if (!res.ok) throw new Error(`second check provider replied ${res.status}`);
       const data = (await res.json()) as {
         choices?: Array<{ message?: { content?: unknown } }>;
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };
       };
       const content = data.choices?.find((c) => typeof c?.message?.content === "string")?.message?.content;
       if (typeof content !== "string") throw new Error("second check provider sent no text");
       return {
         text: content,
         usage: {
-          inputTokens: Number(data.usage?.prompt_tokens) || 0,
-          outputTokens: Number(data.usage?.completion_tokens) || 0,
+          inputTokens: typeof data.usage?.prompt_tokens === "number" ? data.usage.prompt_tokens - (data.usage.prompt_tokens_details?.cached_tokens ?? 0) : NaN,
+          outputTokens: typeof data.usage?.completion_tokens === "number" ? data.usage.completion_tokens : NaN,
+          cacheReadInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
         },
       };
     },

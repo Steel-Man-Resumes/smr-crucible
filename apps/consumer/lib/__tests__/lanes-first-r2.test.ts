@@ -447,7 +447,7 @@ test("Refinery names: Get support, My resumes, Private documents; every tool sti
 test("Get support reads R3's fields: coverage line, last checked, source; older answers still render", () => {
   const r = readSupportResponse({
     resources: [
-      { id: "a", title: "Ride help", provider: "County transit", checkedLine: "Last checked Oct 1, 2026.", sourceLabel: "Steel Man's checked directory", website: "javascript:alert(1)", mayBeOutOfDate: false },
+      { id: "a", title: "Ride help", provider: "County transit", checkedLine: "Last checked Oct 1, 2026.", sourceLabel: "Steel Man's checked directory", website: "javascript:alert(1)", mayBeOutOfDate: false, fees: "No charge", whatToBring: "Photo ID", limits: "One ride each week" },
       { title: "" },
     ],
     coverage: { level: "state", line: "We haven't checked local help in this county yet. These work statewide.", place: "Lincoln County, MT" },
@@ -455,10 +455,20 @@ test("Get support reads R3's fields: coverage line, last checked, source; older 
   assert.equal(r.results.length, 1);
   assert.equal(r.results[0].checkedLine, "Last checked Oct 1, 2026.");
   assert.equal(r.results[0].website, undefined, "only http(s) links");
+  assert.equal(r.results[0].fees, "No charge");
+  assert.equal(r.results[0].whatToBring, "Photo ID");
+  assert.equal(r.results[0].limits, "One ride each week");
+  const malformed = readSupportResponse({resources:[{title:"Help",fees:15,whatToBring:[],limits:" "}]});
+  assert.equal(malformed.results[0].fees, undefined);
+  assert.equal(malformed.results[0].whatToBring, undefined);
+  assert.equal(malformed.results[0].limits, undefined);
   assert.equal(r.coverage?.line, "We haven't checked local help in this county yet. These work statewide.");
   const old = readSupportResponse({ resources: [{ id: "b", title: "Legal aid" }] });
   assert.equal(old.coverage, null);
   assert.equal(old.results[0].checkedLine, undefined);
+  assert.equal(old.results[0].fees, undefined);
+  assert.equal(old.results[0].whatToBring, undefined);
+  assert.equal(old.results[0].limits, undefined);
   const page = read("app/(dashboard)/dashboard/resources/page.tsx");
   assert.match(page, /<SupportSearch /);
   assert.match(page, /id="paths"/);

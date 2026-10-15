@@ -94,3 +94,22 @@ it("every assistant navigation capability maps to a real shipped page", () => {
   walk(root);
   for (const href of Object.values({ ...FORGE_PAGES, ...REFINERY_PAGES })) assert(routes.has(href), `Missing route ${href}`);
 });
+it("loads immutable selected application resume separately from current revision and canonical JD", async () => {
+  const calls: string[] = [];
+  const work = await resolveSelectedWork("owner", { applicationId: job }, store({
+    application: async () => ({ id: job, job_title: "Driver", company: "Example", description: "Old listing", jd_full_text: "Full authoritative duties", jd_excerpt: "Short excerpt", jd_fetched_at: "2026-10-01", jd_truncated: true, resume_artifact_id: art }) as any,
+    documents: async (uid, appId) => { calls.push(`${uid}:${appId}`); return [
+      {id:"cover", document_type:"cover_letter", user_id:uid, application_id:appId, content_snapshot:{text:"Do not use this letter"}},
+      {id:"snapshot",document_type:"resume", user_id:uid, application_id:appId, artifact_id:art,content_snapshot:{text:"Resume attached then"},provenance:"sent_as_is",content_hash:"hash",created_at:"2026-10-01"},
+    ] as any; },
+  }));
+  assert.deepEqual(calls,[`owner:${job}`]);
+  assert.equal(work.application?.jobDescription.text,"Full authoritative duties"); assert.equal(work.application?.jobDescription.truncated,true);
+  assert.equal(work.applicationResumeSnapshot?.resumeText,"Resume attached then"); assert.equal(work.applicationResumeSnapshot?.immutable,true);
+  assert.equal(work.revision?.resumeText,"Actual saved text");
+});
+it("never reads attachment snapshots for an unavailable application", async () => {
+  let reads=0;
+  await assert.rejects(resolveSelectedWork("owner",{applicationId:job},store({application:async()=>null,documents:async()=>{reads++;return[];}})));
+  assert.equal(reads,0);
+});

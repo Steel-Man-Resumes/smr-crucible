@@ -246,6 +246,18 @@ describe("towns and ZIPs to counties (Census list)", () => {
 });
 
 describe("pieces", () => {
+  test("published visit details survive search while older directory rows stay valid", async () => {
+    const base = row({ service_id: "visit-details", area_id: "food", geo_scope: "national", state: "DC" });
+    const answer = await searchSupport({ category: "food" }, { findHud: noHud, readDirectory: async () => [{ ...base, fees: " No charge ", what_to_bring: "Photo ID", limits: "Once a month" }] });
+    assert.equal(answer.resources[0].fees, "No charge");
+    assert.equal(answer.resources[0].whatToBring, "Photo ID");
+    assert.equal(answer.resources[0].limits, "Once a month");
+    const legacy = fromDirectory(base);
+    assert.equal(legacy.fees, undefined);
+    assert.equal(legacy.whatToBring, undefined);
+    assert.equal(legacy.limits, undefined);
+  });
+
   test("scope labels and matching keys from a row", () => {
     assert.equal(directoryScope(ROWS[0]).label, "Lincoln County, MT");
     assert.deepEqual(directoryScope(ROWS[0]).counties, ["lincoln"]);

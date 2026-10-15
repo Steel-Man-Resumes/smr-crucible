@@ -2,6 +2,14 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## Unreleased: Accounts, current directory evidence and contextual assistance
+
+- Require an account for full Forge work while preserving public checks and the existing Mini Forge flow. Keep the selected lane, application and submitted document together through practice and follow-up.
+- Check source-grounded story claims before showing them as verified. Queue finished document packages durably, retain the exact revision across retries and keep failed delivery recoverable.
+- Share bounded, current employer and support publications across app tools, preserve sources and expiry, and save selected resources with owner access checks. Collect deduplicated coverage requests for review.
+- Give the assistant validated selected-work context, direct evidence tools, confirmed correction and resource actions, scoped staff drafts and owner operational reads. Keep phone chat within the page flow.
+- Account for complete AI operations, retries, verification and voice estimates. Distinguish missing prices and usage from zero cost; expose owner policy controls without seeding new allowances.
+
 ## Unreleased: Forge and Refinery review repairs
 
 - Ask for the person's direction and missed work before Forge writing; lead the results with a source-grounded story. Let t.ROY propose line fixes with before/after review, while keeping AI wording outside the person's source facts.

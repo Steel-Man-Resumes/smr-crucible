@@ -9,7 +9,7 @@ export function assistantCapabilities(tools: ToolSet, opts: { role: string; page
     version: "2026-10-15.v1",
     role: opts.role,
     tools: Object.keys(tools),
-    pages: opts.role === "participant" ? (opts.signedIn ? REFINERY_PAGES : FORGE_PAGES) : {},
+    pages: opts.role === "participant" ? (opts.signedIn ? REFINERY_PAGES : FORGE_PAGES) : opts.role === "owner" ? { "Owner controls": "/dashboard/admin", "Directory coverage": "/dashboard/admin/directory-coverage" } : {},
     skills: selectSkills(manifest.skills, opts.page, !!opts.hasCriminalRecord, opts.role).map((s) => ({ id: s.id, version: s.version ?? 1 })),
     access: "Registered here; each execution still enforces authentication, scope, consent and operation policy.",
   };
