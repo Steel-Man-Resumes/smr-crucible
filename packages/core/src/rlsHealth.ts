@@ -50,6 +50,7 @@ export const RLS_PROTECTED_TABLES = [
   "lane_focus",
   "ai_operation",
   "ai_tool_policy",
+  "directory_publication_alias",
 ] as const;
 
 export interface RlsHealth {

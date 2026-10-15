@@ -6,6 +6,7 @@
  * Each artifact is versioned by iteration_number per user+type+context.
  */
 
+import { ResourceListContent } from "./resourceListShared";
 import { createHash } from "node:crypto";
 import { queryAsUser, getOneAsUser, insertAsUser } from "./db";
 
@@ -79,6 +80,7 @@ export async function createArtifact(
   scaffoldLevel: number = 1.0,
   opts: { laneId?: string | null } = {}
 ): Promise<RefineryArtifact> {
+  if (type === "resource_list") { content = ResourceListContent.parse(content); targetContext = {}; }
   // Get next iteration number for this user+type combo
   const latest = await getOneAsUser<{ max_iter: number }>(userId, 
     `SELECT COALESCE(MAX(iteration_number), 0) AS max_iter
@@ -141,6 +143,8 @@ export async function updateArtifact(
   scaffoldLevel?: number,
   expectedContent?: unknown
 ): Promise<ArtifactWriteResult> {
+  const target = await getOneAsUser<{artifact_type:string}>(userId, "SELECT artifact_type FROM refinery_artifact WHERE id=$1 AND user_id=$2", [artifactId,userId]);
+  if (target?.artifact_type === "resource_list") content = ResourceListContent.parse(content);
   const scaffoldClause = scaffoldLevel !== undefined
     ? `, scaffold_level = $4`
     : "";
