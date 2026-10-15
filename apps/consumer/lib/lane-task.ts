@@ -118,14 +118,25 @@ export function taskNeedsResume(task: LaneTask | null | undefined): boolean {
 export const OPEN_WITHOUT_RESUME = ["/dashboard/help","/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
 
 /**
- * The Refinery sends a person with no Forge resume to the first screen,
- * except on the pages above, and on the overview (their lane home) when
- * today's task does not need a resume. Before the task is known: stay put
+ * The Refinery sends a person with no Forge resume to the Forge's first
+ * screen, except on the pages above. The overview is NOT open without a Forge
+ * run: the Forge comes first, always (Troy 2026-10-15, after a new account
+ * signed in and landed in the Refinery). Before the task is known: stay put
  * (the caller waits).
  */
-export function refineryOpenWithoutResume(pathname: string, task: LaneTask | null | undefined): boolean {
-  if (OPEN_WITHOUT_RESUME.some((p) => pathname === p || pathname.startsWith(p + "/"))) return true;
-  return pathname === "/dashboard";
+export function refineryOpenWithoutResume(pathname: string, _task: LaneTask | null | undefined): boolean {
+  return OPEN_WITHOUT_RESUME.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+/**
+ * Where the bounce goes. On production the session cookie spans every
+ * steelmanresumes.com host, so a person on the Refinery host is sent to the
+ * Forge host and the URL says so. Anywhere else (preview, local) the Forge
+ * screens live on the same host and the sign-in comes along.
+ */
+export function forgeStartUrl(hostname: string, from = "refinery"): string {
+  const path = `${START_PATH}?from=${from}`;
+  return /^refinery\.steelmanresumes\.com$/i.test(hostname) ? `https://forge.steelmanresumes.com${path}` : path;
 }
 
 /**

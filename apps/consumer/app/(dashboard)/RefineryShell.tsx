@@ -21,7 +21,7 @@ import { ImpersonationChrome } from "@/components/ImpersonationChrome";
 import { HighlightHost } from "@/components/SpotlightHighlight";
 import { RefineryLaneHeader } from "@/components/lanes/LaneHeader";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
-import { refineryOpenWithoutResume } from "@/lib/lane-task";
+import { refineryOpenWithoutResume, forgeStartUrl } from "@/lib/lane-task";
 import {
   useUserTier,
   useRealTier,
@@ -508,7 +508,7 @@ export function RefineryShell({
       // Lanes first (Phase 5 R2): to the Forge's first screen, "What do you
       // need today?", on this same site so the sign-in comes along. Returning
       // with a task picked, that page shows where the run is (no bounce back).
-      window.location.href = "/start?from=refinery";
+      window.location.href = forgeStartUrl(window.location.hostname);
     }
   }, [authStatus, userTier, effectiveRole, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
 
