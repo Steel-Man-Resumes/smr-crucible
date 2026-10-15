@@ -36,7 +36,7 @@ import { writerSourceFrom } from "../writer-receipt";
 import { saveFinishRevision, type ArtifactLite, type RevisionStore } from "../revision-save";
 import { resumeTextToDocument } from "../revision-to-doc";
 import { saveFirstSection, listVersions, restoreVersion, type LaneFirstStore } from "../lane-first-save";
-import { refineryOpenWithoutResume, keepGoingHref, taskNeedsResume } from "../lane-task";
+import { refineryOpenWithoutResume, keepGoingHref, taskNeedsResume, forgeStartUrl } from "../lane-task";
 import { revisionContentHash, type ArtifactRevision, type InsertRevisionResult, type NewRevision } from "@crucible/core/src/artifactRevision";
 import { RESUME, SOURCE, finishState, allAnswered, OWN_WORDS } from "./fixtures/revision-run";
 import { FORGE_SIGN_IN_PAGES } from "../forge-access";
@@ -486,9 +486,13 @@ test("H1: without a resume, Get support, the job board and the documents open; i
   }
   assert.equal(refineryOpenWithoutResume("/dashboard/interview", "interview"), true);
   assert.equal(refineryOpenWithoutResume("/dashboard/application-tailor", "job"), false);
-  assert.equal(refineryOpenWithoutResume("/dashboard", "support"), true, "the lane home for a support lane");
-  assert.equal(refineryOpenWithoutResume("/dashboard", "resume"), true);
-  assert.equal(refineryOpenWithoutResume("/dashboard", null), true, "the overview asks for today's task without a Forge redirect");
+  // Forge first, always (Troy 2026-10-15): the overview is not a door around the Forge.
+  assert.equal(refineryOpenWithoutResume("/dashboard", "support"), false, "the lane home still needs a Forge run first");
+  assert.equal(refineryOpenWithoutResume("/dashboard", "resume"), false);
+  assert.equal(refineryOpenWithoutResume("/dashboard", null), false, "a new account on the overview goes to the Forge");
+  assert.equal(forgeStartUrl("refinery.steelmanresumes.com"), "https://forge.steelmanresumes.com/start?from=refinery");
+  assert.equal(forgeStartUrl("the-crucible-git-x-troy-carrs-projects.vercel.app"), "/start?from=refinery");
+  assert.equal(forgeStartUrl("localhost"), "/start?from=refinery");
   assert.equal(taskNeedsResume("job"), false);
   const shell = read("app/(dashboard)/RefineryShell.tsx");
   assert.match(shell, /!refineryOpenWithoutResume\(pathname, laneFocus\.task\)/);
