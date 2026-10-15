@@ -32,11 +32,12 @@ const deps: SecondCheckDeps = {
   userIdOf: async () => (await auth())?.user?.id ?? null,
   ipOf: getClientIp,
   spentTodayUsd: async () => {
-    const rows = await query<{ usd: string | null }>(
-      `SELECT COALESCE(SUM(cost_usd), 0)::text AS usd FROM ai_token_usage
+    const rows = await query<{ usd: string | null; unpriced: number }>(
+      `SELECT COALESCE(SUM(cost_usd), 0)::text AS usd, COUNT(*) FILTER (WHERE cost_status='unpriced')::int AS unpriced FROM ai_token_usage
         WHERE endpoint = $1 AND created_at >= $2::timestamptz`,
       [SECOND_CHECK_ENDPOINT, `${usageDayUtc()}T00:00:00Z`]
     );
+    if (rows[0]?.unpriced) throw new Error("unpriced spend needs reconciliation");
     const usd = Number(rows[0]?.usd ?? 0);
     if (!Number.isFinite(usd)) throw new Error("unreadable spend");
     return usd;

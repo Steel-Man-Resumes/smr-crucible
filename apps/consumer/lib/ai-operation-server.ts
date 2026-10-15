@@ -7,7 +7,7 @@ import type { AiCallMeta } from './ai-usage-log';
 
 const refuse = (code: string, error: string, status: number) => Response.json({code,error}, {status});
 export async function readToolPolicy(userId: string, workflow: string): Promise<ToolPolicy | null> {
-  return getOneAsUser<ToolPolicy>(userId,'SELECT * FROM ai_tool_policy WHERE workflow = $1',[workflow]);
+  return getOneAsUser<ToolPolicy>(userId,'SELECT *,daily_usd::float8 AS daily_usd,reserve_usd::float8 AS reserve_usd FROM ai_tool_policy WHERE workflow = $1',[workflow]);
 }
 export interface OperationHandle {
   response?: Response;

@@ -278,11 +278,11 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   }
 
   if (data?.usage) {
-    recordTokenUsage(
+    await recordTokenUsage(
       "openai",
       data.model || VERIFY_MODEL,
       {
-        inputTokens: data.usage.prompt_tokens || 0,
+        inputTokens: Math.max(0,(data.usage.prompt_tokens || 0)-(data.usage.prompt_tokens_details?.cached_tokens || 0)), cacheReadInputTokens: data.usage.prompt_tokens_details?.cached_tokens || 0,
         outputTokens: data.usage.completion_tokens || 0,
       },
       { endpoint: `grounding-verify:${kind}` }
@@ -490,10 +490,10 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
   }
 
   if (data?.usage) {
-    recordTokenUsage(
+    await recordTokenUsage(
       "openai",
       data.model || VERIFY_MODEL,
-      { inputTokens: data.usage.prompt_tokens || 0, outputTokens: data.usage.completion_tokens || 0 },
+      { inputTokens: Math.max(0,(data.usage.prompt_tokens || 0)-(data.usage.prompt_tokens_details?.cached_tokens || 0)), cacheReadInputTokens: data.usage.prompt_tokens_details?.cached_tokens || 0, outputTokens: data.usage.completion_tokens || 0 },
       { endpoint: "grounding-verify:bullets" }
     );
   }
@@ -672,10 +672,10 @@ ${eduLines.join("\n") || "(none)"}`;
   }
 
   if (data?.usage) {
-    recordTokenUsage(
+    await recordTokenUsage(
       "openai",
       data.model || VERIFY_MODEL,
-      { inputTokens: data.usage.prompt_tokens || 0, outputTokens: data.usage.completion_tokens || 0 },
+      { inputTokens: Math.max(0,(data.usage.prompt_tokens || 0)-(data.usage.prompt_tokens_details?.cached_tokens || 0)), cacheReadInputTokens: data.usage.prompt_tokens_details?.cached_tokens || 0, outputTokens: data.usage.completion_tokens || 0 },
       { endpoint: "grounding-verify:lists" }
     );
   }

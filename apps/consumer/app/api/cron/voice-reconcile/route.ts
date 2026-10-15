@@ -17,6 +17,7 @@
 import { NextResponse } from "next/server";
 import { findExpiredActiveSessions, expireSession } from "@crucible/core";
 import { recordTokenUsage } from "@/lib/ai-usage-log";
+import { reconcileClosedVoiceUsage } from "@/lib/voice-usage-reconcile";
 import { REALTIME_MODEL } from "@/lib/voice-instructions";
 
 export const dynamic = "force-dynamic";
@@ -62,7 +63,9 @@ export async function GET(request: Request) {
       reconciled++;
     }
 
+    const recoveredUsage = await reconcileClosedVoiceUsage();
     return NextResponse.json({
+      recoveredUsage,
       ok: true,
       found: expired.length,
       reconciled,
