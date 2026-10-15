@@ -23,6 +23,7 @@
  * gate run here, on that evidence.
  */
 
+import { isRecordChoice, recordChoiceFrom, type RecordChoice } from "./record-choice";
 import { readStoryDraft, type StoryDraft } from "./story-verification";
 import {
   buildFinishView,
@@ -78,6 +79,7 @@ export interface RevisionEvidence {
   grounding: unknown;
   withheldLines: string[];
   keepInsideLines: boolean;
+  recordChoice?: RecordChoice;
   addedTerms: string[];
   credentialCutRemnants: string[];
   credentialsAnswer: string;
@@ -205,6 +207,7 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
         coverLetterText: letterText,
         withheldLines: r.withheldLines,
         keepInsideLines: r.keepInsideLines === true,
+        ...(isRecordChoice(r.recordChoice) ? { recordChoice: r.recordChoice } : {}),
         grounding: JSON.parse(groundingJson),
         written: r.written,
       },
@@ -301,6 +304,7 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
         grounding: verified ? groundingOut : null,
         withheldLines: stored.docs.withheldLines.slice(0, 100).map((l) => l.slice(0, 1000)),
         keepInsideLines: stored.docs.keepInsideLines,
+        recordChoice: recordChoiceFrom(stored.docs.recordChoice, stored.docs.keepInsideLines),
         addedTerms: (stored.addedTerms ?? []).map((t) => t.slice(0, 200)),
         credentialCutRemnants: (stored.credentialCutRemnants ?? []).map((t) => t.slice(0, 2000)),
         credentialsAnswer: str(source.credentialsAnswer, 20_000),

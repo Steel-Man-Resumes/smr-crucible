@@ -14,7 +14,7 @@ const RECORD_PHRASE_RE = /(?:during|while|following|after)\s+(?:a\s+)?(?:period\
 // A line that starts a job, school or credential entry: it carries a year.
 const ENTRY_HEADER_RE = /\b(?:19|20)\d{2}\b/;
 
-const hasRecordWords = (line: string) => {
+export const hasRecordWords = (line: string) => {
   RECORD_LINE_RE.lastIndex = 0;
   RECORD_PHRASE_RE.lastIndex = 0;
   return RECORD_LINE_RE.test(line) || RECORD_PHRASE_RE.test(line);

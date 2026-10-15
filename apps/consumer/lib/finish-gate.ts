@@ -73,6 +73,7 @@ import {
 import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
 import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
 import { withholdRecordLines } from "./record-lines";
+import { isRecordChoice, keepSourceRecordLines, recordChoiceFrom, recordChoiceWords, type RecordChoice } from "./record-choice";
 import { countPromptForLine } from "./count-prompts";
 
 export type { DefendAnswer, OpenItem, ResumeStatus };
@@ -88,6 +89,8 @@ export interface FinishDocs {
   coverLetterText: string;
   withheldLines: string[];
   keepInsideLines: boolean;
+  /** DEC-51: the record on the page as the person chose it; absent on older runs (keepInsideLines decides). */
+  recordChoice?: RecordChoice;
   /** The grounding block from /api/forge/generate-docs, as returned. */
   grounding: unknown;
   /**
@@ -195,8 +198,9 @@ function hash(s: string): string {
 export function finishKey(session: {
   forgeOutput?: unknown;
   resumeText?: string;
-}, keepInsideLines: boolean): string {
-  return hash(`${JSON.stringify(session.forgeOutput ?? null)}\u0000${session.resumeText ?? ""}\u0000${keepInsideLines ? 1 : 0}`);
+}, keepInsideLines: boolean, recordChoice?: RecordChoice): string {
+  // "state" is the one choice the old boolean cannot say; off and facility keep their old keys.
+  return hash(`${JSON.stringify(session.forgeOutput ?? null)}\u0000${session.resumeText ?? ""}\u0000${keepInsideLines ? 1 : 0}${recordChoice === "state" ? "\u0000state" : ""}`);
 }
 
 /** The stored finish for this run, or null when it is missing, on another version or from another run. */
@@ -214,6 +218,7 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
       coverLetterText: typeof d.coverLetterText === "string" ? d.coverLetterText : "",
       withheldLines: Array.isArray(d.withheldLines) ? d.withheldLines.filter((l): l is string => typeof l === "string") : [],
       keepInsideLines: d.keepInsideLines === true,
+      ...(isRecordChoice(d.recordChoice) ? { recordChoice: d.recordChoice } : {}),
       grounding: d.grounding ?? null,
       written:
         d.written && typeof d.written.resume === "string"
@@ -318,10 +323,14 @@ export function ownWordsFor(
     hookNarrative?: string;
     challengeNarratives?: Record<string, string>;
   },
-  keepInsideLines: boolean
+  keepInsideLines: boolean,
+  recordChoice?: RecordChoice
 ): string {
+  const choice = recordChoiceFrom(recordChoice, keepInsideLines);
   return [
-    withholdRecordLines(session.resumeText, keepInsideLines).kept,
+    withholdRecordLines(session.resumeText, keepSourceRecordLines(choice)).kept,
+    // DEC-51 "state": the employer name the person chose stands in their words (record-choice.ts).
+    recordChoiceWords(session.resumeText, choice),
     // Round 13 (R13-B1): the goal box and the "what would make work meaningful" answer are about the job they
     // want. They are marked so a present tense there ("a job where I train new hires") never counts as done.
     markGoalText(session.goalNarrative),

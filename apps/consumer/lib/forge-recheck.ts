@@ -42,6 +42,7 @@
  * database.
  */
 
+import { recordChoiceFrom } from "./record-choice";
 import { buildTrustedSource } from "./grounding-verify";
 import type { verifyGrounding as VerifyFn } from "./grounding-verify";
 import { accountFlags } from "./grounding-accounting";
@@ -206,7 +207,7 @@ export async function recheckDocs(input: unknown, userId: string | null, deps: R
     const store = deps.store;
     if (!store) return { ok: false, status: 500, error: "We couldn't check it just now." };
     const held: WriterSource =
-      (store.serverSource ? await store.serverSource(userId, source.keepInsideLines === true) : null) ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] };
+      (store.serverSource ? await store.serverSource(userId, source.keepInsideLines === true, recordChoiceFrom(source.recordChoice, source.keepInsideLines)) : null) ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] };
     const heldRev = await heldRevisionFor(userId, runId, store);
     const heldEv = (heldRev?.evidence ?? null) as Partial<RevisionEvidence> | null;
     const written = heldEv?.written ? { resume: heldEv.written.resume, letter: heldEv.written.letter } : checked;

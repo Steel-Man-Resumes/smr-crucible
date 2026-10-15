@@ -59,6 +59,7 @@ export function firstSaveState(text: string, typed: string) {
     grounding: null,
     withheldLines: [],
     keepInsideLines: false,
+    recordChoice: "off",
     ownWords: typed,
     credentialsAnswer: "",
     credentialRows: [],

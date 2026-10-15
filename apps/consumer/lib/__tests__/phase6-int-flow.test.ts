@@ -152,7 +152,7 @@ test("M2: in a rebuild the walk, the replay and the change check all use the pag
   // The processing tour walks the same page.
   assert.match(read("app/(forge)/processing/page.tsx"), /session\.originalResumeText \|\| session\.resumeText/);
   // The server checks `old` against the writer's starting text (the page, in a rebuild).
-  assert.match(read("app/api/forge/generate-docs/route.ts"), /ownResumeText: withholdRecordLines\(input\.resumeText, input\.keepInsideLines === true\)\.kept,/);
+  assert.match(read("app/api/forge/generate-docs/route.ts"), /ownResumeText: withholdRecordLines\(input\.resumeText, keepSource\)\.kept,/);
   // Older panels: the server's own words when the page has them, never the starting page.
   assert.match(page, /const panelSource = runEvidence \? runEvidence\.ownResumeText : session\.resumeText;/);
   assert.doesNotMatch(page, /sourceText=\{session\.resumeText\}/);

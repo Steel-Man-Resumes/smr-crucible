@@ -44,6 +44,7 @@ import { serverHashSecret } from "@crucible/core/src/serverHashSecret";
 import { CREDENTIALS_KEY } from "./forge-path";
 import { ownWordsFor } from "./finish-gate";
 import { withholdRecordLines } from "./record-lines";
+import { keepSourceRecordLines, recordChoiceFrom } from "./record-choice";
 import { completeCredentialRows, readCredentialRows } from "./credential-rows";
 
 const PREFIX = "wr2.";
@@ -70,9 +71,11 @@ export function writerSourceFrom(input: {
   credentialsNote?: unknown;
   credentialRows?: unknown;
   keepInsideLines?: unknown;
+  recordChoice?: unknown;
 }): WriterSource {
   const str = (v: unknown) => (typeof v === "string" ? v : undefined);
-  const keep = input.keepInsideLines === true;
+  const choice = recordChoiceFrom(input.recordChoice, input.keepInsideLines);
+  const keep = choice === "facility";
   const credentials = str(input.credentialsNote);
   return {
     ownWords: ownWordsFor(
@@ -82,11 +85,12 @@ export function writerSourceFrom(input: {
         hookNarrative: str(input.hookNarrative),
         challengeNarratives: credentials !== undefined ? { [CREDENTIALS_KEY]: credentials } : undefined,
       },
-      keep
+      keep,
+      choice
     ),
     // The resume text the writer actually received (review r3 L-2), never a
     // separate field the writer did not see.
-    ownResumeText: withholdRecordLines(str(input.resumeText), keep).kept,
+    ownResumeText: withholdRecordLines(str(input.resumeText), keepSourceRecordLines(choice)).kept,
     credentialsAnswer: credentials ?? "",
     credentialRows: completeCredentialRows(readCredentialRows(input.credentialRows)) as unknown[],
   };

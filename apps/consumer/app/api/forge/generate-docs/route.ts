@@ -20,6 +20,7 @@ import { plainPunctuation, plainPunctuationText, logDashSwaps } from "@/lib/lega
 import { credentialStatuses, findOverstatedCredentialLines, findOverstatedCredentials } from "@/lib/credential-truth";
 import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
 import { withholdRecordLines } from "@/lib/record-lines";
+import { applyRecordChoice, keepSourceRecordLines, recordChoiceFrom, recordEntryLabel } from "@/lib/record-choice";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
 import { readRunCookie, runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
@@ -131,6 +132,12 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
       sourceKind = rb.origin;
     }
 
+    // DEC-51: one record choice for the writer, the source, the post-pass and the receipt.
+    const recordChoice = recordChoiceFrom(body.recordChoice, body.keepInsideLines);
+    input = { ...input, recordChoice, keepInsideLines: recordChoice === "facility" };
+    sourceInput = { ...sourceInput, recordChoice, keepInsideLines: recordChoice === "facility" };
+    const keepSource = keepSourceRecordLines(recordChoice);
+
     if (!input.narrative && !input.strengths && !input.skills?.length) {
       return NextResponse.json(
         { error: "No Forge output data provided. Run the analysis first." },
@@ -191,7 +198,7 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
       try {
         progress?.({ type: "stage", message: "Polishing the wording against your work history." });
         const sourceForPolish = buildTrustedSource({
-          resumeText: withholdRecordLines(sourceInput.resumeText, input.keepInsideLines === true).kept,
+          resumeText: withholdRecordLines(sourceInput.resumeText, keepSource).kept,
           userText: [sourceInput.goalNarrative, sourceInput.hookNarrative, (sourceInput.goals || []).join(", "), sourceInput.credentialsNote],
         });
         const qualityDeadline = new AbortController();
@@ -239,7 +246,10 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
     if (dateForms.restored) console.warn(`[date-form] generate-docs: put back ${dateForms.restored} date range(s) in the person's own form`);
     const earlySource = writerSourceFrom(sourceInput as unknown as Record<string, unknown>);
     const repaired = repairForgeResume(dateForms.text, earlySource.ownResumeText, earlySource.ownWords);
-    let resume = repaired.text;
+    // DEC-51 on the WRITTEN page (Troy 2026-10-15): inside entries come off, or
+    // read as the state, whatever the writer did with the words around them.
+    const recordPass = applyRecordChoice(repaired.text, "", recordChoice, sourceInput.resumeText);
+    let resume = recordPass.resume;
     let earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
     let earlyGrounding = withRewording({
       ...earlyAccounting, flags: resumeCheck.flags, hasFabrication: resumeCheck.hasFabrication,
@@ -266,14 +276,14 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
         credentialRows: completeCredentialRows(readCredentialRows(earlySource.credentialRows)), ownResumeText: earlySource.ownResumeText || undefined });
     }
     const earlyChanges = resumeCheck.verifierRan ? changesNotAwaitingCards(validateWriterChanges(rawChanges, {
-      ownResumeText: withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept,
+      ownResumeText: withholdRecordLines(input.resumeText, keepSource).kept,
       finalResume: resume, keepInsideLines: input.keepInsideLines === true,
     }), earlyView) : [];
     progress?.({ type: "resume", resume, changes: earlyChanges, message: "Your resume is written. Finishing the letter and final checks." });
     const coverResult = await coverCheckPending;
     if (!coverResult.result) throw coverResult.error;
     const { raw: coverLetterRaw, check: coverCheck } = coverResult.result;
-    let coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
+    let coverLetter = applyRecordChoice(resume, plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog), recordChoice, sourceInput.resumeText).letter;
     const letterView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
       coverLetterText: coverLetter, written: { resume, letter: coverLetter },
       grounding: withRewording({ ...earlyGrounding, flags: [...resumeCheck.flags, ...coverCheck.flags],
@@ -332,7 +342,7 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
     // Phase 6 integration (M2): in a rebuild `input.resumeText` is the page the writer
     // started from (never the person's own words); `old` lines are checked against it.
     const validChanges = validateWriterChanges(rawChanges, {
-      ownResumeText: withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept,
+      ownResumeText: withholdRecordLines(input.resumeText, keepSource).kept,
       finalResume: resume,
       keepInsideLines: input.keepInsideLines === true,
     });
@@ -372,8 +382,11 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
 
     // What was held back from the source (never silently): the page lists it and
     // offers to put it back.
-    const { withheld: withheldLines } = withholdRecordLines(input.resumeText, input.keepInsideLines === true);
-    const keptInsideLines = input.keepInsideLines === true;
+    const { withheld: sourceWithheld } = withholdRecordLines(input.resumeText, keepSource);
+    // The card lists what the reader will not see: source lines held back, and
+    // inside entries the pass took off (or renamed) on the written page.
+    const withheldLines = Array.from(new Set([...sourceWithheld, ...recordPass.entries.map((e) => recordEntryLabel(e, recordChoice))])).slice(0, 20);
+    const keptInsideLines = recordChoice === "facility";
 
     // Round 3 (review r1 H2): rewording A is opt-in, stamped here from the
     // server's own source kind (lib/source-kind.ts); never carried in.
@@ -454,6 +467,9 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
       coverLetter,
       withheldLines,
       keptInsideLines,
+      recordChoice,
+      recordEntries: recordPass.entries,
+      recordSwaps: recordPass.swaps,
       grounding,
       receipt,
       changes,
@@ -553,7 +569,7 @@ RULES:
 
   if (input.resumeText) {
     // Strip incarceration-related content before sending to AI
-    const cleanedResume = withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept;
+    const cleanedResume = withholdRecordLines(input.resumeText, keepSourceRecordLines(recordChoiceFrom(input.recordChoice, input.keepInsideLines))).kept;
     parts.push(
       `WORK HISTORY EXCERPT:\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.coverLetter.resumeText")}`
     );

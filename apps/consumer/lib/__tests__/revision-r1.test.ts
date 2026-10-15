@@ -947,7 +947,7 @@ test("r3 L-2: own resume lines are the text the writer received; a separate 'ori
   assert.equal(s1.ownResumeText, writerSourceFrom({ resumeText: SOURCE }).ownResumeText);
   const page = src("app", "(forge)", "output", "page.tsx");
   assert.doesNotMatch(page, /originalResumeText: session\.originalResumeText/, "the page does not send it to the writer");
-  assert.match(src("lib", "finish-payload.ts"), /ownResumeText: withholdRecordLines\(run\.resumeText, keep\)\.kept/);
+  assert.match(src("lib", "finish-payload.ts"), /ownResumeText: withholdRecordLines\(run\.resumeText, keepSourceRecordLines\(choice\)\)\.kept/);
 });
 
 test("r3 I-1: the import comment about the original upload is true", () => {
