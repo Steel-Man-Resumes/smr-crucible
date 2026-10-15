@@ -549,6 +549,27 @@ export function applyRewrite(text: string, answers: DefendAnswer[], line: string
   };
 }
 
+/** An approved AI proposal stays sourced to the person's earlier words. It never joins rewritesOf. */
+export function applyAssistedRewrite(text: string, answers: DefendAnswer[], line: string, suggestion: string, source: string): RewriteResult {
+  const proposal = stripBullet(suggestion.replace(/\s*\n\s*/g, " ")).trim();
+  if (!proposal || !source.trim() || distanceFromSource(proposal, source) !== 0 || untracedFacts(proposal, source).length) {
+    return { text, answers, changed: false };
+  }
+  if (!pageLineSet(text).has(squash(stripBullet(line)))) return { text, answers, changed: false };
+  const next = changeLine(text, line, proposal);
+  const newLine = linesOf(next).find((l) => squash(stripBullet(l)) === squash(proposal)) ?? proposal;
+  const old = squash(line);
+  const prior = answers.find((a) => a.kind === "assisted" && typeof a.replaced === "string" && squash(a.line) === old);
+  return {
+    text: next,
+    answers: [
+      ...answers.filter((a) => squash(a.line) !== old && squash(a.line) !== squash(newLine)),
+      { line: newLine, answer: proposal, verdict: "stands", kind: "assisted", replaced: prior?.replaced ?? line },
+    ],
+    changed: true,
+  };
+}
+
 /** The line as the person should see it in an edit box: no bullet glyph. */
 export function editableLine(line: string): string {
   return stripBullet(line);

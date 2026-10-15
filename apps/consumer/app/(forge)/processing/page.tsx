@@ -105,6 +105,7 @@ export default function ProcessingPage() {
             readinessStage: session.readinessStage,
             goals: session.goals,
             goalNarrative: session.goalNarrative,
+            hookNarrative: session.hookNarrative,
             challenges: session.challenges,
             criminalRecord: session.criminalRecord,
             challengeNarratives: session.challengeNarratives,

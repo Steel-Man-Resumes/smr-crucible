@@ -183,6 +183,7 @@ const FORGE_ANONYMOUS_API_ROUTES = new Set([
   "/api/forge/download",
   "/api/forge/email-package",
   "/api/forge/resume-assist",
+  "/api/forge/suggest-fix",
   "/api/resume/fit-check",
   "/api/resume/layout",
   "/api/assistant",

@@ -39,6 +39,8 @@ export interface ForgeSessionData {
    */
   laneTask?: import("./lane-task").LaneTask;
   laneTarget?: string;
+  /** Optional work entry the person wants the first Forge story to lead with. */
+  laneLeadJob?: string;
   laneJobPosting?: string;
   quickBuildDraft?: import("./first-fix").FirstSection;
   /** Lanes first: the letter the writer made, kept for "Add a cover letter" off the job route. */

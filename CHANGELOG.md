@@ -4,6 +4,7 @@ A dated, high-level history of what shipped, built from the commit log. Product 
 
 ## Unreleased: Forge and Refinery review repairs
 
+- Ask for the person's direction and missed work before Forge writing; lead the results with a source-grounded story. Let t.ROY propose line fixes with before/after review, while keeping AI wording outside the person's source facts.
 - Keep the actual job-listing provider on saved applications and their posting snapshots, including jobs saved through t.ROY. Record the contributing providers in the search decision log.
 - Preserve the active Neon Auth role's existing temporary database access when the resource directory migration removes that access from the app role; record the grant for rollback and check the role boundary before applying it.
 - Check suggested interview wording against the person's source before showing it. Preserve skills that their own work history explicitly supports when an automated list check misses them.

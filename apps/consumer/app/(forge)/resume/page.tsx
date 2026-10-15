@@ -203,7 +203,7 @@ export default function ResumeIntakePage() {
           laneTask: session.laneTask || "resume",
           lastPageVisited: "resume",
         });
-        router.replace("/processing");
+        router.replace("/goals");
       } catch {
         if (live) setRebuild({ id: rebuild.id, error: failed });
       }
@@ -353,7 +353,7 @@ export default function ResumeIntakePage() {
           setActivePath("upload");
         }}
         onBuild={() => continueWith({ lastPageVisited: "resume" })}
-        onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "goals", "preferences"])), lastPageVisited: "resume" })}
+        onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "preferences"])), lastPageVisited: "resume" })}
         onEditor={(t) => enterBuilder(t, { name: parsedName || undefined, email: parsedEmail || undefined, phone: parsedPhone || undefined }, rewardText === null ? parsedProfile : null)}
       />
     );
@@ -366,7 +366,7 @@ export default function ResumeIntakePage() {
         signedIn={signedIn}
         onBack={() => setActivePath(null)}
         onContinue={() => continueWith({ lastPageVisited: "resume" })}
-        onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "goals", "preferences"])), lastPageVisited: "resume" })}
+        onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "preferences"])), lastPageVisited: "resume" })}
       />
     );
   }

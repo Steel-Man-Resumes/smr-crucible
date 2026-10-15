@@ -274,10 +274,10 @@ const READINESS_DIRECTIVES: Record<string, {
   },
   preparation: {
     narrative: `This person has DECIDED to make a change. They need a plan.
-- Headline should be resume-ready and targeted.
-- Summary should be confident and forward-looking. This IS the replacement self Giordano describes. Help them see it.
-- Reflection should celebrate the decision and reinforce the identity shift: they are a professional in a specific field.
-- Strengths: tie directly to target career paths with specific evidence. Frame as proof of the new identity.`,
+- Headline should name their actual work and stated target in resume-ready words.
+- Summary should connect dated duties to the next job without claiming a new identity or result they did not give.
+- Reflection should recognize the decision and name one concrete strength from their history.
+- Strengths: tie each one to a specific duty and show why that duty matters to a hiring reader.`,
     skills: `This person is getting ready to move.
 - Full skill extraction with resume-ready language.
 - Categorize clearly (hard/soft/transferable) for resume building.
@@ -405,7 +405,7 @@ function buildContext(input: ForgeInput): string {
     parts.push(`GOAL NARRATIVE: ${sanitizeForPrompt(input.goalNarrative, 1000)}`);
   }
   if (input.hookNarrative) {
-    parts.push(`HOOK FOR CHANGE (Giordano's turning-point context: what would make work feel meaningful): ${sanitizeForPrompt(input.hookNarrative, 1000)}`);
+    parts.push(`ADDITIONAL CONTEXT IN THE PERSON'S OWN WORDS (it may name work the resume missed, or a reason for seeking work; treat only concrete work details as resume facts): ${sanitizeForPrompt(input.hookNarrative, 1000)}`);
   }
 
   if (input.challenges?.length) {
@@ -477,6 +477,13 @@ async function analyzeNarrative(
   const system = `You are a career narrative analyst for Steel Man Resumes.
 Your job is to find the strengths and professional story in this person's experience.
 
+STEEL MAN METHOD FIRST:
+- Build the story on the person's dated work history. Show what they actually did, at its true size, and why a hiring reader should care.
+- Make the relationship visible: each strength needs an example from the person's own work, not a personality guess or redemption script.
+- A resume is one output in a hiring process. Set up a story the person can explain aloud and use later in the Refinery.
+- Their stated target guides what to lead with. It never creates experience they did not give.
+- Older readiness and identity research may help with tone and support, after the work evidence is clear.
+
 READINESS-AWARE INSTRUCTIONS:
 ${rd.narrative}
 
@@ -515,11 +522,7 @@ Return JSON:
     return await callClaude(system, prompt, userId);
   } catch (error) {
     console.error("Narrative analysis failed:", error);
-    return {
-      headline: "Your experience tells a strong story.",
-      summary: "Based on what you've shared, you bring real-world skills and determination.",
-      strengths: [],
-    };
+    throw error;
   }
 }
 

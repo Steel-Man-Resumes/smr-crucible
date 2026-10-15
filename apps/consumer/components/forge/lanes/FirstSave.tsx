@@ -190,7 +190,7 @@ function SavedFirst({
       <div className="mb-4 border border-t-line bg-t-bg p-3" data-testid="first-save-page">
         <ResumePage text={text} draft={!finished} />
       </div>
-      <p className="mb-2 text-sm text-t-phos">{finished ? "Next, t.ROY builds the full page from this." : "Next, t.ROY builds the full page from this and checks every line with you. Until then it stays a draft."}</p>
+      <p className="mb-2 text-sm text-t-phos">{finished ? "First, tell t.ROY what to lead with. Then he builds the full page." : "First, tell t.ROY what to lead with. Then he builds the full page and checks every line with you. Until then it stays a draft."}</p>
       <div className="flex flex-col gap-2 text-sm">
         {onAnotherJob && (
           <button type="button" onClick={onAnotherJob} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-save-another-job">
@@ -198,7 +198,7 @@ function SavedFirst({
           </button>
         )}
         <button type="button" onClick={onDoMore} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="do-more">
-          Do more first: tell t.ROY your goals
+          Add job preferences too
         </button>
         {onEditor && (
           <button type="button" onClick={onEditor} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-save-editor">
@@ -256,7 +256,7 @@ export function FirstReward({
   return (
     <FlowPage
       title="Here's your page."
-      subtitle={hasFix ? "One fix first. Then t.ROY builds your resume from it, and you check it." : "Next, t.ROY builds your resume from it, and you check it."}
+      subtitle={hasFix ? "One fix first. Then tell t.ROY what to lead with before he builds your resume." : "Next, tell t.ROY what to lead with before he builds your resume."}
       actionLabel={hasFix ? HAVE_ONE_FIX_LABEL : HAVE_ONE_BUILD_LABEL}
       onAction={() => go(true, onBuild)}
       showBack
@@ -308,14 +308,14 @@ export function FirstReward({
         </section>
       )}
       <p className="mb-2 text-sm text-t-phos" data-testid="first-reward-next">
-        t.ROY turns this into a real resume from what is on it. You check each job before it is done, and nothing is saved as your resume until then.
+        Next, tell t.ROY what to lead with. Then he turns this into a real resume from what is on it. You check each job before it is done.
       </p>
       <div className="border border-t-line bg-t-bg p-3" data-testid="first-reward-page">
         <ResumePage text={text} draft />
       </div>
       <div className="mt-3 flex flex-col gap-2 text-sm">
         <button type="button" onClick={() => go(false, onDoMore)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="do-more">
-          Do more first: tell t.ROY your goals
+          Add job preferences too
         </button>
         <button type="button" onClick={() => onEditor(text)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-reward-editor">
           Fix lines yourself first, in the editor

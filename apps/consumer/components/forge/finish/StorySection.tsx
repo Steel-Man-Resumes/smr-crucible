@@ -63,11 +63,15 @@ export function StorySection({
   strengthsHeading,
   careersHeading,
   reportChecks,
+  spotlight = false,
+  onRevisit,
 }: {
   output: ForgeOutput;
   strengthsHeading: string;
   careersHeading: string;
   reportChecks: string[];
+  spotlight?: boolean;
+  onRevisit?: () => void;
 }) {
   const narrative = output.narrative || {};
   const strengths = output.strengths || narrative.strengths || [];
@@ -84,16 +88,16 @@ export function StorySection({
   }
 
   return (
-    <section id="finish-story" aria-labelledby="finish-story-heading" className="scroll-mt-20">
+    <section id="finish-story" aria-labelledby="finish-story-heading" className={`scroll-mt-20 ${spotlight ? "border border-t-amber bg-t-panel p-5 sm:p-6" : ""}`}>
       <h2 id="finish-story-heading" className="text-xl font-bold text-t-white">
-        Your story
+        The story behind your resume
       </h2>
       <p className="mb-6 mt-1 text-sm text-t-phos-dim">
-        What t.ROY found in what you told us: your strengths, your skills, what can help, and jobs that fit.
+        t.ROY's reading of the work you gave us. You decide whether this sounds like you.
       </p>
 
       {/* Header / Narrative */}
-      <div className="mb-10">
+      <div className={spotlight ? "mb-4" : "mb-10"}>
         <h3 className="mb-3 text-2xl font-bold text-t-white">
           {narrative.headline || "Your Story, Reforged"}
         </h3>
@@ -108,6 +112,27 @@ export function StorySection({
           </p>
         )}
       </div>
+
+      {spotlight && strengths.length > 0 && (
+        <div className="mb-5 grid gap-3 sm:grid-cols-2" aria-label="Work behind this story">
+          {strengths.slice(0, 2).map((strength, index) => (
+            <div key={`${strength.title}-${index}`} className="border border-t-line bg-t-bg p-3">
+              <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">From your work</p>
+              <p className="mt-1 text-sm font-semibold text-t-white">{strength.title}</p>
+              <p className="mt-1 text-xs leading-relaxed text-t-phos">{strength.evidence}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      {spotlight && <p className="mb-4 text-xs text-t-phos-dim">This is a starting account of your work. The line checks below keep the resume honest.</p>}
+      {spotlight && onRevisit && (
+        <button type="button" onClick={onRevisit} className="t-focus mb-5 min-h-touch border border-t-line bg-t-bg px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
+          Change what t.ROY should lead with
+        </button>
+      )}
+      <details open={!spotlight} className={spotlight ? "border-t border-t-line pt-3" : ""}>
+        <summary className={spotlight ? "t-focus cursor-pointer text-sm font-semibold text-t-amber-bright" : "sr-only"}>Explore your strengths, next paths, and resources</summary>
+        <div className={spotlight ? "pt-5" : ""}>
 
         {/* Report lines that may say more about a credential than the person did.
             Flagged, never removed: the person knows what they hold. */}
@@ -319,6 +344,8 @@ export function StorySection({
       >
         Print or save your story as a PDF
       </button>
+        </div>
+      </details>
     </section>
   );
 }

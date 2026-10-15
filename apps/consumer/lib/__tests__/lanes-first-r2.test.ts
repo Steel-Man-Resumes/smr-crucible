@@ -117,15 +117,16 @@ test("Rush is the job route's 'short on time' branch, not its own entrance", () 
 
 // ---- the path: no readiness, no short/full, nothing before the first page ---------
 
-test("lanes-first path (R9): resume, then build; Do more adds goals and preferences; the support step only when asked", () => {
+test("lanes-first path: resume, a short SMR direction check, then build; optional screens only when asked", () => {
   const ids = (s: Parameters<typeof planForgePath>[0]) => planForgePath(s).screens.map((x) => x.id);
-  assert.deepEqual(ids({ laneTask: "resume", readinessStage: "preparation" }), ["resume", "processing", "output"]);
-  assert.deepEqual(ids({ laneTask: "job", readinessStage: "action" }), ["resume", "processing", "output"]);
+  assert.deepEqual(ids({ laneTask: "resume", readinessStage: "preparation" }), ["resume", "goals", "processing", "output"]);
+  assert.deepEqual(ids({ laneTask: "job", readinessStage: "action" }), ["resume", "goals", "processing", "output"]);
   assert.deepEqual(ids({ laneTask: "resume", pathExtras: ["goals", "preferences"] }), ["resume", "goals", "preferences", "processing", "output"]);
-  assert.deepEqual(ids({ laneTask: "resume", pathExtras: ["story"] }), ["resume", "story", "processing", "output"]);
+  assert.deepEqual(ids({ laneTask: "resume", pathExtras: ["story"] }), ["resume", "goals", "story", "processing", "output"]);
   const p = planForgePath({ laneTask: "resume" });
   assert.equal(previousPath(p, "resume", { laneTask: "resume" }), "/start");
-  assert.equal(nextPath(p, "resume"), "/processing");
+  assert.equal(nextPath(p, "resume"), "/goals");
+  assert.equal(nextPath(p, "goals"), "/processing");
   // Old runs and the demo walkthrough are untouched.
   assert.equal(isLanesFirst({ laneTask: "resume", isDemo: true }), false);
   assert.deepEqual(ids({ readinessStage: "preparation" }), ["resume", "goals", "story", "preferences", "processing", "output"]);

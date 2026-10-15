@@ -274,7 +274,7 @@ test("M3: a rebuild reads the stored upload with held-back lines kept, applies t
   // The browser never gets the own words, and the run's resume text is not written.
   assert.doesNotMatch(read("app/api/revisions/rebuild/route.ts"), /ownResumeText:/);
   const rp = read("app/(forge)/resume/page.tsx");
-  const write = rp.slice(rp.indexOf("// A new build from that page"), rp.indexOf('router.replace("/processing")'));
+  const write = rp.slice(rp.indexOf("// A new build from that page"), rp.indexOf('router.replace("/goals")'));
   assert.doesNotMatch(write, /\bresumeText: /);
   // The "put it back" list comes from the page the writer read, as in a normal run.
   assert.match(read("app/api/forge/generate-docs/route.ts"), /withholdRecordLines\(input\.resumeText, input\.keepInsideLines === true\)/);

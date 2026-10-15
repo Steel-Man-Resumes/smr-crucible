@@ -348,12 +348,12 @@ test("Q1: a saved resume opens for the writer as the person's own, read as them,
   assert.match(block, /fetch\(`\/api\/revisions\/rebuild\?artifactId=\$\{encodeURIComponent\(rebuild\.id\)\}`/);
   // Round 3 (review r1 M3): the run's own resume text is never touched; the page is shown and is the starting text.
   assert.match(block, /updateSession\(\{\s+originalResumeText: page,\s+rebuild: \{ id: rebuild\.id, page, resumeAt: session\.resumeText \?\? "" \},/);
-  const write = block.slice(block.indexOf("// A new build from that page"), block.indexOf('router.replace("/processing")'));
+  const write = block.slice(block.indexOf("// A new build from that page"), block.indexOf('router.replace("/goals")'));
   assert.ok(write.length > 50);
   assert.doesNotMatch(write, /\bresumeText: /, "the run's (and the account's) resume text is not written");
   assert.match(block, /if \(!signedIn\)/);
   assert.match(block, /forgeOutput: undefined,\s+forgeFinish: undefined/);
-  assert.match(block, /router\.replace\("\/processing"\)/);
+  assert.match(block, /router\.replace\("\/goals"\)/);
   // The read is an owner-only revision route.
   assert.match(read("app/api/revisions/rebuild/route.ts"), /revisionCaller/);
 });

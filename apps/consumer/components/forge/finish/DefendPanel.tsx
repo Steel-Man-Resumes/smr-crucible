@@ -2,9 +2,8 @@
 
 /**
  * The defend and fix step: every line the checker has a question about, one
- * at a time, with three plain choices. "This is true as written" (the person
- * explains it in their own words), "Change it" (they rewrite the line) or
- * "Cut it". Answers are kept per line. Nothing here suggests a fact.
+ * at a time. t.ROY can propose source-checked wording for the person to
+ * approve or revise; the person's own explanation and cut choices remain.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -24,7 +23,7 @@ import {
   type OpenItem,
 } from "@/lib/finish-gate";
 
-type Mode = "idle" | "answer" | "change" | "cut" | "scopeYes";
+type Mode = "idle" | "answer" | "change" | "cut" | "scopeYes" | "suggest";
 
 const BTN =
   "t-focus min-h-touch border px-3 py-2 text-xs font-semibold transition-colors";
@@ -551,25 +550,32 @@ function GroupCard({
   group,
   index,
   source,
+  pageText,
   onAnswer,
   onChange,
+  onAssist,
   onCut,
   actions,
 }: {
   group: LineGroup;
   index: number;
   source: string;
+  pageText: string;
   onAnswer: GroupHandler;
   onChange: GroupHandler<boolean>;
+  onAssist: GroupHandler<boolean>;
   onCut: (group: LineGroup) => void;
   actions?: CardActions;
 }) {
   const [mode, setModeState] = useState<Mode>("idle");
   const [who, setWho] = useState("");
   const scope = group.scope && !group.checked && actions?.onScopeYes ? group.scope : undefined;
-  const [answer, setAnswer] = useState(group.answer?.verdict === "stands" && group.answer.kind !== "rewrite" ? group.answer.answer : "");
+  const [answer, setAnswer] = useState(group.answer?.verdict === "stands" && !["rewrite", "assisted"].includes(group.answer.kind || "") ? group.answer.answer : "");
   const [rewrite, setRewrite] = useState(() => prefillRewrite(group.line, source));
   const [notice, setNotice] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [suggesting, setSuggesting] = useState(false);
   const id = `fix-item-${index}`;
   const cardRef = useRef<HTMLLIElement>(null);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -589,6 +595,27 @@ function GroupCard({
     else (firstAction.current ?? cardRef.current)?.focus();
   }, [mode]);
   const noun = group.target === "skill" ? "skill" : "line";
+
+  async function askTroy() {
+    setSuggesting(true);
+    setNotice("");
+    setMode("suggest");
+    try {
+      const response = await fetch("/api/forge/suggest-fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source, page: pageText, target: group.target, current: editableLine(group.line), concern: uniqueQuestions(group.items).join(" "), variation: Math.min(3, suggestions.length) }),
+      });
+      const data = await response.json();
+      if (!response.ok || typeof data.suggestion !== "string") throw new Error(typeof data.error === "string" ? data.error : "Could not draft this line.");
+      setSuggestions((prev) => [...prev, data.suggestion]);
+      setSuggestionIndex(suggestions.length);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not draft this line.");
+    } finally {
+      setSuggesting(false);
+    }
+  }
 
   // The checker's own reason, shown when it adds something the question
   // doesn't say, or when an answer was given and the line is still open.
@@ -621,7 +648,7 @@ function GroupCard({
       {group.checked ? (
         <>
           {group.answer?.answer && (
-            <p className="mt-1 text-xs text-t-phos">Your words: {group.answer.answer}</p>
+            <p className="mt-1 text-xs text-t-phos">{group.answer.kind === "assisted" ? "Wording you approved" : "Your words"}: {group.answer.answer}</p>
           )}
           {mode === "idle" && (
             <button ref={firstAction} onClick={() => setMode("answer")} className="t-focus mt-2 text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
@@ -685,19 +712,23 @@ function GroupCard({
           )}
           {mode === "idle" && !scope && (
             <div className="mt-3 flex flex-wrap gap-2">
+              {group.target !== "skill" && (
+                <button ref={firstAction} onClick={() => void askTroy()} className={BTN_MAIN} data-testid="draft-fix">
+                  Let t.ROY draft a fix
+                </button>
+              )}
               {group.answerable && (
-                <button ref={firstAction} onClick={() => setMode("answer")} className={BTN_MAIN}>
+                <button ref={group.target === "skill" ? firstAction : undefined} onClick={() => setMode("answer")} className={BTN_SOFT}>
                   This is true as written
                 </button>
               )}
               {group.target !== "skill" && (
                 <button
-                  ref={group.answerable ? undefined : firstAction}
                   onClick={() => {
                     setNotice("");
                     setMode("change");
                   }}
-                  className={group.answerable ? BTN_SOFT : BTN_MAIN}
+                  className={BTN_SOFT}
                 >
                   Change it
                 </button>
@@ -708,6 +739,33 @@ function GroupCard({
             </div>
           )}
         </>
+      )}
+
+      {mode === "suggest" && (
+        <div className="mt-3 border-l-2 border-t-amber bg-t-panel-2 p-3" data-testid="fix-suggestion">
+          <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">t.ROY&apos;s proposed fix</p>
+          {suggesting && <p role="status" className="mt-2 text-sm text-t-phos">Checking your original words...</p>}
+          {suggestions[suggestionIndex] && (
+            <>
+              <p className="mt-2 text-xs text-t-phos-dim">Before</p>
+              <p className="text-sm text-t-phos line-through">{editableLine(group.line)}</p>
+              <p className="mt-2 text-xs text-t-phos-dim">After</p>
+              <p className="text-sm font-medium text-t-white">{suggestions[suggestionIndex]}</p>
+              <p className="mt-2 text-xs text-t-phos-dim">Only keep this if it says what you really did. You can change it again later.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => { if (onAssist(group, suggestions[suggestionIndex])) setMode("idle"); else setNotice("That line no longer matches your page. Ask t.ROY again or change it yourself."); }} className={BTN_MAIN} data-testid="use-fix">Use this wording</button>
+                <button onClick={() => { setRewrite(suggestions[suggestionIndex]); setMode("change"); }} className={BTN_SOFT}>Edit it myself</button>
+                <button onClick={() => void askTroy()} disabled={suggesting || suggestions.length >= 4} className={`${BTN_SOFT} disabled:opacity-50`}>Try another</button>
+              </div>
+              {suggestions.length > 1 && <div className="mt-2 flex gap-2" aria-label="Earlier wording options">{suggestions.map((_, i) => <button key={i} onClick={() => setSuggestionIndex(i)} aria-pressed={suggestionIndex === i} className={`t-focus border px-2 py-1 text-xs ${suggestionIndex === i ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-phos"}`}>Option {i + 1}</button>)}</div>}
+            </>
+          )}
+          {notice && <p role="status" className="mt-2 text-xs text-t-amber-bright">{notice}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={() => setMode("idle")} className={BTN_SOFT}>Keep deciding</button>
+            <button onClick={() => setMode("cut")} className={BTN_SOFT}>Cut this line</button>
+          </div>
+        </div>
       )}
 
       {mode === "answer" && (
@@ -876,16 +934,20 @@ function Groups({
   groups,
   offset,
   source,
+  pageText,
   onAnswer,
   onChange,
+  onAssist,
   onCut,
   actions,
 }: {
   groups: LineGroup[];
   offset: number;
   source: string;
+  pageText: string;
   onAnswer: GroupHandler;
   onChange: GroupHandler<boolean>;
+  onAssist: GroupHandler<boolean>;
   onCut: (group: LineGroup) => void;
   actions: CardActions;
 }) {
@@ -906,8 +968,10 @@ function Groups({
           group={g}
           index={offset + i}
           source={source}
+          pageText={pageText}
           onAnswer={onAnswer}
           onChange={onChange}
+          onAssist={onAssist}
           onCut={onCut}
           actions={actions}
         />
@@ -919,16 +983,20 @@ function Groups({
 
 export function DefendPanel({
   view,
+  pageText,
   onAnswer,
   onChange,
+  onAssist,
   onCut,
   actions,
   numberPrompts = [],
 }: {
   view: FinishView;
+  pageText: string;
   onAnswer: GroupHandler;
   /** Returns false when the line did not change. */
   onChange: GroupHandler<boolean>;
+  onAssist: GroupHandler<boolean>;
   onCut: (group: LineGroup) => void;
   actions: CardActions;
   /** D2 (Phase 6): optional "add a number?" prompts, after the cards. */
@@ -939,7 +1007,7 @@ export function DefendPanel({
   const resume = view.groups.filter((g) => g.target === "resume");
   const skills = view.groups.filter((g) => g.target === "skill" || g.target === "skillset");
   const letter = view.groups.filter((g) => g.target === "letter");
-  const common = { source: view.source, onAnswer, onChange, onCut, actions };
+  const common = { source: view.source, pageText, onAnswer, onChange, onAssist, onCut, actions };
 
   return (
     <section id="fix-list" aria-labelledby="fix-list-heading" className="scroll-mt-20" data-testid="fix-list">

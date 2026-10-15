@@ -23,6 +23,7 @@ import {
   readStoredFinish,
   recordAnswer,
   applyRewrite,
+  applyAssistedRewrite,
   prefillRewrite,
   rewritesOf,
   REVIEW_ASK_LINE,
@@ -249,6 +250,25 @@ test("a rewrite counts only for what the person typed new; the written number ty
   assert.match(rewritesOf(mine.answers, mine.text, written), /about 10%/);
   const view = buildFinishView({ resumeText: mine.text, ownWords: own, defendAnswers: mine.answers, written });
   assert.ok(!view.openItems.some((i) => i.rule === "STD-T02"), JSON.stringify(view.openItems));
+});
+
+test("an approved AI wording stays bound to the original source and cannot add its own facts", () => {
+  const source = "I loaded trucks at the Harbor Street dock every Friday.";
+  const written = "MORGAN SAMPLE\n\nEXPERIENCE\nDock worker | Harbor Street | 2019 - 2023\n- Loaded trucks every Friday at the Harbor Street dock.";
+  const original = "- Loaded trucks every Friday at the Harbor Street dock.";
+  const safe = applyAssistedRewrite(written, [], original, "Loaded trucks at the Harbor Street dock every Friday.", source);
+  assert.equal(safe.changed, true);
+  assert.equal(safe.answers[0].kind, "assisted");
+  assert.equal(rewritesOf(safe.answers, safe.text, { resume: written, letter: "" }), "", "AI wording never becomes new source material");
+  const invented = applyAssistedRewrite(written, [], original, "Supervised 12 workers loading trucks every Friday.", source);
+  assert.equal(invented.changed, false);
+  assert.equal(invented.text, written);
+  const fakeCount = applyAssistedRewrite(written, [], original, "Loaded 12 trucks at the Harbor Street dock every Friday.", source);
+  assert.equal(fakeCount.changed, false, "an AI number cannot enter through approval");
+  const same = applyAssistedRewrite(written, [], original, "Loaded trucks every Friday at the Harbor Street dock.", source);
+  assert.equal(same.changed, true, "the person can approve safe wording even if no edit is needed");
+  const second = applyAssistedRewrite(safe.text, safe.answers, "- Loaded trucks at the Harbor Street dock every Friday.", "Loaded trucks every Friday at the Harbor Street dock.", source);
+  assert.equal(second.answers[0].replaced, original, "later approved wording keeps the line the checker first read");
 });
 
 test("the credentials answer counts as the person's own words", () => {

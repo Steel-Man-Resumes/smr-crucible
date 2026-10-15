@@ -34,11 +34,9 @@
  *  R7 The record never shapes wording. The plan never reads the record
  *     details; the only record input is that the person ticked it.
  *  R8 Demo mode is a fixed walkthrough: the full path, default wording.
- *  R9 Lanes first (Phase 5 lane R2, Codex C). A run that started from "What
- *     do you need today?" (laneTask set) goes resume, then build: no
- *     readiness screen, no short/full chooser, and no goals, story or
- *     preferences before the first page. "Do more" after the first result
- *     adds goals (and preferences) back; the story screen is the optional
+ *  R9 Lanes first. A run that started from "What do you need today?" goes
+ *     resume, a short SMR direction check, then build. The older goal and
+ *     preference inventory remains optional depth. The story screen is the optional
  *     "something getting in the way?" step, added only when asked for. Its
  *     first screen goes back to the first screen (/start), not /welcome.
  */
@@ -144,7 +142,7 @@ export function isLanesFirst(s: Pick<PathSession, "laneTask" | "isDemo">): boole
 }
 
 /** R9: the extras "Do more" and the support step add, in the order they run. */
-export const LANE_EXTRAS = ["goals", "preferences", "story"] as const;
+export const LANE_EXTRAS = ["preferences", "story"] as const;
 
 /** R1: the depth a readiness answer starts with, before the person picks. */
 export function defaultDepth(readinessStage: string | undefined): "light" | "full" {
@@ -235,9 +233,9 @@ export function planForgePath(s: PathSession): ForgePath {
   const storyOptedIn = (light || lanes) && extras.includes("story");
 
   // Order of the question screens. Light: story only when they asked for it, after preferences.
-  // R9 lanes first: the resume, then whatever "Do more" or the support step added.
+  // R9 lanes first: ask what to lead with before writing, then optional depth.
   const order: ScreenId[] = lanes
-    ? ["resume", ...(LANE_EXTRAS.filter((x) => extras.includes(x)) as ScreenId[])]
+    ? ["resume", "goals", ...(LANE_EXTRAS.filter((x) => extras.includes(x)) as ScreenId[])]
     : light
       ? ["resume", "goals", "preferences", ...(storyOptedIn ? (["story"] as ScreenId[]) : [])]
       : ["resume", "goals", "story", "preferences"];
@@ -254,7 +252,7 @@ export function planForgePath(s: PathSession): ForgePath {
     if (id === "resume") {
       screens.push(screen("resume", take([q("resume", resumeVariant(s))])));
     } else if (id === "goals") {
-      const fold = light; // light path: everything past the goal cards is optional depth
+      const fold = light || lanes; // the SMR direction check leads; older inventory is optional depth
       const list: PlannedQuestion[] = [q("goals", tone)];
       if (s.resumeMethod !== "guided") list.push(q("confidence", "default", fold));
       list.push(q("worries", "default", fold));

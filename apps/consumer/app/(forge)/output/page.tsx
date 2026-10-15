@@ -62,6 +62,7 @@ import {
   buildFinishView,
   canEmailPackage,
   applyRewrite,
+  applyAssistedRewrite,
   applyScopeHelped,
   titleYesResult,
   isRejectedSchool,
@@ -714,6 +715,7 @@ function OutputPageInner() {
   }, [ready, revealing]);
 
   const tourSteps: TourStep[] = [
+    ...(!checkMode ? [{ target: "finish-story", text: "t.ROY reconstructed your story from the work you gave us. Open the strengths and paths, and tell us if the headline misses you." }] : []),
     view.state === "finished"
       ? { target: "finish-resume", text: "This is your new resume. It comes first because it's what you came for." }
       : { target: "finish-resume", text: "This is your new resume. It's a draft until you've settled the lines t.ROY asks about. It comes first because it's what you came for." },
@@ -724,7 +726,6 @@ function OutputPageInner() {
       ? { target: "finish-download", text: "Download your resume and cover letter here, or email them to yourself." }
       : { target: "finish-download", text: "Download here. Until it's finished, every file is marked DRAFT so nobody mistakes it for the final one." },
     { target: "finish-checks", text: "These checks read your page the way a screener would. Open one if you want the details." },
-    ...(lanes || checkMode ? [] : [{ target: "finish-story", text: "Your story: your strengths, skills and jobs that fit, from what you told us." }]),
     { target: "finish-next", text: "When you're ready, the Refinery aims your resume at real jobs." },
   ];
 
@@ -736,6 +737,16 @@ function OutputPageInner() {
     if (group.target === "skill") return false;
     const text = group.target === "letter" ? coverLetterText : resumeText;
     const r = applyRewrite(text, defendAnswers, group.line, rewrite);
+    if (!r.changed) return false;
+    if (group.target === "letter") setCoverLetterText(r.text);
+    else setResumeText(r.text);
+    setDefendAnswers(r.answers);
+    return true;
+  };
+  const onAssist = (group: LineGroup, suggestion: string): boolean => {
+    if (group.target !== "resume" && group.target !== "letter") return false;
+    const text = group.target === "letter" ? coverLetterText : resumeText;
+    const r = applyAssistedRewrite(text, defendAnswers, group.line, suggestion, view.source);
     if (!r.changed) return false;
     if (group.target === "letter") setCoverLetterText(r.text);
     else setResumeText(r.text);
@@ -1222,6 +1233,14 @@ function OutputPageInner() {
 
       {docState === "done" && !liveFixOn && (
         <>
+          {!checkMode && (
+            <div className="mt-6">
+              <StorySection output={output} strengthsHeading={rc.strengthsHeading} careersHeading={rc.careersHeading} reportChecks={reportChecks} spotlight onRevisit={() => {
+                updateSession({ forgeOutput: undefined, forgeFinish: undefined, laneParkedLetter: undefined });
+                router.push("/goals");
+              }} />
+            </div>
+          )}
           {/* 2. The resume, with the fix questions beside it (under it on a phone) */}
           <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
             <div className="min-w-0">
@@ -1319,7 +1338,7 @@ function OutputPageInner() {
                   onChoice={setLengthChoice}
                 />
               )}
-              <DefendPanel view={view} onAnswer={onAnswer} onChange={onChange} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} />
+              <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} />
             </aside>
           </div>
 
@@ -1528,27 +1547,11 @@ function OutputPageInner() {
                 </button>
               </div>
             )}
-            <StorySection
-              output={output}
-              strengthsHeading={rc.strengthsHeading}
-              careersHeading={rc.careersHeading}
-              reportChecks={reportChecks}
-            />
             <NextStep isDemo={isDemo} audience={audience} refineryCta={rc.refineryCta} refinerySubtext={rc.refinerySubtext} />
           </LaneNextAction>
         </div>
       ) : (
         <>
-          {/* 6. Your story (the narrative keeper) */}
-          <div className="mt-12">
-            <StorySection
-              output={output}
-              strengthsHeading={rc.strengthsHeading}
-              careersHeading={rc.careersHeading}
-              reportChecks={reportChecks}
-            />
-          </div>
-
           {/* 7. Next step */}
           <div className="mt-12">
             <NextStep

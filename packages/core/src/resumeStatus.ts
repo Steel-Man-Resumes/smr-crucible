@@ -88,7 +88,7 @@ export interface OpenItem {
 export interface DefendAnswer {
   /** The resume line the person was asked about, as shown to them. */
   line: string;
-  /** The person's own words. */
+  /** The person's own words, or a source-bound line they explicitly approved when kind is assisted. */
   answer: string;
   /**
    * "stands": they explained it and it stays. "cut": they want it off.
@@ -100,7 +100,8 @@ export interface DefendAnswer {
    * one). The caller may add rewrites to the person's own words; an ordinary
    * answer is never added to the source (no anchoring path, DEC-45).
    */
-  kind?: "rewrite" | "scope_yes" | "title_yes" | "job_ok";
+  /** An AI wording the person approved. It never adds words to sourceText. */
+  kind?: "rewrite" | "assisted" | "scope_yes" | "title_yes" | "job_ok";
   /** Round 13 (SF-4): a rewrite made by "Use my title" on a role in the summary or letter: the title they typed. */
   ownTitle?: string;
   /** Round 11: for "scope_yes", the scope family the typed words answer ("train"). */
@@ -315,6 +316,9 @@ export function answerMentions(answer: string, text: string): boolean {
 export function answerStands(a: DefendAnswer | undefined, line?: string, sourceText?: string): boolean {
   if (!a || a.verdict !== "stands") return false;
   const target = line ?? a.line;
+  if (a.kind === "assisted") {
+    return sourceText !== undefined && squash(stripBullet(a.answer)) === squash(stripBullet(target)) && distanceFromSource(target, sourceText) === 0;
+  }
   if (a.kind === "rewrite") {
     if (typeof a.replaced !== "string" || sourceText === undefined) return false;
     if (squash(stripBullet(a.answer)) !== squash(stripBullet(target))) return false;
@@ -1059,8 +1063,8 @@ function strictLinesUnderA(resumeText: string, sourceText: string, checkedText: 
   const read = checkedText === undefined ? null : new Set(linesOf(checkedText).map((l) => squash(stripBullet(l))));
   const wasRead = (l: string) => {
     if (!read || read.has(squash(stripBullet(l)))) return true;
-    const rw = rewriteOf(answers, l);
-    return !!rw && rw.verdict === "stands" && squash(stripBullet(rw.answer)) === squash(stripBullet(l)) && read.has(squash(stripBullet(rw.replaced as string)));
+    const rw = answers.find((a) => (a.kind === "rewrite" || a.kind === "assisted") && typeof a.replaced === "string" && squash(a.line) === squash(l));
+    return !!rw && rw.verdict === "stands" && squash(stripBullet(rw.answer)) === squash(stripBullet(l)) && read.has(squash(stripBullet(rw.replaced as string))) && (rw.kind !== "assisted" || distanceFromSource(l, sourceText) === 0);
   };
   const body = new Set(bodyLines(resumeText, sourceText).filter((b) => !b.inSkills).map((b) => b.line));
   const isBulletLine = (l: string) => /^[-•*]/.test(l);

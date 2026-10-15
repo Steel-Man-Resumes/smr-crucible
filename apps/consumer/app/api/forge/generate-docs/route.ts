@@ -169,6 +169,7 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
       resumeText: sourceInput.resumeText,
       userText: [
         sourceInput.goalNarrative,
+        sourceInput.hookNarrative,
         (sourceInput.goals || []).join(", "),
         typeof sourceInput.credentialsNote === "string" ? sourceInput.credentialsNote.slice(0, 1000) : undefined,
       ],
@@ -191,7 +192,7 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
         progress?.({ type: "stage", message: "Polishing the wording against your work history." });
         const sourceForPolish = buildTrustedSource({
           resumeText: withholdRecordLines(sourceInput.resumeText, input.keepInsideLines === true).kept,
-          userText: [sourceInput.goalNarrative, (sourceInput.goals || []).join(", "), sourceInput.credentialsNote],
+          userText: [sourceInput.goalNarrative, sourceInput.hookNarrative, (sourceInput.goals || []).join(", "), sourceInput.credentialsNote],
         });
         const qualityDeadline = new AbortController();
         const qualityTimer = setTimeout(() => qualityDeadline.abort(), 25_000);
