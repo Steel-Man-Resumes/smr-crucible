@@ -63,5 +63,25 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- Retention. Finished operation records older than the given number of days are
+-- deleted by the daily usage purge. The delete crosses every account by design, so
+-- it runs as the owner; the application role only chooses the age (7 days minimum).
+-- Running operations are never dropped: a stuck reservation is reviewed, not erased.
+CREATE OR REPLACE FUNCTION public.purge_finished_ai_operations(keep_days integer) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+DECLARE n integer;
+BEGIN
+  IF keep_days IS NULL OR keep_days < 7 THEN RAISE EXCEPTION 'purge keeps at least 7 days'; END IF;
+  DELETE FROM public.ai_operation WHERE status <> 'running' AND created_at < now() - make_interval(days => keep_days);
+  GET DIAGNOSTICS n = ROW_COUNT;
+  RETURN n;
+END $$;
+REVOKE ALL ON FUNCTION public.purge_finished_ai_operations(integer) FROM PUBLIC;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+    GRANT EXECUTE ON FUNCTION public.purge_finished_ai_operations(integer) TO smr_app;
+  END IF;
+END $$;
+
 -- Bind the durable voice lease to its admission reservation across requests.
 ALTER TABLE voice_session ADD COLUMN IF NOT EXISTS operation_id uuid REFERENCES ai_operation(id) ON DELETE SET NULL;

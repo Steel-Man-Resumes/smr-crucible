@@ -32,11 +32,9 @@ export async function GET(request: Request) {
     const purged = await purgeOldAiUsage();
     let operations: number | "unavailable" = "unavailable";
     try {
-      const rows = await query<{ id: string }>(
-        `DELETE FROM ai_operation WHERE status <> 'running' AND created_at < now() - ($1 || ' days')::interval RETURNING id`,
-        [String(AI_OPERATION_RETENTION_DAYS)]
-      );
-      operations = rows.length;
+      // Owner-side function (087): the cross-account delete never runs as the app role.
+      const [row] = await query<{ n: number }>(`SELECT public.purge_finished_ai_operations($1::int) AS n`, [AI_OPERATION_RETENTION_DAYS]);
+      operations = Number(row?.n ?? 0);
     } catch {
       // 087 not applied here yet: nothing to purge.
     }

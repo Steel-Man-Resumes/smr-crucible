@@ -92,6 +92,9 @@ REVOKE ALL ON FUNCTION public.employer_publication_rows(),public.resource_public
 DO $$ BEGIN
  IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='smr_app') THEN
   REVOKE ALL ON directory_publication_alias FROM smr_app;
+  -- Default privileges on a production-shaped database grant the app every table
+  -- privilege on a new view; the publication is read-only for the app.
+  REVOKE ALL ON employer_publication_v,resource_publication_v,resource_chain_publication_v FROM smr_app;
   GRANT SELECT ON employer_publication_v,resource_publication_v,resource_chain_publication_v TO smr_app;
   GRANT EXECUTE ON FUNCTION public.employer_publication_rows(),public.resource_publication_rows(),
    public.resource_chain_publication_rows(),public.resolve_employer_publication_alias(text,text) TO smr_app;
