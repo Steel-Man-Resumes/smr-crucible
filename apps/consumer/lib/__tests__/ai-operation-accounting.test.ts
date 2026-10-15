@@ -5,6 +5,7 @@ import { parseToolPolicy, isAiWorkflow } from '../ai-operation-policy';
 import { withAiOperation, currentAiOperation, trackUsageWrite } from '../ai-operation-context';
 
 test('unknown and future models stay unpriced, date snapshots match precisely',()=>{
+ assert.equal(measureCost('gpt-4o',{inputTokens:NaN,outputTokens:0}).status,'unpriced');
  assert.equal(measureCost('new-model',{inputTokens:100,outputTokens:50}).costUsd,null);
  assert.equal(measureCost('gpt-4o-mini-next',{inputTokens:100,outputTokens:50}).status,'unpriced');
  assert.equal(computeCostUsd('gpt-4o-mini-2024-07-18',{inputTokens:1_000_000,outputTokens:0}),.15);

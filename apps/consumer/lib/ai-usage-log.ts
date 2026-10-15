@@ -50,6 +50,8 @@ export interface CostMeasurement {
 const count = (v: number | undefined) => Number.isFinite(v) && v! >= 0 ? v! : 0;
 const round = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
 export function measureCost(model: string, usage: TokenUsage): CostMeasurement {
+  if ([usage.inputTokens,usage.outputTokens,usage.cacheCreationInputTokens ?? 0,usage.cacheReadInputTokens ?? 0]
+    .some(value=>!Number.isFinite(value) || value < 0)) return {costUsd:null,status:'unpriced',basis:'provider token counts unavailable'};
   if (count(usage.audioSeconds) > 0) {
     // Planning estimate only: half the elapsed session as input speech and half
     // as output. Silence, repeated context and text can change the real bill.
