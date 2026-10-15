@@ -269,21 +269,23 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
 
     if (!res.ok) {
       console.error(`Grounding verify HTTP ${res.status}`);
+      await recordTokenUsage("openai", VERIFY_MODEL, {inputTokens:0,outputTokens:0}, {endpoint:`grounding-verify:${kind}`,usageMissing:true,outcome:"failed"});
       return { ...original, verifierRan: false };
     }
     data = await res.json();
   } catch (err) {
-    console.error("Grounding verify failed (fail-open):", err);
+    console.error("Grounding verify request failed");
+    await recordTokenUsage("openai", VERIFY_MODEL, {inputTokens:0,outputTokens:0}, {endpoint:`grounding-verify:${kind}`,usageMissing:true,outcome:"failed"});
     return { ...original, verifierRan: false };
   }
 
-  if (data?.usage) {
+  {
     await recordTokenUsage(
       "openai",
       data.model || VERIFY_MODEL,
       {
-        inputTokens: Math.max(0,(data.usage.prompt_tokens || 0)-(data.usage.prompt_tokens_details?.cached_tokens || 0)), cacheReadInputTokens: data.usage.prompt_tokens_details?.cached_tokens || 0,
-        outputTokens: data.usage.completion_tokens || 0,
+        inputTokens: (data.usage?.prompt_tokens ?? NaN)-(data.usage?.prompt_tokens_details?.cached_tokens ?? 0), cacheReadInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+        outputTokens: data.usage?.completion_tokens ?? NaN,
       },
       { endpoint: `grounding-verify:${kind}` }
     );
@@ -481,19 +483,21 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
     }
     if (!res.ok) {
       console.error(`Bullet verify HTTP ${res.status}`);
+      await recordTokenUsage("openai", VERIFY_MODEL, {inputTokens:0,outputTokens:0}, {endpoint:"grounding-verify:bullets",usageMissing:true,outcome:"failed"});
       return { ...original, verifierRan: false };
     }
     data = await res.json();
   } catch (err) {
-    console.error("Bullet verify failed (fail-open):", err);
+    console.error("Bullet verify request failed");
+    await recordTokenUsage("openai", VERIFY_MODEL, {inputTokens:0,outputTokens:0}, {endpoint:"grounding-verify:bullets",usageMissing:true,outcome:"failed"});
     return { ...original, verifierRan: false };
   }
 
-  if (data?.usage) {
+  {
     await recordTokenUsage(
       "openai",
       data.model || VERIFY_MODEL,
-      { inputTokens: Math.max(0,(data.usage.prompt_tokens || 0)-(data.usage.prompt_tokens_details?.cached_tokens || 0)), cacheReadInputTokens: data.usage.prompt_tokens_details?.cached_tokens || 0, outputTokens: data.usage.completion_tokens || 0 },
+      { inputTokens: (data.usage?.prompt_tokens ?? NaN)-(data.usage?.prompt_tokens_details?.cached_tokens ?? 0), cacheReadInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0, outputTokens: data.usage?.completion_tokens ?? NaN },
       { endpoint: "grounding-verify:bullets" }
     );
   }
@@ -660,6 +664,7 @@ ${eduLines.join("\n") || "(none)"}`;
       });
       if (!res.ok) {
         console.error(`Structured-list verify HTTP ${res.status}`);
+      await recordTokenUsage("openai", VERIFY_MODEL, {inputTokens:0,outputTokens:0}, {endpoint:"grounding-verify:lists",usageMissing:true,outcome:"failed"});
         return { ...original, verifierRan: false };
       }
       data = await res.json();
@@ -667,15 +672,16 @@ ${eduLines.join("\n") || "(none)"}`;
       clearTimeout(timer);
     }
   } catch (err) {
-    console.error("Structured-list verify failed (fail-open):", err);
+    console.error("Structured-list verify request failed");
+    await recordTokenUsage("openai", VERIFY_MODEL, {inputTokens:0,outputTokens:0}, {endpoint:"grounding-verify:lists",usageMissing:true,outcome:"failed"});
     return { ...original, verifierRan: false };
   }
 
-  if (data?.usage) {
+  {
     await recordTokenUsage(
       "openai",
       data.model || VERIFY_MODEL,
-      { inputTokens: Math.max(0,(data.usage.prompt_tokens || 0)-(data.usage.prompt_tokens_details?.cached_tokens || 0)), cacheReadInputTokens: data.usage.prompt_tokens_details?.cached_tokens || 0, outputTokens: data.usage.completion_tokens || 0 },
+      { inputTokens: (data.usage?.prompt_tokens ?? NaN)-(data.usage?.prompt_tokens_details?.cached_tokens ?? 0), cacheReadInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0, outputTokens: data.usage?.completion_tokens ?? NaN },
       { endpoint: "grounding-verify:lists" }
     );
   }

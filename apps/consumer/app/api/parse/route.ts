@@ -239,10 +239,12 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
     return null;
   });
 
-  if (!response) return { raw_text: text };
+  const failedUsage = () => recordTokenUsage("openai", "gpt-4o-mini", { inputTokens: 0, outputTokens: 0 }, { userId, endpoint: "parse", usageMissing: true, outcome: "failed" });
+  if (!response) { await failedUsage(); return { raw_text: text }; }
 
   if (!response.ok) {
     console.error("OpenAI parse failed:", response.status);
+    await failedUsage();
     return { raw_text: text };
   }
 
@@ -251,15 +253,16 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
     console.error("OpenAI parse body failed:", err?.name || err);
     return null;
   });
-  if (!data) return { raw_text: text };
+  if (!data) { await failedUsage(); return { raw_text: text }; }
 
-  if (data.usage) {
-    recordTokenUsage(
+  {
+    await recordTokenUsage(
       "openai",
       data.model || "gpt-4o-mini",
       {
-        inputTokens: data.usage.prompt_tokens || 0,
-        outputTokens: data.usage.completion_tokens || 0,
+        inputTokens: (data.usage?.prompt_tokens ?? NaN) - (data.usage?.prompt_tokens_details?.cached_tokens ?? 0),
+        cacheReadInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+        outputTokens: data.usage?.completion_tokens ?? NaN,
       },
       { userId, endpoint: "parse" }
     );

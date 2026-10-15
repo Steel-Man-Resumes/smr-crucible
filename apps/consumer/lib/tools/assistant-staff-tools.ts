@@ -4,7 +4,7 @@ import { tool, jsonSchema, type ToolSet } from "ai";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 import { oncePerInput } from "./assistant-data-tools";
 
-export function buildStaffTools(initial: OrgActor): ToolSet {
+export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, result: unknown) => void): ToolSet {
   async function actor() {
     const core = await import("@crucible/core");
     const current = await core.resolveOrgActor(initial.userId);
@@ -52,7 +52,7 @@ export function buildStaffTools(initial: OrgActor): ToolSet {
   const executeOnce = executionBudget(5);
   for (const [name, definition] of Object.entries(tools)) {
     const execute = definition.execute;
-    if (execute) definition.execute = (args, options) => executeOnce(name, args, async () => execute(args, options));
+    if (execute) definition.execute = (args, options) => executeOnce(name, args, async () => { const result = await execute(args, options); onEvidence?.(name, result); return result; });
   }
   return tools;
 }

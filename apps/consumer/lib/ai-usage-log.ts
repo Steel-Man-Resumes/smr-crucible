@@ -13,6 +13,7 @@ const PRICES: Record<string, ModelPrice> = {
   'claude-opus-4-6': { input: 5, output: 25, cacheRead: .5 },
   'claude-opus-4-7': { input: 5, output: 25, cacheRead: .5 },
   'claude-opus-4-8': { input: 5, output: 25, cacheRead: .5 },
+  'gpt-4.1-mini': { input: .4, output: 1.6, cacheRead: .1 },
   'gpt-4o': { input: 2.5, output: 10, cacheRead: 1.25 },
   'gpt-4o-mini': { input: .15, output: .6, cacheRead: .075 },
 };

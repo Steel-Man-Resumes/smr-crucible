@@ -71,15 +71,15 @@ async function callAnthropic(
   const data = await response.json();
 
   // Exact token accounting -- Anthropic reports real usage on every response.
-  if (data.usage) {
+  {
     await recordTokenUsage(
       "anthropic",
       data.model || model,
       {
-        inputTokens: data.usage.input_tokens || 0,
-        outputTokens: data.usage.output_tokens || 0,
-        cacheCreationInputTokens: data.usage.cache_creation_input_tokens || 0,
-        cacheReadInputTokens: data.usage.cache_read_input_tokens || 0,
+        inputTokens: data.usage?.input_tokens ?? NaN,
+        outputTokens: data.usage?.output_tokens ?? NaN,
+        cacheCreationInputTokens: data.usage?.cache_creation_input_tokens ?? 0,
+        cacheReadInputTokens: data.usage?.cache_read_input_tokens ?? 0,
       },
       meta
     );
@@ -126,14 +126,14 @@ async function callOpenAI(
 
   const data = await response.json();
 
-  if (data.usage) {
+  {
     await recordTokenUsage(
       "openai",
       data.model || AI_FALLBACK_MODEL,
       {
-        inputTokens: Math.max(0, (data.usage.prompt_tokens || 0) - (data.usage.prompt_tokens_details?.cached_tokens || 0)),
-        cacheReadInputTokens: data.usage.prompt_tokens_details?.cached_tokens || 0,
-        outputTokens: data.usage.completion_tokens || 0,
+        inputTokens: (data.usage?.prompt_tokens ?? NaN) - (data.usage?.prompt_tokens_details?.cached_tokens ?? 0),
+        cacheReadInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+        outputTokens: data.usage?.completion_tokens ?? NaN,
       },
       meta
     );

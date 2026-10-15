@@ -1,4 +1,5 @@
 import { beginChatOperation } from "@/lib/ai-chat-operation";
+import { createStaffEvidenceCollector } from "@/lib/staff-tool-evidence";
 import { assistantStepUsage } from "@/lib/ai/assistant-step-usage";
 import { assistantCapabilities } from "@/lib/assistant-capabilities";
 /**
@@ -243,7 +244,8 @@ export async function POST(request: Request) {
     catch { return NextResponse.json({ error: "The selected work could not be loaded. Reopen it and try again." }, { status: 409 }); }
   }
   const memorySection = userId && !staffActor && !isDisclosureRehearsal && enhancedConsent ? await buildMemorySection(userId) : "";
-  const tools = staffActor ? buildStaffTools(staffActor) : buildAssistantTools(toolOptions);
+  const staffEvidence = createStaffEvidenceCollector();
+  const tools = staffActor ? buildStaffTools(staffActor, staffEvidence.record) : buildAssistantTools(toolOptions);
   const capabilities = assistantCapabilities(tools, { role: staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord });
   const baseSystemPrompt =
     buildSystemPrompt(context) +
@@ -344,12 +346,19 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       maxTokens: responseMaxTokens,
       tools,
       maxSteps: TROY_SERVER_MAX_STEPS,
+      async onStepFinish({ usage, providerMetadata }) {
+        await operation.run(async () => {
+        const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+        await recordTokenUsage("anthropic", MODEL_TROY, assistantStepUsage(usage, providerMetadata), { userId: userId ?? null, endpoint: "assistant" });
+        });
+      },
     });
     // A safety decline comes back as finishReason "unknown" with no text. Never
     // send a staff member an empty answer; say it plainly instead.
     const answer = replyOrFallback(generated.text);
 
     const facts = {
+      staffToolEvidence: staffEvidence.items,
       caseload: context.org.caseload,
       stalled: context.org.stalled,
       neverStarted: context.org.neverStarted,
@@ -386,12 +395,6 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // statement promised organizations that every answer is logged.
     {
       const usage = generated.usage as { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
-      const { recordTokenUsage } = await import("@/lib/ai-usage-log");
-      for (const step of generated.steps) {
-        await recordTokenUsage("anthropic", MODEL_TROY,
-          assistantStepUsage(step.usage, step.providerMetadata),
-          { userId: userId ?? null, endpoint: "assistant" });
-      }
       try {
         const { logDecision } = await import("@crucible/core");
         await logDecision({
