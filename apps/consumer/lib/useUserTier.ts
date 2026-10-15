@@ -47,7 +47,7 @@ export function setViewAs(view: ViewAs | null): void {
  * 1. Active impersonation (RoleProvider, server-resolved): the TARGET's tier,
  *    so nav/landings/pages branch exactly as the target user sees them.
  * 2. view_as soft preview (admin/partner only): client or observer.
- * 3. The session tier.
+ * 3. The database-resolved tier when loaded, then the session tier.
  * The gates and locks are real in every mode.
  */
 export function useUserTier(): UserTier {
@@ -55,7 +55,7 @@ export function useUserTier(): UserTier {
   const effective = useEffectiveRole();
   if (effective?.impersonating) return effective.tier;
 
-  const realTier = ((session?.user as any)?.tier as UserTier) || "client";
+  const realTier = effective?.tier || (((session?.user as any)?.tier as UserTier) || "client");
   const viewAs = getViewAs();
   if (canSwitchView(realTier) && viewAs) {
     return viewAs;
@@ -70,5 +70,7 @@ export function useUserTier(): UserTier {
  */
 export function useRealTier(): UserTier {
   const { data: session } = useSession();
+  const effective = useEffectiveRole();
+  if (effective && !effective.impersonating) return effective.tier;
   return ((session?.user as any)?.tier as UserTier) || "client";
 }

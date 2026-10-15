@@ -33,6 +33,8 @@
  */
 
 import crypto from "crypto";
+import { recordTokenUsage } from "@/lib/ai-usage-log";
+import { REALTIME_MODEL } from "@/lib/voice-instructions";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { attachCallId, endVoiceSession, getOne, query } from "@crucible/core";
@@ -165,8 +167,10 @@ export async function POST(request: Request) {
       body: form,
     });
   } catch (err) {
-    console.error("Realtime call request failed:", err);
-    await endVoiceSession(userId, sessionId, "provider_error");
+    console.error("Realtime call request failed");
+    const ended = await endVoiceSession(userId, sessionId, "provider_error");
+    if (ended) await recordTokenUsage('openai',REALTIME_MODEL,{inputTokens:0,outputTokens:0,audioSeconds:ended.elapsedSeconds},
+      {userId,operationId:ended.session.operation_id ?? undefined,endpoint:'interview-voice',eventKey:`voice:${sessionId}`,outcome:'failed',usageMissing:true});
     return NextResponse.json(
       { error: "Could not reach the voice provider" },
       { status: 502 }
@@ -174,9 +178,11 @@ export async function POST(request: Request) {
   }
 
   if (!providerRes.ok) {
-    const errText = await providerRes.text();
-    console.error("Realtime call error:", providerRes.status, errText.slice(0, 500));
-    await endVoiceSession(userId, sessionId, "provider_error");
+    await providerRes.body?.cancel();
+    console.error("Realtime call error:", providerRes.status);
+    const ended = await endVoiceSession(userId, sessionId, "provider_error");
+    if (ended) await recordTokenUsage('openai',REALTIME_MODEL,{inputTokens:0,outputTokens:0,audioSeconds:ended.elapsedSeconds},
+      {userId,operationId:ended.session.operation_id ?? undefined,endpoint:'interview-voice',eventKey:`voice:${sessionId}`,outcome:'failed',usageMissing:true});
     return NextResponse.json(
       { error: "Could not start voice practice" },
       { status: 502 }

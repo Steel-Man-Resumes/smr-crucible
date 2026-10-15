@@ -1,0 +1,177 @@
+/**
+ * Server entry for the resume renderer: one call per output format, all from
+ * the same layout model. See README-ish notes at the top of layout.ts.
+ *
+ *   renderResumeLayout(req)  -> { fit, pagesHtml, css } for the on-screen page
+ *   renderPdf(req)           -> PDF bytes (pdf-lib, embedded fonts)
+ *   renderDocx(req)          -> Word bytes
+ *   renderHtml(req)          -> self-contained HTML (fonts embedded)
+ *
+ * The request carries { text, kind, draft, openItems }. The renderer never
+ * decides draft versus finished: the caller (the finish page, via the engine's
+ * getResumeStatus) does, and passes the flag.
+ */
+
+import { fontBytes, fontMeasurer } from "./fonts";
+import { layoutChecklist, layoutLetter, layoutResume, type FitInfo, type Layout } from "./layout";
+import { parseLetter, parseResume, plainDashes } from "./model";
+import { buildPdf } from "./pdf";
+import { buildDocx } from "./docx";
+import { checklistHtml, pagesHtml, resumeCss, standaloneHtml } from "./html";
+import type { FaceKey } from "./style";
+
+export interface RenderRequest {
+  text: string;
+  kind?: "resume" | "cover_letter";
+  /** True: every page carries a small DRAFT line and a to-do page follows. */
+  draft?: boolean;
+  /** Plain-words list of what is left to fix. Only used when draft is true. */
+  openItems?: string[];
+  /** For a cover letter: the resume text, used for the name and contact header. */
+  headerText?: string;
+}
+
+/** Longest text (resume, cover letter or header source) the renderer accepts. Several times a real two-page resume plus a letter. */
+export const MAX_RENDER_CHARS = 40_000;
+export const MAX_RENDER_TOO_LARGE = "That is longer than a resume or letter can be. Shorten it and try again.";
+export const MAX_OPEN_ITEMS = 30;
+export const MAX_OPEN_ITEM_CHARS = 300;
+
+export function cleanOpenItems(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  const out: string[] = [];
+  for (const i of items) {
+    if (out.length >= MAX_OPEN_ITEMS) break; // stop early: never walk a huge array
+    if (typeof i !== "string") continue;
+    const t = plainDashes(i.slice(0, MAX_OPEN_ITEM_CHARS * 2).replace(/\s+/g, " ").trim()).slice(0, MAX_OPEN_ITEM_CHARS);
+    if (t) out.push(t);
+  }
+  return out;
+}
+
+interface Built {
+  layout: Layout;
+  fit: FitInfo;
+  checklist: Layout | null;
+  kind: "resume" | "letter";
+  title: string;
+}
+
+export function build(req: RenderRequest): Built {
+  const m = fontMeasurer();
+  const draft = !!req.draft;
+  const items = cleanOpenItems(req.openItems);
+  const isLetter = req.kind === "cover_letter";
+  const checklist = draft && items.length ? layoutChecklist(items, m) : null;
+  if (isLetter) {
+    const model = parseLetter(req.text, req.headerText);
+    const { layout, fit } = layoutLetter(model, m, { draft });
+    const who = model.header.name;
+    return { layout, fit, checklist, kind: "letter", title: who ? `${who} cover letter` : "Cover letter" };
+  }
+  const model = parseResume(req.text);
+  const { layout, fit } = layoutResume(model, m, { draft });
+  const who = model.header.name;
+  return { layout, fit, checklist, kind: "resume", title: who ? `${who} resume` : "Resume" };
+}
+
+export function fitFor(req: RenderRequest): FitInfo {
+  return build({ ...req, draft: false, openItems: [] }).fit;
+}
+
+export async function renderPdf(req: RenderRequest): Promise<Uint8Array> {
+  const b = build(req);
+  return buildPdf({ layouts: b.checklist ? [b.layout, b.checklist] : [b.layout], title: b.title });
+}
+
+export async function renderDocx(req: RenderRequest): Promise<Buffer> {
+  const b = build(req);
+  return buildDocx({ layout: b.layout, kind: b.kind, checklist: b.checklist, title: b.title });
+}
+
+const dataUriCache = new Map<FaceKey, string>();
+function fontDataUri(face: FaceKey): string {
+  let u = dataUriCache.get(face);
+  if (!u) {
+    u = `data:font/ttf;base64,${Buffer.from(fontBytes(face)).toString("base64")}`;
+    dataUriCache.set(face, u);
+  }
+  return u;
+}
+
+export function renderHtml(req: RenderRequest): string {
+  const b = build(req);
+  return standaloneHtml({ title: b.title, layout: b.layout, kind: b.kind, checklist: b.checklist, fontDataUris: fontDataUri });
+}
+
+/** What the on-screen page needs: markup per page and the CSS (fonts by url). */
+export function renderScreen(req: RenderRequest, fontUrl: (face: FaceKey) => string): { fit: FitInfo; pagesHtml: string; css: string; pages: number } {
+  const b = build(req);
+  const pages = pagesHtml(b.layout, b.kind) + (b.checklist ? "\n" + checklistHtml(b.checklist) : "");
+  return { fit: b.fit, pagesHtml: pages, css: resumeCss(b.layout.level, { fontUrls: fontUrl }), pages: b.layout.pages.length };
+}
+
+export { type FitInfo } from "./layout";
+
+// ---------------------------------------------------------------------------
+// Creative lane documents: the artist resume and the bio card, from their
+// structured models (core assembles them from the practice record). Same page,
+// fonts and builders as the resume.
+// ---------------------------------------------------------------------------
+
+import { layoutArtistResume, layoutBioCard, layoutCv, layoutPerformer, type ArtistResumeInput, type BioCardInput, type CvInput, type PerformerInput, type PerformerTrim } from "./creative";
+
+export type { PerformerInput, PerformerTrim } from "./creative";
+
+export type CreativeRenderRequest =
+  | { doc: "artist_resume"; model: ArtistResumeInput; draft?: boolean; openItems?: string[] }
+  | { doc: "bio"; card: BioCardInput; draft?: boolean; openItems?: string[] }
+  | { doc: "cv"; model: CvInput; draft?: boolean; openItems?: string[] }
+  | { doc: "performer"; model: PerformerInput; trim?: PerformerTrim; draft?: boolean; openItems?: string[] };
+
+export function buildCreative(req: CreativeRenderRequest): Built {
+  const m = fontMeasurer();
+  const draft = !!req.draft;
+  const items = cleanOpenItems(req.openItems);
+  const checklist = draft && items.length ? layoutChecklist(items, m) : null;
+  if (req.doc === "artist_resume") {
+    const { layout, fit } = layoutArtistResume(req.model, m, { draft });
+    const who = req.model.header.name;
+    return { layout, fit, checklist, kind: "resume", title: who ? `${who} artist resume` : "Artist resume" };
+  }
+  if (req.doc === "performer") {
+    // One page, on 8x10 (the back of a headshot) or US Letter. The to-do page of a draft stays Letter.
+    const { layout, fit } = layoutPerformer(req.model, m, { draft, trim: req.trim });
+    const who = req.model.header.name;
+    return { layout, fit, checklist, kind: "resume", title: who ? `${who} performer resume` : "Performer resume" };
+  }
+  if (req.doc === "cv") {
+    const { layout, fit } = layoutCv(req.model, m, { draft });
+    const who = req.model.header.name;
+    return { layout, fit, checklist, kind: "resume", title: who ? `${who} CV` : "CV" };
+  }
+  const { layout, fit } = layoutBioCard(req.card, m, { draft });
+  const who = req.card.name;
+  return { layout, fit, checklist, kind: "resume", title: who ? `${who} bio` : "Bio" };
+}
+
+export async function renderCreativePdf(req: CreativeRenderRequest): Promise<Uint8Array> {
+  const b = buildCreative(req);
+  return buildPdf({ layouts: b.checklist ? [b.layout, b.checklist] : [b.layout], title: b.title });
+}
+
+export async function renderCreativeDocx(req: CreativeRenderRequest): Promise<Buffer> {
+  const b = buildCreative(req);
+  return buildDocx({ layout: b.layout, kind: b.kind, checklist: b.checklist, title: b.title });
+}
+
+export function renderCreativeHtml(req: CreativeRenderRequest): string {
+  const b = buildCreative(req);
+  return standaloneHtml({ title: b.title, layout: b.layout, kind: b.kind, checklist: b.checklist, fontDataUris: fontDataUri });
+}
+
+export function renderCreativeScreen(req: CreativeRenderRequest, fontUrl: (face: FaceKey) => string): { fit: FitInfo; pagesHtml: string; css: string; pages: number; title: string } {
+  const b = buildCreative(req);
+  const pages = pagesHtml(b.layout, b.kind) + (b.checklist ? "\n" + checklistHtml(b.checklist) : "");
+  return { fit: b.fit, pagesHtml: pages, css: resumeCss(b.layout.level, { fontUrls: fontUrl, page: b.layout.page }), pages: b.layout.pages.length, title: b.title };
+}

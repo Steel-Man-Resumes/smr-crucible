@@ -64,22 +64,22 @@ async function callAnthropic(
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`Anthropic API error: ${response.status} ${text}`);
+    await response.body?.cancel();
+    throw new Error(`Anthropic API error: ${response.status}`);
   }
 
   const data = await response.json();
 
   // Exact token accounting -- Anthropic reports real usage on every response.
-  if (data.usage) {
-    recordTokenUsage(
+  {
+    await recordTokenUsage(
       "anthropic",
       data.model || model,
       {
-        inputTokens: data.usage.input_tokens || 0,
-        outputTokens: data.usage.output_tokens || 0,
-        cacheCreationInputTokens: data.usage.cache_creation_input_tokens || 0,
-        cacheReadInputTokens: data.usage.cache_read_input_tokens || 0,
+        inputTokens: data.usage?.input_tokens ?? NaN,
+        outputTokens: data.usage?.output_tokens ?? NaN,
+        cacheCreationInputTokens: data.usage?.cache_creation_input_tokens ?? 0,
+        cacheReadInputTokens: data.usage?.cache_read_input_tokens ?? 0,
       },
       meta
     );
@@ -120,19 +120,20 @@ async function callOpenAI(
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} ${text}`);
+    await response.body?.cancel();
+    throw new Error(`OpenAI API error: ${response.status}`);
   }
 
   const data = await response.json();
 
-  if (data.usage) {
-    recordTokenUsage(
+  {
+    await recordTokenUsage(
       "openai",
       data.model || AI_FALLBACK_MODEL,
       {
-        inputTokens: data.usage.prompt_tokens || 0,
-        outputTokens: data.usage.completion_tokens || 0,
+        inputTokens: (data.usage?.prompt_tokens ?? NaN) - (data.usage?.prompt_tokens_details?.cached_tokens ?? 0),
+        cacheReadInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+        outputTokens: data.usage?.completion_tokens ?? NaN,
       },
       meta
     );
@@ -152,23 +153,37 @@ export async function callAI(
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
+  // One provider, named in the person's consent (record check, D11): no
+  // fallback, and no console line carrying the provider's error text.
+  if (meta?.anthropicOnly) {
+    if (!hasAnthropic) throw new Error("ANTHROPIC_API_KEY not set");
+    try { return await callAnthropic(system, messages, maxTokens, model, meta, signal); }
+    catch (error) { await recordTokenUsage('anthropic',model,{inputTokens:0,outputTokens:0},{...meta,outcome:'failed',usageMissing:true}); throw error; }
+  }
+
   if (hasAnthropic) {
     try {
       return await callAnthropic(system, messages, maxTokens, model, meta, signal);
     } catch (err) {
+      await recordTokenUsage('anthropic',model,{inputTokens:0,outputTokens:0},{...meta,outcome:'failed',usageMissing:true});
       // A caller-initiated abort (deadline) is intentional -- do NOT start a fresh
       // OpenAI call after the deadline already passed; propagate the abort.
       if (signal?.aborted) throw err;
       if (!hasOpenAI) throw err;
       console.error(
         "[ai-call] Anthropic failed, falling back to OpenAI:",
-        err instanceof Error ? err.message : err
+        "provider request failed"
       );
-      return await callOpenAI(system, messages, maxTokens, meta, signal);
+      return await trackedOpenAI(system, messages, maxTokens, meta, signal);
     }
   }
 
-  if (hasOpenAI) return await callOpenAI(system, messages, maxTokens, meta, signal);
+  if (hasOpenAI) return await trackedOpenAI(system, messages, maxTokens, meta, signal);
 
   throw new Error("No AI provider key set (ANTHROPIC_API_KEY or OPENAI_API_KEY)");
+}
+
+async function trackedOpenAI(system: string, messages: Msg[], maxTokens: number, meta?: AiCallMeta, signal?: AbortSignal): Promise<string> {
+  try { return await callOpenAI(system,messages,maxTokens,meta,signal); }
+  catch(error) { await recordTokenUsage('openai',AI_FALLBACK_MODEL,{inputTokens:0,outputTokens:0},{...meta,outcome:'failed',usageMissing:true}); throw error; }
 }

@@ -11,8 +11,18 @@
  * No model call, so no AI cost -- still rate-limited (a write endpoint), still
  * decision-logged. Ownership of BOTH the artifact and the application is
  * server-verified before anything is written.
+ *
+ * WHICH VERSION (Phase 5 R1, review A3). What is attached is a saved
+ * revision (migration 081): the one the page names (`revisionId`, the
+ * person's own and of this resume), or the revision that IS this resume now
+ * (lib/revision-current.ts), made from the stored content when there is none.
+ * Its status is the server's. A finished revision attaches. A draft does NOT
+ * attach unless the request says `acceptDraft: true` after the person was
+ * told it is a draft; then the record says draft, plainly. The snapshot holds
+ * the revision's exact text, so "what did I send" is the version itself.
  */
 
+import { currentRevisionStatus } from "@/lib/revision-status";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
@@ -26,6 +36,10 @@ export const maxDuration = 10;
 interface QuickApplyInput {
   applicationId?: string;
   artifactId?: string;
+  /** A saved revision of this resume (081). Optional: the current one is used. */
+  revisionId?: string;
+  /** The person saw it is a draft and chose to attach it anyway. */
+  acceptDraft?: boolean;
 }
 
 async function handlePost(request: Request) {
@@ -60,9 +74,52 @@ async function handlePost(request: Request) {
     if (!artifact) {
       return NextResponse.json({ error: "resume_not_found" }, { status: 404 });
     }
-    const content = (artifact.content || {}) as Record<string, unknown>;
+    // Creative documents (statement, bio, artist resume) are never sent as a resume.
+    const { isCreativeType } = await import("@crucible/core");
+    if (isCreativeType(artifact.artifact_type)) {
+      return NextResponse.json({ error: "creative_doc", message: "Creative documents can't be sent as a resume." }, { status: 409 });
+    }
+    const { getOneAsUser, queryAsUser, invalidateNextStep, getRevision } = await import("@crucible/core");
 
-    const { getOneAsUser, queryAsUser, invalidateNextStep } = await import("@crucible/core");
+    // (1b) The version: the named revision (the person's own, of THIS
+    // resume), or the one that is this resume now. The server's status.
+    const { coreStore } = await import("@/lib/revision-save");
+    const { ensureExportRevision } = await import("@/lib/revision-current");
+    let revision = null as Awaited<ReturnType<typeof getRevision>>;
+    if (typeof body.revisionId === "string" && body.revisionId) {
+      revision = await getRevision(userId, body.revisionId);
+      if (!revision || revision.artifact_id !== artifactId) {
+        return NextResponse.json({ error: "revision_not_found" }, { status: 404 });
+      }
+    } else {
+      const ex = await ensureExportRevision(userId, artifactId, await coreStore());
+      if (!ex.ok) {
+        return NextResponse.json(
+          { error: ex.reason === "not_ready" ? "not_ready" : "no_version", message: "We couldn't prepare a saved version of this resume to attach." },
+          { status: ex.status === 404 ? 404 : 409 }
+        );
+      }
+      revision = ex.revision;
+    }
+    revision = currentRevisionStatus(revision);
+    const draft = revision.status !== "finished";
+    if (draft && body.acceptDraft !== true) {
+      return NextResponse.json(
+        {
+          error: "draft",
+          message: "Draft: check it before you send it.",
+          revisionId: revision.id,
+          openItems: Array.isArray(revision.open_items) ? revision.open_items : [],
+        },
+        { status: 409 }
+      );
+    }
+    // What was attached: the version's own text and its status, never the page's.
+    const content: Record<string, unknown> = {
+      revision: { id: revision.id, number: revision.revision_number, status: revision.status, checker: revision.checker_version },
+      resumeText: revision.resume_text,
+      ...(draft ? { draft: true, openItems: revision.open_items } : {}),
+    };
 
     // (2) Verify ownership of the application (user-scoped select).
     const application = await getOneAsUser<{ id: string }>(userId, 
@@ -105,8 +162,8 @@ async function handlePost(request: Request) {
         contextPage: "quick-apply",
         modelProvider: "none",
         modelId: "none",
-        input: JSON.stringify({ applicationId, artifactId }).slice(0, 500),
-        explanation: `Attached resume ${artifactId} to application ${applicationId} as-is (baseline_as_is). No AI rewrite.`,
+        input: JSON.stringify({ applicationId, artifactId, revisionId: revision.id }).slice(0, 500),
+        explanation: `Attached resume ${artifactId} (version ${revision.revision_number}, ${draft ? "draft" : "finished"}) to application ${applicationId} as-is (baseline_as_is). No AI rewrite.`,
         outputSummary: {
           type: "quick_apply",
           provenance: "baseline_as_is",
@@ -119,6 +176,7 @@ async function handlePost(request: Request) {
 
     return NextResponse.json({
       ok: true,
+      revision: { id: revision.id, number: revision.revision_number, status: revision.status },
       snapshot: {
         id: snapshot.id,
         provenance: snapshot.provenance,
@@ -138,4 +196,5 @@ export const POST = withRateLimit(handlePost, {
   mode: "user",
   endpoint: "quick-apply",
   requiredTier: "client",
+  premium: "one_click_apply",
 });

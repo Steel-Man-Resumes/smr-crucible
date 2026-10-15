@@ -13,10 +13,12 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { GhostGuide, TBtn } from "@crucible/consumer-ui";
+import { ResumePage } from "@/components/resume/ResumePage";
 
 type Step = "input" | "processing" | "result";
 
@@ -186,7 +188,9 @@ export default function RushPage() {
   }
 
   function handleDownloadTxt() {
-    const text = buildResumeText();
+    // Not a checked, finished version (Phase 5 R1, review L3): marked DRAFT,
+    // like every file the server makes from raw text. Also the docx fallback.
+    const text = `DRAFT\n\n${buildResumeText()}`;
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -227,17 +231,16 @@ export default function RushPage() {
           {/* Disclaimer */}
           <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
             <p className="text-sm text-t-phos leading-relaxed">
-              <span className="font-semibold text-t-amber-bright">Straight up:</span> Rush Mode
-              gives you the weakest possible version of your resume. It&apos;s
-              just enough to submit an application today. It won&apos;t prepare
-              you for the interview. For that, use{" "}
-              <button
-                onClick={() => router.push("/intro")}
+              <span className="font-semibold text-t-amber-bright">What this is:</span> Rush
+              works from the resume you already have and rewrites its lines. It
+              does not build a new resume or learn your story. The full{" "}
+              <Link
+                href="/intro"
                 className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber font-medium"
               >
-                The Forge
-              </button>
-              .
+                Forge
+              </Link>{" "}
+              takes longer and builds the real thing.
             </p>
           </div>
 
@@ -339,7 +342,7 @@ export default function RushPage() {
             disabled={!resumeText.trim() || !targetJob.trim()}
             className="w-full text-lg"
           >
-            build my resume
+            rewrite my lines
           </TBtn>
         </div>
       </div>
@@ -355,18 +358,11 @@ export default function RushPage() {
             <div className="absolute inset-0 border-4 border-t-line" />
             <div className="absolute inset-0 border-4 border-t-amber border-t-transparent animate-spin" />
           </div>
-          <h1 className="text-2xl font-bold mb-2 text-t-white">Building your resume</h1>
+          <h1 className="text-2xl font-bold mb-2 text-t-white">Rewriting your lines</h1>
           <p className="text-base text-t-amber-bright transition-opacity duration-500">
             {PROCESSING_MESSAGES[processingMsg]}
           </p>
-          <div className="w-full h-1.5 bg-t-line mt-8 overflow-hidden">
-            <div
-              className="h-full bg-t-amber transition-all duration-1000 ease-out"
-              style={{
-                width: `${Math.min(90, ((processingMsg + 1) / PROCESSING_MESSAGES.length) * 100)}%`,
-              }}
-            />
-          </div>
+          <p className="mt-5 text-xs text-t-phos-dim">This is still working. We will show the text before you download it.</p>
         </div>
       </div>
     );
@@ -459,6 +455,14 @@ export default function RushPage() {
               </section>
             )}
 
+            <section className="mb-8" aria-labelledby="rush-preview-title">
+              <h2 id="rush-preview-title" className="mb-2 text-lg font-bold text-t-white">Preview the download</h2>
+              <p className="mb-3 text-sm text-t-phos-dim">This shows the rewritten lines as a draft page. It is not a complete resume.</p>
+              <div className="border border-t-line bg-t-bg p-3 sm:p-5" data-testid="rush-download-preview">
+                <ResumePage text={buildResumeText()} draft />
+              </div>
+            </section>
+
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3 mb-4">
               <button
@@ -500,7 +504,7 @@ export default function RushPage() {
             <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
               <p className="text-sm text-t-phos leading-relaxed">
                 <span className="font-semibold text-t-amber-bright">This gets you in the door, not through the interview.</span>{" "}
-                Rush Mode rewrites what you gave it. Nothing more. It doesn&apos;t
+                Rush rewrites what you gave it and nothing more. It doesn&apos;t
                 know your strengths, your story, or what makes you different.
                 An interviewer will ask about all of that.
               </p>

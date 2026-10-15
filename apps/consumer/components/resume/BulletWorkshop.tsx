@@ -17,7 +17,9 @@
 import { useState, useEffect, useRef } from "react";
 import { TroyAttention } from "@crucible/consumer-ui";
 import type { BulletEvidence } from "./resumeModel";
-import { RANGE_CHOICES, QUANTITY_UNITS, type QuantityUnit } from "@/lib/number-truth";
+import { countPromptsFor, quantityFromCounts } from "@/lib/count-prompts";
+import { hasChip, toggleChip, canGenerateBullet } from "@/lib/bullet-chips";
+import { WORKSHOP_PLACEHOLDERS } from "@/lib/workshop-placeholders";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -144,9 +146,11 @@ export function BulletWorkshop({
   const [tools, setTools] = useState(saved?.tools ?? "");
   const [often, setOften] = useState(saved?.often ?? "");
   const [quantity, setQuantity] = useState(saved?.quantity ?? "");
-  // Typed, picked from the offered ranges, or "not sure". Recorded with the bullet.
+  // Typed by the person, or "not sure". Recorded with the bullet. No figure
+  // is ever offered: the prompts below name what to count, and the person
+  // types the number (decision D2).
   const [quantitySource, setQuantitySource] = useState<BulletEvidence["quantitySource"]>(saved?.quantitySource);
-  const [quantityUnit, setQuantityUnit] = useState<QuantityUnit | null>(null);
+  const [counts, setCounts] = useState<Record<string, string>>({});
   const [improved, setImproved] = useState(saved?.improved ?? "");
   const [draft, setDraft] = useState<string | null>(saved?.draft ?? null);
   // A draft belongs to the answers it was written from. If the answers change
@@ -156,10 +160,6 @@ export function BulletWorkshop({
   const [draftFrom, setDraftFrom] = useState<string | null>(() => (saved?.draft ? answersKey : null));
   const [draftEdited, setDraftEdited] = useState(false);
   const draftStale = draft !== null && draftFrom !== null && draftFrom !== answersKey && !draftEdited;
-  // What was in the "How many?" box before a pick replaced it, so one tap undoes it.
-  const [quantityUndo, setQuantityUndo] = useState<{ value: string; source: BulletEvidence["quantitySource"] } | null>(null);
-  const quantityUnitRef = useRef<QuantityUnit | null>(null);
-  quantityUnitRef.current = quantityUnit;
   const [generating, setGenerating] = useState(false);
   const [toolHints, setToolHints] = useState<string[]>([]);
   const [error, setError] = useState("");
@@ -171,10 +171,6 @@ export function BulletWorkshop({
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
-        if (quantityUnitRef.current) {
-          setQuantityUnit(null);
-          return;
-        }
         onClose();
         return;
       }
@@ -247,15 +243,8 @@ export function BulletWorkshop({
     };
   }, [jobTitle]);
 
-  function addTool(t: string) {
-    setTools((prev) => {
-      const have = prev
-        .split(",")
-        .map((s) => s.trim().toLowerCase())
-        .filter(Boolean);
-      if (have.includes(t.toLowerCase())) return prev;
-      return prev.trim() ? `${prev.replace(/,\s*$/, "")}, ${t}` : t;
-    });
+  function toggleTool(t: string) {
+    setTools((prev) => toggleChip(prev, t));
   }
 
   async function generate() {
@@ -313,7 +302,7 @@ export function BulletWorkshop({
   }
 
   const answered = [did, tools, often, quantity, improved].filter((v) => v.trim()).length;
-  const canGenerate = !!(did.trim() || tools.trim() || quantity.trim() || improved.trim());
+  const canGenerate = canGenerateBullet({ did, tools, often, quantity, improved });
 
   return (
     <div
@@ -358,7 +347,7 @@ export function BulletWorkshop({
             label="What did you actually do?"
             value={did}
             onChange={setDid}
-            placeholder="e.g., loaded trucks and kept track of inventory"
+            placeholder={WORKSHOP_PLACEHOLDERS.did}
             why={WHY.did}
             textarea
           />
@@ -367,7 +356,7 @@ export function BulletWorkshop({
               label="What tools, equipment, or systems did you use?"
               value={tools}
               onChange={setTools}
-              placeholder="e.g., forklift, RF scanner, Excel"
+              placeholder={WORKSHOP_PLACEHOLDERS.tools}
               why={WHY.tools}
             />
             {toolHints.length > 0 && (
@@ -377,111 +366,106 @@ export function BulletWorkshop({
                   <button
                     key={t}
                     type="button"
-                    onClick={() => addTool(t)}
-                    className="text-[11px] px-2 py-0.5 bg-t-panel-2 text-t-phos border border-t-line hover:border-t-amber transition-colors"
+                    onClick={() => toggleTool(t)}
+                    aria-pressed={hasChip(tools, t)}
+                    className={`text-[11px] px-2 py-0.5 border transition-colors ${
+                      hasChip(tools, t)
+                        ? "bg-t-amber text-white border-t-amber font-semibold"
+                        : "bg-t-panel-2 text-t-phos border-t-line hover:border-t-amber"
+                    }`}
                   >
-                    {t}
+                    {hasChip(tools, t) ? "\u2713 " : ""}{t}
                   </button>
                 ))}
               </div>
             )}
           </div>
+          {/* "How often" and "How many" are what turn a duty into proof, and they
+              were the easiest questions to scroll past: small grey labels in
+              the middle of a long form. They sit in their own labelled card,
+              marked optional, so nobody feels forced and nobody misses them. */}
+          <section
+            aria-labelledby="bw-proof-heading"
+            className="space-y-3 border border-t-amber bg-t-panel-2 p-3"
+          >
+            <div>
+              <h4 id="bw-proof-heading" className="text-sm font-semibold text-t-white">
+                Two quick ones that make this line stronger
+              </h4>
+              <p className="mt-0.5 text-xs text-t-phos">
+                Optional. Tap an answer or type one. Only say what you know is true. Skip
+                anything you are not sure about.
+              </p>
+            </div>
           <Field
             label="How often?"
+            emphasis
+            optional
             value={often}
             onChange={setOften}
-            placeholder="e.g., every shift, daily, during peak season"
+            placeholder={WORKSHOP_PLACEHOLDERS.often}
             chips={OFTEN_CHIPS}
             why={WHY.often}
           />
           <div>
             <Field
               label="How many?"
+              emphasis
+              optional
               value={quantity}
               onChange={(v) => {
                 setQuantity(v);
+                setCounts({});
                 setQuantitySource(v.trim() ? "typed" : undefined);
-                setQuantityUndo(null);
               }}
-              placeholder="e.g., 3 new hires, 200 orders a day"
+              placeholder={WORKSHOP_PLACEHOLDERS.quantity}
               why={WHY.quantity}
             />
-            {/* Pick what you were counting, then the closest range. The ranges are
-                fixed in code, never written by a model, and a pick only fills the
-                box. Nothing reaches the resume until the person accepts it. */}
-            <div className="mt-1.5 flex flex-wrap gap-1.5" role="group" aria-label="What were you counting?">
-              {QUANTITY_UNITS.map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  aria-pressed={quantityUnit === u}
-                  onClick={() => setQuantityUnit(quantityUnit === u ? null : u)}
-                  className={`t-focus min-h-touch border px-3 text-sm transition-colors hover:border-t-amber ${
-                    quantityUnit === u ? "border-t-amber bg-t-panel text-t-white" : "border-t-line bg-t-panel-2 text-t-phos"
-                  }`}
-                >
-                  {u}
-                </button>
-              ))}
-            </div>
-            {quantityUnit && (
-              <div className="mt-2 border-l-2 border-t-amber pl-2">
-                <p className="mb-1.5 text-[11px] text-t-phos">
-                  {quantityUnit === "crew" ? "About how big was the crew?" : `About how many ${quantityUnit}?`}{" "}
-                  {"Pick the closest one. Only pick it if it's true. You can change it after."}
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {RANGE_CHOICES[quantityUnit].map((r) => (
-                    <button
-                      key={r.label}
-                      type="button"
-                      onClick={() => {
-                        if (quantity.trim()) setQuantityUndo({ value: quantity, source: quantitySource });
-                        setQuantity(r.fill);
-                        setQuantitySource("picked");
-                        setQuantityUnit(null);
-                        document.getElementById("bw-how-many")?.focus();
-                      }}
-                      className="t-focus min-h-touch border border-t-line bg-t-panel-2 px-3 text-sm text-t-phos transition-colors hover:border-t-amber"
-                    >
-                      {r.label}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (quantity.trim()) setQuantityUndo({ value: quantity, source: quantitySource });
-                      setQuantity("");
-                      setQuantitySource("unsure");
-                      setQuantityUnit(null);
-                      document.getElementById("bw-how-many")?.focus();
+            {/* What could be counted for this line's work. Each prompt names the
+                thing to count and nothing else; the person types their own
+                figure beside it. No number, range or example is ever offered. */}
+            <div className="mt-2 space-y-1.5" role="group" aria-label="What could you count here?" data-testid="count-prompts">
+              <p className="text-[11px] text-t-phos">What could you count here? Type a number only if you know it.</p>
+              {countPromptsFor(did || initialBullet || "", jobTitle).map((prompt, i) => (
+                <label key={prompt} className="flex items-center gap-2 text-sm text-t-phos">
+                  <input
+                    id={i === 0 ? "bw-count-first" : undefined}
+                    type="text"
+                    inputMode="decimal"
+                    value={counts[prompt] ?? ""}
+                    onChange={(e) => {
+                      const next = { ...counts, [prompt]: e.target.value };
+                      setCounts(next);
+                      const q = quantityFromCounts(next);
+                      setQuantity(q);
+                      setQuantitySource(q ? "typed" : undefined);
                     }}
-                    className="t-focus min-h-touch border border-t-line px-3 text-sm text-t-phos-dim transition-colors hover:border-t-amber"
-                  >
-                    {"I'm not sure"}
-                  </button>
-                </div>
-              </div>
-            )}
+                    aria-label={`How many ${prompt}`}
+                    className="t-focus min-h-touch w-20 shrink-0 border border-t-line bg-t-panel px-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
+                  />
+                  <span>{prompt}</span>
+                </label>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setCounts({});
+                  setQuantity("");
+                  setQuantitySource("unsure");
+                  document.getElementById("bw-how-many")?.focus();
+                }}
+                className="t-focus min-h-touch border border-t-line px-3 text-sm text-t-phos-dim transition-colors hover:border-t-amber"
+              >
+                {"I'm not sure"}
+              </button>
+            </div>
             {quantitySource === "unsure" && !quantity.trim() && (
               <p className="mt-1.5 text-[11px] text-t-phos-dim">
                 {"That's fine. We'll leave the number out. A true line with no number still works."}
               </p>
             )}
-            {quantityUndo && (
-              <button
-                type="button"
-                onClick={() => {
-                  setQuantity(quantityUndo.value);
-                  setQuantitySource(quantityUndo.source);
-                  setQuantityUndo(null);
-                }}
-                className="t-focus mt-1 min-h-touch text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2 hover:text-t-white"
-              >
-                {`Undo. Put back "${quantityUndo.value}"`}
-              </button>
-            )}
           </div>
+          </section>
           {/* Hardest screen #2: the question that carries the most weight and
               gets skipped the most. He only speaks if it is still empty after
               the person has had a moment with the others. */}
@@ -490,13 +474,13 @@ export function BulletWorkshop({
             surfaceId="bullet-quantity"
             enabled={!quantity.trim() && quantitySource !== "unsure"}
             delayMs={9000}
-            message="Tap what you counted, or type a number you know is true."
+            message="Pick something you counted and type the number you know is true."
           />
           <Field
             label="What got better because of you?"
             value={improved}
             onChange={setImproved}
-            placeholder="e.g., fewer mistakes, faster loading, kept the team on schedule"
+            placeholder={WORKSHOP_PLACEHOLDERS.improved}
             chips={IMPROVED_CHIPS}
             why={WHY.improved}
             textarea
@@ -569,6 +553,8 @@ function Field({
   textarea,
   chips,
   why,
+  emphasis,
+  optional,
 }: {
   label: string;
   value: string;
@@ -579,6 +565,10 @@ function Field({
   chips?: readonly string[];
   /** The rung of the knowledge ladder: why this question earns its place. */
   why?: string;
+  /** Bigger, brighter label for the questions that are easy to scroll past. */
+  emphasis?: boolean;
+  /** Says plainly the question can be skipped. */
+  optional?: boolean;
 }) {
   const [showWhy, setShowWhy] = useState(false);
   // Associate label with input (id/htmlFor) for screen readers + testability.
@@ -586,19 +576,21 @@ function Field({
   const cls =
     "w-full px-3 py-2 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors";
 
-  /** Append a chip's text without clobbering what the person already typed. */
-  function addChip(chip: string) {
-    const current = value.trim();
-    if (!current) return onChange(chip);
-    if (current.toLowerCase().includes(chip.toLowerCase())) return;
-    onChange(`${current}, ${chip}`);
-  }
-
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between gap-2">
-        <label htmlFor={id} className="block text-xs font-medium text-t-phos-dim">
+        <label
+          htmlFor={id}
+          className={
+            emphasis
+              ? "block text-sm font-semibold text-t-white"
+              : "block text-xs font-medium text-t-phos-dim"
+          }
+        >
           {label}
+          {optional && (
+            <span className="ml-1.5 text-[11px] font-normal text-t-phos-dim">(optional)</span>
+          )}
         </label>
         {why && (
           <button
@@ -636,16 +628,25 @@ function Field({
       )}
       {chips && chips.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {chips.map((c) => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => addChip(c)}
-              className="t-focus border border-t-line bg-t-panel-2 px-2 py-0.5 text-[11px] text-t-phos transition-colors hover:border-t-amber"
-            >
-              {c}
-            </button>
-          ))}
+          {chips.map((c) => {
+            const on = hasChip(value, c);
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => onChange(toggleChip(value, c))}
+                aria-pressed={on}
+                className={`t-focus border px-2 py-0.5 text-[11px] transition-colors ${
+                  on
+                    ? "border-t-amber bg-t-amber font-semibold text-white"
+                    : "border-t-line bg-t-panel-2 text-t-phos hover:border-t-amber"
+                }`}
+              >
+                {on ? "\u2713 " : ""}
+                {c}
+              </button>
+            );
+          })}
         </div>
       )}
     </div>

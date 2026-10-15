@@ -12,16 +12,30 @@
  * that's the observer path. This is "how do I actually run this."
  */
 
+import { useServerSwitches } from "@/components/ServerSwitches";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { useEffect } from "react";
 import { TBtn } from "@crucible/consumer-ui";
+import { useForgeWall } from "@/components/forge/useForgeWall";
+import type { ForgeWall } from "@/lib/forge-access";
 
-const CLIENT_WORKFLOW = [
+/**
+ * Lines that follow the Forge sign-in wall (lib/forge-access.ts): the open
+ * version before it, the `up` version after. Nothing until the browser knows.
+ */
+function byWall(wall: ForgeWall | null, open: string, up?: string): string {
+  if (up === undefined) return open;
+  if (wall === null) return "";
+  return wall === "up" ? up : open;
+}
+
+const CLIENT_WORKFLOW: Array<{ step: string; title: string; detail: string; titleUp?: string; detailUp?: string }> = [
   {
     step: "1",
     title: "Share The Forge link",
     detail: "Send your clients to forge.steelmanresumes.com. No login required to start. They complete the intake on any device.",
+    detailUp: "Send your clients to forge.steelmanresumes.com. They sign in with a free account first, then complete the intake on any device.",
   },
   {
     step: "2",
@@ -32,6 +46,8 @@ const CLIENT_WORKFLOW = [
     step: "3",
     title: "They create a free account",
     detail: "At the end of the Forge, they're invited into The Refinery. If they enter your partner code at sign-up, their daily AI limit increases and they get linked to your cohort.",
+    titleUp: "They keep going in The Refinery",
+    detailUp: "The account they made for the Forge also opens The Refinery. If they enter your partner code at sign-up or in Settings, their daily AI limit increases and they get linked to your cohort.",
   },
   {
     step: "4",
@@ -71,11 +87,20 @@ const WHAT_CLIENTS_GET = [
   { tool: "Disclosure Planner", desc: "When and how to talk about their record with specific employers" },
   { tool: "Interview Practice", desc: "Text or voice mock interviews, including disclosure-specific questions" },
   { tool: "Applications Tracker", desc: "Track every application by company, status, resume version used, and follow-up emails" },
-  { tool: "My Materials", desc: "Vault of all generated documents, including resumes, cover letters, disclosure plans, and follow-ups" },
+  { tool: "Library", desc: "Vault of all generated documents, including resumes, cover letters, disclosure plans, and follow-ups" },
   { tool: "t.ROY (AI coach)", desc: "Available on every page. Research-grounded, 10 behavioral rules, never prescriptive" },
 ];
 
-const PARTNER_FAQ = [
+/**
+ * The record check (D11) is switched off until its public copy ships
+ * (lib/server-switch.ts). While off, the FAQ does not describe it.
+ */
+const RECORD_LINES = {
+  on: "The record check is the only screen that asks a client about their record, and only after the client says yes. Staff can't say yes for them, and a saved record check is never shared with your program. If a client mentions their record anywhere else, like the chat, that goes to the AI companies as well.",
+  off: "If a client mentions their record, for example in the chat, that goes to the AI companies as well.",
+};
+
+const PARTNER_FAQ: Array<{ q: string; a: string; aUp?: string; recordLines?: { on: string; off: string } }> = [
   {
     q: "How much does it cost?",
     a: "Free for nonprofit and community organizations during the launch period. No contracts. No per-seat licensing. If that ever changes, existing partners get advance notice.",
@@ -86,7 +111,9 @@ const PARTNER_FAQ = [
   },
   {
     q: "What data do you collect on my clients?",
-    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Nothing shared with third parties. No advertising layer. AGPL-3.0 open source, and the code is public.",
+    recordLines: RECORD_LINES,
+    a: "Only what they give the platform directly: email, resume content, career goals, job applications. Without an account, the Forge keeps their work in their own web browser, not on our servers. To do the writing, their text goes to the AI companies that run t.ROY (Anthropic, and OpenAI for some steps). Nothing is sold, and there is no advertising. AGPL-3.0 open source, and the code is public.",
+    aUp: "Only what they give the platform directly: email, resume content, career goals, job applications. They sign in with a free account, and each person can download or delete their own data in Settings. Program staff see their resumes and letters only when they share them. To do the writing, their text goes to the AI companies that run t.ROY (Anthropic, and OpenAI for some steps). Nothing is sold, and there is no advertising. AGPL-3.0 open source, and the code is public.",
   },
   {
     q: "Can I self-host it for my program?",
@@ -101,6 +128,8 @@ const PARTNER_FAQ = [
 export default function PartnerPage() {
   const router = useRouter();
   const { updateSession } = useForgeSession();
+  const wall = useForgeWall();
+  const { recordStep } = useServerSwitches();
 
   useEffect(() => {
     updateSession({
@@ -144,8 +173,8 @@ export default function PartnerPage() {
                   {item.step}
                 </div>
                 <div className="pt-0.5">
-                  <p className="font-semibold text-t-white text-sm mb-0.5">{item.title}</p>
-                  <p className="text-sm text-t-phos-dim leading-relaxed">{item.detail}</p>
+                  <p className="font-semibold text-t-white text-sm mb-0.5">{byWall(wall, item.title, item.titleUp)}</p>
+                  <p className="text-sm text-t-phos-dim leading-relaxed">{byWall(wall, item.detail, item.detailUp)}</p>
                 </div>
               </div>
             ))}
@@ -216,7 +245,10 @@ export default function PartnerPage() {
             {PARTNER_FAQ.map((item, i) => (
               <div key={i} className="border border-t-line p-4">
                 <p className="font-semibold text-t-white text-sm mb-1">{item.q}</p>
-                <p className="text-sm text-t-phos-dim leading-relaxed">{item.a}</p>
+                <p className="text-sm text-t-phos-dim leading-relaxed">
+                  {byWall(wall, item.a, item.aUp)}
+                  {item.recordLines && wall !== null ? " " + (recordStep ? item.recordLines.on : item.recordLines.off) : ""}
+                </p>
               </div>
             ))}
           </div>

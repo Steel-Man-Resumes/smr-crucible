@@ -1,3 +1,4 @@
+import { executionBudget } from "./tool-execution";
 /**
  * t.ROY's hands -- the assistant tool factory (10x wave, 2026-08-03).
  *
@@ -18,8 +19,12 @@
  */
 
 import { tool, jsonSchema, type ToolSet } from "ai";
+import { buildDataTools } from "./assistant-data-tools";
+import type { SelectedWork } from "../assistant-work-context";
 import { runJobSearch, findCachedJob } from "@/lib/job-search-core";
+import { jobSourceForSave } from "@/lib/job-source";
 import {
+  resolveAssistantPage,
   REFINERY_PAGES,
   FORGE_PAGES,
   TOUR_TARGETS,
@@ -32,6 +37,7 @@ export interface AssistantToolOptions {
   userId: string | null;
   /** Which surface the chat lives on -- restricts navigation targets. */
   surface: "forge" | "refinery";
+  selectedWork?: SelectedWork | null;
 }
 
 /**
@@ -140,6 +146,17 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
   const userId = opts.userId;
   if (!userId) return tools;
 
+  Object.assign(tools, buildDataTools(userId, opts.selectedWork));
+  tools.contextual_handoff = tool({
+    description: "Prepare a button to continue with this exact selected job, lane and saved revision. Use for tailoring, interview practice and applications. The user chooses when to move.",
+    parameters: jsonSchema<{page: "application-tailor" | "interview" | "applications"}>({ type: "object", properties: { page: { type: "string", enum: ["application-tailor", "interview", "applications"] } }, required: ["page"], additionalProperties: false }),
+    execute: async ({ page }) => {
+      const selected = opts.selectedWork?.selection;
+      const href = resolveAssistantPage(page, selected?.applicationId, selected);
+      return { status: "ready", action: "handoff", page, href, selection: selected ?? null, buttonShown: true, navigated: false };
+    },
+  });
+
   tools.get_my_live_status = tool({
     description:
       "Read the user's real, current state from the database: journey stage, the computed next step, saved jobs with their applicationIds and statuses, follow-up dates, and counts. Use this BEFORE answering 'what should I do next' or referencing their saved jobs or progress. Never guess when you can read.",
@@ -175,6 +192,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
           [userId]
         );
         return {
+          selectedWork: opts.selectedWork ? { selection: opts.selectedWork.selection, task: opts.selectedWork.task, lane: opts.selectedWork.lane, revisionStatus: opts.selectedWork.revision?.status } : null,
           readAt: new Date().toISOString(),
           freshness: "read live from the database just now",
           journeyStage: next?.stage ?? profile.currentStage,
@@ -315,7 +333,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
           salary: job.salary || null,
           description: job.description || null,
           employment_type: job.employment_type || null,
-          source: "jsearch",
+          source: jobSourceForSave(job.id),
           source_id: job.id,
           apply_url: job.apply_url || null,
           status: "saved",
@@ -470,6 +488,11 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     },
   });
 
+  const executeOnce = executionBudget();
+  for (const [name, definition] of Object.entries(tools)) {
+    const execute = definition.execute;
+    if (execute) definition.execute = (args, options) => executeOnce(name, args, async () => execute(args, options));
+  }
   return tools;
 }
 
@@ -481,6 +504,10 @@ export function buildHandsSection(opts: AssistantToolOptions): string {
   const authed = !!opts.userId;
   const serverToolLines = authed
     ? `- get_my_live_status: read the user's real current data BEFORE answering "what should I do next" or referencing their saved jobs, stage, or progress. Never guess what you can read.
+- search_verified_employers/get_verified_employer: current published employer evidence, distinct from live openings.
+- search_verified_resources/get_verified_resource/search_resource_chains/get_resource_chain: published support and approved prerequisites.
+- read_saved_resources: find saved lists and refresh their sources before recommending them again.
+- save_resource_list and preview_document_correction: show a confirmation card. They do not save; wait for the person to click and for a real success result.
 - search_jobs, then save_job: find real openings and save the one the user picks.
 - add_follow_up_reminder: set a follow-up date on a tracked application (confirm the date first).
 - file_feedback: when the user reports a bug, confusion, or an idea, or wants to tell Troy something, offer to file it. Only file after they explicitly say yes. Never file silently.

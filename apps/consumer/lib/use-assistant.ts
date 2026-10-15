@@ -13,6 +13,11 @@
 
 "use client";
 
+import { useSession } from "next-auth/react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { assistantClientSelection } from "./assistant-client-selection";
+import { activeLaneStorageKey, LANES_CHANGED_EVENT } from "./lanes";
 import { useChat } from "ai/react";
 import type { AssistantContext } from "./assistant-prompt";
 import { TROY_CLIENT_MAX_STEPS } from "./ai/troy-steps";
@@ -35,10 +40,25 @@ interface UseAssistantOptions {
 }
 
 export function useAssistant({ context, sessionId, coach, onToolCall }: UseAssistantOptions) {
+  const userId = useSession().data?.user?.id;
+  const pathname = usePathname();
+  const search = useSearchParams();
+  const [lane, setLane] = useState<string | undefined>();
+  useEffect(() => {
+    const read = () => {
+      const key = activeLaneStorageKey(userId);
+      try { setLane(key ? localStorage.getItem(key) ?? undefined : undefined); }
+      catch { setLane(undefined); }
+    };
+    read();
+    window.addEventListener(LANES_CHANGED_EVENT, read);
+    return () => window.removeEventListener(LANES_CHANGED_EVENT, read);
+  }, [userId, pathname]);
+  const selectedWork = assistantClientSelection(context.selectedWork, search, lane);
   const chat = useChat({
     api: coach ? "/api/coach" : "/api/assistant",
     body: {
-      context,
+      context: { ...context, selectedWork },
       sessionId,
     },
     // Shared with the routes, which mirror this count (lib/ai/troy-steps).

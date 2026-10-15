@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { getUserProfile, queryAsUser, getOneAsUser } from "@crucible/core";
+import { getUserProfile, queryAsUser, getOneAsUser, RECENT_RESUMES_FOR_CONTEXT_SQL } from "@crucible/core";
 
 export const revalidate = 0; // always fresh -- context freshness matters
 
@@ -44,10 +44,7 @@ export async function GET() {
     content: Record<string, any>;
     created_at: string;
   }>(userId, 
-    `SELECT id, target_context, content, created_at
-     FROM refinery_artifact
-     WHERE user_id = $1 AND artifact_type = 'resume'
-     ORDER BY created_at DESC LIMIT 5`,
+    RECENT_RESUMES_FOR_CONTEXT_SQL,
     [userId]
   );
 

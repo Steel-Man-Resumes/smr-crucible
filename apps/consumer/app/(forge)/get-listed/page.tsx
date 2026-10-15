@@ -9,6 +9,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { TBtn } from "@crucible/consumer-ui";
 
 const CATEGORIES = [
@@ -44,6 +45,15 @@ export default function GetListedPage() {
     setErrors([]);
   }
 
+  /** The Turnstile token, when the env-gated widget is on the page. */
+  function turnstileToken(): string | undefined {
+    try {
+      return document.querySelector<HTMLInputElement>('input[name="cf-turnstile-response"]')?.value || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSubmitting(true);
@@ -53,7 +63,7 @@ export default function GetListedPage() {
       const res = await fetch("/api/org-listing", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, turnstileToken: turnstileToken() }),
       });
 
       const data = await res.json();
@@ -226,6 +236,9 @@ export default function GetListedPage() {
               </ul>
             </div>
           )}
+
+          {/* Bot check: renders only when NEXT_PUBLIC_TURNSTILE_SITE_KEY is set */}
+          <TurnstileWidget />
 
           {/* Submit */}
           <TBtn type="submit" disabled={submitting} className="w-full">

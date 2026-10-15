@@ -82,6 +82,20 @@ const config: Config = {
         "t-bone-dim": "var(--t-bone-dim)",
         "t-steel": "var(--t-steel)",
         "t-electric": "var(--t-electric)",
+        // Workshop palette: the SMR website's locked t-* values as fixed hex, so
+        // they stay the same inside and outside the `.forge-workshop` scope
+        // (globals.css). Keep in sync with the website's tailwind config.
+        "ws-bg": "#121110",
+        "ws-panel": "#1a1815",
+        "ws-panel-2": "#201d18",
+        "ws-panel-3": "#28231c",
+        "ws-line": "#3a352c",
+        "ws-amber": "#b98b32",
+        "ws-amber-bright": "#dbc173",
+        "ws-bone": "#ece7d9",
+        "ws-bone-dim": "#b9b3a0",
+        "ws-red": "#ad2318",
+        "ws-red-bright": "#d9392a",
       },
       fontFamily: {
         display: ['"IBM Plex Sans Variable"', '"IBM Plex Sans"', '"Segoe UI"', "Arial", "sans-serif"],

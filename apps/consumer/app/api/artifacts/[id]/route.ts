@@ -8,8 +8,13 @@ import {
   clearCurrentResume,
   lockBaseline,
   unlockBaseline,
+  setArtifactLane,
+  setArtifactDemo,
+  isCreativeType,
 } from "@crucible/core";
 import { validateResumeContent } from "@/lib/resume-validate";
+import { parseLaneIdBody } from "@/lib/lanes";
+import { isSameOriginJsonPost, isSameOriginRequest } from "@/lib/same-origin";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -34,6 +39,10 @@ export async function GET(_request: Request, context: RouteContext) {
 
 /** PATCH /api/artifacts/[id] — update artifact content */
 export async function PATCH(request: Request, context: RouteContext) {
+  // CSRF: only a page on this app's own origin may change the person's work.
+  if (!isSameOriginJsonPost(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -66,6 +75,35 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json({ data: artifact });
   }
 
+  // Career lanes (074): move this work into one of the person's open lanes,
+  // or back to main with null. Not a content edit, so a locked baseline can
+  // move too. The lane must be theirs and open (the SQL checks; the composite
+  // foreign key is the hard guard).
+  if (body && typeof body === "object" && "laneId" in body && !body.content) {
+    const laneId = parseLaneIdBody(body.laneId);
+    if (laneId === "bad" || laneId === undefined) {
+      return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
+    }
+    // Creative documents belong to their lane and never move (076).
+    const current = await getArtifact(id, userId);
+    if (current && isCreativeType(current.artifact_type)) {
+      return NextResponse.json({ error: "creative_doc", message: "Creative documents stay in their own lane." }, { status: 409 });
+    }
+    const ok = await setArtifactLane(userId, id, laneId);
+    if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const artifact = await getArtifact(id, userId);
+    return NextResponse.json({ data: artifact });
+  }
+
+  // FU2: mark an example or test resume (hidden behind "Show examples"), or
+  // bring it back. Nothing is deleted.
+  if (body && typeof body === "object" && "isDemo" in body && !body.content) {
+    const ok = await setArtifactDemo(userId, id, body.isDemo === true);
+    if (!ok) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    const artifact = await getArtifact(id, userId);
+    return NextResponse.json({ data: artifact });
+  }
+
   if (!body || typeof body !== "object" || !body.content) {
     return NextResponse.json(
       { error: "Missing required field: content" },
@@ -93,22 +131,34 @@ export async function PATCH(request: Request, context: RouteContext) {
   if (result.status === "not_found") {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
+  if (result.status === "creative_doc") {
+    // Statements, bios and the other creative documents save only through
+    // their own tools, which check every word first.
+    return NextResponse.json(
+      { error: "creative_doc", message: "Open this in Creative work to change it." },
+      { status: 409 }
+    );
+  }
   if (result.status === "locked") {
     return NextResponse.json(
       {
         error: "artifact_locked",
         message:
-          "This is a locked baseline. Unlock it in My Materials to edit, or tailor a copy instead.",
+          "This is a locked baseline. Unlock it in My resumes to edit, or tailor a copy instead.",
       },
       { status: 409 }
     );
   }
 
+  if (result.status === "conflict") return NextResponse.json({ error: "This resume changed. Reload it before saving." }, { status: 409 });
   return NextResponse.json({ data: result.artifact });
 }
 
 /** DELETE /api/artifacts/[id] — delete an artifact */
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
+  if (!isSameOriginRequest(request.headers)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -125,7 +175,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
       {
         error: "artifact_locked",
         message:
-          "This is a locked baseline. Unlock it in My Materials before deleting.",
+          "This is a locked baseline. Unlock it in My resumes before deleting.",
       },
       { status: 409 }
     );

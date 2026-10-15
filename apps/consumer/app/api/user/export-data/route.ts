@@ -9,6 +9,10 @@
  *   career_paths, forge_output)
  * - forge_session content (all sessions ever linked to this user)
  * - refinery_artifact rows (resumes, cover letters, disclosure plans, etc.)
+ * - saved resume revisions (081): every version's resume and letter text, the
+ *   person's confirmations behind it, its status and page count
+ * - career lanes (name, target, format and length settings)
+ * - today's task on the lane (083): the task picked, its lane, its target
  * - job_application rows (the tracker pipeline)
  * - coach_conversation messages (full AI coach transcript)
  * - consent event history (current state per layer, from consumer_consent)
@@ -43,6 +47,9 @@
  *                     suggestions staff sent you, and any placement on file.
  *   "disclosure_rehearsal" -> decrypted disclosure rehearsal transcripts (5.1)
  *   "interview_voice"      -> decrypted interview voice transcripts (5.1)
+ *   "record_check"         -> saved record checks (D11), opened: the state,
+ *                            the checklist lines, and the job and record
+ *                            ONLY where the person ticked "Keep what I typed".
  *   "avatar"               -> avatar_asset METADATA manifest (7.7): kind,
  *                            source, dimensions, mime, size, sha256, dates --
  *                            NO bytes. The image is owner-only via its proxy.
@@ -62,7 +69,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { auth } from "@/auth";
-import { query, getOne, queryAsUser, getUserConsents, exportUserConversations } from "@crucible/core";
+import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries, exportRecordChecks, exportRevisions, publicRevision, getLaneFocus } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
   "Cache-Control": "no-store",
@@ -156,7 +163,7 @@ export async function POST(req: Request) {
       ),
       queryAsUser(userId, 
         `SELECT id, artifact_type, target_context, content, iteration_number,
-                scaffold_level, created_at, updated_at
+                scaffold_level, lane_id, is_demo, created_at, updated_at
            FROM refinery_artifact
           WHERE user_id = $1
           ORDER BY created_at DESC`,
@@ -214,6 +221,36 @@ export async function POST(req: Request) {
       payload.consumerProfile = consumerProfileRows;
       payload.forgeSessions = forgeSessionRows;
       payload.refineryArtifacts = refineryArtifactRows;
+      // Saved resume revisions (081): every version, with the confirmations
+      // behind it. Owner only, read AS the person. Empty before 081.
+      payload.resumeRevisions = (await exportRevisions(userId)).map(publicRevision);
+      // Career lanes (074), archived ones included: they are the person's too.
+      // Everything a lane holds, including the person's own answers about
+      // their history (the two hybrid conditions).
+      payload.careerLanes = (await listLanes(userId, { includeArchived: true })).map((l) => ({
+        id: l.id,
+        name: l.name,
+        target_role: l.target_role,
+        format: l.format,
+        hybrid_uneven_history: l.hybrid_uneven_history,
+        hybrid_field_change: l.hybrid_field_change,
+        length_pref: l.length_pref,
+        // 076: what the lane makes, its path, its pair, its choices and plan card.
+        kind: l.kind ?? "resume",
+        path: l.path ?? null,
+        pair_lane_id: l.pair_lane_id ?? null,
+        kind_settings: l.kind_settings ?? {},
+        pair_plan: l.pair_plan ?? null,
+        first_lane_from_forge: l.is_first === true,
+        created_at: l.created_at,
+        updated_at: l.updated_at,
+        archived_at: l.archived_at,
+      }));
+      payload.laneToolNotesDismissed = await listDismissedIntros(userId);
+      // Today's task (083): what the person picked on "What do you need today?".
+      payload.laneFocus = await getLaneFocus(userId);
+      // The practice record (076): every entry, in the person's own words.
+      payload.practiceRecord = await listPracticeEntries(userId);
     }
     if (want("applications")) payload.jobApplications = jobApplicationRows;
     if (want("chat")) payload.coachConversation = coachConversationRows;
@@ -232,6 +269,29 @@ export async function POST(req: Request) {
           (c) => c.purpose === "interview_voice"
         );
       }
+    }
+    // D11: saved record checks, opened for the owner. Owner-only table.
+    if (want("record_check")) {
+      // Every saved check, no limit. Lines are rebuilt from the question bank
+      // and the source list; what they typed appears only where they kept it.
+      // A row that cannot be opened is counted, never failing the export.
+      const { renderChecklist } = await import("@/lib/record-check/handler");
+      const { checks, unreadable } = await exportRecordChecks(userId);
+      payload.recordChecks = {
+        unreadable,
+        checks: checks.map((c) => {
+          const view = renderChecklist(c.state, c.picks, { job: c.typed?.job ?? null });
+          return {
+            savedAt: c.createdAt,
+            state: view.stateName,
+            keptWhatYouTyped: c.keptTyped,
+            whatYouTyped: c.typed,
+            steps: view.steps.map((s) => s.text),
+            questions: view.questions.map((q) => q.text),
+            sources: view.sources.map((s) => ({ title: s.title, url: s.url, asOf: s.asOf, label: s.label })),
+          };
+        }),
+      };
     }
     // Phase 6.2: vault inventory (metadata only, no bytes). Joined to
     // secure_object for real size/mime/sha and to job_application for the link.
@@ -274,6 +334,8 @@ export async function POST(req: Request) {
       payload.aiUsage = {
         totals: aiUsageTotals[0] ?? { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 },
         perEndpoint: aiUsageByEndpoint,
+        operations: await queryAsUser(userId, 'SELECT id,workflow,status,reserved_usd,accounting_incomplete,created_at,finished_at FROM ai_operation WHERE user_id=$1 ORDER BY created_at DESC',[userId]),
+        accounting: await query('SELECT cost_status,outcome,count(*)::int AS calls,sum(cost_usd)::text AS cost_usd FROM ai_token_usage WHERE user_id=$1 GROUP BY cost_status,outcome',[userId]),
       };
     }
 
@@ -328,6 +390,9 @@ export async function POST(req: Request) {
         `SELECT * FROM access_code_redemption WHERE user_id = $1`,
         [userId]
       );
+      // Premium access (079): grants made for this person and what they asked.
+      const { exportPremiumRows } = await import("@crucible/core");
+      payload.premiumAccess = await exportPremiumRows(userId);
     }
 
     return new NextResponse(JSON.stringify(payload, null, 2), {

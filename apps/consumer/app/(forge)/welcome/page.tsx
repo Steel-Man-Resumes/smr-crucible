@@ -14,7 +14,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
+import { FlowPage, CardSelect, GhostGuide, TroyLivingIcon } from "@crucible/consumer-ui";
+import { defaultDepth, planForgePath } from "@/lib/forge-path";
 
 type ReadinessStage =
   | "precontemplation"
@@ -64,6 +65,24 @@ const STAGE_MAP: Record<string, ReadinessStage> = {
   "ready-now": "action",
 };
 
+/**
+ * The short path and the full path (lib/forge-path.ts, rule R1). Offered to
+ * everyone once they pick where they are; "Ready to go" starts on the short
+ * one, everyone else on the full one. Either way it is their pick.
+ */
+const PATH_OPTIONS = [
+  {
+    id: "light",
+    label: "The short path",
+    description: "The essentials only, then I build your page. You can add more on the way.",
+  },
+  {
+    id: "full",
+    label: "The full path",
+    description: "Every question, your story too. Takes longer and makes a stronger page.",
+  },
+];
+
 // Reverse map for demo: clinical stage → display option
 const REVERSE_STAGE_MAP: Record<string, string> = {
   precontemplation: "exploring",
@@ -88,12 +107,31 @@ function WelcomePageInner() {
   const isDemo = searchParams.get("demo") === "true";
   const audience = session.audience || "client";
 
+  // Lanes first (Phase 5 lane R2): the readiness question is no longer on
+  // anyone's path. The first screen asks what you need today. Old links land
+  // there; the partner and observer walkthrough (?demo=true) keeps this page.
+  const toStart = !isDemo && !session.isDemo;
+  useEffect(() => {
+    if (toStart) router.replace("/start");
+  }, [toStart, router]);
+
   const [selected, setSelected] = useState<string>(
     isDemo && DEMO_SESSION.readinessStage
       ? REVERSE_STAGE_MAP[DEMO_SESSION.readinessStage] || ""
       : ""
   );
   const [acknowledged, setAcknowledged] = useState(false);
+  // A run already under way (they came back to change this answer). Keep
+  // their answers; "Start over" is one tap away for anyone else at this computer.
+  const inProgress = !isDemo && !session.isDemo && !!session.readinessStage && !!session.startedAt;
+  const [depth, setDepth] = useState<"light" | "full" | "">(
+    inProgress ? session.pathChoice ?? defaultDepth(session.readinessStage) : ""
+  );
+  useEffect(() => {
+    if (inProgress && !selected && session.readinessStage) {
+      setSelected(REVERSE_STAGE_MAP[session.readinessStage] || "");
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Track page visit + set demo mode from URL param
   // Also clear stale demo sessions when arriving in real (non-demo) mode
@@ -132,6 +170,7 @@ function WelcomePageInner() {
       updateSession({
         audience,
         readinessStage,
+        pathChoice: depth || defaultDepth(readinessStage),
         startedAt: new Date().toISOString(),
         lastPageVisited: "welcome",
         pagesVisited: ["intro", "welcome"],
@@ -140,11 +179,33 @@ function WelcomePageInner() {
     router.push("/resume");
   }
 
+  /** Coming back to change this answer: keep everything else, and the path recomputes. */
+  function handleKeepGoing() {
+    if (!selected) return;
+    const readinessStage = STAGE_MAP[selected];
+    const next = { ...session, readinessStage, pathChoice: depth || defaultDepth(readinessStage) };
+    updateSession({ readinessStage, pathChoice: next.pathChoice, lastPageVisited: "welcome" });
+    router.push(planForgePath(next).screens[0].path);
+  }
+
   function handleSelect(id: string) {
     if (isDemo) return;
     setSelected(id);
     setAcknowledged(true);
+    // A new answer starts on that answer's default path; they can still switch.
+    setDepth(defaultDepth(STAGE_MAP[id]));
   }
+
+  function handleStartOver() {
+    const keepAudience = session.audience;
+    clearSession();
+    updateSession({ audience: keepAudience });
+    setSelected("");
+    setDepth("");
+    setAcknowledged(false);
+  }
+
+  if (toStart) return <div className="h-40" aria-busy="true" />;
 
   return (
     <FlowPage
@@ -152,15 +213,29 @@ function WelcomePageInner() {
       subtitle="This changes how much I talk. Pick what's true."
       actionLabel={isDemo ? "Next" : "Continue"}
       actionDisabled={!isDemo && !selected}
-      onAction={handleContinue}
+      onAction={inProgress ? handleKeepGoing : handleContinue}
       showBack
       onBack={() => router.push("/intro")}
       footer={
         <p>
-          Everything here is private. You can change your answer at any time.
+          No employer or program sees this answer. You can change it any time.
         </p>
       }
     >
+      {inProgress && (
+        <div className="mb-4 flex flex-col gap-2 border border-t-line bg-t-panel px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-t-white">
+            Your answers from before are saved. Change this one and keep going, or start fresh.
+          </p>
+          <button
+            type="button"
+            onClick={handleStartOver}
+            className="t-focus min-h-touch self-start px-3 text-sm font-medium text-t-amber-bright underline underline-offset-2 hover:text-t-amber sm:self-auto"
+          >
+            Start over
+          </button>
+        </div>
+      )}
       <GhostGuide
         message={getOpusMessage("welcome", audience, isDemo)}
         pageId="welcome"
@@ -180,24 +255,25 @@ function WelcomePageInner() {
         onSelect={handleSelect}
       />
 
+      {/* The path offer: plain, both choices visible, theirs to pick. */}
+      {!isDemo && selected && (
+        <div className="mt-6" data-testid="path-choice">
+          <p className="mb-1 font-medium text-t-white">How much do you want to do today?</p>
+          <p className="mb-3 text-sm text-t-phos-dim">
+            {selected === "ready-now" && depth === "light"
+              ? "You need work now, so the short path is set. Want the full one? Tap it."
+              : "Pick what fits. You can switch later by coming back here."}
+          </p>
+          <CardSelect options={PATH_OPTIONS} selected={depth} onSelect={(id) => setDepth(id as "light" | "full")} />
+        </div>
+      )}
+
       {/* t.ROY acknowledges the selection */}
       {acknowledged && selected && TROY_RESPONSES[selected] && (
         <div className="mt-4 bg-t-panel px-4 py-3 border border-t-line flex items-start gap-3 animate-in fade-in duration-300">
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 16 16"
-            fill="none"
-            aria-hidden="true"
-            className="flex-shrink-0 mt-0.5 text-t-amber"
-          >
-            <path
-              d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
-              stroke="currentColor"
-              strokeWidth="1.2"
-              fill="none"
-            />
-          </svg>
+          <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center">
+            <TroyLivingIcon size={26} />
+          </span>
           <p className="text-sm text-t-phos leading-relaxed">
             {TROY_RESPONSES[selected]}
           </p>

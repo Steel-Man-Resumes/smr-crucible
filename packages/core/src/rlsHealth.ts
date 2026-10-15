@@ -36,6 +36,23 @@ export const RLS_PROTECTED_TABLES = [
   "consumer_profile",
   "refinery_artifact",
   "job_application",
+  // career lanes (074), owner only
+  "career_lane",
+  "lane_tool_intro",
+  // practice record (076), owner only
+  "practice_entry",
+  // D11 (migration 080): saved record checks, owner only
+  "record_check_saved",
+  // Phase 5 R1 (migration 081): saved resume revisions, owner only
+  "artifact_revision",
+  "forge_writer_receipt",
+  // Phase 5 R2 (migration 083): today's task on the person's lane, owner only
+  "lane_focus",
+  "ai_operation",
+  "ai_tool_policy",
+  "directory_publication_alias",
+  "forge_package_delivery",
+  "forge_package_email_sent",
 ] as const;
 
 export interface RlsHealth {
@@ -49,7 +66,24 @@ export interface RlsHealth {
   checkedAt: string;
   /** Newest applied migration. Says WHICH database this is, without naming a host. */
   latestMigration: string | null;
+  /**
+   * Can this connection create temporary objects? Migration 082 takes TEMP away
+   * from the app (a planted temp type or function is how a definer function's
+   * search_path gets hijacked). null when the check itself could not run.
+   */
+  appCanCreateTemp: boolean | null;
   problems: string[];
+}
+
+/**
+ * The TEMP rule (review N6): once 082 is applied the app must not hold TEMP on
+ * the database; before 082 (a fresh database) holding it is the default and
+ * is not a problem. Pure, so it is unit tested.
+ */
+export function tempProblem(t: { canCreateTemp: boolean; migration082Applied: boolean }): string | null {
+  return t.canCreateTemp && t.migration082Applied
+    ? "the app role can create temporary objects (TEMP on the database), which migration 082 revoked: something granted it back"
+    : null;
 }
 
 export async function getRlsHealth(): Promise<RlsHealth> {
@@ -63,6 +97,19 @@ export async function getRlsHealth(): Promise<RlsHealth> {
     `SELECT now()::text AS at, (SELECT max(filename) FROM _migrations) AS latest`
   );
 
+  let appCanCreateTemp: boolean | null = null;
+  try {
+    const [t] = await query<{ temp: boolean; m082: boolean }>(
+      `SELECT has_database_privilege(current_user, current_database(), 'TEMP') AS temp,
+              EXISTS (SELECT 1 FROM _migrations WHERE filename = '082_resource_app_view.sql') AS m082`
+    );
+    appCanCreateTemp = !!t?.temp;
+    const p = tempProblem({ canCreateTemp: !!t?.temp, migration082Applied: !!t?.m082 });
+    if (p) problems.push(p);
+  } catch {
+    problems.push("could not check whether the app role holds TEMP on the database");
+  }
+
   const flags = await query<{ relname: string; relrowsecurity: boolean; relforcerowsecurity: boolean }>(
     `SELECT relname, relrowsecurity, relforcerowsecurity FROM pg_class
       WHERE relnamespace = 'public'::regnamespace AND relname = ANY($1::text[])`,
@@ -73,7 +120,17 @@ export async function getRlsHealth(): Promise<RlsHealth> {
     const f = flags.find((r) => r.relname === name);
     // Deliberately unscoped: the whole point is that this must see nothing.
     // (The table name is interpolated from the constant above, never from input.)
-    const [{ n }] = await query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM ${name}`);
+    let n: number;
+    if (name === 'directory_publication_alias') {
+      // Only the narrow definer function may resolve approved aliases. The
+      // application must not receive SELECT on the raw identity map at all.
+      const [privilege] = await query<{ allowed: boolean }>(
+        "SELECT has_table_privilege(current_user, $1, 'SELECT') AS allowed", [name]);
+      n = privilege?.allowed === false ? 0 : 1;
+      if (n) problems.push(`${name}: raw alias reads must be denied`);
+    } else {
+      [{ n }] = await query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM ${name}`);
+    }
     tables[name] = { enabled: !!f?.relrowsecurity, forced: !!f?.relforcerowsecurity, unscopedReadIsEmpty: n === 0 };
     if (!f?.relrowsecurity) problems.push(`${name}: row-level security is not enabled`);
     else if (!f.relforcerowsecurity) problems.push(`${name}: not FORCED, so the table owner bypasses it`);
@@ -107,6 +164,7 @@ export async function getRlsHealth(): Promise<RlsHealth> {
     scopedReadSeesRows,
     checkedAt: stamp?.at ?? "",
     latestMigration: stamp?.latest ?? null,
+    appCanCreateTemp,
     problems,
   };
 }

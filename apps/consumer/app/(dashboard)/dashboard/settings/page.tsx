@@ -11,6 +11,7 @@
  * - Daily AI usage display
  */
 
+import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
@@ -31,6 +32,9 @@ import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { passwordProblem } from "@/lib/password-policy";
 import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
+import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
+import { PackageEmailSetting } from "@/components/PackageEmailSetting";
+import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
 
 interface UsageData {
   used: number;
@@ -64,6 +68,7 @@ export default function SettingsPage() {
     consent: true,
     usage: true,
     progress: true,
+    record_check: true,
     sharing: true,
   });
   // Phase 1C reauth gate: export and delete both require the current
@@ -188,6 +193,8 @@ export default function SettingsPage() {
         setCodeInput("");
         // Joined: the one-time "share your progress?" question can now be asked.
         window.dispatchEvent(new Event(ORG_JOINED_EVENT));
+        // A sponsoring organization opens the premium tools.
+        window.dispatchEvent(new Event(PREMIUM_CHANGED_EVENT));
         // Refresh codes and usage
         const [codesRes, usageRes] = await Promise.all([
           fetch("/api/access-code/mine"),
@@ -469,6 +476,8 @@ export default function SettingsPage() {
           hideBusy={hideBusy}
           unhideEmployer={unhideEmployer}
         />}
+        {!isOrgStaff && <PremiumToolsSection />}
+        {!isOrgStaff && <PackageEmailSetting />}
       </div>
 
       {/* ── 2. Coach & AI ──────────────────────────────────────────── */}
@@ -639,6 +648,7 @@ interface ExportCats {
   consent: boolean;
   usage: boolean;
   progress: boolean;
+  record_check: boolean;
   sharing: boolean;
 }
 
@@ -672,6 +682,8 @@ function DataSection({
   // Read the role here rather than threading a prop through several layers.
   const dataSectionRole = useEffectiveRole();
   const isOrgStaff = !!dataSectionRole?.orgRole;
+  // The record check line shows only while that step is on (settings/layout.tsx).
+  const { recordStep } = useServerSwitches();
   const EXPORT_CATS: { key: keyof ExportCats; label: string }[] = [
     { key: "resumes", label: "Resumes and Forge results" },
     { key: "applications", label: "Job applications" },
@@ -679,6 +691,7 @@ function DataSection({
     { key: "consent", label: "Consent records" },
     { key: "usage", label: "Usage totals" },
     { key: "progress", label: "Your activity history" },
+    { key: "record_check", label: "Saved record checks" },
     { key: "sharing", label: "What you share, who opened it, and what your organization has on file about you" },
   ];
   const anyChecked = Object.values(exportCats).some(Boolean);
@@ -702,9 +715,21 @@ function DataSection({
               Conversations with t.ROY are saved to your account so he can
               remember your recent work. Deleting your data clears them.
             </li>
+            {recordStep && (
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
-              We never sell or share your personal information
+              In the record check, what you type about your record goes to
+              the AI only after you say yes on that screen. A saved checklist
+              keeps the list and the state. What you typed is kept only if
+              you tick the box for it. Taking back your yes deletes your
+              saved checklists.
+            </li>
+            )}
+            <li className="flex gap-2">
+              <span className="text-t-amber flex-shrink-0">&bull;</span>
+              We never sell your personal information. It goes only to the
+              services that run the app, and to a program when you choose to
+              share with it
             </li>
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>

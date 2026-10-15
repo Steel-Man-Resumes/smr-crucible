@@ -33,7 +33,7 @@ async function generateResumeContent(
   const allBullets = profile.work_history.flatMap(j => j.bullets || []).slice(0, 10);
   const isEntryLevel = signals.seniority_level === 'entry';
 
-  const prompt = `You are a TORI Award-winning resume writer. Generate a branded headline and professional summary for this candidate.
+  const prompt = `You are an expert resume writer. Generate a branded headline and professional summary for this candidate.
 
 CANDIDATE:
 - Name: ${profile.full_name}

@@ -19,7 +19,11 @@ import { MySharedTasks } from "@/components/MySharedTasks";
 import { MySuggestions } from "@/components/MySuggestions";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { TaskPicker } from "@/components/lanes/TaskPicker";
+import { LaneHome } from "@/components/lanes/LaneHome";
+import { useLaneFocus } from "@/components/lanes/useLaneFocus";
+import { routeHref, taskNeedsResume } from "@/lib/lane-task";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import { useUserTier } from "@/lib/useUserTier";
@@ -28,12 +32,12 @@ import { JourneyHeader } from "@/components/JourneyHeader";
 import { DashboardResumeCard } from "@/components/DashboardResumeCard";
 import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
 import { PartnerToolsOverview } from "@/components/PartnerToolsOverview";
+import { WallText } from "@/components/forge/WallText";
 import { OrgDashboard } from "@/components/org/OrgDashboard";
 import { AdminHome } from "@/components/admin/AdminHome";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { TBtn } from "@crucible/consumer-ui";
-// Deep, runtime-pure import: the one shared gate-state ordering.
-import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
+import { clientToolUnlocked, lockedToolLine } from "@crucible/core/src/journeyStages";
 
 // ─── Tool definitions ──────────────────────────────────────────────────────
 
@@ -45,6 +49,8 @@ interface ToolCard {
   accent: string;
   /** Minimum onboarding state to unlock */
   minState: OnboardingState;
+  /** Builds on a disclosure plan, like the sidebar item of the same name. */
+  requiresDisclosure?: boolean;
 }
 
 const ALL_TOOLS: ToolCard[] = [
@@ -78,15 +84,17 @@ const ALL_TOOLS: ToolCard[] = [
     description: "Text or live voice mock interviews tailored to your target role.",
     color: "bg-t-panel border-t-steel",
     accent: "text-t-steel",
-    minState: "full_access",
+    minState: "needs_profile",
+    // No disclosure plan needed first (Codex review A6).
   },
   {
     href: "/dashboard/resources",
-    title: "Job Paths",
-    description: "Job paths that are realistic with a record, and where to search for them.",
+    title: "Get support",
+    description: "Local help with rides, ID, housing and food, plus job paths that are realistic with a record.",
     color: "bg-t-panel border-t-amber",
     accent: "text-t-amber-bright",
-    minState: "full_access",
+    // Same as the sidebar: Get support is open from the start.
+    minState: "needs_profile",
   },
   {
     href: "/dashboard/applications",
@@ -94,7 +102,7 @@ const ALL_TOOLS: ToolCard[] = [
     description: "Track your job applications from saved to offered.",
     color: "bg-t-panel border-t-phos",
     accent: "text-t-phos",
-    minState: "full_access",
+    minState: "needs_profile",
   },
   {
     href: "/dashboard/progress",
@@ -106,9 +114,20 @@ const ALL_TOOLS: ToolCard[] = [
   },
 ];
 
-function isToolUnlocked(tool: ToolCard, state: OnboardingState, isAdmin: boolean): boolean {
+function isToolUnlocked(
+  tool: ToolCard,
+  state: OnboardingState,
+  isAdmin: boolean,
+  disclosureComplete: boolean
+): boolean {
   if (isAdmin) return true;
-  return (GATE_STATE_RANK[state] ?? 3) <= (GATE_STATE_RANK[tool.minState] ?? 3);
+  // Same rule as the sidebar (one gate, two displays).
+  return clientToolUnlocked({
+    state,
+    minState: tool.minState,
+    requiresDisclosure: tool.requiresDisclosure,
+    disclosureComplete,
+  });
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -171,6 +190,13 @@ export default function DashboardPage() {
   const onboarding = useOnboarding();
   // Shared-computer rule: only a local run marked as this user's is read.
   const ownerUid = useSession().data?.user?.id;
+  // Lanes first (Phase 5 R2): the first screen after sign-in asks what the
+  // person needs today; once picked, this page is their lane home.
+  const focus = useLaneFocus();
+  const router = useRouter();
+  const changeTask = useSearchParams().get("change") === "1";
+  const [picking, setPicking] = useState(false);
+  const [pickError, setPickError] = useState("");
 
   // Forge data
   const [forgeData, setForgeData] = useState<DashboardData>({});
@@ -211,7 +237,7 @@ export default function DashboardPage() {
       try {
         const [countsRes, recentRes] = await Promise.all([
           fetch("/api/artifacts/counts"),
-          fetch("/api/artifacts?limit=5"),
+          fetch("/api/artifacts?limit=5&examples=hide&order=recent"),
         ]);
         if (countsRes.ok) {
           const { data } = await countsRes.json();
@@ -234,7 +260,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
       if (res.status === 409) {
         window.alert(
-          "This is a locked baseline. Unlock it in My Materials before deleting."
+          "This is a locked baseline. Unlock it in My resumes before deleting."
         );
         return;
       }
@@ -317,15 +343,62 @@ export default function DashboardPage() {
     return <AdminHome />;
   }
 
+  // ─── Lanes first: "What do you need today?" ───────────────────────────
+  // Job seekers only (partners, observers and admins returned above). Viewing
+  // as someone reads their pick but never asks or saves one for them.
+  if (!effectiveRole?.impersonating) {
+    if (!focus.loaded) {
+      return (
+        <div className="flex items-center justify-center py-20">
+          <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
+        </div>
+      );
+    }
+    if (!focus.task || changeTask) {
+      return (
+        <div className="py-4">
+          {pickError && <p role="alert" className="mb-3 text-t-red">{pickError}</p>}
+          <TaskPicker
+            current={focus.task}
+            busy={picking}
+            helpHref="/dashboard/resources#support"
+            onPick={async (t) => {
+              setPicking(true);
+              setPickError("");
+              const saved = await focus.save(t);
+              setPicking(false);
+              if (!saved) { setPickError("Your choice wasn't saved. Try again."); return; }
+              router.push(routeHref(t, { signedIn: true, hasResume: onboarding.state === "full_access" }));
+            }}
+          />
+        </div>
+      );
+    }
+  }
+
   // ─── State: needs_profile ─────────────────────────────────────────────
   if (onboarding.state === "needs_profile" && !isAdmin) {
-    return <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />;
+    return (
+      <div className="space-y-10">
+        {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} profileFirst={taskNeedsResume(focus.task)} />}
+        <div id="profile-setup" className="scroll-mt-24">
+          <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />
+        </div>
+      </div>
+    );
   }
 
   // ─── State: needs_resume OR full_access ───────────────────────────────
   return (
     <div className="space-y-10">
       <MiniForgeBanner />
+      {/* Lanes first (R2): the lane home, then "All tools" below. */}
+      {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} />}
+      {focus.task && (
+        <h2 id="all-tools" className="border-t border-t-line pt-6 text-lg font-bold text-t-white">
+          All tools
+        </h2>
+      )}
       <JourneyHeader />
       <MySharedTasks />
       <MySuggestions />
@@ -355,10 +428,9 @@ export default function DashboardPage() {
                 <div>
                   <p className="text-sm font-medium text-t-amber-bright mb-1">t.ROY</p>
                   <p className="text-sm text-t-phos leading-relaxed">
-                    I&apos;m t.ROY. The Refinery is where the real work happens: targeted
-                    resumes, interview practice, disclosure strategy, job matching. But I
-                    need your story first. The Forge is built to finish in one sitting and gives me
-                    everything I need to help you win.
+                    I&apos;m t.ROY, your AI career coach. Build a resume, prepare for an interview,
+                    find work, or work through what is getting in your way. Start with what you
+                    need today. You can practice an interview before building a resume.
                   </p>
                 </div>
               </div>
@@ -368,14 +440,10 @@ export default function DashboardPage() {
               <h1 className="text-2xl font-bold text-t-white mb-3">
                 Start with The Forge
               </h1>
-              <p className="text-base text-t-phos-dim mb-2">
-                The Forge analyzes your resume, identifies your strengths, maps career
-                paths, and builds your narrative. Everything in The Refinery is built
-                on that foundation.
-              </p>
-              <p className="text-sm text-t-phos-dim mb-6">
-                This isn&apos;t a resume template tool. It&apos;s a narrative engine that turns
-                your real story into career ammunition.
+              <p className="text-base text-t-phos-dim mb-6">
+                The Forge reads your work history, finds your strengths, and builds you
+                one strong resume. It is a general resume. The Refinery then makes it fit
+                each job you go after.
               </p>
               <Link
                 href="/intro"
@@ -384,7 +452,7 @@ export default function DashboardPage() {
                 Start The Forge
               </Link>
               <p className="text-xs text-t-phos-dim mt-4">
-                Free. No account needed until you&apos;re ready to save.
+                <WallText open={<>Free. No account needed until you&apos;re ready to save.</>} up="Free, and it uses the account you are signed in with." />
               </p>
               <p className="text-xs text-t-phos-dim mt-2">
                 Already completed The Forge on another device? Your data syncs automatically.
@@ -429,96 +497,18 @@ export default function DashboardPage() {
       {forgeData.career_paths && forgeData.career_paths.length > 0 && (
         <section>
           <h2 className="text-lg font-bold text-t-white mb-3">Career Paths</h2>
-          <div className="grid sm:grid-cols-2 gap-3">
+          <div className="grid min-w-0 sm:grid-cols-2 gap-3">
             {forgeData.career_paths.slice(0, 4).map((cp, i) => (
-              <div key={i} className="bg-t-panel p-4 border border-t-line">
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="font-semibold text-t-white">{cp.title}</h3>
+              <div key={i} className="min-w-0 bg-t-panel p-4 border border-t-line">
+                <div className="flex min-w-0 flex-col items-start gap-1">
+                  <h3 className="max-w-full break-words font-semibold text-t-white">{cp.title}</h3>
                   {cp.salary_range && (
-                    <span className="text-xs font-medium text-t-amber-bright whitespace-nowrap">{cp.salary_range}</span>
+                    <span className="max-w-full break-words text-xs font-medium text-t-amber-bright">{cp.salary_range}</span>
                   )}
                 </div>
                 <p className="text-sm text-t-phos-dim mt-1 line-clamp-2">{cp.match_reason}</p>
               </div>
             ))}
-          </div>
-        </section>
-      )}
-
-      {/* How the Refinery works -- shown when forge data is available but no tailored resume yet */}
-      {onboarding.state === "needs_resume" && !isAdmin && hasForgeData && (
-        <section className="bg-t-panel border border-t-steel p-6">
-          <h2 className="font-semibold text-t-white mb-3">Here&apos;s how the Refinery works</h2>
-          <p className="text-sm text-t-phos-dim mb-4">
-            Your Forge profile is your base resume. It&apos;s one strong, structured record of your real
-            experience. The Refinery aims it at real jobs and gets smarter the more you use it.
-          </p>
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <span className="w-6 h-6 bg-t-amber text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
-                1
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-t-white">Start from your base resume</p>
-                <p className="text-xs text-t-phos-dim leading-relaxed">
-                  Your one strong, structured resume, built from your Forge. Refine it anytime in the Forge builder.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <span className="w-6 h-6 bg-t-amber text-white text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
-                2
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-t-white">Tailor it to a specific job</p>
-                <p className="text-xs text-t-phos-dim leading-relaxed">
-                  The Application Tailor aims your base resume at the posting&apos;s exact requirements, using your
-                  Forge profile. This unlocks the rest. Do it for as many jobs as you want.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 opacity-55">
-              <span className="w-6 h-6 bg-t-line text-t-phos-dim text-xs flex items-center justify-center flex-shrink-0 mt-0.5 font-bold">
-                3
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-t-white">Everything else unlocks</p>
-                <p className="text-xs text-t-phos-dim leading-relaxed">
-                  Interview practice, disclosure strategy, and application tracking all unlock after your first
-                  tailored resume. The grayed-out tools below open automatically.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Primary CTA when no resume yet */}
-      {onboarding.state === "needs_resume" && !isAdmin && (
-        <section>
-          <div className="grid sm:grid-cols-2 gap-4">
-            <Link
-              href={forgeData.career_paths?.[0]?.title
-                ? `/dashboard/jobs?q=${encodeURIComponent(forgeData.career_paths[0].title)}`
-                : "/dashboard/jobs"}
-              className="block bg-t-panel border border-t-amber p-6 hover:bg-t-panel-2 transition-colors"
-            >
-              <h3 className="font-semibold text-lg text-t-white mb-1">Find a Job to Tailor For</h3>
-              <p className="text-sm text-t-phos-dim">
-                {forgeData.career_paths?.[0]?.title
-                  ? `Search "${forgeData.career_paths[0].title}" and other roles that fit, then tailor your resume to one. That unlocks the rest.`
-                  : "Real listings, with employers we checked for hiring people with records shown first. Pick one and tailor your resume to it. That unlocks the rest."}
-              </p>
-            </Link>
-            <Link
-              href="/resume"
-              className="block bg-t-panel border border-t-steel p-6 hover:bg-t-panel-2 transition-colors"
-            >
-              <h3 className="font-semibold text-lg text-t-white mb-1">Build Your Base Resume</h3>
-              <p className="text-sm text-t-phos-dim">
-                Your one strong resume, built from your real experience. Refine it in the Forge builder anytime.
-              </p>
-            </Link>
           </div>
         </section>
       )}
@@ -631,27 +621,35 @@ export default function DashboardPage() {
         <h2 className="text-lg font-bold text-t-white mb-4">Your Tools</h2>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {ALL_TOOLS.map((tool) => {
-            const unlocked = isToolUnlocked(tool, onboarding.state, isAdmin);
+            const unlocked = isToolUnlocked(tool, onboarding.state, isAdmin, onboarding.disclosureComplete);
             const typeForTool = Object.entries(TYPE_TOOL_HREF).find(
               ([, href]) => href === tool.href
             )?.[0];
             const count = typeForTool ? artifactCounts[typeForTool] : 0;
 
             if (!unlocked) {
+              // RD4: say plainly why it is locked and what opens it. The title
+              // and description stay quiet; the unlock line does not.
+              const lockLine = lockedToolLine({
+                state: onboarding.state,
+                requiresDisclosure: tool.requiresDisclosure,
+                disclosureComplete: onboarding.disclosureComplete,
+              });
               return (
                 <div
                   key={tool.href}
-                  className="p-5 border border-t-line bg-t-panel opacity-40"
+                  className="p-5 border border-t-line bg-t-panel"
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-start justify-between gap-2 opacity-60">
                     <h3 className="font-semibold mb-1 text-t-phos-dim">{tool.title}</h3>
-                    <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" className="text-t-phos-dim flex-shrink-0 mt-0.5">
+                    <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" className="text-t-phos-dim flex-shrink-0 mt-0.5" aria-hidden="true">
                       <path d="M9 5V4a3 3 0 10-6 0v1H2v5a1 1 0 001 1h6a1 1 0 001-1V5H9zM4 4a2 2 0 114 0v1H4V4z" />
                     </svg>
                   </div>
-                  <p className="text-sm text-t-phos-dim leading-relaxed">{tool.description}</p>
-                  <p className="text-xs text-t-phos-dim mt-2 italic">
-                    Build your first resume to unlock
+                  <p className="text-sm text-t-phos-dim leading-relaxed opacity-60">{tool.description}</p>
+                  <p className="text-xs font-medium text-t-white mt-2">
+                    <span className="sr-only">Locked. </span>
+                    {lockLine}
                   </p>
                 </div>
               );
@@ -678,16 +676,21 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Data & Privacy */}
+      {/* Settings -- get people in early (RT2). Real features only, named. */}
       <section className="border-t border-t-line pt-8">
-        <div className="flex gap-3">
-          <Link
-            href="/dashboard/settings"
-            className="t-focus text-sm text-t-phos-dim hover:text-t-white bg-t-panel px-4 py-3 border border-t-line transition-colors"
-          >
-            Settings & privacy
-          </Link>
-        </div>
+        <h2 className="text-lg font-bold text-t-white mb-1">What Settings lets you do</h2>
+        <ul className="mb-4 mt-2 space-y-1.5 text-sm text-t-bone-dim">
+          <li>Name your coach and pick how direct it is.</li>
+          <li>See the reason behind each suggestion t.ROY made.</li>
+          <li>Choose what a partner organization can see of your progress.</li>
+          <li>Hide employers so they never show up in your job search.</li>
+        </ul>
+        <Link
+          href="/dashboard/settings"
+          className="t-focus inline-flex items-center bg-t-panel px-4 py-3 text-sm font-semibold text-t-white border border-t-line hover:border-t-line-strong transition-colors"
+        >
+          Open Settings
+        </Link>
       </section>
     </div>
   );
@@ -925,7 +928,7 @@ function ProfileSetup({
 
         <div className="bg-t-panel p-4 border border-t-line">
           <p className="text-xs text-t-phos leading-relaxed">
-            This info goes on your resume and nowhere else. We don&apos;t sell, share, or spam.
+            Your contact details are saved in your account and used on your documents. Your location also helps match local jobs and support. You choose what to share with your program.
             You can update or delete everything anytime in Settings.
           </p>
         </div>

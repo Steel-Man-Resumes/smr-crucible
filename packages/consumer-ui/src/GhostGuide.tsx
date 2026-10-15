@@ -13,6 +13,7 @@
 
 "use client";
 
+import { TroyMark } from "./TroyMark";
 import { useState, useEffect } from "react";
 
 interface GhostGuideProps {
@@ -71,23 +72,14 @@ export function GhostGuide({
           aria-label="Show guidance from t.ROY"
         >
           {/* t.ROY icon */}
-          <img
-            src="/images/t-roy-icon-badge.webp"
-            alt=""
-            aria-hidden="true"
-            className="w-4 h-4 rounded-full flex-shrink-0"
-          />
+          <TroyMark size={16} />
           <span>Show t.ROY guidance</span>
         </button>
       ) : (
         <div className="px-4 py-3">
           <div className="flex items-start gap-3">
             {/* t.ROY avatar */}
-            <img
-              src="/images/t-roy-icon-badge.webp"
-              alt="t.ROY"
-              className="w-5 h-5 rounded-full flex-shrink-0 mt-0.5"
-            />
+            <TroyMark size={20} alt="t.ROY" className="mt-0.5" />
 
             <div className="flex-1 min-w-0">
               <p className="text-sm leading-relaxed text-t-white">{message}</p>

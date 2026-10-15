@@ -1,13 +1,15 @@
 /**
- * Context Library — Research-backed, user-aware prompt injection for every AI call.
+ * Context Library: source-grounded practice guidance and context for AI calls.
  *
  * Three layers:
- * 1. Research: theory-backed instructions per use case
+ * 1. Practice guidance: fact and choice boundaries per use case
  * 2. User: readiness stage, barriers, skills, narrative, record details
  * 3. Job: target role, company, industry, requirements
  *
  * Every AI route imports from here instead of hardcoding context.
  */
+
+import { resumeRulesBlock } from "@crucible/core/src/resumeRules";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -50,22 +52,22 @@ const LEVEL_DIRECTIVES: Record<UserLevel, string> = {
   foundation: `USER LEVEL: Foundation (entry-level, rebuilding, limited resume history)
 LANGUAGE: Write at a 6th grade reading level. Short sentences. No jargon.
 TONE: Warm, encouraging, patient. Explain everything. Heavy scaffolding.
-RESUME FORMAT: Functional format acceptable if chronological history is thin. Use only numbers the person gave or picked. If a line has no number, leave it without one. Never estimate.
-INTERVIEW: General questions, slow pace, more encouragement. Build confidence.
+RESUME FORMAT: Dated history in reverse order even when it is thin; never a dateless functional page. With little or no work history, lead with what the person does have (education, training, programs, volunteer or informal work), each with the dates in the form the person gave. Never guess a year or invent an entry. Use only numbers the person gave. If a line has no number, leave it without one. Never estimate.
+INTERVIEW: Match the selected role and practice mode. Ask relevant follow-ups and offer explanation when the person wants it.
 DISCLOSURE: Simple script, basic timing advice. Don't overwhelm.`,
 
   professional: `USER LEVEL: Professional (mid-career, solid experience, some education)
 LANGUAGE: Professional level. Concise and direct.
 TONE: Confident peer. Don't over-explain basics.
-RESUME FORMAT: Chronological, real metrics, achievement-dense. Standard professional bar.
-INTERVIEW: Behavioral STAR, industry-specific questions, moderate challenge.
-DISCLOSURE: Employer-specific strategy with legal context.`,
+RESUME FORMAT: Chronological and dated. Specific, plain lines; numbers only as the person gave them. Standard professional bar.
+INTERVIEW: Match the selected role and practice mode. Ask relevant follow-ups and offer explanation when the person wants it.
+DISCLOSURE: Use the selected setting and the person's own facts. Legal context must be current and verified.`,
 
   executive: `USER LEVEL: Executive (senior, advanced degrees, leadership history)
 LANGUAGE: Executive level. Assume expertise. Strategic positioning.
 TONE: Colleague-to-colleague. No hand-holding.
-RESUME FORMAT: Achievement-dense, metrics-heavy, ATS + human optimization. Board-level impact framing.
-INTERVIEW: Executive presence, salary negotiation scenarios, panel interview prep.
+RESUME FORMAT: Chronological and dated, achievement-focused from the person's own facts; numbers only as the person gave them, never added. Readable by software and by a person.
+INTERVIEW: Match the selected role and practice mode. Ask relevant follow-ups and offer explanation when the person wants it.
 DISCLOSURE: Multi-stakeholder strategy, board-level framing, reputation management.`,
 };
 
@@ -103,111 +105,42 @@ export interface JobContext {
   industry?: string;
 }
 
-// ─── Research Context by Use Case ───────────────────────────────────────────
+// ─── Practice Guidance by Use Case ───────────────────────────────────────────
 
-const RESEARCH: Record<UseCase, string> = {
-  resume: `RESEARCH-BACKED RESUME STANDARDS:
+const PRACTICE_GUIDANCE: Record<UseCase, string> = {
+  resume: `RESUME PRACTICE GUIDANCE:
+Use only the person's supplied facts. Reword clearly and organize their experience for the target role without adding duties, scope, tools, credentials, dates, frequency, numbers, results or personal qualities. Keep help and supervision limits. Preserve every date in the form the person gave. A job posting names employer needs; it is not evidence that the person meets them. Career-analysis suggestions are not verified facts. If a useful fact is missing, ask the person or leave it out.
+Make the page specific, readable and useful for discussing the person's actual work. Keep dated history; do not hide gaps or invent their explanation. Follow the active request's rule for the person's chosen treatment of inside work. Do not infer a record from work, education or a gap.
+${resumeRulesBlock("truth")}`,
 
-NARRATIVE IDENTITY (McAdams & McLean, 2013): A resume should read like meeting a person, not scanning a form. There is a narrative arc: where they've been, what they've built, where they're going. Redemption sequences (difficulty → growth → contribution) predict well-being and employer confidence.
+  cover_letter: `COVER LETTER PRACTICE GUIDANCE:
+Connect the person's supplied experience to the stated role using concrete facts. The posting supplies the target, not the applicant's qualifications. Use the supplied resume and any explicitly confirmed additions; do not treat generated strengths or analysis as proof. Keep the letter only as long as the evidence supports. A short factual letter is acceptable.
+State interest as interest. Do not invent a motive, company connection, result, habit, feeling, availability, transportation, physical capability or future guarantee. Preserve the size of each duty and the job where it occurred. Include numbers only as supplied. Do not explain gaps or introduce record information. Do not invent a redemption story or assume that hardship made the person stronger.`,
 
-GENERATIVE IDENTITY (Maruna, 2001): People who successfully rebuild their careers develop "generative scripts", in which their past challenges become strengths. Frame career progression as intentional growth, not accident. "Led" not "was assigned to." "Built" not "was responsible for."
+  interview: `INTERVIEW PRACTICE GUIDANCE:
+Ask one relevant question at a time, using the selected practice mode, the person's supplied experience and the target job. Keep employer requirements separate from candidate facts. Ask a follow-up when an action, example or result is missing; never supply it. A behavioral example can cover the situation, the person's action and what happened, when the person has those details. Other questions may need a direct answer instead.
+Give feedback on what the person actually said: clarity, relevance, specificity and whether the answer addresses the question. Describe a likely interviewer concern as a possibility, not knowledge of their thoughts. Suggest a small next practice step. Do not promise confidence, symptom relief or hiring results.
+Practice record questions only when the user selected or requested that practice. Respect their choice about what to share. Never infer a record or force an admission. Any stronger answer uses only the person's supplied facts, preserves explicit negatives and acknowledges missing details. If a full answer would require invention, ask for the missing detail instead.`,
 
-SELF-EFFICACY (Bandura, 1977): Mastery experiences are the strongest source of confidence. Every bullet should demonstrate a concrete accomplishment: something they DID and the result it produced. Vague duties build no confidence in the reader OR the candidate.
+  disclosure: `RECORD-CONVERSATION PRACTICE GUIDANCE:
+Help the person prepare for the question and setting they chose. Let them decide what to share. Use only their own supplied account; do not ask for private record details to make practice more realistic. Do not introduce charges, sentence, supervision status or an explanation they did not give. Never turn a disputed or unknown event into an admission.
+Offer clear wording and a chance to practice. When discussing responsibility, stay with conduct the person actually acknowledged. Do not invent remorse, lessons, transformation, elapsed time, supervision completion, references or a clean record. Silence about the record is not evidence of poor accountability.
+Do not state what an employer will think or guarantee acceptance. Treat an employer's possible concern as uncertain. Legal requirements depend on the location, employer, role and hiring stage; do not make an unverified legal claim or advise concealment. For a legal question, identify the context needed and direct the person to an appropriate current source or qualified help. Do not claim that this exercise treats anxiety or trauma, or promise deletion behavior that the product has not established.`,
 
-SCAFFOLDING (Wood, Bruner, Ross, 1976): Each resume iteration should require less AI support. First resume: heavy scaffolding. Third resume: user drives, AI suggests.
+  job_search: `JOB SEARCH PRACTICE GUIDANCE:
+Use plain words such as employers that hire people with records when that is relevant to the person's request. Match roles to the experience the person actually supplied. Explain the specific overlap and any requirement not yet supported. A related job title does not establish a skill, credential or readiness for a different role.
+Use only jobs, employer statements and requirements supplied by available sources. Distinguish a retrieved opening from a suggested search direction. If no listings are available, say so and offer a concrete search action; do not invent openings, salary, hiring policy or employer interest. An employer policy is not a promise that a person will be hired.
+Do not add claims about turnover, callback rates, population employment, earnings or program effectiveness. Do not promise that training is unnecessary. Verify the current availability and eligibility of an incentive before presenting it as usable; do not assume a tax credit or bonding program is active or applicable.`,
 
-COMPETITIVE STANDARD: Every resume must compete at the highest professional level. No generic phrases. No duties language. Keep every number the person gave, exactly as given: a range stays a range, and "about 20" stays "about 20". Never add a number they did not give. Action verbs only. ATS-optimized but human-readable.
+  resources: `RESOURCE MATCHING PRACTICE GUIDANCE:
+Start with the need the person identified and the help they want now. Do not infer a diagnosis, urgency or inability to work from a barrier label. Offer manageable next steps and respect their choice to decline or defer.
+Use available source information to explain what a resource provides, where it operates, eligibility, cost, contact method and the next action. Distinguish verified details from details to check. Never invent a service, opening, warm introduction or eligibility decision. Do not claim one barrier, service or treatment predicts employment outcomes or has the highest return without appropriate evidence. Medical or legal questions need current authoritative information or qualified help; this career tool does not diagnose or treat.`,
 
-RECORD RULE (absolute): never ADD, infer or hint at incarceration, a record, supervision or justice involvement the person's source does not state, and never state charges, a sentence or supervision status. By default the record stays off the page and the person explains it in person, at the right time; if the person chose to keep their own lines about work done inside, the writer's rules for that request say so. Employment gaps use years only, never explained.`,
+  analysis: `CAREER EXPLORATION GUIDANCE:
+Separate the person's facts from possible interpretations. Identify skills only when a supplied example supports them; label a possible skill or career direction as something to check with the person. Do not turn hardship, a record or a gap into a strength, motive, recovery story or diagnosis.
+Offer career options with a specific connection to the person's work, interests and constraints. Explain what is known, what is missing and one practical next step. Let the person choose. Do not invent qualifications, pay, employer demand or outcomes. Keep generated analysis separate from the person's confirmed facts in later writing.
+Adjust detail to the person's questions and preferences. A readiness label is context, not a diagnosis or proof of ability. Do not claim that analysis is therapeutic or guarantees emotional, behavioral or employment improvement.`,
 
-  cover_letter: `RESEARCH-BACKED COVER LETTER STANDARDS:
-
-NARRATIVE IDENTITY (McAdams, 2013): The cover letter IS the redemption narrative, compressed into 300 words. Opening: who they are NOW. Middle: what they've BUILT. Close: what they'll CONTRIBUTE.
-
-SELF-DETERMINATION (Deci & Ryan, 2000): The letter must express autonomy: "I chose this path" not "I'm looking for any opportunity." Competence: specific achievements that prove capability. Relatedness: why THIS company, THIS role.
-
-EMPLOYER PSYCHOLOGY: Lead with the strongest match to the job requirements. Second paragraph proves it with numbers. Close with confidence, not desperation.
-
-NEVER: mention records, gaps, "second chances," or anything that requires explanation. The cover letter sells the future, not the past.`,
-
-  disclosure: `RESEARCH-BACKED DISCLOSURE SCIENCE:
-
-STEEL MAN METHOD (practice guidance, not a research finding): prepare the answer and practice it out loud before the interview. Keep it short: acknowledge, pivot, value.
-
-MARUNA (2001): Agency is the strongest predictor of successful desistance. The disclosure script must position the candidate as an AGENT: "I made a mistake, I did the work, I'm here because I chose to be." Not a victim. Not apologetic. Accountable and forward-looking.
-
-EMPLOYER PSYCHOLOGY: What the interviewer is thinking (even if they don't ask):
-1. "Will this person be reliable?" → Answer with attendance/consistency data
-2. "Is there a safety risk?" → Answer with time since offense + supervision completion
-3. "Will other employees be uncomfortable?" → Answer with team leadership evidence
-4. "Could this create liability?" → Answer with clean record since, certifications, references
-
-BAN-THE-BOX: Federal contractors and many states/cities prohibit asking about criminal history before conditional offer. But even where legal, employers CANNOT use a record as automatic disqualification. They must consider: nature of offense, time elapsed, nature of job (EEOC guidance).
-
-AFFECT LABELING (Lieberman et al., 2007): Naming the anxiety of disclosure reduces its physiological impact by up to 50%. The disclosure planner should help users NAME what they're afraid of before crafting the script.
-
-TRAUMA-INFORMED (SAMHSA, 2014): Never re-traumatize. The user controls what they share, when, and how much. Privacy is non-negotiable. Data deletion is immediate and permanent.`,
-
-  interview: `RESEARCH-BACKED INTERVIEW PREPARATION:
-
-SELF-EFFICACY (Bandura, 1977): The single strongest source of confidence is mastery experience: actually doing the thing and succeeding. Each practice session should end with specific, actionable feedback that builds on what they did well (process praise, Dweck 2006).
-
-STAR METHOD: Situation, Task, Action, Result. Every answer should follow this structure. But go beyond generic STAR. Connect actions to QUANTIFIED results from their actual resume.
-
-AFFECT LABELING (Lieberman, 2007): Interview anxiety is normal and reducible. Naming "I'm nervous about the background check question" literally reduces amygdala reactivity. The practice environment should normalize this.
-
-STAGES OF CHANGE (Prochaska, 1983): A user in "preparation" needs different interview prep than one in "action." Preparation users need more scaffolding, more basic questions. Action users need challenging behavioral questions and curveball scenarios.
-
-DISCLOSURE REHEARSAL (Maruna; Steel Man practice): If the user has a record, interview practice MUST include a natural disclosure moment. Not forced. Not the first question. Around exchange 3-4, the AI interviewer should bring up backgrounds naturally, giving the user a chance to practice their prepared script.
-
-GROWTH MINDSET (Dweck, 2006): Feedback should be process-focused: "You did a great job pivoting from the gap question to your warehouse experience" not "You're a natural interviewer."`,
-
-  job_search: `When you talk to the person, use plain words: "employers that hire people with records". "Fair-chance" and "justice-impacted" are words for staff and funders.
-
-RESEARCH-BACKED JOB SEARCH GUIDANCE:
-
-FAIR-CHANCE EMPLOYMENT: Companies with explicit fair-chance hiring policies have 13% lower turnover and report equal or better job performance from justice-impacted hires (SHRM, 2021).
-
-BAN-THE-BOX IMPACT: In jurisdictions with ban-the-box laws, callback rates for people with records increase 30-40% when criminal history inquiry is delayed to post-offer (Agan & Starr, 2018).
-
-EMPLOYMENT REALITY: <50% of formerly incarcerated people find employment in Year 1. Median earnings $7,500/year. Average time to first job: 6+ months. BUT: those who receive targeted career services have significantly better outcomes.
-
-JOB MATCHING: Prioritize roles where the candidate's EXISTING skills transfer directly. A warehouse worker can move toward logistics coordinator with the right positioning, often without retraining. Match based on demonstrated capability, not just job title keywords.
-
-SECOND-CHANCE EMPLOYERS: Companies known to actively hire justice-impacted individuals should be highlighted. Frame them as smart business (lower turnover, loyalty), not as charity. Do NOT cite the Work Opportunity Tax Credit (WOTC) as a current hiring incentive: it expired for hires who begin work after 2025-12-31 and Form 8850 is retired. If an employer incentive is relevant, the Federal Bonding Program is the current one, and never present any incentive as settled without verification.`,
-
-  resources: `RESEARCH-BACKED RESOURCE MATCHING:
-
-BARRIER-SPECIFIC EVIDENCE:
-- Criminal Record: Disclosure coaching is the #1 unmet need (ACM COMPASS, 2025). Legal aid for expungement has highest ROI.
-- Housing: Stable housing is a prerequisite for sustained employment (Desmond, 2016). Housing-first approaches outperform employment-first.
-- Transportation: In car-dependent metros (like Milwaukee), transportation is the #2 barrier after criminal records. Bus passes, ride-share subsidies, bike programs.
-- Mental Health: Untreated mental health conditions are the strongest predictor of job loss within 90 days. Peer support + professional services.
-- Substance Use: Recovery-friendly workplaces exist and should be matched. MAT-compatible scheduling.
-
-READINESS MATCHING (Prochaska, 1983):
-- Precontemplation: Don't push action resources. Offer information and reflection.
-- Contemplation: Present options without pressure. "Here's what's available when you're ready."
-- Preparation: Concrete next steps with contact info and what to expect.
-- Action: Immediate, high-touch resources. Warm handoffs preferred.`,
-
-  analysis: `RESEARCH-BACKED CAREER ANALYSIS:
-
-NARRATIVE IDENTITY (McAdams & McLean, 2013): Redemption sequences (negative → positive) predict well-being and resilience. The analysis should identify and reinforce redemption themes in the user's story.
-
-DESISTANCE THEORY (Maruna, 2001): Agency predicts successful career rebuilding. Identify moments of agency: choices, initiative, self-direction. These become the backbone of the narrative.
-
-AFFECT LABELING (Lieberman et al., 2007): The analysis process itself is therapeutic. Putting experiences into words reduces emotional intensity by up to 50%. Every free-text prompt serves dual purpose: data collection AND emotional processing.
-
-SELF-DETERMINATION (Deci & Ryan, 2000): Never prescribe career paths. Present options with evidence. "Based on your skills, these paths fit" not "You should do this." Autonomy preservation is non-negotiable.
-
-SCAFFOLDING (Wood, Bruner, Ross, 1976): The analysis provides heavy structure initially, identifying skills the user may not recognize. As they return and iterate, the tool should do less and they should do more.
-
-STAGES OF CHANGE (Prochaska & DiClemente, 1983):
-- Precontemplation: Identity-focused. "Here's what you bring." 2 career paths max.
-- Contemplation: Options-focused. "Here's what's possible." 3 paths, acknowledge ambivalence.
-- Preparation: Action-focused. "Here's what to do." 3-5 paths with concrete next steps.
-- Action: Execution-focused. "Here's what to do TODAY." Specific employers, applications, timelines.`,
 };
 
 // ─── User Context Builder ───────────────────────────────────────────────────
@@ -220,7 +153,7 @@ export function buildUserContext(user: UserContext): string {
   }
 
   if (user.readinessStage) {
-    parts.push(`USER READINESS: ${user.readinessStage} (Prochaska Stages of Change). Adapt tone and specificity accordingly.`);
+    parts.push(`USER READINESS: ${user.readinessStage} (context only; follow the person's stated needs and preferences).`);
   }
 
   if (user.narrative) {
@@ -229,7 +162,7 @@ export function buildUserContext(user: UserContext): string {
 
   if (user.strengths?.length) {
     parts.push(
-      `VERIFIED STRENGTHS (from career analysis):\n${user.strengths.map((s) => `- ${s.title}: ${s.evidence}`).join("\n")}`
+      `CAREER-ANALYSIS SUGGESTIONS (not independent verification; use a supplied example or ask the person):\n${user.strengths.map((s) => `- ${s.title}: ${s.evidence}`).join("\n")}`
     );
   }
 
@@ -251,7 +184,7 @@ export function buildUserContext(user: UserContext): string {
       parts.push(`BARRIERS TO ADDRESS: ${safeBarriers.join(", ")}`);
     }
     if (user.barriers.includes("criminal_record")) {
-      parts.push("NOTE: User has a criminal record. NEVER reference this in resumes, cover letters, or any written output. Disclosure happens in person only.");
+      parts.push("Record-related support was selected. Do not introduce record facts into resumes or letters. Discuss the topic only in the requested support or practice context; do not infer details from this label.");
     }
   }
 
@@ -284,8 +217,8 @@ export function buildFullContext(
 ): string {
   const sections: string[] = [];
 
-  // Research layer (always included)
-  sections.push(RESEARCH[useCase]);
+  // Practice guidance (always included)
+  sections.push(PRACTICE_GUIDANCE[useCase]);
 
   // User layer (if available)
   if (user) {

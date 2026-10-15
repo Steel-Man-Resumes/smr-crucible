@@ -22,6 +22,7 @@ import {
   REVIEW_TRAY_LABEL,
 } from "./resumeModel";
 import { BulletWorkshop } from "./BulletWorkshop";
+import { FIRST_BULLET_PLACEHOLDER } from "@/lib/workshop-placeholders";
 
 type Updater = (fn: (prev: ResumeDocument) => ResumeDocument) => void;
 
@@ -394,7 +395,7 @@ function WorkEntryEditor({
                     onChange={(v) => updateBullet(bi, v)}
                     placeholder={
                       bi === 0
-                        ? '[Action verb] + [what you did] + [result]. Example: "Trained 5 new workers on safety procedures"'
+                        ? FIRST_BULLET_PLACEHOLDER
                         : "Describe what you accomplished..."
                     }
                   />

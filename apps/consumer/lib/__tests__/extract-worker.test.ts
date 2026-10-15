@@ -1,7 +1,7 @@
 /**
  * Security review 3a round 2, H1 (c): pdf.js and mammoth run in a worker with
  * a heap limit, and the time budget terminates the worker (a Promise.race
- * only stopped waiting). Carried to the hotfix in review round 5.
+ * only stopped waiting).
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -11,7 +11,7 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 import { ExtractAborted, extractInWorker } from "../extract-worker";
 import { storedZip } from "../upload-safety";
-import { extractTextFromBuffer } from "../text-extraction";
+import { extractTextFromBuffer, extractTextForCheck } from "../text-extraction";
 
 const root = join(import.meta.dirname, "..", "..");
 
@@ -48,6 +48,12 @@ describe("the extraction worker", () => {
     await assert.rejects(extractInWorker("docx", big, { budgetMs: 60_000, heapMb: 32 }), (e: any) => e instanceof ExtractAborted && e.why === "memory");
     // Still alive and still working afterwards:
     assert.match(await extractInWorker("pdf", pdf, { budgetMs: 20_000 }), /JORDAN RIVERS/);
+  });
+
+  it("the page cap is enforced inside the worker", async () => {
+    const doc = await PDFDocument.create();
+    for (let i = 0; i < 12; i++) doc.addPage([612, 792]).drawText("x", { x: 50, y: 700 });
+    await assert.rejects(extractTextForCheck(Buffer.from(await doc.save())), /more pages than a resume/);
   });
 
   it("text-extraction reads pdf.js and mammoth through the worker; next.config keeps both external", () => {

@@ -29,6 +29,8 @@ export interface SkillEntry {
   file: string;
   summary?: string;
   always?: boolean;
+  version?: number;
+  roles?: string[];
   pages?: string[];
   pagesIfCriminalRecord?: string[];
 }
@@ -55,9 +57,12 @@ function readManifest(): Manifest | null {
 export function selectSkills(
   skills: SkillEntry[],
   page: string,
-  hasCriminalRecord: boolean
+  hasCriminalRecord: boolean,
+  role = "participant"
 ): SkillEntry[] {
   return skills.filter((s) => {
+    if (s.roles && !s.roles.includes(role)) return false;
+    if (!s.roles && role !== "participant" && s.id !== "agency-corrections") return false;
     if (s.always) return true;
     if (s.pages?.includes(page)) return true;
     if (hasCriminalRecord && s.pagesIfCriminalRecord?.includes(page)) return true;
@@ -77,11 +82,11 @@ function stripFrontmatter(md: string): string {
   return md;
 }
 
-export function loadSkillsForContext(page: string, hasCriminalRecord: boolean): string {
+export function loadSkillsForContext(page: string, hasCriminalRecord: boolean, role = "participant"): string {
   const manifest = readManifest();
   if (!manifest) return "";
 
-  const active = selectSkills(manifest.skills, page, hasCriminalRecord);
+  const active = selectSkills(manifest.skills, page, hasCriminalRecord, role);
   if (active.length === 0) return "";
 
   const sections: string[] = [];

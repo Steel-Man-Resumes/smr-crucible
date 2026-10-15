@@ -9,6 +9,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { AiPolicyEditor } from "./AiPolicyEditor";
 import { labelForEndpoint } from "@/lib/ai-usage-labels";
 
 function usd(v: unknown): string {
@@ -62,6 +63,8 @@ export function AiCostsAdminSection() {
 
   useEffect(() => {
     let cancelled = false;
+    setError("");
+    setData(null);
     fetch(`/api/admin/ai-costs?days=${days}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => !cancelled && setData(d))
@@ -73,8 +76,8 @@ export function AiCostsAdminSection() {
 
   return (
     <Shell
-      title="AI costs (exact tokens)"
-      subtitle="Per-user and per-feature spend, computed from real provider token counts"
+      title="AI usage and cost"
+      subtitle="Recorded costs, voice estimates and missing accounting"
     >
       <div className="flex gap-2 mb-3">
         {[7, 30, 90].map((d) => (
@@ -96,12 +99,13 @@ export function AiCostsAdminSection() {
       {data && (
         <div className="space-y-4">
           <p className="text-sm text-t-white">
-            Total: <strong>{usd(data.totals?.cost_usd)}</strong>{" "}
+            Recorded cost: <strong>{usd(data.totals?.cost_usd)}</strong>{" "}
             <span className="text-xs text-t-phos-dim">
               ({num(data.totals?.calls)} calls, {num(data.totals?.input_tokens)} in /{" "}
               {num(data.totals?.output_tokens)} out tokens, last {data.days} days)
             </span>
           </p>
+          <p className="text-xs text-t-phos-dim">{usd(data.totals?.estimated_usd)} estimated; {num(data.totals?.unpriced_calls)} unpriced calls; {num(data.totals?.legacy_calls)} calls under earlier accounting. Totals are not an invoice.</p>
           <div className="overflow-x-auto">
             <p className="text-xs font-semibold text-t-white mb-1">By user</p>
             <table className="w-full">
@@ -148,6 +152,18 @@ export function AiCostsAdminSection() {
               </tbody>
             </table>
           </div>
+          <div className="overflow-x-auto">
+            <p className="text-xs font-semibold text-t-white">By complete workflow</p>
+            <table className="w-full"><thead><tr><th className={th}>Workflow</th><th className={th}>Calls</th><th className={th}>Recorded cost</th><th className={th}>Unpriced</th></tr></thead>
+              <tbody>{data.perWorkflow?.map((w: any) => <tr key={w.workflow}><td className={td}>{labelForEndpoint(w.workflow)}</td><td className={td}>{num(w.calls)}</td><td className={td}>{usd(w.cost_usd)}</td><td className={td}>{num(w.unpriced_calls)}</td></tr>)}</tbody></table>
+            <p className="text-xs font-semibold text-t-white mt-3">Operation health</p>
+            {data.operations?.map((o: any) => <p className="text-xs text-t-phos-dim" key={`${o.workflow}:${o.status}`}>{labelForEndpoint(o.workflow)}: {o.status}, {num(o.operations)} operations, {num(o.without_usage)} without usage, {num(o.incomplete_accounting)} with incomplete accounting, {usd(o.reserved_usd)} reserved.</p>)}
+          </div>
+          <div className="overflow-x-auto"><p className="text-xs font-semibold text-t-white">By current organization membership</p>
+            <p className="text-xs text-t-phos-dim">A member of more than one organization can appear in more than one row.</p>
+            <table className="w-full"><thead><tr><th className={th}>Organization</th><th className={th}>Calls</th><th className={th}>Recorded cost</th><th className={th}>Unpriced</th></tr></thead><tbody>{data.perOrg?.map((o:any)=><tr key={o.org_id}><td className={td}>{o.name}</td><td className={td}>{num(o.calls)}</td><td className={td}>{usd(o.cost_usd)}</td><td className={td}>{num(o.unpriced_calls)}</td></tr>)}</tbody></table>
+          </div>
+          <AiPolicyEditor />
           <p className="text-[10px] text-t-phos-dim">
             Tracking began 2026-08-02; earlier usage is not included. Pre-auth Forge
             calls appear under &quot;(pre-auth / anonymous)&quot;.
@@ -164,6 +180,8 @@ export function AiCostsOwnSection() {
 
   useEffect(() => {
     let cancelled = false;
+    setError("");
+    setData(null);
     fetch("/api/user/ai-costs?days=30")
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => !cancelled && setData(d))
@@ -176,7 +194,7 @@ export function AiCostsOwnSection() {
   return (
     <Shell
       title="Your AI usage"
-      subtitle="What the AI work on your account actually costs (last 30 days)"
+      subtitle="Recorded costs and estimates for your account (last 30 days)"
     >
       {error && <p className="text-xs text-t-red">{error}</p>}
       {!data && !error && <p className="text-xs text-t-phos-dim">Loading...</p>}
@@ -216,9 +234,7 @@ export function AiCostsOwnSection() {
               </tbody>
             </table>
           )}
-          {/* Cost per call is the exact provider-reported cost; there is no
-              separate estimated-vs-reconciled figure in this data, so nothing
-              to reconcile here -- each row is the real billed amount. */}
+          <p className="text-xs text-t-phos-dim">{usd(data.totals?.estimated_usd)} is estimated. {num(data.totals?.unpriced_calls)} calls have no price yet, and {num(data.totals?.legacy_calls)} use earlier accounting. This is not a bill.</p>
           <p className="text-[10px] text-t-phos-dim">
             Cost tracking began Aug 2, 2026. AI work before that date is not
             shown here.

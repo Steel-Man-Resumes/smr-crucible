@@ -1,9 +1,9 @@
 /**
  * Numbers on a resume are the person's, never the model's (2026-09-28).
  *
- * The bullet workshop asks "How many?" and, when someone cannot give an exact
- * figure, offers a few ranges to pick from. Whatever they type or pick is their
- * answer. A model writing the bullet may only use numbers that appear in those
+ * The bullet workshop asks "How many?" and shows what could be counted for the
+ * line; the person types the figure. No range or figure is ever offered.
+ * Whatever they type is their answer. A model writing the bullet may only use numbers that appear in those
  * answers. This module is the deterministic check behind that rule, so it holds
  * even when a prompt is ignored.
  */
@@ -109,63 +109,9 @@ export function unsupportedNumbers(output: string, source: string, quantity = ""
   return bad;
 }
 
-export type QuantityUnit = "people" | "crew" | "orders" | "loads" | "units" | "hours" | "shifts" | "miles";
-
-/**
- * Ranges offered after someone picks a unit. Fixed here, never written by a
- * model, so the choices on screen can never be an invented figure. `fill` is
- * exactly what goes into the answer box, and the person can still edit it.
- */
-export const RANGE_CHOICES: Record<QuantityUnit, { label: string; fill: string }[]> = {
-  people: [
-    { label: "1 to 5", fill: "about 1 to 5 people" },
-    { label: "6 to 10", fill: "about 6 to 10 people" },
-    { label: "11 to 25", fill: "about 11 to 25 people" },
-    { label: "more than 25", fill: "more than 25 people" },
-  ],
-  crew: [
-    { label: "2 to 5", fill: "a crew of about 2 to 5" },
-    { label: "6 to 10", fill: "a crew of about 6 to 10" },
-    { label: "11 to 20", fill: "a crew of about 11 to 20" },
-    { label: "more than 20", fill: "a crew of more than 20" },
-  ],
-  orders: [
-    { label: "under 50 a day", fill: "under 50 orders a day" },
-    { label: "50 to 200 a day", fill: "about 50 to 200 orders a day" },
-    { label: "200 to 500 a day", fill: "about 200 to 500 orders a day" },
-    { label: "more than 500 a day", fill: "more than 500 orders a day" },
-  ],
-  loads: [
-    { label: "under 10 a day", fill: "under 10 loads a day" },
-    { label: "10 to 25 a day", fill: "about 10 to 25 loads a day" },
-    { label: "25 to 50 a day", fill: "about 25 to 50 loads a day" },
-    { label: "more than 50 a day", fill: "more than 50 loads a day" },
-  ],
-  units: [
-    { label: "under 100 a day", fill: "under 100 units a day" },
-    { label: "100 to 500 a day", fill: "about 100 to 500 units a day" },
-    { label: "500 to 1,000 a day", fill: "about 500 to 1,000 units a day" },
-    { label: "more than 1,000 a day", fill: "more than 1,000 units a day" },
-  ],
-  hours: [
-    { label: "under 20 a week", fill: "under 20 hours a week" },
-    { label: "20 to 40 a week", fill: "about 20 to 40 hours a week" },
-    { label: "40 to 60 a week", fill: "about 40 to 60 hours a week" },
-    { label: "more than 60 a week", fill: "more than 60 hours a week" },
-  ],
-  shifts: [
-    { label: "1 or 2 a week", fill: "1 or 2 shifts a week" },
-    { label: "3 or 4 a week", fill: "3 or 4 shifts a week" },
-    { label: "5 or more a week", fill: "5 or more shifts a week" },
-  ],
-  miles: [
-    { label: "under 100 a day", fill: "under 100 miles a day" },
-    { label: "100 to 300 a day", fill: "about 100 to 300 miles a day" },
-    { label: "more than 300 a day", fill: "more than 300 miles a day" },
-  ],
-};
-
-export const QUANTITY_UNITS = Object.keys(RANGE_CHOICES) as QuantityUnit[];
+// No ranges or figures are offered anywhere (decision D2, 2026-10-07): the
+// workshop shows what to count (lib/count-prompts.ts) and the person types the
+// number. Ranges a person picked on an older build are still kept whole above.
 
 /** The person's own workshop answers saved on an approved resume, as text the
  *  truth check can trust. Reads only the answer fields, never the bullet, and

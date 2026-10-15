@@ -26,7 +26,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { reserveVoiceSession } from "@crucible/core";
+import { currentAiOperation } from "@/lib/ai-operation-context";
+import { queryAsUser, reserveVoiceSession } from "@crucible/core";
 import { sanitizeOrEmpty } from "@/lib/sanitize";
 import { REALTIME_MODEL, type VoiceSessionBody } from "@/lib/voice-instructions";
 
@@ -89,6 +90,11 @@ async function handlePost(request: Request) {
     );
   }
 
+  const operationId = currentAiOperation()?.operationId;
+  if (operationId) await queryAsUser(userId,
+    'UPDATE voice_session SET operation_id=$1 WHERE id=$2 AND user_id=$3',
+    [operationId, reservation.session.id, userId]);
+
   try {
     const { logDecision } = await import("@crucible/core");
     await logDecision({
@@ -122,5 +128,7 @@ async function handlePost(request: Request) {
 export const POST = withRateLimit(handlePost, {
   mode: "user",
   endpoint: "interview",
+  workflow: "interview-voice-token",
   requiredTier: "client",
+  premium: "interview_coaching",
 });

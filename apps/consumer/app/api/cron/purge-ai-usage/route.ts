@@ -12,7 +12,11 @@
  * as the other cron routes. Schedule lives in vercel.json.
  */
 import { NextResponse } from "next/server";
-import { purgeOldAiUsage } from "@crucible/core";
+import { purgeOldAiUsage, query } from "@crucible/core";
+
+/** Finished operation records older than this are deleted with the usage counters.
+ * Running ones are kept (a stuck reservation is reviewed, never silently dropped). */
+const AI_OPERATION_RETENTION_DAYS = 30;
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,9 +30,18 @@ export async function GET(request: Request) {
 
   try {
     const purged = await purgeOldAiUsage();
+    let operations: number | "unavailable" = "unavailable";
+    try {
+      // Owner-side function (087): the cross-account delete never runs as the app role.
+      const [row] = await query<{ n: number }>(`SELECT public.purge_finished_ai_operations($1::int) AS n`, [AI_OPERATION_RETENTION_DAYS]);
+      operations = Number(row?.n ?? 0);
+    } catch {
+      // 087 not applied here yet: nothing to purge.
+    }
     return NextResponse.json({
       ok: true,
       purged,
+      operations,
       checked_at: new Date().toISOString(),
     });
   } catch (err: any) {

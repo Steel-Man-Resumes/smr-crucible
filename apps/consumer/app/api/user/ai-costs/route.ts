@@ -29,7 +29,10 @@ export async function GET(request: Request) {
               COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
               COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
               COALESCE(SUM(audio_seconds), 0)::bigint AS audio_seconds,
-              COALESCE(SUM(cost_usd), 0)::numeric(12,4) AS cost_usd
+              COALESCE(SUM(cost_usd), 0)::numeric(12,4) AS cost_usd,
+              COUNT(*) FILTER (WHERE cost_status = 'unpriced')::int AS unpriced_calls,
+              COUNT(*) FILTER (WHERE cost_status = 'legacy')::int AS legacy_calls,
+              COALESCE(SUM(cost_usd) FILTER (WHERE cost_status = 'estimated'),0)::numeric(12,6) AS estimated_usd
          FROM ai_token_usage
         WHERE user_id = $1
           AND created_at > NOW() - ($2 || ' days')::interval`,

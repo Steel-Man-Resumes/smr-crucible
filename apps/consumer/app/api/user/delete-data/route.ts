@@ -4,7 +4,13 @@
  * Deletes all user data from Postgres:
  * - secure_object rows (Phase 1C vault/transcript/headshot platform) + the
  *   underlying R2 ciphertext, via the deletion_task retry ledger
+ * - artifact_revision (saved resume revisions, 081; owner only, deleted as the
+ *   person before the artifacts they hang off)
+ * - forge_writer_receipt (081; the newest writer's receipt nonce per run)
  * - refinery_artifact (resumes, disclosure plans, etc.)
+ * - career_lane, lane_tool_intro (career lanes and dismissed tool notes)
+ * - lane_focus (today's task on the lane, 083; owner only, deleted before the lanes)
+ * - practice_entry (the practice record behind creative lanes)
  * - forge_session
  * - consumer_profile
  * - job_application
@@ -13,6 +19,7 @@
  * - coach_conversation (AI coach memory -- full transcript erase)
  * - disclosure_rehearsal + interview_voice sessions/chunks (Phase 5.1
  *   encrypted, text-only transcripts, both purposes)
+ * - saved record checks (D11, owner only, via deleteAllRecordChecks)
  *
  * ACCOUNT vs DATA (Phase 7.4): by default this wipes the DATA above but KEEPS
  * the account/login, so the user can sign back in to an empty workspace. If the
@@ -65,6 +72,10 @@ import {
   listSecureObjectsForOwner,
   enqueueDeletion,
   deleteUserConversations,
+  deleteAllRecordChecks,
+  deleteAllRevisions,
+  deleteLaneFocus,
+  deleteAllWriterReceipts,
   leaveAllOrgs,
 } from "@crucible/core";
 
@@ -127,24 +138,64 @@ export async function DELETE(req: Request) {
     await query("DELETE FROM secure_object WHERE owner_user_id = $1", [userId]);
 
     // Delete in dependency order (children first)
+    // Saved resume revisions (081) hang off the artifacts and would cascade
+    // with them; deleted explicitly, AS the person (owner-only table), so the
+    // erase does not depend on a cascade. Before 081 there is nothing to do.
+    await deleteAllRevisions(userId);
+    // The newest writer's receipt per run (081): nonces only, owner only.
+    await deleteAllWriterReceipts(userId);
     // refinery_artifact has CASCADE on user_id, but be explicit
     await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
+    // Career lanes (074): after the artifacts that point at them. Owner-only
+    // tables, so deleted AS the person; the lane screens only ever archive.
+    // Today's task (083) points at a lane: deleted first, AS the person.
+    await deleteLaneFocus(userId);
+    await queryAsUser(userId, "DELETE FROM career_lane WHERE user_id = $1", [userId]);
+    await queryAsUser(userId, "DELETE FROM lane_tool_intro WHERE user_id = $1", [userId]);
+    // The practice record (076): owner only, deleted as the person.
+    await queryAsUser(userId, "DELETE FROM practice_entry WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
     // ai_token_usage is the newer per-call token ledger (migration 022) that the
     // export reads; it must be cleared too, or usage telemetry survives a delete.
+    await queryAsUser(userId, "DELETE FROM ai_operation WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_token_usage WHERE user_id = $1", [userId]);
     await query("DELETE FROM coach_conversation WHERE user_id = $1", [userId]);
     // Phase 5.1: encrypted disclosure + interview transcripts (both purposes).
     // Chunks cascade off their session rows; this deletes the sessions.
     await deleteUserConversations(userId);
+    // D11: saved record checks (sealed checklists, and the offense where the
+    // person chose to keep it). Owner-only table, so deleted AS them.
+    await deleteAllRecordChecks(userId);
     await query("DELETE FROM forge_session WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM consumer_profile WHERE user_id = $1", [userId]);
     // Progress events are the person's own activity history, and "delete my data"
     // never removed them unless the whole account went too. Row-level protected,
     // so deleted AS them -- an unscoped DELETE would remove nothing and say nothing.
     await queryAsUser(userId, "DELETE FROM user_progress_event WHERE user_id = $1", [userId]);
+    // "Ask SMR for access" requests hold the person's own words (079). Grants
+    // are Troy's record of a decision and stay until revoked or the account
+    // goes (they cascade then). Before 079 is applied the table is missing.
+    await queryAsUser(userId, "DELETE FROM premium_access_request WHERE user_id = $1", [userId]).catch((e) => {
+      if ((e as { code?: string })?.code !== "42P01") throw e;
+    });
+    // Mini Forge plans this person loaded: expired and emptied, so a deleted
+    // plan can never be loaded again, into any account (security review 3a
+    // Part 2 r3, R3-1). Runs for data-only and account deletion alike, and
+    // before the account row goes (that would set imported_by to NULL).
+    // Before 079 the column is missing (42703) and there is nothing to mark.
+    {
+      const { expireImportedPlans } = await import("@/lib/tablet-session");
+      await expireImportedPlans(userId).catch((e) => {
+        if ((e as { code?: string })?.code !== "42703") throw e;
+      });
+    }
+    // Which finished resumes were already emailed (079, hashes only). Without
+    // them a resume finished after this delete is emailed again, as it should be.
+    await queryAsUser(userId, "DELETE FROM forge_package_email_sent WHERE user_id = $1", [userId]).catch((e) => {
+      if ((e as { code?: string })?.code !== "42P01") throw e;
+    });
     // Reset access codes and tier
     // Through the database function, not a DELETE: membership is row-level
     // protected (an unscoped delete would remove nothing and this route would

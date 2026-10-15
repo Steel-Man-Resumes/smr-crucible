@@ -6,6 +6,9 @@
  */
 
 import { NextResponse } from "next/server";
+import { withRateLimit } from "@/lib/withRateLimit";
+import { checkTurnstile, turnstileBlocks } from "@/lib/turnstile";
+import { getClientIp } from "@/lib/auth-rate-limit";
 
 export const maxDuration = 10;
 
@@ -24,7 +27,7 @@ const VALID_CATEGORIES = [
   "other",
 ];
 
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 100_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -57,6 +60,15 @@ export async function POST(request: Request) {
 
     if (errors.length > 0) {
       return NextResponse.json({ errors }, { status: 400 });
+    }
+
+    // Bot check, when Turnstile is configured (same rollout rules as signup).
+    const turnstile = await checkTurnstile(body.turnstileToken, getClientIp(request));
+    if (turnstileBlocks(turnstile)) {
+      return NextResponse.json(
+        { error: "Please complete the verification check and try again." },
+        { status: 400 }
+      );
     }
 
     // Store in DB
@@ -108,3 +120,9 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// Public form (it works with no session, before and after the Forge wall), so
+// it is bounded per IP: an organization needs one or two requests, never more.
+// No cohort-code pool: each request emails a person, and a pool would lift the
+// cap to 5 x the code's seats (security review 3a r1, L7).
+export const POST = withRateLimit(handlePost, { mode: "ip", endpoint: "org-listing", poolable: false });

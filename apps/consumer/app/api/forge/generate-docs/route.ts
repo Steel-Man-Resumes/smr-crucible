@@ -9,8 +9,9 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeUserId } from "@/lib/session-policy";
 import { withRateLimit } from "@/lib/withRateLimit";
-import { buildFullContext, userContextFromForge } from "@/lib/context-library";
+import { buildForgeResumePrompts, type GenerateDocsInput } from "@/lib/forge-resume-prompt";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { verifyGrounding, buildTrustedSource } from "@/lib/grounding-verify";
@@ -21,68 +22,25 @@ import { stripUnsupportedJobCities } from "@/lib/job-line-truth";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
+import { readRunCookie, runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
+import { isUsableResume, splitWriterOutput, validateWriterChanges } from "@/lib/writer-changes";
+import { changesNotAwaitingCards } from "@/lib/changes-gate";
+import { buildFinishView } from "@/lib/finish-gate";
+import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
+import { restoreDateForms } from "@/lib/date-form";
+import { cutUnsupportedExtraSentences, repairForgeResume } from "@/lib/forge-auto-repair";
+import { acceptForgeQualityRevision, forgeQualityIssues } from "@/lib/forge-quality-pass";
+import { randomBytes } from "node:crypto";
+import { revisionCaller } from "@/lib/revision-route";
+import { loadRebuildSource, rebuildInputs, rebuildStore } from "@/lib/rebuild-source";
+import { rewordingAFor, withRewording, type SourceKind } from "@/lib/source-kind";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 export const maxDuration = 120;
 
 // Forge resume + cover letter generation is a DEEP task (models.ts doctrine):
 // one-shot documents whose quality changes a real outcome.
 const AI_MODEL = MODEL_DEEP;
-
-interface GenerateDocsInput {
-  narrative?: {
-    headline?: string;
-    summary?: string;
-    reflection?: string;
-    strengths?: Array<{ title: string; evidence: string; source: string }>;
-  };
-  strengths?: Array<{ title: string; evidence: string; source: string }>;
-  skills?: Array<{ name: string; category: string }>;
-  career_paths?: Array<{
-    title: string;
-    industry?: string;
-    match_reason: string;
-    salary_range?: string;
-    next_steps: string[];
-  }>;
-  barriers?: Array<{
-    type: string;
-    user_narrative?: string;
-    legal_notes?: string;
-  }>;
-  resumeText?: string;
-  goals?: string[];
-  goalNarrative?: string;
-  preferences?: Record<string, string>;
-  readinessStage?: string;
-  // Self-disclosure (F2 s.2.3): the user's own read on their resume + worries.
-  resumeConfidence?: "none" | "rough" | "decent" | "strong";
-  resumeWorries?: string[];
-  // The person tapped "put them back": keep their own lines about time inside.
-  keepInsideLines?: boolean;
-  sessionId?: string;
-}
-
-// Translate the self-disclosure signal into a generation-mode directive. This
-// biases sharpen-vs-scaffold and what to be sensitive to -- it never licenses
-// invention (the TRUTH GATE + verifier still bound the output).
-function selfDisclosureDirective(input: GenerateDocsInput): string {
-  const bits: string[] = [];
-  const conf = input.resumeConfidence;
-  if (conf === "none" || conf === "rough") {
-    bits.push(
-      "The person rates their own history as thin/rough. Keep the familiar layout: dated history in reverse order, never a dateless functional page (employers expect dates, and a page without them reads as hiding something). Put real transferable skills in the core competencies and a strong summary. A shorter, sparser, TRUE resume is correct here. Never pad with invented detail to make it look fuller."
-    );
-  } else if (conf === "strong") {
-    bits.push(
-      "The person rates their history as strong. Sharpen and tighten what is already there; do not over-explain or inflate."
-    );
-  }
-  const worries = new Set(input.resumeWorries || []);
-  if (worries.has("gaps")) bits.push("They worry about employment gaps: use years only (never months), never explain a gap, and let strengths carry the story.");
-  if (worries.has("job_changes")) bits.push("They worry about job changes: frame varied roles as range and adaptability, not instability.");
-  if (worries.has("little_experience")) bits.push("They worry about limited experience: emphasize transferable skills, training, programs and volunteer work with their dates, and any real accomplishments. Keep dated entries; never a dateless functional page.");
-  return bits.length ? `\nSELF-DISCLOSURE (adapt accordingly, never invent):\n- ${bits.join("\n- ")}\n` : "";
-}
 
 /**
  * Remove placeholder contact details, and the separator left orphaned with them.
@@ -107,10 +65,32 @@ function stripContactPlaceholders(text: string): string {
     .join("\n");
 }
 
-const WITHHOLD_RULE = `NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing. (Lines about this were held back from the source on purpose; the person has been told exactly which ones and can put them back.)`;
-const KEEP_INSIDE_RULE = `THE PERSON CHOSE TO KEEP THEIR OWN LINES: keep every job, course and credential the person listed, including work done in a correctional facility, named the way they named it (employer, title, years, real duties). Never ADD, infer or hint at anything about a record, supervision or justice involvement beyond what they wrote. Never state charges, a conviction, a sentence or supervision status, and never add growth, redemption or "second chance" framing.`;
-
 async function handlePost(request: Request) {
+  // Existing anonymous receipts depend on this cookie. Keep the JSON path's
+  // success-only rotation so a failed retry cannot invalidate saved work.
+  if (!request.headers.get("accept")?.includes("application/x-ndjson") || readRunCookie(request.headers.get("cookie"))) return generateDocuments(request);
+  const cookie = randomBytes(16).toString("hex");
+  const encoder = new TextEncoder();
+  let cancelled = false;
+  const body = new ReadableStream({
+    async start(controller) {
+      const emit = (event: unknown) => { if (!cancelled) controller.enqueue(encoder.encode(JSON.stringify(event) + "\n")); };
+      try {
+        const response = await generateDocuments(request, emit, cookie);
+        const data = await response.json();
+        emit({ type: response.ok ? "done" : "error", ...data });
+      } catch {
+        emit({ type: "error", error: "Document generation failed. Please try again." });
+      } finally {
+        if (!cancelled) controller.close();
+      }
+    },
+    cancel() { cancelled = true; },
+  });
+  return new Response(body, { headers: { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store", "Set-Cookie": runCookieHeader(cookie) } });
+}
+
+async function generateDocuments(request: Request, progress?: (event: unknown) => void, streamCookie?: string) {
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -120,9 +100,36 @@ async function handlePost(request: Request) {
     // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
     // login wall before value). Attribute to a user when a session happens to exist.
     const session = await auth();
-    const userId = session?.user?.id;
+    // Never credited to a session that still owes its two-step code.
+    const userId = forgeUserId(session);
 
-    const input: GenerateDocsInput = await request.json();
+    const body: GenerateDocsInput = await request.json();
+
+    // Phase 6 (S1 round 2): a rebuild from a saved resume. The server reads it
+    // AS the person and decides what counts as their own words
+    // (lib/rebuild-source.ts); the request's resume text is never used for
+    // it. `input` is what the writer reads; `sourceInput` is what the second
+    // check, the backstops and the receipt count as the person's own words.
+    let input: GenerateDocsInput = body;
+    let sourceInput: GenerateDocsInput = body;
+    // Round 3 (review r1 H2): the source kind this run is signed with. A Forge
+    // run's resume text is what the person gave; a rebuild's kind is the server's.
+    let sourceKind: SourceKind = "given";
+    const rebuildFrom = (body as unknown as Record<string, unknown>).rebuildFrom;
+    if (rebuildFrom !== undefined) {
+      // Review r1 L1: a rebuild reads stored data and records a newer receipt: same-origin JSON only.
+      if (!isSameOriginJsonPost(request.headers)) return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+      const caller = await revisionCaller();
+      if (!caller.ok || !userId || caller.userId !== userId) {
+        return NextResponse.json({ error: "Sign in to build from a saved resume." }, { status: 401 });
+      }
+      const rb = typeof rebuildFrom === "string" && rebuildFrom ? await loadRebuildSource(caller.userId, rebuildFrom, await rebuildStore()) : null;
+      if (!rb) return NextResponse.json({ error: "We couldn't open that resume." }, { status: 404 });
+      const r = rebuildInputs(body, rb);
+      input = r.writer;
+      sourceInput = r.source;
+      sourceKind = rb.origin;
+    }
 
     if (!input.narrative && !input.strengths && !input.skills?.length) {
       return NextResponse.json(
@@ -134,10 +141,22 @@ async function handlePost(request: Request) {
     const startTime = Date.now();
 
     // Generate resume and cover letter in parallel
-    const [resumeRaw, coverLetterRaw] = await Promise.all([
-      generateResume(input, userId),
-      generateCoverLetter(input, userId),
-    ]);
+    // Attach the failure handler immediately while resume generation/checking runs.
+    const coverPending = generateCoverLetter(input, userId).then(
+      (text) => ({ text, error: null as unknown }), (error: unknown) => ({ text: "", error }));
+    progress?.({ type: "stage", message: "Writing from your own work history." });
+    const resumeReply = await generateResume(input, userId);
+    // Phase 6 (S2): the writer's reply is the resume, then its CHANGES block.
+    // The block is cut off here, before any check reads the resume, and is
+    // never part of what ships as the resume.
+    const { resume: firstResume, changes: rawChanges } = splitWriterOutput(resumeReply);
+    let resumeRaw = firstResume;
+    // Review M3: never check, sign or return an empty page. A reply that was
+    // only a change list (or nothing) is an error the person can retry.
+    if (!isUsableResume(resumeRaw)) {
+      console.error("[generate-docs] the writer returned no resume text");
+      return NextResponse.json({ error: "The writer did not return a resume. Please try again." }, { status: 502 });
+    }
 
     // Post-generation grounding gate (F2): claim-trace each document back to what
     // the user actually gave us and strip/generalize anything invented. The prompt
@@ -147,14 +166,56 @@ async function handlePost(request: Request) {
     // Source = ONLY the user's own material (their resume text + their own words),
     // never the AI-derived narrative, so invention can't launder itself as source.
     const groundingSource = buildTrustedSource({
-      resumeText: input.resumeText,
-      userText: [input.goalNarrative, (input.goals || []).join(", ")],
+      resumeText: sourceInput.resumeText,
+      userText: [
+        sourceInput.goalNarrative,
+        sourceInput.hookNarrative,
+        (sourceInput.goals || []).join(", "),
+        typeof sourceInput.credentialsNote === "string" ? sourceInput.credentialsNote.slice(0, 1000) : undefined,
+      ],
     });
 
-    const [resumeCheck, coverCheck] = await Promise.all([
-      verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume" }),
-      verifyGrounding({ sourceText: groundingSource, output: coverLetterRaw, kind: "cover_letter" }),
-    ]);
+    progress?.({ type: "stage", message: "Checking the resume against your facts." });
+    const coverCheckPending = coverPending.then(async (reply) => {
+      if (reply.error) throw reply.error;
+      return { raw: reply.text, check: await verifyGrounding({ sourceText: groundingSource, output: reply.text, kind: "cover_letter", askSupervision: rewordingAFor(sourceKind) }) };
+    }).then((result) => ({ result, error: null as unknown }), (error: unknown) => ({ result: null, error }));
+    let resumeCheck = await verifyGrounding({ sourceText: groundingSource, output: resumeRaw, kind: "resume", askSupervision: rewordingAFor(sourceKind) });
+    const initialQualityIssues = resumeCheck.verifierRan ? forgeQualityIssues(resumeCheck.text) : [];
+    let qualityImproved = false;
+    // A weak first draft gets one extra writing pass. The checked first draft
+    // stays the fallback: the retry must preserve job headers, credentials,
+    // every number and the number of bullets under each job, then pass the
+    // independent truth check again with fewer writing findings.
+    if (initialQualityIssues.length && rewordingAFor(sourceKind)) {
+      try {
+        progress?.({ type: "stage", message: "Polishing the wording against your work history." });
+        const sourceForPolish = buildTrustedSource({
+          resumeText: withholdRecordLines(sourceInput.resumeText, input.keepInsideLines === true).kept,
+          userText: [sourceInput.goalNarrative, sourceInput.hookNarrative, (sourceInput.goals || []).join(", "), sourceInput.credentialsNote],
+        });
+        const qualityDeadline = new AbortController();
+        const qualityTimer = setTimeout(() => qualityDeadline.abort(), 25_000);
+        const polishedRaw = await callClaude(
+          "Improve the writing of this general resume. Keep every job header, date, employer, credential and number exactly as written. Keep the same number of bullets under each job. Rewrite weak summary and bullet wording using only the person's source. Do not invent a result, tool, skill, setting or scope. Return only the revised resume in plain text, with no commentary or change list.",
+          `PERSON'S SOURCE:\n${sliceWithWarn(sourceForPolish, RESUME_SOURCE_MAX, "generate-docs.qualitySource")}\n\nCURRENT RESUME:\n${resumeCheck.text}\n\nFIX THESE WRITING ISSUES:\n${initialQualityIssues.map((i) => `- ${i.line}: ${i.why}`).join("\n")}`,
+          userId,
+          5500,
+          qualityDeadline.signal
+        ).finally(() => clearTimeout(qualityTimer));
+        const polished = splitWriterOutput(polishedRaw).resume;
+        if (isUsableResume(polished)) {
+          const checked = await verifyGrounding({ sourceText: groundingSource, output: polished, kind: "resume", askSupervision: rewordingAFor(sourceKind) });
+          if (checked.verifierRan && acceptForgeQualityRevision(resumeCheck.text, checked.text, groundingSource)) {
+            resumeRaw = polished;
+            resumeCheck = checked;
+            qualityImproved = true;
+          }
+        }
+      } catch {
+        // The first checked resume remains available when the optional polish fails.
+      }
+    }
 
     // A prompt rule is an instruction, not a guarantee. The output format
     // itself used to DEMONSTRATE "(XXX) XXX-XXXX | email@email.com", and when a
@@ -172,8 +233,60 @@ async function handlePost(request: Request) {
       groundingSource,
       { homeLocation: typeof input.preferences?.location === "string" ? input.preferences.location : undefined }
     );
-    const resume = cityCheck.text;
-    const coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
+    // Dates stay in the form the person gave them ("8/2021" stays "8/2021"):
+    // a job line the writer shortened to years gets the person's form back.
+    const dateForms = restoreDateForms(cityCheck.text, groundingSource);
+    if (dateForms.restored) console.warn(`[date-form] generate-docs: put back ${dateForms.restored} date range(s) in the person's own form`);
+    const earlySource = writerSourceFrom(sourceInput as unknown as Record<string, unknown>);
+    const repaired = repairForgeResume(dateForms.text, earlySource.ownResumeText, earlySource.ownWords);
+    let resume = repaired.text;
+    let earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
+    let earlyGrounding = withRewording({
+      ...earlyAccounting, flags: resumeCheck.flags, hasFabrication: resumeCheck.hasFabrication,
+      verifierRan: resumeCheck.verifierRan, verifierRanByDoc: { resume: resumeCheck.verifierRan },
+      forgeAssisted: rewordingAFor(sourceKind),
+    }, sourceKind);
+    let earlyView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
+      written: { resume, letter: "" }, grounding: earlyGrounding,
+      credentialsAnswer: earlySource.credentialsAnswer || undefined,
+      credentialRows: completeCredentialRows(readCredentialRows(earlySource.credentialRows)), ownResumeText: earlySource.ownResumeText || undefined });
+    const resumeSentenceFix = cutUnsupportedExtraSentences(resume, earlyView.openItems, "resume", groundingSource);
+    if (resumeSentenceFix.repairs.length) {
+      resume = resumeSentenceFix.text;
+      repaired.repairs.push(...resumeSentenceFix.repairs);
+      earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
+      earlyGrounding = withRewording({
+        ...earlyAccounting, flags: resumeCheck.flags, hasFabrication: resumeCheck.hasFabrication,
+        verifierRan: resumeCheck.verifierRan, verifierRanByDoc: { resume: resumeCheck.verifierRan },
+        forgeAssisted: rewordingAFor(sourceKind),
+      }, sourceKind);
+      earlyView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
+        written: { resume, letter: "" }, grounding: earlyGrounding,
+        credentialsAnswer: earlySource.credentialsAnswer || undefined,
+        credentialRows: completeCredentialRows(readCredentialRows(earlySource.credentialRows)), ownResumeText: earlySource.ownResumeText || undefined });
+    }
+    const earlyChanges = resumeCheck.verifierRan ? changesNotAwaitingCards(validateWriterChanges(rawChanges, {
+      ownResumeText: withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept,
+      finalResume: resume, keepInsideLines: input.keepInsideLines === true,
+    }), earlyView) : [];
+    progress?.({ type: "resume", resume, changes: earlyChanges, message: "Your resume is written. Finishing the letter and final checks." });
+    const coverResult = await coverCheckPending;
+    if (!coverResult.result) throw coverResult.error;
+    const { raw: coverLetterRaw, check: coverCheck } = coverResult.result;
+    let coverLetter = plainPunctuation(stripContactPlaceholders(coverCheck.text), swapLog);
+    const letterView = buildFinishView({ resumeText: resume, ownWords: earlySource.ownWords, defendAnswers: [],
+      coverLetterText: coverLetter, written: { resume, letter: coverLetter },
+      grounding: withRewording({ ...earlyGrounding, flags: [...resumeCheck.flags, ...coverCheck.flags],
+        verifierRan: resumeCheck.verifierRan && coverCheck.verifierRan,
+        verifierRanByDoc: { resume: resumeCheck.verifierRan, cover_letter: coverCheck.verifierRan },
+        hasFabrication: resumeCheck.hasFabrication || coverCheck.hasFabrication }, sourceKind),
+      credentialsAnswer: earlySource.credentialsAnswer || undefined,
+      credentialRows: completeCredentialRows(readCredentialRows(earlySource.credentialRows)), ownResumeText: earlySource.ownResumeText || undefined });
+    const letterSentenceFix = cutUnsupportedExtraSentences(coverLetter, letterView.openItems, "letter", groundingSource);
+    if (letterSentenceFix.repairs.length) {
+      coverLetter = letterSentenceFix.text;
+      repaired.repairs.push(...letterSentenceFix.repairs);
+    }
     const credentialChecks = [
       ...findOverstatedCredentialLines(resume, statuses).map((claim) => ({ claim, doc: "resume" as const })),
       ...findOverstatedCredentials(coverLetter, statuses, { firstPerson: true }).map((claim) => ({ claim, doc: "cover_letter" as const })),
@@ -212,6 +325,18 @@ async function handlePost(request: Request) {
     const groundingApplied = resumeCheck.applied || coverCheck.applied;
     const hasFabrication = resumeCheck.hasFabrication || coverCheck.hasFabrication;
 
+    // What t.ROY changed from the person's own page, for the live reveal. Kept
+    // only where the old line is the person's and the new line is on the
+    // FINAL resume (after the truth check and every backstop). Display only:
+    // not part of what the receipt signs, never used to save anything.
+    // Phase 6 integration (M2): in a rebuild `input.resumeText` is the page the writer
+    // started from (never the person's own words); `old` lines are checked against it.
+    const validChanges = validateWriterChanges(rawChanges, {
+      ownResumeText: withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept,
+      finalResume: resume,
+      keepInsideLines: input.keepInsideLines === true,
+    });
+
     const latencyMs = Date.now() - startTime;
 
     // Log decision for JBS compliance
@@ -237,6 +362,7 @@ async function handlePost(request: Request) {
           cover_letter_length: coverLetter.length,
           grounding_flags: groundingFlags.length,
           grounding_applied: groundingApplied,
+          changes_count: validChanges.length,
         },
         latencyMs,
       });
@@ -249,12 +375,9 @@ async function handlePost(request: Request) {
     const { withheld: withheldLines } = withholdRecordLines(input.resumeText, input.keepInsideLines === true);
     const keptInsideLines = input.keepInsideLines === true;
 
-    return NextResponse.json({
-      resume,
-      coverLetter,
-      withheldLines,
-      keptInsideLines,
-      grounding: {
+    // Round 3 (review r1 H2): rewording A is opt-in, stamped here from the
+    // server's own source kind (lib/source-kind.ts); never carried in.
+    const grounding = withRewording({
         hasFabrication,
         applied: groundingApplied,
         removed: removedCount,
@@ -271,6 +394,9 @@ async function handlePost(request: Request) {
         verifierRan: resumeCheck.verifierRan && coverCheck.verifierRan,
         // Per document, so the page can say which one went unchecked.
         verifierRanByDoc: { resume: resumeCheck.verifierRan, cover_letter: coverCheck.verifierRan },
+        forgeAssisted: rewordingAFor(sourceKind),
+        forgeRepairs: repaired.repairs,
+        qualityPass: { attempted: initialQualityIssues.length > 0, improved: qualityImproved, remaining: forgeQualityIssues(resume).length },
         hasFabricationByDoc: { resume: resumeCheck.hasFabrication, cover_letter: coverCheck.hasFabrication },
         // The check reported a problem in this document but named no phrase of its own.
         unnamedByDoc: {
@@ -279,9 +405,66 @@ async function handlePost(request: Request) {
         },
         changed: accounting.changed,
         unmatched: accounting.unmatched,
-      },
+    }, sourceKind);
+    // Phase 5 R1 (review M1): the server's signature over exactly what it
+    // wrote and what its check found. A saved version counts these only
+    // with a matching receipt (lib/writer-receipt.ts).
+    // Bound to this account (or, signed out, this run), this run, this
+    // generation (a nonce) and the own-words source the SERVER works out from
+    // the writer's own inputs (reviews M-B, H2). Signed in, the newest nonce
+    // per run is kept, so an older receipt cannot stand in for this one.
+    const raw = sourceInput as unknown as Record<string, unknown>;
+    const runId = typeof raw.runId === "string" ? raw.runId.slice(0, 100) : "";
+    const nonce = randomBytes(16).toString("hex");
+    const issuedAt = Date.now();
+    // Signed out: a fresh run cookie with every generation (HttpOnly, set
+    // below), and the receipt bound to it (review r3 L-1).
+    const runCookie = userId ? undefined : streamCookie ?? randomBytes(16).toString("hex");
+    // Phase 6 integration (H3): a change whose new line waits on a card (a people
+    // claim set aside to ask, a fact to confirm) is not a finished fix and is not
+    // shown. Read from this server's own finish gate over the final documents,
+    // with the same own words the receipt is bound to.
+    const ownSource = writerSourceFrom(raw);
+    const cardView = buildFinishView({
+      resumeText: resume,
+      ownWords: ownSource.ownWords,
+      defendAnswers: [],
+      coverLetterText: coverLetter,
+      written: { resume, letter: coverLetter },
+      grounding,
+      credentialsAnswer: ownSource.credentialsAnswer || undefined,
+      credentialRows: completeCredentialRows(readCredentialRows(ownSource.credentialRows)),
+      ownResumeText: ownSource.ownResumeText || undefined,
+    });
+    const changes = changesNotAwaitingCards(validChanges, cardView);
+    const receipt = writerReceipt({ resume, letter: coverLetter }, grounding, {
+      userId: userId ?? null,
+      runId,
+      source: writerSourceFrom(raw),
+      nonce,
+      now: issuedAt,
+      cookie: runCookie,
+    });
+    if (userId && runId) {
+      const { recordWriterReceipt } = await import("@crucible/core");
+      await recordWriterReceipt(userId, runId, nonce, issuedAt).catch((e: unknown) => console.error("writer receipt record failed:", (e as Error)?.message || e));
+    }
+    const out = NextResponse.json({
+      resume,
+      coverLetter,
+      withheldLines,
+      keptInsideLines,
+      grounding,
+      receipt,
+      changes,
+      // A rebuild: the own-words source the receipt is bound to, so the finish
+      // page checks against exactly that (its run evidence), never the page.
+      // (For a rebuild `raw` is the server's source, never the request's.)
+      ...(rebuildFrom !== undefined ? { evidence: writerSourceFrom(raw) } : {}),
       generated_at: new Date().toISOString(),
     });
+    if (runCookie) out.headers.append("Set-Cookie", runCookieHeader(runCookie));
+    return out;
   } catch (error: any) {
     console.error("Document generation error:", error);
     return NextResponse.json(
@@ -297,167 +480,20 @@ async function callClaude(
   systemPrompt: string,
   userMessage: string,
   userId: string | null | undefined,
-  maxTokens = 4000
+  maxTokens = 4000,
+  signal?: AbortSignal
 ): Promise<string> {
-  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP, { userId, endpoint: "generate-docs" });
+  return callAI(systemPrompt, [{ role: "user", content: userMessage }], maxTokens, MODEL_DEEP, { userId, endpoint: "generate-docs" }, signal);
 }
 
 // --- Resume Generation ---
 
 async function generateResume(input: GenerateDocsInput, userId: string | null | undefined): Promise<string> {
-  const strengths = input.strengths || input.narrative?.strengths || [];
-  const skills = input.skills || [];
-  const careerPaths = input.career_paths || [];
-  const narrative = input.narrative || {};
-  const isExploring = input.readinessStage === "precontemplation";
-
-  // Inject research-backed context
-  const researchCtx = buildFullContext("resume", userContextFromForge({
-    forgeOutput: { narrative, strengths, skills, career_paths: careerPaths },
-    readinessStage: input.readinessStage,
-    resumeText: input.resumeText,
-  }));
-
-  const system = `${researchCtx}
-
-You are a world-class professional resume writer. You produce resumes that compete at the highest level in professional resume writing for people re-entering the workforce.
-
-YOUR JOB: Take whatever the user gives you, even a terrible, bare-bones resume, and produce a polished, compelling, TRUE resume that gets interviews and survives them.
-
-ABSOLUTE RULES (the truth gate: violating any = failure):
-1. TRUTH GATE: use ONLY facts the source data states. NEVER invent a number, metric, tool, certification, employer, title, or result. NEVER estimate, infer, or borrow "industry typical" figures. If a detail is missing, write the bullet strong without it. This person's resume must survive a background-checked interview. A true unquantified bullet beats an impressive false one.
-2. Numbers ONLY where the source states them, kept exactly as given (ranges stay ranges). This rule runs BOTH WAYS and the second half matters as much as the first: every number the person supplied MUST survive onto the resume. Do not drop a measured detail while rewriting the line that carried it. On a real run the intake said "hauled 40 to 50 loads a week during the season" and the finished resume said only "hauls material for a 6-mile MDT overlay project". The load count had been moved to the cover letter and deleted from the resume. A number the person actually knows is the single most valuable thing their resume can carry. Losing one is as bad as inventing one, and it is harder to notice.
-3. NEVER "responsible for", "tasked with", "helped with", "assisted in", "participated in", "duties included". These are resume poison. Transform every one into achievement language built from stated facts.
-4. NEVER use these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, synergy, innovative, dynamic, proactive, dedicated, motivated, passionate, proven track record, results-driven, detail-oriented, team player. Write like a confident human.
-5. ZERO first person ("I", "my", "me"). ZERO unnecessary articles in bullets.
-6. Every bullet starts with a STRONG action verb: Led, Delivered, Reduced, Achieved, Built, Scaled, Trained, Maintained, Processed, Coordinated, Managed, Operated, Launched.
-7. Past roles = past tense. Current role = present tense. No exceptions.
-8. ${input.keepInsideLines === true ? KEEP_INSIDE_RULE : WITHHOLD_RULE}
-9. For employment gaps: use YEARS ONLY (no months). NEVER explain gaps.
-10. COMPLETENESS FIRST: include every true, relevant role, achievement, and qualification the source supports. Length follows substance. Never cut real content to hit a page or word count, and never pad to fill one. A strong two-page resume beats a thin one-page one; the page-fit pass handles length after the truth is on the page.
-11. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. This applies everywhere in the output. Hyphens inside words (first-piece, part-time) are fine.
-12. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give. No endings like ", freeing capacity for additional production" or ", supporting a smooth flow during busy hours", and no "high-volume", "fast-paced", "peak service" or "busy" unless they said it. A plain true bullet beats a dressed-up one. Keep every result the person did give, in their own terms ("never had an accident in 5 years", "so we didn't have to call a tech"). Dropping one is as bad as inventing one. Never add what a duty covered beyond what they said: "Trained 11 new operators" stays exactly that, never "on setup, quality and safety".
-13. NO CHARACTER CLAIMS: no "dependable", "reliable", "shows up ready", "consistent" or anything like them in the headline, summary or bullets unless the person said it about themselves.
-
-DATA CLEANING (FIX INPUT ERRORS):
-- If a job title doesn't seem to match the company, keep exactly what the person wrote. Never move a title to a different employer and never invent a new employer or role. The person checks it on the next screen.
-- If dates look wrong or overlapping, keep the dates exactly as the person gave them. Never change, merge, shift or guess a date. A date that is off by even a month reads as a discrepancy on a background check, so the person settles it, not you.
-- If the resume is bare/terrible, produce the strongest TRUE resume the facts support: real duties as strong-verb bullets, skills the source supports, clean structure. Do NOT pad with invented achievements or metrics. An honest 3-bullet role beats a fabricated 5-bullet one.
-
-${isExploring ? `This person is exploring, not actively job searching. Frame the value proposition as identity ("who you are") not targeting.` : ""}
-${selfDisclosureDirective(input)}
-SECTION ORDER (exact):
-1. FULL NAME (all caps)
-2. Contact line: City, State | Phone | Email (one line, pipe-separated). Include ONLY the pieces the source provides. Omit anything missing rather than inventing a placeholder for it.
-3. Branded Headline (one powerful line. NOT an objective. An identity statement.)
-4. CAREER SUMMARY (3-4 sentences. Who they are, what they bring, where they're headed. No generic filler.)
-5. CORE COMPETENCIES (the real competencies the source supports, in 3 columns separated by |. No category labels. No "Hard Skills:" or "Soft Skills:". Just the terms. Pull from ACTUAL job content, not generic lists. Never invent terms to fill a grid, and never drop real ones. Every term must name something the person said they did, used or learned. No soft-skill filler (Attention to Detail, Task Prioritization, Time Management) unless they said it. Typically 9 to 15, fewer for a short history.)
-6. PROFESSIONAL EXPERIENCE (reverse chronological)
-   - Format: JOB TITLE | Company Name | City, State | Start Year - End Year. Include City, State only if the source gives that job's city; otherwise leave that part out.
-   - As many CAR bullets as the role's real achievements support (typically 3 to 6). Quantify where the source states a number; a true unquantified bullet beats an invented figure.
-7. EDUCATION (only if the source gives any; otherwise leave the section off)
-   - Institution, dates. City and state only if the source gives them. Add relevant coursework if it strengthens the resume.
-8. CERTIFICATIONS (only if the source gives any; separate section. Don't bury them in education. List each credential once: a certificate goes only under CERTIFICATIONS, never also under EDUCATION.)
-- CREDENTIAL STATUS: a finished course, class or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.
-
-OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No brackets. No placeholders.`;
-
-  const parts: string[] = [];
-
-  if (narrative.headline) parts.push(`NARRATIVE HEADLINE: ${narrative.headline}`);
-  if (narrative.summary) parts.push(`NARRATIVE SUMMARY: ${narrative.summary}`);
-
-  if (strengths.length > 0) {
-    parts.push(
-      `STRENGTHS:\n${strengths.map((s) => `- ${s.title}: ${s.evidence}`).join("\n")}`
-    );
-  }
-
-  if (skills.length > 0) {
-    // Flatten skills into a single list — no category labels in the resume
-    const allSkills = skills.map((s) => s.name).filter(Boolean);
-    parts.push(`SKILLS (use for Core Competencies grid, no category labels):\n${allSkills.join(", ")}`);
-  }
-
-  if (careerPaths.length > 0) {
-    parts.push(
-      `TARGET CAREER PATHS:\n${careerPaths.map((cp) => `- ${cp.title} (${cp.industry || "various"})`).join("\n")}`
-    );
-  }
-
-  if (input.resumeText) {
-    const cleanedResume = withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept;
-    parts.push(`ORIGINAL RESUME TEXT (transform duties into CAR achievements):\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.resumeText")}`);
-  }
-
-  if (input.goals?.length) {
-    parts.push(`GOALS: ${input.goals.join(", ")}`);
-  }
-  if (input.goalNarrative) {
-    parts.push(`GOAL NARRATIVE: ${input.goalNarrative}`);
-  }
-
-  if (input.preferences) {
-    const p = input.preferences;
-    if (p.location) parts.push(`PREFERRED LOCATION: ${p.location}`);
-  }
-
-  const prompt = `Write a world-class professional resume using the data below. Make it significantly better than the input.
-
-${parts.join("\n\n")}
-
-EXACT OUTPUT FORMAT (plain text, follow precisely):
-
-FULL NAME
-City, State | Phone | Email
-  NOTE: Use ONLY contact details the source actually provides. OMIT any you do not
-     have, along with its separator. A name and a city alone is a correct and
-     complete contact line. NEVER write a placeholder: no (XXX) XXX-XXXX, no
-     email@email.com, no [Phone], no "Your Email Here". A placeholder on a
-     finished resume goes to an employer looking like carelessness, and this is
-     a document someone sends without re-reading it.
-
-Branded headline: one powerful line. Not an objective. An identity.
-
-CAREER SUMMARY
-3-4 sentences. Position this person as a professional. What they bring, what industry they've grown through, where they're headed. NO generic filler. NO "dedicated professional" or "proven track record." Write like describing someone you're impressed by.
-
-CORE COMPETENCIES
-Term 1 | Term 2 | Term 3
-Term 4 | Term 5 | Term 6
-Term 7 | Term 8 | Term 9
-(The real competencies the source supports, typically 9 to 15. No labels. No categories. Just the skills. Pull from ACTUAL job content. Never pad to a count.)
-
-PROFESSIONAL EXPERIENCE
-
-JOB TITLE | Company Name | City, State | Start Year - End Year
-(City, State only if the source gives that job's city. Otherwise: JOB TITLE | Company Name | Start Year - End Year)
-- Strong verb + what was done + result, quantified where the source states a number.
-- Strong verb + achievement with scope (headcount, volume, percentage) when the source gives it.
-- As many bullets as the role's real achievements support (typically 3 to 6); write fewer rather than pad.
-
-(Repeat for each role, reverse chronological)
-
-EDUCATION
-Institution Name, City, State | Start Year - End Year
-(City, State only if the source gives them.)
-Relevant coursework or focus area if it adds value (only what the source states).
-
-CERTIFICATIONS
-- Cert name (year, only if the source states it)
-- Cert name (year, only if the source states it)
-
-CRITICAL REMINDERS:
-- TRUTH GATE: every number, tool, certification, and result must come from the source data. If the input is bare or poorly written, make the output CLEAN and strong, never padded: real facts, strong verbs, zero invention.
-- If a job title/company pairing doesn't seem to match, keep exactly what the person wrote. Never move a title to a different employer and never invent a new employer or role.
-- SECTIONS WITH NOTHING IN THEM: leave EDUCATION or CERTIFICATIONS off entirely when the source gives none. Never print a line like "No formal education provided".
-- Transform duties into achievement language using only the source's facts and stated scale.
-- CERTIFICATIONS: include ONLY certifications the source states, exactly as stated. Never annotate "(Current)" unless the source says so.
-- NO placeholder brackets. NO [Company Name]. Use real data or omit.
-- If no work history exists: a skills-led page is allowed, but list training, programs and volunteer work with the dates the person gave, and build only from what the person said.
-- Certifications get their OWN section, never buried in education.`;
-
-  return await callClaude(system, prompt, userId, 4500);
+  // Prompt text lives in lib/forge-resume-prompt.ts, built from the shared
+  // resume rulebook (truth rules via the context library, page rules there).
+  const { system, user } = buildForgeResumePrompts(input);
+  // Room for the resume and its CHANGES block (up to 40 short entries after it).
+  return await callClaude(system, user, userId, 6500);
 }
 
 // --- Cover Letter Generation ---
@@ -479,13 +515,13 @@ RULES:
 - The letter should work for any employer in their target career path(s).
 - Use [Company Name] and [Hiring Manager] as placeholders ONLY for the employer name and contact.
 - Everything else must use REAL data from the person's profile.
-- 250-350 words. Professional tone with warmth.
+- Two or three short paragraphs, with no minimum word count. A thin source should produce a brief letter, even under 100 words. Professional tone with warmth. Never add claims or repeat facts to fill space.
 - Do not raise a record, incarceration, supervision or any justice involvement in the letter, and never add or hint at it. That conversation is the person's to have in person. If the work history includes work done inside, you may describe the work itself (the duties and skills) without naming the facility.
 - Do NOT explain employment gaps. Simply focus on what the candidate brings.
 - TRUTH GATE: never fabricate achievements, experience, numbers, certifications, or personal facts (transportation, availability, physical capability, references). Every claim must come from the profile data provided.
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
-- FACTS AS GIVEN: state every fact the way the profile states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give ("so orders move without hold-ups", "during busy dinner service", "before a run turns into a bin of bad parts"). "I fixed the ice machine drain twice" stays exactly that size.
-- SOURCES: WORK HISTORY EXCERPT is the person's own words. ABOUT, SUMMARY, KEY STRENGTHS and TOP SKILLS were written by an earlier step and can overstate. When they differ, the person's words win. Never repeat a claim about character or reliability ("dependable", "someone you can count on", "shows up ready") unless the work history says it.
+- FACTS AS GIVEN: state every fact the way the profile states it, in every sentence, not only the opening. Do not build a scene around it, count jobs or achievements the person did not count, or add comparisons, metaphors, causes, consequences, settings or reactions the person did not give ("so orders move without hold-ups", "during busy dinner service", "before a run turns into a bin of bad parts"). "I fixed the ice machine drain twice" stays exactly that size. End a paragraph after its sourced duties instead of adding an interpretive wrap-up.
+- SOURCES: WORK HISTORY EXCERPT is the person's own words. ABOUT, SUMMARY, KEY STRENGTHS and TOP SKILLS are earlier AI analysis: targeting context, never evidence about the person, even when their own words are silent. Every duty, skill and trait must be supported by their own words. Never infer frequency, work habits, operating conditions, lessons learned, multitasking or results from a job title or an ordinary duty. "Did safety audits" supports "Ran safety audits", not what was inspected. "Answered phones and helped customers" supports those duties, not solving problems or staying calm under pressure. Never repeat a claim about character or reliability unless the work history says it.
 - CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "Thanks for reading", "asset to your team", "eager to bring", or "fast-paced environment". For THIS letter: ${closingStyle}
 - REPEATS: never repeat a sentence, a list or a phrase you already used in the letter.
 - CREDENTIAL STATUS: a finished course, class or training is not a certification or license unless the person says they passed or are certified. An expired, suspended or revoked credential is not current: never call it current, active, valid or renewable.
@@ -546,13 +582,13 @@ Sincerely,
 IMPORTANT:
 - Use [Company Name] and [Hiring Manager] as the ONLY placeholders.
 - Everything else must be real: real skills, real achievements, real strengths.
-- 250-350 words for the body.
+- Keep the body as short as the source requires. No minimum word count, invented detail or filler.
 - Do not mention barriers, gaps, or anything the person would have to explain. That conversation happens in person.`;
 
   return await callClaude(system, prompt, userId);
 }
 
 export const POST = withRateLimit(handlePost, {
-  mode: "ip",
+  mode: "forge",
   endpoint: "generate-docs",
 });

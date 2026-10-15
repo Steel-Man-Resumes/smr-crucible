@@ -385,7 +385,10 @@ export function scoreResume(doc: ResumeDocument): {
           : "",
   });
 
-  // Education (10%)
+  // Education (10%). Optional: a person with no formal education or training is
+  // not capped. An empty section is "not applicable" and its weight is spread
+  // over the other sections (see the weighted overall below), so every section
+  // the person can truthfully fill filled = 100. Adding a line still counts.
   const filledEd = doc.education.filter((e) => e.credential.trim());
   const edScore = filledEd.length === 0 ? 0 : 100;
   sections.push({
@@ -395,7 +398,7 @@ export function scoreResume(doc: ResumeDocument): {
     status: edScore === 0 ? "empty" : "complete",
     tip:
       edScore === 0
-        ? "Add degrees, certs, or training. GED counts. OSHA counts. Everything counts."
+        ? "Optional. Add degrees, certs, or training if you have them. GED counts. OSHA counts. Everything counts."
         : "",
   });
 
@@ -415,10 +418,15 @@ export function scoreResume(doc: ResumeDocument): {
           : "",
   });
 
-  // Weighted overall
+  // Weighted overall. Education is optional: when the section is empty it drops
+  // out and the remaining weights are scaled up so they still sum to 100.
   const weights = [15, 20, 35, 10, 20];
+  const applicable = weights.map((w, i) =>
+    sections[i].section === "education" && edScore === 0 ? 0 : w
+  );
+  const totalWeight = applicable.reduce((a, b) => a + b, 0);
   const overall = Math.round(
-    sections.reduce((sum, s, i) => sum + s.score * (weights[i] / 100), 0)
+    sections.reduce((sum, s, i) => sum + (s.score * applicable[i]) / totalWeight, 0)
   );
 
   return { overall, sections };

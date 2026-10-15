@@ -6,6 +6,7 @@
  * Each artifact is versioned by iteration_number per user+type+context.
  */
 
+import { ResourceListContent } from "./resourceListShared";
 import { createHash } from "node:crypto";
 import { queryAsUser, getOneAsUser, insertAsUser } from "./db";
 
@@ -24,6 +25,10 @@ export interface RefineryArtifact {
   lane: string | null;
   /** R6: an approved, locked per-lane baseline resume. Multiple are allowed. */
   is_locked: boolean;
+  /** 074: the career lane this belongs to. Null = the main lane. */
+  lane_id: string | null;
+  /** 074/075: an example or test resume, hidden by default behind "Show examples". */
+  is_demo: boolean;
   /** Phase 1A: the immediate artifact this one was forked from. Null if never forked. */
   parent_artifact_id: string | null;
   /** Phase 1A: the root of this artifact's lineage (self-referential for the root itself). */
@@ -47,7 +52,22 @@ export type ArtifactType =
   | "disclosure_plan"
   | "interview_prep"
   | "resource_list"
-  | "job_match";
+  | "job_match"
+  | CreativeArtifactType;
+
+/**
+ * Creative lane documents (migration 076). Written ONLY through the creative
+ * routes (core/creativeDocs.ts), which run the authorship and trace checks
+ * first. The generic content write below refuses them, so no other path can
+ * put text into a statement.
+ */
+export const CREATIVE_ARTIFACT_TYPES = ["artist_resume", "artist_bio", "artist_statement", "work_sample_list", "cv", "performer_resume"] as const;
+export type CreativeArtifactType = (typeof CREATIVE_ARTIFACT_TYPES)[number];
+export const CREATIVE_TYPES_SQL = CREATIVE_ARTIFACT_TYPES.map((t) => `'${t}'`).join(", ");
+
+export function isCreativeType(t: unknown): boolean {
+  return typeof t === "string" && (CREATIVE_ARTIFACT_TYPES as readonly string[]).includes(t);
+}
 
 /**
  * Create a new artifact. Iteration number auto-increments per user+type.
@@ -57,8 +77,10 @@ export async function createArtifact(
   type: ArtifactType,
   targetContext: Record<string, unknown>,
   content: Record<string, unknown>,
-  scaffoldLevel: number = 1.0
+  scaffoldLevel: number = 1.0,
+  opts: { laneId?: string | null } = {}
 ): Promise<RefineryArtifact> {
+  if (type === "resource_list") { content = ResourceListContent.parse(content); targetContext = {}; }
   // Get next iteration number for this user+type combo
   const latest = await getOneAsUser<{ max_iter: number }>(userId, 
     `SELECT COALESCE(MAX(iteration_number), 0) AS max_iter
@@ -75,6 +97,9 @@ export async function createArtifact(
     content: JSON.stringify(content),
     iteration_number: nextIter,
     scaffold_level: scaffoldLevel,
+    // 074: the caller has checked the lane is this person's and open; the
+    // composite foreign key (lane_id, user_id) refuses anything else.
+    ...(opts.laneId ? { lane_id: opts.laneId } : {}),
   });
 }
 
@@ -88,10 +113,11 @@ export async function createArtifact(
  * Exported as a constant so the adversarial suite can assert the predicate
  * never regresses out of the statement.
  */
-export const ARTIFACT_CONTENT_UPDATE_SQL = (scaffoldClause: string) =>
+export const ARTIFACT_CONTENT_UPDATE_SQL = (scaffoldClause: string, expectedParam?: number) =>
   `UPDATE refinery_artifact
      SET content = $1, updated_at = now()${scaffoldClause}
      WHERE id = $2 AND user_id = $3 AND is_locked = false
+       AND artifact_type NOT IN (${CREATIVE_TYPES_SQL})${expectedParam ? ` AND content IS NOT DISTINCT FROM $${expectedParam}::jsonb` : ""}
      RETURNING *`;
 
 export const ARTIFACT_DELETE_SQL = `DELETE FROM refinery_artifact
@@ -101,7 +127,9 @@ export const ARTIFACT_DELETE_SQL = `DELETE FROM refinery_artifact
 export type ArtifactWriteResult =
   | { status: "updated"; artifact: RefineryArtifact }
   | { status: "locked" }
-  | { status: "not_found" };
+  | { status: "creative_doc" }
+  | { status: "not_found" }
+  | { status: "conflict" };
 
 /**
  * Update an existing artifact in place. Ownership-checked, lock-guarded.
@@ -112,8 +140,11 @@ export async function updateArtifact(
   artifactId: string,
   userId: string,
   content: Record<string, unknown>,
-  scaffoldLevel?: number
+  scaffoldLevel?: number,
+  expectedContent?: unknown
 ): Promise<ArtifactWriteResult> {
+  const target = await getOneAsUser<{artifact_type:string}>(userId, "SELECT artifact_type FROM refinery_artifact WHERE id=$1 AND user_id=$2", [artifactId,userId]);
+  if (target?.artifact_type === "resource_list") content = ResourceListContent.parse(content);
   const scaffoldClause = scaffoldLevel !== undefined
     ? `, scaffold_level = $4`
     : "";
@@ -126,17 +157,39 @@ export async function updateArtifact(
     params.push(scaffoldLevel);
   }
 
+  const expectedParam = expectedContent === undefined ? undefined : params.push(JSON.stringify(expectedContent));
   const rows = await queryAsUser<RefineryArtifact>(userId, 
-    ARTIFACT_CONTENT_UPDATE_SQL(scaffoldClause),
+    ARTIFACT_CONTENT_UPDATE_SQL(scaffoldClause, expectedParam),
     params
   );
   if (rows[0]) return { status: "updated", artifact: rows[0] };
   // Zero rows: distinguish a locked row from a missing/foreign one.
-  const existing = await getOneAsUser<{ is_locked: boolean }>(userId, 
-    `SELECT is_locked FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
+  const existing = await getOneAsUser<{ is_locked: boolean; artifact_type: string }>(userId, 
+    `SELECT is_locked, artifact_type FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
     [artifactId, userId]
   );
-  return existing ? { status: "locked" } : { status: "not_found" };
+  if (existing && (CREATIVE_ARTIFACT_TYPES as readonly string[]).includes(existing.artifact_type)) return { status: "creative_doc" };
+  return existing ? { status: existing.is_locked ? "locked" : "conflict" } : { status: "not_found" };
+}
+
+/**
+ * Phase 5 R1 (review M3): record that a new artifact (a Tailor output) was
+ * made from another of the SAME person's artifacts, so its saved revision can
+ * start from the parent's settled answers. Both rows must be the person's
+ * (read and written AS them); a foreign or missing parent changes nothing.
+ * Only an artifact with no parent yet is linked.
+ */
+export const ARTIFACT_SET_PARENT_SQL = `UPDATE refinery_artifact a
+     SET parent_artifact_id = p.id,
+         origin_artifact_id = COALESCE(p.origin_artifact_id, p.id)
+    FROM refinery_artifact p
+   WHERE a.id = $1 AND a.user_id = $3 AND a.parent_artifact_id IS NULL
+     AND p.id = $2 AND p.user_id = $3 AND p.id <> a.id
+  RETURNING a.id`;
+
+export async function setArtifactParent(userId: string, artifactId: string, parentId: string): Promise<boolean> {
+  const rows = await queryAsUser<{ id: string }>(userId, ARTIFACT_SET_PARENT_SQL, [artifactId, parentId, userId]);
+  return rows.length > 0;
 }
 
 /**
@@ -154,25 +207,49 @@ export async function getArtifact(
 }
 
 /**
- * List artifacts for a user, optionally filtered by type.
+ * THE example rule (D12), in one place. A person's old sample resumes are
+ * marked is_demo by 074/075 and tucked away; nothing is deleted. Anything that
+ * lists, counts, or draws profile or contact details from a person's resumes
+ * adds this condition, so a sample can never feed the page, the profile, the
+ * phone number or the journey. Only the Library's explicit "Show examples"
+ * asks for them (examples: "only"). The column comes from 074; before 075 runs
+ * every row is false and nothing is hidden. Pass the table alias when the
+ * query uses one.
  */
-export async function listArtifacts(
+export const ARTIFACT_NOT_DEMO_SQL = "is_demo = false";
+export function artifactNotDemoSql(alias?: string): string {
+  return alias ? `${alias}.${ARTIFACT_NOT_DEMO_SQL}` : ARTIFACT_NOT_DEMO_SQL;
+}
+
+/**
+ * List artifacts for a user, optionally filtered by type. `examples: "hide"`
+ * leaves out example resumes (D12); omitted lists everything.
+ */
+export function listArtifactsSql(
   userId: string,
-  opts?: { type?: ArtifactType; limit?: number }
-): Promise<RefineryArtifact[]> {
+  opts?: { type?: ArtifactType; limit?: number; examples?: "hide" }
+): { sql: string; params: unknown[] } {
   const typeClause = opts?.type ? ` AND artifact_type = $2` : "";
+  const demoClause = opts?.examples === "hide" ? ` AND ${ARTIFACT_NOT_DEMO_SQL}` : "";
   const limit = opts?.limit ?? 50;
   const params: unknown[] = [userId];
   if (opts?.type) params.push(opts.type);
   params.push(limit);
-
-  return queryAsUser<RefineryArtifact>(userId, 
-    `SELECT * FROM refinery_artifact
-     WHERE user_id = $1${typeClause}
+  return {
+    sql: `SELECT * FROM refinery_artifact
+     WHERE user_id = $1${typeClause}${demoClause}
      ORDER BY updated_at DESC
      LIMIT $${params.length}`,
-    params
-  );
+    params,
+  };
+}
+
+export async function listArtifacts(
+  userId: string,
+  opts?: { type?: ArtifactType; limit?: number; examples?: "hide" }
+): Promise<RefineryArtifact[]> {
+  const { sql, params } = listArtifactsSql(userId, opts);
+  return queryAsUser<RefineryArtifact>(userId, sql, params);
 }
 
 /**
@@ -295,6 +372,9 @@ export interface ArtifactPage {
  *              derived from target_context, so this is the title/target search
  *   - lane   : exact lane label
  *   - group  : masters | company | other (a resume sub-group predicate)
+ *   - laneId : a career lane id, or "main" for work outside any lane (074)
+ *   - examples : "hide" leaves out example resumes, "only" lists just them,
+ *                omitted lists everything (the old behaviour)
  *   - limit / offset : pagination (limit clamped to [1,100])
  * Returns the page plus the total matching count (for "showing X of N").
  */
@@ -305,6 +385,10 @@ export async function listArtifactsPaged(
     q?: string;
     lane?: string;
     group?: "masters" | "company" | "other";
+    laneId?: string;
+    examples?: "hide" | "only";
+    /** "recent" = newest edit first, ignoring the pinned current resume. */
+    order?: "recent";
     limit?: number;
     offset?: number;
   } = {}
@@ -328,6 +412,14 @@ export async function listArtifactsPaged(
   if (opts.group && RESUME_GROUP_PREDICATES[opts.group]) {
     where.push(`(${RESUME_GROUP_PREDICATES[opts.group]})`);
   }
+  if (opts.laneId === "main") {
+    where.push(`lane_id IS NULL`);
+  } else if (opts.laneId) {
+    where.push(`lane_id = $${i++}::uuid`);
+    params.push(opts.laneId);
+  }
+  if (opts.examples === "hide") where.push(ARTIFACT_NOT_DEMO_SQL);
+  if (opts.examples === "only") where.push(`is_demo = true`);
 
   const whereSql = where.join(" AND ");
 
@@ -343,7 +435,7 @@ export async function listArtifactsPaged(
   const items = await queryAsUser<RefineryArtifact>(userId, 
     `SELECT * FROM refinery_artifact
       WHERE ${whereSql}
-      ORDER BY is_current DESC, updated_at DESC
+      ORDER BY ${opts.order === "recent" ? "" : "is_current DESC, "}updated_at DESC
       LIMIT $${i++} OFFSET $${i}`,
     pageParams
   );
@@ -351,17 +443,63 @@ export async function listArtifactsPaged(
   return { items, total };
 }
 
+/** Counts by type for the dashboard. Examples (D12) are not counted as the person's work. */
+export const ARTIFACT_COUNTS_SQL = `SELECT artifact_type, COUNT(*)::text AS count
+     FROM refinery_artifact
+     WHERE user_id = $1 AND ${ARTIFACT_NOT_DEMO_SQL}
+     GROUP BY artifact_type`;
+
 /**
- * Get artifact counts grouped by type for a user.
+ * The person's last five resumes for t.ROY's context (/api/user/context).
+ * Examples (D12) are left out, so a sample is never read as their history.
+ */
+export const RECENT_RESUMES_FOR_CONTEXT_SQL = `SELECT id, target_context, content, created_at
+     FROM refinery_artifact
+     WHERE user_id = $1 AND artifact_type = 'resume' AND ${ARTIFACT_NOT_DEMO_SQL}
+     ORDER BY created_at DESC LIMIT 5`;
+
+/**
+ * The resume the profile contact falls back on (/api/user/profile) when the
+ * person never saved their own contact. Examples (D12) are left out: a sample's
+ * 555-01xx phone must never become the person's phone.
+ */
+export const PROFILE_CONTACT_RESUME_SQL = `SELECT content FROM refinery_artifact
+       WHERE user_id = $1 AND artifact_type = 'resume' AND ${ARTIFACT_NOT_DEMO_SQL}
+       ORDER BY (target_context->>'source' = 'forge') DESC, updated_at DESC
+       LIMIT 1`;
+
+/**
+ * The phone from the person's newest resume, for the profile-complete check
+ * (getUserProfile) when they never re-saved Settings. Examples (D12) are left
+ * out, so a sample's 555-01xx phone cannot make a profile look complete.
+ */
+export const PROFILE_ARTIFACT_PHONE_SQL = `SELECT content->'contact'->>'phone' AS phone
+       FROM refinery_artifact
+       WHERE user_id = $1 AND artifact_type = 'resume' AND ${ARTIFACT_NOT_DEMO_SQL}
+         AND COALESCE(content->'contact'->>'phone', '') <> ''
+       ORDER BY updated_at DESC LIMIT 1`;
+
+/**
+ * Journey unlock: is there a job-targeted resume? Examples (D12) never unlock
+ * a step the person has not earned.
+ */
+export const JOURNEY_JOB_TARGETED_RESUME_SQL = `SELECT id FROM refinery_artifact
+       WHERE user_id = $1 AND artifact_type = 'resume' AND ${ARTIFACT_NOT_DEMO_SQL}
+         AND (
+           target_context->>'source' = 'job'
+           OR (COALESCE(target_context->>'targetJob', '') <> ''
+               AND COALESCE(target_context->>'source', '') <> 'forge')
+         )
+       LIMIT 1`;
+
+/**
+ * Get artifact counts grouped by type for a user (examples left out, D12).
  */
 export async function getArtifactCounts(
   userId: string
 ): Promise<Record<string, number>> {
   const rows = await queryAsUser<{ artifact_type: string; count: string }>(userId, 
-    `SELECT artifact_type, COUNT(*)::text AS count
-     FROM refinery_artifact
-     WHERE user_id = $1
-     GROUP BY artifact_type`,
+    ARTIFACT_COUNTS_SQL,
     [userId]
   );
   const counts: Record<string, number> = {};
@@ -392,6 +530,7 @@ export function hashContent(content: Record<string, unknown>): string {
 
 export type ForkResult =
   | { status: "forked"; artifact: RefineryArtifact; deduped: boolean }
+  | { status: "creative_doc" }
   | { status: "not_found" };
 
 /**
@@ -405,9 +544,13 @@ export type ForkResult =
  * the whole chain: COALESCE(source.origin_artifact_id, source.id), so forking
  * a fork still points straight at the original root.
  *
- * The fork starts unlocked, unpinned, and lane-less (is_locked / is_current /
- * lane are NOT copied) -- a fork is a fresh draft, not a second approved
- * baseline. iteration_number is source + 1.
+ * The fork starts unlocked, unpinned, and without the R6 lane LABEL
+ * (is_locked / is_current / lane are NOT copied) -- a fork is a fresh draft,
+ * not a second approved baseline. It does stay in its source's career lane
+ * (lane_id, migration 074): a copy tailored from the Warehouse resume is
+ * Warehouse work. An archived lane takes no new work, so a fork of work in an
+ * archived lane goes to the person's newest open lane, or main when there is
+ * none. iteration_number is source + 1.
  *
  * content_hash is computed in SQL with md5(content::text) as part of the same
  * INSERT..SELECT, since the copy never passes through Node -- see hashContent()'s
@@ -430,7 +573,7 @@ export const ARTIFACT_FORK_SQL = `INSERT INTO refinery_artifact (
        user_id, artifact_type, target_context, content,
        iteration_number, scaffold_level,
        parent_artifact_id, origin_artifact_id, content_hash,
-       creation_reason, operation_key
+       creation_reason, operation_key, lane_id
      )
      SELECT
        src.user_id,
@@ -443,9 +586,21 @@ export const ARTIFACT_FORK_SQL = `INSERT INTO refinery_artifact (
        COALESCE(src.origin_artifact_id, src.id),
        md5(src.content::text),
        $4,
-       $5
+       $5,
+       CASE
+         WHEN src.lane_id IS NULL THEN NULL
+         WHEN EXISTS (SELECT 1 FROM career_lane l
+                       WHERE l.id = src.lane_id AND l.user_id = src.user_id AND l.archived_at IS NULL)
+           THEN src.lane_id
+         ELSE (SELECT l.id FROM career_lane l
+                WHERE l.user_id = src.user_id AND l.archived_at IS NULL
+                ORDER BY l.created_at DESC LIMIT 1)
+       END
      FROM refinery_artifact src
      WHERE src.id = $1 AND src.user_id = $2
+       -- Creative documents are never forked: they live in their own lane and
+       -- are written only through the creative tools.
+       AND src.artifact_type NOT IN (${CREATIVE_TYPES_SQL})
      ON CONFLICT (user_id, parent_artifact_id, operation_key) WHERE operation_key IS NOT NULL
        DO NOTHING
      RETURNING *`;
@@ -480,5 +635,10 @@ export async function forkArtifact(opts: {
     );
     if (existing) return { status: "forked", artifact: existing, deduped: true };
   }
+  const src = await getOneAsUser<{ artifact_type: string }>(userId,
+    `SELECT artifact_type FROM refinery_artifact WHERE id = $1 AND user_id = $2`,
+    [sourceArtifactId, userId]
+  );
+  if (src && isCreativeType(src.artifact_type)) return { status: "creative_doc" };
   return { status: "not_found" };
 }

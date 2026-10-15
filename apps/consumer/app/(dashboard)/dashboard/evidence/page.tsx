@@ -11,11 +11,16 @@
 import { useUserTier } from "@/lib/useUserTier";
 import { DisclosureSection } from "@/components/DisclosureSection";
 import { TBtn } from "@crucible/consumer-ui";
+import { useForgeWall } from "@/components/forge/useForgeWall";
 
 export default function EvidencePage() {
   const tier = useUserTier();
   const isPartnerOrAdmin = tier === "partner" || tier === "admin";
   const isObserver = tier === "observer";
+  // The sign-in wall decides one matrix row and one decision record.
+  const wall = useForgeWall();
+  const matrix = wall === "up" || wall === null ? COMPETITIVE_MATRIX : [...COMPETITIVE_MATRIX.slice(0, 5), NO_LOGIN_ROW, ...COMPETITIVE_MATRIX.slice(5)];
+  const adrs = wall === null ? ADRS : [wall === "up" ? ADR_UP : ADR_OPEN, ...ADRS];
 
   return (
     <div className="max-w-3xl">
@@ -149,7 +154,7 @@ export default function EvidencePage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {COMPETITIVE_MATRIX.map((row, i) => (
+                  {matrix.map((row, i) => (
                     <tr key={i} className={i % 2 === 0 ? "bg-t-panel" : "bg-t-bg"}>
                       <td className="px-4 py-2.5 text-t-phos border-b border-t-line">{row.feature}</td>
                       <td className="px-4 py-2.5 text-center text-t-phos border-b border-t-line">{row.steelMan}</td>
@@ -191,7 +196,7 @@ export default function EvidencePage() {
               Architecture Decisions
             </h2>
             <div className="space-y-4">
-              {ADRS.map((adr, i) => (
+              {adrs.map((adr, i) => (
                 <div key={i} className="bg-t-panel p-5 border border-t-line">
                   <div className="flex items-start gap-3">
                     <span className="px-2 py-1 bg-t-panel-2 border border-t-amber text-t-amber-bright text-xs font-bold flex-shrink-0">
@@ -308,7 +313,6 @@ const COMPETITIVE_MATRIX = [
   { feature: "Disclosure coaching", steelMan: "✓", honestJobs: "✗", careerOneStop: "✗", genericAI: "✗" },
   { feature: "Research-grounded behavioral rules", steelMan: "✓", honestJobs: "✗", careerOneStop: "✗", genericAI: "✗" },
   { feature: "Decision audit trail", steelMan: "✓", honestJobs: "✗", careerOneStop: "✗", genericAI: "✗" },
-  { feature: "No login required", steelMan: "✓", honestJobs: "✗", careerOneStop: "✓", genericAI: "Varies" },
   { feature: "Narrative-first output", steelMan: "✓", honestJobs: "✗", careerOneStop: "✗", genericAI: "✗" },
   { feature: "Fair-chance job matching", steelMan: "✓", honestJobs: "✓", careerOneStop: "✗", genericAI: "✗" },
 ];
@@ -323,12 +327,20 @@ const COMPLIANCE_ITEMS = [
   { requirement: "Transparency", implementation: "AI explains its reasoning. Model version visible. Methodology publicly documented." },
 ];
 
+/** The matrix row and the decision record that follow the Forge sign-in wall (lib/forge-access.ts). */
+const NO_LOGIN_ROW = { feature: "No login required", steelMan: "✓", honestJobs: "✗", careerOneStop: "✓", genericAI: "Varies" };
+const ADR_OPEN = {
+  title: "Pre-auth Forge flow (no login wall)",
+  decision: "The Forge operates without authentication. Users create value before being asked to sign up.",
+  rationale: "Login walls cause 60-80% abandonment in vulnerable populations. Value-first conversion is both ethical and effective.",
+};
+const ADR_UP = {
+  title: "One free sign-in for the Forge",
+  decision: "The Forge asks for one free sign-in, the same account as the Refinery. The free resume check and the Mini Forge in facilities stay open with no account.",
+  rationale: "Work that follows the person to any device, limits counted per person instead of per shared network, and the person's own export and delete. The free check keeps a no-account front door.",
+};
+
 const ADRS = [
-  {
-    title: "Pre-auth Forge flow (no login wall)",
-    decision: "The Forge operates without authentication. Users create value before being asked to sign up.",
-    rationale: "Login walls cause 60-80% abandonment in vulnerable populations. Value-first conversion is both ethical and effective.",
-  },
   {
     title: "LocalStorage for session persistence",
     decision: "Forge session data stored in localStorage, not server-side, until the user creates an account.",

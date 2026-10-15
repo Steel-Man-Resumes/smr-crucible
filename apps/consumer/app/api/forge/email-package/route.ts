@@ -16,10 +16,17 @@
  *   the address itself);
  * - Cloudflare Turnstile when TURNSTILE_SECRET_KEY is set (enforced for a
  *   missing token only with TURNSTILE_ENFORCE=1, same as signup).
+ * - FINISHED on the server (Phase 5 R1, review A3/A5): the body carries the
+ *   finish page's whole state (`finish`), the server runs the same gate and
+ *   page rule a saved revision gets (lib/revision-status.ts), the letter
+ *   included, and a draft is refused. The resume and letter emailed are the
+ *   ones that state holds, as text in the email (no attachments: those go
+ *   only to a signed-in account's proven address).
  */
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeSessionUser } from "@/lib/session-policy";
 import { incrementIpUsage, getOne } from "@crucible/core";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { getClientIp } from "@/lib/auth-rate-limit";
@@ -30,23 +37,17 @@ import {
   originAllowed,
   recipientKey,
 } from "@/lib/email-package-guard";
-
-const MAX_FIELD = 60_000;
-
-function esc(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+import { buildPackageEmail, clipDocs, packageFrom, resendKey, resendTransport } from "@/lib/email-package-send";
+import { cleanRevisionInput, computeRevision } from "@/lib/revision-status";
+import { readRunCookie, runCookieHash } from "@/lib/writer-receipt";
 
 async function handlePost(request: Request) {
   if (!originAllowed(request.headers.get("origin"), request.url)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 403 });
   }
 
-  const resendKey = process.env.RESEND_API_KEY || process.env.AUTH_RESEND_KEY;
-  if (!resendKey) {
+  const key = resendKey();
+  if (!key) {
     return NextResponse.json(
       { error: "Email is not configured right now. Download your documents instead." },
       { status: 503 }
@@ -69,8 +70,9 @@ async function handlePost(request: Request) {
   }
 
   // Signed in: your package goes to your own account address, nobody else's.
+  // A session that still owes its two-step code counts as signed out here.
   const session = await auth().catch(() => null);
-  const sessionEmail = session?.user?.email?.toLowerCase().trim();
+  const sessionEmail = forgeSessionUser(session)?.email?.toLowerCase().trim();
   if (sessionEmail && email !== sessionEmail) {
     return NextResponse.json(
       { error: "While you're signed in, we can only send this to your account email." },
@@ -87,17 +89,24 @@ async function handlePost(request: Request) {
   }
   if (turnstile === "missing") console.error("email-package: Turnstile token missing (not enforced)");
 
-  const resumeText = String(body.resumeText || "").slice(0, MAX_FIELD);
-  const coverLetterText = String(body.coverLetterText || "").slice(0, MAX_FIELD);
-  const headline = String(body.narrativeHeadline || "").slice(0, 500);
-  const summary = String(body.narrativeSummary || "").slice(0, 5000);
-
-  if (!resumeText.trim()) {
+  // Finished, decided here from the whole finish state; never from the page.
+  const runCookie = readRunCookie(request.headers.get("cookie"));
+  const finish = cleanRevisionInput(body.finish, {
+    receipt: { userId: null, runId: typeof body.finish?.runId === "string" ? body.finish.runId : "", cookieHash: runCookie ? runCookieHash(runCookie) : null },
+  });
+  if (!finish.ok) {
     return NextResponse.json(
       { error: "No resume to send yet. Finish the Forge first." },
       { status: 400 }
     );
   }
+  if (computeRevision(finish.input).status !== "finished") {
+    return NextResponse.json(
+      { error: "This opens when your resume is finished, so the copy in your inbox is the final one." },
+      { status: 409 }
+    );
+  }
+  const docs = { ...clipDocs(body), resumeText: finish.input.resumeText, coverLetterText: finish.input.letterText };
 
   // Durable per-recipient cap, counted before the send so a burst cannot race it.
   const sentToday = await incrementIpUsage(recipientKey(email), RECIPIENT_ENDPOINT);
@@ -105,26 +114,6 @@ async function handlePost(request: Request) {
     return NextResponse.json(
       { error: "That address already got its package today. Download your documents instead. They're right on this page." },
       { status: 429 }
-    );
-  }
-
-  const sections: string[] = [];
-  if (headline || summary) {
-    sections.push(
-      `<h2 style="margin:24px 0 8px;font-size:18px;color:#1c1e1b;">Your story</h2>` +
-        (headline ? `<p style="font-weight:bold;color:#1c1e1b;">${esc(headline)}</p>` : "") +
-        (summary ? `<p style="color:#4f554f;line-height:1.6;">${esc(summary)}</p>` : "")
-    );
-  }
-  sections.push(
-    `<h2 style="margin:24px 0 8px;font-size:18px;color:#1c1e1b;">Your resume</h2>` +
-      `<pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;color:#1c1e1b;background:#f5f6f4;padding:16px;border:1px solid #d3d8d1;">${esc(resumeText)}</pre>`
-  );
-  if (coverLetterText.trim()) {
-    sections.push(
-      `<h2 style="margin:24px 0 8px;font-size:18px;color:#1c1e1b;">Your cover letter</h2>` +
-        `<p style="color:#6d736d;font-size:12px;">Edit this for every job. That is why we send it as text you can copy instead of a locked file.</p>` +
-        `<pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;color:#1c1e1b;background:#f5f6f4;padding:16px;border:1px solid #d3d8d1;">${esc(coverLetterText)}</pre>`
     );
   }
 
@@ -145,80 +134,29 @@ async function handlePost(request: Request) {
       );
       letterToken = row?.unsubscribe_token ?? null;
     } catch (err) {
-      console.error("email-package letter opt-in failed:", err);
+      console.error("email-package letter opt-in failed:", (err as { code?: string })?.code || "error");
     }
   }
   const unsubUrl = letterToken
     ? `https://www.steelmanresumes.com/unsubscribe?token=${letterToken}`
     : null;
-  const mailingAddress =
-    (process.env.MAILING_ADDRESS || "").trim() || "Steel Man Resumes, Libby, Montana";
 
-  const html =
-    `<div style="max-width:640px;margin:0 auto;font-family:'Segoe UI',Arial,sans-serif;padding:24px;">` +
-    `<h1 style="font-size:22px;color:#1c1e1b;">You did the work. Here it is.</h1>` +
-    `<p style="color:#4f554f;line-height:1.6;">This is everything you built in The Forge. It is yours. Print it, ` +
-    `forward it, use it. When you are ready for the next step (finding real jobs, ` +
-    `tailoring this resume to them, practicing the hard questions), your free ` +
-    `account in The Refinery is waiting at ` +
-    `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.</p>` +
-    sections.join("") +
-    (unsubUrl
-      ? `<p style="color:#6d736d;font-size:12px;margin-top:32px;">Steel Man Resumes<br>Truth. Told Strong.<br>` +
-        `You received this because you asked for your Forge package at forge.steelmanresumes.com, ` +
-        `and you also asked for Troy's letter, so that's coming too. Changed your mind? ` +
-        `<a href="${unsubUrl}" style="color:#9b6d1d;">Unsubscribe</a> in one click.<br>${esc(mailingAddress)}</p>`
-      : `<p style="color:#6d736d;font-size:12px;margin-top:32px;">Steel Man Resumes<br>Truth. Told Strong.<br>` +
-        `You received this because you asked for your Forge package at forge.steelmanresumes.com. ` +
-        `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
-        `employers that hire people with records, real openings, and insights that move your search forward. ` +
-        `Asking takes one step: create your free account at ` +
-        `<a href="https://refinery.steelmanresumes.com/login" style="color:#9b6d1d;">refinery.steelmanresumes.com</a>.</p>`) +
-    `</div>`;
-
-  const text =
-    `You did the work. Here it is.\n\n` +
-    (headline ? `${headline}\n\n` : "") +
-    (summary ? `${summary}\n\n` : "") +
-    `=== YOUR RESUME ===\n\n${resumeText}\n\n` +
-    (coverLetterText.trim() ? `=== YOUR COVER LETTER ===\n\n${coverLetterText}\n\n` : "") +
-    `Next step: your free Refinery account at https://refinery.steelmanresumes.com/login\n\n` +
-    (unsubUrl
-      ? `You also asked for Troy's letter, so that's coming too. Changed your mind? Unsubscribe: ${unsubUrl}\n${mailingAddress}\n`
-      : `We will not email you again unless you ask. You should ask, though: we keep a fresh list of ` +
-        `employers that hire people with records, real openings, and insights that move your search forward. ` +
-        `Asking takes one step: create your free account at the link above.\n`);
-
+  // Text only, as before this lane (review L5): files are attached only for a
+  // signed-in account's own proven address (the automatic email).
+  const mail = buildPackageEmail(docs, { why: "asked", unsubUrl });
   try {
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${resendKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from:
-          process.env.AUTH_EMAIL_FROM ||
-          "Steel Man Resumes <noreply@steelmanresumes.com>",
-        to: email,
-        subject: "Your resume package from The Forge",
-        html,
-        text,
-      }),
-    });
-
+    const res = await resendTransport(key)({ from: packageFrom(), to: email, ...mail });
     if (!res.ok) {
-      const detail = await res.text();
-      console.error("email-package send failed:", res.status, detail);
+      // The status only: a provider's error text can quote the address.
+      console.error("email-package send failed:", res.status);
       return NextResponse.json(
         { error: "We couldn't send that email. Download your documents instead. They're right on this page." },
         { status: 502 }
       );
     }
-
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error("email-package error:", err);
+    console.error("email-package error:", (err as { name?: string })?.name || "error");
     return NextResponse.json(
       { error: "We couldn't send that email. Download your documents instead." },
       { status: 502 }
@@ -227,6 +165,6 @@ async function handlePost(request: Request) {
 }
 
 export const POST = withRateLimit(handlePost, {
-  mode: "ip",
+  mode: "forge",
   endpoint: "email-package",
 });

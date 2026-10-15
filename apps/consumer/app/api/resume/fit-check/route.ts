@@ -2,7 +2,7 @@
  * Phase 2.5 -- Page-fit check API.
  *
  * Returns a deterministic estimate of how many pages the resume will be when
- * downloaded as the TORI-standard DOCX (built by /api/forge/download), and how
+ * downloaded as the standard SMR DOCX (built by /api/forge/download), and how
  * full the last page is. This is DISTINCT from /api/fit-check, which is a
  * JD-vs-resume semantic match. Here "fit" means PAGE fit.
  *
@@ -104,6 +104,6 @@ async function handlePost(request: Request) {
 }
 
 export const POST = withRateLimit(handlePost, {
-  mode: "ip",
+  mode: "forge",
   endpoint: "resume-fit-check",
 });

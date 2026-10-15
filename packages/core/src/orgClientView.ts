@@ -32,6 +32,7 @@
 import { runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
 import { SHARING_SCOPES, isSharingScope, type SharingScope } from "./sharingScopes";
+import { staffStepLabel } from "./journeyStages";
 
 export type ClientViewDenied =
   | "no_capability"
@@ -131,7 +132,7 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
   type Row = { id: string; name: string | null; email: string | null; current_stage: number | null; joined_at: string | null; staff_id: string | null; staff_name: string | null };
   const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
   type PolicyRow = { scopes: string[]; acked: boolean; stopped: string[] | null };
-  type ProgressRow = { next_step_action: string | null; applications: number; saved_jobs: number; practice_sessions: number; has_tailored: boolean; last_active_at: string | null };
+  type ProgressRow = { next_step_reason: string | null; next_step_stage: string | null; applications: number; saved_jobs: number; practice_sessions: number; has_tailored: boolean; last_active_at: string | null };
   const [who, grants, requests, policy, progress] = await runScoped<[Row[], { scope: string; granted_at: string; covers_from: string | null; chose: boolean }[], { scope: string }[], PolicyRow[], ProgressRow[]]>(
     scopeOf(actor),
     (sql) => [
@@ -171,7 +172,9 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
       // The same signals the caseload table already shows, behind the same
       // consent: the person's own "share my progress" switch.
       run(sql)(
-        `SELECT u.next_step_cache->>'action' AS next_step_action,
+        // Never the action text: it can name an employer or a role, and
+        // progress sharing does not include applications (review M3).
+        `SELECT u.next_step_cache->>'reason' AS next_step_reason, u.next_step_cache->>'stage' AS next_step_stage,
                 pc.applications, pc.saved_jobs, pc.practice_sessions, pc.has_resume_tailored AS has_tailored,
                 GREATEST(COALESCE(u.next_step_cached_at, to_timestamp(0)),
                          COALESCE(pc.last_application_at, to_timestamp(0)),
@@ -202,7 +205,7 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
       joinedAt: row.joined_at, assignedStaffId: row.staff_id, assignedStaffName: row.staff_name, scopes,
       awaitingAcknowledgement: !!policy[0] && !policy[0].acked,
       progress: progress[0] ? {
-        nextStepAction: progress[0].next_step_action, applications: progress[0].applications, savedJobs: progress[0].saved_jobs,
+        nextStepAction: staffStepLabel(progress[0].next_step_reason, progress[0].next_step_stage), applications: progress[0].applications, savedJobs: progress[0].saved_jobs,
         practiceSessions: progress[0].practice_sessions, hasTailoredResume: progress[0].has_tailored,
         lastActiveAt: progress[0].last_active_at && new Date(progress[0].last_active_at).getTime() > 0 ? progress[0].last_active_at : null,
       } : null,

@@ -32,6 +32,8 @@ import {
   type HurdleType,
 } from "@/lib/hurdle-guidance";
 import { CheckCircle2 } from "lucide-react";
+import { RECORD_CHECK_COPY } from "@/lib/record-check/copy";
+import { useServerSwitches } from "@/components/ServerSwitches";
 
 type PlannerStep = "assess" | "deepen" | "plan" | "rehearse";
 
@@ -188,6 +190,23 @@ function DisclosurePlannerPage() {
     if (job) setTargetJob(job);
   }, [searchParams]);
 
+  const [applicationError, setApplicationError] = useState("");
+  useEffect(() => {
+    const id = searchParams.get("applicationId");
+    if (!id) return;
+    let live = true;
+    fetch(`/api/application-context?applicationId=${encodeURIComponent(id)}`, { cache: "no-store" }).then(async r => {
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      const application = data.application;
+      if (!application) throw new Error();
+      if (!live) return;
+      setTargetCompany(application.company || "");
+      setTargetJob(application.job_title || "");
+    }).catch(() => live && setApplicationError("This saved job could not be loaded. Check your applications before continuing."));
+    return () => { live = false; };
+  }, [searchParams]);
+
   // Plain-language mode (7.2 / coach settings) -- respected intake-side so
   // questions are phrased simpler when the user prefers it.
   useEffect(() => {
@@ -201,6 +220,7 @@ function DisclosurePlannerPage() {
 
   const hasForgeData = forge.strengths.length > 0 || !!forge.headline;
   const isRecord = isRecordHurdle(hurdle);
+  const { recordStep } = useServerSwitches();
   const hurdleGuidance = getHurdleGuidance(hurdle);
 
   // --- 5.2 Strength discovery: AI proposes, user confirms ---
@@ -307,6 +327,7 @@ function DisclosurePlannerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           record: sendRecord ? record : undefined,
+          applicationId: searchParams.get("applicationId") || undefined,
           aiProcessingConsent: consent,
           timing,
           hurdle,
@@ -341,7 +362,7 @@ function DisclosurePlannerPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "disclosure_plan",
-            targetContext: { targetJob: targetJob || null },
+            targetContext: { targetJob: targetJob || null, applicationId: searchParams.get("applicationId") || undefined },
             content: {
               timing_advice: data.timing_advice ?? null,
               legal_context: data.legal_context ?? null,
@@ -634,6 +655,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
         </div>
 
         {/* Target company (from URL param) */}
+        {applicationError && <p role="alert" className="text-t-red">{applicationError}</p>}
         {targetCompany && (
           <div className="mb-6">
             <label className="text-sm font-medium text-t-white block mb-1">Target employer</label>
@@ -642,6 +664,22 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               onChange={(e) => setTargetCompany(e.target.value)}
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
             />
+          </div>
+        )}
+
+        {/* D11: the record check is its own screen with its own yes. This is
+            only a plain choice that opens it; nothing typed here goes there.
+            Hidden while the step is switched off (lib/server-switch.ts). */}
+        {isRecord && recordStep && (
+          <div className="bg-t-panel p-5 border border-t-line mb-6" data-testid="record-check-entry">
+            <h3 className="font-semibold text-t-white mb-2">{RECORD_CHECK_COPY.entryQuestion}</h3>
+            <p className="text-sm text-t-phos-dim leading-relaxed mb-3">{RECORD_CHECK_COPY.entryBody}</p>
+            <a
+              href="/dashboard/record-check"
+              className="t-focus inline-block px-4 py-2.5 border border-t-steel text-t-steel text-sm font-bold min-h-touch"
+            >
+              {RECORD_CHECK_COPY.entryButton}
+            </a>
           </div>
         )}
 
@@ -658,8 +696,8 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
               and you get a generic template you will have to rewrite yourself.
             </p>
             <p className="text-xs text-t-phos-dim mb-4">
-              Your details are never put on paper, never shared, and you can delete
-              them anytime.
+              Your details go to the AI services that build the plan. No program or
+              employer can read them, and you can delete them anytime.
             </p>
             <div className="flex flex-wrap gap-3">
               <button
@@ -980,14 +1018,15 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
         {/* Persistent confirmation -- the plan is saved to Materials */}
         <div className="flex items-center justify-between gap-3 bg-t-panel-2 px-4 py-3 border border-t-amber mb-6">
           <p className="text-sm text-t-amber-bright">
-            <span className="font-semibold">Saved to your Materials.</span> Come
-            back to it anytime. It is private to your account.
+            <span className="font-semibold">Saved to your Library.</span> Come
+            back to it anytime. No program or employer can read it. If you share your progress with a
+            program, it sees only that you have a plan.
           </p>
           <a
             href="/dashboard/vault"
             className="text-sm font-medium text-t-amber-bright hover:text-t-amber whitespace-nowrap"
           >
-            View Materials
+            View Library
           </a>
         </div>
 

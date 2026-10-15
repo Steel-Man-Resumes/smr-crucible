@@ -9,7 +9,13 @@
 
 /** Pages t.ROY may navigate to inside the Refinery (post-auth). */
 export const REFINERY_PAGES: Record<string, string> = {
+  start: "/start",
   dashboard: "/dashboard",
+  creative: "/dashboard/creative",
+  cv: "/dashboard/cv",
+  performer: "/dashboard/performer",
+  documents: "/dashboard/documents",
+  help: "/dashboard/help",
   jobs: "/dashboard/jobs",
   applications: "/dashboard/applications",
   "application-tailor": "/dashboard/application-tailor",
@@ -24,6 +30,7 @@ export const REFINERY_PAGES: Record<string, string> = {
 
 /** Pages t.ROY may navigate to inside the Forge (pre-auth safe). */
 export const FORGE_PAGES: Record<string, string> = {
+  start: "/start",
   welcome: "/welcome",
   resume: "/resume",
   goals: "/goals",
@@ -43,7 +50,7 @@ export const TOUR_TARGETS: Record<string, string> = {
   "nav-application-tailor": "Application Tailor link in the sidebar",
   "nav-disclosure": "Disclosure Planner link in the sidebar",
   "nav-interview": "Interview Practice link in the sidebar",
-  "nav-resources": "Job Paths link in the sidebar",
+  "nav-resources": "Get support link in the sidebar",
   "jobs-search-role": "the role/keyword input on the Job Board",
   "jobs-search-button": "the search button on the Job Board",
   "jobs-first-result": "the first job card in the Job Board results",
@@ -66,17 +73,21 @@ export interface HighlightElementArgs {
 /** Resolve a tool "page" name to an href, or null if not allowlisted. */
 export function resolveAssistantPage(
   page: string,
-  jobApplicationId?: string
+  jobApplicationId?: string,
+  selection?: { laneId?: string | null; artifactId?: string; revisionId?: string }
 ): string | null {
   const href = REFINERY_PAGES[page] ?? FORGE_PAGES[page] ?? null;
   if (!href) return null;
-  if (
-    jobApplicationId &&
-    (page === "application-tailor" || page === "disclosure") &&
-    /^[a-zA-Z0-9-]+$/.test(jobApplicationId)
-  ) {
-    return `${href}?job=${jobApplicationId}`;
+  const query = new URLSearchParams();
+  if (["application-tailor", "disclosure", "interview", "applications", "documents"].includes(page)) {
+    if (jobApplicationId && /^[a-zA-Z0-9-]+$/.test(jobApplicationId)) query.set("job", jobApplicationId);
+    if (selection?.laneId === null) query.set("laneId", "main");
+    for (const field of ["laneId", "artifactId", "revisionId"] as const) {
+      const value = selection?.[field];
+      if (value && /^[a-zA-Z0-9-]+$/.test(value)) query.set(field, value);
+    }
   }
+  if (query.size) return `${href}?${query}`;
   return href;
 }
 

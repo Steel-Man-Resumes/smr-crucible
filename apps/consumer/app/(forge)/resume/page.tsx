@@ -22,8 +22,58 @@ import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { GroundingGauge } from "@/components/GroundingGauge";
 import { computeGrounding, jobsFromParsedProfile } from "@/lib/grounding";
+import { FORGE_UPLOAD_PICK_AGAIN_MESSAGE, forgeUploadAuthAction, forgeUploadErrorMessage, isUploadReturn } from "@/lib/forge-upload-error";
+import { datedJobs, isLanesFirst, nextPath, planForgePath, resumeVariant, type ConfirmJob } from "@/lib/forge-path";
+import type { ForgeSessionData } from "@/lib/forge-context";
+import { useSession } from "next-auth/react";
+import { sessionPending } from "@/lib/session-policy";
+import { FirstReward, QuickBuild } from "@/components/forge/lanes/FirstSave";
+import { IntakeHelp, PasteInline } from "@/components/forge/lanes/IntakeExtras";
+import { INTAKE_BUILD, INTAKE_HAVE_ONE, INTAKE_TITLE, REBUILD_PARAM } from "@/lib/lane-task";
 
-type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | null;
+/**
+ * "Is this right?": the jobs and dates we read, shown back so the person
+ * confirms them instead of typing them again (lib/forge-path.ts, rule R3).
+ */
+function JobsToConfirm({ jobs, heading }: { jobs: ConfirmJob[]; heading: string }) {
+  return (
+    <section className="mb-4 border border-t-line bg-t-panel" aria-labelledby="jobs-to-confirm" data-testid="jobs-to-confirm">
+      <h2 id="jobs-to-confirm" className="border-b border-t-line bg-t-panel-2 px-4 py-2.5 text-sm font-semibold text-t-white">
+        {heading}
+      </h2>
+      <ul className="divide-y divide-t-line">
+        {jobs.map((j, i) => (
+          <li key={i} className="px-4 py-3">
+            <p className="font-medium text-t-white">
+              {j.title || j.company}
+              {j.title && j.company && <span className="font-normal text-t-phos"> at {j.company}</span>}
+            </p>
+            <p className="mt-0.5 font-term text-xs text-t-phos-dim">
+              {j.start} to {j.end || "now"}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const jobsFromProfile = (profile: any): ConfirmJob[] =>
+  datedJobs(
+    (Array.isArray(profile?.work_history) ? profile.work_history : []).map((w: any) => ({
+      title: w?.title,
+      company: w?.company,
+      start: w?.start_date,
+      end: w?.end_date,
+    }))
+  );
+
+const jobsFromDoc = (doc: ResumeDocument | undefined): ConfirmJob[] =>
+  datedJobs(
+    (doc?.experience ?? []).map((e) => ({ title: e.title, company: e.company, start: e.startDate, end: e.endDate }))
+  );
+
+type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | "quick" | null;
 
 const ACCEPTED_TYPES = [
   ".pdf",
@@ -64,6 +114,13 @@ export default function ResumeIntakePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
+  // Lanes first (Phase 5 R2, lib/forge-path.ts R9): two choices, the first
+  // reward right away, and help tucked into a panel.
+  const lanes = isLanesFirst(session);
+  const { data: authData, status: authStatus } = useSession();
+  const signedIn = authStatus === "authenticated" && !!authData?.user && !sessionPending(authData.user as any);
+  // The page the person gave (paste), shown with its one fix (lanes first).
+  const [rewardText, setRewardText] = useState<string | null>(null);
 
   // Track page visit
   useEffect(() => {
@@ -73,6 +130,12 @@ export default function ResumeIntakePage() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [activePath, setActivePath] = useState<IntakePath>(null);
+  // The first Forge decision already chose a way in. Do not ask it twice.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const entry = new URLSearchParams(window.location.search).get("entry");
+    if (entry === "upload" || entry === "quick") setActivePath(entry);
+  }, []);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [uploadSuccess, setUploadSuccess] = useState(false);
@@ -85,6 +148,78 @@ export default function ResumeIntakePage() {
   // Phase 7: once ingest yields material, drop the user into the structured
   // base-resume builder (the Build stage) instead of routing straight on.
   const [builderDoc, setBuilderDoc] = useState<ResumeDocument | null>(null);
+  // A saved resume is confirmed, not asked for again. "Use a different one"
+  // opens the chooser without erasing the saved one until a new one lands.
+  const [replacing, setReplacing] = useState(false);
+  // FU1: back from a sign-in step. Open the file step and ask for the file
+  // once more (a browser cannot keep it across the trip).
+  const [pickAgain, setPickAgain] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !isUploadReturn(window.location.search)) return;
+    setActivePath("upload");
+    setPickAgain(true);
+  }, []);
+
+  // Phase 6 (plan Q1): "Build it with t.ROY" / "Rewrite it with t.ROY" on a
+  // saved resume (lib/lane-task.ts rebuildHref). The person's newest saved
+  // version (owner only, read as them) becomes the writer's source, and the
+  // build runs. The saved resume itself is never changed here.
+  const [rebuild, setRebuild] = useState<{ id: string; error?: string } | null>(null);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const id = new URLSearchParams(window.location.search).get(REBUILD_PARAM);
+    if (id) setRebuild({ id });
+  }, []);
+  useEffect(() => {
+    if (!rebuild || rebuild.error || authStatus === "loading") return;
+    const failed = "We couldn't open that resume. Open it from My resumes and try again.";
+    if (!signedIn) {
+      setRebuild({ id: rebuild.id, error: "Sign in to build from a saved resume." });
+      return;
+    }
+    let live = true;
+    (async () => {
+      try {
+        // Round 2/3 (CC's truth rulings): the SERVER decides, owner only, what
+        // on this saved resume counts as the person's own words, and the writer
+        // reads them itself. The browser gets only the page (shown, and the
+        // build's starting text). The run's own resume text, the one the account
+        // keeps, is never changed by a rebuild (review r1 M3).
+        const res = await fetch(`/api/revisions/rebuild?artifactId=${encodeURIComponent(rebuild.id)}`, { cache: "no-store" });
+        const data = (await res.json().catch(() => null)) as { pageText?: unknown } | null;
+        const page = typeof data?.pageText === "string" ? data.pageText : "";
+        if (!live) return;
+        if (!res.ok || !page.trim()) {
+          setRebuild({ id: rebuild.id, error: failed });
+          return;
+        }
+        // A new build from that page: the documents of an earlier build no longer match.
+        updateSession({
+          originalResumeText: page,
+          rebuild: { id: rebuild.id, page, resumeAt: session.resumeText ?? "" },
+          forgeOutput: undefined,
+          forgeFinish: undefined,
+          laneParkedLetter: undefined,
+          laneTask: session.laneTask || "resume",
+          lastPageVisited: "resume",
+        });
+        router.replace("/goals");
+      } catch {
+        if (live) setRebuild({ id: rebuild.id, error: failed });
+      }
+    })();
+    return () => {
+      live = false;
+    };
+    // session is read for its lane only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rebuild, signedIn, authStatus]);
+
+  /** Save, then go where this person's path goes next (not always goals). */
+  function continueWith(updates: Partial<ForgeSessionData>) {
+    updateSession(updates);
+    router.push(nextPath(planForgePath({ ...session, ...updates }), "resume"));
+  }
 
   // All hooks must be declared before any conditional returns (rules-of-hooks)
   const handleFile = useCallback(
@@ -104,12 +239,20 @@ export default function ResumeIntakePage() {
         const data = await res.json();
 
         if (!res.ok) {
-          setUploadError(data.error || "Something went wrong. Try again?");
+          // FU1: a half-finished sign-in goes to the step it is waiting on and
+          // comes back to this file step (lib/forge-upload-error.ts).
+          const next = forgeUploadAuthAction(res.status, data);
+          if (next?.kind === "go") {
+            window.location.assign(next.url);
+            return;
+          }
+          setUploadError(forgeUploadErrorMessage(res.status, data?.error));
           return;
         }
 
         updateSession({
           resumeText: data.resumeText,
+          originalResumeText: data.resumeText,
           resumeFileName: file.name,
           resumeMethod: "upload",
         });
@@ -119,6 +262,7 @@ export default function ResumeIntakePage() {
         setParsedPhone(data.profile?.phone || "");
         setParsedProfile(data.profile || null);
         setUploadSuccess(true);
+        setPickAgain(false);
       } catch (err) {
         setUploadError("Couldn't read that file. Try a different one?");
       } finally {
@@ -171,6 +315,20 @@ export default function ResumeIntakePage() {
     []
   );
 
+  // Phase 6 (Q1): opening a saved resume for the writer.
+  if (rebuild) {
+    return (
+      <FlowPage
+        title={rebuild.error ? "That didn't open." : "Getting your resume ready for t.ROY."}
+        subtitle={rebuild.error ?? "t.ROY builds a new version from it. You can always get the earlier one back from My resumes."}
+        showBack={!!rebuild.error}
+        onBack={() => router.push("/dashboard/vault")}
+      >
+        <div data-testid="rebuild-status" data-state={rebuild.error ? "error" : "loading"} />
+      </FlowPage>
+    );
+  }
+
   // Phase 7: the structured builder owns the screen once ingest produced material.
   if (builderDoc) {
     return (
@@ -182,6 +340,37 @@ export default function ResumeIntakePage() {
     );
   }
 
+  // Lanes first: the first reward. The page they gave and the one fix, then
+  // the writer (Phase 6 Q1): the page is its source, never saved as the resume.
+  if (lanes && !isDemo && (rewardText !== null || uploadSuccess)) {
+    const text = rewardText ?? session.resumeText ?? "";
+    return (
+      <FirstReward
+        text={text}
+        onBack={() => {
+          setRewardText(null);
+          setUploadSuccess(false);
+          setActivePath("upload");
+        }}
+        onBuild={() => continueWith({ lastPageVisited: "resume" })}
+        onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "preferences"])), lastPageVisited: "resume" })}
+        onEditor={(t) => enterBuilder(t, { name: parsedName || undefined, email: parsedEmail || undefined, phone: parsedPhone || undefined }, rewardText === null ? parsedProfile : null)}
+      />
+    );
+  }
+
+  // Lanes first: "Build with me", one job and one true duty.
+  if (lanes && !isDemo && activePath === "quick") {
+    return (
+      <QuickBuild
+        signedIn={signedIn}
+        onBack={() => setActivePath(null)}
+        onContinue={() => continueWith({ lastPageVisited: "resume" })}
+        onDoMore={() => continueWith({ pathExtras: Array.from(new Set([...(session.pathExtras || []), "preferences"])), lastPageVisited: "resume" })}
+      />
+    );
+  }
+
   // Demo mode: show pre-filled resume and continue
   if (isDemo) {
     return (
@@ -189,15 +378,14 @@ export default function ResumeIntakePage() {
         title="Resume received."
         subtitle="We extracted experience, skills, and education from the sample resume."
         actionLabel="Next"
-        onAction={() => {
-          updateSession({
+        onAction={() =>
+          continueWith({
             resumeText: DEMO_SESSION.resumeText,
             resumeFileName: DEMO_SESSION.resumeFileName,
             resumeMethod: DEMO_SESSION.resumeMethod,
             lastPageVisited: "resume",
-          });
-          router.push("/goals");
-        }}
+          })
+        }
         showBack
         onBack={() => router.push("/welcome")}
       >
@@ -227,16 +415,13 @@ export default function ResumeIntakePage() {
         title="We already have your resume."
         subtitle="You pasted this in Rush Mode. We'll use it for the full Forge analysis, so you don't need to enter it again."
         actionLabel="Continue"
-        onAction={() => {
-          updateSession({ lastPageVisited: "resume" });
-          router.push("/goals");
-        }}
+        onAction={() => continueWith({ lastPageVisited: "resume" })}
         showBack
         onBack={() => router.push("/welcome")}
         footer={
           <button
             onClick={() => {
-              updateSession({ resumeText: undefined, resumeMethod: undefined });
+              updateSession({ resumeText: undefined, originalResumeText: undefined, resumeMethod: undefined });
             }}
             className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
           >
@@ -264,12 +449,11 @@ export default function ResumeIntakePage() {
   // Persist the finished base resume into the Forge session (structured doc +
   // a refreshed plain-text copy for the downstream analysis), then continue.
   function finishBuilder(doc: ResumeDocument) {
-    updateSession({
+    continueWith({
       resumeDoc: doc,
       resumeText: formatResumeDownload(doc),
       lastPageVisited: "resume",
     });
-    router.push("/goals");
   }
 
   // --- Skip option for "I don't have a resume" ---
@@ -303,11 +487,17 @@ export default function ResumeIntakePage() {
       );
     };
 
+    const readJobs = jobsFromProfile(parsedProfile);
+
     return (
       <FlowPage
         title={parsedName ? `Got it, ${parsedName}.` : "Got it."}
-        subtitle="Check that we read it correctly before moving on."
-        actionLabel="Looks good, continue"
+        subtitle={
+          readJobs.length
+            ? "Is this right? These are the jobs and dates we read. You fix anything off on the next screen."
+            : "Check that we read it correctly before moving on."
+        }
+        actionLabel={readJobs.length ? "Yes, that's right" : "Looks good, continue"}
         onAction={commitAndContinue}
         showBack
         onBack={() => {
@@ -315,6 +505,9 @@ export default function ResumeIntakePage() {
           setActivePath("upload");
         }}
       >
+        {/* The question this screen asks first: are these your jobs and dates? */}
+        {readJobs.length > 0 && <JobsToConfirm jobs={readJobs} heading="Your jobs" />}
+
         {/* Grounding gauge -- the honest contract: how much true material we have. */}
         {parsedProfile && (
           <GroundingGauge score={computeGrounding(jobsFromParsedProfile(parsedProfile))} />
@@ -401,6 +594,83 @@ export default function ResumeIntakePage() {
     );
   }
 
+  // --- A resume is already saved (coming back, or returning later) ---
+  if (!activePath && !replacing && resumeVariant(session) === "saved") {
+    const savedJobs = jobsFromDoc(session.resumeDoc);
+    return (
+      <FlowPage
+        title="We already have your resume."
+        subtitle={savedJobs.length ? "Is this still right?" : "No need to add it again."}
+        actionLabel="Yes, keep going"
+        onAction={() => continueWith({ lastPageVisited: "resume" })}
+        showBack
+        onBack={() => router.push(lanes ? "/start?change=1" : "/welcome")}
+        footer={
+          <button
+            onClick={() => setReplacing(true)}
+            className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
+          >
+            Use a different resume
+          </button>
+        }
+      >
+        <GhostGuide message={getOpusMessage("resume", audience, false)} pageId="resume" />
+        {savedJobs.length > 0 ? (
+          <JobsToConfirm jobs={savedJobs} heading="Your jobs" />
+        ) : (
+          <div className="mb-4 border border-t-line bg-t-panel p-4">
+            <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-t-phos-dim">
+              {(session.resumeText || "").slice(0, 500)}
+              {(session.resumeText || "").length > 500 ? "..." : ""}
+            </p>
+          </div>
+        )}
+        {session.resumeDoc && (
+          <button
+            type="button"
+            onClick={() => setBuilderDoc(session.resumeDoc!)}
+            className="t-focus min-h-touch w-full border border-t-line bg-t-panel px-4 py-2.5 text-sm font-medium text-t-phos transition-colors hover:border-t-phos-dim hover:text-t-white"
+          >
+            Something&apos;s off: open it in the editor
+          </button>
+        )}
+      </FlowPage>
+    );
+  }
+
+  // --- Path Selection, lanes first: two choices, help in a panel ---
+  if (!activePath && lanes) {
+    return (
+      <FlowPage
+        title={INTAKE_TITLE}
+        subtitle="Bring any version you have. It gives t.ROY more of your real history to work with."
+        showBack
+        onBack={() => (replacing ? setReplacing(false) : router.push("/start?change=1"))}
+      >
+        <div className="flex flex-col gap-3" data-testid="intake-choices">
+          <button
+            onClick={() => setActivePath("upload")}
+            className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
+            data-testid="intake-have-one"
+          >
+            <span className="font-medium text-t-white">{INTAKE_HAVE_ONE.label}</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">{INTAKE_HAVE_ONE.body}</p>
+          </button>
+          <button
+            onClick={() => setActivePath("quick")}
+            className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
+            data-testid="intake-build"
+          >
+            <span className="font-medium text-t-white">{INTAKE_BUILD.label}</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">{INTAKE_BUILD.body}</p>
+          </button>
+        </div>
+        <p className="mt-5 text-sm text-t-phos-dim">PDF, Word, a phone photo, screenshot, copied email, pasted text, or your voice can get us started. Faxed copy? Photograph the page. Morse code? Translate it first, then paste it.</p>
+        <IntakeHelp />
+      </FlowPage>
+    );
+  }
+
   // --- Path Selection ---
   if (!activePath) {
     return (
@@ -408,7 +678,7 @@ export default function ResumeIntakePage() {
         title="Do you have a resume?"
         subtitle="Any format works, even a photo of a paper copy."
         showBack
-        onBack={() => router.push("/welcome")}
+        onBack={() => (replacing ? setReplacing(false) : router.push("/welcome"))}
       >
         <GhostGuide
           message={getOpusMessage("resume", audience, false)}
@@ -541,8 +811,15 @@ export default function ResumeIntakePage() {
         >
           {uploading ? (
             <>
-              <div className="w-8 h-8 border-2 border-t-amber border-t-transparent animate-spin" />
-              <p className="text-t-phos-dim">Reading your file...</p>
+              <div className="relative w-36 border border-t-amber bg-t-bg p-3 text-left shadow-[5px_5px_0_rgba(155,109,29,0.22)]" aria-hidden="true">
+                <div className="mb-2 h-1 w-16 bg-t-amber" />
+                <div className="mb-1 h-1 w-full bg-t-line" />
+                <div className="mb-1 h-1 w-3/4 bg-t-line" />
+                <div className="h-1 w-5/6 bg-t-line" />
+                <div className="absolute -right-3 -top-3 flex h-7 w-7 items-center justify-center border border-t-amber bg-t-panel motion-safe:animate-pulse"><span className="h-3 w-3 border-b-2 border-r-2 border-t-amber" /></div>
+              </div>
+              <p className="font-medium text-t-white">t.ROY is pulling the work off your page.</p>
+              <p className="text-sm text-t-phos-dim">Your jobs and dates are coming up for your review.</p>
             </>
           ) : (
             <>
@@ -589,17 +866,26 @@ export default function ResumeIntakePage() {
           aria-label="Upload resume file"
         />
 
+        {pickAgain && !uploadError && !uploading && (
+          <p role="status" className="mt-4 p-4 bg-t-panel border border-t-amber text-sm text-t-white" data-testid="upload-pick-again">
+            {FORGE_UPLOAD_PICK_AGAIN_MESSAGE}
+          </p>
+        )}
+
         {uploadError && (
           <div className="mt-4 p-4 bg-t-panel border border-t-red">
             <p className="text-sm text-t-red">{uploadError}</p>
             <button
-              onClick={handleNoResume}
+              onClick={lanes ? () => setActivePath("quick") : handleNoResume}
               className="text-sm text-t-amber-bright underline mt-2"
             >
               Or build one with our help instead
             </button>
           </div>
         )}
+
+        {/* Lanes first: paste sits on the same screen, so there is nothing more to choose. */}
+        {lanes && <PasteInline onDone={(text) => setRewardText(text)} />}
       </FlowPage>
     );
   }
@@ -1298,6 +1584,7 @@ function PasteResume({
 
     updateSession({
       resumeText: finalText,
+      originalResumeText: finalText,
       resumeMethod: "paste",
       lastPageVisited: "resume",
     });

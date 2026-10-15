@@ -15,12 +15,20 @@
 import { getOne, queryAsUser, getOneAsUser } from "./db";
 import type { UserTier } from "./userTier";
 import { TAILORED_PROVENANCES } from "./applicationEvents";
+import { PROFILE_ARTIFACT_PHONE_SQL } from "./refineryArtifact";
 
 export interface NextStepResult {
   stage: number;
   action: string;
   href: string;
   reason?: string;
+  /**
+   * Set on a deadline step (an interview coming up, a follow-up due): the
+   * ladder stage and reason underneath it, so the progress arc and the saved
+   * stage still show how far the person has come.
+   */
+  progressStage?: number;
+  progressReason?: string;
 }
 
 export interface SavedJobSummary {
@@ -81,6 +89,8 @@ export interface UserProfile {
 
   // Disclosure
   hasDisclosurePlan: boolean;
+  /** When the person said "I don't need this now" to the disclosure step (ISO), or null. */
+  disclosureNotNowAt: string | null;
 
   // Practice -- NOTE: interview practice is currently localStorage-only on the
   // client (consumer_progress key); it is NOT server-persisted yet. Until the
@@ -120,6 +130,41 @@ function parseLocation(loc: unknown): { city: string | null; state: string } {
   const parts = loc.split(",").map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) return { city: parts[0], state: parts[1].slice(0, 2).toUpperCase() || "WI" };
   return { city: parts[0] || null, state: "WI" };
+}
+
+/** profile_data.journey.disclosure_not_now_at, when it is a readable date. */
+export function readDisclosureNotNow(profileData: Record<string, unknown> | null | undefined): string | null {
+  const journey = (profileData as { journey?: unknown } | null | undefined)?.journey;
+  const v = journey && typeof journey === "object" ? (journey as Record<string, unknown>).disclosure_not_now_at : null;
+  return typeof v === "string" && Number.isFinite(Date.parse(v)) ? v : null;
+}
+
+/**
+ * "I don't need this now" for the disclosure step: stamps
+ * profile_data.journey.disclosure_not_now_at, written AS the person (their own
+ * row only). Returns false when the person has no profile row yet.
+ */
+export async function setDisclosureNotNow(userId: string, on: boolean): Promise<boolean> {
+  const rows = await queryAsUser<{ user_id: string }>(
+    userId,
+    on
+      ? `UPDATE consumer_profile
+            SET profile_data = COALESCE(profile_data, '{}'::jsonb)
+                  || jsonb_build_object('journey',
+                       COALESCE(profile_data->'journey', '{}'::jsonb)
+                       || jsonb_build_object('disclosure_not_now_at', to_jsonb(now()))),
+                updated_at = now()
+          WHERE user_id = $1
+          RETURNING user_id`
+      : `UPDATE consumer_profile
+            SET profile_data = jsonb_set(COALESCE(profile_data, '{}'::jsonb), '{journey}',
+                  COALESCE(profile_data->'journey', '{}'::jsonb) - 'disclosure_not_now_at'),
+                updated_at = now()
+          WHERE user_id = $1
+          RETURNING user_id`,
+    [userId]
+  );
+  return rows.length > 0;
 }
 
 export async function getUserProfile(userId: string): Promise<UserProfile | null> {
@@ -182,11 +227,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
   // full_access users back to needs_profile (review finding, 2026-08-10).
   if (!contactPhone) {
     const artifactPhone = await getOneAsUser<{ phone: string }>(userId, 
-      `SELECT content->'contact'->>'phone' AS phone
-       FROM refinery_artifact
-       WHERE user_id = $1 AND artifact_type = 'resume'
-         AND COALESCE(content->'contact'->>'phone', '') <> ''
-       ORDER BY updated_at DESC LIMIT 1`,
+      PROFILE_ARTIFACT_PHONE_SQL,
       [userId]
     );
     contactPhone = (artifactPhone?.phone || "").trim();
@@ -300,6 +341,7 @@ export async function getUserProfile(userId: string): Promise<UserProfile | null
     profileComplete,
 
     hasDisclosurePlan: Number(artifactStats?.disclosure_count ?? 0) > 0,
+    disclosureNotNowAt: readDisclosureNotNow(profile?.profile_data),
 
     interviewSessionCount: Number(artifactStats?.interview_total ?? 0),
     practiceSessionsThisWeek: Number(artifactStats?.interview_week ?? 0),

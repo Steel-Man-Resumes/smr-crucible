@@ -4,27 +4,10 @@
  * blocked, WHY, and encourage them to unblock -- "click this button and it takes
  * you right to the page you need").
  *
- * Companion to computeNextStep (the forward journey ladder). computeNextStep always
- * returns a next move; computeCurrentBlock returns non-null ONLY when a tool is
- * genuinely gated (pre-full-access), and frames it around the take_me_there nav
- * hand so t.ROY can offer a one-click unblock. Same gate fields as OnboardingGate
- * (forgeComplete, then a resume tailored to a target job), so t.ROY and the UI lock
- * never disagree. Pure + deterministic -- testable, no I/O.
- *
- * Phase 1D: journey.ts's computeGateDecision() is now the canonical gate
- * decision (consumed by useOnboarding -> OnboardingGate + RefineryShell.
- * isNavUnlocked via GET /api/user/journey). computeCurrentBlock must stay in
- * parity with it on the field both ultimately gate the toolset on --
- * hasResumeTailoredToTarget -- which is unchanged here (still the same
- * getUserProfile field, same server definition). Pre-existing, NOT
- * introduced by Phase 1D: this function's first gate is forgeComplete, while
- * computeGateDecision's first gate is profileComplete (name + phone) --
- * OnboardingGate's state machine has never gated on forgeComplete directly
- * (RefineryShell enforces that one separately, with a hard redirect to the
- * Forge). The two ladders were already not fully identical before this
- * change; this comment exists so the next person doesn't assume they are.
- * If computeGateDecision's ladder changes (e.g. Phase 4.1's trialMode lane),
- * check whether this function needs updating in the same change.
+ * These are document prerequisites, not a universal journey lock. Interview
+ * practice, applications, jobs and support can start without a resume. Account,
+ * role and sponsor requirements belong to the destination's access checks;
+ * two resume booleans cannot establish those entitlements. Pure, no I/O.
  */
 
 /** The minimal journey shape both t.ROY surfaces can supply. */
@@ -52,14 +35,12 @@ export function computeCurrentBlock(j: BlockJourney): CurrentBlock | null {
       lockedTools: [
         "Application Tailor",
         "Disclosure Planner",
-        "Interview Practice",
-        "Applications",
         "Progress",
       ],
       reason:
-        "The Forge builds the story, skills, and career paths everything else is built on. Until it is done, the Refinery tools stay locked.",
+        "These document tools need a resume to work from. Interview Practice, Applications, job search and support can start now without one.",
       action:
-        "Finish the Forge. It is one sitting and gives t.ROY what it needs to build your resume.",
+        "Build or bring a resume when the person wants to work on documents. Start urgent interview practice or follow-up immediately when that is their need.",
       targetPage: "resume",
       ctaLabel: "Continue the Forge",
     };
@@ -68,14 +49,12 @@ export function computeCurrentBlock(j: BlockJourney): CurrentBlock | null {
     return {
       lockedTools: [
         "Disclosure Planner",
-        "Interview Practice",
-        "Applications",
         "Progress",
       ],
       reason:
-        "These tools are built around one specific job, so they unlock the moment a resume is tailored to a real posting. No live job search is needed. Pasting a job description works just as well.",
+        "These document-dependent steps use a resume tailored to a specific job. Interview Practice and Applications do not require that step. A pasted job description works for tailoring.",
       action:
-        "Tailor a resume to a job you are aiming at. That single step unlocks the rest of the toolset.",
+        "Tailor the resume when it serves the person's chosen task. Do not delay an interview or application follow-up to do it.",
       targetPage: "application-tailor",
       ctaLabel: "Tailor a resume",
     };
@@ -92,13 +71,14 @@ export function buildBlockSection(block: CurrentBlock | null): string {
     return `
 
 ## CURRENT BLOCK
-Nothing is locked for this user. They have full access to every tool. Do NOT invent a blocker or imply something is locked. Coach toward their next best move instead.`;
+No document prerequisite is blocking this user. A tool's actual sign-in, role and sponsor requirements still apply. Do not invent a lock or promise access you have not checked. Coach toward their chosen next step.`;
   }
   return `
 
 ## CURRENT BLOCK (lead with this when it is relevant to what they want)
 LOCKED for this user right now: ${block.lockedTools.join(", ")}.
 Why: ${block.reason}
-The one move that unlocks all of it: ${block.action}
+The document step, when relevant: ${block.action}
+Interview Practice, Applications, job search and support are available without these document steps. Never redirect an urgent request through the full course. Voice practice and one-click apply may require sponsor access; do not infer it from resume completion.
 When they ask about (or head toward) a locked tool, or when it is clearly what they need, say it plainly and OFFER to take them straight there: call take_me_there with page "${block.targetPage}" ("Want me to open it? One click."), then narrate what they will do when they land. Frame it as helping them get what they came for. Never frame it as a gate, and never scold. Never point them at a locked tool as if it were open.`;
 }

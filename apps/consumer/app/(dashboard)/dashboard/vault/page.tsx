@@ -15,12 +15,19 @@
  * SEPARATE page at /dashboard/documents.
  */
 
+import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
+import { EarlierVersions } from "@/components/lanes/EarlierVersions";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { printResumePdf } from "@/components/resume/resumePrint";
 import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
 import { resolveResumeGroup, type ResumeGroup } from "@crucible/core/src/libraryGroupingShared";
+import { MAIN_LANE_KEY } from "@crucible/core/src/careerLaneShared";
+import { useLanes } from "@/components/lanes/useLanes";
+import { LaneSwitcher } from "@/components/lanes/LaneSwitcher";
+import { LaneIntro } from "@/components/lanes/LaneIntro";
+import { laneFilterParam, laneIdForSave, MAIN_LANE_LABEL, type LibraryLaneChoice } from "@/lib/lanes";
 
 const RESUME_GROUP_LABELS: { key: ResumeGroup; label: string }[] = [
   { key: "masters", label: "Masters (locked baselines)" },
@@ -41,6 +48,8 @@ interface Artifact {
   is_current?: boolean;
   lane?: string | null;
   is_locked?: boolean;
+  lane_id?: string | null;
+  is_demo?: boolean;
   updated_at: string;
 }
 
@@ -145,13 +154,32 @@ export default function VaultPage() {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [statusMsg, setStatusMsg] = useState("");
 
+  // Career lanes (074): the Library holds every lane; the switcher narrows it.
+  const lanes = useLanes();
+  // Opens in the lane the person is working in (the lane holding their newest
+  // resume until they pick one); "All lanes" is one tap away. Null until the
+  // lanes arrive, so the first list is the right one.
+  const [laneFilterState, setLaneFilter] = useState<LibraryLaneChoice | null>(null);
+  const laneFilter: LibraryLaneChoice = laneFilterState ?? "all";
+  useEffect(() => {
+    if (lanes.loaded && laneFilterState === null) setLaneFilter(lanes.active);
+  }, [lanes.loaded, lanes.active, laneFilterState]);
+  // "Move to" commits only on the Move button, never on an arrow key in the list.
+  const [moveChoice, setMoveChoice] = useState<Record<string, string>>({});
+  // FU2: examples and test resumes are hidden until asked for.
+  const [examples, setExamples] = useState<Artifact[]>([]);
+  const [showExamples, setShowExamples] = useState(false);
+  const [moving, setMoving] = useState<string | null>(null);
+
   const PAGE = 100;
 
   // Server-side search + pagination. A blank query loads the first page; a query
   // hits ?q= so search covers everything, not just the loaded page.
   const load = useCallback((query: string, offset = 0, append = false) => {
-    const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset) });
+    const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset), examples: "hide" });
     if (query.trim()) params.set("q", query.trim());
+    const laneParam = laneFilterParam(laneFilter);
+    if (laneParam) params.set("laneId", laneParam);
     return fetch(`/api/artifacts?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : { items: [], total: 0 }))
       .then((d) => {
@@ -161,12 +189,90 @@ export default function VaultPage() {
       })
       .catch(() => {})
       .finally(() => setLoading(false));
+  }, [laneFilter]);
+
+  const loadExamples = useCallback(() => {
+    fetch("/api/artifacts?examples=only&limit=100")
+      .then((r) => (r.ok ? r.json() : { items: [] }))
+      .then((d) => setExamples(d.items || d.data || []))
+      .catch(() => {});
   }, []);
 
-  // Initial load.
+  // Initial load (once the lane is known), and again when the lane changes.
   useEffect(() => {
-    load("");
-  }, [load]);
+    if (laneFilterState === null) return;
+    load(q);
+  }, [load, laneFilterState]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    loadExamples();
+  }, [loadExamples]);
+
+  // Move one piece of work to another lane (or main), or in and out of the examples.
+  async function moveToLane(a: Artifact, choice: string) {
+    const laneId = choice === MAIN_LANE_KEY ? null : laneIdForSave(choice);
+    if ((a.lane_id ?? null) === laneId) return;
+    setMoving(a.id);
+    try {
+      const res = await fetch(`/api/artifacts/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ laneId }),
+      });
+      if (res.ok) {
+        const name = laneId ? lanes.lanes.find((l) => l.id === laneId)?.name : MAIN_LANE_LABEL;
+        setStatusMsg(`Moved to ${name}.`);
+        setMoveChoice((m) => {
+          const n = { ...m };
+          delete n[a.id];
+          return n;
+        });
+        // In a one-lane view the moved item leaves the list.
+        setItems((prev) =>
+          laneFilter === "all" ? prev.map((x) => (x.id === a.id ? { ...x, lane_id: laneId } : x)) : prev.filter((x) => x.id !== a.id)
+        );
+      } else {
+        setStatusMsg("Could not move that. Try again.");
+      }
+    } catch {
+      setStatusMsg("Could not move that. Try again.");
+    } finally {
+      setMoving(null);
+    }
+  }
+
+  async function setExample(a: Artifact, isDemo: boolean) {
+    setMoving(a.id);
+    try {
+      const res = await fetch(`/api/artifacts/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isDemo }),
+      });
+      if (res.ok) {
+        setStatusMsg(isDemo ? "Moved to examples." : "Back in My resumes.");
+        if (isDemo) {
+          setItems((prev) => prev.filter((x) => x.id !== a.id));
+          setTotal((t) => Math.max(0, t - 1));
+          setExamples((prev) => [{ ...a, is_demo: true }, ...prev]);
+        } else {
+          setExamples((prev) => prev.filter((x) => x.id !== a.id));
+          load(q);
+        }
+      } else {
+        setStatusMsg("Could not change that. Try again.");
+      }
+    } catch {
+      setStatusMsg("Could not change that. Try again.");
+    } finally {
+      setMoving(null);
+    }
+  }
+
+  function laneName(id: string | null | undefined): string {
+    if (!id) return MAIN_LANE_LABEL;
+    return lanes.lanes.find((l) => l.id === id)?.name ?? lanes.archived.find((l) => l.id === id)?.name ?? MAIN_LANE_LABEL;
+  }
 
   // Debounced server search on q change (skip the very first render -- initial
   // load already covers the empty query).
@@ -245,15 +351,36 @@ export default function VaultPage() {
 
   // N4/F10: one-click editable DOCX for resumes + cover letters, reusing the
   // Forge DOCX generator (same file quality as the builder's export).
+  /**
+   * Phase 5 R1: the saved revision that IS this resume as stored (made by the
+   * server from the stored content when needed). Downloads and print use its
+   * id, so the server decides DRAFT. Null: the file is marked DRAFT.
+   */
+  async function exportRevisionFor(a: Artifact): Promise<string | null> {
+    if (a.artifact_type !== "resume") return null;
+    try {
+      const res = await fetch("/api/revisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "export", artifactId: a.id }),
+      });
+      const data = await res.json().catch(() => null);
+      return res.ok && typeof data?.revision?.id === "string" ? data.revision.id : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function downloadDocx(a: Artifact) {
     const type = a.artifact_type === "resume" ? "resume" : "cover_letter";
     const content = a.artifact_type === "resume" ? toText(a) : a.content?.text || toText(a);
     if (!content) return;
     try {
+      const revisionId = await exportRevisionFor(a);
       const res = await fetch("/api/forge/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content, type, format: "docx" }),
+        body: JSON.stringify({ ...(revisionId ? { revisionId } : {}), content, type, format: "docx" }),
       });
       if (!res.ok) throw new Error("Download failed");
       const blob = await res.blob();
@@ -287,7 +414,10 @@ export default function VaultPage() {
     let body = "";
     switch (a.artifact_type) {
       case "cover_letter":
-        body = paras(c.text);
+        // Phase 5 R1: a letter printed on its own has no saved, checked
+        // version behind it, so it is marked DRAFT (the finished letter
+        // downloads with its resume from the finish page or the Tailor).
+        body = `<p class="meta"><strong>DRAFT.</strong> Not checked as part of a finished version.</p>` + paras(c.text);
         break;
       case "follow_up":
         body =
@@ -390,7 +520,7 @@ ${body}
         key={a.id}
         className={`bg-t-panel border p-4 ${a.is_current ? "border-t-amber" : "border-t-line"}`}
       >
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <h3 className="font-medium text-t-white truncate">{title(a)}</h3>
@@ -404,7 +534,15 @@ ${body}
                   Baseline{a.lane ? ` · ${a.lane}` : ""}
                 </span>
               )}
+              {a.is_demo && (
+                <span className="flex-shrink-0 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide border border-t-line text-t-phos-dim">
+                  Example
+                </span>
+              )}
             </div>
+            {laneFilter === "all" && !a.is_demo && (
+              <p className="text-xs text-t-phos-dim mt-0.5" data-testid="item-lane">Lane: {laneName(a.lane_id)}</p>
+            )}
             <p className="text-xs text-t-phos-dim mt-0.5">Updated {fmt(a.updated_at)}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -495,6 +633,60 @@ ${body}
           </div>
         )}
 
+        {(isResume || a.artifact_type === "cover_letter") && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+            {!a.is_demo && (lanes.lanes.length > 0 || a.lane_id) && (() => {
+              const current = a.lane_id ?? MAIN_LANE_KEY;
+              const chosen = moveChoice[a.id] ?? current;
+              const archivedHere = a.lane_id && !lanes.lanes.some((l) => l.id === a.lane_id);
+              return (
+                <span className="inline-flex flex-wrap items-center gap-2 text-xs text-t-phos-dim">
+                  <label className="inline-flex items-center gap-2">
+                    Move to
+                    <select
+                      aria-label={`Lane for ${title(a)}`}
+                      data-testid="move-select"
+                      value={chosen}
+                      disabled={moving === a.id}
+                      onChange={(e) => setMoveChoice((m) => ({ ...m, [a.id]: e.target.value }))}
+                      className="t-focus bg-t-bg border border-t-line px-2 py-1 text-xs text-t-white"
+                    >
+                      {archivedHere && (
+                        <option value={a.lane_id!} disabled>
+                          {laneName(a.lane_id)} (archived)
+                        </option>
+                      )}
+                      {lanes.lanes.map((l) => (
+                        <option key={l.id} value={l.id}>{l.name}</option>
+                      ))}
+                      <option value={MAIN_LANE_KEY}>{MAIN_LANE_LABEL}</option>
+                    </select>
+                  </label>
+                  <button
+                    type="button"
+                    data-testid="move-commit"
+                    disabled={moving === a.id || chosen === current}
+                    onClick={() => moveToLane(a, chosen)}
+                    className="t-focus min-h-touch px-2 font-medium text-t-amber-bright hover:text-t-amber disabled:opacity-40"
+                  >
+                    Move
+                  </button>
+                </span>
+              );
+            })()}
+            <button
+              type="button"
+              data-testid={a.is_demo ? "not-example" : "to-examples"}
+              onClick={() => setExample(a, !a.is_demo)}
+              disabled={moving === a.id || !!a.is_locked}
+              title={a.is_locked ? "Unlock the baseline first" : undefined}
+              className="text-xs font-medium text-t-phos-dim hover:text-t-white disabled:opacity-50"
+            >
+              {a.is_demo ? "Not an example" : "Move to examples"}
+            </button>
+          </div>
+        )}
+
         {open && (
           <div className="mt-3 border-t border-t-line pt-3">
             <p className="text-sm text-t-phos whitespace-pre-line leading-relaxed">
@@ -503,7 +695,7 @@ ${body}
             <div className="flex flex-wrap items-center gap-3 mt-3">
               <button
                 onClick={() =>
-                  isResume ? printResumePdf(a.content as ResumeDocument) : downloadPDF(a)
+                  isResume ? printResumePdf(a.content as ResumeDocument, { prepare: () => exportRevisionFor(a) }) : downloadPDF(a)
                 }
                 className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright"
               >
@@ -523,6 +715,10 @@ ${body}
                 .docx opens in Word to edit. PDF keeps the formatting exactly.
               </p>
             )}
+            {/* Phase 5 R2: a resume never finished in the Forge downloads as a draft; this is the way out. */}
+            {isResume && <CheckAndFinish artifactId={a.id} className="mt-3" />}
+            {/* R2 review H3: every saved version stays reachable, and an earlier one can come back. */}
+            {isResume && <EarlierVersions artifactId={a.id} />}
           </div>
         )}
       </div>
@@ -582,14 +778,29 @@ ${body}
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">Library</h1>
+      <h1 className="text-2xl font-bold text-t-white">My resumes</h1>
       <p className="text-t-phos-dim mt-1 mb-6">
         Everything you have created, in one place. Private to your account and never shared
         unless you choose to. Pin your current resume, lock an approved baseline for each
         career lane (so tailoring sharpens it without ever downgrading it), save anything as a
         PDF or Word file, or delete it, anytime. Uploaded documents like your ID, certificates,
-        and reference letters live in your <Link href="/dashboard/documents" className="text-t-amber-bright hover:text-t-amber font-medium">Vault</Link>.
+        and reference letters live in your <Link href="/dashboard/documents" className="text-t-amber-bright hover:text-t-amber font-medium">Private documents</Link>.
       </p>
+
+      {/* Career lanes (074): which lane's work is shown. */}
+      <div className="mb-6 space-y-3">
+        <LaneSwitcher
+          lanes={lanes}
+          value={laneFilter}
+          includeAll
+          label="Showing"
+          onChange={(c) => {
+            setLaneFilter(c);
+            if (c !== "all") lanes.setActive(c);
+          }}
+        />
+        <LaneIntro lanes={lanes} tool="library" laneId={laneIdForSave(laneFilter)} />
+      </div>
 
       {/* Saved jobs surfaced here too (R1) -- "my stuff" is where people look for
           them. Renders nothing when there are none. */}
@@ -597,12 +808,13 @@ ${body}
         <SavedJobsPanel heading="Your saved jobs" limit={5} />
       </div>
 
-      <p aria-live="polite" className="sr-only">{statusMsg}</p>
+      <p aria-live="polite" role="status" className="mb-2 min-h-[1rem] text-xs text-t-phos-dim" data-testid="library-status">{statusMsg}</p>
 
       {items.length === 0 && !query ? (
-        <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
-          Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it
-          will show up here.
+        <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12" data-testid="library-empty">
+          {laneFilter === "all"
+            ? "Nothing here yet. Build a resume, plan a disclosure, or practice an interview and it will show up here."
+            : "Nothing in this lane yet. Tailor a resume while you're working in this lane and it shows up here."}
         </div>
       ) : (
         <>
@@ -682,6 +894,29 @@ ${body}
             </div>
           )}
         </>
+      )}
+
+      {/* FU2: examples and test resumes, hidden unless asked for. Never deleted here. */}
+      {examples.length > 0 && (
+        <section className="mt-10 border-t border-t-line pt-6" data-testid="examples">
+          <button
+            type="button"
+            data-testid="examples-toggle"
+            onClick={() => setShowExamples((v) => !v)}
+            aria-expanded={showExamples}
+            className="t-focus text-sm font-medium text-t-phos-dim hover:text-t-white"
+          >
+            {showExamples ? "Hide examples" : `Show examples (${examples.length})`}
+          </button>
+          {showExamples && (
+            <div className="mt-3 space-y-3">
+              <p className="text-xs text-t-phos-dim">
+                Sample and test resumes, kept out of your way. Tap Not an example to bring one back.
+              </p>
+              {examples.map((a) => renderCard(a))}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

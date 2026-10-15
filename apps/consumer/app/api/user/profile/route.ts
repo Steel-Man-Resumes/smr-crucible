@@ -8,7 +8,8 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { query, queryAsUser, getOneAsUser } from "@crucible/core";
+import { query, queryAsUser, getOneAsUser, PROFILE_CONTACT_RESUME_SQL } from "@crucible/core";
+import { resumeTextToDocument } from "@/lib/revision-to-doc";
 import { formatPhoneUS } from "@/lib/phone";
 
 export interface UserContact {
@@ -57,15 +58,21 @@ export async function GET() {
     if (c.state) contact.state = c.state;
   }
 
+  // Fill only blanks from the person's saved source. Every field stays editable.
+  const ownText = profile?.profile_data?.resumeText;
+  if (typeof ownText === "string" && ownText.trim()) {
+    const source = resumeTextToDocument(ownText).contact;
+    for (const field of ["name", "phone", "email", "city", "state"] as const) {
+      if (!contact[field] && source[field]) contact[field] = source[field];
+    }
+  }
+
   // Source 3: Forge resume parsing (if contact wasn't explicitly saved).
   // Prefer the BASE resume (source='forge') -- it holds what the user typed
   // about themselves; a tailored artifact's contact is derived and circular.
   if (!contact.phone || !contact.city) {
     const artifact = await getOneAsUser<{ content: Record<string, any> }>(userId, 
-      `SELECT content FROM refinery_artifact
-       WHERE user_id = $1 AND artifact_type = 'resume'
-       ORDER BY (target_context->>'source' = 'forge') DESC, updated_at DESC
-       LIMIT 1`,
+      PROFILE_CONTACT_RESUME_SQL,
       [userId]
     );
     if (artifact?.content?.contact) {
@@ -145,7 +152,14 @@ export async function PATCH(request: Request) {
       );
     }
 
-    return NextResponse.json({ success: true, contact });
+    const previousContact = existing?.profile_data?.contact;
+    let coverageRequestStatus: string | undefined;
+    if(contact.city && contact.state && (contact.city !== previousContact?.city || contact.state !== previousContact?.state)) {
+      const { toStateCode, requestDirectoryCoverage } = await import("@crucible/core");
+      const state=toStateCode(contact.state);
+      if(state) { try { await requestDirectoryCoverage(userId,{state,place:contact.city,category:"employers",reason:"new_area"});coverageRequestStatus="pending"; } catch {coverageRequestStatus="unavailable";} }
+    }
+    return NextResponse.json({ success: true, contact, coverageRequestStatus });
   } catch (err: any) {
     console.error("Profile save error:", err?.message || err);
     return NextResponse.json(

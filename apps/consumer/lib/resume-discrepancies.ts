@@ -451,7 +451,7 @@ export function findDiscrepancies(
         label: vague.label,
         evidence: b,
         question:
-          "This line tells an employer the job existed, not what you did in it. What is one specific thing you handled here, and roughly how much or how often?",
+          "This line tells an employer the job existed, not what you did in it. What is one specific thing you handled here? If you know a number for this, add it. If not, the line stands without one.",
       });
     }
   }
@@ -472,10 +472,10 @@ export function findDiscrepancies(
   if (bullets.length >= 3 && !bullets.some((b) => /\d/.test(b))) {
     found.push({
       kind: "unquantified_role",
-      label: "Nothing measured anywhere",
+      label: "No numbers on the page (that can be fine)",
       evidence: bullets[0],
       question:
-        "No line on this resume carries a number, like a count, a size, a crew or a frequency. One real number does more than a page of description. What is a number you actually know?",
+        "No line on this resume carries a number. That is fine when every line is true. If you know a number for this, add it. If not, the line stands without one.",
     });
   }
 

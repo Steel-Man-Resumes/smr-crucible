@@ -48,6 +48,7 @@ export interface VoiceSession {
   id: string;
   user_id: string;
   call_id: string | null;
+  operation_id?: string | null;
   status: "active" | "ended" | "expired";
   reserved_seconds: number;
   started_at: string;

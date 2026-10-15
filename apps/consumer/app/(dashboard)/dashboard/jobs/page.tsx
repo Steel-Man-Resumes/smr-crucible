@@ -16,6 +16,7 @@ import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
 import { trackProgress } from "@/lib/track-progress";
+import { jobSourceForSave } from "@/lib/job-source";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -301,6 +302,7 @@ function JobBoardPage() {
   }
 
   async function saveJob(job: EnrichedJob) {
+    const jobSource = jobSourceForSave(job.id, source);
     // Optimistic UI update
     setSavedJobs((prev) => {
       const next = new Map(prev);
@@ -319,7 +321,7 @@ function JobBoardPage() {
           salary: job.salary,
           description: job.description,
           employment_type: job.employment_type,
-          source: "jsearch",
+          source: jobSource,
           source_id: job.id,
           apply_url: job.apply_url || null,
           employer_website: job.employer_website || null,
@@ -327,7 +329,7 @@ function JobBoardPage() {
           // HTML-stripped body) so the saved snapshot is not the 200-char
           // truncated `description`. Provenance = the board provider + apply URL.
           jdFullText: job.full_description || job.description,
-          jdSourceProvider: "jsearch",
+          jdSourceProvider: jobSource,
           jdSourceUrl: job.apply_url || job.employer_website || null,
           status: "saved",
         }),
@@ -482,9 +484,9 @@ function JobBoardPage() {
                 applied
               </span>
             </div>
-            <span className="text-xs text-t-phos-dim">
-              Application tracking coming soon
-            </span>
+            <Link href="/dashboard/applications" className="text-xs text-t-amber-bright underline">
+              Track applications
+            </Link>
           </div>
         </div>
       )}

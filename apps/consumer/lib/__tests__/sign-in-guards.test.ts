@@ -215,10 +215,10 @@ describe("reading the browser's session inside the Google sign-in (R3 G-1)", () 
   });
 
   it("recognizes the Auth.js session cookie names", () => {
-    for (const n of ["authjs.session-token", "__Secure-authjs.session-token", "__Secure-authjs.session-token.0", "authjs.session-token.1"]) {
+    for (const n of ["authjs.session-token", "__Secure-authjs.session-token", "__Secure-authjs.session-token.0", "authjs.session-token.1", "authjs.session-tokenx"]) {
       assert.equal(isSessionCookieName(n), true, n);
     }
-    for (const n of ["authjs.csrf-token", "__Host-authjs.csrf-token", "authjs.callback-url", "smr_impersonate", "authjs.session-tokenx"]) {
+    for (const n of ["authjs.csrf-token", "__Host-authjs.csrf-token", "authjs.callback-url", "smr_impersonate", "xauthjs.session-token"]) {
       assert.equal(isSessionCookieName(n), false, n);
     }
   });

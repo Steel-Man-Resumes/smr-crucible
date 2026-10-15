@@ -263,11 +263,15 @@ export default function VaultDocumentsPage() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
-      <h1 className="text-2xl font-bold text-t-white">Vault</h1>
+      <h1 className="text-2xl font-bold text-t-white">Private documents</h1>
       <p className="text-t-phos-dim mt-1">
         A safe home for the documents that prove who you are and what you have earned: your ID,
-        certificates, reference letters, records, and notes. It is yours for life, encrypted, and
-        private to your account. Only you can open it. Nothing here is ever shared without your say.
+        certificates, reference letters, records, and notes. It is encrypted and stays in your account
+        until you delete it. Only you can open it here. Programs and employers can't, even if you share
+        other things with them.
+      </p>
+      <p className="text-xs text-t-phos-dim mt-2" data-testid="vault-lanes-note">
+        One Vault for every lane. Your proof is the same whatever job you aim at.
       </p>
       <div className="mt-3 border border-t-line bg-t-panel px-4 py-3 text-sm text-t-phos-dim">
         <span className="font-semibold text-t-phos">This is not a password keeper.</span> Do not put

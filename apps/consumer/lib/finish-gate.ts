@@ -1,0 +1,2514 @@
+/**
+ * The Forge finish page gate: draft vs finished, the defend answers, and what
+ * the page may show in each state.
+ *
+ * Pure (no React, no I/O) so every rule here is unit tested. The page wires
+ * these to the screen; it never decides "finished" on its own.
+ *
+ * The contract comes from the engine (getResumeStatus):
+ * - "finished" only when no BLOCK is open. Then, and only then: confetti, the
+ *   finished download, the email box and the review ask.
+ * - "draft": the person can always download, but the file carries the DRAFT
+ *   mark and the open items in plain words. No confetti, no review ask.
+ * - Open items come from the checker. This file never invents one and never
+ *   hides one: every BLOCK and FIX the engine returns lands in a group.
+ * - Defend answers are stored per line, never pooled into the source.
+ */
+
+import { untracedFacts } from "./fact-trace";
+import { CREDENTIALS_KEY } from "./forge-path";
+import {
+  answerMentions,
+  answerStands,
+  credentialMemoryPrompt,
+  distanceFromSource,
+  getResumeStatus,
+  introducedWords,
+  questionForFinding,
+  credentialPromptWhy,
+  scopeWhy,
+  scopeNotTheirsAnswered,
+  scopeAllNotTheirsAnswered,
+  roleTitleWhy,
+  roleTitleQuestion,
+  Q_SCOPE,
+  type DefendAnswer,
+  type OpenItem,
+  type ResumeStatus,
+} from "@crucible/core/src/resumeStatus";
+import { hasCredentialStatus, isEntryHeader, isSectionEnd, linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
+import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
+import { isSectionHeader } from "@crucible/core/src/pageFitShared";
+import { employerKey, employersMatch, jobsIn, matchOwnJob, placeKey, readJobHeader, sameDates, titleKey, type JobFacts } from "@crucible/core/src/jobResolver";
+import { stemOf } from "@crucible/core/src/wordStem";
+import { namedCredentialRe, credentialInitialsRe } from "@crucible/core/src/credentialWords";
+import { scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion, markGoalText, sameTitle, isPeopleScopeHit, ownLineFor, OVER_PEOPLE_QUESTION, OVER_PEOPLE_YES } from "@crucible/core/src/scopeWords";
+import { isStrictCredentialWhen } from "@crucible/core/src/credentialStatus";
+import {
+  credentialHomes,
+  credentialKeyOf,
+  credentialMentionsOf,
+  credentialsToAsk,
+  removeCredentialPart,
+  sameCredential,
+  mentionsOfName,
+  titleOfHeader,
+  credentialLineText,
+  educationLineRewrite,
+  educationAttendedLine,
+  isAttendedYears,
+  attendedYears,
+  isConfirmedAttendedLine,
+  withoutEducationPart,
+  credentialPartsOnly,
+  attendedSchoolOf,
+  typedSchoolName,
+  typedSchoolParts,
+  isConfirmedEducationLine,
+  isLiveCredential,
+  liveCredentialCovers,
+  type CredentialMention,
+  type CredentialRow,
+} from "@crucible/core/src/credentialMentions";
+import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
+import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
+import { withholdRecordLines } from "./record-lines";
+import { countPromptForLine } from "./count-prompts";
+
+export type { DefendAnswer, OpenItem, ResumeStatus };
+
+// ---- stored state ------------------------------------------------------------
+
+/** Bump when StoredFinish changes shape. A stored copy on another version is ignored, never half-read. */
+export const FINISH_STATE_VERSION = 1;
+
+/** The documents the writer made, kept so a reload never spends another AI call or loses answers. */
+export interface FinishDocs {
+  resumeText: string;
+  coverLetterText: string;
+  withheldLines: string[];
+  keepInsideLines: boolean;
+  /** The grounding block from /api/forge/generate-docs, as returned. */
+  grounding: unknown;
+  /**
+   * The writer's documents exactly as they came back, never edited. A word
+   * or number anywhere in them is never the person's, whichever line they
+   * type it into. Missing on runs saved before it existed: then no rewrite
+   * adds to the person's words (closed by default).
+   */
+  written?: WrittenDocs;
+  /** Phase 5 R1 (review M1): the server's receipt over `written` and `grounding` (lib/writer-receipt.ts). */
+  receipt?: string;
+}
+
+/** The writer's resume and letter, as delivered. */
+export interface WrittenDocs {
+  resume: string;
+  letter: string;
+}
+
+export interface StoredFinish {
+  v: number;
+  /** Ties the stored copy to the Forge run it came from (see finishKey). */
+  key: string;
+  docs: FinishDocs;
+  defendAnswers: DefendAnswer[];
+  /** Skills the person added from a job posting in the keyword check. Each is asked about. */
+  addedTerms?: string[];
+  /** Skills terms the person kept on the "added for you" card (decision D3). */
+  keptTerms?: string[];
+  /** Credentials the person confirmed with their own type and year or status (decision D4). */
+  confirmedCredentials?: CredentialConfirm[];
+  /** What "No, take it off" left of longer sentences (round 6), held like a confirmed move's leftover. */
+  credentialCutRemnants?: string[];
+  /** Phase 5 R1: the person's page choice ("one_page" or "auto"); read by the page, not by this file. */
+  lengthChoice?: string;
+  /** Phase 5 R1: restored from the account, the saved revision's own evidence (lib/finish-payload.ts). */
+  evidence?: unknown;
+  /** Phase 5 R1: the saved revision this copy came from, when restored from the account. */
+  revisionId?: string;
+}
+
+/** A credential the writer put on the page that the person confirmed holding, in their own words. */
+export interface CredentialConfirm {
+  /** The name as it was on the page (the memory prompt). */
+  name: string;
+  /** What kind it is, as the person picked it. */
+  type: CredentialType;
+  /** The year or status in the person's own words. */
+  when: string;
+  /** The line as rewritten to match what they typed ("Forklift card, 2021"). */
+  text: string;
+  /** The credential's key, so every mention of it on both pages answers to this one confirmation. */
+  key?: string;
+  /** What was left of a longer sentence after the credential moved out of it (held until the person rewords or cuts it). */
+  remnants?: string[];
+  /** A sentence about the credential was taken out of the cover letter. */
+  letterSentenceDropped?: boolean;
+  /** Round 9: an education line keeps its school: the whole line as rewritten ("GED, in progress | Toledo Adult Education"). */
+  line?: string;
+  /** Round 10 (SF-7): a line already on the page that shows this confirmation ("- AWS D1.1 certification, 2019" for "AWS, certification, 2019"). */
+  coveredBy?: string;
+  /** Round 11 (SF-3): for "did not finish", the school the person typed on the card (their words). */
+  school?: string;
+}
+
+export const CREDENTIAL_TYPES = ["license", "certification", "card", "training course", "permit"] as const;
+/**
+ * Round 8: an education line (GED, diploma, degree) is confirmed as earned or
+ * in progress. Round 10 (SF-1): or "did not finish": the school stays with
+ * only the years the person typed, and no completion word.
+ */
+export const EDUCATION_KINDS = ["earned", "in progress", "did not finish"] as const;
+export type CredentialType = (typeof CREDENTIAL_TYPES)[number] | (typeof EDUCATION_KINDS)[number];
+const ALL_KINDS: readonly string[] = [...CREDENTIAL_TYPES, ...EDUCATION_KINDS];
+const isEducationKind = (t: string) => (EDUCATION_KINDS as readonly string[]).includes(t);
+
+/**
+ * True when the year-or-status box is a real answer for this kind (round 9,
+ * r9-N5): "earned" needs a real year ("2015"), never "current"; "in
+ * progress" needs nothing more; a credential takes a year or a status.
+ */
+export function isConfirmWhen(type: string, when: string): boolean {
+  if (type === "in progress") return true;
+  if (type === "did not finish") return isAttendedYears(when);
+  if (!isCredentialWhen(when)) return false;
+  if (type === "earned") return /\b(?:19|20)\d{2}\b/.test(when) && !/[a-z]/i.test(when.replace(/\b(?:in|earned|got|finished|graduated|completed)\b/gi, ""));
+  return true;
+}
+
+/** Small stable string hash (FNV-1a), enough to tell one run from another. */
+function hash(s: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Which Forge run a stored finish belongs to. A new analysis, a new resume
+ * upload or the "put them back" choice makes a new key, so stale documents
+ * and answers are never shown against a different run.
+ */
+export function finishKey(session: {
+  forgeOutput?: unknown;
+  resumeText?: string;
+}, keepInsideLines: boolean): string {
+  return hash(`${JSON.stringify(session.forgeOutput ?? null)}\u0000${session.resumeText ?? ""}\u0000${keepInsideLines ? 1 : 0}`);
+}
+
+/** The stored finish for this run, or null when it is missing, on another version or from another run. */
+export function readStoredFinish(stored: unknown, key: string): StoredFinish | null {
+  if (!stored || typeof stored !== "object") return null;
+  const s = stored as Partial<StoredFinish>;
+  if (s.v !== FINISH_STATE_VERSION || s.key !== key) return null;
+  const d = s.docs as Partial<FinishDocs> | undefined;
+  if (!d || typeof d.resumeText !== "string") return null;
+  return {
+    v: FINISH_STATE_VERSION,
+    key,
+    docs: {
+      resumeText: d.resumeText,
+      coverLetterText: typeof d.coverLetterText === "string" ? d.coverLetterText : "",
+      withheldLines: Array.isArray(d.withheldLines) ? d.withheldLines.filter((l): l is string => typeof l === "string") : [],
+      keepInsideLines: d.keepInsideLines === true,
+      grounding: d.grounding ?? null,
+      written:
+        d.written && typeof d.written.resume === "string"
+          ? { resume: d.written.resume, letter: typeof d.written.letter === "string" ? d.written.letter : "" }
+          : undefined,
+      // A real wr2 receipt is about 400 characters; the same cap as readReceipt.
+      ...(typeof d.receipt === "string" && d.receipt.length <= 2000 ? { receipt: d.receipt } : {}),
+    },
+    defendAnswers: Array.isArray(s.defendAnswers)
+      ? s.defendAnswers
+          .filter((a): a is DefendAnswer => !!a && typeof a.line === "string" && typeof a.answer === "string")
+          .map((a) =>
+            // A stored rewrite is trusted only when it is consistent with
+            // itself: it names a real line it replaced (one the writer
+            // wrote, when the written documents are stored), and its text is
+            // its line.
+            a.kind === "rewrite" &&
+            typeof a.replaced === "string" &&
+            a.replaced.trim() !== "" &&
+            (!d.written || writtenHasLine(d.written as WrittenDocs, a.replaced)) &&
+            squash(stripBullet(a.answer)) === squash(stripBullet(a.line))
+              ? {
+                  line: a.line,
+                  answer: a.answer,
+                  verdict: a.verdict,
+                  kind: "rewrite" as const,
+                  replaced: a.replaced,
+                  ...(a.scopeHelp === true ? { scopeHelp: true } : {}),
+                  ...(a.scopeHelp === true && typeof a.scopeHelpFamily === "string" ? { scopeHelpFamily: a.scopeHelpFamily } : {}),
+                  ...(a.scopeHelp === true && typeof a.scopeHelpText === "string" ? { scopeHelpText: a.scopeHelpText } : {}),
+                }
+              : // Round 11: a "Yes, I did this" answer keeps its family; it settles only that claim on its line.
+                a.kind === "scope_yes" && typeof a.family === "string"
+                ? { line: a.line, answer: a.answer, kind: "scope_yes" as const, family: a.family, ...(typeof a.job === "string" && a.job ? { job: a.job.slice(0, 300) } : {}) }
+                : a.kind === "title_yes"
+                ? { line: a.line, answer: a.answer, kind: "title_yes" as const }
+                : // Phase 6: "Looks right" on a job settles only that job's card; it never joins the person's words.
+                  a.kind === "job_ok"
+                  ? { line: a.line, answer: JOB_OK_ANSWER, kind: "job_ok" as const }
+                  : { line: a.line, answer: a.answer, verdict: a.verdict }
+          )
+      : [],
+    addedTerms: Array.isArray(s.addedTerms) ? s.addedTerms.filter((t): t is string => typeof t === "string" && !!t.trim()) : [],
+    // A kept term is kept only while it is still a term on the page.
+    keptTerms: Array.isArray(s.keptTerms)
+      ? s.keptTerms.filter((t): t is string => typeof t === "string" && !!t.trim() && termOnPage(d.resumeText as string, t))
+      : [],
+    // A confirmation is trusted only when its name is a credential the writer
+    // put on the page, its year or status is a real answer, and its text is
+    // rebuilt from those, never taken as stored.
+    credentialCutRemnants: Array.isArray(s.credentialCutRemnants) ? s.credentialCutRemnants.filter((r): r is string => typeof r === "string" && !!r.trim()) : [],
+    confirmedCredentials: Array.isArray(s.confirmedCredentials)
+      ? s.confirmedCredentials
+          .filter(
+            (c): c is CredentialConfirm =>
+              !!c &&
+              typeof c.name === "string" &&
+              typeof c.when === "string" &&
+              ALL_KINDS.includes(c.type as string) &&
+              isConfirmWhen(c.type as string, c.when) &&
+              !!d.written &&
+              writtenNamesCredential(d.written as WrittenDocs, c.name)
+          )
+          .map((c) => ({
+            name: c.name,
+            type: c.type,
+            when: c.when.trim(),
+            text: confirmedCredentialText(c.name, c.type, c.when),
+            key: credentialKeyOf(c.name),
+            remnants: Array.isArray(c.remnants) ? c.remnants.filter((r): r is string => typeof r === "string") : [],
+            letterSentenceDropped: c.letterSentenceDropped === true,
+            // An education line and a covering line are re-checked against the page and the person's words in buildFinishView.
+            ...(typeof c.line === "string" && isEducationKind(c.type) ? { line: c.line } : {}),
+            ...(typeof c.coveredBy === "string" && !isEducationKind(c.type) ? { coveredBy: c.coveredBy } : {}),
+            ...(typeof c.school === "string" && c.type === "did not finish" ? { school: c.school } : {}),
+          }))
+      : [],
+  };
+}
+
+function writtenNamesCredential(w: WrittenDocs, name: string): boolean {
+  const k = squash(name);
+  return credentialMentionsOf(`${w.resume || ""}\n\n${w.letter || ""}`).some((m) => squash(m.name) === k);
+}
+
+function writtenHasLine(w: WrittenDocs, line: string): boolean {
+  const k = squash(stripBullet(line));
+  return [...linesOf(w.resume || ""), ...linesOf(w.letter || "")].some((l) => squash(stripBullet(l)) === k);
+}
+
+// ---- the person's own words ------------------------------------------------------
+
+/**
+ * Only the person's own words: their resume text (with record lines held back
+ * unless they chose to keep them, matching what the writer was given) and the
+ * answers they typed in the Forge. Never the AI-written analysis.
+ */
+export function ownWordsFor(
+  session: {
+    resumeText?: string;
+    goalNarrative?: string;
+    hookNarrative?: string;
+    challengeNarratives?: Record<string, string>;
+  },
+  keepInsideLines: boolean
+): string {
+  return [
+    withholdRecordLines(session.resumeText, keepInsideLines).kept,
+    // Round 13 (R13-B1): the goal box and the "what would make work meaningful" answer are about the job they
+    // want. They are marked so a present tense there ("a job where I train new hires") never counts as done.
+    markGoalText(session.goalNarrative),
+    markGoalText(session.hookNarrative),
+    // Training, certificates and licenses they told us about (not record answers).
+    session.challengeNarratives?.[CREDENTIALS_KEY],
+  ]
+    .map((s) => (typeof s === "string" ? s.trim() : ""))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+// ---- answers and edits -----------------------------------------------------------
+
+const squash = (s: string) => s.toLowerCase().replace(/[\s\-‐-―]+/g, "");
+const stripBullet = (l: string) => l.replace(/^\s*[-•*]\s*/, "").trim();
+
+export type DefendChoice = "stands" | "cut";
+
+/**
+ * Record one answer for one line. Replaces that line's earlier answer; never
+ * touches another line's. A rewrite record on the same line is kept (it says
+ * what the person introduced), and the new answer goes last so it is the one
+ * the checker reads for the line.
+ */
+export function recordAnswer(
+  answers: DefendAnswer[],
+  line: string,
+  answer: string,
+  verdict: DefendChoice
+): DefendAnswer[] {
+  const k = squash(line);
+  const next: DefendAnswer = { line, answer: answer.trim(), verdict };
+  // A rewrite and a "Yes, I did this" answer stay: they settle other items on the line (round 11).
+  return [...answers.filter((a) => squash(a.line) !== k || a.kind === "rewrite" || a.kind === "scope_yes" || a.kind === "title_yes" || a.kind === "job_ok"), next];
+}
+
+/** The lines on a page, without bullets, squashed, for "is this line still here". */
+function pageLineSet(...texts: string[]): Set<string> {
+  return new Set(texts.flatMap((t) => linesOf(t || "")).map((l) => squash(stripBullet(l))));
+}
+
+/**
+ * What the person introduced through "Change it", for the source the checker
+ * reads. Only rewrites that are consistent (their text is their line, they
+ * name the line they replaced) and whose line is still on the page count, and
+ * from each only the words and numbers that are in neither the replaced line
+ * nor anywhere in the writer's documents (`written`). Without the written
+ * documents nothing is added: a rewrite cannot launder the writer's words
+ * when we cannot tell them apart.
+ */
+export function rewritesOf(answers: DefendAnswer[], pages: string | string[], written?: WrittenDocs | null): string {
+  if (!written) return "";
+  const onPage = pageLineSet(...(Array.isArray(pages) ? pages : [pages]));
+  const writerText = `${written.resume}\n${written.letter}`;
+  return answers
+    .filter(
+      (a) =>
+        a.kind === "rewrite" &&
+        !a.scopeHelp &&
+        a.verdict === "stands" &&
+        typeof a.replaced === "string" &&
+        a.replaced.trim() !== "" &&
+        squash(stripBullet(a.answer)) === squash(stripBullet(a.line)) &&
+        onPage.has(squash(stripBullet(a.line)))
+    )
+    .map((a) => introducedWords(stripBullet(a.answer), stripBullet(a.replaced as string), writerText))
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Kept terms and confirmed credentials as text, for display only. Round 3:
+ * the gate never adds these to the person's words. A kept term settles only
+ * its own skills item, and a confirmation settles only its own credential.
+ */
+export function confirmedWords(keptTerms: string[] = [], confirms: CredentialConfirm[] = []): string {
+  const kept = keptTerms.map((t) => {
+    let out = "";
+    let at = 0;
+    const text = normalizeDigits(t);
+    for (const tok of numberTokens(text)) {
+      out += text.slice(at, tok.index);
+      at = tok.index + tok.length;
+    }
+    return (out + text.slice(at)).trim();
+  });
+  const creds = confirms.filter((c) => hasCredentialStatus(c.when)).map((c) => c.text);
+  return [...kept, ...creds].filter(Boolean).join("\n");
+}
+
+/** The one source the gate and every panel check against: own words plus what rewrites introduced. */
+export function gateSource(ownWords: string, answers: DefendAnswer[], pages: string | string[], written?: WrittenDocs | null): string {
+  // Round 10 (SF-5): phones type curly apostrophes ("I’ve trained"); the person's words are read with straight ones.
+  const own = straightQuotes(ownWords);
+  const added = rewritesOf(answers, pages, written);
+  return added ? `${own}\n\n${straightQuotes(added)}` : own;
+}
+
+/**
+ * The starting text for "Change it". A number whose value the person never
+ * gave (in any form: "42" for their "forty-two" is theirs) becomes "[your
+ * number]", so the box never hands them the written figure to keep. A bracket
+ * left in blocks the finish (STD-F05).
+ */
+export function prefillRewrite(line: string, ownWords: string): string {
+  const theirs = numbersIn(ownWords);
+  const text = normalizeDigits(stripBullet(line));
+  let out = "";
+  let at = 0;
+  for (const t of numberTokens(text)) {
+    out += text.slice(at, t.index) + (theirs.has(t.value) ? text.slice(t.index, t.index + t.length) : "[your number]");
+    at = t.index + t.length;
+  }
+  return out + text.slice(at);
+}
+
+/** The answer on file for a line (the latest one that is not a rewrite record), if any. */
+export function answerFor(answers: DefendAnswer[], line: string): DefendAnswer | undefined {
+  const k = squash(line);
+  // Round 11: a "Yes, I did this" answer belongs to its scope claim only, never the line's other questions.
+  const mine = answers.filter((a) => squash(a.line) === k && a.kind !== "scope_yes" && a.kind !== "title_yes" && a.kind !== "job_ok");
+  return [...mine].reverse().find((a) => a.kind !== "rewrite") ?? mine[mine.length - 1];
+}
+
+/** The line itself, exactly, before any other line with the same words (round 9: "- Certified Nursing Assistant" is the list line, not the headline above it). */
+function lineIndexOf(lines: string[], line: string, target: string): number {
+  const exact = lines.findIndex((l) => l.trim() === line.trim());
+  return exact !== -1 ? exact : lines.findIndex((l) => stripBullet(l) === target);
+}
+
+/** Take one line off the page. Returns the text unchanged when the line is not there. */
+export function cutLine(resumeText: string, line: string): string {
+  const target = stripBullet(line);
+  if (!target) return resumeText;
+  const out = resumeText.split("\n");
+  const hit = lineIndexOf(out, line, target);
+  if (hit === -1) return resumeText;
+  out.splice(hit, 1);
+  return dropEmptySections(out.join("\n").replace(/\n{3,}/g, "\n\n"));
+}
+
+/**
+ * Round 13 (SF-2): a section heading with no lines under it comes off ("EDUCATION" after its only line is cut,
+ * two headings back to back). Only known section names count, so a name or a letter line is never touched.
+ */
+export function dropEmptySections(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let atEnd = false;
+  const heading = (t: string) => isSectionHeader(t) || SKILLS_HEADING_RE.test(t) || CERT_HEADING_RE.test(t);
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (t && heading(t)) {
+      let j = i + 1;
+      while (j < lines.length && !lines[j].trim()) j++;
+      if (j >= lines.length || heading(lines[j].trim())) {
+        // The heading and the blank lines under it go; the gap before it stays as the gap before the next one.
+        if (j >= lines.length) atEnd = true;
+        i = j - 1;
+        continue;
+      }
+    }
+    out.push(lines[i]);
+  }
+  const joined = out.join("\n").replace(/\n{3,}/g, "\n\n");
+  return atEnd ? joined.replace(/\s+$/, "") : joined;
+}
+
+/**
+ * Replace one line with the person's own rewrite, keeping its bullet. Returns
+ * the text unchanged when the line is gone or the rewrite is empty.
+ */
+export function changeLine(resumeText: string, line: string, rewrite: string): string {
+  const target = stripBullet(line);
+  const next = stripBullet(rewrite.replace(/\s*\n\s*/g, " "));
+  if (!target || !next) return resumeText;
+  const out = resumeText.split("\n");
+  const hit = lineIndexOf(out, line, target);
+  if (hit === -1) return resumeText;
+  const prefix = out[hit].match(/^\s*(?:[-*•]\s*)?/)?.[0] ?? "";
+  out[hit] = prefix + next;
+  return out.join("\n");
+}
+
+export interface RewriteResult {
+  text: string;
+  answers: DefendAnswer[];
+  /** False when nothing changed (same line, empty rewrite, or the line is gone). */
+  changed: boolean;
+}
+
+/**
+ * "Change it": put the person's rewrite on the page and record it, with the
+ * line it replaced. A rewrite of a rewrite keeps the original written line as
+ * `replaced`, so words the person introduced earlier stay theirs and the
+ * writer's words never become theirs by being carried along.
+ */
+export function applyRewrite(text: string, answers: DefendAnswer[], line: string, rewrite: string): RewriteResult {
+  const next = changeLine(text, line, rewrite);
+  if (next === text) return { text, answers, changed: false };
+  const typed = stripBullet(rewrite.replace(/\s*\n\s*/g, " "));
+  const newLine = linesOf(next).find((l) => stripBullet(l) === typed) ?? typed;
+  const prior = answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && squash(a.line) === squash(line));
+  const replaced = prior?.replaced ?? line;
+  const k = squash(newLine);
+  // Round 12 (SF-5): a "Yes, I did this" answer survives a rewrite that keeps the same claim (only a number changed).
+  const claimKey = (h: { family: string; word: string }) => `${h.family}\u0000${h.word.toLowerCase().replace(/\b\d+\b|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|fifteen|twenty|thirty|forty|fifty|dozen)\b/g, " ").replace(/\s+/g, " ").trim()}`;
+  const kept = new Set(scopeHits(typed).map(claimKey));
+  const before = new Map<string, string>(scopeHits(stripBullet(line)).map((h) => [h.family as string, claimKey(h)]));
+  const carried = answers
+    .filter((a) => a.kind === "scope_yes" && squash(a.line) === squash(line) && kept.has(before.get(a.family as string) ?? ""))
+    .map((a) => ({ ...a, line: newLine }));
+  // Phase 6 integration (L1): "Fix this" on a job header carries the answers keyed to that job.
+  const oldJob = squash(stripBullet(line));
+  const rekey = (a: DefendAnswer): DefendAnswer => (typeof a.job === "string" && squash(stripBullet(a.job)) === oldJob ? { ...a, job: newLine } : a);
+  return {
+    text: next,
+    answers: [
+      ...answers.filter((a) => squash(a.line) !== k).map(rekey),
+      { line: newLine, answer: typed, verdict: "stands", kind: "rewrite", replaced },
+      ...carried.map(rekey),
+    ],
+    changed: true,
+  };
+}
+
+/** An approved AI proposal stays sourced to the person's earlier words. It never joins rewritesOf. */
+export function applyAssistedRewrite(text: string, answers: DefendAnswer[], line: string, suggestion: string, source: string): RewriteResult {
+  const proposal = stripBullet(suggestion.replace(/\s*\n\s*/g, " ")).trim();
+  if (!proposal || !source.trim() || distanceFromSource(proposal, source) !== 0 || untracedFacts(proposal, source).length) {
+    return { text, answers, changed: false };
+  }
+  if (!pageLineSet(text).has(squash(stripBullet(line)))) return { text, answers, changed: false };
+  const next = changeLine(text, line, proposal);
+  const newLine = linesOf(next).find((l) => squash(stripBullet(l)) === squash(proposal)) ?? proposal;
+  const old = squash(line);
+  const prior = answers.find((a) => a.kind === "assisted" && typeof a.replaced === "string" && squash(a.line) === old);
+  return {
+    text: next,
+    answers: [
+      ...answers.filter((a) => squash(a.line) !== old && squash(a.line) !== squash(newLine)),
+      { line: newLine, answer: proposal, verdict: "stands", kind: "assisted", replaced: prior?.replaced ?? line },
+    ],
+    changed: true,
+  };
+}
+
+/** The line as the person should see it in an edit box: no bullet glyph. */
+export function editableLine(line: string): string {
+  return stripBullet(line);
+}
+
+// ---- skills added from a posting --------------------------------------------------
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const termRe = (term: string) => new RegExp(`(?<![\\w])${escapeRe(term.trim())}(?![\\w])`, "i");
+
+/**
+ * An answer about one skills term stands only when it stands like any answer
+ * and talks about that term (a word starting the same way: "bathed" for
+ * "bathing"). A general "I did that" for a list of posting words is not one
+ * time they did each of them.
+ */
+export function skillAnswerStands(a: DefendAnswer | undefined, term: string, source: string): boolean {
+  if (!answerStands(a, term, source)) return false;
+  // A real stem match ("bathed" for "bathing"), never just a shared four-letter start.
+  const stems = (t: string) => (t.toLowerCase().match(/[a-z]{3,}/g) ?? []).map(stemOf);
+  const want = new Set(stems(term));
+  return stems(a?.answer ?? "").some((h) => want.has(h));
+}
+
+/** True when the term is still listed in the skills section (a job header with the same words does not count). */
+export function termOnPage(text: string, term: string): boolean {
+  if (!term.trim()) return false;
+  const re = termRe(term);
+  const lines = text.split("\n");
+  const skills = skillsLineIndexes(lines);
+  return lines.some((l, i) => skills.has(i) && re.test(l));
+}
+
+const SKILLS_HEADING_RE = /^(?:core competencies|skills|key skills|competencies|core skills|technical skills):?$/i;
+const ANY_HEADING_RE = /^[A-Z][A-Z &/]{3,}:?$/;
+
+/** The indexes of the lines in the skills section (a term is cut only there, never from a job header). */
+function skillsLineIndexes(lines: string[]): Set<number> {
+  return new Set(listLineKinds(lines).keys());
+}
+
+/** Each list line's index and its list: a skills list, or a credentials list (round 4: terms live in both). */
+function listLineKinds(lines: string[]): Map<number, "skills" | "credentials"> {
+  const out = new Map<number, "skills" | "credentials">();
+  let list: "skills" | "credentials" | null = null;
+  lines.forEach((l, i) => {
+    const t = l.trim();
+    if (SKILLS_HEADING_RE.test(t)) { list = "skills"; return; }
+    if (CERT_HEADING_RE.test(t)) { list = "credentials"; return; }
+    if (ANY_HEADING_RE.test(t) && !t.includes("|")) { list = null; return; }
+    if (list && t) out.set(i, list);
+  });
+  return out;
+}
+
+/** Take one skill term off its skills line. Returns the text unchanged when it is not a listed item there. */
+export function cutTerm(text: string, term: string): string {
+  const t = term.trim().toLowerCase();
+  if (!t) return text;
+  const re = termRe(term);
+  const lines = text.split("\n");
+  const kinds = listLineKinds(lines);
+  const out = lines
+    .map((l, i) => {
+      if (!kinds.has(i) || !re.test(l)) return l;
+      // A credentials line is split the one way the checker reads it, and a
+      // part's year or status goes with it.
+      if (kinds.get(i) === "credentials") {
+        const bullet = l.match(/^\s*(?:[-•*]\s*)?/)?.[0] ?? "";
+        const rest = removeCredentialPart(l, term);
+        if (rest === l) return l;
+        return rest ? bullet + rest : "";
+      }
+      const m = l.match(/^(\s*(?:[-•*]\s*)?(?:[A-Za-z &/]+:\s*)?)(.*)$/);
+      const prefix = m?.[1] ?? "";
+      // Integration r2 (L3): a slash term ("Lockout/tagout") is one term: read the line
+      // with slash pairs whole first, and split at a slash only when the term is one half.
+      const norm = (p: string) => p.replace(/^\(|\)$/g, "").trim().toLowerCase();
+      const whole = (m?.[2] ?? l).split(/\s*(?:[,;|•·]|\s[-–]\s|\s\/\s|\band\b)\s*/i);
+      const parts = whole.some((p) => norm(p) === t) ? whole : (m?.[2] ?? l).split(/\s*(?:[,;|•·]|\s[-–]\s|\s\/\s|\/(?=[A-Za-z])|\band\b)\s*/i);
+      const kept = parts.filter((p) => p.trim() && norm(p) !== t);
+      if (kept.length === parts.filter((p) => p.trim()).length) return l;
+      return kept.length ? prefix + kept.join(", ") : "";
+    })
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n");
+  // Round 14 (F8): the last term taken off takes its empty heading too (the Copy button copies this text).
+  return out === text ? text : dropEmptySections(out);
+}
+
+// ---- credentials the person confirmed (D4) ---------------------------------------
+
+/** The line as the person confirmed it: the name, the kind they picked, and their own year or status (core credentialLineText). */
+export function confirmedCredentialText(name: string, type: CredentialType, when: string): string {
+  // An education line keeps its own name: "GED, 2019", "High School Diploma, in progress".
+  if (type === "did not finish") {
+    const y = attendedYears(when);
+    return `${name.trim()}, attended${y ? ` ${y}` : ""}`;
+  }
+  if (isEducationKind(type)) return type === "in progress" ? `${name.trim()}, in progress` : `${name.trim()}, ${when.trim().replace(/[.\s]+$/, "")}`;
+  return credentialLineText(name, type, when);
+}
+
+/**
+ * True when the year-or-status box holds exactly one real status, maybe with
+ * a year that is not in the future: current/active, expired/lapsed, in
+ * progress, or completed (core isStrictCredentialWhen).
+ */
+export function isCredentialWhen(when: string): boolean {
+  return isStrictCredentialWhen(when);
+}
+
+// Words next to a credential's name that go with it when it moves: who holds
+// it and how it is held ("I hold a current ... certification (OSHA)").
+const MOVE_LEFT_RE = /(?:\b(?:i|hold|holds|holding|have|has|a|an|the|my|our|current|currently|valid|active|fully|certified|licensed|am|is|also|with|earned|obtained|passed|completed|got|and)\s+)+$/i;
+const MOVE_RIGHT_RE =
+  /^(?:\s+(?:certification|certificate|card|license|licence|certified|licensed|endorsement|permit|registry|status|holder))*(?:\s*\([^)]{1,15}\))?(?:,?\s*(?:(?:that\s+is|which\s+is|is|and\s+is)\s+)?(?:(?:current|valid|active|expired|lapsed|renewed)(?:\s+(?:through|until|since|in)\s+(?:19|20)\d{2})?|in good standing|up to date|(?:since|from|in|through|until|valid through|current through|expires?|exp\.?)\s+(?:19|20)\d{2}))*/i;
+// A leftover may not start or end on a joining word.
+const ORPHAN_START_RE = /^(?:and|or|but|so|who|which|that|as|with|while|plus)\b[\s,]*/i;
+const ORPHAN_END_RE = /[\s,]*\b(?:and|or|but|so|who|which|that|as|with|while|plus)$/i;
+
+/** A credential's words as a pattern that also matches them joined by a hyphen ("forklift-certified"). */
+function wordsPattern(raw: string): RegExp {
+  return new RegExp(escapeRe(raw.trim()).replace(/(?:\\s|\s|-|\\-)+/g, "[\\s\\u2010-\\u2015-]+"), "i");
+}
+
+/** Take a credential's words out of a longer sentence. Returns the rest of the sentence, tidied. */
+function removeFromSentence(sentence: string, raw: string): string {
+  const pattern = wordsPattern(raw);
+  const m = sentence.match(pattern);
+  if (!m || m.index === undefined) return sentence;
+  let start = m.index;
+  let end = m.index + m[0].length;
+  const left = sentence.slice(0, start).match(MOVE_LEFT_RE);
+  if (left) start -= left[0].length;
+  const right = sentence.slice(end).match(MOVE_RIGHT_RE);
+  if (right) end += right[0].length;
+  return (sentence.slice(0, start) + " " + sentence.slice(end))
+    .replace(/\(\s*\)/g, "")
+    .replace(/([.!?])\s*[,;:]\s*/g, "$1 ")
+    .replace(/\s+([,.;:])/g, "$1")
+    .replace(/([,;:])\s*([,;:.])/g, "$2")
+    .replace(/^\s*[,;:]\s*/, "")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\.{2,}/g, ".")
+    .trim()
+    .replace(ORPHAN_START_RE, "")
+    .replace(ORPHAN_END_RE, "")
+    .replace(/[\s,;:]+([.!?]?)$/, "$1")
+    .trim()
+    .replace(/^[a-z]/, (c) => c.toUpperCase());
+}
+
+// A period after one of these is not a sentence end ("Main St.", "Acme Inc.", "U.S.", "Dr. Lee", "J. Smith").
+const ABBREV_END_RE = /(?:\b(?:St|Ave|Rd|Blvd|Hwy|Ln|Ct|Pl|Ste|Inc|Co|Corp|Ltd|LLC|Bros|Mfg|Assn|Intl|Twp|Dr|Mr|Mrs|Ms|Jr|Sr|No|Mt|Ft|Dept|Univ|vs|etc|approx|a\.m|p\.m|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\.|\b[A-Z]\.|(?:\b[A-Za-z]\.){2,})$/;
+
+/** The sentences of a paragraph, never broken at an abbreviation or an initial. */
+export function splitSentences(paragraph: string): string[] {
+  const pieces = paragraph.split(/(?<=[.!?])\s+/);
+  const out: string[] = [];
+  for (const p of pieces) {
+    const prev = out[out.length - 1];
+    // Join when the last piece ends on an abbreviation, or this one does not start a sentence.
+    // Join when the last piece ends on an abbreviation, or this one does not start a sentence (lower case, a digit).
+    if (prev !== undefined && (ABBREV_END_RE.test(prev) || !/^["'(\[]?[A-Z]/.test(p))) out[out.length - 1] = `${prev} ${p}`;
+    else out.push(p);
+  }
+  return out;
+}
+
+// A sentence that only carries the dropped sentence's status ("It is current and in good standing.").
+const STATUS_FOLLOW_RE = /^(?:it|this|that|which|both|they|these|each|all|mine|my card|the card)\b/i;
+const STATUS_ANY_RE = /\b(?:current|currently|valid|active|expired|expires|renewed|renew|lapsed|in good standing|up to date|good for|good through|through|until)\b/i;
+
+/**
+ * Drop every sentence of a letter paragraph that names the credential, and a
+ * sentence right after one that only carries its status. Returns the
+ * paragraph without them.
+ */
+function dropSentences(paragraph: string, raw: string): string {
+  const pattern = wordsPattern(raw);
+  const kept: string[] = [];
+  let dropped = false;
+  for (const sent of splitSentences(paragraph)) {
+    if (pattern.test(sent) || (dropped && STATUS_FOLLOW_RE.test(sent.trim()) && STATUS_ANY_RE.test(sent))) {
+      dropped = true;
+      continue;
+    }
+    dropped = false;
+    kept.push(sent);
+  }
+  return kept.join(" ").replace(/\.{2,}/g, ".").trim();
+}
+
+const CERT_HEADING_RE = /^(?:certifications?|licenses?|licences?|credentials?|certifications? (?:and|&) licen[cs]es?|licen[cs]es? (?:and|&) certifications?):?$/i;
+
+/**
+ * Round 10 (SF-7): a credentials line already on the page that shows this
+ * confirmation: its name holds every word of the confirmed name ("AWS D1.1"
+ * for "AWS", "OSHA 10" for "OSHA 10 trained"), and it shows the same kind
+ * and the same year or status.
+ */
+export function coveringCertificationLine(text: string, name: string, type: string, when: string): string | undefined {
+  const want = (credentialKeyOf(name) ?? "").split(" ").filter(Boolean);
+  if (!want.length) return undefined;
+  void type;
+  const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const whenWords = words(when).split(" ").filter(Boolean);
+  for (const m of credentialMentionsOf(text)) {
+    if (m.where !== "credentials" || m.education) continue;
+    const have = (credentialKeyOf(m.name) ?? "").split(" ");
+    const shown = words(m.unit);
+    // Round 11 (SF-9): the kind word need not be there; a bigger credential ("OSHA 10 Trainer") never shows the smaller one.
+    if (/\b(?:trainer|instructor|inspector|evaluator|assessor|examiner|proctor|outreach|master|supervisor|manager|authorized)\b/i.test(m.unit) && !/\b(?:trainer|instructor|inspector|evaluator|assessor|examiner|proctor|outreach|master|supervisor|manager|authorized)\b/i.test(name)) continue;
+    if (want.every((w) => have.includes(w)) && whenWords.every((w) => shown.split(" ").includes(w))) return m.line;
+  }
+  return undefined;
+}
+
+/** Put the confirmed text on its own line under CERTIFICATIONS, adding the section when it is missing. */
+function ensureCertificationLine(text: string, confirmed: string): string {
+  const lines = text.split("\n");
+  if (lines.some((l) => squash(stripBullet(l)) === squash(confirmed))) return text;
+  const head = lines.findIndex((l) => CERT_HEADING_RE.test(l.trim()));
+  if (head === -1) return `${text.replace(/\s+$/, "")}\n\nCERTIFICATIONS\n- ${confirmed}`;
+  let at = head + 1;
+  while (at < lines.length && lines[at].trim() && !/^[A-Z][A-Z &/]{3,}:?$/.test(lines[at].trim())) at++;
+  lines.splice(at, 0, `- ${confirmed}`);
+  return lines.join("\n");
+}
+
+interface MovedResult {
+  text: string;
+  remnants: string[];
+}
+
+/**
+ * Apply one confirmation to one document: every mention of the credential
+ * (by its key) gives way to exactly what the person typed. A short line
+ * becomes the confirmed text; a skills term leaves the skills list; inside a
+ * longer sentence the credential's words come out and the rest of the
+ * sentence stays to be checked like any line. On the resume the confirmed
+ * text then sits on its own line under CERTIFICATIONS. The letter never keeps
+ * its own version: the credential comes out of the letter's sentences.
+ */
+function applyToDocument(
+  text: string,
+  key: string | undefined,
+  name: string,
+  confirmed: string,
+  isLetter: boolean,
+  opts: { education?: boolean; held?: { name: string; kind: string; when: string }; personText?: string; covered?: string } = {}
+): MovedResult & { droppedSentence: boolean; educationLine?: string } {
+  const education = !!opts.education;
+  const remnants: string[] = [];
+  let droppedSentence = false;
+  let educationLine: string | undefined;
+  // A letter sentence wrapped across lines is one sentence: join it first, so it goes whole.
+  if (isLetter) text = joinWrappedLines(text);
+  const found = credentialMentionsOf(text).filter((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
+  // A credential the backstop found ("QMA") is found again by its name.
+  const mentions = [...found, ...mentionsOfName(text, name).filter((b) => !found.some((f) => f.line === b.line))];
+  const header = headerBlockLines(text);
+  let next = text;
+  let placed = false;
+  for (const m of mentions) {
+    // A credential in a job title stays in the title: the confirmation makes that word theirs, the rest of the title is still checked.
+    if (m.title) continue;
+    if (m.term) {
+      next = cutTerm(next, m.line);
+      continue;
+    }
+    const current = linesOf(next).find((l) => l === m.line);
+    if (!current) continue;
+    // Round 9 (r9-S2): a credential they hold now stays where a sentence names it plainly
+    // ("Certified nursing assistant with eight years", "as a certified nursing assistant at Meadowbrook").
+    if (opts.held && liveCredentialCovers(m, opts.held)) continue;
+    // Round 9 (r9-N4): an education line changes only in the part the prompt named; the school stays.
+    if (!isLetter && education && m.education && m.where === "credentials") {
+      if (placed) {
+        next = cutLine(next, m.line);
+        continue;
+      }
+      // Round 11 (SF-4): another credential on the line keeps its own card, asked under CERTIFICATIONS.
+      const split = splitOffCredentials(next, m.line, credentialMentionsOf(text));
+      next = split.text;
+      const rewritten = educationLineRewrite(split.line, m.raw || m.name, confirmed, opts.personText);
+      next = changeLine(next, split.line, rewritten.line);
+      // Round 10 (SF-3): what the writer added beside it (honors, a program, a training) stays on its own line, checked like any line.
+      if (rewritten.rest) next = insertLineAfter(next, rewritten.line, rewritten.rest);
+      educationLine = stripBullet(rewritten.line);
+      placed = true;
+      continue;
+    }
+    // Round 10 (SF-2): a credential on an education line moves out of it; the schooling stays.
+    if (!isLetter && !education && m.onEducationLine) {
+      const rest = withoutEducationPart(current, m.raw || m.name);
+      next = rest ? changeLine(next, m.line, rest) : cutLine(next, m.line);
+      continue;
+    }
+    if (isLetter) {
+      // The letter never splices inside a sentence: the whole sentence goes.
+      const rest = dropSentences(current, m.raw || m.name);
+      droppedSentence = true;
+      next = rest ? changeLine(next, m.line, rest) : cutLine(next, m.line);
+      // Whatever stays of that paragraph is read again: a fragment, or a status with no credential, is held.
+      if (rest && splitSentences(rest).some((sent) => readsAsFragment(sent) || (STATUS_ANY_RE.test(sent) && !credentialMentionsOf(`x\n${sent}`).length))) {
+        remnants.push(linesOf(next).find((l) => l === rest) ?? rest);
+      }
+      continue;
+    }
+    const words = stripBullet(m.line).split(/\s+/).length;
+    // A credentials line, or a short line that is the credential, becomes the confirmed text.
+    // A headline is never replaced whole: the credential moves out of it.
+    if (!header.has(m.line) && (m.where === "credentials" || words <= 8)) {
+      // Round 10 (SF-7): when another credentials line already shows it, this one is never rewritten into a second copy.
+      if (opts.covered && stripBullet(m.line) !== stripBullet(opts.covered)) {
+        if (m.where === "credentials") {
+          next = cutLine(next, m.line);
+          continue;
+        }
+      } else {
+        next = placed ? cutLine(next, m.line) : changeLine(next, m.line, confirmed);
+        placed = true;
+        continue;
+      }
+    }
+    const rest = removeFromSentence(stripBullet(current), m.raw || m.name);
+    if (!rest || rest.split(/\s+/).length < 2) next = cutLine(next, m.line);
+    else {
+      next = changeLine(next, m.line, rest);
+      remnants.push(linesOf(next).find((l) => stripBullet(l) === rest) ?? rest);
+    }
+  }
+  // An education line is rewritten where it stands (or added under EDUCATION when only a sentence named it);
+  // a credential goes under CERTIFICATIONS.
+  if (!isLetter && !education && !opts.covered) next = ensureCertificationLine(next, confirmed);
+  if (!isLetter && education && !placed) next = ensureSectionLine(next, confirmed, "EDUCATION", EDUCATION_HEADING_RE);
+  return { text: next, remnants, droppedSentence, ...(educationLine && educationLine !== confirmed ? { educationLine } : {}) };
+}
+
+const EDUCATION_HEADING_RE = /^(?:education|schooling|academic background)\b.*$|^(?:training|certifications?)\s*(?:and|&)\s*education:?$/i;
+
+/**
+ * Round 11 (SF-4): the other credentials on an education line ("OSHA 10" in
+ * "GED | Toledo Adult Education | OSHA 10 | 2015") come off it, with its
+ * years, onto their own line under CERTIFICATIONS, where they are asked about
+ * on their own. Returns the text and the education line that is left.
+ */
+function splitOffCredentials(text: string, line: string, mentions: ReturnType<typeof credentialMentionsOf>): { text: string; line: string } {
+  const raws = mentions.filter((x) => x.line === line && x.onEducationLine).map((x) => x.raw || x.name);
+  if (!raws.length) return { text, line };
+  const creds = credentialPartsOnly(line, raws);
+  if (!creds) return { text, line };
+  let left = line;
+  for (const r of raws) left = withoutEducationPart(left, r) || left;
+  if (left === line) return { text, line };
+  let next = changeLine(text, line, left);
+  next = ensureCertificationLine(next, stripBullet(creds).replace(/\s*\|\s*/g, ", "));
+  return { text: next, line: linesOf(next).find((l) => stripBullet(l) === stripBullet(left)) ?? left };
+}
+
+/** Put a new line right under one line (found by its words). */
+function insertLineAfter(text: string, after: string, line: string): string {
+  const lines = text.split("\n");
+  const at = lines.findIndex((l) => stripBullet(l) === stripBullet(after));
+  if (at === -1) return text;
+  lines.splice(at + 1, 0, line);
+  return lines.join("\n");
+}
+
+/** Put a line under a heading, adding the section at the end when the page has none. */
+function ensureSectionLine(text: string, line: string, heading: string, headingRe: RegExp): string {
+  const lines = text.split("\n");
+  if (lines.some((l) => squash(stripBullet(l)) === squash(line))) return text;
+  const head = lines.findIndex((l) => headingRe.test(l.trim()));
+  if (head === -1) return `${text.replace(/\s+$/, "")}\n\n${heading}\n${line}`;
+  let at = head + 1;
+  while (at < lines.length && lines[at].trim() && !/^[A-Z][A-Z &/]{3,}:?$/.test(lines[at].trim())) at++;
+  lines.splice(at, 0, line);
+  return lines.join("\n");
+}
+
+/** Join a paragraph's hard-wrapped lines: a line that does not end a sentence, followed by one that starts in lower case. */
+function joinWrappedLines(text: string): string {
+  const out: string[] = [];
+  for (const l of text.split("\n")) {
+    const prev = out[out.length - 1];
+    if (prev !== undefined && prev.trim() && !/[.!?:,;]\s*$/.test(prev) && /^\s*[a-z]/.test(l)) out[out.length - 1] = `${prev.trimEnd()} ${l.trim()}`;
+    else out.push(l);
+  }
+  return out.join("\n");
+}
+
+/** The lines above the first section heading, after the name line. */
+function headerBlockLines(text: string): Set<string> {
+  const out = new Set<string>();
+  const ls = linesOf(text);
+  for (let i = 1; i < ls.length; i++) {
+    if (ANY_HEADING_RE.test(ls[i]) && !ls[i].includes("|")) break;
+    if (CERT_HEADING_RE.test(ls[i]) || SKILLS_HEADING_RE.test(ls[i])) break;
+    out.add(ls[i]);
+  }
+  return out;
+}
+
+/**
+ * "Yes, I hold it" (decision D4), on both documents. Only with a kind picked
+ * and a year or status that is a real answer. Returns null when the details
+ * are not enough, or when nothing on either page changed (the card stays open
+ * and says so).
+ */
+export function applyConfirmation(
+  docs: { resume: string; letter: string },
+  name: string,
+  type: CredentialType,
+  when: string,
+  /** Round 10 (SF-3): the person's own words, so a school they named themselves may ride on an education line. */
+  opts: { personText?: string; /** Round 11: "did not finish": the school they typed on the card. */ school?: string } = {}
+): { resume: string; letter: string; confirm: CredentialConfirm } | null {
+  if (!ALL_KINDS.includes(type) || !isConfirmWhen(type, when)) return null;
+  const confirmed = confirmedCredentialText(name, type, when);
+  const key = credentialKeyOf(name);
+  // Nothing to confirm when neither page names this credential.
+  const mentionsIn = (t: string) => credentialMentionsOf(t).filter((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
+  const named = (t: string) => mentionsIn(t).length > 0 || mentionsOfName(t, name).length > 0;
+  if (!named(docs.resume) && !named(docs.letter)) return null;
+  // Round 9: an education line is confirmed as earned or in progress, a credential as a license, a card...; never crossed.
+  // Round 10 (SF-2): the mention of this kind is the one confirmed, whatever else shares its line.
+  const all = [...mentionsIn(docs.resume), ...mentionsIn(docs.letter)];
+  if (all.length && !all.some((m) => !!m.education === isEducationKind(type))) return null;
+  if (type === "did not finish") return applyDidNotFinish(docs, name, when, opts.personText, opts.school);
+  const held = isLiveCredential(type, when) ? { name, kind: type, when } : undefined;
+  // Round 10 (SF-7): a credentials line already showing it ("AWS D1.1 certification, 2019") is not written twice.
+  const covered = isEducationKind(type) ? undefined : coveringCertificationLine(docs.resume, name, type, when);
+  const r = applyToDocument(docs.resume, key, name, confirmed, false, { education: isEducationKind(type), held, personText: opts.personText, covered });
+  const l = applyToDocument(docs.letter, key, name, confirmed, true, { held });
+  // The line may already read exactly as confirmed: the confirmation still counts.
+  if (r.text === docs.resume && l.text === docs.letter && !pageLineSet(docs.resume).has(squash(confirmed))) return null;
+  return {
+    resume: r.text,
+    letter: l.text,
+    confirm: {
+      name,
+      type,
+      when: when.trim(),
+      text: confirmed,
+      key,
+      remnants: [...r.remnants, ...l.remnants],
+      letterSentenceDropped: l.droppedSentence,
+      ...(r.educationLine ? { line: r.educationLine } : {}),
+      ...(covered && !pageLineSet(r.text).has(squash(confirmed)) ? { coveredBy: stripBullet(covered) } : {}),
+    },
+  };
+}
+
+/**
+ * Round 10 (SF-1): "I went there but didn't finish." The education line
+ * becomes the school and the years the person typed ("Scott High School,
+ * attended 2011 - 2014"), or comes off when there is no school to keep; every
+ * other mention of the credential comes off both pages.
+ */
+function applyDidNotFinish(
+  docs: { resume: string; letter: string },
+  name: string,
+  when: string,
+  personText?: string,
+  typedSchool?: string
+): { resume: string; letter: string; confirm: CredentialConfirm } | null {
+  const key = credentialKeyOf(name);
+  const all = credentialMentionsOf(docs.resume);
+  const edu = all.find((m) => m.education && m.where === "credentials" && (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
+  let resume = docs.resume;
+  let line: string | undefined;
+  // Round 12: what they typed, as typed (a grade they add is written as "through 11th grade").
+  const school = typedSchoolName(typedSchool) ? (typedSchool ?? "").trim() : "";
+  if (edu) {
+    // Round 11 (SF-4): another credential on the line keeps its own card, asked under CERTIFICATIONS.
+    const split = splitOffCredentials(resume, edu.line, all);
+    resume = split.text;
+    const attended = educationAttendedLine(split.line, edu.raw || edu.name, name, when, personText, school);
+    resume = attended ? changeLine(resume, split.line, attended) : cutLine(resume, split.line);
+    line = attended ? stripBullet(attended) : undefined;
+  }
+  const rest = cutCredentialEverywhere({ resume, letter: docs.letter }, name, { keepLines: new Set(line ? [line] : []) });
+  if (rest.resume === docs.resume && rest.letter === docs.letter) return null;
+  return {
+    resume: rest.resume,
+    letter: rest.letter,
+    confirm: {
+      name,
+      type: "did not finish",
+      when: when.trim(),
+      text: confirmedCredentialText(name, "did not finish", when),
+      key,
+      remnants: rest.remnants,
+      letterSentenceDropped: rest.changes.some((c) => c.target === "letter"),
+      ...(line ? { line } : {}),
+      ...(school ? { school } : {}),
+    },
+  };
+}
+
+/**
+ * The same, on one document (kept for callers that hold one page). On the
+ * letter the credential comes out of its sentence; the confirmed line belongs
+ * on the resume (applyConfirmation puts it there).
+ */
+export function confirmCredential(
+  text: string,
+  line: string,
+  isTerm: boolean,
+  name: string,
+  type: CredentialType,
+  when: string
+): { text: string; confirm: CredentialConfirm } | null {
+  if (!ALL_KINDS.includes(type) || !isConfirmWhen(type, when)) return null;
+  const confirmed = confirmedCredentialText(name, type, when);
+  const key = credentialKeyOf(name);
+  // A document with no CERTIFICATIONS heading and no resume header is read as a letter.
+  const isLetter = /^\s*dear\b/im.test(text) && !CERT_HEADING_RE.test(text);
+  const held = isLiveCredential(type, when) ? { name, kind: type, when } : undefined;
+  if (type === "did not finish") return null;
+  const r = applyToDocument(text, key, name, confirmed, isLetter, { education: isEducationKind(type), held });
+  if (r.text === text) return null;
+  void line;
+  void isTerm;
+  return {
+    text: r.text,
+    confirm: { name, type, when: when.trim(), text: confirmed, key, remnants: r.remnants, letterSentenceDropped: r.droppedSentence, ...(r.educationLine ? { line: r.educationLine } : {}) },
+  };
+}
+
+/** "No, take it off", for callers with no place to keep a leftover: the term, the short line, or the whole line a credential sits inside. */
+export function cutCredential(text: string, line: string, isTerm: boolean, name: string): string {
+  // With nowhere to keep a leftover, a credential inside a longer sentence takes the whole line with it (round 6).
+  const r = cutCredentialWithRemnant(text, line, isTerm, name);
+  return r.remnant ? cutLine(text, line) : r.text;
+}
+
+// The words in a job title that claim a credential; "No, take it off" on a title takes off only these.
+const TITLE_CLAIM_WORDS_RE = /\b(?:certified|licensed|registered|journeyman|master|bonded|accredited|credentialed)\b\s*/gi;
+
+/**
+ * "No, take it off", and what is left. In a job title only the credential
+ * words come off ("CERTIFIED NURSING ASSISTANT" becomes "NURSING
+ * ASSISTANT"). Inside a longer sentence the credential's words come out and
+ * the rest is returned as `remnant`, so the gate holds it like a confirmed
+ * move's leftover (round 6): a fragment, or words that are not the person's,
+ * are settled only by their rewrite or a cut.
+ */
+const CLAIM_WORD_RE = /\b(?:certified|certification|certificate|licensed|license|licence|card|endorsement|permit|registry|registered|trained|authori[sz]ed|qualified|hold|holds|held)\b/i;
+
+export function cutCredentialWithRemnant(text: string, line: string, isTerm: boolean, name: string): { text: string; remnant?: string } {
+  if (isTerm) return { text: cutTerm(text, line) };
+  const at = linesOf(text).find((l) => l === line);
+  if (!at) return { text };
+  if (line.includes("|") && /\b(?:19|20)\d{2}\b|\bpresent\b/i.test(line)) {
+    const title = titleOfHeader(line);
+    // Round 8: the claim words and the credential's own name come off the title ("CDL-A DRIVER" is "DRIVER").
+    // The credential inside the title, by its own name ("CDL-A" in "CDL-A DRIVER"), never the whole title.
+    const flat = title.replace(/(?<=[A-Za-z])-(?=[A-Za-z])/g, " ");
+    const inside = [...Array.from(flat.matchAll(namedCredentialRe())), ...Array.from(flat.matchAll(credentialInitialsRe()))].map((x) => x[0]);
+    void name;
+    const bare = inside
+      .reduce((t, n) => t.replace(wordsPattern(n), " "), title.replace(TITLE_CLAIM_WORDS_RE, ""))
+      .replace(/\s{2,}/g, " ")
+      .replace(/^[\s,/-]+|[\s,/-]+$/g, "")
+      .trim();
+    if (bare === title) return { text };
+    // A title that was only the credential ("CNA") asks for their own title: a placeholder the gate holds until they change it.
+    return { text: changeLine(text, line, line.replace(title, bare || "[Your job title]")) };
+  }
+  const m = credentialMentionsOf(text).find((x) => x.line === line && (squash(x.name) === squash(name) || squash(x.raw) === squash(name)));
+  // Round 8: a duty line that only mentions the credential ("Followed ServSafe rules") keeps its line;
+  // only the credential's word comes off. A line that claims it ("Forklift certified") goes.
+  const claims = !!m && (m.where === "credentials" || CLAIM_WORD_RE.test(m.raw) || CLAIM_WORD_RE.test(stripBullet(at)));
+  if (claims && stripBullet(line).split(/\s+/).length <= 8) return { text: cutLine(text, line) };
+  const rest = removeFromSentence(stripBullet(at), m?.raw || name);
+  if (rest === stripBullet(at)) return { text };
+  if (!rest || rest.split(/\s+/).length < 2) return { text: cutLine(text, line) };
+  const next = changeLine(text, line, rest);
+  return { text: next, remnant: linesOf(next).find((l) => stripBullet(l) === rest) ?? rest };
+}
+
+/**
+ * "No, take it off", everywhere (round 7): every mention of that credential
+ * on the resume and in the letter comes off, so the same credential is never
+ * asked again on the next line. A list item goes alone, never its whole
+ * line; a short line goes; inside a longer resume sentence the rest is kept
+ * as a leftover the gate holds; in the letter the whole sentence goes, and
+ * what stays of its paragraph is read again.
+ */
+export function cutCredentialEverywhere(
+  docs: { resume: string; letter: string },
+  name: string,
+  /** Lines never touched (round 10: a confirmed "attended" line, another confirmed line with the same key). */
+  opts: { keepLines?: Set<string> } = {}
+): { resume: string; letter: string; remnants: string[]; changes: Array<{ target: "resume" | "letter"; before: string; after: string | null }> } {
+  const key = credentialKeyOf(name);
+  const remnants: string[] = [];
+  const changes: Array<{ target: "resume" | "letter"; before: string; after: string | null }> = [];
+  // Only the mentions the finder itself reports: never someone else's ("the CDL drivers").
+  const keep = new Set(Array.from(opts.keepLines ?? []).map((l) => squash(stripBullet(l))));
+  const mentionsIn = (t: string) => {
+    const found = credentialMentionsOf(t).filter((m) => (key ? sameCredential(m.key, key) : squash(m.name) === squash(name)));
+    return [...found, ...mentionsOfName(t, name).filter((b) => !found.some((f) => f.line === b.line))].filter((m) => !keep.has(squash(stripBullet(m.line))));
+  };
+  const record = (target: "resume" | "letter", beforeText: string, afterText: string) => {
+    const was = linesOf(beforeText);
+    const now = linesOf(afterText);
+    const gone = was.filter((l) => !now.includes(l) && !isSectionHeader(l.trim()));
+    const added = now.filter((l) => !was.includes(l));
+    gone.forEach((g, i) => changes.push({ target, before: g, after: added[i] ?? null }));
+  };
+  let resume = docs.resume;
+  for (let guard = 0; guard < 20; guard++) {
+    const m = mentionsIn(resume)[0];
+    if (!m) break;
+    // Round 10 (SF-1): "No" on an education line takes the line off whole (never "[Your job title]"), unless a
+    // credential on the same line is asked on its own: then only the schooling part comes off.
+    if ((m.education && m.where === "credentials") || m.onEducationLine) {
+      const others = credentialMentionsOf(resume).filter((x) => x.line === m.line && x.key !== m.key && (x.education || x.onEducationLine));
+      // Round 11 (SF-4): "No" on the schooling takes its school with it; another credential keeps its own line.
+      let next: string;
+      if (m.education && others.length && others.every((x) => x.onEducationLine)) {
+        const split = splitOffCredentials(resume, m.line, credentialMentionsOf(resume));
+        next = cutLine(split.text, split.line);
+      } else {
+        const rest = others.length ? withoutEducationPart(m.line, m.raw || m.name) : "";
+        next = rest && rest !== m.line ? changeLine(resume, m.line, rest) : cutLine(resume, m.line);
+      }
+      if (next === resume) break;
+      record("resume", resume, next);
+      resume = next;
+      continue;
+    }
+    const r = cutCredentialWithRemnant(resume, m.line, m.term, m.raw || name);
+    if (r.text === resume) break;
+    record("resume", resume, r.text);
+    resume = r.text;
+    if (r.remnant) remnants.push(r.remnant);
+  }
+  let letter = joinWrappedLines(docs.letter);
+  for (let guard = 0; guard < 20; guard++) {
+    const m = mentionsIn(letter).find((x) => !x.term);
+    if (!m) break;
+    const current = linesOf(letter).find((l) => l === m.line);
+    if (!current) break;
+    // Drop only the sentences where the finder itself reads the credential.
+    const sentenceHasIt = (sent: string) =>
+      credentialMentionsOf(`x\n${sent}`).some((x) => (key ? sameCredential(x.key, key) : squash(x.name) === squash(name))) || mentionsOfName(`x\n${sent}`, name).length > 0;
+    // A sentence that claims it goes whole; a duty sentence ("I followed ServSafe rules") keeps itself without the credential's word.
+    const kept = splitSentences(current)
+      // Round 11 (SF-5): a sentence about schooling ("I finished high school and went to work") goes whole.
+      .map((sent) => (!sentenceHasIt(sent) ? sent : CLAIM_WORD_RE.test(sent) || m.education ? "" : removeFromSentence(sent, m.raw || m.name)))
+      .filter((sent) => sent.trim());
+    const rest = kept.join(" ").trim();
+    const next = rest ? changeLine(letter, m.line, rest) : cutLine(letter, m.line);
+    if (next === letter) break;
+    record("letter", letter, next);
+    letter = next;
+    if (rest && splitSentences(rest).some((sent) => readsAsFragment(sent) || (STATUS_ANY_RE.test(sent) && !credentialMentionsOf(`x\n${sent}`).length))) {
+      remnants.push(linesOf(letter).find((l) => l === rest) ?? rest);
+    }
+  }
+  return { resume, letter, remnants, changes };
+}
+
+// ---- the view ------------------------------------------------------------------
+
+export type GroupTarget = "resume" | "letter" | "skill" | "skillset";
+
+/** The one keep-or-cut card for skills the person never said (D3). */
+export const SKILLS_CARD_KEY = "Skills added for you";
+export const SKILLS_CARD_TEXT = "These skills were added for you. Keep the ones that are true.";
+
+/** The credential name a memory-prompt item is about: its full name from the check, never a clipped one. */
+function unsaidName(i: OpenItem): string {
+  return i.subject ?? i.why.match(/"([^"]+)"/)?.[1] ?? stripBullet(i.line);
+}
+
+const scopeItem = (its: GateItem[]) => its.find((i) => i.kind === "scope_unsaid" && i.scopeFamily);
+
+/** Phase 6 (r2 ruling): true when every claim the card asks about on this line is a claim of being over people. */
+function overPeopleCard(line: string, families: string[]): boolean {
+  const hits = scopeHits(stripBullet(line)).filter((h) => families.includes(h.family));
+  return hits.length > 0 && hits.every(isPeopleScopeHit);
+}
+
+/** The job header ("TITLE | Employer | ...") a resume line sits under, if any. */
+function jobHeaderFor(resumeText: string, line: string): string | undefined {
+  let job: string | undefined;
+  for (const l of linesOf(resumeText)) {
+    if (squash(l) === squash(line)) return job;
+    if (isSectionHeader(l)) job = undefined;
+    else if (l.includes("|") && !/^[-*\u2022]/.test(l) && !l.includes("@") && /[A-Za-z]{2,}/.test(l.split("|")[0])) job = l;
+  }
+  return undefined;
+}
+
+// ---- round 11: the one-tap scope card ------------------------------------------------------
+
+/** "Yes, I did this": their typed who or what, kept for this line's scope claim only. */
+export function recordScopeYes(answers: DefendAnswer[], line: string, family: string | string[], typed: string, job?: string): DefendAnswer[] {
+  const k = squash(line);
+  const families = Array.isArray(family) ? family : [family];
+  // Round 4 (r3 M3-3): an answer belongs to one line in one job.
+  const j = squash(job ?? "");
+  return [
+    ...answers.filter((a) => !(a.kind === "scope_yes" && squash(a.line) === k && squash(a.job ?? "") === j && families.includes(a.family as string))),
+    ...families.map((f) => ({ line, answer: typed.trim(), kind: "scope_yes" as const, family: f, ...(job ? { job } : {}) })),
+  ];
+}
+
+/**
+ * What "Yes, I did this" with these words would do: "empty" when they name
+ * nobody and nothing, "unmatched" when the words do not cover the line
+ * (fewer people, other people, another thing), "ok" when this claim is
+ * settled.
+ */
+export function scopeYesResult(
+  doc: { target: "resume" | "letter"; text: string },
+  line: string,
+  family: string | string[],
+  typed: string,
+  source: string,
+  answers: DefendAnswer[],
+  job?: string
+): "ok" | "empty" | "unmatched" | "copy" {
+  if (!isScopeWhoAnswer(typed)) return "empty";
+  // Round 12: the line pasted back is not their words.
+  if (isScopeCopy(typed, line) || splitSentences(line).some((sent) => isScopeCopy(typed, sent))) return "copy";
+  const families = Array.isArray(family) ? family : [family];
+  const next = recordScopeYes(answers, line, families, typed, job);
+  // Round 12: one card per line; one answer must cover every claim it asked about.
+  const still = (text: string) => {
+    const own = next.map((a) => (squash(a.line) === squash(line) ? { ...a, line: text } : a));
+    return scopeAllNotTheirsAnswered(text, source, own, { job }).some((h) => families.includes(h.family));
+  };
+  if (doc.target === "letter") return splitSentences(line).some((sent) => still(sent)) ? "unmatched" : "ok";
+  return still(line) ? "unmatched" : "ok";
+}
+
+/** "I helped with it": the line becomes its shared form, as the person's own choice (never added to their words). */
+export function applyScopeHelped(text: string, answers: DefendAnswer[], line: string, helped: string, family?: string): RewriteResult {
+  const r = applyRewrite(text, answers, line, helped);
+  if (!r.changed) return r;
+  // Round 12 (SF-7): it settles only the claim it was made for, in the sentence it changed.
+  const was = splitSentences(stripBullet(line));
+  const changed = splitSentences(stripBullet(helped)).find((sent) => !was.includes(sent)) ?? stripBullet(helped);
+  return {
+    ...r,
+    answers: r.answers.map((a) =>
+      a.kind === "rewrite" && squash(a.line) === squash(stripBullet(helped)) ? { ...a, scopeHelp: true, ...(family ? { scopeHelpFamily: family } : {}), scopeHelpText: changed } : a
+    ),
+  };
+}
+
+/** Round 13 (SF-6): true when the typed school names a jail or prison; the person chooses to keep it or change it. */
+export function isFacilitySchool(typed: string | undefined): boolean {
+  const r = typedSchoolParts(typed);
+  return typeof r === "object" && !!r.facility;
+}
+
+/** Round 12 (SF-8): true when something was typed in "What school?" but it is not a school's name. */
+export function isRejectedSchool(typed: string | undefined): boolean {
+  return typedSchoolParts(typed) === "rejected";
+}
+
+/**
+ * Round 12 (SF-2): "Yes, that was my title": what they type must be the title on the line. Round 13 (SF-9):
+ * their short form counts ("Customer Service Rep", "Asst Mgr"). `current` is the title the card asks about
+ * (a role in the summary or letter); a job header's own title otherwise.
+ */
+export function titleYesResult(line: string, typed: string, current?: string): "ok" | "empty" | "unmatched" {
+  if (!typed.trim()) return "empty";
+  // Round 15: with no title passed, a line that is not a job header asks about its role's title, so the card
+  // settles that exact phrase and never loops.
+  const role = !line.includes("|") ? scopeHits(stripBullet(line)).find((h) => h.role && h.title)?.title : undefined;
+  const title = current ?? role ?? titleOfHeader(stripBullet(line));
+  return squash(typed) === squash(title) || sameTitle(typed, title) ? "ok" : "unmatched";
+}
+
+/**
+ * Round 13 (SF-5): what "Use my title" will not take: nothing, an answer that is not a title ("idk", "no",
+ * "n/a", "I don't remember"), fewer than 2 letters, digits or a bar. The same title as the line is a Yes.
+ */
+export function ownTitleProblem(typed: string, current: string): "empty" | "not_a_title" | "same" | undefined {
+  const t = straightQuotes(typed || "").replace(/\s+/g, " ").trim();
+  if (!t) return "empty";
+  if ((t.match(/[A-Za-z]/g) ?? []).length < 2) return "not_a_title";
+  if (/[|\d]/.test(t)) return "not_a_title";
+  const plain = t.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (
+    /^(?:idk|i\s?dk|dk|no|nope|nah|na|n a|none|nothing|nobody|ok|okay|k|yes|yeah|yep|ya|sure|maybe|unsure|not sure|i'?m not sure|dunno|no idea|forgot|i forgot|unknown|whatever|same|n\/a|i don'?t know|i do not know|don'?t know|i don'?t remember|i do not remember|don'?t remember|i can'?t remember|can'?t remember|i don'?t recall|don'?t recall|not sure what it was|i don'?t know my title|no title|there wasn'?t one|didn'?t have one|i didn'?t have one|none really)$/i.test(
+      plain
+    )
+  )
+    return "not_a_title";
+  if (sameTitle(t, current) || squash(t) === squash(current)) return "same";
+  return undefined;
+}
+
+/** Record "Yes, that was my title" for a header line. */
+export function recordTitleYes(answers: DefendAnswer[], line: string, typed: string): DefendAnswer[] {
+  const k = squash(line);
+  return [...answers.filter((a) => !(a.kind === "title_yes" && squash(a.line) === k)), { line, answer: typed.trim(), kind: "title_yes" }];
+}
+
+/**
+ * Round 12 (SF-2): "Use my title": their own title replaces only the title
+ * part of the job header; the employer, the city and the dates stay.
+ */
+export function applyOwnTitle(text: string, answers: DefendAnswer[], line: string, title: string, roleTitle?: string): RewriteResult {
+  const t = title.replace(/\s+/g, " ").trim().replace(/\|/g, "");
+  const body = stripBullet(line);
+  if (!t) return { text, answers, changed: false };
+  if (roleTitle) {
+    // Round 13 (SF-4): a role in the summary or letter: only the role's words change, and the new title is theirs.
+    const at = body.toLowerCase().indexOf(roleTitle.toLowerCase());
+    if (at < 0) return { text, answers, changed: false };
+    // Round 14 (F9): mid-sentence their title keeps the casing they typed; at the start of the line it starts with a capital.
+    const fit = at === 0 || /[.!?]\s*$/.test(body.slice(0, at)) ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+    const r = applyRewrite(text, answers, line, `${body.slice(0, at)}${fit}${body.slice(at + roleTitle.length)}`);
+    if (!r.changed) return r;
+    const nextLine = (line.match(/^\s*(?:[-*•]\s*)?/)?.[0] ?? "") + `${body.slice(0, at)}${fit}${body.slice(at + roleTitle.length)}`;
+    return { ...r, answers: r.answers.map((a) => (a.kind === "rewrite" && squash(a.line) === squash(nextLine) ? { ...a, ownTitle: fit } : a)) };
+  }
+  const head = titleOfHeader(body);
+  const at = body.indexOf(head);
+  const next = at >= 0 ? `${body.slice(0, at)}${t}${body.slice(at + head.length)}` : body;
+  return applyRewrite(text, answers, line, next);
+}
+
+/**
+ * "Take it off" on a scope claim in the letter: the sentences that make a
+ * claim the person never made come out whole (round 11, SF-5); the rest of
+ * the paragraph stays.
+ */
+export function cutScopeSentences(letter: string, line: string, source: string, answers: DefendAnswer[] = []): string {
+  const current = linesOf(letter).find((l) => l === line);
+  if (!current) return letter;
+  const kept = splitSentences(current).filter((sent) => !scopeNotTheirsAnswered(sent, source, answers.map((a) => (squash(a.line) === squash(line) ? { ...a, line: sent } : a))));
+  const rest = kept.join(" ").trim();
+  return rest ? changeLine(letter, line, rest) : cutLine(letter, line);
+}
+
+// ---- Phase 6 (plan Q3): one tap per job, facts locked ----------------------------------
+
+/** The answer "Looks right" records on a job header. It settles that job's card only. */
+export const JOB_OK_ANSWER = "Looks right";
+export const JOB_WHY = "These are from your page. Check them against your records.";
+/** Review r1 M2: a job t.ROY changed (a month, a place, the employer's name). A tap never settles it. */
+export const JOB_CHANGED_QUESTION = "Fix it to match your records. A screener checks these against your paperwork.";
+export function jobChangedWhy(changes: string[]): string {
+  return `t.ROY changed this job. Not on your page: ${changes.map((c) => `"${c}"`).join(", ")}.`;
+}
+export const JOB_QUESTION = "Is this job right?";
+/** Integration H4: the dates of a job changed (merged stints, a moved start or end). A tap never settles it. */
+export function jobDatesWhy(own: string[], others: string[] = []): string {
+  const theirs = own.length ? own.join(" and ") : "no dates for this job";
+  const also = others.length ? ` Also not on your page: ${others.map((c) => `"${c}"`).join(", ")}.` : "";
+  return `t.ROY changed the dates for this job. Your page says ${theirs}.${also}`;
+}
+const JOB_HEADING_RE = /^(?:(?:professional |work |relevant )?experience|employment(?: history)?|work history)$/i;
+
+/**
+ * The job headers in page order, from the shared job resolver (core jobResolver: the same reading as the
+ * renderer and people scope). A header written over two or three lines is named by its first line.
+ */
+export function jobHeaderLines(resumeText: string): string[] {
+  const out: string[] = [];
+  const lines = linesOf(resumeText || "");
+  for (const j of jobsIn(lines.slice(1).join("\n"))) if (!out.includes(j.lines[0])) out.push(j.lines[0]);
+  return out;
+}
+
+/** The parts of a job header, for the job card: the title, then the rest (employer, place, dates). */
+export function jobPartsOf(line: string): { title: string; rest: string[] } {
+  const parts = stripBullet(line).split("|").map((p) => p.trim()).filter(Boolean);
+  return { title: parts[0] ?? "", rest: parts.slice(1) };
+}
+
+/**
+ * Integration r2 (L1): the job card shows the whole header, also when the
+ * writer split it over two or three lines ("CNA" / "Valley Care Center,
+ * 2019 - 2021"): title, then employer, place and dates from the shared
+ * resolver. "Looks right" never settles a fact the card did not show.
+ */
+export function jobCardParts(header: string, resumeText: string): { title: string; rest: string[] } {
+  const facts = jobsIn(linesOf(resumeText || "").slice(1).join("\n")).find((j) => j.lines[0] === header);
+  if (!facts || facts.lines.length < 2) return jobPartsOf(header);
+  return { title: facts.title || jobPartsOf(header).title, rest: [facts.employer, facts.place, facts.dates].map((p) => (p || "").trim()).filter(Boolean) };
+}
+
+/**
+ * A job line's facts, one by one (title, employer, place, each date), as
+ * written: split at pipes, commas, dashes with spaces and the small words that
+ * join them in a sentence ("Line cook at Harbor Street Diner from 2019 to 2023").
+ */
+function jobAtoms(text: string): string[] {
+  return stripBullet(text)
+    .split(/\s*[|,;\t]\s*|\s+[-\u2013\u2014]\s+|\s+(?:at|to|through|until|from|since|in|for)\s+/i)
+    .map((a) => a.replace(/\s+/g, " ").replace(/[.;:]+$/, "").replace(/^(?:a|an|the)\s+/i, "").trim())
+    .filter(Boolean);
+}
+// Integration M3: punctuation and spacing are not facts ("Libby MT" and "Libby, MT" are one place).
+const factKey = (a: string) => a.toLowerCase().replace(/[^a-z0-9]+/g, "");
+const JOB_MONTH = "(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\\.?";
+/** A date on a job line as written ("8/2021", "Aug 2021", "2021", "Present"), whatever the dash or spacing around it. */
+const JOB_DATE_RE = new RegExp(`\\b(?:${JOB_MONTH}\\s+)?(?:\\d{1,2}\\/)?(?:19|20)\\d{2}\\b|\\b(?:present|current|now)\\b`, "gi");
+const datesOn = (text: string) => (text.match(JOB_DATE_RE) ?? []).map((d) => d.replace(/\s+/g, " ").replace(/\.$/, ""));
+/** A part that is only dates and the dashes or words between them ("8/2021-Present", "Aug 2021 to now"). */
+const onlyDates = (a: string) => a.replace(JOB_DATE_RE, " ").replace(/[\s\-\u2013\u2014.,/]|\b(?:to|through|until)\b/gi, "") === "";
+
+/**
+ * Review r1 M2 (r2 M3, L3): the facts on a job header that are not, as
+ * written, on the person's own lines for that job (the lines that name its
+ * title or its employer, and the line on either side). Dates are compared
+ * as dates ("8/2021-Present" and "8/2021 - Present" are the same); a changed
+ * month ("3/2021" for "8/2021"), an added place or a shortened employer
+ * comes back here, spelled as on the page. Such a header is a fact card,
+ * never settled by "Looks right".
+ */
+export function jobHeaderChanges(header: string, ownText: string, resumeText?: string): string[] {
+  return jobHeaderReview(header, ownText, resumeText).changes;
+}
+
+/**
+ * Offer a one-tap correction only when this page job matches exactly one job
+ * on the person's own page. A split page header needs a separate edit path:
+ * replacing only its first line would leave the old facts underneath.
+ */
+export function ownJobHeaderForFix(header: string, resumeText: string, ownResumeText: string): string | undefined {
+  const page = jobsIn(linesOf(resumeText).slice(1).join("\n")).find((job) => job.lines[0] === header);
+  if (!page || page.lines.length !== 1) return undefined;
+  const match = matchOwnJob(page, jobsIn(ownResumeText, { own: true }));
+  if (match.kind !== "one" || !match.job.title || !match.job.employer) return undefined;
+  const sourceHeader = match.job.header.trim();
+  return squash(sourceHeader) === squash(stripBullet(header)) ? undefined : sourceHeader;
+}
+
+/**
+ * Integration M4/H4/M3: a page job header read against the person's own jobs through the shared resolver.
+ * `changes`: facts on the header that are not theirs for that job (employer, place, dates; the title too
+ * for a header without pipes, which the title rule does not read). `dates`: set when the dates are not that
+ * job's start/end pair (a moved start or end, or stints merged into one range): their dates, as written.
+ * Places compare without punctuation ("Libby MT" is "Libby, MT").
+ */
+export function jobHeaderReview(header: string, ownText: string, resumeText?: string): { changes: string[]; dates?: string[] } {
+  const pageJob = (resumeText ? jobsIn(linesOf(resumeText).slice(1).join("\n")).find((j) => j.lines[0] === header) : undefined) ?? readJobHeader(header);
+  const own = jobsIn(ownText || "", { own: true });
+  const m = matchOwnJob(pageJob, own);
+  if (m.kind === "one") {
+    const j = m.job;
+    const changes: string[] = [];
+    if (pageJob.employer && employerKey(pageJob.employer) !== employerKey(j.employer)) changes.push(pageJob.employer);
+    if (pageJob.place && placeKey(pageJob.place) !== placeKey(j.place) && !ownMentionsPlace(j, pageJob.place)) changes.push(pageJob.place);
+    // "Present" and "Current" are one date, but the page keeps the person's word for it.
+    // The page's dates are exactly another job of theirs at this employer (a higher title moved onto earlier
+    // years): that is the title changing, asked on the title card, not the dates.
+    const titleMoved = own.some((o) => o !== j && employersMatch(o.employer, pageJob.employer) && sameDates(o, pageJob));
+    if (!titleMoved && (!sameDates(pageJob, j) || (pageJob.present && j.present && pageJob.endText.toLowerCase() !== j.endText.toLowerCase()))) {
+      // The start and the end each as the page spells them, when that one changed.
+      const startChanged = !sameDate(pageJob.start, j.start);
+      const endChanged = pageJob.present !== j.present || (!pageJob.present && !sameDate(pageJob.end, j.end)) || (pageJob.present && pageJob.endText.toLowerCase() !== j.endText.toLowerCase());
+      const parts = [...(startChanged ? [pageJob.startText || "no start date"] : []), ...(endChanged ? [pageJob.endText || "no end date"] : [])];
+      return { changes: [...changes, ...parts.filter((p, k) => parts.indexOf(p) === k)], dates: [j.dates || "no dates"] };
+    }
+    return { changes };
+  }
+  if (m.kind === "several") {
+    // The same title and employer more than once, and the page's dates are none of them: merged stints.
+    return { changes: [pageJob.dates || "no dates"], dates: m.jobs.map((j) => j.dates || "no dates") };
+  }
+  const legacy = legacyJobHeaderChanges(pageJob.lines.length > 1 ? pageJob.header : header, ownText);
+  // A header without pipes is not read by the title rule: its title is checked here.
+  if (!header.includes("|") && pageJob.title && !own.some((j) => titleKey(j.title) === titleKey(pageJob.title)) && !factKeys(ownText).has(factKey(pageJob.title))) {
+    return { changes: [pageJob.title, ...legacy] };
+  }
+  return { changes: legacy };
+}
+
+const sameDate = (a?: { year: number; month?: number }, b?: { year: number; month?: number }) =>
+  (!a && !b) || (!!a && !!b && a.year === b.year && (a.month ?? 0) === (b.month ?? 0));
+
+/** True when the person's own lines for that job carry the place ("Corner Mart, Libby MT" under the header). */
+function ownMentionsPlace(j: JobFacts, place: string): boolean {
+  const k = placeKey(place);
+  return !!k && [...j.lines, ...j.body.slice(0, 1)].some((l) => placeKey(l).includes(k));
+}
+
+function factKeys(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const l of linesOf(text || "")) for (const a of jobAtoms(l)) out.add(factKey(a));
+  return out;
+}
+
+/** Before the shared resolver: the atoms on the person's lines that name the title or employer (free-text uploads). */
+function legacyJobHeaderChanges(header: string, ownText: string): string[] {
+  const page = jobAtoms(header);
+  // The title is checked by the title rule (its own card); here: employer, place and dates.
+  const anchors = new Set(page.slice(0, 2).map(factKey));
+  const lines = linesOf(ownText || "");
+  const ownFacts = new Set<string>();
+  const ownDates = new Set<string>();
+  const take = (l: string | undefined) => {
+    if (!l || /^\s*[-•*]/.test(l)) return;
+    for (const a of jobAtoms(l)) ownFacts.add(factKey(a));
+    for (const d of datesOn(l)) ownDates.add(factKey(d));
+  };
+  lines.forEach((l, i) => {
+    if (!jobAtoms(l).some((a) => anchors.has(factKey(a)))) return;
+    take(l);
+    take(lines[i + 1]);
+    take(lines[i - 1]);
+  });
+  const facts = page.slice(1).filter((a) => !onlyDates(a) && !ownFacts.has(factKey(a)));
+  const dates = datesOn(header).filter((d) => !ownDates.has(factKey(d)));
+  return [...facts, ...dates.filter((d, k) => dates.findIndex((x) => factKey(x) === factKey(d)) === k)];
+}
+
+/** "Looks right" on one job. Recorded for that header line only; never part of the person's words. */
+export function recordJobOk(answers: DefendAnswer[], line: string): DefendAnswer[] {
+  const k = squash(stripBullet(line));
+  return [...answers.filter((a) => !(a.kind === "job_ok" && squash(stripBullet(a.line)) === k)), { line, answer: JOB_OK_ANSWER, kind: "job_ok" }];
+}
+
+/** The header retyped by the person ("Fix this"): their own words, settled whatever it says. */
+function jobRetyped(answers: DefendAnswer[], line: string): boolean {
+  const k = squash(stripBullet(line));
+  return answers.some((a) => squash(stripBullet(a.line)) === k && a.kind === "rewrite" && !a.scopeHelp && a.verdict === "stands" && squash(stripBullet(a.answer)) === k);
+}
+
+/** A job header whose facts are all on the person's page, settled by "Looks right" (or their title typed on its title card). */
+function jobTapped(answers: DefendAnswer[], line: string): boolean {
+  const k = squash(stripBullet(line));
+  return answers.some((a) => squash(stripBullet(a.line)) === k && (a.kind === "job_ok" || a.kind === "title_yes"));
+}
+
+/**
+ * Rewording A (Troy 2026-10-11): a reworded line whose facts trace back is
+ * not asked about. Only when the writer's documents are known, its second
+ * check ran on the resume (that check is what catches a new result or tool),
+ * and the signer marked the build eligible (rewordingA, from the server's own
+ * source kind); otherwise the stricter rule stands.
+ */
+export function verifierCheckedDocument(grounding: unknown, kind: "resume" | "cover_letter"): boolean {
+  if (!grounding || typeof grounding !== "object") return false;
+  const g = grounding as { verifierRan?: unknown; verifierRanByDoc?: Record<string, unknown> };
+  return g.verifierRanByDoc ? g.verifierRanByDoc[kind] === true : g.verifierRan === true;
+}
+
+export function factsLockedFor(written: WrittenDocs | null | undefined, grounding: unknown): boolean {
+  if (!written || typeof written.resume !== "string" || !written.resume.trim()) return false;
+  if (!grounding || typeof grounding !== "object") return false;
+  const g = grounding as { verifierRan?: unknown; verifierRanByDoc?: { resume?: unknown } | null; rewordingA?: unknown };
+  // Round 3 (review r1 H2): opt-in. Only a grounding a server signer stamped
+  // with the positive marker (lib/source-kind.ts withRewording) qualifies.
+  if (g.rewordingA !== true) return false;
+  if (g.verifierRan === false) return false;
+  if (g.verifierRanByDoc && typeof g.verifierRanByDoc === "object" && g.verifierRanByDoc.resume === false) return false;
+  return true;
+}
+
+/** D2 (Phase 6): an optional "add a number?" prompt. Never an open item; never needed to finish. */
+export interface NumberPrompt {
+  /** The duty line, as it is on the page. */
+  line: string;
+  /** What could be counted (lib/count-prompts.ts). Never a figure. */
+  count: string;
+}
+
+/**
+ * Up to three optional "add a number?" prompts: the first duty line of each
+ * job that has no number yet, with the one thing to count that fits it (or a
+ * neutral "how many" when the line's work is unclear). Lines with a card
+ * open are left to that card. The person types the number into the line
+ * themselves; nothing here offers a figure.
+ */
+export function optionalNumberPrompts(resumeText: string, skipLines: Iterable<string> = [], max = 3): NumberPrompt[] {
+  const skip = new Set(Array.from(skipLines, (l) => squash(stripBullet(l))));
+  const out: NumberPrompt[] = [];
+  let inExperience = false;
+  let job = "";
+  let asked = false;
+  linesOf(resumeText || "").forEach((l, i) => {
+    if (i === 0 || out.length >= max) return;
+    if (isSectionEnd(l)) {
+      inExperience = JOB_HEADING_RE.test(l.replace(/:$/, "").trim());
+      job = "";
+      return;
+    }
+    if (!inExperience) return;
+    if (isEntryHeader(l)) {
+      job = jobPartsOf(l).title;
+      asked = false;
+      return;
+    }
+    if (!job || asked || !/^\s*[-•*]/.test(l)) return;
+    if (numbersIn(l).size > 0 || skip.has(squash(stripBullet(l)))) return;
+    // Phase 6 integration (L6): the one thing to count that fits this job, else a neutral "how many".
+    out.push({ line: l, count: countPromptForLine(stripBullet(l), job) });
+    asked = true;
+  });
+  return out;
+}
+
+/** One line (or added skill) and everything open about it. */
+export interface LineGroup {
+  line: string;
+  /** Which document the line is in. "skill": a term added from a posting. */
+  target: GroupTarget;
+  items: OpenItem[];
+  /** True when at least one BLOCK is open on this line. */
+  blocking: boolean;
+  /**
+   * True when an answer in the person's own words can settle every open item
+   * on this line (a defend question or a credential's status). Anything else
+   * the checker found (a number or year the person never gave, a placeholder)
+   * only goes away when the line changes or comes off, so "true as written"
+   * is not offered for it.
+   */
+  answerable: boolean;
+  /** A defend line the person already explained; nothing open on it. */
+  checked: boolean;
+  answer?: DefendAnswer;
+  /** On the skills card: every term to keep or cut. */
+  terms?: string[];
+  /** On a memory prompt (a credential the person never mentioned): its name. */
+  credentialName?: string;
+  /** On a memory prompt for an education line: confirmed as earned or in progress. */
+  education?: boolean;
+  /** Round 11 (SF-3): on an education card, true when the line's school is one the person named (no need to ask "What school?"). */
+  schoolKnown?: boolean;
+  /** Round 11: an unmatched scope claim: its family (for "Who did you train?") and the line's shared form. */
+  scope?: {
+    family: string;
+    families: string[];
+    question: string;
+    helped?: string;
+    /**
+     * Phase 6 (r2 ruling): a claim of being over people is one tap, "Were you over other people in this job?"
+     * `yes` is the answer "Yes, I was over people" records for this line; `noLine` is the person's own line
+     * "No, I did the work" puts back (absent when none of theirs matches; then only "Take it off").
+     */
+    overPeople?: { yes: string; noLine?: string; job?: string };
+  };
+  /** Round 12 (SF-2): a job title the person never used: "Yes, that was my title" or "Use my title". */
+  /** Round 13 (SF-4): `role` when the title is a role in the summary or letter, not a job header's title. */
+  title?: { current: string; role?: boolean };
+  /** Phase 6 (Q3): a job to confirm with one tap ("Looks right" or "Fix this"). */
+  job?: { title: string; rest: string[]; /** Review r1 M2: the facts t.ROY changed (no "Looks right" then). */ changes?: string[]; /** One exact, uniquely matched header from the person's page. */ ownHeader?: string };
+}
+
+/** An open item with the document it is in. */
+export type GateItem = OpenItem & { target: GroupTarget; /** Raised by the generate-docs claim trace. */ trace?: boolean };
+
+export interface FinishView {
+  status: ResumeStatus;
+  state: "finished" | "draft";
+  /** Every open item the gate holds: resume, cover letter, added skills, second check. */
+  openItems: GateItem[];
+  /** Lines with something open, BLOCK lines first, in page order. */
+  groups: LineGroup[];
+  /** Defend lines already explained, in page order (shown as checked). */
+  checkedLines: LineGroup[];
+  /** Open items not tied to one line on the page (no resume, none of the person's words, a line we could not find). */
+  general: GateItem[];
+  /** Things that block "finished": blocking lines plus general BLOCKs. */
+  fixCount: number;
+  /** Verifiable progress on the defend step. */
+  defendDone: number;
+  defendTotal: number;
+  /** The one source every panel checks against. */
+  source: string;
+  /** Every explainable line on the resume is in the person's own words, so none was asked to fill a minimum. */
+  allLinesInOwnWords: boolean;
+  /** Phase 6: job cards still waiting for "Looks right" (part of fixCount). */
+  jobsOpen: number;
+}
+
+/** Items an answer in the person's own words can settle. A second-check item is settled only by a change or a fresh check. */
+const ANSWERABLE = (i: OpenItem) =>
+  i.from !== "second_check" && i.kind !== "credential_remnant" && i.kind !== "scope_unsaid" && i.kind !== "job_confirm" && i.kind !== "job_changed" && i.rule === "STD-C04";
+
+// Words that start a fragment, not a sentence: a joining word or a relative pronoun.
+const FRAGMENT_START_RE = /^(?:and|or|but|so|nor|yet|plus|who|whom|whose|which|that|where|while|as|with|because|since|although|though|than)\b/i;
+const IRREGULAR_VERB_RE =
+  /\b(?:ran|run|runs|led|lead|leads|made|make|makes|kept|keep|keeps|built|build|builds|drove|drive|drives|took|take|takes|did|do|does|got|get|gets|went|go|goes|set|sets|held|hold|holds|fed|feed|met|meet|sold|sell|taught|teach|put|cut|cuts|brought|bring|bought|buy|caught|dug|fixed|fix|fixes|ate|wrote|write|writes|read|reads|spoke|speak|swept|sweep|stood|stand|told|tell|found|find|gave|give|gives|left|lift|lifts|load|loads|cook|cooks|clean|cleans|open|opens|close|closes|serve|serves|stock|stocks|pack|packs|help|helps|work|works|is|was|are|were|am|has|have|had|would|could|will|can|should|may|might|be|been|want|wants|say|says|said|love|like|know|knew|see|saw|show|showed|start|started|bring|brings)\b/i;
+
+/**
+ * True when a leftover must be reworded or cut: a sentence of it reads as a
+ * fragment or keeps a status word with no credential, or it is not the
+ * person's own words.
+ */
+function remnantNeedsCard(line: string, source: string): boolean {
+  const body = stripBullet(line);
+  if (splitSentences(body).some((sent) => readsAsFragment(sent) || (STATUS_ANY_RE.test(sent) && !credentialMentionsOf(`x\n${sent}`).length))) return true;
+  return distanceFromSource(body, source) > 0;
+}
+
+/** True when a leftover reads as a fragment: it starts lower case, starts on a joining word, or has no verb. */
+export function readsAsFragment(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (/^[a-z]/.test(t)) return true;
+  if (FRAGMENT_START_RE.test(t)) return true;
+  const hasVerb = /\b[a-z]{2,}(?:ed|ing)\b/i.test(t) || IRREGULAR_VERB_RE.test(t);
+  return !hasVerb;
+}
+
+type GroundingOutcome = { claim?: unknown; doc?: unknown; status?: unknown };
+
+/** The page line holding a claim, matched the way the claim trace matches it (number words, punctuation). */
+function lineWithClaim(text: string, claim: string): string | undefined {
+  const n = normalizeForMatch(claim);
+  if (!n) return undefined;
+  return linesOf(text).find((l) => ` ${normalizeForMatch(l)} `.includes(` ${n} `));
+}
+
+/**
+ * The claim trace from generate-docs, as open items: a claim it flagged that
+ * is still on the page or survives reworded, and a line that may say more
+ * about a credential than the person did. An edit settles one only when the
+ * claim is gone (flagOutcome "removed"); reordering its words does not. A
+ * claim still on the page but across lines is held in the general list.
+ */
+function groundingItems(grounding: unknown, resumeText: string, letterText: string, written?: WrittenDocs | null): GateItem[] {
+  const outcomes = (grounding as { outcomes?: unknown })?.outcomes;
+  if (!Array.isArray(outcomes)) return [];
+  const items: GateItem[] = [];
+  for (const o of outcomes as GroundingOutcome[]) {
+    if (typeof o?.claim !== "string" || !o.claim.trim()) continue;
+    if (o.status !== "still_there" && o.status !== "credential" && o.status !== "changed") continue;
+    const target: GroupTarget = o.doc === "cover_letter" ? "letter" : "resume";
+    const text = target === "letter" ? letterText : resumeText;
+    const original = written ? (target === "letter" ? written.letter : written.resume) : text;
+    const now = flagOutcome({ claim: o.claim, why: "" }, original || text, text);
+    if (now === "removed") continue;
+    if (now === "unmatched" && !lineWithClaim(text, o.claim)) continue;
+    const line = lineWithClaim(text, o.claim) ?? "";
+    const credential = o.status === "credential";
+    items.push({
+      rule: credential ? "STD-T03" : "STD-C04",
+      severity: "BLOCK",
+      // Not on one line (across lines, or reworded): held in the general list.
+      line: line || "",
+      target,
+      trace: true,
+      why: credential
+        ? "Our second check says this may say more about a card, license or certification than you told us."
+        : "Our second check couldn't match this to anything you told us.",
+      question: credential
+        ? "Change it to what you actually hold, the way your card or papers say it, or cut it."
+        : line
+          ? "Tell me in one sentence how you'd describe this, in your own words. If it isn't true, change it or cut it."
+          : `Our second check flagged "${o.claim.trim().slice(0, 80)}". Find it on the page and change it or cut it.`,
+    });
+  }
+  return items;
+}
+
+// ---- the cover letter ---------------------------------------------------------------
+
+/** New (round 3): a letter credential the resume card already asks about. */
+export const Q_LETTER_SHARED = "Answer this one on your resume card. Then the letter changes to match, or you can cut it here.";
+/** New (round 3): a letter credential with a status or year the person never gave. */
+export const Q_LETTER_STATUS = "If an interviewer read this, would the status be true? It isn't one you gave us. Change it or cut it.";
+/** New (round 3): a mention that disagrees with what the person confirmed. */
+export function confirmedMismatchQuestion(text: string): string {
+  return `An interviewer will hold you to what you told us: "${text}". Change this to match it, or cut it.`;
+}
+/** New (round 3): writer's status words left in a sentence after the credential moved out. */
+export const Q_STATUS_LEFT = "This line still has a status word that went with the credential you confirmed. If an interviewer asked, it would point at nothing. Change the line or cut it.";
+// Long names and their short forms, only to notice two confirmations that may
+// be one credential. Never used to decide a credential is said or held.
+const SAME_NAME: Array<[RegExp, string]> = [
+  [/\bcommercial driver'?s?\b(?:\s+licen[cs]e)?/gi, "cdl"],
+  [/\b(?:certified\s+)?nursing\s+assistant\b/gi, "cna"],
+  [/\bemergency\s+medical\s+technician\b/gi, "emt"],
+  [/\bbasic\s+life\s+support\b/gi, "bls"],
+  [/\bcardiopulmonary\s+resuscitation\b/gi, "cpr"],
+  [/\b(\d+)[\s-]*hour\b/gi, "$1"],
+  [/\bservsafe\s+food\s+protection\s+manager\b/gi, "servsafe manager"],
+  [/\b(?:certified\s+)?forklift\s+operator\b/gi, "forklift"],
+];
+function sameNameWords(name: string): string {
+  const t = SAME_NAME.reduce((acc, [re, to]) => acc.replace(re, to), name).toLowerCase();
+  // One family, one key (round 7): every OSHA card of one number, every CDL of one class, every CPR card.
+  // Round 8: a word that makes it a different credential stays in the key (OSHA 10 is not OSHA 10 Trainer).
+  const role = (t.match(/\b(?:trainer|instructor|inspector|outreach|endorsement|hazmat|tanker|doubles|passenger|school\s+bus|master|journeyman|manager)\b/g) ?? []).sort().join(" ");
+  const osha = t.match(/\bosha\s*-?\s*(\d+)/);
+  if (osha) return `osha ${osha[1]} ${role}`.trim();
+  if (/\bcdl\b/.test(t)) {
+    const cls = t.match(/\bclass[\s-]*([a-d])\b|\bcdl[\s-]*\(?([a-d])\)?(?![\w'])/);
+    return `cdl ${cls ? `class_${cls[1] ?? cls[2]}` : ""} ${role}`.replace(/\s+/g, " ").trim();
+  }
+  if (/\bcpr\b/.test(t)) return `cpr ${role}`.trim();
+  return t;
+}
+
+/** New (round 5): two confirmations that may be one credential, told two ways. */
+export function confirmedConflictQuestion(a: string, b: string): string {
+  return `You told us "${a}" and "${b}". If they are the same one, cut the one that is wrong.`;
+}
+/** New (round 6): a line "No, take it off" changed. Only the person's own rewrite or a cut clears it. */
+export const Q_REMNANT_CUT = "This line changed when the credential came off. Read it again: reword it in your own words, or cut it.";
+/** New (round 4): a line the move changed. Only the person's own rewrite or a cut clears it. */
+export const Q_REMNANT = "This line changed when the credential moved. Read it again: reword it in your own words, or cut it.";
+/** New (round 4): a sentence about a credential was taken out of the letter. */
+export function letterNote(name: string): string {
+  return `We took out a sentence about ${name}. Add one in your own words if you want.`;
+}
+const STATUS_LEFT_RE = /\b(current|currently|valid|active|expired|renewed|lapsed|in good standing|up to date|through|until)\b/i;
+
+// A courtesy sentence ("I would welcome the chance to talk") makes no claim.
+const COURTESY_RE = /^(?:dear (?:hiring manager|hiring team|sir or madam)|(?:sincerely|(?:best |kind )?regards)|thank you for (?:your time|your consideration|your time and consideration)|i (?:would welcome|look forward to|would appreciate) (?:the chance to |the opportunity to )?(?:talk(?:ing)?|speak(?:ing)?|discuss(?:ing)?)\s*(?:with you|the role|this opportunity)?|i am eager to join your (?:store|team|company))(?:[.!?,])?$/i;
+const SCOPE_RE = /\b(supervis\w*|manag\w*|led|lead\w*|oversaw|oversee\w*|direct\w*|train(?:ed|ing)?|mentor\w*|coordinat\w*)\b/gi;
+const LETTER_FAR = 0.5;
+
+/** The claim sentences of a letter, each with the letter line it is on. */
+function letterSentences(letter: string): Array<{ line: string; sentence: string; courtesy?: true }> {
+  const out: Array<{ line: string; sentence: string; courtesy?: true }> = [];
+  for (const line of linesOf(letter)) {
+    for (const sentence of splitSentences(line)) {
+      const t = sentence.trim();
+      if (!t || t.split(/\s+/).length < 4) continue;
+      if (COURTESY_RE.test(t)) continue;
+      out.push({ line, sentence: t });
+    }
+  }
+  return out;
+}
+
+/**
+ * The letter's own checks beyond the mint check: a sentence far from the
+ * person's words (above half its words new, against their words and the
+ * resume as it stands now), and a scope word ("supervised", "managed", "led",
+ * "trained") the person never used. Each is a BLOCK an answer settles, like a
+ * defend line. Credentials in the letter are checked by name, once, skipping
+ * any the resume already asks about.
+ */
+function letterItems(
+  letter: string,
+  resumeText: string,
+  source: string,
+  answers: DefendAnswer[],
+  personText: { text: string; rows?: ReadonlyArray<CredentialRow>; backstop: string },
+  askedOnResume: Set<string>,
+  checkedLetter?: string
+): GateItem[] {
+  const items: GateItem[] = [];
+  const against = `${source}\n${resumeText}`;
+  for (const { line, sentence, courtesy } of letterSentences(letter)) {
+    // A scope claim the person never made: settled by "Yes, I did this" with their own words, "I helped
+    // with it", their own rewrite, or a cut (round 11). The paragraph's answers count for its sentences only.
+    const own = answers.map((a) => (squash(a.line) === squash(line) ? { ...a, line: sentence } : a));
+    // A scope word the person typed into the line themselves (their rewrite) is their claim.
+    const rw = answers.find((a) => a.kind === "rewrite" && typeof a.replaced === "string" && squash(a.line) === squash(line));
+    const theirWord = (word: string) => !!rw && !new RegExp(`\\b${(word.match(/[A-Za-z]+/) ?? [""])[0]}\\b`, "i").test(rw.replaced as string);
+    const all = scopeAllNotTheirsAnswered(sentence, source, own).filter((h) => !theirWord(h.word));
+    // Round 13 (SF-4): a role used as a title ("As a shift supervisor I ...") gets its own title card.
+    const role = all.find((h) => h.role && h.title);
+    if (role && !items.some((i) => i.line === line && i.kind === "title_unsaid")) {
+      items.push({
+        rule: "STD-C04",
+        severity: "BLOCK",
+        line,
+        target: "letter",
+        kind: "title_unsaid",
+        why: roleTitleWhy(role.title as string),
+        question: roleTitleQuestion(role.title as string),
+        roleTitle: role.title,
+      });
+    }
+
+    const hits = all.filter((h) => !(h.role && h.title));
+    const hit = hits[0];
+    const existing = items.find((i) => i.line === line && i.kind === "scope_unsaid");
+    if (hit && existing) {
+      // Round 12: one card per paragraph line, asking about every claim in it.
+      existing.scopeFamilies = Array.from(new Set([...(existing.scopeFamilies ?? [existing.scopeFamily as string]), ...hits.map((h) => h.family)]));
+      delete existing.helped;
+    } else if (hit) {
+      const helpedSentence = hits.length === 1 && !hit.role ? helpedForm(sentence, hit.word) : undefined;
+      items.push({
+        rule: "STD-C04",
+        severity: "BLOCK",
+        line,
+        target: "letter",
+        kind: "scope_unsaid",
+        why: scopeWhy(hit.word),
+        question: Q_SCOPE,
+        scopeFamily: hit.family,
+        ...(hits.length > 1 ? { scopeFamilies: Array.from(new Set(hits.map((h) => h.family))) } : {}),
+        ...(helpedSentence ? { helped: line.replace(sentence, helpedSentence) } : {}),
+      });
+    }
+    // A sentence far from the person's words: settled by an answer, like a defend line.
+    // The supported employer placeholder is not a factual employer or scope
+    // claim. Check everything surrounding it, including any courtesy tail.
+    const newFacts = untracedFacts(sentence.replace(/\[Company Name\]/g, ""), source);
+    if (!newFacts.length && checkedLetter && pageLineSet(checkedLetter).has(squash(line))) continue;
+    if (!newFacts.length && distanceFromSource(sentence, against) <= LETTER_FAR) continue;
+    if (answerStands(answerFor(answers, line), line, source)) continue;
+    if (items.some((i) => i.line === line && i.rule === "STD-C04" && i.kind !== "scope_unsaid")) continue;
+    items.push({
+      rule: "STD-C04",
+      severity: "BLOCK",
+      line,
+      target: "letter",
+      why: "Most of this sentence isn't in anything you told us.",
+      question: "Tell me in one sentence how you'd describe this line.",
+    });
+  }
+  // Every letter credential is a memory prompt (round 5), unless it is
+  // exactly a line the person typed. One the resume also names is asked
+  // once, on the resume; the letter item points there and the letter
+  // follows the confirmation.
+  // The resume's card is the one place a shared credential is asked. While it
+  // is open the page is a draft; confirming it takes the letter's sentence
+  // out, and cutting it leaves the letter's mention to be asked here.
+  for (const m of credentialsToAsk(letter, personText.text, askedOnResume, personText.rows, personText.backstop)) {
+    items.push({
+      rule: "STD-T03",
+      severity: "BLOCK",
+      line: m.line,
+      target: "letter",
+      kind: "credential_unsaid",
+      subject: m.name,
+      why: credentialPromptWhy(m.name),
+      question: credentialMemoryPrompt(m.name),
+    });
+  }
+  return items;
+}
+
+export function buildFinishView(input: {
+  resumeText: string;
+  ownWords: string;
+  defendAnswers: DefendAnswer[];
+  coverLetterText?: string;
+  /** The writer's documents as delivered. Without them, rewrites add nothing to the person's words. */
+  written?: WrittenDocs | null;
+  /** Skill terms the person added from a posting (keyword check). */
+  addedTerms?: string[];
+  /** Skills terms kept on the "added for you" card (D3). */
+  keptTerms?: string[];
+  /** Credentials confirmed with the person's own type and year or status (D4). */
+  confirmedCredentials?: CredentialConfirm[];
+  /** The grounding block from generate-docs, when there is one. */
+  grounding?: unknown;
+  /** The second check's findings, only when it ran. */
+  secondCheckFindings?: ReadonlyArray<SecondCheckFinding>;
+  /** What the person typed in the Forge's licenses-and-training answer (with their own words: the whole-line exception). */
+  credentialsAnswer?: string;
+  /** What "No, take it off" left of longer sentences (held like a confirmed move's leftover). */
+  credentialCutRemnants?: string[];
+  /** The person's structured credentials from the Forge's training step (round 7): the one typed exception. */
+  credentialRows?: ReadonlyArray<CredentialRow>;
+  /** The person's own uploaded resume (record lines held back as they chose). Whole lines of it may cover a credential. */
+  ownResumeText?: string;
+}): FinishView {
+  const letter = input.coverLetterText ?? "";
+  const answers = input.defendAnswers;
+  // Round 3: what the person settles on a card settles only that card's item.
+  // Kept terms and confirmed credentials never join the person's words.
+  const source = gateSource(input.ownWords, answers, [input.resumeText, letter], input.written);
+  const kept = new Set((input.keptTerms ?? []).map((t) => t.trim().toLowerCase()));
+  // A confirmation counts only when it is valid and its line is on the page
+  // exactly as the person typed it. That one line is theirs and is not checked
+  // again; every other line is checked as before.
+  const validConfirms = (input.confirmedCredentials ?? [])
+    .filter((c) => ALL_KINDS.includes(c.type) && isConfirmWhen(c.type, c.when))
+    .map((c) => {
+      const text = confirmedCredentialText(c.name, c.type, c.when);
+      // Round 9: an education line that kept its school counts only while it is the confirmed text plus parts with no year or status.
+      // Round 10: only school names the person used ride on it (SF-3); "did not finish" keeps the school and their years only (SF-1).
+      const line =
+        typeof c.line === "string" &&
+        (c.type === "did not finish" ? isConfirmedAttendedLine(c.line, c.name, c.when, source, c.school) : isEducationKind(c.type) && isConfirmedEducationLine(c.line, text, source))
+          ? c.line
+          : undefined;
+      // Round 10 (SF-7): a credentials line already on the page that shows exactly this confirmation.
+      const coveredBy =
+        typeof c.coveredBy === "string" && !isEducationKind(c.type) && coveringCertificationLine(input.resumeText, c.name, c.type, c.when) !== undefined &&
+        squash(stripBullet(coveringCertificationLine(input.resumeText, c.name, c.type, c.when) as string)) === squash(c.coveredBy)
+          ? c.coveredBy
+          : undefined;
+      return { ...c, text, line, coveredBy, key: c.key ?? credentialKeyOf(c.name) };
+    });
+  // One credential, one confirmation: the last one for a key is the one that counts.
+  const lastByKey = new Map<string, (typeof validConfirms)[number]>();
+  for (const c of validConfirms) lastByKey.set(c.key ?? squash(c.name), c);
+  const pageSet = pageLineSet(input.resumeText);
+  const confirms = Array.from(lastByKey.values()).filter(
+    (c) => pageSet.has(squash(c.text)) || (!!c.line && pageSet.has(squash(c.line))) || (!!c.coveredBy && pageSet.has(squash(c.coveredBy)))
+  );
+  // "Did not finish" settles its own line; it never makes the credential theirs.
+  const heldConfirms = confirms.filter((c) => c.type !== "did not finish");
+  const confirmedLines = new Set(confirms.flatMap((c) => [squash(c.text), ...(c.line && pageSet.has(squash(c.line)) ? [squash(c.line)] : [])]));
+  const resumeForChecks = input.resumeText
+    .split("\n")
+    .filter((l) => !confirmedLines.has(squash(stripBullet(l))))
+    .join("\n");
+  // Rewording A: facts locked, one tap per job (only where the writer's second check ran).
+  const factsLocked = factsLockedFor(input.written, input.grounding);
+  // A new Forge build has already checked each unchanged job against the
+  // person's own page. Asking for a tap on every matching header repeats the
+  // source they supplied. Older revisions and checks keep their existing rule.
+  const assistedForge = factsLocked && (input.grounding as { forgeAssisted?: unknown } | null)?.forgeAssisted === true;
+  const status = getResumeStatus({
+    resumeText: resumeForChecks,
+    sourceText: source,
+    defendAnswers: answers,
+    secondCheckFindings: input.secondCheckFindings,
+    credentialsAnswer: input.credentialsAnswer,
+    confirmedKeys: heldConfirms.map((c) => c.key).filter((k): k is string => !!k),
+    credentialRows: input.credentialRows,
+    ownResumeText: input.ownResumeText,
+    factsLocked,
+    // What the second check read: lines outside it keep the stricter reading.
+    checkedText: input.written ? `${input.written.resume}\n${input.written.letter}` : undefined,
+  });
+
+  const resumeLines = pageLineSet(input.resumeText);
+  const letterLines = pageLineSet(letter);
+  const items: GateItem[] = [];
+  for (const i of status.openItems) {
+    // Skills terms the person never said go on ONE keep-or-cut card (D3).
+    if (i.kind === "grid_term") {
+      if (kept.has(i.line.trim().toLowerCase())) continue;
+      items.push({ ...i, severity: "BLOCK", target: "skillset" });
+      continue;
+    }
+    // A skills term with a scope word is a claim: its own card, settled
+    // only by cutting it (round 5: an answer never settles a scope claim).
+    if (i.kind === "grid_scope_term") {
+      items.push({ ...i, severity: "BLOCK", target: "skill" });
+      continue;
+    }
+    // A credential that is one term of a skills line is asked about as that term.
+    if (i.line && !resumeLines.has(squash(stripBullet(i.line))) && termOnPage(input.resumeText, i.line)) {
+      items.push({ ...i, target: "skill" });
+      continue;
+    }
+    items.push({ ...i, target: "resume" });
+  }
+
+  // The cover letter ships in the same package, so it is checked too.
+  if (letter.trim() && input.resumeText.trim() && source.trim()) {
+    for (const f of runMintCheck({ output: letter, source, kind: "cover_letter" }).findings) {
+      items.push({ rule: f.rule, severity: f.severity, line: f.line, why: f.why, question: questionForFinding(f), target: "letter" });
+    }
+    // The same exception the resume uses: their uploaded resume (never the free-text licenses answer) and their rows.
+    const typedLines = new Set((input.credentialsAnswer ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
+    const personText = input.ownResumeText ?? source.split("\n").filter((l) => !typedLines.has(l.trim())).join("\n");
+    const backstopText = `${source}\n\n${input.credentialsAnswer ?? ""}`;
+    const confirmedSet = new Set(heldConfirms.map((c) => c.key).filter((k): k is string => !!k));
+    const askedOnResume = new Set([...credentialsToAsk(resumeForChecks, personText, confirmedSet, input.credentialRows, backstopText).map((m) => m.key), ...confirmedSet]);
+    items.push(...letterItems(letter, input.resumeText, source, answers, { text: personText, rows: input.credentialRows, backstop: backstopText }, askedOnResume, factsLocked && verifierCheckedDocument(input.grounding, "cover_letter") ? input.written?.letter : undefined));
+  }
+
+  // Skills added from a posting go on the same keep-or-cut card.
+  for (const term of Array.from(new Set((input.addedTerms ?? []).map((t) => t.trim()).filter(Boolean)))) {
+    if (!termOnPage(input.resumeText, term)) continue;
+    if (kept.has(term.toLowerCase())) continue;
+    if (items.some((i) => (i.target === "skill" || i.target === "skillset") && i.line.toLowerCase() === term.toLowerCase())) continue;
+    items.push({
+      rule: "STD-T01",
+      severity: "BLOCK",
+      line: term,
+      target: "skillset",
+      kind: "grid_term",
+      why: "You added this from a job posting.",
+      question: SKILLS_CARD_TEXT,
+    });
+  }
+
+  // Every other mention of a confirmed credential must say what the person
+  // confirmed. A leftover writer's status after a move is flagged.
+  const keyed = heldConfirms.filter((c) => c.key);
+  const mismatchLines = new Set<string>();
+  for (const [doc, target] of [[resumeForChecks, "resume"], [letter, "letter"]] as const) {
+    for (const m of credentialMentionsOf(doc)) {
+      if (m.title) continue; // a title keeps its words; the title check reads it
+      const c = keyed.find((x) => sameCredential(x.key as string, m.key));
+      if (!c) continue;
+      // Round 9 (r9-S2): a credential they hold now may stay in a sentence that names it plainly.
+      if (liveCredentialCovers(m, { name: c.name, kind: c.type, when: c.when })) continue;
+      const t: GroupTarget = m.term ? "skill" : target;
+      mismatchLines.add(`${t}\u0000${m.line}`);
+      items.push({
+        rule: "STD-T03",
+        severity: "BLOCK",
+        line: m.line,
+        target: t,
+        kind: "credential_confirmed_mismatch",
+        subject: m.name,
+        why: `You told us "${c.text}". This says it differently.`,
+        question: confirmedMismatchQuestion(c.text),
+      });
+    }
+  }
+  if (mismatchLines.size) {
+    for (let k = items.length - 1; k >= 0; k--) {
+      const it = items[k];
+      if (it.kind === "credential_confirmed_mismatch") continue;
+      const credentialItem = it.rule === "STD-T03" || /a license, a certification, or a training course/.test(it.question);
+      if (credentialItem && mismatchLines.has(`${it.target}\u0000${it.line}`)) items.splice(k, 1);
+    }
+  }
+  // Two confirmations that are one credential spelled two ways ("OSHA 10"
+  // and "10-hour OSHA", "CNA" and "Certified Nursing Assistant") must not
+  // tell two stories. Round 6: only when the two names normalise to the same
+  // key and the kind or the year or status differ; two different credentials
+  // ("Welding" and "Welding Inspector") stand side by side.
+  const sameKeyOf = (c: (typeof heldConfirms)[number]) =>
+    (credentialKeyOf(sameNameWords(c.name)) ?? "")
+      .split(/\s+/)
+      .map((w) => w.replace(/'s$|s$/, ""))
+      .filter((w) => w.length > 0 && w !== "s")
+      .sort()
+      .join(" ");
+  for (let a = 0; a < heldConfirms.length; a++) {
+    for (let b = a + 1; b < heldConfirms.length; b++) {
+      const [x, y] = [heldConfirms[a], heldConfirms[b]];
+      if (x.type === y.type && x.when.trim().toLowerCase() === y.when.trim().toLowerCase()) continue;
+      if (!sameKeyOf(x) || sameKeyOf(x) !== sameKeyOf(y)) continue;
+      const line = linesOf(input.resumeText).find((l) => squash(stripBullet(l)) === squash(y.text));
+      if (!line) continue;
+      items.push({
+        rule: "STD-T03",
+        severity: "BLOCK",
+        line,
+        target: "resume",
+        kind: "credential_confirmed_conflict",
+        subject: y.name,
+        why: `You told us "${x.text}" and "${y.text}".`,
+        question: confirmedConflictQuestion(x.text, y.text),
+      });
+    }
+  }
+  // What is left of a sentence the credential moved out of is held until the
+  // person rewords it in their own words or cuts it, when it reads as a
+  // fragment or is not their own words. A clean leftover in their own words
+  // is not held: every other check still reads it.
+  for (const c of validConfirms) {
+    for (const rem of c.remnants ?? []) {
+      for (const [doc, target] of [[input.resumeText, "resume"], [letter, "letter"]] as const) {
+        const line = linesOf(doc).find((l) => squash(stripBullet(l)) === squash(stripBullet(rem)));
+        if (!line) continue;
+        if (!remnantNeedsCard(line, source)) continue;
+        items.push({ rule: "STD-C04", severity: "BLOCK", line, target, kind: "credential_remnant", why: "This line changed when the credential moved.", question: Q_REMNANT });
+      }
+    }
+    if (c.letterSentenceDropped && letter.trim()) {
+      items.push({ rule: "STD-C04", severity: "FIX", line: "", target: "letter", kind: "credential_letter_note", why: `We took out a sentence about ${c.name} from your cover letter.`, question: letterNote(c.name) });
+    }
+  }
+  // The same for what "No, take it off" left of a longer sentence (round 6).
+  for (const rem of input.credentialCutRemnants ?? []) {
+    for (const [doc, target] of [[input.resumeText, "resume"], [letter, "letter"]] as const) {
+      const line = linesOf(doc).find((l) => squash(stripBullet(l)) === squash(stripBullet(rem)));
+      if (!line || !remnantNeedsCard(line, source)) continue;
+      if (items.some((i) => i.kind === "credential_remnant" && i.line === line && i.target === target)) continue;
+      items.push({ rule: "STD-C04", severity: "BLOCK", line, target, kind: "credential_remnant", why: "This line changed when the credential came off.", question: Q_REMNANT_CUT });
+    }
+  }
+
+  // The claim trace, settled by a standing answer when it asks for one.
+  for (const g of groundingItems(input.grounding, input.resumeText, letter, input.written)) {
+    if (g.line && g.rule === "STD-C04" && answerStands(answerFor(answers, g.line), g.line, source)) continue;
+    // Already held on that line under the same rule: mark it as the claim trace's too.
+    const same = g.line ? items.find((i) => i.target === g.target && i.line === g.line && i.rule === g.rule) : undefined;
+    if (same) {
+      same.trace = true;
+      continue;
+    }
+    items.push(g);
+  }
+
+  // A skills term asked as a credential is not also on the keep-or-cut skills card.
+  const askedTerms = new Set(items.filter((i) => i.kind === "credential_unsaid" && i.target === "skill").map((i) => i.line.trim().toLowerCase()));
+  for (let k = items.length - 1; k >= 0; k--) if (items[k].kind === "grid_term" && askedTerms.has(items[k].line.trim().toLowerCase())) items.splice(k, 1);
+
+  // Phase 6 (Q3): one tap per job, where rewording A applies (it replaces the
+  // "explain this line" questions there). The fact checks above already hold a
+  // title, employer or date that is not the person's; a header with anything
+  // open is settled on that card. Every other job header asks only "Looks right?".
+  // Integration H4: in every mode, a job whose dates are not one of the person's start/end pairs (a moved
+  // date, stints merged into one range) is a dates card with true words, and never a title card: the title
+  // is theirs, it is the dates that changed. Only retyping the header ("Fix this") settles it.
+  for (const header of jobHeaderLines(input.resumeText)) {
+    if (jobRetyped(answers, header)) continue;
+    const review = jobHeaderReview(header, source, input.resumeText);
+    if (!review.dates) continue;
+    const k = squash(stripBullet(header));
+    for (let x = items.length - 1; x >= 0; x--) {
+      if (items[x].target === "resume" && squash(stripBullet(items[x].line)) === k && (items[x].kind === "title_unsaid" || items[x].kind === "job_confirm")) items.splice(x, 1);
+    }
+    const others = review.changes.filter((c) => !review.dates!.includes(c) && datesOn(c).length === 0);
+    items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_changed", why: jobDatesWhy(review.dates, others), question: JOB_CHANGED_QUESTION });
+  }
+  for (const header of factsLocked ? jobHeaderLines(input.resumeText) : []) {
+    if (jobRetyped(answers, header)) continue;
+    if (items.some((i) => i.target === "resume" && squash(stripBullet(i.line)) === squash(stripBullet(header)))) continue;
+    // Review r1 M2: a fact t.ROY changed is a fact card; "Looks right" never settles it.
+    const changes = jobHeaderChanges(header, source, input.resumeText);
+    if (changes.length) {
+      items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_changed", why: jobChangedWhy(changes), question: JOB_CHANGED_QUESTION });
+      continue;
+    }
+    if (jobTapped(answers, header)) continue;
+    if (assistedForge) {
+      const pageJob = jobsIn(linesOf(input.resumeText).slice(1).join("\n")).find((j) => j.lines[0] === header);
+      if (pageJob && matchOwnJob(pageJob, jobsIn(input.ownResumeText ?? input.ownWords, { own: true })).kind === "one") continue;
+    }
+    items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_confirm", why: JOB_WHY, question: JOB_QUESTION });
+  }
+
+  // An item whose line is not on its page cannot be changed or cut there.
+  const onItsPage = (i: GateItem) =>
+    i.target === "skill" || i.target === "skillset" ? true : (i.target === "letter" ? letterLines : resumeLines).has(squash(stripBullet(i.line)));
+  // A non-blocking item must point at a line on the page; one about the person's own words loses its line.
+  for (const i of items) if (i.severity === "FIX" && i.line && !onItsPage(i)) i.line = "";
+  const general = items.filter((i) => !i.line || !onItsPage(i));
+  const lined = items.filter((i) => i.line && onItsPage(i));
+
+  const byLine = new Map<string, GateItem[]>();
+  const seenLines = new Set<string>();
+  const dupLines = new Set<string>();
+  for (const l of linesOf(input.resumeText)) {
+    const k = squash(stripBullet(l));
+    if (seenLines.has(k)) dupLines.add(k);
+    seenLines.add(k);
+  }
+  for (const item of lined) {
+    // Every added skill is one card, not one card per term.
+    // Round 10 (SF-2): each credential on a line is its own card; the line's other items ride with its first one.
+    let k = item.target === "skillset" ? "skillset" : `${item.target}\u0000${item.line}`;
+    // Round 4 (r3 M3-3): the same line in two jobs is two scope cards, one per job.
+    if (item.kind === "scope_unsaid" && item.job && dupLines.has(squash(stripBullet(item.line)))) k = `${k}\u0000${item.job}`;
+    if (item.kind === "credential_unsaid" && item.subject) {
+      const first = lined.find((x) => x.kind === "credential_unsaid" && x.target === item.target && x.line === item.line);
+      if (first && first !== item && first.subject !== item.subject) k = `${k}\u0000${item.subject}`;
+    }
+    const list = byLine.get(k) ?? [];
+    list.push(item);
+    byLine.set(k, list);
+  }
+
+  const order = linesOf(input.resumeText);
+  const targetRank: Record<GroupTarget, number> = { resume: 0, skill: 1, skillset: 2, letter: 3 };
+  const groups: LineGroup[] = Array.from(byLine.values()).map((its) => {
+    const unsaid = its.find((i) => i.kind === "credential_unsaid");
+    return {
+      line: its[0].target === "skillset" ? SKILLS_CARD_KEY : its[0].line,
+      target: its[0].target,
+      items: its,
+      blocking: its.some((i) => i.severity === "BLOCK"),
+      answerable: its[0].target !== "skillset" && !unsaid && its.every((i) => ANSWERABLE(i)),
+      checked: false,
+      answer: its[0].target === "skillset" ? undefined : answerFor(answers, its[0].line),
+      ...(its[0].target === "skillset"
+        ? { terms: its.map((i) => i.line).filter((t, k, all) => all.findIndex((x) => x.toLowerCase() === t.toLowerCase()) === k) }
+        : {}),
+      ...(its.length === 1 && its[0].kind === "job_confirm" ? { job: jobCardParts(its[0].line, input.resumeText) } : {}),
+      ...(its.length === 1 && its[0].kind === "job_changed" ? { job: { ...jobCardParts(its[0].line, input.resumeText), changes: jobHeaderChanges(its[0].line, source, input.resumeText), ownHeader: ownJobHeaderForFix(its[0].line, input.resumeText, input.ownResumeText ?? input.ownWords) } } : {}),
+      ...(unsaid ? { credentialName: unsaidName(unsaid), ...(unsaid.education ? { education: true, schoolKnown: !!attendedSchoolOf(its[0].line, source) } : {}) } : {}),
+      ...(its.find((i) => i.kind === "title_unsaid" && i.roleTitle)
+        ? { title: { current: its.find((i) => i.kind === "title_unsaid" && i.roleTitle)!.roleTitle as string, role: true } }
+        : its.some((i) => i.kind === "title_unsaid") && its[0].target === "resume"
+          ? { title: { current: titleOfHeader(stripBullet(its[0].line)) } }
+          : {}),
+      ...(!unsaid && scopeItem(its)
+        ? {
+            scope: {
+              family: scopeItem(its)!.scopeFamily as string,
+              families: scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string],
+              question: overPeopleCard(its[0].line, scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string])
+                ? OVER_PEOPLE_QUESTION
+                : Array.from(new Set((scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string]).map((f) => scopeWhoQuestion(f)))).join(" "),
+              ...(scopeItem(its)!.helped ? { helped: scopeItem(its)!.helped } : {}),
+              ...(overPeopleCard(its[0].line, scopeItem(its)!.scopeFamilies ?? [scopeItem(its)!.scopeFamily as string])
+                ? (() => {
+                    const job = scopeItem(its)!.job ?? (its[0].target === "resume" ? jobHeaderFor(input.resumeText, its[0].line) : undefined);
+                    const noLine = its[0].target === "resume" ? ownLineFor(its[0].line, source, { job }) : undefined;
+                    const bullet = its[0].line.match(/^\s*[-*\u2022]\s*/)?.[0] ?? "";
+                    return { overPeople: { yes: OVER_PEOPLE_YES, ...(job ? { job } : {}), ...(noLine && squash(noLine) !== squash(stripBullet(its[0].line)) ? { noLine: `${bullet}${noLine}` } : {}) } };
+                  })()
+                : {}),
+            },
+          }
+        : {}),
+    };
+  });
+  groups.sort(
+    (a, b) =>
+      Number(b.blocking) - Number(a.blocking) ||
+      targetRank[a.target] - targetRank[b.target] ||
+      order.indexOf(a.line) - order.indexOf(b.line)
+  );
+
+  const openDefend = new Set(status.openItems.filter((i) => i.rule === "STD-C04").map((i) => squash(i.line)));
+  const grouped = new Set(groups.map((g) => g.line));
+  const checkedLines: LineGroup[] = status.defendLines
+    .filter((d) => !openDefend.has(squash(d.line)))
+    .filter((d) => !grouped.has(d.line))
+    .map((d) => ({
+      line: d.line,
+      target: resumeLines.has(squash(stripBullet(d.line))) ? ("resume" as const) : ("skill" as const),
+      items: [],
+      blocking: false,
+      answerable: true,
+      checked: true,
+      answer: answerFor(answers, d.line),
+    }));
+
+  const defendTotal = status.defendLines.length;
+  const defendDone = status.defendLines.filter((d) => !openDefend.has(squash(d.line))).length;
+  const blocks = items.filter((i) => i.severity === "BLOCK").length;
+
+  return {
+    status,
+    state: blocks > 0 ? "draft" : "finished",
+    openItems: [...items.filter((i) => i.severity === "BLOCK"), ...items.filter((i) => i.severity === "FIX")],
+    groups,
+    checkedLines,
+    general,
+    fixCount: groups.filter((g) => g.blocking).length + general.filter((i) => i.severity === "BLOCK").length,
+    defendDone,
+    defendTotal,
+    source,
+    allLinesInOwnWords: status.allLinesInOwnWords,
+    jobsOpen: groups.filter((g) => g.job && !g.job.changes).length,
+  };
+}
+
+/**
+ * The open items in plain words, for the DRAFT file's to-do page. Every BLOCK
+ * and every FIX the gate holds (resume, letter, added skills), nothing added.
+ */
+export function openItemsInPlainWords(view: { openItems: Array<OpenItem & { target?: GroupTarget }> }): string[] {
+  return view.openItems.map((i) => {
+    const what = i.severity === "BLOCK" ? "Fix before you send" : "Worth checking";
+    const where = i.target === "letter" ? " (cover letter)" : i.target === "skill" || i.target === "skillset" ? " (skills)" : "";
+    return i.line ? `${what}${where}: "${stripBullet(i.line)}" ${i.question}` : `${what}${where}: ${i.question}`;
+  });
+}
+
+// ---- what the page may show ------------------------------------------------------
+
+/** Celebrate only a finished page, never in the demo, once per page load. */
+export function shouldCelebrate(args: { state: "finished" | "draft"; isDemo: boolean; docsReady: boolean; alreadyCelebrated: boolean }): boolean {
+  return args.docsReady && !args.isDemo && args.state === "finished" && !args.alreadyCelebrated;
+}
+
+/** What a download carries: finished only when the engine says so. */
+export function downloadMode(state: "finished" | "draft"): { draft: boolean } {
+  return { draft: state !== "finished" };
+}
+
+/** The email box sends an unmarked package, so it opens only on a finished page. */
+export function canEmailPackage(args: { state: "finished" | "draft"; isDemo: boolean }): boolean {
+  return args.state === "finished" && !args.isDemo;
+}
+
+/** sessionStorage key: the review ask has been shown in this visit. */
+export const REVIEW_ASK_SHOWN_KEY = "forge_review_ask_shown";
+
+/**
+ * The Google review ask: after a finished download only, never in the demo,
+ * never before the resume is finished, never twice in one visit.
+ */
+export function shouldShowReviewAsk(args: {
+  state: "finished" | "draft";
+  isDemo: boolean;
+  /** A finished (not draft) download happened on this page load. */
+  finishedDownloadDone: boolean;
+  /** The ask was already shown earlier in this visit (sessionStorage). */
+  shownEarlierThisVisit: boolean;
+  dismissed: boolean;
+}): boolean {
+  if (args.isDemo || args.dismissed || args.shownEarlierThisVisit) return false;
+  return args.state === "finished" && args.finishedDownloadDone;
+}
+
+/** localStorage key: the finish-page tour was seen (finished or skipped). */
+export const TOUR_SEEN_KEY = "forge_finish_tour_seen";
+
+/** The newsletter box starts unchecked. A yes has to be the person's own click. */
+export const NEWSLETTER_DEFAULT_CHECKED = false;
+
+// ---- copy -------------------------------------------------------------------------
+
+export const GOOGLE_REVIEW_URL = "https://g.page/r/CXwCW8901YTuEAE/review";
+
+const NUMBER_WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
+export const countWord = (n: number) => NUMBER_WORDS[n] ?? String(n);
+
+/** t.ROY's one status line at the top of the page. */
+export function statusLine(view: Pick<FinishView, "state" | "fixCount"> & { jobsOpen?: number }): string {
+  if (view.state === "finished") return "Your resume is ready.";
+  const n = view.fixCount;
+  if (n <= 0) return "A few things to check before it's ready.";
+  // Phase 6: only job taps left.
+  if (view.jobsOpen && view.jobsOpen === n) return `Check your ${n === 1 ? "job" : `${countWord(n).toLowerCase()} jobs`}, one tap each, and it's ready.`;
+  return `${countWord(n)} ${n === 1 ? "thing" : "things"} to fix before it's ready.`;
+}
+
+/** The main button's words. In a draft it says what's left. */
+export function mainActionLabel(view: Pick<FinishView, "state" | "fixCount"> & { jobsOpen?: number }): string {
+  if (view.state === "finished") return "Download your resume package";
+  const n = view.fixCount;
+  if (n <= 0) return "Check what's left with t.ROY";
+  if (view.jobsOpen && view.jobsOpen === n) return n === 1 ? "Check your job" : `Check your ${n} jobs`;
+  return `Fix ${n === 1 ? "1 thing" : `${n} things`} with t.ROY`;
+}
+
+/** Verifiable progress only: "2 of 3 lines checked". Never a percentage. */
+export function progressLine(view: Pick<FinishView, "defendDone" | "defendTotal">): string {
+  if (view.defendTotal === 0) return "";
+  return `${view.defendDone} of ${view.defendTotal} ${view.defendTotal === 1 ? "line" : "lines"} checked`;
+}
+
+export const NEWSLETTER_LINE =
+  "Also send me Troy's letter. It comes out Sunday and Wednesday, it's short and practical, and you can unsubscribe any time.";
+
+export const REVIEW_ASK_LINE = "Did this help? A Google review helps the next person find us.";
+
+export const PDF_WORD_EXPLAINER: { heading: string; lines: string[] } = {
+  heading: "PDF or Word: which one do I send?",
+  lines: [
+    "Both files have the same words. Only the file type is different.",
+    "Send the PDF for most online applications and any time you email your resume. It looks the same on every screen, and nobody can change it by accident.",
+    "Send the Word file (.docx) when a job site or a person asks for .docx, or when you want to make changes yourself in Word or Google Docs.",
+    "Not sure? Send the PDF.",
+  ],
+};

@@ -1,4 +1,8 @@
 import { SecurityContent } from "@/components/SecurityContent";
+import { recordStepOn } from "@/lib/server-switch";
+
+// Read per request: the record check copy shows only while that step is on.
+export const dynamic = "force-dynamic";
 
 export const metadata = {
   title: "Security & Privacy | Steel Man Resumes",
@@ -10,7 +14,7 @@ export default function SecurityPage() {
   return (
     <div className="min-h-screen bg-t-bg px-4 py-12">
       <div className="max-w-2xl mx-auto">
-        <SecurityContent />
+        <SecurityContent recordStep={recordStepOn()} />
       </div>
     </div>
   );

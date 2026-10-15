@@ -19,6 +19,11 @@ import { TBtn } from "@crucible/consumer-ui";
 import { trackGA } from "@/lib/ga";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
 import { isSafeRelativePath } from "@/lib/safe-path";
+import { safeLoginReturn } from "@/lib/session-policy";
+import { isForgeSignInPage } from "@/lib/forge-access";
+import { useForgeWall } from "@/components/forge/useForgeWall";
+import { TERMS_TICKED_KEY, tickedMark } from "@/lib/terms-ticked";
+import { TERMS_VERSION } from "@/lib/terms";
 import {
   FORGE_RUN_CHOICE_DEFAULT,
   FORGE_SESSION_KEY,
@@ -63,6 +68,13 @@ function LoginForm() {
   const forPartner = (searchParams.get("callbackUrl") || "").includes(
     "/dashboard/partner"
   );
+  // Sent here from a Forge screen (the sign-in wall): this page brings them
+  // straight back there, and says so.
+  const forgeReturn = (() => {
+    const back = safeLoginReturn(searchParams.get("callbackUrl"));
+    return isForgeSignInPage(back.split(/[?#]/)[0]) ? back : null;
+  })();
+  const wall = useForgeWall();
 
   const [mode, setMode] = useState<Mode>(fromForge ? "create" : "sign-in");
   // Seeded from ?as= so an invitation email or a partner page can send someone
@@ -147,7 +159,9 @@ function LoginForm() {
     if (code.trim()) localStorage.setItem("pending_access_code", code.trim());
   }
 
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
+  // Checked here as well as by Auth.js: a same-site path only, never another
+  // site, never the login pages or an API route (lib/session-policy.ts).
+  const callbackUrl = safeLoginReturn(searchParams.get("callbackUrl"));
   // Mini Forge sends people here with callbackUrl=/mini-forge/import-complete,
   // the step that loads their tablet plan into the new account. Account
   // creation must honor it (see createCallback below) or the import never runs.
@@ -344,8 +358,12 @@ function LoginForm() {
       // answered "No" is not this account's data.
       const createCallback = (() => {
         const explicit = searchParams.get("callbackUrl");
-        if (fromMiniForge && isSafeRelativePath(explicit)) return explicit;
-        return forgeFields.forge?.forgeOutput ? callbackUrl : "/intro";
+        if (explicit && isSafeRelativePath(explicit)) return safeLoginReturn(explicit);
+        // Came from a Forge screen (the sign-in wall): back to it. A run
+        // answered "Yes" is marked as this account's below, so the Forge
+        // shows it; "No" erased it.
+        if (forgeReturn) return forgeReturn;
+        return callbackUrl;
       })();
       const result = await signIn("password-login", {
         email: email.trim(), password, callbackUrl: createCallback, redirect: false,
@@ -367,7 +385,15 @@ function LoginForm() {
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
+    if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to continue."); return; }
     setError(""); setSending(true); storeCode();
+    // The box checked here is recorded once the link signs them in, on this
+    // browser only (app/(auth)/login/terms).
+    try {
+      localStorage.setItem(TERMS_TICKED_KEY, JSON.stringify(tickedMark(email, TERMS_VERSION)));
+    } catch {
+      // storage blocked: the terms page asks with one tap instead
+    }
 
     try {
       const result = await signIn("resend", {
@@ -389,9 +415,9 @@ function LoginForm() {
   // ─── Magic link sent confirmation ─────────────────────────────────────
   if (magicLinkSent) {
     return (
-      <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
-        <div className="app-panel w-full max-w-md p-6 text-center sm:p-8">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-[6px] border border-[#b9cdbd] bg-[#e3ede5]">
+      <main className="forge-workshop flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
+        <div className="w-full max-w-md border border-t-line bg-t-panel p-6 text-center sm:p-8">
+          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center border border-t-amber bg-t-panel-2">
             <svg width="28" height="28" viewBox="0 0 18 18" fill="none" className="text-t-amber">
               <rect x="2" y="4" width="14" height="10" rx="0" stroke="currentColor" strokeWidth="1.3" />
               <path d="M2 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -422,29 +448,40 @@ function LoginForm() {
     || (mode !== "magic-link" && !password)
     || (twoFactorStep && !totp.trim())
     || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms))
+    || (mode === "magic-link" && !acceptedTerms)
     || (mode === "create" && !forgeChoiceComplete(forgeRunOffered, forgeChoice));
 
   return (
-    <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
-      <div className="app-panel w-full max-w-md p-6 sm:p-8">
+    <main className="forge-workshop flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
+      <div className="w-full max-w-md border border-t-line bg-t-panel p-6 shadow-[4px_4px_0_#000] sm:p-8">
         <div className="mb-6">
-          <p className="app-eyebrow mb-2 text-[#4f6b57]">Private career workspace</p>
-          <h1 className="text-2xl font-semibold text-t-white">
-            {mode === "create"
-              ? "Create your Refinery account"
-              : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
-                 "Sign in to The Refinery")}
+          <p className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">
+            {forgeReturn ? "/forge" : "/refinery"}
+          </p>
+          <h1 className="font-display text-2xl font-bold uppercase text-t-white" data-testid="login-heading">
+            {forgeReturn
+              ? mode === "create"
+                ? "Make your free account"
+                : "Sign in to keep building"
+              : mode === "create"
+                ? "Create your Refinery account"
+                : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
+                   "Sign in to The Refinery")}
           </h1>
           <p className="mt-2 text-sm text-t-bone-dim">
-            {mode === "create"
-              ? "Save your Forge work and continue with the full toolset."
-              : mode === "magic-link"
-                ? "Sign in with a magic link"
-                : "Continue your career work where you left off."}
+            {forgeReturn
+              ? "It's free. One account for the Forge and the Refinery. You come right back to where you were."
+              : mode === "create"
+                ? "Save your Forge work and continue with the full toolset."
+                : mode === "magic-link"
+                  ? "Sign in with a magic link"
+                  : "Continue your career work where you left off."}
           </p>
         </div>
 
-        <AccountTypeChooser value={accountRoute} onChange={setAccountRoute} />
+        {/* Someone coming from a Forge screen is here to build their own
+            resume: the "who are you here as" choice would only slow them down. */}
+        {!forgeReturn && <AccountTypeChooser value={accountRoute} onChange={setAccountRoute} />}
 
         <AccountRouteNote route={accountRoute}>
           {accountRoute === "agency" && (
@@ -689,10 +726,11 @@ function LoginForm() {
             </fieldset>
           )}
 
-          {/* Terms / Privacy / AI-processing consent -- create mode only.
-              Required before any account or Forge data persists (versioned
-              acceptance recorded server-side at registration). */}
-          {mode === "create" && (
+          {/* Terms / Privacy / AI-processing consent -- create and email-link
+              modes. Required before any account or Forge data persists:
+              recorded at registration, or on the terms page once an email link
+              signs the person in (app/(auth)/login/terms). */}
+          {(mode === "create" || mode === "magic-link") && (
             <label className="flex items-start gap-2 text-[12px] text-t-phos-dim">
               <input
                 type="checkbox"
@@ -730,7 +768,7 @@ function LoginForm() {
           )}
 
           {/* Submit */}
-          <TBtn type="submit" disabled={submitDisabled} className="w-full !border-[#4f6b57] !bg-[#4f6b57] hover:!bg-[#3d5745]">
+          <TBtn type="submit" disabled={submitDisabled} className="w-full !text-[#14100a]">
             {sending
               ? "Working..."
               : mode === "create"
@@ -810,7 +848,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => handleDevLogin("client", true)}
                 disabled={sending}
-                className="t-focus min-h-touch w-full rounded-[5px] border border-t-line-strong bg-t-panel-2 px-4 py-3 text-sm font-medium text-t-white transition-colors hover:bg-t-panel-3 disabled:opacity-40"
+                className="t-focus min-h-touch w-full border border-t-line-strong bg-t-panel-2 px-4 py-3 text-sm font-medium text-t-white transition-colors hover:bg-t-panel-3 disabled:opacity-40"
               >
                 Fresh Client Run
               </button>
@@ -819,7 +857,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => handleDevLogin("client")}
                   disabled={sending}
-                  className="t-focus min-h-touch rounded-[5px] border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
+                  className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
                 >
                   Client Login
                 </button>
@@ -827,7 +865,7 @@ function LoginForm() {
                   type="button"
                   onClick={() => handleDevLogin("admin")}
                   disabled={sending}
-                  className="t-focus min-h-touch rounded-[5px] border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
+                  className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-3 text-sm font-medium text-t-white transition-colors hover:border-t-line-strong disabled:opacity-40"
                 >
                   Admin Login
                 </button>
@@ -839,7 +877,7 @@ function LoginForm() {
                   window.location.href = "/intro";
                 }}
                 disabled={sending}
-                className="t-focus min-h-touch w-full rounded-[5px] border border-t-line bg-transparent px-4 py-3 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white disabled:opacity-40"
+                className="t-focus min-h-touch w-full border border-t-line bg-transparent px-4 py-3 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white disabled:opacity-40"
               >
                 Reset Local Flow Only
               </button>
@@ -859,7 +897,7 @@ function LoginForm() {
             <a href="/intro" className="text-t-amber-bright hover:text-t-amber font-medium">
               Try The Forge
             </a>
-            . It&apos;s free, and you don&apos;t need an account.
+            {wall === null ? "." : wall === "up" ? ". It's free." : ". It's free, and you don't need an account."}
           </p>
         </div>
       </div>

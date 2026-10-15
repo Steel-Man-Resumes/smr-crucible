@@ -1,3 +1,5 @@
+import { loadApplicationContext } from "@/lib/application-context";
+import { formatResumeDownload } from "@/components/resume/resumeModel";
 /**
  * Interview Practice API
  *
@@ -9,13 +11,17 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
+import { checkTextPracticeAllowance } from "@/lib/premium-server";
+import { refundUserUsage } from "@crucible/core";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { buildFullContext, type UserContext } from "@/lib/context-library";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
+import { verifyGrounding } from "@/lib/grounding-verify";
+import { interviewFeedbackMessages, parseInterviewFeedback, screenInterviewExamples } from "@/lib/interview-feedback";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
 
 async function handlePost(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -23,13 +29,36 @@ async function handlePost(request: Request) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
   }
 
+  // Declared outside the try so a failed AI call can still hand back the id
+  // of a session it already counted (review r2, I-b).
+  let practiceSession: string | undefined;
   try {
     // Route is mode:"user" in withRateLimit, so a session is guaranteed by
     // the time handlePost runs -- re-derive here to attribute the AI call.
     const session = await auth();
     const userId = session?.user?.id;
 
-    const { messages, config, exchangeCount, forgeContext, resume, jobDescription, endInterview } = await request.json();
+    const body = await request.json();
+    const { messages, config, exchangeCount, forgeContext, endInterview } = body;
+    let { resume, jobDescription } = body;
+    if (typeof body.applicationId === "string" && body.applicationId) {
+      if (!userId) return NextResponse.json({ error: "Sign in again" }, { status: 401 });
+      const selected = await loadApplicationContext(userId, body.applicationId);
+      if (!selected) return NextResponse.json({ error: "That saved job is unavailable in your account" }, { status: 404 });
+      jobDescription = selected.application.jd_full_text || selected.application.jd_excerpt || selected.application.description || "";
+      let resumeText = selected.resumeSnapshot ? formatResumeDownload(selected.resumeSnapshot.content_snapshot as any) : selected.revision?.resume_text || "";
+      if (body.resumeArtifactId && body.resumeArtifactId !== selected.application.resume_artifact_id) {
+        const core = await import("@crucible/core");
+        const changed = await core.getLatestRevision(userId, body.resumeArtifactId);
+        if (!changed) return NextResponse.json({ error: "That resume is unavailable in your account" }, { status: 404 });
+        resumeText = changed.resume_text;
+      }
+      resume = resumeText ? { text: resumeText, targetJob: selected.application.job_title, targetCompany: selected.application.company, evidence: [] } : undefined;
+      if (config) config.targetRole = [selected.application.job_title, selected.application.company].filter(Boolean).join(" at ");
+    }
+    if (!config || typeof config.interviewType !== "string" || !Array.isArray(messages) || !messages.length || messages.some((m: any) => !m || typeof m.content !== "string")) {
+      return NextResponse.json({ error: "Choose an interview and add your answer before continuing." }, { status: 400 });
+    }
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json(
@@ -37,6 +66,22 @@ async function handlePost(request: Request) {
         { status: 500 }
       );
     }
+
+    // Text practice is free with an account (the premium split, Troy
+    // 2026-10-10), up to a daily number of sessions while the gate is on.
+    // A sponsor removes the allowance. Counted once per practice interview.
+    // A server-issued session id decides what counts as a new session (review
+    // L1). A refused turn gives back the daily AI call it was charged (I2).
+    if (userId) {
+      const verdict = await checkTextPracticeAllowance(userId, body);
+      if (verdict.refuse) {
+        await refundUserUsage(userId, "interview").catch(() => {});
+        return verdict.refuse;
+      }
+      practiceSession = verdict.session;
+    }
+    const reply = (payload: unknown) =>
+      NextResponse.json(practiceSession ? { ...(payload as Record<string, unknown>), practiceSession } : payload);
 
     const isDisclosure =
       config.interviewType === "disclosure" || config.includeDisclosure;
@@ -150,15 +195,15 @@ ${isDisclosure ? "The interview included a criminal record disclosure element." 
 ${candidateBlock}${applicationBlock}
 
 The interview is now over. Review the entire conversation and provide:
-1. A brief closing statement as the interviewer (1-2 sentences)
-2. Then break character and provide structured feedback.
+1. A brief closing statement as the interviewer (1-2 sentences) inside the JSON closing field.
+2. Then break character and provide structured feedback inside the same JSON object. Do not ask another interview question.
 
 Return JSON:
 {
   "closing": "Your closing statement as the interviewer",
   "feedback": {
-    "strengths": ["2-3 specific things they did well"],
-    "improvements": ["2-3 specific things to work on"],
+    "strengths": ["Specific things this practice actually shows; fewer are fine when evidence is limited"],
+    "improvements": ["Specific next practice steps supported by this conversation"],
     "overall": "1-2 sentence overall assessment. Encouraging but honest.",
     "better_answers": [
       { "question": "a real question from this interview they could have answered more strongly", "model_answer": "a stronger model answer, 2-4 sentences, built from THEIR real experience (use the resume). Show, do not tell." }
@@ -171,10 +216,11 @@ Return JSON:
 RULES:
 - Be specific. Reference actual things they said
 - Focus on communication skills: confidence, clarity, brevity, pivot to strengths
-- ACCOUNTABILITY CHECK (do not skip): if any answer shifted blame, minimized their role, or framed their record as something that was done TO them ("it wasn't really my fault," "they charged me with," "the system"), you MUST name it plainly in improvements, kindly and not as a lecture. In better_answers, model the SAME point rewritten with ownership (what they did, what they learned, who they are now). Employers, and especially peer-support and reentry roles, hire for ownership; a polished answer that dodges it still fails the interview. If they owned their story well, say so in strengths.
+- ACCOUNTABILITY CHECK: when the candidate has acknowledged their own conduct, help them explain their role plainly. Ask for missing details about what they did or learned; never supply them. A phrase such as "they charged me with" alone does not establish blame shifting. Never turn a disputed or unknown event into an admission. Do not score choosing not to disclose as failure. Comment only on what this practice actually shows.
 - For better_answers, model 1-2 stronger responses built from their real resume, in their own voice. Show them what good sounds like
+- Use only facts the candidate supplied in the transcript or resume. The job posting describes the employer's needs, not the candidate's experience. Never add tools, duties, frequency, numbers, results, feelings, motives or lessons they did not give. Respect explicit negatives, such as never operating a forklift. If a specific story or result is missing, ask for that detail in improvements and keep better_answers empty when a stronger answer would require inventing it. A short practice only supports limited feedback; say so.
 - 6th grade reading level. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. No emojis.
-- JSON only (after the closing statement)`;
+- Return only one valid JSON object, including the closing field. No text before or after it.`;
     }
 
     const chatMessages = messages.map((m: any) => ({
@@ -182,7 +228,7 @@ RULES:
       content: m.content,
     }));
 
-    const text = await callAI(systemPrompt, chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined, { userId, endpoint: "interview-practice" });
+    const text = await callAI(systemPrompt, shouldWrapUp ? interviewFeedbackMessages(chatMessages) : chatMessages, shouldWrapUp ? 1800 : 300, shouldWrapUp ? MODEL_DEEP : undefined, { userId, endpoint: "interview-practice" });
     // Belt-and-braces dash sweep on model-written text only (counts logged, never content).
     const swapLog = logDashSwaps("interview-practice");
 
@@ -208,45 +254,28 @@ RULES:
         console.error("Decision log failed (interview wrapup):", err);
       }
 
-      // Parse feedback from response
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        try {
-          const parsed = JSON.parse(jsonMatch[0]);
-          return NextResponse.json(
-            plainPunctuation(
-              {
-                response:
-                  parsed.closing || "Thank you for your time today. We'll be in touch.",
-                feedback: parsed.feedback,
-              },
-              swapLog
-            )
-          );
-        } catch {
-          // If JSON parse fails, return the text as closing with generic feedback
-          return NextResponse.json({
-            response: plainPunctuation(text.split("{")[0].trim() || "Thank you for your time today.", swapLog),
-            feedback: {
-              strengths: ["You completed the full practice interview"],
-              improvements: [
-                "Try to be more specific in your answers",
-                "Practice pivoting to your strengths",
-              ],
-              overall:
-                "Good effort completing the practice. The more you practice, the more natural it feels.",
-            },
-          });
+      const parsed = parseInterviewFeedback(text);
+      if (!parsed) {
+        return NextResponse.json({
+          error: "Your feedback could not be prepared. Your answers are still here. Try End & get feedback again.",
+          ...(practiceSession ? { practiceSession } : {}),
+        }, { status: 502 });
+      }
+      let feedback = parsed.feedback;
+      if (feedback.better_answers?.length) {
+        const sourceText = [
+          typeof resume?.text === "string" ? resume.text : "",
+          ...chatMessages.filter((m) => m.role === "user").map((m) => m.content),
+        ].filter(Boolean).join("\n");
+        const answerText = feedback.better_answers.map((answer) => answer.model_answer).join("\n\n");
+        if (answerText.trim().length < 20) {
+          feedback = { ...feedback, better_answers: [] };
+        } else {
+          const check = await verifyGrounding({ sourceText, output: answerText, kind: "report" });
+          feedback = screenInterviewExamples(feedback, check);
         }
       }
-      return NextResponse.json({
-        response: plainPunctuation(text, swapLog),
-        feedback: {
-          strengths: ["You showed up and practiced. That takes courage."],
-          improvements: ["Keep practicing to build confidence"],
-          overall: "Every practice session makes the real thing easier.",
-        },
-      });
+      return reply(plainPunctuation({ response: parsed.closing, feedback }, swapLog));
     }
 
     // Log decision for JBS compliance
@@ -270,14 +299,18 @@ RULES:
       console.error("Decision log failed (interview):", err);
     }
 
-    return NextResponse.json({ response: plainPunctuation(text, swapLog) });
+    return reply({ response: plainPunctuation(text, swapLog) });
   } catch (error: any) {
     console.error("Interview practice error:", error);
+    // The session was counted before the AI call: give its id back, so the
+    // retry continues this session instead of being charged a new one.
     return NextResponse.json(
-      { error: "Could not process interview" },
+      { error: "Could not process interview", ...(practiceSession ? { practiceSession } : {}) },
       { status: 500 }
     );
   }
 }
 
+// Text practice is not a sponsored tool (lib/premium.ts, the split): no
+// `premium` here. Voice coaching stays sponsored at /api/interview-voice/token.
 export const POST = withRateLimit(handlePost, { mode: "user", endpoint: "interview", requiredTier: "client" });

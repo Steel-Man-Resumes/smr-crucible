@@ -12,6 +12,8 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
+import { PremiumGate, usePremium } from "@/components/premium/PremiumGate";
+import { textPracticeAllowanceLine, toolIsOpen } from "@/lib/premium";
 import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
@@ -44,6 +46,7 @@ interface InterviewConfig {
 
 /** A saved job application that carries a JD snapshot we can auto-fill from. */
 interface SavedApplication {
+  resume_artifact_id?: string | null;
   id: string;
   job_title: string;
   company: string;
@@ -129,7 +132,10 @@ const INTERVIEW_TYPES = [
 export default function InterviewPracticePageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <OnboardingGate toolName="Interview Practice" previewFeature="interview">
+      <OnboardingGate requiredState="needs_profile" toolName="Interview Practice" previewFeature="interview">
+        {/* Text practice is free with an account (a daily allowance while the
+            premium gate is on). Voice coaching is sponsored: only the voice
+            panel below sits behind the gate. */}
         <Suspense><InterviewPracticePage /></Suspense>
       </OnboardingGate>
     </TierGate>
@@ -152,6 +158,13 @@ function InterviewPracticePage() {
   const [exchangeCount, setExchangeCount] = useState(0);
   const [feedback, setFeedback] = useState<any>(null);
   const [rateLimitError, setRateLimitError] = useState("");
+  // The server's id for this practice interview (the daily allowance counts
+  // one per interview, lib/premium-server.ts). Sent back on every later turn.
+  const practiceSessionRef = useRef<string | null>(null);
+  // The daily text practice allowance applies while the premium gate is on
+  // and voice coaching is not open for this person (no sponsor).
+  const { status: premiumStatus } = usePremium();
+  const practiceAllowanceApplies = !!premiumStatus?.gate && toolIsOpen(premiumStatus, "interview_coaching") === false;
   const chatRef = useRef<HTMLDivElement>(null);
   // Phase 3: interview against a SPECIFIC saved resume + optional job posting.
   const [resumes, setResumes] = useState<
@@ -233,7 +246,7 @@ function InterviewPracticePage() {
   // Phase 3: load the user's saved resumes so they can interview against a
   // SPECIFIC tailored resume (default: most recent), not just generic Forge data.
   useEffect(() => {
-    fetch("/api/artifacts?type=resume&limit=20")
+    fetch("/api/artifacts?type=resume&limit=20&examples=hide&order=recent")
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then(({ data }) => {
         const list = (data || []).map((a: any) => ({
@@ -244,7 +257,7 @@ function InterviewPracticePage() {
           content: a.content ?? null,
         }));
         setResumes(list);
-        if (list.length) {
+        if (list.length && !searchParams.get("applicationId")) {
           setSelectedResumeId((prev) => prev || list[0].id);
           const r0 = list[0];
           const label = [r0.targetJob, r0.targetCompany].filter(Boolean).join(" at ");
@@ -263,9 +276,10 @@ function InterviewPracticePage() {
       .then((r) => (r.ok ? r.json() : { applications: [] }))
       .then(({ applications: rows }) => {
         const withJd: SavedApplication[] = (rows || [])
-          .filter((a: any) => (a?.jd_full_text || a?.jd_excerpt))
+          .filter((a: any) => a?.id)
           .map((a: any) => ({
             id: a.id,
+            resume_artifact_id: a.resume_artifact_id ?? null,
             job_title: a.job_title || "",
             company: a.company || "",
             jd_full_text: a.jd_full_text ?? null,
@@ -277,6 +291,15 @@ function InterviewPracticePage() {
       })
       .catch(() => {});
   }, []);
+
+  const [selectedSnapshot, setSelectedSnapshot] = useState<{ id: string; content: any; applicationId: string } | null>(null);
+  const [applicationLoading, setApplicationLoading] = useState(false);
+  const [applicationFailed, setApplicationFailed] = useState(false);
+  const selectionSequence = useRef(0);
+  useEffect(() => {
+    const id = searchParams.get("applicationId");
+    if (id) void selectApplication(id);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phase 5.8/5.9: load saved voice-interview sessions (metadata only) so we can
   // show a history list and offer to target last time's struggle tags.
@@ -310,29 +333,37 @@ function InterviewPracticePage() {
   // Pick a saved job: auto-fill role + company, load its JD snapshot into the
   // job-description field (snapshot wins over any paste), and prefer a tailored
   // resume linked to the same job if the user has one.
-  function selectApplication(id: string) {
+  async function selectApplication(id: string) {
+    const seq = ++selectionSequence.current;
     setSelectedApplicationId(id);
-    if (!id) {
-      setJdMeta(null);
-      return;
-    }
-    const app = applications.find((a) => a.id === id);
-    if (!app) {
-      setJdMeta(null);
-      return;
-    }
-    const label = [app.job_title, app.company].filter(Boolean).join(" at ");
-    if (label) setConfig((prev) => ({ ...prev, targetRole: label }));
-
-    const picked = pickJdSource(app.jd_full_text || app.jd_excerpt, "");
-    setJobDescription(picked.text);
-    setJdMeta({ age: formatSnapshotAge(app.jd_fetched_at), truncated: app.jd_truncated });
-
-    const norm = (v: string | null) => (v || "").toLowerCase().trim();
-    const linked = resumes.find(
-      (r) => norm(r.targetJob) === norm(app.job_title) && norm(r.targetCompany) === norm(app.company)
-    );
-    if (linked) setSelectedResumeId(linked.id);
+    setSelectedSnapshot(null);
+    setApplicationFailed(false);
+    setConfig(prev => ({ ...prev, targetRole: "" }));
+    setSelectedResumeId("");
+    setJobDescription("");
+    setJdMeta(null);
+    if (!id) return;
+    setApplicationLoading(true);
+    setRateLimitError("");
+    try {
+      const response = await fetch(`/api/application-context?applicationId=${encodeURIComponent(id)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error();
+      const context = await response.json();
+      if (selectionSequence.current !== seq) return;
+      const app = context.application;
+      setConfig(prev => ({ ...prev, targetRole: [app.job_title, app.company].filter(Boolean).join(" at ") }));
+      setJobDescription(pickJdSource(app.jd_full_text || app.jd_excerpt || app.description, "").text);
+      setJdMeta({ age: formatSnapshotAge(app.jd_fetched_at), truncated: app.jd_truncated });
+      if (context.resumeSnapshot) setSelectedSnapshot({ id: context.resumeSnapshot.id, content: context.resumeSnapshot.content_snapshot, applicationId: id });
+      else if (context.revision) setSelectedSnapshot({ id: context.revision.id, content: null, applicationId: id, text: context.revision.resume_text } as any);
+      setSelectedResumeId(app.resume_artifact_id || "");
+      const nextUrl = new URL(window.location.href);
+      if (nextUrl.searchParams.get("applicationId") !== id) {
+        nextUrl.searchParams.set("applicationId", id);
+        window.history.replaceState(null, "", nextUrl.toString());
+      }
+    } catch { if (selectionSequence.current === seq) { setApplicationFailed(true); setRateLimitError("This saved job could not be loaded. Choose a job again before starting."); } }
+    finally { if (selectionSequence.current === seq) setApplicationLoading(false); }
   }
 
   // Phase 5.9: toggle targeting last time's struggle tags for this run.
@@ -365,9 +396,11 @@ function InterviewPracticePage() {
         ? "Welcome! I'm going to ask you some questions about your past experiences. Take your time with each answer. Let's start. Tell me about yourself and what brought you here today."
         : "Hi there, thanks for taking the time to interview with us today. Let's get started. Can you tell me a bit about yourself and why you're interested in this role?";
 
+    if (applicationLoading || applicationFailed) return;
     setMessages([{ role: "assistant", content: openingMessage }]);
     setStep("practice");
     setExchangeCount(0);
+    practiceSessionRef.current = null;
 
     // Track interview start
     try {
@@ -386,7 +419,9 @@ function InterviewPracticePage() {
   function buildResumePayload():
     | { targetJob: string | null; targetCompany: string | null; text: string; evidence: any[] }
     | undefined {
-    const sel = resumes.find((r) => r.id === selectedResumeId);
+    const selected = resumes.find((r) => r.id === selectedResumeId);
+    if (selectedSnapshot && (selectedSnapshot as any).text) return { targetJob: config.targetRole, targetCompany: null, text: (selectedSnapshot as any).text, evidence: [] };
+    const sel = selectedSnapshot?.content ? { content: selectedSnapshot.content, targetJob: config.targetRole, targetCompany: null } : selected;
     if (!sel?.content) return undefined;
     let text = "";
     try {
@@ -490,38 +525,40 @@ function InterviewPracticePage() {
       return;
     }
     setSending(true);
+    setRateLimitError("");
     try {
       const res = await fetch("/api/interview-practice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          applicationId: selectedApplicationId || undefined,
+          resumeArtifactId: selectedResumeId || undefined,
           messages,
           config,
           exchangeCount,
           endInterview: true,
+          practiceSession: practiceSessionRef.current ?? undefined,
           forgeContext: forgeContext || undefined,
           resume: buildResumePayload(),
           jobDescription: jobDescription.trim() || undefined,
         }),
       });
-      if (res.status === 429) {
-        const data = await res.json();
-        setRateLimitError(data.error);
-      } else if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => null);
+      if (typeof data?.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
+      if (res.ok && data) {
         if (data.feedback) {
           if (data.response) setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
           setFeedback(data.feedback);
           setStep("feedback");
           recordCompletion(data.feedback, exchangeCount);
         } else {
-          resetToSetup();
+          setRateLimitError("Your feedback could not be prepared. Your answers are still here. Try End & get feedback again.");
         }
       } else {
-        resetToSetup();
+        setRateLimitError(data?.error || "Your feedback could not be prepared. Your answers are still here. Try End & get feedback again.");
       }
     } catch {
-      resetToSetup();
+      setRateLimitError("The connection dropped. Your answers are still here. Try End & get feedback again.");
     } finally {
       setSending(false);
     }
@@ -544,9 +581,12 @@ function InterviewPracticePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          applicationId: selectedApplicationId || undefined,
+          resumeArtifactId: selectedResumeId || undefined,
           messages: updatedMessages,
           config,
           exchangeCount: newExchangeCount,
+          practiceSession: practiceSessionRef.current ?? undefined,
           forgeContext: forgeContext || undefined,
           resume: buildResumePayload(),
           jobDescription: jobDescription.trim() || undefined,
@@ -558,6 +598,7 @@ function InterviewPracticePage() {
         setRateLimitError(data.error);
       } else if (res.ok) {
         const data = await res.json();
+        if (typeof data.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
 
         if (data.feedback) {
           // Interview complete — show feedback
@@ -574,6 +615,15 @@ function InterviewPracticePage() {
             { role: "assistant", content: data.response },
           ]);
         }
+      } else {
+        // A failed turn can still carry the session id it was counted under
+        // (the retry then continues this session, not a new one).
+        const data = await res.json().catch(() => null);
+        if (typeof data?.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "I had trouble with that response. Let's try again." },
+        ]);
       }
     } catch {
       setMessages((prev) => [
@@ -635,14 +685,14 @@ function InterviewPracticePage() {
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 </style></head><body>
 <h1>Interview Analysis${config.targetRole ? `: ${esc(config.targetRole)}` : ""}</h1>
-<p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date} &bull; Practice frames only, no transcript</p>
+<p class="subtitle">Built with The Refinery &bull; steelmanresumes.com &bull; ${date} &bull; Analysis and your notes, no transcript</p>
 ${fb.frame ? `<h2>The Frame to Carry In</h2><blockquote>${esc(fb.frame)}</blockquote>` : ""}
 ${Array.isArray(fb.strengths) && fb.strengths.length ? `<h2>What You Did Well</h2><ul>${list(fb.strengths)}</ul>` : ""}
 ${Array.isArray(fb.improvements) && fb.improvements.length ? `<h2>Areas to Work On</h2><ul>${list(fb.improvements)}</ul>` : ""}
 ${Array.isArray(fb.better_answers) && fb.better_answers.length ? `<h2>Stronger Answers to Model</h2>${fb.better_answers.map((b: any) => `<p class="q">${esc(b.question)}</p><blockquote>${esc(b.model_answer)}</blockquote>`).join("")}` : ""}
 ${fb.overall ? `<h2>Overall</h2><p>${esc(fb.overall)}</p>` : ""}
 ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br/>")}</p>` : ""}
-<div class="footer">This analysis is yours. We only keep the frames you practiced. We never store your interview words or recordings.</div>
+<div class="footer">This analysis is yours. Text practice keeps this feedback, never a transcript. Voice practice keeps a text transcript only when you turn saving on. We never keep the audio.</div>
 </body></html>`;
     const w = window.open("", "_blank");
     if (!w) return;
@@ -701,7 +751,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               </label>
               <select
                 value={selectedApplicationId}
-                onChange={(e) => selectApplication(e.target.value)}
+                onChange={(e) => void selectApplication(e.target.value)}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
               >
                 <option value="">Not right now</option>
@@ -754,10 +804,11 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                 value={selectedResumeId}
                 onChange={(e) => {
                   const id = e.target.value;
+                  setSelectedSnapshot(null);
                   setSelectedResumeId(id);
                   const r = resumes.find((x) => x.id === id);
                   const label = r ? [r.targetJob, r.targetCompany].filter(Boolean).join(" at ") : "";
-                  if (label) setConfig((prev) => ({ ...prev, targetRole: label }));
+                  if (label && !selectedApplicationId) setConfig((prev) => ({ ...prev, targetRole: label }));
                 }}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
               >
@@ -855,15 +906,20 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               </label>
             )}
 
-          <VoicePracticePanel
-            config={config}
-            forgeContext={forgeContext}
-            enabled={!!config.interviewType}
-            jobDescription={jobDescription.trim() || undefined}
-            buildResumePayload={buildResumePayload}
-            onVoiceFeedback={handleVoiceFeedback}
-            onHistoryChange={loadVoiceHistory}
-          />
+          {/* Voice coaching is sponsored (an organization or SMR opens it).
+              Locked, it shows what's included and how to get it; the text
+              practice below keeps working either way. */}
+          <PremiumGate tool="interview_coaching" compact>
+            <VoicePracticePanel
+              config={config}
+              forgeContext={forgeContext}
+              enabled={!!config.interviewType}
+              jobDescription={jobDescription.trim() || undefined}
+              buildResumePayload={buildResumePayload}
+              onVoiceFeedback={handleVoiceFeedback}
+              onHistoryChange={loadVoiceHistory}
+            />
+          </PremiumGate>
 
           <button
             onClick={startInterview}
@@ -872,6 +928,11 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           >
             Start Practice Interview
           </button>
+          {practiceAllowanceApplies && (
+            <p className="text-xs text-t-phos-dim" data-testid="text-practice-allowance">
+              {textPracticeAllowanceLine()}
+            </p>
+          )}
         </div>
 
         <VoiceSessionHistory history={voiceHistory} />
@@ -976,7 +1037,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
         <div className="bg-t-panel p-5 border border-t-line mb-4">
           <h2 className="font-semibold text-t-white mb-2">Your notes</h2>
           <p className="text-xs text-t-phos-dim mb-2">
-            Jot what you want to remember. These stay on your device. We never store your words.
+            Jot what you want to remember. These notes stay on this page and are not saved. Copy or download the analysis to keep them.
           </p>
           <textarea
             value={userNotes}
@@ -1124,11 +1185,12 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
       )}
 
       <p className="text-xs text-t-phos-dim text-center">
-        This is a safe space to practice. We never save your words or
-        recordings, only the frames you practice and whether your point lands, so
-        the app can coach you and track your progress. Your practice is private
-        to your account and never shared unless you choose to connect a support
-        partner.
+        This is a safe space to practice. In text practice we keep the role, the
+        kind of practice and t.ROY&apos;s feedback, never a transcript of your
+        answers, so the app can track your progress. In voice practice, what was said is kept as text
+        only when you turn saving on, and we never keep the audio. No program or
+        employer can read your practice. If you share your progress with a
+        program, it sees how many sessions you have done.
       </p>
     </div>
   );

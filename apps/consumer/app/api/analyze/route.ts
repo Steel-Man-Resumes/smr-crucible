@@ -14,8 +14,10 @@
  * for the new vision (empowerment, not sales).
  */
 
+import { verifyStory } from "@/lib/story-verification";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeUserId } from "@/lib/session-policy";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { isMockEnabled, MOCK_FORGE_OUTPUT } from "@/lib/mock-ai";
@@ -24,6 +26,7 @@ import { MODEL_DEEP } from "@/lib/ai/models";
 import { buildTrustedSource, verifyGrounding } from "@/lib/grounding-verify";
 import { WOTC_RE, stripEmployerTaxCredit, plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { credentialStatuses, findOverstatedCredentialsDeep } from "@/lib/credential-truth";
+import { parseStateCode } from "@/lib/location-state";
 
 export const maxDuration = 120;
 
@@ -33,6 +36,12 @@ const AI_MODEL = MODEL_DEEP;
 
 interface ForgeInput {
   resumeText?: string;
+  /**
+   * Phase 6 S1 (review r2 L1): a rebuild's saved page, as starting text only.
+   * It may be AI-written, so it never joins the trusted source the report's
+   * checks read (that stays resumeText and the typed answers).
+   */
+  startingText?: string;
   readinessStage?: string;
   goals?: string[];
   goalNarrative?: string;
@@ -65,7 +74,8 @@ async function handlePost(request: Request) {
     // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
     // login wall before value). Attribute to a user when a session happens to exist.
     const session = await auth();
-    const userId = session?.user?.id;
+    // Never credited to a session that still owes its two-step code.
+    const userId = forgeUserId(session);
 
     const input: ForgeInput = await request.json();
 
@@ -82,50 +92,9 @@ async function handlePost(request: Request) {
         : Promise.resolve(null),
     ]);
 
-    // P1.6 (Codex 3): ground the narrative that ships in the downloadable report.
-    // Sol's QA flagged the report asserting implied skills and an assumed pronoun
-    // the source never stated. Run the cheap grounding verifier (fail-open) on the
-    // summary + reflection against ONLY the person's own material -- resume text and
-    // their typed answers, never the AI narrative or a job posting (buildTrustedSource).
-    try {
-      const trustedSource = buildTrustedSource({
-        resumeText: input.resumeText,
-        userText: [
-          input.goalNarrative,
-          input.hookNarrative,
-          ...(input.challengeNarratives ? Object.values(input.challengeNarratives) : []),
-          input.criminalRecord?.context,
-        ],
-      });
-      const summary = typeof narrative.summary === "string" ? narrative.summary : "";
-      const reflection = typeof narrative.reflection === "string" ? narrative.reflection : "";
-      // Strengths were NOT verified until now, and that is where the fabrications
-      // actually landed: a dangling "2008 -" became "worked there year after year"
-      // and "flagger certification" became "OSHA Flagger Certification." The
-      // evidence line of each strength is prose about the person, exactly what
-      // this verifier is for, so it gets the same treatment as the summary.
-      const strengths = Array.isArray(narrative.strengths)
-        ? (narrative.strengths as Array<Record<string, unknown>>)
-        : [];
-      const [gSummary, gReflection, gStrengths] = await Promise.all([
-        summary ? verifyGrounding({ sourceText: trustedSource, output: summary, kind: "report" }) : null,
-        reflection ? verifyGrounding({ sourceText: trustedSource, output: reflection, kind: "report" }) : null,
-        Promise.all(
-          strengths.map((s) =>
-            typeof s.evidence === "string" && s.evidence
-              ? verifyGrounding({ sourceText: trustedSource, output: s.evidence, kind: "report" })
-              : null
-          )
-        ),
-      ]);
-      if (gSummary) narrative.summary = gSummary.text;
-      if (gReflection) narrative.reflection = gReflection.text;
-      gStrengths.forEach((g, i) => {
-        if (g) strengths[i].evidence = g.text;
-      });
-    } catch (err) {
-      console.error("Narrative grounding failed (fail-open):", err);
-    }
+    const trustedSource = buildTrustedSource({ resumeText: input.resumeText, userText: [input.goalNarrative, input.hookNarrative, ...(input.challengeNarratives ? Object.values(input.challengeNarratives) : []), input.criminalRecord?.context] });
+    const checked = await verifyStory({ narrative, skills: skills.skills || [], career_paths: careerPaths.paths || [], barriers: barriers?.barriers || [] }, trustedSource, verifyGrounding);
+    const checkedNarrative = checked.narrative as typeof narrative;
 
     // Compose the Forge output. Two deterministic guards sweep the whole object
     // (belt-and-suspenders, like the prompts themselves): stripEmployerTaxCredit
@@ -135,11 +104,12 @@ async function handlePost(request: Request) {
       schema_version: "forge_output.v1",
       generated_at: new Date().toISOString(),
       readiness_stage: input.readinessStage || "preparation",
-      narrative,
-      strengths: narrative.strengths || [],
-      skills: skills.skills || [],
-      career_paths: careerPaths.paths || [],
-      barriers: barriers?.barriers || [],
+      narrative: checkedNarrative,
+      story_verification: checked.story_verification,
+      strengths: checkedNarrative.strengths || [],
+      skills: checked.skills,
+      career_paths: checked.career_paths,
+      barriers: checked.barriers,
       // Honest framing surfaced to the user: the organizations, programs, and
       // legal notes here are AI-generated leads to verify, not a vetted directory
       // or legal advice. Pairs with the in-prompt sourcing discipline.
@@ -265,15 +235,15 @@ const READINESS_DIRECTIVES: Record<string, {
   },
   preparation: {
     narrative: `This person has DECIDED to make a change. They need a plan.
-- Headline should be resume-ready and targeted.
-- Summary should be confident and forward-looking. This IS the replacement self Giordano describes. Help them see it.
-- Reflection should celebrate the decision and reinforce the identity shift: they are a professional in a specific field.
-- Strengths: tie directly to target career paths with specific evidence. Frame as proof of the new identity.`,
+- Headline should name their actual work and stated target in resume-ready words.
+- Summary should connect dated duties to the next job without claiming a new identity or result they did not give.
+- Reflection should recognize the decision and name one concrete strength from their history.
+- Strengths: tie each one to a specific duty and show why that duty matters to a hiring reader.`,
     skills: `This person is getting ready to move.
 - Full skill extraction with resume-ready language.
 - Categorize clearly (hard/soft/transferable) for resume building.
 - Flag high-value skills that should be featured prominently.
-- Include industry keywords where natural.`,
+- Use the plain names for the tools and tasks the person described.`,
     careers: `This person is PREPARING to act.
 - Suggest 3-5 paths with concrete detail.
 - For the top path, identify the specific "hook": an org, program, or employer in their area that could be both a job opportunity AND a genuine turning-point relationship.
@@ -292,15 +262,15 @@ const READINESS_DIRECTIVES: Record<string, {
   },
   action: {
     narrative: `This person is READY TO GO. They are actively looking for work.
-- Headline must be resume-ready, keyword-rich, and targeted to their strongest career path.
+- Headline must be resume-ready: plain words naming the work they have actually done, aimed at their strongest career path. Nothing they did not say.
 - Summary should read like a professional brand statement an employer would respond to.
 - Reflection can be brief. They have made the identity shift. Reinforce it with a line built from their own facts: they are matching real skills to the right employer.
-- Strengths: frame as competitive advantages with specific evidence and metrics.`,
+- Strengths: frame as competitive advantages with specific evidence from their own words (a number only if they gave it).`,
     skills: `This person is actively job searching.
-- Comprehensive extraction with ATS-optimized language.
+- Comprehensive extraction in the plain words a screener and a person both read.
 - Categorize precisely. Flag which skills map to which career paths.
-- Include industry-standard terminology. List a certification only if the person says they hold it.
-- Prioritize hard skills and quantifiable competencies.`,
+- Use the plain names for the tools and tasks the person described; never a term they did not show. List a certification only if the person says they hold it.
+- Prioritize the hard skills, tools and equipment they named.`,
     careers: `This person is READY and actively searching.
 - Suggest 3-5 paths with maximum actionable detail.
 - For each path: show HOW to find employers that hire people with records in their area (the state American Job Center, local reentry orgs, job boards for people with records) rather than naming a specific local company as one, which you cannot verify. In what you write to the person, say "employers that hire people with records", never "fair-chance". SHRM data shows 85% of HR pros say JI employees perform equal or better. This person should know that data exists.
@@ -357,10 +327,14 @@ const STATE_LEGAL_CONTEXT: Record<string, string> = {
   MI: `- Michigan: "ban-the-box" (removing the conviction question from the initial application) is PUBLIC only: a 2018 executive directive removed the felony question from STATE agency job and occupational-licensing applications; it does NOT bind private employers, and Michigan law generally bars local governments from mandating ban-the-box on private employers, so most Michigan private employers may still ask about a record on the application. GRAND RAPIDS is a notable exception: its Human Rights Ordinance (effective 2019) covers employers with 1+ employees inside the city and bars an outright no-convictions rule. It requires an individualized assessment (nature and severity of the offense, age at the time, evidence of rehabilitation, relevance to the job) and forbids using arrest-only records; frame this as a protection a legal-aid resource can confirm applies to a given Grand Rapids employer, never as a guarantee. Michigan's Clean Slate law sets some records aside (a portion automatically since April 2023, plus a petition path), but many offenses are excluded and eligibility is fact-specific. Say Michigan's Clean Slate process or a legal-aid resource (such as Michigan Legal Help or Legal Aid of Western Michigan) can assess whether it applies; do NOT assert the person's own eligibility.`,
 };
 
-/** USPS state code from a "City, ST" location string, or null. */
+/**
+ * USPS state code from the saved location ("City, ST", "City, ST 12345" for a
+ * ZIP pick, "County, ST", or a state spelled out), or null. One parser,
+ * lib/location-state.ts, shared with the tests.
+ */
 function extractStateCode(location: string | undefined): string | null {
   if (!location) return null;
-  return sanitizeForPrompt(location, 200).match(/,\s*([A-Z]{2})$/)?.[1] ?? null;
+  return parseStateCode(sanitizeForPrompt(location, 200));
 }
 
 function buildContext(input: ForgeInput): string {
@@ -379,6 +353,11 @@ function buildContext(input: ForgeInput): string {
   if (input.resumeText) {
     parts.push(`RESUME:\n${sanitizeForPrompt(input.resumeText, 6000)}`);
   }
+  if (typeof input.startingText === "string" && input.startingText.trim()) {
+    parts.push(
+      `STARTING PAGE (a saved page to rebuild from; it may not be in the person's own words, so treat it as material to check, never as a fact about them):\n${sanitizeForPrompt(input.startingText, 6000)}`
+    );
+  }
 
   if (input.goals?.length) {
     parts.push(`GOALS: ${sanitizeArray(input.goals)}`);
@@ -387,7 +366,7 @@ function buildContext(input: ForgeInput): string {
     parts.push(`GOAL NARRATIVE: ${sanitizeForPrompt(input.goalNarrative, 1000)}`);
   }
   if (input.hookNarrative) {
-    parts.push(`HOOK FOR CHANGE (Giordano's turning-point context: what would make work feel meaningful): ${sanitizeForPrompt(input.hookNarrative, 1000)}`);
+    parts.push(`ADDITIONAL CONTEXT IN THE PERSON'S OWN WORDS (it may name work the resume missed, or a reason for seeking work; treat only concrete work details as resume facts): ${sanitizeForPrompt(input.hookNarrative, 1000)}`);
   }
 
   if (input.challenges?.length) {
@@ -395,7 +374,14 @@ function buildContext(input: ForgeInput): string {
   }
   if (input.challengeNarratives) {
     for (const [key, value] of Object.entries(input.challengeNarratives)) {
-      if (value) parts.push(`CHALLENGE DETAIL (${sanitizeForPrompt(key, 100)}): ${sanitizeForPrompt(value, 1000)}`);
+      if (!value) continue;
+      // The licenses-and-training answer is a qualification the person holds or
+      // is working on, never a barrier. Label it so the model reads it that way.
+      if (key === "licenses_and_training") {
+        parts.push(`CREDENTIALS (the person's own words: training, certificates or licenses they hold or are working on; a qualification, not a barrier): ${sanitizeForPrompt(value, 1000)}`);
+        continue;
+      }
+      parts.push(`CHALLENGE DETAIL (${sanitizeForPrompt(key, 100)}): ${sanitizeForPrompt(value, 1000)}`);
     }
   }
 
@@ -419,9 +405,9 @@ function buildContext(input: ForgeInput): string {
     );
     // Extract state for jurisdiction-specific barrier analysis
     if (p.location) {
-      const stateMatch = sanitizeForPrompt(p.location, 200).match(/,\s*([A-Z]{2})$/);
-      if (stateMatch) {
-        parts.push(`JURISDICTION: ${stateMatch[1]} (use for ban-the-box laws, expungement rules, and fair-chance ordinances)`);
+      const stateCode = extractStateCode(p.location);
+      if (stateCode) {
+        parts.push(`JURISDICTION: ${stateCode} (use for ban-the-box laws, expungement rules, and fair-chance ordinances)`);
       }
     }
   }
@@ -452,6 +438,13 @@ async function analyzeNarrative(
   const system = `You are a career narrative analyst for Steel Man Resumes.
 Your job is to find the strengths and professional story in this person's experience.
 
+STEEL MAN METHOD FIRST:
+- Build the story on the person's dated work history. Show what they actually did, at its true size, and why a hiring reader should care.
+- Make the relationship visible: each strength needs an example from the person's own work, not a personality guess or redemption script.
+- A resume is one output in a hiring process. Set up a story the person can explain aloud and use later in the Refinery.
+- Their stated target guides what to lead with. It never creates experience they did not give.
+- Older readiness and identity research may help with tone and support, after the work evidence is clear.
+
 READINESS-AWARE INSTRUCTIONS:
 ${rd.narrative}
 
@@ -463,6 +456,7 @@ RULES:
 - SCOPE FIDELITY: never promote someone's role beyond what they wrote. A ranch hand has not "run a ranch." A crew lead has not "managed a department." Keep the scope they stated.
 - Frame strengths, not deficits.
 - Write at a 6th grade reading level.
+- Address the person consistently as "you" in the story, summary, reflection and strengths. Never alternate between first and third person.
 - Never judge, score, or grade.
 - The headline and summary should be RESUME-READY. They may appear on actual job applications. Therefore:
   - NEVER mention incarceration, prison, jail, correctional facilities, parole, probation, criminal records, "time away", "time served", re-entry, or any reference to justice involvement, not even obliquely or with euphemisms like "during his time away" or "while building new skills in a structured environment."
@@ -490,11 +484,7 @@ Return JSON:
     return await callClaude(system, prompt, userId);
   } catch (error) {
     console.error("Narrative analysis failed:", error);
-    return {
-      headline: "Your experience tells a strong story.",
-      summary: "Based on what you've shared, you bring real-world skills and determination.",
-      strengths: [],
-    };
+    throw error;
   }
 }
 
@@ -664,4 +654,4 @@ Return JSON:
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "ip", endpoint: "analyze" });
+export const POST = withRateLimit(handlePost, { mode: "forge", endpoint: "analyze" });

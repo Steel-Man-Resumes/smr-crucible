@@ -25,6 +25,7 @@ export * from './orgToday';
 export * from './orgOutcomes';
 export * from './forgeSession';
 export * from './refineryArtifact';
+export * from './artifactRevision';
 export * from './outcomeAggregate';
 export * from './partnerTracking';
 export * from './getUserProfile';
@@ -38,6 +39,7 @@ export * from './partnerDashboard';
 export * from './orgInvite';
 export * from './systemHealth';
 export * from './employer';
+export * from './resourceDirectory';
 export * from './hiddenEmployers';
 export * from './currentBlock';
 export * from './platformChangelog';
@@ -53,6 +55,7 @@ export * from './jobDescriptionStore';
 export * from './uiPrefs';
 export * from './supportRequest';
 export * from './conversationStore';
+export * from './recordCheck';
 export * from './libraryGroupingShared';
 export * from './vaultDocumentShared';
 export * from './vaultDocument';
@@ -61,6 +64,21 @@ export * from './avatarAssetShared';
 export * from './avatarAsset';
 export * from './pageFitShared';
 export * from './pageFit';
+// Career lanes under one account (migration 074).
+export * from './careerLane';
+// Creative lanes, the practice record and the realistic/dream pair (076).
+export * from './practiceRecord';
+export * from './creativeLaneShared';
+export * from './creativeBio';
+export * from './creativeStatement';
+export * from './creativeChecks';
+export * from './creativeDocs';
+export * from './twoPathPlan';
+// CV lanes (077).
+export * from './cvShared';
+export * from './cvChecks';
+export * from './performerShared';
+export * from './performerChecks';
 
 // Org authorization (2026-09-19): capabilities answer the verb, reach answers
 // the rows. Replaces inline tier-string comparisons in routes.
@@ -70,3 +88,19 @@ export * from './orgStaffPerformance';
 export * from './orgStaffAdmin';
 export * from './joinSharingPrompt';
 export * from './orgVisibilityShared';
+
+// The second check (2026-10-07): a different model family reads the page
+// against the person's own words. Off by default (SECOND_CHECK_ENABLED).
+export * from './secondCheckShared';
+export * from './secondCheck';
+// Premium tools by entitlement, never payment (migration 079).
+export * from './premium';
+export * from './packageEmail';
+// Today's task on the person's lane (083, Phase 5 lane R2).
+export * from './laneFocusShared';
+export * from './laneFocus';
+
+export * from './directoryPublication';
+export * from './resourceList';
+export * from './directoryCoverage';
+export * from './packageDelivery';

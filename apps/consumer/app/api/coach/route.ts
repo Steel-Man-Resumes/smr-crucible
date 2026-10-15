@@ -1,3 +1,6 @@
+import { beginChatOperation } from "@/lib/ai-chat-operation";
+import { assistantStepUsage } from "@/lib/ai/assistant-step-usage";
+import { assistantCapabilities } from "@/lib/assistant-capabilities";
 /**
  * AI Career Coach -- streaming, profile-aware, persistent (master plan Section 5).
  *
@@ -19,6 +22,9 @@
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
 import { auth } from "@/auth";
+import { forgeUserId } from "@/lib/session-policy";
+import { effectiveAuth } from "@/lib/effective-auth";
+import { loadSelectedWork, selectedWorkPrompt } from "@/lib/assistant-work-context";
 import { sanitizeOrEmpty } from "@/lib/sanitize";
 import { loadSkillsForContext } from "@/lib/skills-loader";
 import { MODEL_TROY } from "@/lib/ai/models";
@@ -58,7 +64,7 @@ const RATE_LIMIT_MESSAGE =
 /** GET -> stored conversation, so the chat UI can hydrate on open. */
 export async function GET() {
   const session = await auth();
-  const userId = session?.user?.id;
+  const userId = forgeUserId(session);
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -71,7 +77,7 @@ export async function GET() {
 const CURRENT_LAW_NOTE = `
 
 ## Current law
-You cannot look anything up. When an answer depends on current law or policy (ban-the-box, expungement or sealing, WOTC, licensing, a program's status), say that the rules vary by place and change over time, and point the person to the official state or city source or a local legal aid office to confirm. Never state law as settled.`;
+You can read the published employer and resource tools, but you cannot verify current law on the open web. When an answer depends on current law or policy (ban-the-box, expungement or sealing, WOTC, licensing, a program's status), say that the rules vary by place and change over time, and point the person to the official state or city source or a local legal aid office to confirm. Never state law as settled.`;
 
 export async function POST(request: Request) {
   const contentLength = request.headers.get("content-length");
@@ -80,10 +86,16 @@ export async function POST(request: Request) {
   }
 
   const session = await auth();
-  const userId = session?.user?.id;
+  const userId = forgeUserId(session);
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const effective = await effectiveAuth();
+  if (effective?.user?.id !== userId) return NextResponse.json({ error: "Coach is unavailable while viewing as someone." }, { status: 403 });
+  if (await (await import("@crucible/core")).isPlatformAdmin(userId)) return NextResponse.json({ error: "Use the platform assistant for owner operations." }, { status: 403 });
+  const actor = await (await import("@crucible/core")).resolveOrgActor(userId);
+  if (actor) return NextResponse.json({ error: "Use the staff assistant for organization work." }, { status: 403 });
 
   // Daily quota (atomic increment-then-check), action "coach"
   const limit = await getUserDailyLimit(userId);
@@ -107,11 +119,15 @@ export async function POST(request: Request) {
   // Bring Troy's doctrine (disclosure + career-narrative) into the authenticated
   // coach -- buildCoachSystemPrompt gives profile awareness; the skill files give
   // the coaching methodology; the hands section gives tool doctrine.
-  const ctx = (body?.context ?? {}) as { currentPage?: string };
+  const ctx = (body?.context ?? {}) as { currentPage?: string; selectedWork?: unknown };
   const page = typeof ctx.currentPage === "string" ? ctx.currentPage : "dashboard";
   const hasCriminalRecord = profile.barriers.includes("criminal_record");
   const skillsContext = loadSkillsForContext(page, hasCriminalRecord);
-  const toolOptions = { userId, surface: "refinery" as const };
+  let selectedWork;
+  try { selectedWork = await loadSelectedWork(userId, ctx.selectedWork); }
+  catch { return NextResponse.json({ error: "The selected work could not be loaded. Reopen your lane or document and try again." }, { status: 409 }); }
+  const access = await (await import("@crucible/core")).getPremiumAccess(userId);
+  const toolOptions = { userId, surface: "refinery" as const, selectedWork };
   // "enhanced" consent gates all memory personalization (read AND write).
   // Absent row defaults to granted (see consentDefaultFor doctrine), so this
   // is a no-op for every user until someone actually revokes it. Computed
@@ -120,9 +136,14 @@ export async function POST(request: Request) {
   // Memory loads BEFORE the current user turn is persisted, so the section
   // holds prior work, not an echo of what was just typed.
   const memorySection = enhancedConsent ? await buildMemorySection(userId) : "";
+  const tools = buildAssistantTools(toolOptions);
+  const capabilities = assistantCapabilities(tools, { role: "participant", page, signedIn: true, hasCriminalRecord });
   const systemPrompt =
     buildCoachSystemPrompt(profile) +
     skillsContext +
+    selectedWorkPrompt(selectedWork) +
+    "\nCURRENT CAPABILITIES: " + JSON.stringify(capabilities) +
+    "\nSERVER ACCESS (each operation still checks policy): " + JSON.stringify({ role: "participant", open: access.open }) +
     buildHandsSection(toolOptions) +
     CURRENT_LAW_NOTE +
     coachCreativityNote(profile.coachCreativity) +
@@ -142,6 +163,10 @@ export async function POST(request: Request) {
 
   const startTime = Date.now();
 
+  const operation = await beginChatOperation(userId ?? null, "coach", MODEL);
+  if (operation.response) return operation.response;
+  return operation.run(async () => {
+  try {
   const result = streamText({
     model: troyChatModel(),
     system: systemPrompt,
@@ -149,30 +174,20 @@ export async function POST(request: Request) {
     // Reply budget by the length setting, plus room for Sonnet 5.5's thinking.
     // The prompt's length rule still sets how long the reply is.
     maxTokens: troyMaxTokens(profile.coachLength === "brief" ? 400 : 700),
-    tools: buildAssistantTools(toolOptions),
+    tools,
     maxSteps: TROY_SERVER_MAX_STEPS,
     toolCallStreaming: true,
+    async onStepFinish({ usage, providerMetadata }) {
+      await operation.run(async () => {
+      const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+      await recordTokenUsage("anthropic", MODEL, assistantStepUsage(usage, providerMetadata), { userId: userId ?? null, endpoint: "coach" });
+      });
+    },
+    async onError() { await operation.fail(); },
     experimental_transform: emptyReplyGuard({ firstStep: firstStepIndex(messages) }),
     async onFinish({ text, usage, finishReason, steps }) {
-      // Exact token accounting (in multi-step runs `usage` is the combined
-      // total of all steps in this request)
-      if (usage) {
-        try {
-          const { recordTokenUsage } = await import("@/lib/ai-usage-log");
-          recordTokenUsage(
-            "anthropic",
-            MODEL,
-            {
-              inputTokens: (usage as any).promptTokens || 0,
-              outputTokens: (usage as any).completionTokens || 0,
-            },
-            { userId, endpoint: "coach" }
-          );
-        } catch (err) {
-          console.error("Coach token accounting failed:", err);
-        }
-      }
-
+      await operation.run(async () => {
+      try {
       // Persist the assistant turn only when the model finished SPEAKING.
       // finishReason "tool-calls" means the turn continues in the browser
       // (client-executed tool); the continuation request persists the reply.
@@ -207,8 +222,12 @@ export async function POST(request: Request) {
       } catch (err) {
         console.error("Coach decision log failed:", err);
       }
+      } finally { await operation.finish(); }
+      });
     },
   });
 
   return result.toDataStreamResponse();
+  } catch (error) { await operation.fail(); throw error; }
+  });
 }

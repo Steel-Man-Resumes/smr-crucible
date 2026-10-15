@@ -12,22 +12,23 @@
  * memory either.
  */
 
-import { useState } from "react";
-import { signOut, useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import { Eraser } from "lucide-react";
 import { clearThisComputer, useForgeSession } from "@/lib/forge-context";
+import { confirmedSignOut } from "@/lib/confirmed-sign-out";
 
 const LEAVE_TO = "https://steelmanresumes.com";
 
-async function clearAndLeave(signedIn: boolean) {
-  clearThisComputer();
+/** Plain hint beside the control: who it is for. */
+const CLEAR_HINT = "(if you're on a public or shared computer)";
+
+export async function clearAndLeave(signedIn: boolean, clearSession: () => void) {
   if (signedIn) {
-    try {
-      await signOut({ redirect: false });
-    } catch {
-      // The storage is already gone; leave anyway.
-    }
+    await confirmedSignOut();
   }
+  clearSession();
+  clearThisComputer();
   window.location.replace(LEAVE_TO);
 }
 
@@ -43,27 +44,35 @@ export function ClearThisComputerButton() {
   const { status } = useSession();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  // The saved run lives in browser storage, which the server never sees.
+  // Decide after mount so the server and first browser render match.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  if (!hasForgeWork(session as Record<string, unknown>)) return null;
+  if (!mounted || (!confirming && !hasForgeWork(session as Record<string, unknown>))) return null;
 
   if (confirming) {
     return (
-      <div className="flex items-center gap-2" role="group" aria-label="Clear this computer">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Clear this computer">
+        {error && <p role="alert" className="w-full text-sm text-t-red">{error}</p>}
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || status === "loading"}
           onClick={async () => {
             setBusy(true);
-            clearSession();
-            await clearAndLeave(status === "authenticated");
+            setError("");
+            try { await clearAndLeave(status === "authenticated", clearSession); }
+            catch { setError("We couldn't sign you out. Stay here and try again before leaving this computer."); }
+            finally { setBusy(false); }
           }}
-          className="t-focus inline-flex min-h-touch items-center rounded-[5px] border border-t-red bg-white px-3 py-2 text-sm font-medium text-t-red transition-colors hover:bg-t-red hover:text-white disabled:opacity-60"
+          className="t-focus inline-flex min-h-touch items-center rounded-[5px] border border-t-red bg-transparent px-3 py-2 text-sm font-medium whitespace-nowrap text-t-red transition-colors hover:bg-t-red hover:text-white disabled:opacity-60"
         >
           {busy ? "Clearing..." : "Yes, erase it"}
         </button>
         <button
           type="button"
-          disabled={busy}
+          disabled={busy || status === "loading"}
           onClick={() => setConfirming(false)}
           className="t-focus inline-flex min-h-touch items-center rounded-[5px] px-2 py-2 text-sm text-t-bone-dim hover:text-t-white"
         >
@@ -77,11 +86,18 @@ export function ClearThisComputerButton() {
     <button
       type="button"
       onClick={() => setConfirming(true)}
-      className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-t-line bg-white px-3 py-2 text-sm font-medium text-t-bone-dim transition-colors hover:border-t-line-strong hover:text-t-white"
-      aria-label="Clear this computer: erase your Forge work from this browser"
+      className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-ws-bg/25 bg-transparent px-3 py-1.5 text-left text-sm font-medium text-t-bone-dim transition-colors hover:border-ws-bg/60 hover:text-ws-bg"
+      aria-label={`Clear this computer: erase your Forge work from this browser ${CLEAR_HINT}`}
+      title={`Erase your Forge work from this browser ${CLEAR_HINT}`}
     >
-      <Eraser size={17} aria-hidden="true" />
-      <span className="hidden sm:inline">Clear this computer</span>
+      <Eraser size={17} aria-hidden="true" className="flex-none" />
+      <span className="flex flex-col leading-tight">
+        <span>
+          <span className="sm:hidden">Clear</span>
+          <span className="hidden sm:inline">Clear this computer</span>
+        </span>
+        <span className="hidden text-[11px] font-normal sm:block">{CLEAR_HINT}</span>
+      </span>
     </button>
   );
 }
@@ -92,6 +108,7 @@ export function ClearThisComputerPanel() {
   const { status } = useSession();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   return (
     <div className="mt-8 border border-t-line bg-t-panel p-6">
@@ -99,20 +116,22 @@ export function ClearThisComputerPanel() {
         Using a library or shared computer?
       </h3>
       <p className="mb-4 text-sm leading-relaxed text-t-phos-dim">
-        Your work is saved in this browser, not on our servers. Anyone who sits
-        down here after you could open it. Download it, email it to yourself, or
-        make your free account first. Then clear it before you walk away. This
-        browser also forgets it on its own after a day with no use.
+        {status === "authenticated"
+          ? "Work saved to your account stays there. Clearing this computer signs you out and removes this browser's copy. Save any changes before you leave."
+          : "This browser keeps a copy of your work. Download it or save it to your free account before clearing this computer. Anyone who sits down here next could open the browser's copy."}
       </p>
+      {error && <p role="alert" className="mb-3 text-sm text-t-red">{error}</p>}
       {confirming ? (
         <div className="flex flex-col gap-2 sm:flex-row">
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || status === "loading"}
             onClick={async () => {
               setBusy(true);
-              clearSession();
-              await clearAndLeave(status === "authenticated");
+              setError("");
+              try { await clearAndLeave(status === "authenticated", clearSession); }
+              catch { setError("We couldn't sign you out. Stay here and try again before leaving this computer."); }
+              finally { setBusy(false); }
             }}
             className="t-focus flex-1 border border-t-red px-4 py-3 text-sm font-semibold text-t-red transition-colors hover:bg-t-red hover:text-white disabled:opacity-60"
           >
@@ -120,7 +139,7 @@ export function ClearThisComputerPanel() {
           </button>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || status === "loading"}
             onClick={() => setConfirming(false)}
             className="t-focus flex-1 border border-t-line px-4 py-3 text-sm font-medium text-t-phos-dim transition-colors hover:border-t-phos-dim hover:text-t-white"
           >

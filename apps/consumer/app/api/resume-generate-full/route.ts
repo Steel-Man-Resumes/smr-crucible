@@ -11,7 +11,8 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { getArtifact } from "@crucible/core";
+import { getArtifact, getOpenLane, isUuid } from "@crucible/core";
+import { laneWriterNote } from "@/lib/lanes";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import { JD_MAX, RESUME_SOURCE_MAX } from "@/lib/limits";
@@ -63,7 +64,10 @@ async function handlePost(request: Request) {
     const userId = session?.user?.id;
 
     const body = await request.json();
-    const { forgeOutput, resumeText, job, contact, challenges, criminalRecord, approvedArtifactId } = body;
+    const { forgeOutput, resumeText, job, contact, challenges, criminalRecord, approvedArtifactId, laneId } = body;
+    // Career lanes (074): the lane's own length choice, read from the
+    // database (never from the request body), only for the person's open lane.
+    const lane = userId && isUuid(laneId) ? await getOpenLane(userId, laneId) : null;
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "AI not configured" }, { status: 500 });
@@ -180,18 +184,18 @@ ABSOLUTE RULES (the truth gate: violating any = failure):
 1. Target the resume specifically at the role in <job_posting>.
 2. TRUTH GATE: use ONLY facts present in the person's background. NEVER invent a number, metric, tool, certification, title, employer, or result they did not provide. If a detail is missing, leave it out. Do not guess or pad. Must survive a background-checked interview.
 3. Numbers ONLY where the background states them, kept exactly as given. A bullet with no stated quantity is written strong WITHOUT a number.
-4. NEVER "responsible for", "tasked with", "helped with", "assisted in". Transform duties into achievements using only stated facts.
+4. Follow the RESUME TRUTH RULES above. Turn duty phrasing ("responsible for", "tasked with") into a plain action verb only where the person's words support the action. Shared or supervised work keeps its true scope: "helped with" or "under" stays when that is what the person said.
 5. NEVER these AI-flagged words: utilize, facilitate, leverage, comprehensive, streamline, dedicated, passionate, proven track record, results-driven, detail-oriented.
-6. Every bullet starts with a strong action verb.
-7. As many CAR bullets as the role's real achievements support (typically 3 to 6). Write fewer rather than padding with invented detail, more when the background genuinely supports it.
+6. Every bullet starts with a plain action verb the person's words support.
+7. As many bullets as the role's real work supports (typically 3 to 6). Write fewer rather than padding with invented detail, more when the background genuinely supports it.
 8. The skills that match the posting AND are supported by the background, typically 9 to 15. Never pad to a count, never drop a real match.
 9. Carry forward ALL education and certifications from the background. A certification becomes its own education entry. Never drop them; never add ones not stated.
 10. NEVER mention incarceration, criminal records, justice involvement, parole, probation, or a correctional facility name.
-11. If a title/company pairing is clearly garbled, repair it. Never invent a new employer or title.
-12. Years only (no months). Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
+11. If a title/company pairing looks garbled, keep exactly what the person wrote; never move a title to another employer and never invent a new employer or title. The person checks it.
+12. Keep every date at the precision the person gave it, including months. Never guess a missing month or year. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
 13. If an APPROVED BASE RESUME is provided, it is the person's own reviewed resume and the PRIMARY source: restructure and re-target THAT document for this role. Preserve its real achievements and its wording where they already read well; never downgrade, weaken, or drop a true, approved point just because the original upload phrased it differently or omitted it. Still add nothing the person's background does not support.
 14. RESULTS AND SETTINGS ONLY AS GIVEN: never tack on a result, benefit or setting the person did not give (no endings like ", freeing capacity for additional production", no "high-volume" or "fast-paced" unless they said it). Keep every result they did give, in their own terms.
-15. NO CHARACTER CLAIMS: no "dependable", "reliable", "consistent" or anything like them unless the person said it about themselves.`;
+15. NO CHARACTER CLAIMS: no "dependable", "reliable", "consistent" or anything like them unless the person said it about themselves.${laneWriterNote(lane)}`;
 
     const resumePrompt = `Generate a complete, targeted resume. Return ONLY valid JSON.
 
@@ -217,9 +221,9 @@ CONTACT INFO:
 
 Return this exact JSON structure:
 {
-  "summary": "3-4 sentence summary targeted at the role. NO generic phrases.",
+  "summary": "A short summary using only supplied facts that fit the role. No minimum length or generic phrases.",
   "experience": [
-    { "title": "Job Title", "company": "Company Name", "startDate": "2020", "endDate": "", "bullets": ["Strong verb + achievement.", "Another achievement."] }
+    { "title": "Job Title", "company": "Company Name", "startDate": "Date exactly as supplied", "endDate": "Date exactly as supplied", "bullets": ["Plain action supported by their words."] }
   ],
   "education": [
     { "institution": "School or Program Name", "credential": "Degree, Certificate, or Training", "year": "2020" }
@@ -234,9 +238,9 @@ You write a targeted cover letter (plain text, no JSON). ${INJECTION_GUARD}
 
 RULES:
 - Address the SPECIFIC company. NO [Company Name]/[Hiring Manager] placeholders. Use "Dear Hiring Team" if unknown.
-- 250-350 words.
+- No minimum length. Use only as much space as the person's facts support. A short letter is complete; never pad it with invented detail.
 - TRUTH GATE: every claim comes from the background. NEVER invent achievements, numbers, certifications, or personal facts (transportation, availability, physical capability, references), even if the posting asks for it.
-- Open: who they are, what role, why this company. Middle: 2-3 real achievements matching the requirements. Close: grounded confidence.
+- Open with their real work and the target role. Include a company-specific motive only if the person gave it. Use whichever real duties or achievements match the requirements; fewer are fine when evidence is thin. Close with a modest invitation to talk.
 - NEVER mention incarceration, criminal records, justice involvement. NEVER "responsible for", "proven track record", "dedicated professional", "utilize", "leverage", "passionate".
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
 - FACTS AS GIVEN: state every fact the way the background states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give. "I fixed the ice machine drain twice" stays exactly that size.
@@ -255,7 +259,9 @@ Requirements: ${jobRequirements}
 </job_posting>
 
 APPLICANT: ${contactName || "Candidate"}${contactPlace ? ` from ${contactPlace}` : ""}
-BACKGROUND (the only source of facts): ${narrative}
+BACKGROUND (the only source of facts):
+${cleanedApprovedResume ? `APPROVED BASE RESUME (primary source):\n${cleanedApprovedResume}\n` : ""}ORIGINAL RESUME:\n${cleanedResume}
+NARRATIVE (use only details supported by the person's source material): ${narrative}
 KEY SKILLS: ${skills}
 ${strengths ? `STRENGTHS: ${strengths}` : ""}
 

@@ -102,7 +102,9 @@ describe("Refinery sync: never claims silently", () => {
   it("does nothing before the user is known or without a run", () => {
     assert.equal(forgeSyncDecision(JSON.stringify(RUN), undefined, NOW), "none");
     assert.equal(forgeSyncDecision(null, "user-b", NOW), "none");
-    assert.equal(forgeSyncDecision(JSON.stringify({ pagesVisited: [] }), "user-b", NOW), "none");
+    // A fresh run with no work: nothing to do. (Unstamped or stale, it is
+    // erased: follow-up R3, shared-computer-followups.test.ts.)
+    assert.equal(forgeSyncDecision(JSON.stringify({ pagesVisited: [], _savedAt: NOW - 1000 }), "user-b", NOW), "none");
   });
   it("the shell has no name-match claim, and saves only on an owned run or a Yes", () => {
     const src = read(...SHELL);
@@ -129,8 +131,12 @@ describe("every Refinery reader uses the accessor", () => {
     [join("app", "api", "user", "export-data", "route.ts")]: "server SQL on the forge_session database table, not browser storage",
     [join("app", "api", "user", "delete-data", "route.ts")]: "server SQL on the forge_session database table, not browser storage",
     [join("lib", "forge-persist.ts")]: "server doc comment naming the forge_session database table",
+    // fix/s3-accounts (merged 2026-10-08):
+    [join("components", "forge", "ForgeAccountBar.tsx")]: "the sign-out clean's removal list (never reads the run)",
+    [join("lib", "forge-import.ts")]: "doc comment only; the import's decisions take the run from ForgeProvider",
+    [join("lib", "tablet-session.ts")]: "server SQL on the forge_session database table (the admin's stuck-claim check), not browser storage",
   };
-  const SERVER_ONLY = Object.keys(ALLOWED).filter((k) => /api|forge-persist/.test(k));
+  const SERVER_ONLY = Object.keys(ALLOWED).filter((k) => /api|forge-persist|tablet-session/.test(k));
   const MENTION = /\bforge_session\b|FORGE_SESSION_KEY|FORGE_LAST_SYNCED_RUN_KEY|forge_last_synced_run/;
   function walk(dir: string, out: string[] = []): string[] {
     for (const name of readdirSync(dir)) {
@@ -246,7 +252,9 @@ describe("create-account form: a required yes or no", () => {
     const src = read(...LOGIN);
     assert.match(src, /Yes, this is my resume\. Save it to my new account\./);
     assert.match(src, /No, this isn&apos;t mine\. Erase it from this computer\./);
-    assert.doesNotMatch(src, /forgeRunName|started by|\b(un)?tick(ed)?\b|Clear this computer/i);
+    // The terms-checkbox helper's names (lib/terms-ticked.ts) are code, not copy.
+    const copy = src.replace(/TERMS_TICKED_KEY|tickedMark|terms-ticked/g, "");
+    assert.doesNotMatch(copy, /forgeRunName|started by|\b(un)?tick(ed)?\b|Clear this computer/i);
   });
   it("offers only a fresh run with work in it", () => {
     assert.equal(readStoredForgeRun(null, NOW), null);

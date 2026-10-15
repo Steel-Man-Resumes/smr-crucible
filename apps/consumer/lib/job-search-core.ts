@@ -534,7 +534,7 @@ async function fetchCareerOneStopJobs(
       const [cosCity, cosState] = (j.Location || "").split(",").map((x) => x.trim());
       const fair = isMarked(company, { city: cosCity || null, state: cosState || null, title: j.JobTitle }, marks);
       return {
-        id: j.JvId || `cos-${i}`,
+        id: `cos-${j.JvId || i}`,
         title: j.JobTitle || "Job",
         company,
         location: j.Location || location,
@@ -923,13 +923,13 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
       await logDecision({
         userId: params.userId ?? null,
         contextPage: "job-search",
-        modelProvider: `jsearch+${AI_PROVIDER}`,
-        modelId: `jsearch-v1+${AI_MODEL}`,
+        modelProvider: `${providerNames.join("+") || "none"}+${AI_PROVIDER}`,
+        modelId: `job-search-v1+${AI_MODEL}`,
         input: JSON.stringify({ targetRole: role, location, skills, hasRecord }).slice(0, 500),
-        explanation: `JSearch API: ${rawJobs.length} raw results. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
+        explanation: `Job providers (${providerNames.join(", ") || "none"}): ${rawJobs.length} raw results. ${AI_PROVIDER} enriched ${enrichedJobs.length} listings. Fair-chance: ${enrichedJobs.filter((j) => j.second_chance).length}.`,
         outputSummary: {
           type: "job_search",
-          source: "jsearch",
+          source: providerNames.join("+") || "none",
           raw_count: rawJobs.length,
           enriched_count: enrichedJobs.length,
           second_chance_count: enrichedJobs.filter((j) => j.second_chance).length,

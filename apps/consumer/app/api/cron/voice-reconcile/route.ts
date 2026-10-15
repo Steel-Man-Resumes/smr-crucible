@@ -14,9 +14,11 @@
  * becoming publicly callable. Same pattern as
  * apps/consumer/app/api/cron/sync-tracking/route.ts.
  */
+import { drainPackageDeliveries } from "@/lib/package-delivery-worker";
 import { NextResponse } from "next/server";
 import { findExpiredActiveSessions, expireSession } from "@crucible/core";
 import { recordTokenUsage } from "@/lib/ai-usage-log";
+import { reconcileClosedVoiceUsage } from "@/lib/voice-usage-reconcile";
 import { REALTIME_MODEL } from "@/lib/voice-instructions";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +29,7 @@ async function hangupProviderCall(callId: string): Promise<void> {
   try {
     await fetch(`https://api.openai.com/v1/realtime/calls/${callId}/hangup`, {
       method: "POST",
+      signal: AbortSignal.timeout(3000),
       headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
     });
   } catch (err) {
@@ -42,30 +45,41 @@ export async function GET(request: Request) {
   }
 
   try {
+    const started = Date.now();
     const expired = await findExpiredActiveSessions(100);
     let reconciled = 0;
 
     for (const voiceSession of expired) {
-      if (voiceSession.call_id) {
-        await hangupProviderCall(voiceSession.call_id);
+      if (Date.now() - started > 20_000) break;
+      const hasProviderCall = !!voiceSession.call_id && voiceSession.call_id !== "pending";
+      if (hasProviderCall) {
+        await hangupProviderCall(voiceSession.call_id!);
       }
 
       const closed = await expireSession(voiceSession.id, "lease_expired");
       if (!closed) continue;
 
-      recordTokenUsage(
+      await recordTokenUsage(
         "openai",
         REALTIME_MODEL,
         { inputTokens: 0, outputTokens: 0, audioSeconds: closed.elapsedSeconds },
-        { userId: voiceSession.user_id, endpoint: "interview-voice" }
+        { userId: voiceSession.user_id, endpoint: "interview-voice", eventKey: `voice:${voiceSession.id}`, operationId: voiceSession.operation_id ?? undefined,
+          usageMissing: !hasProviderCall, outcome: hasProviderCall ? "unknown" : "failed" }
       );
       reconciled++;
     }
 
+    const recoveredUsage = await reconcileClosedVoiceUsage();
+    // Package delivery gets what is left of the 60-second budget, minus a margin.
+    const delivery = Date.now() - started < 40_000
+      ? await drainPackageDeliveries(started + 50_000).catch(() => ({ unavailable: true }))
+      : { deferred: true };
     return NextResponse.json({
+      recoveredUsage,
       ok: true,
       found: expired.length,
       reconciled,
+      delivery,
       checked_at: new Date().toISOString(),
     });
   } catch (err: any) {

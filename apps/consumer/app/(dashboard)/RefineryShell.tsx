@@ -1,13 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PolicyAckBanner } from "@/components/PolicyAckBanner";
 import { JoinSharingPrompt } from "@/components/JoinSharingPrompt";
 import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
 import { usePathname } from "next/navigation";
-import { signOut, useSession } from "next-auth/react";
+import { useSession } from "next-auth/react";
+import { confirmedSignOut } from "@/lib/confirmed-sign-out";
 import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { UiPrefsApplier } from "@/components/UiPrefsApplier";
@@ -18,6 +19,9 @@ import { GuidedTour } from "@/components/GuidedTour";
 import { DevSwitcher } from "@/components/DevSwitcher";
 import { ImpersonationChrome } from "@/components/ImpersonationChrome";
 import { HighlightHost } from "@/components/SpotlightHighlight";
+import { RefineryLaneHeader } from "@/components/lanes/LaneHeader";
+import { useLaneFocus } from "@/components/lanes/useLaneFocus";
+import { refineryOpenWithoutResume } from "@/lib/lane-task";
 import {
   useUserTier,
   useRealTier,
@@ -35,11 +39,21 @@ import {
   readLocalForgeRunRaw,
 } from "@/lib/forge-carry";
 import { useOnboarding, type OnboardingState } from "@/lib/useOnboarding";
+import {
+  DERIVED_KEYS,
+  DERIVED_OWNER_KEY,
+  forgeQuestionHoldsBounce,
+  forgeQuestionOpen,
+  forgeSyncAllowed,
+  settleDerivedKeys,
+  applyForgeClearMark,
+  IMPERSONATION_SEEN_KEY,
+} from "@/lib/refinery-guards";
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
 // client bundle -- see @crucible/core/src/gateRank).
-import { GATE_STATE_RANK } from "@crucible/core/src/gateRank";
 import { previewIdForHref } from "@/lib/featurePreviews";
+import { clientToolUnlocked, lockedToolLine } from "@crucible/core/src/journeyStages";
 import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
 import { ExternalLink, LockKeyhole, LogOut, Menu, Sparkles, X } from "lucide-react";
 
@@ -86,24 +100,29 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Find Work",
     items: [
       { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "full_access" },
+      { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/employers", label: "Employers That Hire", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/resources", label: "Job Paths", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/resources", label: "Get support", minTier: "client", minState: "needs_profile" },
     ],
   },
   {
     label: "Build",
     items: [
       { href: "/dashboard/application-tailor", label: "Application Tailor", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/creative", label: "Creative Work", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/cv", label: "CV", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/performer", label: "Performer", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "full_access", requiresDisclosure: true },
+      // Interview prep never waits on a disclosure plan (Codex review A6):
+      // an interview can come before any lesson.
+      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "needs_profile" },
     ],
   },
   {
     label: "My Stuff",
     items: [
-      { href: "/dashboard/vault", label: "Library", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/documents", label: "Vault", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/vault", label: "My resumes", minTier: "client", minState: "needs_resume" },
+      { href: "/dashboard/documents", label: "Private documents", minTier: "client", minState: "needs_resume" },
       { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
     ],
   },
@@ -194,6 +213,10 @@ const PERSONAL_LS_KEYS = [
   "active_baseline_id",
   "view_as",
   "forge_last_synced_run",
+  "interview_struggle_tags",
+  DERIVED_OWNER_KEY,
+  // r3 I4: the "impersonation seen" flag never outlives the sign-in.
+  IMPERSONATION_SEEN_KEY,
 ];
 
 /**
@@ -203,14 +226,7 @@ const PERSONAL_LS_KEYS = [
  * the new run. Everything here is derived from a run and goes stale the moment
  * a different person's intake lands in the same browser.
  */
-const RUN_SCOPED_LS_KEYS = [
-  "forge_preload",
-  "consumer_progress",
-  "saved_jobs",
-  "hidden_jobs",
-  "refinery_last_job_search",
-  "active_baseline_id",
-];
+const RUN_SCOPED_LS_KEYS = DERIVED_KEYS;
 
 /**
  * The last Forge run this browser synced. Deliberately NOT inside
@@ -279,11 +295,13 @@ function isNavUnlocked(
   }
   const tierRank = TIER_RANK[userTier] ?? 3;
   if (tierRank > (TIER_RANK[item.minTier] ?? 3)) return false;
-  const stateRank = GATE_STATE_RANK[onboardingState] ?? 3;
-  const requiredRank = GATE_STATE_RANK[item.minState] ?? 3;
-  if (stateRank > requiredRank) return false;
-  if (item.requiresDisclosure && !disclosureComplete) return false;
-  return true;
+  // Same rule the dashboard cards use (one gate, two displays).
+  return clientToolUnlocked({
+    state: onboardingState,
+    minState: item.minState,
+    requiresDisclosure: item.requiresDisclosure,
+    disclosureComplete,
+  });
 }
 
 // Hide items requiring a tier the user can never reach (partner-only, admin-only)
@@ -346,10 +364,61 @@ export function RefineryShell({
   const onboarding = useOnboarding();
   const { context: userFullContext } = useUserContext();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const navTrigger = useRef<HTMLButtonElement>(null);
+  const navPanel = useRef<HTMLDivElement>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState("");
+  async function leaveAccount() {
+    if (signingOut) return;
+    setSigningOut(true);
+    setSignOutError("");
+    try {
+      await confirmedSignOut();
+      clearPersonalLocalStorage();
+      window.location.replace("/login");
+    } catch {
+      setSignOutError("We couldn't confirm sign-out. Stay here and try again before leaving this computer.");
+      setSigningOut(false);
+    }
+  }
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    navPanel.current?.focus();
+    const closeOnDesktop = () => {
+      if (window.matchMedia("(min-width: 768px)").matches) setDrawerOpen(false);
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); setDrawerOpen(false); return; }
+      if (event.key !== "Tab") return;
+      const panel = navPanel.current;
+      if (!panel) return;
+      const items = Array.from(panel.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),[tabindex="0"]')).filter((el) => el.offsetParent !== null);
+      const first = items[0], last = items[items.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel || !panel.contains(document.activeElement))) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault(); first.focus();
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    window.addEventListener("resize", closeOnDesktop);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKey);
+      window.removeEventListener("resize", closeOnDesktop);
+      navTrigger.current?.focus();
+    };
+  }, [drawerOpen]);
   const [unlockToast, setUnlockToast] = useState<string | null>(null);
   // Shared-computer rule: the "Is it yours?" card for an unowned Forge run.
   const [forgePrompt, setForgePrompt] = useState<"none" | "ask" | "saving" | "saved" | "failed">("none");
   const [forgeSyncTick, setForgeSyncTick] = useState(0);
+  // N7: the onboarding load count when "Yes" finished saving. "saved" holds
+  // the bounce only until onboarding has loaded again after that.
+  const [savedAtLoads, setSavedAtLoads] = useState<number | null>(null);
   // The run the card asked about. "Yes" saves only that run (another tab may
   // replace it); a changed run is asked about again and nothing is saved.
   const askedRunRef = useRef<string | null>(null);
@@ -363,6 +432,23 @@ export function RefineryShell({
   const prevState = useRef<string>("loading");
   const prevDisclosure = useRef(false);
 
+  // R6: keys an earlier account left in this browser (its saved jobs, last
+  // search, approved-resume pointer) are read by pages the moment they mount,
+  // before this shell's effects run. Settle them here, during render, and show
+  // the page only after. Idempotent, so a second render changes nothing.
+  const shellUid = sessionData?.user?.id ?? null;
+  const derivedSettledFor = useRef<string | null>(null);
+  if (authStatus === "authenticated" && shellUid && derivedSettledFor.current !== shellUid) {
+    const uid = shellUid;
+    // A clear marked on the other host applies here first (N3).
+    applyForgeClearMark(uid);
+    settleDerivedKeys(uid);
+    derivedSettledFor.current = uid;
+  }
+  const derivedReady =
+    authStatus === "unauthenticated" ||
+    (authStatus === "authenticated" && !!shellUid && derivedSettledFor.current === shellUid);
+
   // Show unlock toast when key milestones flip
   useEffect(() => {
     const prev = prevState.current;
@@ -375,7 +461,7 @@ export function RefineryShell({
       prevState.current = cur;
     }
     if (!prevDisclosure.current && onboarding.disclosureComplete && cur === "full_access") {
-      setUnlockToast("Interview Prep is now unlocked.");
+      setUnlockToast("Your disclosure plan is saved. Practice using it in Interview Prep.");
       setTimeout(() => setUnlockToast(null), 5000);
     }
     prevDisclosure.current = onboarding.disclosureComplete;
@@ -393,25 +479,38 @@ export function RefineryShell({
   // They see the in-app "Start with The Forge" state instead; every other
   // gate stays real.
   const effectiveRole = useEffectiveRole();
+  const laneFocus = useLaneFocus();
   useEffect(() => {
     // While the "Is it yours?" card is open (or its "Yes" is still landing),
-    // stay here: bouncing to the Forge would skip the person's answer.
-    const forgeQuestionOpen =
-      forgePrompt !== "none" ||
-      forgeSyncDecision(readLocalForgeRunRaw(), sessionData?.user?.id) === "ask";
+    // stay here: bouncing to the Forge would skip the person's answer. After
+    // a save, only until onboarding has re-read (N7).
+    const holds = forgeQuestionHoldsBounce({
+      prompt: forgePrompt,
+      askNow: forgeSyncDecision(readLocalForgeRunRaw(), sessionData?.user?.id) === "ask",
+      onboardingLoads: onboarding.loads,
+      savedAtLoads,
+    });
     if (
-      !forgeQuestionOpen &&
+      !holds &&
       authStatus === "authenticated" &&
+      effectiveRole !== null &&
       userTier === "client" &&
       getViewAs() === null &&
       !effectiveRole?.impersonating &&
       onboarding.state !== "loading" &&
       !onboarding.forgeComplete &&
-      pathname !== "/dashboard/settings"
+      pathname !== "/dashboard/settings" &&
+      // Lanes first (R2 review H1): support, job search and the documents
+      // open without a resume; only the resume and interview routes need one.
+      laneFocus.loaded &&
+      !refineryOpenWithoutResume(pathname, laneFocus.task)
     ) {
-      window.location.href = "https://forge.steelmanresumes.com";
+      // Lanes first (Phase 5 R2): to the Forge's first screen, "What do you
+      // need today?", on this same site so the sign-in comes along. Returning
+      // with a task picked, that page shows where the run is (no bounce back).
+      window.location.href = "/start?from=refinery";
     }
-  }, [authStatus, userTier, effectiveRole?.impersonating, onboarding.state, onboarding.forgeComplete, pathname, forgePrompt, sessionData?.user?.id]);
+  }, [authStatus, userTier, effectiveRole, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier
   useEffect(() => {
@@ -456,9 +555,13 @@ export function RefineryShell({
   // for an unowned run. An unowned run past the Forge's 24-hour idle limit is
   // erased, never offered. Impersonation never asks or claims: "Yes" would
   // save into the impersonated account.
+  const syncRoleKey = effectiveRole === null ? "loading" : effectiveRole.impersonating ? "impersonating" : "self";
   useEffect(() => {
     const uid = sessionData?.user?.id;
     if (authStatus !== "authenticated" || !uid) return; // wait for the signed-in user id
+    // N6: nothing while the role is loading or an admin is viewing as someone
+    // else (the save route writes to the effective account).
+    if (!forgeSyncAllowed(effectiveRole)) return;
     try {
       const stored = readLocalForgeRunRaw();
       const decision = forgeSyncDecision(stored, uid);
@@ -479,10 +582,8 @@ export function RefineryShell({
         // Clear what is DERIVED from any earlier run, so nothing from an
         // unverified run shows, then ask. Nothing is saved or claimed here.
         clearRunScopedLocalStorage();
-        if (!effectiveRole?.impersonating) {
-          if (askedRunRef.current === null) askedRunRef.current = stored;
-          setForgePrompt((p) => (p === "none" ? "ask" : p));
-        }
+        if (askedRunRef.current === null) askedRunRef.current = stored;
+        setForgePrompt((p) => (p === "none" || p === "saved" ? "ask" : p));
         return;
       }
       if (decision !== "owned" || !stored) return;
@@ -526,7 +627,14 @@ export function RefineryShell({
     } catch {
       // Silent
     }
-  }, [authStatus, sessionData?.user?.id, effectiveRole?.impersonating, forgeSyncTick]);
+  }, [authStatus, sessionData?.user?.id, syncRoleKey, forgeSyncTick]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The welcome tour waits while the question is on screen: a brand-new
+  // account sees the card first, never the tour on top of it.
+  const tourHeld = forgeQuestionOpen({
+    prompt: forgePrompt,
+    askNow: !effectiveRole?.impersonating && forgeSyncDecision(readLocalForgeRunRaw(), shellUid) === "ask",
+  });
 
   // "Is it yours?" answers. Only "Yes" saves; "No" erases.
   async function answerForgePrompt(yes: boolean) {
@@ -564,6 +672,7 @@ export function RefineryShell({
       if (ok) {
         askedRunRef.current = null;
         setForgeRunChanged(false);
+        setSavedAtLoads(onboarding.loads);
         setForgePrompt("saved");
         setForgeNotice("Saved to your account.");
         setForgeSyncTick((t) => t + 1);
@@ -670,13 +779,13 @@ export function RefineryShell({
             const unlocked = isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete);
             const isActive = pathname === item.href;
 
-            // Human-readable lock reason
-            const lockReason = (() => {
-              if (onboarding.state === "needs_profile") return "Complete your profile to unlock";
-              if (onboarding.state === "needs_resume") return "Build a targeted resume to unlock";
-              if (item.requiresDisclosure && !onboarding.disclosureComplete) return "Complete the Disclosure Planner to unlock";
-              return "Keep going to unlock this";
-            })();
+            // One plain line: what is locked and what opens it (RD4). Shown under
+            // the label so it reads on a phone, not only as a hover tooltip.
+            const lockLine = lockedToolLine({
+              state: onboarding.state,
+              requiresDisclosure: item.requiresDisclosure,
+              disclosureComplete: onboarding.disclosureComplete,
+            });
 
             if (!unlocked) {
               // Phase 4.1: no dead ends. A locked tool that has a preview becomes
@@ -685,28 +794,36 @@ export function RefineryShell({
               // still enforces the gate at action depth. Tools with no preview
               // entry keep the plain locked affordance.
               const previewId = previewIdForHref(item.href);
+              const lockedLabel = (
+                <span className="min-w-0">
+                  <span className="block">{navItemLabel(item)}</span>
+                  <span className="mt-0.5 block text-[11px] font-normal leading-snug text-t-bone-dim">
+                    {lockLine}
+                  </span>
+                </span>
+              );
               if (previewId) {
                 return (
                   <Link
                     key={item.href}
                     href={`/dashboard/preview/${previewId}`}
                     onClick={onItemClick}
-                    title={`${lockReason}. See a preview.`}
-                    className="t-focus flex min-h-[40px] items-center justify-between rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-sm font-medium text-[#9ca29b] transition-colors hover:bg-t-panel-2 hover:text-t-white"
+                    title={`${lockLine} See a preview.`}
+                    className="t-focus flex min-h-[40px] items-start justify-between gap-2 rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-sm font-medium text-[#6b726b] transition-colors hover:bg-t-panel-2 hover:text-t-white"
                   >
-                    <span>{navItemLabel(item)}</span>
-                    <LockKeyhole size={13} className="opacity-60" aria-hidden="true" />
+                    {lockedLabel}
+                    <LockKeyhole size={13} className="mt-1 flex-shrink-0 opacity-60" aria-hidden="true" />
                   </Link>
                 );
               }
               return (
                 <div
                   key={item.href}
-                  className="flex min-h-[40px] cursor-not-allowed select-none items-center justify-between rounded-[4px] px-3 py-2 text-sm text-[#9ca29b]"
-                  title={lockReason}
+                  className="flex min-h-[40px] cursor-not-allowed select-none items-start justify-between gap-2 rounded-[4px] px-3 py-2 text-sm text-[#6b726b]"
+                  title={lockLine}
                 >
-                  <span>{navItemLabel(item)}</span>
-                  <LockKeyhole size={13} className="opacity-60" aria-hidden="true" />
+                  {lockedLabel}
+                  <LockKeyhole size={13} className="mt-1 flex-shrink-0 opacity-60" aria-hidden="true" />
                 </div>
               );
             }
@@ -812,9 +929,12 @@ export function RefineryShell({
             {/* Left: hamburger (mobile) + logo */}
             <div className="flex items-center gap-3">
               <button
+                ref={navTrigger}
                 onClick={() => setDrawerOpen(true)}
                 className="t-focus -ml-2 flex h-11 w-11 items-center justify-center rounded-[4px] text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white md:hidden"
                 aria-label="Open navigation"
+                aria-expanded={drawerOpen}
+                aria-controls="refinery-mobile-navigation"
               >
                 <Menu size={21} aria-hidden="true" />
               </button>
@@ -844,19 +964,19 @@ export function RefineryShell({
                 <span className="hidden sm:inline">Settings</span>
               </Link>
               <button
-                onClick={() => {
-                  clearPersonalLocalStorage();
-                  signOut({ callbackUrl: "/login" });
-                }}
+                onClick={leaveAccount}
+                disabled={signingOut}
+                aria-label={signingOut ? "Signing out" : "Sign out"}
                 className="t-focus flex min-h-touch items-center gap-1.5 rounded-[4px] px-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
               >
                 <LogOut size={15} aria-hidden="true" />
-                <span className="hidden sm:inline">Sign out</span>
+                <span className="hidden sm:inline">{signingOut ? "Signing out..." : "Sign out"}</span>
               </button>
             </div>
           </div>
         </div>
       </nav>
+      {signOutError && !drawerOpen && <p role="alert" className="border-b border-t-red bg-t-panel px-4 py-3 text-sm text-t-red">{signOutError} <button type="button" onClick={leaveAccount} disabled={signingOut} className="t-focus min-h-touch underline">Try again</button></p>}
 
       {/* Body: sidebar + content */}
       <div className="flex min-h-[calc(100vh-72px)]">
@@ -937,12 +1057,16 @@ export function RefineryShell({
               viewing as someone else: the answer would be recorded for the admin. */}
           {!isOrgPartner && !effectiveRole?.impersonating && <JoinSharingPrompt />}
           {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
-          {children}
+          {/* Lanes first (Phase 5 R2): "Working toward ... Today ..." with Change. */}
+          {!isOrgPartner && <RefineryLaneHeader />}
+          {derivedReady ? children : null}
         </main>
       </div>
 
       {/* First-run orientation -- self-gating (client tier, DB-persisted) */}
-      <GuidedTour />
+      <Suspense fallback={null}>
+        <GuidedTour held={tourHeld} />
+      </Suspense>
 
       {/* Developer impersonation frame (blue view / red assist) */}
       <ImpersonationChrome />
@@ -957,6 +1081,14 @@ export function RefineryShell({
 
       {/* Mobile drawer panel */}
       <div
+        ref={navPanel}
+        id="refinery-mobile-navigation"
+        role="dialog"
+        aria-label="Career workspace navigation"
+        aria-modal={drawerOpen ? true : undefined}
+        aria-hidden={!drawerOpen}
+        inert={!drawerOpen}
+        tabIndex={-1}
         className={`fixed bottom-0 left-0 top-0 z-50 w-[min(19rem,88vw)] overflow-y-auto border-r border-t-line bg-t-panel shadow-xl transition-transform duration-200 md:hidden ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
         }`}
@@ -974,6 +1106,7 @@ export function RefineryShell({
         <div className="px-2 py-4 space-y-1">
           {isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : renderNavItems(() => setDrawerOpen(false))}
           <div className="mt-3 pt-3 border-t border-t-line space-y-1">
+            {signOutError && <p role="alert" className="px-3 text-sm text-t-red">{signOutError}</p>}
             <a
               href="https://forge.steelmanresumes.com"
               target="_blank"
@@ -983,13 +1116,11 @@ export function RefineryShell({
               The Forge <ExternalLink size={14} aria-hidden="true" />
             </a>
             <button
-              onClick={() => {
-                clearPersonalLocalStorage();
-                signOut({ callbackUrl: "/login" });
-              }}
+              onClick={leaveAccount}
+              disabled={signingOut}
               className="flex min-h-touch w-full items-center gap-1.5 rounded-[4px] px-3 py-2 text-left text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
             >
-              <LogOut size={14} aria-hidden="true" /> Sign out
+              <LogOut size={14} aria-hidden="true" /> {signingOut ? "Signing out..." : signOutError ? "Try sign-out again" : "Sign out"}
             </button>
           </div>
         </div>
@@ -997,22 +1128,27 @@ export function RefineryShell({
 
       {/* AI Assistant */}
       <AssistantDrawer>
-        <AssistantChat
-          context={{
-            currentPage: pathname === "/dashboard" ? "dashboard" : pathname.replace("/dashboard/", ""),
-            forgeComplete: onboarding.state !== "needs_profile",
-            readinessStage: userFullContext?.forge?.readinessStage ?? undefined,
-            skills: userFullContext?.forge?.skills?.map((s) => (typeof s === "string" ? s : (s as any).name)).filter(Boolean) ?? undefined,
-            barriers: userFullContext?.forge?.barriers ?? undefined,
-            hasCriminalRecord: userFullContext?.forge?.hasCriminalRecord ?? undefined,
-            userFullContext,
-          }}
-          // Org staff get t.ROY's caseload assistant (/api/assistant resolves
-          // their org server-side). The Refinery coach is a job-seeker's coach
-          // and answered a case manager as if they needed a resume.
-          coach={!isOrgPartner}
-          staff={isOrgPartner}
-        />
+        {effectiveRole === null ? (
+          <p role="status" className="p-5 text-sm text-t-bone-dim">Checking your account...</p>
+        ) : (
+          <AssistantChat
+            key={isOrgPartner ? "org-assistant" : "career-coach"}
+            context={{
+              currentPage: pathname === "/dashboard" ? "dashboard" : pathname.replace("/dashboard/", ""),
+              forgeComplete: onboarding.state !== "needs_profile",
+              readinessStage: userFullContext?.forge?.readinessStage ?? undefined,
+              skills: userFullContext?.forge?.skills?.map((s) => (typeof s === "string" ? s : (s as any).name)).filter(Boolean) ?? undefined,
+              barriers: userFullContext?.forge?.barriers ?? undefined,
+              hasCriminalRecord: userFullContext?.forge?.hasCriminalRecord ?? undefined,
+              userFullContext,
+            }}
+            // Org staff get t.ROY's caseload assistant (/api/assistant resolves
+            // their org server-side). The Refinery coach is a job-seeker's coach
+            // and answered a case manager as if they needed a resume.
+            coach={!isOrgPartner}
+            staff={isOrgPartner}
+          />
+        )}
       </AssistantDrawer>
 
       {/* Unlock toast */}

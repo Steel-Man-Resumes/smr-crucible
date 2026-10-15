@@ -8,6 +8,7 @@
  * Handles: state management, save/load, auto-save, Forge/Rush import.
  */
 
+import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -21,11 +22,17 @@ import { parseRushToResume } from "./resumeParsers";
 import { ResumeEditor } from "./ResumeEditor";
 import { PageFitCheck } from "./PageFitCheck";
 import { printResumePdf } from "./resumePrint";
+import { RECHECK_HREF, RECHECK_LINE, needsRecheck } from "@/lib/recheck-copy";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
 import { isSamePerson } from "@/lib/is-same-person";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
+import { useLanes } from "@/components/lanes/useLanes";
+import { LaneSwitcher } from "@/components/lanes/LaneSwitcher";
+import { LaneIntro } from "@/components/lanes/LaneIntro";
+import { laneFilterParam, laneIdForSave, MAIN_LANE_LABEL, FACTS_CARRY_COPY } from "@/lib/lanes";
+import { EDIT_RESUME_HREF } from "@/lib/refinery-guards";
 
 interface SavedResume {
   id: string;
@@ -33,6 +40,9 @@ interface SavedResume {
   scaffold_level: number;
   iteration_number: number;
   updated_at: string;
+  lane_id?: string | null;
+  is_current?: boolean;
+  is_locked?: boolean;
 }
 
 export function ResumeWorkspace() {
@@ -44,6 +54,20 @@ export function ResumeWorkspace() {
   const ownerUidRef = useRef(ownerUid);
   ownerUidRef.current = ownerUid;
 
+  // Career lanes (074): the Tailor works in one lane at a time. New work is
+  // saved into it; "Main" is work outside any named lane.
+  const lanes = useLanes();
+  const laneIdForNewWork = laneIdForSave(lanes.active);
+  const laneIdRef = useRef<string | null>(laneIdForNewWork);
+  laneIdRef.current = laneIdForNewWork;
+  // The person's base resume, across every lane: a new lane starts from it.
+  const [baseResume, setBaseResume] = useState<SavedResume | null>(null);
+  const [startingLane, setStartingLane] = useState(false);
+  // The editor's own lane picker: switching saves this resume, then opens the
+  // other lane's Tailor (a resume belongs to one lane; "Move to" in the
+  // Library moves it).
+  const [showLanePicker, setShowLanePicker] = useState(false);
+
   // Document state
   const [doc, setDoc] = useState<ResumeDocument>(createEmptyResume());
   const [showSetup, setShowSetup] = useState(true);
@@ -51,8 +75,23 @@ export function ResumeWorkspace() {
   // Persistence
   const [artifactId, setArtifactId] = useState<string | null>(null);
   const [savedResumes, setSavedResumes] = useState<SavedResume[]>([]);
+  const [savedLoaded, setSavedLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error" | "locked">("idle");
   const lastSaved = useRef<string>("");
+  // Phase 5 R1: every download and print goes through a saved revision. The
+  // last one prepared for this resume, so the page can say which version.
+  const [exportRev, setExportRev] = useState<{ id: string; number: number; status: "draft" | "finished"; recheck?: boolean } | null>(null);
+  const [exportError, setExportError] = useState("");
+  const artifactIdRef = useRef<string | null>(null);
+  // Review M3: the resume a Tailor output was made from (the approved base, or
+  // the Forge resume). Saved as its parent, so its version starts from the
+  // parent's settled answers: unchanged lines stay settled.
+  const tailorParentRef = useRef<string | null>(null);
+  useEffect(() => {
+    artifactIdRef.current = artifactId;
+    setExportRev(null);
+    setExportError("");
+  }, [artifactId]);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The artifact id whose content is currently loaded in the editor -- guards
   // the ?id= effect against re-fetch-and-clobber after a fork URL replace.
@@ -174,12 +213,30 @@ export function ResumeWorkspace() {
   }
 
   // --- Load saved resumes list ---
+  const laneParam = laneFilterParam(lanes.active);
   const loadSavedResumes = useCallback(() => {
-    fetch("/api/artifacts?type=resume&limit=20")
+    if (!lanes.loaded) return;
+    const lane = laneParam ? `&laneId=${encodeURIComponent(laneParam)}` : "";
+    fetch(`/api/artifacts?type=resume&limit=20&examples=hide${lane}`)
       .then((r) => (r.ok ? r.json() : { data: [] }))
       .then((d) => setSavedResumes(d.data || []))
+      .catch(() => {})
+      .finally(() => setSavedLoaded(true));
+    // The base resume, wherever it sits: the pinned current one, else the
+    // Forge's, else the newest approved baseline.
+    fetch("/api/artifacts?type=resume&limit=50&examples=hide")
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((d) => {
+        const all: SavedResume[] = d.data || [];
+        setBaseResume(
+          all.find((a) => a.is_current) ||
+            all.find((a) => (a.target_context as any)?.source === "forge") ||
+            all.find((a) => a.is_locked) ||
+            null
+        );
+      })
       .catch(() => {});
-  }, []);
+  }, [lanes.loaded, laneParam]);
 
   useEffect(() => {
     loadSavedResumes();
@@ -239,6 +296,7 @@ export function ResumeWorkspace() {
               const { data: fork } = await forkRes.json();
               loadedIdRef.current = fork.id;
               setArtifactId(fork.id);
+              lanes.setActive(fork.lane_id || "main");
               const content = fork.content;
               if (content.formatVersion === 2 || content.formatVersion === 3) {
                 setDoc(upgradeToV3(content));
@@ -261,6 +319,8 @@ export function ResumeWorkspace() {
 
         loadedIdRef.current = data.data.id;
         setArtifactId(data.data.id);
+        // The lane shown is the lane this resume is in.
+        lanes.setActive(data.data.lane_id || "main");
         const content = data.data.content;
         if (content.formatVersion === 2 || content.formatVersion === 3) {
           setDoc(upgradeToV3(content));
@@ -271,7 +331,8 @@ export function ResumeWorkspace() {
         setShowSetup(false);
       })
       .catch(() => {});
-  }, [searchParams, router]);
+    // lanes.setActive is stable per account; the lane list is not a reason to reload the document.
+  }, [searchParams, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Recover the linked application when a tailored resume is opened directly
   // (?id=, or from "Your saved work") so the Apply CTA (R8) can appear even
@@ -339,6 +400,16 @@ export function ResumeWorkspace() {
     } catch {}
     return [];
   }
+
+  const startTargetLoaded = useRef(false);
+  useEffect(() => {
+    if (searchParams.get("from") !== "start" || !ownerUid || startTargetLoaded.current) return;
+    const run = readOwnForgeSession(ownerUid);
+    if (!run) return;
+    setJobDescription(run.laneJobPosting || "");
+    setDoc((d) => ({ ...d, meta: { ...d.meta, targetJob: run.laneTarget || "" } }));
+    startTargetLoaded.current = true;
+  }, [searchParams, ownerUid]);
 
   // --- Import from Rush (via sessionStorage) ---
   useEffect(() => {
@@ -491,7 +562,7 @@ export function ResumeWorkspace() {
         // computers, common for this population).
         if (!baseDocContact) {
           try {
-            const artRes = await fetch("/api/artifacts?type=resume&limit=20");
+            const artRes = await fetch("/api/artifacts?type=resume&limit=20&examples=hide");
             if (artRes.ok) {
               const { data } = await artRes.json();
               const base = (data || []).find(
@@ -543,7 +614,7 @@ export function ResumeWorkspace() {
         // client never sends approved text.
         let approvedArtifactId: string | undefined;
         try {
-          const artRes = await fetch("/api/artifacts?type=resume&limit=50");
+          const artRes = await fetch("/api/artifacts?type=resume&limit=50&examples=hide");
           if (artRes.ok) {
             const { data } = await artRes.json();
             const resumes: any[] = data || [];
@@ -551,11 +622,15 @@ export function ResumeWorkspace() {
             try {
               activeId = localStorage.getItem("active_baseline_id");
             } catch {}
+            const laneNow = laneIdRef.current;
             const approvedBase =
+              (laneNow && resumes.find((a) => a.lane_id === laneNow && (a.is_locked || a.is_current))) ||
               (activeId && resumes.find((a) => a.id === activeId && (a.is_locked || a.is_current))) ||
               resumes.find((a) => a.is_current) ||
               null;
             if (approvedBase?.id) approvedArtifactId = approvedBase.id;
+            const forgeBase = resumes.find((a) => (a.target_context as any)?.source === "forge");
+            tailorParentRef.current = approvedBase?.id || forgeBase?.id || null;
           }
         } catch {}
 
@@ -577,6 +652,8 @@ export function ResumeWorkspace() {
             challenges,
             criminalRecord,
             ...(approvedArtifactId ? { approvedArtifactId } : {}),
+            // The lane's own length choice is read on the server from this id.
+            ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
           }),
         });
 
@@ -673,6 +750,7 @@ export function ResumeWorkspace() {
                 },
                 content: { text: coverLetter, targetJob: job.title, targetCompany: job.company },
                 scaffoldLevel: 1.0,
+                ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
               }),
             });
           } catch {}
@@ -717,7 +795,7 @@ export function ResumeWorkspace() {
           {
             title: app.job_title,
             company: app.company,
-            description: app.description,
+            description: app.jd_full_text || app.jd_excerpt || app.description,
             location: app.location,
             salary: app.salary,
             employment_type: app.employment_type,
@@ -736,12 +814,12 @@ export function ResumeWorkspace() {
 
   // --- Save ---
   const save = useCallback(
-    async (isAutoSave = false) => {
+    async (isAutoSave = false): Promise<string | null> => {
       const content = doc;
       const contentStr = JSON.stringify(content);
       if (contentStr === lastSaved.current) {
         if (!isAutoSave) setSaveStatus("saved");
-        return;
+        return artifactId;
       }
 
       setSaveStatus("saving");
@@ -755,14 +833,18 @@ export function ResumeWorkspace() {
           if (res.ok) {
             lastSaved.current = contentStr;
             setSaveStatus("saved");
+            return artifactId;
           } else if (res.status === 409) {
             // Locked baseline: the server refused the write (Phase 0.1).
             // Do NOT touch lastSaved -- a manual Save after the user unlocks
             // it elsewhere must still send the real write. Autosave is
             // suppressed separately while status is "locked".
             setSaveStatus("locked");
+            // The stored (locked) content stands; an export uses that.
+            return artifactId;
           } else {
             setSaveStatus("error");
+            return null;
           }
         } else {
           const res = await fetch("/api/artifacts", {
@@ -780,6 +862,8 @@ export function ResumeWorkspace() {
               },
               content,
               scaffoldLevel: 0.5,
+              ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
+              ...(tailorParentRef.current ? { parentArtifactId: tailorParentRef.current } : {}),
             }),
           });
           if (res.ok) {
@@ -793,12 +877,16 @@ export function ResumeWorkspace() {
             setSavedResumes((prev) => [data, ...prev]);
             // Signal the nav to re-check unlock state
             window.dispatchEvent(new Event("resume-saved"));
+            artifactIdRef.current = data.id;
+            return data.id as string;
           } else {
             setSaveStatus("error");
+            return null;
           }
         }
       } catch {
         setSaveStatus("error");
+        return null;
       }
     },
     [doc, artifactId, router, targetApplicationId, coverLetterText, disclosureBrief]
@@ -854,14 +942,46 @@ export function ResumeWorkspace() {
   }
 
   // --- Download DOCX ---
+  /**
+   * Phase 5 R1: save, then get the revision that IS this resume as stored
+   * (the server makes one from the stored content when needed, and decides
+   * draft or finished). Every download and print here uses its id.
+   */
+  async function exportRevision(): Promise<string | null> {
+    setExportError("");
+    const id = (await save(false)) ?? artifactIdRef.current ?? artifactId;
+    if (!id) {
+      setExportError("Save your resume first, then download it.");
+      return null;
+    }
+    try {
+      const res = await fetch("/api/revisions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "export", artifactId: id, ...(coverLetterText ? { letterText: coverLetterText } : {}) }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
+      setExportRev({ id: data.revision.id, number: data.revision.number, status: data.revision.status, recheck: needsRecheck(data.revision.openItems) });
+      return data.revision.id as string;
+    } catch {
+      setExportError("We couldn't save this version to your account, so the file is marked DRAFT.");
+      return null;
+    }
+  }
+
   async function downloadDocx(type: "resume" | "cover_letter", content: string) {
     try {
+      const revisionId = await exportRevision();
       const res = await fetch("/api/forge/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Pass naming inputs so the download is a real slug
-        // (First-Last--Company--Role.docx), Phase 2.6.
+        // (First-Last--Company--Role.docx), Phase 2.6. The server takes the
+        // text and the DRAFT decision from the revision; without one the
+        // text sent is marked DRAFT.
         body: JSON.stringify({
+          ...(revisionId ? { revisionId } : {}),
           content,
           type,
           format: "docx",
@@ -921,6 +1041,44 @@ export function ResumeWorkspace() {
       },
       {}
     );
+  }
+
+  // --- Start a lane's first resume from the base resume (no facts re-asked) ---
+  const [laneStartError, setLaneStartError] = useState<string | null>(null);
+  async function startLaneFromBase() {
+    const lane = lanes.activeLane;
+    if (!lane || !baseResume || startingLane) return;
+    setStartingLane(true);
+    setLaneStartError(null);
+    try {
+      const res = await fetch(`/api/artifacts/${baseResume.id}/fork`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reason: "lane-start",
+          operationKey: `lane-start:${lane.id}`,
+          laneId: lane.id,
+          targetContext: { targetJob: lane.target_role || lane.name, source: "lane" },
+        }),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const { data: fork } = await res.json();
+      // Same facts; only the aim changes. The copy's target line names this lane's job.
+      const content = fork?.content;
+      if (lane.target_role && content && typeof content === "object" && content.meta) {
+        await fetch(`/api/artifacts/${fork.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: { ...content, meta: { ...content.meta, targetJob: lane.target_role } } }),
+        }).catch(() => {});
+      }
+      setSavedResumes((prev) => [fork, ...prev]);
+      loadResume(fork.id);
+    } catch {
+      setLaneStartError("That didn't work. Try again in a moment.");
+    } finally {
+      setStartingLane(false);
+    }
   }
 
   // --- Start fresh ---
@@ -1005,6 +1163,29 @@ export function ResumeWorkspace() {
         <h1 className="text-2xl font-bold text-t-white mb-2">
           Application Tailor
         </h1>
+        {/* Career lanes (074): which lane this tool is working in. */}
+        <div className="mb-4 space-y-3">
+          <LaneSwitcher lanes={lanes} value={lanes.active} onChange={(c) => lanes.setActive(c)} />
+          <LaneIntro lanes={lanes} tool="tailor" laneId={laneIdForNewWork} />
+          {lanes.activeLane && savedLoaded && savedResumes.length === 0 && baseResume && (
+            <div data-testid="lane-empty" className="border border-t-amber bg-t-panel p-4 space-y-2">
+              <p className="text-sm font-semibold text-t-white">
+                No resume in your {lanes.activeLane.name} lane yet.
+              </p>
+              <p className="text-xs text-t-phos-dim">{FACTS_CARRY_COPY}</p>
+              <button
+                type="button"
+                data-testid="lane-start-from-base"
+                onClick={startLaneFromBase}
+                disabled={startingLane}
+                className="t-focus w-full sm:w-auto min-h-touch px-5 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50"
+              >
+                {startingLane ? "Starting..." : "Start it from my base resume"}
+              </button>
+              {laneStartError && <p className="text-xs text-t-red" role="alert">{laneStartError}</p>}
+            </div>
+          )}
+        </div>
         <p className="text-base text-t-phos-dim mb-2">
           Aim your base resume at a specific job. We use your Forge profile to
           tailor your resume, cover letter, and disclosure plan to the exact
@@ -1215,6 +1396,7 @@ export function ResumeWorkspace() {
         {(() => {
           const hasBaseResume =
             forgeAvailable ||
+            !!baseResume ||
             savedResumes.some(
               (r) =>
                 (r.target_context as any)?.source === "forge" ||
@@ -1240,7 +1422,7 @@ export function ResumeWorkspace() {
                         : "Uses your base resume. Paste the job description above for a sharper match. Only what's true about you, aimed at this posting."}
                   </p>
                   <a
-                    href="/resume"
+                    href={EDIT_RESUME_HREF}
                     className="t-focus block w-full text-center px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
                   >
                     Rebuild my base resume in the Forge
@@ -1249,7 +1431,7 @@ export function ResumeWorkspace() {
               ) : (
                 <>
                   <a
-                    href="/resume"
+                    href={EDIT_RESUME_HREF}
                     className="t-focus block w-full text-center px-6 py-4 bg-t-amber text-white text-base font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
                   >
                     Build your base resume in the Forge first
@@ -1283,6 +1465,19 @@ export function ResumeWorkspace() {
           {doc.meta.targetCompany && (
             <p className="text-xs text-t-phos-dim">at {doc.meta.targetCompany}</p>
           )}
+          <p className="text-xs text-t-phos-dim" data-testid="workspace-lane">
+            Lane: <span className="font-semibold text-t-phos">{lanes.activeLane?.name ?? MAIN_LANE_LABEL}</span>
+            {" "}
+            <button
+              type="button"
+              data-testid="workspace-switch-lane"
+              aria-expanded={showLanePicker}
+              onClick={() => setShowLanePicker((v) => !v)}
+              className="t-focus underline hover:text-t-white"
+            >
+              Switch lane
+            </button>
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {saveStatus === "error" && (
@@ -1290,7 +1485,7 @@ export function ResumeWorkspace() {
           )}
           {saveStatus === "locked" && (
             <span className="text-xs text-t-amber-bright">
-              Locked baseline. Edits are not saved. Unlock it in My Materials to change it.
+              Locked baseline. Edits are not saved. Unlock it in My resumes to change it.
             </span>
           )}
           <button
@@ -1301,6 +1496,21 @@ export function ResumeWorkspace() {
           </button>
         </div>
       </div>
+
+      {showLanePicker && (
+        <div className="mb-4">
+          <LaneSwitcher
+            lanes={lanes}
+            value={lanes.active}
+            onChange={async (c) => {
+              await save();
+              setShowLanePicker(false);
+              lanes.setActive(c);
+              startNewResume();
+            }}
+          />
+        </div>
+      )}
 
       {/* What the truth check found in this tailored version */}
       {truthCheck && (
@@ -1587,7 +1797,7 @@ export function ResumeWorkspace() {
                 Download .docx
               </button>
               <button
-                onClick={() => printResumePdf(doc)}
+                onClick={() => printResumePdf(doc, { prepare: exportRevision })}
                 className="t-focus px-4 py-3 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors min-h-touch text-sm"
               >
                 Save as PDF
@@ -1595,6 +1805,27 @@ export function ResumeWorkspace() {
               {/* Phase 2.5: page-fit estimate of the exact .docx the Download
                   button produces -- same content-derivation (formatResumeDownload). */}
               <PageFitCheck getContent={() => formatResumeDownload(doc)} />
+              {(exportRev || exportError) && (
+                <p className="w-full text-xs text-t-phos" role="status" data-testid="workspace-version">
+                  {exportError
+                    ? exportError
+                    : exportRev!.status === "finished"
+                      ? `Version ${exportRev!.number}, finished. Downloads use this exact version.`
+                      : exportRev!.recheck
+                        ? <>{RECHECK_LINE} <a href={RECHECK_HREF} className="underline underline-offset-2" data-testid="workspace-recheck">Check it again</a></>
+                        : "Draft: check it before you send it."}
+                </p>
+              )}
+              {/* Phase 5 R2: the way out of DRAFT for a Tailor result: the same cards, saved as a revision of this resume. */}
+              {artifactId && (
+                <CheckAndFinish
+                  key={`${artifactId}:${exportRev?.id ?? ""}`}
+                  artifactId={artifactId}
+                  status={exportRev ? exportRev.status : null}
+                  showBadge={!exportRev}
+                  className="w-full"
+                />
+              )}
             </>
           }
           actionsHint=".docx = editable in Word. PDF = keeps the formatting exactly. Save both."

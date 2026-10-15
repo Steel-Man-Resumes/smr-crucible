@@ -1,0 +1,466 @@
+/**
+ * Resume engine: one rulebook, the draft/finished status contract, and the
+ * defend-step line picker. Fixtures are fictional (fixtures-resume-engine.ts).
+ *
+ * Run: npm test  (node --import tsx --test, no extra deps)
+ */
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  RESUME_RULES,
+  RESUME_RULES_VERSION,
+  resumeRulesBlock,
+  rulesFor,
+  rulesForStd,
+} from "../resumeRules";
+import { runMintCheck, credentialLinesOf } from "../resumeMintCheckShared";
+import { checkCredentialUpgrade } from "../resumeMintCheckShared";
+import { getResumeStatus, pickDefendLines, questionForFinding, distanceFromSource, credentialQuestion, credentialMemoryPrompt, type DefendAnswer } from "../resumeStatus";
+import { computeFitPlan } from "../pageFit";
+import { THIN, NO_NUMBERS, HELPED_UNDER, CREDENTIAL_NO_STATUS, ONE_BLOCK, TWO_PAGE } from "./fixtures-resume-engine";
+
+/** Answer every defend line in the person's own words (a fixture stand-in for the defend step). */
+const answerAll = (resume: string, source: string, answer = "I did this myself on most shifts there, the owner can tell you about it."): DefendAnswer[] =>
+  pickDefendLines(resume, source).map((d) => ({ line: d.line, answer, verdict: "stands" as const }));
+
+// ---- rulebook --------------------------------------------------------------
+
+test("rulebook: versioned, ids unique, every block carries the version", () => {
+  assert.match(RESUME_RULES_VERSION, /^resume-rules\/\d{4}-\d{2}-\d{2}\.\d+$/);
+  const ids = RESUME_RULES.map((r) => r.id);
+  assert.equal(new Set(ids).size, ids.length);
+  for (const scope of ["truth", "page", "fix"] as const) {
+    const block = resumeRulesBlock(scope);
+    assert.ok(block.includes(RESUME_RULES_VERSION), scope);
+    for (const r of rulesFor(scope)) assert.ok(block.includes(r.text), r.id);
+  }
+});
+
+test("rulebook: shared or supervised work keeps its scope; no outright ban on helped", () => {
+  const truth = resumeRulesBlock("truth");
+  assert.match(truth, /"helped with X under the operator" stays/);
+  assert.match(truth, /Never make a shared task a sole one/);
+  assert.match(truth, /only when the person's words support that action/);
+  assert.doesNotMatch(truth, /never[^.\n]*"helped with"/i);
+  assert.doesNotMatch(truth, /never[^.\n]*"assisted in"/i);
+});
+
+test("rulebook: skills are one column, never three columns or a grid", () => {
+  const page = resumeRulesBlock("page");
+  assert.match(page, /one column/i);
+  assert.doesNotMatch(page, /3 columns|three columns|columns separated/i);
+  for (const r of RESUME_RULES) assert.doesNotMatch(r.text, /3 columns|in \w+ columns separated/i, r.id);
+});
+
+test("rulebook: keeps the existing truth rules", () => {
+  const truth = resumeRulesBlock("truth");
+  assert.match(truth, /Never invent a number/);
+  assert.match(truth, /never a dateless functional page/);
+  assert.match(truth, /never push for a number/);
+  assert.match(truth, /follows the request's own rule/);
+  assert.match(truth, /never called current, active, valid or renewable/);
+});
+
+test("rulebook: every checker rule id maps back to a rulebook rule", () => {
+  for (const std of ["STD-T01", "STD-T02", "STD-T03", "STD-T05", "STD-T07", "STD-F01", "STD-F02", "STD-F05", "STD-C07", "STD-A02"]) {
+    assert.ok(rulesForStd(std).length > 0, std);
+  }
+});
+
+test("mint check reports the rulebook version it graded against", () => {
+  const r = runMintCheck({ output: NO_NUMBERS.resume, source: NO_NUMBERS.source, kind: "resume" });
+  assert.equal(r.rulesVersion, RESUME_RULES_VERSION);
+});
+
+// ---- checker uses the same rules -------------------------------------------
+
+test("checker: a true helped-under-the-operator line passes; the sole-actor rewrite is flagged", () => {
+  const ok = runMintCheck({ output: HELPED_UNDER.faithful, source: HELPED_UNDER.source, kind: "resume" });
+  assert.ok(!ok.findings.some((f) => f.kind === "sole_actor"), JSON.stringify(ok.findings));
+  assert.match(HELPED_UNDER.faithful, /Helped with blowdown under the operator/);
+
+  const bad = runMintCheck({ output: HELPED_UNDER.soleActor, source: HELPED_UNDER.source, kind: "resume" });
+  const f = bad.findings.find((x) => x.kind === "sole_actor");
+  assert.ok(f, JSON.stringify(bad.findings));
+  assert.equal(f!.rule, "STD-T01");
+  assert.match(f!.line, /Performed boiler blowdown/);
+});
+
+test("checker: one-column skills lines are read term by term, labels and commas included", () => {
+  const src = "Drove a forklift and used an RF scanner.";
+  const out = `JO EXAMPLE
+
+CORE COMPETENCIES
+Equipment: Forklift, RF scanner
+Inventory forecasting`;
+  const r = runMintCheck({ output: out, source: src, kind: "resume" });
+  const terms = r.findings.filter((f) => f.kind === "grid_term" || f.kind === "grid_scope_term").map((f) => f.line);
+  assert.deepEqual(terms, ["Inventory forecasting"]);
+});
+
+// ---- status contract ---------------------------------------------------------
+
+test("status: one open BLOCK means draft, with a question that adds no fact", () => {
+  const s = getResumeStatus({ resumeText: ONE_BLOCK.resume, sourceText: ONE_BLOCK.source, defendAnswers: answerAll(ONE_BLOCK.resume, ONE_BLOCK.source) });
+  assert.equal(s.state, "draft");
+  const year = s.openItems.find((i) => i.rule === "STD-T05");
+  assert.ok(year, JSON.stringify(s.openItems));
+  assert.equal(year!.severity, "BLOCK");
+  assert.match(year!.question, /What years did you do this, as best you know\?/);
+  assert.doesNotMatch(year!.question, /\b(?:19|20)\d{2}\b/, "the question never suggests a year");
+  assert.equal(s.rulesVersion, RESUME_RULES_VERSION);
+});
+
+test("status: a clean, defended page with no numbers is finished", () => {
+  const s = getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source, defendAnswers: answerAll(NO_NUMBERS.resume, NO_NUMBERS.source) });
+  assert.deepEqual(s.openItems.filter((i) => i.severity === "BLOCK"), []);
+  assert.equal(s.state, "finished");
+});
+
+// The same page with two lines the writer reworded away from the person's words.
+const FAR = NO_NUMBERS.resume
+  .replace("Ran the grill on the breakfast line.", "Operated the breakfast grill station with precision.")
+  .replace("Asked by the owner to show new cooks the grill.", "Showed incoming culinary staff the equipment.");
+
+test("status: a page entirely in the person's own words asks nothing extra (round 2)", () => {
+  const s = getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source });
+  assert.equal(s.state, "finished", JSON.stringify(s.openItems));
+  assert.equal(s.allLinesInOwnWords, true);
+  assert.deepEqual(s.openItems.filter((i) => i.rule === "STD-C04"), []);
+});
+
+test("status: before the defend step, lines far from the person's words are draft with defend questions", () => {
+  const s = getResumeStatus({ resumeText: FAR, sourceText: NO_NUMBERS.source });
+  assert.equal(s.state, "draft");
+  const defend = s.openItems.filter((i) => i.rule === "STD-C04");
+  assert.equal(defend.length, 2);
+  for (const d of defend) assert.equal(d.question, "Tell me in one sentence how you'd describe this line.");
+  assert.equal(s.allLinesInOwnWords, false);
+});
+
+test("status: requireDefend false skips only the defend items", () => {
+  const s = getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: NO_NUMBERS.source, requireDefend: false });
+  assert.equal(s.state, "finished");
+});
+
+test("status: an answer marked cut or unsure keeps the line open", () => {
+  const answers = answerAll(FAR, NO_NUMBERS.source);
+  answers[0] = { ...answers[0], verdict: "cut" };
+  answers[1] = { ...answers[1], verdict: "unsure" };
+  const s = getResumeStatus({ resumeText: FAR, sourceText: NO_NUMBERS.source, defendAnswers: answers });
+  assert.equal(s.state, "draft");
+  const open = s.openItems.filter((i) => i.rule === "STD-C04").map((i) => i.line);
+  assert.deepEqual(open, [answers[0].line, answers[1].line]);
+  assert.equal(s.openItems.find((i) => i.line === answers[0].line)!.question, "OK to take this line off now?");
+});
+
+test("status: a number the model wrote stays a BLOCK even when the person's answer repeats it", () => {
+  const resume = NO_NUMBERS.resume.replace("Ran the grill on the breakfast line.", "Ran the grill for about 80 breakfasts a morning.");
+  const before = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source, defendAnswers: answerAll(resume, NO_NUMBERS.source) });
+  const added = before.openItems.find((i) => i.rule === "STD-T02");
+  assert.ok(added && added.severity === "BLOCK");
+  assert.doesNotMatch(added!.question, /\d/, "the question never shows a number");
+  assert.match(added!.question, /If you don't know a number, the line stays true without one/);
+
+  // Echoing the number back in the defend step does not source it (no anchoring path).
+  const echo = answerAll(resume, NO_NUMBERS.source).map((a) =>
+    /80/.test(a.line) ? { ...a, answer: "Yeah, about 80 breakfasts a morning." } : a
+  );
+  const after = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source, defendAnswers: echo });
+  assert.equal(after.state, "draft");
+  assert.ok(after.openItems.some((i) => i.rule === "STD-T02" && i.severity === "BLOCK"));
+
+  // Only the person's own words, given where no number was shown, source it.
+  const ownWords = `${NO_NUMBERS.source}\nOn a busy morning I cooked about 80 breakfasts.`;
+  const sourced = getResumeStatus({ resumeText: resume, sourceText: ownWords, defendAnswers: answerAll(resume, ownWords) });
+  assert.equal(sourced.state, "finished", JSON.stringify(sourced.openItems));
+});
+
+test("status: an answer with no verdict, or 'I don't know', does not stand", () => {
+  const noVerdict = pickDefendLines(FAR, NO_NUMBERS.source).map((d) => ({ line: d.line, answer: "I don't know" }));
+  assert.equal(getResumeStatus({ resumeText: FAR, sourceText: NO_NUMBERS.source, defendAnswers: noVerdict }).state, "draft");
+  const dontKnow = answerAll(FAR, NO_NUMBERS.source, "I don't know");
+  assert.equal(getResumeStatus({ resumeText: FAR, sourceText: NO_NUMBERS.source, defendAnswers: dontKnow }).state, "draft");
+});
+
+test("status: an answer that contradicts its line keeps the BLOCK", () => {
+  const resume = `ALEX EXAMPLE
+Erie, PA
+
+PROFESSIONAL EXPERIENCE
+WAREHOUSE ASSOCIATE | Pinecrest Supply | 2019 - 2023
+- Loaded trailers at the dock.
+
+CERTIFICATIONS
+- Forklift Certified`;
+  const source = "Warehouse associate at Pinecrest Supply from 2019 to 2023. I loaded trailers at the dock. I took a forklift training class.";
+  const answers = answerAll(resume, source).map((a) =>
+    /Forklift Certified/.test(a.line) ? { ...a, answer: "It was just a training class, I never got certified." } : a
+  );
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, defendAnswers: answers });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => /Forklift Certified/.test(i.line) && i.severity === "BLOCK"), JSON.stringify(s.openItems));
+});
+
+test("status: a course written up as a certification is a BLOCK", () => {
+  const resume = `ALEX EXAMPLE
+Erie, PA
+
+PROFESSIONAL EXPERIENCE
+WAREHOUSE ASSOCIATE | Pinecrest Supply | 2019 - 2023
+- Loaded trailers at the dock.
+
+CERTIFICATIONS
+- Forklift Certified, 2019`;
+  const source = "Warehouse associate at Pinecrest Supply from 2019 to 2023. I loaded trailers at the dock. I took a forklift training class in 2019.";
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, defendAnswers: answerAll(resume, source) });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => i.rule === "STD-T03" && i.severity === "BLOCK" && /Forklift Certified/.test(i.line)), JSON.stringify(s.openItems));
+});
+
+test("status: an answer on one line never clears a finding on another line", () => {
+  const resume = `SAM EXAMPLE
+Erie, PA
+
+PROFESSIONAL EXPERIENCE
+WAREHOUSE ASSOCIATE | Pinecrest Supply | 2019 - 2023
+- Loaded trailers at the dock.
+- Counted stock for the monthly count.
+
+CORE COMPETENCIES
+Trailer loading, Inventory Control, Hazmat Handling`;
+  const source = "Warehouse associate at Pinecrest Supply from 2019 to 2023. I loaded trailers at the dock and counted stock for the monthly count.";
+  const answers = answerAll(resume, source, "I loaded trailers, did inventory control and hazmat handling.");
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, defendAnswers: answers });
+  const terms = s.openItems.filter((i) => i.rule === "STD-T01").map((i) => i.line);
+  assert.deepEqual(terms.sort(), ["Hazmat Handling", "Inventory Control"]);
+});
+
+test("status: a page with no dated entries at all is a BLOCK (skills-only page)", () => {
+  const resume = `JO EXAMPLE
+Erie, PA
+
+Warehouse worker
+
+CORE COMPETENCIES
+Forklift, Pallet jack, RF scanner
+
+EXPERIENCE HIGHLIGHTS
+- Loaded trailers at the dock.
+- Picked orders with an RF scanner.`;
+  const source = "I loaded trailers at the dock and picked orders with an RF scanner. I drove a forklift and a pallet jack.";
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, requireDefend: false });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => i.rule === "STD-F01" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
+});
+
+test("defend: a line with an unsourced number gets the describe-it question, never the number", () => {
+  const resume = NO_NUMBERS.resume.replace("Ran the grill on the breakfast line.", "Ran the grill for about 80 breakfasts a morning.");
+  const d = pickDefendLines(resume, NO_NUMBERS.source).find((x) => /80/.test(x.line));
+  assert.ok(d);
+  assert.doesNotMatch(d!.question, /\d|how you know this number/i);
+  assert.match(d!.question, /the line stays true without one/i);
+  const s = getResumeStatus({ resumeText: resume, sourceText: NO_NUMBERS.source });
+  for (const i of s.openItems.filter((x) => /80/.test(x.line))) assert.doesNotMatch(i.question, /\d|how you know this number/i);
+});
+
+test("defend: a city-only contact line is never a defend line", () => {
+  const lines = pickDefendLines(THIN.resume, THIN.source).map((d) => d.line);
+  assert.ok(!lines.includes("Dayton, OH"), JSON.stringify(lines));
+});
+
+test("checker: 'licenses' as an ordinary word is not a credential", () => {
+  const resume = `PAT EXAMPLE
+Erie, PA
+
+PROFESSIONAL EXPERIENCE
+DOOR STAFF | Lakeview Hall | 2019 - 2023
+- Checked customer IDs and licenses at the door.`;
+  const source = "Door staff at Lakeview Hall from 2019 to 2023. I checked customer IDs and licenses at the door.";
+  assert.deepEqual(credentialLinesOf(resume), []);
+  assert.ok(!pickDefendLines(resume, source).some((d) => d.reasons.includes("credential")));
+});
+
+test("checker: sole-actor flags shared work written alone, not neighbouring lines", () => {
+  const source = "Maintenance helper at Lakeside Apartments from 2018 to 2022. I helped with boiler blowdown under the operator. I tested boiler water by myself. I helped with customer returns.";
+  const page = (bullet: string) => `RILEY EXAMPLE
+
+PROFESSIONAL EXPERIENCE
+MAINTENANCE HELPER | Lakeside Apartments | 2018 - 2022
+- ${bullet}`;
+  const flags = (bullet: string) => runMintCheck({ output: page(bullet), source, kind: "resume" }).findings.filter((f) => f.kind === "sole_actor");
+  assert.deepEqual(flags("Tested boiler water every morning."), []);
+  assert.deepEqual(flags("Answered customer questions at the front."), []);
+  const hit = flags("Did the blowdown with a wrench.");
+  assert.equal(hit.length, 1);
+  assert.equal(hit[0].severity, "FIX");
+  assert.deepEqual(flags("Helped with boiler blowdown under the operator."), []);
+});
+
+test("status: a credential the person only drove past (no card, class or certification in their words) is a memory prompt (round 3)", () => {
+  const s = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: CREDENTIAL_NO_STATUS.source });
+  const cred = s.openItems.find((i) => i.rule === "STD-T03");
+  assert.ok(cred && cred.kind === "credential_unsaid", JSON.stringify(s.openItems));
+  assert.equal(cred!.severity, "BLOCK");
+});
+
+test("status (round 5): a credential the person named in free text is still a memory prompt, and no answer settles it", () => {
+  const source = `${CREDENTIAL_NO_STATUS.source}\nI have a forklift operator card from the warehouse.`;
+  const s = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: source });
+  const cred = s.openItems.find((i) => i.rule === "STD-T03");
+  assert.ok(cred && cred.kind === "credential_unsaid" && cred.severity === "BLOCK", JSON.stringify(s.openItems));
+  assert.equal(cred!.question, credentialMemoryPrompt("Forklift Operator"));
+  assert.doesNotMatch(cred!.question, /\b(?:19|20)\d{2}\b|current|expired/, "the prompt never supplies a status");
+  const answers = answerAll(CREDENTIAL_NO_STATUS.resume, source).map((a) =>
+    /Forklift Operator$/.test(a.line) ? { ...a, answer: "It was the warehouse's forklift training, passed in 2021, expired now." } : a
+  );
+  const after = getResumeStatus({ resumeText: CREDENTIAL_NO_STATUS.resume, sourceText: source, defendAnswers: answers });
+  assert.ok(after.openItems.some((i) => i.kind === "credential_unsaid"), JSON.stringify(after.openItems));
+});
+
+test("status: thin history with a dated class is not penalized for thinness", () => {
+  // Round 5: the class line is theirs only when it is exactly what they typed in the licenses-and-training answer.
+  const typed = "Forklift training, county job center (2023), passed the driving test";
+  // Round 6: a job title counts only as the person's own whole title (their job header).
+  const source = `${THIN.source}\nYard worker | Neighbors in Dayton | 2021 - 2024`;
+  // Round 7: the class line is theirs as a whole line of their own uploaded resume.
+  const s = getResumeStatus({ resumeText: THIN.resume, sourceText: source, defendAnswers: answerAll(THIN.resume, source), ownResumeText: `${source}\n${typed}` });
+  assert.equal(s.state, "finished", JSON.stringify(s.openItems));
+});
+
+test("status: no source or no resume is never finished", () => {
+  assert.equal(getResumeStatus({ resumeText: NO_NUMBERS.resume, sourceText: "" }).state, "draft");
+  assert.equal(getResumeStatus({ resumeText: "", sourceText: NO_NUMBERS.source }).state, "draft");
+});
+
+test("status: BLOCKs come before FIXes", () => {
+  const s = getResumeStatus({ resumeText: HELPED_UNDER.soleActor.replace("2018 - 2022", "2017 - 2022"), sourceText: HELPED_UNDER.source });
+  const sev = s.openItems.map((i) => i.severity);
+  assert.deepEqual(sev, [...sev].sort((a, b) => (a === b ? 0 : a === "BLOCK" ? -1 : 1)));
+});
+
+test("questions: every rule the checker raises gets a plain question with no digits", () => {
+  for (const rule of ["STD-T01", "STD-T02", "STD-T03", "STD-T05", "STD-T07", "STD-C05", "STD-C07", "STD-F01", "STD-F02", "STD-F05", "STD-F06", "STD-A02", "STD-C03"]) {
+    const q = questionForFinding({ rule, line: "Line", why: `"word" here` });
+    assert.match(q, /\?/, rule);
+    assert.doesNotMatch(q, /\d/, rule);
+  }
+});
+
+// ---- defend step -------------------------------------------------------------
+
+test("defend: every number and every credential, plus the two lines furthest from the person's words", () => {
+  const lines = pickDefendLines(TWO_PAGE.resume, TWO_PAGE.source);
+  const numberLines = TWO_PAGE.resume
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => /^- /.test(l) && /\d/.test(l) && !/OSHA/.test(l));
+  for (const l of numberLines) {
+    assert.ok(lines.some((d) => d.line === l && d.reasons.includes("number")), `missing number line: ${l}`);
+  }
+  // The person gave the card a type and a year ("my OSHA 10 card in 2017"): nothing to ask (round 2).
+  assert.ok(!lines.some((d) => /OSHA 10 card/.test(d.line)));
+  // The minimum fills only with lines that differ from the person's words.
+  const far = lines.filter((d) => d.reasons.includes("far_from_your_words"));
+  assert.ok(far.length >= 1 && far.length <= 2);
+  for (const d of far) assert.ok(distanceFromSource(d.line, TWO_PAGE.source) > 0, d.line);
+  // The summary is written by the tool, so its lines sit furthest from the person's words.
+  assert.ok(far.some((d) => /Delivery driver with warehouse/.test(d.line)), JSON.stringify(far));
+});
+
+test("defend: contact digits, years and skills terms are not defend lines", () => {
+  const lines = pickDefendLines(TWO_PAGE.resume, TWO_PAGE.source).map((d) => d.line);
+  assert.ok(!lines.some((l) => /@example\.com/.test(l)));
+  assert.ok(!lines.some((l) => /^[A-Z ]+ \| /.test(l)), "job headers are not asked about");
+  assert.ok(!lines.some((l) => /^Box truck, RF scanner/.test(l)));
+});
+
+test("defend: a thin page in the person's own words, with a dated class they named, asks nothing (round 2)", () => {
+  assert.deepEqual(pickDefendLines(THIN.resume, THIN.source), []);
+  // Reword one line away from their words and that line is asked.
+  const r = THIN.resume.replace("Did yard work and snow shoveling for neighbors.", "Delivered comprehensive grounds maintenance services.");
+  assert.ok(pickDefendLines(r, THIN.source).some((d) => /grounds maintenance/.test(d.line) && d.reasons.includes("far_from_your_words")));
+});
+
+test("two-page fixture really runs to two pages and stays finished once defended", () => {
+  const plan = computeFitPlan(TWO_PAGE.resume, {});
+  assert.equal(plan.result.pageCount, 2);
+  const s = getResumeStatus({ resumeText: TWO_PAGE.resume, sourceText: TWO_PAGE.source, defendAnswers: answerAll(TWO_PAGE.resume, TWO_PAGE.source), credentialRows: [{ name: "OSHA 10", kind: "card", when: "2017" }], ownResumeText: "GED, Columbus Adult Learning Center | 2005" });
+  assert.deepEqual(s.openItems.filter((i) => i.severity === "BLOCK"), []);
+  assert.equal(s.state, "finished");
+});
+
+test("checker: helping a customer is not shared work", () => {
+  const src = "Cashier at Corner Market from 2016 to 2019. I helped customers find items and ran the register.";
+  const out = `DANA EXAMPLE
+
+PROFESSIONAL EXPERIENCE
+CASHIER | Corner Market | 2016 - 2019
+- Ran the register and showed customers where to find items.`;
+  const r = runMintCheck({ output: out, source: src, kind: "resume" });
+  assert.ok(!r.findings.some((f) => f.kind === "sole_actor"), JSON.stringify(r.findings));
+});
+
+test("STD-F01: a skills-only page with no bullets and no dates is never finished", () => {
+  const resume = `Jane Doe
+Milwaukee, WI | 555-555-0100
+
+SKILLS
+Forklift, Pallet jack, RF scanner
+Injection molding, Quality checks`;
+  const source = "I drove a forklift and a pallet jack, used an RF scanner, ran injection molding and did quality checks.";
+  const s = getResumeStatus({ resumeText: resume, sourceText: source, requireDefend: false });
+  assert.equal(s.state, "draft");
+  assert.ok(s.openItems.some((i) => i.rule === "STD-F01" && i.severity === "BLOCK"), JSON.stringify(s.openItems));
+});
+
+test("pickDefendLines: a short headline under the name is never a defend line", () => {
+  const resume = "Sam Delgado\nLine Cook\nSpringfield, IL | sam@example.com\n\nEXPERIENCE\nLine Cook | Riverside Diner | 2019 - 2023\n- Ran the grill on weekend rushes";
+  const lines = pickDefendLines(resume, "I ran the grill at Riverside Diner.").map((d) => d.line);
+  assert.ok(!lines.includes("Line Cook"), JSON.stringify(lines));
+  const claim = "Sam Delgado\n10 years in busy kitchens\n\nEXPERIENCE\nLine Cook | Riverside Diner | 2019 - 2023\n- Ran the grill";
+  assert.ok(pickDefendLines(claim, "I ran the grill.").some((d) => d.line === "10 years in busy kitchens"));
+});
+
+test("STD-T03 upgrade: a long summary line is judged by its named credential, not its first word", () => {
+  const page = "Sam Delgado\n\nSUMMARY\nWarehouse associate who loads trailers, keeps the dock clean and is certified to run the forklift.";
+  const src = "Warehouse class at the community center. I have my forklift certification.";
+  assert.deepEqual(checkCredentialUpgrade(page, src), []);
+  // A named credential in a long line is still checked.
+  const page2 = "Sam Delgado\n\nSUMMARY\nWarehouse associate who loads trailers, keeps the dock clean and holds OSHA 10 certification.";
+  const src2 = "I took an OSHA 10 class at the community center.";
+  assert.equal(checkCredentialUpgrade(page2, src2).length, 1);
+});
+
+// ---- Troy's decisions 2026-10-07 --------------------------------------------
+
+test("D8: two pages when the true history fills them, one when it doesn't, never filler, never more than two, the person can choose one", () => {
+  const truth = resumeRulesBlock("truth");
+  assert.match(truth, /Two pages when the person's true history fills them, one page when it doesn't/);
+  assert.match(truth, /Never add filler to reach a second page, and never more than two pages/);
+  assert.match(truth, /The person can choose one page/);
+  // The fit advice never asks for filler and caps at two.
+  const body = TWO_PAGE.resume.split("\n").slice(14).join("\n");
+  const long = computeFitPlan([TWO_PAGE.resume, body, body].join("\n"), {});
+  assert.ok(long.result.pageCount > 2, `pages ${long.result.pageCount}`);
+  assert.ok(long.ledger.some((e) => /never more than two pages/.test(e.message)));
+  for (const e of long.ledger) assert.doesNotMatch(e.message, /add real achievements|fill it/i);
+  const short = computeFitPlan(THIN.resume, {});
+  for (const e of short.ledger) assert.doesNotMatch(e.message, /add real achievements|fuller/i);
+});
+
+test("D9: the rules never offer years worked in place of dates", () => {
+  const all = RESUME_RULES.map((r) => r.text).join("\n");
+  assert.match(all, /never replace dates with how long a job lasted or a count of years worked/);
+  for (const sentence of all.split(/(?<=\.)\s+/)) {
+    if (/years worked|how long a job lasted/i.test(sentence)) assert.match(sentence, /\bnever\b/i, sentence);
+  }
+});
+
+test("D10: a hybrid fits only on M-26's two conditions; long stretches and strong skills are examples", () => {
+  const page = resumeRulesBlock("page");
+  assert.match(page, /fits only when both are true/);
+  assert.match(page, /work history is uneven/);
+  assert.match(page, /changing fields on the strength of their skills/);
+  assert.match(page, /examples of those two conditions, never extra conditions/);
+});

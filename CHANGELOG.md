@@ -2,6 +2,72 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## Unreleased: Accounts, current directory evidence and contextual assistance
+
+- Require an account for full Forge work while preserving public checks and the existing Mini Forge flow. Keep the selected lane, application and submitted document together through practice and follow-up.
+- Check source-grounded story claims before showing them as verified. Queue finished document packages durably, retain the exact revision across retries and keep failed delivery recoverable.
+- Share bounded, current employer and support publications across app tools, preserve sources and expiry, and save selected resources with owner access checks. Collect deduplicated coverage requests for review.
+- Give the assistant validated selected-work context, direct evidence tools, confirmed correction and resource actions, scoped staff drafts and owner operational reads. Keep phone chat within the page flow.
+- Account for complete AI operations, retries, verification and voice estimates. Distinguish missing prices and usage from zero cost; expose owner policy controls without seeding new allowances.
+
+## Unreleased: Forge and Refinery review repairs
+
+- Ask for the person's direction and missed work before Forge writing; lead the results with a source-grounded story. Let t.ROY propose line fixes with before/after review, while keeping AI wording outside the person's source facts.
+- Keep the actual job-listing provider on saved applications and their posting snapshots, including jobs saved through t.ROY. Record the contributing providers in the search decision log.
+- Preserve the active Neon Auth role's existing temporary database access when the resource directory migration removes that access from the app role; record the grant for rollback and check the role boundary before applying it.
+- Check suggested interview wording against the person's source before showing it. Preserve skills that their own work history explicitly supports when an automated list check misses them.
+- End interview practice with specific, validated feedback; keep answers available when feedback fails. Keep tailoring dates and source evidence intact, distinguish unavailable job providers from zero matches, and keep dashboard career cards readable on phones.
+- Recognize already supplied school credentials in plain sentences, keep ordinary letter contractions and employer placeholders out of factual-warning cards, and display resume text while fonts load.
+- Keep cover letters proportional to the supplied facts, check ordinary duty and character claims, and preserve supported customer-service duties without losing qualifiers.
+- Identify t.ROY as an AI career coach throughout the interface. Align urgent-task guidance and navigation with available tools; remove unsupported outcome and therapeutic claims.
+- Show saved-work loading failures with a retry. Keep closed mobile navigation out of keyboard focus, retry sign-out once when the session remains, and clear personal browser work only after confirmation.
+- Require completed truth checks before marking documents finished. Check factual claims inside polite letter sentences, keep rewording tied to the correct job, and reassess older saved versions before export or attachment.
+- Recover partial saves without losing the corrected version, and protect newer editor changes from delayed writes.
+- Open interview practice without a resume prerequisite. Carry a pasted posting into Tailor, retain unfinished quick-build fields, and remember the selected document in each lane.
+- Show checked resume changes while remaining document checks finish. Keep failed generation and sign-out attempts retryable, and improve keyboard focus and mobile success screens.
+
+## 2026-10 One finished resume, everywhere (saved revisions)
+
+- A finished resume is now saved on the server as a revision: the resume and letter text, the
+  person's confirmations (skills they kept, credentials they confirmed in their own words, their
+  answers about each line, title and scope answers), the checker version, and a status the server
+  works out itself. Owner only under row-level security (read, add, delete; never edited), in
+  export and delete-my-data. Migration 081.
+- Draft or finished is decided on the server, never by the page: the same finish gate with all of
+  the evidence, the cover letter included, plus the real page count from the renderer. An ordinary
+  resume over two pages (or over the person's one-page choice) stays a draft, and the person picks
+  which lines to cut; nothing comes off by itself. CVs, artist and performer resumes keep their own
+  length rules.
+- Every download, print, the letter, the package email and quick-apply now take a revision. Text
+  sent without one is always marked DRAFT. Drafts can still be downloaded, marked. Quick-apply
+  attaches a finished revision, or a draft only when the person chooses it, and records which.
+- Signed in, the finish page saves each change and says "Saved to your account" only after the
+  server answers, with Try again when it does not. A new browser opens the same saved version.
+- The automatic email sends the saved revision as attached PDF and Word files, once per version, and
+  says on the page when it did not send and why.
+
+## 2026-10 Record check (a separate, consented step)
+
+- A new Refinery step helps a person work out which official sources to check for a job or license
+  they want, using their record in their own words, the state and the job. It gives a checklist of
+  where to look and questions to ask the board, never a ruling, and says it is not legal advice.
+- The AI only picks items, by id, from a dated source list and a fixed question bank in the repo.
+  Every line the person sees is written by us, apart from the job and any link the person typed
+  themselves; the AI's own words are never shown or stored. If it
+  picks nothing usable, or takes longer than 20 seconds, the person gets a fixed plain checklist.
+- It has its own yes: a ticked box, stored with the time and wording version, that can be taken back.
+  Taking it back deletes every saved checklist in the same database transaction. Staff working in
+  someone's account cannot say yes, and every write must come from the app's own pages.
+- Only those three typed fields are sent, to Anthropic only (no fallback provider). A saved checklist
+  keeps the state, the picked items and the date. The job and the record are kept only if the person
+  also ticks "Keep what I typed". Saved checklists are encrypted in the app, owner only under
+  row-level security (the app role can read, add and delete, never edit), capped at 50 per person,
+  included in export and delete-my-data, and never shareable with a program. The decision log gets
+  counts only; partner usage for this step is counted without the person's id.
+- Links come only from the dated source list (Montana, Wisconsin, Michigan, Missouri, Ohio and
+  federal), each labeled "verify before relying"; unverified entries are never shown.
+  Migration 080.
+
 ## 2026-10 Employer directory: Tier 3 working agreements
 
 - An employer that works with Steel Man to get people hired can now be recorded as Tier 3: a working

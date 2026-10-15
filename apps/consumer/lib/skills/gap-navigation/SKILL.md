@@ -8,8 +8,8 @@
 
 ## On Paper (structural moves only)
 
-- **Years, not months.** "2019 - 2021" instead of "March 2019 - January 2021." This is standard professional formatting, available to everyone, and it quietly absorbs most gaps. Never stretch a date to cover time that wasn't worked. That is a lie and fails the truth gate.
-- **Order by relevance when chronology hurts.** A skills-forward (functional or hybrid) layout leads with capability clusters and lists employment compactly below. Use it when the timeline is the weakest thing about an otherwise strong history, but know that recruiters read pure-functional resumes as concealment; hybrid beats functional.
+- Preserve every date exactly as the person supplied it. 8/2021 stays 8/2021. Do not remove months, change the format or stretch a period to cover a gap. Ask for a missing date; never suggest one.
+- Use a familiar dated work history. A hybrid, with skills plus dated history, fits when both conditions apply: uneven work history and a skill-driven change of field. Do not offer a dateless functional page or a years-worked format.
 - **Fill with what was true.** Training, certifications, education, volunteer work, caregiving framed as the work it was, program participation (translated, per the inside-experience doctrine). Real activity belongs on the resume; emptiness needs no caption.
 - **Never** "gap due to personal circumstances," "time away," "sabbatical" (unless it was one), or any phrase that points at the hole while claiming to cover it.
 
@@ -21,7 +21,7 @@ The gap question gets a three-beat answer, rehearsed until it sounds unrehearsed
 2. **What the time built** (one sentence, true): "During that time I completed my OSHA 10 and worked a structured kitchen operation."
 3. **Pivot to now** (one sentence, forward): "I'm back at full capacity and that's why I'm here. This role is exactly the work I do best."
 
-Coach the delivery: steady tone, no apology posture, no over-explaining. The interviewer takes their cue from the candidate's own comfort. A composed twenty seconds ends the topic; a nervous two minutes becomes the interview.
+Practice a brief, accurate answer and follow-up questions. The right level of detail depends on the question and the person's situation. Do not promise that a particular delivery will end the topic.
 
 ## Calibration
 
@@ -29,6 +29,9 @@ Coach the delivery: steady tone, no apology posture, no over-explaining. The int
 - Long or repeated gaps: structural moves on paper + the rehearsed three-beat + disclosure-plan coordination if the cause is the record (the disclosure skill owns that conversation; keep the stories consistent with each other).
 - Currently in a gap: today's move is the strongest one: training, volunteering, the Forge itself ("rebuilding my materials and targeting the right role" is a true and respectable answer to "what are you doing now?").
 
-## The Frame Underneath
+## Keep the account true
 
-A gap is evidence that life happened, and the person in front of the employer came back. The doctrine word is anti-fragility: the return IS the credential. Coach users to stop seeing the hole and start seeing the comeback. Employers take their cue from that, too.
+Help the person describe what they actually did during the gap and what they are
+doing now. Use their facts and words. An employer's response is uncertain;
+practice helps the person explain clearly but cannot guarantee the decision.
+Examples above are patterns, never facts to assign to a person. Ask what applies.

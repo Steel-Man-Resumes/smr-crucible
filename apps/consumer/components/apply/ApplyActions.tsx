@@ -27,6 +27,9 @@
 
 import { useEffect, useState } from "react";
 import { classifyApplyUrl } from "@/lib/apply-destination";
+import Link from "next/link";
+import { usePremium } from "@/components/premium/PremiumGate";
+import { PREMIUM_TOOL_LABELS, toolIsOpen } from "@/lib/premium";
 
 interface ApplyActionsProps {
   applicationId: string;
@@ -108,6 +111,10 @@ export function ApplyActions({
     } catch {}
   }, [resumeArtifactId]);
   const resumeId = resumeArtifactId || baselineId;
+  // One-click apply is a premium tool (lib/premium.ts). Unknown status: show
+  // the button; the server checks every call.
+  const { status: premium } = usePremium();
+  const oneClickOpen = toolIsOpen(premium, "one_click_apply") !== false;
 
   const [checking, setChecking] = useState(false);
   const [fit, setFit] = useState<FitResult | null>(null);
@@ -115,6 +122,10 @@ export function ApplyActions({
   const [applyingAsIs, setApplyingAsIs] = useState(false);
   const [asIsDone, setAsIsDone] = useState(false);
   const [asIsErr, setAsIsErr] = useState<string | null>(null);
+  // Phase 5 R1: the server says which version attaches and whether it is a
+  // draft. A draft attaches only after the person chooses it, and says so.
+  const [asIsDraftAsk, setAsIsDraftAsk] = useState<string | null>(null);
+  const [asIsResult, setAsIsResult] = useState<{ number: number; status: "draft" | "finished" } | null>(null);
 
   // Apply-ladder rung selection with honesty: prefer the direct apply link, but
   // only when it is READABLE. An unreadable link never renders -- fall to the
@@ -201,7 +212,7 @@ export function ApplyActions({
     setChecking(false);
   }
 
-  async function applyAsIs() {
+  async function applyAsIs(acceptDraft = false) {
     if (!resumeId) return;
     setApplyingAsIs(true);
     setAsIsErr(null);
@@ -209,13 +220,25 @@ export function ApplyActions({
       const res = await fetch("/api/quick-apply", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ applicationId, artifactId: resumeId }),
+        body: JSON.stringify({ applicationId, artifactId: resumeId, ...(acceptDraft ? { acceptDraft: true } : {}) }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setAsIsDone(true);
+        setAsIsDraftAsk(null);
+        if (data?.revision) setAsIsResult({ number: data.revision.number, status: data.revision.status });
+      } else if (res.status === 409 && data.error === "draft") {
+        setAsIsDraftAsk(data.message || "This resume is still a draft.");
       } else {
-        setAsIsErr(data.error === "resume_not_found" ? "We could not find that resume." : "Could not attach your resume. Try again in a moment.");
+        // A locked or unavailable sponsored tool says why in plain words (lib/premium.ts).
+        const premiumWords = data.code === "premium_locked" || data.code === "premium_unavailable";
+        setAsIsErr(
+          data.error === "resume_not_found"
+            ? "We could not find that resume."
+            : premiumWords && typeof data.error === "string"
+              ? data.error
+              : "Could not attach your resume. Try again in a moment."
+        );
       }
     } catch {
       setAsIsErr("Could not attach your resume. Try again in a moment.");
@@ -334,10 +357,39 @@ export function ApplyActions({
             {checking ? "Checking fit..." : "Check fit"}
           </button>
           {asIsDone ? (
-            <span className="text-[11px] text-t-amber-bright">Your current resume is attached to this job.</span>
+            <span className="text-[11px] text-t-amber-bright" data-testid="quick-apply-done">
+              {asIsResult
+                ? asIsResult.status === "finished"
+                  ? `Your finished resume (version ${asIsResult.number}) is attached to this job.`
+                  : `Your draft resume (version ${asIsResult.number}) is attached to this job, marked as a draft.`
+                : "Your current resume is attached to this job."}
+            </span>
+          ) : asIsDraftAsk ? (
+            <span className="text-[11px] text-t-phos" data-testid="quick-apply-draft">
+              {asIsDraftAsk}{" "}
+              <button
+                onClick={() => applyAsIs(true)}
+                disabled={applyingAsIs}
+                className="t-focus underline underline-offset-2 hover:text-t-white disabled:opacity-50"
+              >
+                Attach it marked as a draft
+              </button>
+            </span>
+          ) : !oneClickOpen ? (
+            <span className="text-[11px] text-t-phos-dim" data-testid="one-click-locked">
+              {PREMIUM_TOOL_LABELS.one_click_apply} opens through your organization or SMR.{" "}
+              <Link href="/dashboard/settings#premium" className="underline underline-offset-2 hover:text-t-white">
+                How to get it
+              </Link>
+              {". "}You can still{" "}
+              <Link href={`/dashboard/application-tailor?job=${applicationId}`} className="underline underline-offset-2 hover:text-t-white">
+                tailor your resume for this job
+              </Link>
+              .
+            </span>
           ) : (
             <button
-              onClick={applyAsIs}
+              onClick={() => applyAsIs()}
               disabled={applyingAsIs}
               className="t-focus px-3 py-1.5 bg-t-panel-2 border border-t-line text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors disabled:opacity-50"
             >
@@ -385,9 +437,9 @@ export function ApplyActions({
           {/* One-click route to the recommended next step. */}
           <div className="flex items-center gap-2 flex-wrap mt-2">
             {fit.recommendation === "as_is" ? (
-              !asIsDone && (
+              !asIsDone && oneClickOpen && (
                 <button
-                  onClick={applyAsIs}
+                  onClick={() => applyAsIs()}
                   disabled={applyingAsIs}
                   className="t-focus px-3 py-1.5 bg-t-amber text-white text-xs font-bold hover:bg-t-amber-bright transition-colors disabled:opacity-50"
                 >

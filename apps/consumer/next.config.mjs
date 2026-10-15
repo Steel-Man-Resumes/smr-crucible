@@ -1,7 +1,9 @@
+import { releaseCheck, formatReleaseCheck } from "./lib/release-check.mjs";
+
 /**
  * The extraction worker (lib/extract-worker.ts) loads mammoth and pdf.js by
  * path at run time, so the tracer cannot see what they need. Ship mammoth with
- * its whole dependency tree, and pdf.js's package file, with the route that
+ * its whole dependency tree, and pdf.js's package file, with each route that
  * reads uploads. Keep in step with mammoth's dependencies (npm ls mammoth).
  */
 const MAMMOTH_TREE = [
@@ -40,13 +42,48 @@ const nextConfig = {
   outputFileTracingIncludes: {
     // Every route that reads skill doctrine off disk needs the files traced
     // into ITS own Lambda. Keep in sync with the callers of loadSkillsForContext.
-    "/api/assistant": ["./lib/skills/**/*"],
-    "/api/coach": ["./lib/skills/**/*"],
+    "/api/assistant": ["./lib/skills/**/*", "./public/fonts/resume/**/*"],
+    "/api/coach": ["./lib/skills/**/*", "./public/fonts/resume/**/*"],
     "/api/health/skills": ["./lib/skills/**/*"],
+    // The resume renderer reads its bundled fonts (Carlito, Caladea, public/fonts/resume)
+    // with fs. Nothing imports the .ttf files, so the tracer must be told to ship them
+    // with every function that renders a resume or measures its pages.
+    "/api/forge/download": ["./public/fonts/resume/**/*"],
+    // The support search reads the Census place list with fs to find the
+    // counties a typed town or ZIP sits in (lib/support-place-index.ts).
+    "/api/resources-search": ["./public/forge-data/us-places-2020.v1.json"],
+    "/api/resume/layout": ["./public/fonts/resume/**/*"],
+    // Phase 5 R1: saving a revision measures its pages (the status counts
+    // them), the Forge save stores one, and both package emails measure and
+    // attach the rendered files.
+    "/api/revisions": ["./public/fonts/resume/**/*"],
+    // Phase 5 R2: "Check and finish" measures pages the same way.
+    "/api/revisions/check": ["./public/fonts/resume/**/*"],
+    "/api/lane-first": ["./public/fonts/resume/**/*"],
+    "/api/forge/save": ["./public/fonts/resume/**/*"],
+    "/api/forge/email-package": ["./public/fonts/resume/**/*"], // measures pages (the finished check)
+    "/api/forge/email-package/auto": ["./public/fonts/resume/**/*"],
+    "/api/cron/voice-reconcile": ["./public/fonts/resume/**/*"],
+    "/api/assistant/correction": ["./public/fonts/resume/**/*"],
+    "/api/quick-apply": ["./public/fonts/resume/**/*"],
+    // Creative lanes: the artist resume and bio card use the same renderer.
+    "/api/creative/layout": ["./public/fonts/resume/**/*"],
+    "/api/creative/[laneId]/export": ["./public/fonts/resume/**/*"],
     // /api/parse uses dynamic OCR imports for photos/scanned PDFs. Keep the
     // worker/core files in the serverless function instead of relying on CDN
     // runtime downloads for executable assets. The pdfjs legacy build + its
     // worker .mjs are force-included so text extraction resolves the worker.
+    // The free checker reads files with the same extractors (OCR included).
+    "/api/check/extract": [
+      ...MAMMOTH_TREE,
+      "../../node_modules/tesseract.js/**/*",
+      "../../node_modules/tesseract.js-core/**/*",
+      "../../node_modules/regenerator-runtime/**/*",
+      "../../node_modules/is-url/**/*",
+      "../../node_modules/wasm-feature-detect/**/*",
+      "../../node_modules/bmp-js/**/*",
+      "../../node_modules/pdfjs-dist/legacy/build/**/*",
+    ],
     "/api/parse": [
       ...MAMMOTH_TREE,
       "../../node_modules/tesseract.js/**/*",
@@ -66,7 +103,9 @@ const nextConfig = {
         source: "/",
         has: [{ type: "host", value: "forge.steelmanresumes.com" }],
         destination: "/intro",
-        permanent: false,
+        // Permanent: Search Console read the temporary redirect as two pages
+        // (/ and /intro) and flagged a duplicate (2026-10-15).
+        permanent: true,
       },
       {
         source: "/",
@@ -143,4 +182,23 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+/**
+ * Every `next build` (preview and production alike) starts with the release
+ * check (lib/release-check.mjs): a release marked as requiring accounts
+ * (SMR_RELEASE_REQUIRES_ACCOUNTS=1) cannot build with the Forge sign-in wall
+ * switch anything but "on", and an unreadable switch value fails the build
+ * instead of quietly leaving something open. `next dev` skips it.
+ * Ship-day steps: docs/SHIP-DAY-GATES.md.
+ */
+export default function config(phase) {
+  if (phase === "phase-production-build") {
+    const result = releaseCheck(process.env);
+    const text = formatReleaseCheck(result);
+    if (!result.ok) {
+      console.error(text);
+      throw new Error("Release check failed: see [release-check] above.");
+    }
+    console.log(text);
+  }
+  return nextConfig;
+}

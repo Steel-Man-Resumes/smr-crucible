@@ -28,10 +28,14 @@
  * ---------------------------------------------------------------------------
  * ENTIRELY CLIENT SIDE, ON PURPOSE
  * ---------------------------------------------------------------------------
- * The decode happens in the browser. No server action, no cookie, no logging.
- * The code never leaves the device, which keeps the promise the consent screen
- * made inside the facility: their answers are theirs, and redeeming them does
- * not hand them to us on the way through.
+ * The decode happens in the browser. No server action, no cookie, no logging:
+ * the code itself never leaves the device.
+ *
+ * What happens AFTER the decode is said plainly on the page (security review
+ * 3a r1, L8): the answers fill in this computer's Forge run. When the person
+ * is signed in (the sign-in wall makes that the rule), the Forge saves the run
+ * to their account once a resume is added (components/forge/ForgeImport.tsx).
+ * Signed out, they stay on this computer. The page says which, by name.
  *
  * The codec is a byte-identical copy of scorm/src/carry-code.js, and there is
  * a test in the SCORM suite that fails the build if the two ever drift. A
@@ -42,6 +46,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForgeSession } from "@/lib/forge-context";
+import { useSession } from "next-auth/react";
+import { sessionPending } from "@/lib/session-policy";
 import CarryCode from "@/lib/carry-code.js";
 
 type DecodeResult =
@@ -62,6 +68,10 @@ type DecodeResult =
 
 export default function CarryPage() {
   const router = useRouter();
+  const { data: authData, status: authStatus } = useSession();
+  const authUser = authData?.user as { email?: string | null; mfa?: unknown; claim?: unknown } | undefined;
+  const signedInEmail =
+    authStatus === "authenticated" && authUser && !sessionPending(authUser) ? authUser.email || "your account" : null;
   const { updateSession } = useForgeSession();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -158,9 +168,14 @@ export default function CarryPage() {
   return (
     <div className="mx-auto max-w-lg px-4 py-10">
       <h1 className="mb-2 text-2xl font-semibold text-t-white">Enter your code</h1>
-      <p className="mb-8 text-t-phos">
-        The one you wrote down before you left. It picks up everything you already
+      <p className="mb-3 text-t-phos">
+        The one you wrote down before you left. It fills in everything you already
         answered so you do not start over.
+      </p>
+      <p className="mb-8 text-sm text-t-phos-dim" data-testid="carry-where">
+        {signedInEmail
+          ? `Once you add your resume, your answers are saved to the account for ${signedInEmail}, so you can finish on any computer.`
+          : "Your answers stay on this computer. Sign in to save them to a free account."}
       </p>
 
       {error && (

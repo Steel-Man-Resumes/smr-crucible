@@ -39,6 +39,9 @@ import {
   parseResumeHeader,
   isSectionHeader,
   isCompetencyLine,
+  isDateText,
+  looksLikePlace,
+  splitResumeHeader,
   isJobTitleLine,
   isBulletLine,
   estimatePageFit,
@@ -177,6 +180,59 @@ test("classify: competency vs job-title disambiguation matches the route", () =>
   assert.ok(isJobTitleLine("Operations Manager | Global Freight, 2016 - Present"));
   // a contact line has an @ -> NOT a job title
   assert.equal(isJobTitleLine("555 | jordan@example.com | Milwaukee"), false);
+});
+
+test("classify: three- and four-part job headers are never skills lines", () => {
+  // The bug: three short parts counted as a skills list, so a job header with a
+  // short title, employer and place was drawn like a skills line.
+  assert.equal(isCompetencyLine("Shift Lead | Northgate Plastics | Milwaukee, WI"), false);
+  assert.equal(isCompetencyLine("Shift Lead | Northgate Plastics | 2019 - Present"), false);
+  assert.equal(isCompetencyLine("Line Cook | Coop Street | Milwaukee, Wisconsin"), false);
+  // The four-part format the Forge writes: TITLE | Company | City, State | Years
+  assert.equal(isCompetencyLine("Warehouse Associate | Acme Logistics | Milwaukee, WI | 2023 - Present"), false);
+  assert.equal(isCompetencyLine("Warehouse Associate | Acme Logistics | Milwaukee, WI | 2023 - 2024"), false);
+  assert.equal(classifyResumeLine("Shift Lead | Northgate Plastics | Milwaukee, WI"), "jobTitle");
+  // Real skills lines still count as skills.
+  assert.ok(isCompetencyLine("Safety | Lean | Scheduling"));
+  assert.ok(isCompetencyLine("Forklift | Pallet jack | Inventory counts | Safety checks"));
+  assert.ok(isCompetencyLine("Sales, Marketing | Lean, Six | Budgets | Hiring"));
+});
+
+test("date and place helpers", () => {
+  assert.ok(isDateText("2019 - 2021"));
+  assert.ok(isDateText("2019 - 2021; 2026 - Present"));
+  assert.ok(isDateText("Jan 2020 - Mar 2021"));
+  assert.ok(isDateText("2018 (four months)"));
+  assert.equal(isDateText("Milwaukee, WI"), false);
+  assert.equal(isDateText("Forklift 2019 certified"), false);
+  assert.ok(looksLikePlace("Milwaukee, WI"));
+  assert.ok(looksLikePlace("Joliet, Illinois"));
+  assert.equal(looksLikePlace("Safety, Lean"), false);
+});
+
+test("splitResumeHeader: header lines and body lines", () => {
+  const r = splitResumeHeader(SHORT_RESUME);
+  assert.equal(r.header.nameLine, "JORDAN RIVERS");
+  assert.equal(r.bodyLines[0], "PROFESSIONAL SUMMARY");
+  assert.equal(r.headerLines.length, 3);
+});
+
+test("splitResumeHeader: a header line the header does not draw goes to the body, never vanishes", () => {
+  const r = splitResumeHeader("JANE TESTER\nMilwaukee, WI\n(555) 010-0100\nCertified Welder\n\nSUMMARY\nHello.\n");
+  assert.equal(r.header.nameLine, "JANE TESTER");
+  const all = [r.header.nameLine, r.header.headlineLine, r.header.contactLine, r.header.publicNotesLine, ...r.bodyLines].join(" ");
+  assert.ok(all.includes("Certified Welder"), "fourth header line kept");
+  // Phase 6 (review M4, r2 M-C): the stacked city and phone are one contact line, never the headline or the
+  // body; "Certified Welder" is drawn once, as the headline.
+  assert.equal(r.header.contactLine, "Milwaukee, WI | (555) 010-0100");
+  assert.equal(r.header.headlineLine, "Certified Welder");
+  assert.equal(all.split("Certified Welder").length - 1, 1);
+  assert.equal(r.bodyLines.filter((l) => l === "(555) 010-0100" || l === "Milwaukee, WI").length, 0);
+  // a repeated line is not doubled or lost
+  const d = splitResumeHeader("A B\nWelder\nWelder\na@b.com\n\nSUMMARY\nHi.\n");
+  const words = [d.header.nameLine, d.header.headlineLine, d.header.contactLine, d.header.publicNotesLine, ...d.bodyLines].filter(Boolean);
+  assert.equal(words.filter((w) => w === "Welder").length, 2);
+  assert.equal(words.filter((w) => w === "a@b.com").length, 1);
 });
 
 test("classify: bullets detected by all three markers", () => {

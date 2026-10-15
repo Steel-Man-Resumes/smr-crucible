@@ -18,12 +18,14 @@
  * phase surfaces it. Exported handler is a minimal wire-up point.
  */
 
+import { resumeRulesBlock } from "@crucible/core/src/resumeRules";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
   getArtifact,
   forkArtifact,
   updateArtifact,
+  isCreativeType,
   snapshotApplicationDocument,
 } from "@crucible/core";
 import { withRateLimit } from "@/lib/withRateLimit";
@@ -108,6 +110,10 @@ async function handlePost(request: Request) {
     if (!source) {
       return NextResponse.json({ error: "source_not_found" }, { status: 404 });
     }
+    // Creative documents (statements, bios) are never forked or rewritten here.
+    if (isCreativeType(source.artifact_type)) {
+      return NextResponse.json({ error: "creative_doc", message: "Open this in Creative work to change it." }, { status: 409 });
+    }
 
     // (2) Fork it server-side into a company-named fork. Idempotent per
     // (source, application-or-company) so a repeat fine-tune reuses the fork.
@@ -124,7 +130,10 @@ async function handlePost(request: Request) {
         source: "job",
       },
     });
-    if (fork.status === "not_found") {
+    if (fork.status === "creative_doc") {
+      return NextResponse.json({ error: "creative_doc", message: "Open this in Creative work to change it." }, { status: 409 });
+    }
+    if (fork.status !== "forked") {
       return NextResponse.json({ error: "source_not_found" }, { status: 404 });
     }
     const forkId = fork.artifact.id;
@@ -150,7 +159,9 @@ async function handlePost(request: Request) {
 
     let edited = baseFields;
     if (!isMockEnabled()) {
-      const system = `You perform a LIGHT fine-tuning pass on an EXISTING, already-true resume for a specific target role. This is NOT a rewrite. Reorder, re-emphasize, and adjust the wording of the PROVIDED resume so the most relevant experience for this role reads first and strongest. ADD NOTHING that is not already present in the provided resume: never invent a skill, tool, number, certification, employer, title, or date. If a detail is not in the provided resume, it does not exist. Never mention incarceration, criminal records, justice involvement, parole, probation, or a facility name. Keep the same JSON shape. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.`;
+      const system = `You perform a LIGHT fine-tuning pass on an EXISTING, already-true resume for a specific target role. This is NOT a rewrite. Reorder, re-emphasize, and adjust the wording of the PROVIDED resume so the most relevant experience for this role reads first and strongest. ADD NOTHING that is not already present in the provided resume: never invent a skill, tool, number, certification, employer, title, or date. If a detail is not in the provided resume, it does not exist. Never mention incarceration, criminal records, justice involvement, parole, probation, or a facility name. Keep the same JSON shape. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. Return ONLY the JSON object.
+
+${resumeRulesBlock("truth")}`;
       const prompt = `Fine-tune this resume for the target role. Reorder and re-emphasize its OWN content only. Add nothing new.
 
 <job_posting>
@@ -267,6 +278,10 @@ Return this exact JSON structure (same content, re-emphasized, never expanded):
     }
     if (write.status === "not_found") {
       return NextResponse.json({ error: "fork_not_found" }, { status: 404 });
+    }
+    // Anything but a real write is a failure (never a 200 over content that did not save).
+    if (write.status !== "updated") {
+      return NextResponse.json({ error: write.status === "creative_doc" ? "creative_doc" : "write_failed" }, { status: 409 });
     }
 
     // (5) Link the fork to the application via a provenance snapshot -- this is

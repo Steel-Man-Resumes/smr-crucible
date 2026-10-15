@@ -81,12 +81,8 @@ export function googleSignInDecision(input: {
   return true;
 }
 
-/** Auth.js session cookie names (plain or __Secure-, possibly chunked .0, .1, ...). */
-const SESSION_COOKIE_RE = /^(__Secure-)?authjs\.session-token(\.\d+)?$/;
-
-export function isSessionCookieName(name: string): boolean {
-  return SESSION_COOKIE_RE.test(name);
-}
+/** Auth.js session cookie names; one rule, shared with the middleware. */
+export { isSessionCookieName } from "./session-policy";
 
 /** What the browser brought to a Google sign-in, as far as linking is concerned. */
 export type CurrentSessionRead =

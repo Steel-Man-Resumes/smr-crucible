@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ applications: rows });
   } catch (error) {
     console.error("Applications GET error:", error);
-    return NextResponse.json({ applications: [] });
+    return NextResponse.json({ error: "Could not load applications. Try again." }, { status: 503 });
   }
 }
 

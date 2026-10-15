@@ -7,10 +7,27 @@
  * to consumer_profile, marks session claimed, redirects to /dashboard.
  */
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { getTabletSessionByCode, markClaimed, TABLET_COOKIE } from "@/lib/tablet-session";
-import { query } from "@crucible/core";
+import {
+  getTabletSessionByCodeOnly,
+  markClaimed,
+  recordPinFailure,
+  tabletColumnsMissing,
+  TABLET_COOKIE,
+  verifyPin,
+} from "@/lib/tablet-session";
+import {
+  canonicalImportCode,
+  countPinTry,
+  ipFromHeaders,
+  MINI_FORGE_LOCK_AFTER,
+  MINI_FORGE_MESSAGES,
+  planStateBlock,
+  validPin,
+} from "@/lib/mini-forge-guard";
+import { auth } from "@/auth";
+import { incrementIpUsage, incrementUserUsage } from "@crucible/core";
 
 export default async function ImportPage(
   props: {
@@ -22,28 +39,35 @@ export default async function ImportPage(
 
   async function handleImport(formData: FormData) {
     "use server";
-    const code = (formData.get("import_code") as string)?.toUpperCase().trim();
-    const pin = formData.get("pin") as string;
+    const code = canonicalImportCode(formData.get("import_code"));
+    const pin = formData.get("pin");
+    if (!code) redirect("/mini-forge/import?error=invalid_code");
+    if (!validPin(pin)) redirect("/mini-forge/import?error=invalid_pin");
 
-    if (!code || code.length !== 6) {
-      redirect("/mini-forge/import?error=invalid_code");
-    }
-    if (!pin || pin.length !== 4) {
-      redirect("/mini-forge/import?error=invalid_pin");
-    }
+    // Every try counts, right or wrong, before anything is looked up (security
+    // review 3a Part 2 r1, L3): per code, per network, per account.
+    const session = await auth().catch(() => null);
+    const userId = (session?.user as { id?: string } | undefined)?.id ?? null;
+    const { allowed } = await countPinTry(
+      { bucket: incrementIpUsage, account: incrementUserUsage },
+      { plan: code, ip: ipFromHeaders(await headers()), userId }
+    );
+    if (!allowed) redirect("/mini-forge/import?error=too_many");
 
-    const tabletSession = await getTabletSessionByCode(code, pin);
-
-    if (!tabletSession) {
-      redirect("/mini-forge/import?error=not_found");
-    }
-
-    if (tabletSession.claimed_at) {
-      redirect("/mini-forge/import?error=already_claimed");
-    }
-
-    if (tabletSession.processing_status !== "ready" || !tabletSession.forge_output) {
-      redirect("/mini-forge/import?error=not_ready");
+    let tabletSession;
+    try {
+      tabletSession = await getTabletSessionByCodeOnly(code);
+      // The plan's own state first: the answer never depends on the PIN.
+      const block = planStateBlock(tabletSession, { needReady: true, me: userId });
+      if (block) redirect(`/mini-forge/import?error=${block}`);
+      if (!(await verifyPin(pin, tabletSession!.pin_hash))) {
+        await recordPinFailure(tabletSession!.id, MINI_FORGE_LOCK_AFTER);
+        // One message for "no such code" and "wrong PIN".
+        redirect("/mini-forge/import?error=not_found");
+      }
+    } catch (e) {
+      if (tabletColumnsMissing(e)) redirect("/mini-forge/import?error=unavailable");
+      throw e;
     }
 
     // Save forge_output to the session cookie so it can be used on account creation.
@@ -53,7 +77,7 @@ export default async function ImportPage(
     // chain, so import-complete would see no cookie and silently skip the
     // import. Lax is still only sent on top-level GET navigations.
     const cookieStore = await cookies();
-    cookieStore.set(TABLET_COOKIE, tabletSession.id, {
+    cookieStore.set(TABLET_COOKIE, tabletSession!.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -61,8 +85,9 @@ export default async function ImportPage(
       path: "/",
     });
 
-    // Mark as claimed
-    await markClaimed(tabletSession.id);
+    // Code and PIN entered. The plan is loaded into an account only at the
+    // confirm step, once (imported_at).
+    await markClaimed(tabletSession!.id);
 
     // Redirect to login. callbackUrl sends them to import-complete after auth
     // where forge_output is seeded into their Refinery profile.
@@ -73,11 +98,8 @@ export default async function ImportPage(
   }
 
   const errorMessages: Record<string, string> = {
-    invalid_code: "Enter a 6-letter code (like A7B3KM).",
+    ...MINI_FORGE_MESSAGES,
     invalid_pin: "Enter your 4-digit PIN.",
-    not_found: "We could not find that code. Check your spelling and PIN.",
-    already_claimed: "This code has already been used to create an account.",
-    not_ready: "Your career plan is still being prepared. Check back soon.",
   };
 
   return (

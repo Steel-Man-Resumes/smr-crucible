@@ -27,6 +27,7 @@
 import { query, queryAsUser, insertAsUser } from "./db";
 import { getUserProfile } from "./getUserProfile";
 import { countApplicationsSent } from "./applicationEvents";
+import { JOURNEY_JOB_TARGETED_RESUME_SQL } from "./refineryArtifact";
 
 /**
  * The full vocabulary of activity a client is allowed to log server-side.
@@ -156,17 +157,7 @@ export async function buildJourneySnapshot(userId: string): Promise<JourneySnaps
     // job-targeted resume artifact unlocks even without a surviving saved-job
     // link (source === "job", or a targetJob on a non-forge artifact). Without
     // this OR, users who unlocked under the old client rule would relock.
-    queryAsUser<{ id: string }>(userId, 
-      `SELECT id FROM refinery_artifact
-       WHERE user_id = $1 AND artifact_type = 'resume'
-         AND (
-           target_context->>'source' = 'job'
-           OR (COALESCE(target_context->>'targetJob', '') <> ''
-               AND COALESCE(target_context->>'source', '') <> 'forge')
-         )
-       LIMIT 1`,
-      [userId]
-    ),
+    queryAsUser<{ id: string }>(userId, JOURNEY_JOB_TARGETED_RESUME_SQL, [userId]),
   ]);
   const hasJobTargetedResume = jobTargetedRows.length > 0;
 

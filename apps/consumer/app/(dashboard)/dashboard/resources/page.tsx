@@ -1,7 +1,11 @@
 "use client";
 
 /**
- * Fair-Chance Lanes -- Refinery Tool 5
+ * Get support (formerly Job Paths) -- Refinery Tool 5
+ *
+ * Phase 5 lane R2: the nav calls this "Get support". It opens with local help
+ * from the checked directory (components/lanes/SupportSearch.tsx, #support),
+ * then the fair-chance job paths that were here before (#paths).
  *
  * Curated fair-chance job lanes plus live-search handoffs.
  * This page does not invent openings. It points users toward realistic
@@ -13,6 +17,7 @@ import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
+import { SupportSearch } from "@/components/lanes/SupportSearch";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { getCareerPaths, getSkillNames } from "@/lib/forge-output";
@@ -76,6 +81,14 @@ function SecondChanceBoardPage() {
     return () => window.removeEventListener("forge-synced", load);
   }, [ownerUid]);
 
+  // A return visit in another browser can use the account's location too.
+  useEffect(()=>{let live=true;if(!ownerUid)return;
+    fetch("/api/user/context",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(d=>{
+      if(!live||!d)return;const saved=[d.profile?.city,d.profile?.state].filter(Boolean).join(", ");
+      if(saved)setLocation(current=>current||saved);
+    }).catch(()=>{});return()=>{live=false;};
+  },[ownerUid]);
+
   useEffect(() => {
     try {
       const tracker = JSON.parse(
@@ -117,8 +130,17 @@ function SecondChanceBoardPage() {
     <div className="max-w-5xl space-y-8">
       <header className="max-w-3xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Job Paths
+          Get support
         </h1>
+        <p className="text-base text-t-phos-dim leading-relaxed">
+          Local help first. Below it, job paths that are realistic with a record.
+        </p>
+      </header>
+
+      <SupportSearch initialLocation={location} barriers={barriers} />
+
+      <header id="paths" className="max-w-3xl scroll-mt-24">
+        <h2 className="text-xl font-bold text-t-white mb-2">Job paths that are realistic with a record</h2>
         <GhostGuide message={getOpusMessage("resources")} pageId="resources" />
         <p className="text-base text-t-phos-dim leading-relaxed">
           Start with job lanes and employers more likely to evaluate people

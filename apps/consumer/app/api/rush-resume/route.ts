@@ -20,6 +20,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeUserId } from "@/lib/session-policy";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { JD_MAX, RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
@@ -33,6 +34,7 @@ import {
   verificationNoticeFor,
   type ResumeExperience,
 } from "@/lib/grounding-verify";
+import { RUSH_SYSTEM_PROMPT } from "@/lib/rush-prompt";
 
 export const maxDuration = 60;
 
@@ -43,29 +45,16 @@ interface RushInput {
   jobDescription?: string;
 }
 
-const SYSTEM_PROMPT = `You are a professional resume rewriter for Steel Man Resumes.
-
-You take a rough/weak resume and rewrite it for a specific target job.
-
-RULES:
-- ONLY use facts from the original resume. Never fabricate experience, employers, dates, or skills.
-- Rewrite bullets with strong action verbs. Use only numbers that appear in the original; never add or estimate one.
-- Write a new professional summary targeted to the specific job.
-- Extract and organize skills relevant to the target role.
-- 6th grade reading level. Short sentences. No buzzwords ("results-driven", "detail-oriented").
-- If the resume is thin, work with what's there. An honest 3-bullet resume beats a fabricated 10-bullet one.
-- Do NOT add, infer, or invent any incarceration, criminal-record, or justice-involvement framing that is not already in the person's own resume. Never introduce it, and never spin a neutral fact into a justice-involved one.
-- Keep only what the person themselves wrote. If their resume states where a skill, course, or certification was earned, including a correctional setting, keep it exactly as they framed it. Their story is theirs to tell: do not editorialize, expand, explain, dramatize, or add growth/redemption language they did not write.
-- For employment gaps, simply omit or skip that period. Do NOT explain or narrate gaps. A functional/skills-based format is fine.
-- Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence.
-- Output JSON only.`;
+// Rules come from the shared resume rulebook (truth rules) plus Rush's own.
+const SYSTEM_PROMPT = RUSH_SYSTEM_PROMPT;
 
 async function handlePost(request: Request) {
   try {
     // IP-rate-limited Forge flow -- anonymous use is intentional (no login wall
     // before value). Attribute to a user when a session happens to exist.
     const session = await auth();
-    const userId = session?.user?.id;
+    // Never credited to a session that still owes its two-step code.
+    const userId = forgeUserId(session);
 
     const input: RushInput = await request.json();
 
@@ -218,6 +207,6 @@ Return JSON:
 }
 
 export const POST = withRateLimit(handlePost, {
-  mode: "ip",
+  mode: "forge",
   endpoint: "rush-resume",
 });

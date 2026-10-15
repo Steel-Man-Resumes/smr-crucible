@@ -1,64 +1,50 @@
 "use client";
 
 /**
- * Intro Page — t.ROY Introduces Itself
+ * Intro page: the front door.
  *
- * Clean, confident, single-screen presentation. No chatbot monologue,
- * no line-by-line animation. t.ROY walks into the room and tells you
- * what's happening. Three genuinely different paths.
+ * One clear start for the person building a resume. A fictional before and
+ * after example shows why t.ROY asks for real details. The partner and
+ * observer pages remain directly reachable without crowding this entrance.
  *
  * Routes:
- * - Client → /welcome (full Forge flow)
- * - Partner → /partner (methodology showcase)
- * - Observer → /overview (evidence showcase)
+ * - Client   -> /start (resume-first Forge flow)
+ * - Partner  -> /partner (methodology showcase)
+ * - Observer -> /overview (evidence showcase)
+ *
+ * Every path that goes through handleSelect sets the audience that ForgeShell
+ * passes to t.ROY, and stores it for pre-auth t.ROY access.
+ *
+ * Sign-in (lib/forge-access.ts): once the wall is up, the one clear start goes
+ * through sign-in and comes back to /start. The free checker remains a link
+ * for anyone who wants to look before signing in.
  */
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
+import { TroyLivingIcon } from "@crucible/consumer-ui";
 import { useForgeSession } from "@/lib/forge-context";
-
-type Audience = "client" | "partner" | "observer";
-
-interface PathOption {
-  id: Audience;
-  label: string;
-  subtitle: string;
-  route: string;
-}
-
-const PATHS: PathOption[] = [
-  {
-    id: "client",
-    label: "I’m rebuilding my career",
-    subtitle: "Full Forge flow, built to finish in one sitting",
-    route: "/welcome",
-  },
-  {
-    id: "partner",
-    label: "I’m from a partner organization",
-    subtitle: "See how it works with your clients",
-    route: "/partner",
-  },
-  {
-    id: "observer",
-    label: "I’m here to learn about this tool",
-    subtitle: "See the evidence and methodology",
-    route: "/overview",
-  },
-];
+import { CLIENT_PATH, sessionForPath, type PathOption } from "@/lib/forge-front-door";
+import { useForgeWall } from "@/components/forge/useForgeWall";
 
 export default function IntroPage() {
   const router = useRouter();
-  const { updateSession, clearSession } = useForgeSession();
+  const { session, updateSession, clearSession } = useForgeSession();
+  const wall = useForgeWall();
 
   function handleSelect(path: PathOption) {
-    // Clear any previous session data — fresh start every time
-    clearSession();
-
-    updateSession({
-      audience: path.id,
-      pagesVisited: ["intro"],
-      isDemo: path.id !== "client",
-    });
+    // A real run already under way is kept for the job seeker's start: the
+    // welcome screen offers "Start over" (nothing in progress is lost on the
+    // way through sign-in). Every other choice starts fresh, as before.
+    const keepRun =
+      path.id === "client" && !session.isDemo && !!session.readinessStage && !!session.startedAt;
+    if (keepRun) {
+      updateSession({ audience: "client" });
+    } else {
+      clearSession();
+      updateSession(sessionForPath(path));
+    }
 
     // Persist audience for pre-auth t.ROY access
     try {
@@ -67,139 +53,90 @@ export default function IntroPage() {
       // localStorage may be unavailable
     }
 
+    // Past the wall, the Forge screens send a signed-out visitor to sign-in
+    // and back. A full page load lets the server do that redirect cleanly.
+    if (wall === "up" && path.id === "client") {
+      window.location.assign(path.route);
+      return;
+    }
     router.push(path.route);
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-8 font-body">
-      <div className="w-full max-w-md">
-        {/* t.ROY icon */}
-        <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 bg-t-panel-2 border border-t-line flex items-center justify-center">
-            <svg
-              width="32"
-              height="32"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-              className="text-t-amber"
-            >
-              <path
-                d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z"
-                stroke="currentColor"
-                strokeWidth="1.2"
-                fill="none"
-              />
-            </svg>
+    <div className="font-body">
+      <div className="mx-auto w-full max-w-xl px-5 pb-16 pt-10 sm:pt-16">
+        {/* Eyebrow */}
+        <p className="mb-5 font-term text-[11px] font-semibold uppercase tracking-[0.14em] text-t-amber-bright">
+          The Forge by Steel Man Resumes
+        </p>
+
+        {/* t.ROY, a few plain lines */}
+        <div className="mb-8 flex items-start gap-4">
+          <div className="mt-1 flex h-16 w-16 flex-none items-center justify-center">
+            <TroyLivingIcon size={56} />
+          </div>
+          <div className="min-w-0">
+            <h1 className="mb-3 text-3xl font-semibold leading-tight text-t-white sm:text-4xl">
+              I&apos;m t.ROY.
+            </h1>
+            <p className="text-lg leading-relaxed text-t-white">
+              I&apos;m an AI career coach. I can listen while you tell me what you did, help write a resume you can stand behind, and stay with you for job search and interview practice in The Refinery.
+            </p>
+            <p className="mt-3 min-h-[3rem] text-base leading-relaxed text-t-bone-dim" data-testid="intro-account-line">
+              {wall === "up"
+                ? "It's free. You sign in first, so your work is saved to your account."
+                : wall
+                  ? "It's free to start here. Sign in to keep your work with your account."
+                  : null}
+            </p>
           </div>
         </div>
 
-        {/* t.ROY introduction -- says plainly that this is AI, and good AI */}
-        <div className="text-center mb-6 space-y-3">
-          <h1 className="text-2xl font-bold text-t-white">I&apos;m t.ROY.</h1>
+        {/* The one clear start */}
+        <button
+          type="button"
+          onClick={() => handleSelect(CLIENT_PATH)}
+          className="t-focus group flex min-h-[64px] w-full items-center justify-between gap-3 rounded-[5px] border border-ws-amber bg-ws-amber px-6 py-4 text-left text-ws-bg shadow-[0_3px_0_rgba(0,0,0,0.35)] transition-colors hover:border-ws-amber-bright hover:bg-ws-amber-bright"
+        >
+          <span className="min-w-0">
+            <span className="block text-lg font-semibold">{CLIENT_PATH.label}</span>
+            <span className="mt-0.5 block text-sm">{CLIENT_PATH.subtitle}</span>
+          </span>
+          <ArrowRight
+            size={22}
+            aria-hidden="true"
+            className="flex-none transition-transform group-hover:translate-x-1"
+          />
+        </button>
 
-          <p className="text-base text-t-white leading-relaxed">
-            I&apos;m an AI. I&apos;m the best available, and I&apos;m aimed at one job: your career.
-            I find what you&apos;re good at, match it to jobs that fit, and
-            handle the record stuff so you don&apos;t have to figure it out
-            alone.
-          </p>
-          <p className="text-sm text-t-bone-dim leading-relaxed">
-            Real Troy designed every word I say. You can adjust how I work
-            later, in The Refinery.
-          </p>
-        </div>
+        {/* The free checker: no sign-in, for anyone who wants to look first */}
+        <p className="mt-4 text-sm leading-relaxed text-t-bone-dim">
+          Already have a resume?{" "}
+          <Link
+            href="/check"
+            className="t-focus font-medium text-t-white underline decoration-t-line-strong underline-offset-4 transition-colors hover:text-t-amber-bright"
+          >
+            Check it free
+          </Link>
+          . No sign-in, and we don&apos;t save it.
+        </p>
 
-        {/* "Who are you?" -- the three paths, front and center */}
-        <p className="font-semibold text-t-white mb-4 text-lg">Who are you?</p>
-
-        <div className="flex flex-col gap-3 mb-8">
-          {/* Client path with Rush Mode escape valve */}
-          <div>
-            <button
-              onClick={() => handleSelect(PATHS[0])}
-              className="t-focus group w-full flex items-center justify-between gap-3 text-left px-5 py-4 border border-t-amber bg-t-panel hover:bg-t-panel-2 transition-all min-h-touch"
-            >
-              <span className="min-w-0">
-                <span className="font-semibold text-t-white block">
-                  {PATHS[0].label}
-                </span>
-                <span className="text-sm text-t-bone-dim mt-0.5 block">
-                  {PATHS[0].subtitle}
-                </span>
-              </span>
-              <span
-                aria-hidden="true"
-                className="text-t-amber-bright text-lg flex-shrink-0 transition-transform group-hover:translate-x-1"
-              >
-                &rarr;
-              </span>
-            </button>
-            <button
-              onClick={() => router.push("/rush")}
-              className="t-focus mt-1.5 ml-5 text-xs text-t-bone-dim hover:text-t-amber-bright transition-colors"
-            >
-              Need to apply somewhere today?{" "}
-              <span className="underline underline-offset-2">Rush Mode</span>{" "}
-              <span className="text-t-red">(not recommended)</span>
-            </button>
+        <section className="mt-8 border border-t-line bg-t-panel p-5" aria-labelledby="intro-example-title">
+          <p className="font-term text-xs font-bold uppercase tracking-[0.15em] text-t-amber-bright">See the work · fictional example</p>
+          <h2 id="intro-example-title" className="mt-2 text-xl font-bold text-t-white">A rough line gives us a question.</h2>
+          <div className="mt-4 space-y-3 text-sm">
+            <p className="border-l-2 border-t-line pl-3 text-t-phos-dim"><span className="block text-xs font-bold uppercase text-t-phos">The old line</span>Did safety audits.</p>
+            <p className="border-l-2 border-t-amber pl-3 text-t-white"><span className="block text-xs font-bold uppercase text-t-amber-bright">t.ROY asks</span>What did you check?</p>
+            <p className="border-l-2 border-[#4f6b57] pl-3 text-t-white"><span className="block text-xs font-bold uppercase text-[#4f6b57]">The person answers</span>I checked exit routes every shift.</p>
+            <p className="border border-t-line bg-t-bg px-4 py-3 font-semibold text-t-white"><span className="mb-1 block text-xs font-bold uppercase text-t-amber-bright">The stronger line</span>Checked exit routes each shift.</p>
           </div>
+          <p className="mt-4 text-xs text-t-phos-dim">The detail comes from the person. t.ROY does the writing; you check the facts.</p>
+        </section>
 
-          {PATHS.slice(1).map((path) => (
-            <button
-              key={path.id}
-              onClick={() => handleSelect(path)}
-              className="t-focus group w-full flex items-center justify-between gap-3 text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim hover:bg-t-panel-2 transition-all min-h-touch"
-            >
-              <span className="min-w-0">
-                <span className="font-medium text-t-white block">
-                  {path.label}
-                </span>
-                <span className="text-sm text-t-bone-dim mt-0.5 block">
-                  {path.subtitle}
-                </span>
-              </span>
-              <span
-                aria-hidden="true"
-                className="text-t-phos-dim text-lg flex-shrink-0 transition-transform group-hover:translate-x-1"
-              >
-                &rarr;
-              </span>
-            </button>
-          ))}
-        </div>
+        <p className="mt-4 text-sm leading-relaxed text-t-bone-dim">
+          The chat button on every page is me. If you get stuck, ask.
+        </p>
 
-        {/* Here's the deal */}
-        <div className="bg-t-panel px-4 py-4 mb-6 border border-t-line">
-          <p className="text-sm font-semibold text-t-white mb-2">Here&apos;s what happens:</p>
-          <ol className="text-sm text-t-bone-dim space-y-1.5 list-decimal list-inside leading-relaxed">
-            <li>You give me your resume (or we build one together)</li>
-            <li>I ask a few questions about what you want and what&apos;s in your way</li>
-            <li>You get: a resume, cover letter, career paths, and resources for your situation</li>
-            <li>Free. Nothing stored unless you say so.</li>
-          </ol>
-        </div>
-
-        {/* Do the work warning */}
-        <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
-          <p className="text-sm text-t-bone-dim leading-relaxed">
-            <span className="font-semibold text-t-amber-bright">Fair warning:</span> shortcuts are
-            dangerous. A rushed resume gets you in the door, but you&apos;ll
-            fall apart in the interview if you haven&apos;t done the work. The
-            Forge does the work. I&apos;ll help you through every step.
-          </p>
-        </div>
-
-        {/* t.ROY callout — use it */}
-        <div className="bg-t-panel-2 px-5 py-4 border border-t-amber">
-          <p className="text-sm font-bold text-t-white mb-1">One more thing.</p>
-          <p className="text-sm leading-relaxed text-t-bone-dim">
-            You&apos;ll see a chat button on every page. That&apos;s me. Real
-            Troy designed every word I say, and I&apos;m here to actually help.
-            I&apos;m not selling you anything. If you get stuck, confused, or
-            just want to talk it through, use it. That&apos;s what it&apos;s for.
-          </p>
-        </div>
       </div>
     </div>
   );

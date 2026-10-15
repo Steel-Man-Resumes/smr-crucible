@@ -38,12 +38,28 @@ export const FORGE_IP_LIMITS: Record<string, number> = {
   // shared IPs (reentry-program labs, libraries) share it -- raise it further
   // for those contexts if users report being cut off.
   "forge-resume-assist": 100,
+  // One finish run can have several cards and a few variations per card.
+  "forge-suggest-fix": 100,
   // Deterministic docx build (no AI cost) -- generous cap, bounded so the
   // public route can't be used as a free compute endpoint.
   "forge-download": 100,
+  // Page count and on-screen page from the layout model (pure compute, no AI).
+  // The page asks once per change of text, so it needs a roomy cap.
+  "resume-layout": 400,
+  // The same, for the artist resume and bio pages of a creative lane.
+  "creative-layout": 400,
   // "Email me my package" sends mail from SMR's domain to a typed address.
   // A person needs one or two sends; the route also caps per recipient.
   "email-package": 5,
+  // The second check (a different model family reads the page against the
+  // person's words). A paid call; one or two runs per resume. Off unless
+  // SECOND_CHECK_ENABLED, and also held by a daily dollar cap.
+  "second-check": 5,
+  // The free checker's file upload: text extraction (and OCR for a scan or a
+  // photo), no AI call, nothing stored. OCR is CPU heavy, so it is bounded.
+  "check-extract": 30,
+  // The public "get listed" form for organizations (stores a request).
+  "org-listing": 5,
 };
 
 export interface RateLimitResult {
@@ -126,6 +142,19 @@ export async function incrementUserUsage(
     [userId, endpoint]
   );
   return row?.call_count ?? 1;
+}
+
+/**
+ * Give back one call counted for a user today (never below zero). For a call
+ * the account allowed but a shared limit (a network, an organization's seat
+ * pool) refused: the person's own allowance is not spent on it.
+ */
+export async function refundUserUsage(userId: string, endpoint: string): Promise<void> {
+  await query(
+    `UPDATE ai_usage SET call_count = GREATEST(call_count - 1, 0), updated_at = now()
+      WHERE user_id = $1 AND endpoint = $2 AND usage_date = CURRENT_DATE`,
+    [userId, endpoint]
+  );
 }
 
 /**
@@ -342,14 +371,20 @@ export async function getOrgMemberDailyLimit(userId: string): Promise<number | n
  * ("headshot_generate") IS a real AI call and is deliberately NOT excluded, so it
  * DOES count toward the displayed AI usage.
  */
-export async function getUserDailyUsage(userId: string): Promise<number> {
-  const row = await getOne<{ total: string }>(
-    `SELECT COALESCE(SUM(call_count), 0) as total
+/**
+ * Counters in ai_usage that are not AI calls, left out of the displayed usage:
+ * the photo upload ceiling and the text practice allowance counters (Phase 5
+ * review L2: one practice session is one AI call, not two).
+ */
+export const NON_AI_USAGE_ENDPOINTS = ["headshot_upload", "interview-text-session", "interview-text-turn"] as const;
+
+export const DAILY_USAGE_SQL = `SELECT COALESCE(SUM(call_count), 0) as total
      FROM ai_usage
      WHERE user_id = $1 AND usage_date = CURRENT_DATE
        AND endpoint NOT LIKE 'vault_%'
-       AND endpoint <> 'headshot_upload'`,
-    [userId]
-  );
+       AND endpoint NOT IN (${NON_AI_USAGE_ENDPOINTS.map((e) => `'${e}'`).join(", ")})`;
+
+export async function getUserDailyUsage(userId: string): Promise<number> {
+  const row = await getOne<{ total: string }>(DAILY_USAGE_SQL, [userId]);
   return parseInt(row?.total ?? "0", 10);
 }

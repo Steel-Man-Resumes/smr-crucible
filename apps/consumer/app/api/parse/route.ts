@@ -9,10 +9,12 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { forgeUserId } from "@/lib/session-policy";
 import { extractTextFromBuffer } from "@/lib/text-extraction";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "@/lib/limits";
+import { summaryInSource } from "@/lib/summary-source";
 import { coverageForProfile } from "@/components/resume/resumeParsers";
 
 export const maxDuration = 60;
@@ -30,7 +32,8 @@ async function handlePost(request: Request) {
     // IP-rate-limited pre-auth Forge flow -- anonymous use is intentional (no
     // login wall before value). Attribute to a user when a session happens to exist.
     const session = await auth();
-    const userId = session?.user?.id;
+    // Never credited to a session that still owes its two-step code.
+    const userId = forgeUserId(session);
 
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
@@ -131,6 +134,10 @@ async function handlePost(request: Request) {
       }
     }
 
+    // The summary must be the person's own words: keep it only if it is really in
+    // the uploaded text (whitespace and case ignored), otherwise drop it.
+    if (!summaryInSource(parsedProfile.summary, cleanedText)) parsedProfile.summary = null;
+
     // Lossless-intake signal (Phase 2.2): measure how much of the original
     // cleaned source the structured parse actually accounts for, and surface the
     // lines it missed so the client can show a review tray instead of silently
@@ -204,7 +211,8 @@ Return a JSON object with:
   "education": [{ "institution": string, "credential": string, "field": string, "year": string }],
   "certifications": string[],
   "military": { "branch": string, "rank": string, "years": string } or null,
-  "skills_mentioned": string[]
+  "skills_mentioned": string[],
+  "summary": string or null
 }
 
 RULES (this feeds a real resume, so a dropped or altered field is a failure):
@@ -214,7 +222,8 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
 4. EDUCATION is ONLY real schools, training programs, degrees, GEDs, or credentials. NEVER create an education entry from a section header ("ADDITIONAL", "SKILLS", "SUMMARY"), a narrative sentence, or a date fragment. If a line is not clearly a school/program/credential, leave it out.
 5. Capture ALL skills, tools, and certifications mentioned. Do not omit them.
 6. NEVER carry any mention of incarceration, prison, jail, parole, probation, "release", "reentry", or justice involvement into ANY field. Omit such phrases entirely; never turn them into an education entry, title, or bullet.
-7. Parse only what exists. Use null for missing fields. Do not infer or fabricate.`,
+7. SUMMARY: if the resume has its own summary, profile or objective paragraph, copy it word for word into "summary". If it has none, use null. NEVER write or rewrite one.
+8. Parse only what exists. Use null for missing fields. Do not infer or fabricate.`,
         },
         {
           role: "user",
@@ -230,10 +239,12 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
     return null;
   });
 
-  if (!response) return { raw_text: text };
+  const failedUsage = () => recordTokenUsage("openai", "gpt-4o-mini", { inputTokens: 0, outputTokens: 0 }, { userId, endpoint: "parse", usageMissing: true, outcome: "failed" });
+  if (!response) { await failedUsage(); return { raw_text: text }; }
 
   if (!response.ok) {
     console.error("OpenAI parse failed:", response.status);
+    await failedUsage();
     return { raw_text: text };
   }
 
@@ -242,15 +253,16 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
     console.error("OpenAI parse body failed:", err?.name || err);
     return null;
   });
-  if (!data) return { raw_text: text };
+  if (!data) { await failedUsage(); return { raw_text: text }; }
 
-  if (data.usage) {
-    recordTokenUsage(
+  {
+    await recordTokenUsage(
       "openai",
       data.model || "gpt-4o-mini",
       {
-        inputTokens: data.usage.prompt_tokens || 0,
-        outputTokens: data.usage.completion_tokens || 0,
+        inputTokens: (data.usage?.prompt_tokens ?? NaN) - (data.usage?.prompt_tokens_details?.cached_tokens ?? 0),
+        cacheReadInputTokens: data.usage?.prompt_tokens_details?.cached_tokens ?? 0,
+        outputTokens: data.usage?.completion_tokens ?? NaN,
       },
       { userId, endpoint: "parse" }
     );
@@ -263,4 +275,4 @@ RULES (this feeds a real resume, so a dropped or altered field is a failure):
   }
 }
 
-export const POST = withRateLimit(handlePost, { mode: "ip", endpoint: "parse" });
+export const POST = withRateLimit(handlePost, { mode: "forge", endpoint: "parse" });

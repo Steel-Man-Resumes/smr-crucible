@@ -67,7 +67,7 @@ const RULES: WinRule[] = [
       id: "start-forge",
       title: "Explore The Forge",
       description:
-        "We find your skills, match you to careers, and point you toward realistic next steps. Everything stays private.",
+        "We find your skills, match you to careers, and point you toward realistic next steps. No employer or program sees it unless you share it.",
       action: { type: "link", label: "Start The Forge", href: "/welcome" },
       category: "foundation",
     },
@@ -152,7 +152,7 @@ const RULES: WinRule[] = [
       id: "first-interview",
       title: "Run one practice interview",
       description:
-        "5 minutes. Private. You can redo it as many times as you want. The AI gives you real feedback on what to improve.",
+        "About 5 minutes. No program or employer sees your answers. The AI gives you real feedback on what to improve, and you can practice again.",
       action: {
         type: "link",
         label: "Start Practice Interview",
@@ -337,7 +337,7 @@ const RULES: WinRule[] = [
       id: "check-security",
       title: "Review your privacy settings",
       description:
-        "Your data is private and secure. Take a minute to see exactly how we protect your information.",
+        "See who can see your information, what the AI services see, and how we protect it.",
       action: {
         type: "link",
         label: "View Security & Privacy",

@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowRight, Check, Clipboard, KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { ProductBrand, SteelManBrand } from "@/components/brand/BrandMarks";
+import { WallText } from "@/components/forge/WallText";
 
 const SAMPLE_RESUME = `James "Jimmy" Wallace
 Milwaukee, WI | 414-555-0187 | jimmywallace82@email.com
@@ -190,7 +191,7 @@ function AccessPageInner() {
           <div className="mt-5 grid gap-5 lg:grid-cols-2">
             <article className="app-panel border-t-[4px] border-t-[#9b6d1d] p-6">
               <ProductBrand product="forge" />
-              <p className="mt-5 text-sm leading-relaxed text-t-bone-dim">The public starting point. It turns raw work history into a strengths-first narrative, practical career paths, barrier resources, and a resume starter. No account is required.</p>
+              <p className="mt-5 text-sm leading-relaxed text-t-bone-dim">The public starting point. It turns raw work history into a strengths-first narrative, practical career paths, barrier resources, and a resume starter. <WallText open="No account is required." up="It is free, with one free sign-in." /></p>
             </article>
             <article className="app-panel border-t-[4px] border-t-[#4f6b57] p-6">
               <ProductBrand product="refinery" />
