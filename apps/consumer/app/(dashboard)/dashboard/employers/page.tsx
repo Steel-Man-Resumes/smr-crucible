@@ -31,6 +31,7 @@ const PAGE_SIZE = 25;
 function EmployersList() {
   const searchParams = useSearchParams();
   const lanes = useLanes();
+  const [selectedEmployerId,setSelectedEmployerId]=useState(searchParams.get("employerId")||"");
   const [stateFilter,setStateFilter] = useState("");
   const [manualSearch,setManualSearch] = useState(false);
   const laneQ = (searchParams.get("q") || "").trim();
@@ -50,6 +51,7 @@ function EmployersList() {
 
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page) });
+    if (selectedEmployerId) params.set("employerId",selectedEmployerId);
     if (stateFilter) params.set("state",stateFilter);
     if (query) params.set("q", query);
     if (industry !== "all") params.set("industry", industry);
@@ -73,7 +75,7 @@ function EmployersList() {
     return () => {
       live = false;
     };
-  }, [query, industry, page, stateFilter]);
+  }, [query, industry, page, stateFilter, selectedEmployerId]);
 
   useEffect(()=>{setManualSearch(false);},[lanes.active]);
   useEffect(()=>{if(laneQ){setQuery(laneQ);setDraft(laneQ);setPage(0);return;}
@@ -84,12 +86,14 @@ function EmployersList() {
 
   function search(e: React.FormEvent) {
     e.preventDefault();
+    setSelectedEmployerId("");
     setManualSearch(true);
     setQuery(draft.trim());
     setPage(0);
   }
 
   function pickIndustry(ind: string) {
+    setSelectedEmployerId("");
     setManualSearch(true);
     setIndustry(ind);
     setPage(0);
@@ -144,7 +148,7 @@ function EmployersList() {
         </p>
       </div>
 
-      <div className="my-3 flex items-center gap-3"><label htmlFor="employer-state" className="text-sm text-t-phos">State</label><input id="employer-state" value={stateFilter} maxLength={2} placeholder="Any" onChange={e=>{setManualSearch(true);setStateFilter(e.target.value.toUpperCase().replace(/[^A-Z]/g,""));setPage(0);}} className="w-20 border border-t-line bg-t-bg px-2 py-2 text-t-white" /><span className="text-sm text-t-phos-dim">Your lane helps start the search. Change any filter.</span></div>
+      <div className="my-3 flex items-center gap-3"><label htmlFor="employer-state" className="text-sm text-t-phos">State</label><input id="employer-state" value={stateFilter} maxLength={2} placeholder="Any" onChange={e=>{setSelectedEmployerId("");setManualSearch(true);setStateFilter(e.target.value.toUpperCase().replace(/[^A-Z]/g,""));setPage(0);}} className="w-20 border border-t-line bg-t-bg px-2 py-2 text-t-white" /><span className="text-sm text-t-phos-dim">Your lane helps start the search. Change any filter.</span></div>
       <form onSubmit={search} className="mb-4 flex gap-2" role="search" data-testid="employer-search">
         <label htmlFor="employer-q" className="sr-only">Search employers</label>
         <input

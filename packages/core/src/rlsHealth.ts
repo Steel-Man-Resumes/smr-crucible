@@ -118,7 +118,17 @@ export async function getRlsHealth(): Promise<RlsHealth> {
     const f = flags.find((r) => r.relname === name);
     // Deliberately unscoped: the whole point is that this must see nothing.
     // (The table name is interpolated from the constant above, never from input.)
-    const [{ n }] = await query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM ${name}`);
+    let n: number;
+    if (name === 'directory_publication_alias') {
+      // Only the narrow definer function may resolve approved aliases. The
+      // application must not receive SELECT on the raw identity map at all.
+      const [privilege] = await query<{ allowed: boolean }>(
+        "SELECT has_table_privilege(current_user, $1, 'SELECT') AS allowed", [name]);
+      n = privilege?.allowed === false ? 0 : 1;
+      if (n) problems.push(`${name}: raw alias reads must be denied`);
+    } else {
+      [{ n }] = await query<{ n: number }>(`SELECT COUNT(*)::int AS n FROM ${name}`);
+    }
     tables[name] = { enabled: !!f?.relrowsecurity, forced: !!f?.relforcerowsecurity, unscopedReadIsEmpty: n === 0 };
     if (!f?.relrowsecurity) problems.push(`${name}: row-level security is not enabled`);
     else if (!f.relforcerowsecurity) problems.push(`${name}: not FORCED, so the table owner bypasses it`);

@@ -77,3 +77,9 @@ export function searchApprovedResourceChains(opts:{state?:string;q?:string}={}) 
  return query<PublishedResourceChainSummary>(`SELECT chain_key AS "chainKey",goal,state,min(verified_on)::text AS "checkedAt",min(expires_on)::text AS "expiresAt",count(*)::int AS "stepCount" FROM resource_chain_publication_v ${where.length?'WHERE '+where.join(' AND '):''} GROUP BY chain_key,goal,state HAVING count(*)<=50 ORDER BY state,goal,chain_key LIMIT 25`,params);
  });
 }
+/** Aggregate map standing only; no identities or bulk record export. */
+export function getDirectoryCoverageSummary(){
+ return publicationRead<{state:string;employers:number;topTier:number}[]>([],()=>query(`SELECT p.state,count(DISTINCT d.org_id)::int AS employers,coalesce(max(right(p.relationship_tier,1)::int),0)::int AS "topTier"
+ FROM employer_publication_v p JOIN directory_public_v d ON d.place_id=p.id
+ WHERE p.relationship_tier IS NOT NULL GROUP BY p.state ORDER BY p.state LIMIT 51`));
+}

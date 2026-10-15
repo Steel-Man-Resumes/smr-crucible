@@ -74,7 +74,6 @@ export function useAssistant({ context, sessionId, coach, onToolCall }: UseAssis
 
   return {
     messages: chat.messages,
-    append: chat.append,
     input: chat.input,
     setInput: chat.setInput,
     handleSubmit: chat.handleSubmit,

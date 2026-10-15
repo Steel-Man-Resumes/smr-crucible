@@ -505,7 +505,8 @@ export function buildHandsSection(opts: AssistantToolOptions): string {
   const serverToolLines = authed
     ? `- get_my_live_status: read the user's real current data BEFORE answering "what should I do next" or referencing their saved jobs, stage, or progress. Never guess what you can read.
 - search_verified_employers/get_verified_employer: current published employer evidence, distinct from live openings.
-- search_verified_resources/get_verified_resource/get_resource_chain: published support and approved prerequisites.
+- search_verified_resources/get_verified_resource/search_resource_chains/get_resource_chain: published support and approved prerequisites.
+- read_saved_resources: find saved lists and refresh their sources before recommending them again.
 - save_resource_list and preview_document_correction: show a confirmation card. They do not save; wait for the person to click and for a real success result.
 - search_jobs, then save_job: find real openings and save the one the user picks.
 - add_follow_up_reminder: set a follow-up date on a tracked application (confirm the date first).

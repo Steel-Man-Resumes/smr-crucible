@@ -98,6 +98,15 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     if (initialLocation) setLocation((l) => l || initialLocation);
   }, [initialLocation]);
 
+  // Public directory handoff keeps the canonical service through sign-in.
+  useEffect(()=>{const id=new URL(window.location.href).searchParams.get("resourceId");
+    if(!id||!/^[0-9a-f-]{36}$/i.test(id))return;let live=true;
+    fetch(`/api/directory/resources/${id}`,{cache:"no-store"}).then(async res=>{const body=await res.json();if(!live)return;
+      if(!res.ok||!body.data){setError(res.status===404?"That listing is no longer current. Search for current help.":"That listing could not be checked. Try again shortly.");return;}
+      const r=body.data;setAnswer(readSupportResponse({resources:[{id:`dir-${r.service_id}`,title:r.service_name||r.org_name,provider:r.org_name,description:r.description,eligibility:r.eligibility,phone:r.phone,address:r.address,hours:r.hours,website:r.website,sourceUrl:r.source_url,sourceLabel:"Steel Man's checked directory",checkedLine:`Last checked ${r.last_checked}.`}]}));
+    }).catch(()=>{if(live)setError("That listing could not be checked. Try searching again.");});return()=>{live=false;};
+  },[]);
+
   async function search() {
     setBusy(true);
     setError("");

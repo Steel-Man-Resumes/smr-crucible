@@ -44,6 +44,8 @@ const TOOL_ACTIVITY: Record<string, string> = {
   get_verified_employer: "Reading employer details",
   search_verified_resources: "Finding checked support",
   get_verified_resource: "Checking service details",
+  search_resource_chains: "Finding approved next steps",
+  read_saved_resources: "Refreshing your saved resources",
   get_resource_chain: "Checking next steps",
   save_resource_list: "Preparing your save preview",
   preview_document_correction: "Preparing a correction preview",
@@ -221,7 +223,7 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
     [router, pathname]
   );
 
-  const { messages, append, input, setInput, handleSubmit, isLoading, error } = useAssistant({
+  const { messages, input, setInput, handleSubmit, isLoading, error } = useAssistant({
     context,
     sessionId,
     coach,
@@ -655,13 +657,13 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
                     | { toolName?: string; state?: string; result?: Record<string, unknown> }
                     | undefined;
                   if (inv?.state === "result" && inv.result?.status === "needs_confirmation" && ["save_resources", "correct_document"].includes(String(inv.result.action))) {
-                    return <AssistantActionCard key={i} result={inv.result} onSaved={(message, revisionId) => {
+                    return <AssistantActionCard key={i} result={inv.result} onSaved={(revisionId) => {
                       if (revisionId) {
                         const url = new URL(window.location.href);
                         url.searchParams.set("revisionId", revisionId);
                         window.history.replaceState(null, "", url.pathname + url.search);
                       }
-                      void append({ role: "user", content: message });
+                      router.refresh();
                     }} />;
                   }
                   // A deferred move shows its button below instead of "Taking you there".
