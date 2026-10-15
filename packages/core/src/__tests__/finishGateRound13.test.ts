@@ -206,7 +206,8 @@ test("SF-7: on a combined card each claim needs its own group", () => {
   const line = "Trained new hires and supervised the night crew";
   const fams = ["train", "supervise"];
   const settle = (typed: string) => scopeAllNotTheirsAnswered(line, OWN, fams.map((family) => ({ line, answer: typed, kind: "scope_yes", family }) as DefendAnswer)).length === 0;
-  assert.ok(!settle("new hires"));
+  // 2026-10-15 (Troy, finish page decision 3): the typed who settles the claim it answers.
+  assert.ok(settle("new hires"));
   assert.ok(settle("new hires and the night crew"));
   assert.ok(settle("people"));
 });

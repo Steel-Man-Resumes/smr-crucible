@@ -58,7 +58,7 @@ test("R12: one card per line asks about every claim, and one answer must cover e
   assert.equal(g.scope!.question, "Who or what did you lead? Who did you train?");
   assert.equal(g.scope!.helped, undefined);
   const doc = { target: "resume" as const, text: r };
-  assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "my cousin", own(), []), "unmatched");
+  assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "my cousin", own(), []), "ok", "who they typed is their fact (2026-10-15)");
   assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "Led the dock crew and trained new hires", own(), []), "copy");
   assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "the dock crew and the new hires", own(), []), "ok");
   const a = settleGeneric(r, recordScopeYes([], g.line, g.scope!.families, "the dock crew and the new hires"));

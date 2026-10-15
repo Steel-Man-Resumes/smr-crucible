@@ -62,8 +62,8 @@ test("R11 card: the scope card asks who, takes their words for that line, and th
   assert.deepEqual(g.scope, { family: "train", families: ["train"], question: "Who did you train?", helped: "- Helped train new hires on the scanner" });
   const doc = { target: "resume" as const, text: r };
   assert.equal(scopeYesResult(doc, g.line, "train", "", v.source, []), "empty");
-  assert.equal(scopeYesResult(doc, g.line, "train", "nobody", v.source, []), "empty");
-  assert.equal(scopeYesResult(doc, g.line, "train", "my cousin", v.source, []), "unmatched");
+  assert.equal(scopeYesResult(doc, g.line, "train", "nobody", v.source, []), "denies", "a denial goes to Take it off");
+  assert.equal(scopeYesResult(doc, g.line, "train", "my cousin", v.source, []), "ok", "who they typed is their fact (2026-10-15)");
   assert.equal(scopeYesResult(doc, g.line, "train", "the new hires on second shift", v.source, []), "ok");
   let a = recordScopeYes([], g.line, "train", "the new hires on second shift");
   // A generic answer to the line's other card never wipes it.

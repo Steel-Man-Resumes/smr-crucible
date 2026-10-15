@@ -45,6 +45,8 @@
 
 import { TroyMark } from "@crucible/consumer-ui";
 import { RecordChoiceCard } from "@/components/forge/finish/RecordChoiceCard";
+import { ConfidenceMeter } from "@/components/forge/finish/ConfidenceMeter";
+import { sourceConfidence, confidenceLines } from "@/lib/finish-gate";
 import { keepSourceRecordLines, recordChoiceFrom, type RecordChoice, type RecordEntry } from "@/lib/record-choice";
 import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -261,6 +263,8 @@ function OutputPageInner() {
   const [recordChoice, setRecordChoice] = useState<RecordChoice>("off");
   const keepInsideLines = recordChoice === "facility";
   const [recordEntries, setRecordEntries] = useState<RecordEntry[]>([]);
+  // Numbers t.ROY asked about that the person skipped (confidence meter).
+  const [skippedNumbers, setSkippedNumbers] = useState<string[]>([]);
   const [coverLetterText, setCoverLetterText] = useState<string>("");
   const [grounding, setGrounding] = useState<unknown>(null);
   // The writer's documents exactly as delivered; never edited (see finish-gate WrittenDocs).
@@ -885,7 +889,9 @@ function OutputPageInner() {
     first.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
   };
 
-  const draftItems = () => (view.state === "finished" ? undefined : current?.openItems.length ? current.openItems : openItemsInPlainWords(view));
+  const confidence = useMemo(() => sourceConfidence(defendAnswers, skippedNumbers), [defendAnswers, skippedNumbers]);
+  // The DRAFT file's to-do page carries the meter too (Troy 2026-10-15).
+  const draftItems = () => (view.state === "finished" ? undefined : [...(current?.openItems.length ? current.openItems : openItemsInPlainWords(view)), ...confidenceLines(confidence)]);
 
   async function runDownload(fn: () => Promise<void>) {
     setBusy(true);
@@ -1334,6 +1340,7 @@ function OutputPageInner() {
                   onChoice={setLengthChoice}
                 />
               )}
+              <ConfidenceMeter level={confidence.level} notes={confidence.notes} />
               <RecordChoiceCard
                 choice={recordChoice}
                 entries={recordEntries}
@@ -1345,7 +1352,7 @@ function OutputPageInner() {
                   setDocState("idle");
                 }}
               />
-              <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} />
+              <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />
             </aside>
           </div>
 

@@ -87,7 +87,8 @@ test("R11 card: the typed who settles that claim only, on that line only", () =>
   // Never pooled: another line with the same claim is still held.
   assert.ok(scopeNotTheirsAnswered("- Trained new hires on the forklift", OWN, yes));
   // Fewer people than the line: still held.
-  assert.ok(scopeNotTheirsAnswered("- Trained all new hires on the scanner", OWN, [{ line: "- Trained all new hires on the scanner", answer: "two new guys", kind: "scope_yes", family: "train" }]));
+  // 2026-10-15 (Troy, finish page decision 3): who they typed is their fact, even when the line says "all".
+  assert.equal(scopeNotTheirsAnswered("- Trained all new hires on the scanner", OWN, [{ line: "- Trained all new hires on the scanner", answer: "two new guys", kind: "scope_yes", family: "train" }]), undefined);
   // Another family on the same line is still read.
   assert.ok(scopeNotTheirsAnswered("- Trained new hires and supervised the night crew", OWN, [{ line: "- Trained new hires and supervised the night crew", answer: "the new hires", kind: "scope_yes", family: "train" }]));
   // An empty or nobody answer does nothing.

@@ -717,11 +717,12 @@ export function scopeAllNotTheirsAnswered(line: string, sourceText: string, answ
       if (h.title && help?.ownTitle && sameTitle(help.ownTitle, h.title)) return false;
       return true;
     }
-    // Round 12 (SF-4): typed words that name people, a count or names cover an uncounted group. Round 13 (SF-7):
-    // typed words that name a different group are refused, and the sentence reading does not get a second go.
-    const verdicts = own.filter((a) => a.family === h.family).map((a) => typedCoversHit(h, a.answer, line, employers));
-    if (verdicts.some((v) => v === true)) return false;
-    if (verdicts.length && verdicts.every((v) => v === false)) return true;
+    // Troy 2026-10-15 (finish page redesign, decision 3): who or what the person typed for this claim is
+    // their fact, whatever words the line used. The old rule graded the answer against the line's own
+    // words and refused honest answers ("Everyone in the crew" for a line about managing production).
+    // A denial never gets here: the page sends it to Take it off (scopeYesResult "denies").
+    if (own.some((a) => a.family === h.family)) return false;
+    void typedCoversHit; void employers;
     if (!withYes.has(k(h))) return false;
     // Their "I helped with it": only the claim it was made for, in its own sentence.
     if (help?.scopeHelp && h.shared && (!help.scopeHelpFamily || help.scopeHelpFamily === h.family)) {

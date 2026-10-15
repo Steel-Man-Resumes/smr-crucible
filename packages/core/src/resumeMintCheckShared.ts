@@ -164,6 +164,9 @@ function checkNumbers(out: string, src: string, f: MintFinding[], kind: MintChec
   if (kind === "cover_letter") return;
   for (const n of srcNums) {
     if (outNums.has(n) || (/^\d$/.test(n))) continue;
+    // A year on its own (1862 in a story, a date the writer formatted differently) is checked by the
+    // date rules, not owed back as a work number (Troy's run, 2026-10-15).
+    if (/^(?:1[89]|20)\d{2}$/.test(n)) continue;
     const at = numberLine(src, n);
     f.push({
       rule: "STD-T02",
