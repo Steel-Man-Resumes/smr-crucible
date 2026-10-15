@@ -58,11 +58,13 @@ export interface OrgAssistantContext {
   staffNames?: string[];
   /** Every participant in reach, for the output verifier's allow-list. */
   visibleNames?: string[];
+  visibleParticipants?: { id: string; firstName: string }[];
 }
 
 export interface AssistantContext {
   /** Current page the user is on */
   currentPage: string;
+  selectedWork?: import("./assistant-work-context").WorkSelection;
   /** User's detected readiness stage */
   readinessStage?: string;
   /** What the user has entered so far */
@@ -335,10 +337,8 @@ YOU KNOW: ${context.skills?.length ? `Their skills: ${sanitizeArray(context.skil
 PROACTIVE: "Practice lets you try an answer and review feedback. Use written practice for drafting answers and live voice practice for delivery."
 DON'T: During active practice, stay in character as interviewer. Break character ONLY for feedback.`,
 
-    resources: `PAGE: JOB PATHS (Job paths that are realistic with a record)
-The user is looking for employers and job lanes more likely to evaluate people individually.
-PROACTIVE: "Start with one lane that fits your life this week. Then search live jobs, build a targeted resume, and practice the interview."
-DON'T: Don't promise any employer will approve them. A company that hires people with records still decides case by case. Say "employers that hire people with records", never "fair-chance".`,
+    resources: `PAGE: GET SUPPORT (Checked local services and practical next steps)
+The user is looking for practical help such as transport, food, ID documents or training. Use current published resource tools and the location and need the person gave. Explain known eligibility and what to bring. Offer to save chosen services through the confirmation card. Never promise eligibility, an appointment or receipt of service.`,
 
     progress: `PAGE: PROGRESS (What they've done so far)
 The user is reviewing their progress across all tools.

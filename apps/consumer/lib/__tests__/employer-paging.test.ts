@@ -117,7 +117,7 @@ test("the route counts before it answers, needs a session, and has no export", (
   const src = readFileSync(join(__dirname, "..", "..", "app", "api", "employers", "route.ts"), "utf8");
   assert.match(src, /if \(!userId\)[\s\S]*status: 401/);
   const countAt = src.indexOf("incrementUserUsage(userId, EMPLOYER_PAGES_ENDPOINT)");
-  const searchAt = src.indexOf("searchPublishedEmployers(");
+  const searchAt = src.indexOf("searchVerifiedEmployers(");
   assert.ok(countAt > 0 && searchAt > countAt, "counted before the search runs");
   assert.match(src, /status: 429/);
   assert.doesNotMatch(src, /listPublishedEmployers|limit:\s*\d|text\/csv|Content-Disposition/);

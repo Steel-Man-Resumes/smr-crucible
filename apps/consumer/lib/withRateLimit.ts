@@ -53,6 +53,8 @@ const TIER_RANK: Record<string, number> = {
 interface RateLimitOptions {
   mode: "user" | "ip" | "forge";
   endpoint: string;
+  /** Cost policy may separate work that shares an existing quota bucket. */
+  workflow?: string;
   /** Minimum tier required to access this endpoint. */
   requiredTier?: UserTier;
   /**
@@ -157,7 +159,7 @@ export function withRateLimit(
         });
       }
 
-      return runAiOperation({ userId, endpoint: opts.endpoint }, () => handler(request));
+      return runAiOperation({ userId, endpoint: opts.workflow ?? opts.endpoint }, () => handler(request));
     }
 
     // The Forge, signed in: count per account, with per-IP as the floor.
@@ -179,7 +181,7 @@ export function withRateLimit(
           { status: 401 }
         );
       }
-      if (action === "unmetered") return userId ? runAiOperation({ userId, endpoint: opts.endpoint }, () => handler(request)) : handler(request);
+      if (action === "unmetered") return userId ? runAiOperation({ userId, endpoint: opts.workflow ?? opts.endpoint }, () => handler(request)) : handler(request);
       if (plan.kind === "account") {
         // The account first, then the code's seat pool or the network ceiling
         // (lib/forge-rate-limit.ts, decideSignedInCall).
@@ -228,7 +230,7 @@ export function withRateLimit(
           void ensureUserAttribution(plan.userId, authedCode).catch(() => {});
           void logPartnerUsage({ code: authedCode, userId: plan.userId, endpoint: opts.endpoint });
         }
-        return runAiOperation({ userId: plan.userId, endpoint: opts.endpoint }, () => handler(request));
+        return runAiOperation({ userId: plan.userId, endpoint: opts.workflow ?? opts.endpoint }, () => handler(request));
       }
       // Signed out on an open route: the per-IP rules below, unchanged.
     }

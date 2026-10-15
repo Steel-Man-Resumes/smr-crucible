@@ -29,7 +29,7 @@ BEGIN ATOMIC
  SELECT p.place_id, p.canonical_name, p.industry, p.state, p.city,
  concat_ws(', ',coalesce(p.city,p.county),p.state), coalesce(p.careers_url,p.website),
  ev.role_title, ev.excerpt, ev.limitations, ev.observed_on, ev.expires_on, ev.source_url,
- 'T'||coalesce(t.tier,1)::text, p.place_kind, p.standing,
+ CASE WHEN t.tier IN (1,2,3) THEN 'T'||t.tier::text END, p.place_kind, p.standing,
  md5(concat_ws('|',p.place_id::text,p.canonical_name,p.industry,p.state,p.city,p.county,
  p.careers_url,p.website,p.standing,t.tier::text,ev.id::text,ev.observed_on::text,
  ev.expires_on::text,ev.source_url,ev.excerpt,ev.limitations,ev.role_title))
@@ -37,7 +37,7 @@ BEGIN ATOMIC
  LEFT JOIN public.directory_tier_v t ON t.place_id=p.place_id
  JOIN LATERAL (
   SELECT e.* FROM public.directory_public_evidence_v e
-  WHERE e.org_id=p.org_id AND (e.place_id=p.place_id OR e.place_id IS NULL AND e.scope='company')
+  WHERE e.org_id=p.org_id AND EXISTS (SELECT 1 FROM public.directory_place_evidence pe WHERE pe.target_place_id=p.place_id AND pe.id=e.id)
     AND e.polarity='yes' AND e.expires_on > (now() AT TIME ZONE 'UTC')::date
     AND e.source_url IS NOT NULL AND e.source_kind <> 'casework_aggregate'
   ORDER BY e.observed_on DESC,e.id LIMIT 1

@@ -12,6 +12,8 @@
  */
 
 import { useEffect, useState } from "react";
+import { parsePlace } from "@/lib/support-location";
+import { SavedResources } from "./SavedResources";
 
 export const SUPPORT_CATEGORIES: { id: string; label: string }[] = [
   { id: "all", label: "Any kind of help" },
@@ -40,6 +42,8 @@ export interface SupportResultView {
   sourceLabel?: string;
   checkedLine?: string;
   mayBeOutOfDate?: boolean;
+  eligibility?: string;
+  sourceUrl?: string;
 }
 
 export interface SupportCoverageView {
@@ -70,6 +74,8 @@ export function readSupportResponse(j: unknown): { results: SupportResultView[];
         sourceLabel: str(x.sourceLabel),
         checkedLine: str(x.checkedLine),
         mayBeOutOfDate: x.mayBeOutOfDate === true,
+        eligibility: str(x.eligibility),
+        sourceUrl: str(x.sourceUrl) && /^https?:\/\//i.test(String(x.sourceUrl)) ? String(x.sourceUrl) : undefined,
       } as SupportResultView;
     })
     .filter((r): r is SupportResultView => r !== null);
@@ -83,6 +89,9 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
   const [category, setCategory] = useState("all");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [saveStatus,setSaveStatus] = useState("");
+  const [savedRefresh,setSavedRefresh] = useState(0);
+  const [saving,setSaving] = useState(false);
   const [answer, setAnswer] = useState<ReturnType<typeof readSupportResponse> | null>(null);
   // The place the person gave the Forge arrives after mount; fill it in once, never over their typing.
   useEffect(() => {
@@ -104,12 +113,31 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
         setAnswer(null);
       } else {
         setAnswer(readSupportResponse(j));
+        if(j?.directoryRead === false) setError(j.warning || "The checked directory could not be read. Please retry for current local coverage.");
       }
     } catch {
       setError("Search didn't work. Try again in a minute.");
     } finally {
       setBusy(false);
     }
+  }
+
+  async function requestCoverage(){
+    const place=parsePlace(location);
+    if(!place.state){setSaveStatus("Add a state or ZIP so we know which area to check.");return;}
+    const areas:Record<string,string>={all:"community",housing:"shelter",legal:"legal_aid",mental_health:"mental",substance:"recovery",employment:"jobs"};
+    setSaving(true);setSaveStatus("");
+    try{const res=await fetch("/api/directory/coverage",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({state:place.state,place:place.cityKey||place.countyKey||place.zip||place.state,category:areas[category]||category,reason:"low_coverage"})});
+      const body=await res.json();if(!res.ok)throw new Error(body.error||"Could not record the request.");setSaveStatus("Area added to the research queue. This does not mean new services are available yet.");
+    }catch(e){setSaveStatus(e instanceof Error?e.message:"Could not record the request.");}finally{setSaving(false);}
+  }
+
+  async function save(id:string) {
+    setSaving(true);setSaveStatus("");
+    try {const res=await fetch("/api/resource-lists",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({serviceIds:[id.slice(4)]})});
+      const body=await res.json();if(!res.ok)throw new Error(body.error || "Could not save this choice.");
+      setSaveStatus("Saved your choice. This does not apply for or arrange a service.");setSavedRefresh(n=>n+1);
+    }catch(e){setSaveStatus(e instanceof Error?e.message:"Could not save this choice.");}finally{setSaving(false);}
   }
 
   return (
@@ -167,6 +195,9 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
         </p>
       )}
 
+      {answer && <button type="button" disabled={saving} onClick={()=>void requestCoverage()} className="mt-3 min-h-touch text-sm text-t-steel underline">Ask us to check this area</button>}
+      {saveStatus && <p role="status" className="mt-3 text-sm text-t-phos">{saveStatus}</p>}
+      <SavedResources refresh={savedRefresh} />
       {answer && (
         <div className="mt-5" data-testid="support-results">
           {answer.coverage?.line && (
@@ -183,6 +214,9 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
                   <p className="font-semibold text-t-white">{r.title}</p>
                   {r.provider && r.provider !== r.title && <p className="text-sm text-t-phos-dim">{r.provider}</p>}
                   {r.description && <p className="mt-1 text-sm text-t-phos">{r.description}</p>}
+                  {r.eligibility && <p className="mt-2 text-sm text-t-phos">Who can use it: {r.eligibility}</p>}
+                  {r.sourceUrl && <a href={r.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-t-steel underline">Check the source</a>}
+                  {r.id.startsWith("dir-") && <button type="button" disabled={saving} onClick={()=>void save(r.id)} className="ml-3 min-h-touch text-sm text-t-steel underline disabled:opacity-60">Save this choice</button>}
                   <div className="mt-2 space-y-0.5 text-sm text-t-phos">
                     {r.phone && (
                       <p>

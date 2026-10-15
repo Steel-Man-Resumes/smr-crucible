@@ -18,9 +18,9 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { findHudCounselors } from "@/lib/hud-counselors";
-import { searchSupport } from "@/lib/support-search";
+import { searchSupport, requestedWants } from "@/lib/support-search";
 import { countiesOf, isPlaceIn } from "@/lib/support-place-index";
-import { readResourceDirectory } from "@crucible/core";
+import { searchVerifiedResources, requestDirectoryCoverage } from "@crucible/core";
 
 export const maxDuration = 15;
 
@@ -39,8 +39,18 @@ async function handlePost(request: Request) {
     // asked only for the normalised place (support-search hudQueryFor).
     const { resources, coverage, place, directoryRead } = await searchSupport(
       { category, barriers, location },
-      { findHud: (location) => findHudCounselors(location), readDirectory: readResourceDirectory, countiesOf, isPlaceIn }
+      { findHud: (location) => findHudCounselors(location), readDirectory: async (opts) => { const result = await searchVerifiedResources(opts); if (result.status !== "ok") throw new Error("directory_unavailable"); return result.data; }, countiesOf, isPlaceIn }
     );
+
+    // A real searched area with no checked local match creates one minimal owner ticket.
+    // A failed read never becomes a false coverage gap. No person or barrier text is stored.
+    if(directoryRead && place.state && !resources.some(r=>r.source === "directory" && (r.scope === "city" || r.scope === "county"))) {
+      const session=await auth().catch(()=>null);
+      if(session?.user?.id){const areas=requestedWants(category,undefined).areas;
+        const selected=typeof category === "string" && category !== "all" ? areas.slice(0,3) : ["community"];
+        await Promise.all(selected.map(area=>requestDirectoryCoverage(session.user!.id!,{state:place.state!,place:place.cityKey||place.countyKey||place.zip||place.state!,category:area,reason:"low_coverage"}).catch(()=>null)));
+      }
+    }
 
     // Log for JBS compliance. IDs and counts only: no typed location and no
     // barrier list (Codex E, privacy: support needs stay out of logs).
@@ -72,7 +82,7 @@ async function handlePost(request: Request) {
       console.error("Decision log failed (resources):", (err as { name?: string })?.name || "error");
     }
 
-    return NextResponse.json({ resources, coverage });
+    return NextResponse.json({ resources, coverage, directoryRead, warning: directoryRead ? null : "The checked directory could not be read. These fallback links do not establish current local coverage." }, { headers:{"Cache-Control":"private, no-store"} });
   } catch (error) {
     console.error("Resource search error:", (error as { name?: string })?.name || "error");
     return NextResponse.json({ error: "Support search is unavailable. Please try again." }, { status: 503 });

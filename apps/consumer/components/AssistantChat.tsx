@@ -18,6 +18,7 @@ import { useAssistant, type AssistantToolCall } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
 import { resolveAssistantPage, crossesShell, pageLabel } from "@/lib/tools/assistant-tool-defs";
 import { requestHighlight } from "@/lib/highlight-bus";
+import { AssistantActionCard } from "./AssistantActionCard";
 import SpeechInputButton from "@/components/SpeechInputButton";
 import { Send, Check, Loader2, Settings2 } from "lucide-react";
 
@@ -39,6 +40,14 @@ interface AssistantChatProps {
 
 /** Human-friendly activity lines per tool -- shown instead of raw tool output */
 const TOOL_ACTIVITY: Record<string, string> = {
+  search_verified_employers: "Checking employer evidence",
+  get_verified_employer: "Reading employer details",
+  search_verified_resources: "Finding checked support",
+  get_verified_resource: "Checking service details",
+  get_resource_chain: "Checking next steps",
+  save_resource_list: "Preparing your save preview",
+  preview_document_correction: "Preparing a correction preview",
+  contextual_handoff: "Preparing your next step",
   get_my_live_status: "Checking your real progress",
   search_jobs: "Searching live jobs",
   save_job: "Saving that job",
@@ -124,6 +133,10 @@ function getQuickPrompts(context: AssistantContext, coach?: boolean, staff?: boo
         "What if my resume is bad?",
         "I have an interview tomorrow",
       ];
+    case "resources":
+      return ["I have no ride", "Help me find local support", "Explain these next steps"];
+    case "employers":
+      return ["Find employers near me", "What supports this listing?", "Help me go after this job"];
     case "jobs":
       return [
         "Find me jobs that fit me",
@@ -208,7 +221,7 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
     [router, pathname]
   );
 
-  const { messages, input, setInput, handleSubmit, isLoading, error } = useAssistant({
+  const { messages, append, input, setInput, handleSubmit, isLoading, error } = useAssistant({
     context,
     sessionId,
     coach,
@@ -611,6 +624,11 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
             const inv = part.toolInvocation as
               | { toolName?: string; state?: string; args?: unknown; result?: unknown }
               | undefined;
+            if (inv?.toolName === "contextual_handoff" && inv.state === "result") {
+              const result = inv.result as { page?: string; selection?: { applicationId?: string; laneId?: string | null; artifactId?: string; revisionId?: string } };
+              const href = result.page ? resolveAssistantPage(result.page, result.selection?.applicationId, result.selection) : null;
+              return href ? [{ key: i, href, label: pageLabel(result.page!) }] : [];
+            }
             if (inv?.toolName !== "take_me_there" || inv.state !== "result") return [];
             if (!(inv.result as { buttonShown?: unknown } | undefined)?.buttonShown) return [];
             const args = (inv.args ?? {}) as { page?: string; jobApplicationId?: string };
@@ -634,25 +652,36 @@ export function AssistantChat({ context, sessionId, coach, staff }: AssistantCha
                 }
                 if (part.type === "tool-invocation") {
                   const inv = part.toolInvocation as
-                    | { toolName?: string; state?: string }
+                    | { toolName?: string; state?: string; result?: Record<string, unknown> }
                     | undefined;
+                  if (inv?.state === "result" && inv.result?.status === "needs_confirmation" && ["save_resources", "correct_document"].includes(String(inv.result.action))) {
+                    return <AssistantActionCard key={i} result={inv.result} onSaved={(message, revisionId) => {
+                      if (revisionId) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set("revisionId", revisionId);
+                        window.history.replaceState(null, "", url.pathname + url.search);
+                      }
+                      void append({ role: "user", content: message });
+                    }} />;
+                  }
                   // A deferred move shows its button below instead of "Taking you there".
                   if (goTo.some((g) => g.key === i)) return null;
                   const label = TOOL_ACTIVITY[inv?.toolName ?? ""] ?? "Working on it";
                   const done = inv?.state === "result";
+                  const failed = done && (inv?.result?.ok === false || ["unavailable", "blocked", "refused"].includes(String(inv?.result?.status)));
                   return (
                     <div
                       key={i}
                       className="flex items-center gap-2 pl-1 text-xs text-muted"
                       role="status"
                     >
-                      {done ? (
+                      {failed ? <span className="text-amber-700" aria-label="Could not complete">!</span> : done ? (
                         <Check size={14} className="text-sage-600" aria-hidden="true" />
                       ) : (
                         <Loader2 size={14} className="animate-spin" aria-hidden="true" />
                       )}
                       <span>
-                        {label}
+                        {failed ? "Could not complete this step" : label}
                         {done ? "" : "..."}
                       </span>
                     </div>

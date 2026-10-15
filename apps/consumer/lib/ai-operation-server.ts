@@ -38,12 +38,25 @@ export async function beginAiOperation(input: {userId: string; endpoint: string}
         WHERE (${policy?.daily_calls ?? null}::integer IS NULL OR
           (SELECT count(*) FROM ai_operation WHERE user_id=${input.userId}::uuid
            AND workflow=${input.endpoint} AND created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC') < ${policy?.daily_calls ?? null}::integer)
-        AND (${policy?.daily_usd ?? null}::numeric IS NULL OR
-          COALESCE((SELECT SUM(GREATEST(o.reserved_usd,
+        AND (${policy?.daily_usd ?? null}::numeric IS NULL OR (
+          NOT EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.user_id=${input.userId}::uuid
+            AND t.endpoint=${input.endpoint} AND t.operation_id IS NULL
+            AND t.created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+            AND t.cost_status <> 'priced')
+          AND NOT EXISTS (SELECT 1 FROM ai_operation o
+            WHERE o.user_id=${input.userId}::uuid AND o.workflow=${input.endpoint}
+              AND o.created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+              AND o.reserved_usd=0 AND (o.status='running'
+                OR NOT EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id)
+                OR EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id AND t.cost_status <> 'priced')))
+          AND COALESCE((SELECT SUM(GREATEST(o.reserved_usd,
             COALESCE((SELECT SUM(t.cost_usd) FROM ai_token_usage t WHERE t.operation_id=o.id),0)))
             FROM ai_operation o WHERE o.user_id=${input.userId}::uuid AND o.workflow=${input.endpoint}
               AND o.created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)
-          + ${policy?.reserve_usd ?? 0}::numeric <= ${policy?.daily_usd ?? null}::numeric)
+          + COALESCE((SELECT SUM(t.cost_usd) FROM ai_token_usage t
+              WHERE t.user_id=${input.userId}::uuid AND t.endpoint=${input.endpoint} AND t.operation_id IS NULL
+                AND t.created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)
+          + ${policy?.reserve_usd ?? 0}::numeric <= ${policy?.daily_usd ?? null}::numeric))
         RETURNING id`,
     ]);
     if (!rows[1]?.length) {result.response=refuse('tool_allowance_used','This tool has reached its current allowance. Your saved work is still available.',429);return result;}
@@ -54,7 +67,7 @@ export async function beginAiOperation(input: {userId: string; endpoint: string}
       try {
         await queryAsUser(input.userId,`UPDATE ai_operation SET status=$3,finished_at=now(),
           reserved_usd=CASE WHEN NOT $4::boolean AND EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=ai_operation.id)
-            AND NOT EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=ai_operation.id AND t.cost_status NOT IN ('priced','estimated'))
+            AND NOT EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=ai_operation.id AND t.cost_status <> 'priced')
             THEN 0 ELSE reserved_usd END
           WHERE id=$1 AND user_id=$2 AND status='running'`,[id,input.userId,status,!!context.accountingIncomplete]);
       } catch { console.error('AI_OPERATION_FINISH_FAILED'); }

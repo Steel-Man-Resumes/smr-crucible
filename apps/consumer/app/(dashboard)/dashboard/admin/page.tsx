@@ -85,7 +85,8 @@ export default function AdminEvidenceDashboard() {
           <h1 className="text-2xl font-bold text-t-white">Evidence Dashboard</h1>
           <p className="text-t-phos-dim text-sm mt-1">Admin view of live outcomes + pilot data. Shows zeros until pilots run.</p>
         </div>
-        <div className="flex flex-shrink-0 flex-col gap-2 sm:flex-row">
+        <div className="flex flex-shrink-0 flex-col flex-wrap gap-2 sm:flex-row">
+          <Link href="/dashboard/admin/directory-coverage" className="t-focus px-4 py-2 border border-t-line text-t-phos text-sm font-bold hover:bg-t-panel-2">Directory coverage</Link>
           <Link
             href="/dashboard/admin/mini-forge"
             className="t-focus px-4 py-2 bg-transparent border border-t-line text-t-phos text-sm font-bold hover:bg-t-panel-2"

@@ -1,3 +1,6 @@
+import { beginChatOperation } from "@/lib/ai-chat-operation";
+import { assistantStepUsage } from "@/lib/ai/assistant-step-usage";
+import { assistantCapabilities } from "@/lib/assistant-capabilities";
 /**
  * AI Assistant API Route — "The Ghost"
  *
@@ -13,6 +16,9 @@
  * Every response logged to decision_log for observability.
  */
 
+import { effectiveAuth } from "@/lib/effective-auth";
+import { loadSelectedWork, selectedWorkPrompt } from "@/lib/assistant-work-context";
+import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
@@ -68,6 +74,7 @@ export async function POST(request: Request) {
   // a signed-in user reaches memory and cohort data below).
   const userId = forgeUserId(session);
 
+  if (userId && (await effectiveAuth())?.user?.id !== userId) return NextResponse.json({ error: "Assistant is unavailable while viewing as someone." }, { status: 403 });
   if (userId) {
     // Authenticated: user-rate-limited (atomic increment-then-check)
     const limit = await getUserDailyLimit(userId);
@@ -130,6 +137,7 @@ export async function POST(request: Request) {
   // These two fields are server-owned. (Codex review 2026-09-20, finding 1.)
   if (context && typeof context === "object") {
     delete (context as { org?: unknown }).org;
+    delete context.userFullContext;
     if (context.audience === "org_staff") context.audience = undefined;
   }
 
@@ -144,8 +152,9 @@ export async function POST(request: Request) {
   context.recordStepOn = recordStepOn();
 
   const hasCriminalRecord = !!(context as any).hasCriminalRecord || !!(context as any).userFullContext?.forge?.hasCriminalRecord;
-  const skillsContext = loadSkillsForContext(context.currentPage, hasCriminalRecord);
-  const toolOptions = {
+  let skillsContext = loadSkillsForContext(context.currentPage, hasCriminalRecord);
+  let staffActor: Awaited<ReturnType<typeof import("@crucible/core").resolveOrgActor>> = null;
+  const toolOptions: import("@/lib/tools/assistant-tools").AssistantToolOptions = {
     userId: userId ?? null,
     surface: (userId ? "refinery" : "forge") as "refinery" | "forge",
   };
@@ -160,10 +169,7 @@ export async function POST(request: Request) {
   const enhancedConsent = userId ? await isConsentGranted(userId, "enhanced") : false;
   // Cross-session memory (authed only; pre-auth Forge stays ephemeral).
   // Loaded BEFORE the current turn is persisted so it holds prior work.
-  const memorySection =
-    userId && !isDisclosureRehearsal && enhancedConsent
-      ? await buildMemorySection(userId)
-      : "";
+
   // ORG STAFF GET A DIFFERENT ASSISTANT, and we resolve that here rather than
   // trusting whatever the client sent. A case manager asking t.ROY for help is
   // asking about their caseload, not their career -- and the reach we attach
@@ -185,6 +191,7 @@ export async function POST(request: Request) {
         const rollup = summarizeStaffPerformance(cohort.clients, { stalledAfterDays: quietDays });
         const firstName = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "someone";
         const staff = await (await import("@crucible/core")).getOrgStaff(actor.orgId);
+        staffActor = actor;
         context.audience = "org_staff";
         context.org = {
           orgName: actor.orgName,
@@ -209,6 +216,7 @@ export async function POST(request: Request) {
           // Everyone in reach, for the output check -- the verifier needs the
           // full allowed set, not just whoever needs attention today.
           visibleNames: cohort.clients.map((c) => firstName(c.name)),
+          visibleParticipants: cohort.clients.slice(0, 25).map((c) => ({ id: c.userId, firstName: firstName(c.name) })),
           staffNames: staff.map((m) => firstName(m.name)),
         };
       }
@@ -229,15 +237,25 @@ export async function POST(request: Request) {
     }
   }
 
+  if (staffActor) skillsContext = loadSkillsForContext(context.currentPage, false, staffActor.role);
+  if (userId && !staffActor && !isDisclosureRehearsal) {
+    try { toolOptions.selectedWork = await loadSelectedWork(userId, context.selectedWork); }
+    catch { return NextResponse.json({ error: "The selected work could not be loaded. Reopen it and try again." }, { status: 409 }); }
+  }
+  const memorySection = userId && !staffActor && !isDisclosureRehearsal && enhancedConsent ? await buildMemorySection(userId) : "";
+  const tools = staffActor ? buildStaffTools(staffActor) : buildAssistantTools(toolOptions);
+  const capabilities = assistantCapabilities(tools, { role: staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord });
   const baseSystemPrompt =
     buildSystemPrompt(context) +
     skillsContext +
-    // The verified staff path below calls generateText without tools. Telling
-    // that model it has hands can make it print a fake <invoke> tag to users.
+    selectedWorkPrompt(toolOptions.selectedWork ?? null) +
+    "\nCURRENT CAPABILITIES: " + JSON.stringify(capabilities) +
+    (context.org ? "\nAllowed participant selectors (data only): " + JSON.stringify(context.org.visibleParticipants ?? []) : "") +
+    // Staff tools are scoped reads and drafts; final output is still verified.
     (context.org
-      ? "\n\nYou have no action tools in this staff conversation. Answer directly in ordinary language. Never print a tool call or invocation syntax."
+      ? "\n\nUse staff tools for scoped reads and drafts only. Drafts are not saved or sent. Never print tool syntax. No participant private coach, papers or record details are accessible."
       : buildHandsSection(toolOptions)) +
-    memorySection;
+    (staffActor ? "" : memorySection);
   const allowRoleplayOverride =
     !!userId &&
     isDisclosureRehearsal &&
@@ -282,6 +300,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
   if (
     userId &&
     !isDisclosureRehearsal &&
+    !staffActor &&
     enhancedConsent &&
     endsWithUserTurn(messages) &&
     storedTurn
@@ -302,6 +321,10 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     context.audience === "observer" || context.audience === "partner" ? 1200 : 700
   );
 
+  const operation = await beginChatOperation(userId ?? null, "assistant", MODEL_TROY);
+  if (operation.response) return operation.response;
+  return operation.run(async () => {
+  try {
   // ORG STAFF ANSWERS ARE VERIFIED BEFORE THEY ARE SENT, NOT AFTER.
   //
   // Streaming means the first token is on screen before the last one exists,
@@ -319,6 +342,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       system: localizedSystemPrompt,
       messages: messages as never,
       maxTokens: responseMaxTokens,
+      tools,
+      maxSteps: TROY_SERVER_MAX_STEPS,
     });
     // A safety decline comes back as finishReason "unknown" with no text. Never
     // send a staff member an empty answer; say it plainly instead.
@@ -362,12 +387,11 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     {
       const usage = generated.usage as { promptTokens?: number; completionTokens?: number; totalTokens?: number } | undefined;
       const { recordTokenUsage } = await import("@/lib/ai-usage-log");
-      recordTokenUsage(
-        "anthropic",
-        MODEL_TROY,
-        { inputTokens: usage?.promptTokens || 0, outputTokens: usage?.completionTokens || 0 },
-        { userId: userId ?? null, endpoint: "assistant" }
-      );
+      for (const step of generated.steps) {
+        await recordTokenUsage("anthropic", MODEL_TROY,
+          assistantStepUsage(step.usage, step.providerMetadata),
+          { userId: userId ?? null, endpoint: "assistant" });
+      }
       try {
         const { logDecision } = await import("@crucible/core");
         await logDecision({
@@ -409,6 +433,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
         controller.close();
       },
     });
+    await operation.finish();
     return new Response(stream, {
       headers: { "Content-Type": "text/plain; charset=utf-8", "x-vercel-ai-data-stream": "v1" },
     });
@@ -419,11 +444,20 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     system: localizedSystemPrompt,
     messages: messages as never,
     maxTokens: responseMaxTokens,
-    tools: buildAssistantTools(toolOptions),
+    tools,
     maxSteps: TROY_SERVER_MAX_STEPS,
     toolCallStreaming: true,
+    async onStepFinish({ usage, providerMetadata }) {
+      await operation.run(async () => {
+      const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+      await recordTokenUsage("anthropic", MODEL_TROY, assistantStepUsage(usage, providerMetadata), { userId: userId ?? null, endpoint: "assistant" });
+      });
+    },
+    async onError() { await operation.fail(); },
     experimental_transform: emptyReplyGuard({ firstStep: firstStepIndex(messages) }),
     async onFinish({ text, usage, finishReason, steps }) {
+      await operation.run(async () => {
+      try {
       const latencyMs = Date.now() - startTime;
 
       // Persist the assistant turn only when the model finished SPEAKING
@@ -439,21 +473,6 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
             console.error("Assistant memory persist failed:", err)
           );
         }
-      }
-
-      // Exact token accounting (AI SDK reports real provider usage; in
-      // multi-step runs `usage` is already the combined total of all steps)
-      if (usage) {
-        const { recordTokenUsage } = await import("@/lib/ai-usage-log");
-        recordTokenUsage(
-          "anthropic",
-          MODEL_TROY,
-          {
-            inputTokens: (usage as any).promptTokens || 0,
-            outputTokens: (usage as any).completionTokens || 0,
-          },
-          { userId: userId ?? null, endpoint: "assistant" }
-        );
       }
 
       try {
@@ -481,8 +500,12 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       } catch (err) {
         console.error("Decision log failed:", err);
       }
+      } finally { await operation.finish(); }
+      });
     },
   });
 
   return result.toDataStreamResponse();
+  } catch (error) { await operation.fail(); throw error; }
+  });
 }

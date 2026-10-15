@@ -170,7 +170,7 @@ export async function POST(request: Request) {
     console.error("Realtime call request failed");
     const ended = await endVoiceSession(userId, sessionId, "provider_error");
     if (ended) await recordTokenUsage('openai',REALTIME_MODEL,{inputTokens:0,outputTokens:0,audioSeconds:ended.elapsedSeconds},
-      {userId,endpoint:'interview-voice',eventKey:`voice:${sessionId}`,outcome:'failed',usageMissing:true});
+      {userId,operationId:ended.session.operation_id ?? undefined,endpoint:'interview-voice',eventKey:`voice:${sessionId}`,outcome:'failed',usageMissing:true});
     return NextResponse.json(
       { error: "Could not reach the voice provider" },
       { status: 502 }
@@ -182,7 +182,7 @@ export async function POST(request: Request) {
     console.error("Realtime call error:", providerRes.status);
     const ended = await endVoiceSession(userId, sessionId, "provider_error");
     if (ended) await recordTokenUsage('openai',REALTIME_MODEL,{inputTokens:0,outputTokens:0,audioSeconds:ended.elapsedSeconds},
-      {userId,endpoint:'interview-voice',eventKey:`voice:${sessionId}`,outcome:'failed',usageMissing:true});
+      {userId,operationId:ended.session.operation_id ?? undefined,endpoint:'interview-voice',eventKey:`voice:${sessionId}`,outcome:'failed',usageMissing:true});
     return NextResponse.json(
       { error: "Could not start voice practice" },
       { status: 502 }

@@ -64,15 +64,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, elapsedSeconds: 0 });
   }
 
-  if (ended.session.call_id) {
-    await hangupProviderCall(ended.session.call_id);
+  const hasProviderCall = !!ended.session.call_id && ended.session.call_id !== "pending";
+  if (hasProviderCall) {
+    await hangupProviderCall(ended.session.call_id!);
   }
 
   await recordTokenUsage(
     "openai",
     REALTIME_MODEL,
     { inputTokens: 0, outputTokens: 0, audioSeconds: ended.elapsedSeconds },
-    { userId, endpoint: "interview-voice", eventKey: `voice:${sessionId}` }
+    { userId, operationId: ended.session.operation_id ?? undefined, endpoint: "interview-voice", eventKey: `voice:${sessionId}`, usageMissing: !hasProviderCall, outcome: hasProviderCall ? "succeeded" : "unknown" }
   );
 
   return NextResponse.json({ ok: true, elapsedSeconds: ended.elapsedSeconds });

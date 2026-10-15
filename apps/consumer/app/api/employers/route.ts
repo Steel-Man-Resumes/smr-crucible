@@ -13,7 +13,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { forgeSessionUser } from "@/lib/session-policy";
 import { getClientIp } from "@/lib/auth-rate-limit";
-import { getUserTier, incrementIpUsage, incrementUserUsage, listEmployerIndustries, searchPublishedEmployers } from "@crucible/core";
+import { getUserTier, incrementIpUsage, incrementUserUsage, searchVerifiedEmployers, requestDirectoryCoverage } from "@crucible/core";
 import {
   EMPLOYER_PAGES_ENDPOINT,
   EMPLOYER_PAGES_LIMIT_MESSAGE,
@@ -43,12 +43,17 @@ export async function GET(request: Request) {
   }
 
   const { q, industry, page } = parseEmployerQuery(new URL(request.url).searchParams);
-  const [result, industries] = await Promise.all([
-    searchPublishedEmployers({ q, industry, page }),
-    page === 0 ? listEmployerIndustries() : Promise.resolve(undefined),
-  ]);
+  const state = new URL(request.url).searchParams.get("state")?.toUpperCase();
+  const result = await searchVerifiedEmployers({ q: q || undefined, industry: industry || undefined, state, page });
+  if (result.status !== "ok") return NextResponse.json({ error: result.error }, {status:503, headers:{"Cache-Control":"private, no-store"}});
+  const employers = result.data.map(e => ({...e, whyGoodFit:e.evidence ? `What we found: ${e.evidence}` : null,lastVerified:e.checkedAt}));
+  if(state && /^[A-Z]{2}$/.test(state) && result.data.length===0 && page===0) {
+    // Only the explicitly selected state, never a guessed place from job text.
+    await requestDirectoryCoverage(userId,{state,place:state,category:"employers",reason:"low_coverage"}).catch(()=>null);
+  }
+  const industries = [...new Set(employers.map(e=>e.industry).filter(Boolean))];
   return NextResponse.json(
-    { ...result, ...(industries ? { industries } : {}) },
+    { employers, page, pageSize:25, hasMore:employers.length === 25 && page < 39, industries, contractVersion:result.contractVersion, asOf:result.asOf },
     { headers: { "Cache-Control": "private, no-store" } }
   );
 }

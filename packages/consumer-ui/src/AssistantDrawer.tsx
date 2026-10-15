@@ -129,7 +129,7 @@ export function AssistantDrawer({
           hidden={isOpen}
           style={isOpen ? { display: "none" } : undefined}
           onClick={() => setIsOpen(true)}
-          className="t-focus group fixed bottom-24 right-2 z-40 flex min-h-touch items-center gap-1 rounded-full bg-transparent p-1 sm:bottom-5 sm:right-4"
+          className="t-focus group relative my-3 ml-auto mr-3 z-30 flex min-h-touch items-center gap-1 rounded-full bg-transparent p-1 sm:fixed sm:bottom-5 sm:right-4 sm:z-40 sm:m-0"
           aria-label={`${triggerLabel}, your AI career coach, open assistant`}
         >
           <span className="pointer-events-none rounded-xl border border-[#e4d9ff] bg-white/95 px-3 py-2 text-left text-sm font-semibold leading-tight text-[#4c1d95] shadow-sm">

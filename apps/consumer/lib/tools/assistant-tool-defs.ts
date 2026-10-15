@@ -73,17 +73,21 @@ export interface HighlightElementArgs {
 /** Resolve a tool "page" name to an href, or null if not allowlisted. */
 export function resolveAssistantPage(
   page: string,
-  jobApplicationId?: string
+  jobApplicationId?: string,
+  selection?: { laneId?: string | null; artifactId?: string; revisionId?: string }
 ): string | null {
   const href = REFINERY_PAGES[page] ?? FORGE_PAGES[page] ?? null;
   if (!href) return null;
-  if (
-    jobApplicationId &&
-    (page === "application-tailor" || page === "disclosure") &&
-    /^[a-zA-Z0-9-]+$/.test(jobApplicationId)
-  ) {
-    return `${href}?job=${jobApplicationId}`;
+  const query = new URLSearchParams();
+  if (["application-tailor", "disclosure", "interview", "applications", "documents"].includes(page)) {
+    if (jobApplicationId && /^[a-zA-Z0-9-]+$/.test(jobApplicationId)) query.set("job", jobApplicationId);
+    if (selection?.laneId === null) query.set("laneId", "main");
+    for (const field of ["laneId", "artifactId", "revisionId"] as const) {
+      const value = selection?.[field];
+      if (value && /^[a-zA-Z0-9-]+$/.test(value)) query.set(field, value);
+    }
   }
+  if (query.size) return `${href}?${query}`;
   return href;
 }
 

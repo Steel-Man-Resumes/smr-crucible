@@ -7,7 +7,7 @@ RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog,public
 DECLARE k text; result uuid; normalized text;
 BEGIN
  IF nullif(current_setting('app.user_id',true),'') IS NULL THEN RAISE EXCEPTION 'Authentication required'; END IF;
- IF p_state !~ '^[A-Z]{2}$' OR p_place IS NULL OR length(p_place) NOT BETWEEN 1 AND 80
+ IF p_state IS NULL OR p_category IS NULL OR p_reason IS NULL OR p_state !~ '^[A-Z]{2}$' OR p_place IS NULL OR length(trim(p_place)) NOT BETWEEN 1 AND 80 OR length(p_place)>80
     OR p_category NOT IN ('employers','shelter','food','clothing','safety','physical','mental','recovery','id_documents','legal_aid','expungement','courts','jobs','training','education','financial','community','faith','veterans','youth','transportation')
     OR p_reason NOT IN ('new_area','low_coverage','stale_listing','missing_prerequisite') THEN
   RAISE EXCEPTION 'Invalid coverage request';

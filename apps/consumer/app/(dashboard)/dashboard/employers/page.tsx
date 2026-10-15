@@ -8,6 +8,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useLanes } from "@/components/lanes/useLanes";
 import { TierGate } from "@/components/TierGate";
 
 interface Employer {
@@ -20,12 +21,18 @@ interface Employer {
   whyGoodFit: string | null;
   caveats: string | null;
   lastVerified: string | null;
+  sourceUrl?: string;
+  relationshipTier?: string;
+  expiresAt?: string;
 }
 
 const PAGE_SIZE = 25;
 
 function EmployersList() {
   const searchParams = useSearchParams();
+  const lanes = useLanes();
+  const [stateFilter,setStateFilter] = useState("");
+  const [manualSearch,setManualSearch] = useState(false);
   const laneQ = (searchParams.get("q") || "").trim();
   // The search runs on the server, one page at a time (lib/employer-paging.ts).
   const [query, setQuery] = useState(laneQ);
@@ -43,6 +50,7 @@ function EmployersList() {
 
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page) });
+    if (stateFilter) params.set("state",stateFilter);
     if (query) params.set("q", query);
     if (industry !== "all") params.set("industry", industry);
     let live = true;
@@ -65,15 +73,24 @@ function EmployersList() {
     return () => {
       live = false;
     };
-  }, [query, industry, page]);
+  }, [query, industry, page, stateFilter]);
+
+  useEffect(()=>{setManualSearch(false);},[lanes.active]);
+  useEffect(()=>{if(laneQ){setQuery(laneQ);setDraft(laneQ);setPage(0);return;}
+    if(!manualSearch && lanes.loaded){const target=lanes.activeLane?.target_role || "";setQuery(target);setDraft(target);setPage(0);}
+  },[laneQ,lanes.loaded,lanes.active,lanes.activeLane?.target_role,manualSearch]);
+
+  useEffect(()=>{if(!manualSearch && me?.state && /^[A-Za-z]{2}$/.test(me.state))setStateFilter(me.state.toUpperCase());},[me?.state,manualSearch]);
 
   function search(e: React.FormEvent) {
     e.preventDefault();
+    setManualSearch(true);
     setQuery(draft.trim());
     setPage(0);
   }
 
   function pickIndustry(ind: string) {
+    setManualSearch(true);
     setIndustry(ind);
     setPage(0);
   }
@@ -127,13 +144,14 @@ function EmployersList() {
         </p>
       </div>
 
+      <div className="my-3 flex items-center gap-3"><label htmlFor="employer-state" className="text-sm text-t-phos">State</label><input id="employer-state" value={stateFilter} maxLength={2} placeholder="Any" onChange={e=>{setManualSearch(true);setStateFilter(e.target.value.toUpperCase().replace(/[^A-Z]/g,""));setPage(0);}} className="w-20 border border-t-line bg-t-bg px-2 py-2 text-t-white" /><span className="text-sm text-t-phos-dim">Your lane helps start the search. Change any filter.</span></div>
       <form onSubmit={search} className="mb-4 flex gap-2" role="search" data-testid="employer-search">
         <label htmlFor="employer-q" className="sr-only">Search employers</label>
         <input
           id="employer-q"
           type="search"
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {setManualSearch(true);setDraft(e.target.value);}}
           maxLength={80}
           placeholder="Search by name, town or kind of work"
           className="t-focus min-h-touch w-full border border-t-line bg-t-panel px-3 py-2 text-sm text-t-white placeholder:text-t-phos-dim"
@@ -209,6 +227,7 @@ function EmployersList() {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-t-phos-dim">
                       {e.industry && <span>{e.industry}</span>}
                       {e.location && <span>{e.location}</span>}
+                      {e.relationshipTier && <span>{e.relationshipTier} employer evidence</span>}
                     </div>
                   </div>
                   {e.applyUrl && (

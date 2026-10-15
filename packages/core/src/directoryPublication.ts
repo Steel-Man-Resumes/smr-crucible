@@ -7,7 +7,7 @@ export type PublicationResult<T> = {status:'ok';contractVersion:typeof DIRECTORY
 export interface PublishedEmployer {
  id:string;name:string;industry:string|null;state:string;city:string|null;location:string|null;
  applyUrl:string|null;roleTypes:string|null;evidence:string|null;caveats:string|null;checkedAt:string;
- expiresAt:string;sourceUrl:string;relationshipTier:'T1'|'T2'|'T3';scope:string;standing:string;version:string;
+ expiresAt:string;sourceUrl:string;relationshipTier:'T1'|'T2'|'T3'|null;scope:string;standing:string;version:string;
 }
 export interface PublishedResource extends ResourceAppRow {
  fees:string|null;what_to_bring:string|null;limits:string|null;expires_on:string;
@@ -56,7 +56,7 @@ export function searchVerifiedResources(opts:ResourcePlaceQuery) {
  const {sql,params}=resourceAppSql(opts);if(!(params[0] as string[]).length)return [];
  // Existing tested place/scope and per-level bounds; join only the selected IDs.
  const selected=sql.replaceAll('resource_app_v','resource_publication_v');
- return query<PublishedResource>(`WITH selected AS (${selected}) SELECT ${RESOURCE_FIELDS.split(',').map(f=>f.trim().startsWith('last_checked')||f.trim().startsWith('expires_on')?'p.'+f.trim():'p.'+f.trim()).join(',')} FROM resource_publication_v p JOIN selected s USING(service_id) ORDER BY p.last_checked DESC,p.org_name,p.service_id`,params);
+ return query<PublishedResource>(`WITH selected AS (${selected}) SELECT ${RESOURCE_FIELDS.split(',').map(f=>'p.'+f.trim()).join(',')} FROM resource_publication_v p JOIN selected s USING(service_id) ORDER BY p.last_checked DESC,p.org_name,p.service_id`,params);
  });
 }
 export function getVerifiedResource(id:string) {
@@ -67,4 +67,13 @@ export function getApprovedResourceChain(chainKey:string) {
  const rows=await query<PublishedResourceStep>(`SELECT chain_key,state,goal,unlocks,verified_on::text,expires_on::text,n,action,agency,requires,cost,wait_time,where_how,url,phone,no_docs_fallback,fee_waiver,source_url,step_verified_on::text,version FROM resource_chain_publication_v WHERE chain_key=$1 ORDER BY n LIMIT 51`,[chainKey]);
  // A chain must never appear incomplete.
  if(rows.length>50)throw new Error('Chain exceeds supported size');return rows;});
+}
+export interface PublishedResourceChainSummary {chainKey:string;goal:string;state:string;checkedAt:string;expiresAt:string;stepCount:number}
+export function searchApprovedResourceChains(opts:{state?:string;q?:string}={}) {
+ return publicationRead<PublishedResourceChainSummary[]>([],async()=>{
+ const params:unknown[]=[];const where:string[]=[];
+ if(opts.state&&/^[A-Z]{2}$/.test(opts.state)){params.push(opts.state);where.push(`state=$${params.length}`);}
+ const pattern=employerLikePattern(opts.q);if(pattern){params.push(pattern);where.push(`goal ILIKE $${params.length} ESCAPE '\\'`);}
+ return query<PublishedResourceChainSummary>(`SELECT chain_key AS "chainKey",goal,state,min(verified_on)::text AS "checkedAt",min(expires_on)::text AS "expiresAt",count(*)::int AS "stepCount" FROM resource_chain_publication_v ${where.length?'WHERE '+where.join(' AND '):''} GROUP BY chain_key,goal,state HAVING count(*)<=50 ORDER BY state,goal,chain_key LIMIT 25`,params);
+ });
 }

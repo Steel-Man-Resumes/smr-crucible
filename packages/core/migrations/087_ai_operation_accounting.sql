@@ -61,3 +61,6 @@ DO $$ BEGIN
     GRANT SELECT,INSERT,UPDATE,DELETE ON ai_tool_policy TO smr_app;
   END IF;
 END $$;
+
+-- Bind the durable voice lease to its admission reservation across requests.
+ALTER TABLE voice_session ADD COLUMN IF NOT EXISTS operation_id uuid REFERENCES ai_operation(id) ON DELETE SET NULL;

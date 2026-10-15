@@ -142,7 +142,14 @@ export async function PATCH(request: Request) {
       );
     }
 
-    return NextResponse.json({ success: true, contact });
+    const previousContact = existing?.profile_data?.contact;
+    let coverageRequestStatus: string | undefined;
+    if(contact.city && contact.state && (contact.city !== previousContact?.city || contact.state !== previousContact?.state)) {
+      const { toStateCode, requestDirectoryCoverage } = await import("@crucible/core");
+      const state=toStateCode(contact.state);
+      if(state) { try { await requestDirectoryCoverage(userId,{state,place:contact.city,category:"employers",reason:"new_area"});coverageRequestStatus="pending"; } catch {coverageRequestStatus="unavailable";} }
+    }
+    return NextResponse.json({ success: true, contact, coverageRequestStatus });
   } catch (err: any) {
     console.error("Profile save error:", err?.message || err);
     return NextResponse.json(

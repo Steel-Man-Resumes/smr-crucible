@@ -81,6 +81,14 @@ function SecondChanceBoardPage() {
     return () => window.removeEventListener("forge-synced", load);
   }, [ownerUid]);
 
+  // A return visit in another browser can use the account's location too.
+  useEffect(()=>{let live=true;if(!ownerUid)return;
+    fetch("/api/user/context",{cache:"no-store"}).then(r=>r.ok?r.json():null).then(d=>{
+      if(!live||!d)return;const saved=[d.profile?.city,d.profile?.state].filter(Boolean).join(", ");
+      if(saved)setLocation(current=>current||saved);
+    }).catch(()=>{});return()=>{live=false;};
+  },[ownerUid]);
+
   useEffect(() => {
     try {
       const tracker = JSON.parse(

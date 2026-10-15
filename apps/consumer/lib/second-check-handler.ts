@@ -138,7 +138,9 @@ export async function handleSecondCheckPost(request: Request, deps: SecondCheckD
     // Spend unknown: no spend. The page uses the mint check alone.
     return none("capped");
   }
-  const estimate = deps.estimateUsd(provider.model, body.resumeText.length + sourceText.length, SECOND_CHECK_MAX_OUTPUT_TOKENS);
+  let estimate: number;
+  try { estimate = deps.estimateUsd(provider.model, body.resumeText.length + sourceText.length, SECOND_CHECK_MAX_OUTPUT_TOKENS); }
+  catch { return none("capped"); }
   if (!secondCheckBudgetAllows(spent, cap, estimate)) return none("capped");
 
   let userId: string | null = null;
