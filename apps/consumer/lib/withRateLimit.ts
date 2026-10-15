@@ -10,6 +10,7 @@
  * - Trusted IP extraction (x-real-ip on Vercel, last x-forwarded-for as fallback)
  */
 
+import { runAiOperation } from "./ai-operation-server";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
@@ -156,7 +157,7 @@ export function withRateLimit(
         });
       }
 
-      return handler(request);
+      return runAiOperation({ userId, endpoint: opts.endpoint }, () => handler(request));
     }
 
     // The Forge, signed in: count per account, with per-IP as the floor.
@@ -178,7 +179,7 @@ export function withRateLimit(
           { status: 401 }
         );
       }
-      if (action === "unmetered") return handler(request);
+      if (action === "unmetered") return userId ? runAiOperation({ userId, endpoint: opts.endpoint }, () => handler(request)) : handler(request);
       if (plan.kind === "account") {
         // The account first, then the code's seat pool or the network ceiling
         // (lib/forge-rate-limit.ts, decideSignedInCall).
@@ -227,7 +228,7 @@ export function withRateLimit(
           void ensureUserAttribution(plan.userId, authedCode).catch(() => {});
           void logPartnerUsage({ code: authedCode, userId: plan.userId, endpoint: opts.endpoint });
         }
-        return handler(request);
+        return runAiOperation({ userId: plan.userId, endpoint: opts.endpoint }, () => handler(request));
       }
       // Signed out on an open route: the per-IP rules below, unchanged.
     }

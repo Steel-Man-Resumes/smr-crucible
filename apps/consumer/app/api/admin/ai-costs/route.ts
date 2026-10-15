@@ -1,74 +1,42 @@
-/**
- * GET /api/admin/ai-costs -- per-user AI cost calculator (admin only).
- *
- * Exact token accounting from ai_token_usage (real provider-reported counts).
- * Returns per-user aggregates for the requested window (default 30 days) plus
- * a per-endpoint breakdown and grand totals.
- */
+import { NextResponse } from 'next/server';
+import { query, queryAsUser, runPerOrg } from '@crucible/core';
+import { requirePlatformAdmin } from '@/lib/org-guard';
 
-import { NextResponse } from "next/server";
-import { query } from "@crucible/core";
-import { requirePlatformAdmin } from "@/lib/org-guard";
-
+// Source rates, estimates, missing usage and old accounting stay inspectable.
+const sums = `count(*)::int AS calls, COALESCE(sum(t.input_tokens),0)::bigint AS input_tokens,
+ COALESCE(sum(t.output_tokens),0)::bigint AS output_tokens, COALESCE(sum(t.audio_seconds),0)::bigint AS audio_seconds,
+ COALESCE(sum(t.cost_usd),0)::numeric(12,6) AS cost_usd,
+ COALESCE(sum(t.cost_usd) FILTER (WHERE t.cost_status='estimated'),0)::numeric(12,6) AS estimated_usd,
+ count(*) FILTER (WHERE t.cost_status='unpriced')::int AS unpriced_calls,
+ count(*) FILTER (WHERE t.cost_status='legacy')::int AS legacy_calls,
+ count(*) FILTER (WHERE t.outcome='failed')::int AS failed_calls`;
 export async function GET(request: Request) {
-  const guard = await requirePlatformAdmin();
-  if (!guard.ok) return guard.response;
-
-  const { searchParams } = new URL(request.url);
-  const days = Math.min(
-    365,
-    Math.max(1, parseInt(searchParams.get("days") || "30", 10) || 30)
-  );
-
+  const guard=await requirePlatformAdmin(); if(!guard.ok)return guard.response;
+  const days=Math.min(365,Math.max(1,parseInt(new URL(request.url).searchParams.get('days') || '30',10)||30));
+  const where=`t.created_at > now() - ($1 || ' days')::interval`;
   try {
-    const perUser = await query(
-      `SELECT u.id AS user_id,
-              COALESCE(u.name, '') AS name,
-              COALESCE(u.email, '(pre-auth / anonymous)') AS email,
-              COUNT(*)::int AS calls,
-              SUM(t.input_tokens)::bigint AS input_tokens,
-              SUM(t.output_tokens)::bigint AS output_tokens,
-              SUM(t.cost_usd)::numeric(12,4) AS cost_usd
-         FROM ai_token_usage t
-         LEFT JOIN users u ON u.id = t.user_id
-        WHERE t.created_at > NOW() - ($1 || ' days')::interval
-        GROUP BY u.id, u.name, u.email
-        ORDER BY SUM(t.cost_usd) DESC
-        LIMIT 200`,
-      [String(days)]
-    );
-
-    const perEndpoint = await query(
-      `SELECT endpoint,
-              COUNT(*)::int AS calls,
-              SUM(input_tokens)::bigint AS input_tokens,
-              SUM(output_tokens)::bigint AS output_tokens,
-              SUM(cost_usd)::numeric(12,4) AS cost_usd
-         FROM ai_token_usage
-        WHERE created_at > NOW() - ($1 || ' days')::interval
-        GROUP BY endpoint
-        ORDER BY SUM(cost_usd) DESC`,
-      [String(days)]
-    );
-
-    const totals = await query(
-      `SELECT COUNT(*)::int AS calls,
-              COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
-              COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
-              COALESCE(SUM(cost_usd), 0)::numeric(12,4) AS cost_usd
-         FROM ai_token_usage
-        WHERE created_at > NOW() - ($1 || ' days')::interval`,
-      [String(days)]
-    );
-
-    return NextResponse.json({
-      days,
-      totals: totals[0],
-      perUser: perUser,
-      perEndpoint: perEndpoint,
-    });
-  } catch (err: any) {
-    console.error("ai-costs query failed:", err?.message || err);
-    return NextResponse.json({ error: "Query failed" }, { status: 500 });
-  }
+    const [totals,perUser,perEndpoint,perWorkflow,operations,policies] = await Promise.all([
+      query(`SELECT ${sums} FROM ai_token_usage t WHERE ${where}`,[String(days)]),
+      query(`SELECT u.id AS user_id,COALESCE(u.name,'') AS name,COALESCE(u.email,'(pre-auth / anonymous)') AS email,${sums}
+        FROM ai_token_usage t LEFT JOIN users u ON u.id=t.user_id WHERE ${where}
+        GROUP BY u.id,u.name,u.email ORDER BY sum(t.cost_usd) DESC NULLS LAST LIMIT 200`,[String(days)]),
+      query(`SELECT t.endpoint,${sums} FROM ai_token_usage t WHERE ${where}
+        GROUP BY t.endpoint ORDER BY sum(t.cost_usd) DESC NULLS LAST`,[String(days)]),
+      queryAsUser(guard.userId,`SELECT COALESCE(o.workflow,'ungrouped') AS workflow,${sums}
+        FROM ai_token_usage t LEFT JOIN ai_operation o ON o.id=t.operation_id WHERE ${where}
+        GROUP BY o.workflow ORDER BY sum(t.cost_usd) DESC NULLS LAST`,[String(days)]),
+      queryAsUser(guard.userId,`SELECT workflow,status,count(*)::int AS operations,
+        count(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id))::int AS without_usage,
+        sum(reserved_usd)::numeric(12,6) AS reserved_usd FROM ai_operation o
+        WHERE created_at > now()-($1 || ' days')::interval GROUP BY workflow,status`,[String(days)]),
+      queryAsUser(guard.userId,'SELECT workflow,disabled,daily_calls,daily_usd,reserve_usd,premium_tool FROM ai_tool_policy ORDER BY workflow'),
+    ]);
+    const orgs=await query<{id:string;partner_name:string}>('SELECT id,partner_name FROM access_code ORDER BY id');
+    const orgUsage=await runPerOrg(orgs.map(o=>o.id),guard.userId,`SELECT ${sums} FROM ai_token_usage t
+      WHERE t.created_at > now()-($2 || ' days')::interval AND EXISTS
+       (SELECT 1 FROM access_code_redemption r WHERE r.access_code_id=$1 AND r.user_id=t.user_id)`,id=>[id,String(days)]);
+    const perOrg=orgs.map(o=>({org_id:o.id,name:o.partner_name,...orgUsage.get(o.id)?.[0]}));
+    return NextResponse.json({days,perOrg,totals:totals[0],perUser,perEndpoint,perWorkflow,operations,policies,
+      pricingAsOf:'2026-10-15',note:'Recorded costs include estimates. Unpriced and legacy calls need reconciliation; totals are not an invoice.'});
+  } catch {return NextResponse.json({error:'Cost accounting could not be read. Check migration readiness.'},{status:503});}
 }

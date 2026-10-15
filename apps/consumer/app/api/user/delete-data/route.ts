@@ -159,6 +159,7 @@ export async function DELETE(req: Request) {
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
     // ai_token_usage is the newer per-call token ledger (migration 022) that the
     // export reads; it must be cleared too, or usage telemetry survives a delete.
+    await queryAsUser(userId, "DELETE FROM ai_operation WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_token_usage WHERE user_id = $1", [userId]);
     await query("DELETE FROM coach_conversation WHERE user_id = $1", [userId]);
     // Phase 5.1: encrypted disclosure + interview transcripts (both purposes).

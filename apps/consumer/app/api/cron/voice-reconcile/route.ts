@@ -53,11 +53,11 @@ export async function GET(request: Request) {
       const closed = await expireSession(voiceSession.id, "lease_expired");
       if (!closed) continue;
 
-      recordTokenUsage(
+      await recordTokenUsage(
         "openai",
         REALTIME_MODEL,
         { inputTokens: 0, outputTokens: 0, audioSeconds: closed.elapsedSeconds },
-        { userId: voiceSession.user_id, endpoint: "interview-voice" }
+        { userId: voiceSession.user_id, endpoint: "interview-voice", eventKey: `voice:${voiceSession.id}` }
       );
       reconciled++;
     }

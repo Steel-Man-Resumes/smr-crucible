@@ -15,7 +15,7 @@
  *
  * Pricing (per 1M tokens, input / output) for cost-awareness:
  *   Opus 4.8   $5 / $25      Sonnet 4.6   $3 / $15      Haiku 4.5   $1 / $5
- *   Sonnet 5.5 $2 / $10 (cache read $0.20, 5-minute cache write $2.50)
+ *   Sonnet 5.5 $2 / $10 (cache read $0.10, 5-minute cache write $2.50; checked 2026-10-15)
  *
  * Use the exact model aliases below -- do NOT append date suffixes.
  */

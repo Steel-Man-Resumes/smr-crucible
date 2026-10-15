@@ -48,6 +48,8 @@ export const RLS_PROTECTED_TABLES = [
   "forge_writer_receipt",
   // Phase 5 R2 (migration 083): today's task on the person's lane, owner only
   "lane_focus",
+  "ai_operation",
+  "ai_tool_policy",
 ] as const;
 
 export interface RlsHealth {

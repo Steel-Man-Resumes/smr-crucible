@@ -334,6 +334,8 @@ export async function POST(req: Request) {
       payload.aiUsage = {
         totals: aiUsageTotals[0] ?? { calls: 0, input_tokens: 0, output_tokens: 0, cost_usd: 0 },
         perEndpoint: aiUsageByEndpoint,
+        operations: await queryAsUser(userId, 'SELECT id,workflow,status,reserved_usd,created_at,finished_at FROM ai_operation WHERE user_id=$1 ORDER BY created_at DESC',[userId]),
+        accounting: await query('SELECT cost_status,outcome,count(*)::int AS calls,sum(cost_usd)::text AS cost_usd FROM ai_token_usage WHERE user_id=$1 GROUP BY cost_status,outcome',[userId]),
       };
     }
 

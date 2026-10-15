@@ -1,144 +1,113 @@
-/**
- * Exact AI token accounting (server-side only).
- *
- * Every AI call records real provider-reported token counts plus a computed
- * cost into ai_token_usage. Recording is fire-and-forget: a logging failure
- * must never break the user-facing call.
- *
- * Prices are USD per MILLION tokens (checked 2026-08-02 against Anthropic's
- * published pricing and OpenAI's). Cache reads bill at ~0.1x input, cache
- * writes at 1.25x input (Anthropic).
+/** Provider counts and explicit pricing confidence. No unknown model is priced
+ * by guessing. Rates checked 2026-10-15 against the first-party pricing pages:
+ * https://platform.claude.com/docs/en/about-claude/pricing
+ * https://developers.openai.com/api/docs/pricing
  */
-
-interface ModelPrice {
-  input: number;
-  output: number;
-}
-
+import { currentAiOperation, trackUsageWrite } from './ai-operation-context';
+interface ModelPrice { input: number; output: number; cacheRead: number; }
 const PRICES: Record<string, ModelPrice> = {
-  // Anthropic (per MTok)
-  "claude-sonnet-4-6": { input: 3, output: 15 },
-  "claude-sonnet-5": { input: 3, output: 15 },
-  // t.ROY chat (2026-10-01). Cache read 0.1x and 5-minute write 1.25x of input
-  // match its published $0.20 / $2.50.
-  "claude-sonnet-5-5": { input: 2, output: 10 },
-  "claude-haiku-4-5": { input: 1, output: 5 },
-  "claude-opus-4-6": { input: 5, output: 25 },
-  "claude-opus-4-7": { input: 5, output: 25 },
-  "claude-opus-4-8": { input: 5, output: 25 },
-  // OpenAI (per MTok)
-  "gpt-4o": { input: 2.5, output: 10 },
-  "gpt-4o-mini": { input: 0.15, output: 0.6 },
+  'claude-sonnet-4-6': { input: 3, output: 15, cacheRead: .3 },
+  'claude-sonnet-5': { input: 2, output: 10, cacheRead: .2 },
+  'claude-sonnet-5-5': { input: 2, output: 10, cacheRead: .1 },
+  'claude-haiku-4-5': { input: 1, output: 5, cacheRead: .1 },
+  'claude-opus-4-6': { input: 5, output: 25, cacheRead: .5 },
+  'claude-opus-4-7': { input: 5, output: 25, cacheRead: .5 },
+  'claude-opus-4-8': { input: 5, output: 25, cacheRead: .5 },
+  'gpt-4o': { input: 2.5, output: 10, cacheRead: 1.25 },
+  'gpt-4o-mini': { input: .15, output: .6, cacheRead: .075 },
 };
-
-function priceFor(model: string): ModelPrice {
+function priceFor(model: string): ModelPrice | undefined {
   if (PRICES[model]) return PRICES[model];
-  // Prefix match tolerates dated/suffixed model ids. Match the LONGEST key first
-  // so "gpt-4o-mini-2024-07-18" resolves to "gpt-4o-mini", not "gpt-4o" (which
-  // over-reported the mini-based grounding verifier ~16x in the cost panel).
-  const key = Object.keys(PRICES)
-    .sort((a, b) => b.length - a.length)
-    .find((k) => model.startsWith(k));
-  if (key) return PRICES[key];
-  // Unknown model: assume Sonnet-tier so costs are never silently zero
-  return { input: 3, output: 15 };
+  // Only a documented date snapshot may inherit an alias price. A new model
+  // whose name merely begins with an old one must remain visibly unpriced.
+  const key = Object.keys(PRICES).sort((a,b) => b.length-a.length)
+    .find(k => model.startsWith(k + '-') && /^\d{4}-?\d{2}-?\d{2}$/.test(model.slice(k.length+1)));
+  return key ? PRICES[key] : undefined;
 }
-
 export interface TokenUsage {
+  /** Uncached input for Anthropic; callers subtract OpenAI cached tokens. */
   inputTokens: number;
   outputTokens: number;
   cacheCreationInputTokens?: number;
   cacheReadInputTokens?: number;
-  /** Phase 1D: voice practice has no provider token count, only elapsed
-   *  audio time. Text calls omit this and it defaults to 0 (audio_seconds,
-   *  migration 035) -- correct, since a text call really used 0 audio
-   *  seconds. Not included in computeCostUsd: gpt-realtime-2 audio pricing
-   *  is per-minute, not per-token, and is not modeled here yet. */
   audioSeconds?: number;
 }
-
 export interface AiCallMeta {
   userId?: string | null;
   endpoint?: string;
-  /** Claude only: never fall back to OpenAI, and never log the provider's
-   *  error text here (the caller logs a fixed label). Used by the record check
-   *  (D11), whose consent names one provider. */
   anthropicOnly?: boolean;
+  operationId?: string;
+  eventKey?: string;
+  outcome?: 'succeeded' | 'failed' | 'unknown';
+  /** Provider gave no usage (including transport failures). Never imply free. */
+  usageMissing?: boolean;
 }
-
-export function computeCostUsd(model: string, usage: TokenUsage): number {
+export interface CostMeasurement {
+  costUsd: number | null;
+  status: 'priced' | 'estimated' | 'unpriced';
+  basis: string;
+}
+const count = (v: number | undefined) => Number.isFinite(v) && v! >= 0 ? v! : 0;
+const round = (v: number) => Math.round(v * 1_000_000) / 1_000_000;
+export function measureCost(model: string, usage: TokenUsage): CostMeasurement {
+  if (count(usage.audioSeconds) > 0) {
+    // Planning estimate only: half the elapsed session as input speech and half
+    // as output. Silence, repeated context and text can change the real bill.
+    // Rates: gpt-realtime-2 model page, 2026-10-15, audio $32/$64 per MTok.
+    // Token rates: OpenAI voice-latency-cost, input 10/s, output 20/s.
+    const override = Number(process.env.VOICE_ESTIMATE_USD_PER_MINUTE);
+    const rate = Number.isFinite(override) && override > 0 ? override
+      : model === 'gpt-realtime-2' ? (300 * 32 + 600 * 64) / 1_000_000 : null;
+    if (rate !== null) return {
+      costUsd: round(count(usage.audioSeconds) / 60 * rate), status: 'estimated',
+      basis: override > 0 ? 'owner-configured elapsed-session estimate' : 'elapsed session; 50/50 speech estimate; excludes replayed context/text; rates 2026-10-15',
+    };
+    return { costUsd: null, status: 'unpriced', basis: 'elapsed audio only; model price unavailable' };
+  }
   const p = priceFor(model);
-  const cacheWrite = usage.cacheCreationInputTokens || 0;
-  const cacheRead = usage.cacheReadInputTokens || 0;
-  const cost =
-    (usage.inputTokens / 1_000_000) * p.input +
-    (usage.outputTokens / 1_000_000) * p.output +
-    (cacheWrite / 1_000_000) * p.input * 1.25 +
-    (cacheRead / 1_000_000) * p.input * 0.1;
-  return Math.round(cost * 1_000_000) / 1_000_000;
+  if (!p) return { costUsd: null, status: 'unpriced', basis: 'model price not verified' };
+  return { costUsd: round((count(usage.inputTokens) * p.input + count(usage.outputTokens) * p.output
+    + count(usage.cacheCreationInputTokens) * p.input * 1.25 + count(usage.cacheReadInputTokens) * p.cacheRead) / 1_000_000),
+    status: 'priced', basis: 'provider token counts; standard global rates checked 2026-10-15' };
 }
-
-/**
- * Fire-and-forget flat-cost logger for calls priced PER OPERATION rather than
- * per token (e.g. image generation). recordTokenUsage derives cost from token
- * counts against a per-MTok price table; an image model has no token count, so
- * this records the endpoint + an already-estimated flat cost directly, with zero
- * tokens. Same ai_token_usage ledger, same never-throw contract.
- */
-export function recordFlatUsage(
-  provider: string,
-  model: string,
-  costUsd: number,
-  meta?: AiCallMeta
-): void {
-  void (async () => {
+/** Budget callers must refuse an unpriceable estimate, never convert null to 0. */
+export function computeCostUsd(model: string, usage: TokenUsage): number {
+  const value = measureCost(model, usage).costUsd;
+  if (value === null) throw new Error('AI_PRICE_UNAVAILABLE');
+  return value;
+}
+function writeUsage(provider: string, model: string, usage: TokenUsage, price: CostMeasurement, meta?: AiCallMeta): Promise<void> {
+  const context = currentAiOperation();
+  const merged = { ...context, ...meta };
+  const write = (async () => {
     try {
-      const { query } = await import("@crucible/core");
-      await query(
-        `INSERT INTO ai_token_usage
-           (user_id, endpoint, provider, model, input_tokens, output_tokens,
-            cache_creation_input_tokens, cache_read_input_tokens, cost_usd,
-            audio_seconds)
-         VALUES ($1, $2, $3, $4, 0, 0, 0, 0, $5, 0)`,
-        [meta?.userId || null, meta?.endpoint || "unknown", provider, model, costUsd || 0]
-      );
-    } catch (err) {
-      console.error("ai_token_usage flat insert failed:", err);
+      const { query } = await import('@crucible/core');
+      await query(`INSERT INTO ai_token_usage
+        (user_id,endpoint,provider,model,input_tokens,output_tokens,cache_creation_input_tokens,
+         cache_read_input_tokens,cost_usd,audio_seconds,cost_status,cost_basis,operation_id,outcome,event_key)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        ON CONFLICT (event_key) WHERE event_key IS NOT NULL DO NOTHING`, [
+        merged.userId || null, merged.endpoint || 'unknown', provider, model,
+        count(usage.inputTokens),count(usage.outputTokens),count(usage.cacheCreationInputTokens),count(usage.cacheReadInputTokens),
+        price.costUsd,count(usage.audioSeconds),price.status,price.basis,merged.operationId || null,
+        merged.outcome || 'succeeded',merged.eventKey || null,
+      ]);
+    } catch {
+      // Fixed diagnostic only: a DB exception can carry row content.
+      if (context) context.accountingIncomplete = true;
+      console.error('AI_USAGE_WRITE_FAILED');
     }
   })();
+  trackUsageWrite(write);
+  return write;
 }
-
-/** Fire-and-forget: never throws, never blocks the caller. */
-export function recordTokenUsage(
-  provider: string,
-  model: string,
-  usage: TokenUsage,
-  meta?: AiCallMeta
-): void {
-  void (async () => {
-    try {
-      const { query } = await import("@crucible/core");
-      await query(
-        `INSERT INTO ai_token_usage
-           (user_id, endpoint, provider, model, input_tokens, output_tokens,
-            cache_creation_input_tokens, cache_read_input_tokens, cost_usd,
-            audio_seconds)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-        [
-          meta?.userId || null,
-          meta?.endpoint || "unknown",
-          provider,
-          model,
-          usage.inputTokens || 0,
-          usage.outputTokens || 0,
-          usage.cacheCreationInputTokens || 0,
-          usage.cacheReadInputTokens || 0,
-          computeCostUsd(model, usage),
-          usage.audioSeconds || 0,
-        ]
-      );
-    } catch (err) {
-      console.error("ai_token_usage insert failed:", err);
-    }
-  })();
+/** Await at request boundaries; legacy callers remain tracked by their workflow. */
+export function recordTokenUsage(provider: string, model: string, usage: TokenUsage, meta?: AiCallMeta): Promise<void> {
+  return writeUsage(provider,model,usage,meta?.usageMissing
+    ? {costUsd:null,status:'unpriced',basis:'provider did not report usage'} : measureCost(model,usage),meta);
+}
+export function recordFlatUsage(provider: string, model: string, costUsd: number, meta?: AiCallMeta): Promise<void> {
+  return writeUsage(provider,model,{inputTokens:0,outputTokens:0},Number.isFinite(costUsd) && costUsd >= 0
+    ? {costUsd,status:'estimated',basis:'per-operation estimate'}
+    : {costUsd:null,status:'unpriced',basis:'operation price unavailable'},meta);
 }

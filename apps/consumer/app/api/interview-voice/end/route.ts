@@ -68,11 +68,11 @@ export async function POST(request: Request) {
     await hangupProviderCall(ended.session.call_id);
   }
 
-  recordTokenUsage(
+  await recordTokenUsage(
     "openai",
     REALTIME_MODEL,
     { inputTokens: 0, outputTokens: 0, audioSeconds: ended.elapsedSeconds },
-    { userId, endpoint: "interview-voice" }
+    { userId, endpoint: "interview-voice", eventKey: `voice:${sessionId}` }
   );
 
   return NextResponse.json({ ok: true, elapsedSeconds: ended.elapsedSeconds });
