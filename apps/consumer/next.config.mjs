@@ -103,7 +103,9 @@ const nextConfig = {
         source: "/",
         has: [{ type: "host", value: "forge.steelmanresumes.com" }],
         destination: "/intro",
-        permanent: false,
+        // Permanent: Search Console read the temporary redirect as two pages
+        // (/ and /intro) and flagged a duplicate (2026-10-15).
+        permanent: true,
       },
       {
         source: "/",
