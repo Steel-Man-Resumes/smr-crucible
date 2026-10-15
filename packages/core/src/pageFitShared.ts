@@ -350,7 +350,13 @@ export function jobLineRoles(lines: string[]): JobLineRole[] {
       jobHasYears = true;
       continue;
     }
-    if (headerish(l) && !isDateText(l)) {
+    // A comma header can be longer than a standalone title. Validate the
+    // dated prefix by its separated fields instead of rejecting it at eight words.
+    const dated = splitTrailingYears(l);
+    const commaHeader = dated && dated.title.split(/\s*,\s*/);
+    const completeCommaHeader = !!commaHeader && commaHeader.length >= 2
+      && commaHeader.length <= 5 && commaHeader.every((part) => headerish(part));
+    if ((headerish(l) || completeCommaHeader) && !isDateText(l)) {
       // A header without pipes: dates on it, or a dates line within the next two lines (header-ish between).
       if (splitTrailingYears(l)) {
         roles[i] = "job";

@@ -103,3 +103,4 @@ export * from './laneFocus';
 export * from './directoryPublication';
 export * from './resourceList';
 export * from './directoryCoverage';
+export * from './packageDelivery';

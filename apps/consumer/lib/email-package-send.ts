@@ -14,6 +14,7 @@
 export const MAX_FIELD = 60_000;
 
 export interface PackageDocs {
+  strengths?: Array<{ title: string; evidence: string }>;
   resumeText: string;
   coverLetterText: string;
   headline: string;
@@ -27,6 +28,7 @@ export interface MailAttachment {
 }
 
 export interface PackageMail {
+  idempotencyKey?: string;
   from: string;
   to: string;
   subject: string;
@@ -42,13 +44,22 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+/** Readable email typography, with every line escaped and kept in order. */
+function documentHtml(text: string): string {
+ return `<div style="font-family:Georgia,serif;font-size:15px;line-height:1.6;color:#1c1e1b;padding:16px;border:1px solid #d3d8d1;">` + text.split("\n").map((line, index) => {
+  if (!line.trim()) return `<div style="height:8px;"></div>`;
+  const heading = index === 0 || (/^[A-Z][A-Z &/]{2,45}$/.test(line.trim()));
+  return `<p style="margin:0 0 5px;${heading ? "font-weight:bold;" : ""}">${esc(line)}</p>`;
+ }).join("") + "</div>";
+}
+
 /** Clip what the client sent to the sizes the email allows. */
 export function clipDocs(body: Record<string, unknown>): PackageDocs {
   return {
     resumeText: String(body.resumeText || "").slice(0, MAX_FIELD),
     coverLetterText: String(body.coverLetterText || "").slice(0, MAX_FIELD),
-    headline: String(body.narrativeHeadline || "").slice(0, 500),
-    summary: String(body.narrativeSummary || "").slice(0, 5000),
+    headline: "",
+    summary: "",
   };
 }
 
@@ -79,15 +90,16 @@ export function buildPackageEmail(
         (docs.summary ? `<p style="color:#4f554f;line-height:1.6;">${esc(docs.summary)}</p>` : "")
     );
   }
+  if (docs.strengths?.length) sections.push(`<h2 style="margin:24px 0 8px;font-size:18px;">Strengths from your work</h2>` + docs.strengths.map(s => `<p style="line-height:1.6;"><strong>${esc(s.title)}</strong><br>${esc(s.evidence)}</p>`).join(""));
   sections.push(
     `<h2 style="margin:24px 0 8px;font-size:18px;color:#1c1e1b;">Your resume</h2>` +
-      `<pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;color:#1c1e1b;background:#f5f6f4;padding:16px;border:1px solid #d3d8d1;">${esc(docs.resumeText)}</pre>`
+      documentHtml(docs.resumeText)
   );
   if (docs.coverLetterText.trim()) {
     sections.push(
       `<h2 style="margin:24px 0 8px;font-size:18px;color:#1c1e1b;">Your cover letter</h2>` +
         `<p style="color:#6d736d;font-size:12px;">${opts.attached ? "Edit this for every job. The Word file is attached, and the text is here to copy." : "Edit this for every job. That is why we send it as text you can copy instead of a locked file."}</p>` +
-        `<pre style="white-space:pre-wrap;font-family:Georgia,serif;font-size:14px;color:#1c1e1b;background:#f5f6f4;padding:16px;border:1px solid #d3d8d1;">${esc(docs.coverLetterText)}</pre>`
+        documentHtml(docs.coverLetterText)
     );
   }
 
@@ -133,6 +145,7 @@ export function buildPackageEmail(
     (files ? `${files.trim()}\n\n` : "") +
     (docs.headline ? `${docs.headline}\n\n` : "") +
     (docs.summary ? `${docs.summary}\n\n` : "") +
+    (docs.strengths?.length ? docs.strengths.map(s => `${s.title}: ${s.evidence}`).join("\n") + "\n\n" : "") +
     `=== YOUR RESUME ===\n\n${docs.resumeText}\n\n` +
     (docs.coverLetterText.trim() ? `=== YOUR COVER LETTER ===\n\n${docs.coverLetterText}\n\n` : "") +
     (opts.why === "finished"
@@ -156,8 +169,9 @@ export function resendTransport(key: string): MailTransport {
   return async (msg) => {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify(msg),
+      signal: AbortSignal.timeout(12_000),
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json", ...(msg.idempotencyKey ? { "Idempotency-Key": msg.idempotencyKey } : {}) },
+      body: JSON.stringify(Object.fromEntries(Object.entries(msg).filter(([field]) => field !== "idempotencyKey"))),
     });
     return { ok: res.ok, status: res.status };
   };

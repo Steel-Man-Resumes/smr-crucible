@@ -390,7 +390,7 @@ describe("L1: an unreadable wall date or switch never guesses", () => {
   it("impossible dates are refused (February 30, April 31, hour 24), real ones read", () => {
     for (const bad of ["2026-02-30T00:00:00-07:00", "2026-04-31T00:00:00Z", "2026-11-02T24:00:00Z", "2027-02-29T00:00:00Z"]) {
       assert.equal(forgeWallStartsAt(bad), null, bad);
-      assert.equal(forgeWallState({ now: Date.parse("2030-01-01T00:00:00Z"), startsAt: bad, override: null }), "open", bad);
+      assert.equal(forgeWallState({ now: Date.parse("2030-01-01T00:00:00Z"), startsAt: bad, override: null }), "up", bad);
     }
     assert.ok(forgeWallStartsAt("2028-02-29T00:00:00Z"));
   });

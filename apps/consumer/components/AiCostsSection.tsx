@@ -157,7 +157,7 @@ export function AiCostsAdminSection() {
             <table className="w-full"><thead><tr><th className={th}>Workflow</th><th className={th}>Calls</th><th className={th}>Recorded cost</th><th className={th}>Unpriced</th></tr></thead>
               <tbody>{data.perWorkflow?.map((w: any) => <tr key={w.workflow}><td className={td}>{labelForEndpoint(w.workflow)}</td><td className={td}>{num(w.calls)}</td><td className={td}>{usd(w.cost_usd)}</td><td className={td}>{num(w.unpriced_calls)}</td></tr>)}</tbody></table>
             <p className="text-xs font-semibold text-t-white mt-3">Operation health</p>
-            {data.operations?.map((o: any) => <p className="text-xs text-t-phos-dim" key={`${o.workflow}:${o.status}`}>{labelForEndpoint(o.workflow)}: {o.status}, {num(o.operations)} operations, {num(o.without_usage)} without usage, {usd(o.reserved_usd)} reserved.</p>)}
+            {data.operations?.map((o: any) => <p className="text-xs text-t-phos-dim" key={`${o.workflow}:${o.status}`}>{labelForEndpoint(o.workflow)}: {o.status}, {num(o.operations)} operations, {num(o.without_usage)} without usage, {num(o.incomplete_accounting)} with incomplete accounting, {usd(o.reserved_usd)} reserved.</p>)}
           </div>
           <div className="overflow-x-auto"><p className="text-xs font-semibold text-t-white">By current organization membership</p>
             <p className="text-xs text-t-phos-dim">A member of more than one organization can appear in more than one row.</p>

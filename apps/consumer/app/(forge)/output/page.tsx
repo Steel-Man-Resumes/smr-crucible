@@ -202,6 +202,21 @@ function OutputPageInner() {
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
   const output = (session.forgeOutput as ForgeOutput) || {};
+  const [storyRetrying, setStoryRetrying] = useState(false);
+  const [storyRetryError, setStoryRetryError] = useState("");
+  async function retryStory() {
+    if (!runIsMine()) return;
+    setStoryRetrying(true);
+    setStoryRetryError("");
+    try {
+      const response = await fetch("/api/forge/story-check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ story: output, resumeText: session.resumeText, userText: [session.goalNarrative, session.hookNarrative, session.criminalRecord?.context, ...Object.values(session.challengeNarratives || {})] }) });
+      if (!response.ok) throw new Error("Story check could not complete. Try again.");
+      const next = await response.json();
+      if (!runIsMine()) return;
+      updateSession({ forgeOutput: next, ...(session.forgeFinish ? { forgeFinish: { ...session.forgeFinish, key: finishKey({ ...session, forgeOutput: next }, keepInsideLines) } } : {}) });
+    } catch { setStoryRetryError("Story check could not complete. Your saved work is still here."); }
+    finally { setStoryRetrying(false); }
+  }
 
   const readiness = output.readiness_stage || session.readinessStage || "preparation";
   const rc = READINESS_CONFIG[readiness] || READINESS_CONFIG.preparation;
@@ -592,7 +607,7 @@ function OutputPageInner() {
         : await fetch("/api/revisions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ kind: "finish", finish: payload, laneTarget: careerPaths[0]?.title || "" }),
+            body: JSON.stringify({ kind: "finish", finish: payload, laneTarget: session.laneTarget || careerPaths[0]?.title || "" }),
           });
       const data = (await res.json().catch(() => null)) as { revision?: SavedRevisionSummary; error?: string } | null;
       if (mine !== saveSeq.current) return;
@@ -607,6 +622,8 @@ function OutputPageInner() {
       }
       if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
       setSaved({ ...data.revision, mark: forMark });
+      if (!checkModeRef.current && data.revision.laneId !== undefined) updateSession({ forgeLaneId: data.revision.laneId });
+      window.dispatchEvent(new Event("lane-focus-changed"));
     } catch {
       if (mine === saveSeq.current) setFailedMark(forMark);
     }
@@ -1235,7 +1252,8 @@ function OutputPageInner() {
         <>
           {!checkMode && (
             <div className="mt-6">
-              <StorySection output={output} strengthsHeading={rc.strengthsHeading} careersHeading={rc.careersHeading} reportChecks={reportChecks} spotlight onRevisit={() => {
+              {storyRetryError && <p role="alert" className="text-t-red">{storyRetryError}</p>}
+              <StorySection onRetry={() => void retryStory()} retrying={storyRetrying} output={output} strengthsHeading={rc.strengthsHeading} careersHeading={rc.careersHeading} reportChecks={reportChecks} spotlight onRevisit={() => {
                 updateSession({ forgeOutput: undefined, forgeFinish: undefined, laneParkedLetter: undefined });
                 router.push("/goals");
               }} />

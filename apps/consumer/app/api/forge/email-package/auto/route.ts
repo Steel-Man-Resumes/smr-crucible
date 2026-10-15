@@ -13,6 +13,7 @@
  * still owes its second step is held (lib/session-policy.ts).
  */
 
+import { packageDeliveryDeps } from "@/lib/package-delivery-worker";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { forgeSessionUser } from "@/lib/session-policy";
@@ -36,21 +37,7 @@ async function handlePost(request: Request) {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
-  const { getPackageEmailTarget, incrementIpUsage, claimPackageEmailVersion, releasePackageEmailVersion, getRevision, getLatestRevision } =
-    await import("@crucible/core");
-  const { packageFiles } = await import("@/lib/email-package-files");
-  const key = resendKey();
-  const result = await sendFinishedPackage(user.id, body as Record<string, unknown>, {
-    target: getPackageEmailTarget,
-    count: incrementIpUsage,
-    claim: claimPackageEmailVersion,
-    release: releasePackageEmailVersion,
-    getRevision,
-    getLatestRevision,
-    files: packageFiles,
-    transport: key ? resendTransport(key) : null,
-    from: packageFrom(),
-  });
+  const result = await sendFinishedPackage(user.id, body as Record<string, unknown>, await packageDeliveryDeps());
   if (!result.sent && result.reason === "failed") console.error("email-package auto: send failed");
   return NextResponse.json(result, { status: result.sent || result.reason !== "draft" ? 200 : 409 });
 }

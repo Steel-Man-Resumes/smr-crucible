@@ -190,6 +190,23 @@ function DisclosurePlannerPage() {
     if (job) setTargetJob(job);
   }, [searchParams]);
 
+  const [applicationError, setApplicationError] = useState("");
+  useEffect(() => {
+    const id = searchParams.get("applicationId");
+    if (!id) return;
+    let live = true;
+    fetch(`/api/application-context?applicationId=${encodeURIComponent(id)}`, { cache: "no-store" }).then(async r => {
+      if (!r.ok) throw new Error();
+      const data = await r.json();
+      const application = data.application;
+      if (!application) throw new Error();
+      if (!live) return;
+      setTargetCompany(application.company || "");
+      setTargetJob(application.job_title || "");
+    }).catch(() => live && setApplicationError("This saved job could not be loaded. Check your applications before continuing."));
+    return () => { live = false; };
+  }, [searchParams]);
+
   // Plain-language mode (7.2 / coach settings) -- respected intake-side so
   // questions are phrased simpler when the user prefers it.
   useEffect(() => {
@@ -310,6 +327,7 @@ function DisclosurePlannerPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           record: sendRecord ? record : undefined,
+          applicationId: searchParams.get("applicationId") || undefined,
           aiProcessingConsent: consent,
           timing,
           hurdle,
@@ -344,7 +362,7 @@ function DisclosurePlannerPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             type: "disclosure_plan",
-            targetContext: { targetJob: targetJob || null },
+            targetContext: { targetJob: targetJob || null, applicationId: searchParams.get("applicationId") || undefined },
             content: {
               timing_advice: data.timing_advice ?? null,
               legal_context: data.legal_context ?? null,
@@ -637,6 +655,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
         </div>
 
         {/* Target company (from URL param) */}
+        {applicationError && <p role="alert" className="text-t-red">{applicationError}</p>}
         {targetCompany && (
           <div className="mb-6">
             <label className="text-sm font-medium text-t-white block mb-1">Target employer</label>

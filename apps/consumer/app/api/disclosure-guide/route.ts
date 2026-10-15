@@ -1,3 +1,4 @@
+import { loadApplicationContext } from "@/lib/application-context";
 /**
  * Disclosure Guide API
  *
@@ -64,13 +65,19 @@ async function handlePost(request: Request) {
   const {
     record,
     timing,
-    targetJob,
+    targetJob: requestedTargetJob,
+    applicationId,
     forgeContext,
     refinementNote,
     intakeAnswers,
     hurdle,
     aiProcessingConsent: aiProcessingConsentRaw,
   } = await request.json();
+
+  const selected = typeof applicationId === "string" && applicationId && userId ? await loadApplicationContext(userId, applicationId) : null;
+  if (applicationId && !selected) return NextResponse.json({ error: "That saved job is unavailable in your account" }, { status: 404 });
+  const targetJob = selected?.application.job_title || requestedTargetJob;
+  const posting = selected?.application.jd_full_text || selected?.application.jd_excerpt || "";
 
   // Affirmative, explicit consent to send the record to an AI provider. The
   // client sends this true ONLY when the user clicked "I understand -- let's
@@ -140,6 +147,7 @@ STARTER SCRIPT SHAPE (personalize it, keep their voice):
 ${g.scriptScaffold}
 
 ${targetJob ? `TARGET ROLE: ${sanitizeForPrompt(targetJob, 120)}` : ""}
+${posting ? `SAVED JOB DUTIES (employer requirements, never facts about the applicant): ${sanitizeForPrompt(posting, 4000)}` : ""}
 ${strengthsLine ? `STRENGTHS TO PIVOT TO: ${strengthsLine}` : ""}
 ${intakeLines ? `IN THEIR OWN WORDS:\n${intakeLines}` : ""}
 ${refinementNote ? `\nREFINEMENT REQUEST: ${sanitizeForPrompt(refinementNote, 500)}` : ""}

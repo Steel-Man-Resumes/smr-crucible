@@ -53,7 +53,9 @@ export async function POST(request: Request) {
   if (!body || typeof body !== "object" || Array.isArray(body)) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   const b = body as Record<string, unknown>;
   try {
-    const store = await coreStore();
+    const requestedLane = b.kind === "finish" && b.finish && typeof b.finish === "object" ? (b.finish as { laneId?: unknown }).laneId : undefined;
+    if (requestedLane !== undefined && requestedLane !== null && (typeof requestedLane !== "string" || !/^[0-9a-f-]{36}$/i.test(requestedLane))) return NextResponse.json({ error: "Invalid lane" }, { status: 400 });
+    const store = await coreStore({ laneId: requestedLane as string | null | undefined });
     if (b.kind === "export") {
       if (b.letterText !== undefined && typeof b.letterText !== "string") return NextResponse.json({ error: "Invalid request" }, { status: 400 });
       const ex = await ensureExportRevision(userId, typeof b.artifactId === "string" ? b.artifactId : "", store, {
@@ -92,7 +94,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error, reason: result.reason }, { status: result.status, headers: NO_STORE });
     }
     // A signed-out run's receipt was used for this account: no other account may import it.
-    const res = NextResponse.json({ revision: result.revision }, { headers: NO_STORE });
+    const { getArtifact } = await import("@crucible/core");
+    const savedArtifact = await getArtifact(result.revision.artifactId, userId);
+    const res = NextResponse.json({ revision: { ...result.revision, laneId: savedArtifact?.lane_id || null } }, { headers: NO_STORE });
     if (result.usedRunReceipt) res.headers.append("Set-Cookie", runCookieHeader(null));
     return res;
   } catch (err: any) {
@@ -109,7 +113,10 @@ export async function GET(request: Request) {
   let artifactId = url.searchParams.get("artifactId") || "";
   if (!artifactId && url.searchParams.get("forge") === "1") {
     const list = await core.listArtifacts(caller.userId, { type: "resume", examples: "hide", limit: 50 });
-    artifactId = pickForgeArtifact(list as unknown as ArtifactLite[])?.id ?? "";
+    const laneId = url.searchParams.get("laneId");
+    if (laneId && laneId !== "main" && !(await core.getOpenLane(caller.userId, laneId))) return NextResponse.json({ error: "Lane not found" }, { status: 404, headers: NO_STORE });
+    const scoped = laneId ? list.filter(a => laneId === "main" ? !a.lane_id : a.lane_id === laneId) : list;
+    artifactId = pickForgeArtifact(scoped as unknown as ArtifactLite[])?.id ?? "";
   }
   if (!artifactId) return NextResponse.json({ revision: null }, { headers: NO_STORE });
   const rev = await core.getLatestRevision(caller.userId, artifactId);

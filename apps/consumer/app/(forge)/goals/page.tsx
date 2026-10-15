@@ -19,6 +19,7 @@ import { FlowPage, CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import ForgeAccumulator from "@/components/ForgeAccumulator";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { findQuestion, isLanesFirst, nextPath, planForgePath, previousPath } from "@/lib/forge-path";
+import { useLaneFocus } from "@/components/lanes/useLaneFocus";
 import { jobsIn } from "@crucible/core/src/jobResolver";
 
 const GOAL_OPTIONS = [
@@ -127,6 +128,8 @@ export default function GoalsPage() {
   const [resumeWorries, setResumeWorries] = useState<string[]>(
     isDemo ? [] : (session.resumeWorries || [])
   );
+  const focus = useLaneFocus({ task: session.laneTask, target: session.laneTarget });
+  const [directionError, setDirectionError] = useState("");
   const [makesCreativeWork, setMakesCreativeWork] = useState<"yes" | "no" | "">(
     isDemo ? "" : (session.makesCreativeWork || "")
   );
@@ -145,8 +148,12 @@ export default function GoalsPage() {
     );
   }
 
-  function handleContinue() {
+  async function handleContinue() {
     saveGoals();
+    if (lanes && !isDemo && !(await focus.save(focus.task || "resume", target.trim()))) {
+      setDirectionError("Your direction is still on this page, but could not be saved. Try again.");
+      return;
+    }
     const goals = isDemo ? DEMO_SESSION.goals : selected;
     router.push(nextPath(planForgePath({ ...session, goals }), "goals"));
   }
@@ -158,7 +165,7 @@ export default function GoalsPage() {
       goals: isDemo ? DEMO_SESSION.goals : selected,
       goalNarrative: isDemo ? DEMO_SESSION.goalNarrative : (lanes ? (laneDirection || undefined) : (narrative || undefined)),
       hookNarrative: isDemo ? (DEMO_SESSION.hookNarrative || undefined) : (hookNarrative || undefined),
-      ...(lanes ? { laneTarget: target.trim() || undefined, laneLeadJob: leadJob || undefined } : {}),
+      ...(lanes ? { forgeLaneId: focus.laneId, laneTarget: target.trim() || undefined, laneLeadJob: leadJob || undefined } : {}),
       resumeConfidence: isDemo ? undefined : ((resumeConfidence || undefined) as "none" | "rough" | "decent" | "strong" | undefined),
       resumeWorries: isDemo ? undefined : (resumeWorries.length ? resumeWorries : undefined),
       makesCreativeWork: isDemo ? undefined : (makesCreativeWork || undefined),
@@ -170,7 +177,7 @@ export default function GoalsPage() {
 
   if (lanes) return (
     <FlowPage
-      title="Before t.ROY writes, give him direction"
+      title={directionError || "Before t.ROY writes, give him direction"}
       subtitle="The work you gave us is the starting point. These answers help t.ROY decide what to lead with. Keep it short, or let him start with what you gave us."
       actionLabel="Build my best draft"
       onAction={handleContinue}

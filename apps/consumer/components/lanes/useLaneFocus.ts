@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { sessionPending } from "@/lib/session-policy";
 import { isLaneTask, type LaneTask } from "@/lib/lane-task";
-import { activeLaneStorageKey } from "@/lib/lanes";
+import { activeLaneStorageKey, LANES_CHANGED_EVENT } from "@/lib/lanes";
 
 export interface FocusState {
   /** False until the account's pick (or its absence) is known. */
@@ -74,7 +74,7 @@ export function useLaneFocus(fallback?: { task?: unknown; target?: unknown }) {
       }
       fetchFocus(uid).then((s) => {
         if (!live) return;
-        if (s) setState({ loaded: true, task: s.task, target: s.target ?? s.laneTarget ?? fbTarget, laneId: s.laneId, fromAccount: true });
+        if (s) setState({ loaded: true, task: s.task, target: s.laneTarget ?? s.target ?? fbTarget, laneId: s.laneId, fromAccount: true });
         else setState({ loaded: true, task: fbTask, target: fbTarget, laneId: null, fromAccount: false });
       });
     };
@@ -84,9 +84,11 @@ export function useLaneFocus(fallback?: { task?: unknown; target?: unknown }) {
       load();
     };
     window.addEventListener(LANE_FOCUS_CHANGED_EVENT, onChange);
+    window.addEventListener(LANES_CHANGED_EVENT, onChange);
     return () => {
       live = false;
       window.removeEventListener(LANE_FOCUS_CHANGED_EVENT, onChange);
+      window.removeEventListener(LANES_CHANGED_EVENT, onChange);
     };
   }, [uid, status, fbTask, fbTarget]);
 

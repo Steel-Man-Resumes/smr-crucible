@@ -8,6 +8,7 @@
  */
 
 import React from "react";
+import { storyIsChecked, type StoryVerification } from "@/lib/story-verification";
 import { escapeHtml as escHtml } from "@/lib/escape-html";
 import { formatSalaryRange } from "@/lib/metric-emphasis";
 
@@ -45,6 +46,7 @@ export interface CareerPath {
 }
 
 export interface ForgeOutput {
+  story_verification?: StoryVerification;
   narrative?: {
     headline?: string;
     summary?: string;
@@ -65,6 +67,8 @@ export function StorySection({
   reportChecks,
   spotlight = false,
   onRevisit,
+  onRetry,
+  retrying = false,
 }: {
   output: ForgeOutput;
   strengthsHeading: string;
@@ -72,7 +76,10 @@ export function StorySection({
   reportChecks: string[];
   spotlight?: boolean;
   onRevisit?: () => void;
+  onRetry?: () => void;
+  retrying?: boolean;
 }) {
+  const checked = storyIsChecked(output);
   const narrative = output.narrative || {};
   const strengths = output.strengths || narrative.strengths || [];
   const skills = output.skills || [];
@@ -80,6 +87,7 @@ export function StorySection({
   const careerPaths = output.career_paths || [];
 
   function handlePrintAnalysisPdf() {
+    if (!checked) return;
     const html = analysisToStandaloneHtml(output, narrative);
     const w = window.open("", "_blank");
     if (!w) { alert("Please allow popups for this site to save the PDF."); return; }
@@ -96,6 +104,10 @@ export function StorySection({
         t.ROY's reading of the work you gave us. You decide whether this sounds like you.
       </p>
 
+      {!checked && <div role="status" className="mb-4 border border-t-amber p-4 text-sm text-t-phos">
+        <p>Story draft: its fact check is incomplete. Your resume and saved corrections are still here. Check the story before exporting it.</p>
+        {onRetry && <button type="button" disabled={retrying} onClick={onRetry} className="t-focus mt-2 min-h-touch underline">{retrying ? "Checking story..." : "Retry story check"}</button>}
+      </div>}
       {/* Header / Narrative */}
       <div className={spotlight ? "mb-4" : "mb-10"}>
         <h3 className="mb-3 text-2xl font-bold text-t-white">
@@ -340,6 +352,7 @@ export function StorySection({
 
       <button
         onClick={handlePrintAnalysisPdf}
+        disabled={!checked}
         className="t-focus w-full border border-t-line bg-transparent px-4 py-3 text-sm font-medium text-t-phos-dim transition-colors hover:border-t-phos-dim hover:text-t-white"
       >
         Print or save your story as a PDF

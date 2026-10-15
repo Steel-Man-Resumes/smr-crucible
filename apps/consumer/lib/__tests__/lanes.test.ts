@@ -54,7 +54,7 @@ describe("which lane a screen works in", () => {
   });
   it("the screens take the server's default and the Library opens in the working lane", () => {
     assert.match(read("app/api/lanes/route.ts"), /defaultLaneId/);
-    assert.match(read("components/lanes/useLanes.ts"), /resolveActiveLane\(readRemembered\(userId\), lanes\.map\(\(l\) => l\.id\), defaultRef\.current\)/);
+    assert.match(read("components/lanes/useLanes.ts"), /resolveActiveLane\(d\.activeLaneId \?\? readRemembered\(userId\), lanes\.map\(\(l\) => l\.id\), defaultRef\.current\)/);
     assert.match(read("app/(dashboard)/dashboard/vault/page.tsx"), /if \(lanes\.loaded && laneFilterState === null\) setLaneFilter\(lanes\.active\)/);
   });
   it("remembered per account, never shared between accounts on one computer", () => {

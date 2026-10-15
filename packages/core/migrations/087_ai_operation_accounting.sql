@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS ai_operation (
   status text NOT NULL DEFAULT 'running' CHECK (status IN ('running','succeeded','failed')),
   reserved_usd numeric(12,6) NOT NULL DEFAULT 0 CHECK (reserved_usd >= 0),
   created_at timestamptz NOT NULL DEFAULT now(),
-  finished_at timestamptz
+  finished_at timestamptz,
+  accounting_incomplete boolean NOT NULL DEFAULT false
 );
 CREATE INDEX IF NOT EXISTS ai_operation_user_day ON ai_operation(user_id, created_at);
 CREATE INDEX IF NOT EXISTS ai_token_usage_operation ON ai_token_usage(operation_id);

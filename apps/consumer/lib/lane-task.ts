@@ -20,7 +20,7 @@ export { isLaneTask, MAIN_TASKS, OTHER_TASKS };
 
 export const START_PATH = "/start";
 /** The Change link everywhere. */
-export const CHANGE_HREF = "/start?change=1";
+export const CHANGE_HREF = "/dashboard?change=1";
 /** The lane home for someone signed in. */
 export const LANE_HOME_HREF = "/dashboard";
 
@@ -115,7 +115,7 @@ export function taskNeedsResume(task: LaneTask | null | undefined): boolean {
  * and performer documents. "A person needing food or transport should not
  * have to finish a resume to find it" (Codex C).
  */
-export const OPEN_WITHOUT_RESUME = ["/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
+export const OPEN_WITHOUT_RESUME = ["/dashboard/help","/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
 
 /**
  * The Refinery sends a person with no Forge resume to the first screen,
@@ -125,7 +125,7 @@ export const OPEN_WITHOUT_RESUME = ["/dashboard/interview", "/dashboard/applicat
  */
 export function refineryOpenWithoutResume(pathname: string, task: LaneTask | null | undefined): boolean {
   if (OPEN_WITHOUT_RESUME.some((p) => pathname === p || pathname.startsWith(p + "/"))) return true;
-  return pathname === "/dashboard" && !!task && !taskNeedsResume(task);
+  return pathname === "/dashboard";
 }
 
 /**

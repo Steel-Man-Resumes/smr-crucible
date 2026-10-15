@@ -51,6 +51,8 @@ export const RLS_PROTECTED_TABLES = [
   "ai_operation",
   "ai_tool_policy",
   "directory_publication_alias",
+  "forge_package_delivery",
+  "forge_package_email_sent",
 ] as const;
 
 export interface RlsHealth {

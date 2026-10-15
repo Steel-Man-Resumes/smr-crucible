@@ -795,7 +795,7 @@ export function ResumeWorkspace() {
           {
             title: app.job_title,
             company: app.company,
-            description: app.description,
+            description: app.jd_full_text || app.jd_excerpt || app.description,
             location: app.location,
             salary: app.salary,
             employment_type: app.employment_type,

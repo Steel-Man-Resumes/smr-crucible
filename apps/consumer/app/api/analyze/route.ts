@@ -14,6 +14,7 @@
  * for the new vision (empowerment, not sales).
  */
 
+import { verifyStory } from "@/lib/story-verification";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { forgeUserId } from "@/lib/session-policy";
@@ -91,50 +92,9 @@ async function handlePost(request: Request) {
         : Promise.resolve(null),
     ]);
 
-    // P1.6 (Codex 3): ground the narrative that ships in the downloadable report.
-    // Sol's QA flagged the report asserting implied skills and an assumed pronoun
-    // the source never stated. Run the cheap grounding verifier (fail-open) on the
-    // summary + reflection against ONLY the person's own material -- resume text and
-    // their typed answers, never the AI narrative or a job posting (buildTrustedSource).
-    try {
-      const trustedSource = buildTrustedSource({
-        resumeText: input.resumeText,
-        userText: [
-          input.goalNarrative,
-          input.hookNarrative,
-          ...(input.challengeNarratives ? Object.values(input.challengeNarratives) : []),
-          input.criminalRecord?.context,
-        ],
-      });
-      const summary = typeof narrative.summary === "string" ? narrative.summary : "";
-      const reflection = typeof narrative.reflection === "string" ? narrative.reflection : "";
-      // Strengths were NOT verified until now, and that is where the fabrications
-      // actually landed: a dangling "2008 -" became "worked there year after year"
-      // and "flagger certification" became "OSHA Flagger Certification." The
-      // evidence line of each strength is prose about the person, exactly what
-      // this verifier is for, so it gets the same treatment as the summary.
-      const strengths = Array.isArray(narrative.strengths)
-        ? (narrative.strengths as Array<Record<string, unknown>>)
-        : [];
-      const [gSummary, gReflection, gStrengths] = await Promise.all([
-        summary ? verifyGrounding({ sourceText: trustedSource, output: summary, kind: "report" }) : null,
-        reflection ? verifyGrounding({ sourceText: trustedSource, output: reflection, kind: "report" }) : null,
-        Promise.all(
-          strengths.map((s) =>
-            typeof s.evidence === "string" && s.evidence
-              ? verifyGrounding({ sourceText: trustedSource, output: s.evidence, kind: "report" })
-              : null
-          )
-        ),
-      ]);
-      if (gSummary) narrative.summary = gSummary.text;
-      if (gReflection) narrative.reflection = gReflection.text;
-      gStrengths.forEach((g, i) => {
-        if (g) strengths[i].evidence = g.text;
-      });
-    } catch (err) {
-      console.error("Narrative grounding failed (fail-open):", err);
-    }
+    const trustedSource = buildTrustedSource({ resumeText: input.resumeText, userText: [input.goalNarrative, input.hookNarrative, ...(input.challengeNarratives ? Object.values(input.challengeNarratives) : []), input.criminalRecord?.context] });
+    const checked = await verifyStory({ narrative, skills: skills.skills || [], career_paths: careerPaths.paths || [], barriers: barriers?.barriers || [] }, trustedSource, verifyGrounding);
+    const checkedNarrative = checked.narrative as typeof narrative;
 
     // Compose the Forge output. Two deterministic guards sweep the whole object
     // (belt-and-suspenders, like the prompts themselves): stripEmployerTaxCredit
@@ -144,11 +104,12 @@ async function handlePost(request: Request) {
       schema_version: "forge_output.v1",
       generated_at: new Date().toISOString(),
       readiness_stage: input.readinessStage || "preparation",
-      narrative,
-      strengths: narrative.strengths || [],
-      skills: skills.skills || [],
-      career_paths: careerPaths.paths || [],
-      barriers: barriers?.barriers || [],
+      narrative: checkedNarrative,
+      story_verification: checked.story_verification,
+      strengths: checkedNarrative.strengths || [],
+      skills: checked.skills,
+      career_paths: checked.career_paths,
+      barriers: checked.barriers,
       // Honest framing surfaced to the user: the organizations, programs, and
       // legal notes here are AI-generated leads to verify, not a vetted directory
       // or legal advice. Pairs with the in-prompt sourcing discipline.
@@ -495,6 +456,7 @@ RULES:
 - SCOPE FIDELITY: never promote someone's role beyond what they wrote. A ranch hand has not "run a ranch." A crew lead has not "managed a department." Keep the scope they stated.
 - Frame strengths, not deficits.
 - Write at a 6th grade reading level.
+- Address the person consistently as "you" in the story, summary, reflection and strengths. Never alternate between first and third person.
 - Never judge, score, or grade.
 - The headline and summary should be RESUME-READY. They may appear on actual job applications. Therefore:
   - NEVER mention incarceration, prison, jail, correctional facilities, parole, probation, criminal records, "time away", "time served", re-entry, or any reference to justice involvement, not even obliquely or with euphemisms like "during his time away" or "while building new skills in a structured environment."

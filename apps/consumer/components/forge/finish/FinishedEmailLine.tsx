@@ -1,20 +1,10 @@
 "use client";
 
 /**
- * Signed in and FINISHED: the package goes to the account's own proven
- * address by itself (lib/email-package-auto.ts), once per saved revision,
- * unless the person turned it off. The finish page shows one line:
- * "We sent it to you@example.com."
- *
- * It sends ONE thing: the id of the revision the page just saved (Phase 5
- * R1). The server re-checks that resume's NEWEST revision, letter included,
- * and decides everything: the address (the account's, never typed here),
- * whether this version was already sent, and the caps (one automatic email
- * per resume per day). Quick edits settle first (review L4): the page asks
- * about five minutes after the last finished save, and "Email me the latest"
- * asks at once. Nothing on the server sends it later (no scheduled job): a
- * version that is due is sent the next time this page opens (review L-B). A server draft or a failure is said on the page, with Try
- * again where a retry can help. Nothing is kept in this browser.
+ * Shows the state of a durable package delivery created with the saved revision.
+ * Closing the page never cancels it. The server checks the latest version,
+ * account preference and proven address before dispatch. This component can
+ * request immediate delivery and refresh status, but does not schedule mail.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -76,14 +66,9 @@ export function FinishedEmailLine(props: {
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     if (!props.revisionId || !props.mayUse()) return;
-    const age = props.savedAt ? Date.now() - Date.parse(props.savedAt) : 0;
-    const wait = Number.isFinite(age) ? Math.max(0, AUTO_EMAIL_DELAY_MS - age) : AUTO_EMAIL_DELAY_MS;
-    if (wait === 0) {
-      send(props.revisionId);
-      return;
-    }
-    setResult({ sent: false, reason: "settling" });
-    timer.current = setTimeout(() => latestId.current && send(latestId.current), wait);
+    // Queue already exists from the atomic revision save. Ask the server now
+    // for honest delivery state; the browser is never the delivery scheduler.
+    send(props.revisionId);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };

@@ -65,7 +65,7 @@ export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" |
   }
 }
 
-export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profileFirst?: boolean }) {
+export function LaneHome({ task, profileFirst = false, laneId = null }: { task: LaneTask; profileFirst?: boolean; laneId?: string | null }) {
   const [rev, setRev] = useState<ForgeRevision | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -74,7 +74,7 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
     let live = true;
     setLoaded(false);
     setLoadError(false);
-    fetch("/api/revisions?forge=1", { cache: "no-store" })
+    fetch(`/api/revisions?forge=1&laneId=${encodeURIComponent(laneId || "main")}`, { cache: "no-store" })
       .then((r) => {
         if (!r.ok) throw new Error("Could not load saved work");
         return r.json();
@@ -90,7 +90,7 @@ export function LaneHome({ task, profileFirst = false }: { task: LaneTask; profi
     return () => {
       live = false;
     };
-  }, [retry]);
+  }, [retry, laneId]);
 
   // A new account saves its profile (name, phone) before the Refinery's tools open.
   const next = profileFirst && task !== "interview" ? { label: "Save your profile below", href: "#profile-setup" }

@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { query, queryAsUser, getOneAsUser, PROFILE_CONTACT_RESUME_SQL } from "@crucible/core";
+import { resumeTextToDocument } from "@/lib/revision-to-doc";
 import { formatPhoneUS } from "@/lib/phone";
 
 export interface UserContact {
@@ -55,6 +56,15 @@ export async function GET() {
     if (c.email) contact.email = c.email;
     if (c.city) contact.city = c.city;
     if (c.state) contact.state = c.state;
+  }
+
+  // Fill only blanks from the person's saved source. Every field stays editable.
+  const ownText = profile?.profile_data?.resumeText;
+  if (typeof ownText === "string" && ownText.trim()) {
+    const source = resumeTextToDocument(ownText).contact;
+    for (const field of ["name", "phone", "email", "city", "state"] as const) {
+      if (!contact[field] && source[field]) contact[field] = source[field];
+    }
   }
 
   // Source 3: Forge resume parsing (if contact wasn't explicitly saved).

@@ -358,12 +358,12 @@ function LoginForm() {
       // answered "No" is not this account's data.
       const createCallback = (() => {
         const explicit = searchParams.get("callbackUrl");
-        if (fromMiniForge && isSafeRelativePath(explicit)) return explicit;
+        if (explicit && isSafeRelativePath(explicit)) return safeLoginReturn(explicit);
         // Came from a Forge screen (the sign-in wall): back to it. A run
         // answered "Yes" is marked as this account's below, so the Forge
         // shows it; "No" erased it.
         if (forgeReturn) return forgeReturn;
-        return forgeFields.forge?.forgeOutput ? callbackUrl : "/intro";
+        return callbackUrl;
       })();
       const result = await signIn("password-login", {
         email: email.trim(), password, callbackUrl: createCallback, redirect: false,

@@ -59,6 +59,7 @@ export interface RevisionStore {
 
 /** What the page is told about a saved revision. */
 export interface SavedRevisionSummary {
+  laneId?: string | null;
   id: string;
   artifactId: string;
   number: number;
@@ -278,10 +279,21 @@ export async function saveEditRevision(
 }
 
 /** The real store: packages/core, every call AS the person. */
-export async function coreStore(): Promise<RevisionStore> {
+export async function coreStore(selection: { laneId?: string | null } = {}): Promise<RevisionStore> {
   const core = await import("@crucible/core");
+  let selected: Promise<{ laneId: string | null; task: string }> | null = null;
+  const selectedLane = (userId: string) => selected ??= (async () => {
+    const focus = await core.getLaneFocus(userId);
+    const laneId = selection.laneId !== undefined ? selection.laneId : focus?.laneId || null;
+    if (laneId && !(await core.getOpenLane(userId, laneId))) throw new Error("Selected lane is unavailable");
+    return { laneId, task: focus?.task || "resume" };
+  })();
   return {
-    listResumeArtifacts: (userId) => core.listArtifacts(userId, { type: "resume", examples: "hide", limit: 50 }) as Promise<ArtifactLite[]>,
+    listResumeArtifacts: async (userId) => {
+      const focus = await selectedLane(userId);
+      const all = await core.listArtifacts(userId, { type: "resume", examples: "hide", limit: 50 });
+      return all.filter(a => focus?.laneId ? a.lane_id === focus.laneId : !a.lane_id) as ArtifactLite[];
+    },
     getArtifact: (userId, id) => core.getArtifact(id, userId) as Promise<ArtifactLite | null>,
     createForgeArtifact: async (userId, content, laneTarget) => {
       const made = await core.createArtifact(userId, "resume", { source: "forge", targetJob: "" }, content, 1.0);
@@ -289,8 +301,12 @@ export async function coreStore(): Promise<RevisionStore> {
       // Forge save does (best effort; a lane problem never fails the save).
       if (laneTarget && !core.looksLikeExampleResume(content)) {
         try {
-          const lane = await core.ensureFirstLane(userId, laneTarget);
-          if (lane) await core.setArtifactLane(userId, made.id, lane.id);
+          const focus = await selectedLane(userId);
+          const lane = focus?.laneId ? await core.getOpenLane(userId, focus.laneId) : await core.ensureFirstLane(userId, laneTarget);
+          if (lane) {
+            await core.setArtifactLane(userId, made.id, lane.id);
+            await core.setLaneFocus(userId, { task: focus?.task || "resume", laneId: lane.id, target: laneTarget });
+          }
         } catch {
           // fine
         }

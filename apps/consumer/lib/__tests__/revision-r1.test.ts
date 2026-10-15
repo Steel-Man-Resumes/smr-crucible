@@ -608,7 +608,7 @@ test("L3: the browser-made .txt files (ResumeBuilder, Rush and its docx fallback
 test("L5: the signed-out package email attaches nothing (files go only to a signed-in proven address)", () => {
   const route = src("app", "api", "forge", "email-package", "route.ts");
   assert.doesNotMatch(route.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""), /packageFiles|attachments/);
-  assert.match(src("app", "api", "forge", "email-package", "auto", "route.ts"), /files: packageFiles/);
+  assert.match(src("lib", "package-delivery-worker.ts"), /files: packageFiles/);
 });
 
 test("L6 and L8: a sensible daily save cap and a plain, non-retry message for a version too big", () => {
@@ -877,9 +877,9 @@ test("I-1: a receipt made on a preview deployment never verifies on production",
 
 test("L-B: the email line says what really happens", async () => {
   const { autoResultLine } = await import("../email-package-auto-line");
-  assert.equal(autoResultLine({ sent: false, reason: "settling" }), "We'll email your finished resume a few minutes after you're done. Leaving early? Tap Email me the latest.");
+  assert.equal(autoResultLine({ sent: false, reason: "settling" }), "Your finished package is queued. You can close this page; delivery will be retried if needed.");
   const line = src("components", "forge", "finish", "FinishedEmailLine.tsx");
-  assert.match(line, /if \(wait === 0\) \{\s+send\(props\.revisionId\);/, "a version already due is sent on the next visit");
+  assert.match(line, /send\(props\.revisionId\);/, "the page asks for delivery state immediately");
   assert.doesNotMatch(src("app", "api", "forge", "email-package", "auto", "route.ts"), /cron/i);
 });
 

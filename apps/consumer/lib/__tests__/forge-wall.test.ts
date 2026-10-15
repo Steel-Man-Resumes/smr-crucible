@@ -55,9 +55,9 @@ const OLD_ANONYMOUS = [
 const WALLED = OLD_ANONYMOUS.filter((p) => !["/api/resume/layout", "/api/assistant", "/api/org-listing"].includes(p));
 
 describe("the date the wall goes up", () => {
-  it("ships with no date: the owner sets it, nothing is made up", () => {
+  it("ships with the account requirement active unless explicitly overridden", () => {
     assert.equal(FORGE_SIGN_IN_STARTS_AT, null);
-    assert.equal(forgeWallState({ now: NOW, override: null }), "open");
+    assert.equal(forgeWallState({ now: NOW, override: null }), "up");
     assert.equal(forgeWallNotice("open"), null);
   });
 
@@ -78,7 +78,7 @@ describe("the date the wall goes up", () => {
   it("refuses a date it would have to guess at (no time, no offset, nonsense)", () => {
     for (const bad of ["2026-11-02", "2026-11-02T00:00:00", "November 2", "", "  ", "2026-13-40T00:00:00Z"]) {
       assert.equal(forgeWallStartsAt(bad), null, bad);
-      assert.equal(forgeWallState({ now: NOW, startsAt: bad, override: null }), "open", bad);
+      assert.equal(forgeWallState({ now: NOW, startsAt: bad, override: null }), "up", bad);
     }
     assert.ok(forgeWallStartsAt("2026-11-02T09:00:00Z"));
   });

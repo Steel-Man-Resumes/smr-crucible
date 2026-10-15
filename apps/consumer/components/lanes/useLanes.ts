@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
+import { LANE_FOCUS_CHANGED_EVENT } from "./useLaneFocus";
 import type { CareerLane } from "@crucible/core/src/careerLaneShared";
 import { MAIN_LANE_KEY } from "@crucible/core/src/careerLaneShared";
 import {
@@ -47,6 +48,9 @@ function announce(kind: "list" | "active", from: number) {
 export function useLanes() {
   const userId = useSession().data?.user?.id;
   const [state, setState] = useState<LanesState>({ loaded: false, lanes: [], archived: [], introsSeen: new Set() });
+  const [error, setError] = useState("");
+  const [switching, setSwitching] = useState(false);
+  const taskRef = useRef("resume");
   const [active, setActiveState] = useState<LaneChoice>(MAIN_LANE_KEY);
   const lanesRef = useRef<CareerLane[]>([]);
   // The open lane holding the newest resume (server): where a screen opens
@@ -60,6 +64,8 @@ export function useLanes() {
       const res = await fetch("/api/lanes");
       if (!res.ok) throw new Error(String(res.status));
       const d = await res.json();
+      setError("");
+      taskRef.current = d.task || "resume";
       const lanes: CareerLane[] = Array.isArray(d.lanes) ? d.lanes : [];
       lanesRef.current = lanes;
       defaultRef.current = typeof d.defaultLaneId === "string" ? d.defaultLaneId : null;
@@ -70,8 +76,9 @@ export function useLanes() {
         archived: Array.isArray(d.archived) ? d.archived : [],
         introsSeen: new Set(Array.isArray(d.introsSeen) ? d.introsSeen : []),
       });
-      setActiveState(resolveActiveLane(readRemembered(userId), lanes.map((l) => l.id), defaultRef.current));
+      setActiveState(resolveActiveLane(d.activeLaneId ?? readRemembered(userId), lanes.map((l) => l.id), defaultRef.current));
     } catch {
+      setError("Your lanes could not be loaded. Try again before changing work.");
       // No lanes reachable: the screen works in main, exactly as before lanes.
       loadedRef.current = true;
       setState((s) => ({ ...s, loaded: true }));
@@ -93,10 +100,19 @@ export function useLanes() {
 
   /** Work in this lane from now on (main or a lane id). */
   const setActive = useCallback(
-    (choice: LaneChoice) => {
+    async (choice: LaneChoice) => {
       // Before the list arrives (a screen opening a resume by id), remember
       // the choice as given; load() resolves it against the real lanes.
       const next = loadedRef.current ? resolveActiveLane(choice, lanesRef.current.map((l) => l.id), defaultRef.current) : choice;
+      if (!userId) return;
+      setSwitching(true);
+      setError("");
+      try {
+        const lane = lanesRef.current.find(l => l.id === next);
+        const response = await fetch("/api/lane-focus", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: taskRef.current, laneId: next === MAIN_LANE_KEY ? null : next, target: lane?.target_role || lane?.name || null }) });
+        if (!response.ok) throw new Error();
+      } catch { setError("Your lane choice was not saved. Try again."); setSwitching(false); return; }
+      setSwitching(false);
       if (loadedRef.current) setActiveState(next);
       const key = activeLaneStorageKey(userId);
       if (key) {
@@ -107,6 +123,7 @@ export function useLanes() {
         }
       }
       announce("active", selfId.current);
+      window.dispatchEvent(new Event(LANE_FOCUS_CHANGED_EVENT));
     },
     [userId]
   );
@@ -143,7 +160,7 @@ export function useLanes() {
 
   const activeLane = state.lanes.find((l) => l.id === active) ?? null;
 
-  return { ...state, userId, active, activeLane, setActive, refresh, adoptLane, dismissIntro };
+  return { ...state, error, switching, userId, active, activeLane, setActive, refresh, adoptLane, dismissIntro };
 }
 
 export type LanesApi = ReturnType<typeof useLanes>;

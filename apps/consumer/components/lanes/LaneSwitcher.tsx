@@ -60,6 +60,7 @@ export function LaneSwitcher({
 
   return (
     <section data-testid="lane-switcher" aria-label="Career lanes" className="border border-t-line bg-t-panel p-3 sm:p-4">
+      {api.error && <p role="alert" className="mb-2 text-sm text-t-red">{api.error} <button type="button" onClick={() => void api.refresh()} className="underline">Reload</button></p>}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-2">
         <label htmlFor={selectId} className="shrink-0 text-xs font-mono uppercase tracking-wide text-t-phos-dim">
@@ -68,6 +69,7 @@ export function LaneSwitcher({
         <select
           id={selectId}
           data-testid="lane-select"
+          disabled={api.switching}
           value={value}
           onChange={(e) => {
             setPanel(null);

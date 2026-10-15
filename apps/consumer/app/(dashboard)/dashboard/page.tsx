@@ -380,7 +380,7 @@ export default function DashboardPage() {
   if (onboarding.state === "needs_profile" && !isAdmin) {
     return (
       <div className="space-y-10">
-        {focus.task && <LaneHome task={focus.task} profileFirst={taskNeedsResume(focus.task)} />}
+        {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} profileFirst={taskNeedsResume(focus.task)} />}
         <div id="profile-setup" className="scroll-mt-24">
           <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />
         </div>
@@ -393,7 +393,7 @@ export default function DashboardPage() {
     <div className="space-y-10">
       <MiniForgeBanner />
       {/* Lanes first (R2): the lane home, then "All tools" below. */}
-      {focus.task && <LaneHome task={focus.task} />}
+      {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} />}
       {focus.task && (
         <h2 id="all-tools" className="border-t border-t-line pt-6 text-lg font-bold text-t-white">
           All tools
@@ -928,7 +928,7 @@ function ProfileSetup({
 
         <div className="bg-t-panel p-4 border border-t-line">
           <p className="text-xs text-t-phos leading-relaxed">
-            This info goes on your resume and nowhere else. We don&apos;t sell, share, or spam.
+            Your contact details are saved in your account and used on your documents. Your location also helps match local jobs and support. You choose what to share with your program.
             You can update or delete everything anytime in Settings.
           </p>
         </div>

@@ -103,7 +103,7 @@ export function releaseCheck(env) {
   if (wall.malformed) {
     errors.push(
       `${RELEASE_WALL_ENV}="${env[RELEASE_WALL_ENV]}" is not "on" or "off". ` +
-        `At run time it would be ignored and the Forge would stay open.`
+        `At run time it would be ignored; the account requirement defaults to active.`
     );
   }
   if ((req.required || req.malformed) && wall.value !== "on") {
@@ -127,9 +127,9 @@ export function releaseCheck(env) {
   }
 
   summary.push(
-    `accounts required: ${req.malformed ? "UNREADABLE" : req.required ? "yes" : req.set ? "no (set to 0)" : "no (not set)"}`,
+    `release requires explicit account flag: ${req.malformed ? "UNREADABLE" : req.required ? "yes" : req.set ? "no (set to 0)" : "no (not set)"}`,
     `production build: ${isProductionBuild(env) ? "yes" : "no"}`,
-    `Forge sign-in wall switch: ${wall.malformed ? "UNREADABLE" : wall.value ?? "unset (the date in forge-access.ts decides; none is set, so open)"}`,
+    `Forge sign-in wall switch: ${wall.malformed ? "UNREADABLE" : wall.value ?? "unset (account requirement active by default)"}`,
     `premium gate: ${premium.malformed ? "UNREADABLE" : premium.value === "on" ? "on" : "off"}`,
     `record check: ${recordsSwitch.malformed ? "UNREADABLE" : recordsSwitch.value === "on" ? "on" : "off"}`
   );

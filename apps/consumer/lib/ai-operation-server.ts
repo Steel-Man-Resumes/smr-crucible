@@ -46,7 +46,7 @@ export async function beginAiOperation(input: {userId: string; endpoint: string}
           AND NOT EXISTS (SELECT 1 FROM ai_operation o
             WHERE o.user_id=${input.userId}::uuid AND o.workflow=${input.endpoint}
               AND o.created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-              AND o.reserved_usd=0 AND (o.status='running'
+              AND o.reserved_usd=0 AND (o.status='running' OR o.accounting_incomplete
                 OR NOT EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id)
                 OR EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id AND t.cost_status <> 'priced')))
           AND COALESCE((SELECT SUM(GREATEST(o.reserved_usd,
@@ -65,7 +65,7 @@ export async function beginAiOperation(input: {userId: string; endpoint: string}
       if(finished)return;finished=true;
       await Promise.allSettled(context.pending);
       try {
-        await queryAsUser(input.userId,`UPDATE ai_operation SET status=$3,finished_at=now(),
+        await queryAsUser(input.userId,`UPDATE ai_operation SET status=$3,finished_at=now(),accounting_incomplete=$4,
           reserved_usd=CASE WHEN NOT $4::boolean AND EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=ai_operation.id)
             AND NOT EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=ai_operation.id AND t.cost_status <> 'priced')
             THEN 0 ELSE reserved_usd END

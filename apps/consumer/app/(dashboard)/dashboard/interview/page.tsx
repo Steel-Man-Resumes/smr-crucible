@@ -46,6 +46,7 @@ interface InterviewConfig {
 
 /** A saved job application that carries a JD snapshot we can auto-fill from. */
 interface SavedApplication {
+  resume_artifact_id?: string | null;
   id: string;
   job_title: string;
   company: string;
@@ -256,7 +257,7 @@ function InterviewPracticePage() {
           content: a.content ?? null,
         }));
         setResumes(list);
-        if (list.length) {
+        if (list.length && !searchParams.get("applicationId")) {
           setSelectedResumeId((prev) => prev || list[0].id);
           const r0 = list[0];
           const label = [r0.targetJob, r0.targetCompany].filter(Boolean).join(" at ");
@@ -275,9 +276,10 @@ function InterviewPracticePage() {
       .then((r) => (r.ok ? r.json() : { applications: [] }))
       .then(({ applications: rows }) => {
         const withJd: SavedApplication[] = (rows || [])
-          .filter((a: any) => (a?.jd_full_text || a?.jd_excerpt))
+          .filter((a: any) => a?.id)
           .map((a: any) => ({
             id: a.id,
+            resume_artifact_id: a.resume_artifact_id ?? null,
             job_title: a.job_title || "",
             company: a.company || "",
             jd_full_text: a.jd_full_text ?? null,
@@ -289,6 +291,15 @@ function InterviewPracticePage() {
       })
       .catch(() => {});
   }, []);
+
+  const [selectedSnapshot, setSelectedSnapshot] = useState<{ id: string; content: any; applicationId: string } | null>(null);
+  const [applicationLoading, setApplicationLoading] = useState(false);
+  const [applicationFailed, setApplicationFailed] = useState(false);
+  const selectionSequence = useRef(0);
+  useEffect(() => {
+    const id = searchParams.get("applicationId");
+    if (id) void selectApplication(id);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phase 5.8/5.9: load saved voice-interview sessions (metadata only) so we can
   // show a history list and offer to target last time's struggle tags.
@@ -322,29 +333,37 @@ function InterviewPracticePage() {
   // Pick a saved job: auto-fill role + company, load its JD snapshot into the
   // job-description field (snapshot wins over any paste), and prefer a tailored
   // resume linked to the same job if the user has one.
-  function selectApplication(id: string) {
+  async function selectApplication(id: string) {
+    const seq = ++selectionSequence.current;
     setSelectedApplicationId(id);
-    if (!id) {
-      setJdMeta(null);
-      return;
-    }
-    const app = applications.find((a) => a.id === id);
-    if (!app) {
-      setJdMeta(null);
-      return;
-    }
-    const label = [app.job_title, app.company].filter(Boolean).join(" at ");
-    if (label) setConfig((prev) => ({ ...prev, targetRole: label }));
-
-    const picked = pickJdSource(app.jd_full_text || app.jd_excerpt, "");
-    setJobDescription(picked.text);
-    setJdMeta({ age: formatSnapshotAge(app.jd_fetched_at), truncated: app.jd_truncated });
-
-    const norm = (v: string | null) => (v || "").toLowerCase().trim();
-    const linked = resumes.find(
-      (r) => norm(r.targetJob) === norm(app.job_title) && norm(r.targetCompany) === norm(app.company)
-    );
-    if (linked) setSelectedResumeId(linked.id);
+    setSelectedSnapshot(null);
+    setApplicationFailed(false);
+    setConfig(prev => ({ ...prev, targetRole: "" }));
+    setSelectedResumeId("");
+    setJobDescription("");
+    setJdMeta(null);
+    if (!id) return;
+    setApplicationLoading(true);
+    setRateLimitError("");
+    try {
+      const response = await fetch(`/api/application-context?applicationId=${encodeURIComponent(id)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error();
+      const context = await response.json();
+      if (selectionSequence.current !== seq) return;
+      const app = context.application;
+      setConfig(prev => ({ ...prev, targetRole: [app.job_title, app.company].filter(Boolean).join(" at ") }));
+      setJobDescription(pickJdSource(app.jd_full_text || app.jd_excerpt, "").text);
+      setJdMeta({ age: formatSnapshotAge(app.jd_fetched_at), truncated: app.jd_truncated });
+      if (context.resumeSnapshot) setSelectedSnapshot({ id: context.resumeSnapshot.id, content: context.resumeSnapshot.content_snapshot, applicationId: id });
+      else if (context.revision) setSelectedSnapshot({ id: context.revision.id, content: null, applicationId: id, text: context.revision.resume_text } as any);
+      setSelectedResumeId(app.resume_artifact_id || "");
+      const nextUrl = new URL(window.location.href);
+      if (nextUrl.searchParams.get("applicationId") !== id) {
+        nextUrl.searchParams.set("applicationId", id);
+        window.history.replaceState(null, "", nextUrl.toString());
+      }
+    } catch { if (selectionSequence.current === seq) { setApplicationFailed(true); setRateLimitError("This saved job could not be loaded. Choose a job again before starting."); } }
+    finally { if (selectionSequence.current === seq) setApplicationLoading(false); }
   }
 
   // Phase 5.9: toggle targeting last time's struggle tags for this run.
@@ -377,6 +396,7 @@ function InterviewPracticePage() {
         ? "Welcome! I'm going to ask you some questions about your past experiences. Take your time with each answer. Let's start. Tell me about yourself and what brought you here today."
         : "Hi there, thanks for taking the time to interview with us today. Let's get started. Can you tell me a bit about yourself and why you're interested in this role?";
 
+    if (applicationLoading || applicationFailed) return;
     setMessages([{ role: "assistant", content: openingMessage }]);
     setStep("practice");
     setExchangeCount(0);
@@ -399,7 +419,9 @@ function InterviewPracticePage() {
   function buildResumePayload():
     | { targetJob: string | null; targetCompany: string | null; text: string; evidence: any[] }
     | undefined {
-    const sel = resumes.find((r) => r.id === selectedResumeId);
+    const selected = resumes.find((r) => r.id === selectedResumeId);
+    if (selectedSnapshot && (selectedSnapshot as any).text) return { targetJob: config.targetRole, targetCompany: null, text: (selectedSnapshot as any).text, evidence: [] };
+    const sel = selectedSnapshot?.content ? { content: selectedSnapshot.content, targetJob: config.targetRole, targetCompany: null } : selected;
     if (!sel?.content) return undefined;
     let text = "";
     try {
@@ -509,6 +531,8 @@ function InterviewPracticePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          applicationId: selectedApplicationId || undefined,
+          resumeArtifactId: selectedResumeId || undefined,
           messages,
           config,
           exchangeCount,
@@ -557,6 +581,8 @@ function InterviewPracticePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          applicationId: selectedApplicationId || undefined,
+          resumeArtifactId: selectedResumeId || undefined,
           messages: updatedMessages,
           config,
           exchangeCount: newExchangeCount,
@@ -725,7 +751,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               </label>
               <select
                 value={selectedApplicationId}
-                onChange={(e) => selectApplication(e.target.value)}
+                onChange={(e) => void selectApplication(e.target.value)}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
               >
                 <option value="">Not right now</option>
@@ -778,10 +804,11 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
                 value={selectedResumeId}
                 onChange={(e) => {
                   const id = e.target.value;
+                  setSelectedSnapshot(null);
                   setSelectedResumeId(id);
                   const r = resumes.find((x) => x.id === id);
                   const label = r ? [r.targetJob, r.targetCompany].filter(Boolean).join(" at ") : "";
-                  if (label) setConfig((prev) => ({ ...prev, targetRole: label }));
+                  if (label && !selectedApplicationId) setConfig((prev) => ({ ...prev, targetRole: label }));
                 }}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none min-h-touch"
               >

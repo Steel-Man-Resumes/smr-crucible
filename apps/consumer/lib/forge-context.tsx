@@ -66,6 +66,9 @@ export interface ForgeSessionData {
    *  analysis and saved as the base the Application Tailor aims at jobs. */
   resumeDoc?: ResumeDocument;
 
+  /** The lane this run belongs to; null is work outside named lanes. */
+  forgeLaneId?: string | null;
+
   // Page 3: Goals
   goals?: string[];
   goalNarrative?: string;

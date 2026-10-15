@@ -1,3 +1,5 @@
+import { loadApplicationContext } from "@/lib/application-context";
+import { formatResumeDownload } from "@/components/resume/resumeModel";
 /**
  * Interview Practice API
  *
@@ -37,7 +39,23 @@ async function handlePost(request: Request) {
     const userId = session?.user?.id;
 
     const body = await request.json();
-    const { messages, config, exchangeCount, forgeContext, resume, jobDescription, endInterview } = body;
+    const { messages, config, exchangeCount, forgeContext, endInterview } = body;
+    let { resume, jobDescription } = body;
+    if (typeof body.applicationId === "string" && body.applicationId) {
+      if (!userId) return NextResponse.json({ error: "Sign in again" }, { status: 401 });
+      const selected = await loadApplicationContext(userId, body.applicationId);
+      if (!selected) return NextResponse.json({ error: "That saved job is unavailable in your account" }, { status: 404 });
+      jobDescription = selected.application.jd_full_text || selected.application.jd_excerpt || "";
+      let resumeText = selected.resumeSnapshot ? formatResumeDownload(selected.resumeSnapshot.content_snapshot as any) : selected.revision?.resume_text || "";
+      if (body.resumeArtifactId && body.resumeArtifactId !== selected.application.resume_artifact_id) {
+        const core = await import("@crucible/core");
+        const changed = await core.getLatestRevision(userId, body.resumeArtifactId);
+        if (!changed) return NextResponse.json({ error: "That resume is unavailable in your account" }, { status: 404 });
+        resumeText = changed.resume_text;
+      }
+      resume = resumeText ? { text: resumeText, targetJob: selected.application.job_title, targetCompany: selected.application.company, evidence: [] } : undefined;
+      if (config) config.targetRole = [selected.application.job_title, selected.application.company].filter(Boolean).join(" at ");
+    }
     if (!config || typeof config.interviewType !== "string" || !Array.isArray(messages) || !messages.length || messages.some((m: any) => !m || typeof m.content !== "string")) {
       return NextResponse.json({ error: "Choose an interview and add your answer before continuing." }, { status: 400 });
     }

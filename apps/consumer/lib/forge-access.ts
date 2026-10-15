@@ -1,23 +1,11 @@
 /**
- * Who may use which part of the Forge, and from when.
- *
- * THE WALL. The Forge's question and build screens move behind sign-in (one
- * free account, the same one the Refinery uses). The public pages, the free
- * checker and the Mini Forge stay open. The wall goes up on a date the owner
- * sets in FORGE_SIGN_IN_STARTS_AT; until that date the Forge works as it
- * always has and the public pages show a quiet notice with the date.
- *
- * Pure and edge-safe (no imports): the middleware, the route wrappers, the
- * client pages and the unit tests all read the same rules.
+ * Forge generation requires an account by default. Public check tools and
+ * Mini Forge remain open. The explicit deployment override supports reviewed
+ * preview tests and rollback; a missing or malformed setting keeps accounts on.
+ * Pure and edge-safe so middleware, route wrappers and UI use one rule.
  */
 
-/**
- * When the Forge starts asking people to sign in. SET BY THE OWNER, never by
- * code or an agent: an ISO 8601 instant with its offset, for example
- * "2026-11-02T00:00:00-07:00" (midnight Mountain Time). null means no date has
- * been set: no notice is shown and the wall stays down (unless the
- * NEXT_PUBLIC_FORGE_SIGN_IN_WALL switch below says otherwise).
- */
+/** Optional owner-set announcement date; absent means accounts are required now. */
 export const FORGE_SIGN_IN_STARTS_AT: string | null = null;
 
 /**
@@ -25,28 +13,18 @@ export const FORGE_SIGN_IN_STARTS_AT: string | null = null;
  * middleware agree):
  *   "on"  the wall is up now, whatever the date (preview testing);
  *   "off" the wall is down and no notice shows (an emergency off switch);
- *   unset the date above decides.
+ *   unset the account requirement is active, unless an announcement date is set.
  */
 export const FORGE_WALL_ENV = "NEXT_PUBLIC_FORGE_SIGN_IN_WALL";
 
 /**
- *  - "open":      no date set (or switched off): the Forge works signed out;
+ *  - "open":      explicitly switched off: the Forge works signed out;
  *  - "announced": a date is set and still ahead: works signed out, notice shows;
  *  - "up":        the date has come (or switched on): Forge screens need sign-in.
  */
 export type ForgeWall = "open" | "announced" | "up";
 
-/*
- * A DATE OR SWITCH THAT CANNOT BE READ LEAVES THE WALL DOWN (security review
- * 3a r1, L1). Down is how the Forge works today, so a typo can never lock
- * people out of it by surprise; the cost is that a typo does not put the wall
- * up. Two guards cover that side: a unit test fails the build when the date in
- * this file is set but unreadable (forge-wall.test.ts), and the server logs a
- * clear warning (once per process) when it meets an unreadable date or switch.
- * "Unreadable" includes impossible calendar dates (February 30), a missing
- * time, and a missing offset: nothing is guessed.
- */
-
+// Invalid configuration must not silently open generation to anonymous callers.
 const warned = new Set<string>();
 function warnOnce(message: string) {
   if (warned.has(message)) return;
@@ -97,9 +75,9 @@ export function forgeWallState(
   const at = forgeWallStartsAt(raw);
   if (at === null) {
     if (typeof raw === "string" && raw.trim()) {
-      warnOnce(`FORGE_SIGN_IN_STARTS_AT "${raw}" is not a readable date and time with an offset; the wall stays down.`);
+      warnOnce(`FORGE_SIGN_IN_STARTS_AT "${raw}" is not a readable date and time with an offset; the account requirement stays active.`);
     }
-    return "open";
+    return "up";
   }
   return (opts.now ?? Date.now()) >= at ? "up" : "announced";
 }

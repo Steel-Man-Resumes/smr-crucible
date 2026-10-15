@@ -1,7 +1,7 @@
 /** Only expensive work is configurable. Downloads, safety, help and deletion
  * never enter this registry. Existing quota and premium checks still apply. */
 export const AI_WORKFLOWS = [
-  'assistant','coach','analyze','generate-docs','forge-resume-assist',
+  'assistant','coach','analyze','story-check','forge-package-story','generate-docs','forge-resume-assist',
   'forge-suggest-fix','forge-recheck','forge-second-check','resume','resume-full',
   'career-package','interview','interview-practice','interview-voice-token',
   'quick-apply','follow-up','intake-followups','disclosure','disclosure-takeaways',

@@ -295,18 +295,18 @@ test("the version is a SHA-256 hex of the person, the revision and its content h
   assert.ok(!v.includes("MORGAN"));
 });
 
-test("a failed send gives the claim back, so a later visit can send it", async () => {
+test("an uncertain provider result preserves claims for leased idempotent recovery", async () => {
   const w = world({ transportOk: false });
   const r = await sendFinishedPackage(UID, finishedBody(), w.deps);
   assert.deepEqual(r, { sent: false, reason: "failed", to: OWN });
-  assert.equal(w.released.length, 2, "the revision claim and the day claim");
-  assert.equal(w.claims.size, 0);
+  assert.equal(w.released.length, 0, "a provider may have accepted before the response was lost");
+  assert.equal(w.claims.size, 2);
 });
 
-test("a transport that throws gives the claim back too", async () => {
+test("a transport that throws keeps its claims for idempotent recovery", async () => {
   const w = world({ transportThrows: true });
   assert.equal((await sendFinishedPackage(UID, finishedBody(), w.deps)).sent, false);
-  assert.equal(w.claims.size, 0);
+  assert.equal(w.claims.size, 2);
 });
 
 test("a counter error after the claim gives the claim back and is not swallowed", async () => {
@@ -346,11 +346,13 @@ test("the route takes no address from the request and wires the real claim", () 
   const src = readFileSync(join(__dirname, "..", "..", "app", "api", "forge", "email-package", "auto", "route.ts"), "utf8");
   assert.doesNotMatch(src, /body\.(email|to|recipient)/);
   assert.match(src, /forgeSessionUser\(await auth\(\)\)/);
-  assert.match(src, /claim: claimPackageEmailVersion/);
-  assert.match(src, /release: releasePackageEmailVersion/);
+  const wiring = readFileSync(join(__dirname, "..", "package-delivery-worker.ts"), "utf8");
+  assert.match(src, /await packageDeliveryDeps\(\)/);
+  assert.match(wiring, /claim: core.claimPackageEmailVersion/);
+  assert.match(wiring, /release: core.releasePackageEmailVersion/);
   assert.match(src, /mode: "user"/);
-  assert.match(src, /getRevision,/);
-  assert.match(src, /files: packageFiles/);
+  assert.match(wiring, /getRevision: core.getRevision/);
+  assert.match(wiring, /files: packageFiles/);
   assert.match(src, /isSameOriginJsonPost\(request\.headers\)/);
   assert.doesNotMatch(src, /originAllowed/);
 });
@@ -447,4 +449,52 @@ test("L4: a newer draft means nothing goes out (never an older version)", async 
   const draft = revision({ defendAnswers: [] });
   const w = world({ revisions: [FINISHED, draft] });
   assert.deepEqual(await sendFinishedPackage(UID, finishedBody(), w.deps), { sent: false, reason: "draft" });
+});
+
+test("a newer revision saved while attachments render cancels the obsolete package", async () => {
+ const revisions = [FINISHED];
+ const w = world({ revisions });
+ const files = w.deps.files;
+ w.deps.files = async (...args) => { revisions.push(revision({ defendAnswers: [] })); return files(...args); };
+ const result = await sendFinishedPackage(UID, finishedBody(), w.deps);
+ assert.equal(result.sent, false);
+ assert.equal(result.reason, "settling");
+ assert.equal(w.sent.length, 0);
+});
+test("client story claims are never emailed; only a server-checked stored story is eligible", async () => {
+ const w = world();
+ w.deps.story = async () => null;
+ await sendFinishedPackage(UID, finishedBody({ narrativeHeadline: "Invented director", narrativeSummary: "Invented 500 staff" }), w.deps);
+ assert.doesNotMatch(w.sent[0].text, /Invented/);
+ const checked = world();
+ checked.deps.story = async () => ({ headline: "Line cook", summary: "You prepared food.", strengths: [{ title: "Cooking", evidence: "You prepared food." }] });
+ await sendFinishedPackage(UID, finishedBody(), checked.deps);
+ assert.match(checked.sent[0].text, /Cooking: You prepared food/);
+});
+test("busy and expired-uncertain delivery claims never report a send", async () => {
+ for (const claim of ["busy", "uncertain"] as const) {
+  const w = world();
+  w.deps.claim = async () => claim;
+  const result = await sendFinishedPackage(UID, finishedBody(), w.deps);
+  assert.equal(result.sent, false);
+  assert.equal(result.reason, claim === "busy" ? "delivery_pending" : "delivery_unknown");
+  assert.equal(w.sent.length, 0);
+ }
+});
+test("provider retries use the persisted request, including unchanged attachment bytes", async () => {
+ const w = world();
+ let frozen: PackageMail | null = null;
+ w.deps.prepare = async (_user, _version, mail) => frozen ??= structuredClone(mail);
+ await sendFinishedPackage(UID, finishedBody(), w.deps);
+ assert.ok(w.sent[0].idempotencyKey);
+ assert.deepEqual(w.sent[0], frozen);
+});
+test("opting out during rendering cancels delivery", async () => {
+ const w = world();
+ let reads = 0;
+ w.deps.target = async () => ({ email: OWN, proven: true, on: ++reads === 1 });
+ const result = await sendFinishedPackage(UID, finishedBody(), w.deps);
+ assert.equal(result.sent, false);
+ assert.equal(result.reason, "off");
+ assert.equal(w.sent.length, 0);
 });

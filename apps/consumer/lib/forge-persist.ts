@@ -157,7 +157,7 @@ export async function persistForgeSession(
   // draft, and the finish page saves its own version when it opens signed in.
   if (typeof (finish as Record<string, unknown>).writerReceipt !== "string" || !(finish as Record<string, unknown>).writerReceipt) return { revision: null, revisionProblem: "no receipt" };
   const laneTarget = firstLaneTarget({}, body);
-  const saved = await saveFinishRevision(userId, finish, { source: "forge_import", laneTarget, cookieHash: opts.cookieHash ?? null }, await coreStore());
+  const saved = await saveFinishRevision(userId, finish, { source: "forge_import", laneTarget, cookieHash: opts.cookieHash ?? null }, await coreStore({ laneId: finish.laneId }));
   if (saved.ok) return { revision: saved.revision, ...(saved.usedRunReceipt ? { usedRunReceipt: true } : {}) };
   // Not valid as sent: the rest of the run is saved; say so, never pretend.
   // Before 081 is applied (503 not_ready) the run still saves as it always did.

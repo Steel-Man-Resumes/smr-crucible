@@ -198,8 +198,9 @@ export async function verifyGrounding(params: {
   const apiKey = process.env.OPENAI_API_KEY;
   // FAIL-CLOSED signal: no cheap-model key means the verifier could NOT run.
   if (!apiKey) return { ...original, verifierRan: false };
-  // Fail-open, but the verifier legitimately RAN its decision: nothing to verify.
-  if (!output || output.trim().length < 20) return original;
+  // Short report titles and skill names can still claim unsupported credentials.
+  // Keep the legacy document shortcut, but always check a nonempty report field.
+  if (!output || (kind !== "report" && output.trim().length < 20)) return original;
   const source = (sourceText || "").trim();
   // With no source at all the model can't distinguish grounded from invented;
   // don't risk a destructive rewrite. (The gauge already warns the user here.)

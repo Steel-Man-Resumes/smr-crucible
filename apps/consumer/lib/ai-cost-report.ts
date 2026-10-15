@@ -23,6 +23,7 @@ export async function getAiCostReport(userId: string, requestedDays = 30) {
         GROUP BY o.workflow ORDER BY sum(t.cost_usd) DESC NULLS LAST`,[String(days)]),
       queryAsUser(userId,`SELECT workflow,status,count(*)::int AS operations,
         count(*) FILTER (WHERE NOT EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id))::int AS without_usage,
+        count(*) FILTER (WHERE accounting_incomplete)::int AS incomplete_accounting,
         sum(reserved_usd)::numeric(12,6) AS reserved_usd FROM ai_operation o
         WHERE created_at > now()-($1 || ' days')::interval GROUP BY workflow,status`,[String(days)]),
       queryAsUser(userId,'SELECT workflow,disabled,daily_calls,daily_usd,reserve_usd,premium_tool FROM ai_tool_policy ORDER BY workflow'),

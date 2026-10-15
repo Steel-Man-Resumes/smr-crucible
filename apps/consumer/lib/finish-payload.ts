@@ -8,6 +8,7 @@
  * decides draft or finished (lib/revision-status.ts).
  */
 
+import { readStoryDraft, type StoryDraft } from "./story-verification";
 import { CREDENTIALS_KEY } from "./forge-path";
 import { finishKey, ownWordsFor, readStoredFinish, FINISH_STATE_VERSION, type StoredFinish } from "./finish-gate";
 import { completeCredentialRows, readCredentialRows } from "./credential-rows";
@@ -15,6 +16,8 @@ import { withholdRecordLines } from "./record-lines";
 import { isLengthChoice, type LengthChoice } from "./length-rule";
 
 export interface FinishPayload {
+  laneId?: string | null;
+  storyDraft?: StoryDraft;
   resumeText: string;
   coverLetterText: string;
   defendAnswers: unknown[];
@@ -39,6 +42,7 @@ export interface FinishPayload {
 
 /** The run fields the evidence comes from. */
 export interface RunForPayload {
+  forgeLaneId?: string | null;
   resumeText?: string;
   originalResumeText?: string;
   goalNarrative?: string;
@@ -104,6 +108,8 @@ export function finishPayload(
   };
   const ev = evidence ?? fromRun;
   return {
+    ...(run.forgeLaneId !== undefined ? { laneId: run.forgeLaneId } : {}),
+    ...(readStoryDraft(run.forgeOutput) ? { storyDraft: readStoryDraft(run.forgeOutput) } : {}),
     resumeText: state.resumeText,
     coverLetterText: state.coverLetterText,
     defendAnswers: state.defendAnswers,

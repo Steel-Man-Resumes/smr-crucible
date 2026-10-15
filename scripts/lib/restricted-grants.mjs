@@ -98,6 +98,11 @@ export const RESTRICTED_GRANTS = {
   // The app's one read of the directory (082): approved, fresh, active services,
   // public fields only. Built on resource_public_v; no base table is granted.
   resource_app_v: ["SELECT"],
+  // Delivery leases and cost records need UPDATE after blanket grants too.
+  forge_package_delivery: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  forge_package_email_sent: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  ai_operation: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  ai_tool_policy: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   directory_publication_alias: [],
   employer_publication_v: ["SELECT"],
   resource_publication_v: ["SELECT"],

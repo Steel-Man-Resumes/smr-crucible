@@ -386,7 +386,7 @@ function ApplicationsPage() {
                         {stage.suggestion &&
                           !(stage.status === "saved" && !!app.resume_artifact_id) && (
                           <Link
-                            href={stage.suggestion.href}
+                            href={`${stage.suggestion.href}?${stage.suggestion.href.endsWith("application-tailor") ? "job" : "applicationId"}=${encodeURIComponent(app.id)}`}
                             className="t-focus mt-3 flex items-center gap-2 px-3 py-2 bg-t-panel-2 border border-t-line text-xs text-t-amber-bright hover:text-t-amber transition-colors"
                           >
                             <svg
@@ -457,8 +457,15 @@ function ApplicationsPage() {
                         {stage.status === "offered" && (
                           <div className="mt-3 bg-t-panel-2 px-3 py-2 border border-t-phos">
                             <p className="text-xs text-t-phos font-medium">
-                              Congratulations! You earned this.
+                              You have an offer. Confirm the terms and your next step.
                             </p>
+                            <ul className="mt-2 list-disc pl-4 text-xs text-t-phos space-y-1">
+                              <li>Ask your contact which conditions remain and which documents to bring.</li>
+                              <li>Confirm your start date, time, location and transportation.</li>
+                              <li>After you actually start, tell your program contact if you choose to share.</li>
+                              <li>Set your own check-in for your first week. An offer alone is not a confirmed start.</li>
+                            </ul>
+                            <Link href="/dashboard/resources#support" className="t-focus mt-2 inline-flex min-h-touch items-center text-xs underline">Get help with the next step</Link>
                           </div>
                         )}
                       </div>

@@ -78,7 +78,7 @@ test("the dashboard asks first, then becomes the lane home with All tools second
   const picker = d.indexOf("<TaskPicker");
   const profile = d.indexOf("<ProfileSetup contact");
   assert.ok(picker > 0 && profile > picker, "the question comes before the profile form");
-  const home = d.indexOf("{focus.task && <LaneHome task={focus.task} />}\n      {focus.task && (");
+  const home = d.indexOf("{focus.task && <LaneHome laneId={focus.laneId} task={focus.task} />}\n      {focus.task && (");
   const tools = d.indexOf("All tools\n        </h2>");
   assert.ok(home > 0 && tools > home, "lane home first, All tools second");
 });
@@ -477,8 +477,8 @@ test("H1: without a resume, Get support, the job board and the documents open; i
   assert.equal(refineryOpenWithoutResume("/dashboard/interview", "interview"), true);
   assert.equal(refineryOpenWithoutResume("/dashboard/application-tailor", "job"), false);
   assert.equal(refineryOpenWithoutResume("/dashboard", "support"), true, "the lane home for a support lane");
-  assert.equal(refineryOpenWithoutResume("/dashboard", "resume"), false);
-  assert.equal(refineryOpenWithoutResume("/dashboard", null), false, "no task yet: the first screen asks");
+  assert.equal(refineryOpenWithoutResume("/dashboard", "resume"), true);
+  assert.equal(refineryOpenWithoutResume("/dashboard", null), true, "the overview asks for today's task without a Forge redirect");
   assert.equal(taskNeedsResume("job"), false);
   const shell = read("app/(dashboard)/RefineryShell.tsx");
   assert.match(shell, /!refineryOpenWithoutResume\(pathname, laneFocus\.task\)/);

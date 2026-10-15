@@ -47,6 +47,14 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
   const input = core.readLaneFocusInput(body);
   if (!input.ok) return NextResponse.json({ error: "Invalid request", reason: input.reason }, { status: 400 });
+  if (input.focus.laneId) {
+    const lane = await core.getOpenLane(caller.userId, input.focus.laneId);
+    if (!lane) return NextResponse.json({ error: "Lane not found" }, { status: 404 });
+    if (input.focus.target && input.focus.target !== lane.target_role) {
+      const updated = await core.updateLane(caller.userId, lane.id, { targetRole: input.focus.target });
+      if (updated.status !== "ok") return NextResponse.json({ error: "Could not save lane direction" }, { status: 409 });
+    }
+  }
   const r = await core.setLaneFocus(caller.userId, input.focus);
   if (r.status === "bad_lane") return NextResponse.json({ error: "That lane isn't yours." }, { status: 404 });
   if (r.status === "not_ready") return NextResponse.json({ error: "Saving this isn't ready here yet. Your pick still works on this computer." }, { status: 503 });

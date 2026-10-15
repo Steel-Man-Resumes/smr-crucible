@@ -77,17 +77,20 @@ export const PACKAGE_VERSION_RE = /^[0-9a-f]{64}$/;
  * false: it was already sent; null: 079 is not applied yet (the caller falls
  * back to a daily count).
  */
-export async function claimPackageEmailVersion(userId: string, version: string): Promise<boolean | null> {
+export async function claimPackageEmailVersion(userId: string, version: string): Promise<boolean | null | "busy" | "uncertain"> {
   if (!PACKAGE_VERSION_RE.test(version)) throw new Error("bad package version");
   try {
-    const rows = await queryAsUser<{ version: string }>(
-      userId,
-      `INSERT INTO forge_package_email_sent (user_id, version) VALUES ($1, $2)
-       ON CONFLICT (user_id, version) DO NOTHING
-       RETURNING version`,
-      [userId, version]
-    );
-    return rows.length > 0;
+    const rows = await queryAsUser<{ version: string }>(userId,
+      `INSERT INTO forge_package_email_sent (user_id, version, delivered_at, lease_until) VALUES ($1, $2, NULL, now() + interval '2 minutes')
+       ON CONFLICT (user_id, version) DO UPDATE SET lease_until = now() + interval '2 minutes'
+       WHERE forge_package_email_sent.delivered_at IS NULL AND forge_package_email_sent.lease_until < now()
+         AND forge_package_email_sent.sent_at > now() - interval '23 hours'
+       RETURNING version`, [userId, version]);
+    if (rows.length) return true;
+    const [existing] = await queryAsUser<{ delivered_at: string | null; recent: boolean }>(userId,
+      `SELECT delivered_at, sent_at > now() - interval '23 hours' AS recent FROM forge_package_email_sent WHERE user_id = $1 AND version = $2`, [userId, version]);
+    if (existing?.delivered_at) return false;
+    return existing?.recent ? "busy" : "uncertain";
   } catch (e) {
     if (missingTable(e)) return null;
     throw e;
@@ -97,7 +100,7 @@ export async function claimPackageEmailVersion(userId: string, version: string):
 /** Give a claim back when the email did not go out, so a later visit can send it. */
 export async function releasePackageEmailVersion(userId: string, version: string): Promise<void> {
   try {
-    await queryAsUser(userId, `DELETE FROM forge_package_email_sent WHERE user_id = $1 AND version = $2`, [userId, version]);
+    await queryAsUser(userId, `DELETE FROM forge_package_email_sent WHERE user_id = $1 AND version = $2 AND attempted_at IS NULL AND delivered_at IS NULL`, [userId, version]);
   } catch (e) {
     if (!missingTable(e)) throw e;
   }

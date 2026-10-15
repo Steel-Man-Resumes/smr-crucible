@@ -35,7 +35,7 @@
 import { createHash } from "crypto";
 import { computeRevision, inputFromRevision } from "./revision-status";
 import { EMAIL_PACKAGE_PER_RECIPIENT_PER_DAY, RECIPIENT_ENDPOINT, recipientKey } from "./email-package-guard";
-import { buildPackageEmail, type MailAttachment, type MailTransport } from "./email-package-send";
+import { buildPackageEmail, type MailAttachment, type MailTransport, type PackageMail } from "./email-package-send";
 import type { AutoResult } from "./email-package-auto-line";
 import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
 export { autoResultLine, type AutoResult } from "./email-package-auto-line";
@@ -48,7 +48,10 @@ export interface AutoDeps {
   /** Durable daily counter (packages/core incrementIpUsage). Returns the new count. */
   count: (key: string, endpoint: string) => Promise<number>;
   /** Claim a finished version (packages/core claimPackageEmailVersion): true claimed, false already sent, null not ready. */
-  claim: (userId: string, version: string) => Promise<boolean | null>;
+  claim: (userId: string, version: string) => Promise<boolean | null | "busy" | "uncertain">;
+  story?: (revision: ArtifactRevision) => Promise<{ headline: string; summary: string; strengths?: Array<{ title: string; evidence: string }> } | null>;
+  prepare?: (userId: string, version: string, mail: PackageMail) => Promise<PackageMail>;
+  complete?: (userId: string, version: string) => Promise<void>;
   /** Give a claim back (packages/core releasePackageEmailVersion). */
   release: (userId: string, version: string) => Promise<void>;
   /** The person's own revision (packages/core getRevision). */
@@ -127,13 +130,14 @@ export async function sendFinishedPackage(
   const day = utcDay(nowMs);
   const dayVersion = artifactDayVersion(userId, rev.artifact_id, day);
   const claimedRev = await deps.claim(userId, version);
+  if (claimedRev === "busy" || claimedRev === "uncertain") return { sent: false, reason: claimedRev === "busy" ? "delivery_pending" : "delivery_unknown", to };
   if (claimedRev === false) return { sent: false, reason: "already", to };
-  let claimedDay: boolean | null = null;
+  let claimedDay: boolean | null | "busy" | "uncertain" = null;
   if (claimedRev === true) {
     claimedDay = await deps.claim(userId, dayVersion);
-    if (claimedDay === false) {
+    if (claimedDay === false || claimedDay === "busy" || claimedDay === "uncertain") {
       await deps.release(userId, version).catch(() => {});
-      return { sent: false, reason: "already_today", to };
+      return { sent: false, reason: claimedDay === false ? "already_today" : claimedDay === "busy" ? "delivery_pending" : "delivery_unknown", to };
     }
   } else if ((await deps.count(autoRunKey(userId, rev.artifact_id, day), AUTO_ENDPOINT)) > 1) {
     // 079 not applied: a daily count per resume.
@@ -142,6 +146,7 @@ export async function sendFinishedPackage(
   const claimed = claimedRev === true;
   // From here the claims are given back unless the email went out (the cap,
   // a provider refusal, or an error), so a later visit can send it.
+  let transportAttempted = false;
   let result: AutoResult = { sent: false, reason: "failed", to };
   try {
     if ((await deps.count(recipientKey(to), RECIPIENT_ENDPOINT)) > EMAIL_PACKAGE_PER_RECIPIENT_PER_DAY) {
@@ -154,25 +159,42 @@ export async function sendFinishedPackage(
     } catch {
       return result; // the files did not build: not sent, given back, retry later
     }
+    const story = await deps.story?.(rev).catch(() => null);
     const mail = buildPackageEmail(
       {
         resumeText: rev.resume_text,
         coverLetterText: rev.letter_text,
         // Display only (the person's story heading); never decides anything.
-        headline: clip(body.narrativeHeadline, 500),
-        summary: clip(body.narrativeSummary, 5000),
+        headline: story?.headline || "",
+        summary: story?.summary || "",
+        strengths: story?.strengths || [],
       },
       { why: "finished", attached: attachments.length > 0 }
     );
     try {
-      const res = await deps.transport({ from: deps.from, to, ...mail, attachments });
-      if (res.ok) result = { sent: true, to, revision: rev.revision_number };
+      const latest = await deps.getLatestRevision(userId, rev.artifact_id);
+      if (!latest || latest.id !== rev.id || latest.content_hash !== rev.content_hash) return { sent: false, reason: "settling", retryInMs: AUTO_SETTLE_MS, to };
+      const candidate = { from: deps.from, to, ...mail, attachments, idempotencyKey: `forge-package-${version}` };
+      const outgoing = deps.prepare ? await deps.prepare(userId, version, candidate) : candidate;
+      // A changed account address must never replay the old recipient's payload.
+      if (outgoing.to !== to) return { sent: false, reason: "delivery_unknown", to };
+      const finalTarget = await deps.target(userId);
+      if (!finalTarget?.on) return { sent: false, reason: "off" };
+      if (!finalTarget.proven) return { sent: false, reason: "unproven" };
+      if (finalTarget.email !== to) return { sent: false, reason: "delivery_unknown" };
+      transportAttempted = true;
+      const res = await deps.transport(outgoing);
+      if (res.ok) {
+        result = { sent: true, to, revision: rev.revision_number };
+        await deps.complete?.(userId, version);
+        if (claimedDay === true) await deps.complete?.(userId, dayVersion);
+      }
     } catch {
       // not sent
     }
     return result;
   } finally {
-    if (!result.sent && claimed) {
+    if (!result.sent && claimed && !transportAttempted) {
       await deps.release(userId, version).catch(() => {});
       if (claimedDay) await deps.release(userId, dayVersion).catch(() => {});
     }

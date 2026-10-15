@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
-import { createLane, listLanes, listDismissedIntros, laneOfNewestResume, incrementUserUsage, LANE_WRITES_PER_DAY } from "@crucible/core";
+import { createLane, getLaneFocus, listLanes, listDismissedIntros, laneOfNewestResume, incrementUserUsage, LANE_WRITES_PER_DAY } from "@crucible/core";
 import { LANE_ERROR_COPY } from "@/lib/lanes";
 
 /**
@@ -18,16 +18,19 @@ export async function GET() {
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const [all, intros, defaultLaneId] = await Promise.all([
+  const [all, intros, defaultLaneId, focus] = await Promise.all([
     listLanes(userId, { includeArchived: true }),
     listDismissedIntros(userId),
     laneOfNewestResume(userId),
+    getLaneFocus(userId),
   ]);
   return NextResponse.json({
     lanes: all.filter((l) => !l.archived_at),
     archived: all.filter((l) => !!l.archived_at),
     introsSeen: intros.map((r) => `${r.lane_key}:${r.tool}`),
     defaultLaneId,
+    activeLaneId: focus ? (focus.laneId || "main") : null,
+    task: focus?.task || "resume",
   });
 }
 

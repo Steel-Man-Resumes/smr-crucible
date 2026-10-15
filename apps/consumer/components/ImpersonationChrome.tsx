@@ -36,6 +36,7 @@ export function ImpersonationChrome() {
   // button does (security review 3a Part 2 r2, N3).
   const { data: authData } = useSession();
   const adminId = (authData?.user as { id?: string } | undefined)?.id ?? null;
+  const isAdmin = (authData?.user as { tier?: string } | undefined)?.tier === "admin";
   const wasActive = useRef(false);
   const cleared = useRef(false);
   const settle = useCallback((active: boolean) => {
@@ -74,6 +75,10 @@ export function ImpersonationChrome() {
   }, [settle]);
 
   useEffect(() => {
+    if (!isAdmin) {
+      setStatus({ active: false });
+      return;
+    }
     load();
     const poll = setInterval(load, 60_000);
     const tick = setInterval(() => setNow(Date.now()), 1000);
@@ -81,7 +86,7 @@ export function ImpersonationChrome() {
       clearInterval(poll);
       clearInterval(tick);
     };
-  }, [load]);
+  }, [load, isAdmin]);
 
   // The countdown reaching zero also ends it, before the next poll.
   const runOut = status.active && status.expiresAt ? Date.parse(status.expiresAt) <= now : false;

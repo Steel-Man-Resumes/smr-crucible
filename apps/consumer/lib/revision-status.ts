@@ -23,6 +23,7 @@
  * gate run here, on that evidence.
  */
 
+import { readStoryDraft, type StoryDraft } from "./story-verification";
 import {
   buildFinishView,
   openItemsInPlainWords,
@@ -71,6 +72,7 @@ export interface RevisionInput {
 
 /** The evidence stored with a revision (everything besides texts and confirmations). */
 export interface RevisionEvidence {
+  storyDraft?: StoryDraft;
   ownWords: string;
   written: WrittenDocs | null;
   grounding: unknown;
@@ -290,6 +292,7 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
       keptTerms: (stored.keptTerms ?? []).map((t) => t.slice(0, 200)),
       confirmedCredentials: stored.confirmedCredentials ?? [],
       evidence: {
+        ...(readStoryDraft(r.storyDraft) ? { storyDraft: readStoryDraft(r.storyDraft) } : {}),
         ownWords: str(source.ownWords, MAX_WORDS),
         // Without a matching receipt the writer's documents and check are not
         // known: written counts for nothing (closed by default) and the version
