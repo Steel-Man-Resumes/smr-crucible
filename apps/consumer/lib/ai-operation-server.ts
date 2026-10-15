@@ -17,6 +17,9 @@ export interface OperationHandle {
 }
 /** Atomic admission across serverless instances. Policy is empty by default;
  * existing daily quotas and sponsorship continue to be enforced by callers.
+ * Under a dollar allowance an ESTIMATED cost (voice) counts at its estimate;
+ * only UNPRICED usage (unknown model or missing usage) closes the day, since
+ * its bill is unknown.
  * Stuck operations retain their reservation until reviewed: a crashed request
  * must not turn an unknown provider bill into new spendable budget. */
 export async function beginAiOperation(input: {userId: string; endpoint: string}): Promise<OperationHandle> {
@@ -42,13 +45,13 @@ export async function beginAiOperation(input: {userId: string; endpoint: string}
           NOT EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.user_id=${input.userId}::uuid
             AND t.endpoint=${input.endpoint} AND t.operation_id IS NULL
             AND t.created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
-            AND t.cost_status <> 'priced')
+            AND t.cost_status = 'unpriced')
           AND NOT EXISTS (SELECT 1 FROM ai_operation o
             WHERE o.user_id=${input.userId}::uuid AND o.workflow=${input.endpoint}
               AND o.created_at >= date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
               AND o.reserved_usd=0 AND (o.status='running' OR o.accounting_incomplete
                 OR NOT EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id)
-                OR EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id AND t.cost_status <> 'priced')))
+                OR EXISTS (SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id AND t.cost_status = 'unpriced')))
           AND COALESCE((SELECT SUM(GREATEST(o.reserved_usd,
             COALESCE((SELECT SUM(t.cost_usd) FROM ai_token_usage t WHERE t.operation_id=o.id),0)))
             FROM ai_operation o WHERE o.user_id=${input.userId}::uuid AND o.workflow=${input.endpoint}

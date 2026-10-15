@@ -27,16 +27,18 @@ export async function publicationRead<T>(empty:T,read:()=>Promise<T>):Promise<Pu
 const EMPLOYER_FIELDS=`id,name,industry,state,city,location,apply_url AS "applyUrl",role_types AS "roleTypes",
  evidence,caveats,checked_at::text AS "checkedAt",expires_at::text AS "expiresAt",source_url AS "sourceUrl",
  relationship_tier AS "relationshipTier",scope,standing,version`;
-export function publishedEmployerSql(opts:{q?:string;state?:string;industry?:string;page?:number}) {
+export const EMPLOYER_PAGE_MAX=200;
+export function employerPageSize(limit:unknown):number {const n=Number(limit);return Number.isFinite(n)&&n>=1?Math.min(EMPLOYER_PAGE_MAX,Math.floor(n)):25;}
+export function publishedEmployerSql(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number}) {
  const params:unknown[]=[];const where=["expires_at > (now() AT TIME ZONE 'UTC')::date"];
  const q=employerLikePattern(opts.q);
  if(q){params.push(q);where.push(`concat_ws(' ',name,industry,city,state,role_types) ILIKE $${params.length} ESCAPE '\\'`);}
  if(opts.state && /^[A-Z]{2}$/.test(opts.state)){params.push(opts.state);where.push(`state=$${params.length}`);}
  if(opts.industry){params.push(opts.industry.slice(0,80));where.push(`industry=$${params.length}`);}
- params.push(clampEmployerPage(opts.page)*25);
- return {sql:`SELECT ${EMPLOYER_FIELDS} FROM employer_publication_v WHERE ${where.join(' AND ')} ORDER BY state,name,id LIMIT 25 OFFSET $${params.length}`,params};
+ const size=employerPageSize(opts.limit);params.push(size);const limitAt=params.length;params.push(clampEmployerPage(opts.page)*size);
+ return {sql:`SELECT ${EMPLOYER_FIELDS} FROM employer_publication_v WHERE ${where.join(' AND ')} ORDER BY state,name,id LIMIT $${limitAt} OFFSET $${params.length}`,params};
 }
-export function searchVerifiedEmployers(opts:{q?:string;state?:string;industry?:string;page?:number}={}) {
+export function searchVerifiedEmployers(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number}={}) {
  return publicationRead<PublishedEmployer[]>([],async()=>{const {sql,params}=publishedEmployerSql(opts);const rows=await query<PublishedEmployer>(sql,params);return rows.map(r=>({...r,caveats:publicCaveat(r.caveats)}));});
 }
 export function getVerifiedEmployer(id:string) {

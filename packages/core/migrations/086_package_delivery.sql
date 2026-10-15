@@ -20,11 +20,13 @@ CREATE POLICY forge_package_delivery_owner ON forge_package_delivery
  USING (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)
  WITH CHECK (user_id = NULLIF(current_setting('app.user_id', true), '')::uuid);
 -- Enqueue in the SAME transaction as every revision. A newer draft cancels a
--- pending finished delivery; finishing again replaces the job without a browser.
+-- pending finished delivery; any newer FINISHED version (Forge finish, import or
+-- a finished Refinery edit) replaces the job without a browser, so the newest
+-- finished document is what goes out.
 CREATE OR REPLACE FUNCTION public.queue_finished_package() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
- IF NEW.status = 'finished' AND NEW.source IN ('forge_finish','forge_import') THEN
+ IF NEW.status = 'finished' THEN
   INSERT INTO public.forge_package_delivery(user_id, artifact_id, revision_id)
   VALUES(NEW.user_id, NEW.artifact_id, NEW.id)
   ON CONFLICT(user_id, artifact_id) DO UPDATE SET revision_id = EXCLUDED.revision_id,
@@ -43,7 +45,7 @@ CREATE OR REPLACE FUNCTION public.package_delivery_due()
 RETURNS TABLE(user_id uuid, artifact_id uuid, revision_id uuid)
 LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp
 AS $$ SELECT user_id, artifact_id, revision_id FROM public.forge_package_delivery
- WHERE due_at <= now() ORDER BY due_at LIMIT 3 $$;
+ WHERE due_at <= now() ORDER BY due_at LIMIT 25 $$;
 REVOKE ALL ON forge_package_delivery FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.package_delivery_due() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.queue_finished_package() FROM PUBLIC;

@@ -9,7 +9,7 @@ test('publication outages never masquerade as an empty area',async()=>{
 });
 test('employer search is bounded, parameterized and matches literal search punctuation',()=>{
  const x=publishedEmployerSql({q:"100% _ ' OR true",page:Infinity,state:'WI'});
- assert.match(x.sql,/LIMIT 25 OFFSET/);assert.ok(!x.sql.includes('OR true'));assert.equal(x.params[0],"%100\\% \\_ ' OR true%");assert.equal(x.params.at(-1),0);
+ assert.match(x.sql,/LIMIT \$3 OFFSET \$4/);assert.ok(!x.sql.includes('OR true'));assert.equal(x.params[0],"%100\\% \\_ ' OR true%");assert.equal(x.params.at(-1),0);
  assert.equal(publishedEmployerSql({page:99999}).params.at(-1),975);
 });
 test('resource saved content cannot smuggle private notes or unsupported service claims',()=>{

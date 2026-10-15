@@ -70,8 +70,9 @@ export async function GET(request: Request) {
     }
 
     const recoveredUsage = await reconcileClosedVoiceUsage();
-    const delivery = Date.now() - started < 25_000
-      ? await drainPackageDeliveries().catch(() => ({ unavailable: true }))
+    // Package delivery gets what is left of the 60-second budget, minus a margin.
+    const delivery = Date.now() - started < 40_000
+      ? await drainPackageDeliveries(started + 50_000).catch(() => ({ unavailable: true }))
       : { deferred: true };
     return NextResponse.json({
       recoveredUsage,

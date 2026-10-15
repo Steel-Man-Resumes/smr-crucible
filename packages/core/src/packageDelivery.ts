@@ -11,10 +11,22 @@ export async function claimPackageDelivery(job: PackageDelivery): Promise<boolea
  WHERE user_id = $1 AND artifact_id = $2 AND revision_id = $3 AND due_at <= now() RETURNING artifact_id`, [job.user_id, job.artifact_id, job.revision_id]);
  return rows.length > 0;
 }
+/** After this many tries the job is dropped; the person can still tap "Email me the latest". */
+export const PACKAGE_DELIVERY_MAX_ATTEMPTS = 24;
+/** Retry timing follows the reason: a daily cap waits for the next UTC day, an unproven
+ * address or missing transport waits hours, anything else half an hour. A job past the
+ * attempt cap is dropped instead of holding a queue slot forever. */
 export async function finishPackageDelivery(job: PackageDelivery, retry: boolean, reason: string): Promise<void> {
- if (retry) await queryAsUser(job.user_id, `UPDATE forge_package_delivery SET due_at = now() + interval '30 minutes', last_result = $4
- WHERE user_id = $1 AND artifact_id = $2 AND revision_id = $3`, [job.user_id, job.artifact_id, job.revision_id, reason]);
- else await queryAsUser(job.user_id, `DELETE FROM forge_package_delivery WHERE user_id = $1 AND artifact_id = $2 AND revision_id = $3`, [job.user_id, job.artifact_id, job.revision_id]);
+ if (retry) {
+  const kept = await queryAsUser(job.user_id, `UPDATE forge_package_delivery SET last_result = $4,
+   due_at = CASE WHEN $4::text = 'already_today' THEN (date_trunc('day', now() AT TIME ZONE 'UTC') + interval '1 day 5 minutes') AT TIME ZONE 'UTC'
+                 WHEN $4::text IN ('unproven', 'not_configured') THEN now() + interval '6 hours'
+                 ELSE now() + interval '30 minutes' END
+   WHERE user_id = $1 AND artifact_id = $2 AND revision_id = $3 AND attempts < $5 RETURNING artifact_id`,
+   [job.user_id, job.artifact_id, job.revision_id, reason, PACKAGE_DELIVERY_MAX_ATTEMPTS]);
+  if (kept.length) return;
+ }
+ await queryAsUser(job.user_id, `DELETE FROM forge_package_delivery WHERE user_id = $1 AND artifact_id = $2 AND revision_id = $3`, [job.user_id, job.artifact_id, job.revision_id]);
 }
 export async function completePackageEmailVersion(userId: string, version: string): Promise<void> {
  await queryAsUser(userId, `UPDATE forge_package_email_sent SET delivered_at = now(), lease_until = NULL, payload_encrypted = NULL WHERE user_id = $1 AND version = $2`, [userId, version]);

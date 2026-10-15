@@ -27,16 +27,16 @@ export async function packageDeliveryDeps(): Promise<AutoDeps> {
   getRevision: core.getRevision, getLatestRevision: core.getLatestRevision, files: packageFiles,
   transport: key ? resendTransport(key) : null, from: packageFrom() };
 }
-/** Existing maintenance tick; bounded work, no new schedule. */
-export async function drainPackageDeliveries(): Promise<{ processed: number; retrying: number }> {
+/** Existing maintenance tick; bounded work, no new schedule. Every due job is
+ * tried while the time budget lasts (one person's package must never wait
+ * behind a stranger's permanent failure); the rest wait for the next tick. */
+export async function drainPackageDeliveries(deadline = Date.now() + 40_000): Promise<{ processed: number; retrying: number; deferred: number }> {
  const core = await import("@crucible/core");
  const jobs = await core.duePackageDeliveries();
  const deps = await packageDeliveryDeps();
- let processed = 0, retrying = 0;
- const deadline = Date.now() + 20_000;
- // Leave headroom for voice reconciliation in this shared 60-second route.
- for (const job of jobs.slice(0, 1)) {
-  if (Date.now() > deadline) break;
+ let processed = 0, retrying = 0, deferred = 0;
+ for (const job of jobs) {
+  if (Date.now() > deadline) { deferred++; continue; }
   if (!(await core.claimPackageDelivery(job))) continue;
   try {
    const result = await sendFinishedPackage(job.user_id, { revisionId: job.revision_id }, deps);
@@ -46,5 +46,5 @@ export async function drainPackageDeliveries(): Promise<{ processed: number; ret
    if (retry) retrying++;
   } catch { await core.finishPackageDelivery(job, true, "failed"); retrying++; }
  }
- return { processed, retrying };
+ return { processed, retrying, deferred };
 }

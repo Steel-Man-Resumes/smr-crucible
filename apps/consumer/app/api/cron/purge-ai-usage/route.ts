@@ -12,7 +12,11 @@
  * as the other cron routes. Schedule lives in vercel.json.
  */
 import { NextResponse } from "next/server";
-import { purgeOldAiUsage } from "@crucible/core";
+import { purgeOldAiUsage, query } from "@crucible/core";
+
+/** Finished operation records older than this are deleted with the usage counters.
+ * Running ones are kept (a stuck reservation is reviewed, never silently dropped). */
+const AI_OPERATION_RETENTION_DAYS = 30;
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,9 +30,20 @@ export async function GET(request: Request) {
 
   try {
     const purged = await purgeOldAiUsage();
+    let operations: number | "unavailable" = "unavailable";
+    try {
+      const rows = await query<{ id: string }>(
+        `DELETE FROM ai_operation WHERE status <> 'running' AND created_at < now() - ($1 || ' days')::interval RETURNING id`,
+        [String(AI_OPERATION_RETENTION_DAYS)]
+      );
+      operations = rows.length;
+    } catch {
+      // 087 not applied here yet: nothing to purge.
+    }
     return NextResponse.json({
       ok: true,
       purged,
+      operations,
       checked_at: new Date().toISOString(),
     });
   } catch (err: any) {
