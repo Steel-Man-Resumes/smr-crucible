@@ -73,6 +73,7 @@ import {
 import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
 import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
 import { withholdRecordLines } from "./record-lines";
+import { isRecordChoice, keepSourceRecordLines, recordChoiceFrom, recordChoiceWords, type RecordChoice } from "./record-choice";
 import { countPromptForLine } from "./count-prompts";
 
 export type { DefendAnswer, OpenItem, ResumeStatus };
@@ -88,6 +89,8 @@ export interface FinishDocs {
   coverLetterText: string;
   withheldLines: string[];
   keepInsideLines: boolean;
+  /** DEC-51: the record on the page as the person chose it; absent on older runs (keepInsideLines decides). */
+  recordChoice?: RecordChoice;
   /** The grounding block from /api/forge/generate-docs, as returned. */
   grounding: unknown;
   /**
@@ -195,8 +198,9 @@ function hash(s: string): string {
 export function finishKey(session: {
   forgeOutput?: unknown;
   resumeText?: string;
-}, keepInsideLines: boolean): string {
-  return hash(`${JSON.stringify(session.forgeOutput ?? null)}\u0000${session.resumeText ?? ""}\u0000${keepInsideLines ? 1 : 0}`);
+}, keepInsideLines: boolean, recordChoice?: RecordChoice): string {
+  // "state" is the one choice the old boolean cannot say; off and facility keep their old keys.
+  return hash(`${JSON.stringify(session.forgeOutput ?? null)}\u0000${session.resumeText ?? ""}\u0000${keepInsideLines ? 1 : 0}${recordChoice === "state" ? "\u0000state" : ""}`);
 }
 
 /** The stored finish for this run, or null when it is missing, on another version or from another run. */
@@ -214,6 +218,7 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
       coverLetterText: typeof d.coverLetterText === "string" ? d.coverLetterText : "",
       withheldLines: Array.isArray(d.withheldLines) ? d.withheldLines.filter((l): l is string => typeof l === "string") : [],
       keepInsideLines: d.keepInsideLines === true,
+      ...(isRecordChoice(d.recordChoice) ? { recordChoice: d.recordChoice } : {}),
       grounding: d.grounding ?? null,
       written:
         d.written && typeof d.written.resume === "string"
@@ -318,10 +323,14 @@ export function ownWordsFor(
     hookNarrative?: string;
     challengeNarratives?: Record<string, string>;
   },
-  keepInsideLines: boolean
+  keepInsideLines: boolean,
+  recordChoice?: RecordChoice
 ): string {
+  const choice = recordChoiceFrom(recordChoice, keepInsideLines);
   return [
-    withholdRecordLines(session.resumeText, keepInsideLines).kept,
+    withholdRecordLines(session.resumeText, keepSourceRecordLines(choice)).kept,
+    // DEC-51 "state": the employer name the person chose stands in their words (record-choice.ts).
+    recordChoiceWords(session.resumeText, choice),
     // Round 13 (R13-B1): the goal box and the "what would make work meaningful" answer are about the job they
     // want. They are marked so a present tense there ("a job where I train new hires") never counts as done.
     markGoalText(session.goalNarrative),
@@ -1299,7 +1308,9 @@ export function scopeYesResult(
   source: string,
   answers: DefendAnswer[],
   job?: string
-): "ok" | "empty" | "unmatched" | "copy" {
+): "ok" | "empty" | "unmatched" | "copy" | "denies" {
+  // "No", "never", "not me": the honest move is Take it off, not a who-answer.
+  if (/^\s*(?:no|nope|never|not me|nobody|no one|i did(?: not|n't)|didn't|i never)\b/i.test(typed || "")) return "denies";
   if (!isScopeWhoAnswer(typed)) return "empty";
   // Round 12: the line pasted back is not their words.
   if (isScopeCopy(typed, line) || splitSentences(line).some((sent) => isScopeCopy(typed, sent))) return "copy";
@@ -2493,6 +2504,41 @@ export function mainActionLabel(view: Pick<FinishView, "state" | "fixCount"> & {
 }
 
 /** Verifiable progress only: "2 of 3 lines checked". Never a percentage. */
+/**
+ * The confidence meter (Troy 2026-10-15): the quick route is allowed, and the
+ * page says what it cost. An AI wording the person approved without typing a
+ * word of their own, and a number t.ROY asked for that was skipped, each lower
+ * it. A confirmed title, a typed who-or-what answer and a rewrite in the
+ * person's own words are the person's facts and never lower it (decision 2).
+ */
+export interface ConfidenceNote {
+  line: string;
+  why: string;
+}
+export type ConfidenceLevel = "high" | "medium" | "low";
+export function sourceConfidence(answers: DefendAnswer[], skippedNumbers: Iterable<string> = []): { level: ConfidenceLevel; notes: ConfidenceNote[] } {
+  const notes: ConfidenceNote[] = [];
+  const seen = new Set<string>();
+  for (const a of answers) {
+    if (a.kind === "assisted" && a.verdict === "stands" && !seen.has(squash(a.line))) {
+      seen.add(squash(a.line));
+      notes.push({ line: editableLine(a.line), why: "t.ROY wrote this wording from your words; you approved it without changing it." });
+    }
+  }
+  for (const line of skippedNumbers) {
+    if (seen.has(`n:${squash(line)}`)) continue;
+    seen.add(`n:${squash(line)}`);
+    notes.push({ line: editableLine(line), why: "A number t.ROY asked about was skipped. The line is true without it, and weaker." });
+  }
+  return { level: notes.length === 0 ? "high" : notes.length <= 2 ? "medium" : "low", notes };
+}
+export const CONFIDENCE_LABEL: Record<ConfidenceLevel, string> = { high: "High", medium: "Medium", low: "Low" };
+/** The meter in plain words, for the DRAFT file's to-do page. */
+export function confidenceLines(c: { level: ConfidenceLevel; notes: ConfidenceNote[] }): string[] {
+  if (!c.notes.length) return [];
+  return [`Source confidence: ${CONFIDENCE_LABEL[c.level]}.`, ...c.notes.map((n) => `"${n.line}": ${n.why}`)];
+}
+
 export function progressLine(view: Pick<FinishView, "defendDone" | "defendTotal">): string {
   if (view.defendTotal === 0) return "";
   return `${view.defendDone} of ${view.defendTotal} ${view.defendTotal === 1 ? "line" : "lines"} checked`;

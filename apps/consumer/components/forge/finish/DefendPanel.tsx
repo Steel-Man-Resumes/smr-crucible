@@ -29,6 +29,8 @@ const BTN =
   "t-focus min-h-touch border px-3 py-2 text-xs font-semibold transition-colors";
 const BTN_MAIN = `${BTN} border-t-amber bg-t-amber text-white hover:bg-t-amber-bright`;
 const BTN_SOFT = `${BTN} border-t-line bg-t-panel text-t-phos hover:border-t-phos-dim hover:text-t-white`;
+/** One tap answers for "who or what": the common true answers; the box takes anything else. */
+const SCOPE_CHIPS = ["My crew", "My shift", "My team", "The whole department", "New hires", "Customers"] as const;
 
 function uniqueQuestions(items: OpenItem[]): string[] {
   return Array.from(new Set(items.map((i) => i.question)));
@@ -46,7 +48,7 @@ export interface CardActions {
   /** Round 8: the lines "No, take it off" would change, shown before it does. */
   onPreviewCut?: (group: LineGroup) => Array<{ target: "resume" | "letter"; before: string; after: string | null }>;
   /** Round 11: "Yes, I did this" with who or what in their words. "empty": names no one; "unmatched": does not cover the line. */
-  onScopeYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched" | "copy";
+  onScopeYes?: (group: LineGroup, typed: string) => "ok" | "empty" | "unmatched" | "copy" | "denies";
   /** Round 11: "I helped with it": the line becomes its shared form. */
   onScopeHelped?: (group: LineGroup) => void;
   /** Phase 6: "No, I did the work" puts the person's own line back. */
@@ -283,6 +285,39 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
   }
 }
 
+/** Troy 2026-10-15: every job title the writer named sits on ONE card, one tap each. */
+function TitlesCard({ groups, index, actions }: { groups: LineGroup[]; index: number; actions: CardActions }) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [typed, setTyped] = useState("");
+  const [notice, setNotice] = useState("");
+  return (
+    <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-titles-card="true" data-target="resume" data-blocking="true" className="border border-t-amber bg-t-panel px-3 py-3">
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
+      <p className="mt-1 text-sm text-t-white">We named these jobs for you. Tap the ones that are right, or give us your title.</p>
+      <ul className="mt-2 space-y-2">
+        {groups.map((g) => (
+          <li key={g.line} className="border-t border-t-line pt-2" data-testid="titles-card-row" data-line={g.line}>
+            <p className="text-sm text-t-white">&ldquo;{editableLine(g.line)}&rdquo;</p>
+            {editing === g.line ? (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Your title at this job" className="min-w-[12rem] flex-1 border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none" />
+                <button onClick={() => { const r = actions.onOwnTitle?.(g, typed) ?? "empty"; if (r === "empty") return setNotice("Type your title."); if (r === "not_a_title") return setNotice("If you're not sure of the exact title, type what you did there, like Warehouse worker."); setNotice(""); setEditing(null); }} className={BTN_MAIN}>Save</button>
+                <button onClick={() => { setNotice(""); setEditing(null); }} className={BTN_SOFT}>Back</button>
+              </div>
+            ) : (
+              <div className="mt-1.5 flex flex-wrap gap-2">
+                <button onClick={() => actions.onTitleYes?.(g)} className={BTN_MAIN} data-testid="title-yes">Right</button>
+                <button onClick={() => { setNotice(""); setTyped(""); setEditing(g.line); }} className={BTN_SOFT}>Use my title</button>
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+      {notice && <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="title-notice">{notice}</p>}
+    </li>
+  );
+}
+
 /**
  * A title we could not find in the person's source. They can confirm the
  * displayed title with one tap, or type a correction. Confirmation is scoped
@@ -473,7 +508,7 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
  * counted; the person types their own number into the line. Never required,
  * never an open item, never a figure offered.
  */
-function NumberPrompts({ prompts, onChange }: { prompts: NumberPrompt[]; onChange: GroupHandler<boolean> }) {
+function NumberPrompts({ prompts, onChange, onSkip }: { prompts: NumberPrompt[]; onChange: GroupHandler<boolean>; onSkip?: (line: string) => void }) {
   const [skipped, setSkipped] = useState<string[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -534,7 +569,7 @@ function NumberPrompts({ prompts, onChange }: { prompts: NumberPrompt[]; onChang
                 >
                   Add a number
                 </button>
-                <button onClick={() => setSkipped((s) => [...s, p.line])} className={BTN_SOFT}>
+                <button onClick={() => { setSkipped((s) => [...s, p.line]); onSkip?.(p.line); }} className={BTN_SOFT}>
                   Skip
                 </button>
               </div>
@@ -596,10 +631,20 @@ function GroupCard({
   }, [mode]);
   const noun = group.target === "skill" ? "skill" : "line";
 
-  async function askTroy() {
+  // Troy 2026-10-15: t.ROY proposes the fix before the person is asked to type anything. Only the
+  // first few blocking cards ask on their own (quota); the rest ask on the first tap.
+  const autoAsked = useRef(false);
+  useEffect(() => {
+    if (autoAsked.current || group.checked || !group.blocking || scope || group.target === "skill" || index >= 6) return;
+    autoAsked.current = true;
+    void askTroy(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function askTroy(auto = false) {
     setSuggesting(true);
     setNotice("");
-    setMode("suggest");
+    if (!auto) setMode("suggest");
     try {
       const response = await fetch("/api/forge/suggest-fix", {
         method: "POST",
@@ -710,11 +755,34 @@ function GroupCard({
               </button>
             </div>
           )}
-          {mode === "idle" && !scope && (
+          {mode === "idle" && !scope && suggestions[suggestionIndex] && (
+            <div className="mt-3 border-l-2 border-t-amber bg-t-panel-2 p-3" data-testid="fix-proposal">
+              <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">t.ROY&apos;s fix, from your words</p>
+              <p className="mt-1 text-sm font-medium text-t-white">{suggestions[suggestionIndex]}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button ref={firstAction} onClick={() => { if (onAssist(group, suggestions[suggestionIndex])) setMode("idle"); else setNotice("That line no longer matches your page. Edit it, or ask again."); }} className={BTN_MAIN} data-testid="use-fix">
+                  Use this fix
+                </button>
+                <button onClick={() => { setNotice(""); setRewrite(suggestions[suggestionIndex]); setMode("change"); }} className={BTN_SOFT}>
+                  Edit it
+                </button>
+                {group.answerable && (
+                  <button onClick={() => setMode("answer")} className={BTN_SOFT}>
+                    It&apos;s right as written
+                  </button>
+                )}
+                <button onClick={() => setMode("cut")} className={BTN_SOFT}>
+                  Cut it
+                </button>
+              </div>
+              {notice && <p role="status" className="mt-2 text-xs text-t-amber-bright">{notice}</p>}
+            </div>
+          )}
+          {mode === "idle" && !scope && !suggestions[suggestionIndex] && (
             <div className="mt-3 flex flex-wrap gap-2">
               {group.target !== "skill" && (
-                <button ref={firstAction} onClick={() => void askTroy()} className={BTN_MAIN} data-testid="draft-fix">
-                  Let t.ROY draft a fix
+                <button ref={firstAction} onClick={() => void askTroy()} disabled={suggesting} className={`${BTN_MAIN} disabled:opacity-60`} data-testid="draft-fix">
+                  {suggesting ? "t.ROY is drafting a fix..." : "Let t.ROY draft a fix"}
                 </button>
               )}
               {group.answerable && (
@@ -806,6 +874,22 @@ function GroupCard({
           <label htmlFor={`${id}-who`} className="block text-xs font-semibold text-t-white">
             {scope.question}
           </label>
+          <div className="mt-2 flex flex-wrap gap-2" data-testid="scope-chips">
+            {SCOPE_CHIPS.map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => {
+                  const r = actions?.onScopeYes?.(group, chip) ?? "empty";
+                  if (r === "ok") setMode("idle");
+                  else setNotice("Say who or what in the box below.");
+                }}
+                className={`${BTN_SOFT} rounded-full`}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
           <textarea
             ref={field}
             id={`${id}-who`}
@@ -831,6 +915,11 @@ function GroupCard({
                 }
                 if (r === "copy") {
                   setNotice("Say it in your own words.");
+                  field.current?.focus();
+                  return;
+                }
+                if (r === "denies") {
+                  setNotice("Sounds like you didn't do this. Tap Take it off, or say who or what you did it for.");
                   field.current?.focus();
                   return;
                 }
@@ -951,9 +1040,20 @@ function Groups({
   onCut: (group: LineGroup) => void;
   actions: CardActions;
 }) {
+  // Troy 2026-10-15: job titles the writer named go on one card; the first optional card gets a divider.
+  const titleGroups = groups.filter((g) => g.title && !g.title.role && !g.checked && actions.onTitleYes);
+  const combined = titleGroups.length >= 2;
+  const shown = combined ? groups.filter((g) => !titleGroups.includes(g)) : groups;
+  const firstOptional = shown.findIndex((g) => !g.blocking && !g.checked);
   return (
     <ol className="space-y-2">
-      {groups.map((g, i) =>
+      {combined && <TitlesCard key="titles" groups={titleGroups} index={offset} actions={actions} />}
+      {shown.map((g, i) => [
+        i === firstOptional && firstOptional > 0 ? (
+          <li key="worth-a-look" className="pt-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim" data-testid="worth-a-look-divider">
+            Worth a look (these don&apos;t stop you)
+          </li>
+        ) : null,
         g.target === "skillset" ? (
           <SkillsCard key="skillset" group={g} index={offset + i} actions={actions} />
         ) : g.job && actions.onJobOk ? (
@@ -975,8 +1075,8 @@ function Groups({
           onCut={onCut}
           actions={actions}
         />
-        )
-      )}
+        ),
+      ])}
     </ol>
   );
 }
@@ -990,6 +1090,7 @@ export function DefendPanel({
   onCut,
   actions,
   numberPrompts = [],
+  onSkipNumber,
 }: {
   view: FinishView;
   pageText: string;
@@ -1001,6 +1102,8 @@ export function DefendPanel({
   actions: CardActions;
   /** D2 (Phase 6): optional "add a number?" prompts, after the cards. */
   numberPrompts?: NumberPrompt[];
+  /** A skipped number lowers the confidence meter (Troy 2026-10-15). */
+  onSkipNumber?: (line: string) => void;
 }) {
   const progress = progressLine(view);
   const intro = fixPanelIntro(view);
@@ -1042,6 +1145,11 @@ export function DefendPanel({
         </ul>
       )}
 
+      {view.fixCount > 0 && (
+        <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-amber-bright" data-testid="fix-before-heading">
+          Fix before you send ({view.fixCount})
+        </h3>
+      )}
       <Groups groups={[...resume, ...view.checkedLines]} offset={0} {...common} />
 
       {skills.length > 0 && (
@@ -1058,7 +1166,7 @@ export function DefendPanel({
         </div>
       )}
 
-      <NumberPrompts prompts={numberPrompts} onChange={onChange} />
+      <NumberPrompts prompts={numberPrompts} onChange={onChange} onSkip={onSkipNumber} />
     </section>
   );
 }

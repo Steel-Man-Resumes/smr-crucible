@@ -9,6 +9,7 @@
  */
 
 import { readStoryDraft, type StoryDraft } from "./story-verification";
+import { keepSourceRecordLines, recordChoiceFrom, type RecordChoice } from "./record-choice";
 import { CREDENTIALS_KEY } from "./forge-path";
 import { finishKey, ownWordsFor, readStoredFinish, FINISH_STATE_VERSION, type StoredFinish } from "./finish-gate";
 import { completeCredentialRows, readCredentialRows } from "./credential-rows";
@@ -29,6 +30,7 @@ export interface FinishPayload {
   grounding: unknown;
   withheldLines: string[];
   keepInsideLines: boolean;
+  recordChoice?: RecordChoice;
   ownWords: string;
   credentialsAnswer: string;
   credentialRows: unknown[];
@@ -93,18 +95,20 @@ export function finishPayload(
     grounding?: unknown;
     withheldLines?: string[];
     keepInsideLines: boolean;
+    recordChoice?: RecordChoice;
     lengthChoice?: LengthChoice;
     receipt?: string;
   },
   evidence?: RunEvidence | null
 ): FinishPayload {
-  const keep = state.keepInsideLines === true;
+  const choice = recordChoiceFrom(state.recordChoice, state.keepInsideLines);
+  const keep = choice === "facility";
   const fromRun = {
-    ownWords: ownWordsFor(run, keep),
+    ownWords: ownWordsFor(run, keep, choice),
     credentialsAnswer: run.challengeNarratives?.[CREDENTIALS_KEY] ?? "",
     credentialRows: completeCredentialRows(readCredentialRows(run.credentialRows)) as unknown[],
     // The resume text the writer received (review r3 L-2), as generate-docs derives it.
-    ownResumeText: withholdRecordLines(run.resumeText, keep).kept,
+    ownResumeText: withholdRecordLines(run.resumeText, keepSourceRecordLines(choice)).kept,
   };
   const ev = evidence ?? fromRun;
   return {
@@ -121,6 +125,7 @@ export function finishPayload(
     grounding: state.grounding ?? null,
     withheldLines: state.withheldLines ?? [],
     keepInsideLines: keep,
+    recordChoice: choice,
     ownWords: ev.ownWords,
     credentialsAnswer: ev.credentialsAnswer,
     credentialRows: ev.credentialRows,
@@ -133,10 +138,10 @@ export function finishPayload(
 
 /** The finish page's stored copy in a run, only when it belongs to that run (finishKey). */
 export function storedFinishOf(run: RunForPayload & { forgeFinish?: unknown }): (Omit<StoredFinish, "lengthChoice" | "evidence"> & { lengthChoice?: LengthChoice; evidence?: RunEvidence }) | null {
-  const raw = run.forgeFinish as { docs?: { keepInsideLines?: boolean }; lengthChoice?: unknown; evidence?: unknown } | undefined;
+  const raw = run.forgeFinish as { docs?: { keepInsideLines?: boolean; recordChoice?: unknown }; lengthChoice?: unknown; evidence?: unknown } | undefined;
   if (!raw) return null;
   const keep = raw.docs?.keepInsideLines === true;
-  const stored = readStoredFinish(raw, finishKey(run as { forgeOutput?: unknown; resumeText?: string }, keep));
+  const stored = readStoredFinish(raw, finishKey(run as { forgeOutput?: unknown; resumeText?: string }, keep, recordChoiceFrom(raw.docs?.recordChoice, keep)));
   if (!stored) return null;
   const evidence = readRunEvidence(raw.evidence);
   const { lengthChoice: _l, evidence: _e, ...rest } = stored;
@@ -155,15 +160,17 @@ export function storedFinishFromRevision(
   run: RunForPayload
 ): Record<string, unknown> {
   const ev = (rev.evidence && typeof rev.evidence === "object" ? rev.evidence : {}) as Record<string, unknown>;
-  const keep = ev.keepInsideLines === true;
+  const choice = recordChoiceFrom(ev.recordChoice, ev.keepInsideLines);
+  const keep = choice === "facility";
   return {
     v: FINISH_STATE_VERSION,
-    key: finishKey(run as { forgeOutput?: unknown; resumeText?: string }, keep),
+    key: finishKey(run as { forgeOutput?: unknown; resumeText?: string }, keep, choice),
     docs: {
       resumeText: rev.resumeText,
       coverLetterText: rev.letterText,
       withheldLines: Array.isArray(ev.withheldLines) ? ev.withheldLines : [],
       keepInsideLines: keep,
+      recordChoice: choice,
       grounding: ev.grounding ?? null,
       ...(ev.written ? { written: ev.written } : {}),
       ...(typeof ev.writerReceipt === "string" && ev.writerReceipt ? { receipt: ev.writerReceipt } : {}),
@@ -200,6 +207,7 @@ export function finishPayloadFromRun(run: RunForPayload & { forgeFinish?: unknow
     grounding: s.docs.grounding,
     withheldLines: s.docs.withheldLines,
     keepInsideLines: s.docs.keepInsideLines,
+    recordChoice: recordChoiceFrom(s.docs.recordChoice, s.docs.keepInsideLines),
     lengthChoice: s.lengthChoice,
     receipt: s.docs.receipt,
   }, s.evidence ?? null);

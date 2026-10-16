@@ -212,8 +212,8 @@ test("SF-7: the page refuses a different group and accepts the honest one", () =
   const g = view(r).groups.find((x) => x.scope)!;
   const doc = { target: "resume" as const, text: r };
   const source = view(r).source;
-  assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "new hires", source, []), "unmatched");
-  assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "Never", source, []), "unmatched");
+  assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "new hires", source, []), "ok", "who they typed is their fact (2026-10-15)");
+  assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "Never", source, []), "denies", "a denial goes to Take it off, never into their words");
   assert.equal(scopeYesResult(doc, g.line, g.scope!.families, "the guys on the dock", source, []), "ok");
   let a = recordScopeYes([], g.line, g.scope!.families, "the guys on the dock");
   for (let k = 0; k < 3; k++) for (const x of view(r, { answers: a }).groups) if (x.blocking && x.answerable) a = recordAnswer(a, x.line, GOOD, "stands");

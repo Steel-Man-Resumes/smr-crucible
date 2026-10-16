@@ -44,6 +44,10 @@
  */
 
 import { TroyMark } from "@crucible/consumer-ui";
+import { RecordChoiceCard } from "@/components/forge/finish/RecordChoiceCard";
+import { ConfidenceMeter } from "@/components/forge/finish/ConfidenceMeter";
+import { sourceConfidence, confidenceLines } from "@/lib/finish-gate";
+import { keepSourceRecordLines, recordChoiceFrom, type RecordChoice, type RecordEntry } from "@/lib/record-choice";
 import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CREDENTIALS_KEY, isLanesFirst } from "@/lib/forge-path";
@@ -213,7 +217,7 @@ function OutputPageInner() {
       if (!response.ok) throw new Error("Story check could not complete. Try again.");
       const next = await response.json();
       if (!runIsMine()) return;
-      updateSession({ forgeOutput: next, ...(session.forgeFinish ? { forgeFinish: { ...session.forgeFinish, key: finishKey({ ...session, forgeOutput: next }, keepInsideLines) } } : {}) });
+      updateSession({ forgeOutput: next, ...(session.forgeFinish ? { forgeFinish: { ...session.forgeFinish, key: finishKey({ ...session, forgeOutput: next }, keepInsideLines, recordChoice) } } : {}) });
     } catch { setStoryRetryError("Story check could not complete. Your saved work is still here."); }
     finally { setStoryRetrying(false); }
   }
@@ -255,7 +259,12 @@ function OutputPageInner() {
   // Lines about time inside that the writer held back (never silently), and
   // whether the person chose to put them back as written.
   const [withheldLines, setWithheldLines] = useState<string[]>([]);
-  const [keepInsideLines, setKeepInsideLines] = useState(false);
+  // DEC-51: how inside work shows on the page (lib/record-choice.ts). "facility" is the old keepInsideLines.
+  const [recordChoice, setRecordChoice] = useState<RecordChoice>("off");
+  const keepInsideLines = recordChoice === "facility";
+  const [recordEntries, setRecordEntries] = useState<RecordEntry[]>([]);
+  // Numbers t.ROY asked about that the person skipped (confidence meter).
+  const [skippedNumbers, setSkippedNumbers] = useState<string[]>([]);
   const [coverLetterText, setCoverLetterText] = useState<string>("");
   const [grounding, setGrounding] = useState<unknown>(null);
   // The writer's documents exactly as delivered; never edited (see finish-gate WrittenDocs).
@@ -294,9 +303,9 @@ function OutputPageInner() {
     if (checkModeRef.current) return;
     if (hydrated.current || !session.forgeOutput) return;
     hydrated.current = true;
-    const raw = session.forgeFinish as { docs?: { keepInsideLines?: boolean }; lengthChoice?: unknown; evidence?: unknown } | undefined;
+    const raw = session.forgeFinish as { docs?: { keepInsideLines?: boolean; recordChoice?: unknown }; lengthChoice?: unknown; evidence?: unknown } | undefined;
     const keep = raw?.docs?.keepInsideLines === true;
-    const stored = readStoredFinish(raw, finishKey(session, keep));
+    const stored = readStoredFinish(raw, finishKey(session, keep, recordChoiceFrom(raw?.docs?.recordChoice, keep)));
     if (!stored) return;
     hasStarted.current = true;
     if (isLengthChoice(raw?.lengthChoice)) setLengthChoice(raw!.lengthChoice as LengthChoice);
@@ -304,7 +313,7 @@ function OutputPageInner() {
     setResumeText(stored.docs.resumeText);
     setCoverLetterText(stored.docs.coverLetterText);
     setWithheldLines(stored.docs.withheldLines);
-    setKeepInsideLines(stored.docs.keepInsideLines);
+    setRecordChoice(recordChoiceFrom(stored.docs.recordChoice, stored.docs.keepInsideLines));
     setGrounding(stored.docs.grounding);
     setWritten(stored.docs.written ?? null);
     setReceipt(stored.docs.receipt ?? "");
@@ -324,8 +333,8 @@ function OutputPageInner() {
     updateSession({
       forgeFinish: {
         v: FINISH_STATE_VERSION,
-        key: finishKey(session, keepInsideLines),
-        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written: written ?? undefined, ...(receipt ? { receipt } : {}) },
+        key: finishKey(session, keepInsideLines, recordChoice),
+        docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, recordChoice, grounding, written: written ?? undefined, ...(receipt ? { receipt } : {}) },
         defendAnswers,
         addedTerms,
         keptTerms,
@@ -337,7 +346,7 @@ function OutputPageInner() {
     });
     // session is read for its key fields only; writing must not loop on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, grounding, written, receipt, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, lengthChoice, runEvidence, updateSession]);
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, recordChoice, grounding, written, receipt, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, lengthChoice, runEvidence, updateSession]);
 
   const runIsMineRef = useRef(runIsMine);
   runIsMineRef.current = runIsMine;
@@ -384,6 +393,7 @@ function OutputPageInner() {
           resumeConfidence: session.resumeConfidence,
           resumeWorries: session.resumeWorries,
           keepInsideLines,
+          recordChoice,
         }),
       });
 
@@ -423,6 +433,7 @@ function OutputPageInner() {
         setCoverLetterText(data.coverLetter || "");
       }
       setWithheldLines(Array.isArray(data.withheldLines) ? data.withheldLines.filter((l: unknown) => typeof l === "string") : []);
+      setRecordEntries(Array.isArray(data.recordEntries) ? (data.recordEntries as RecordEntry[]).filter((e) => e && typeof e.header === "string").slice(0, 20) : []);
       setGrounding(data.grounding ?? null);
       setWritten({ resume: data.resume || "", letter: data.coverLetter || "" });
       setReceipt(typeof data.receipt === "string" ? data.receipt : "");
@@ -444,7 +455,7 @@ function OutputPageInner() {
       setDocState("error");
       hasStarted.current = false;
     }
-  }, [docState, output, session.resumeText, session.rebuild, session.originalResumeText, session.goals, session.goalNarrative, session.preferences, session.readinessStage, session.resumeConfidence, session.resumeWorries, keepInsideLines]);
+  }, [docState, output, session.resumeText, session.rebuild, session.originalResumeText, session.goals, session.goalNarrative, session.preferences, session.readinessStage, session.resumeConfidence, session.resumeWorries, keepInsideLines, recordChoice]);
 
   // Write the documents when the page loads, unless this run already has them.
   useEffect(() => {
@@ -539,7 +550,7 @@ function OutputPageInner() {
   // ---- the gate ----------------------------------------------------------------
   // Restored from the account: the saved revision's own words (runEvidence), so
   // the page is that exact version. Otherwise this run's words, as before.
-  const ownWords = useMemo(() => runEvidence?.ownWords ?? ownWordsFor(session, keepInsideLines), [runEvidence, session, keepInsideLines]);
+  const ownWords = useMemo(() => runEvidence?.ownWords ?? ownWordsFor(session, keepInsideLines, recordChoice), [runEvidence, session, keepInsideLines, recordChoice]);
   // The licenses-and-training answer: a credential line exactly as typed there is not asked about.
   const credentialsAnswer = runEvidence ? runEvidence.credentialsAnswer || undefined : session.challengeNarratives?.[CREDENTIALS_KEY];
   // Round 7: the structured rows are the typed exception; whole lines of their own resume are the other.
@@ -549,8 +560,8 @@ function OutputPageInner() {
   );
   const ownResumeText = useMemo(
     // The resume text the writer received (review r3 L-2): the same block the server attests.
-    () => (runEvidence ? runEvidence.ownResumeText : withholdRecordLines(session.resumeText, keepInsideLines).kept),
-    [runEvidence, session.resumeText, keepInsideLines]
+    () => (runEvidence ? runEvidence.ownResumeText : withholdRecordLines(session.resumeText, keepSourceRecordLines(recordChoice)).kept),
+    [runEvidence, session.resumeText, recordChoice]
   );
   const gateView = useMemo(
     () =>
@@ -580,13 +591,13 @@ function OutputPageInner() {
       ready
         ? finishPayload(
             session,
-            { resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, lengthChoice, receipt },
+            { resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, recordChoice, lengthChoice, receipt },
             runEvidence
           )
         : null,
     // session is read for its run fields only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ready, resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, lengthChoice, receipt, runEvidence, session.resumeText, session.originalResumeText, session.goalNarrative, session.hookNarrative, session.challengeNarratives, session.credentialRows]
+    [ready, resumeText, coverLetterText, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, written, grounding, withheldLines, keepInsideLines, recordChoice, lengthChoice, receipt, runEvidence, session.resumeText, session.originalResumeText, session.goalNarrative, session.hookNarrative, session.challengeNarratives, session.credentialRows]
   );
   const mark = useMemo(() => payloadMark(payload), [payload]);
   const mayAccount = signedIn && !isDemo;
@@ -878,7 +889,9 @@ function OutputPageInner() {
     first.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
   };
 
-  const draftItems = () => (view.state === "finished" ? undefined : current?.openItems.length ? current.openItems : openItemsInPlainWords(view));
+  const confidence = useMemo(() => sourceConfidence(defendAnswers, skippedNumbers), [defendAnswers, skippedNumbers]);
+  // The DRAFT file's to-do page carries the meter too (Troy 2026-10-15).
+  const draftItems = () => (view.state === "finished" ? undefined : [...(current?.openItems.length ? current.openItems : openItemsInPlainWords(view)), ...confidenceLines(confidence)]);
 
   async function runDownload(fn: () => Promise<void>) {
     setBusy(true);
@@ -934,6 +947,7 @@ function OutputPageInner() {
             credentialsNote: session.challengeNarratives?.[CREDENTIALS_KEY],
             credentialRows: session.credentialRows,
             keepInsideLines,
+            recordChoice,
           },
           answers: [
             ...defendAnswers.map((a) => a.answer),
@@ -1295,36 +1309,6 @@ function OutputPageInner() {
                 </details>
               )}
 
-              {withheldLines.length > 0 && !keepInsideLines && (
-                <div className="mt-3 border border-t-line bg-t-panel px-4 py-3">
-                  <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">What we left off your resume, and why</p>
-                  <p className="text-xs leading-relaxed text-t-phos">
-                    These lines mention a record or time inside, so we kept them off your resume and letter. That is the usual Steel Man move: you talk about it in person, at the right time. But if a line is real work you want on the page, it is your call.
-                  </p>
-                  <ul className="mt-1.5 space-y-1">
-                    {withheldLines.map((line, i) => (
-                      <li key={i} className="text-[11px] leading-relaxed text-t-phos">&ldquo;{line}&rdquo;</li>
-                    ))}
-                  </ul>
-                  <button
-                    onClick={() => {
-                      setKeepInsideLines(true);
-                      hasStarted.current = false;
-                      setDocState("idle");
-                    }}
-                    className="t-focus mt-2 border border-t-line bg-t-panel px-3 py-1.5 text-xs font-medium text-t-phos transition-colors hover:border-t-phos-dim"
-                  >
-                    Put them back and rebuild
-                  </button>
-                </div>
-              )}
-              {keepInsideLines && (
-                <div className="mt-3 border border-t-line bg-t-panel px-4 py-3">
-                  <p className="text-xs leading-relaxed text-t-phos">
-                    Your resume keeps your own lines about work, training or credentials from inside, the way you wrote them. Nothing about a record was added. Your cover letter talks about the work and leaves the record for you to bring up in person.
-                  </p>
-                </div>
-              )}
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
@@ -1356,7 +1340,19 @@ function OutputPageInner() {
                   onChoice={setLengthChoice}
                 />
               )}
-              <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} />
+              <ConfidenceMeter level={confidence.level} notes={confidence.notes} />
+              <RecordChoiceCard
+                choice={recordChoice}
+                entries={recordEntries}
+                sourceWithheld={withheldLines}
+                busy={docState !== "done"}
+                onChoose={(next) => {
+                  setRecordChoice(next);
+                  hasStarted.current = false;
+                  setDocState("idle");
+                }}
+              />
+              <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />
             </aside>
           </div>
 

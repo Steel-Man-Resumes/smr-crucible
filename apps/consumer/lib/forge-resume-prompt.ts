@@ -13,6 +13,7 @@ import { resumeRulesBlock, RESUME_RULES_VERSION } from "@crucible/core/src/resum
 import { buildFullContext, userContextFromForge } from "./context-library";
 import { RESUME_SOURCE_MAX, sliceWithWarn } from "./limits";
 import { withholdRecordLines } from "./record-lines";
+import { keepSourceRecordLines, recordChoiceFrom, type RecordChoice } from "./record-choice";
 import { CHANGES_START, CHANGES_END, CHANGES_MAX } from "./writer-changes";
 
 export interface GenerateDocsInput {
@@ -48,8 +49,10 @@ export interface GenerateDocsInput {
   // Self-disclosure (F2 s.2.3): the user's own read on their resume + worries.
   resumeConfidence?: "none" | "rough" | "decent" | "strong";
   resumeWorries?: string[];
-  // The person tapped "put them back": keep their own lines about time inside.
+  // The person tapped "put them back": keep their own lines about time inside (the "facility" choice).
   keepInsideLines?: boolean;
+  // DEC-51: off (default), state (the work stays, the employer reads "State of <X>"), facility (as written).
+  recordChoice?: RecordChoice;
   // The person chose one page (the length rule lets them). No screen sets this
   // yet; the Forge preferences step or the finish page's "Page length" row is
   // where that choice would be offered.
@@ -80,6 +83,7 @@ export function selfDisclosureDirective(input: GenerateDocsInput): string {
 }
 
 export const WITHHOLD_RULE = `NEVER mention incarceration, criminal records, convictions, justice involvement, prison, jail, re-entry, parole, probation. Not even obliquely. Not even with growth framing. (Lines about this were held back from the source on purpose; the person has been told exactly which ones and can put them back.)`;
+export const STATE_RULE = `THE PERSON CHOSE TO SHOW THE WORK AND NAME THE STATE, NOT THE FACILITY: keep every job, course and credential the person listed, including work done inside, with its title, years and real duties. For any employer that is a prison, jail or correctional facility, write the employer as "State of <state>" (the state the person gave for it), never the facility's name, and never a word that says the work was inside (no prison, jail, correctional, inmate, incarceration). Never ADD, infer or hint at anything about a record, supervision or justice involvement. Never state charges, a conviction, a sentence or supervision status, and never add growth, redemption or "second chance" framing.`;
 export const KEEP_INSIDE_RULE = `THE PERSON CHOSE TO KEEP THEIR OWN LINES: keep every job, course and credential the person listed, including work done in a correctional facility, named the way they named it (employer, title, years, real duties). Never ADD, infer or hint at anything about a record, supervision or justice involvement beyond what they wrote. Never state charges, a conviction, a sentence or supervision status, and never add growth, redemption or "second chance" framing.`;
 
 export function buildForgeResumePrompts(input: GenerateDocsInput): { system: string; user: string } {
@@ -105,7 +109,7 @@ YOUR JOB: Take whatever the person gives you, even a bare-bones resume, and prod
 ${resumeRulesBlock("page")}
 
 FORGE WRITER RULES:
-1. RECORD: ${input.keepInsideLines === true ? KEEP_INSIDE_RULE : WITHHOLD_RULE}
+1. RECORD: ${recordChoiceFrom(input.recordChoice, input.keepInsideLines) === "state" ? STATE_RULE : recordChoiceFrom(input.recordChoice, input.keepInsideLines) === "facility" ? KEEP_INSIDE_RULE : WITHHOLD_RULE}
 2. Past roles in past tense, the current role in present tense.
 3. REWORDING (reword freely, facts locked): every bullet starts with a strong, specific action verb, then what was done, with any amount or size only in the person's own numbers and words (never add a size word such as "large", "heavy", "major" or "daily"), then a result only if the person gave one. Rewrite every duty line ("responsible for", "duties included", "did", "dealt with", "in charge of", "worked with") into what it means, from the person's facts: "In charge of the guys on my shift." becomes "Supervised the shift crew."; "Did safety audits." becomes "Ran safety audits on the floor." only if they said where, otherwise "Ran safety audits." Locked in every reworded line: numbers, job titles, employers, dates, credentials (type and status) and scope ("helped" stays helped, never led or sole). SUPERVISING PEOPLE IS SCOPE: a line saying the person was over people ("supervised", "led", "oversaw", "directed" or "managed" people) is settled only when their own words for that job say it in so many words ("supervised 4 workers", "in charge of employees on my shift", "led a crew of 6"). A title, "my crew", a shift, a place or a task never says it. "Responsible for" a shift or an area is not a people claim by itself. You may still write such a line when that job's facts point to it (for example "Responsible for 3rd shift" under the title Production Supervisor becoming "Supervised third-shift production"); the person is asked one tap, "Were you over other people in this job?", and a No puts their own words back. Never turn "responsible for" a task or thing ("the crew's safety gear", "cleaning the kitchen") into supervising, and "helped" never becomes led. "Managed" a thing (inventory, accounts) is a duty, not people. Facts belong to their own job: never move a number, duty or scope from one job to another. Anything NEW (a number, a result, a tool, a skill the person never named) is never added.
 4. PAGE LENGTH: ${input.onePage === true ? "The person chose ONE page. Keep to one page by leading with the strongest true lines and shortening older roles to title, employer and years. Never drop a role, a date or a fact to make room." : "Two pages when the person's true history fills them, one page when it doesn't. Never add filler to reach a second page, and never more than two pages."}
@@ -162,7 +166,7 @@ OUTPUT: Clean formatted plain text ready for DOCX conversion. No markdown. No br
   }
 
   if (input.resumeText) {
-    const cleanedResume = withholdRecordLines(input.resumeText, input.keepInsideLines === true).kept;
+    const cleanedResume = withholdRecordLines(input.resumeText, keepSourceRecordLines(recordChoiceFrom(input.recordChoice, input.keepInsideLines))).kept;
     parts.push(`ORIGINAL RESUME TEXT (the person's own words and the facts you work from. Reword every weak line into strong plain words that say what it means; keep every fact):\n${sliceWithWarn(cleanedResume, RESUME_SOURCE_MAX, "generate-docs.resumeText")}`);
   }
 

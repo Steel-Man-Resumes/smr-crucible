@@ -20,6 +20,7 @@
  * The store is passed in so tests run without a database.
  */
 
+import { recordChoiceFrom, type RecordChoice } from "./record-choice";
 import { stableJson } from "@crucible/core/src/artifactRevision";
 import type { ArtifactRevision, InsertRevisionResult, NewRevision, RevisionSource } from "@crucible/core/src/artifactRevision";
 import { cleanRevisionInput, computeRevision, editInput, givenTextMark, inputFromRevision, revisionRecord, type RevisionEvidence, type RevisionVerdict } from "./revision-status";
@@ -52,7 +53,7 @@ export interface RevisionStore {
    */
   receiptState?(userId: string, runId: string): Promise<{ newestNonce: string | null; linked: boolean }>;
   /** The person's own words as the server holds them (review H2). The real store always has it. */
-  serverSource?(userId: string, keepInsideLines: boolean): Promise<WriterSource | null>;
+  serverSource?(userId: string, keepInsideLines: boolean, recordChoice?: RecordChoice): Promise<WriterSource | null>;
   /** Every saved version of one of the person's resumes (Phase 6 S1 round 3: its lineage). The real store always has it. */
   listRevisions?(userId: string, artifactId: string): Promise<ArtifactRevision[]>;
 }
@@ -159,7 +160,7 @@ export async function saveFinishRevision(
   const r0 = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const meta = readReceipt(r0.writerReceipt);
   const state = meta?.run && store.receiptState ? await store.receiptState(userId, meta.run) : { newestNonce: null, linked: !store.receiptState };
-  const serverSource = store.serverSource ? await store.serverSource(userId, r0.keepInsideLines === true) : null;
+  const serverSource = store.serverSource ? await store.serverSource(userId, r0.keepInsideLines === true, recordChoiceFrom(r0.recordChoice, r0.keepInsideLines)) : null;
   const artifacts = await store.listResumeArtifacts(userId);
   let forge = pickForgeArtifact(artifacts);
   const newestOwn = forge ? await store.getLatestRevision(userId, forge.id) : null;
@@ -323,7 +324,7 @@ export async function coreStore(selection: { laneId?: string | null } = {}): Pro
     }),
     // The person's stored upload and typed answers (consumer_profile), worked
     // out the same way the writer's inputs are.
-    serverSource: async (userId, keepInsideLines) => {
+    serverSource: async (userId, keepInsideLines, recordChoice) => {
       const p = await core.loadForgeProfile(userId);
       if (!p) return null;
       return writerSourceFrom({
@@ -331,6 +332,7 @@ export async function coreStore(selection: { laneId?: string | null } = {}): Pro
         goalNarrative: p.goalNarrative,
         credentialsNote: p.challengeNarratives?.[CREDENTIALS_KEY],
         keepInsideLines,
+        recordChoice,
       });
     },
   };

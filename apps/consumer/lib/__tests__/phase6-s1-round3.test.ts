@@ -277,7 +277,7 @@ test("M3: a rebuild reads the stored upload with held-back lines kept, applies t
   const write = rp.slice(rp.indexOf("// A new build from that page"), rp.indexOf('router.replace("/goals")'));
   assert.doesNotMatch(write, /\bresumeText: /);
   // The "put it back" list comes from the page the writer read, as in a normal run.
-  assert.match(read("app/api/forge/generate-docs/route.ts"), /withholdRecordLines\(input\.resumeText, input\.keepInsideLines === true\)/);
+  assert.match(read("app/api/forge/generate-docs/route.ts"), /withholdRecordLines\(input\.resumeText, keepSource\)/);
 });
 
 // ---- M5: "Rewrite it with t.ROY" rebuilds from this page ----------------------------------------------
