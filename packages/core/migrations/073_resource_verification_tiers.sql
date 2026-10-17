@@ -4,6 +4,9 @@
 -- to be showing in resource_chain_public_v, a confirmation is bound to the check it confirmed, resource_host
 -- strips query, fragment, userinfo, port and trailing dot, R4 requires R3 evidence for that service,
 -- directories and same-agency pages no longer lift a tier, and wrong corroborations or events can be voided.
+-- 2026-10-17: resource_service_tier_v is amended by 088_resource_tier_confidence.sql (curated directory hosts on the
+--   resource_directory_publisher allowlist lift to R2 flagged 'low'; columns tier_confidence and corroboration_points
+--   appended). The view text below is the 073 original and is kept as history; 088 holds the current rule.
 -- Verification tiers for the resource directory (Troy 2026-10-08):
 --   R1 public record      the org's or an agency's own page, quote on the page (lowest, may be shown)
 --   R2 multiple proof     two or more INDEPENDENT sources agree

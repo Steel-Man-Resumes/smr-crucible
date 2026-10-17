@@ -2,7 +2,8 @@
 import { query } from './db';
 import { resourceAppSql, type ResourceAppRow, type ResourcePlaceQuery } from './resourceDirectoryShared';
 import { clampEmployerPage, employerLikePattern, publicCaveat } from './employer';
-export const DIRECTORY_CONTRACT_VERSION = '2026-10-15.v1' as const;
+/** 2026-10-17.v2: resources carry tier_confidence and corroboration_points (migration 088). */
+export const DIRECTORY_CONTRACT_VERSION = '2026-10-17.v2' as const;
 export type PublicationResult<T> = {status:'ok';contractVersion:typeof DIRECTORY_CONTRACT_VERSION;asOf:string;data:T} | {status:'unavailable';contractVersion:typeof DIRECTORY_CONTRACT_VERSION;asOf:string;data:T;error:string};
 export interface PublishedEmployer {
  id:string;name:string;industry:string|null;state:string;city:string|null;location:string|null;
@@ -11,7 +12,11 @@ export interface PublishedEmployer {
 }
 export interface PublishedResource extends ResourceAppRow {
  fees:string|null;what_to_bring:string|null;limits:string|null;expires_on:string;
- verification_tier:'R1'|'R2'|'R3'|'R4';version:string;
+ verification_tier:'R1'|'R2'|'R3'|'R4';
+ /** 'low' = R2 reached only through a curated local guide; 'high' = an independent non-directory source agrees; null for other tiers. */
+ tier_confidence:'low'|'high'|null;
+ /** Distinct source hosts that count toward the tier (the listing's own page is not one). 0 below R2. */
+ corroboration_points:number;version:string;
 }
 export interface PublishedResourceStep {
  chain_key:string;state:string;goal:string;unlocks:string[];verified_on:string;expires_on:string;n:number;
@@ -50,9 +55,9 @@ export function resolvePublishedEmployerAlias(source:string,externalId:string){
  return publicationRead<string|null>(null,async()=>{if(!['website','airtable','employer_intel'].includes(source)||!externalId||externalId.length>160)return null;
  const rows=await query<{id:string|null}>('SELECT public.resolve_employer_publication_alias($1,$2) AS id',[source,externalId]);return rows[0]?.id??null;});
 }
-const RESOURCE_FIELDS=`service_id,org_name,service_name,description,eligibility,area_id,area_label,geo_scope,
+export const RESOURCE_FIELDS=`service_id,org_name,service_name,description,eligibility,area_id,area_label,geo_scope,
  state,county,counties,city,address,zip,phone,hours,website,source_url,last_checked::text AS last_checked,
- fees,what_to_bring,limits,expires_on::text AS expires_on,verification_tier,version`;
+ fees,what_to_bring,limits,expires_on::text AS expires_on,verification_tier,tier_confidence,corroboration_points,version`;
 export function searchVerifiedResources(opts:ResourcePlaceQuery) {
  return publicationRead<PublishedResource[]>([],async()=>{
  const {sql,params}=resourceAppSql(opts);if(!(params[0] as string[]).length)return [];

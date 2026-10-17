@@ -44,7 +44,8 @@ async function migrate() {
     await client.query('BEGIN');
     try {
       await client.query(sql);
-      await client.query('INSERT INTO _migrations (filename) VALUES ($1)', [file]);
+      // A guarded migration (088 onward) records its own ledger row; do not fail on it.
+      await client.query('INSERT INTO _migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING', [file]);
       await client.query('COMMIT');
       count++;
     } catch (err) {
