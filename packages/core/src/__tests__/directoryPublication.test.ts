@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {publicationRead,publishedEmployerSql,isPublicationId,isChainKey} from '../directoryPublication';
+import {publicationRead,publishedEmployerSql,isPublicationId,isChainKey,DIRECTORY_CONTRACT_VERSION,RESOURCE_FIELDS} from '../directoryPublication';
 import {ResourceListContent,ResourceListSelection} from '../resourceListShared';
 test('publication outages never masquerade as an empty area',async()=>{
  const empty=await publicationRead([],async()=>[]);
@@ -23,4 +23,9 @@ test('resource saved content cannot smuggle private notes or unsupported service
 test('canonical detail and chain identifiers reject display-name guessing and path input',()=>{
  assert.equal(isPublicationId('Example Company'),false);assert.equal(isPublicationId('10000000-0000-4000-8000-000000000001'),true);
  assert.equal(isChainKey('../../private'),false);assert.equal(isChainKey('WI-ID-steps'),true);
+});
+test('resource contract 2026-10-17.v2 publishes tier confidence and corroboration points (migration 088)',()=>{
+ assert.equal(DIRECTORY_CONTRACT_VERSION,'2026-10-17.v2');
+ const fields=RESOURCE_FIELDS.split(',').map(f=>f.trim().replace(/^.*AS /,''));
+ for(const f of ['verification_tier','tier_confidence','corroboration_points','version'])assert.ok(fields.includes(f),f);
 });
