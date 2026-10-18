@@ -95,6 +95,8 @@ export interface ResourcePlaceQuery {
   /** Folded city name (foldName). */
   cityKey?: string | null;
   zip?: string | null;
+  /** A state page: every row in the state (any county or city) plus national rows. */
+  wholeState?: boolean;
 }
 
 /**
@@ -107,7 +109,8 @@ export interface ResourcePlaceQuery {
  * (review N3). Closest first, newest first within a level.
  * The app re-checks every row with the same rules (support-search scopeCovers).
  */
-export function resourceAppSql(opts: ResourcePlaceQuery): { sql: string; params: unknown[] } {
+/** The place match shared by the app read and the public bands: WHERE text and its parameters. */
+export function resourcePlaceWhere(opts: ResourcePlaceQuery): { where: string; params: unknown[] } {
   const areas = opts.areas.filter(isResourceArea);
   const state = typeof opts.state === "string" && /^[A-Z]{2}$/.test(opts.state) ? opts.state : null;
   const params: unknown[] = [areas];
@@ -119,7 +122,11 @@ export function resourceAppSql(opts: ResourcePlaceQuery): { sql: string; params:
     params.push(state, countyKeys, cityKey, zip);
     const city = `${sqlFold("city")} = $4::text`;
     const zipHit = "left(zip, 5) = $5::text";
-    where += `(geo_scope = 'national' OR (state = $2 AND (
+    if (opts.wholeState) {
+      // A state page: every row that reaches somewhere in the state, plus national rows.
+      where += "(geo_scope = 'national' OR state = $2)";
+    } else {
+      where += `(geo_scope = 'national' OR (state = $2 AND (
            geo_scope = 'statewide'
         OR (geo_scope IN ('county', 'multi_county') AND (
              ${sqlFoldCounty("county")} = ANY($3::text[])
@@ -127,9 +134,15 @@ export function resourceAppSql(opts: ResourcePlaceQuery): { sql: string; params:
           OR ${city}
           OR ${zipHit}))
         OR (geo_scope = 'city' AND (${city} OR ${zipHit})))))`;
+    }
   } else {
     where += "geo_scope = 'national'";
   }
+  return { where, params };
+}
+
+export function resourceAppSql(opts: ResourcePlaceQuery): { sql: string; params: unknown[] } {
+  const { where, params } = resourcePlaceWhere(opts);
   params.push(RESOURCE_APP_LEVEL_CAP);
   return {
     sql: `SELECT service_id, org_name, service_name, description, eligibility, area_id, area_label,
@@ -149,6 +162,70 @@ export function resourceAppSql(opts: ResourcePlaceQuery): { sql: string; params:
        ) r
       WHERE r.rn <= $${params.length}
       ORDER BY r.lvl, r.last_checked DESC, r.org_name, r.service_id`,
+    params,
+  };
+}
+
+// ─── Public bands (migration 089, Troy 2026-10-18) ──────────────────────────
+
+/**
+ * A  exactly the checked publication (resource_public_v): review passed, fresh, high or medium.
+ * B  a dated public source but no passed review yet (partial, unverifiable, or T1 awaiting a name).
+ * C  dataset-only, low confidence, or a check that lapsed within 90 days.
+ * Best first, always; a seeker is never handed C above A.
+ */
+export const RESOURCE_BANDS = ["A", "B", "C"] as const;
+export type ResourceBand = (typeof RESOURCE_BANDS)[number];
+export const RESOURCE_BAND_LABELS: Record<ResourceBand, string> = {
+  A: "Checked by Steel Man",
+  B: "Listed, not yet checked by us",
+  C: "Found, could not confirm. Call first.",
+};
+export function isResourceBand(s: unknown): s is ResourceBand {
+  return typeof s === "string" && (RESOURCE_BANDS as readonly string[]).includes(s);
+}
+/** "ABC" or "A,B" from a query string to a clean band list; nothing recognisable means A only. */
+export function parseBands(raw: unknown): ResourceBand[] {
+  const picked = typeof raw === "string" ? [...raw.toUpperCase()].filter(isResourceBand) : [];
+  const unique = RESOURCE_BANDS.filter((b) => picked.includes(b));
+  return unique.length ? [...unique] : ["A"];
+}
+
+export const RESOURCE_BAND_FIELDS = `service_id,org_name,service_name,description,eligibility,area_id,area_label,geo_scope,
+ state,county,counties,city,address,zip,phone,hours,website,source_url,last_checked::text AS last_checked,
+ fees,what_to_bring,limits,expires_on::text AS expires_on,verification_tier,tier_confidence,corroboration_points,version,band,band_reason`;
+
+/**
+ * Public rows from resource_band_publication_v for a place, in the bands asked for.
+ * Each (band, reach level) pair is capped on its own at RESOURCE_APP_LEVEL_CAP, so the
+ * poor band can never push the checked band off the page and a big state's dataset rows
+ * cannot bury its own county. Order: band, then closest, then newest.
+ */
+export function resourceBandSql(opts: ResourcePlaceQuery & { bands?: readonly ResourceBand[] }): { sql: string; params: unknown[] } {
+  const { where, params } = resourcePlaceWhere(opts);
+  const bands = (opts.bands ?? ["A"]).filter(isResourceBand);
+  params.push(bands.length ? bands : ["A"]);
+  const bandAt = params.length;
+  params.push(RESOURCE_APP_LEVEL_CAP);
+  const plain = ["service_id", "org_name", "service_name", "description", "eligibility", "area_id", "area_label", "geo_scope",
+    "state", "county", "counties", "city", "address", "zip", "phone", "hours", "website", "source_url",
+    "fees", "what_to_bring", "limits", "verification_tier", "tier_confidence", "corroboration_points", "version", "band", "band_reason"];
+  const inner = [...plain, "last_checked::text AS last_checked", "expires_on::text AS expires_on"].join(", ");
+  const outer = [...plain, "last_checked", "expires_on"].map((f) => "r." + f).join(", ");
+  return {
+    sql: `SELECT ${outer}
+       FROM (
+         SELECT m.*, row_number() OVER (PARTITION BY m.band, m.lvl ORDER BY m.last_checked DESC, m.org_name, m.service_id) AS rn
+           FROM (
+             SELECT ${inner},
+                    CASE geo_scope WHEN 'city' THEN 0 WHEN 'county' THEN 1 WHEN 'multi_county' THEN 1
+                                   WHEN 'statewide' THEN 2 ELSE 3 END AS lvl
+               FROM resource_band_publication_v
+              WHERE ${where} AND band = ANY($${bandAt}::text[])
+           ) m
+       ) r
+      WHERE r.rn <= $${params.length}
+      ORDER BY r.band, r.lvl, r.last_checked DESC, r.org_name, r.service_id`,
     params,
   };
 }

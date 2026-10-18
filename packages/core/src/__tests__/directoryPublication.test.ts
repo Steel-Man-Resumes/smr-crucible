@@ -24,8 +24,22 @@ test('canonical detail and chain identifiers reject display-name guessing and pa
  assert.equal(isPublicationId('Example Company'),false);assert.equal(isPublicationId('10000000-0000-4000-8000-000000000001'),true);
  assert.equal(isChainKey('../../private'),false);assert.equal(isChainKey('WI-ID-steps'),true);
 });
-test('resource contract 2026-10-17.v2 publishes tier confidence and corroboration points (migration 088)',()=>{
- assert.equal(DIRECTORY_CONTRACT_VERSION,'2026-10-17.v2');
+test('resource contract 2026-10-18.v3 publishes bands over the 088 tier fields (migration 089)',()=>{
+ assert.equal(DIRECTORY_CONTRACT_VERSION,'2026-10-18.v3');
  const fields=RESOURCE_FIELDS.split(',').map(f=>f.trim().replace(/^.*AS /,''));
- for(const f of ['verification_tier','tier_confidence','corroboration_points','version'])assert.ok(fields.includes(f),f);
+ for(const f of ['verification_tier','tier_confidence','corroboration_points','version','band','band_reason'])assert.ok(fields.includes(f),f);
+});
+
+import {resourceBandSql,resourceAppSql,parseBands,RESOURCE_BAND_LABELS} from '../resourceDirectoryShared';
+test('public bands default to A, keep place and bands as parameters, and cap each band and level on its own',()=>{
+ assert.deepEqual(parseBands(undefined),['A']);assert.deepEqual(parseBands('abc'),['A','B','C']);assert.deepEqual(parseBands('C,A'),['A','C']);assert.deepEqual(parseBands("x'; DROP"),['A']);
+ const {sql,params}=resourceBandSql({state:'MT',areas:['food'],countyKeys:['lincoln'],cityKey:'libby',zip:'59923',bands:['A','B','C']});
+ assert.match(sql,/FROM resource_band_publication_v/);assert.match(sql,/band = ANY\(\$6::text\[\]\)/);assert.match(sql,/WHERE r\.rn <= \$7/);
+ assert.match(sql,/PARTITION BY m\.band, m\.lvl/);assert.match(sql,/ORDER BY r\.band, r\.lvl, r\.last_checked DESC/);
+ assert.doesNotMatch(sql,/'MT'|'food'|lincoln|libby|DROP/);assert.deepEqual(params,[['food'],'MT',['lincoln'],'libby','59923',['A','B','C'],50]);
+ const whole=resourceBandSql({state:'MT',areas:['food'],wholeState:true});assert.match(whole.sql,/\(geo_scope = 'national' OR state = \$2\)/);
+ // The app read (resource_app_v) is unchanged by the refactor: same text shape and parameter order.
+ const app=resourceAppSql({state:'MT',areas:['food'],countyKeys:['lincoln'],cityKey:'libby',zip:'59923'});
+ assert.match(app.sql,/FROM resource_app_v/);assert.deepEqual(app.params,[['food'],'MT',['lincoln'],'libby','59923',50]);assert.doesNotMatch(app.sql,/band/);
+ assert.equal(RESOURCE_BAND_LABELS.C,'Found, could not confirm. Call first.');
 });
