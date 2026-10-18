@@ -1,9 +1,11 @@
 /** One live, versioned publication contract for pages and assistant tools. */
 import { query } from './db';
-import { resourceAppSql, type ResourceAppRow, type ResourcePlaceQuery } from './resourceDirectoryShared';
+import { resourceBandSql, RESOURCE_BAND_FIELDS, parseBands, type ResourceAppRow, type ResourcePlaceQuery, type ResourceBand } from './resourceDirectoryShared';
 import { clampEmployerPage, employerLikePattern, publicCaveat } from './employer';
-/** 2026-10-17.v2: resources carry tier_confidence and corroboration_points (migration 088). */
-export const DIRECTORY_CONTRACT_VERSION = '2026-10-17.v2' as const;
+/** 2026-10-18.v3: resources and chain steps carry band ('A' checked, 'B' listed, 'C' found) and band_reason
+ * (migration 089); reads default to band A, so a v2 caller sees the same rows as before. v2 added
+ * tier_confidence and corroboration_points (migration 088). */
+export const DIRECTORY_CONTRACT_VERSION = '2026-10-18.v3' as const;
 export type PublicationResult<T> = {status:'ok';contractVersion:typeof DIRECTORY_CONTRACT_VERSION;asOf:string;data:T} | {status:'unavailable';contractVersion:typeof DIRECTORY_CONTRACT_VERSION;asOf:string;data:T;error:string};
 export interface PublishedEmployer {
  id:string;name:string;industry:string|null;state:string;city:string|null;location:string|null;
@@ -17,11 +19,17 @@ export interface PublishedResource extends ResourceAppRow {
  tier_confidence:'low'|'high'|null;
  /** Distinct source hosts that count toward the tier (the listing's own page is not one). 0 below R2. */
  corroboration_points:number;version:string;
+ /** 'A' checked (review passed), 'B' listed (dated source, no passed review yet), 'C' found (dataset-only, low confidence or lapsed). */
+ band:ResourceBand;
+ /** Plain words for the band, shown next to the listing. */
+ band_reason:string;
 }
 export interface PublishedResourceStep {
  chain_key:string;state:string;goal:string;unlocks:string[];verified_on:string;expires_on:string;n:number;
  action:string;agency:string|null;requires:string[];cost:string|null;wait_time:string|null;where_how:string|null;
  url:string|null;phone:string|null;no_docs_fallback:string|null;fee_waiver:string|null;source_url:string;step_verified_on:string;version:string;
+ /** 'A' approved by a person, every step fact-checked; 'B' steps found on official pages, not yet approved. */
+ band:'A'|'B';band_reason:string;
 }
 export function isPublicationId(id:unknown):id is string {return typeof id==='string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);}
 export function isChainKey(key:unknown):key is string {return typeof key==='string' && /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,119}$/.test(key);}
@@ -55,33 +63,39 @@ export function resolvePublishedEmployerAlias(source:string,externalId:string){
  return publicationRead<string|null>(null,async()=>{if(!['website','airtable','employer_intel'].includes(source)||!externalId||externalId.length>160)return null;
  const rows=await query<{id:string|null}>('SELECT public.resolve_employer_publication_alias($1,$2) AS id',[source,externalId]);return rows[0]?.id??null;});
 }
-export const RESOURCE_FIELDS=`service_id,org_name,service_name,description,eligibility,area_id,area_label,geo_scope,
- state,county,counties,city,address,zip,phone,hours,website,source_url,last_checked::text AS last_checked,
- fees,what_to_bring,limits,expires_on::text AS expires_on,verification_tier,tier_confidence,corroboration_points,version`;
-export function searchVerifiedResources(opts:ResourcePlaceQuery) {
+export const RESOURCE_FIELDS=RESOURCE_BAND_FIELDS;
+/** Resources for a place. bands defaults to ['A'] (the checked publication); 'B' and 'C' add the listed and found layers, best first. */
+export function searchVerifiedResources(opts:ResourcePlaceQuery&{bands?:readonly ResourceBand[]}) {
  return publicationRead<PublishedResource[]>([],async()=>{
- const {sql,params}=resourceAppSql(opts);if(!(params[0] as string[]).length)return [];
- // Existing tested place/scope and per-level bounds; join only the selected IDs.
- const selected=sql.replaceAll('resource_app_v','resource_publication_v');
- return query<PublishedResource>(`WITH selected AS (${selected}) SELECT ${RESOURCE_FIELDS.split(',').map(f=>'p.'+f.trim()).join(',')} FROM resource_publication_v p JOIN selected s USING(service_id) ORDER BY p.last_checked DESC,p.org_name,p.service_id`,params);
+ const {sql,params}=resourceBandSql(opts);if(!(params[0] as string[]).length)return [];
+ return query<PublishedResource>(sql,params);
  });
 }
-export function getVerifiedResource(id:string) {
- return publicationRead<PublishedResource|null>(null,async()=>{if(!isPublicationId(id))return null;const rows=await query<PublishedResource>(`SELECT ${RESOURCE_FIELDS} FROM resource_publication_v WHERE service_id=$1::uuid`,[id]);return rows[0]??null;});
+/** Band list from a query string ("ABC", "A,B"); anything else means A only. */
+export const publicationBands=parseBands;
+export function getVerifiedResource(id:string,bands:readonly ResourceBand[]=['A','B','C']) {
+ return publicationRead<PublishedResource|null>(null,async()=>{if(!isPublicationId(id))return null;const rows=await query<PublishedResource>(`SELECT ${RESOURCE_FIELDS} FROM resource_band_publication_v WHERE service_id=$1::uuid AND band=ANY($2::text[])`,[id,[...bands]]);return rows[0]??null;});
 }
-export function getApprovedResourceChain(chainKey:string) {
+/** Aggregate standing of the resource map: services per state per band. No identities, no bulk export. */
+export function getResourceCoverageSummary(){
+ return publicationRead<{state:string;band:ResourceBand;services:number}[]>([],()=>query(`SELECT state,band,count(*)::int AS services FROM resource_band_publication_v GROUP BY state,band ORDER BY state,band LIMIT 200`));
+}
+const CHAIN_FIELDS='chain_key,state,goal,unlocks,verified_on::text,expires_on::text,n,action,agency,requires,cost,wait_time,where_how,url,phone,no_docs_fallback,fee_waiver,source_url,step_verified_on::text,version,band,band_reason';
+/** One chain's steps. bands defaults to ['A'] (approved); 'B' adds chains found but not yet approved. */
+export function getApprovedResourceChain(chainKey:string,bands:readonly ('A'|'B')[]=['A']) {
  return publicationRead<PublishedResourceStep[]>([],async()=>{if(!isChainKey(chainKey))return [];
- const rows=await query<PublishedResourceStep>(`SELECT chain_key,state,goal,unlocks,verified_on::text,expires_on::text,n,action,agency,requires,cost,wait_time,where_how,url,phone,no_docs_fallback,fee_waiver,source_url,step_verified_on::text,version FROM resource_chain_publication_v WHERE chain_key=$1 ORDER BY n LIMIT 51`,[chainKey]);
+ const rows=await query<PublishedResourceStep>(`SELECT ${CHAIN_FIELDS} FROM resource_chain_band_publication_v WHERE chain_key=$1 AND band=ANY($2::text[]) ORDER BY n LIMIT 51`,[chainKey,[...bands]]);
  // A chain must never appear incomplete.
  if(rows.length>50)throw new Error('Chain exceeds supported size');return rows;});
 }
-export interface PublishedResourceChainSummary {chainKey:string;goal:string;state:string;checkedAt:string;expiresAt:string;stepCount:number}
-export function searchApprovedResourceChains(opts:{state?:string;q?:string}={}) {
+export interface PublishedResourceChainSummary {chainKey:string;goal:string;state:string;checkedAt:string;expiresAt:string;stepCount:number;band:'A'|'B'}
+export function searchApprovedResourceChains(opts:{state?:string;q?:string;bands?:readonly ('A'|'B')[]}={}) {
  return publicationRead<PublishedResourceChainSummary[]>([],async()=>{
  const params:unknown[]=[];const where:string[]=[];
+ params.push([...(opts.bands??['A'])].filter(b=>b==='A'||b==='B'));where.push(`band=ANY($${params.length}::text[])`);
  if(opts.state&&/^[A-Z]{2}$/.test(opts.state)){params.push(opts.state);where.push(`state=$${params.length}`);}
  const pattern=employerLikePattern(opts.q);if(pattern){params.push(pattern);where.push(`goal ILIKE $${params.length} ESCAPE '\\'`);}
- return query<PublishedResourceChainSummary>(`SELECT chain_key AS "chainKey",goal,state,min(verified_on)::text AS "checkedAt",min(expires_on)::text AS "expiresAt",count(*)::int AS "stepCount" FROM resource_chain_publication_v ${where.length?'WHERE '+where.join(' AND '):''} GROUP BY chain_key,goal,state HAVING count(*)<=50 ORDER BY state,goal,chain_key LIMIT 25`,params);
+ return query<PublishedResourceChainSummary>(`SELECT chain_key AS "chainKey",goal,state,min(verified_on)::text AS "checkedAt",min(expires_on)::text AS "expiresAt",count(*)::int AS "stepCount",band FROM resource_chain_band_publication_v ${where.length?'WHERE '+where.join(' AND '):''} GROUP BY chain_key,goal,state,band HAVING count(*)<=50 ORDER BY band,state,goal,chain_key LIMIT 25`,params);
  });
 }
 /** Aggregate map standing only; no identities or bulk record export. */
