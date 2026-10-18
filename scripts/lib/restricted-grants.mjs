@@ -112,6 +112,8 @@ export const RESTRICTED_GRANTS = {
   // 089: layered bands (A checked / B listed / C found) over the same publication; read only.
   resource_band_publication_v: ["SELECT"],
   resource_chain_band_publication_v: ["SELECT"],
+  // 090: the employer ledger in two bands (A the mark, B reported); read only.
+  employer_band_publication_v: ["SELECT"],
   // Phase 5 R1 (081). Saved resume revisions, owner only: never edited (a
   // change is a new revision), so no UPDATE; deleted by delete-my-data.
   artifact_revision: ["SELECT", "INSERT", "DELETE"],
@@ -134,7 +136,7 @@ export const DIRECTORY_OBJECTS = [
   "resource_chain_recheck_queue_v",
   "resource_corroboration", "resource_chain_step_corroboration", "resource_relationship", "resource_relationship_event", "resource_corroboration_void", "resource_relationship_event_void", "resource_service_tier_v", "resource_chain_tier_v", "resource_directory_publisher",
   "resource_app_v", "directory_publication_alias", "employer_publication_v", "resource_publication_v", "resource_chain_publication_v",
-  "resource_band_publication_v", "resource_chain_band_publication_v",
+  "resource_band_publication_v", "resource_chain_band_publication_v", "employer_band_publication_v",
 ];
 
 /**
