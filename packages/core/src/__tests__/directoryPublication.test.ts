@@ -37,7 +37,10 @@ test('public bands default to A, keep place and bands as parameters, and cap eac
  assert.match(sql,/FROM resource_band_publication_v/);assert.match(sql,/band = ANY\(\$6::text\[\]\)/);assert.match(sql,/WHERE r\.rn <= \$7/);
  assert.match(sql,/PARTITION BY m\.band, m\.lvl/);assert.match(sql,/ORDER BY r\.band, r\.lvl, r\.last_checked DESC/);
  assert.doesNotMatch(sql,/'MT'|'food'|lincoln|libby|DROP/);assert.deepEqual(params,[['food'],'MT',['lincoln'],'libby','59923',['A','B','C'],50]);
- const whole=resourceBandSql({state:'MT',areas:['food'],wholeState:true});assert.match(whole.sql,/\(geo_scope = 'national' OR state = \$2\)/);
+ const whole=resourceBandSql({state:'MT',areas:['food'],wholeState:true,bands:['A','B','C']});assert.match(whole.sql,/\(geo_scope = 'national' OR state = \$2\)/);
+ // Every bound parameter is referenced (an unused one has no type and Postgres refuses the query: live 2026-10-18).
+ assert.deepEqual(whole.params,[['food'],'MT',['A','B','C'],50]);assert.match(whole.sql,/band = ANY\(\$3::text\[\]\)/);assert.match(whole.sql,/r\.rn <= \$4/);
+ for(const x of [whole,resourceBandSql({state:null,areas:['food']})]){const used=new Set((x.sql.match(/\$\d+/g)||[]).map(m=>Number(m.slice(1))));for(let i=1;i<=x.params.length;i++)assert.ok(used.has(i),`$${i} bound but unused`);}
  // The app read (resource_app_v) is unchanged by the refactor: same text shape and parameter order.
  const app=resourceAppSql({state:'MT',areas:['food'],countyKeys:['lincoln'],cityKey:'libby',zip:'59923'});
  assert.match(app.sql,/FROM resource_app_v/);assert.deepEqual(app.params,[['food'],'MT',['lincoln'],'libby','59923',50]);assert.doesNotMatch(app.sql,/band/);

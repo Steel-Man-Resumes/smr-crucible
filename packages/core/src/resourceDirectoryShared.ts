@@ -119,13 +119,17 @@ export function resourcePlaceWhere(opts: ResourcePlaceQuery): { where: string; p
     const countyKeys = [...new Set((opts.countyKeys ?? []).map(cleanKey).filter((k): k is string => !!k))].slice(0, 10);
     const cityKey = cleanKey(opts.cityKey);
     const zip = typeof opts.zip === "string" && /^\d{5}$/.test(opts.zip) ? opts.zip : null;
+    if (opts.wholeState) {
+      // A state page: every row that reaches somewhere in the state, plus national rows.
+      // Only the state is bound: an unused bind parameter has no type and Postgres rejects the query.
+      params.push(state);
+      where += "(geo_scope = 'national' OR state = $2)";
+      return { where, params };
+    }
     params.push(state, countyKeys, cityKey, zip);
     const city = `${sqlFold("city")} = $4::text`;
     const zipHit = "left(zip, 5) = $5::text";
-    if (opts.wholeState) {
-      // A state page: every row that reaches somewhere in the state, plus national rows.
-      where += "(geo_scope = 'national' OR state = $2)";
-    } else {
+    {
       where += `(geo_scope = 'national' OR (state = $2 AND (
            geo_scope = 'statewide'
         OR (geo_scope IN ('county', 'multi_county') AND (
