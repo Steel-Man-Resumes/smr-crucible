@@ -5,12 +5,15 @@ import { clampEmployerPage, employerLikePattern, publicCaveat } from './employer
 /** 2026-10-18.v3: resources and chain steps carry band ('A' checked, 'B' listed, 'C' found) and band_reason
  * (migration 089); reads default to band A, so a v2 caller sees the same rows as before. v2 added
  * tier_confidence and corroboration_points (migration 088). */
-export const DIRECTORY_CONTRACT_VERSION = '2026-10-18.v3' as const;
+/** 2026-10-18.v4: employers carry band ('A' the mark, 'B' reported) and band_reason (migration 090); reads default to A. */
+export const DIRECTORY_CONTRACT_VERSION = '2026-10-18.v4' as const;
 export type PublicationResult<T> = {status:'ok';contractVersion:typeof DIRECTORY_CONTRACT_VERSION;asOf:string;data:T} | {status:'unavailable';contractVersion:typeof DIRECTORY_CONTRACT_VERSION;asOf:string;data:T;error:string};
 export interface PublishedEmployer {
  id:string;name:string;industry:string|null;state:string;city:string|null;location:string|null;
  applyUrl:string|null;roleTypes:string|null;evidence:string|null;caveats:string|null;checkedAt:string;
  expiresAt:string;sourceUrl:string;relationshipTier:'T1'|'T2'|'T3'|null;scope:string;standing:string;version:string;
+ /** 'A' the mark (dated evidence that meets our rule); 'B' reported (public evidence below the mark). Never marks a listing. */
+ band:'A'|'B';band_reason:string;
 }
 export interface PublishedResource extends ResourceAppRow {
  fees:string|null;what_to_bring:string|null;limits:string|null;expires_on:string;
@@ -39,24 +42,28 @@ export async function publicationRead<T>(empty:T,read:()=>Promise<T>):Promise<Pu
 }
 const EMPLOYER_FIELDS=`id,name,industry,state,city,location,apply_url AS "applyUrl",role_types AS "roleTypes",
  evidence,caveats,checked_at::text AS "checkedAt",expires_at::text AS "expiresAt",source_url AS "sourceUrl",
- relationship_tier AS "relationshipTier",scope,standing,version`;
+ relationship_tier AS "relationshipTier",scope,standing,version,band,band_reason`;
+export type EmployerBand='A'|'B';
+/** "A" (default, the mark) or "AB" to add the reported layer. */
+export function parseEmployerBands(raw:unknown):EmployerBand[] {return typeof raw==='string'&&raw.toUpperCase().includes('B')?['A','B']:['A'];}
 export const EMPLOYER_PAGE_MAX=200;
 export function employerPageSize(limit:unknown):number {const n=Number(limit);return Number.isFinite(n)&&n>=1?Math.min(EMPLOYER_PAGE_MAX,Math.floor(n)):25;}
-export function publishedEmployerSql(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number}) {
+export function publishedEmployerSql(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number;bands?:readonly EmployerBand[]}) {
  const params:unknown[]=[];const where=["expires_at > (now() AT TIME ZONE 'UTC')::date"];
+ params.push([...(opts.bands??['A'])].filter(b=>b==='A'||b==='B'));where.push(`band=ANY($${params.length}::text[])`);
  const q=employerLikePattern(opts.q);
  if(q){params.push(q);where.push(`concat_ws(' ',name,industry,city,state,role_types) ILIKE $${params.length} ESCAPE '\\'`);}
  if(opts.state && /^[A-Z]{2}$/.test(opts.state)){params.push(opts.state);where.push(`state=$${params.length}`);}
  if(opts.industry){params.push(opts.industry.slice(0,80));where.push(`industry=$${params.length}`);}
  const size=employerPageSize(opts.limit);params.push(size);const limitAt=params.length;params.push(clampEmployerPage(opts.page)*size);
- return {sql:`SELECT ${EMPLOYER_FIELDS} FROM employer_publication_v WHERE ${where.join(' AND ')} ORDER BY state,name,id LIMIT $${limitAt} OFFSET $${params.length}`,params};
+ return {sql:`SELECT ${EMPLOYER_FIELDS} FROM employer_band_publication_v WHERE ${where.join(' AND ')} ORDER BY band,state,name,id LIMIT $${limitAt} OFFSET $${params.length}`,params};
 }
-export function searchVerifiedEmployers(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number}={}) {
+export function searchVerifiedEmployers(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number;bands?:readonly EmployerBand[]}={}) {
  return publicationRead<PublishedEmployer[]>([],async()=>{const {sql,params}=publishedEmployerSql(opts);const rows=await query<PublishedEmployer>(sql,params);return rows.map(r=>({...r,caveats:publicCaveat(r.caveats)}));});
 }
-export function getVerifiedEmployer(id:string) {
+export function getVerifiedEmployer(id:string,bands:readonly EmployerBand[]=['A','B']) {
  return publicationRead<PublishedEmployer|null>(null,async()=>{if(!isPublicationId(id))return null;
- const rows=await query<PublishedEmployer>(`SELECT ${EMPLOYER_FIELDS} FROM employer_publication_v WHERE id=$1::uuid`,[id]);
+ const rows=await query<PublishedEmployer>(`SELECT ${EMPLOYER_FIELDS} FROM employer_band_publication_v WHERE id=$1::uuid AND band=ANY($2::text[])`,[id,[...bands]]);
  return rows[0]?{...rows[0],caveats:publicCaveat(rows[0].caveats)}:null;});
 }
 export function resolvePublishedEmployerAlias(source:string,externalId:string){

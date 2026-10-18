@@ -9,8 +9,11 @@ test('publication outages never masquerade as an empty area',async()=>{
 });
 test('employer search is bounded, parameterized and matches literal search punctuation',()=>{
  const x=publishedEmployerSql({q:"100% _ ' OR true",page:Infinity,state:'WI'});
- assert.match(x.sql,/LIMIT \$3 OFFSET \$4/);assert.ok(!x.sql.includes('OR true'));assert.equal(x.params[0],"%100\\% \\_ ' OR true%");assert.equal(x.params.at(-1),0);
+ assert.match(x.sql,/LIMIT \$4 OFFSET \$5/);assert.ok(!x.sql.includes('OR true'));assert.deepEqual(x.params[0],['A']);assert.equal(x.params[1],"%100\\% \\_ ' OR true%");assert.equal(x.params.at(-1),0);
  assert.equal(publishedEmployerSql({page:99999}).params.at(-1),975);
+ // 090: employers read from the band view, A only unless asked; B never changes the mark.
+ assert.match(x.sql,/FROM employer_band_publication_v/);assert.match(x.sql,/band=ANY\(\$1::text\[\]\)/);assert.match(x.sql,/ORDER BY band,state,name,id/);
+ assert.deepEqual(publishedEmployerSql({bands:['A','B']}).params[0],['A','B']);
 });
 test('resource saved content cannot smuggle private notes or unsupported service claims',()=>{
  const id='10000000-0000-4000-8000-000000000001',version='a'.repeat(32);
@@ -24,8 +27,8 @@ test('canonical detail and chain identifiers reject display-name guessing and pa
  assert.equal(isPublicationId('Example Company'),false);assert.equal(isPublicationId('10000000-0000-4000-8000-000000000001'),true);
  assert.equal(isChainKey('../../private'),false);assert.equal(isChainKey('WI-ID-steps'),true);
 });
-test('resource contract 2026-10-18.v3 publishes bands over the 088 tier fields (migration 089)',()=>{
- assert.equal(DIRECTORY_CONTRACT_VERSION,'2026-10-18.v3');
+test('contract 2026-10-18.v4 publishes resource bands (089) and employer bands (090)',()=>{
+ assert.equal(DIRECTORY_CONTRACT_VERSION,'2026-10-18.v4');
  const fields=RESOURCE_FIELDS.split(',').map(f=>f.trim().replace(/^.*AS /,''));
  for(const f of ['verification_tier','tier_confidence','corroboration_points','version','band','band_reason'])assert.ok(fields.includes(f),f);
 });
