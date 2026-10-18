@@ -173,8 +173,8 @@ describe("directory first", () => {
     await run({ category: "employment", location: "Springfield" }, read);
     await run({ category: "nonsense", location: "Libby, MT" }, read);
     assert.deepEqual(calls, [
-      { state: "MT", areas: ["shelter"], countyKeys: [], cityKey: "libby", zip: null },
-      { state: null, areas: ["jobs", "training"], countyKeys: [], cityKey: "springfield", zip: null },
+      { state: "MT", areas: ["shelter"], countyKeys: [], cityKey: "libby", zip: null, bands: ["A", "B", "C"] },
+      { state: null, areas: ["jobs", "training"], countyKeys: [], cityKey: "springfield", zip: null, bands: ["A", "B", "C"] },
     ]);
   });
 

@@ -170,6 +170,8 @@ export type ResultSource = "directory" | "curated" | "hud";
 export interface SupportResult {
   id: string;
   source: ResultSource;
+  /** Directory rows only: A checked, B listed, C found. Missing for the earlier list and HUD. */
+  band?: SupportBand;
   /** Plain words for where this came from. */
   sourceLabel: string;
   category: string;
@@ -306,6 +308,21 @@ export interface SupportDirectoryRow extends ResourceAppRow {
   fees?: string | null;
   what_to_bring?: string | null;
   limits?: string | null;
+  /** Publication band (migration 089): A checked, B listed, C found. Missing means A (an older read). */
+  band?: SupportBand;
+  band_reason?: string | null;
+}
+
+export type SupportBand = "A" | "B" | "C";
+export const BAND_ORDER: Record<SupportBand, number> = { A: 0, B: 1, C: 2 };
+/** Troy 2026-10-18: show what we have collected, best first; the unchecked rows carry their own label so nobody reads them as canon. */
+export const BAND_SOURCE_LABEL: Record<SupportBand, string> = {
+  A: "Steel Man's checked directory",
+  B: "Listed, not yet checked by us",
+  C: "Found, could not confirm. Call first.",
+};
+export function bandOf(r: SupportDirectoryRow): SupportBand {
+  return r.band === "B" || r.band === "C" ? r.band : "A";
 }
 
 export function fromDirectory(r: SupportDirectoryRow): SupportResult {
@@ -313,10 +330,13 @@ export function fromDirectory(r: SupportDirectoryRow): SupportResult {
   const cats = categoriesOfArea(r.area_id);
   const lastChecked = String(r.last_checked).slice(0, 10);
   const stZip = [r.state, r.zip].filter(Boolean).join(" ");
+  const band = bandOf(r);
+  const reason = typeof r.band_reason === "string" && r.band_reason.trim() ? r.band_reason.trim() : null;
   return {
     id: `dir-${r.service_id}`,
     source: "directory",
-    sourceLabel: "Steel Man's checked directory",
+    band,
+    sourceLabel: BAND_SOURCE_LABEL[band],
     category: cats[0] ?? r.area_id,
     type: "curated",
     title: r.service_name?.trim() || r.org_name,
@@ -335,9 +355,11 @@ export function fromDirectory(r: SupportDirectoryRow): SupportResult {
     state: scope.state,
     area: scope.label,
     lastChecked,
-    checkedLine: `Last checked ${showDate(lastChecked)}.`,
+    checkedLine: band === "A"
+      ? `Last checked ${showDate(lastChecked)}.`
+      : `${reason ?? BAND_SOURCE_LABEL[band]} Last looked at ${showDate(lastChecked)}. Call first.`,
     sourceUrl: /^https?:\/\//i.test(r.source_url) ? r.source_url : null,
-    mayBeOutOfDate: false,
+    mayBeOutOfDate: band === "C",
   };
 }
 
@@ -374,7 +396,8 @@ export function fromHud(c: CounselorResult): SupportResult {
  * never makes a place count as covered; when it is there the line says so.
  */
 function coverageFor(place: Place, all: SupportResult[]): Coverage {
-  const results = all.filter((r) => r.source !== "hud");
+  // Checked means band A or the earlier hand-checked list; a listed or found row never makes a place count as covered.
+  const results = all.filter((r) => r.source !== "hud" && (r.source !== "directory" || (r.band ?? "A") === "A"));
   const hudNote = all.some((r) => r.source === "hud") ? " HUD's counselors near you are listed too." : "";
   const best = results.reduce<ScopeLevel>((acc, r) => (LEVEL_ORDER[r.scope] < LEVEL_ORDER[acc] ? r.scope : acc), "national");
   const placeMatched: Coverage["placeMatched"] = !place.state ? "none"
@@ -420,8 +443,8 @@ function coverageFor(place: Place, all: SupportResult[]): Coverage {
 
 export interface SupportSearchDeps {
   findHud: (location: string) => Promise<CounselorResult[]>;
-  /** resource_app_v rows that reach the place, closest first (core readResourceDirectory). */
-  readDirectory?: (opts: ResourcePlaceQuery) => Promise<SupportDirectoryRow[]>;
+  /** Publication rows that reach the place, closest first (core searchVerifiedResources); bands asks for the listed and found layers too. */
+  readDirectory?: (opts: ResourcePlaceQuery & { bands?: readonly SupportBand[] }) => Promise<SupportDirectoryRow[]>;
   /** The counties a city or ZIP sits in, folded (lib/support-place-index.ts). */
   countiesOf?: (place: Place) => string[];
   /** Is a folded name a Census place in a state (lib/support-place-index.ts)? Lets "libby mt" read as Montana. */
@@ -472,7 +495,7 @@ export async function searchSupport(input: SupportSearchInput, deps: SupportSear
   if (deps.readDirectory && want.areas.length) {
     try {
       const rows = await deps.readDirectory({
-        state: place.state, areas: want.areas, countyKeys: place.countyKeys, cityKey: place.cityKey, zip: place.zip,
+        state: place.state, areas: want.areas, countyKeys: place.countyKeys, cityKey: place.cityKey, zip: place.zip, bands: ["A", "B", "C"],
       });
       dirRows = rows.filter((r) => want.areas.includes(r.area_id as ResourceArea) && scopeCovers(directoryScope(r), place));
       directoryRead = true;
@@ -490,8 +513,9 @@ export async function searchSupport(input: SupportSearchInput, deps: SupportSear
   // only earlier national ones. A side area (training, expungement) adds to
   // the earlier list rather than replacing it.
   const directory = dirRows.map(fromDirectory);
+  // Only a CHECKED directory row (band A) stands in for the earlier hand-checked list.
   const closest = new Map<ResourceCategory, number>();
-  for (const r of dirRows) {
+  for (const r of dirRows.filter((row) => bandOf(row) === "A")) {
     for (const c of CURATED_CATEGORIES) {
       if (CATEGORY_AREAS[c][0] !== r.area_id) continue;
       const lvl = LEVEL_ORDER[directoryScope(r).level];
@@ -524,7 +548,9 @@ export async function searchSupport(input: SupportSearchInput, deps: SupportSear
   }
 
   const SOURCE_ORDER: Record<ResultSource, number> = { directory: 0, hud: 1, curated: 2 };
-  results.sort((a, b) => LEVEL_ORDER[a.scope] - LEVEL_ORDER[b.scope] || SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source]);
+  // Closest first; within a level the checked band, then HUD and the earlier list, then listed, then found.
+  const rank = (r: SupportResult) => (r.source === "directory" ? BAND_ORDER[r.band ?? "A"] * 10 : 5) + SOURCE_ORDER[r.source];
+  results.sort((a, b) => LEVEL_ORDER[a.scope] - LEVEL_ORDER[b.scope] || rank(a) - rank(b));
   return { resources: results, coverage: coverageFor(place, results), place, directoryRead };
 }
 
