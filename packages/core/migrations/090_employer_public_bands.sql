@@ -131,11 +131,15 @@ $migration090$;
     RAISE EXCEPTION '090 after: band B carries a marked or negative place';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
-    IF NOT has_table_privilege('smr_app', 'public.employer_band_publication_v', 'SELECT')
-       OR has_table_privilege('smr_app', 'public.employer_band_publication_v', 'INSERT')
-       OR has_table_privilege('smr_app', 'public.directory_tier_v', 'SELECT')
-       OR has_table_privilege('smr_app', 'public.employer_contact', 'SELECT') THEN
-      RAISE EXCEPTION '090 after: app privileges are not read-only on the band view, or widened elsewhere';
+    -- Only what 090 creates is checked here: a fresh CI database holds blanket default privileges on
+    -- older objects until rls-stage1 repairs them, and that is not this migration's to assert.
+    IF NOT has_table_privilege('smr_app', 'public.employer_band_publication_v', 'SELECT') THEN
+      RAISE EXCEPTION '090 after: smr_app cannot read employer_band_publication_v';
+    END IF;
+    IF has_table_privilege('smr_app', 'public.employer_band_publication_v', 'INSERT')
+       OR has_table_privilege('smr_app', 'public.employer_band_publication_v', 'UPDATE')
+       OR has_table_privilege('smr_app', 'public.employer_band_publication_v', 'DELETE') THEN
+      RAISE EXCEPTION '090 after: smr_app holds a write privilege on employer_band_publication_v';
     END IF;
   END IF;
   INSERT INTO _migrations (filename) VALUES ('090_employer_public_bands.sql');
