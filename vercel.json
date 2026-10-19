@@ -5,8 +5,8 @@
   "installCommand": "npm install",
   "crons": [
     { "path": "/api/cron/sync-tracking", "schedule": "0 8 * * *" },
-    { "path": "/api/cron/voice-reconcile", "schedule": "*/10 * * * *" },
-    { "path": "/api/cron/deletion-retry", "schedule": "*/30 * * * *" },
+    { "path": "/api/cron/voice-reconcile", "schedule": "0 * * * *" },
+    { "path": "/api/cron/deletion-retry", "schedule": "0 * * * *" },
     { "path": "/api/cron/purge-tablet-sessions", "schedule": "0 4 * * *" },
     { "path": "/api/cron/purge-ai-usage", "schedule": "15 4 * * *" },
     { "path": "/api/cron/purge-auth-rate-limits", "schedule": "30 4 * * *" }

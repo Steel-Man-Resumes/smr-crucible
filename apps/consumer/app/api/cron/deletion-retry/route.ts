@@ -1,7 +1,7 @@
 /**
  * GET /api/cron/deletion-retry
  *
- * Vercel cron, every 30 minutes: drains pending deletion_task rows
+ * Vercel cron, hourly at :00 (same wake as voice-reconcile): drains pending deletion_task rows
  * (migration 037) -- primarily R2 object deletes enqueued by
  * /api/user/delete-data when a user's secure_object rows are cleaned up.
  * DB rows are deleted synchronously in delete-data; the R2 side is queued
