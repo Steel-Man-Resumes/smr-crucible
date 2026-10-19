@@ -32,7 +32,7 @@ const STAYS_TRUE: Record<string, string> = {
   "app/api/forge/resume-assist/route.ts": "comment",
   "app/api/rush-resume/route.ts": "comment",
   "app/api/user/delete-data/route.ts": "comment",
-  "app/walkthrough/page.tsx": "comment",
+  "app/walkthrough/page.tsx": "the free checker stays open signed out",
   "lib/session-policy.ts": "comments about the pre-wall rules",
   "lib/forge-access.ts": "the wall itself",
   "components/forge/WallText.tsx": "the wall-aware helper itself",
