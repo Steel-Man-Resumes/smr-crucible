@@ -3,8 +3,10 @@
 /**
  * Walkthrough -- "/walkthrough" (also "/demo", via next.config redirect)
  *
- * A chaptered page the visitor scrolls at their own pace. It replaces the
- * self-playing slideshow (Troy 2026-10-19: "old, stale, amateur").
+ * A guided tour on top (TourPlayer: camera, spotlight, cursor, timed
+ * captions; plays on its own, the viewer controls the pace), then the same
+ * story as chapters to read at your own pace. Replaces the August storyboard
+ * (Troy 2026-10-19: "old, stale, amateur").
  *
  * Accuracy rules for this page:
  * - Screens are real captures, each labelled with its date and source.
@@ -19,17 +21,16 @@
  * Fully static -- no API, no auth, no DB. Images live in /public/walkthrough.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, X } from "lucide-react";
-import { RecordChoiceCard } from "@/components/forge/finish/RecordChoiceCard";
-import { ConfidenceMeter } from "@/components/forge/finish/ConfidenceMeter";
-import { applyRecordChoice, type RecordChoice } from "@/lib/record-choice";
-import { SAMPLE_PAGE } from "./sample";
+import { RecordDemo } from "./record-demo";
+import { TOOLS } from "./tour";
+import { TourPlayer } from "./TourPlayer";
 
 const SITE = "https://www.steelmanresumes.com";
 
 const CHAPTERS = [
-  { id: "idea", label: "The idea" },
+  { id: "tour", label: "Guided tour" },
   { id: "forge", label: "The Forge" },
   { id: "record", label: "Your record" },
   { id: "refinery", label: "The Refinery" },
@@ -196,91 +197,18 @@ function LineBuild() {
   );
 }
 
-/* ── Chapter 02: the real record card and record pass, on a sample page ── */
-
-function RecordDemo() {
-  const [choice, setChoice] = useState<RecordChoice>("off");
-  const passes = useMemo(() => {
-    const out = {} as Record<RecordChoice, ReturnType<typeof applyRecordChoice>>;
-    (["off", "state", "facility"] as RecordChoice[]).forEach((c) => {
-      out[c] = applyRecordChoice(SAMPLE_PAGE, "", c, SAMPLE_PAGE);
-    });
-    return out;
-  }, []);
-  const pass = passes[choice];
-  // The card lists what the pass found on the page as written.
-  const entries = choice === "state" ? passes.state.entries : passes.facility.entries;
-  const before = SAMPLE_PAGE.split("\n");
-  const after = pass.resume.split("\n");
-  const afterSet = new Set(after);
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <div className="rounded-lg border border-white/10 bg-[#eaede9] p-4 text-[#1c1e1b] sm:p-5">
-        <p className="mb-3 font-mono text-[11px] uppercase tracking-[0.1em] text-[#54594f]">The Forge finish page · try it</p>
-        <RecordChoiceCard choice={choice} entries={entries} sourceWithheld={[]} busy={false} onChoose={setChoice} />
-        <ConfidenceMeter
-          level="medium"
-          notes={[
-            { line: "Prepared meals and kept the kitchen and dish area clean.", why: "t.ROY wrote this wording from your words; you approved it without changing it." },
-            { line: "Loaded and unloaded trucks. Picked and packed orders.", why: "A number t.ROY asked about was skipped. The line is true without it, and weaker." },
-          ]}
-        />
-      </div>
-      <div className="rounded-lg border border-white/10 bg-white p-5 text-[#1c1e1b] shadow-[0_20px_60px_-30px_rgba(0,0,0,0.9)] sm:p-7">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#54594f]">Sample page · Kevin Talbot is fictional</p>
-          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#9b6d1d]" aria-live="polite">
-            {choice === "off" ? "Left off" : choice === "state" ? "Named as the state" : "As written"}
-          </p>
-        </div>
-        <pre className="whitespace-pre-wrap font-serif text-[13px] leading-relaxed sm:text-sm">
-          {after.map((line, i) => {
-            const changed = line.trim() !== "" && !before.includes(line);
-            const isHead = /^[A-Z][A-Z &]+$/.test(line.trim()) || i === 0;
-            return (
-              <span key={`${choice}-${i}`} className={`wt-line block ${changed ? "bg-[#f6e7c4] text-[#5a3d0c]" : ""} ${isHead ? "font-bold" : ""}`}>
-                {line || " "}
-              </span>
-            );
-          })}
-        </pre>
-        {choice === "off" && (
-          <p className="mt-3 border-t border-[#d3d8d1] pt-3 text-xs text-[#54594f]">
-            Left off: {before.filter((l) => l.trim() && !afterSet.has(l)).length} lines. You bring it up in person, at the right time.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── Chapter 03: the Refinery tools, in the words of the audited site copy ── */
-
-const TOOLS: Array<{ group: string; name: string; body: string; art?: string }> = [
-  { group: "Build", name: "Application Tailor", art: "/walkthrough/art-refinery-tailor-02.webp", body: "Aim your resume and a cover letter at one job, built only from your own history. Your approved resume stays protected. Tailoring makes a copy." },
-  { group: "Build", name: "Disclosure Planner", art: "/walkthrough/art-refinery-disclosure-03.webp", body: "Plan when to bring up your record, what to say, and what to say next. Coaching, not legal advice. Then practice saying it out loud." },
-  { group: "Build", name: "Interview Practice", art: "/walkthrough/art-refinery-practice-04.webp", body: "Practice by text for the job you are going for, or out loud with a live voice interviewer. You get feedback on what landed." },
-  { group: "Find work", name: "Job Board", body: "Several job sources searched at once. If a source is down, it tells you, instead of telling you there are no jobs. Employers we checked are marked." },
-  { group: "Find work", name: "Employers That Hire", body: "Employers with dated public evidence that they hire people with records. Each mark shows the source, the date we checked and when it expires." },
-  { group: "Find work", name: "Applications", body: "Track every application from saved to offer. When a follow-up comes due, your coach tells you and helps draft the note." },
-  { group: "Find work", name: "Get support", body: "Rides, ID, a place to stay, food, and legal help with a record, close to where you live." },
-  { group: "My stuff", name: "Library and Vault", body: "Everything you make is kept to reopen. The Vault holds ID, certificates and letters, encrypted, opened only from your own signed-in session." },
-  { group: "My stuff", name: "Your next step", body: "Rules pick the one most useful next step. Your progress page counts real actions, not guesses." },
-];
-
 /* ── The page ─────────────────────────────────────────────────────────── */
 
 export default function WalkthroughPage() {
   const [open, setOpen] = useState<Shot | null>(null);
-  const [active, setActive] = useState("idea");
+  const [active, setActive] = useState("tour");
 
   useEffect(() => {
     const els = Array.from(document.querySelectorAll<HTMLElement>("[data-chapter]"));
     const io = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
-          if (e.isIntersecting) setActive(e.target.getAttribute("data-chapter") || "idea");
+          if (e.isIntersecting) setActive(e.target.getAttribute("data-chapter") || "tour");
         });
       },
       { rootMargin: "-45% 0px -50% 0px" },
@@ -335,39 +263,25 @@ export default function WalkthroughPage() {
         </div>
       </header>
 
-      {/* 00 The idea */}
-      <section id="idea" data-chapter="idea" className="scroll-mt-20 px-4 pb-16 pt-12 sm:px-6 sm:pb-24 sm:pt-20">
-        <div className="mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-[minmax(0,6fr)_minmax(0,5fr)]">
-          <Reveal>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/steel-man-mark-light.svg" alt="Steel Man Resumes" className="h-10 w-auto" />
-            <p className="mt-8 font-mono text-xs uppercase tracking-[0.14em] text-[#dbc173]">Guided walkthrough</p>
-            <h1 className="mt-3 text-4xl font-bold leading-[1.05] text-[#f4efe2] sm:text-6xl">
-              A resume is one move in the hiring game.
-            </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-[#b9b2a0]">
-              Hiring is a process, and most of it was built to serve the employer. With a record it cuts harder. Steel Man
-              shows you how to play it smart and still win.
-            </p>
-            <p className="mt-4 max-w-xl text-base leading-relaxed text-[#b9b2a0]">
-              The Forge builds the resume. The Refinery puts it to work. Here's every piece, on the real screens.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a href="/" className="inline-flex items-center gap-2 rounded-[5px] bg-[#dbc173] px-5 py-3 text-sm font-semibold text-[#121110] hover:bg-[#f0dda0]">
-                Start free in the Forge <ArrowRight size={16} aria-hidden="true" />
-              </a>
-              <a href="#forge" className="rounded-[5px] border border-white/25 px-5 py-3 text-sm font-semibold hover:bg-white hover:text-black">
-                Walk through it
-              </a>
+      {/* Guided tour */}
+      <section id="tour" data-chapter="tour" className="scroll-mt-16 px-3 pb-14 pt-4 sm:px-6 sm:pb-20 sm:pt-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#dbc173]">Guided tour · about 3 minutes</p>
+              <h1 className="mt-1 text-xl font-bold leading-tight text-[#f4efe2] sm:text-4xl">A resume is one move in the hiring game.</h1>
             </div>
-            <p className="mt-6 text-xs text-[#8f897a]">Real screens from the live product. Every person shown is fictional.</p>
-          </Reveal>
-          <Reveal delay={120}>
-            <Frame
-              shot={shot("forge-intro", "The Forge start page: t.ROY introduces itself, with a fictional before and after example", "forge.steelmanresumes.com · captured Oct 19, 2026")}
-              onOpen={setOpen}
-            />
-          </Reveal>
+            <a href="#forge" className="hidden text-sm text-[#b9b2a0] underline underline-offset-4 hover:text-white sm:inline">
+              Rather read it at your own pace?
+            </a>
+          </div>
+          {/* Keep the whole player, controls included, on one screen. */}
+          <div className="mx-auto" style={{ maxWidth: "max(320px, calc((100svh - 290px) * 1.6))" }}>
+            <TourPlayer />
+          </div>
+          <p className="mt-4 text-xs text-[#8f897a]">
+            Real screens from the live product, each labeled with its date. Every person shown is fictional. Tap the screen to pause.
+          </p>
         </div>
       </section>
 

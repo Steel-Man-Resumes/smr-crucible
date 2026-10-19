@@ -8,7 +8,7 @@ A dated, high-level history of what shipped, built from the commit log. Product 
 - Check source-grounded story claims before showing them as verified. Queue finished document packages durably, retain the exact revision across retries and keep failed delivery recoverable.
 - Share bounded, current employer and support publications across app tools, preserve sources and expiry, and save selected resources with owner access checks. Collect deduplicated coverage requests for review.
 - Give the assistant validated selected-work context, direct evidence tools, confirmed correction and resource actions, scoped staff drafts and owner operational reads. Keep phone chat within the page flow.
-- Rebuild /walkthrough as a chaptered page the visitor scrolls: the idea, the Forge with a before and after, the real record choice card running on a sample page, every Refinery tool, employers and local help, and the program view. Screens are current captures, each dated.
+- Open /walkthrough with a guided tour that plays on its own: a camera frames each point on the real screens, a spotlight and cursor show what matters, captions stay up long enough to read, and the viewer can pause, step or jump chapters. Then rebuild the rest of the page as chapters the visitor scrolls: the idea, the Forge with a before and after, the real record choice card running on a sample page, every Refinery tool, employers and local help, and the program view. Screens are current captures, each dated.
 - Account for complete AI operations, retries, verification and voice estimates. Distinguish missing prices and usage from zero cost; expose owner policy controls without seeding new allowances.
 
 ## Unreleased: Forge and Refinery review repairs
