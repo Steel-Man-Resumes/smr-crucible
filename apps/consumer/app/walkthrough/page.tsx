@@ -54,7 +54,7 @@ function Reveal({ children, className = "", delay = 0 }: { children: React.React
           io.disconnect();
         }
       },
-      { rootMargin: "0px 0px -8% 0px" },
+      { rootMargin: "0px 0px 12% 0px" },
     );
     io.observe(el);
     return () => io.disconnect();
@@ -85,7 +85,7 @@ function Frame({ shot, onOpen, className = "" }: { shot: Shot; onOpen: (s: Shot)
           <span className="h-2 w-2 rounded-full bg-white/20" />
         </span>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={shot.src} alt={shot.alt} loading="lazy" className="block w-full" />
+        <img src={shot.src} alt={shot.alt} decoding="async" className="block w-full" />
       </button>
       <figcaption className="mt-2 font-mono text-[11px] uppercase tracking-[0.08em] text-[#8f897a]">{shot.note}</figcaption>
     </figure>
@@ -474,7 +474,7 @@ export default function WalkthroughPage() {
               <article className="flex h-full flex-col overflow-hidden rounded-lg border border-white/10 bg-[#1a1815]">
                 {t.art && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={t.art} alt="" loading="lazy" className="aspect-[16/10] w-full object-cover" />
+                  <img src={t.art} alt="" decoding="async" className="aspect-[16/10] w-full object-cover" />
                 )}
                 <div className="flex flex-1 flex-col p-5">
                   <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#8f897a]">{t.group}</p>
@@ -605,7 +605,7 @@ export default function WalkthroughPage() {
 
       <style jsx global>{`
         html { scroll-behavior: smooth; }
-        .wt-reveal { opacity: 0; transform: translateY(14px); transition: opacity 420ms cubic-bezier(.16,1,.3,1), transform 520ms cubic-bezier(.16,1,.3,1); }
+        .wt-reveal { opacity: 0; transform: translateY(12px); transition: opacity 340ms cubic-bezier(.16,1,.3,1), transform 440ms cubic-bezier(.16,1,.3,1); }
         .wt-reveal.wt-in { opacity: 1; transform: none; }
         .wt-step { opacity: 0.12; transform: translateX(-6px); transition: opacity 360ms ease, transform 420ms cubic-bezier(.16,1,.3,1); }
         .wt-step-on { opacity: 1; transform: none; }
