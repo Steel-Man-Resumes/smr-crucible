@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 export const metadata: Metadata = {
   title: "Forge + Refinery: A Guided Walkthrough | Steel Man Resumes",
   description:
-    "A two-minute guided look at how The Forge and The Refinery turn a plain resume into a strengths-first roadmap for justice-impacted job seekers.",
+    "A guided look at the Forge and the Refinery on the real screens: the resume, the record on the page, every job search tool, employers, local help and the program view.",
   icons: {
     icon: [{ url: "/brand/refinery-icon.png", type: "image/png", sizes: "512x512" }],
   },
