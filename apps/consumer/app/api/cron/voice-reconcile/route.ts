@@ -1,7 +1,7 @@
 /**
  * GET /api/cron/voice-reconcile
  *
- * Vercel cron, every 10 minutes: closes out any voice_session leases that
+ * Vercel cron, hourly (shares the :00 wake with deletion-retry so Neon wakes once an hour): closes out any voice_session leases that
  * ran past their expires_at without the user (or the call route) ever
  * calling /api/interview-voice/end -- a crashed tab, a closed laptop lid, a
  * dropped network connection. For each one: best-effort hang up the OpenAI
