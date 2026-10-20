@@ -79,6 +79,14 @@ test("STD-F06 and STD-F05: tool marks and placeholders block", () => {
   assert.ok(has(r, "STD-F05", "BLOCK", /Your Phone/));
 });
 
+test("STD-F06: a tool's name the person wrote themselves is their own employer, not a mark", () => {
+  const own = "Founder, Steel Man Resumes\n- Built The Forge and The Refinery, free resume tools";
+  const mine = runMintCheck({ output: CLEAN + "\n\n" + own, source: SRC + "\n" + own, kind: "resume" });
+  assert.ok(!mine.findings.some((f) => f.rule === "STD-F06"), JSON.stringify(mine.findings));
+  const theirs = runMintCheck({ output: CLEAN + "\n\n" + own, source: SRC, kind: "resume" });
+  assert.ok(theirs.findings.some((f) => f.rule === "STD-F06"), "a name the person never gave still blocks");
+});
+
 test("a cover letter keeps its two allowed placeholders", () => {
   const letter = "Dear [Hiring Manager],\n\nI moved 40 pallets a shift at Northgate Freight and want to do that at [Company Name].\n\nSincerely,\nDana Example";
   const r = runMintCheck({ output: letter, source: SRC, kind: "cover_letter" });

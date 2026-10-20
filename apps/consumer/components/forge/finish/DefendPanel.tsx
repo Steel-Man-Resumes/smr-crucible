@@ -1081,6 +1081,123 @@ function Groups({
   );
 }
 
+/** One fix t.ROY made for the person (Troy 2026-10-20: the AI does the work, the person reviews). */
+export type BulkPick =
+  | { kind: "job_ok"; group: LineGroup }
+  | { kind: "own_header"; group: LineGroup; text: string }
+  | { kind: "assist"; group: LineGroup; text: string };
+
+/**
+ * Cards t.ROY may settle for a person who brought their own resume: a job
+ * whose details are the page's own, a changed job put back to the page's
+ * details, and a flagged line given t.ROY's source-bound, verified wording.
+ * Anything about the person's record, a credential, a title the page never
+ * used, a skill added from a posting, or a claim of being over people still
+ * waits for the person.
+ */
+function bulkEligible(groups: LineGroup[], actions: CardActions): LineGroup[] {
+  return groups.filter((g) => {
+    if (g.checked || g.credentialName || g.scope || g.terms) return false;
+    if (g.target === "skill" || g.target === "skillset") return false;
+    if (g.title && actions.onTitleYes) return false;
+    if (g.job && actions.onJobOk) {
+      const changed = g.items.some((i) => i.kind === "job_changed");
+      return !changed || !!g.job.ownHeader;
+    }
+    return g.target === "resume" || g.target === "letter";
+  });
+}
+
+async function fetchSuggestion(source: string, page: string, g: LineGroup): Promise<string | null> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 25000);
+  try {
+    const res = await fetch("/api/forge/suggest-fix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: ctl.signal,
+      body: JSON.stringify({ source, page, target: g.target, current: editableLine(g.line), concern: uniqueQuestions(g.items).join(" "), variation: 0 }),
+    });
+    const data = (await res.json().catch(() => null)) as { suggestion?: string } | null;
+    const text = typeof data?.suggestion === "string" ? data.suggestion.trim() : "";
+    return res.ok && text && text !== editableLine(g.line).trim() ? text : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function BulkBar({
+  view,
+  pageText,
+  actions,
+  onBulk,
+}: {
+  view: FinishView;
+  pageText: string;
+  actions: CardActions;
+  onBulk: (picks: BulkPick[]) => number;
+}) {
+  const eligible = bulkEligible(view.groups, actions);
+  const [state, setState] = useState<{ kind: "idle" } | { kind: "working"; done: number; total: number } | { kind: "done"; fixed: number; left: number }>({ kind: "idle" });
+  if (!eligible.length && state.kind !== "done") return null;
+
+  async function run() {
+    const total = eligible.length;
+    setState({ kind: "working", done: 0, total });
+    const picks: BulkPick[] = [];
+    const wording: LineGroup[] = [];
+    for (const g of eligible) {
+      if (g.job && actions.onJobOk) {
+        const changed = g.items.some((i) => i.kind === "job_changed");
+        if (!changed) picks.push({ kind: "job_ok", group: g });
+        else if (g.job.ownHeader) picks.push({ kind: "own_header", group: g, text: g.job.ownHeader });
+      } else wording.push(g);
+    }
+    let done = picks.length;
+    setState({ kind: "working", done, total });
+    // Three at a time: each is one source-bound, verified draft.
+    let next = 0;
+    const lane = async () => {
+      while (next < wording.length) {
+        const g = wording[next++];
+        const text = await fetchSuggestion(view.source, pageText, g);
+        if (text) picks.push({ kind: "assist", group: g, text });
+        done += 1;
+        setState({ kind: "working", done, total });
+      }
+    };
+    await Promise.all([lane(), lane(), lane()]);
+    const fixed = onBulk(picks);
+    setState({ kind: "done", fixed, left: Math.max(0, total - fixed) });
+  }
+
+  if (state.kind === "done") {
+    return (
+      <div role="status" aria-live="polite" className="mb-3 border border-t-line bg-t-panel px-3 py-3" data-testid="bulk-done">
+        <p className="text-sm font-semibold text-t-white">t.ROY handled {state.fixed}.</p>
+        <p className="mt-0.5 text-xs text-t-phos">{state.left > 0 ? `${state.left} still need a word from you. They are below.` : "Nothing else needs you in this part."}</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mb-3 border border-t-amber bg-t-panel px-3 py-3" data-testid="bulk-fix">
+      <p className="text-sm font-semibold text-t-white">Let t.ROY handle these for you.</p>
+      <p className="mt-0.5 text-xs text-t-phos">He treats your page as true, fixes what he can in your own words, and leaves only what needs you: your record, credentials, titles and claims about people.</p>
+      <button
+        type="button"
+        onClick={() => void run()}
+        disabled={state.kind === "working"}
+        className={`${BTN_MAIN} mt-3 disabled:opacity-60`}
+        data-testid="bulk-fix-button"
+      >
+        {state.kind === "working" ? `t.ROY is working... ${state.done} of ${state.total}` : `Fix ${eligible.length} for me`}
+      </button>
+    </div>
+  );
+}
+
 export function DefendPanel({
   view,
   pageText,
@@ -1091,6 +1208,7 @@ export function DefendPanel({
   actions,
   numberPrompts = [],
   onSkipNumber,
+  onBulk,
 }: {
   view: FinishView;
   pageText: string;
@@ -1104,6 +1222,8 @@ export function DefendPanel({
   numberPrompts?: NumberPrompt[];
   /** A skipped number lowers the confidence meter (Troy 2026-10-15). */
   onSkipNumber?: (line: string) => void;
+  /** Apply every pick at once; returns how many landed. */
+  onBulk?: (picks: BulkPick[]) => number;
 }) {
   const progress = progressLine(view);
   const intro = fixPanelIntro(view);
@@ -1132,6 +1252,8 @@ export function DefendPanel({
           </p>
         )}
       </div>
+
+      {onBulk && view.state !== "finished" && <BulkBar view={view} pageText={pageText} actions={actions} onBulk={onBulk} />}
 
       {view.general.length > 0 && (
         <ul className="mb-3 space-y-2">

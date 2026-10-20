@@ -111,7 +111,7 @@ import type { SavedRevisionSummary } from "@/lib/revision-save";
 import { RECHECK_LINE, needsRecheck } from "@/lib/recheck-copy";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
-import { DefendPanel, type CardActions } from "@/components/forge/finish/DefendPanel";
+import { DefendPanel, type BulkPick, type CardActions } from "@/components/forge/finish/DefendPanel";
 import { DownloadBox } from "@/components/forge/finish/DownloadBox";
 import { EmailPackageBox } from "@/components/forge/finish/EmailPackageBox";
 import { FinishedEmailLine } from "@/components/forge/finish/FinishedEmailLine";
@@ -241,6 +241,10 @@ function OutputPageInner() {
   // own lines, and whether they are playing on screen right now.
   const [changes, setChanges] = useState<MarkupChange[]>([]);
   const [revealing, setRevealing] = useState(false);
+  // Troy 2026-10-20: a record choice rewrites quietly. No replay of the animation, just a short status.
+  const [quiet, setQuiet] = useState(false);
+  const quietRef = useRef(false);
+  quietRef.current = quiet;
   const reduced = useReducedMotion();
   const reducedRef = useRef(reduced);
   reducedRef.current = reduced;
@@ -413,7 +417,7 @@ function OutputPageInner() {
         if (event.type !== "resume" || typeof event.resume !== "string") return;
         const checked = readChanges(event.changes, rebuildActive(session) ? session.originalResumeText ?? "" : session.resumeText ?? "", event.resume);
         setChanges(checked);
-        setRevealing(checked.length > 0);
+        setRevealing(checked.length > 0 && !quietRef.current);
         progressed = checked.length > 0;
       });
       setResumeText(data.resume || "");
@@ -422,7 +426,7 @@ function OutputPageInner() {
       // M2: checked against the page the writer started from (the server checked the same).
       const verified = readChanges(data.changes, rebuildActive(session) ? session.originalResumeText ?? "" : session.resumeText ?? "", data.resume || "");
       setChanges(verified);
-      if (!progressed) setRevealing(verified.length > 0 && reducedRef.current === false);
+      if (!progressed) setRevealing(verified.length > 0 && reducedRef.current === false && !quietRef.current);
       // Lanes first (R2): the letter is the job route's. On the other routes it
       // waits behind "Add a cover letter" (written once, never forced on).
       if (offerLetterOnlyRef.current) {
@@ -447,8 +451,10 @@ function OutputPageInner() {
       // A rebuild: exactly the own words the server bound the receipt to.
       setRunEvidence(readRunEvidence(data.evidence));
       setDocState("done");
+      setQuiet(false);
     } catch (err: unknown) {
       console.error("Doc generation error:", err);
+      setQuiet(false);
       setDocError(limited
         ? err instanceof Error ? err.message : "Today's writing limit has been reached."
         : "The writer stopped before it made your resume. Your uploaded page is still here in this browser.");
@@ -780,6 +786,32 @@ function OutputPageInner() {
     else setResumeText(r.text);
     setDefendAnswers(r.answers);
     return true;
+  };
+  /** Troy 2026-10-20: t.ROY settles what it can in one pass. Each pick goes through the same gate as a tap. */
+  const onBulk = (picks: BulkPick[]): number => {
+    let resume = resumeText;
+    let letter = coverLetterText;
+    let answers = defendAnswers;
+    let landed = 0;
+    for (const p of picks) {
+      if (p.kind === "job_ok") {
+        answers = recordJobOk(answers, p.group.line);
+        landed += 1;
+        continue;
+      }
+      const isLetter = p.group.target === "letter";
+      const text = isLetter ? letter : resume;
+      const r = p.kind === "assist" ? applyAssistedRewrite(text, answers, p.group.line, p.text, view.source) : applyRewrite(text, answers, p.group.line, p.text);
+      if (!r.changed) continue;
+      if (isLetter) letter = r.text;
+      else resume = r.text;
+      answers = r.answers;
+      landed += 1;
+    }
+    setResumeText(resume);
+    setCoverLetterText(letter);
+    setDefendAnswers(answers);
+    return landed;
   };
   const onCut = (group: LineGroup) => {
     if (group.target === "skill") {
@@ -1219,7 +1251,16 @@ function OutputPageInner() {
       </div>
 
       {(docState === "generating" || docState === "idle") && !checkMode && !liveFixOn && (
-        changes.length > 0 ? (
+        quiet ? (
+          <div role="status" aria-live="polite" className="mt-6 border border-t-line bg-t-panel p-6 text-center" data-testid="quiet-rebuild">
+            <div className="relative mx-auto mb-3 h-8 w-8">
+              <div className="absolute inset-0 border-[3px] border-t-line" />
+              <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
+            </div>
+            <p className="text-sm font-medium text-t-amber-bright">Updating your resume with your choice...</p>
+            <p className="mt-1 text-xs text-t-phos-dim">About a minute. Nothing else to do.</p>
+          </div>
+        ) : changes.length > 0 ? (
           <div className="mt-6"><p role="status">Changes checked. Checking the rest of your documents...</p><ChangesList changes={changes} open /></div>
         ) : walkTour ? (
           <MarkupWalk tour={walkTour} reduced={reduced} startingPage={rebuilding} />
@@ -1347,12 +1388,13 @@ function OutputPageInner() {
                 sourceWithheld={withheldLines}
                 busy={docState !== "done"}
                 onChoose={(next) => {
+                  setQuiet(true);
                   setRecordChoice(next);
                   hasStarted.current = false;
                   setDocState("idle");
                 }}
               />
-              <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />
+              <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onBulk={onBulk} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />
             </aside>
           </div>
 
