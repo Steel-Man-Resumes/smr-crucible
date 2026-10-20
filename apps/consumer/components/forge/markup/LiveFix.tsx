@@ -102,9 +102,11 @@ export function LiveFix({
         <button
           type="button"
           onClick={onDone}
-          className="t-focus min-h-touch bg-t-amber px-6 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright"
+          disabled={pending}
+          className="t-focus min-h-touch bg-t-amber px-6 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright disabled:cursor-wait disabled:opacity-60"
+          data-testid="live-fix-done"
         >
-          {pending ? "Keep checking my documents" : "See my finished page"}
+          {pending ? "Checking your documents..." : "Done. See my finished page"}
         </button>
       </div>
     );
@@ -180,11 +182,12 @@ export function LiveFix({
           <button
             type="button"
             onClick={onDone}
-            className="t-focus inline-flex min-h-touch items-center gap-2 bg-t-amber px-4 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright"
+            disabled={pending && done}
+            className="t-focus inline-flex min-h-touch items-center gap-2 bg-t-amber px-4 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright disabled:cursor-wait disabled:opacity-60"
             data-testid="live-fix-skip"
           >
             <SkipForward size={16} aria-hidden="true" />
-            {pending ? "Skip animation" : done ? "See my finished page" : "Skip to my finished page"}
+            {pending ? (done ? "Checking your documents..." : "Skip animation") : done ? "Done. See my finished page" : "Skip to my finished page"}
           </button>
         </div>
       </div>
