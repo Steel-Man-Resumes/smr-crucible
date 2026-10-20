@@ -76,3 +76,47 @@ test("live fix: the finished-page button is not live until the scan is done", ()
   assert.doesNotMatch(ready, /<button[^>]*data-testid="live-fix-done"[^>]*disabled/);
   assert.match(ready, /Done\. See my finished page/);
 });
+
+// ---- 2026-10-20 (second pass): the Forge finishes its own page ---------------------------------
+
+import { cardPosition } from "../../components/forge/finish/FinishTour";
+import { ReviewSteps } from "../../components/forge/markup/ReviewSteps";
+
+test("tour: the card sits beside, above or below the framed part and never over it", () => {
+  const overlap = (b: { top: number; left: number; width: number; height: number }, c: { top: number; left: number }, w = 340, h = 190) =>
+    c.left < b.left + b.width && c.left + w > b.left && c.top < b.top + b.height && c.top + h > b.top;
+  const cases = [
+    { top: 100, left: 40, width: 500, height: 300 },
+    { top: 500, left: 40, width: 900, height: 120 },
+    { top: 20, left: 20, width: 300, height: 200 },
+  ];
+  for (const b of cases) assert.equal(overlap(b, cardPosition(b, 1280, 800)), false, JSON.stringify(b));
+  // A part that fills the screen: the card goes to the corner (and can be dragged).
+  const full = { top: 0, left: 0, width: 1280, height: 800 };
+  const c = cardPosition(full, 1280, 800);
+  assert.ok(c.left >= 0 && c.top >= 0 && c.left + 340 <= 1280 && c.top + 190 <= 800);
+});
+
+test("review steps: names the two parts and the end, and marks where you are", () => {
+  const one = renderToStaticMarkup(React.createElement(ReviewSteps, { step: 1 }));
+  assert.match(one, /Reading your page/);
+  assert.match(one, /What changed/);
+  assert.match(one, /Your finished resume/);
+  assert.match(one, /aria-current="step"/);
+  const two = renderToStaticMarkup(React.createElement(ReviewSteps, { step: 2 }));
+  assert.match(two, /\(done\)/);
+});
+
+test("auto finish: the Forge settles its own page; check mode and the demo keep the cards; the safety net stays", () => {
+  const page = read("app/(forge)/output/page.tsx");
+  assert.match(page, /const autoFinish = !checkMode && !isDemo;/);
+  assert.match(page, /settleFinishPage\(/);
+  assert.match(page, /draft=\{view\.state !== "finished" && !settling\}/);
+  // If the gate still holds something nothing could clear, the cards come back as the safety net.
+  assert.match(page, /settle\.status === "done" && view\.state !== "finished"/);
+});
+
+test("lanes-first path includes the story questions again", () => {
+  const path = read("lib/forge-path.ts");
+  assert.match(path, /\["resume", "goals", "story",/);
+});

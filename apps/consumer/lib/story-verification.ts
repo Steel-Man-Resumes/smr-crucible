@@ -16,13 +16,20 @@ export async function verifyStory<T extends Record<string, unknown>>(story: T, s
        && ["headline", "summary", "reflection", "title", "evidence", "name"].includes(key));
    if (factual && typeof value === "string" && value.trim()) {
     fields[at] = false;
-    // Bounded request cost. Excess fields remain explicitly unchecked.
-    if (jobs.length >= 60) continue;
+    // Bounded request cost; an excess field stays unchecked and is retried.
+    if (jobs.length >= 150) continue;
     jobs.push((async () => {
      try {
       const result = await verify({ sourceText, output: value, kind: "report" });
-      fields[at] = result.verifierRan && (!result.hasFabrication || result.applied);
-      if (fields[at]) (node as Record<string, unknown>)[key] = result.text;
+      if (!result.verifierRan) return; // an outage: unchecked, and the page retries it
+      if (result.hasFabrication && !result.applied) {
+       // Troy 2026-10-20: a claim the person's words don't support is taken off the story, not flagged.
+       (node as Record<string, unknown>)[key] = "";
+       fields[at] = true;
+       return;
+      }
+      fields[at] = true;
+      (node as Record<string, unknown>)[key] = result.text;
      } catch { /* Draft survives; check remains false. */ }
     })());
    } else if (typeof value === "object") walk(value, at);

@@ -1108,7 +1108,7 @@ function bulkEligible(groups: LineGroup[], actions: CardActions): LineGroup[] {
   });
 }
 
-async function fetchSuggestion(source: string, page: string, g: LineGroup): Promise<string | null> {
+export async function fetchSuggestion(source: string, page: string, g: LineGroup): Promise<string | null> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 25000);
   try {
