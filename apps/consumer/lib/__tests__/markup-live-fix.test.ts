@@ -202,7 +202,7 @@ test("the finish page accepts checked resume progress before the whole package f
   assert.match(src, /docState === "done" && !liveFixOn/);
   assert.match(src, /setRevealing\(verified\.length > 0 && reducedRef\.current === false && !quietRef\.current\)/);
   // The tour and the celebration wait for the finished page.
-  assert.match(src, /if \(!ready \|\| revealing\) return;/);
+  assert.match(src, /if \(!ready \|\| revealing \|\| settling\) return;/);
   assert.match(src, /docsReady: ready && !revealing/);
 });
 

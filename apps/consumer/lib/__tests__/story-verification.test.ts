@@ -24,9 +24,10 @@ for (const failure of ["timeout", "missing-key", "malformed"]) test(`${failure} 
  assert.ok(storyIsChecked(recovered));
  assert.deepEqual(recovered.narrative, draft.narrative);
 });
-test("unsupported scope without an applied repair cannot be exported as checked", async () => {
+test("unsupported scope without an applied repair comes off the story and nothing unsupported is exported", async () => {
  const checked = await verifyStory({ headline: "You managed the whole warehouse." }, source, async ({ output }) => ({ text: output, hasFabrication: true, applied: false, verifierRan: true, flags: [{ claim: output, why: "scope" }] }));
- assert.equal(storyIsChecked(checked), false);
+ assert.equal(checked.headline, "");
+ assert.ok(storyIsChecked(checked));
 });
 test("saved story draft carries no claimed verification or private reflection into an email", () => {
  const stored = readStoryDraft({ ...draft, story_verification: { checked: true } });

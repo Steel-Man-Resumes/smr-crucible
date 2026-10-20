@@ -111,7 +111,9 @@ import type { SavedRevisionSummary } from "@/lib/revision-save";
 import { RECHECK_LINE, needsRecheck } from "@/lib/recheck-copy";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
-import { DefendPanel, type BulkPick, type CardActions } from "@/components/forge/finish/DefendPanel";
+import { storyIsChecked } from "@/lib/story-verification";
+import { DefendPanel, fetchSuggestion, type BulkPick, type CardActions } from "@/components/forge/finish/DefendPanel";
+import { settleFinishPage, type SettleNote } from "@/lib/auto-settle";
 import { DownloadBox } from "@/components/forge/finish/DownloadBox";
 import { EmailPackageBox } from "@/components/forge/finish/EmailPackageBox";
 import { FinishedEmailLine } from "@/components/forge/finish/FinishedEmailLine";
@@ -129,6 +131,7 @@ import { useReducedMotion } from "@/components/forge/showstopper/useReducedMotio
 import { MarkupWalk } from "@/components/forge/markup/MarkupWalk";
 import { verifierCheckedDocument } from "@/lib/finish-gate";
 import { readDocumentResponse } from "@/lib/document-response";
+import { ReviewSteps } from "@/components/forge/markup/ReviewSteps";
 import { LiveFix } from "@/components/forge/markup/LiveFix";
 import { ChangesList } from "@/components/forge/markup/ChangesList";
 
@@ -236,6 +239,20 @@ function OutputPageInner() {
   const hydrated = useRef(false);
 
   const [docState, setDocState] = useState<DocGenState>("idle");
+  // The story check retries by itself, twice, before any note is shown.
+  const storyAuto = useRef(0);
+  const [storyAutoTick, setStoryAutoTick] = useState(0);
+  const storyUnchecked = !storyIsChecked(output);
+  useEffect(() => {
+    if (!storyUnchecked || storyAuto.current >= 2 || storyRetrying || !signedIn || checkMode || isDemo || docState !== "done") return;
+    const t = setTimeout(() => {
+      storyAuto.current += 1;
+      void retryStory().finally(() => setStoryAutoTick((n) => n + 1));
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyUnchecked, storyAutoTick, storyRetrying, signedIn, docState]);
+
   const [resumeText, setResumeText] = useState<string>("");
   // Phase 6 live markup (S3): the writer's verified changes to the person's
   // own lines, and whether they are playing on screen right now.
@@ -681,6 +698,65 @@ function OutputPageInner() {
     [gateView, state, lengthOver, needsCheck]
   );
   const finished = ready && view.state === "finished";
+
+  // Troy 2026-10-20: the Forge finishes its own page. Bad one in, good one out, no draft mark.
+  // t.ROY makes every fix it can in the person's words and takes off what it cannot stand behind
+  // (lib/auto-settle.ts), then fits the page length and runs the second check, and says what it did.
+  // Check mode (a saved resume reopened from the Refinery) and the demo keep the cards.
+  const [checking, setChecking] = useState(false);
+  const [checkError, setCheckError] = useState("");
+  const autoFinish = !checkMode && !isDemo;
+  const [settle, setSettle] = useState<{ status: "idle" | "running" | "done"; notes: SettleNote[]; trimmed: string[] }>({ status: "idle", notes: [], trimmed: [] });
+  const settledFor = useRef("");
+  useEffect(() => {
+    if (!autoFinish || !ready || !written) return;
+    if (settledFor.current === written.resume) return;
+    settledFor.current = written.resume;
+    setSettle({ status: "running", notes: [], trimmed: [] });
+    void (async () => {
+      try {
+        const r = await settleFinishPage(
+          { ownWords, written, grounding, credentialsAnswer, credentialRows, ownResumeText },
+          { resume: resumeText, letter: coverLetterText, answers: defendAnswers, addedTerms, keptTerms, confirmed: confirmedCredentials, remnants: credentialCutRemnants },
+          (group, source, page) => fetchSuggestion(source, page, group)
+        );
+        setResumeText(r.state.resume);
+        setCoverLetterText(r.state.letter);
+        setDefendAnswers(r.state.answers);
+        setAddedTerms(r.state.addedTerms);
+        setKeptTerms(r.state.keptTerms);
+        setConfirmedCredentials(r.state.confirmed);
+        setCredentialCutRemnants(r.state.remnants);
+        setSettle({ status: "done", notes: r.notes, trimmed: [] });
+      } catch {
+        setSettle({ status: "done", notes: [], trimmed: [] });
+      }
+    })();
+    // The settle runs once per written document.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFinish, ready, written]);
+  // Over two pages: the oldest bullets come off one at a time until it fits (the server's count decides).
+  useEffect(() => {
+    if (!autoFinish || settle.status !== "done" || !lengthOver || !current || settle.trimmed.length >= 30) return;
+    const next = cuttableLines(resumeText)[0];
+    if (!next) return;
+    const t = setTimeout(() => {
+      setResumeText((x) => cutLine(x, next));
+      setDefendAnswers((a) => recordAnswer(a, next, "", "cut"));
+      setSettle((st) => ({ ...st, trimmed: [...st.trimmed, next] }));
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFinish, settle.status, lengthOver, current, resumeText]);
+  // A changed page needs its second check again; the person is not asked.
+  const autoRechecks = useRef(0);
+  useEffect(() => {
+    if (!autoFinish || settle.status !== "done" || !needsCheck || checking || !current || autoRechecks.current >= 3) return;
+    autoRechecks.current += 1;
+    void checkAgain();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoFinish, settle.status, needsCheck, checking, current]);
+  const settling = autoFinish && ready && settle.status !== "done";
   // Where every file comes from: the saved revision when there is one for
   // this exact state; otherwise the whole state, and the server decides.
   const fileSource = (): { revisionId?: string; finish?: unknown } => (mayAccount && current ? { revisionId: current.id } : { finish: payload });
@@ -737,7 +813,7 @@ function OutputPageInner() {
   // The tour: once by itself, then from the button.
   const [tourOpen, setTourOpen] = useState(false);
   useEffect(() => {
-    if (!ready || revealing) return;
+    if (!ready || revealing || settling) return;
     try {
       if (localStorage.getItem(TOUR_SEEN_KEY) === "1") return;
       localStorage.setItem(TOUR_SEEN_KEY, "1");
@@ -746,21 +822,21 @@ function OutputPageInner() {
     }
     const t = setTimeout(() => setTourOpen(true), 900);
     return () => clearTimeout(t);
-  }, [ready, revealing]);
+  }, [ready, revealing, settling]);
 
   const tourSteps: TourStep[] = [
-    ...(!checkMode ? [{ target: "finish-story", text: "t.ROY reconstructed your story from the work you gave us. Open the strengths and paths, and tell us if the headline misses you." }] : []),
-    view.state === "finished"
-      ? { target: "finish-resume", text: "This is your new resume. It comes first because it's what you came for." }
-      : { target: "finish-resume", text: "This is your new resume. It's a draft until you've settled the lines t.ROY asks about. It comes first because it's what you came for." },
-    view.state === "finished"
-      ? { target: "fix-list", text: "Every line we asked about is checked. You can still change an answer." }
-      : { target: "fix-list", text: "These are the lines only you can answer. For each one: say it's true, change it, or cut it. When they're done, your resume is finished." },
-    view.state === "finished"
-      ? { target: "finish-download", text: "Download your resume and cover letter here, or email them to yourself." }
-      : { target: "finish-download", text: "Download here. Until it's finished, every file is marked DRAFT so nobody mistakes it for the final one." },
-    { target: "finish-checks", text: "These checks read your page the way a screener would. Open one if you want the details." },
-    { target: "finish-next", text: "When you're ready, the Refinery aims your resume at real jobs." },
+    ...(!checkMode ? [{ target: "finish-story", title: "Your story", text: "t.ROY read the work you gave us and wrote this. It is a starting account in his words. If the headline misses you, say so and he redoes it." }] : []),
+    { target: "finish-resume", title: "Your resume", text: "Built from your page, using only what you told us. This is the version employers see. It is yours to download, and the Refinery tailors it to each job." },
+    ...(autoFinish
+      ? [{ target: "auto-finish-notes", title: "What t.ROY did", text: "Every fix he made and anything he left out because it needed a fact only you could give. Open it to see each one. Nothing here is a mistake you have to fix." }]
+      : [
+          view.state === "finished"
+            ? { target: "fix-list", title: "Your lines are checked", text: "Every line we asked about is settled. You can still change an answer." }
+            : { target: "fix-list", title: "Lines only you can answer", text: "For each one: say it's true, change it, or cut it. When they're done, your resume is finished." },
+        ]),
+    { target: "finish-download", title: "Download it", text: view.state === "finished" ? "Download your resume and cover letter here, or email them to yourself. A copy was also saved to your account." : "Download here. Until it is finished, every file is marked DRAFT so nobody mistakes it for the final one." },
+    { target: "finish-checks", title: "How it reads", text: "These checks read your page the way a screener does. Open one for the detail. They are for your information. You don't have to act on them." },
+    { target: "finish-next", title: "Next: the Refinery", text: "Your resume carries over. The Refinery tailors it to real jobs, writes cover letters, and prepares you for interviews." },
   ];
 
   // ---- actions -------------------------------------------------------------------
@@ -953,8 +1029,6 @@ function OutputPageInner() {
   // "Check it again" (review r3 M-1): the second check runs again on the page
   // as it is, and the server signs a fresh receipt. Nothing is rewritten; the
   // answers stay. Anything newly flagged comes back as a card.
-  const [checking, setChecking] = useState(false);
-  const [checkError, setCheckError] = useState("");
   const checkAgain = async () => {
     if (checking) return;
     setChecking(true);
@@ -1250,6 +1324,8 @@ function OutputPageInner() {
         )}
       </div>
 
+      {!checkMode && !quiet && (docState === "generating" || docState === "idle" || liveFixOn) && <ReviewSteps step={liveFixOn ? 2 : 1} />}
+
       {(docState === "generating" || docState === "idle") && !checkMode && !liveFixOn && (
         quiet ? (
           <div role="status" aria-live="polite" className="mt-6 border border-t-line bg-t-panel p-6 text-center" data-testid="quiet-rebuild">
@@ -1276,7 +1352,7 @@ function OutputPageInner() {
       )}
 
       {liveFixOn && (
-        <LiveFix lines={liveFixLines} changes={changes} reduced={reduced} pending={docState === "generating"} onDone={() => setRevealing(false)} />
+        <LiveFix lines={liveFixLines} changes={changes} reduced={reduced} pending={docState === "generating" || settling} onDone={() => setRevealing(false)} />
       )}
 
       {docState === "error" && !checkMode && (
@@ -1308,7 +1384,7 @@ function OutputPageInner() {
           {!checkMode && (
             <div className="mt-6">
               {storyRetryError && <p role="alert" className="text-t-red">{storyRetryError}</p>}
-              <StorySection onRetry={() => void retryStory()} retrying={storyRetrying} output={output} strengthsHeading={rc.strengthsHeading} careersHeading={rc.careersHeading} reportChecks={reportChecks} spotlight onRevisit={() => {
+              <StorySection onRetry={() => void retryStory()} retrying={storyRetrying} quiet={storyAuto.current < 2 || storyRetrying} output={output} strengthsHeading={rc.strengthsHeading} careersHeading={rc.careersHeading} reportChecks={reportChecks} spotlight onRevisit={() => {
                 updateSession({ forgeOutput: undefined, forgeFinish: undefined, laneParkedLetter: undefined });
                 router.push("/goals");
               }} />
@@ -1320,7 +1396,7 @@ function OutputPageInner() {
               {!checkMode && <ChangesList changes={recapChanges} open={reduced !== false} />}
               <div id="finish-resume" className="scroll-mt-20 border border-t-line bg-t-bg p-3 sm:p-4" data-testid="finish-resume">
                 {resumeText ? (
-                  <ResumePage text={resumeText} draft={view.state !== "finished"} />
+                  <ResumePage text={resumeText} draft={view.state !== "finished" && !settling} />
                 ) : (
                   <p className="text-sm text-t-phos">The resume came back empty. Try again below.</p>
                 )}
@@ -1353,7 +1429,32 @@ function OutputPageInner() {
             </div>
 
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
-              {needsCheck && (
+              {autoFinish && settling && (
+                <div role="status" aria-live="polite" className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="auto-finish-running">
+                  <p className="text-sm font-bold text-t-white">t.ROY is finishing your resume.</p>
+                  <p className="mt-1 text-xs leading-relaxed text-t-phos">He is checking every line against what you gave him and fixing what he can. You don&apos;t need to do anything.</p>
+                </div>
+              )}
+              {autoFinish && !settling && settle.status === "done" && (settle.notes.length > 0 || settle.trimmed.length > 0) && (
+                <details id="auto-finish-notes" className="mb-4 border border-t-line bg-t-panel px-4 py-3" data-testid="auto-finish-notes">
+                  <summary className="cursor-pointer text-sm font-semibold text-t-white">
+                    What t.ROY did on the last pass ({settle.notes.filter((n) => n.kind !== "confirmed").length + settle.trimmed.length})
+                  </summary>
+                  <ul className="mt-2 space-y-2 text-xs leading-relaxed text-t-phos">
+                    {settle.notes.filter((n) => n.kind === "rewritten").map((n, i) => (
+                      <li key={`w${i}`}>Reworded &ldquo;{n.kind === "rewritten" ? n.before : ""}&rdquo; to &ldquo;{n.kind === "rewritten" ? n.after : ""}&rdquo;, using only your words.</li>
+                    ))}
+                    {settle.notes.filter((n) => n.kind === "removed").map((n, i) => (
+                      <li key={`r${i}`}>Left out &ldquo;{n.kind === "removed" ? n.line : ""}&rdquo;. {n.kind === "removed" ? n.why : ""}</li>
+                    ))}
+                    {settle.trimmed.map((line, i) => (
+                      <li key={`t${i}`}>Trimmed &ldquo;{line.replace(/^[-•*]\s+/, "")}&rdquo; to keep your resume to two pages.</li>
+                    ))}
+                    <li className="text-t-phos-dim">Anything left out can be added back in the Refinery when it is true and you can back it up.</li>
+                  </ul>
+                </details>
+              )}
+              {needsCheck && !autoFinish && (
                 <div className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="recheck-card" data-blocking="true">
                   <p className="text-sm font-bold text-t-white">{RECHECK_LINE}</p>
                   <p className="mt-1 text-xs leading-relaxed text-t-phos">
@@ -1371,7 +1472,7 @@ function OutputPageInner() {
                   {checkError && <p role="status" className="mt-2 text-xs text-t-amber-bright">{checkError}</p>}
                 </div>
               )}
-              {lengthOver && shownPages !== null && (
+              {lengthOver && shownPages !== null && !autoFinish && (
                 <LengthCard
                   pages={shownPages}
                   limit={current?.pageLimit ?? pageLimit ?? 2}
@@ -1381,7 +1482,7 @@ function OutputPageInner() {
                   onChoice={setLengthChoice}
                 />
               )}
-              <ConfidenceMeter level={confidence.level} notes={confidence.notes} />
+              {!autoFinish && <ConfidenceMeter level={confidence.level} notes={confidence.notes} />}
               <RecordChoiceCard
                 choice={recordChoice}
                 entries={recordEntries}
@@ -1394,7 +1495,7 @@ function OutputPageInner() {
                   setDocState("idle");
                 }}
               />
-              <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onBulk={onBulk} onCut={onCut} actions={cardActions} numberPrompts={numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />
+              {(!autoFinish || (!settling && settle.status === "done" && view.state !== "finished" && (!mayAccount || saveShown !== "saving"))) && <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onBulk={onBulk} onCut={onCut} actions={cardActions} numberPrompts={autoFinish ? [] : numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />}
             </aside>
           </div>
 

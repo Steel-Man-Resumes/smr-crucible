@@ -235,7 +235,10 @@ export function planForgePath(s: PathSession): ForgePath {
   // Order of the question screens. Light: story only when they asked for it, after preferences.
   // R9 lanes first: ask what to lead with before writing, then optional depth.
   const order: ScreenId[] = lanes
-    ? ["resume", "goals", ...(LANE_EXTRAS.filter((x) => extras.includes(x)) as ScreenId[])]
+    // Troy 2026-10-20: the story questions (what is in the way, the record, goals and wants) are part of
+    // every lanes-first run again. They are all skippable; they are how the narrative and the local
+    // help and employers get matched. Preferences stay an offer.
+    ? ["resume", "goals", "story", ...(LANE_EXTRAS.filter((x) => x !== "story" && extras.includes(x)) as ScreenId[])]
     : light
       ? ["resume", "goals", "preferences", ...(storyOptedIn ? (["story"] as ScreenId[]) : [])]
       : ["resume", "goals", "story", "preferences"];
@@ -292,7 +295,7 @@ export function planForgePath(s: PathSession): ForgePath {
     depth,
     tone,
     screens,
-    offers: lanes ? (LANE_EXTRAS.filter((x) => !extras.includes(x)) as ScreenId[]) : light && !storyOptedIn ? ["story"] : [],
+    offers: lanes ? (LANE_EXTRAS.filter((x) => x !== "story" && !extras.includes(x)) as ScreenId[]) : light && !storyOptedIn ? ["story"] : [],
   };
 }
 

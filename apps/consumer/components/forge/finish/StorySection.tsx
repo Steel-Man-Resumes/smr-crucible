@@ -69,6 +69,7 @@ export function StorySection({
   onRevisit,
   onRetry,
   retrying = false,
+  quiet = false,
 }: {
   output: ForgeOutput;
   strengthsHeading: string;
@@ -78,11 +79,14 @@ export function StorySection({
   onRevisit?: () => void;
   onRetry?: () => void;
   retrying?: boolean;
+  /** Troy 2026-10-20: the page is already re-checking quietly; no draft note until that has failed twice. */
+  quiet?: boolean;
 }) {
   const checked = storyIsChecked(output);
   const narrative = output.narrative || {};
-  const strengths = output.strengths || narrative.strengths || [];
-  const skills = output.skills || [];
+  // A claim the checker took off leaves an empty field: nothing blank is shown.
+  const strengths = (output.strengths || narrative.strengths || []).filter((x) => x?.title?.trim() && x?.evidence?.trim());
+  const skills = (output.skills || []).filter((x) => x?.name?.trim());
   const barriers = output.barriers || [];
   const careerPaths = output.career_paths || [];
 
@@ -104,7 +108,7 @@ export function StorySection({
         t.ROY's reading of the work you gave us. You decide whether this sounds like you.
       </p>
 
-      {!checked && <div role="status" className="mb-4 border border-t-amber p-4 text-sm text-t-phos">
+      {!checked && !quiet && <div role="status" className="mb-4 border border-t-amber p-4 text-sm text-t-phos">
         <p>Story draft: its fact check is incomplete. Your resume and saved corrections are still here. Check the story before exporting it.</p>
         {onRetry && <button type="button" disabled={retrying} onClick={onRetry} className="t-focus mt-2 min-h-touch underline">{retrying ? "Checking story..." : "Retry story check"}</button>}
       </div>}
