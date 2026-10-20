@@ -26,7 +26,7 @@ import { ResumePage } from "@/components/resume/ResumePage";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { useForgeSession, type ForgeSessionData } from "@/lib/forge-context";
 import { applyFirstFix, checkFirstSection, firstSectionText, FIX_PROBLEM_COPY, pickFirstFix, type FirstSection } from "@/lib/first-fix";
-import { DRAFT_BADGE, HAVE_ONE_BUILD_LABEL, HAVE_ONE_FIX_LABEL } from "@/lib/lane-task";
+import { DRAFT_BADGE, HAVE_ONE_BUILD_LABEL } from "@/lib/lane-task";
 import type { SavedRevisionSummary } from "@/lib/revision-save";
 
 type Keep = "new" | "replace";
@@ -211,12 +211,24 @@ function SavedFirst({
 }
 
 /**
- * "I have one" (Phase 6, plan Q1): the page they gave and the one most useful
- * fix, then t.ROY builds the resume from it. The page is the writer's source,
- * never the finished page: nothing is saved here as "your resume". The fix
- * (when they make it) goes into the source the writer reads; the finished
- * version is saved after the writer and the finish page, as R1 does.
+ * "I have one" (Phase 6, plan Q1; Troy 2026-10-20: no stop after the first
+ * parse). The person brought a page, so the page is taken as theirs. The one
+ * first fix is made FOR them and the writer starts at once: nothing waits on
+ * a button, a box or a choice, and no fix can end in "the same line".
+ *
+ *  add_heading: "Work History" goes above the jobs.
+ *  edit_line:   t.ROY drafts the line from their own words (the same
+ *               source-bound, verified route the finish cards use). If there
+ *               is no safe draft, the line stays as they wrote it.
+ *  add_contact: the only fix t.ROY cannot make (it never invents a phone or an
+ *               email). One optional box; Build works with it empty.
+ *
+ * The page is still the writer's source, never the finished page: nothing is
+ * saved as "your resume" here; the finish page saves the writer's version.
  */
+const AUTO_KEY = "forge_first_reward_auto";
+const pageKey = (t: string) => `${t.length}:${t.slice(0, 40)}:${t.slice(-40)}`;
+
 export function FirstReward({
   text,
   onBack,
@@ -233,88 +245,114 @@ export function FirstReward({
 }) {
   const { updateSession } = useForgeSession();
   const fix = pickFirstFix(text);
-  const [typed, setTyped] = useState(fix.start);
+  const needsContact = fix.kind === "add_contact";
+  const [typed, setTyped] = useState("");
+  const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const hasFix = fix.kind !== "none";
+  const started = useRef(false);
 
-  /** The writer's source: their page, with the fix when they made it. */
-  function go(fixIt: boolean, then: () => void) {
+  /** The writer's source: their page, with the first fix made when it can be. */
+  async function go(contact: string | null, then: () => void) {
+    if (started.current) return;
+    started.current = true;
+    setWorking(true);
     setProblem(null);
     let next = text;
-    if (fixIt && hasFix) {
-      const r = applyFirstFix(text, fix, typed);
-      if (!r.ok) {
-        setProblem(FIX_PROBLEM_COPY[r.problem]);
-        return;
+    try {
+      if (fix.kind === "add_contact") {
+        if (contact?.trim()) {
+          const r = applyFirstFix(text, fix, contact);
+          if (r.ok) next = r.text;
+          else {
+            started.current = false;
+            setWorking(false);
+            setProblem(FIX_PROBLEM_COPY[r.problem]);
+            return;
+          }
+        }
+      } else if (fix.kind === "add_heading") {
+        const r = applyFirstFix(text, fix, fix.start);
+        if (r.ok) next = r.text;
+      } else if (fix.kind === "edit_line" && fix.line) {
+        const draft = await draftLine(text, fix.line, fix.why);
+        if (draft) {
+          const r = applyFirstFix(text, fix, draft);
+          if (r.ok) next = r.text;
+        }
       }
-      next = r.text;
+    } catch {
+      // A fix that cannot be made never blocks the build: the page goes as they wrote it.
+    }
+    try {
+      sessionStorage.setItem(AUTO_KEY, pageKey(text));
+    } catch {
+      // storage unavailable: back from the writer shows the manual page again
     }
     updateSession({ resumeText: next, lastPageVisited: "resume" });
     then();
   }
 
+  // Nothing to ask for: go. Coming back from the writer does not loop forward.
+  useEffect(() => {
+    if (needsContact) return;
+    let seen = false;
+    try {
+      seen = sessionStorage.getItem(AUTO_KEY) === pageKey(text);
+    } catch {
+      seen = false;
+    }
+    if (!seen) void go(null, onBuild);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  if (working && !needsContact) {
+    return (
+      <FlowPage title="Got your page." subtitle="t.ROY is tidying it and starting your resume." showBack onBack={onBack}>
+        <div role="status" aria-live="polite" className="mt-4 border border-t-line bg-t-panel p-6 text-center" data-testid="first-reward-working">
+          <div className="relative mx-auto mb-3 h-8 w-8">
+            <div className="absolute inset-0 border-[3px] border-t-line" />
+            <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
+          </div>
+          <p className="text-sm text-t-phos">One moment. You don&apos;t need to do anything.</p>
+        </div>
+      </FlowPage>
+    );
+  }
+
   return (
     <FlowPage
       title="Here's your page."
-      subtitle={hasFix ? "One fix first. Then tell t.ROY what to lead with before he builds your resume." : "Next, tell t.ROY what to lead with before he builds your resume."}
-      actionLabel={hasFix ? HAVE_ONE_FIX_LABEL : HAVE_ONE_BUILD_LABEL}
-      onAction={() => go(true, onBuild)}
+      subtitle="t.ROY builds your resume from what is on it."
+      actionLabel={HAVE_ONE_BUILD_LABEL}
+      onAction={() => void go(needsContact ? typed : null, onBuild)}
       showBack
       onBack={onBack}
     >
-      {hasFix && (
-        <section className="mb-4 border border-t-amber bg-t-panel p-4" aria-labelledby="first-fix-title" data-testid="first-fix" data-kind={fix.kind}>
-          <h2 id="first-fix-title" className="text-base font-semibold text-t-white">
-            {fix.title}
-          </h2>
-          <p className="mt-1 text-sm text-t-phos">{fix.why}</p>
-          {fix.kind === "edit_line" && fix.line && (
-            <p className="mt-2 border-l-2 border-t-line pl-3 text-sm text-t-phos-dim" data-testid="first-fix-line">
-              &ldquo;{fix.line}&rdquo;
-            </p>
-          )}
-          <label htmlFor="first-fix-input" className="mt-3 block text-xs font-semibold text-t-white">
-            {fix.label}
+      {needsContact && (
+        <section className="mb-4 border border-t-line bg-t-panel p-4" data-testid="first-fix" data-kind={fix.kind}>
+          <label htmlFor="first-fix-input" className="block text-sm font-semibold text-t-white">
+            A phone or email employers can reach you at <span className="font-normal text-t-phos-dim">(optional)</span>
           </label>
+          <p className="mt-1 text-xs text-t-phos-dim">t.ROY can&apos;t make this one up. Add it now, or build without it.</p>
           <input
             id="first-fix-input"
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
-            className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2.5 text-base text-t-white focus:border-t-amber focus:outline-none"
+            className="mt-2 w-full border border-t-line bg-t-bg px-3 py-2.5 text-base text-t-white focus:border-t-amber focus:outline-none"
             data-testid="first-fix-input"
           />
-          {fix.kind === "edit_line" && <p className="mt-1 text-xs text-t-phos-dim">Empty the box to take the line off.</p>}
           {problem && (
             <p role="status" className="mt-2 text-sm text-t-amber-bright" data-testid="first-fix-problem">
               {problem}
             </p>
           )}
-          <button
-            type="button"
-            onClick={() => go(true, onBuild)}
-            className="t-focus mt-4 min-h-touch w-full bg-t-amber px-5 py-3 text-sm font-bold text-white hover:bg-t-amber-bright sm:w-auto"
-            data-testid="first-fix-continue"
-          >
-            Use this fix and build my resume
-          </button>
-          <button
-            type="button"
-            onClick={() => go(false, onBuild)}
-            className="t-focus mt-3 block min-h-touch text-sm text-t-phos underline underline-offset-2 hover:text-t-white"
-            data-testid="first-fix-skip"
-          >
-            Skip this fix and build my resume
-          </button>
         </section>
       )}
-      <p className="mb-2 text-sm text-t-phos" data-testid="first-reward-next">
-        Next, tell t.ROY what to lead with. Then he turns this into a real resume from what is on it. You check each job before it is done.
-      </p>
       <div className="border border-t-line bg-t-bg p-3" data-testid="first-reward-page">
         <ResumePage text={text} draft />
       </div>
       <div className="mt-3 flex flex-col gap-2 text-sm">
-        <button type="button" onClick={() => go(false, onDoMore)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="do-more">
+        <button type="button" onClick={() => void go(null, onDoMore)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="do-more">
           Add job preferences too
         </button>
         <button type="button" onClick={() => onEditor(text)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-reward-editor">
@@ -323,6 +361,27 @@ export function FirstReward({
       </div>
     </FlowPage>
   );
+}
+
+/** t.ROY's draft for one flagged line, from the person's own page. Null when there is no safe, different line. */
+async function draftLine(page: string, line: string, concern: string): Promise<string | null> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const res = await fetch("/api/forge/suggest-fix", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: ctl.signal,
+      body: JSON.stringify({ source: page, page, target: "resume", current: line, concern, variation: 0 }),
+    });
+    const data = (await res.json().catch(() => null)) as { suggestion?: string } | null;
+    const s = typeof data?.suggestion === "string" ? data.suggestion.trim() : "";
+    return res.ok && s && s !== line.trim() ? s : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 const EMPTY: FirstSection = { name: "", contact: "", title: "", employer: "", years: "", duty: "" };
