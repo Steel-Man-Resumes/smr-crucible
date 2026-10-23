@@ -38,3 +38,8 @@ test("the writing pass keeps the person's contact line", () => {
   const after = strong.replace("MORGAN SAMPLE", "MORGAN SAMPLE\nother@example.com");
   assert.equal(acceptForgeQualityRevision(before, after, source), false);
 });
+
+test("a missing career summary is included in the writing repair request", () => {
+  const bare = "MORGAN SAMPLE\nPROFESSIONAL EXPERIENCE\nWarehouse Associate | Midstate Distribution | 8/2021 - Present\n- Loaded trucks and moved 40 pallets a night with a pallet jack.";
+  assert.ok(forgeQualityIssues(bare).some((finding) => /summary/i.test(finding.why)));
+});

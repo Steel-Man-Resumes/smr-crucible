@@ -15,6 +15,7 @@
  * the server marks it done only from its own records.
  */
 
+import { refreshVerifiedSession } from "@/lib/verified-session";
 import { Suspense, useEffect, useState } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
@@ -56,8 +57,10 @@ function VerifyForm() {
 
   /** Refresh the session from the server; go on if nothing is owed any more. */
   async function finish(failMessage: string) {
-    const next = await update();
-    if (sessionPending(next?.user as any)) {
+    // An explicit payload makes Auth.js POST /session and run the JWT update
+    // callback. update() alone only GETs the old claims from the cookie.
+    const verified = await refreshVerifiedSession(update);
+    if (!verified) {
       setError(failMessage);
       setSending(false);
       setConfirmRemove(false);

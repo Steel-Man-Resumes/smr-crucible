@@ -28,9 +28,10 @@ import { getTenantConfig } from "@/lib/tenant-config";
 import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
-import { getEmployerMarks, isMarked, type EmployerMarks } from "@crucible/core";
+import { getEmployerMarks, isMarked, getOneAsUser, type EmployerMarks } from "@crucible/core";
 import { fetchAdzunaJobs, fetchUsaJobs, mergeJobs } from "./job-providers";
 import crypto from "crypto";
+import { readJobFit, jobFitExclusion } from "./job-fit";
 
 // Every upstream call is individually bounded so a slow provider can never hold
 // the route open to its maxDuration and 504. What each bound should BE is
@@ -764,7 +765,17 @@ function truncateDescription(desc: string, maxLen: number): string {
 
 // ─── Search ─────────────────────────────────────────────────────────────────
 
+/** Apply personal choices after shared cache reads, including coach tool calls. */
 export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOutcome> {
+  const result = await searchListings(params);
+  if (!params.userId) return result;
+  const row = await getOneAsUser<{ job_fit: unknown }>(params.userId,
+    "SELECT preferences->'jobFit' AS job_fit FROM consumer_profile WHERE user_id=$1", [params.userId]);
+  const preferences = readJobFit(row?.job_fit);
+  return { ...result, jobs: result.jobs.filter((job) => !jobFitExclusion(job, preferences)) };
+}
+
+async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome> {
   if (isMockEnabled()) {
     return MOCK_JOB_RESULTS as JobSearchOutcome;
   }

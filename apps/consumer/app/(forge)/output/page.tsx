@@ -124,11 +124,12 @@ import { FinishTour, type TourStep } from "@/components/forge/finish/FinishTour"
 import { GroundingNote, groundingOpenCount, readGrounding } from "@/components/forge/finish/GroundingNote";
 import { NextStep, ReviewAsk } from "@/components/forge/finish/NextStep";
 import { StorySection, type ForgeOutput } from "@/components/forge/finish/StorySection";
-import { buildResumeTour, pageLines } from "@/lib/showstopper-tour";
+import { pageLines } from "@/lib/showstopper-tour";
 import { readChanges, type MarkupChange } from "@/lib/markup-changes";
 import { changesStillOnPage } from "@/lib/changes-gate";
 import { useReducedMotion } from "@/components/forge/showstopper/useReducedMotion";
-import { MarkupWalk } from "@/components/forge/markup/MarkupWalk";
+import { WorkFocus } from "@/components/forge/WorkFocus";
+import { FocusDialog } from "@/components/forge/FocusDialog";
 import { verifierCheckedDocument } from "@/lib/finish-gate";
 import { readDocumentResponse } from "@/lib/document-response";
 import { ReviewSteps } from "@/components/forge/markup/ReviewSteps";
@@ -272,10 +273,6 @@ function OutputPageInner() {
   // older resume text. It is a starting page, not the person's own words.
   const rebuilding = !!rebuildActive(session);
   const startingPage = rebuilding ? session.originalResumeText ?? "" : session.resumeText ?? "";
-  const walkTour = useMemo(
-    () => (checkMode || (!rebuilding && session.resumeMethod === "guided") ? null : buildResumeTour(startingPage)),
-    [checkMode, rebuilding, session.resumeMethod, startingPage]
-  );
   const liveFixLines = useMemo(() => pageLines(startingPage), [startingPage]);
   // Lines about time inside that the writer held back (never silently), and
   // whether the person chose to put them back as written.
@@ -735,19 +732,7 @@ function OutputPageInner() {
     // The settle runs once per written document.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoFinish, ready, written]);
-  // Over two pages: the oldest bullets come off one at a time until it fits (the server's count decides).
-  useEffect(() => {
-    if (!autoFinish || settle.status !== "done" || !lengthOver || !current || settle.trimmed.length >= 30) return;
-    const next = cuttableLines(resumeText)[0];
-    if (!next) return;
-    const t = setTimeout(() => {
-      setResumeText((x) => cutLine(x, next));
-      setDefendAnswers((a) => recordAnswer(a, next, "", "cut"));
-      setSettle((st) => ({ ...st, trimmed: [...st.trimmed, next] }));
-    }, 600);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFinish, settle.status, lengthOver, current, resumeText]);
+  // Length changes are a person's choice. Never silently discard their work to fit.
   // A changed page needs its second check again; the person is not asked.
   const autoRechecks = useRef(0);
   useEffect(() => {
@@ -826,7 +811,7 @@ function OutputPageInner() {
 
   const tourSteps: TourStep[] = [
     ...(!checkMode ? [{ target: "finish-story", title: "Your story", text: "t.ROY read the work you gave us and wrote this. It is a starting account in his words. If the headline misses you, say so and he redoes it." }] : []),
-    { target: "finish-resume", title: "Your resume", text: "Built from your page, using only what you told us. This is the version employers see. It is yours to download, and the Refinery tailors it to each job." },
+    { target: "finish-resume", title: "Your resume", text: "This is your first stronger draft, built from your experience. Read it, make it yours, then use the Refinery to tailor it to a real job and practice your story." },
     ...(autoFinish
       ? [{ target: "auto-finish-notes", title: "What t.ROY did", text: "Every fix he made and anything he left out because it needed a fact only you could give. Open it to see each one. Nothing here is a mistake you have to fix." }]
       : [
@@ -1235,7 +1220,7 @@ function OutputPageInner() {
         : liveFixOn
           ? "Each old line, the new one, and why. Skip any time."
           : view.state === "finished"
-          ? checkMode ? "Download it below, or email it to yourself." : "Download your general resume below. The Refinery helps you tailor it and practice."
+          ? checkMode ? "Download it below, or email it to yourself." : "This is your first stronger draft. Download it below, then improve and tailor it in the Refinery."
           : "Answer them with t.ROY. You can download a draft any time.";
 
   return (
@@ -1324,6 +1309,7 @@ function OutputPageInner() {
         )}
       </div>
 
+      <WorkFocus active={!checkMode && !quiet && (docState === "generating" || docState === "idle" || liveFixOn)} title="Building your first stronger draft">
       {!checkMode && !quiet && (docState === "generating" || docState === "idle" || liveFixOn) && <ReviewSteps step={liveFixOn ? 2 : 1} />}
 
       {(docState === "generating" || docState === "idle") && !checkMode && !liveFixOn && (
@@ -1338,15 +1324,14 @@ function OutputPageInner() {
           </div>
         ) : changes.length > 0 ? (
           <div className="mt-6"><p role="status">Changes checked. Checking the rest of your documents...</p><ChangesList changes={changes} open /></div>
-        ) : walkTour ? (
-          <MarkupWalk tour={walkTour} reduced={reduced} startingPage={rebuilding} />
         ) : (
           <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
             <div className="relative mx-auto mb-4 h-10 w-10">
               <div className="absolute inset-0 border-[3px] border-t-line" />
               <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
             </div>
-            <p className="text-sm font-medium text-t-amber-bright">Writing your resume and cover letter...</p>
+            <p role="status" aria-live="polite" className="text-sm font-medium text-t-amber-bright">{writeProgress || "Writing from your work history..."}</p>
+            <p className="mt-3 text-sm text-t-phos">The reading is complete. Next you will see changes checked against your original page.</p>
           </div>
         )
       )}
@@ -1354,6 +1339,7 @@ function OutputPageInner() {
       {liveFixOn && (
         <LiveFix lines={liveFixLines} changes={changes} reduced={reduced} pending={docState === "generating" || settling} onDone={() => setRevealing(false)} />
       )}
+      </WorkFocus>
 
       {docState === "error" && !checkMode && (
         <div className="mt-6 border border-t-red bg-t-panel p-6" role="alert">
@@ -1472,7 +1458,7 @@ function OutputPageInner() {
                   {checkError && <p role="status" className="mt-2 text-xs text-t-amber-bright">{checkError}</p>}
                 </div>
               )}
-              {lengthOver && shownPages !== null && !autoFinish && (
+              {lengthOver && shownPages !== null && (
                 <LengthCard
                   pages={shownPages}
                   limit={current?.pageLimit ?? pageLimit ?? 2}
@@ -1554,11 +1540,11 @@ function OutputPageInner() {
           </div>
 
           {/* The review ask sits where the person just downloaded: one line,
-              after a finished download only, once per visit, never a popup. */}
+              after a finished download only, once per visit, with an optional focus dialog. */}
           {reviewVisible && (
-            <div className="mt-4">
+            <FocusDialog open={!tourOpen && !settling && !liveFixOn} title="How did the Forge work for you?" onClose={() => setReviewDismissed(true)}>
               <ReviewAsk onDismiss={() => setReviewDismissed(true)} />
-            </div>
+            </FocusDialog>
           )}
 
           {/* 4. Checks, collapsed, one plain line each */}

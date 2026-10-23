@@ -17,6 +17,7 @@ import { WORKSHOP_PATHS, QUIET_PATHS, isQuiet, shellChrome } from "@/lib/forge-f
 import { FORGE_PUBLIC_PAGES, isForgeSignInPage } from "@/lib/forge-access";
 import { useSession } from "next-auth/react";
 import { ForgeImport } from "@/components/forge/ForgeImport";
+import { ForgeWelcomeTour } from "@/components/forge/ForgeWelcomeTour";
 import { SignInNotice } from "@/components/forge/SignInNotice";
 import { ForgeAccountBar } from "@/components/forge/ForgeAccountBar";
 import { ForgeLaneHeader } from "@/components/lanes/ForgeLaneHeader";
@@ -145,6 +146,7 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
             when it is not provably theirs, the person is asked first). */}
         {/* Shown on quiet screens too: a run that is not settled blocks the build. */}
         <ForgeImport showPrompt />
+        <ForgeWelcomeTour />
         {/* A Forge screen mounts only once the sign-in is known, so it never
             reads (or starts from) a run before its owner is settled. */}
         {screenWaits ? <div className="h-40" aria-busy="true" /> : children}

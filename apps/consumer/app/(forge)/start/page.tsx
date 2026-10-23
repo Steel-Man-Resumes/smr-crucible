@@ -8,8 +8,8 @@
  * interview routes remain compatible with saved runs and direct links, while
  * the new entrance leaves those decisions to the Refinery.
  *
- * Coming back: signed in, the lane home is the Refinery overview; signed
- * out, this page shows where the run is with one "Keep going". "Change"
+ * Coming back: only a completed Forge run opens the Refinery overview.
+ * Unfinished runs stay here with one "Keep going". "Change"
  * (?change=1) always opens the two resume choices again.
  */
 
@@ -20,13 +20,13 @@ import { useForgeSession } from "@/lib/forge-context";
 import { LaneHeader } from "@/components/lanes/LaneHeader";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
 import { planForgePath } from "@/lib/forge-path";
+import { returnToRefinery } from "@/lib/forge-return";
 import {
   DRAFT_BADGE,
   DOCUMENT_LINKS,
   LANE_HOME_HREF,
   START_PATH,
   TASK_COPY,
-  isLaneTask,
   keepGoingHref,
   routeHref,
   type LaneTask,
@@ -82,11 +82,15 @@ function StartInner() {
     if (focus.loaded && !target) setTarget(session.laneJobPosting || focus.target || "");
   }, [focus.loaded, focus.target]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Returning and signed in, with a task already picked: the lane home.
+  const goToRefinery = returnToRefinery({
+    loaded: focus.loaded, signedIn: focus.signedIn, task: focus.task,
+    forgeComplete, change, step, fromRefinery,
+  });
+
+  // A picked task alone must never send an unfinished run into the Refinery.
   useEffect(() => {
-    if (!focus.loaded || change || step || fromRefinery || navigating.current) return;
-    if (focus.signedIn && focus.task) router.replace(LANE_HOME_HREF);
-  }, [focus.loaded, focus.signedIn, focus.task, change, step, fromRefinery, router]);
+    if (goToRefinery && !navigating.current) router.replace(LANE_HOME_HREF);
+  }, [goToRefinery, router]);
 
   // Practice and tailoring live in the Refinery, which opens once the Forge resume is built.
   const hasResume = !!session.forgeOutput || forgeComplete;
@@ -132,7 +136,7 @@ function StartInner() {
     router.push(focus.signedIn && hasResume ? "/dashboard/application-tailor?from=start" : "/resume");
   }
 
-  if (!focus.loaded || (focus.signedIn && focus.task && !change && !step && !fromRefinery)) {
+  if (!focus.loaded || goToRefinery) {
     return <div className="h-40" aria-busy="true" />;
   }
 
@@ -220,7 +224,7 @@ function StartInner() {
   }
 
   // ---- coming back before the resume is built: where the run is, one way on --
-  if (!change && focus.task && (fromRefinery || isLaneTask(session.laneTask))) {
+  if (!change && focus.task) {
     const task = focus.task;
     const next = keepGoingHref(task, {
       signedIn: focus.signedIn,

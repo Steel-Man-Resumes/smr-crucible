@@ -177,7 +177,7 @@ export default function GoalsPage() {
 
   if (lanes) return (
     <FlowPage
-      title={directionError || "Before t.ROY writes, give him direction"}
+      title={directionError || "Tell the story behind your work"}
       subtitle="The work you gave us is the starting point. These answers help t.ROY decide what to lead with. Keep it short, or let him start with what you gave us."
       actionLabel="Build my best draft"
       onAction={handleContinue}
@@ -185,9 +185,19 @@ export default function GoalsPage() {
       onBack={() => { saveGoals(); router.push(previousPath(plan, "goals", session)); }}
       footer={<p>You can correct the story and every resume line before you send it.</p>}
     >
-      <GhostGuide message={buildingFromScratch ? "I have the work you told me about. Tell me where you want to go and one thing I should understand. A few words are enough. I will do the writing, then you decide what stays." : "I read your page. Tell me where you want to go and what the page missed. A few words are enough. I will do the writing, then you decide what stays."} pageId="goals" />
+      <GhostGuide message={buildingFromScratch ? "I have the work you told me about. Tell me where you want to go and one thing I should understand. A few words are enough. I will do the writing, then you decide what stays." : "I read your page. Tell me what the page missed, then where you might want to go. A few words are enough. I will do the writing, then you decide what stays."} pageId="goals" />
       <ForgeAccumulator />
       <div className="space-y-6">
+        <div className="border border-t-line bg-t-panel p-4">
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="forge-missed" className="text-sm font-bold text-t-white">{buildingFromScratch ? "What should t.ROY understand about your work?" : "What does your old resume miss about your work?"}</label>
+            <SpeechInputButton compact onText={(t) => setHookNarrative((v) => v ? `${v.trim()} ${t}` : t)} />
+          </div>
+          <p className="mt-1 text-xs text-t-phos-dim">Tell us about a problem you handled, work people relied on you for, or something you learned to do well. What did you do, and what happened? A short real example helps more than a list of qualities.</p>
+          <textarea id="forge-missed" value={hookNarrative} onChange={(e) => setHookNarrative(e.target.value)} rows={2} maxLength={1000}
+            placeholder="I trained new people, but my resume only says I worked the line."
+            className="mt-2 w-full resize-y border border-t-line bg-t-bg px-3 py-3 text-base text-t-white focus:border-t-amber focus:outline-none" />
+        </div>
         <div className="border border-t-amber bg-t-panel p-4">
           <div className="flex items-center justify-between gap-2">
             <label htmlFor="forge-target" className="text-sm font-bold text-t-white">What work do you want next?</label>
@@ -218,18 +228,8 @@ export default function GoalsPage() {
           </div>
         )}
         <div className="border border-t-line bg-t-panel p-4">
-          <div className="flex items-center justify-between gap-2">
-            <label htmlFor="forge-missed" className="text-sm font-bold text-t-white">{buildingFromScratch ? "What should t.ROY understand about your work?" : "What does your old resume miss about your work?"}</label>
-            <SpeechInputButton compact onText={(t) => setHookNarrative((v) => v ? `${v.trim()} ${t}` : t)} />
-          </div>
-          <p className="mt-1 text-xs text-t-phos-dim">A task you really did, people you helped, or a skill worth showing. One sentence is enough. Skip it if the work you entered tells the truth.</p>
-          <textarea id="forge-missed" value={hookNarrative} onChange={(e) => setHookNarrative(e.target.value)} rows={2} maxLength={1000}
-            placeholder="I trained new people, but my resume only says I worked the line."
-            className="mt-2 w-full resize-y border border-t-line bg-t-bg px-3 py-3 text-base text-t-white focus:border-t-amber focus:outline-none" />
-        </div>
-        <div className="border border-t-line bg-t-panel p-4">
           <p className="text-sm font-bold text-t-white">What matters most in the next job?</p>
-          <p className="mt-1 text-xs text-t-phos-dim">Pick any that fit. These help with the paths we suggest after your resume.</p>
+          <p className="mt-1 text-xs text-t-phos-dim">Pick any that fit. These give your story direction. The Refinery will help you judge specific jobs and work through what you cannot or do not want to do.</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {GOAL_OPTIONS.slice(0, 6).map((o) => (
               <button key={o.id} type="button" aria-pressed={selected.includes(o.id)} onClick={() => handleSelect(o.id)}

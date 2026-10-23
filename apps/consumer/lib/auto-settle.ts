@@ -8,10 +8,10 @@
  *
  * Order of preference for a card:
  *   a job whose details are the page's own        -> Looks right
- *   a job the writer changed                      -> back to the page's details, else off
+ *   a job the writer changed                      -> back to the page's details, else leave for correction
  *   a skill the person never named                -> off
  *   a credential the person never mentioned       -> off, everywhere
- *   a claim of being over people                  -> the person's own line, else the shared form, else off
+ *   a claim of being over people                  -> the person's own line, else a verified rewrite, else off
  *   any other flagged line                        -> t.ROY's verified draft, else a line the person
  *                                                    already explained stands, else off
  *
@@ -22,7 +22,6 @@
 import {
   applyAssistedRewrite,
   applyRewrite,
-  applyScopeHelped,
   buildFinishView,
   cutCredentialEverywhere,
   cutLine,
@@ -34,6 +33,7 @@ import {
   type FinishView,
   type LineGroup,
 } from "./finish-gate";
+import { resumeStructureLoss } from "./resume-structure";
 
 export interface SettleState {
   resume: string;
@@ -127,21 +127,17 @@ export async function settleFinishPage(
           notes.push({ kind: "confirmed", line: editableLine(g.line) });
         } else if (g.job.ownHeader && rewrite(g, g.job.ownHeader, false)) {
           // back to the page's own details
-        } else cut(g, "t.ROY changed this job and could not match it to your page.");
+        }
+        // An uncertain match needs correction, never a header deletion that
+        // leaves the person's duties attached to the wrong employer.
         continue;
       }
       if (g.scope) {
         const own = g.scope.overPeople?.noLine;
         if (own && rewrite(g, own, false)) continue;
-        if (g.scope.helped) {
-          const doc = g.target === "letter" ? s.letter : s.resume;
-          const r = applyScopeHelped(doc, s.answers, g.line, g.scope.helped, g.scope.family);
-          if (r.changed) {
-            s = { ...s, answers: r.answers, ...(g.target === "letter" ? { letter: r.text } : { resume: r.text }) };
-            notes.push({ kind: "rewritten", before: editableLine(g.line), after: editableLine(g.scope.helped) });
-            continue;
-          }
-        }
+        // "I helped" is the person's choice, not a safe automatic downgrade.
+        const draft = await suggest(g, view.source, g.target === "letter" ? s.letter : s.resume);
+        if (draft && rewrite(g, draft, true)) continue;
         cut(g, "It claimed leading or training people your page doesn't say.");
         continue;
       }
@@ -156,5 +152,9 @@ export async function settleFinishPage(
     view = viewOf(input, s);
   }
 
+  if (resumeStructureLoss(start.resume, s.resume).length) {
+    const original = viewOf(input, start);
+    return { state: start, view: original, notes: [], finished: original.state === "finished" };
+  }
   return { state: s, view, notes, finished: view.state === "finished" };
 }

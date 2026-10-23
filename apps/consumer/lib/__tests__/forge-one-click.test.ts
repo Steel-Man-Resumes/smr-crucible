@@ -99,9 +99,9 @@ test("tour: the card sits beside, above or below the framed part and never over 
 
 test("review steps: names the two parts and the end, and marks where you are", () => {
   const one = renderToStaticMarkup(React.createElement(ReviewSteps, { step: 1 }));
-  assert.match(one, /Reading your page/);
+  assert.match(one, /Writing and checking/);
   assert.match(one, /What changed/);
-  assert.match(one, /Your finished resume/);
+  assert.match(one, /Your first stronger draft/);
   assert.match(one, /aria-current="step"/);
   const two = renderToStaticMarkup(React.createElement(ReviewSteps, { step: 2 }));
   assert.match(two, /\(done\)/);

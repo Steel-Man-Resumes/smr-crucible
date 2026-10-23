@@ -29,6 +29,7 @@ import { OldPageTour } from "@/components/forge/showstopper/OldPageTour";
 import { JobCards } from "@/components/forge/showstopper/JobCards";
 import { TroyArrival } from "@/components/forge/showstopper/TroyArrival";
 import { useReducedMotion } from "@/components/forge/showstopper/useReducedMotion";
+import { WorkFocus } from "@/components/forge/WorkFocus";
 
 /** Stop waiting after this long; the server gives up well before it. */
 const HARD_STOP_MS = 180_000;
@@ -163,6 +164,7 @@ export default function ProcessingPage() {
   };
 
   return (
+    <WorkFocus active={!failure && phase !== "done"} title="Reading your experience">
     <div className="forge-workshop -mb-8 min-h-[calc(100vh-72px)] px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
       <div className="mx-auto w-full max-w-6xl">
         <h1 className="mb-4 font-display text-2xl font-bold text-t-white sm:text-3xl">Building your story</h1>
@@ -235,5 +237,6 @@ export default function ProcessingPage() {
 
       </div>
     </div>
+    </WorkFocus>
   );
 }

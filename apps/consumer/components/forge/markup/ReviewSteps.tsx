@@ -6,9 +6,9 @@
  */
 
 const STEPS = [
-  { n: 1, name: "Reading your page", note: "While the writer works. About a minute." },
+  { n: 1, name: "Writing and checking", note: "The reading is done. The writer is using your work history." },
   { n: 2, name: "What changed", note: "Every line he fixed, one at a time." },
-  { n: 3, name: "Your finished resume", note: "Then it is yours to download." },
+  { n: 3, name: "Your first stronger draft", note: "Download it, then build on it in the Refinery." },
 ] as const;
 
 export function ReviewSteps({ step }: { step: 1 | 2 | 3 }) {

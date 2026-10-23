@@ -107,12 +107,15 @@ export function readJobHeader(header: string, lines: string[] = [header], body: 
     text = (text.slice(0, last.index) + text.slice((last.index ?? 0) + last[0].length)).replace(/\(\s*\)/g, " ");
   }
   // "Cashier at Quick Stop" -> title and employer.
-  const parts = text
+  const pipeParts = text.split("|").map((part) => part.trim());
+  const separateTitle = (lines.length > 1 ? splitTrailingYears(lines[0])?.title : undefined)
+    ?? (pipeParts.length > 1 && pipeParts[1] && !isPlacePart(pipeParts[1]) ? pipeParts[0] : undefined);
+  const parts = (separateTitle ? text.slice(text.indexOf("|") + 1) : text)
     .split(/\s*\|\s*|\s*,\s*|\s+[-\u2013\u2014]\s+|\t+/)
     .map((p) => p.trim())
     .filter((p) => /[A-Za-z]/.test(p));
-  let title = parts[0] ?? "";
-  let rest = parts.slice(1);
+  let title = separateTitle ?? parts[0] ?? "";
+  let rest = separateTitle ? parts : parts.slice(1);
   const at = title.match(/^(.+?)\s+(?:at|@|for)\s+(.+)$/i);
   if (at) {
     title = at[1].trim();

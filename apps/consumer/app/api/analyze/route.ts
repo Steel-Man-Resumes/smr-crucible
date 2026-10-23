@@ -87,9 +87,11 @@ async function handlePost(request: Request) {
       analyzeNarrative(context, input, userId),
       extractSkills(context, input, userId),
       findCareerPaths(context, input, userId),
-      input.challenges?.length
-        ? analyzeBarriers(context, input, userId)
-        : Promise.resolve(null),
+      // Forge collects a light signal. Detailed disclosure and hurdle coaching
+      // belongs in the Refinery, with the person's full circumstances.
+      Promise.resolve({ barriers: (input.challenges || []).map((type) => ({
+        type, user_narrative: input.challengeNarratives?.[type] || "", resources: [],
+      })) }),
     ]);
 
     const trustedSource = buildTrustedSource({ resumeText: input.resumeText, userText: [input.goalNarrative, input.hookNarrative, ...(input.challengeNarratives ? Object.values(input.challengeNarratives) : []), input.criminalRecord?.context] });
@@ -454,6 +456,9 @@ RULES:
 - CREDENTIAL FIDELITY: reproduce every certification, license, and credential EXACTLY as the person wrote it. Never add an issuing body, expand an abbreviation, or complete a name that looks incomplete. "flagger certification (2019)" stays "Flagger Certification (2019)" and never becomes "OSHA Flagger Certification." If you are unsure what a credential is, repeat their words and say nothing more about it.
 - DATE HONESTY: if a date range is incomplete, ambiguous, or has no end date, do NOT resolve it. Never assume "Present," never infer how long something lasted, and never build a claim about duration, continuity, or steadiness on a date you had to guess. Describe the experience without a timespan instead.
 - SCOPE FIDELITY: never promote someone's role beyond what they wrote. A ranch hand has not "run a ranch." A crew lead has not "managed a department." Keep the scope they stated.
+- Build a specific professional narrative, not a rewritten list of duties: connect the person's progression, recurring skills and present capability using concrete details from their history. Give real responsibility its full weight. Never weaken an explicit "managed", "supervised" or "trained" into "helped".
+- Write two short paragraphs, about 100 to 160 words when the history supports them, with the strongest evidence first. Shorter is better when there are fewer facts. Do not pad.
+- Encourage through evidence: show what they can already bring to work, without a redemption story, exaggerated praise or a promise of a job.
 - Frame strengths, not deficits.
 - Write at a 6th grade reading level.
 - Address the person consistently as "you" in the story, summary, reflection and strengths. Never alternate between first and third person.
@@ -473,7 +478,7 @@ ${context}
 Return JSON:
 {
   "headline": "A one-sentence summary of who this person is professionally (positive, specific)",
-  "summary": "2-3 sentence narrative about their strengths, experience, and what they bring to an employer. Use their words.",
+  "summary": "Two short paragraphs connecting their real work history, skills and contribution. Make the professional story recognizable and encouraging, with concrete evidence.",
   "reflection": "A sentence that mirrors back something they shared, validating it.",
   "strengths": [
     { "title": "strength name", "evidence": "specific thing from their history", "source": "resume|narrative|ai_inferred" }

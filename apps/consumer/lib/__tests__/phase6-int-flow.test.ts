@@ -146,7 +146,7 @@ test("L2: the recap shows only changes whose new line is still on the resume (af
 test("M2: in a rebuild the walk, the replay and the change check all use the page the writer started from; the panels read the server's own words", () => {
   const page = read("app/(forge)/output/page.tsx");
   assert.match(page, /const startingPage = rebuilding \? session\.originalResumeText \?\? "" : session\.resumeText \?\? "";/);
-  assert.match(page, /buildResumeTour\(startingPage\)/);
+  assert.doesNotMatch(page, /buildResumeTour\(startingPage\)/); // Reading tour happens once, on processing.
   assert.match(page, /pageLines\(startingPage\)/);
   assert.match(page, /readChanges\(data\.changes, rebuildActive\(session\) \? session\.originalResumeText \?\? "" : session\.resumeText \?\? "", data\.resume \|\| ""\)/);
   // The processing tour walks the same page.

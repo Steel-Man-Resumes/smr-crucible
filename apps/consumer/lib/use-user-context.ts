@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 export interface UserFullContext {
+  workPreferences?: import("./job-fit").JobFitPreferences;
   profile: {
     name: string | null;
     email: string | null;
