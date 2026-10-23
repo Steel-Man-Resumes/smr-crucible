@@ -51,7 +51,10 @@ test("finish page: one pass settles the cards t.ROY may settle and leaves record
   const eligible = panel.slice(panel.indexOf("function bulkEligible"), panel.indexOf("async function fetchSuggestion"));
   assert.match(eligible, /g\.credentialName \|\| g\.scope \|\| g\.terms/, "credential, scope and skills cards wait for the person");
   assert.match(eligible, /g\.title && actions\.onTitleYes/, "a title the page never used waits for the person");
-  assert.match(panel, /Fix all with t\.ROY \(\$\{eligible\.length\}\)/);
+  assert.match(panel, /Fix all suggested items \(\$\{eligible\.length\}\)/);
+  assert.match(panel, /Your last t\.ROY pass/);
+  assert.match(panel, /Review remaining suggestions/);
+  assert.match(panel, /if \(running\.current \|\| !eligible\.length\) return/);
   const page = read("app/(forge)/output/page.tsx");
   const bulk = page.slice(page.indexOf("const onBulk"), page.indexOf("const onCut = (group"));
   assert.match(bulk, /applyAssistedRewrite\(text, answers, p\.group\.line, p\.text, view\.source\)/, "each draft goes through the same gate as a tap");

@@ -1142,9 +1142,12 @@ function BulkBar({
 }) {
   const eligible = bulkEligible(view.groups, actions);
   const [state, setState] = useState<{ kind: "idle" } | { kind: "working"; done: number; total: number } | { kind: "done"; fixed: number; left: number }>({ kind: "idle" });
-  if (!eligible.length) return null;
+  const running = useRef(false);
+  if (!eligible.length && state.kind !== "done") return null;
 
   async function run() {
+    if (running.current || !eligible.length) return;
+    running.current = true;
     const total = eligible.length;
     setState({ kind: "working", done: 0, total });
     const picks: BulkPick[] = [];
@@ -1170,24 +1173,33 @@ function BulkBar({
       }
     };
     await Promise.all([lane(), lane(), lane()]);
-    const fixed = onBulk(picks);
-    setState({ kind: "done", fixed, left: Math.max(0, total - fixed) });
+    try {
+      const fixed = onBulk(picks);
+      setState({ kind: "done", fixed, left: Math.max(0, total - fixed) });
+    } finally {
+      running.current = false;
+    }
   }
 
+  const button = <button
+    type="button"
+    onClick={() => void run()}
+    disabled={state.kind === "working" || !eligible.length}
+    className={`${BTN_MAIN} mt-3 disabled:opacity-60`}
+    data-testid="bulk-fix-button"
+  >
+    {state.kind === "working" ? `t.ROY is working... ${state.done} of ${state.total}` : state.kind === "done" ? `Try remaining suggestions (${eligible.length})` : `Fix all suggested items (${eligible.length})`}
+  </button>;
   return (
     <div className="mb-3 border border-t-amber bg-t-panel px-3 py-3" data-testid="bulk-fix">
-      <p className="text-sm font-semibold text-t-white">Let t.ROY handle these for you.</p>
-      {state.kind === "done" && <p role="status" className="mt-1 text-xs text-t-phos">Updated {state.fixed}. Anything still listed needs your answer or different wording.</p>}
-      <p className="mt-0.5 text-xs text-t-phos">He treats your page as true, fixes what he can in your own words, and leaves only what needs you: your record, credentials, titles and claims about people.</p>
-      <button
-        type="button"
-        onClick={() => void run()}
-        disabled={state.kind === "working"}
-        className={`${BTN_MAIN} mt-3 disabled:opacity-60`}
-        data-testid="bulk-fix-button"
-      >
-        {state.kind === "working" ? `t.ROY is working... ${state.done} of ${state.total}` : `Fix all with t.ROY (${eligible.length})`}
-      </button>
+      <p className="text-sm font-semibold text-t-white">{state.kind === "done" ? "Your last t.ROY pass" : "Let t.ROY handle the suggested fixes."}</p>
+      {state.kind === "done" ? <>
+        <p role="status" className="mt-1 text-xs text-t-phos">{state.fixed ? `Updated ${state.fixed} suggested ${state.fixed === 1 ? "item" : "items"}.` : "No verified changes were applied."} {state.left ? `${state.left} could not be resolved in that pass.` : "That pass is complete."} Check the before-and-after list beside your resume. Remaining questions are below.</p>
+        {eligible.length > 0 && <details className="mt-2"><summary className="t-focus cursor-pointer text-xs text-t-phos underline">Review remaining suggestions</summary><p className="mt-2 text-xs text-t-phos-dim">You can answer these with t.ROY one at a time, or request another pass. Another pass uses AI allowance and may still need your answer.</p>{button}</details>}
+      </> : <>
+        <p className="mt-1 text-xs text-t-phos">This count is the suggested fixes t.ROY can attempt together, not every open check. Questions about your credentials, job titles, responsibilities and record still need you. No new facts are guessed.</p>
+        {button}
+      </>}
     </div>
   );
 }
@@ -1221,6 +1233,7 @@ export function DefendPanel({
 }) {
   const progress = progressLine(view);
   const intro = fixPanelIntro(view);
+  const suggestedCount = onBulk ? bulkEligible(view.groups, actions).length : 0;
   const resume = view.groups.filter((g) => g.target === "resume");
   const skills = view.groups.filter((g) => g.target === "skill" || g.target === "skillset");
   const letter = view.groups.filter((g) => g.target === "letter");
@@ -1234,7 +1247,7 @@ export function DefendPanel({
         </h2>
         {intro.subline && (
           <p className="mt-0.5 text-xs text-t-phos-dim" data-testid="fix-panel-subline">
-            {intro.subline}
+            {suggestedCount ? "Start with the suggested fixes below. t.ROY will leave the questions that need your facts, and help you through them one at a time." : intro.subline}
           </p>
         )}
         <p role="status" aria-live="polite" className="mt-1 text-xs font-semibold text-t-phos" data-testid="defend-progress">
@@ -1263,7 +1276,7 @@ export function DefendPanel({
 
       {view.fixCount > 0 && (
         <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-amber-bright" data-testid="fix-before-heading">
-          Fix before you send ({view.fixCount})
+          Checks to resolve ({view.fixCount})
         </h3>
       )}
       <Groups groups={resume.filter((g) => !g.checked)} offset={0} {...common} />
@@ -1271,14 +1284,14 @@ export function DefendPanel({
       {skills.length > 0 && (
         <div className="mt-4" data-testid="fix-skills">
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Skills</h3>
-          <Groups groups={skills} offset={resume.length + view.checkedLines.length} {...common} />
+          <Groups groups={skills.filter((g) => !g.checked)} offset={resume.length + view.checkedLines.length} {...common} />
         </div>
       )}
 
       {letter.length > 0 && (
         <div className="mt-4" data-testid="fix-letter">
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Your cover letter</h3>
-          <Groups groups={letter} offset={resume.length + view.checkedLines.length + skills.length} {...common} />
+          <Groups groups={letter.filter((g) => !g.checked)} offset={resume.length + view.checkedLines.length + skills.length} {...common} />
         </div>
       )}
 

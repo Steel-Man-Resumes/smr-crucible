@@ -239,6 +239,22 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
     coach,
     onToolCall,
   });
+  const [pendingLineHelp, setPendingLineHelp] = useState<string[]>([]);
+  useEffect(() => {
+    const help = (event: Event) => {
+      const text = (event as CustomEvent<{text?:unknown}>).detail?.text;
+      if (typeof text === "string" && text.trim()) setPendingLineHelp((pending) => [...pending, text.slice(0,4000)]);
+    };
+    window.addEventListener("troy-line-help", help);
+    return () => window.removeEventListener("troy-line-help", help);
+  }, []);
+  useEffect(() => {
+    // Keep a current unsent draft intact. Loading a draft never sends it.
+    if (!input.trim() && pendingLineHelp.length > 0) {
+      setInput(pendingLineHelp[0]);
+      setPendingLineHelp((pending) => pending.slice(1));
+    }
+  }, [input, pendingLineHelp, setInput]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -764,6 +780,11 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
         </div>
       )}
 
+      {pendingLineHelp.length > 0 && (
+        <p role="status" className="pb-2 text-xs text-foreground">
+          Your line review is queued. Send or clear your current draft to load it here.
+        </p>
+      )}
       {/* Input — shrink-0 keeps it pinned at bottom always */}
       <form ref={formRef} onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t border-border flex-shrink-0">
         <input

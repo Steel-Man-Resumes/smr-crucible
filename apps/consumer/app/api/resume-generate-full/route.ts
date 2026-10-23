@@ -1,3 +1,6 @@
+import { PACKAGE_VERIFY_SOURCE_MAX } from "@/lib/grounding-source-window";
+import { masterWorkFacts } from "@/lib/master-draft";
+import { getOneAsUser } from "@crucible/core";
 /**
  * Career Package Generation API
  *
@@ -67,7 +70,14 @@ async function handlePost(request: Request) {
     const { forgeOutput, resumeText, job, contact, challenges, criminalRecord, approvedArtifactId, laneId } = body;
     // Career lanes (074): the lane's own length choice, read from the
     // database (never from the request body), only for the person's open lane.
-    const lane = userId && isUuid(laneId) ? await getOpenLane(userId, laneId) : null;
+    const selectedLaneId = laneId === undefined || laneId === null || laneId === "main" ? null : laneId;
+    if (selectedLaneId !== null && !isUuid(selectedLaneId)) {
+      return NextResponse.json({ error: "Invalid career lane" }, { status: 400 });
+    }
+    const lane = userId && selectedLaneId ? await getOpenLane(userId, selectedLaneId) : null;
+    if (selectedLaneId && !lane) {
+      return NextResponse.json({ error: "Career lane unavailable" }, { status: 404 });
+    }
 
     if (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "AI not configured" }, { status: 500 });
@@ -98,7 +108,7 @@ async function handlePost(request: Request) {
         )
       : "";
 
-    const cleanedResume = resumeText
+    let cleanedResume = resumeText
       ? sanitizeForPrompt(resumeText, RESUME_SOURCE_MAX, "resumeText")
       : "not available";
 
@@ -123,7 +133,7 @@ async function handlePost(request: Request) {
       // getArtifact is ownership-scoped (WHERE user_id), so a foreign id reads
       // as not_found; the pure resolver re-checks every predicate regardless.
       const artifact = userId ? await getArtifact(approvedArtifactId, userId) : null;
-      const decision = resolveApprovedBase(artifact, userId);
+      const decision = resolveApprovedBase(artifact, userId, selectedLaneId);
       if (!decision.ok) {
         // Fail closed and loud on a BAD REFERENCE (foreign, missing, or
         // unapproved artifact). One narrow soft spot remains: a legitimately
@@ -148,6 +158,11 @@ async function handlePost(request: Request) {
         );
       }
     }
+    const masterRow = userId ? await getOneAsUser<{master:unknown}>(userId,"SELECT profile_data->'masterDraft' AS master FROM consumer_profile WHERE user_id=$1",[userId]) : null;
+    const confirmedWork = masterWorkFacts(masterRow?.master).filter(text => !isJusticeSensitive(text));
+    approvedEvidenceAnswers.unshift(...confirmedWork);
+    const masterContext = confirmedWork.length ? "\nUSER-CONFIRMED WORK DETAILS (attribute each to its stated job; do not transfer between employers):\n" + confirmedWork.map(text=>sanitizeForPrompt(text,700)).join("\n") : "";
+    cleanedResume += masterContext;
     const cleanedApprovedResume = approvedResumeText
       ? sanitizeForPrompt(approvedResumeText, RESUME_SOURCE_MAX, "approvedResumeText")
       : "";
@@ -245,6 +260,8 @@ RULES:
 - OPENING: never open with "I am writing to express my interest", "I am writing to apply", or "My name is". Start with a real fact from the profile: what the person does now, or something they fixed, built, ran or trained. Name the role within the first two sentences.
 - FACTS AS GIVEN: state every fact the way the background states it, in every sentence, not only the opening. Do not build a scene around it, and do not add causes, consequences, settings or reactions the person did not give. "I fixed the ice machine drain twice" stays exactly that size.
 - CLOSING: never use "I would welcome the opportunity", "I would welcome the chance", "Thank you for your time and consideration", "Thanks for reading", "asset to your team", "eager to bring", or "fast-paced environment". For THIS letter: ${letterClosingStyle(contactName || jobCompany || "")}
+- TARGET CONNECTION: choose the posting's most important duties that the person's actual background supports. Connect those duties to concrete examples from their work. Do not merely change the company name in a general letter. If the background lacks a requested credential or skill, do not claim it or invent a substitute.
+- BEFORE RETURNING: reread this posting and your letter. Make the role and employer clear; keep each experience example tied to its real source job; explain its relevance to this opening. Revise generic filler yourself rather than assigning that editing to the applicant.
 - REPEATS: never repeat a sentence, a list or a phrase you already used in the letter.
 - VOICE: write the way a capable person talks to someone they respect. Contractions are fine ("I'm", "I've", "I'd"). Mix short sentences with longer ones. Build the letter around this person's facts so it could not be mistaken for anyone else's letter.
 - Confident human voice, no buzzwords. Never use a dash as punctuation: no em dash and no "--". Use a period or a comma, or reword the sentence. No contrast sentences: never write "not X, but Y", "X, not Y", "X, not just Y", "more than just X" or "you're not X, you're Y". Say the positive point directly. Hyphens inside words (no-cost, part-time) are fine. Sign with the applicant's name.`;
@@ -307,27 +324,27 @@ ${contactName || "Candidate"}`;
     // rephrased content that isn't literally in the raw upload. The job posting is
     // never source.
     const groundingSource = buildTrustedSource({
-      resumeText: typeof resumeText === "string" ? resumeText : "",
+      resumeText: typeof resumeText === "string" ? sanitizeForPrompt(resumeText, RESUME_SOURCE_MAX, "grounding.resumeText") : "",
       // Server-resolved (Phase 1A): approvedResumeText only exists when the
       // artifact passed ownership + approval checks above.
-      approvedResume: { text: approvedResumeText, approved: !!approvedResumeText },
+      approvedResume: { text: cleanedApprovedResume, approved: !!approvedResumeText },
       // Numbers the person typed or picked in the workshop are theirs, so the
       // truth check treats them as supported. Only from the approved artifact.
-      userText: approvedResumeText ? approvedEvidenceAnswers : [],
+      userText: approvedEvidenceAnswers,
     });
 
     const [coverCheck, summaryCheck, bulletCheck, listCheck] = await Promise.all([
-      verifyGrounding({ sourceText: groundingSource, output: coverLetterText, kind: "cover_letter" }),
-      verifyGrounding({ sourceText: groundingSource, output: parsed.summary || "", kind: "summary" }),
+      verifyGrounding({ sourceText: groundingSource, sourceLimit: PACKAGE_VERIFY_SOURCE_MAX, output: coverLetterText, kind: "cover_letter", targetContext: { title: jobTitle, company: jobCompany, description: jobDescription } }),
+      verifyGrounding({ sourceText: groundingSource, sourceLimit: PACKAGE_VERIFY_SOURCE_MAX, output: parsed.summary || "", kind: "summary" }),
       verifyResumeBullets({
-        sourceText: groundingSource,
+        sourceText: groundingSource, sourceLimit: PACKAGE_VERIFY_SOURCE_MAX,
         experience: Array.isArray(parsed.experience) ? parsed.experience : [],
       }),
       // Skills + education bypass the bullet/summary gate (Codex 4) -- ground them
       // against the person's own source so an injected "CNC Programming"/"OSHA 30"
       // can't ship.
       verifyStructuredLists({
-        sourceText: groundingSource,
+        sourceText: groundingSource, sourceLimit: PACKAGE_VERIFY_SOURCE_MAX,
         skills: Array.isArray(parsed.skills) ? parsed.skills.filter(Boolean) : [],
         education: Array.isArray(parsed.education) ? parsed.education : [],
       }),

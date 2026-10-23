@@ -13,13 +13,15 @@
  * baseline or a pinned current), so it stays out of a new user's way.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useLanes } from "@/components/lanes/useLanes";
 
 interface ResumeArtifact {
   id: string;
   target_context: { targetJob?: string; targetCompany?: string; source?: string } | null;
   lane?: string | null;
+  lane_id?: string | null;
   is_locked?: boolean;
   is_current?: boolean;
 }
@@ -32,18 +34,26 @@ function labelFor(a: ResumeArtifact): string {
 }
 
 export function BaselineSelector({ className = "" }: { className?: string }) {
+  const lanes = useLanes();
+  const selectedLane = lanes.active === "main" ? null : lanes.active;
   const [candidates, setCandidates] = useState<ResumeArtifact[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const requestVersion = useRef(0);
   const loadBaselines = useCallback(async () => {
+    const version = ++requestVersion.current;
+    setLoading(true);
+    setCandidates([]);
+    setActiveId(null);
     try {
       const res = await fetch("/api/artifacts?type=resume&limit=50&examples=hide");
       if (res.ok) {
         const { data } = await res.json();
+        if (version !== requestVersion.current) return;
         const resumes: ResumeArtifact[] = (data || []).filter(Boolean);
         // Only APPROVED resumes qualify: locked baselines + the pinned current.
-        const cands = resumes.filter((a) => a.is_locked || a.is_current);
+        const cands = resumes.filter((a) => (a.lane_id || null) === (selectedLane || null) && (a.is_locked || a.is_current));
         setCandidates(cands);
 
         let stored: string | null = null;
@@ -61,14 +71,17 @@ export function BaselineSelector({ className = "" }: { className?: string }) {
         }
       }
     } catch {}
-    setLoading(false);
-  }, []);
+    if (version === requestVersion.current) setLoading(false);
+  }, [selectedLane]);
 
   useEffect(() => {
     loadBaselines();
     const onChange = () => loadBaselines();
     window.addEventListener("baseline-changed", onChange);
-    return () => window.removeEventListener("baseline-changed", onChange);
+    return () => {
+      requestVersion.current++;
+      window.removeEventListener("baseline-changed", onChange);
+    };
   }, [loadBaselines]);
 
   function choose(id: string) {

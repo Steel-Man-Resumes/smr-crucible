@@ -68,6 +68,13 @@ export function AssistantDrawer({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
+  // Explicit user request from the guided line review, never an automatic popup.
+  useEffect(() => {
+    const open = () => { if (enabled) setIsOpen(true); };
+    window.addEventListener("troy-line-help", open);
+    return () => window.removeEventListener("troy-line-help", open);
+  }, [enabled]);
+
   // Close on Escape
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {

@@ -109,7 +109,8 @@
       "pages": [
         "application-tailor",
         "jobs",
-        "documents"
+        "documents",
+        "master"
       ],
       "pagesIfCriminalRecord": [],
       "version": 2

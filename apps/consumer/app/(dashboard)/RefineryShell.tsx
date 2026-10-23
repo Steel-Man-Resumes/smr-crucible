@@ -104,6 +104,7 @@ const NAV_GROUPS: NavGroup[] = [
         { href: "/dashboard/employers", label: "Employers", minTier: "client", minState: "needs_profile" },
       ] },
       { href: "/dashboard/vault", label: "My resumes", targetId: "refinery-nav-resumes", minTier: "client", minState: "needs_profile", children: [
+        { href: "/dashboard/master", label: "Master Draft", minTier: "client", minState: "needs_profile" },
         { href: "/dashboard/vault", label: "Resumes & versions", minTier: "client", minState: "needs_profile" },
         { href: "/dashboard/application-tailor", label: "Tailor for a job", minTier: "client", minState: "needs_resume" },
         { href: "/dashboard/creative", label: "Creative work", minTier: "client", minState: "needs_profile" },

@@ -208,7 +208,7 @@ describe("routes", () => {
   });
   it("the tailor reads the lane from the database, never from the request body", () => {
     const gen = read("app/api/resume-generate-full/route.ts");
-    assert.match(gen, /getOpenLane\(userId, laneId\)/);
+    assert.match(gen, /getOpenLane\(userId, selectedLaneId\)/);
     assert.match(gen, /laneWriterNote\(lane\)/);
   });
   it("the export carries the lanes in full: hybrid answers, updated_at, dismissed notes", () => {
@@ -248,6 +248,6 @@ describe("examples", () => {
   it("Switch lane in the editor really switches: it saves, then opens the other lane", () => {
     const ws = read("components/resume/ResumeWorkspace.tsx");
     assert.match(ws, /data-testid="workspace-switch-lane"/);
-    assert.match(ws, /await save\(\);\s+setShowLanePicker\(false\);\s+lanes\.setActive\(c\);/);
+    assert.match(ws, /if \(!await save\(\)\) return;\s+if \(!await lanes\.setActive\(c\)\) return;/);
   });
 });

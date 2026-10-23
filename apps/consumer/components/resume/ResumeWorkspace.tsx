@@ -8,6 +8,8 @@
  * Handles: state management, save/load, auto-save, Forge/Rush import.
  */
 
+import { SavedPackagePreview } from "./SavedPackagePreview";
+import { TroyLivingIcon } from "@crucible/consumer-ui";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -194,6 +196,26 @@ export function ResumeWorkspace() {
     targetCompany: string;
   } | null>(null);
   const [coverLetterCopied, setCoverLetterCopied] = useState(false);
+  const [emailState, setEmailState] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [packageBusy, setPackageBusy] = useState(false);
+  const packageEpoch = useRef(0);
+  const hydratingRef = useRef(false);
+  const savingRef = useRef(false);
+  const [hydrating, setHydrating] = useState(false);
+  const packageLaneRef = useRef<string | null>(laneIdForNewWork);
+  const currentContentRef = useRef("");
+  currentContentRef.current = JSON.stringify([doc, coverLetterText]);
+  useEffect(() => () => { packageEpoch.current++; }, []);
+  function resetPackage() {
+    packageEpoch.current++;
+    setEmailBusy(false); setPackageBusy(false); setGeneratingFull(false);
+    if(autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    setTargetApplicationId(null); setApplyInfo({applyUrl:null,employerWebsite:null,applied:false});
+    setCoverLetterText(null); setDisclosureBrief(null); setTailoringNotes([]); setPackageTab("resume");
+    setExportRev(null); setEmailState(""); setExportError(""); tailorParentRef.current=null;
+  }
+
 
   // --- Delete resume ---
   async function deleteResume(id: string) {
@@ -229,9 +251,9 @@ export function ResumeWorkspace() {
       .then((d) => {
         const all: SavedResume[] = d.data || [];
         setBaseResume(
-          all.find((a) => a.is_current) ||
+          all.find((a) => a.is_current && (a.target_context as any)?.source !== "job" && !a.target_context?.targetCompany) ||
             all.find((a) => (a.target_context as any)?.source === "forge") ||
-            all.find((a) => a.is_locked) ||
+            all.find((a) => a.is_locked && (a.target_context as any)?.source !== "job" && !a.target_context?.targetCompany) ||
             null
         );
       })
@@ -275,63 +297,62 @@ export function ResumeWorkspace() {
     // effect. The document is already loaded then -- re-fetching would clobber
     // any keystroke made in the meantime.
     if (id === loadedIdRef.current) return;
-    fetch(`/api/artifacts/${id}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then(async (data) => {
-        if (!data?.data) return;
-
-        if (data.data.is_locked) {
-          // The ?job= param is the only application id reliably in scope
-          // synchronously here; targetApplicationId is populated by a later,
-          // async effect and may not be set yet.
+    resetPackage();
+    const epoch = packageEpoch.current;
+    hydratingRef.current = true;
+    setHydrating(true);
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetch(`/api/artifacts/${id}`, {cache: "no-store"});
+        if (!response.ok) throw new Error("load");
+        const data = await response.json();
+        if (!data?.data || cancelled || epoch !== packageEpoch.current) return;
+        let artifact = data.data;
+        let forked = false;
+        if (artifact.is_locked) {
           const jobId = searchParams.get("job");
-          const operationKey = `tailor:${id}:${jobId || "manual"}`;
           try {
-            const forkRes = await fetch(`/api/artifacts/${id}/fork`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ reason: "tailor", operationKey }),
+            const result = await fetch(`/api/artifacts/${id}/fork`, {
+              method: "POST", headers: {"Content-Type": "application/json"},
+              body: JSON.stringify({reason: "tailor", operationKey: `tailor:${id}:${jobId || "manual"}`}),
             });
-            if (forkRes.ok) {
-              const { data: fork } = await forkRes.json();
-              loadedIdRef.current = fork.id;
-              setArtifactId(fork.id);
-              lanes.setActive(fork.lane_id || "main");
-              const content = fork.content;
-              if (content.formatVersion === 2 || content.formatVersion === 3) {
-                setDoc(upgradeToV3(content));
-              } else {
-                setDoc(migrateLegacyResume(content));
-              }
-              lastSaved.current = JSON.stringify(content);
-              setShowSetup(false);
-              router.replace(`/dashboard/application-tailor?id=${fork.id}`, {
-                scroll: false,
-              });
-              return;
-            }
-          } catch {}
-          // Fork failed: fall back to opening the locked baseline read-only.
-          // The existing locked-banner mechanism (saveStatus === "locked")
-          // already shows the notice and suppresses autosave.
-          setSaveStatus("locked");
+            if (result.ok) { artifact = (await result.json()).data; forked = true; }
+          } catch { /* The original stays read-only when a fork is unavailable. */ }
         }
-
-        loadedIdRef.current = data.data.id;
-        setArtifactId(data.data.id);
-        // The lane shown is the lane this resume is in.
-        lanes.setActive(data.data.lane_id || "main");
-        const content = data.data.content;
-        if (content.formatVersion === 2 || content.formatVersion === 3) {
-          setDoc(upgradeToV3(content));
-        } else {
-          setDoc(migrateLegacyResume(content));
+        if (cancelled || epoch !== packageEpoch.current) return;
+        // Publish identity and content together. A failed optional revision read
+        // must never leave an old document attached to the new artifact id.
+        const content = artifact.content;
+        let letter = typeof content.jobPackage?.coverLetterText === "string" ? content.jobPackage.coverLetterText : null;
+        if (letter === null) {
+          try {
+            const result = await fetch(`/api/revisions?artifactId=${encodeURIComponent(artifact.id)}`, {cache: "no-store"});
+            const revision = result.ok ? (await result.json()).revision : null;
+            if (typeof revision?.letterText === "string") letter = revision.letterText;
+          } catch { /* The saved artifact remains usable without a revision. */ }
         }
+        if (cancelled || epoch !== packageEpoch.current) return;
+        await lanes.setActive(artifact.lane_id || "main");
+        if (cancelled || epoch !== packageEpoch.current) return;
+        packageLaneRef.current = artifact.lane_id || null;
+        loadedIdRef.current = artifact.id;
+        artifactIdRef.current = artifact.id;
+        setArtifactId(artifact.id);
+        setDoc(content.formatVersion === 2 || content.formatVersion === 3 ? upgradeToV3(content) : migrateLegacyResume(content));
+        setCoverLetterText(letter);
+        setSaveStatus(artifact.is_locked ? "locked" : "idle");
         lastSaved.current = JSON.stringify(content);
         setShowSetup(false);
-      })
-      .catch(() => {});
+        if (forked) router.replace(`/dashboard/application-tailor?id=${artifact.id}`, {scroll: false});
+      } catch {
+        if (!cancelled && epoch === packageEpoch.current) setGenError("This resume could not be opened. Your saved work has not changed. Try opening it again.");
+      } finally {
+        if (!cancelled && epoch === packageEpoch.current) { hydratingRef.current = false; setHydrating(false); }
+      }
+    })();
     // lanes.setActive is stable per account; the lane list is not a reason to reload the document.
+    return () => { cancelled = true; };
   }, [searchParams, router]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Recover the linked application when a tailored resume is opened directly
@@ -432,7 +453,7 @@ export function ResumeWorkspace() {
 
   // --- Import from Job Board (AI-generated targeted resume, via sessionStorage) ---
   useEffect(() => {
-    if (searchParams.get("from") !== "job") return;
+    if (!lanes.loaded || searchParams.get("from") !== "job") return;
     const jobData = sessionStorage.getItem("resume_target_job");
     if (!jobData) return;
     sessionStorage.removeItem("resume_target_job");
@@ -441,11 +462,12 @@ export function ResumeWorkspace() {
     } catch {
       setGenError("Could not read the selected job. Try importing from Forge instead.");
     }
-  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams, lanes.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // --- Updater function passed to section editors ---
   const updateDoc = useCallback(
     (fn: (prev: ResumeDocument) => ResumeDocument) => {
+      setExportRev(null);
       setDoc((prev) => fn(prev));
     },
     []
@@ -486,6 +508,12 @@ export function ResumeWorkspace() {
       },
       opts: { existingApplicationId?: string } = {}
     ) => {
+      const epoch = ++packageEpoch.current;
+      const generationLaneId = laneIdRef.current;
+      packageLaneRef.current = generationLaneId;
+      if(autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+      setArtifactId(null); artifactIdRef.current=null; loadedIdRef.current=null; lastSaved.current="";
+      setTargetApplicationId(null); setCoverLetterText(null); setDisclosureBrief(null); setTailoringNotes([]); setExportRev(null); setEmailState("");
       try {
         setGeneratingFull(true);
         setGenError(null);
@@ -493,9 +521,9 @@ export function ResumeWorkspace() {
 
         // Pre-fill target info immediately
         updateDoc((d) => ({
-          ...d,
+          ...createEmptyResume(),
           meta: {
-            ...d.meta,
+            ...createEmptyResume().meta,
             targetJob: job.title || "",
             targetCompany: job.company || "",
             jobListingUrl: job.jobListingUrl ?? d.meta.jobListingUrl,
@@ -622,14 +650,13 @@ export function ResumeWorkspace() {
             try {
               activeId = localStorage.getItem("active_baseline_id");
             } catch {}
-            const laneNow = laneIdRef.current;
+            const laneNow = generationLaneId;
+            const laneCandidates = resumes.filter((a) => (a.lane_id || null) === (laneNow || null));
             const approvedBase =
-              (laneNow && resumes.find((a) => a.lane_id === laneNow && (a.is_locked || a.is_current))) ||
-              (activeId && resumes.find((a) => a.id === activeId && (a.is_locked || a.is_current))) ||
-              resumes.find((a) => a.is_current) ||
-              null;
+              laneCandidates.find((a) => a.id === activeId && (a.is_locked || a.is_current)) ||
+              laneCandidates.find((a) => a.is_locked || a.is_current) || null;
             if (approvedBase?.id) approvedArtifactId = approvedBase.id;
-            const forgeBase = resumes.find((a) => (a.target_context as any)?.source === "forge");
+            const forgeBase = laneCandidates.find((a) => (a.target_context as any)?.source === "forge");
             tailorParentRef.current = approvedBase?.id || forgeBase?.id || null;
           }
         } catch {}
@@ -653,7 +680,7 @@ export function ResumeWorkspace() {
             criminalRecord,
             ...(approvedArtifactId ? { approvedArtifactId } : {}),
             // The lane's own length choice is read on the server from this id.
-            ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
+            ...(generationLaneId ? { laneId: generationLaneId } : {}),
           }),
         });
 
@@ -663,6 +690,7 @@ export function ResumeWorkspace() {
         }
 
         const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes, grounding, finalizationBlocked, verificationNotice } = await res.json();
+        if(epoch !== packageEpoch.current) return;
         const flagClaims: string[] = Array.isArray(grounding?.flags)
           ? grounding.flags.map((f: any) => (typeof f?.claim === "string" ? f.claim.trim() : "")).filter(Boolean).slice(0, 8)
           : [];
@@ -718,6 +746,7 @@ export function ResumeWorkspace() {
             }
           } catch {}
         }
+        if(epoch !== packageEpoch.current) return;
         if (applicationId) setTargetApplicationId(applicationId);
         // Remember where to apply so the Apply CTA (R8) can surface the moment
         // the resume is ready.
@@ -750,14 +779,16 @@ export function ResumeWorkspace() {
                 },
                 content: { text: coverLetter, targetJob: job.title, targetCompany: job.company },
                 scaffoldLevel: 1.0,
-                ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
+                ...(generationLaneId ? { laneId: generationLaneId } : {}),
               }),
             });
           } catch {}
         }
       } catch (err: any) {
+        if(epoch !== packageEpoch.current) return;
         console.error("Career-package generation error:", err);
         setGenError(err.message || "Could not generate resume. Try importing from Forge instead.");
+        setShowSetup(true);
         setGeneratingFull(false);
       }
     },
@@ -769,7 +800,7 @@ export function ResumeWorkspace() {
   // application, then tailor against it (or open the existing tailored resume).
   useEffect(() => {
     const appId = searchParams.get("job");
-    if (!appId) return;
+    if (!appId || !lanes.loaded) return;
     let cancelled = false;
     (async () => {
       try {
@@ -810,18 +841,21 @@ export function ResumeWorkspace() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams, runCareerPackage, router]);
+  }, [searchParams, runCareerPackage, router, lanes.loaded]);
 
   // --- Save ---
   const save = useCallback(
     async (isAutoSave = false): Promise<string | null> => {
-      const content = doc;
+      if (hydratingRef.current || generatingFull || savingRef.current) return null;
+      const saveEpoch = packageEpoch.current;
+      const content = { ...doc, ...(targetApplicationId ? { jobPackage: { applicationId: targetApplicationId, coverLetterText: coverLetterText || "" } } : {}) };
       const contentStr = JSON.stringify(content);
       if (contentStr === lastSaved.current) {
         if (!isAutoSave) setSaveStatus("saved");
         return artifactId;
       }
 
+      savingRef.current = true;
       setSaveStatus("saving");
       try {
         if (artifactId) {
@@ -831,17 +865,18 @@ export function ResumeWorkspace() {
             body: JSON.stringify({ content, scaffoldLevel: 0.5 }),
           });
           if (res.ok) {
+            if(saveEpoch !== packageEpoch.current) return null;
             lastSaved.current = contentStr;
             setSaveStatus("saved");
+            window.dispatchEvent(new Event("resume-saved"));
             return artifactId;
           } else if (res.status === 409) {
             // Locked baseline: the server refused the write (Phase 0.1).
             // Do NOT touch lastSaved -- a manual Save after the user unlocks
             // it elsewhere must still send the real write. Autosave is
             // suppressed separately while status is "locked".
-            setSaveStatus("locked");
-            // The stored (locked) content stands; an export uses that.
-            return artifactId;
+            if (saveEpoch === packageEpoch.current) setSaveStatus("locked");
+            return null;
           } else {
             setSaveStatus("error");
             return null;
@@ -862,12 +897,14 @@ export function ResumeWorkspace() {
               },
               content,
               scaffoldLevel: 0.5,
-              ...(laneIdRef.current ? { laneId: laneIdRef.current } : {}),
+              ...(packageLaneRef.current ? { laneId: packageLaneRef.current } : {}),
               ...(tailorParentRef.current ? { parentArtifactId: tailorParentRef.current } : {}),
             }),
           });
           if (res.ok) {
             const { data } = await res.json();
+            if(saveEpoch !== packageEpoch.current) return null;
+            loadedIdRef.current = data.id;
             setArtifactId(data.id);
             lastSaved.current = contentStr;
             setSaveStatus("saved");
@@ -885,11 +922,11 @@ export function ResumeWorkspace() {
           }
         }
       } catch {
-        setSaveStatus("error");
+        if (saveEpoch === packageEpoch.current) setSaveStatus("error");
         return null;
-      }
+      } finally { savingRef.current = false; }
     },
-    [doc, artifactId, router, targetApplicationId, coverLetterText, disclosureBrief]
+    [doc, artifactId, router, targetApplicationId, coverLetterText, disclosureBrief, generatingFull]
   );
 
   // --- Auto-save (5s debounce after edits, only when past setup) ---
@@ -897,13 +934,13 @@ export function ResumeWorkspace() {
   // the write, so retrying every 5s is noise. A manual Save still attempts
   // (and succeeds once the user unlocks it in My Materials).
   useEffect(() => {
-    if (showSetup || saveStatus === "locked") return;
+    if (showSetup || generatingFull || hydrating || saveStatus === "locked") return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(() => save(true), 5000);
     return () => {
       if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     };
-  }, [doc, showSetup, saveStatus, save]);
+  }, [doc, showSetup, generatingFull, hydrating, saveStatus, save]);
 
   // Clear "saved" indicator after 3s
   useEffect(() => {
@@ -949,7 +986,11 @@ export function ResumeWorkspace() {
    */
   async function exportRevision(): Promise<string | null> {
     setExportError("");
-    const id = (await save(false)) ?? artifactIdRef.current ?? artifactId;
+    const epoch = packageEpoch.current;
+    const snapshot = currentContentRef.current;
+    const current = () => epoch === packageEpoch.current && snapshot === currentContentRef.current;
+    const id = await save(false);
+    if (!current()) return null;
     if (!id) {
       setExportError("Save your resume first, then download it.");
       return null;
@@ -958,22 +999,24 @@ export function ResumeWorkspace() {
       const res = await fetch("/api/revisions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "export", artifactId: id, ...(coverLetterText ? { letterText: coverLetterText } : {}) }),
+        body: JSON.stringify({ kind: "export", artifactId: id, letterText: coverLetterText ?? "" }),
       });
       const data = await res.json().catch(() => null);
+      if (!current()) return null;
       if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
       setExportRev({ id: data.revision.id, number: data.revision.number, status: data.revision.status, recheck: needsRecheck(data.revision.openItems) });
       return data.revision.id as string;
     } catch {
-      setExportError("We couldn't save this version to your account, so the file is marked DRAFT.");
+      if (current()) setExportError("This version could not be prepared. Save your work and try again.");
       return null;
     }
   }
 
-  async function downloadDocx(type: "resume" | "cover_letter", content: string) {
+  async function downloadDocx(type: "resume" | "cover_letter", content: string, format: "pdf" | "docx" = "docx") {
     try {
       const revisionId = await exportRevision();
-      const res = await fetch("/api/forge/download", {
+      if (!revisionId) return;
+      const res = await fetch(targetApplicationId ? `/api/applications/package-preview?applicationId=${encodeURIComponent(targetApplicationId)}&revisionId=${encodeURIComponent(revisionId)}&kind=${type}&format=${format}` : "/api/forge/download", targetApplicationId ? {} : {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         // Pass naming inputs so the download is a real slug
@@ -984,7 +1027,7 @@ export function ResumeWorkspace() {
           ...(revisionId ? { revisionId } : {}),
           content,
           type,
-          format: "docx",
+          format,
           name: doc.contact.name || "",
           company: doc.meta.targetCompany || "",
           role: doc.meta.targetJob || "",
@@ -1020,7 +1063,7 @@ export function ResumeWorkspace() {
   // A real job needs a title AND a company -- a bare title must never produce a
   // "job-targeted" resume that unlocks the toolset without a linked application
   // (Codex 5). The pasted job description is the sharper-tailoring enhancement.
-  const canTailor = Boolean(doc.meta.targetJob.trim() && doc.meta.targetCompany.trim());
+  const canTailor = lanes.loaded && !lanes.switching && Boolean(doc.meta.targetJob.trim() && doc.meta.targetCompany.trim());
 
   function tailorForJob() {
     if (!canTailor) return;
@@ -1093,12 +1136,15 @@ export function ResumeWorkspace() {
 
   // --- Load existing resume ---
   function loadResume(id: string) {
+    resetPackage();
     setArtifactId(null);
     router.replace(`/dashboard/application-tailor?id=${id}`, { scroll: false });
   }
 
   // --- New resume ---
   function startNewResume() {
+    resetPackage(); loadedIdRef.current=null; artifactIdRef.current=null;
+    hydratingRef.current=false; setHydrating(false); packageLaneRef.current=laneIdRef.current;
     setArtifactId(null);
     setDoc(createEmptyResume());
     lastSaved.current = "";
@@ -1108,6 +1154,7 @@ export function ResumeWorkspace() {
   }
 
   // --- Full resume generation loading state ---
+  if (hydrating) return <p role="status" className="p-6 font-mono text-purple-300">Opening your saved work…</p>;
   if (generatingFull) {
     return (
       <div className="max-w-2xl">
@@ -1115,16 +1162,13 @@ export function ResumeWorkspace() {
           Building Your Career Package
         </h1>
         <div className="bg-t-panel p-8 border border-t-line text-center mt-6">
-          <div className="w-12 h-12 mx-auto mb-4 relative">
-            <div className="absolute inset-0 border-[3px] border-t-line" />
-            <div className="absolute inset-0 border-[3px] border-t-amber border-t-transparent animate-spin" />
-          </div>
-          <p className="text-sm font-medium text-t-amber-bright">
+          <div className="mx-auto mb-4 flex justify-center"><TroyLivingIcon size={100} attention /></div>
+          <p className="font-mono text-sm font-medium text-purple-300">
             Building your package for {doc.meta.targetJob || "this job"}
             {doc.meta.targetCompany ? ` at ${doc.meta.targetCompany}` : ""}...
           </p>
           <p className="text-xs text-t-phos-dim mt-2">
-            Targeted resume + cover letter + disclosure brief. Takes 20-40 seconds.
+            Preparing your job-specific resume and cover letter, then checking the wording against your source facts. This can take a little time.
           </p>
         </div>
       </div>
@@ -1196,6 +1240,12 @@ export function ResumeWorkspace() {
           then tailor and apply to them one by one. They wait for you under
           your saved jobs.
         </p>
+        <section className="mb-5 border border-purple-400/40 bg-t-panel p-4">
+          <h2 className="font-bold text-t-white">Start with a real opening</h2>
+          <p className="mt-2 text-sm text-t-phos">Find a job in this lane, then bring it here. We will use the posting to prepare your resume and cover letter together. For a different career direction, switch lanes first.</p>
+          <a href={`/dashboard/jobs?laneId=${encodeURIComponent(lanes.active || "main")}`} className="t-focus mt-3 inline-flex min-h-touch items-center bg-purple-700 px-4 py-2 font-bold text-white">Find a job in this lane</a>
+          <p className="mt-2 text-xs text-t-phos-dim">Already found the job? Enter its details below. Open a saved resume below when you want to continue an existing package.</p>
+        </section>
         {/* R6: which approved baseline this tailoring restructures. Tailoring
             within a lane sharpens that baseline without downgrading it. */}
         <div className="mb-8">
@@ -1298,7 +1348,7 @@ export function ResumeWorkspace() {
         <div className="space-y-4 mb-6">
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
-              What job are you applying for?
+              Already have a job posting?
             </label>
             <input
               value={doc.meta.targetJob}
@@ -1503,9 +1553,10 @@ export function ResumeWorkspace() {
             lanes={lanes}
             value={lanes.active}
             onChange={async (c) => {
-              await save();
+              if (!await save()) return;
+              if (!await lanes.setActive(c)) return;
+              laneIdRef.current = laneIdForSave(c);
               setShowLanePicker(false);
-              lanes.setActive(c);
               startNewResume();
             }}
           />
@@ -1564,55 +1615,6 @@ export function ResumeWorkspace() {
           <p className="text-[10px] text-t-phos-dim mt-2 italic">
             Use these points in your disclosure and interview prep. They are where your profile and this job connect.
           </p>
-        </div>
-      )}
-
-      {/* Ready to apply -- the Apply ladder (R8) plus what's next (R7). Appears
-          once this resume is tied to a real saved job. */}
-      {targetApplicationId && !generatingFull && (
-        <div className="mb-4 bg-t-panel border border-t-amber p-4">
-          <div className="flex items-center gap-2 mb-1.5">
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="text-t-amber flex-shrink-0">
-              <path d="M14 2L7 9M14 2l-4.5 12-2.5-5-5-2.5L14 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-            </svg>
-            <span className="text-sm font-bold text-t-amber-bright">
-              {applyInfo.applied ? "Applied, nice work" : "Ready to apply"}
-            </span>
-          </div>
-          <p className="text-xs text-t-phos-dim mb-3">
-            {applyInfo.applied
-              ? `You applied to ${doc.meta.targetCompany || "this job"}. Keep the momentum going.`
-              : "Dial in your resume below until it reads exactly right, then apply. t.ROY keeps track for you, so you don't have to re-type anything."}
-          </p>
-          <ApplyActions
-            applicationId={targetApplicationId}
-            applyUrl={applyInfo.applyUrl}
-            employerWebsite={applyInfo.employerWebsite}
-            company={doc.meta.targetCompany || doc.meta.targetJob || "this employer"}
-            applied={applyInfo.applied}
-            onApplied={() => setApplyInfo((p) => ({ ...p, applied: true }))}
-            forgeStrengths={workspaceStrengths()}
-            candidateName={doc.contact.name}
-            resumeArtifactId={artifactId}
-          />
-          {/* What's next: the next saved job that still needs a tailored resume. */}
-          <div className="mt-3 pt-3 border-t border-t-line">
-            {nextJob ? (
-              <a
-                href={`/dashboard/application-tailor?job=${nextJob.id}`}
-                className="t-focus text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
-              >
-                Next: tailor your resume for {nextJob.title} &rarr;
-              </a>
-            ) : (
-              <a
-                href="/dashboard/applications"
-                className="t-focus text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
-              >
-                See all your saved jobs &rarr;
-              </a>
-            )}
-          </div>
         </div>
       )}
 
@@ -1773,6 +1775,8 @@ export function ResumeWorkspace() {
       {/* Resume editor -- only shown on resume tab */}
       {packageTab !== "resume" ? null : (
         <ResumeEditor
+          guided
+          draft={exportRev?.status !== "finished"}
           doc={doc}
           onChange={updateDoc}
           onSummaryAssist={requestSummarySuggestion}
@@ -1797,7 +1801,7 @@ export function ResumeWorkspace() {
                 Download .docx
               </button>
               <button
-                onClick={() => printResumePdf(doc, { prepare: exportRevision })}
+                onClick={() => targetApplicationId ? void downloadDocx("resume", formatResumeDownload(doc), "pdf") : printResumePdf(doc, { prepare: exportRevision })}
                 className="t-focus px-4 py-3 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors min-h-touch text-sm"
               >
                 Save as PDF
@@ -1831,6 +1835,65 @@ export function ResumeWorkspace() {
           actionsHint=".docx = editable in Word. PDF = keeps the formatting exactly. Save both."
         />
       )}
+      {/* Ready to apply -- the Apply ladder (R8) plus what's next (R7). Appears
+          once this resume is tied to a real saved job. */}
+      {targetApplicationId && !generatingFull && (
+        <div className="mb-4 bg-t-panel border border-t-amber p-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" className="text-t-amber flex-shrink-0">
+              <path d="M14 2L7 9M14 2l-4.5 12-2.5-5-5-2.5L14 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+            </svg>
+            <span className="text-sm font-bold text-t-amber-bright">
+              {applyInfo.applied ? "Applied, nice work" : "Your next step: send this application"}
+            </span>
+          </div>
+          <p className="text-xs text-t-phos-dim mb-3">
+            {applyInfo.applied
+              ? `You applied to ${doc.meta.targetCompany || "this job"}. Keep the momentum going.`
+              : "Review your saved pages, then use the employer link below. We recommend working through each line with t.ROY; you can return to refine your Master Draft as you learn more."}
+          </p>
+          <div className="mb-4 flex flex-wrap gap-3">
+            <button disabled={packageBusy || emailBusy} onClick={async()=>{const epoch=packageEpoch.current;setPackageBusy(true);try{await exportRevision();}finally{if(epoch===packageEpoch.current)setPackageBusy(false);}}} className="t-focus min-h-touch bg-purple-700 px-4 text-white disabled:opacity-50">{packageBusy ? "Saving your package…" : "Save package & review PDF"}</button>
+            <button disabled={emailBusy || packageBusy} onClick={async()=>{const epoch=packageEpoch.current;const applicationId=targetApplicationId;setEmailBusy(true);setEmailState("");try{const revisionId=await exportRevision();if(!revisionId||epoch!==packageEpoch.current)return;const r=await fetch("/api/applications/email-package",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({applicationId,revisionId})});const result=await r.json();if(epoch!==packageEpoch.current)return;setEmailState(result.message||result.error||"Email could not be prepared.");}catch{if(epoch===packageEpoch.current)setEmailState("Email could not be prepared. Your saved files remain available.");}finally{if(epoch===packageEpoch.current)setEmailBusy(false);}}} className="t-focus min-h-touch border border-purple-400 px-4 text-purple-300 disabled:opacity-50">{emailBusy ? "Preparing your email…" : "Save & email this job package"}</button>
+          </div>
+          <p className="mb-3 text-xs text-t-phos-dim">Email includes this saved resume and cover letter, when present, with filenames and next steps for this job. Private disclosure notes stay in Refinery. Up to three package emails a day; downloads remain available.</p>
+          {emailState && <p role="status" className="mb-3 text-sm text-t-phos">{emailState}</p>}
+          {exportRev && <SavedPackagePreview revisionId={exportRev.id} applicationId={targetApplicationId} />}
+          <ApplyActions
+            applicationId={targetApplicationId}
+            applyUrl={applyInfo.applyUrl}
+            employerWebsite={applyInfo.employerWebsite}
+            company={doc.meta.targetCompany || doc.meta.targetJob || "this employer"}
+            applied={applyInfo.applied}
+            onApplied={() => setApplyInfo((p) => ({ ...p, applied: true }))}
+            forgeStrengths={workspaceStrengths()}
+            candidateName={doc.contact.name}
+            resumeArtifactId={artifactId}
+          />
+          <p className="mt-4 text-sm text-t-phos-dim">For a very similar role, reuse the useful wording and check it against the new posting. For a different role, find the job first and tailor from this lane’s baseline. A new career direction belongs in its own lane.</p>
+          <a href={`/dashboard/jobs?laneId=${encodeURIComponent(laneIdRef.current || "main")}`} className="t-focus mt-2 inline-flex min-h-touch items-center text-purple-300 underline">Find another job in this lane</a>
+          <a href="/dashboard/master" className="t-focus ml-4 inline-flex min-h-touch items-center text-purple-300 underline">Build my Master Draft</a>
+          {/* What's next: the next saved job that still needs a tailored resume. */}
+          <div className="mt-3 pt-3 border-t border-t-line">
+            {nextJob ? (
+              <a
+                href={`/dashboard/application-tailor?job=${nextJob.id}`}
+                className="t-focus text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
+              >
+                Next: tailor your resume for {nextJob.title} &rarr;
+              </a>
+            ) : (
+              <a
+                href="/dashboard/applications"
+                className="t-focus text-xs font-medium text-t-steel underline underline-offset-2 hover:opacity-80"
+              >
+                See all your saved jobs &rarr;
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
