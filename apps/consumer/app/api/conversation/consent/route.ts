@@ -25,6 +25,7 @@ import {
   consentLayerForPurpose,
   isConversationPurpose,
   isConsentGranted,
+  getUserConsents,
   CONSENT_TEXT_VERSION,
 } from "@crucible/core";
 
@@ -82,5 +83,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unknown purpose" }, { status: 400 });
   }
   const granted = await isConsentGranted(userId, consentLayerForPurpose(purpose));
-  return NextResponse.json({ granted });
+  const records = await getUserConsents(userId);
+  const preference = records.find((record) => record.consent_layer === consentLayerForPurpose(purpose))?.status ?? null;
+  return NextResponse.json({ granted, preference });
 }

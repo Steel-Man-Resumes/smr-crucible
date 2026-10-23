@@ -8,6 +8,7 @@
  * Save jobs to track applications across the Refinery.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSession } from "next-auth/react";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
@@ -677,7 +678,7 @@ function JobBoardPage() {
       {/* Loading */}
       {searching && (
         <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim">
-          <div className="w-5 h-5 border-2 border-t-amber border-t-transparent animate-spin" />
+          <TroyWork compact decorative />
           Searching real job listings...
         </div>
       )}

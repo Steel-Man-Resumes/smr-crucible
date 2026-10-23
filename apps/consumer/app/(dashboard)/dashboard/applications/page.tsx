@@ -7,6 +7,7 @@
  * Each status has cross-tool suggestions to help the user prepare.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
@@ -224,7 +225,7 @@ function ApplicationsPage() {
   if (loading) {
     return (
       <div className="flex items-center gap-3 py-12 justify-center text-t-phos-dim">
-        <div className="w-5 h-5 border-2 border-t-amber border-t-transparent animate-spin" />
+        <TroyWork compact decorative />
         Loading applications...
       </div>
     );

@@ -8,6 +8,7 @@
  * Feedback on content, not judgment.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
@@ -20,6 +21,7 @@ import { useUserContext } from "@/lib/use-user-context";
 import { formatResumeDownload } from "@/components/resume/resumeModel";
 import { escapeHtml as esc } from "@/lib/escape-html";
 import { trackProgress } from "@/lib/track-progress";
+import { parseInterviewFeedback } from "@/lib/interview-feedback";
 import { pickJdSource, formatSnapshotAge } from "@/lib/interview-jd";
 import {
   turnFromRealtimeEvent,
@@ -80,9 +82,10 @@ async function recordInterviewPractice(record: {
   includeDisclosure: boolean;
   exchanges?: number;
   feedback?: unknown;
-}): Promise<void> {
+}): Promise<boolean> {
   try {
-    await fetch("/api/artifacts", {
+    const res = await fetch("/api/artifacts", {
+      signal: AbortSignal.timeout(10000),
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -100,8 +103,10 @@ async function recordInterviewPractice(record: {
         scaffoldLevel: 1.0,
       }),
     });
+    return res.ok;
   } catch {
     // Never let progress-tracking break the practice experience.
+    return false;
   }
 }
 
@@ -157,6 +162,7 @@ function InterviewPracticePage() {
   const [sending, setSending] = useState(false);
   const [exchangeCount, setExchangeCount] = useState(0);
   const [feedback, setFeedback] = useState<any>(null);
+  const [voiceSaveWarning, setVoiceSaveWarning] = useState("");
   const [rateLimitError, setRateLimitError] = useState("");
   // The server's id for this practice interview (the daily allowance counts
   // one per interview, lib/premium-server.ts). Sent back on every later turn.
@@ -486,8 +492,9 @@ function InterviewPracticePage() {
   // same feedback screen text mode uses, and record the completion (mode voice,
   // with feedback). The conversation session itself is closed inside the voice
   // panel (takeaways + struggle tags) before this runs.
-  function handleVoiceFeedback(fb: any, exchanges: number) {
+  function handleVoiceFeedback(fb: any, exchanges: number, saveFeedback: boolean, warning: string) {
     setFeedback(fb);
+    setVoiceSaveWarning(warning);
     setStep("feedback");
     try {
       const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
@@ -495,19 +502,22 @@ function InterviewPracticePage() {
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
     trackProgress("interview_completed", { mode: "voice" });
-    recordInterviewPractice({
+    void recordInterviewPractice({
       role: config.targetRole,
       frame: config.interviewType || "general",
       mode: "voice",
       includeDisclosure: config.interviewType === "disclosure" || config.includeDisclosure,
       exchanges,
-      feedback: fb,
+      feedback: saveFeedback ? fb : undefined,
+    }).then((saved) => {
+      if (!saved) setVoiceSaveWarning((previous) => [previous, "Your practice record could not be saved. Keep this report open or download it before leaving."].filter(Boolean).join(" "));
     });
-    stashStruggleTags(fb);
+    if (saveFeedback) stashStruggleTags(fb);
     loadVoiceHistory();
   }
 
   function resetToSetup() {
+    setVoiceSaveWarning("");
     setStep("setup");
     setMessages([]);
     setFeedback(null);
@@ -916,6 +926,8 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               enabled={!!config.interviewType}
               jobDescription={jobDescription.trim() || undefined}
               buildResumePayload={buildResumePayload}
+              applicationId={selectedApplicationId || undefined}
+              resumeArtifactId={selectedResumeId || undefined}
               onVoiceFeedback={handleVoiceFeedback}
               onHistoryChange={loadVoiceHistory}
             />
@@ -952,6 +964,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           perfection.
         </p>
 
+        {voiceSaveWarning && <p role="alert" className="mb-4 text-sm text-t-amber-bright">{voiceSaveWarning}</p>}
         {/* Strengths */}
         {feedback.strengths && (
           <div className="bg-t-panel p-5 border border-t-line mb-4">
@@ -1145,11 +1158,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           ))}
           {sending && (
             <div className="flex justify-start">
-              <div className="bg-t-panel-2 border border-t-line px-4 py-3 flex gap-1">
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce" />
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.1s]" />
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.2s]" />
-              </div>
+              <TroyWork topic="interview" label="Preparing a response to your answer" />
             </div>
           )}
         </div>
@@ -1202,6 +1211,8 @@ function VoicePracticePanel({
   enabled,
   jobDescription,
   buildResumePayload,
+  applicationId,
+  resumeArtifactId,
   onVoiceFeedback,
   onHistoryChange,
 }: {
@@ -1216,13 +1227,31 @@ function VoicePracticePanel({
   buildResumePayload: () =>
     | { targetJob: string | null; targetCompany: string | null; text: string; evidence: any[] }
     | undefined;
-  onVoiceFeedback: (feedback: any, exchanges: number) => void;
+  applicationId?: string;
+  resumeArtifactId?: string;
+  onVoiceFeedback: (feedback: any, exchanges: number, saveFeedback: boolean, warning: string) => void;
   onHistoryChange: () => void;
 }) {
   const [status, setStatus] = useState<"idle" | "connecting" | "live" | "error">("idle");
   const [error, setError] = useState("");
   const [reservedSeconds, setReservedSeconds] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [reportError, setReportError] = useState("");
+  const [finishing, setFinishing] = useState(false);
+  const finishingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const [saveWarning, setSaveWarning] = useState("");
+  const saveWarningRef = useRef("");
+  const pendingWritesRef = useRef(new Set<Promise<void>>());
+  const [consentBusy, setConsentBusy] = useState(false);
+  const reportBusyRef = useRef(false);
+  const reportRequestRef = useRef<Record<string, unknown> | null>(null);
+  const reportContextRef = useRef<Record<string, unknown> | null>(null);
+  const sessionSavingRef = useRef(false);
+  const sessionFeedbackRef = useRef(onVoiceFeedback);
+  const connectionEpochRef = useRef(0);
+  const practiceSessionRef = useRef<string | undefined>(undefined);
+  const [consentReady, setConsentReady] = useState(false);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
@@ -1251,24 +1280,33 @@ function VoicePracticePanel({
   // On mount: is the durable interview-transcript layer already granted?
   useEffect(() => {
     let live = true;
-    fetch(`/api/conversation/consent?purpose=${VOICE_PURPOSE}`)
+    fetch(`/api/conversation/consent?purpose=${VOICE_PURPOSE}`, { cache: "no-store", signal: AbortSignal.timeout(10000) })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (live && d?.granted) setAlwaysAllow(true);
+        if (!live) return;
+        setAlwaysAllow(d?.granted === true);
+        // A missing preference is different from a deliberate revocation.
+        // Failed/older API responses stay off rather than guessing.
+        setSaveThisSession(d?.preference === null);
+        setConsentReady(true);
       })
-      .catch(() => {});
+      .catch(() => { if (live) setConsentReady(true); });
     return () => {
       live = false;
     };
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       cleanupVoiceConnection();
+      void endServerSession();
     };
   }, []);
 
   function cleanupVoiceConnection() {
+    connectionEpochRef.current++;
     dataChannelRef.current?.close();
     pcRef.current?.close();
     streamRef.current?.getTracks().forEach((track) => track.stop());
@@ -1292,32 +1330,44 @@ function VoicePracticePanel({
     }
   }
 
-  /** Grant/revoke the durable interview-transcript layer. */
-  async function setConsent(action: "grant" | "revoke"): Promise<boolean> {
+  function warnSaving(message: string) {
+    saveWarningRef.current = message;
+    if (mountedRef.current) setSaveWarning(message);
+  }
+
+  /** Save an explicit off choice without granting durable saving. */
+  async function handleSaveToggle(next: boolean, durable: boolean) {
+    if (consentBusy || finishingRef.current || status === "live") return;
+    if (!durable && next) {
+      setSaveThisSession(true);
+      return;
+    }
+    // Turning either control off creates the existing durable revoked record.
+    // A later one-run save still uses sessionConsent, not a durable grant.
+    if (!next) {
+      setAlwaysAllow(false);
+      setSaveThisSession(false);
+      // Never carry a failed start's saved-session identity into a later private run.
+      convSessionIdRef.current = null;
+    }
+    setConsentBusy(true);
     try {
       const res = await fetch("/api/conversation/consent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ purpose: VOICE_PURPOSE, action }),
+        signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({ purpose: VOICE_PURPOSE, action: next ? "grant" : "revoke" }),
       });
       const data = res.ok ? await res.json() : null;
-      return !!data?.granted;
+      if (typeof data?.granted !== "boolean" || data.granted !== next) throw new Error("Preference not confirmed");
+      setAlwaysAllow(data.granted);
+      if (!data.granted) setSaveThisSession(false);
+      warnSaving("");
     } catch {
-      return false;
+      warnSaving("Your saving preference could not be saved. Check this choice again before your next practice.");
+    } finally {
+      setConsentBusy(false);
     }
-  }
-
-  function handleSaveToggle(next: boolean, durable: boolean) {
-    if (durable) {
-      void (async () => {
-        const granted = next ? await setConsent("grant") : await setConsent("revoke");
-        setAlwaysAllow(granted);
-        if (!granted) setSaveThisSession(false);
-      })();
-      return;
-    }
-    setSaveThisSession(next);
-    if (!next) convSessionIdRef.current = null;
   }
 
   /** Open a stored conversation session if saving is on. For a one-time "save
@@ -1326,6 +1376,7 @@ function VoicePracticePanel({
     if (!savingOn || convSessionIdRef.current) return;
     try {
       const res = await fetch("/api/conversation/session", {
+        signal: AbortSignal.timeout(10000),
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1338,9 +1389,10 @@ function VoicePracticePanel({
         }),
       });
       const data = res.ok ? await res.json() : null;
-      if (data?.created && data.sessionId) convSessionIdRef.current = data.sessionId;
+      if (!data?.created || !data.sessionId) throw new Error("Transcript session unavailable");
+      convSessionIdRef.current = data.sessionId;
     } catch {
-      // Fail open: practice continues unrecorded if the session could not open.
+      warnSaving("Your transcript could not be saved. You can still practice and get feedback in this tab.");
     }
   }
 
@@ -1348,7 +1400,8 @@ function VoicePracticePanel({
     if (!savingOn || !convSessionIdRef.current || !turn.text.trim()) return;
     const seq = convSeqRef.current++;
     try {
-      await fetch("/api/conversation/chunk", {
+      const res = await fetch("/api/conversation/chunk", {
+        signal: AbortSignal.timeout(10000),
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1359,8 +1412,9 @@ function VoicePracticePanel({
           text: turn.text,
         }),
       });
+      if (!res.ok) throw new Error("Transcript write failed");
     } catch {
-      // A dropped turn is acceptable; never block practice on persistence.
+      warnSaving("Some transcript text could not be saved. Keep this tab open for your feedback; saved history may be incomplete.");
     }
   }
 
@@ -1368,6 +1422,7 @@ function VoicePracticePanel({
   // capture) or a streaming caption fragment. TEXT ONLY -- audio bytes never
   // reach this handler.
   function handleDataChannelMessage(ev: MessageEvent) {
+    if (!mountedRef.current) return;
     let evt: unknown;
     try {
       evt = JSON.parse(typeof ev.data === "string" ? ev.data : "");
@@ -1379,7 +1434,9 @@ function VoicePracticePanel({
       turnsRef.current.push(turn);
       setCaptions((prev) => [...prev, turn].slice(-60));
       setPartial("");
-      void persistVoiceTurn(turn);
+      const pending = persistVoiceTurn(turn);
+      pendingWritesRef.current.add(pending);
+      void pending.finally(() => pendingWritesRef.current.delete(pending));
       return;
     }
     const delta = captionDeltaFromEvent(evt);
@@ -1389,78 +1446,92 @@ function VoicePracticePanel({
   // Generate a real scorecard from the captured transcript (same feedback shape
   // as text mode) and close the stored session with takeaways + struggle tags.
   async function finishSavedVoice(turns: VoiceTurn[]) {
+    if (reportBusyRef.current) return;
+    reportBusyRef.current = true;
     setGenerating(true);
+    setReportError("");
     try {
-      const chatMessages = turns.map((t) => ({ role: t.role, content: t.text }));
-      const userTurns = turns.filter((t) => t.role === "user").length;
-      let feedback: any = null;
-      try {
-        const res = await fetch("/api/interview-practice", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: chatMessages,
-            config,
-            exchangeCount: userTurns,
-            endInterview: true,
-            forgeContext: forgeContext || undefined,
-            resume: buildResumePayload(),
-            jobDescription: jobDescription || undefined,
-          }),
-        });
-        const data = res.ok ? await res.json() : null;
-        feedback = data?.feedback || null;
-      } catch {
-        feedback = null;
-      }
-
-      const struggleTags = deriveStruggleTags(feedback);
-      if (convSessionIdRef.current) {
-        await fetch("/api/conversation/session/end", {
+      const userTurns = turns.filter((t) => t.role === "user" && t.text.trim()).length;
+      // Freeze the context for retries even if setup fields change afterwards.
+      reportRequestRef.current ??= {
+        ...reportContextRef.current,
+        messages: turns.map((t) => ({ role: t.role, content: t.text })),
+        exchangeCount: userTurns,
+        endInterview: true,
+      };
+      const res = await fetch("/api/interview-practice", {
+        signal: AbortSignal.timeout(65000),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...reportRequestRef.current, practiceSession: practiceSessionRef.current }),
+      });
+      const data = await res.json().catch(() => null);
+      if (typeof data?.practiceSession === "string") practiceSessionRef.current = data.practiceSession;
+      const parsed = res.ok ? parseInterviewFeedback(JSON.stringify({ closing: "Practice complete.", feedback: data?.feedback })) : null;
+      if (!parsed) throw new Error("Feedback unavailable");
+      const feedback = parsed.feedback;
+      await Promise.allSettled([...pendingWritesRef.current]);
+      if (!mountedRef.current) return;
+      if (sessionSavingRef.current && convSessionIdRef.current) {
+        const saved = await fetch("/api/conversation/session/end", {
+          signal: AbortSignal.timeout(10000),
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             purpose: VOICE_PURPOSE,
             sessionId: convSessionIdRef.current,
-            struggleTags,
-            takeaways: feedback
-              ? { overall: feedback.overall ?? null, frame: feedback.frame ?? null }
-              : undefined,
+            struggleTags: deriveStruggleTags(feedback),
+            takeaways: { overall: feedback.overall ?? null, frame: feedback.frame ?? null },
           }),
-        }).catch(() => {});
+        }).catch(() => null);
+        if (!saved?.ok) warnSaving("Your feedback is ready, but saved practice history could not be finalized. Keep this report open or download it.");
       }
+      if (!mountedRef.current) return;
       convSessionIdRef.current = null;
       convSeqRef.current = 0;
       onHistoryChange();
-
-      if (feedback) {
-        onVoiceFeedback(feedback, userTurns);
-      }
+      turnsRef.current = [];
+      sessionFeedbackRef.current(feedback, userTurns, sessionSavingRef.current, saveWarningRef.current);
+    } catch {
+      setReportError("Your feedback could not be prepared. Your captured answers are still here in this tab. Retry feedback before leaving this page.");
     } finally {
+      reportBusyRef.current = false;
       setGenerating(false);
     }
   }
 
-  function stopVoicePractice() {
+  async function stopVoicePractice() {
+    if (finishingRef.current || reportBusyRef.current || status !== "live") return;
+    finishingRef.current = true;
+    setFinishing(true);
     const wasLive = status === "live";
+    // Stop sending microphone audio immediately; allow already sent audio a
+    // short, bounded window to arrive as final transcript events.
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    if (audioRef.current) audioRef.current.muted = true;
+    await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+    if (!mountedRef.current) return;
     const turns = turnsRef.current.slice();
-    const saved = savingOn && convSessionIdRef.current != null && turns.length > 0;
+    const hasAnswer = turns.some((turn) => turn.role === "user" && turn.text.trim());
 
     cleanupVoiceConnection();
     void endServerSession();
     setStatus("idle");
     setError("");
     setReservedSeconds(null);
+    finishingRef.current = false;
+    setFinishing(false);
 
-    if (saved) {
+    if (hasAnswer) {
       // A saved run has a transcript -> generate a scorecard (Phase 5.8). The
       // completion is recorded by the parent's onVoiceFeedback.
       void finishSavedVoice(turns);
       return;
     }
 
-    // Not saved (or nothing captured): keep today's honest behavior -- a bare
-    // record of the practice, no scorecard, nothing stored from the words.
+    setError("No completed answer was captured. Start again and wait for your answer to appear in the captions before ending.");
+    setStatus("error");
+    // No completed answer: record only practice metadata.
     if (wasLive) {
       recordInterviewPractice({
         role: config.targetRole,
@@ -1476,7 +1547,17 @@ function VoicePracticePanel({
   }
 
   async function startVoicePractice() {
-    if (!enabled || status === "connecting" || status === "live") return;
+    if (!enabled || !consentReady || consentBusy || finishingRef.current || reportBusyRef.current || reportError || status === "connecting" || status === "live") return;
+    const connectionEpoch = ++connectionEpochRef.current;
+    const assertActive = () => { if (!mountedRef.current || connectionEpochRef.current !== connectionEpoch) throw new Error("Voice connection cancelled."); };
+    reportRequestRef.current = null;
+    reportContextRef.current = structuredClone({ config, forgeContext: forgeContext || undefined, resume: buildResumePayload(), applicationId, resumeArtifactId, jobDescription: jobDescription || undefined });
+    sessionSavingRef.current = savingOn;
+    sessionFeedbackRef.current = onVoiceFeedback;
+    convSessionIdRef.current = null;
+    practiceSessionRef.current = undefined;
+    if (audioRef.current) audioRef.current.muted = false;
+    warnSaving("");
     setStatus("connecting");
     setError("");
     setCaptions([]);
@@ -1492,6 +1573,7 @@ function VoicePracticePanel({
       // Open the stored session first (if saving is on) so we never miss the
       // opening turns. No consent -> no session -> nothing stored.
       await ensureConvSession();
+      assertActive();
 
       const tokenRes = await fetch("/api/interview-voice/token", {
         method: "POST",
@@ -1507,6 +1589,7 @@ function VoicePracticePanel({
         throw new Error("Voice session could not be reserved.");
       }
       sessionIdRef.current = sessionId;
+      assertActive();
       setReservedSeconds(tokenData.reservedSeconds ?? null);
 
       const pc = new RTCPeerConnection();
@@ -1521,6 +1604,7 @@ function VoicePracticePanel({
         audio: true,
       });
       streamRef.current = mediaStream;
+      assertActive();
       mediaStream.getTracks().forEach((track) => pc.addTrack(track, mediaStream));
 
       const dataChannel = pc.createDataChannel("oai-events");
@@ -1539,6 +1623,7 @@ function VoicePracticePanel({
       };
 
       const offer = await pc.createOffer();
+      assertActive();
       await pc.setLocalDescription(offer);
       if (!offer.sdp) throw new Error("Could not create voice offer.");
 
@@ -1575,6 +1660,7 @@ function VoicePracticePanel({
         sdp: await sdpRes.text(),
       });
 
+      assertActive();
       setStatus("live");
 
       try {
@@ -1590,6 +1676,7 @@ function VoicePracticePanel({
       trackProgress("interview_started", { mode: "voice" });
     } catch (err: any) {
       cleanupVoiceConnection();
+      convSessionIdRef.current = null;
       void endServerSession();
       setStatus("error");
       setError(err?.message || "Voice practice could not start.");
@@ -1628,9 +1715,7 @@ function VoicePracticePanel({
               </p>
             )}
             {generating && (
-              <p className="mt-1 text-xs font-medium text-t-phos-dim">
-                Building your feedback...
-              </p>
+              <TroyWork topic="interview" label="Building feedback from your captured answers" />
             )}
             {status === "error" && error && (
               <p className="mt-1 text-xs font-medium text-t-red">{error}</p>
@@ -1641,14 +1726,15 @@ function VoicePracticePanel({
           {status === "live" ? (
             <button
               onClick={stopVoicePractice}
+              disabled={finishing}
               className="t-focus inline-flex min-h-touch items-center justify-center bg-t-panel-2 px-5 py-3 text-sm font-medium text-t-red border border-t-red hover:bg-t-red/10"
             >
-              {savingOn ? "End & get feedback" : "End voice session"}
+              {finishing ? "Finishing captured answers..." : "End & get feedback"}
             </button>
           ) : (
             <button
               onClick={startVoicePractice}
-              disabled={!enabled || status === "connecting" || generating}
+              disabled={!enabled || !consentReady || consentBusy || finishing || status === "connecting" || generating || !!reportError}
               className="t-focus inline-flex min-h-touch items-center justify-center bg-t-steel px-5 py-3 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
             >
               {status === "connecting" ? "Connecting..." : "Start live voice"}
@@ -1662,15 +1748,25 @@ function VoicePracticePanel({
         </div>
       </div>
 
-      {/* Phase 5.7 consent -- shown before/after a session, not mid-call. */}
+      {saveWarning && <p role="alert" className="mt-3 text-sm text-t-amber-bright">{saveWarning}</p>}
+      {reportError && (
+        <div className="mt-4" role="alert">
+          <p className="text-sm text-t-red">{reportError}</p>
+          <button type="button" disabled={generating} onClick={() => void finishSavedVoice(turnsRef.current.slice())} className="t-focus min-h-touch border border-t-steel px-4 py-2 text-sm text-t-white disabled:opacity-40">
+            Retry feedback
+          </button>
+        </div>
+      )}
+      {status === "live" && <p className="mt-3 text-xs text-t-phos-dim">{savingOn ? "Text saving is on for this practice." : "Text saving is off. You can still get feedback when you end."}</p>}
+      {/* Saving is chosen before the call; feedback does not require saving. */}
       {status !== "live" && (
         <div className="mt-4 border-t border-t-line pt-4">
           <p className="text-sm font-medium text-t-white mb-1">Save this voice practice?</p>
           <p className="text-xs text-t-phos-dim leading-relaxed mb-3">
-            Off by default. Turn it on and we save only the TEXT of your practice,
-            encrypted and private to your account, so you get written feedback at
-            the end and can read it later. We never save the audio. Delete saved
-            practice anytime in Settings.
+            Saving is selected for your first practice unless you previously turned
+            it off. You can turn it off below. Saved transcripts are text only,
+            encrypted and private to your account. Feedback is available either
+            way. We never save the audio. Delete saved practice in Settings.
           </p>
           <label className="flex items-start gap-2 mb-2 cursor-pointer">
             <input
@@ -1678,12 +1774,12 @@ function VoicePracticePanel({
               checked={savingOn}
               onChange={(e) => handleSaveToggle(e.target.checked, false)}
               className="mt-1"
-              disabled={alwaysAllow}
+              disabled={alwaysAllow || !consentReady || consentBusy || finishing || generating || !!reportError || status === "connecting"}
             />
             <span className="text-sm text-t-white">
               Save this voice practice
               <span className="block text-xs text-t-phos-dim">
-                Saved just for this run. Auto-saving stays off after.
+                Turning this off remembers your choice. Turning it on here saves only this run.
               </span>
             </span>
           </label>
@@ -1691,6 +1787,7 @@ function VoicePracticePanel({
             <input
               type="checkbox"
               checked={alwaysAllow}
+              disabled={!consentReady || consentBusy || finishing || generating || !!reportError || status === "connecting"}
               onChange={(e) => handleSaveToggle(e.target.checked, true)}
               className="mt-1"
             />
@@ -1703,8 +1800,8 @@ function VoicePracticePanel({
           </label>
           {!savingOn && (
             <p className="text-xs text-t-phos-dim mt-2">
-              With saving off, we practice live and store nothing. Turn on saving
-              to get written feedback on a voice session.
+              With saving off, your transcript and feedback stay in this tab.
+              We keep basic practice progress. Leaving the page clears the report.
             </p>
           )}
         </div>

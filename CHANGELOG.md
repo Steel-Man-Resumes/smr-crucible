@@ -1,3 +1,12 @@
+## 2026-10-23: Refinery orientation and work feedback (local, unreleased)
+
+- Teach the application process through twelve resumable tour chapters and eight settings lessons linked to real controls.
+- Offer an optional server-scored orientation check. Passing grants one-time guided tailoring and application access with a confirmed receipt and celebration. Existing access, paid features, spending controls and career milestones remain separate.
+- Replace generic spinning and chat-dot placeholders with reusable t.ROY task illustrations and a compact particle mark. Respect reduced motion, explicit pause and background tabs.
+- Generate voice interview feedback independently of transcript retention, accept current and legacy transcript events, allow a bounded final capture window, and retain answers for visible retries. Remember deliberate saving-off choices and expose persistence failures.
+- Freeze interview report context and saving choices at Start, prevent a failed saved startup from carrying its session identity into a later private practice, and stop a late microphone stream after navigation.
+- No schema migration or production change in this local build.
+
 ## 2026-10-23: Participant ideas (local, unreleased)
 
 - Extend Share an idea with a broader invitation, optional contact permission, and owner-controlled preference changes.

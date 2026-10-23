@@ -11,24 +11,19 @@ import {
 import { TourGuide } from "@/components/tour/TourGuide";
 import { TourTrail } from "@/components/tour/TourTrail";
 import { useTourAnchor } from "@/components/tour/useTourAnchor";
+import { ORIENTATION_LESSONS } from "@/lib/orientation-lessons";
+import { OrientationQuiz } from "@/components/tour/OrientationQuiz";
 import { usePremium } from "@/components/premium/PremiumGate";
 import { PREMIUM_INCLUDED_LINE } from "@/lib/premium";
 import "@/components/tour/tour.css";
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
 const SUPPRESS_KEY = "guided_tour_suppressed";
-const STOPS = [
-  { label: "Your starting point", targets: ["refinery-workspace-context", "refinery-nav-overview"] },
-  { label: "Meet t.ROY", targets: ["refinery-coach-trigger"] },
-  { label: "One job at a time", targets: ["refinery-nav-jobs", "refinery-nav-resumes"] },
-  { label: "When an interview comes", targets: ["refinery-nav-applications", "refinery-nav-interview"] },
-  { label: "Help and room to grow", targets: ["refinery-nav-support", "refinery-workspace-context"] },
-  { label: "Your next move", targets: ["refinery-workspace-context", "refinery-nav-overview"] },
-] as const;
+const STOPS = ORIENTATION_LESSONS;
 type Write = { action: "progress"; version: number; stop: number } | { action: "complete" | "skip" };
 type Notice = { text: string; retry?: Write; resume?: boolean };
 
-/** Six short stops. Only orientation preferences are written by this controller. */
+/** Chaptered orientation. Quiz grants are separately confirmed by the server. */
 export function GuidedTour({ held = false }: { held?: boolean } = {}) {
   const tier = useUserTier();
   const pathname = usePathname();
@@ -44,7 +39,6 @@ export function GuidedTour({ held = false }: { held?: boolean } = {}) {
   const [closed, setClosed] = useState(false);
   const [motionPaused, setMotionPaused] = useState(false);
   const [pageHidden, setPageHidden] = useState(false);
-  const [illustrationOpen, setIllustrationOpen] = useState(false);
   const [readFailed, setReadFailed] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
@@ -213,7 +207,7 @@ export function GuidedTour({ held = false }: { held?: boolean } = {}) {
       if (event.key !== "Tab") return;
       const panel = panelRef.current;
       if (!panel) return;
-      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((item) => item.getClientRects().length > 0);
+      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((item) => item.getClientRects().length > 0 && !item.matches(":disabled"));
       const first = items[0];
       const last = items[items.length - 1];
       if (!first || !last) { event.preventDefault(); panel.focus(); return; }
@@ -240,7 +234,6 @@ export function GuidedTour({ held = false }: { held?: boolean } = {}) {
 
   useEffect(() => {
     if (!visible) return;
-    setIllustrationOpen(false);
     titleRef.current?.focus({ preventScroll: true });
   }, [screen, visible]);
 
@@ -270,7 +263,7 @@ export function GuidedTour({ held = false }: { held?: boolean } = {}) {
           style={anchor.panel ? { top: anchor.panel.top, left: anchor.panel.left } : undefined}
         >
           <header className="refinery-tour-top">
-            <p>Welcome to the Refinery</p>
+            <p>The Refinery · learn the process</p>
             <button type="button" onClick={() => close("skip")}>Skip tour</button>
           </header>
           <div className="refinery-tour-body">
@@ -279,45 +272,21 @@ export function GuidedTour({ held = false }: { held?: boolean } = {}) {
               <div><p className="refinery-tour-step">Stop {screen + 1} of {TOUR_STOP_COUNT}</p>
                 <p className="refinery-tour-coach">t.ROY · your AI coach</p></div>
             </div>
+            <details className="refinery-tour-chapters"><summary>Choose a chapter</summary><nav aria-label="Tour chapters">{STOPS.map((stop, index) => <button type="button" key={stop.label} aria-current={screen === index ? "step" : undefined} onClick={() => setScreen(index)}>{index + 1}. {stop.label}</button>)}</nav></details>
             <div className="refinery-tour-progress" aria-hidden="true">
               {STOPS.map((stop, index) => <span key={stop.label} data-complete={index <= screen} />)}
             </div>
-            <h2 id="guided-tour-heading" ref={titleRef} tabIndex={-1}>{screen === 0 && state?.forgeComplete ? "You finished the Forge." : STOPS[screen].label}</h2>
+            <h2 id="guided-tour-heading" ref={titleRef} tabIndex={-1}>{STOPS[screen].label}</h2>
             <div id="guided-tour-description" className="refinery-tour-copy">
-              {screen === 0 ? <>
-                <p>{state?.forgeComplete ? "Your Forge starting resume is saved. You did the work of getting your experience down. Next, refine it for each real job you go after." : "This is your workspace for the work ahead. Your next step follows what you have actually saved."}</p>
-                <p>The bar above keeps your goal, current resume and next action together. My resumes keeps your starting resume and later versions.</p>
-              </> : null}
-              {screen === 1 ? <>
-                <p>I’m t.ROY. I can help explain a screen, work through your experience, prepare for a job and practice an answer.</p>
-                <p>Open my coach button when you need help. I can get things wrong, so check suggestions against your facts. You choose what to use.</p>
-                <p className="refinery-tour-small">Coach preferences are in Settings. Available tools and usage limits still apply.</p>
-                {premiumGate ? <p className="refinery-tour-small" data-testid="tour-included">{PREMIUM_INCLUDED_LINE} Usage limits still apply.</p> : null}
-              </> : null}
-              {screen === 2 ? <>
-                <p>Find work starts with a real posting. Choose a job, tailor a resume to it, then prepare your application.</p>
-                <div className="refinery-tour-flow" aria-label="Find work, tailor a resume, prepare an application"><span>Find work</span><span aria-hidden="true">→</span><span>Tailor</span><span aria-hidden="true">→</span><span>Apply</span></div>
-                <p>Keep the starting resume. Each job gets its own version, and Applications keeps the job and its documents together. You confirm when you actually apply.</p>
-              </> : null}
-              {screen === 3 ? <>
-                <p>You can practice in Interview prep early. When you get an invitation, tell Applications “I got an interview” to make that job the priority.</p>
-                <div className="refinery-tour-example">
-                  <p className="refinery-tour-small">Example only · changes nothing in your account</p>
-                  <div className="refinery-tour-example-row"><span>{illustrationOpen ? "Interview · preparation is the next action" : "Applied · interview not scheduled"}</span><span aria-hidden="true">{illustrationOpen ? <svg className="refinery-tour-reward" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="m12 1 3.1 7.9L23 12l-7.9 3.1L12 23l-3.1-7.9L1 12l7.9-3.1Z" /></svg> : null}{illustrationOpen ? "Ready" : "Waiting"}</span></div>
-                  <button type="button" aria-pressed={illustrationOpen} onClick={() => setIllustrationOpen((value) => !value)}>{illustrationOpen ? "Reset example" : "Preview “I got an interview”"}</button>
-                </div>
-                <p className="refinery-tour-small">There is no application-count requirement for practice.</p>
-              </> : null}
-              {screen === 4 ? <>
-                <p>Support &amp; disclosure helps with practical hurdles and planning what to say. Disclosure is your choice. Get your records is there when you need it.</p>
-                <p>Add a lane in My resumes when you want another direction: a trade, self-employment, freelance work, a creative path or a CV. Lanes share your factual history and keep their work distinct.</p>
-                <p className="refinery-tour-small">My information holds your profile, private documents and data controls. Support and practice stay reachable.</p>
-              </> : null}
-              {screen === 5 ? <>
-                <p>You know where to find the tools. Start with the next action based on your saved work.</p>
+              <p className="refinery-tour-principle">{STOPS[screen].idea}</p>
+              <p>{STOPS[screen].explanation}</p>
+              {screen === 10 && (premiumGate ? <p className="refinery-tour-small" data-testid="tour-included">{PREMIUM_INCLUDED_LINE} Usage limits still apply.</p> : null)}
+              <div className="refinery-tour-example"><p className="refinery-tour-small">Put it to work</p><p>{STOPS[screen].example}</p></div>
+              {screen < TOUR_STOP_COUNT - 1 ? <button className="refinery-tour-visit" type="button" onClick={() => close("pause", STOPS[screen].href)}>{STOPS[screen].action} · pause tour</button> : <>
+                {state?.accountId ? <OrientationQuiz key={state.accountId} accountId={state.accountId} /> : <p>Sign in and reload to take the optional check.</p>}
                 <div className="refinery-tour-next"><span>Your next action</span><strong>{next?.action || "See your next step on Overview"}</strong></div>
-                <p className="refinery-tour-small">You can replay this tour from Help. Your saved career work stays yours.</p>
-              </> : null}
+              </>}
+
             </div>
             {readFailed ? <p className="refinery-tour-warning" role="status">Your saved tour state could not be loaded. You can still look around or leave.</p> : null}
             {notice?.retry ? <p className="refinery-tour-warning" role="status">{notice.text} <button type="button" onClick={() => { const body = notice.retry; setNotice(null); if (body) saveWithRecovery(body.action === "progress" ? { ...body, stop: screen } : body); }}>Retry save</button></p> : null}
@@ -326,9 +295,9 @@ export function GuidedTour({ held = false }: { held?: boolean } = {}) {
           <footer className="refinery-tour-controls">
             <div className="refinery-tour-navigation"><button type="button" disabled={screen === 0} onClick={() => setScreen((value) => Math.max(0, value - 1))}>Back</button>
               {screen < TOUR_STOP_COUNT - 1 ? <button type="button" className="refinery-tour-primary" onClick={() => setScreen((value) => Math.min(TOUR_STOP_COUNT - 1, value + 1))}>Next</button>
-                : <button type="button" className="refinery-tour-primary" onClick={() => close("complete", destination)}>{next?.action ? "Start my next step" : "Open Overview"}</button>}
+                : <button type="button" className="refinery-tour-primary" onClick={() => close("complete", destination)}>{next?.action ? "Finish tour and start my next step" : "Finish tour"}</button>}
             </div>
-            <div className="refinery-tour-utility"><button type="button" onClick={() => close("pause")}>Pause tour</button><button type="button" onClick={() => { setScreen(0); setIllustrationOpen(false); }}>Replay from start</button><button type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused((value) => !value)}>{motionPaused ? "Resume motion" : "Pause motion"}</button></div>
+            <div className="refinery-tour-utility"><button type="button" onClick={() => close("pause")}>Pause tour</button><button type="button" onClick={() => { setScreen(0); }}>Replay from start</button><button type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused((value) => !value)}>{motionPaused ? "Resume motion" : "Pause motion"}</button></div>
           </footer>
         </div>
       </> : notice ? <div className="refinery-tour-notice" role="status"><p>{notice.text}</p><div>

@@ -43,6 +43,7 @@
  * number?" that never stops the finish (lib/finish-gate.ts).
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { TroyMark } from "@crucible/consumer-ui";
 import { RecordChoiceCard } from "@/components/forge/finish/RecordChoiceCard";
 import { ConfidenceMeter } from "@/components/forge/finish/ConfidenceMeter";
@@ -1356,10 +1357,7 @@ function OutputPageInner() {
       {(docState === "generating" || docState === "idle") && !checkMode && !liveFixOn && (
         quiet ? (
           <div role="status" aria-live="polite" className="mt-6 border border-t-line bg-t-panel p-6 text-center" data-testid="quiet-rebuild">
-            <div className="relative mx-auto mb-3 h-8 w-8">
-              <div className="absolute inset-0 border-[3px] border-t-line" />
-              <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
-            </div>
+            <div className="my-4 flex justify-center"><TroyWork topic="resume" label="Working from the information you provided" /></div>
             <p className="text-sm font-medium text-t-amber-bright">Updating your resume with your choice...</p>
             <p className="mt-1 text-xs text-t-phos-dim">About a minute. Nothing else to do.</p>
           </div>
@@ -1367,10 +1365,7 @@ function OutputPageInner() {
           <div className="mt-6"><p role="status">Changes checked. Checking the rest of your documents...</p><ChangesList changes={changes} open /></div>
         ) : (
           <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
-            <div className="relative mx-auto mb-4 h-10 w-10">
-              <div className="absolute inset-0 border-[3px] border-t-line" />
-              <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
-            </div>
+            <div className="my-4 flex justify-center"><TroyWork topic="resume" label="Working from the information you provided" /></div>
             <p role="status" aria-live="polite" className="text-sm font-medium text-t-amber-bright">{writeProgress || "Writing from your work history..."}</p>
             <p className="mt-3 text-sm text-t-phos">The reading is complete. Next you will see changes checked against your original page.</p>
           </div>

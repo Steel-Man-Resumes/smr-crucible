@@ -41,7 +41,7 @@ export function turnFromRealtimeEvent(evt: unknown): VoiceTurn | null {
     const text = readTranscript(evt);
     return text ? { role: "user", text } : null;
   }
-  if (type === ASSISTANT_TRANSCRIPT_DONE) {
+  if (type === ASSISTANT_TRANSCRIPT_DONE || type === "response.output_audio_transcript.done") {
     const text = readTranscript(evt);
     return text ? { role: "assistant", text } : null;
   }
@@ -52,7 +52,7 @@ export function turnFromRealtimeEvent(evt: unknown): VoiceTurn | null {
 export function captionDeltaFromEvent(evt: unknown): string | null {
   if (!evt || typeof evt !== "object") return null;
   const rec = evt as { type?: unknown; delta?: unknown };
-  if (rec.type !== ASSISTANT_TRANSCRIPT_DELTA) return null;
+  if (rec.type !== ASSISTANT_TRANSCRIPT_DELTA && rec.type !== "response.output_audio_transcript.delta") return null;
   return typeof rec.delta === "string" && rec.delta.length ? rec.delta : null;
 }
 

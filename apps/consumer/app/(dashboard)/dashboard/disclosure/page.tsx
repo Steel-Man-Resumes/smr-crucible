@@ -13,6 +13,7 @@
  * Loads Forge session data for personalized strengths + narrative context.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, FlowPage, GhostGuide } from "@crucible/consumer-ui";
@@ -947,7 +948,7 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
 
         {generating && (
           <div className="mt-4 flex items-center gap-3 bg-t-panel px-4 py-3 border border-t-line">
-            <div className="w-4 h-4 border-2 border-t-amber border-t-transparent animate-spin flex-shrink-0" />
+            <TroyWork topic="support" label="Building your plan around what you shared" />
             <p className="text-sm text-t-phos">
               Building your plan around what you shared. This usually takes
               about 30 seconds.

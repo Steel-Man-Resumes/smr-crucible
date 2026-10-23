@@ -15,6 +15,7 @@
  * Admin: god mode (everything unlocked, all states skipped).
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { MySharedTasks } from "@/components/MySharedTasks";
 import { MySuggestions } from "@/components/MySuggestions";
 import { useState, useEffect } from "react";
@@ -140,7 +141,7 @@ export default function DashboardPage() {
   if (effectiveRole === null) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
+        <TroyWork compact decorative />
       </div>
     );
   }
@@ -148,7 +149,7 @@ export default function DashboardPage() {
   if (onboarding.state === "loading") {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
+        <TroyWork compact decorative />
       </div>
     );
   }
@@ -161,7 +162,7 @@ export default function DashboardPage() {
       // Role still resolving -- avoid flashing the wrong landing
       return (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
+          <TroyWork compact decorative />
         </div>
       );
     }
@@ -191,7 +192,7 @@ export default function DashboardPage() {
     if (!focus.loaded) {
       return (
         <div className="flex items-center justify-center py-20">
-          <div className="w-8 h-8 border-[3px] border-t-line border-t-[#c9973f] animate-spin" />
+          <TroyWork compact decorative />
         </div>
       );
     }
