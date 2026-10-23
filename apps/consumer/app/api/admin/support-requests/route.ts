@@ -11,6 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { requirePlatformAdmin } from "@/lib/org-guard";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 export const maxDuration = 10;
 
@@ -40,12 +41,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (!isSameOriginJsonPost(request.headers)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const guard = await requirePlatformAdmin();
   if (!guard.ok) return guard.response;
   const adminId = guard.userId;
   const body = await request.json().catch(() => ({}));
   const id = String(body.id || "");
-  if (!id) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
 
@@ -53,7 +55,17 @@ export async function POST(request: Request) {
     setSupportStatus,
     replyToSupportRequest,
     isValidSupportStatus,
+    isIdeaStage,
+    updateIdeaProgress,
   } = await import("@crucible/core");
+
+  if (body.ideaStage !== undefined) {
+    if (!isIdeaStage(body.ideaStage) || typeof body.update !== "string" || !body.update.trim() || body.update.length > 2000) {
+      return NextResponse.json({ error: "Choose an idea stage and write an update for its author." }, { status: 400 });
+    }
+    const ok = await updateIdeaProgress(id, body.ideaStage, body.update);
+    return NextResponse.json({ ok }, { status: ok ? 200 : 404 });
+  }
 
   // Reply path.
   if (typeof body.reply === "string" && body.reply.trim()) {
@@ -67,6 +79,6 @@ export async function POST(request: Request) {
   if (!isValidSupportStatus(status)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
-  await setSupportStatus(id, status);
-  return NextResponse.json({ ok: true });
+  const ok = await setSupportStatus(id, status);
+  return NextResponse.json({ ok, ...(!ok ? { error: "Use idea progress with an update for ideas." } : {}) }, { status: ok ? 200 : 409 });
 }

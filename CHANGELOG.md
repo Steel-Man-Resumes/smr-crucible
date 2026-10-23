@@ -1,3 +1,10 @@
+## 2026-10-23: Participant ideas (local, unreleased)
+
+- Extend Share an idea with a broader invitation, optional contact permission, and owner-controlled preference changes.
+- Track received, exploring, next step, and closed in the existing admin inbox, with a visible update required for progress changes.
+- Keep contact permission separate from publication and introductions. Include support submissions in data export and deletion.
+- Reuse the existing support store; no migration required.
+
 # Changelog
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.

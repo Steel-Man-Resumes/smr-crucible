@@ -165,6 +165,8 @@ export async function DELETE(req: Request) {
     await queryAsUser(userId, "DELETE FROM ai_operation WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_token_usage WHERE user_id = $1", [userId]);
     await query("DELETE FROM coach_conversation WHERE user_id = $1", [userId]);
+    // Help messages and ideas must not survive account deletion as orphaned text.
+    await query("DELETE FROM support_request WHERE user_id = $1", [userId]);
     // Phase 5.1: encrypted disclosure + interview transcripts (both purposes).
     // Chunks cascade off their session rows; this deletes the sessions.
     await deleteUserConversations(userId);

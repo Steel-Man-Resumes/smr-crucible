@@ -14,11 +14,12 @@
  * - Past submissions show their visible status; Troy's replies surface here.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { Suspense, useCallback, useEffect, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
+  IDEA_STAGE_LABELS, readIdea,
   SUPPORT_CATEGORIES,
   SUPPORT_CATEGORY_LABELS,
   displaySupportStatus,
@@ -36,17 +37,23 @@ interface MineRow {
   admin_reply: string | null;
   created_at: string;
   replied_at: string | null;
+  context?: Record<string, unknown>;
 }
 
 const MODE_BLURB: Record<SupportCategory, string> = {
   bug: "Something broke or did not work the way you expected. Tell us what happened.",
   confusing: "Something was hard to follow. Tell us what did not make sense.",
   help: "Stuck on something? Ask your question. We may have a quick answer.",
-  idea: "Have a suggestion? We read every one.",
+  idea: "You see things others miss. Tell Troy about a problem you know firsthand or an idea you want to see grow. It could shape the site, a course, a newsletter, or research. Sometimes the next step is finding the right person to talk to.",
   message: "Write a note straight to Troy, a real person. He reads them himself.",
 };
 
 export default function HelpPage() {
+  return <Suspense fallback={<p role="status">Loading Help &amp; Feedback...</p>}><HelpContent /></Suspense>;
+}
+
+function HelpContent() {
+  const searchParams = useSearchParams();
   const pathname = usePathname();
   const { data: session } = useSession();
   const tier = ((session?.user as { tier?: string })?.tier) || "client";
@@ -54,6 +61,13 @@ export default function HelpPage() {
   const [mode, setMode] = useState<SupportCategory>("help");
   const [text, setText] = useState("");
   const [includeContext, setIncludeContext] = useState(false);
+  const [followUp, setFollowUp] = useState(false);
+  const [savingPreference, setSavingPreference] = useState<string | null>(null);
+  const [preferenceError, setPreferenceError] = useState("");
+
+  useEffect(() => {
+    if (searchParams.get("mode") === "idea") setMode("idea");
+  }, [searchParams]);
 
   // Ask-for-help retrieval state
   const [articleShown, setArticleShown] = useState<
@@ -72,7 +86,7 @@ export default function HelpPage() {
   const [helpedCount, setHelpedCount] = useState(0);
 
   const loadMine = useCallback(() => {
-    fetch("/api/support-request/mine")
+    return fetch("/api/support-request/mine")
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
         if (!j) return;
@@ -82,7 +96,7 @@ export default function HelpPage() {
       .catch(() => {});
   }, []);
 
-  useEffect(loadMine, [loadMine]);
+  useEffect(() => { void loadMine(); }, [loadMine]);
 
   function pickMode(next: SupportCategory) {
     setMode(next);
@@ -127,7 +141,8 @@ export default function HelpPage() {
             category,
             message,
             page: pathname.replace("/dashboard/", "") || "dashboard",
-            includeContext,
+            includeContext: category === "idea" ? false : includeContext,
+            followUp: category === "idea" && followUp,
           }),
         });
         if (!res.ok) throw new Error(String(res.status));
@@ -141,8 +156,19 @@ export default function HelpPage() {
         setStatus("error");
       }
     },
-    [text, status, pathname, includeContext, loadMine]
+    [text, status, pathname, includeContext, followUp, loadMine]
   );
+
+  async function changeFollowUp(id: string, allowed: boolean) {
+    setPreferenceError("");
+    setSavingPreference(id);
+    try {
+      const res = await fetch("/api/support-request/mine", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, followUp: allowed }) });
+      if (!res.ok) throw new Error();
+      await loadMine();
+    } catch { setPreferenceError("Your contact choice did not save. Please try again."); }
+    finally { setSavingPreference(null); }
+  }
 
   const shortId = submitted?.id ? submitted.id.slice(0, 8) : "";
 
@@ -179,7 +205,9 @@ export default function HelpPage() {
       <div className="bg-t-panel p-5 border border-t-line">
         <p className="text-sm text-t-phos-dim mb-3">{MODE_BLURB[mode]}</p>
 
+        <label htmlFor="support-message" className="sr-only">{mode === "idea" ? "Your idea or the problem you see" : "Your message"}</label>
         <textarea
+          id="support-message"
           value={text}
           onChange={(e) => {
             setText(e.target.value);
@@ -192,6 +220,8 @@ export default function HelpPage() {
           placeholder={
             mode === "help"
               ? "What do you need help with?"
+              : mode === "idea"
+                ? "What have you noticed? What could help, and who would it help? A rough idea is welcome."
               : mode === "bug"
                 ? "What happened, and what did you expect?"
                 : mode === "message"
@@ -201,8 +231,19 @@ export default function HelpPage() {
           className="w-full px-3 py-2 bg-t-panel-2 border border-t-line text-t-white text-sm focus:border-t-amber focus:outline-none transition-colors"
         />
 
+        {mode === "idea" && (
+          <div className="mt-3 space-y-3 text-sm text-t-phos-dim">
+            <p>You don&apos;t need a finished plan. Share only what you&apos;re comfortable sending to Troy. This goes to the private Help inbox, not a public board.</p>
+            <label className="flex items-start gap-3 text-t-white">
+              <input type="checkbox" checked={followUp} onChange={(e) => setFollowUp(e.target.checked)} className="mt-1 accent-t-amber" />
+              Troy may contact me about this idea. I can change this choice below later.
+            </label>
+            <p>This permission is only for contact about your idea. Publishing your story, sharing your details, or making an introduction needs a separate conversation and your permission.</p>
+            <p>Submitting an idea doesn&apos;t promise a project or a reply by a certain date. Updates will appear below.</p>
+          </div>
+        )}
         {/* Opt-in context capture + redacted preview */}
-        <label className="flex items-start gap-3 mt-3 text-sm text-t-white cursor-pointer">
+        {mode !== "idea" && <label className="flex items-start gap-3 mt-3 text-sm text-t-white cursor-pointer">
           <input
             type="checkbox"
             checked={includeContext}
@@ -213,9 +254,9 @@ export default function HelpPage() {
             Include what page I&apos;m on and my recent activity to help debug
             (optional)
           </span>
-        </label>
+        </label>}
 
-        {includeContext && (
+        {mode !== "idea" && includeContext && (
           <div className="mt-2 border border-t-line bg-t-panel-2 p-3 text-xs text-t-phos-dim">
             <p className="font-semibold text-t-phos mb-1">
               Here is what we&apos;ll include:
@@ -321,12 +362,12 @@ export default function HelpPage() {
           <h2 className="text-lg font-bold text-t-white">Your submissions</h2>
           {helpedCount > 0 && (
             <span className="text-xs text-t-phos-dim">
-              You have helped improve this {helpedCount} time
-              {helpedCount === 1 ? "" : "s"}.
+              {helpedCount} submission{helpedCount === 1 ? "" : "s"}
             </span>
           )}
         </div>
 
+        {preferenceError && <p role="alert" className="mb-3 text-sm text-t-red">{preferenceError}</p>}
         {mine.length === 0 ? (
           <p className="text-sm text-t-phos-dim border border-t-line bg-t-panel p-4">
             Nothing yet. When you send something, it shows up here with its
@@ -345,12 +386,21 @@ export default function HelpPage() {
                     &middot; {new Date(r.created_at).toLocaleDateString()}
                   </span>
                   <span className="text-xs px-2 py-0.5 border border-t-line text-t-phos-dim">
-                    {displaySupportStatus(r.status)}
+                    {r.category === "idea" ? IDEA_STAGE_LABELS[readIdea(r.context, r.status).stage] : displaySupportStatus(r.status)}
                   </span>
                 </div>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-t-phos">
                   {r.message}
                 </p>
+                {r.category === "idea" && (
+                  <div className="mt-3 space-y-2 text-sm">
+                    {readIdea(r.context, r.status).update && <p className="whitespace-pre-wrap text-t-white">{readIdea(r.context, r.status).update}</p>}
+                    <label className="flex items-start gap-3 text-t-phos-dim">
+                      <input type="checkbox" disabled={savingPreference !== null} checked={readIdea(r.context, r.status).followUp} onChange={(e) => changeFollowUp(r.id, e.target.checked)} className="mt-1 accent-t-amber" />
+                      Troy may contact me about this idea
+                    </label>
+                  </div>
+                )}
                 {r.admin_reply && (
                   <div className="mt-3 border-l-2 border-t-amber pl-3">
                     <p className="text-xs font-semibold text-t-amber-bright mb-1">

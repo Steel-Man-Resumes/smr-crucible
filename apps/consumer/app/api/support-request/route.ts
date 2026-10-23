@@ -15,12 +15,14 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 export const maxDuration = 10;
 
 const DAILY_CAP = 5;
 
 export async function POST(request: Request) {
+  if (!isSameOriginJsonPost(request.headers)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) {
@@ -57,7 +59,7 @@ export async function POST(request: Request) {
   const count = await incrementUserUsage(userId, "support");
   if (count > DAILY_CAP) {
     return NextResponse.json(
-      { error: "You've sent the most messages allowed for today. Troy reads every one. Give him a day to get back to you." },
+      { error: "You've reached today's message limit. You can send another tomorrow." },
       { status: 429 }
     );
   }
@@ -87,6 +89,10 @@ export async function POST(request: Request) {
     };
   }
 
+  if (category === "idea") {
+    context.idea = { followUp: body.followUp === true, stage: "received", update: "",
+      consentVersion: "idea-contact-v1", consentUpdatedAt: new Date().toISOString() };
+  }
   const row = await createSupportRequest({
     userId,
     email,

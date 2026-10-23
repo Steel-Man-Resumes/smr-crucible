@@ -22,6 +22,24 @@ export const SUPPORT_CATEGORIES = [
 ] as const;
 export type SupportCategory = (typeof SUPPORT_CATEGORIES)[number];
 
+export const IDEA_STAGES = ["received", "exploring", "next_step", "closed"] as const;
+export type IdeaStage = (typeof IDEA_STAGES)[number];
+export const IDEA_STAGE_LABELS: Record<IdeaStage, string> = {
+  received: "Received", exploring: "Exploring", next_step: "Next step", closed: "Closed",
+};
+export function isIdeaStage(value: unknown): value is IdeaStage {
+  return typeof value === "string" && (IDEA_STAGES as readonly string[]).includes(value);
+}
+export function readIdea(context: Record<string, unknown> | null | undefined, legacyStatus?: string) {
+  const value = context?.idea;
+  const idea = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return {
+    followUp: idea.followUp === true,
+    stage: isIdeaStage(idea.stage) ? idea.stage : legacyStatus === "closed" ? "closed" : "received" as IdeaStage,
+    update: typeof idea.update === "string" ? idea.update : "",
+  };
+}
+
 export function isValidSupportCategory(value: unknown): value is SupportCategory {
   return (
     typeof value === "string" &&
