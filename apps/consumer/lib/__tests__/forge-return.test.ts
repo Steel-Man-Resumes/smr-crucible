@@ -4,7 +4,7 @@ import { returnToRefinery } from "../forge-return";
 
 const returning = {
   loaded: true, signedIn: true, task: "resume", forgeComplete: false,
-  change: false, step: null, fromRefinery: false,
+  resumeStatus: "finished", change: false, step: null, fromRefinery: false,
 };
 
 test("returning account with a saved task but no finished Forge stays in Forge", () => {
@@ -24,5 +24,11 @@ test("explicit Forge work and the Refinery recovery path never bounce back", () 
 test("loading, signed-out and new accounts remain in Forge", () => {
   for (const override of [{ loaded: false }, { signedIn: false }, { task: null }]) {
     assert.equal(returnToRefinery({ ...returning, forgeComplete: true, ...override }), false);
+  }
+});
+
+test("analysis completion without a finished resume never redirects", () => {
+  for (const resumeStatus of [null, "draft", "unknown"]) {
+    assert.equal(returnToRefinery({ ...returning, forgeComplete: true, resumeStatus }), false);
   }
 });

@@ -57,7 +57,7 @@ function StartInner() {
   const navigating = useRef(false);
   // The account's saved resume (R1 revision), for the "welcome back" line.
   const [accountRev, setAccountRev] = useState<{ number: number; status: string } | null>(null);
-  // The Refinery opens once the Forge resume is built (onboarding's forgeComplete).
+  // Journey completion records the analysis; redirect also requires a finished resume.
   const [forgeComplete, setForgeComplete] = useState<boolean>(false);
   const [target, setTarget] = useState<string>("");
 
@@ -84,7 +84,7 @@ function StartInner() {
 
   const goToRefinery = returnToRefinery({
     loaded: focus.loaded, signedIn: focus.signedIn, task: focus.task,
-    forgeComplete, change, step, fromRefinery,
+    forgeComplete, resumeStatus: accountRev?.status ?? null, change, step, fromRefinery,
   });
 
   // A picked task alone must never send an unfinished run into the Refinery.
