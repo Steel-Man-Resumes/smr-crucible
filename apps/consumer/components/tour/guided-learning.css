@@ -24,3 +24,6 @@ html.reduce-motion .learning-root *{animation:none!important;transition:none!imp
 .learning-mobile-pause{display:none}@media(max-width:1199px){.learning-root .learning-mobile-pause{display:inline-block;font-size:0.75rem;padding:8px}.learning-controls .learning-motion{font-size:0.6875rem;padding:4px;min-height:32px}}
 /* The fixed header already keeps Pause available during the full-height quiz. */
 .learning-root[data-quiz=true] .learning-mobile-pause,.learning-root[data-quiz=true] .learning-controls .learning-motion{display:none}
+/* Keep the real mobile navigation's scroll viewport above the teaching dock.
+   Its last item must be reachable without sitting behind the guide. */
+@media(max-width:767px){html[data-guided-learning] #refinery-mobile-navigation{bottom:calc(min(280px,50dvh) + 16px)}}
