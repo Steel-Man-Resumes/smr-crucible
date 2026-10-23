@@ -10,14 +10,18 @@
 import { useRouter } from "next/navigation";
 import { TBtn } from "@crucible/consumer-ui";
 import { ClearThisComputerPanel } from "@/components/ClearThisComputer";
-import { GOOGLE_REVIEW_URL, REVIEW_ASK_LINE } from "@/lib/finish-gate";
+import { GOOGLE_REVIEW_URL } from "@/lib/finish-gate";
 
 export const LETTERS_URL = "https://steelmanresumes.com/letters";
 
 export function ReviewAsk({ onDismiss }: { onDismiss: () => void }) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-t-line bg-t-panel px-4 py-3" data-testid="review-ask">
-      <p className="text-sm text-t-white">{REVIEW_ASK_LINE}</p>
+      <div className="w-full">
+        <p className="text-xl font-semibold text-t-white">Got three minutes? Tell us how it really went.</p>
+        <p className="mt-3 text-base leading-relaxed text-t-phos">Good or bad, your honest review helps other people find these tools and helps us improve them. We want to keep the Forge free for the next person, too.</p>
+        <p className="mt-3 text-sm text-t-phos-dim">Your work stays here. The review opens in a new tab; come back here to continue into the Refinery. Reviewing is optional.</p>
+      </div>
       <a
         href={GOOGLE_REVIEW_URL}
         target="_blank"
@@ -27,7 +31,7 @@ export function ReviewAsk({ onDismiss }: { onDismiss: () => void }) {
         Leave a review
       </a>
       <button onClick={onDismiss} className="t-focus text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
-        No thanks
+        Continue without reviewing
       </button>
     </div>
   );

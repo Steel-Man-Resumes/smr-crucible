@@ -17,6 +17,8 @@ import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
 import { trackProgress } from "@/lib/track-progress";
 import { jobSourceForSave } from "@/lib/job-source";
+import { JobFitChoices } from "@/components/JobFitChoices";
+import { jobFitExclusion, type JobFitPreferences } from "@/lib/job-fit";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -95,6 +97,7 @@ function JobBoardPage() {
     hasRecord: false,
   });
   const [jobs, setJobs] = useState<EnrichedJob[]>([]);
+  const [jobFit, setJobFit] = useState<JobFitPreferences | null>(null);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [fairChanceInfo, setFairChanceInfo] = useState("");
@@ -422,6 +425,7 @@ function JobBoardPage() {
   // ─── Derived ────────────────────────────────────────────────────────────
 
   const visibleJobs = jobs.filter((j) => {
+    if (!jobFit || jobFitExclusion(j, jobFit)) return false;
     if (hiddenJobs.has(j.id)) return false;
     if (hiddenEmployerKeys.has(lightEmployerKey(j.company))) return false;
     if (fairChanceOnly && !j.second_chance) return false;
@@ -492,6 +496,7 @@ function JobBoardPage() {
       )}
 
       {/* Search form */}
+      <JobFitChoices onChange={setJobFit} />
       <div className="bg-t-panel p-5 border border-t-line mb-6">
         <div className="space-y-4">
           <div>

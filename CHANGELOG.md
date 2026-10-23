@@ -2,6 +2,13 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## Unreleased: Forge return, writing and Refinery fit
+
+- Keep returning users in unfinished Forge work instead of routing them away merely because they chose a task. Refresh verified sign-in claims before continuing to saved work.
+- Recognize split title/date and employer rows in uploaded resumes. Preserve actual responsibility, work headings and substantive summary and skills sections during cleanup; make length cuts an explicit choice.
+- Lead with the professional story and visible skills, explain Forge and Refinery at entry, and focus the real analysis and writing stages without replaying the same walkthrough. Offer an optional, dismissible honest-review invitation with saved work intact.
+- Keep detailed hurdle coaching in Refinery. Save personal job exclusions through owner-scoped access and apply them after shared search caching, including coach searches.
+
 ## Unreleased: Accounts, current directory evidence and contextual assistance
 
 - Require an account for full Forge work while preserving public checks and the existing Mini Forge flow. Keep the selected lane, application and submitted document together through practice and follow-up.

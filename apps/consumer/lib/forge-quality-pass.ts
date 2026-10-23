@@ -7,7 +7,7 @@ import { runQualityCheck } from "@crucible/core/src/resumeQualityRules";
 import { jobHeaderLines } from "./finish-gate";
 import { isUsableResume } from "./writer-changes";
 
-const REPAIRABLE = new Set(["objective", "generic_summary", "soft_skill_list", "duty_phrasing", "weak_bullet", "bullets", "heading"]);
+const REPAIRABLE = new Set(["objective", "summary", "generic_summary", "soft_skill_list", "duty_phrasing", "weak_bullet", "bullets", "heading"]);
 
 export function forgeQualityIssues(text: string): Array<{ line: string; why: string }> {
   return runQualityCheck(text)

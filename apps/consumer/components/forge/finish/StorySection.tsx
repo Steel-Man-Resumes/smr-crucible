@@ -2,9 +2,8 @@
 
 /**
  * "Your story": the narrative reconstruction from the Forge analysis
- * (strengths, skills, hurdles with resources, career paths), moved from the
- * output page with its content unchanged. It sits below the resume now, so
- * the first thing a person sees is the page they came for.
+ * leads the output, followed by visible evidence and skills. Deeper hurdle
+ * coaching continues in the Refinery.
  */
 
 import React from "react";
@@ -118,7 +117,7 @@ export function StorySection({
           {narrative.headline || "Your Story, Reforged"}
         </h3>
         {narrative.summary && (
-          <p className="mb-3 text-base leading-relaxed text-t-phos">
+          <p className="mb-3 whitespace-pre-line text-base leading-relaxed text-t-phos">
             {narrative.summary}
           </p>
         )}
@@ -131,7 +130,7 @@ export function StorySection({
 
       {spotlight && strengths.length > 0 && (
         <div className="mb-5 grid gap-3 sm:grid-cols-2" aria-label="Work behind this story">
-          {strengths.slice(0, 2).map((strength, index) => (
+          {strengths.slice(0, 6).map((strength, index) => (
             <div key={`${strength.title}-${index}`} className="border border-t-line bg-t-bg p-3">
               <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">From your work</p>
               <p className="mt-1 text-sm font-semibold text-t-white">{strength.title}</p>
@@ -140,52 +139,12 @@ export function StorySection({
           ))}
         </div>
       )}
-      {spotlight && <p className="mb-4 text-xs text-t-phos-dim">This is a starting account of your work. The line checks below keep the resume honest.</p>}
+      {spotlight && <p className="mb-4 text-xs text-t-phos-dim">This is your first stronger draft. In the Refinery, you can sharpen the story, tailor the resume to a real job and practice saying it with confidence.</p>}
       {spotlight && onRevisit && (
         <button type="button" onClick={onRevisit} className="t-focus mb-5 min-h-touch border border-t-line bg-t-bg px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
           Change what t.ROY should lead with
         </button>
       )}
-      <details open={!spotlight} className={spotlight ? "border-t border-t-line pt-3" : ""}>
-        <summary className={spotlight ? "t-focus cursor-pointer text-sm font-semibold text-t-amber-bright" : "sr-only"}>Explore your strengths, next paths, and resources</summary>
-        <div className={spotlight ? "pt-5" : ""}>
-
-        {/* Report lines that may say more about a credential than the person did.
-            Flagged, never removed: the person knows what they hold. */}
-        {reportChecks.length > 0 && (
-          <section className="mb-10 border border-t-amber bg-t-panel px-4 py-3">
-            <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">Check these lines</p>
-            <p className="text-xs leading-relaxed text-t-phos">
-              {reportChecks.length === 1 ? "This line" : "These lines"} may say more about a card, license or certification than you told us. If you hold it, you can ignore this. If you don't, don't tell an employer you do.
-            </p>
-            <ul className="mt-1.5 space-y-1">
-              {reportChecks.map((c, i) => (
-                <li key={i} className="text-[11px] leading-relaxed text-t-phos">{`"${c}"`}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-  
-        {/* Strengths */}
-        {strengths.length > 0 && (
-          <section id="strengths" className="mb-10 scroll-mt-20">
-            <h3 className="text-lg font-bold text-t-white mb-4">
-              {strengthsHeading}
-            </h3>
-            <div className="space-y-3">
-              {strengths.map((s, i) => (
-                <div
-                  key={i}
-                  className="bg-t-panel p-5 border border-t-line"
-                >
-                  <h4 className="font-semibold text-t-amber-bright">{s.title}</h4>
-                  <p className="text-sm text-t-phos mt-1">{s.evidence}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-  
         {/* Skills */}
         {skills.length > 0 && (
           <section id="skills" className="mb-10 scroll-mt-20">
@@ -249,63 +208,54 @@ export function StorySection({
             </div>
           </section>
         )}
-  
-        {/* Barriers with Resources */}
-        {barriers.length > 0 && (
-          <section className="mb-10">
-            <h3 className="text-lg font-bold text-t-white mb-4">
-              Your Hurdles, and What Can Help
-            </h3>
-            {/* Coaching-not-legal-advice disclaimer (F6): the analysis can touch
-                expungement/ban-the-box, so it carries the same guard the disclosure
-                planner does. */}
-            <p className="text-xs text-t-phos mb-4 bg-t-panel-2 border border-t-steel/40 px-3 py-2">
-              <span className="font-semibold text-t-white">This is career coaching, not legal advice.</span>{" "}
-              Laws change and every situation is different. For legal guidance, contact a reentry attorney or free legal aid in your area.
+
+      <details open={!spotlight} className={spotlight ? "border-t border-t-line pt-3" : ""}>
+        <summary className={spotlight ? "t-focus cursor-pointer text-sm font-semibold text-t-amber-bright" : "sr-only"}>Possible directions and your next steps</summary>
+        <div className={spotlight ? "pt-5" : ""}>
+
+        {/* Report lines that may say more about a credential than the person did.
+            Flagged, never removed: the person knows what they hold. */}
+        {reportChecks.length > 0 && (
+          <section className="mb-10 border border-t-amber bg-t-panel px-4 py-3">
+            <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">Check these lines</p>
+            <p className="text-xs leading-relaxed text-t-phos">
+              {reportChecks.length === 1 ? "This line" : "These lines"} may say more about a card, license or certification than you told us. If you hold it, you can ignore this. If you don't, don't tell an employer you do.
             </p>
-            <div className="space-y-4">
-              {barriers.map((b, i) => (
+            <ul className="mt-1.5 space-y-1">
+              {reportChecks.map((c, i) => (
+                <li key={i} className="text-[11px] leading-relaxed text-t-phos">{`"${c}"`}</li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Strengths */}
+        {!spotlight && strengths.length > 0 && (
+          <section id="strengths" className="mb-10 scroll-mt-20">
+            <h3 className="text-lg font-bold text-t-white mb-4">
+              {strengthsHeading}
+            </h3>
+            <div className="space-y-3">
+              {strengths.map((s, i) => (
                 <div
                   key={i}
                   className="bg-t-panel p-5 border border-t-line"
                 >
-                  <h4 className="font-semibold text-t-white capitalize">
-                    {b.type.replace(/_/g, " ")}
-                  </h4>
-                  {b.user_narrative && (
-                    <p className="text-sm text-t-phos-dim mt-1 italic">
-                      &ldquo;{b.user_narrative}&rdquo;
-                    </p>
-                  )}
-                  {b.legal_notes && (
-                    <p className="text-sm text-t-steel mt-2 bg-t-panel-2 border border-t-steel/40 px-3 py-2">
-                      {b.legal_notes}
-                    </p>
-                  )}
-                  {(b.resources?.length ?? 0) > 0 && (
-                    <div className="mt-3 space-y-2">
-                      <p className="text-xs font-medium text-t-phos-dim uppercase">
-                        Resources
-                      </p>
-                      {(b.resources ?? []).map((r, j) => (
-                        <div
-                          key={j}
-                          className="bg-t-panel-2 px-4 py-3 border border-t-line"
-                        >
-                          <p className="font-medium text-sm text-t-white">{r.name}</p>
-                          <p className="text-xs text-t-phos-dim mt-0.5">
-                            {r.description}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  <h4 className="font-semibold text-t-amber-bright">{s.title}</h4>
+                  <p className="text-sm text-t-phos mt-1">{s.evidence}</p>
                 </div>
               ))}
             </div>
           </section>
         )}
-  
+
+        <section className="mb-8 border border-t-line bg-t-panel p-5">
+          <h3 className="text-lg font-semibold">Work through hurdles in the Refinery</h3>
+          <p className="mt-2 text-sm leading-relaxed text-t-phos">Your resume stays focused on your work. In the Refinery, t.ROY helps you prepare what to say about your record, consider the job and employer, and practice the conversation in your own words. You can also find local support.</p>
+          {barriers.length > 0 && <p className="mt-2 text-sm text-t-phos-dim">You flagged: {barriers.map((b) => b.type.replace(/_/g, " ")).join(", ")}. Those are topics to work through, not a judgment about what you can do.</p>}
+          <p className="mt-2 text-xs text-t-phos-dim">Disclosure guidance is career coaching, not legal advice.</p>
+        </section>
+
         {/* Career Paths */}
         {careerPaths.length > 0 && (
           <section id="careers" className="mb-10 scroll-mt-20">
@@ -415,18 +365,7 @@ function analysisToStandaloneHtml(
   }
 
   if (output.barriers?.length) {
-    body += `<h2>Resources for Your Situation</h2>`;
-    for (const b of output.barriers) {
-      body += `<div class="career-path">`;
-      body += `<h3>${escHtml(b.type.replace(/_/g, " "))}</h3>`;
-      if (b.legal_notes) body += `<p><em>${escHtml(b.legal_notes)}</em></p>`;
-      if (b.resources.length) {
-        body += `<ul>${b.resources.map((r) => `<li><strong>${escHtml(r.name)}:</strong> ${escHtml(r.description)}</li>`).join("")}</ul>`;
-      }
-      body += `</div>`;
-    }
-    // Coaching-not-legal-advice disclaimer (F6).
-    body += `<p style="margin-top:14px;font-size:9pt;color:#555;background:#f4f4f4;border-left:3px solid #B8C9E0;padding:8px 12px;"><strong>This is career coaching, not legal advice.</strong> Laws change and every situation is different. For legal guidance, contact a reentry attorney or free legal aid in your area.</p>`;
+    body += `<h2>Work through hurdles in the Refinery</h2><p>You flagged: ${output.barriers.map((b) => escHtml(b.type.replace(/_/g, " "))).join(", ")}.</p><p>Use the Disclosure Planner with t.ROY to prepare what to say and compare the requirements of a real job. This is coaching, not legal advice.</p>`;
   }
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Career Analysis (Steel Man Resumes)</title>

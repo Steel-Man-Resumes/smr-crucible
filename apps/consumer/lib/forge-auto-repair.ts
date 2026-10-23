@@ -4,6 +4,7 @@
  * person never supplied are changed here. Every change is returned for the
  * result page to show; uncertain facts remain questions in the finish gate.
  */
+import { resumeStructureLoss } from "./resume-structure";
 import { getResumeStatus } from "@crucible/core/src/resumeStatus";
 import { jobsIn, matchOwnJob, readJobHeader } from "@crucible/core/src/jobResolver";
 import { numberTokens } from "@crucible/core/src/numberRead";
@@ -112,7 +113,7 @@ export function repairForgeResume(resume: string, ownResume: string, ownWords: s
   const terms = [...new Set(status.openItems.filter((item) => item.kind === "grid_term" || item.kind === "grid_scope_term").map((item) => item.line))];
   for (const term of terms) {
     const next = cutTerm(text, term);
-    if (next === text) continue;
+    if (next === text || resumeStructureLoss(text, next).length) continue;
     repairs.push({ kind: "skill", before: term, after: "" });
     text = next;
   }

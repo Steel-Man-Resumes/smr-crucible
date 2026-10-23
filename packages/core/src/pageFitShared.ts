@@ -275,10 +275,11 @@ function titleLike(l: string): boolean {
 export function splitTrailingYears(l: string): { title: string; years: string } | null {
   // Round 4: dates in brackets at the end first ("Certified Nursing Assistant, Valley Care (2018 - 2020)"),
   // then after the last comma ("Cashier, Quick Stop, 2014 - 2015").
-  const m =
-    l.match(/^(.*\S)\s*\(([^()]*)\)\s*$/) ??
-    l.match(/^(.*\S)\s*,\s*([^,]*)$/) ??
-    l.match(/^(.*\S)\s+((?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}\s*(?:[-\u2012-\u2015]|to)\s*(?:(?:[A-Za-z]{3,9}\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))$/i);
+  const m = [
+    l.match(/^(.*\S)\s*\(([^()]*)\)\s*$/),
+    l.match(/^(.*\S)\s*,\s*([^,]*)$/),
+    l.match(/^(.*?\S)\s+((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}\s*(?:[-\u2012-\u2015]|to)\s*(?:(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+|\d{1,2}\/)?(?:19|20)\d{2}|present|current|now))$/i),
+  ].find((candidate) => candidate && isDateText(candidate[2].trim()));
   const years = m ? (m[2] ?? "").trim() : "";
   if (!m || !years || !isDateText(years)) return null;
   const title = m[1].replace(/[,(]\s*$/, "").trim();
@@ -356,13 +357,25 @@ export function jobLineRoles(lines: string[]): JobLineRole[] {
     const commaHeader = dated && dated.title.split(/\s*,\s*/);
     const completeCommaHeader = !!commaHeader && commaHeader.length >= 2
       && commaHeader.length <= 5 && commaHeader.every((part) => headerish(part));
-    if ((headerish(l) || completeCommaHeader) && !isDateText(l)) {
+    if ((headerish(l) || (dated && headerish(dated.title)) || completeCommaHeader) && !isDateText(l)) {
       // A header without pipes: dates on it, or a dates line within the next two lines (header-ish between).
       if (splitTrailingYears(l)) {
         roles[i] = "job";
         underJob = true;
         jobHasYears = true;
         lastJobLine = i;
+        // Common Word layout: title + dates, then employer + city + state.
+        // Keep that employer with the header, not in the duties. Otherwise
+        // matching a rewritten job falsely reports an invented employer.
+        const employerAt = nextFilled(i);
+        if (dated && !dated.title.includes("|") && employerAt >= 0
+          && headerish(t[employerAt]) && !isBulletLine(t[employerAt])
+          && !NOT_A_JOB_RE.test(t[employerAt])
+          && /^[^,]+,\s*[^,]+,\s*[A-Z]{2}(?:\s+\d{5}(?:-\d{4})?)?$/.test(t[employerAt])
+          && !YEARISH_RE.test(t[employerAt])) {
+          roles[employerAt] = "jobPart";
+          i = employerAt;
+        }
         continue;
       }
       const a = nextFilled(i);

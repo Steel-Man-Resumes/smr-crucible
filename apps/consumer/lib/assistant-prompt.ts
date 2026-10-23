@@ -439,6 +439,17 @@ function buildFullUserSection(ctx: UserFullContext): string {
   lines.push(`Name: ${name}${loc ? `\nLocation: ${loc}` : ""}`);
   lines.push(`Journey stage: ${ctx.journey.onboardingState}${ctx.journey.disclosureComplete ? " + disclosure complete" : ""}`);
 
+  if (ctx.workPreferences) {
+    const p = ctx.workPreferences;
+    const choices = [
+      p.excludedTitles.length ? `Excluded job titles: ${sanitizeArray(p.excludedTitles)}` : "",
+      p.noDriving ? "No required driving" : "",
+      p.noHeavyLifting ? "No required heavy lifting (50 pounds or more)" : "",
+      p.noOvernight ? "No required overnight work" : "",
+    ].filter(Boolean);
+    if (choices.length) lines.push(`\nWORK CHOICES: ${choices.join("; ")}. Respect these in recommendations. Search results filter explicit requirements; ask about unknown requirements. Do not infer legal eligibility from a record. Help compare real duties, skills and practical constraints.`);
+  }
+
   // Forge output
   if (ctx.forge) {
     lines.push(`\n### THEIR FORGE STORY`);

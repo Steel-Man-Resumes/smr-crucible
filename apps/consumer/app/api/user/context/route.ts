@@ -8,6 +8,7 @@
  * Cached at the edge for 30s to avoid hammering the DB on every chat open.
  */
 
+import { readJobFit } from "@/lib/job-fit";
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { getUserProfile, queryAsUser, getOneAsUser, RECENT_RESUMES_FOR_CONTEXT_SQL } from "@crucible/core";
@@ -29,10 +30,11 @@ export async function GET() {
 
   // Full forge output for rich narrative, strengths, career paths
   const cp = await getOneAsUser<{
+    preferences: Record<string, unknown> | null;
     forge_output: Record<string, any> | null;
     profile_data: Record<string, any> | null;
   }>(userId, 
-    `SELECT forge_output, profile_data FROM consumer_profile WHERE user_id = $1`,
+    `SELECT forge_output, profile_data, preferences FROM consumer_profile WHERE user_id = $1`,
     [userId]
   );
   const fo = cp?.forge_output ?? null;
@@ -73,6 +75,7 @@ export async function GET() {
     : "full_access";
 
   return NextResponse.json({
+    workPreferences: readJobFit(cp?.preferences?.jobFit),
     profile: {
       name: profile.name,
       email: profile.email,
