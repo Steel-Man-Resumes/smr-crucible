@@ -819,6 +819,7 @@ function GroupCard({
               <p className="text-sm text-t-phos line-through">{editableLine(group.line)}</p>
               <p className="mt-2 text-xs text-t-phos-dim">After</p>
               <p className="text-sm font-medium text-t-white">{suggestions[suggestionIndex]}</p>
+              <p className="mt-2 text-xs text-t-phos"><strong>Why this change:</strong> {Array.from(new Set(group.items.map((item) => item.why))).join(" ")} This wording stays tied to the experience you shared.</p>
               <p className="mt-2 text-xs text-t-phos-dim">Only keep this if it says what you really did. You can change it again later.</p>
               <div className="mt-3 flex flex-wrap gap-2">
                 <button onClick={() => { if (onAssist(group, suggestions[suggestionIndex])) setMode("idle"); else setNotice("That line no longer matches your page. Ask t.ROY again or change it yourself."); }} className={BTN_MAIN} data-testid="use-fix">Use this wording</button>
@@ -1141,7 +1142,7 @@ function BulkBar({
 }) {
   const eligible = bulkEligible(view.groups, actions);
   const [state, setState] = useState<{ kind: "idle" } | { kind: "working"; done: number; total: number } | { kind: "done"; fixed: number; left: number }>({ kind: "idle" });
-  if (!eligible.length && state.kind !== "done") return null;
+  if (!eligible.length) return null;
 
   async function run() {
     const total = eligible.length;
@@ -1173,17 +1174,10 @@ function BulkBar({
     setState({ kind: "done", fixed, left: Math.max(0, total - fixed) });
   }
 
-  if (state.kind === "done") {
-    return (
-      <div role="status" aria-live="polite" className="mb-3 border border-t-line bg-t-panel px-3 py-3" data-testid="bulk-done">
-        <p className="text-sm font-semibold text-t-white">t.ROY handled {state.fixed}.</p>
-        <p className="mt-0.5 text-xs text-t-phos">{state.left > 0 ? `${state.left} still need a word from you. They are below.` : "Nothing else needs you in this part."}</p>
-      </div>
-    );
-  }
   return (
     <div className="mb-3 border border-t-amber bg-t-panel px-3 py-3" data-testid="bulk-fix">
       <p className="text-sm font-semibold text-t-white">Let t.ROY handle these for you.</p>
+      {state.kind === "done" && <p role="status" className="mt-1 text-xs text-t-phos">Updated {state.fixed}. Anything still listed needs your answer or different wording.</p>}
       <p className="mt-0.5 text-xs text-t-phos">He treats your page as true, fixes what he can in your own words, and leaves only what needs you: your record, credentials, titles and claims about people.</p>
       <button
         type="button"
@@ -1192,7 +1186,7 @@ function BulkBar({
         className={`${BTN_MAIN} mt-3 disabled:opacity-60`}
         data-testid="bulk-fix-button"
       >
-        {state.kind === "working" ? `t.ROY is working... ${state.done} of ${state.total}` : `Fix ${eligible.length} for me`}
+        {state.kind === "working" ? `t.ROY is working... ${state.done} of ${state.total}` : `Fix all with t.ROY (${eligible.length})`}
       </button>
     </div>
   );
@@ -1272,7 +1266,7 @@ export function DefendPanel({
           Fix before you send ({view.fixCount})
         </h3>
       )}
-      <Groups groups={[...resume, ...view.checkedLines]} offset={0} {...common} />
+      <Groups groups={resume.filter((g) => !g.checked)} offset={0} {...common} />
 
       {skills.length > 0 && (
         <div className="mt-4" data-testid="fix-skills">

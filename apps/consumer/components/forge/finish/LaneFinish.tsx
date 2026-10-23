@@ -123,7 +123,7 @@ export function LaneDownloadBox({
   );
 }
 
-export function LaneNextAction({ action, children }: { action: NextAction; children: ReactNode }) {
+export function LaneNextAction({ action, children, onFinish, checking = false }: { action: NextAction; children: ReactNode; onFinish?: () => void; checking?: boolean }) {
   const internal = action.href.startsWith("/");
   const cls = "t-focus inline-flex min-h-touch w-full items-center justify-center bg-t-amber px-6 py-3 text-base font-bold text-white hover:bg-t-amber-bright sm:w-auto";
   return (
@@ -131,7 +131,9 @@ export function LaneNextAction({ action, children }: { action: NextAction; child
       <h2 id="finish-next-heading" className="mb-3 text-xl font-bold text-t-white">
         Next
       </h2>
-      {internal ? (
+      {action.href === "#fix-list" && onFinish ? (
+        <button type="button" onClick={onFinish} disabled={checking} className={`${cls} disabled:opacity-60`} data-testid="lane-next-action">{checking ? "Finishing your checks..." : action.label}</button>
+      ) : internal ? (
         <Link href={action.href} className={cls} data-testid="lane-next-action">
           {action.label}
         </Link>

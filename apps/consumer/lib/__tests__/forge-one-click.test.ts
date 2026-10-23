@@ -51,7 +51,7 @@ test("finish page: one pass settles the cards t.ROY may settle and leaves record
   const eligible = panel.slice(panel.indexOf("function bulkEligible"), panel.indexOf("async function fetchSuggestion"));
   assert.match(eligible, /g\.credentialName \|\| g\.scope \|\| g\.terms/, "credential, scope and skills cards wait for the person");
   assert.match(eligible, /g\.title && actions\.onTitleYes/, "a title the page never used waits for the person");
-  assert.match(panel, /Fix \$\{eligible\.length\} for me/);
+  assert.match(panel, /Fix all with t\.ROY \(\$\{eligible\.length\}\)/);
   const page = read("app/(forge)/output/page.tsx");
   const bulk = page.slice(page.indexOf("const onBulk"), page.indexOf("const onCut = (group"));
   assert.match(bulk, /applyAssistedRewrite\(text, answers, p\.group\.line, p\.text, view\.source\)/, "each draft goes through the same gate as a tap");
@@ -113,7 +113,7 @@ test("auto finish: the Forge settles its own page; check mode and the demo keep 
   assert.match(page, /settleFinishPage\(/);
   assert.match(page, /draft=\{view\.state !== "finished" && !settling\}/);
   // If the gate still holds something nothing could clear, the cards come back as the safety net.
-  assert.match(page, /settle\.status === "done" && view\.state !== "finished"/);
+  assert.match(page, /!finished && \(!autoFinish \|\| \(!settling && settle\.status === "done"\)\)/);
 });
 
 test("lanes-first path includes the story questions again", () => {
