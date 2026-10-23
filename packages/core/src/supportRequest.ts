@@ -18,12 +18,38 @@ import {
   buildSupportDigestText,
   isValidSupportCategory,
   isValidSupportStatus,
+  isIdeaStage,
+  type IdeaStage,
   type SupportCategory,
   type SupportDigestRow,
   type SupportStatus,
 } from "./supportRequestShared";
 
 export * from "./supportRequestShared";
+
+/** Merge only the admin-owned progress fields, preserving consent/debug context. */
+export async function updateIdeaProgress(id: string, stage: IdeaStage, update: string): Promise<boolean> {
+  if (!isIdeaStage(stage) || !update.trim() || update.length > 2000) return false;
+  const rows = await query<{ id: string }>(
+    `UPDATE support_request SET context = jsonb_set(context, '{idea}',
+       COALESCE(context->'idea', '{}'::jsonb) || $2::jsonb),
+       status = CASE WHEN $3 = 'closed' THEN 'closed' ELSE 'seen' END
+     WHERE id = $1 AND category = 'idea' RETURNING id`,
+    [id, JSON.stringify({ stage, update: update.trim(), updatedAt: new Date().toISOString() }), stage]
+  );
+  return rows.length > 0;
+}
+
+/** Only the submitting account can change contact consent. Never grants publication permission. */
+export async function setIdeaFollowUp(userId: string, id: string, followUp: boolean): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE support_request SET context = jsonb_set(context, '{idea}',
+       COALESCE(context->'idea', '{}'::jsonb) || $3::jsonb)
+     WHERE id = $1 AND user_id = $2 AND category = 'idea' RETURNING id`,
+    [id, userId, JSON.stringify({ followUp, consentVersion: "idea-contact-v1", consentUpdatedAt: new Date().toISOString() })]
+  );
+  return rows.length > 0;
+}
 
 // ── DB row shape ─────────────────────────────────────────────────────────────
 
@@ -56,7 +82,7 @@ export interface SupportContext {
 
 /**
  * Create a support request. New rows default to status 'received'. context is
- * the OPT-IN, server-derived debug blob (empty object when the user opted out).
+ * optional server-derived debug details and explicit idea-contact preferences.
  */
 export async function createSupportRequest(params: {
   userId: string | null;
@@ -89,7 +115,8 @@ export async function replyToSupportRequest(
 ): Promise<void> {
   await query(
     `UPDATE support_request
-        SET admin_reply = $2, replied_at = now(), status = 'replied'
+        SET admin_reply = $2, replied_at = now(),
+            status = CASE WHEN category = 'idea' THEN status ELSE 'replied' END
       WHERE id = $1`,
     [id, adminReply]
   );
@@ -103,8 +130,8 @@ export async function replyToSupportRequest(
 export async function setSupportStatus(
   id: string,
   status: SupportStatus
-): Promise<void> {
-  if (!isValidSupportStatus(status)) return;
+): Promise<boolean> {
+  if (!isValidSupportStatus(status)) return false;
   const stampCol =
     status === "seen"
       ? "seen_at"
@@ -114,14 +141,16 @@ export async function setSupportStatus(
           ? "replied_at"
           : null;
   if (stampCol) {
-    await query(
+    const rows = await query<{ id: string }>(
       `UPDATE support_request
           SET status = $2, ${stampCol} = COALESCE(${stampCol}, now())
-        WHERE id = $1`,
+        WHERE id = $1 AND category IS DISTINCT FROM 'idea' RETURNING id`,
       [id, status]
     );
+    return rows.length > 0;
   } else {
-    await query(`UPDATE support_request SET status = $2 WHERE id = $1`, [id, status]);
+    const rows = await query<{ id: string }>(`UPDATE support_request SET status = $2 WHERE id = $1 AND category IS DISTINCT FROM 'idea' RETURNING id`, [id, status]);
+    return rows.length > 0;
   }
 }
 
@@ -140,10 +169,12 @@ export async function listUserSupportRequests(
     admin_reply: string | null;
     created_at: string;
     replied_at: string | null;
+    context: Record<string, unknown>;
   }>
 > {
   return query(
-    `SELECT id, category, message, status, admin_reply, created_at, replied_at
+    `SELECT id, category, message, status, admin_reply, created_at, replied_at,
+            jsonb_build_object('idea', context->'idea') AS context
        FROM support_request
       WHERE user_id = $1
       ORDER BY created_at DESC

@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  IDEA_STAGES, IDEA_STAGE_LABELS, readIdea, type IdeaStage,
   SUPPORT_CATEGORIES,
   SUPPORT_CATEGORY_LABELS,
   displaySupportStatus,
@@ -39,6 +40,9 @@ export function SupportRequestsSection() {
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [replyDraft, setReplyDraft] = useState<Record<string, string>>({});
+  const [ideaDraft, setIdeaDraft] = useState<Record<string, { stage: IdeaStage; update: string }>>({});
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [digest, setDigest] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -75,6 +79,17 @@ export function SupportRequestsSection() {
     }).catch(() => {});
     setReplyDraft((d) => ({ ...d, [id]: "" }));
     load();
+  }
+
+  async function saveIdea(id: string, draft: { stage: IdeaStage; update: string }) {
+    setSaving(true); setSaveError("");
+    try {
+      const res = await fetch("/api/admin/support-requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ideaStage: draft.stage, update: draft.update }) });
+      if (!res.ok) throw new Error();
+      setIdeaDraft(d => { const next = { ...d }; delete next[id]; return next; });
+      load();
+    } catch { setSaveError("The idea update did not save. Your draft is still here."); }
+    finally { setSaving(false); }
   }
 
   async function loadDigest() {
@@ -119,6 +134,7 @@ export function SupportRequestsSection() {
         </pre>
       )}
 
+      {saveError && <p role="alert" className="mb-3 text-sm text-t-red">{saveError}</p>}
       {/* Filters */}
       <div className="mb-4 flex flex-wrap gap-2">
         <select
@@ -156,6 +172,8 @@ export function SupportRequestsSection() {
 
       <div className="space-y-2">
         {requests?.map((r) => {
+          const idea = readIdea(r.context, r.status);
+          const draft = ideaDraft[r.id] ?? { stage: idea.stage, update: idea.update };
           const filedByAssistant = !!(r.context && (r.context as Record<string, unknown>).filedByAssistant);
           return (
             <div key={r.id} className="border border-t-line bg-t-panel p-4">
@@ -177,7 +195,7 @@ export function SupportRequestsSection() {
                   </span>
                 </div>
                 <div className="flex gap-1">
-                  {STATUS_ACTIONS.map((s) => (
+                  {r.category !== "idea" && STATUS_ACTIONS.map((s) => (
                     <button
                       key={s}
                       onClick={() => setStatus(r.id, s)}
@@ -195,6 +213,21 @@ export function SupportRequestsSection() {
 
               <p className="mt-2 whitespace-pre-wrap text-sm text-t-phos">{r.message}</p>
 
+              {r.category === "idea" && (
+                <div className="mt-3 space-y-3 border border-t-line p-3">
+                  <p className="text-sm text-t-white">{IDEA_STAGE_LABELS[idea.stage]} · {idea.followUp ? "Contact about this idea allowed" : "No contact permission recorded"}</p>
+                  <p className="text-xs text-t-phos-dim">Progress updates stay visible here. Contact permission does not cover publishing, sharing personal details or introductions. Ask separately before doing any of those.</p>
+                  <label className="block text-sm text-t-phos-dim">Idea progress
+                    <select value={draft.stage} onChange={e => setIdeaDraft(d => ({ ...d, [r.id]: { ...draft, stage: e.target.value as IdeaStage } }))} className="ml-2 border border-t-line bg-t-panel-2 p-2 text-t-white">
+                      {IDEA_STAGES.map(stage => <option key={stage} value={stage}>{IDEA_STAGE_LABELS[stage]}</option>)}
+                    </select>
+                  </label>
+                  <label className="block text-sm text-t-phos-dim">Update for the person who shared this idea {draft.stage === "closed" ? "(include why it is closed)" : "(what you are exploring or the next step)"}
+                    <textarea value={draft.update} onChange={e => setIdeaDraft(d => ({ ...d, [r.id]: { ...draft, update: e.target.value } }))} maxLength={2000} rows={3} className="mt-1 w-full border border-t-line bg-t-panel-2 p-2 text-t-white" />
+                  </label>
+                  <button onClick={() => saveIdea(r.id, draft)} disabled={saving || !draft.update.trim()} className="t-focus min-h-touch border border-t-amber px-3 py-2 text-sm text-t-white disabled:opacity-50">{saving ? "Saving..." : "Save idea update"}</button>
+                </div>
+              )}
               {r.thread_excerpt && (
                 <button
                   onClick={() => setExpanded(expanded === r.id ? null : r.id)}

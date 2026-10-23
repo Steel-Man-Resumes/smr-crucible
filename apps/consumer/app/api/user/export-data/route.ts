@@ -383,6 +383,11 @@ export async function POST(req: Request) {
       ]);
       payload.sharing = { grants, requests, programRequirements: policies, whoOpenedWhat: accessLog, tasksFromStaff: tasks, suggestionsFromStaff: suggestions, placementsOnFile: outcomes };
     }
+    if (want("support")) {
+      payload.supportRequests = await query(
+        `SELECT category, message, status, admin_reply, context, created_at, replied_at FROM support_request WHERE user_id = $1 ORDER BY created_at DESC`, [userId]
+      );
+    }
     if (want("org")) {
       // Read AS the person. Unscoped, row-level security returns nothing and
       // the export would silently omit org membership -- a data-rights defect
