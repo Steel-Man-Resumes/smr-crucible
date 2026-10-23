@@ -21,6 +21,11 @@ import { useUserContext } from "@/lib/use-user-context";
 import { formatResumeDownload } from "@/components/resume/resumeModel";
 import { escapeHtml as esc } from "@/lib/escape-html";
 import { trackProgress } from "@/lib/track-progress";
+import { useEffectiveRole } from "@/components/RoleProvider";
+import { saveArtifactReceipt } from "@/lib/artifact-save";
+import type { VoiceSessionBody } from "@/lib/voice-instructions";
+import type { SavedVoiceReport } from "@/lib/saved-voice-report";
+import type { InterviewFeedback } from "@/lib/interview-feedback";
 import { parseInterviewFeedback } from "@/lib/interview-feedback";
 import { pickJdSource, formatSnapshotAge } from "@/lib/interview-jd";
 import {
@@ -75,35 +80,33 @@ interface VoiceSessionMeta {
  * We teach frames, not scripts, so we store the FRAME practiced and the coach's
  * meaning-level feedback -- never the user's words, transcript, or audio.
  */
-async function recordInterviewPractice(record: {
+interface PracticeRecord {
+  accountId: string;
   role: string;
   frame: string;
   mode: "text" | "voice";
   includeDisclosure: boolean;
   exchanges?: number;
   feedback?: unknown;
-}): Promise<boolean> {
+  voiceSessionId?: string;
+}
+async function recordInterviewPractice(record: PracticeRecord): Promise<boolean> {
   try {
-    const res = await fetch("/api/artifacts", {
-      signal: AbortSignal.timeout(10000),
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "interview_prep",
-        targetContext: { targetJob: record.role || null, frame: record.frame },
-        content: {
-          role: record.role || null,
-          frame: record.frame, // the frame practiced (behavioral=STAR, disclosure, industry)
-          mode: record.mode,
-          includeDisclosure: record.includeDisclosure,
-          ...(record.exchanges !== undefined ? { exchanges: record.exchanges } : {}),
-          ...(record.feedback ? { feedback: record.feedback } : {}),
-          completedAt: new Date().toISOString(),
-        },
-        scaffoldLevel: 1.0,
-      }),
-    });
-    return res.ok;
+    await saveArtifactReceipt({
+      type: "interview_prep",
+      targetContext: { targetJob: record.role || null, frame: record.frame, ...(record.voiceSessionId ? { voiceSessionId: record.voiceSessionId } : {}) },
+      content: {
+        role: record.role || null,
+        frame: record.frame,
+        mode: record.mode,
+        includeDisclosure: record.includeDisclosure,
+        ...(record.exchanges !== undefined ? { exchanges: record.exchanges } : {}),
+        ...(record.feedback ? { feedback: record.feedback } : {}),
+        completedAt: new Date().toISOString(),
+      },
+      scaffoldLevel: 1.0,
+    }, record.accountId);
+    return true;
   } catch {
     // Never let progress-tracking break the practice experience.
     return false;
@@ -148,6 +151,8 @@ export default function InterviewPracticePageWrapper() {
 }
 
 function InterviewPracticePage() {
+  const effectiveRole = useEffectiveRole();
+  const practiceOwnerRef = useRef<string | null>(null);
   const searchParams = useSearchParams();
   const [step, setStep] = useState<InterviewStep>("setup");
   const [config, setConfig] = useState<InterviewConfig>({
@@ -163,6 +168,21 @@ function InterviewPracticePage() {
   const [exchangeCount, setExchangeCount] = useState(0);
   const [feedback, setFeedback] = useState<any>(null);
   const [voiceSaveWarning, setVoiceSaveWarning] = useState("");
+  const voiceRecordRef = useRef<PracticeRecord | null>(null);
+  const voiceRecordBusy = useRef(false);
+  const [voiceRecordSaving, setVoiceRecordSaving] = useState(false);
+  const [voiceRecordFailed, setVoiceRecordFailed] = useState(false);
+  async function saveVoiceRecord() {
+    if (!voiceRecordRef.current || voiceRecordBusy.current) return;
+    voiceRecordBusy.current = true;
+    setVoiceRecordSaving(true);
+    setVoiceRecordFailed(false);
+    try {
+      const saved = await recordInterviewPractice(voiceRecordRef.current);
+      setVoiceRecordFailed(!saved);
+      if (saved) { voiceRecordRef.current = null; loadVoiceHistory(); }
+    } finally { voiceRecordBusy.current = false; setVoiceRecordSaving(false); }
+  }
   const [rateLimitError, setRateLimitError] = useState("");
   // The server's id for this practice interview (the daily allowance counts
   // one per interview, lib/premium-server.ts). Sent back on every later turn.
@@ -393,6 +413,9 @@ function InterviewPracticePage() {
   }, [messages]);
 
   function startInterview() {
+    const accountId = effectiveRole?.accountId;
+    if (!accountId) { setRateLimitError("Your account is still loading. Try again in a moment."); return; }
+    practiceOwnerRef.current = accountId;
     const isDisclosure =
       config.interviewType === "disclosure" || config.includeDisclosure;
 
@@ -458,6 +481,8 @@ function InterviewPracticePage() {
 
   // Record a completed practice into the in-page tracker + the journey engine.
   function recordCompletion(fb: any, exchanges: number) {
+    const accountId = practiceOwnerRef.current;
+    if (!accountId) return;
     try {
       const tracker = JSON.parse(localStorage.getItem("consumer_progress") || "{}");
       tracker.interviews_completed = (tracker.interviews_completed || 0) + 1;
@@ -465,6 +490,7 @@ function InterviewPracticePage() {
     } catch {}
     trackProgress("interview_completed");
     recordInterviewPractice({
+      accountId,
       role: config.targetRole,
       frame: config.interviewType || "general",
       mode: "text",
@@ -492,7 +518,7 @@ function InterviewPracticePage() {
   // same feedback screen text mode uses, and record the completion (mode voice,
   // with feedback). The conversation session itself is closed inside the voice
   // panel (takeaways + struggle tags) before this runs.
-  function handleVoiceFeedback(fb: any, exchanges: number, saveFeedback: boolean, warning: string) {
+  function handleVoiceFeedback(fb: any, exchanges: number, saveFeedback: boolean, warning: string, voiceSessionId?: string, practiceConfig: InterviewConfig = config, practiceAccountId?: string) {
     setFeedback(fb);
     setVoiceSaveWarning(warning);
     setStep("feedback");
@@ -502,21 +528,25 @@ function InterviewPracticePage() {
       localStorage.setItem("consumer_progress", JSON.stringify(tracker));
     } catch {}
     trackProgress("interview_completed", { mode: "voice" });
-    void recordInterviewPractice({
-      role: config.targetRole,
-      frame: config.interviewType || "general",
+    if (!practiceAccountId) { setVoiceSaveWarning("Your report is here, but the account could not be confirmed for saving."); return; }
+    voiceRecordRef.current = {
+      accountId: practiceAccountId,
+      role: practiceConfig.targetRole,
+      frame: practiceConfig.interviewType || "general",
       mode: "voice",
-      includeDisclosure: config.interviewType === "disclosure" || config.includeDisclosure,
+      includeDisclosure: practiceConfig.interviewType === "disclosure" || practiceConfig.includeDisclosure,
       exchanges,
       feedback: saveFeedback ? fb : undefined,
-    }).then((saved) => {
-      if (!saved) setVoiceSaveWarning((previous) => [previous, "Your practice record could not be saved. Keep this report open or download it before leaving."].filter(Boolean).join(" "));
-    });
+      voiceSessionId: saveFeedback ? voiceSessionId : undefined,
+    };
+    void saveVoiceRecord();
     if (saveFeedback) stashStruggleTags(fb);
     loadVoiceHistory();
   }
 
   function resetToSetup() {
+    // A failed save remains recoverable while the report is open.
+    if (voiceRecordSaving) return;
     setVoiceSaveWarning("");
     setStep("setup");
     setMessages([]);
@@ -921,13 +951,14 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               practice below keeps working either way. */}
           <PremiumGate tool="interview_coaching" compact>
             <VoicePracticePanel
+              accountId={effectiveRole?.accountId ?? null}
               config={config}
               forgeContext={forgeContext}
-              enabled={!!config.interviewType}
+              enabled={!!config.interviewType && !applicationLoading && !applicationFailed}
               jobDescription={jobDescription.trim() || undefined}
               buildResumePayload={buildResumePayload}
               applicationId={selectedApplicationId || undefined}
-              resumeArtifactId={selectedResumeId || undefined}
+              resumeArtifactId={selectedResumeId || null}
               onVoiceFeedback={handleVoiceFeedback}
               onHistoryChange={loadVoiceHistory}
             />
@@ -966,6 +997,9 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 
         {voiceSaveWarning && <p role="alert" className="mb-4 text-sm text-t-amber-bright">{voiceSaveWarning}</p>}
         {/* Strengths */}
+        {voiceRecordSaving && <p role="status" className="mb-4 text-sm text-t-phos-dim">Saving your practice record...</p>}
+        {voiceRecordFailed && <div role="alert" className="mb-4 border border-t-amber p-3 text-sm"><p>Your practice record save has not been confirmed. Your report is still here. Check your Library before retrying, or download a copy.</p><button onClick={() => void saveVoiceRecord()} className="t-focus mt-2 min-h-touch text-t-amber-bright underline">Retry saving practice</button></div>}
+
         {feedback.strengths && (
           <div className="bg-t-panel p-5 border border-t-line mb-4">
             <h2 className="font-semibold text-t-amber-bright mb-2">
@@ -1206,6 +1240,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
 }
 
 function VoicePracticePanel({
+  accountId,
   config,
   forgeContext,
   enabled,
@@ -1216,6 +1251,7 @@ function VoicePracticePanel({
   onVoiceFeedback,
   onHistoryChange,
 }: {
+  accountId: string | null;
   config: InterviewConfig;
   forgeContext: {
     skills: string[];
@@ -1228,8 +1264,8 @@ function VoicePracticePanel({
     | { targetJob: string | null; targetCompany: string | null; text: string; evidence: any[] }
     | undefined;
   applicationId?: string;
-  resumeArtifactId?: string;
-  onVoiceFeedback: (feedback: any, exchanges: number, saveFeedback: boolean, warning: string) => void;
+  resumeArtifactId?: string | null;
+  onVoiceFeedback: (feedback: any, exchanges: number, saveFeedback: boolean, warning: string, voiceSessionId?: string, practiceConfig?: InterviewConfig, practiceAccountId?: string) => void;
   onHistoryChange: () => void;
 }) {
   const [status, setStatus] = useState<"idle" | "connecting" | "live" | "error">("idle");
@@ -1247,7 +1283,9 @@ function VoicePracticePanel({
   const reportBusyRef = useRef(false);
   const reportRequestRef = useRef<Record<string, unknown> | null>(null);
   const reportContextRef = useRef<Record<string, unknown> | null>(null);
+  const voiceContextRef = useRef<VoiceSessionBody | null>(null);
   const sessionSavingRef = useRef(false);
+  const voiceOwnerRef = useRef<string | null>(null);
   const sessionFeedbackRef = useRef(onVoiceFeedback);
   const connectionEpochRef = useRef(0);
   const practiceSessionRef = useRef<string | undefined>(undefined);
@@ -1487,11 +1525,12 @@ function VoicePracticePanel({
         if (!saved?.ok) warnSaving("Your feedback is ready, but saved practice history could not be finalized. Keep this report open or download it.");
       }
       if (!mountedRef.current) return;
+      const savedVoiceSessionId = convSessionIdRef.current ?? undefined;
       convSessionIdRef.current = null;
       convSeqRef.current = 0;
       onHistoryChange();
       turnsRef.current = [];
-      sessionFeedbackRef.current(feedback, userTurns, sessionSavingRef.current, saveWarningRef.current);
+      sessionFeedbackRef.current(feedback, userTurns, sessionSavingRef.current, saveWarningRef.current, savedVoiceSessionId, voiceContextRef.current?.config as InterviewConfig | undefined, voiceOwnerRef.current ?? undefined);
     } catch {
       setReportError("Your feedback could not be prepared. Your captured answers are still here in this tab. Retry feedback before leaving this page.");
     } finally {
@@ -1532,8 +1571,9 @@ function VoicePracticePanel({
     setError("No completed answer was captured. Start again and wait for your answer to appear in the captions before ending.");
     setStatus("error");
     // No completed answer: record only practice metadata.
-    if (wasLive) {
+    if (wasLive && voiceOwnerRef.current) {
       recordInterviewPractice({
+        accountId: voiceOwnerRef.current,
         role: config.targetRole,
         frame: config.interviewType || "general",
         mode: "voice",
@@ -1547,11 +1587,13 @@ function VoicePracticePanel({
   }
 
   async function startVoicePractice() {
-    if (!enabled || !consentReady || consentBusy || finishingRef.current || reportBusyRef.current || reportError || status === "connecting" || status === "live") return;
+    if (!accountId || !enabled || !consentReady || consentBusy || finishingRef.current || reportBusyRef.current || reportError || status === "connecting" || status === "live") return;
+    voiceOwnerRef.current = accountId;
     const connectionEpoch = ++connectionEpochRef.current;
     const assertActive = () => { if (!mountedRef.current || connectionEpochRef.current !== connectionEpoch) throw new Error("Voice connection cancelled."); };
     reportRequestRef.current = null;
-    reportContextRef.current = structuredClone({ config, forgeContext: forgeContext || undefined, resume: buildResumePayload(), applicationId, resumeArtifactId, jobDescription: jobDescription || undefined });
+    voiceContextRef.current = structuredClone({ config, forgeContext: forgeContext || undefined, applicationId, resumeArtifactId: resumeArtifactId ?? null, jobDescription: jobDescription || undefined });
+    reportContextRef.current = { ...voiceContextRef.current, voiceContext: true };
     sessionSavingRef.current = savingOn;
     sessionFeedbackRef.current = onVoiceFeedback;
     convSessionIdRef.current = null;
@@ -1578,12 +1620,16 @@ function VoicePracticePanel({
       const tokenRes = await fetch("/api/interview-voice/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ config, forgeContext: forgeContext || undefined }),
+        body: JSON.stringify(voiceContextRef.current),
       });
       const tokenData = await tokenRes.json();
       if (!tokenRes.ok) {
         throw new Error(tokenData.message || tokenData.error || "Could not start voice practice.");
       }
+      // Freeze the owned revision resolved before the lease. The call and the
+      // report re-check these selectors; later setup edits cannot change this run.
+      voiceContextRef.current = { ...voiceContextRef.current, ...tokenData.selection };
+      reportContextRef.current = { ...voiceContextRef.current, voiceContext: true };
       const sessionId = tokenData.sessionId;
       if (!sessionId) {
         throw new Error("Voice session could not be reserved.");
@@ -1627,23 +1673,12 @@ function VoicePracticePanel({
       await pc.setLocalDescription(offer);
       if (!offer.sdp) throw new Error("Could not create voice offer.");
 
-      const configHeader = btoa(
-        unescape(
-          encodeURIComponent(
-            JSON.stringify({ config, forgeContext: forgeContext || undefined })
-          )
-        )
-      );
-
       const sdpRes = await fetch(
         `/api/interview-voice/call?sessionId=${encodeURIComponent(sessionId)}`,
         {
           method: "POST",
-          body: offer.sdp,
-          headers: {
-            "Content-Type": "application/sdp",
-            "X-Voice-Config": configHeader,
-          },
+          body: JSON.stringify({ sdp: offer.sdp, context: voiceContextRef.current }),
+          headers: { "Content-Type": "application/json" },
         }
       );
       if (!sdpRes.ok) {
@@ -1847,83 +1882,70 @@ function VoicePracticePanel({
  *  same pattern as the disclosure rehearsal history. Only sessions the user
  *  chose to save appear here. */
 function VoiceSessionHistory({ history }: { history: VoiceSessionMeta[] }) {
-  const [detail, setDetail] = useState<
-    { id: string; transcript: Array<{ role: string; text: string }> } | null
-  >(null);
+  const [detail, setDetail] = useState<{ id: string; transcript: Array<{ role: string; text: string }>; report: SavedVoiceReport | null; reportStatus: string } | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<{ id: string; message: string } | null>(null);
+  const sequence = useRef(0);
+  useEffect(() => () => { sequence.current++; }, []);
 
-  if (history.length === 0) return null;
-
-  function openDetail(id: string) {
+  async function openDetail(id: string) {
+    const request = ++sequence.current;
     setDetail(null);
-    fetch(`/api/conversation/session/${id}?purpose=${VOICE_PURPOSE}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (Array.isArray(d?.transcript)) setDetail({ id, transcript: d.transcript });
-      })
-      .catch(() => {});
+    setLoadError(null);
+    setLoadingId(id);
+    try {
+      const response = await fetch(`/api/conversation/session/${id}?purpose=${VOICE_PURPOSE}`, { cache: "no-store", signal: AbortSignal.timeout(15000) });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !Array.isArray(data?.transcript)) throw new Error();
+      if (request === sequence.current) setDetail({ id, transcript: data.transcript, report: data.report ?? null, reportStatus: data.reportStatus || "missing" });
+    } catch { if (request === sequence.current) setLoadError({ id, message: "This saved practice could not be opened. Try again." }); }
+    finally { if (request === sequence.current) setLoadingId(null); }
   }
-
+  function closeDetail() { sequence.current++; setDetail(null); setLoadingId(null); setLoadError(null); }
+  if (history.length === 0) return null;
   return (
     <div className="mt-8">
       <h2 className="font-semibold text-t-white mb-1">Your saved voice practice</h2>
-      <p className="text-xs text-t-phos-dim mb-3">
-        Only voice sessions you chose to save show up here. Each one is the text
-        of the practice, encrypted and private to your account. Delete saved
-        practice anytime in Settings.
-      </p>
+      <p className="text-xs text-t-phos-dim mb-3">Open a saved practice to read its feedback and text transcript. Older sessions may have only a transcript and a short summary. Transcript text is encrypted in your account. We do not save audio.</p>
       <div className="space-y-2">
-        {history.map((s) => {
-          const role = (s.target_context?.role as string) || "an interview";
-          const when = new Date(s.started_at).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-          });
-          const tags = knownStruggleTags(s.struggle_tags);
-          return (
-            <div key={s.id} className="bg-t-panel border border-t-line px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="text-sm text-t-white font-medium">Voice practice for {role}</p>
-                  <p className="text-xs text-t-phos-dim">{when}</p>
-                </div>
-                <button
-                  onClick={() => (detail?.id === s.id ? setDetail(null) : openDetail(s.id))}
-                  className="text-sm font-medium text-t-amber-bright hover:text-t-amber"
-                >
-                  {detail?.id === s.id ? "Hide" : "Read"}
-                </button>
-              </div>
-              {tags.length > 0 && (
-                <p className="text-xs text-t-phos mt-2">
-                  <span className="text-t-amber-bright">Working on:</span>{" "}
-                  {tags.map(struggleTagLabel).filter(Boolean).join(", ")}
-                </p>
-              )}
-              {detail?.id === s.id && (
-                <div className="mt-3 space-y-2 border-t border-t-line pt-3">
-                  {detail.transcript.map((c, i) => (
-                    <div
-                      key={i}
-                      className={`flex ${c.role === "user" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-[85%] px-3 py-2 text-xs leading-relaxed ${
-                          c.role === "user"
-                            ? "bg-t-amber text-white"
-                            : "bg-t-panel-2 text-t-white border border-t-line"
-                        }`}
-                      >
-                        {c.text}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+        {history.map((session) => {
+          const role = typeof session.target_context?.role === "string" ? session.target_context.role : "an interview";
+          const when = new Date(session.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+          const tags = knownStruggleTags(session.struggle_tags);
+          const opened = detail?.id === session.id;
+          return <div key={session.id} className="bg-t-panel border border-t-line px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div><p className="text-sm text-t-white font-medium">Voice practice for {role}</p><p className="text-xs text-t-phos-dim">{when}</p></div>
+              <button onClick={() => opened ? closeDetail() : void openDetail(session.id)} disabled={loadingId === session.id} aria-expanded={opened} className="t-focus min-h-touch text-sm font-medium text-t-amber-bright hover:text-t-amber">{loadingId === session.id ? "Opening..." : opened ? "Close practice" : "Open practice"}</button>
             </div>
-          );
+            {tags.length > 0 && <p className="text-xs text-t-phos mt-2"><span className="text-t-amber-bright">Working on:</span> {tags.map(struggleTagLabel).filter(Boolean).join(", ")}</p>}
+            {loadError?.id === session.id && <p role="alert" className="mt-3 text-sm text-t-red">{loadError.message}</p>}
+            {opened && <div className="mt-3 space-y-4 border-t border-t-line pt-3">
+              {detail.report ? <SavedVoiceFeedback feedback={detail.report.feedback} /> : <div className="text-sm text-t-phos-dim">
+                <p>{detail.reportStatus === "unavailable" ? "Your transcript opened, but the saved report could not be loaded." : "There is no full report linked to this practice. It may be an older session, or its report was not saved."}</p>
+                {detail.reportStatus === "unavailable" && <button onClick={() => void openDetail(session.id)} className="t-focus min-h-touch text-t-amber-bright underline">Retry loading report</button>}
+                {typeof session.takeaways?.overall === "string" && <p className="mt-2">Saved summary: {session.takeaways.overall}</p>}
+                {typeof session.takeaways?.frame === "string" && <p className="mt-2">{session.takeaways.frame}</p>}
+              </div>}
+              <section aria-label="Practice transcript"><h3 className="font-semibold text-t-white mb-2">Transcript</h3>
+                {detail.transcript.length === 0 && <p className="text-sm text-t-phos-dim">No transcript text was saved for this practice.</p>}
+                {detail.transcript.map((chunk, index) => <div key={index} className="mb-3 text-sm"><p className="font-semibold text-t-amber-bright">{chunk.role === "user" ? "You" : "Interviewer"}</p><p className="whitespace-pre-wrap text-t-phos">{chunk.text}</p></div>)}
+              </section>
+            </div>}
+          </div>;
         })}
       </div>
     </div>
   );
+}
+function SavedVoiceFeedback({ feedback }: { feedback: InterviewFeedback }) {
+  return <section aria-label="Saved practice report" className="space-y-3 text-sm text-t-phos">
+    <h3 className="font-semibold text-t-white">Your practice report</h3>
+    <p>{feedback.overall}</p>
+    <div><h4 className="font-semibold text-t-white">What worked</h4><ul className="list-disc pl-5">{feedback.strengths.map((text, index) => <li key={index}>{text}</li>)}</ul></div>
+    <div><h4 className="font-semibold text-t-white">What to practice next</h4><ul className="list-disc pl-5">{feedback.improvements.map((text, index) => <li key={index}>{text}</li>)}</ul></div>
+    {feedback.frame && <div><h4 className="font-semibold text-t-white">What to carry into your interview</h4><p>{feedback.frame}</p></div>}
+    {feedback.disclosure_notes && <div><h4 className="font-semibold text-t-white">Disclosure practice</h4><p>{feedback.disclosure_notes}</p></div>}
+    {!!feedback.better_answers?.length && <div><h4 className="font-semibold text-t-white">Answers to practice</h4>{feedback.better_answers.map((answer, index) => <div key={index} className="mt-2"><p className="font-medium">{answer.question}</p><p>{answer.model_answer}</p></div>)}</div>}
+  </section>;
 }

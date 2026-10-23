@@ -1,310 +1,334 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useUserTier } from "@/lib/useUserTier";
-import {
-  FALLBACK_TOUR_STATE, NEXT_STEP_CHANGED_EVENT, TOUR_STOP_COUNT, TOUR_VERSION,
-  isTourRequested, isTourVisible, type TourState,
-} from "@/lib/guidedTour";
-import { TourGuide } from "@/components/tour/TourGuide";
-import { TourTrail } from "@/components/tour/TourTrail";
-import { useTourAnchor } from "@/components/tour/useTourAnchor";
-import { ORIENTATION_LESSONS } from "@/lib/orientation-lessons";
-import { OrientationQuiz } from "@/components/tour/OrientationQuiz";
-import { usePremium } from "@/components/premium/PremiumGate";
-import { PREMIUM_INCLUDED_LINE } from "@/lib/premium";
-import "@/components/tour/tour.css";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { TroyMark, TroyWork } from '@crucible/consumer-ui';
+import { useUserTier } from '@/lib/useUserTier';
+import { GUIDED_ENDING, GUIDED_LESSONS, GUIDED_PART_LABELS } from '@/lib/guided-lessons';
+import { TOUR_VERSION, NEXT_STEP_CHANGED_EVENT, type TourState } from '@/lib/guidedTour';
+import { nextPaint, safeTourRoute, visibleGuidedRect, waitForGuidedTarget, type GuidedRect } from '@/lib/guided-attention';
+import { OrientationQuiz, type OrientationDraft } from './tour/OrientationQuiz';
+import './tour/guided-learning.css';
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
-const SUPPRESS_KEY = "guided_tour_suppressed";
-const STOPS = ORIENTATION_LESSONS;
-type Write = { action: "progress"; version: number; stop: number } | { action: "complete" | "skip" };
-type Notice = { text: string; retry?: Write; resume?: boolean };
+type Phase = 'explain' | 'revealing' | 'travel' | 'ready';
+type Write = { action: 'start' | 'progress' | 'complete'; version: number; runId: string; sequence: number; stop: number; previousRunId?: string | null };
+const FOCUSABLE = 'button:not(:disabled),a[href],input:not(:disabled),summary,[tabindex="0"]';
+const PAUSE_KEY = 'guided-learning-paused:';
 
-/** Chaptered orientation. Quiz grants are separately confirmed by the server. */
-export function GuidedTour({ held = false }: { held?: boolean } = {}) {
+/** The controller survives route changes. Motion follows acknowledgement, never reading time. */
+export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolean; onNavigationReveal?: (open: boolean) => void }) {
   const tier = useUserTier();
+  const allowed = useRef(false);
+  allowed.current = tier === 'client' && !held;
   const pathname = usePathname();
+  const search = useSearchParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const { status: premium } = usePremium();
-  const premiumGate = !!premium?.gate;
-  const requested = isTourRequested(searchParams);
-  const onHome = pathname === "/dashboard";
+  const requested = search?.get('tour') === '1';
   const [mounted, setMounted] = useState(false);
   const [state, setState] = useState<TourState | null>(null);
-  const [screen, setScreen] = useState(0);
-  const [closed, setClosed] = useState(false);
-  const [motionPaused, setMotionPaused] = useState(false);
-  const [pageHidden, setPageHidden] = useState(false);
-  const [readFailed, setReadFailed] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const titleRef = useRef<HTMLHeadingElement>(null);
-  const previousFocus = useRef<HTMLElement | null>(null);
-  const writes = useRef<Promise<void>>(Promise.resolve());
-  const writeGeneration = useRef(0);
+  const [active, setActive] = useState(false);
+  const [step, setStep] = useState(0);
+  const [phase, setPhase] = useState<Phase>('explain');
+  const [targetIndex, setTargetIndex] = useState(0);
+  const [rect, setRect] = useState<GuidedRect | null>(null);
+  const [path, setPath] = useState('');
+  const [error, setError] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [quiz, setQuiz] = useState(false);
+  const [quizPassed, setQuizPassed] = useState(false);
+  const [quizDraft, setQuizDraft] = useState<OrientationDraft>({ question: 0, answers: {} });
+  const [reduced, setReduced] = useState(true);
+  const [quiet, setQuiet] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [unsavedWarning, setUnsavedWarning] = useState(false);
+  const dock = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const roy = useRef<HTMLSpanElement>(null);
+  const revealedTarget = useRef<HTMLElement | null>(null);
+  const stateRef = useRef<TourState | null>(null);
+  const stepRef = useRef(0);
   const alive = useRef(true);
-  const pendingProgress = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const visible = isTourVisible({ tier, onHome, closed, state, requested, held });
-  const anchor = useTourAnchor(visible, STOPS[screen].targets, panelRef);
+  const transition = useRef<AbortController | null>(null);
+  const requestController = useRef<AbortController | null>(null);
+  const run = useRef({ id: '', sequence: 0, account: '' });
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  const lastWrite = useRef<Write | null>(null);
+  const pendingStart = useRef<Write | null>(null);
+  const previousRequest = useRef('');
+  const expectedRoute = useRef<string | null>(null);
+  const navigationIntent = useRef(0);
+  const previousRoute = useRef(pathname);
+  const dirty = useRef(false);
+  const oldFocus = useRef<HTMLElement | null>(null);
+  const lesson = GUIDED_LESSONS[step];
+  const ending = !lesson;
+  const motionOff = reduced || quiet;
 
   useEffect(() => {
-    setMounted(true);
-    alive.current = true;
-    return () => { alive.current = false; };
+    alive.current = true; setMounted(true);
+    const media = matchMedia('(prefers-reduced-motion: reduce)');
+    const sync = () => setReduced(media.matches || document.documentElement.classList.contains('reduce-motion'));
+    const visibility = () => setHidden(document.hidden);
+    const mutation = new MutationObserver(sync);
+    mutation.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    media.addEventListener('change', sync); document.addEventListener('visibilitychange', visibility); sync(); visibility();
+    const changed = (event: Event) => {
+      if (!document.documentElement.dataset.guidedLearning && event.target instanceof HTMLElement && event.target.closest('input,textarea,select,[contenteditable="true"]')) dirty.current = true;
+    };
+    document.addEventListener('input', changed, true); document.addEventListener('change', changed, true);
+    return () => {
+      alive.current = false; requestController.current?.abort(); transition.current?.abort();
+      mutation.disconnect(); media.removeEventListener('change', sync); document.removeEventListener('visibilitychange', visibility);
+      document.removeEventListener('input', changed, true); document.removeEventListener('change', changed, true);
+    };
   }, []);
 
-  useEffect(() => {
-    if (!visible) return;
-    const sync = () => setPageHidden(document.hidden);
-    sync();
-    document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
-  }, [visible]);
-
-  useEffect(() => {
-    if (tier !== "client" || !onHome || held) return;
-    let cancelled = false;
-    if (requested) {
-      setClosed(false);
-    }
-    void fetch("/api/onboarding/tour", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Tour state unavailable");
-        const json = await response.json();
-        if (!json?.data) throw new Error("Tour state unavailable");
-        if (cancelled) return;
-        const data = json.data as TourState;
+  const persist = useCallback((action: Write['action'], stop: number): Promise<void> => {
+    const current = run.current;
+    if (!current.account || !current.id) return Promise.reject(new Error('Your saved place is unavailable. Reload to reconnect.'));
+    const body: Write = { action, version: TOUR_VERSION, runId: current.id, sequence: action === 'start' ? 0 : ++current.sequence, stop, ...(action === 'start' ? { previousRunId: stateRef.current?.previousRunId ?? stateRef.current?.runId ?? null } : {}) };
+    lastWrite.current = body;
+    if (action === 'start') pendingStart.current = body;
+    const operation = queue.current.catch(() => {}).then(async () => {
+      if (!alive.current || run.current.id !== body.runId || run.current.account !== current.account) throw new Error('This lesson was replaced by a newer run.');
+      const send = async (write: Write) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
         try {
-          if (requested) sessionStorage.removeItem(`${SUPPRESS_KEY}:${data.accountId}`);
-          else if (sessionStorage.getItem(`${SUPPRESS_KEY}:${data.accountId}`) === "1") setClosed(true);
-        } catch {}
-        setState(data);
-        setReadFailed(false);
-        setScreen(data.version === TOUR_VERSION && data.inProgress && Number.isInteger(data.stop)
-          ? Math.max(0, Math.min(TOUR_STOP_COUNT - 1, data.stop!)) : 0);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setReadFailed(true);
-        if (requested) { setState(FALLBACK_TOUR_STATE); setScreen(0); }
-      });
-    return () => { cancelled = true; };
-  }, [tier, onHome, requested, held]);
-
-  // The final action gets a fresh server read. No model call and no simulated
-  // progress: another tab may have saved work during the introduction.
-  useEffect(() => {
-    if (!visible || screen !== TOUR_STOP_COUNT - 1) return;
-    let cancelled = false;
-    void fetch("/api/onboarding/tour", { cache: "no-store" }).then(async (response) => {
-      if (!response.ok) throw new Error("Next action unavailable");
-      const json = await response.json();
-      if (!json?.data) throw new Error("Next action unavailable");
-      if (!cancelled) { setState(json.data as TourState); setReadFailed(false); }
-    }).catch(() => {
-      if (!cancelled) {
-        setReadFailed(true);
-        setState((current) => current ? { ...current, nextStep: undefined } : current);
+          const response = await fetch('/api/onboarding/tour', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Orientation-Account': current.account }, body: JSON.stringify(write), signal: controller.signal, keepalive: true });
+          const result = await response.json().catch(() => null);
+          if (!response.ok || result?.ok !== true || result.runId !== write.runId || result.sequence !== write.sequence) throw new Error(result?.error || 'Your place could not be saved.');
+        } finally { clearTimeout(timeout); }
+      };
+      if (pendingStart.current?.runId === body.runId && body.action !== 'start') {
+        await send(pendingStart.current); pendingStart.current = null;
       }
-    });
-    return () => { cancelled = true; };
-  }, [visible, screen]);
+      await send(body);
+      if (body.action === 'start' && pendingStart.current?.runId === body.runId) pendingStart.current = null;
+      if (alive.current && run.current.id === body.runId) { setSaveError(''); if (action === 'complete') window.dispatchEvent(new Event(NEXT_STEP_CHANGED_EVENT)); }
 
-  // Serialize bounded stop writes. Rapid Next/Back cannot leave an older stop
-  // as the final saved value. Errors remain visible after the dialog closes.
-  const persist = useCallback((body: Write): Promise<void> => {
-    const operation = writes.current.then(async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 12_000);
-      try {
-        const response = await fetch("/api/onboarding/tour", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body), keepalive: true, signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("Tour preference did not save");
-        if (body.action !== "progress") window.dispatchEvent(new Event(NEXT_STEP_CHANGED_EVENT));
-      } finally { clearTimeout(timeout); }
     });
-    writes.current = operation.catch(() => {});
+    queue.current = operation;
     return operation;
   }, []);
 
-  const saveWithRecovery = useCallback((body: Write) => {
-    const generation = ++writeGeneration.current;
-    void persist(body).then(() => {
-      if (alive.current && generation === writeGeneration.current) setNotice((current) => current?.retry ? null : current);
-    }).catch(() => {
-      if (alive.current && generation === writeGeneration.current) setNotice({ text: "Your tour choice did not save. Your career work is unchanged.", retry: body });
-    });
+  const save = useCallback((action: Write['action'], stop: number) => {
+    const identity = run.current;
+    void persist(action, stop).catch(e => { if (alive.current && run.current === identity) setSaveError(e instanceof Error && e.name !== 'AbortError' ? e.message : 'Saving timed out. Your place is still here; retry to save it.'); });
   }, [persist]);
 
-  useEffect(() => {
-    if (!visible) return;
-    pendingProgress.current = setTimeout(() => {
-      pendingProgress.current = null;
-      saveWithRecovery({ action: "progress", version: TOUR_VERSION, stop: screen });
-    }, 350);
-    return () => {
-      if (pendingProgress.current) clearTimeout(pendingProgress.current);
-      pendingProgress.current = null;
-    };
-  }, [visible, screen, saveWithRecovery]);
+  const enter = useCallback((data: TourState, resume: boolean) => {
+    if (!allowed.current) return;
+    if (dirty.current) { setUnsavedWarning(true); return; }
+    const stop = resume && data.version === TOUR_VERSION && data.inProgress ? data.stop ?? 0 : 0;
+    pendingStart.current = null;
+    run.current = { id: resume && data.runId ? data.runId : crypto.randomUUID(), sequence: resume ? data.sequence ?? 0 : 0, account: data.accountId || '' };
+    stepRef.current = stop; setStep(stop); setTargetIndex(0); setPhase('explain'); setRect(null); setQuiz(false); setError(''); setNotice(''); setActive(true);
+    oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (data.accountId) { try { sessionStorage.removeItem(PAUSE_KEY + data.accountId); } catch {} }
+    if (!(resume && data.runId)) save('start', stop);
+  }, [save]);
 
-  const close = useCallback((mode: "pause" | "skip" | "complete", destination?: string) => {
-    if (pendingProgress.current) clearTimeout(pendingProgress.current);
-    pendingProgress.current = null;
-    try { if (state?.accountId) sessionStorage.setItem(`${SUPPRESS_KEY}:${state.accountId}`, "1"); } catch {}
-    setClosed(true);
-    if (mode === "pause") {
-      setNotice({ text: "Tour paused. Pick it up here or replay it from Help.", resume: true });
-      saveWithRecovery({ action: "progress", version: TOUR_VERSION, stop: screen });
-    } else {
-      setState((current) => current ? { ...current, tourComplete: true, inProgress: false } : current);
-      setNotice(null);
-      saveWithRecovery({ action: mode });
-    }
-    if (destination) router.push(destination);
-    else if (requested) {
-      const params = new URLSearchParams(searchParams.toString());
-      params.delete("tour");
-      router.replace(params.size ? `${pathname}?${params}` : pathname, { scroll: false });
-    }
-  }, [pathname, requested, router, saveWithRecovery, screen, searchParams, state?.accountId]);
-  const closeRef = useRef(close);
-  closeRef.current = close;
+  const load = useCallback(async (mode: 'auto' | 'replay' | 'resume') => {
+    requestController.current?.abort(); const controller = new AbortController(); requestController.current = controller;
+    setLoading(true); setError('');
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      if (mode !== 'auto') await queue.current.catch(() => {});
+      if (controller.signal.aborted) return;
+      const response = await fetch('/api/onboarding/tour', { cache: 'no-store', signal: controller.signal });
+      if (!response.ok) throw new Error('Your tour could not be loaded. Try again.');
+      const body = await response.json();
+      const data = body?.data as TourState;
+      if (!data?.accountId) throw new Error('Sign in again to open your tour.');
+      if (!alive.current || requestController.current !== controller) return;
+      setState(data); stateRef.current = data;
+      let paused = false; try { paused = sessionStorage.getItem(PAUSE_KEY + data.accountId) === '1'; } catch {}
+      if (mode === 'replay' || mode === 'resume' || (!data.tourComplete && !paused && location.pathname === '/dashboard')) enter(data, mode !== 'replay' && !!data.inProgress);
+      else if (data.inProgress) setNotice('Your guided lesson is paused.');
+    } catch (e) {
+      if (alive.current && requestController.current === controller) setError(e instanceof Error && e.name !== 'AbortError' ? e.message : 'The tour is taking too long to load. Try again.');
+    } finally { clearTimeout(timeout); if (alive.current && requestController.current === controller) setLoading(false); }
+  }, [enter]);
 
   useEffect(() => {
-    if (!visible) return;
-    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const body = document.body;
+    if (tier !== 'client' || held) return;
+    const key = requested ? `${pathname}?tour=1` : 'initial';
+    if (previousRequest.current === key || (active && !requested)) return;
+    if (!requested && previousRequest.current) return;
+    previousRequest.current = key;
+    void load(requested ? 'replay' : 'auto');
+  }, [tier, held, requested, pathname, active, load]);
+
+  const pause = useCallback(() => {
+    navigationIntent.current++; setLoading(false);
+    transition.current?.abort(); expectedRoute.current = null; setActive(false); setRect(null); setQuiz(false); onNavigationReveal?.(false);
+    if (run.current.account) { try { sessionStorage.setItem(PAUSE_KEY + run.current.account, '1'); } catch {} }
+    setNotice('Lesson paused. Resume here when you are ready.'); save('progress', stepRef.current);
+  }, [save, onNavigationReveal]);
+
+  useEffect(() => {
+    if (previousRoute.current === pathname) return;
+    previousRoute.current = pathname;
+    if (!active) return;
+    if (expectedRoute.current === pathname) { expectedRoute.current = null; return; }
+    // Browser Back or an unrelated route change never silently advances a lesson.
+    pause();
+  }, [pathname, active, pause]);
+  useEffect(() => { if ((held || tier !== 'client') && active) { requestController.current?.abort(); pause(); } }, [held, tier, active, pause]);
+
+  useEffect(() => {
+    if (!active || held || tier !== 'client') return;
     const html = document.documentElement;
-    const scroll = { x: window.scrollX, y: window.scrollY };
-    const bodyStyle = { position: body.style.position, top: body.style.top, left: body.style.left,
-      width: body.style.width, overflow: body.style.overflow, paddingRight: body.style.paddingRight };
-    const htmlStyle = { overflow: html.style.overflow, scrollBehavior: html.style.scrollBehavior };
-    const gutter = Math.max(0, window.innerWidth - html.clientWidth);
-    const paddingRight = parseFloat(getComputedStyle(body).paddingRight) || 0;
-    // Fixed body also prevents touch scrolling behind the phone sheet. Keep
-    // the original position and scrollbar space so the spotlight does not jump.
-    Object.assign(body.style, { position: "fixed", top: `${-scroll.y}px`, left: `${-scroll.x}px`,
-      width: "100%", overflow: "hidden", paddingRight: `${paddingRight + gutter}px` });
-    html.style.overflow = "hidden";
-    const overlay = overlayRef.current;
-    const oldInert = new Map<HTMLElement, boolean>();
-    // The dialog lives directly under body. Keep the rendered page visible to
-    // the spotlight while making its controls unavailable to keyboard users.
-    for (const child of Array.from(document.body.children)) {
-      if (child instanceof HTMLElement && child !== overlay) { oldInert.set(child, child.inert); child.inert = true; }
-    }
-    titleRef.current?.focus({ preventScroll: true });
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); closeRef.current("pause"); return; }
-      if (event.key !== "Tab") return;
-      const panel = panelRef.current;
-      if (!panel) return;
-      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((item) => item.getClientRects().length > 0 && !item.matches(":disabled"));
-      const first = items[0];
-      const last = items[items.length - 1];
-      if (!first || !last) { event.preventDefault(); panel.focus(); return; }
-      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
-        event.preventDefault(); last.focus();
-      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
-        event.preventDefault(); first.focus();
-      }
+    html.dataset.guidedLearning = 'true';
+    const shell = document.querySelector<HTMLElement>('.refinery-app');
+    const wasInert = shell?.inert ?? false;
+    if (shell) shell.inert = true;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); pause(); return; }
+      if (event.key !== 'Tab') return;
+      const items = Array.from(dock.current?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter(item => item.getClientRects().length && !item.closest('[hidden]'));
+      const first = items[0], last = items.at(-1);
+      if (!first || !last) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || !dock.current?.contains(document.activeElement))) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || !dock.current?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     };
-    document.addEventListener("keydown", keydown);
-    return () => {
-      document.removeEventListener("keydown", keydown);
-      oldInert.forEach((value, element) => { element.inert = value; });
-      Object.assign(body.style, bodyStyle);
-      html.style.overflow = htmlStyle.overflow;
-      html.style.scrollBehavior = "auto";
-      window.scrollTo(scroll.x, scroll.y);
-      html.style.scrollBehavior = htmlStyle.scrollBehavior;
-      const restore = previousFocus.current;
-      if (restore?.isConnected && restore !== document.body) restore.focus({ preventScroll: true });
-      else document.getElementById("refinery-nav-overview")?.focus({ preventScroll: true });
-    };
-  }, [visible]);
+    document.addEventListener('keydown', onKey);
+    return () => { delete html.dataset.guidedLearning; if (shell) shell.inert = wasInert; document.removeEventListener('keydown', onKey); if (oldFocus.current?.isConnected) oldFocus.current.focus({ preventScroll: true }); };
+  }, [active, held, tier, pause]);
 
   useEffect(() => {
-    if (!visible) return;
-    titleRef.current?.focus({ preventScroll: true });
-  }, [screen, visible]);
+    if (!active) return;
+    const reader = dock.current?.querySelector('.learning-reading');
+    if (reader) reader.scrollTop = 0;
+    heading.current?.focus({ preventScroll: true });
+  }, [active, step, quiz]);
+  useEffect(() => {
+    if (!active || phase === 'explain') return;
+    const reset = () => { transition.current?.abort(); setRect(null); setPhase('explain'); setError('The layout changed. Choose Show me to point to this area again.'); };
+    window.addEventListener('resize', reset);
+    return () => window.removeEventListener('resize', reset);
+  }, [active, phase]);
 
-  function resume() {
-    try { if (state?.accountId) sessionStorage.removeItem(`${SUPPRESS_KEY}:${state.accountId}`); } catch {}
-    setNotice(null);
-    setClosed(false);
-    if (!onHome || state?.tourComplete) router.push("/dashboard?tour=1");
+  useEffect(() => {
+    const target = revealedTarget.current;
+    if (!active || phase !== 'ready' || !target || lesson?.part === 'story') return;
+    const measure = () => {
+      if (!target.isConnected) { setRect(null); setPhase('explain'); return; }
+      setRect(visibleGuidedRect(target.getBoundingClientRect(), window.innerWidth >= 1200 ? window.innerWidth - 400 : window.innerWidth, window.innerHeight, window.innerWidth < 1200 ? Math.min(280, window.innerHeight / 2) : 0));
+    };
+    const observer = new ResizeObserver(measure);
+    observer.observe(target);
+    window.addEventListener('scroll', measure, { capture: true, passive: true });
+    return () => { observer.disconnect(); window.removeEventListener('scroll', measure, true); };
+  }, [active, phase, lesson]);
+
+  async function reveal(index = targetIndex) {
+    if (!lesson || !safeTourRoute(lesson.route)) return;
+    transition.current?.abort(); const controller = new AbortController(); transition.current = controller;
+    setError(''); setRect(null); setPhase('revealing'); setTargetIndex(index);
+    try {
+      if (lesson.part === 'story') { await nextPaint(controller.signal); setPhase('ready'); return; }
+      const mobile = window.innerWidth < 768;
+      onNavigationReveal?.(mobile && lesson.part === 'map');
+      if (location.pathname !== lesson.route) { expectedRoute.current = lesson.route; router.push(lesson.route); }
+      const target = await waitForGuidedTarget(lesson.targets[index], lesson.route, controller.signal);
+      // Use the actual scroll containers. Text is never scaled to fake a zoom.
+      const oldMargins = [target.style.scrollMarginTop, target.style.scrollMarginBottom];
+      target.style.scrollMarginTop = '90px'; target.style.scrollMarginBottom = window.innerWidth < 1200 ? '220px' : '24px';
+      revealedTarget.current = target;
+      target.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
+      [target.style.scrollMarginTop, target.style.scrollMarginBottom] = oldMargins;
+      await nextPaint(controller.signal);
+      const screen = visibleGuidedRect(target.getBoundingClientRect(), window.innerWidth >= 1200 ? window.innerWidth - 400 : window.innerWidth, window.innerHeight, window.innerWidth < 1200 ? Math.min(280, window.innerHeight / 2) : 0);
+      if (!screen) throw new Error('This area does not fit above the guide. Continue the explanation, or pause to explore it.');
+      setRect(screen);
+      const origin = roy.current?.getBoundingClientRect();
+      const sx = origin ? origin.left + origin.width / 2 : screen.left, sy = origin ? origin.top + origin.height / 2 : screen.top;
+      const ex = screen.left + Math.min(28, screen.width / 2), ey = screen.top + 8;
+      setPath(`M ${sx} ${sy} Q ${sx} ${Math.min(sy, ey) - 35} ${ex} ${ey}`);
+      if (motionOff) { setPhase('ready'); return; }
+      setPhase('travel');
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(resolve, 700);
+        controller.signal.addEventListener('abort', () => { clearTimeout(timeout); reject(new DOMException('Cancelled', 'AbortError')); }, { once: true });
+      });
+      if (!controller.signal.aborted) setPhase('ready');
+    } catch (e) {
+      if (controller.signal.aborted || !alive.current) return;
+      setPhase('explain'); setError(e instanceof Error ? e.message : 'The page could not be shown. Try again.');
+    }
   }
 
-  if (!mounted || (!visible && !notice)) return null;
-  const next = state?.nextStep;
-  // Only internal destinations returned by the server are used. A failed state
-  // read leads back to the real Overview instead of guessing a career stage.
-  const destination = next?.href && /^\/(?!\/)/.test(next.href) && !next.href.includes("tour=1") ? next.href : "/dashboard";
+  function move(next: number) {
+    transition.current?.abort(); onNavigationReveal?.(false); setRect(null); setPath(''); setPhase('explain'); setTargetIndex(0); setError(''); setQuiz(false);
+    stepRef.current = next; setStep(next); save('progress', next);
+  }
+  async function finish(destination?: string) {
+    const identity = run.current;
+    const intent = navigationIntent.current;
+    setLoading(true); setError('');
+    try {
+      await persist('complete', GUIDED_LESSONS.length);
+      if (!alive.current || run.current !== identity || navigationIntent.current !== intent) return;
+      transition.current?.abort(); setActive(false); setNotice('Your tour is complete. You can ask t.ROY for help on any page.');
+      if (stateRef.current) { stateRef.current = { ...stateRef.current, tourComplete: true, inProgress: false }; setState(stateRef.current); }
+      const href = destination || stateRef.current?.nextStep?.href;
+      if (href && /^\/dashboard(?:[/?#]|$)/.test(href) && !href.includes('tour=1')) router.push(href);
+    } catch (e) { if (alive.current && run.current === identity && navigationIntent.current === intent) setSaveError(e instanceof Error ? e.message : 'Your completion could not be confirmed. Retry safely.'); if (destination) throw e; }
+    finally { if (alive.current && run.current === identity) setLoading(false); }
+  }
+  if (!mounted || tier !== 'client' || held) return null;
+  if (!active) return <>
+    {unsavedWarning && <div className="learning-notice" role="status">Save your current work before starting the guided lesson. <button onClick={() => { dirty.current = false; setUnsavedWarning(false); void load('replay'); }}>I have saved my work</button><button onClick={() => setUnsavedWarning(false)}>Stay here</button></div>}
+    {(notice || error || saveError) && <div className="learning-notice" role="status"><p>{saveError || error || notice}</p><button disabled={loading} onClick={() => void load(state?.inProgress || notice ? 'resume' : 'replay')}>{loading ? 'Opening lesson…' : 'Resume lesson'}</button><button onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>Dismiss</button></div>}
+  </>;
+  const partLessons = lesson ? GUIDED_LESSONS.filter(item => item.part === lesson.part) : [];
+  const partIndex = lesson ? partLessons.findIndex(item => item.id === lesson.id) + 1 : 0;
+  const showing = phase === 'ready' || phase === 'travel' || phase === 'revealing';
+  return createPortal(<div className="learning-root" data-phase={phase} data-part={lesson?.part || 'check'} data-quiz={quiz} data-still={motionOff} data-hidden={hidden}>
+    <div className="learning-backdrop" aria-hidden="true" />
+    {rect && phase === 'ready' && <div className="learning-focus" aria-hidden="true" style={rect} />}
+    {path && phase === 'travel' && !motionOff && <svg className="learning-particles" aria-hidden="true"><path d={path} fill="none" stroke="#bc9aff" strokeWidth="1" opacity=".3" />{Array.from({ length: 9 }, (_, i) => <circle key={i} r={i % 3 ? 2 : 4} fill={i % 3 ? '#d5b8fa' : '#e8aa48'} style={{ offsetPath: `path('${path}')`, animationDelay: `${i * 20}ms` } as CSSProperties} />)}</svg>}
+    {lesson?.part === 'story' && <div className="learning-stage" aria-hidden="true" data-revealed={phase === 'ready'}><Concept concept={lesson.concept} /></div>}
+    <section ref={dock} className="learning-guide" role="dialog" aria-modal="true" aria-labelledby="learning-heading">
+      <header className="learning-top"><span>{lesson ? `${GUIDED_PART_LABELS[lesson.part]} · ${partIndex} of ${partLessons.length}` : quiz ? 'Your optional check' : 'Your next move'}</span><button aria-label="Pause lesson and keep my place" onClick={pause}>Pause</button></header>
+      <div className="learning-reading">
+        <div className="learning-speaker"><span ref={roy}><TroyMark size={72} /></span><div><strong>t.ROY</strong><span>Your guide</span></div></div>
+        <h2 id="learning-heading" ref={heading} tabIndex={-1}>{lesson?.title || GUIDED_ENDING.title}</h2>
+        {!quiz && <p className="learning-message">{lesson?.message || GUIDED_ENDING.message}</p>}
+        {lesson && <div className="learning-observation" role="status">{phase === 'ready' ? <><span>{lesson.observation}</span>{lesson.part !== 'story' && <small>Showing {targetLabel(lesson.targets[targetIndex], lesson.title)}.</small>}{lesson.part === 'map' && lesson.targets.length > 1 && <small>Area {targetIndex + 1} of {lesson.targets.length} in this group</small>}</> : phase === 'revealing' ? <TroyWork topic="plan" label="Opening the page and finding this area" /> : <span className="learning-read-cue">Read at your pace. Choose Show me when you’re ready.</span>}</div>}
+        {lesson?.part === 'story' && phase === 'ready' && <div className="learning-mobile-concept"><Concept concept={lesson.concept} /></div>}
+        {!lesson && !quiz && <>{state?.nextStep?.action && <p className="learning-next-action">Your next move: {state.nextStep.action}</p>}<p className="learning-check-note">This is a check of the tools, not a test of your ability. Review explanations and retry. Passing does not change sponsored features or usage limits.</p><button className="learning-primary" onClick={() => { setQuizPassed(false); setQuiz(true); }}>{GUIDED_ENDING.action}</button></>}
+        {!lesson && quiz && state?.accountId && <OrientationQuiz accountId={state.accountId} draft={quizDraft} onDraftChange={setQuizDraft} onContinue={finish} onPassed={() => setQuizPassed(true)} />}
+        {error && <p className="learning-error" role="alert">{error}</p>}
+        {saveError && <p className="learning-error" role="status">{saveError} <button onClick={() => lastWrite.current?.action === 'complete' ? void finish() : save(lastWrite.current?.action === 'start' ? 'start' : 'progress', stepRef.current)}>Retry saving</button></p>}
+      </div>
+      <footer className="learning-controls">
+        {!quiz && <button disabled={step === 0 || loading} onClick={() => move(Math.max(0, step - 1))}>Back</button>}
+        {lesson ? <button className="learning-primary" disabled={phase === 'revealing' || phase === 'travel'} onClick={() => {
+          if (!showing) void reveal();
+          else if (targetIndex < lesson.targets.length - 1) void reveal(targetIndex + 1);
+          else move(step + 1);
+        }}>{phase === 'revealing' ? 'Finding this area…' : phase === 'travel' ? 'Showing you…' : phase === 'ready' ? targetIndex < lesson.targets.length - 1 ? 'Show next area' : 'Next' : 'Show me'}</button> : quiz && !quizPassed ? <button onClick={() => setQuiz(false)}>Back to lesson</button> : <button disabled={loading} className={quizPassed ? 'learning-primary' : ''} onClick={() => void finish()}>{loading ? 'Saving…' : quizPassed ? state?.nextStep?.action || 'Finish lesson' : 'Finish without the check'}</button>}
+        {error && lesson && <button onClick={() => move(step + 1)}>Continue the explanation</button>}
+        <button className="learning-mobile-pause" onClick={pause}>Pause</button>
+        <button className="learning-motion" aria-pressed={quiet || reduced} onClick={() => setQuiet(v => !v)} disabled={reduced}>{motionOff ? 'Motion off' : 'Turn motion off'}</button>
+      </footer>
+    </section>
+  </div>, document.body);
+}
 
-  return createPortal(
-    <div ref={overlayRef} className="refinery-tour-root" data-motion-paused={motionPaused || pageHidden}>
-      {visible ? <>
-        <div className={`refinery-tour-shade ${anchor.rect ? "refinery-tour-shade-clear" : ""}`} aria-hidden="true" />
-        {anchor.rect ? <div className="refinery-tour-spotlight" style={anchor.rect} aria-hidden="true" /> : null}
-        <TourTrail rect={anchor.rect} stop={screen} ready={STOPS[screen].targets.some((id) => id === anchor.targetId)} />
-        <div
-          ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="guided-tour-heading"
-          aria-describedby="guided-tour-description" tabIndex={-1}
-          className={`refinery-tour-panel ${anchor.panel ? "refinery-tour-anchored" : ""}`}
-          style={anchor.panel ? { top: anchor.panel.top, left: anchor.panel.left } : undefined}
-        >
-          <header className="refinery-tour-top">
-            <p>The Refinery · learn the process</p>
-            <button type="button" onClick={() => close("skip")}>Skip tour</button>
-          </header>
-          <div className="refinery-tour-body">
-            <div className="refinery-tour-intro">
-              <TourGuide paused={motionPaused || pageHidden} />
-              <div><p className="refinery-tour-step">Stop {screen + 1} of {TOUR_STOP_COUNT}</p>
-                <p className="refinery-tour-coach">t.ROY · your AI coach</p></div>
-            </div>
-            <details className="refinery-tour-chapters"><summary>Choose a chapter</summary><nav aria-label="Tour chapters">{STOPS.map((stop, index) => <button type="button" key={stop.label} aria-current={screen === index ? "step" : undefined} onClick={() => setScreen(index)}>{index + 1}. {stop.label}</button>)}</nav></details>
-            <div className="refinery-tour-progress" aria-hidden="true">
-              {STOPS.map((stop, index) => <span key={stop.label} data-complete={index <= screen} />)}
-            </div>
-            <h2 id="guided-tour-heading" ref={titleRef} tabIndex={-1}>{STOPS[screen].label}</h2>
-            <div id="guided-tour-description" className="refinery-tour-copy">
-              <p className="refinery-tour-principle">{STOPS[screen].idea}</p>
-              <p>{STOPS[screen].explanation}</p>
-              {screen === 10 && (premiumGate ? <p className="refinery-tour-small" data-testid="tour-included">{PREMIUM_INCLUDED_LINE} Usage limits still apply.</p> : null)}
-              <div className="refinery-tour-example"><p className="refinery-tour-small">Put it to work</p><p>{STOPS[screen].example}</p></div>
-              {screen < TOUR_STOP_COUNT - 1 ? <button className="refinery-tour-visit" type="button" onClick={() => close("pause", STOPS[screen].href)}>{STOPS[screen].action} · pause tour</button> : <>
-                {state?.accountId ? <OrientationQuiz key={state.accountId} accountId={state.accountId} /> : <p>Sign in and reload to take the optional check.</p>}
-                <div className="refinery-tour-next"><span>Your next action</span><strong>{next?.action || "See your next step on Overview"}</strong></div>
-              </>}
+function Concept({ concept }: { concept?: 'process' | 'facts' | 'coach' }) {
+  return <><span className="learning-stage-kicker">THE FORGE → THE REFINERY</span>
+    {concept === 'process' ? <><h3>Your story has somewhere to go.</h3><div className="learning-process">{['Find work', 'Prepare', 'Apply', 'Practice', 'Next steps'].map((label, i) => <span key={label}><b>{i + 1}</b>{label}</span>)}</div><p>Return to any part. Keep moving with what you learn.</p></> : concept === 'facts' ? <><h3>One true history.<br />More than one direction.</h3><div className="learning-facts"><span>Your real work</span><span>A job version</span><span>Your own words</span></div><p>The emphasis can change. The facts stay yours.</p></> : <><div className="learning-coach-hero"><TroyMark size={120} /></div><h3>Help beside your work.</h3><p>Ask. Check. Choose.<br />You keep the final say.</p></>}
+  </>;
+}
 
-            </div>
-            {readFailed ? <p className="refinery-tour-warning" role="status">Your saved tour state could not be loaded. You can still look around or leave.</p> : null}
-            {notice?.retry ? <p className="refinery-tour-warning" role="status">{notice.text} <button type="button" onClick={() => { const body = notice.retry; setNotice(null); if (body) saveWithRecovery(body.action === "progress" ? { ...body, stop: screen } : body); }}>Retry save</button></p> : null}
-            <p className="refinery-tour-anchor-note">{anchor.rect ? "Highlighted in your workspace." : "This control may be inside the menu on your screen. You can follow the tour here."}</p>
-          </div>
-          <footer className="refinery-tour-controls">
-            <div className="refinery-tour-navigation"><button type="button" disabled={screen === 0} onClick={() => setScreen((value) => Math.max(0, value - 1))}>Back</button>
-              {screen < TOUR_STOP_COUNT - 1 ? <button type="button" className="refinery-tour-primary" onClick={() => setScreen((value) => Math.min(TOUR_STOP_COUNT - 1, value + 1))}>Next</button>
-                : <button type="button" className="refinery-tour-primary" onClick={() => close("complete", destination)}>{next?.action ? "Finish tour and start my next step" : "Finish tour"}</button>}
-            </div>
-            <div className="refinery-tour-utility"><button type="button" onClick={() => close("pause")}>Pause tour</button><button type="button" onClick={() => { setScreen(0); }}>Replay from start</button><button type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused((value) => !value)}>{motionPaused ? "Resume motion" : "Pause motion"}</button></div>
-          </footer>
-        </div>
-      </> : notice ? <div className="refinery-tour-notice" role="status"><p>{notice.text}</p><div>
-        {notice.retry ? <button type="button" onClick={() => { const body = notice.retry; setNotice(null); if (body) saveWithRecovery(body); }}>Retry save</button> : null}
-        {notice.resume ? <button type="button" onClick={resume}>Resume tour</button> : null}
-        <button type="button" onClick={() => setNotice(null)}>Dismiss</button>
-      </div></div> : null}
-    </div>, document.body,
-  );
+function targetLabel(id: string, fallback: string): string {
+  const labels: Record<string, string> = { 'refinery-nav-overview': 'Overview', 'refinery-nav-jobs': 'Find work', 'refinery-nav-resumes': 'My resumes', 'refinery-nav-applications': 'Applications', 'refinery-nav-interview': 'Interview prep', 'refinery-nav-support': 'Support & disclosure', 'refinery-nav-settings': 'Settings' };
+  return labels[id] || fallback;
 }

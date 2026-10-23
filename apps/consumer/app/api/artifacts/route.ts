@@ -140,6 +140,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  // Optional for legacy callers; new delayed/retry saves bind to the account
+  // that produced the work, never to a cookie that changed in the meantime.
+  const expectedAccountId = request.headers.get("x-expected-account-id");
+  if (expectedAccountId !== null && expectedAccountId !== userId) {
+    return NextResponse.json({ error: "Your account changed. Reload before saving this work." }, { status: 409 });
+  }
+
   const body = await request.json();
   if (!body || typeof body !== "object" || !body.type || !body.content) {
     return NextResponse.json(

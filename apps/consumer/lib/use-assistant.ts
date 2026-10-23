@@ -16,6 +16,9 @@
 import { useSession } from "next-auth/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { readAssistantArrival } from "./assistant-arrival";
+import { TOUR_TARGETS } from "./tools/assistant-tool-defs";
+import type { AssistantUiContext } from "./assistant-page-context";
 import { assistantClientSelection } from "./assistant-client-selection";
 import { activeLaneStorageKey, LANES_CHANGED_EVENT } from "./lanes";
 import { useChat } from "ai/react";
@@ -44,6 +47,27 @@ export function useAssistant({ context, sessionId, coach, onToolCall }: UseAssis
   const pathname = usePathname();
   const search = useSearchParams();
   const [lane, setLane] = useState<string | undefined>();
+  const [uiContext, setUiContext] = useState<AssistantUiContext>();
+  useEffect(() => {
+    let frame = 0;
+    const read = () => {
+      frame = 0;
+      const snapshot = readAssistantArrival(pathname);
+      const marker = Array.from(document.querySelectorAll<HTMLElement>("[data-assistant-page-ready]"))
+        .find(element => element.dataset.assistantPageReady === pathname);
+      const visibleTargets = marker ? Array.from(marker.querySelectorAll<HTMLElement>("[data-tour]"))
+        .filter(element => { const r = element.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight && !element.closest('[hidden], [aria-hidden="true"]') && getComputedStyle(element).visibility !== "hidden"; })
+        .map(element => element.dataset.tour!).filter(id => Object.hasOwn(TOUR_TARGETS, id)).slice(0, 12) : [];
+      const next = { pathname, contentVisible: snapshot.visible, loading: !!(marker?.matches('[aria-busy="true"]') || marker?.querySelector('[aria-busy="true"]')), visibleTargets };
+      setUiContext(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(read); };
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["data-assistant-page-ready", "aria-busy", "hidden", "aria-hidden"] });
+    window.addEventListener("scroll", schedule, { capture: true, passive: true });
+    window.addEventListener("resize", schedule); read();
+    return () => { observer.disconnect(); cancelAnimationFrame(frame); window.removeEventListener("scroll", schedule, true); window.removeEventListener("resize", schedule); };
+  }, [pathname, userId]);
   useEffect(() => {
     const read = () => {
       const key = activeLaneStorageKey(userId);
@@ -57,14 +81,19 @@ export function useAssistant({ context, sessionId, coach, onToolCall }: UseAssis
   const selectedWork = assistantClientSelection(context.selectedWork, search, lane, pathname);
   const chat = useChat({
     api: coach ? "/api/coach" : "/api/assistant",
+    headers: userId ? { "X-Expected-Account-Id": userId } : undefined,
     body: {
-      context: { ...context, selectedWork },
+      context: { ...context, selectedWork, uiContext: uiContext?.pathname === pathname ? uiContext : undefined },
       sessionId,
     },
     // Shared with the routes, which mirror this count (lib/ai/troy-steps).
     maxSteps: TROY_CLIENT_MAX_STEPS,
     onToolCall: onToolCall as never,
   });
+
+  // Keyed assistant remounts must also cancel the previous account's stream.
+  const stop = chat.stop;
+  useEffect(() => () => { stop(); }, [stop]);
 
   return {
     messages: chat.messages,

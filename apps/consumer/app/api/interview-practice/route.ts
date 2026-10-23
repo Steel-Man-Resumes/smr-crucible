@@ -1,3 +1,4 @@
+import { loadVoiceWork } from "@/lib/voice-work-context";
 import { loadApplicationContext } from "@/lib/application-context";
 import { formatResumeDownload } from "@/components/resume/resumeModel";
 /**
@@ -41,7 +42,15 @@ async function handlePost(request: Request) {
     const body = await request.json();
     const { messages, config, exchangeCount, forgeContext, endInterview } = body;
     let { resume, jobDescription } = body;
-    if (typeof body.applicationId === "string" && body.applicationId) {
+    if (body.voiceContext === true) {
+      if (!userId) return NextResponse.json({ error: "Sign in again" }, { status: 401 });
+      let selected;
+      try { selected = await loadVoiceWork(userId, body); }
+      catch { return NextResponse.json({ error: "The selected job or resume could not be loaded. Your answers remain in this tab." }, { status: 409 }); }
+      jobDescription = selected.work.jobDescription;
+      resume = selected.work.resumeText ? { text: selected.work.resumeText, evidence: [] } : undefined;
+      if (config) config.targetRole = selected.body.config?.targetRole;
+    } else if (typeof body.applicationId === "string" && body.applicationId) {
       if (!userId) return NextResponse.json({ error: "Sign in again" }, { status: 401 });
       const selected = await loadApplicationContext(userId, body.applicationId);
       if (!selected) return NextResponse.json({ error: "That saved job is unavailable in your account" }, { status: 404 });

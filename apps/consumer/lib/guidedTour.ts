@@ -11,13 +11,13 @@
  *    never lands on a page where nothing happens.
  */
 
-import { ORIENTATION_LESSONS } from "./orientation-lessons";
+import { GUIDED_LESSONS } from "./guided-lessons";
 import { TOUR_PARAM } from "@crucible/core/src/journeyStages";
 
 /** Fired after persisted completion or skip so the next-step card refetches. */
 export const NEXT_STEP_CHANGED_EVENT = "next-step-changed";
-export const TOUR_VERSION = 3;
-export const TOUR_STOP_COUNT = ORIENTATION_LESSONS.length;
+export const TOUR_VERSION = 4;
+export const TOUR_STOP_COUNT = GUIDED_LESSONS.length + 1;
 
 export interface TourNextStep {
   action: string;
@@ -36,6 +36,9 @@ export interface TourState {
   /** Zero-based stop to resume, not a career milestone. */
   stop?: number;
   inProgress?: boolean;
+  runId?: string;
+  previousRunId?: string | null;
+  sequence?: number;
   nextStep?: TourNextStep;
 }
 
@@ -59,10 +62,11 @@ export function isTourVisible(args: {
   requested: boolean;
   /** Something must be answered first (the shell's "Is it yours?" card). */
   held?: boolean;
+  active?: boolean;
 }): boolean {
   const { tier, onHome, closed, state, requested, held } = args;
   if (held) return false;
-  if (tier !== "client" || !onHome || closed || !state) return false;
+  if (tier !== "client" || (!onHome && !args.active && !requested) || closed || !state) return false;
   // A request opens the tour even if it was already completed (replay).
   return requested || !state.tourComplete;
 }

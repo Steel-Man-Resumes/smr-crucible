@@ -10,6 +10,8 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { readSavedVoiceReport, type SavedVoiceReport } from "@/lib/saved-voice-report";
+import { getOneAsUser, type RefineryArtifact } from "@crucible/core";
 import { getConversationTranscript, isConversationPurpose } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
@@ -53,8 +55,23 @@ export async function GET(request: Request, context: RouteContext) {
     );
   }
 
+  // Read the existing feedback artifact only after the owner-exclusive
+  // transcript lookup succeeded. No transcript is copied into artifact storage.
+  let report: SavedVoiceReport | null = null;
+  let reportStatus: "available" | "missing" | "unavailable" = "missing";
+  if (purpose === "interview_voice") {
+    try {
+      const artifact = await getOneAsUser<RefineryArtifact>(userId,
+        `SELECT id, artifact_type, target_context, content FROM refinery_artifact
+         WHERE user_id=$1 AND artifact_type='interview_prep'
+           AND target_context->>'voiceSessionId'=$2 AND content->>'mode'='voice'
+         ORDER BY created_at DESC, id DESC LIMIT 1`, [userId, id]);
+      report = readSavedVoiceReport(artifact, id);
+      reportStatus = report ? "available" : "missing";
+    } catch { reportStatus = "unavailable"; }
+  }
   return NextResponse.json(
-    { sessionId: id, purpose, transcript },
+    { sessionId: id, purpose, transcript, ...(purpose === "interview_voice" ? { report, reportStatus } : {}) },
     { headers: NO_STORE_HEADERS }
   );
 }

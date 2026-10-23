@@ -28,7 +28,7 @@ export async function loadJobSearchPreferences(userId:string,requested?:unknown,
   const account=readSavedJobSearch(preferences.jobSearchDefaults);
   const lane=readSavedJobSearch(lanes[laneId||"main"]);
   const target=laneId?(await store.lane(userId,laneId))?.target_role||null:null;
-  return{laneId,target,saved:lane||account||{role:"",location:"",filters:defaultJobSearchFilters(),revision:0},revision:lane?.revision||0,accountRevision:account?.revision||0,inherited:!lane&&!!account};
+  return{laneId,target,source:lane?"lane" as const:account?"account" as const:"built-in" as const,saved:lane||account||{role:"",location:"",filters:defaultJobSearchFilters(),revision:0},revision:lane?.revision||0,accountRevision:account?.revision||0,inherited:!lane&&!!account};
 }
 export async function saveJobSearchPreferences(userId:string,input:{laneId?:unknown;scope?:unknown;revision?:unknown;role?:unknown;location?:unknown;filters?:unknown}){
   const laneId=await resolveSearchLane(userId,input.laneId);

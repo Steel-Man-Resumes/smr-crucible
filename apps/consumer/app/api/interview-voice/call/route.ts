@@ -33,6 +33,7 @@
  */
 
 import crypto from "crypto";
+import { loadVoiceWork } from "@/lib/voice-work-context";
 import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { REALTIME_MODEL } from "@/lib/voice-instructions";
 import { NextResponse } from "next/server";
@@ -44,6 +45,7 @@ export const maxDuration = 30;
 
 const MAX_SDP_BYTES = 60_000;
 const MAX_CONFIG_HEADER_BYTES = 20_000;
+const MAX_CALL_BYTES = 160_000;
 
 interface VoiceSessionRow {
   id: string;
@@ -86,8 +88,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
   }
 
+  const isJson = request.headers.get("content-type")?.includes("application/json") === true;
+  const maximumBytes = isJson ? MAX_CALL_BYTES : MAX_SDP_BYTES;
   const contentLength = request.headers.get("content-length");
-  if (contentLength && parseInt(contentLength, 10) > MAX_SDP_BYTES) {
+  if (contentLength && parseInt(contentLength, 10) > maximumBytes) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
   }
 
@@ -120,6 +124,28 @@ export async function POST(request: Request) {
     );
   }
 
+  // JSON keeps selected context out of headers and URLs. Accept the old SDP
+  // body during rollout, but resolve its selectors through the same owned path.
+  const wire = await request.text();
+  if (Buffer.byteLength(wire, "utf8") > maximumBytes) return NextResponse.json({ error: "Request too large" }, { status: 413 });
+  let offerSdp = wire;
+  let body = decodeConfigHeader(configHeader);
+  if (isJson) {
+    try {
+      const payload = JSON.parse(wire);
+      offerSdp = typeof payload.sdp === "string" ? payload.sdp : "";
+      body = payload.context && typeof payload.context === "object" ? payload.context : {};
+    } catch { return NextResponse.json({ error: "Invalid voice request" }, { status: 400 }); }
+  }
+  if (!offerSdp || Buffer.byteLength(offerSdp, "utf8") > MAX_SDP_BYTES) return NextResponse.json({ error: "Invalid SDP offer" }, { status: 400 });
+  let selected;
+  try { selected = await loadVoiceWork(userId, body); }
+  catch {
+    await endVoiceSession(userId, sessionId, "provider_error");
+    return NextResponse.json({ error: "The selected job or resume is unavailable. Choose it again before starting." }, { status: 409 });
+  }
+  const sessionConfig = buildVoiceSessionConfig(selected.body, selected.work);
+
   // ONE call per lease: claim it atomically before relaying to the provider.
   // Without this, one reservation could open N concurrent provider calls (each
   // POST relays a fresh offer) while the budget ledger counts the lease once.
@@ -138,14 +164,6 @@ export async function POST(request: Request) {
       { status: 409 }
     );
   }
-
-  const offerSdp = await request.text();
-  if (!offerSdp) {
-    return NextResponse.json({ error: "Missing SDP offer" }, { status: 400 });
-  }
-
-  const body = decodeConfigHeader(configHeader);
-  const sessionConfig = buildVoiceSessionConfig(body);
 
   const safetyIdentifier = crypto
     .createHash("sha256")

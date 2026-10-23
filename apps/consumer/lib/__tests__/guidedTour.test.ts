@@ -49,8 +49,10 @@ test("a request replays a tour that was already completed", () => {
   assert.equal(isTourVisible({ ...base, state: done, requested: true }), true);
 });
 
-test("never shows off the dashboard home, for non-clients, or before state loads", () => {
-  assert.equal(isTourVisible({ ...base, onHome: false, requested: true }), false);
+test("active and requested tours can cross pages; non-clients and unloaded state cannot", () => {
+  assert.equal(isTourVisible({ ...base, onHome: false, requested: true }), true);
+  assert.equal(isTourVisible({ ...base, onHome: false, active: true }), true);
+  assert.equal(isTourVisible({ ...base, onHome: false }), false);
   assert.equal(isTourVisible({ ...base, tier: "partner", requested: true }), false);
   assert.equal(isTourVisible({ ...base, state: null, requested: true }), false);
 });

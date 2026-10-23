@@ -64,6 +64,8 @@ export interface OrgAssistantContext {
 export interface AssistantContext {
   /** Current page the user is on */
   currentPage: string;
+  /** Bounded UI hints only; no arbitrary DOM text or unsaved field values. */
+  uiContext?: import("./assistant-page-context").AssistantUiContext;
   selectedWork?: import("./assistant-work-context").WorkSelection;
   /** User's detected readiness stage */
   readinessStage?: string;

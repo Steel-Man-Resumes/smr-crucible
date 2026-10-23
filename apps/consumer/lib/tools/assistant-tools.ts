@@ -496,9 +496,10 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         });
         return {
           filed: true,
-          id: row.id.slice(0, 8),
+          id: row.id,
           category: cat,
-          note: "Confirm to the user in one sentence that it went to Troy and his reply will show up in their Help center.",
+          status: "received",
+          note: "Confirm that the support request was recorded and give its reference. This does not confirm a notification, that Troy read it, or that research started. Any reply can be read in Help. Do not promise a reply or a deadline.",
         };
       } catch (err) {
         console.error("[assistant-tools] file_feedback failed:", err);
