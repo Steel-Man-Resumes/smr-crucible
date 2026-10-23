@@ -91,3 +91,14 @@ test("settle: an already-clean page is only confirmed, nothing removed", async (
   assert.equal(r.view.state, "finished");
   assert.ok(!r.notes.some((n) => n.kind === "removed" && /Load outbound|Prepped/.test(n.line)));
 });
+
+test("a source fallback keeps explicit management in current tense without restoring duty phrasing", async () => {
+  const own = `MORGAN SAMPLE\nWORK EXPERIENCE\nProduction Manager | Example Workshop | 2019 - Present\nResponsible for managing day-to-day production operations.`;
+  const written = `MORGAN SAMPLE\nCAREER SUMMARY\nProduction operations experience.\nPROFESSIONAL EXPERIENCE\nProduction Manager | Example Workshop | 2019 - Present\n- Supervised day-to-day production operations.`;
+  const r = await settleFinishPage({ ownWords: own, ownResumeText: own,
+    written: { resume: written, letter: "" }, grounding: GROUNDING },
+    { ...start, resume: written }, async () => null);
+  assert.match(r.state.resume, /- Manage day-to-day production operations\./);
+  assert.doesNotMatch(r.state.resume, /Responsible for|Supervised|Helped manage/);
+  assert.match(r.state.resume, /Production Manager \| Example Workshop \| 2019 - Present/);
+});

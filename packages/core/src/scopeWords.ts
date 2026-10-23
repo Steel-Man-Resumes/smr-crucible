@@ -591,6 +591,14 @@ function doerOf(before0: string, verb: string, after = "", goal = false, next = 
   const before = before0.split(/\bbut\s+(?=I\b)/).pop() as string;
   const past = PAST_VERB_RE.test(verb);
   if (REFUSED_AFTER_RE.test(after)) return "none";
+  // Explicit resume duty frames identify whose gerund this is. The verb and
+  // its object still pass the ordinary scope/family/quantity checks below.
+  // Anchor the whole prefix: another person, assistance, a denial or a plan
+  // cannot become the applicant's action by containing "responsible for".
+  if (/ing$/i.test(verb) && /^\s*(?:[-•*]\s*)?(?:(?:I\s+(?:was|am)|I['’]m|was|is)\s+)?(?:responsible\s+for|(?:duties|responsibilities)\s+include(?:d)?)\s+$/i.test(before0)) {
+    if (/\b(?:not|never|no|zero)\b|^\s+0\b/i.test(after)) return "none";
+    return presentHeld(before0, after, goal, next) ? "none" : "self";
+  }
   if (NOT_DONE_BEFORE.test(before)) return "none";
   if (SHARED_BEFORE.test(before)) return /\bI\b|^\s*(?:[-•*]\s*)?(?:help|assist)/i.test(before) || LINE_START_BEFORE.test(before.replace(SHARED_BEFORE, "")) ? "shared" : "none";
   // Round 14 (R14-B1): "I'm / I am in charge of", "I'm the one who trains" are a present tense: the same goal,

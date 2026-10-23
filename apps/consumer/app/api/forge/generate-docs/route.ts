@@ -30,7 +30,8 @@ import { buildFinishView } from "@/lib/finish-gate";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
 import { restoreDateForms } from "@/lib/date-form";
 import { cutUnsupportedExtraSentences, repairForgeResume } from "@/lib/forge-auto-repair";
-import { acceptForgeQualityRevision, forgeQualityIssues } from "@/lib/forge-quality-pass";
+import { acceptForgeQualityRevision, forgeQualityIssues, forgeQualityIssueCount } from "@/lib/forge-quality-pass";
+import { normalizeResumeDutyWording } from "@/lib/explicit-duty-wording";
 import { randomBytes } from "node:crypto";
 import { revisionCaller } from "@/lib/revision-route";
 import { loadRebuildSource, rebuildInputs, rebuildStore } from "@/lib/rebuild-source";
@@ -249,7 +250,11 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
     // DEC-51 on the WRITTEN page (Troy 2026-10-15): inside entries come off, or
     // read as the state, whatever the writer did with the words around them.
     const recordPass = applyRecordChoice(repaired.text, "", recordChoice, sourceInput.resumeText);
-    let resume = recordPass.resume;
+    // Only rewrite explicit verbs on lines still present after record choice.
+    // This cannot recover withheld entries or fill missing source duties.
+    const dutyWording = normalizeResumeDutyWording(recordPass.resume);
+    repaired.repairs.push(...dutyWording.repairs.map((repair) => ({ kind: "claim" as const, ...repair })));
+    let resume = dutyWording.text;
     let earlyAccounting = accountFlags([{ doc: "resume", flags: resumeCheck.flags, original: resumeRaw, final: resume }]);
     let earlyGrounding = withRewording({
       ...earlyAccounting, flags: resumeCheck.flags, hasFabrication: resumeCheck.hasFabrication,
@@ -409,7 +414,7 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
         verifierRanByDoc: { resume: resumeCheck.verifierRan, cover_letter: coverCheck.verifierRan },
         forgeAssisted: rewordingAFor(sourceKind),
         forgeRepairs: repaired.repairs,
-        qualityPass: { attempted: initialQualityIssues.length > 0, improved: qualityImproved, remaining: forgeQualityIssues(resume).length },
+        qualityPass: { attempted: initialQualityIssues.length > 0, improved: qualityImproved, remaining: forgeQualityIssueCount(resume) },
         hasFabricationByDoc: { resume: resumeCheck.hasFabrication, cover_letter: coverCheck.hasFabrication },
         // The check reported a problem in this document but named no phrase of its own.
         unnamedByDoc: {

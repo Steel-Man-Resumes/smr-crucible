@@ -441,9 +441,9 @@ describe("RL4: the Refinery tour says what is free once the gate is on", () => {
   it("no 'if you qualify' line; the included tools are named when the gate is on", () => {
     const tour = code(read("components/GuidedTour.tsx"));
     assert.doesNotMatch(tour, /If you qualify/);
-    assert.match(tour, /\{premiumGate \? "Free with your account\." : "Every tool\. For free\."\}/);
-    assert.match(tour, /\{premiumGate && \(/);
-    assert.match(tour, /\{PREMIUM_INCLUDED_LINE\} You never pay for any of it\./);
+    assert.match(tour, /premiumGate \? <p/);
+    assert.match(tour, /\{PREMIUM_INCLUDED_LINE\} Usage limits still apply/);
+    assert.doesNotMatch(tour, /Every tool\. For free\./);
     assert.doesNotMatch(tour, PRICE);
   });
 });

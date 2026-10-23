@@ -388,7 +388,7 @@ export async function listArtifactsPaged(
     laneId?: string;
     examples?: "hide" | "only";
     /** "recent" = newest edit first, ignoring the pinned current resume. */
-    order?: "recent";
+    order?: "recent" | "created";
     limit?: number;
     offset?: number;
   } = {}
@@ -435,7 +435,7 @@ export async function listArtifactsPaged(
   const items = await queryAsUser<RefineryArtifact>(userId, 
     `SELECT * FROM refinery_artifact
       WHERE ${whereSql}
-      ORDER BY ${opts.order === "recent" ? "" : "is_current DESC, "}updated_at DESC
+      ORDER BY ${opts.order === "created" ? "created_at ASC, id ASC" : `${opts.order === "recent" ? "" : "is_current DESC, "}updated_at DESC, id ASC`}
       LIMIT $${i++} OFFSET $${i}`,
     pageParams
   );

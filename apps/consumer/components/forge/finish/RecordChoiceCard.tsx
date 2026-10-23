@@ -13,7 +13,7 @@ import { recordEntryLabel, type RecordChoice, type RecordEntry } from "@/lib/rec
 const BTN = "t-focus min-h-touch border px-3 py-2 text-left text-xs transition-colors";
 
 const OPTIONS: Array<{ value: RecordChoice; label: string; body: string }> = [
-  { value: "off", label: "Leave it off the page", body: "The usual Steel Man move. You bring it up in person, at the right time." },
+  { value: "off", label: "Leave it off the page", body: "These jobs and their duties stay out of this resume. Your saved source keeps them. You can revisit this choice for a different job." },
   { value: "state", label: "Show the work, name the state", body: "The job stays. The employer reads as the state, not the facility." },
   { value: "facility", label: "Name the facility as I wrote it", body: "Everything stays the way you wrote it." },
 ];

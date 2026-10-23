@@ -198,7 +198,7 @@ test("performer lanes: the export builds the page from the database (8x10 or Let
   assert.ok(!/<img|type="file"|upload|weight/i.test(view.replace(/No weight, no birth date, no age/, "")), "no photo, upload or weight field");
   assert.match(view, /if \(trim === "8x10"\) setPages\(n\)/);
   assert.match(view, /exportOpenItemLines\(status, ctx\.entries, ctx\.settings, "performer", shownIds\)/);
-  assert.match(rd("app", "(dashboard)", "RefineryShell.tsx"), /href: "\/dashboard\/performer", label: "Performer"/);
+  assert.match(rd("app", "(dashboard)", "RefineryShell.tsx"), /href: "\/dashboard\/performer", label: "Performer page"/);
   // The coach and bio routes stay creative-only, so a performer lane is never sent to a model.
   for (const p of [["app", "api", "creative", "coach", "route.ts"], ["app", "api", "creative", "bio-draft", "route.ts"], ["app", "api", "creative", "[laneId]", "docs", "route.ts"]]) {
     assert.match(rd(...p), /await creativeLane\(g\.userId/, p.join("/"));

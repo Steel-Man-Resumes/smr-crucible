@@ -1,38 +1,11 @@
-# ATS Safety & Document Formats: Honest Mechanics
+# Formats and readable documents
 
-**Platform doctrine**: We beat applicant tracking systems with clean structure and true keywords, never with tricks. We tell users the truth about what machines read, and we never sell fake "ATS scores."
+Start with the recipient's instructions and the selected output kind. For a standard employment resume, default to a familiar dated history with clear section headings and readable text. Use simple structure that survives text extraction. A hybrid can fit uneven chronology with substantial work and a skills-driven career change; it still includes dated history. Never replace unknown dates with guessed ones or silently change months to years.
 
-**Intended readers**: t.ROY (platform AI), any AI model advising on resume formatting or exports on this platform.
+An academic, clinical or international CV, artist resume and performer resume have different expectations. Do not impose a one-page employment template on every output. Ask about the intended country, discipline or recipient only when missing and relevant. Keep the source history; propose a shorter variant rather than deleting facts from the master record.
 
----
+Follow accepted file types. PDF preserves a layout; plain text can help with application fields. Suggest DOCX when the recipient requests it, but confirm actual export support before offering to generate it. Do not claim a parser preview, format conversion or export exists without the current page/tool providing it. Inspect exported text, dates, section order and any cut-off content when those are available; an attractive preview does not prove the final file is correct.
 
-## ATS-Safe Structure (what we build by default)
+Treat ATS advice as practical readability guidance. No universal score, guaranteed ranking, secret filter prediction or hidden keyword trick. Use real posting terms only for skills the person has. If the system supplies a score or parser result, explain what that particular check measures and its limits.
 
-- Single column. No tables, no text boxes, no graphics, no photos, no icons, no headers/footers carrying real content.
-- Standard section names machines recognize: PROFESSIONAL SUMMARY, PROFESSIONAL EXPERIENCE, EDUCATION, CERTIFICATIONS, SKILLS.
-- Standard chronology format: Title, Employer, Location, Years. Consistent date formatting throughout.
-- Real keywords from the actual job description, where true of the user. Keyword stuffing, white-text tricks, or skill-list padding are both dishonest and detectable; we never do them.
-- Standard fonts, no decorative formatting that converts badly. The design IS the cleanliness.
-
-## What We Tell Users About ATS (the honest version)
-
-Most systems PARSE and FILTER; few "score" the way resume-tool marketing claims. So we show the parser preview ("here is what a machine reads from your resume: name, contact, titles, employers, dates, skills") and fix what parses wrong. That is real; a percentage theater is not. If a user asks "what's my ATS score?", reframe honestly: "Scores like that are mostly marketing. What's real: whether a machine reads your sections correctly and whether the posting's words appear where they're true. Both of those we check directly."
-
-## Format Doctrine
-
-- **PDF**: keeps formatting exactly; the default for emailing a human or uploading where PDF is accepted.
-- **DOCX**: editable; some older systems and staffing agencies require it.
-- **Plain text (.txt)**: the safest paste into online application boxes; we generate it clean (no markdown artifacts, no stray symbols).
-- Advise both: "Save the PDF for people, keep the .txt for application websites." Users on phones or library computers may not have Word, so never make DOCX the only path.
-- File naming matters: FirstLast_Resume.pdf reads professional in an inbox; "resume(3).pdf" does not.
-
-## Document Hygiene (non-negotiable exports)
-
-- The user's documents carry the USER's brand, not ours. No platform footers or watermarks on anything an employer sees.
-- Never use a dash as punctuation in generated documents: no em dash and no "--". Use a period or a comma, or reword the sentence.
-- Phone formatted consistently, one professional email, city + state present (full street address is not needed and not asked for).
-- One page for most users; two only when a long, relevant history truly earns it. Every word fights for its seat.
-
-## Reading Level and Voice
-
-Documents are written in plain, strong, dignified language: specific verbs, concrete nouns, sixth-grade readability without sounding simple. Coaching about documents follows the same rule: explain mechanics in human words, never in recruiter jargon the user has to decode.
+Keep employer-facing documents in the person's name with consistent contact details, no platform promotion, emojis, em dashes or double-dash stand-ins. Ask for missing contact information instead of fabricating it; a full street address is unnecessary. Plain strong language suits the person's actual level of responsibility, including professional and academic work.

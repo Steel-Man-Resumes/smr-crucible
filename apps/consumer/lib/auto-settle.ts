@@ -34,6 +34,7 @@ import {
   type LineGroup,
 } from "./finish-gate";
 import { resumeStructureLoss } from "./resume-structure";
+import { dutyTenseForLine, normalizeExplicitDutyLine } from "./explicit-duty-wording";
 
 export interface SettleState {
   resume: string;
@@ -134,7 +135,13 @@ export async function settleFinishPage(
       }
       if (g.scope) {
         const own = g.scope.overPeople?.noLine;
-        if (own && rewrite(g, own, false)) continue;
+        if (own) {
+          // Keep assisted source checks; rejection retains the original safe
+          // source fallback rather than inventing or downgrading scope.
+          const normalized = normalizeExplicitDutyLine(own, dutyTenseForLine(s.resume, g.line));
+          if (normalized !== own && rewrite(g, normalized, true)) continue;
+          if (rewrite(g, own, false)) continue;
+        }
         // "I helped" is the person's choice, not a safe automatic downgrade.
         const draft = await suggest(g, view.source, g.target === "letter" ? s.letter : s.resume);
         if (draft && rewrite(g, draft, true)) continue;

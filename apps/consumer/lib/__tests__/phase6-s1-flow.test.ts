@@ -338,8 +338,8 @@ test("Q1: the lane home never sends a page saved as given into check mode; the w
   assert.equal(rebuildHref("x"), "/resume?rebuild=x");
   // Round 3 (review r1 H1): the server says whether the writer made it (lib/source-kind.ts, tested in phase6-s1-rebuild).
   const home = read("components/lanes/LaneHome.tsx");
-  assert.match(home, /fromWriter: r\.fromWriter === true/);
-  assert.match(home, /draftNext\(rev\)\.href/);
+  assert.match(read("lib/assistant-work-context.ts"), /fromWriter: fromWriterNewest\(revision\)/);
+  assert.match(home, /resumeNext!\.href/);
 });
 
 test("Q1: a saved resume opens for the writer as the person's own, read as them, and the build runs", () => {

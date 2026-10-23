@@ -1439,7 +1439,6 @@ section("gate previews + advising");
   const importers = [
     "components/OnboardingGate.tsx",
     "app/(dashboard)/RefineryShell.tsx",
-    "app/(dashboard)/dashboard/page.tsx",
   ];
   for (const rel of importers) {
     const src = readFileSync(join(appRoot, rel), "utf8");
@@ -1448,6 +1447,9 @@ section("gate previews + advising");
     check(`dedup: ${rel} imports GATE_STATE_RANK`, src.includes("GATE_STATE_RANK") || src.includes("clientToolUnlocked"));
     check(`dedup: ${rel} has no local STATE_RANK const`, !/const\s+STATE_RANK\s*[:=]/.test(src), rel);
   }
+
+  const overview = readFileSync(join(appRoot, "app/(dashboard)/dashboard/page.tsx"), "utf8");
+  check("overview delegates current work instead of duplicating nav gates", overview.includes("<LaneHome") && !/const\s+(?:STATE_RANK|TOOLS)\s*[:=]/.test(overview));
 
   // Feature-preview registry: every locked feature has a complete entry.
   const validStates: GateState[] = ["needs_profile", "needs_resume", "full_access"];

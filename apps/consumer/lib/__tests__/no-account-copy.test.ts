@@ -85,7 +85,8 @@ test("the security page card and the dashboard line have a signed-in version", (
   assert.match(sec, /title="One Free Account"/);
   assert.match(sec, /<WallText/);
   const dash = readFileSync(join(ROOT, "app", "(dashboard)", "dashboard", "page.tsx"), "utf8");
-  assert.match(dash, /<WallText open=\{<>Free\. No account needed/);
+  assert.doesNotMatch(dash, /No account needed/);
+  assert.match(dash, /<LaneHome/);
 });
 
 test("no wall-aware line shows before the browser knows the wall (no stale claim in pre-rendered HTML)", () => {

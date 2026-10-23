@@ -5,12 +5,17 @@
  * task is picked. Three things, in order: the person's current resume (with
  * an honest draft line and its next step: "Check and finish" for a draft the
  * writer made, "Build it with t.ROY" for a page saved as given), the one next task for
- * today's route, and the support that fits. "All tools" follows it on the
- * page, so every tool stays reachable.
+ * today's route, and the support that fits. The shell keeps every tool reachable.
  */
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { resumeWorkspaceAction, workspaceNextAction } from "@/lib/workspace-next-action";
+import type { RefineryWorkspaceContext } from "@/lib/refinery-workspace";
+import { LANES_CHANGED_EVENT } from "@/lib/lanes";
+import { LANE_FOCUS_CHANGED_EVENT } from "./useLaneFocus";
+import { laneToolHref } from "@/lib/lane-goals";
+import { isLaneKind } from "@crucible/core/src/careerLaneShared";
 import {
   BUILD_WITH_TROY_LABEL,
   CARDS_PARAM,
@@ -66,36 +71,39 @@ export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" |
 }
 
 export function LaneHome({ task, profileFirst = false, laneId = null }: { task: LaneTask; profileFirst?: boolean; laneId?: string | null }) {
-  const [rev, setRev] = useState<ForgeRevision | null>(null);
-  const [loaded, setLoaded] = useState(false);
-  const [loadError, setLoadError] = useState(false);
+  const laneKey = laneId || "main";
+  const [result, setResult] = useState<{ key: string; work: RefineryWorkspaceContext | null; error: boolean } | null>(null);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let live = true;
-    setLoaded(false);
-    setLoadError(false);
-    fetch(`/api/revisions?forge=1&laneId=${encodeURIComponent(laneId || "main")}`, { cache: "no-store" })
-      .then((r) => {
-        if (!r.ok) throw new Error("Could not load saved work");
-        return r.json();
-      })
-      .then((j) => {
-        if (!live) return;
-        const r = j?.revision;
-        // Review r1 H1: the server says whether the writer made it (its lineage), never this page.
-        setRev(r && typeof r.id === "string" ? { id: r.id, artifactId: r.artifactId, number: r.number, status: r.status, fromWriter: r.fromWriter === true } : null);
-      })
-      .catch(() => live && setLoadError(true))
-      .finally(() => live && setLoaded(true));
-    return () => {
-      live = false;
+    let controller: AbortController | null = null;
+    const load = () => {
+      controller?.abort();
+      controller = new AbortController();
+      const current = controller;
+      setResult(null);
+      fetch(`/api/workspace-context?laneId=${encodeURIComponent(laneKey)}`, { cache: "no-store", signal: current.signal })
+        .then(async (response) => {
+          if (!response.ok) throw new Error("Could not load saved work");
+          const body = await response.json();
+          if (!body?.data) throw new Error("Could not load saved work");
+          if (live && !current.signal.aborted) setResult({ key: laneKey, work: body.data, error: false });
+        })
+        .catch(() => { if (live && !current.signal.aborted) setResult({ key: laneKey, work: null, error: true }); });
     };
-  }, [retry, laneId]);
-
-  // A new account saves its profile (name, phone) before the Refinery's tools open.
-  const next = profileFirst && task !== "interview" ? { label: "Save your profile below", href: "#profile-setup" }
-    : task === "resume" && (!loaded || loadError) ? { label: "Open My resumes", href: "/dashboard/vault" }
-    : laneHomeNext(task, rev);
+    load();
+    const events = [LANES_CHANGED_EVENT, LANE_FOCUS_CHANGED_EVENT, "resume-saved", "forge-synced", "next-step-changed"];
+    events.forEach((event) => window.addEventListener(event, load));
+    return () => { live = false; controller?.abort(); events.forEach((event) => window.removeEventListener(event, load)); };
+  }, [retry, laneKey]);
+  const current = result?.key === laneKey ? result : null;
+  const loaded = !!current;
+  const loadError = current?.error === true;
+  const work = current?.work;
+  const rev = work?.revision;
+  const documentHref = work?.lane && isLaneKind(work.lane.kind) ? laneToolHref(work.lane.kind, work.lane.id) : null;
+  const resumeNext = rev ? resumeWorkspaceAction(rev) : null;
+  const next = loaded && !loadError ? workspaceNextAction({ work: work || null, task, profileFirst }) : null;
   const box = "border border-t-line bg-t-panel p-4";
   return (
     <section aria-labelledby="lane-home-heading" className="space-y-3" data-testid="lane-home">
@@ -104,7 +112,7 @@ export function LaneHome({ task, profileFirst = false, laneId = null }: { task: 
       </h1>
       <div className="grid gap-3 lg:grid-cols-3">
         <div className={box} data-testid="lane-home-resume">
-          <p className="text-xs font-semibold uppercase text-t-bone-dim">Your resume</p>
+          <p className="text-xs font-semibold uppercase text-t-bone-dim">{documentHref ? "This lane’s documents" : "Current resume"}</p>
           {!loaded ? (
             <p className="mt-1 text-sm text-t-phos-dim">Loading...</p>
           ) : loadError ? (
@@ -112,6 +120,8 @@ export function LaneHome({ task, profileFirst = false, laneId = null }: { task: 
               <p role="alert" className="text-t-red">We couldn't load your saved resume. Try again to check your latest work.</p>
               <button type="button" onClick={() => setRetry((n) => n + 1)} className="t-focus mt-2 min-h-touch text-t-amber-bright underline underline-offset-2">Try again</button>
             </div>
+          ) : documentHref ? (
+            <Link href={documentHref} className="t-focus mt-2 inline-flex min-h-touch items-center text-sm text-t-amber-bright underline underline-offset-2">Open {work?.lane?.name || "your documents"}</Link>
           ) : rev ? (
             <>
               <p className="mt-1 text-sm font-semibold text-t-white">Version {rev.number}{rev.status === "finished" ? ", finished" : ""}</p>
@@ -122,8 +132,8 @@ export function LaneHome({ task, profileFirst = false, laneId = null }: { task: 
               )}
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 {(rev.status !== "finished" || !rev.fromWriter) && (
-                  <Link href={draftNext(rev).href} className="t-focus min-h-touch inline-flex items-center font-medium text-t-amber-bright underline underline-offset-2" data-testid="lane-home-check">
-                    {draftNext(rev).label}
+                  <Link href={resumeNext!.href} className="t-focus min-h-touch inline-flex items-center font-medium text-t-amber-bright underline underline-offset-2" data-testid="lane-home-check">
+                    {resumeNext!.label}
                   </Link>
                 )}
                 <Link href="/dashboard/vault" className="t-focus min-h-touch inline-flex items-center text-t-phos underline underline-offset-2">
@@ -132,18 +142,18 @@ export function LaneHome({ task, profileFirst = false, laneId = null }: { task: 
               </div>
             </>
           ) : (
-            <p className="mt-1 text-sm text-t-phos">No resume yet. It takes a few minutes to get a first piece saved.</p>
+            <p className="mt-1 text-sm text-t-phos">No saved resume version in this lane yet.</p>
           )}
         </div>
         <div className={box} data-testid="lane-home-next">
           <p className="text-xs font-semibold uppercase text-t-bone-dim">Next</p>
-          <Link
+          {next ? <Link
             href={next.href}
             className="t-focus mt-2 inline-flex min-h-touch w-full items-center justify-center bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
             data-testid="lane-home-next-action"
           >
             {next.label}
-          </Link>
+          </Link> : <p className="mt-2 text-sm text-t-phos-dim">{loadError ? "Reload your workspace to see the next step." : "Loading your next step..."}</p>}
           {task === "documents" && (
             <ul className="mt-2 space-y-1 text-sm">
               {DOCUMENT_LINKS.map((d) => (

@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
+import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
 import { TierGate } from "@/components/TierGate";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { StatusBadges } from "@/components/apply/StatusBadges";
@@ -122,6 +123,8 @@ function ApplicationsPage() {
   const [apps, setApps] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [statusNotice, setStatusNotice] = useState("");
+  const [interviewReady, setInterviewReady] = useState<string | null>(null);
 
   const loadApps = useCallback(async () => {
     try {
@@ -140,16 +143,22 @@ function ApplicationsPage() {
 
   async function updateStatus(id: string, status: string) {
     setUpdating(id);
+    setStatusNotice("");
+    setInterviewReady(null);
     try {
       const res = await fetch("/api/applications", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, status }),
       });
-      if (res.ok) {
-        await loadApps();
-      }
-    } catch {}
+      if (!res.ok) throw new Error("status_not_saved");
+      await loadApps();
+      window.dispatchEvent(new Event(NEXT_STEP_CHANGED_EVENT));
+      if (status === "interviewing") {
+        setInterviewReady(id);
+        setStatusNotice("You got the interview. Let’s prepare with the job and documents you saved.");
+      } else setStatusNotice("Application updated.");
+    } catch { setStatusNotice("That update did not save. Your application is unchanged. Try again."); }
     setUpdating(null);
   }
 
@@ -230,6 +239,12 @@ function ApplicationsPage() {
         Track your job applications from saved to offered. Each step has tools
         to help you prepare.
       </p>
+
+      {statusNotice && <div role="status" className="mb-5 border border-t-amber bg-t-panel p-4 text-t-phos">
+        <p>{statusNotice}</p>
+        {interviewReady && <Link href={`/dashboard/interview?applicationId=${encodeURIComponent(interviewReady)}`} className="t-focus mt-2 inline-flex min-h-touch items-center text-t-amber-bright underline">Prepare for this interview with t.ROY</Link>}
+      </div>}
+      <p className="mb-5 text-sm text-t-phos-dim">You can <Link href="/dashboard/interview" className="t-focus text-t-amber-bright underline">practice an interview anytime</Link>. An invitation moves that job straight to preparation.</p>
 
       {activeApps.length === 0 && archivedApps.length === 0 && (
         <div className="text-center py-16">
@@ -320,6 +335,7 @@ function ApplicationsPage() {
                               applied lives in the ApplyActions block below (the
                               full apply ladder); later stages just advance. */}
                           <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
+                            {["saved", "applied", "heard_back"].includes(app.status) && <button type="button" disabled={updating === app.id} onClick={() => updateStatus(app.id, "interviewing")} className="t-focus min-h-touch border border-t-amber px-3 py-1.5 text-xs font-semibold text-t-amber-bright disabled:opacity-50">I got an interview</button>}
                             {stage.status !== "saved" && nextStage && (
                               <button
                                 onClick={() =>

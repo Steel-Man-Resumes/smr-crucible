@@ -39,12 +39,12 @@ async function handlePost(request: Request) {
     // asked only for the normalised place (support-search hudQueryFor).
     const { resources, coverage, place, directoryRead } = await searchSupport(
       { category, barriers, location },
-      { findHud: (location) => findHudCounselors(location), readDirectory: async (opts) => { const result = await searchVerifiedResources(opts); if (result.status !== "ok") throw new Error("directory_unavailable"); return result.data; }, countiesOf, isPlaceIn }
+      { findHud: (location) => findHudCounselors(location), readDirectory: async (opts) => { const result = await searchVerifiedResources({...opts, bands: ["A", "B", "C"]}); if (result.status !== "ok") throw new Error("directory_unavailable"); return result.data; }, countiesOf, isPlaceIn }
     );
 
     // A real searched area with no checked local match creates one minimal owner ticket.
     // A failed read never becomes a false coverage gap. No person or barrier text is stored.
-    if(directoryRead && place.state && !resources.some(r=>r.source === "directory" && (r.scope === "city" || r.scope === "county"))) {
+    if(directoryRead && place.state && !resources.some(r=>r.source === "directory" && r.band === "A" && (r.scope === "city" || r.scope === "county"))) {
       const session=await auth().catch(()=>null);
       if(session?.user?.id){const areas=requestedWants(category,undefined).areas;
         const selected=typeof category === "string" && category !== "all" ? areas.slice(0,3) : ["community"];

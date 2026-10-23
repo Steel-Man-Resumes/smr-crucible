@@ -63,7 +63,7 @@ it("support and creative packs load by relevant page", () => {
 });
 it("handoff preserves selected job/lane/revision", () => {
   const url = new URL(resolveAssistantPage("interview", job, { laneId: laneB, artifactId: art, revisionId: rev })!, "https://example.test");
-  assert.equal(url.searchParams.get("job"), job); assert.equal(url.searchParams.get("laneId"), laneB); assert.equal(url.searchParams.get("revisionId"), rev);
+  assert.equal(url.searchParams.get("applicationId"), job); assert.equal(url.searchParams.get("laneId"), laneB); assert.equal(url.searchParams.get("revisionId"), rev);
 });
 
 import { executionBudget } from "../tools/tool-execution";
@@ -112,4 +112,23 @@ it("never reads attachment snapshots for an unavailable application", async () =
   let reads=0;
   await assert.rejects(resolveSelectedWork("owner",{applicationId:job},store({application:async()=>null,documents:async()=>{reads++;return[];}})));
   assert.equal(reads,0);
+});
+
+it("an application without an attachment never borrows the active lane resume", async () => {
+  let reads = 0;
+  const work = await resolveSelectedWork("owner", { applicationId: job }, store({
+    application: async () => ({ id: job, job_title: "Driver", company: "Example", resume_artifact_id: null }) as any,
+    laneResume: async () => { reads++; return { id: art, lane_id: laneA, artifact_type: "resume", is_demo: false, content: {} }; },
+  }));
+  assert.equal(reads, 0); assert.equal(work.revision, null); assert.equal(work.lane, null);
+});
+
+it("a moved employment resume does not replace a CV lane's visible record", async () => {
+ const doc = { kind: "cv" as const, source: "current_visible_lane_document", text: "Selected CV", truncated: false, notice: "Current output" };
+ const work = await resolveSelectedWork("owner", { laneId: laneB }, store({
+  lane: async () => ({ id: laneB, kind: "cv", cv_type: "clinical", archived_at: null }) as any,
+  laneResume: async () => ({ id: art, lane_id: laneB, artifact_type: "resume", is_demo: false, content: {} }),
+  laneDocument: async () => doc,
+ }));
+ assert.equal(work.revision, null); assert.equal(work.laneDocument?.text, "Selected CV");
 });

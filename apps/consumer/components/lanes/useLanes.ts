@@ -104,14 +104,14 @@ export function useLanes() {
       // Before the list arrives (a screen opening a resume by id), remember
       // the choice as given; load() resolves it against the real lanes.
       const next = loadedRef.current ? resolveActiveLane(choice, lanesRef.current.map((l) => l.id), defaultRef.current) : choice;
-      if (!userId) return;
+      if (!userId) return false;
       setSwitching(true);
       setError("");
       try {
         const lane = lanesRef.current.find(l => l.id === next);
         const response = await fetch("/api/lane-focus", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: taskRef.current, laneId: next === MAIN_LANE_KEY ? null : next, target: lane?.target_role || lane?.name || null }) });
         if (!response.ok) throw new Error();
-      } catch { setError("Your lane choice was not saved. Try again."); setSwitching(false); return; }
+      } catch { setError("Your lane choice was not saved. Try again."); setSwitching(false); return false; }
       setSwitching(false);
       if (loadedRef.current) setActiveState(next);
       const key = activeLaneStorageKey(userId);
@@ -124,6 +124,7 @@ export function useLanes() {
       }
       announce("active", selfId.current);
       window.dispatchEvent(new Event(LANE_FOCUS_CHANGED_EVENT));
+      return true;
     },
     [userId]
   );

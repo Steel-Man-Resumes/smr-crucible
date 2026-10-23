@@ -13,7 +13,6 @@ import { AssistantDrawer } from "@crucible/consumer-ui";
 import { AssistantChat } from "@/components/AssistantChat";
 import { UiPrefsApplier } from "@/components/UiPrefsApplier";
 import { NavAvatar } from "@/components/NavAvatar";
-import { JourneyProgressBanner } from "@/components/JourneyProgressBanner";
 import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
 import { GuidedTour } from "@/components/GuidedTour";
 import { DevSwitcher } from "@/components/DevSwitcher";
@@ -72,11 +71,14 @@ interface NavItem {
   minTier: UserTier;
   minState: OnboardingState;
   requiresDisclosure?: boolean;
+  targetId?: string;
+  children?: NavItem[];
 }
 
 interface NavGroup {
   label?: string;
   items: NavItem[];
+  collapsible?: boolean;
 }
 
 const TIER_RANK: Record<string, number> = {
@@ -91,39 +93,37 @@ const TIER_RANK: Record<string, number> = {
 const NAV_GROUPS: NavGroup[] = [
   {
     items: [
-      { href: "/dashboard", label: "Overview", minTier: "observer", minState: "needs_profile" },
-    ],
-  },
-  // Nav order follows the core loop: find work FIRST (job board leads), then
-  // the advanced build tools. See Refinery walkthrough feedback C6/C10.
-  {
-    label: "Find Work",
-    items: [
-      { href: "/dashboard/jobs", label: "Job Board", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/applications", label: "Applications", minTier: "client", minState: "needs_profile" },
-      { href: "/dashboard/employers", label: "Employers That Hire", minTier: "client", minState: "full_access" },
-      { href: "/dashboard/resources", label: "Get support", minTier: "client", minState: "needs_profile" },
-    ],
-  },
-  {
-    label: "Build",
-    items: [
-      { href: "/dashboard/application-tailor", label: "Application Tailor", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/creative", label: "Creative Work", minTier: "client", minState: "needs_profile" },
-      { href: "/dashboard/cv", label: "CV", minTier: "client", minState: "needs_profile" },
-      { href: "/dashboard/performer", label: "Performer", minTier: "client", minState: "needs_profile" },
-      { href: "/dashboard/disclosure", label: "Disclosure", minTier: "client", minState: "full_access" },
-      // Interview prep never waits on a disclosure plan (Codex review A6):
-      // an interview can come before any lesson.
-      { href: "/dashboard/interview", label: "Interview Prep", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard", label: "Overview", targetId: "refinery-nav-overview", minTier: "observer", minState: "needs_profile", children: [
+        { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "needs_profile" },
+      ] },
+      { href: "/dashboard/jobs", label: "Find work", targetId: "refinery-nav-jobs", minTier: "client", minState: "needs_profile", children: [
+        { href: "/dashboard/jobs", label: "Jobs", minTier: "client", minState: "needs_profile" },
+        { href: "/dashboard/employers", label: "Employers", minTier: "client", minState: "needs_profile" },
+      ] },
+      { href: "/dashboard/vault", label: "My resumes", targetId: "refinery-nav-resumes", minTier: "client", minState: "needs_profile", children: [
+        { href: "/dashboard/vault", label: "Resumes & versions", minTier: "client", minState: "needs_profile" },
+        { href: "/dashboard/application-tailor", label: "Tailor for a job", minTier: "client", minState: "needs_resume" },
+        { href: "/dashboard/creative", label: "Creative work", minTier: "client", minState: "needs_profile" },
+        { href: "/dashboard/cv", label: "CV", minTier: "client", minState: "needs_profile" },
+        { href: "/dashboard/performer", label: "Performer page", minTier: "client", minState: "needs_profile" },
+      ] },
+      { href: "/dashboard/applications", label: "Applications", targetId: "refinery-nav-applications", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/interview", label: "Interview prep", targetId: "refinery-nav-interview", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/resources", label: "Support & disclosure", targetId: "refinery-nav-support", minTier: "client", minState: "needs_profile", children: [
+        { href: "/dashboard/resources", label: "Local help & job paths", minTier: "client", minState: "needs_profile" },
+        { href: "/dashboard/disclosure", label: "Disclosure plan", minTier: "client", minState: "needs_profile" },
+        { href: "/dashboard/documents", label: "Private records & documents", minTier: "client", minState: "needs_profile" },
+      ] },
     ],
   },
   {
-    label: "My Stuff",
+    label: "My information",
+    collapsible: true,
     items: [
-      { href: "/dashboard/vault", label: "My resumes", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/documents", label: "Private documents", minTier: "client", minState: "needs_resume" },
-      { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "full_access" },
+      { href: "/dashboard/settings#account", label: "Profile & contact details", minTier: "observer", minState: "needs_profile" },
+      { href: "/dashboard/documents", label: "Private documents", minTier: "client", minState: "needs_profile" },
+      { href: "/dashboard/settings#privacy", label: "Sharing & privacy", minTier: "observer", minState: "needs_profile" },
+      { href: "/dashboard/settings#data", label: "Export or delete my data", minTier: "observer", minState: "needs_profile" },
     ],
   },
   {
@@ -134,12 +134,16 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     items: [
-      { href: "/dashboard/help", label: "Help & Feedback", minTier: "observer", minState: "needs_profile" },
+      { href: "/dashboard/help", label: "Help & tour", minTier: "observer", minState: "needs_profile" },
       { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
       { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
     ],
   },
 ];
+
+function navContains(item: NavItem, pathname: string): boolean {
+  return pathname === item.href || !!item.children?.some((child) => pathname === child.href);
+}
 
 // Org-oversight nav (org-oversight wave, 2026-08-07): an org admin/staff runs
 // the organization -- the participant toolset (Job Board, Tailor, etc.) is NOT
@@ -749,101 +753,53 @@ export function RefineryShell({
     return item.label;
   }
 
-  function navGroupLabel(group: NavGroup): string | undefined {
-    if (userTier === "partner" && group.label === "Find Work") {
-      return "Client tools (what your clients see)";
+  function renderNavItems(onItemClick?: () => void, mobile = false) {
+    function renderItem(item: NavItem, secondary = false) {
+      const unlocked = isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete);
+      const active = secondary ? pathname === item.href : navContains(item, pathname);
+      // Only one copy owns each tour target. A closed mobile menu leaves the
+      // desktop target hidden on small screens; the tour uses its readable fallback.
+      const targetId = item.targetId && (mobile ? drawerOpen : !drawerOpen) ? item.targetId : undefined;
+      const lockLine = lockedToolLine({ state: onboarding.state, requiresDisclosure: item.requiresDisclosure, disclosureComplete: onboarding.disclosureComplete });
+      const cls = `t-focus flex min-h-[40px] items-center justify-between gap-2 rounded-[4px] border-l-[3px] px-3 py-2 text-sm transition-colors ${secondary ? "font-normal" : "font-medium"} ${active ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]" : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"}`;
+      const previewId = !unlocked ? previewIdForHref(item.href) : null;
+      const content = <>
+        <span className="min-w-0"><span className="block">{navItemLabel(item)}</span>{!unlocked && <span className="mt-0.5 block text-[11px] font-normal leading-snug text-t-bone-dim">{lockLine}</span>}</span>
+        {!unlocked && <LockKeyhole size={13} className="shrink-0 opacity-60" aria-hidden="true" />}
+      </>;
+      return (
+        <div key={`${item.href}:${item.label}`}>
+          {unlocked || previewId ? (
+            <Link id={targetId} href={unlocked ? item.href : `/dashboard/preview/${previewId}`} onClick={onItemClick}
+              data-tour={`nav-${item.href.split("/").pop()}`} aria-current={unlocked && pathname === item.href ? "page" : undefined}
+              title={!unlocked ? `${lockLine} See a preview.` : undefined} className={cls}>
+              {content}
+            </Link>
+          ) : (
+            <div id={targetId} aria-disabled="true" title={lockLine} className={`${cls} cursor-not-allowed opacity-70`}>{content}</div>
+          )}
+          {!secondary && active && item.children && (
+            <div aria-label={`${item.label} views`} className="my-1 ml-4 border-l border-t-line pl-1">
+              {item.children.filter((child) => shouldShowItem(child, userTier)).map((child) => renderItem(child, true))}
+            </div>
+          )}
+        </div>
+      );
     }
-    return group.label;
-  }
-
-  function renderNavItems(onItemClick?: () => void) {
     return NAV_GROUPS.map((group, gi) => {
-      const visible = group.items.filter((item) => {
-        // Org leaders' Overview IS the org dashboard -- hide the duplicate
-        // Partner Dashboard entry for them (admins keep it: it is the entry
-        // to the all-cohorts view and the ?codeId override target).
-        if (item.href === "/dashboard/partner" && isOrgPartner) return false;
-        return shouldShowItem(item, userTier);
-      });
+      const visible = group.items.filter((item) => !(item.href === "/dashboard/partner" && isOrgPartner) && shouldShowItem(item, userTier));
       if (!visible.length) return null;
-
-      const groupLabel = navGroupLabel(group);
+      const links = visible.map((item) => renderItem(item));
+      if (group.collapsible) return (
+        <details key={group.label} className="mt-3 border-t border-t-line pt-3" open={pathname === "/dashboard/documents" || pathname === "/dashboard/settings" ? true : undefined}>
+          <summary className="t-focus cursor-pointer px-3 py-2 text-sm font-medium text-t-bone-dim hover:text-t-white">{group.label}</summary>
+          <div className="ml-2">{links}</div>
+        </details>
+      );
       return (
         <div key={gi} className={gi > 0 ? "mt-2 border-t border-t-line pt-3" : ""}>
-          {groupLabel && (
-            <p className="mb-1 px-3 font-term text-[9px] font-semibold uppercase text-t-bone-dim">
-              {groupLabel}
-            </p>
-          )}
-          {visible.map((item) => {
-            const unlocked = isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete);
-            const isActive = pathname === item.href;
-
-            // One plain line: what is locked and what opens it (RD4). Shown under
-            // the label so it reads on a phone, not only as a hover tooltip.
-            const lockLine = lockedToolLine({
-              state: onboarding.state,
-              requiresDisclosure: item.requiresDisclosure,
-              disclosureComplete: onboarding.disclosureComplete,
-            });
-
-            if (!unlocked) {
-              // Phase 4.1: no dead ends. A locked tool that has a preview becomes
-              // a LINK to that preview (lock badge kept as the "not yet yours"
-              // cue). The preview is informational only -- the real tool page
-              // still enforces the gate at action depth. Tools with no preview
-              // entry keep the plain locked affordance.
-              const previewId = previewIdForHref(item.href);
-              const lockedLabel = (
-                <span className="min-w-0">
-                  <span className="block">{navItemLabel(item)}</span>
-                  <span className="mt-0.5 block text-[11px] font-normal leading-snug text-t-bone-dim">
-                    {lockLine}
-                  </span>
-                </span>
-              );
-              if (previewId) {
-                return (
-                  <Link
-                    key={item.href}
-                    href={`/dashboard/preview/${previewId}`}
-                    onClick={onItemClick}
-                    title={`${lockLine} See a preview.`}
-                    className="t-focus flex min-h-[40px] items-start justify-between gap-2 rounded-[4px] border-l-[3px] border-transparent px-3 py-2 text-sm font-medium text-[#6b726b] transition-colors hover:bg-t-panel-2 hover:text-t-white"
-                  >
-                    {lockedLabel}
-                    <LockKeyhole size={13} className="mt-1 flex-shrink-0 opacity-60" aria-hidden="true" />
-                  </Link>
-                );
-              }
-              return (
-                <div
-                  key={item.href}
-                  className="flex min-h-[40px] cursor-not-allowed select-none items-start justify-between gap-2 rounded-[4px] px-3 py-2 text-sm text-[#6b726b]"
-                  title={lockLine}
-                >
-                  {lockedLabel}
-                  <LockKeyhole size={13} className="mt-1 flex-shrink-0 opacity-60" aria-hidden="true" />
-                </div>
-              );
-            }
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={onItemClick}
-                data-tour={`nav-${item.href.split("/").pop()}`}
-                className={`t-focus flex min-h-[40px] items-center rounded-[4px] border-l-[3px] px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]"
-                    : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"
-                }`}
-              >
-                {navItemLabel(item)}
-              </Link>
-            );
-          })}
+          {group.label && <p className="mb-1 px-3 font-term text-[9px] font-semibold uppercase text-t-bone-dim">{group.label}</p>}
+          {links}
         </div>
       );
     });
@@ -987,12 +943,14 @@ export function RefineryShell({
             <p className="mb-4 px-3 font-term text-[10px] font-semibold uppercase text-[#4f6b57]">
               {isOrgPartner ? "Organization" : "Career workspace"}
             </p>
-            {isOrgPartner ? renderOrgNav() : renderNavItems()}
+            {isOrgPartner ? renderOrgNav() : <nav aria-label="Career workspace">{renderNavItems()}</nav>}
           </div>
         </aside>
 
         {/* Main content */}
-        <main id="main" className="min-w-0 flex-1 px-4 py-8 pb-32 sm:px-7 sm:pb-8 lg:px-10">
+        <div className="min-w-0 flex-1">
+        {!isOrgPartner && userTier === "client" && <Suspense fallback={null}><RefineryLaneHeader state={onboarding.state} /></Suspense>}
+        <main id="main" className="px-4 py-6 pb-32 sm:px-7 sm:pb-8 lg:px-10">
           {forgeNotice && (
             <p role="status" className="mb-6 border border-t-line bg-t-panel px-4 py-3 text-sm text-t-white">
               {forgeNotice}
@@ -1056,11 +1014,9 @@ export function RefineryShell({
           {/* Asked once after joining an organization. Not while an admin is
               viewing as someone else: the answer would be recorded for the admin. */}
           {!isOrgPartner && !effectiveRole?.impersonating && <JoinSharingPrompt />}
-          {!isOrgPartner && <JourneyProgressBanner state={onboarding.state} />}
-          {/* Lanes first (Phase 5 R2): "Working toward ... Today ..." with Change. */}
-          {!isOrgPartner && <RefineryLaneHeader />}
           {derivedReady ? children : null}
         </main>
+        </div>
       </div>
 
       {/* First-run orientation -- self-gating (client tier, DB-persisted) */}
@@ -1104,7 +1060,7 @@ export function RefineryShell({
           </button>
         </div>
         <div className="px-2 py-4 space-y-1">
-          {isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : renderNavItems(() => setDrawerOpen(false))}
+          {isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : <nav aria-label="Career workspace">{renderNavItems(() => setDrawerOpen(false), true)}</nav>}
           <div className="mt-3 pt-3 border-t border-t-line space-y-1">
             {signOutError && <p role="alert" className="px-3 text-sm text-t-red">{signOutError}</p>}
             <a

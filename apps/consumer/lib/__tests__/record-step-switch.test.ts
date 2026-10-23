@@ -214,7 +214,7 @@ describe("t.ROY", () => {
 
   it("the coaching doctrine points there only when the page says it is available", () => {
     const skill = read("lib/skills/strong-background-professional/SKILL.md");
-    assert.match(skill, /Only when the page instructions say the Refinery's record check is available/);
+    assert.match(skill, /Use a dedicated record-check flow only when current capabilities say it is available and the person chooses it/);
   });
 });
 

@@ -80,7 +80,7 @@ export function SavedJobsPanel({
         </Link>
       </div>
       <p className="text-xs text-t-phos-dim mb-3">
-        You tailor one job at a time. Save as many as you want, then dial them in and apply one by one.
+        Saved jobs across all your lanes. Open one job to work with its own resume and application.
       </p>
       <div className="mb-4">
         <BaselineSelector />

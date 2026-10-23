@@ -303,7 +303,7 @@ describe("pieces", () => {
 
   test("the route reads the directory and keeps the premium hook", () => {
     const src = readFileSync(join(__dirname, "..", "..", "app", "api", "resources-search", "route.ts"), "utf8");
-    assert.match(src, /readDirectory: async[\s\S]*searchVerifiedResources\(opts\)/);
+    assert.match(src, /readDirectory: async[\s\S]*searchVerifiedResources\(\{\.\.\.opts, bands: \["A", "B", "C"\]\}\)/);
     assert.match(src, /result.status !== "ok"\) throw new Error\("directory_unavailable"\)/);
     assert.match(src, /directoryRead, warning:/);
     assert.match(src, /premium: "resources"/);

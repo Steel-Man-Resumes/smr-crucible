@@ -13,13 +13,29 @@
 
 import { TOUR_PARAM } from "@crucible/core/src/journeyStages";
 
-/** Fired on window after the tour is completed or deferred, so the next-step card refetches. */
+/** Fired after persisted completion or skip so the next-step card refetches. */
 export const NEXT_STEP_CHANGED_EVENT = "next-step-changed";
+export const TOUR_VERSION = 2;
+export const TOUR_STOP_COUNT = 6;
+
+export interface TourNextStep {
+  action: string;
+  href: string;
+}
 
 export interface TourState {
+  /** Scopes the non-sensitive session pause marker on shared browsers. */
+  accountId?: string;
   tourComplete: boolean;
   tourDeferrals: number;
   coachName: string;
+  /** Unknown on a failed read: never celebrate an unverified completion. */
+  forgeComplete?: boolean;
+  version?: number;
+  /** Zero-based stop to resume, not a career milestone. */
+  stop?: number;
+  inProgress?: boolean;
+  nextStep?: TourNextStep;
 }
 
 /** Shown when the tour state cannot be read, so an explicit request still opens. */
@@ -50,18 +66,18 @@ export function isTourVisible(args: {
   return requested || !state.tourComplete;
 }
 
-/** "Remind me next login" only applies to a first run that still has deferrals left. */
+/** Pausing is always available, including after earlier deferrals and on replay. */
 export function canDeferTour(state: TourState | null): boolean {
-  return !!state && !state.tourComplete && state.tourDeferrals < 2;
+  return !!state;
 }
 
-/** A replay of a completed tour can always be closed. */
+/** Orientation must never trap someone away from their saved work. */
 export function canCloseTour(state: TourState | null): boolean {
-  return !!state && state.tourComplete;
+  return !!state;
 }
 
 /**
- * What the tour teaches. REAL tools only: each entry points at a page that
+ * Supporting route catalog. REAL tools only: each entry points at a page that
  * exists today (a test checks the file is there). Planned tools are named once,
  * plainly, in TOUR_NOT_BUILT_YET and never get a row of their own.
  */
