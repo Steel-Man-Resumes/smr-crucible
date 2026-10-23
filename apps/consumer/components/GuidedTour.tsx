@@ -265,31 +265,43 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
       const mobile = window.innerWidth < 768;
       onNavigationReveal?.(mobile && lesson.part === 'map');
       if (location.pathname !== lesson.route) { expectedRoute.current = lesson.route; router.push(lesson.route); }
-      const target = await waitForGuidedTarget(lesson.targets[index], lesson.route, controller.signal);
-      // Establish the real page, then frame the exact teaching target.
-      const oldMargins = [target.style.scrollMarginTop, target.style.scrollMarginBottom];
-      target.style.scrollMarginTop = '90px'; target.style.scrollMarginBottom = `${window.innerHeight - (dock.current?.getBoundingClientRect().top ?? window.innerHeight) + 32}px`;
-      revealedTarget.current = target;
-      target.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
-      [target.style.scrollMarginTop, target.style.scrollMarginBottom] = oldMargins;
-      await nextPaint(controller.signal);
-      const page = target.closest<HTMLElement>('[data-tour-page]');
-      if (lesson.part === 'pages' && page) {
-        const bottom = dock.current?.getBoundingClientRect().top ?? innerHeight - 260;
-        // Keep the desktop navigation as a stable landmark beside the camera.
-        const left = innerWidth >= 768 ? Math.max(16, page.getBoundingClientRect().left) : 16;
-        restoreCamera.current = directGuidedCamera(page, target, { left, top: 82, width: innerWidth - left - 16, height: Math.max(100, bottom - 110) }, motionOff);
-        if (!motionOff) await guidedHold(GUIDED_CAMERA_MS, controller.signal);
+      // A real page may briefly render its controls, then replace them while
+      // its lane or saved work loads. Reacquire within one bounded deadline.
+      const deadline = performance.now() + 12000;
+      for (let attempt = 0; attempt < 3 && performance.now() < deadline; attempt++) {
+        resetCamera(); setRect(null); setPath(''); setPhase('revealing');
+        const target = await waitForGuidedTarget(lesson.targets[index], lesson.route, controller.signal, Math.max(1, deadline - performance.now()));
+        const currentTarget = () => target.isConnected && document.getElementById(lesson.targets[index]) === target && location.pathname === lesson.route && !!document.querySelector(`[data-assistant-page-ready="${lesson.route}"]`);
+        // Establish the real page, then frame the exact teaching target.
+        const oldMargins = [target.style.scrollMarginTop, target.style.scrollMarginBottom];
+        target.style.scrollMarginTop = '90px'; target.style.scrollMarginBottom = `${window.innerHeight - (dock.current?.getBoundingClientRect().top ?? window.innerHeight) + 32}px`;
+        revealedTarget.current = target;
+        target.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
+        [target.style.scrollMarginTop, target.style.scrollMarginBottom] = oldMargins;
         await nextPaint(controller.signal);
+        if (!currentTarget()) continue;
+        const page = target.closest<HTMLElement>('[data-tour-page]');
+        if (lesson.part === 'pages' && page) {
+          const bottom = dock.current?.getBoundingClientRect().top ?? innerHeight - 260;
+          // Keep the desktop navigation as a stable landmark beside the camera.
+          const left = innerWidth >= 768 ? Math.max(16, page.getBoundingClientRect().left) : 16;
+          restoreCamera.current = directGuidedCamera(page, target, { left, top: 82, width: innerWidth - left - 16, height: Math.max(100, bottom - 110) }, motionOff);
+          if (!motionOff) await guidedHold(GUIDED_CAMERA_MS, controller.signal);
+          await nextPaint(controller.signal);
+        }
+        if (!currentTarget()) continue;
+        const screen = visibleGuidedRect(target.getBoundingClientRect(), window.innerWidth, window.innerHeight, window.innerHeight - (dock.current?.getBoundingClientRect().top ?? window.innerHeight) + 20);
+        if (!screen) throw new Error('This area does not fit above the guide. Continue the explanation, or pause to explore it.');
+        setRect(screen);
+        setPath(attentionPath(roy.current, screen));
+        if (motionOff) { setPhase('ready'); return; }
+        setPhase('travel');
+        await guidedHold(700, controller.signal);
+        if (!currentTarget()) continue;
+        if (!controller.signal.aborted) setPhase('ready');
+        return;
       }
-      const screen = visibleGuidedRect(target.getBoundingClientRect(), window.innerWidth, window.innerHeight, window.innerHeight - (dock.current?.getBoundingClientRect().top ?? window.innerHeight) + 20);
-      if (!screen) throw new Error('This area does not fit above the guide. Continue the explanation, or pause to explore it.');
-      setRect(screen);
-      setPath(attentionPath(roy.current, screen));
-      if (motionOff) { setPhase('ready'); return; }
-      setPhase('travel');
-      await guidedHold(700, controller.signal);
-      if (!controller.signal.aborted) setPhase('ready');
+      throw new Error('This page is still changing. Choose Show me to try again.');
     } catch (e) {
       if (controller.signal.aborted || !alive.current) return;
       resetCamera(); setPhase('explain'); setError(e instanceof Error ? e.message : 'The page could not be shown. Try again.');

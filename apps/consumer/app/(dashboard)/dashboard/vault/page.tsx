@@ -283,14 +283,12 @@ export default function VaultPage() {
     return lanes.lanes.find((l) => l.id === id)?.name ?? lanes.archived.find((l) => l.id === id)?.name ?? MAIN_LANE_LABEL;
   }
 
-  // Debounced server search on q change (skip the very first render -- initial
-  // load already covers the empty query).
-  const firstRun = useRef(true);
+  // Only text changes need a debounce. Lane/filter changes already load above;
+  // scheduling a second read here briefly replaced ready controls with loading.
+  const previousSearch = useRef(q);
   useEffect(() => {
-    if (firstRun.current) {
-      firstRun.current = false;
-      return;
-    }
+    if (previousSearch.current === q) return;
+    previousSearch.current = q;
     const t = setTimeout(() => {
       setLoading(true);
       load(q);
