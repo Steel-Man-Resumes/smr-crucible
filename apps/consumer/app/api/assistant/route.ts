@@ -43,8 +43,6 @@ import {
   endsWithUserTurn,
 } from "@/lib/tools/assistant-tools";
 import {
-  getUserDailyLimit,
-  incrementUserUsage,
   incrementIpUsage,
   FORGE_IP_LIMITS,
   buildMemorySection,
@@ -77,21 +75,7 @@ export async function POST(request: Request) {
   const userId = forgeUserId(session);
 
   if (userId && (await effectiveAuth())?.user?.id !== userId) return NextResponse.json({ error: "Assistant is unavailable while viewing as someone." }, { status: 403 });
-  if (userId) {
-    // Authenticated: user-rate-limited (atomic increment-then-check)
-    const limit = await getUserDailyLimit(userId);
-    const newCount = await incrementUserUsage(userId, "assistant");
-    if (limit !== 0 && newCount > limit) {
-      // "Enter a partner code" is advice for a job seeker. Somebody at work for
-      // an organization needs to know it resets and who can raise it.
-      const { getOrgMemberDailyLimit } = await import("@crucible/core");
-      const isOrgMember = (await getOrgMemberDailyLimit(userId).catch(() => null)) !== null;
-      return NextResponse.json(
-        { error: isOrgMember ? ORG_RATE_LIMIT_MESSAGE : RATE_LIMIT_MESSAGE },
-        { status: 429 }
-      );
-    }
-  } else {
+  if (!userId) {
     // Pre-auth (Forge flow): IP-rate-limited (atomic increment-then-check)
     // Use x-real-ip (Vercel edge, not spoofable), fall back to last x-forwarded-for value
     const realIp = request.headers.get("x-real-ip")?.trim();
@@ -334,7 +318,11 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     context.audience === "observer" || context.audience === "partner" ? 1200 : 700
   );
 
-  const operation = await beginChatOperation(userId ?? null, "assistant", MODEL_TROY);
+  const operation = await beginChatOperation(userId ?? null, "assistant", MODEL_TROY, { rateLimitMessage: async () => {
+    const { getOrgMemberDailyLimit } = await import("@crucible/core");
+    const isOrgMember = userId && (await getOrgMemberDailyLimit(userId).catch(() => null)) !== null;
+    return isOrgMember ? ORG_RATE_LIMIT_MESSAGE : RATE_LIMIT_MESSAGE;
+  } });
   if (operation.response) return operation.response;
   return operation.run(async () => {
   try {
@@ -350,6 +338,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     const { generateText } = await import("ai");
     const { verifyOrgOutput } = await import("@/lib/org-output-verify");
 
+    operation.markProviderAttempted();
     const generated = await generateText({
       model: troyChatModel(),
       system: localizedSystemPrompt,
@@ -453,6 +442,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     });
   }
 
+  operation.markProviderAttempted();
   const result = streamText({
     model: troyChatModel(),
     system: localizedSystemPrompt,

@@ -59,7 +59,7 @@ test("global journey is reserved for no chosen task; unavailable work is not a n
   assert.equal(workspaceNextAction({ work: work({ task: null }) }), null);
   assert.equal(workspaceNextAction({ work: null, task: "resume" }), null);
   assert.equal(workspaceNextAction({ work: work({ task: "resume", revision: null }) })?.href, "/resume");
-  assert.equal(workspaceNextAction({ work: work({ task: "explore" }) })?.href, "/dashboard/resources#paths");
+  assert.equal(workspaceNextAction({ work: work({ task: "explore" }) })?.href, "/dashboard/paths");
 });
 
 test("selected application and document links derive their lane instead of inheriting a stale focus", () => {

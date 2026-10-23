@@ -64,13 +64,13 @@ export function laneHomeNext(task: LaneTask, rev: Pick<ForgeRevision, "status" |
     case "documents":
       return { label: "Open creative work", href: "/dashboard/creative" };
     case "explore":
-      return { label: "See job paths", href: "/dashboard/resources#paths" };
+      return { label: "See job paths", href: "/dashboard/paths" };
     case "support":
       return { label: "Find help near you", href: "/dashboard/resources#support" };
   }
 }
 
-export function LaneHome({ task, profileFirst = false, laneId = null }: { task: LaneTask; profileFirst?: boolean; laneId?: string | null }) {
+export function LaneHome({ task, profileFirst = false, laneId = null, hidePrimaryAction = false }: { task: LaneTask; profileFirst?: boolean; laneId?: string | null; hidePrimaryAction?: boolean }) {
   const laneKey = laneId || "main";
   const [result, setResult] = useState<{ key: string; work: RefineryWorkspaceContext | null; error: boolean } | null>(null);
   const [retry, setRetry] = useState(0);
@@ -110,7 +110,7 @@ export function LaneHome({ task, profileFirst = false, laneId = null }: { task: 
       <h1 id="lane-home-heading" className="text-2xl font-bold text-t-white">
         Today: {TASK_COPY[task].label}
       </h1>
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className={`grid gap-3 ${hidePrimaryAction ? "lg:grid-cols-2" : "lg:grid-cols-3"}`}>
         <div className={box} data-testid="lane-home-resume">
           <p className="text-xs font-semibold uppercase text-t-bone-dim">{documentHref ? "This lane’s documents" : "Current resume"}</p>
           {!loaded ? (
@@ -145,7 +145,7 @@ export function LaneHome({ task, profileFirst = false, laneId = null }: { task: 
             <p className="mt-1 text-sm text-t-phos">No saved resume version in this lane yet.</p>
           )}
         </div>
-        <div className={box} data-testid="lane-home-next">
+        {!hidePrimaryAction && <div className={box} data-testid="lane-home-next">
           <p className="text-xs font-semibold uppercase text-t-bone-dim">Next</p>
           {next ? <Link
             href={next.href}
@@ -165,7 +165,7 @@ export function LaneHome({ task, profileFirst = false, laneId = null }: { task: 
               ))}
             </ul>
           )}
-        </div>
+        </div>}
         <div className={box} data-testid="lane-home-support">
           <p className="text-xs font-semibold uppercase text-t-bone-dim">Support</p>
           <p className="mt-1 text-sm text-t-phos">Rides, ID, a place to stay, food, and legal help with a record.</p>

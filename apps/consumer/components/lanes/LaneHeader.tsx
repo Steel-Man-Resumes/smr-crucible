@@ -16,6 +16,8 @@ import { LANES_CHANGED_EVENT } from "@/lib/lanes";
 import { LANE_FOCUS_CHANGED_EVENT, useLaneFocus } from "./useLaneFocus";
 import { workspaceContextUrl, type RefineryWorkspaceContext } from "@/lib/refinery-workspace";
 import { CHANGE_HREF, laneHeaderLine, type LaneTask } from "@/lib/lane-task";
+import { useProgression } from "@/components/progression/ProgressionProvider";
+import { ProgressAllowance } from "@/components/progression/ProgressOverview";
 
 export function LaneHeader({ task, target, changeHref = CHANGE_HREF, className = "" }: { task: LaneTask; target?: string | null; changeHref?: string; className?: string }) {
   const { toward, today } = laneHeaderLine(task, target);
@@ -40,6 +42,7 @@ export function LaneHeader({ task, target, changeHref = CHANGE_HREF, className =
 
 /** One compact sticky surface belongs to the shell, outside the page heading. */
 export function RefineryLaneHeader({ state }: { state: OnboardingState }) {
+  const progression = useProgression();
   const focus = useLaneFocus();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -91,6 +94,10 @@ export function RefineryLaneHeader({ state }: { state: OnboardingState }) {
         {work.application && <span>Application: <Link href={`/dashboard/application-tailor?job=${encodeURIComponent(work.application.id)}`} className="t-focus text-t-white underline underline-offset-2">{work.application.job_title}{work.application.company ? ` at ${work.application.company}` : ""}</Link></span>}
         <span>{work.revision ? <><span>Current resume: </span><Link href={`/dashboard/application-tailor?id=${encodeURIComponent(work.revision.artifactId)}`} className="t-focus text-t-white underline underline-offset-2">Version {work.revision.number}, {work.revision.status}</Link></> : work.lane && work.lane.kind && work.lane.kind !== "resume" ? "Use this lane’s document tool in My resumes." : "No saved resume version in this workspace."}</span>
       </p>}
+      {progression?.data ? <div className="hidden flex-wrap items-center gap-x-4 text-xs leading-6 text-t-bone-dim sm:flex">
+        <ProgressAllowance compact />
+        {progression.data.nextReward ? <span className="max-w-sm truncate" title={progression.data.nextReward.requirement}>Next reward: {progression.data.nextReward.label}</span> : null}
+      </div> : null}
     </section>
   );
 }

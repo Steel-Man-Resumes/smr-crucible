@@ -507,7 +507,7 @@ test("H1: Keep going follows the route; the lane home's next step too", () => {
   const ctx = { signedIn: true, hasForgeOutput: false, hasResumeText: false, forgeNext: "/resume" };
   assert.equal(keepGoingHref("support", ctx), "/dashboard/resources#support");
   assert.equal(keepGoingHref("documents", ctx), "/dashboard/creative");
-  assert.equal(keepGoingHref("explore", ctx), "/dashboard/resources#paths");
+  assert.equal(keepGoingHref("explore", ctx), "/dashboard/paths");
   assert.equal(keepGoingHref("job", ctx), "/start?step=job");
   assert.equal(keepGoingHref("job", { ...ctx, hasResumeText: true }), "/resume");
   assert.equal(keepGoingHref("resume", ctx), "/resume");

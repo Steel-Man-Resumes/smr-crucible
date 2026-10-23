@@ -59,7 +59,7 @@ export const TASK_COPY: Record<LaneTask, TaskCopy> = {
   },
   explore: {
     label: "Explore a career",
-    body: "See job paths that are open to people with records.",
+    body: "Explore work directions based on your experience and what you need.",
     today: "exploring careers",
   },
   support: {
@@ -98,7 +98,7 @@ export function routeHref(task: LaneTask, ctx: RouteContext): string {
     case "documents":
       return ctx.signedIn ? "/dashboard/creative" : `${START_PATH}?step=documents`;
     case "explore":
-      return ctx.signedIn ? "/dashboard/resources#paths" : `${START_PATH}?step=explore`;
+      return ctx.signedIn ? "/dashboard/paths" : `${START_PATH}?step=explore`;
     case "support":
       return ctx.signedIn ? "/dashboard/resources#support" : `${START_PATH}?step=support`;
   }
@@ -115,7 +115,7 @@ export function taskNeedsResume(task: LaneTask | null | undefined): boolean {
  * and performer documents. "A person needing food or transport should not
  * have to finish a resume to find it" (Codex C).
  */
-export const OPEN_WITHOUT_RESUME = ["/dashboard/documents", "/dashboard/vault", "/dashboard/employers", "/dashboard/progress", "/dashboard/disclosure", "/dashboard/help","/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
+export const OPEN_WITHOUT_RESUME = ["/dashboard/paths", "/dashboard/documents", "/dashboard/vault", "/dashboard/employers", "/dashboard/progress", "/dashboard/disclosure", "/dashboard/help","/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
 
 /**
  * The Refinery sends a person with no Forge resume to the Forge's first

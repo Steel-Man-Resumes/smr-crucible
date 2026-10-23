@@ -53,6 +53,10 @@ export const RLS_PROTECTED_TABLES = [
   "directory_publication_alias",
   "forge_package_delivery",
   "forge_package_email_sent",
+  "progression_policy",
+  "progression_account",
+  "progression_grant",
+  "progression_request",
 ] as const;
 
 export interface RlsHealth {
