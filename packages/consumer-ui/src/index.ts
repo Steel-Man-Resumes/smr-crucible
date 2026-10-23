@@ -3,6 +3,7 @@ export { FlowPage } from "./FlowPage";
 export { ExitButton } from "./ExitButton";
 export { AssistantDrawer } from "./AssistantDrawer";
 export { TroyLivingIcon } from "./TroyLivingIcon";
+export { TroyWork, type TroyWorkTopic } from "./TroyWork";
 export { TroyMark, TROY_MARK_SRC } from "./TroyMark";
 export { TroyAttention } from "./TroyAttention";
 export { GhostGuide } from "./GhostGuide";

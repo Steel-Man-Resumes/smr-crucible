@@ -9,10 +9,12 @@ export function TourGuide({ paused }: { paused: boolean }) {
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setStill(preference.matches);
+    const sync = () => setStill(preference.matches || document.documentElement.classList.contains('reduce-motion'));
+    const observer = new MutationObserver(sync);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     sync();
     preference.addEventListener("change", sync);
-    return () => preference.removeEventListener("change", sync);
+    return () => { preference.removeEventListener("change", sync); observer.disconnect(); };
   }, []);
 
   useEffect(() => {

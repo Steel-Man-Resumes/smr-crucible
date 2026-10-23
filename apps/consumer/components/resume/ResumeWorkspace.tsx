@@ -8,8 +8,8 @@
  * Handles: state management, save/load, auto-save, Forge/Rush import.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { SavedPackagePreview } from "./SavedPackagePreview";
-import { TroyLivingIcon } from "@crucible/consumer-ui";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -1162,7 +1162,7 @@ export function ResumeWorkspace() {
           Building Your Career Package
         </h1>
         <div className="bg-t-panel p-8 border border-t-line text-center mt-6">
-          <div className="mx-auto mb-4 flex justify-center"><TroyLivingIcon size={100} attention /></div>
+          <div className="mx-auto mb-4 flex justify-center"><TroyWork topic="resume" label="Preparing your resume and cover letter" /></div>
           <p className="font-mono text-sm font-medium text-purple-300">
             Building your package for {doc.meta.targetJob || "this job"}
             {doc.meta.targetCompany ? ` at ${doc.meta.targetCompany}` : ""}...

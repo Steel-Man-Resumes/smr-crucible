@@ -24,6 +24,7 @@
  *   - PLAIN-LANGUAGE mode: simpler helper copy and a hint to the follow-up model.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { useRef, useState } from "react";
 import type { IntakeAnswer, IntakeContext } from "@/lib/intake-engine";
 import {
@@ -297,7 +298,7 @@ export function ProgressiveIntake({
           </button>
         )}
         {thinking && (
-          <div className="w-5 h-5 border-2 border-t-amber border-t-transparent animate-spin" />
+          <TroyWork topic="plan" label="Reviewing the answers you shared" />
         )}
       </div>
     </div>

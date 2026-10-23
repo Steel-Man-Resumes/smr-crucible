@@ -12,6 +12,7 @@
  * No auth required. IP-rate-limited via /api/rush-resume.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -288,7 +289,7 @@ export default function RushPage() {
                 }}
               />
               {uploading && (
-                <div className="w-4 h-4 border-2 border-t-amber border-t-transparent animate-spin" />
+                <TroyWork compact decorative />
               )}
             </div>
           </div>
@@ -354,10 +355,7 @@ export default function RushPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-t-bg">
         <div className="w-full max-w-md text-center">
-          <div className="w-16 h-16 mx-auto mb-6 relative">
-            <div className="absolute inset-0 border-4 border-t-line" />
-            <div className="absolute inset-0 border-4 border-t-amber border-t-transparent animate-spin" />
-          </div>
+          <div className="my-4 flex justify-center"><TroyWork topic="resume" label="Working from the information you provided" /></div>
           <h1 className="text-2xl font-bold mb-2 text-t-white">Rewriting your lines</h1>
           <p className="text-base text-t-amber-bright transition-opacity duration-500">
             {PROCESSING_MESSAGES[processingMsg]}

@@ -13,6 +13,7 @@
 
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
+import { SettingsLesson } from "@/components/tour/SettingsLesson";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
@@ -378,6 +379,8 @@ export default function SettingsPage() {
           ? "How you work here, and your account."
           : "Your data, your control. Manage your information and privacy."}
       </p>
+
+      {!isOrgStaff && <SettingsLesson />}
 
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
       <nav

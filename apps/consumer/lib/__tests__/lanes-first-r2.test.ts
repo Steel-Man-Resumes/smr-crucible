@@ -485,7 +485,7 @@ test("the fixture is fictional", () => {
 // ---- review round 1: H1, L1, L2, L4 ------------------------------------------------
 
 test("H1: without a resume, Get support, the job board and the documents open; interview and follow-up remain reachable", () => {
-  for (const p of ["/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv/abc", "/dashboard/performer"]) {
+  for (const p of ["/dashboard/orientation", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv/abc", "/dashboard/performer"]) {
     assert.equal(refineryOpenWithoutResume(p, null), true, p);
   }
   assert.equal(refineryOpenWithoutResume("/dashboard/interview", "interview"), true);

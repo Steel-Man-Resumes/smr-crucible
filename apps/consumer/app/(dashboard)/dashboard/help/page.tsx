@@ -184,6 +184,8 @@ function HelpContent() {
         Replay the Refinery tour
       </Link>
 
+      <div className="mb-6 flex flex-wrap gap-4 text-sm text-t-amber-bright underline"><Link href="/dashboard/settings?lesson=1">Learn your settings</Link><Link href="/dashboard/orientation">Take the orientation check</Link></div>
+
       {/* Mode picker */}
       <div className="flex flex-wrap gap-2 mb-5">
         {SUPPORT_CATEGORIES.map((c) => (

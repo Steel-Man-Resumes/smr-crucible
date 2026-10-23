@@ -12,6 +12,7 @@
 
 "use client";
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { assistantErrorMessage } from "@/lib/assistant-error-message";
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
@@ -21,7 +22,7 @@ import { resolveAssistantPage, crossesShell, pageLabel } from "@/lib/tools/assis
 import { requestHighlight } from "@/lib/highlight-bus";
 import { AssistantActionCard } from "./AssistantActionCard";
 import SpeechInputButton from "@/components/SpeechInputButton";
-import { Send, Check, Loader2, Settings2 } from "lucide-react";
+import { Send, Check, Settings2 } from "lucide-react";
 
 interface ChatSettings {
   coachLength: "brief" | "full";
@@ -710,7 +711,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                       {failed ? <span className="text-amber-700" aria-label="Could not complete">!</span> : done ? (
                         <Check size={14} className="text-sage-600" aria-hidden="true" />
                       ) : (
-                        <Loader2 size={14} className="animate-spin" aria-hidden="true" />
+                        <TroyWork compact decorative />
                       )}
                       <span>
                         {failed ? "Could not complete this step" : label}
@@ -747,17 +748,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
 
         {isLoading && (
           <div className="flex justify-start">
-            <div
-              className="bg-gray-100 text-foreground px-4 py-3 rounded-[7px] rounded-bl-sm"
-              role="status"
-              aria-label="Assistant is thinking"
-            >
-              <div className="flex gap-1">
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce" />
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce [animation-delay:0.1s]" />
-                <span className="w-2 h-2 bg-muted rounded-full animate-bounce [animation-delay:0.2s]" />
-              </div>
-            </div>
+            <TroyWork topic={context.currentPage.includes("interview") ? "interview" : context.currentPage.includes("resume") || context.currentPage.includes("tailor") || context.currentPage === "vault" ? "resume" : context.currentPage.includes("job") ? "jobs" : context.currentPage.includes("resource") || context.currentPage.includes("disclosure") ? "support" : "coach"} label="t.ROY is working on your request" />
           </div>
         )}
 

@@ -140,7 +140,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboard/help", label: "Help & tour", minTier: "observer", minState: "needs_profile" },
       { href: "/dashboard/help?mode=idea", label: "Share an idea", minTier: "observer", minState: "needs_profile" },
-      { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
+      { href: "/dashboard/settings", label: "Settings", targetId: "refinery-nav-settings", minTier: "observer", minState: "needs_profile" },
       { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
       { href: "/dashboard/admin/access-requests", label: "Access requests", minTier: "admin", minState: "needs_profile" },
     ],

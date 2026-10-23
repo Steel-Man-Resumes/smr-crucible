@@ -20,6 +20,7 @@
  * the routes refuse to persist without one.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { useEffect, useRef, useState } from "react";
 import {
   REHEARSAL_PERSONAS,
@@ -469,11 +470,7 @@ export function ConfidenceCoach({
           ))}
           {sending && (
             <div className="flex justify-start">
-              <div className="bg-t-panel-2 border border-t-line px-4 py-3 flex gap-1">
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce" />
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.1s]" />
-                <span className="w-2 h-2 bg-t-phos-dim animate-bounce [animation-delay:0.2s]" />
-              </div>
+              <TroyWork topic="coach" label="Preparing a response to your answer" />
             </div>
           )}
           <div ref={chatEndRef} />

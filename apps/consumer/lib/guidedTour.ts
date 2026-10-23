@@ -11,12 +11,13 @@
  *    never lands on a page where nothing happens.
  */
 
+import { ORIENTATION_LESSONS } from "./orientation-lessons";
 import { TOUR_PARAM } from "@crucible/core/src/journeyStages";
 
 /** Fired after persisted completion or skip so the next-step card refetches. */
 export const NEXT_STEP_CHANGED_EVENT = "next-step-changed";
-export const TOUR_VERSION = 2;
-export const TOUR_STOP_COUNT = 6;
+export const TOUR_VERSION = 3;
+export const TOUR_STOP_COUNT = ORIENTATION_LESSONS.length;
 
 export interface TourNextStep {
   action: string;

@@ -20,6 +20,7 @@
  * Nothing here writes a fact for the person.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { useEffect, useRef, useState } from "react";
 import { FlowPage, TroyLivingIcon } from "@crucible/consumer-ui";
 import { ResumePage } from "@/components/resume/ResumePage";
@@ -309,10 +310,7 @@ export function FirstReward({
     return (
       <FlowPage title="Got your page." subtitle="t.ROY is tidying it and starting your resume." showBack onBack={onBack}>
         <div role="status" aria-live="polite" className="mt-4 border border-t-line bg-t-panel p-6 text-center" data-testid="first-reward-working">
-          <div className="relative mx-auto mb-3 h-8 w-8">
-            <div className="absolute inset-0 border-[3px] border-t-line" />
-            <div className="absolute inset-0 animate-spin border-[3px] border-t-amber border-t-transparent" />
-          </div>
+          <div className="my-4 flex justify-center"><TroyWork topic="resume" label="Working from the information you provided" /></div>
           <p className="text-sm text-t-phos">One moment. You don&apos;t need to do anything.</p>
         </div>
       </FlowPage>

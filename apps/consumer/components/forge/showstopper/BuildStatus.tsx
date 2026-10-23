@@ -7,6 +7,7 @@
  * percentages, no made-up stages.
  */
 
+import { TroyWork } from "@crucible/consumer-ui";
 import { Check } from "lucide-react";
 import { elapsedLabel } from "@/lib/showstopper-tour";
 
@@ -15,14 +16,7 @@ export type BuildPhase = "sending" | "working" | "done";
 /** Past this many seconds the screen says plainly that it is running long. */
 export const LONG_RUN_SECONDS = 90;
 
-function Spinner() {
-  return (
-    <span
-      className="inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-t-line border-t-t-amber-bright"
-      aria-hidden="true"
-    />
-  );
-}
+function WorkMark() { return <TroyWork compact decorative />; }
 
 function Mark({ state }: { state: "done" | "active" | "waiting" }) {
   if (state === "done")
@@ -31,7 +25,7 @@ function Mark({ state }: { state: "done" | "active" | "waiting" }) {
         <Check size={11} strokeWidth={3} />
       </span>
     );
-  if (state === "active") return <Spinner />;
+  if (state === "active") return <WorkMark />;
   return <span className="inline-block h-4 w-4 shrink-0 rounded-full border border-t-line" aria-hidden="true" />;
 }
 
