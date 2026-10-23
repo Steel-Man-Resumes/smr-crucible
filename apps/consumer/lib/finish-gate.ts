@@ -116,6 +116,8 @@ export interface StoredFinish {
   key: string;
   docs: FinishDocs;
   defendAnswers: DefendAnswer[];
+  /** UI-only explanations of edits. Never evidence for the finish gate. */
+  changeNotes?: Record<string, string>;
   /** Skills the person added from a job posting in the keyword check. Each is asked about. */
   addedTerms?: string[];
   /** Skills terms the person kept on the "added for you" card (decision D3). */
@@ -227,15 +229,24 @@ export function readStoredFinish(stored: unknown, key: string): StoredFinish | n
       // A real wr2 receipt is about 400 characters; the same cap as readReceipt.
       ...(typeof d.receipt === "string" && d.receipt.length <= 2000 ? { receipt: d.receipt } : {}),
     },
+    changeNotes: s.changeNotes && typeof s.changeNotes === "object" && !Array.isArray(s.changeNotes)
+      ? Object.fromEntries(Object.entries(s.changeNotes).slice(-400).filter(([k, v]) => k.length <= 4000 && typeof v === "string" && v.length <= 2000))
+      : {},
     defendAnswers: Array.isArray(s.defendAnswers)
       ? s.defendAnswers
           .filter((a): a is DefendAnswer => !!a && typeof a.line === "string" && typeof a.answer === "string")
           .map((a) =>
+            // Assisted approvals retain their kind across save/restore. The gate
+            // still checks them against source; they never become source facts.
             // A stored rewrite is trusted only when it is consistent with
             // itself: it names a real line it replaced (one the writer
             // wrote, when the written documents are stored), and its text is
             // its line.
-            a.kind === "rewrite" &&
+            a.kind === "assisted" &&
+            typeof a.replaced === "string" && a.replaced.trim() !== "" &&
+            squash(stripBullet(a.answer)) === squash(stripBullet(a.line))
+              ? { line: a.line, answer: a.answer, verdict: a.verdict, kind: "assisted" as const, replaced: a.replaced }
+              : a.kind === "rewrite" &&
             typeof a.replaced === "string" &&
             a.replaced.trim() !== "" &&
             (!d.written || writtenHasLine(d.written as WrittenDocs, a.replaced)) &&

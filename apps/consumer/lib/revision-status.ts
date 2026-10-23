@@ -52,8 +52,8 @@ export function sameJobHeader(oldHeader: string, newHeader: string): boolean {
 import { lineKey } from "./revision-patch";
 
 /** Bump when the gate or the page rule changes in a way that can change a status. */
-// v4 requires completed truth checks and keeps factual letter clauses in scope.
-export const CHECKER_VERSION = "finish-gate-4+pages-1+receipt-1";
+// v5 preserves source-bound assisted approvals through save/restore.
+export const CHECKER_VERSION = "finish-gate-5+pages-1+receipt-1";
 
 const MAX_WORDS = 120_000;
 const MAX_GROUNDING_JSON = 300_000;

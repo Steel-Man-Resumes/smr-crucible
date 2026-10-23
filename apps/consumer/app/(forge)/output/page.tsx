@@ -290,6 +290,7 @@ function OutputPageInner() {
   // The server's receipt over the writer's documents and their check (review M1).
   const [receipt, setReceipt] = useState<string>("");
   const [defendAnswers, setDefendAnswers] = useState<DefendAnswer[]>([]);
+  const [changeNotes, setChangeNotes] = useState<Record<string, string>>({});
   // Skill terms the person added from a job posting; each is asked about.
   const [addedTerms, setAddedTerms] = useState<string[]>([]);
   // Skills kept on the "added for you" card (D3), credentials confirmed in the person's own words (D4).
@@ -336,10 +337,13 @@ function OutputPageInner() {
     setWritten(stored.docs.written ?? null);
     setReceipt(stored.docs.receipt ?? "");
     setDefendAnswers(stored.defendAnswers);
+    setChangeNotes(stored.changeNotes ?? {});
     setAddedTerms(stored.addedTerms ?? []);
     setKeptTerms(stored.keptTerms ?? []);
     setConfirmedCredentials(stored.confirmedCredentials ?? []);
     setCredentialCutRemnants(stored.credentialCutRemnants ?? []);
+    settledFor.current = stored.docs.written?.resume ?? "";
+    setSettle({ status: "done", notes: [], trimmed: [] });
     setDocState("done");
   }, [session]);
 
@@ -354,6 +358,7 @@ function OutputPageInner() {
         key: finishKey(session, keepInsideLines, recordChoice),
         docs: { resumeText, coverLetterText, withheldLines, keepInsideLines, recordChoice, grounding, written: written ?? undefined, ...(receipt ? { receipt } : {}) },
         defendAnswers,
+        changeNotes,
         addedTerms,
         keptTerms,
         confirmedCredentials,
@@ -364,7 +369,7 @@ function OutputPageInner() {
     });
     // session is read for its key fields only; writing must not loop on it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, recordChoice, grounding, written, receipt, defendAnswers, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, lengthChoice, runEvidence, updateSession]);
+  }, [docState, resumeText, coverLetterText, withheldLines, keepInsideLines, recordChoice, grounding, written, receipt, defendAnswers, changeNotes, addedTerms, keptTerms, confirmedCredentials, credentialCutRemnants, lengthChoice, runEvidence, updateSession]);
 
   const runIsMineRef = useRef(runIsMine);
   runIsMineRef.current = runIsMine;
@@ -457,6 +462,7 @@ function OutputPageInner() {
       setReceipt(typeof data.receipt === "string" ? data.receipt : "");
       // New documents: earlier answers belonged to other lines.
       setDefendAnswers([]);
+      setChangeNotes({});
       setAddedTerms([]);
       setKeptTerms([]);
       setConfirmedCredentials([]);
@@ -689,7 +695,7 @@ function OutputPageInner() {
   const needsCheck = ready && (checkUnavailable || (!checkMode && (!receipt || (!!current && needsRecheck(current.openItems)))));
   const localState: "finished" | "draft" = gateView.state === "finished" && !lengthOver && !needsCheck ? "finished" : "draft";
   // Signed in: the server's status for the saved version wins.
-  const state: "finished" | "draft" = mayAccount && current ? current.status : localState;
+  const state: "finished" | "draft" = mayAccount ? (current?.status ?? "draft") : localState;
   const view = useMemo(
     () => ({ ...gateView, state, fixCount: gateView.fixCount + (lengthOver ? 1 : 0) + (needsCheck ? 1 : 0) }),
     [gateView, state, lengthOver, needsCheck]
@@ -734,13 +740,18 @@ function OutputPageInner() {
   }, [autoFinish, ready, written]);
   // Length changes are a person's choice. Never silently discard their work to fit.
   // A changed page needs its second check again; the person is not asked.
-  const autoRechecks = useRef(0);
+  // One automatic attempt per edited version. A receipt/save response is not a new edit.
+  const checkVersion = JSON.stringify([resumeText, coverLetterText, defendAnswers, keptTerms, confirmedCredentials, recordChoice, lengthChoice]);
+  const latestCheckVersion = useRef(checkVersion);
+  latestCheckVersion.current = checkVersion;
+  const autoRechecks = useRef(new Set<string>());
+  const checkInFlight = useRef(false);
   useEffect(() => {
-    if (!autoFinish || settle.status !== "done" || !needsCheck || checking || !current || autoRechecks.current >= 3) return;
-    autoRechecks.current += 1;
+    if (!autoFinish || settle.status !== "done" || !needsCheck || checking || !current || autoRechecks.current.has(checkVersion)) return;
+    autoRechecks.current.add(checkVersion);
     void checkAgain();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoFinish, settle.status, needsCheck, checking, current]);
+  }, [autoFinish, settle.status, needsCheck, checking, current, checkVersion]);
   const settling = autoFinish && ready && settle.status !== "done";
   // Where every file comes from: the saved revision when there is one for
   // this exact state; otherwise the whole state, and the server decides.
@@ -827,6 +838,10 @@ function OutputPageInner() {
   // ---- actions -------------------------------------------------------------------
   const onAnswer = (group: LineGroup, answer: string) =>
     setDefendAnswers((a) => recordAnswer(a, group.line, answer, "stands"));
+  const explainChange = (group: LineGroup, after: string) => {
+    const why = Array.from(new Set(group.items.map((item) => item.why).filter(Boolean))).join(" ").slice(0, 2000);
+    if (why) setChangeNotes((notes) => ({ ...notes, [group.line]: why, [after]: why }));
+  };
   /** Returns false when nothing changed, so the panel can say so. */
   const onChange = (group: LineGroup, rewrite: string): boolean => {
     if (group.target === "skill") return false;
@@ -836,6 +851,7 @@ function OutputPageInner() {
     if (group.target === "letter") setCoverLetterText(r.text);
     else setResumeText(r.text);
     setDefendAnswers(r.answers);
+    explainChange(group, r.answers[r.answers.length - 1]?.line ?? group.line);
     return true;
   };
   const onAssist = (group: LineGroup, suggestion: string): boolean => {
@@ -846,10 +862,12 @@ function OutputPageInner() {
     if (group.target === "letter") setCoverLetterText(r.text);
     else setResumeText(r.text);
     setDefendAnswers(r.answers);
+    explainChange(group, r.answers[r.answers.length - 1]?.line ?? group.line);
     return true;
   };
   /** Troy 2026-10-20: t.ROY settles what it can in one pass. Each pick goes through the same gate as a tap. */
   const onBulk = (picks: BulkPick[]): number => {
+    if (latestCheckVersion.current !== checkVersion) return 0; // A newer edit wins over an in-flight batch.
     let resume = resumeText;
     let letter = coverLetterText;
     let answers = defendAnswers;
@@ -867,6 +885,7 @@ function OutputPageInner() {
       if (isLetter) letter = r.text;
       else resume = r.text;
       answers = r.answers;
+      explainChange(p.group, r.answers[r.answers.length - 1]?.line ?? p.group.line);
       landed += 1;
     }
     setResumeText(resume);
@@ -972,14 +991,21 @@ function OutputPageInner() {
   };
 
   const goFix = () => {
-    const first =
-      document.querySelector<HTMLElement>('[data-testid="fix-item"][data-blocking="true"]') ||
-      document.getElementById("fix-item-0") ||
+    if (checking || settling) return;
+    // With all questions answered, this action must perform work, not jump to an empty list.
+    if (gateView.fixCount === 0 && !lengthOver) {
+      if (needsCheck || checkUnavailable || current?.status === "draft") void checkAgain();
+      else void saveRevision();
+      return;
+    }
+    const first = document.querySelector<HTMLElement>('[data-testid="fix-item"][data-blocking="true"]') ||
+      document.querySelector<HTMLElement>('[data-testid="length-card"]') ||
+      document.querySelector<HTMLElement>('[data-testid="recheck-button"]') ||
       document.getElementById("fix-list");
     if (!first) return;
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     first.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "center" });
-    first.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    (first.querySelector<HTMLButtonElement>("button") ?? first).focus({ preventScroll: true });
   };
 
   const confidence = useMemo(() => sourceConfidence(defendAnswers, skippedNumbers), [defendAnswers, skippedNumbers]);
@@ -1015,9 +1041,14 @@ function OutputPageInner() {
   // as it is, and the server signs a fresh receipt. Nothing is rewritten; the
   // answers stay. Anything newly flagged comes back as a card.
   const checkAgain = async () => {
-    if (checking) return;
+    if (checkInFlight.current) return;
+    checkInFlight.current = true;
+    const forVersion = checkVersion;
+    autoRechecks.current.add(forVersion);
     setChecking(true);
     setCheckError("");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 65000);
     try {
       if (checkId) {
         const saved = await fetch("/api/revisions/check", { method: "POST", headers: { "Content-Type": "application/json" },
@@ -1025,6 +1056,7 @@ function OutputPageInner() {
         if (!saved.ok) throw new Error("Save this version before checking it again. Try saving once more.");
       }
       const res = await fetch("/api/forge/recheck", {
+        signal: controller.signal,
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1050,6 +1082,13 @@ function OutputPageInner() {
       });
       const data = (await res.json().catch(() => null)) as { grounding?: unknown; receipt?: string; written?: WrittenDocs; evidence?: unknown; error?: string } | null;
       if (!res.ok || !data?.receipt) throw new Error(data?.error || "failed");
+      // Do not attach a completed check to edits made while its request was running.
+      if (latestCheckVersion.current !== forVersion) {
+        setReceipt(""); // The server replaced the nonce; the edited version needs its own check.
+        return;
+      }
+      // Rechecking is not a new writing pass; never run the automatic editor again.
+      if (data.written) settledFor.current = data.written.resume;
       // The receipt covers the documents that were checked: they are now "as delivered".
       if (data.written) setWritten(data.written);
       setGrounding(data.grounding ?? null);
@@ -1060,6 +1099,8 @@ function OutputPageInner() {
     } catch (err) {
       setCheckError(err instanceof Error && err.message !== "failed" ? err.message : "We couldn't check it just now. Try again in a moment.");
     } finally {
+      clearTimeout(timeout);
+      checkInFlight.current = false;
       setChecking(false);
     }
   };
@@ -1387,6 +1428,23 @@ function OutputPageInner() {
                   <p className="text-sm text-t-phos">The resume came back empty. Try again below.</p>
                 )}
               </div>
+              {defendAnswers.some((a) => a.replaced || a.verdict === "cut") && (
+                <details open className="mt-3 border border-t-line bg-t-panel px-4 py-3" data-testid="approved-changes">
+                  <summary className="t-focus cursor-pointer text-sm font-semibold text-t-white">Your changes: before and after</summary>
+                  <ul className="mt-3 space-y-4 text-sm text-t-phos">
+                    {defendAnswers.filter((a) => a.replaced || a.verdict === "cut").map((a, i) => (
+                      <li key={`${a.line}-${i}`}>
+                        <p className="text-xs text-t-phos-dim">Before</p>
+                        <p>{a.replaced || a.line}</p>
+                        <p className="mt-2 text-xs text-t-phos-dim">After</p>
+                        <p className="text-t-white">{a.verdict === "cut" ? "Removed from the page" : a.line}</p>
+                        {(changeNotes[a.line] || (a.replaced && changeNotes[a.replaced])) && <p className="mt-2 text-xs"><strong>What this addresses:</strong> {changeNotes[a.line] || changeNotes[a.replaced!]}</p>}
+                        <p className="mt-2 text-xs">{a.verdict === "cut" ? "You chose to leave this line out." : a.kind === "assisted" ? "The new wording uses facts from the experience you shared, so you can explain it in an interview." : "This puts your correction directly on the page."}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
               {forgeRepairs.length > 0 && (
                 <details className="mt-3 border border-t-line bg-t-panel px-4 py-3" data-testid="forge-repairs">
                   <summary className="cursor-pointer text-sm font-semibold text-t-white">
@@ -1440,8 +1498,8 @@ function OutputPageInner() {
                   </ul>
                 </details>
               )}
-              {needsCheck && !autoFinish && (
-                <div className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="recheck-card" data-blocking="true">
+              {!finished && !settling && (needsCheck || checking || !!checkError) && (
+                <div id="finish-recheck" className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="recheck-card" data-blocking="true">
                   <p className="text-sm font-bold text-t-white">{RECHECK_LINE}</p>
                   <p className="mt-1 text-xs leading-relaxed text-t-phos">
                     This checks your page again, as it is now. Nothing on it is rewritten, and your answers stay.
@@ -1458,6 +1516,13 @@ function OutputPageInner() {
                   {checkError && <p role="status" className="mt-2 text-xs text-t-amber-bright">{checkError}</p>}
                 </div>
               )}
+              {!finished && !settling && !needsCheck && !checking && gateView.fixCount === 0 && current && current.openItems.length > 0 && (
+                <div className="mb-4 border border-t-line bg-t-panel p-4" role="status">
+                  <p className="text-sm font-semibold text-t-white">What still needs checking</p>
+                  <ul className="mt-2 space-y-2 text-xs text-t-phos">{current.openItems.map((item, i) => <li key={i}>{item}</li>)}</ul>
+                  <button type="button" className="t-focus mt-3 min-h-touch text-sm underline" onClick={() => void checkAgain()}>Check this version with t.ROY</button>
+                </div>
+              )}
               {lengthOver && shownPages !== null && (
                 <LengthCard
                   pages={shownPages}
@@ -1470,10 +1535,11 @@ function OutputPageInner() {
               )}
               {!autoFinish && <ConfidenceMeter level={confidence.level} notes={confidence.notes} />}
               <RecordChoiceCard
+                decisionKey={String(session.startedAt)}
                 choice={recordChoice}
                 entries={recordEntries}
                 sourceWithheld={withheldLines}
-                busy={docState !== "done"}
+                busy={docState !== "done" || settling || checking}
                 onChoose={(next) => {
                   setQuiet(true);
                   setRecordChoice(next);
@@ -1481,7 +1547,7 @@ function OutputPageInner() {
                   setDocState("idle");
                 }}
               />
-              {(!autoFinish || (!settling && settle.status === "done" && view.state !== "finished" && (!mayAccount || saveShown !== "saving"))) && <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onBulk={onBulk} onCut={onCut} actions={cardActions} numberPrompts={autoFinish ? [] : numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />}
+              {!finished && (!autoFinish || (!settling && settle.status === "done")) && <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onBulk={onBulk} onCut={onCut} actions={cardActions} numberPrompts={autoFinish ? [] : numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />}
             </aside>
           </div>
 
@@ -1676,7 +1742,7 @@ function OutputPageInner() {
       ) : lanes ? (
         /* Lanes first (R2): one next action by route; the rest behind "Something else". */
         <div className="mt-12">
-          <LaneNextAction action={nextActionFor(session.laneTask, { signedIn, finished })}>
+          <LaneNextAction action={nextActionFor(session.laneTask, { signedIn, finished })} onFinish={goFix} checking={checking || settling || (mayAccount && saveShown === "saving")}>
             {parkedLetter && !coverLetterText && docState === "done" && (
               <div data-testid="letter-offer">
                 <p className="mb-2 text-sm text-t-phos">Applying somewhere that wants a cover letter? t.ROY wrote one from your story. t.ROY checks it line by line with you, like the resume.</p>
