@@ -115,7 +115,7 @@ function JobBoardPage() {
   const [hiddenEmployerKeys, setHiddenEmployerKeys] = useState<Set<string>>(new Set());
   const [hideEmployerFor, setHideEmployerFor] = useState<string | null>(null);
   const [hideReason, setHideReason] = useState("");
-  const [fairChanceOnly, setFairChanceOnly] = useState(false);
+  const [prioritizeRecordEvidence, setPrioritizeRecordEvidence] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
   const [roleFromLane, setRoleFromLane] = useState(false);
 
@@ -460,10 +460,10 @@ function JobBoardPage() {
     if (!jobFit || jobFitExclusion(j, jobFit)) return false;
     if (hiddenJobs.has(j.id)) return false;
     if (hiddenEmployerKeys.has(lightEmployerKey(j.company))) return false;
-    if (fairChanceOnly && !j.second_chance) return false;
     if (remoteOnly && !j.remote) return false;
     return true;
   });
+  if (prioritizeRecordEvidence) visibleJobs.sort((a, b) => Number(b.second_chance) - Number(a.second_chance));
   const hiddenCount = jobs.length - visibleJobs.length;
   const savedCount = savedJobs.size;
 
@@ -616,15 +616,19 @@ function JobBoardPage() {
       </div>
 
       {summary && !searching && preferencesReady && <section aria-label="Loaded search results" className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos-dim"><p>{summary.matched} kept from {summary.loaded} loaded listings. {summary.excluded} excluded. {summary.unknownIncluded} kept with fields to check.</p><p className="mt-1 text-xs">This is a bounded search, not a count of every opening. Listings fetched {new Date(summary.fetchedAt).toLocaleString()}. {source === "cache" ? "Reused from a cached search." : ""}</p>{summary.notices.map(line=><p key={line} className="mt-1 text-xs">{line}</p>)}{submittedFilters.current !== canonicalSearchFilters(filters) && <p className="mt-2 text-xs text-t-amber-bright">Choices changed. Run Find Jobs to apply them.</p>}</section>}
+      {prioritizeRecordEvidence && <p className="mb-3 text-sm text-t-phos-dim">Employers with verified evidence appear first. Other openings stay visible: missing evidence does not mean an employer won’t hire you.</p>}
+      {summary && summary.excluded > 0 && <details className="mb-4 text-sm text-t-phos-dim"><summary className="cursor-pointer">Why were openings excluded?</summary><ul className="mt-2 space-y-1">{Object.entries(summary.excludedBy).map(([key, count]) => <li key={key}>{key === "personal" ? "Your saved exclusions or hidden employers" : key.startsWith("unknown_") ? `Missing ${FILTER_LABELS[key.slice(8)] || key.slice(8)}` : FILTER_LABELS[key] || key}: {count}</li>)}</ul><p className="mt-2">One opening can fail more than one requirement. Change a requirement only if it works for you, then run Find Jobs again.</p></details>}
       {/* Phase 4C: result filters -- refine the listings you already pulled */}
       {jobs.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <span className="text-xs font-medium text-t-phos-dim">Filter:</span>
+          <span className="text-xs font-medium text-t-phos-dim">Show:</span>
           <button
-            onClick={() => setFairChanceOnly((v) => !v)}
-            className={`t-focus text-xs px-3 py-1.5 border transition-colors ${fairChanceOnly ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
+            aria-pressed={prioritizeRecordEvidence}
+            title="Bring employers with verified hiring evidence to the top. Other openings stay visible because missing evidence is not a refusal."
+            onClick={() => setPrioritizeRecordEvidence((v) => !v)}
+            className={`t-focus text-xs px-3 py-1.5 border transition-colors ${prioritizeRecordEvidence ? "bg-t-amber text-white border-t-amber font-bold" : "bg-t-panel border-t-line text-t-phos-dim hover:border-t-phos-dim"}`}
           >
-            Hires people with records
+            Prioritize employers with hiring evidence
           </button>
           <button
             onClick={() => setRemoteOnly((v) => !v)}
@@ -721,6 +725,7 @@ function JobBoardPage() {
                 {job.filterAssessment && <div className="border-b border-t-line px-4 py-2 text-xs text-t-phos-dim">{job.filterAssessment.distanceMiles === null ? "Distance unverified" : `About ${job.filterAssessment.distanceMiles.toFixed(1)} miles in a straight line`}{job.filterAssessment.unknown.length>0?` · Check: ${job.filterAssessment.unknown.map(key=>FILTER_LABELS[key]||key).join(", ")}`:""}{job.filterAssessment.preferred.length>0?` · Preferences not matched: ${job.filterAssessment.preferred.map(key=>FILTER_LABELS[key]||key).join(", ")}`:""}</div>}
                 {job.evidence && <p className="px-4 pt-2 text-xs text-t-phos-dim">Source: {job.evidence.source}. Posted: {job.evidence.postedAt && Number.isFinite(Date.parse(job.evidence.postedAt)) ? new Date(job.evidence.postedAt).toLocaleDateString() : "not supplied"}. Fetched: {new Date(job.evidence.fetchedAt).toLocaleString()}.</p>}
                 {job.evidence?.warnings.map(warning=><p key={warning} className="px-4 pt-1 text-xs text-t-amber-bright">{warning}</p>)}
+                {job.relevance && <p className="px-4 pt-2 text-sm text-t-phos-dim">{job.relevance.reason}</p>}
                 {/* Header — always visible */}
                 <button
                   onClick={() =>

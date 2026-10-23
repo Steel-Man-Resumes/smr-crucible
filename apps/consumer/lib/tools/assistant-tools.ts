@@ -298,7 +298,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
             company: j.company,
             location: j.location,
             salary: j.salary,
-            employmentType:j.employment_type,evidence:j.evidence,filterAssessment:j.filterAssessment,
+            employmentType:j.employment_type,evidence:j.evidence,filterAssessment:j.filterAssessment,relevance:j.relevance,
             fairChance: j.second_chance,
             posted: j.posted,
           })),
