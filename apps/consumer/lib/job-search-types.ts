@@ -16,6 +16,7 @@ export interface EnrichedJob {
   description: string; full_description: string; requirements: string[]; benefits: string[];
   employment_type: string; posted: string; second_chance: boolean; fair_chance_reason: string | null;
   remote: boolean; apply_url: string | null; employer_website: string | null;
+  relevance?: { score: number; reason: string };
   evidence?: JobSearchEvidence; filterAssessment?: JobFilterAssessment;
   source_fields?: Record<string, unknown>; source_variants?: JSearchJob["source_variants"];
 }

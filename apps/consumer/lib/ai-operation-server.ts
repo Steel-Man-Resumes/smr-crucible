@@ -29,8 +29,10 @@ export async function beginAiOperation(input: {userId: string; endpoint: string;
   const context: OperationContext = {operationId:id, ...input, pending:[]};
   const result: OperationHandle = {meta:{...input,operationId:id},context,finish:async()=>{}};
   if (!isAiWorkflow(input.endpoint)) return result;
+  let admissionStage = 'policy';
   try {
     const policy = await readToolPolicy(input.userId,input.endpoint);
+    admissionStage = 'progression';
     const progress = countsForProgression(input.endpoint) ? await progressionAllowance(input.userId) : null;
     const newAccount = !!progress && !progress.account.existing;
     const reserve = Math.max(policy?.reserve_usd ?? 0, newAccount ? progress!.policy.reserve_usd : 0);
@@ -39,6 +41,7 @@ export async function beginAiOperation(input: {userId: string; endpoint: string;
       const locked = await checkPremium(input.userId,policy.premium_tool);
       if (locked) {result.response=locked;return result;}
     }
+    admissionStage = 'reservation';
     const rows = await runAsUser<unknown[][]>(input.userId,sql=>[
       sql`SELECT pg_advisory_xact_lock(hashtextextended(${input.userId}, 873))`,
       sql`INSERT INTO ai_operation (id,user_id,workflow,reserved_usd,progression_counted,progression_bonus_used)
@@ -94,7 +97,9 @@ export async function beginAiOperation(input: {userId: string; endpoint: string;
       } catch { console.error('AI_OPERATION_FINISH_FAILED'); }
     };
     return result;
-  } catch {
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+    console.error('AI_OPERATION_ADMISSION_FAILED', { stage: admissionStage, code: /^[A-Z0-9]{5}$/.test(code) ? code : 'unavailable' });
     result.response=refuse('tool_policy_unavailable','Access could not be checked. Try again shortly. Your saved work is still available.',503);
     return result;
   }

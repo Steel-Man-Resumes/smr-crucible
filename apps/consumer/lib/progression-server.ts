@@ -11,9 +11,11 @@ export async function readProgressionPolicy(userId:string):Promise<ProgressionPo
  const p=await getOneAsUser<ProgressionPolicy>(userId,'SELECT *,daily_usd::float8 AS daily_usd,reserve_usd::float8 AS reserve_usd FROM progression_policy WHERE id=true');
  if(!p)throw new Error('progression_unavailable'); return p;
 }
+// Migration 092 snapshots pre-launch users. Auth users have no created_at column;
+// an absent snapshot is a new account, with explicit legacy entitlements retained.
 export async function progressionAccount(userId:string) {
  const [account,tier,legacyLimit]=await Promise.all([
-  getOneAsUser<{existing_access:boolean}>(userId,'SELECT COALESCE(a.existing_access,u.created_at<p.launched_at) AS existing_access FROM users u CROSS JOIN progression_policy p LEFT JOIN progression_account a ON a.user_id=u.id WHERE u.id=$1',[userId]),getUserTier(userId),getUserDailyLimit(userId),
+  getOneAsUser<{existing_access:boolean}>(userId,'SELECT existing_access FROM progression_account WHERE user_id=$1',[userId]),getUserTier(userId),getUserDailyLimit(userId),
  ]);
  return {existing:!!account?.existing_access || tier==='admin' || tier==='partner' || legacyLimit!==30,legacyLimit};
 }

@@ -12,6 +12,7 @@
 
 "use client";
 
+import { assistantErrorMessage } from "@/lib/assistant-error-message";
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAssistant, type AssistantToolCall } from "@/lib/use-assistant";
@@ -723,9 +724,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
         {error && (
           <div className="bg-amber-50 rounded-[6px] p-3 border border-amber-200">
             <p className="text-sm text-amber-800">
-              {error.message?.includes("429")
-                ? "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more."
-                : "Something went wrong. Try again in a moment."}
+              {assistantErrorMessage(error.message || "")}
             </p>
           </div>
         )}

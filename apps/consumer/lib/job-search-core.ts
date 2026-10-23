@@ -1,3 +1,4 @@
+import { searchRoles, jobRelevance } from './job-search-relevance';
 /**
  * One bounded provider search and deterministic filter path for Job Board and coach.
  * Cache public source listings; apply current lane choices after cache reads.
@@ -70,6 +71,7 @@ const DB_DEADLINE_MS = 3000;
 
 export interface JobSearchParams {
   role?: string;
+  searchRoles?: string[];
   location?: string;
   filters?: unknown;
   laneId?: string | null;
@@ -341,7 +343,11 @@ function truncateDescription(desc: string, maxLen: number): string {
 export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOutcome> {
   const saved = params.userId ? await loadJobSearchPreferences(params.userId, params.laneId) : null;
   const filters = readJobSearchFilters(params.filters, saved?.saved.filters || defaultJobSearchFilters());
-  const result = await searchListings({ ...params, role: params.role === undefined ? saved?.saved.role || "" : params.role, location: params.location === undefined ? saved?.saved.location || "" : params.location, resolvedFilters: filters });
+  const profile = params.userId ? await (await import("@crucible/core")).getUserProfile(params.userId) : null;
+  const skills = profile?.topSkills || params.skills || [];
+  const requestedRole = params.role === undefined ? saved?.saved.role || "" : params.role;
+  const roles = searchRoles(requestedRole, saved?.target || (!saved?.laneId ? profile?.topCareerPaths[0] || "" : ""), skills);
+  const result = await searchListings({ ...params, role: roles[0] || requestedRole, searchRoles: roles, location: params.location === undefined ? saved?.saved.location || "" : params.location, resolvedFilters: filters });
   let hidden = new Set<string>();
   let personal = readJobFit(null);
   if (params.userId) {
@@ -360,11 +366,11 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     if (!filters.includeUnknown) assessment.requiredUnknown.forEach(key => { excludedBy[`unknown_${key}`] = (excludedBy[`unknown_${key}`] || 0) + 1; });
     if (!assessment.included) return [];
     assessment.unknown.forEach(key => { unknownBy[key] = (unknownBy[key] || 0) + 1; });
-    return [{ ...job, filterAssessment: assessment }];
+    return [{ ...job, relevance: jobRelevance(job, roles, skills), filterAssessment: assessment }];
   });
-  jobs.sort((a,b) => (a.filterAssessment.preferred.length + a.filterAssessment.unknown.length) - (b.filterAssessment.preferred.length + b.filterAssessment.unknown.length));
+  jobs.sort((a,b) => b.relevance.score - a.relevance.score || a.filterAssessment.preferred.length - b.filterAssessment.preferred.length);
   const summary: JobSearchSummary = { loaded, matched: jobs.length, excluded: loaded - jobs.length, unknownIncluded: jobs.filter(j => j.filterAssessment.unknown.length > 0).length, excludedBy, unknownBy, providerRequests: result.metadata?.providerRequests || 0, partial: true, fetchedAt: result.jobs[0]?.evidence?.fetchedAt || new Date().toISOString(), filters, laneId: saved?.laneId || null,
-    notices: ["Counts cover the listings loaded for this search, not every opening.", ...(!filters.origin && filters.radiusMiles.value !== null ? ["Distance is unverified without an exact search center. Provider radius is approximate."] : []), ...(result.metadata?.notices || [])] };
+    notices: [...(roles.length ? [`Search directions: ${roles.join("; ")}. Ordered by title and saved skill overlap, not confirmed eligibility.`] : ["Add a role or save a career direction for more focused results."]), "Counts cover the listings loaded for this search, not every opening.", ...(!filters.origin && filters.radiusMiles.value !== null ? ["Distance is unverified without an exact search center. Provider radius is approximate."] : []), ...(result.metadata?.notices || [])] };
   const { metadata: _metadata, ...publicResult } = result;
   return { ...publicResult, jobs, summary };
 }
@@ -385,7 +391,8 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
   const cacheParams = {
     role: sanitizeOrEmpty(role),
     location: searchLocation,
-    version: 2,
+    version: 3,
+    roles: params.searchRoles || [],
     filtersHash: hashQuery({ filters: canonicalSearchFilters(filters) }),
   };
   const queryHash = hashQuery(cacheParams);
@@ -425,32 +432,15 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
   const roleClean = sanitizeOrEmpty(role);
   const searchRole = roleClean || "jobs";
   const providerNames: string[] = [];
+  const roles = params.searchRoles?.length ? params.searchRoles : [searchRole];
+  const multi = roles.length > 1;
   const settled = await Promise.all([
-    fetchJSearchJobs(searchRole, searchLocation, filters.radiusMiles.value ?? tenantGeo.searchRadiusMiles, { filters }).then((r) => {
-      if (r.jobs.length) providerNames.push("jsearch");
-      return r;
-    }),
-    fetchAdzunaJobs(
-      searchRole,
-      searchLocation,
-      filters.radiusMiles.value ?? tenantGeo.searchRadiusMiles,
-      PARALLEL_PROVIDER_TIMEOUT_MS,
-      { filters }
-    ).then((r) => {
-      if (r.jobs.length) providerNames.push("adzuna");
-      return r;
-    }),
-    fetchUsaJobs(roleClean, searchLocation, PARALLEL_PROVIDER_TIMEOUT_MS, { filters }).then((r) => {
-      if (r.jobs.length) providerNames.push("usajobs");
-      return r;
-    }),
+    ...roles.map(r => fetchJSearchJobs(r, searchLocation, filters.radiusMiles.value ?? tenantGeo.searchRadiusMiles, { filters, maxPages: multi ? 1 : 2 }).then(result => { if(result.jobs.length) providerNames.push("jsearch"); return result; })),
+    ...roles.map(r => fetchAdzunaJobs(r, searchLocation, filters.radiusMiles.value ?? tenantGeo.searchRadiusMiles, PARALLEL_PROVIDER_TIMEOUT_MS, { filters, maxPages: multi ? 1 : 2 }).then(result => { if(result.jobs.length) providerNames.push("adzuna"); return result; })),
+    fetchUsaJobs(roleClean, searchLocation, PARALLEL_PROVIDER_TIMEOUT_MS, { filters, maxPages: multi ? 1 : 2 }).then(result => { if(result.jobs.length) providerNames.push("usajobs"); return result; }),
   ]);
-  const [jsearch, adzuna, usajobs] = settled;
   const metadata = { providerRequests: settled.reduce((n,r) => n + (r.requests || 0), 0), notices: settled.some(r => r.failed || r.partial) ? ["Some providers were unavailable or reached the bounded page limit."] : [] };
-
-  // JSearch first: it is the only source with structured qualifications and
-  // benefits, so its records enrich best. The others fill in behind it, deduped.
-  const rawJobs = mergeJobs([jsearch.jobs, adzuna.jobs, usajobs.jobs]);
+  const rawJobs = mergeJobs(settled.map(result => result.jobs));
   const allFailed = settled.every((r) => r.failed || r.jobs.length === 0);
 
   if (rawJobs.length === 0) {

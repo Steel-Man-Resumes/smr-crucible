@@ -190,7 +190,8 @@
         "resources",
         "applications"
       ],
-      "pagesIfCriminalRecord": []
+      "pagesIfCriminalRecord": [],
+      "version": 2
     },
     {
       "id": "rejection-recovery",
