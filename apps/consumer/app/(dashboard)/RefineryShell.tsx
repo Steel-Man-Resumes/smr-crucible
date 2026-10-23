@@ -15,6 +15,7 @@ import { UiPrefsApplier } from "@/components/UiPrefsApplier";
 import { NavAvatar } from "@/components/NavAvatar";
 import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
 import { GuidedTour } from "@/components/GuidedTour";
+import { TourPageFrame } from "@/components/tour/TourPageFrame";
 import { DevSwitcher } from "@/components/DevSwitcher";
 import { ImpersonationChrome } from "@/components/ImpersonationChrome";
 import { HighlightHost } from "@/components/SpotlightHighlight";
@@ -396,11 +397,12 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
     if (!drawerOpen) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    navPanel.current?.focus();
+    if (!document.documentElement.dataset.guidedLearning) navPanel.current?.focus();
     const closeOnDesktop = () => {
       if (window.matchMedia("(min-width: 768px)").matches) setDrawerOpen(false);
     };
     const handleKey = (event: KeyboardEvent) => {
+      if (document.documentElement.dataset.guidedLearning) return;
       if (event.key === "Escape") { event.preventDefault(); setDrawerOpen(false); return; }
       if (event.key !== "Tab") return;
       const panel = navPanel.current;
@@ -420,7 +422,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKey);
       window.removeEventListener("resize", closeOnDesktop);
-      navTrigger.current?.focus();
+      if (!document.documentElement.dataset.guidedLearning) navTrigger.current?.focus();
     };
   }, [drawerOpen]);
   // Shared-computer rule: the "Is it yours?" card for an unowned Forge run.
@@ -1007,14 +1009,14 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
           {/* Asked once after joining an organization. Not while an admin is
               viewing as someone else: the answer would be recorded for the admin. */}
           {!isOrgPartner && !effectiveRole?.impersonating && <JoinSharingPrompt />}
-          {derivedReady ? children : null}
+          {derivedReady && effectiveRole !== null ? <TourPageFrame key={JSON.stringify([pathname, shellUid, effectiveRole?.accountId ?? null, effectiveRole?.tier ?? null, effectiveRole?.orgRole ?? null, effectiveRole?.impersonating?.mode ?? null])} pathname={pathname}>{children}</TourPageFrame> : null}
         </main>
         </div>
       </div>
 
       {/* First-run orientation -- self-gating (client tier, DB-persisted) */}
       <Suspense fallback={null}>
-        <GuidedTour held={tourHeld} />
+        <GuidedTour key={JSON.stringify([shellUid, effectiveRole?.accountId ?? null])} held={tourHeld || !derivedReady || effectiveRole === null} onNavigationReveal={setDrawerOpen} />
       </Suspense>
 
       {/* Developer impersonation frame (blue view / red assist) */}
@@ -1077,11 +1079,11 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
 
       {/* AI Assistant */}
       <AssistantDrawer>
-        {effectiveRole === null ? (
+        {!shellUid || authStatus !== "authenticated" || effectiveRole === null ? (
           <p role="status" className="p-5 text-sm text-t-bone-dim">Checking your account...</p>
         ) : (
           <AssistantChat
-            key={isOrgPartner ? "org-assistant" : "career-coach"}
+            key={JSON.stringify([shellUid, effectiveRole.accountId, effectiveRole.tier, effectiveRole.orgRole, effectiveRole.impersonating?.mode ?? null, isOrgPartner])}
             context={{
               currentPage: pathname === "/dashboard" ? "dashboard" : pathname.replace("/dashboard/", ""),
               forgeComplete: onboarding.state !== "needs_profile",

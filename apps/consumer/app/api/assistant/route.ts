@@ -73,6 +73,8 @@ export async function POST(request: Request) {
   // middleware already removes its cookie here; this is the second lock, since
   // a signed-in user reaches memory and cohort data below).
   const userId = forgeUserId(session);
+  const expectedAccount = request.headers.get("X-Expected-Account-Id");
+  if (expectedAccount !== null && expectedAccount !== userId) return NextResponse.json({ error: "Your account changed. Reload before continuing this conversation." }, { status: 409 });
 
   if (userId && (await effectiveAuth())?.user?.id !== userId) return NextResponse.json({ error: "Assistant is unavailable while viewing as someone." }, { status: 403 });
   if (!userId) {

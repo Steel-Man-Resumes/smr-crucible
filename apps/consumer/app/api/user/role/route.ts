@@ -44,11 +44,13 @@ export async function GET() {
         .catch(() => null)
     : null;
 
-  const impersonation = (session as { impersonation?: { mode: "view" | "assist" } })
+  const impersonation = (session as { impersonation?: { mode: "view" | "assist"; adminId: string } })
     .impersonation;
 
   return NextResponse.json({
     data: {
+      accountId: userId,
+      sessionAccountId: impersonation?.adminId ?? userId,
       tier,
       orgRole: org?.role ?? null,
       orgName: org?.orgName ?? null,
@@ -57,5 +59,5 @@ export async function GET() {
       crmV2: !!flag?.crm_v2,
       impersonating: impersonation ? { mode: impersonation.mode } : null,
     },
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }

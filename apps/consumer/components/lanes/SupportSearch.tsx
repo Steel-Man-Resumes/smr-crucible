@@ -11,7 +11,9 @@
  * simply not shown.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
+import { readCoverageReceipt, type CoverageReceipt } from "@/lib/coverage-receipt";
 import { parsePlace } from "@/lib/support-location";
 import { resourceEvidenceLabel } from "@/lib/directory-labels";
 import { SavedResources } from "./SavedResources";
@@ -92,6 +94,14 @@ export function readSupportResponse(j: unknown): { results: SupportResultView[];
 }
 
 export function SupportSearch({ initialLocation = "", barriers = [] }: { initialLocation?: string; barriers?: string[] }) {
+  const accountId = useSession().data?.user?.id;
+  const coverageController = useRef<AbortController | null>(null);
+  const [coveragePreview, setCoveragePreview] = useState<{state: string; place: string; category: string; reason: "low_coverage"} | null>(null);
+  const [coverageReceipt, setCoverageReceipt] = useState<CoverageReceipt | null>(null);
+  useEffect(() => {
+    setCoveragePreview(null); setCoverageReceipt(null); setSaveStatus(""); setSaving(false);
+    return () => { const controller = coverageController.current; coverageController.current = null; controller?.abort(); };
+  }, [accountId]);
   const [location, setLocation] = useState(initialLocation);
   const [category, setCategory] = useState("all");
   const [busy, setBusy] = useState(false);
@@ -138,14 +148,32 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     }
   }
 
-  async function requestCoverage(){
-    const place=parsePlace(location);
-    if(!place.state){setSaveStatus("Add a state or ZIP so we know which area to check.");return;}
-    const areas:Record<string,string>={all:"community",housing:"shelter",legal:"legal_aid",mental_health:"mental",substance:"recovery",employment:"jobs"};
-    setSaving(true);setSaveStatus("");
-    try{const res=await fetch("/api/directory/coverage",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({state:place.state,place:place.cityKey||place.countyKey||place.zip||place.state,category:areas[category]||category,reason:"low_coverage"})});
-      const body=await res.json();if(!res.ok)throw new Error(body.error||"Could not record the request.");setSaveStatus("Area added to the research queue. This does not mean new services are available yet.");
-    }catch(e){setSaveStatus(e instanceof Error?e.message:"Could not record the request.");}finally{setSaving(false);}
+  function previewCoverage() {
+    const place = parsePlace(location);
+    if (!place.state) { setSaveStatus("Add a state or ZIP so we know which area to check."); return; }
+    const areas: Record<string, string> = { all: "community", housing: "shelter", legal: "legal_aid", mental_health: "mental", substance: "recovery", employment: "jobs" };
+    setCoverageReceipt(null); setSaveStatus("");
+    setCoveragePreview({ state: place.state, place: place.cityKey || place.countyKey || place.zip || place.state, category: areas[category] || category, reason: "low_coverage" });
+  }
+  async function requestCoverage() {
+    if (!coveragePreview || saving || coverageController.current) return;
+    const controller = new AbortController(); coverageController.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    setSaving(true); setSaveStatus("");
+    try {
+      const response = await fetch("/api/directory/coverage", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(coveragePreview), signal: controller.signal });
+      const body = await response.json().catch(() => null);
+      if (controller.signal.aborted) return;
+      const receipt = readCoverageReceipt(body);
+      if (!response.ok || !receipt) throw new Error(body?.error || "The queue receipt could not be confirmed. Retry safely.");
+      setCoverageReceipt(receipt); setCoveragePreview(null);
+      setSaveStatus("Your area request is saved and pending review. Keep using the listings while it waits.");
+    } catch (error) {
+      if (coverageController.current === controller) setSaveStatus(error instanceof Error && error.name !== "AbortError" ? error.message : "The queue receipt could not be confirmed. You can retry this request.");
+    } finally {
+      clearTimeout(timeout);
+      if (coverageController.current === controller) { coverageController.current = null; setSaving(false); }
+    }
   }
 
   async function save(id:string) {
@@ -170,7 +198,7 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
           <input
             id="support-location"
             value={location}
-            onChange={(e) => setLocation(e.target.value)}
+            onChange={(e) => { setLocation(e.target.value); setCoveragePreview(null); }}
             placeholder="City and state, or ZIP"
             className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2.5 text-base text-t-white focus:border-t-amber focus:outline-none"
             data-testid="support-location"
@@ -183,7 +211,7 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
           <select
             id="support-category"
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
+            onChange={(e) => { setCategory(e.target.value); setCoveragePreview(null); }}
             className="mt-1 w-full min-h-touch border border-t-line bg-t-bg px-3 py-2.5 text-base text-t-white focus:border-t-amber focus:outline-none"
             data-testid="support-category"
           >
@@ -211,7 +239,14 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
         </p>
       )}
 
-      {answer && <button type="button" disabled={saving} onClick={()=>void requestCoverage()} className="mt-3 min-h-touch text-sm text-t-steel underline">Ask us to check this area</button>}
+      {answer && <button type="button" disabled={saving} onClick={previewCoverage} className="mt-3 min-h-touch text-sm text-t-steel underline">Ask us to check this area</button>}
+      {coveragePreview && <section aria-label="Review area request" className="mt-3 border border-t-line p-3 text-sm">
+        <p>Request a directory check for {coveragePreview.place}, {coveragePreview.state}: {coveragePreview.category.replaceAll("_", " ")}.</p>
+        <p className="mt-2">Send this area and type of help for review. Your conversation and personal history stay out of this request. We cannot give a review date yet.</p>
+        <button type="button" disabled={saving} onClick={() => void requestCoverage()} className="t-focus mt-2 min-h-touch underline">{saving ? "Recording request..." : "Confirm area request"}</button>
+        <button type="button" disabled={saving} onClick={() => setCoveragePreview(null)} className="t-focus ml-4 min-h-touch underline">Cancel</button>
+      </section>}
+      {coverageReceipt && <p className="mt-3 break-all text-xs">Queue reference: {coverageReceipt.requestId}. Status: {coverageReceipt.status}.</p>}
       {saveStatus && <p role="status" className="mt-3 text-sm text-t-phos">{saveStatus}</p>}
       <SavedResources refresh={savedRefresh} />
       {answer && (

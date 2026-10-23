@@ -43,7 +43,7 @@ test("tour final action uses the same selected-work policy as the workspace", ()
  assert.match(route, /loadSelectedWork\(userId, \{\}, false\)/);
  assert.match(route, /workspaceNextAction\(\{ work/);
  assert.match(route, /jsonb_set/);
- assert.match(route, /queryAsUser\(userId/);
+ assert.match(route, /queryAsUser(?:<[^>]+>)?\(userId/);
  assert.doesNotMatch(route, /recordProgressEvent|INSERT INTO job_application/);
 });
 

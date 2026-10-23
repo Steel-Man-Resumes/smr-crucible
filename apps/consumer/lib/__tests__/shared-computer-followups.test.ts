@@ -169,7 +169,7 @@ describe("R6: what an earlier account left in this browser is cleared before any
   it("the shell settles them during render and shows the page only after", () => {
     const shell = code(read("app", "(dashboard)", "RefineryShell.tsx"));
     assert.match(shell, /settleDerivedKeys\(uid\)/);
-    assert.match(shell, /\{derivedReady \? children : null\}/);
+    assert.match(shell, /\{derivedReady && effectiveRole !== null \? <TourPageFrame[^>]*>\{children\}<\/TourPageFrame> : null\}/);
     for (const k of ["refinery_last_job_search", "saved_jobs", "active_baseline_id"]) assert.ok(DERIVED_KEYS.includes(k), k);
   });
 });
@@ -193,8 +193,8 @@ describe("Welcome tour: never on top of the 'Is it yours?' card", () => {
 
   it("the shell passes it to the tour", () => {
     const shell = code(read("app", "(dashboard)", "RefineryShell.tsx"));
-    assert.match(shell, /<GuidedTour held=\{tourHeld\} \/>/);
-    assert.match(code(read("components", "GuidedTour.tsx")), /isTourVisible\(\{ tier, onHome, closed, state, requested, held \}\)/);
+    assert.match(shell, /<GuidedTour[^>]*held=\{tourHeld \|\| !derivedReady[^}]*\}/);
+    assert.match(code(read("components", "GuidedTour.tsx")), /if \(tier !== 'client' \|\| held\) return/);
   });
 });
 

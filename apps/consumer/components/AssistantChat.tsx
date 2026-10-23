@@ -16,9 +16,11 @@ import { TroyWork } from "@crucible/consumer-ui";
 import { assistantErrorMessage } from "@/lib/assistant-error-message";
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { readAssistantArrival, waitForAssistantArrival } from "@/lib/assistant-arrival";
 import { useAssistant, type AssistantToolCall } from "@/lib/use-assistant";
 import type { AssistantContext } from "@/lib/assistant-prompt";
-import { resolveAssistantPage, crossesShell, pageLabel } from "@/lib/tools/assistant-tool-defs";
+import { resolveAssistantPage, crossesShell, isRefineryPath, pageLabel } from "@/lib/tools/assistant-tool-defs";
 import { requestHighlight } from "@/lib/highlight-bus";
 import { AssistantActionCard } from "./AssistantActionCard";
 import SpeechInputButton from "@/components/SpeechInputButton";
@@ -63,7 +65,7 @@ const TOOL_ACTIVITY: Record<string, string> = {
   add_follow_up_reminder: "Setting your reminder",
   take_me_there: "Taking you there",
   highlight_element: "Pointing at it",
-  file_feedback: "Sending that to Troy",
+  file_feedback: "Recording your confirmed message",
 };
 
 /** Page-aware quick prompts — buttons users can tap instead of typing */
@@ -198,12 +200,17 @@ export function AssistantChat(props: AssistantChatProps) {
 function AssistantChatContent({ context, sessionId, coach, staff }: AssistantChatProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const accountId = useSession().data?.user?.id;
+  const pathRef = useRef(pathname); pathRef.current = pathname;
+  const navigation = useRef<AbortController | null>(null);
+  useEffect(() => () => { navigation.current?.abort(); }, [accountId]);
 
   // Browser-executed tools. The return value becomes the tool result the
   // model narrates over -- keep results short and honest.
   const onToolCall = useCallback(
     async ({ toolCall }: { toolCall: AssistantToolCall }) => {
       if (toolCall.toolName === "take_me_there") {
+        navigation.current?.abort();
         const args = (toolCall.args ?? {}) as { page?: string; jobApplicationId?: string };
         const href = args.page ? resolveAssistantPage(args.page, args.jobApplicationId) : null;
         if (!href) {
@@ -220,8 +227,20 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             note: "That page is in the other part of the app, where this chat does not follow. A button to open it shows under your reply. Answer first, then tell them to tap the button when they are ready.",
           };
         }
+        const controller = new AbortController(); navigation.current = controller;
+        if (!isRefineryPath(pathname ?? "")) {
+          navigation.current = null;
+          return { ok: true, navigated: false, buttonShown: true,
+            note: "This surface has no route-arrival acknowledgement. A button is shown so the person can open the page after your explanation. Do not say you have arrived." };
+        }
         router.push(href);
-        return { ok: true, nowOn: args.page };
+        const arrival = await waitForAssistantArrival(href, {
+          signal: controller.signal, originPath: pathRef.current ?? "",
+          read: () => readAssistantArrival(pathRef.current ?? ""),
+        });
+        if (navigation.current === controller) navigation.current = null;
+        return arrival.ok ? { ...arrival, nowOn: args.page, note: "The route content is visible. Its queries and selected work still need their own confirmation." }
+          : { ...arrival, buttonShown: arrival.reason === "timeout", note: "Arrival was not confirmed. Do not say you arrived or that data loaded. Offer a retry or a page button." };
       }
       if (toolCall.toolName === "highlight_element") {
         const args = (toolCall.args ?? {}) as { target?: string; note?: string };

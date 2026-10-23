@@ -5,7 +5,7 @@
  * Consumed by the AssistantChat to give t.ROY god-like awareness of the
  * user's state -- what they've built, what they haven't done, what's next.
  *
- * Cached at the edge for 30s to avoid hammering the DB on every chat open.
+ * Private account-bound snapshot; never cached.
  */
 
 import { readJobFit } from "@/lib/job-fit";
@@ -75,6 +75,8 @@ export async function GET() {
     : "full_access";
 
   return NextResponse.json({
+    accountId: userId,
+    sessionAccountId: session.impersonation?.adminId ?? userId,
     workPreferences: readJobFit(cp?.preferences?.jobFit),
     profile: {
       name: profile.name,
@@ -142,5 +144,5 @@ export async function GET() {
       applicationCount: profile.applicationCount,
       hasResumeTailoredToTarget: profile.hasResumeTailoredToTarget,
     },
-  });
+  }, { headers: { "Cache-Control": "private, no-store" } });
 }

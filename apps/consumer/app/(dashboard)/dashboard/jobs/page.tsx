@@ -25,6 +25,7 @@ import { trackProgress } from "@/lib/track-progress";
 import { jobSourceForSave } from "@/lib/job-source";
 import { JobFitChoices } from "@/components/JobFitChoices";
 import { jobFitExclusion, type JobFitPreferences } from "@/lib/job-fit";
+import { broadenJobSearch } from "@/lib/job-search-broaden";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -75,6 +76,7 @@ export default function JobBoardPageWrapper() {
 function JobBoardPage() {
   const searchParams = useSearchParams();
   const ownerUid = useSession().data?.user?.id;
+  const ownerRef = useRef(ownerUid); ownerRef.current = ownerUid;
   const focus = useLaneFocus();
   const explicitLane = searchParams.get("laneId");
   const laneKey = explicitLane || (focus.loaded ? focus.laneId || "main" : null);
@@ -85,6 +87,7 @@ function JobBoardPage() {
   const [summary, setSummary] = useState<JobSearchSummary | null>(null);
   const [preferencesError, setPreferencesError] = useState("");
   const [preferencesNotice, setPreferencesNotice] = useState("");
+  const [preferenceSource, setPreferenceSource] = useState("built-in");
   const [preferenceRevision, setPreferenceRevision] = useState(0);
   const [accountRevision, setAccountRevision] = useState(0);
   const [savingPreferences, setSavingPreferences] = useState(false);
@@ -113,7 +116,11 @@ function JobBoardPage() {
   const [savedJobs, setSavedJobs] = useState<Map<string, SavedJob>>(new Map());
   const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
   // N1: persistent per-employer hiding (normalized name keys) + the card being confirmed.
-  const [hiddenEmployerKeys, setHiddenEmployerKeys] = useState<Set<string>>(new Set());
+  const [hiddenEmployers, setHiddenEmployers] = useState<Array<{ id: string; display_name: string }>>([]);
+  const hiddenEmployerKeys = new Set(hiddenEmployers.map(employer => lightEmployerKey(employer.display_name)));
+  const [hiddenEmployerError, setHiddenEmployerError] = useState("");
+  const [restoringEmployer, setRestoringEmployer] = useState<string | null>(null);
+  const [hiddenReload, setHiddenReload] = useState(0);
   const [hideEmployerFor, setHideEmployerFor] = useState<string | null>(null);
   const [hideReason, setHideReason] = useState("");
   const [prioritizeRecordEvidence, setPrioritizeRecordEvidence] = useState(false);
@@ -145,6 +152,7 @@ function JobBoardPage() {
             submittedFilters.current = canonicalSearchFilters(nextFilters);
           }
         } catch { setPreferencesNotice("Your last search could not be restored. Your saved lane choices are loaded."); }
+        setPreferenceSource(data.source === "lane" ? "lane" : data.source === "account" ? "account" : "built-in");
         setFilters(nextFilters); setContext(nextContext); setPreferenceRevision(data.revision || 0); setAccountRevision(data.accountRevision || 0); setLoadedLane(laneKey);
       })
       .catch(() => { if (!controller.signal.aborted) setPreferencesError("Your lane search choices could not be loaded. Try again before searching."); });
@@ -166,50 +174,32 @@ function JobBoardPage() {
     finally { if (laneRef.current === targetLane) setSavingPreferences(false); }
   }
 
-  // Load saved/hidden state
+  // Shared browsers never reuse another account's hidden or saved job state.
   useEffect(() => {
+    const controller = new AbortController();
+    setHiddenEmployers([]); setSavedJobs(new Map()); setHiddenJobs(new Set());
+    setHiddenEmployerError(""); setRestoringEmployer(null);
+    if (!ownerUid) return () => controller.abort();
     try {
-      const stored = localStorage.getItem("hidden_jobs");
-      if (stored) setHiddenJobs(new Set(JSON.parse(stored)));
+      const stored = JSON.parse(localStorage.getItem(`hidden_jobs:v2:${ownerUid}`) || "[]");
+      if (Array.isArray(stored)) setHiddenJobs(new Set(stored.filter((id): id is string => typeof id === "string")));
     } catch {}
-
-    // N1: the user's hidden employers, so restored/cached listings are filtered too.
-    fetch("/api/user/hidden-employers")
-      .then((r) => (r.ok ? r.json() : { employers: [] }))
-      .then((d) =>
-        setHiddenEmployerKeys(
-          new Set((d.employers || []).map((e: { display_name: string }) => lightEmployerKey(e.display_name)))
-        )
-      )
-      .catch(() => {});
-
-    // Load saved jobs from API (DB-backed)
-    async function loadSavedJobs() {
-      try {
-        const res = await fetch("/api/applications");
-        if (res.ok) {
-          const data = await res.json();
-          const map = new Map<string, SavedJob>();
-          for (const app of data.applications || []) {
-            // Use source_id (JSearch job ID) as the key to match against search results
-            const key = app.source_id || app.id;
-            map.set(key, { id: app.id, status: app.status });
-          }
-          setSavedJobs(map);
-        }
-      } catch {
-        // Fallback to localStorage
-        try {
-          const stored = localStorage.getItem("saved_jobs");
-          if (stored) {
-            const arr: SavedJob[] = JSON.parse(stored);
-            setSavedJobs(new Map(arr.map((j) => [j.id, j])));
-          }
-        } catch {}
-      }
-    }
-    loadSavedJobs();
-  }, []);
+    void fetch("/api/user/hidden-employers", { cache: "no-store", signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error(); return response.json(); })
+      .then(body => {
+        if (controller.signal.aborted) return;
+        setHiddenEmployers(Array.isArray(body.employers) ? body.employers.filter((item: {id?: unknown; display_name?: unknown}) => typeof item?.id === "string" && typeof item?.display_name === "string") : []);
+      }).catch(() => { if (!controller.signal.aborted) setHiddenEmployerError("Hidden employers could not be loaded. Retry to review them."); });
+    void fetch("/api/applications", { cache: "no-store", signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error(); return response.json(); })
+      .then(body => {
+        if (controller.signal.aborted) return;
+        const map = new Map<string, SavedJob>();
+        for (const app of body.applications || []) map.set(app.source_id || app.id, { id: app.id, status: app.status });
+        setSavedJobs(map);
+      }).catch(() => {});
+    return () => controller.abort();
+  }, [ownerUid, hiddenReload]);
 
   // Load context from the SERVER (not fragile cross-domain localStorage, which is
   // empty on refinery.* for users whose Forge was saved server-side at signup).
@@ -250,19 +240,14 @@ function JobBoardPage() {
     }
   }, [searchParams, preferencesReady]);
 
-  // Trigger search when context is set from URL param
-  useEffect(() => {
-    if (preferencesReady && autoSearched.current && context.targetRole && !searched) {
-      searchJobs();
-    }
-  }, [context.targetRole, preferencesReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  // URL suggestions fill the form; the person reviews the visible choices before searching.
 
   // ─── Actions ────────────────────────────────────────────────────────────
 
-  async function searchJobs() {
+  async function searchJobs(override?: JobSearchFilters) {
     if (!preferencesReady || !laneKey) return;
     let chosenFilters: JobSearchFilters;
-    try { chosenFilters = readJobSearchFilters(filters); } catch (error) { setSearchError(error instanceof Error ? error.message : "Check your filters."); return; }
+    try { chosenFilters = readJobSearchFilters(override ?? filters); } catch (error) { setSearchError(error instanceof Error ? error.message : "Check your filters."); return; }
     const targetLane = laneKey;
     const request = ++searchSequence.current;
     searchController.current?.abort();
@@ -433,26 +418,53 @@ function JobBoardPage() {
     setHiddenJobs((prev) => {
       const next = new Set(prev);
       next.add(jobId);
-      localStorage.setItem("hidden_jobs", JSON.stringify(Array.from(next)));
+      try { if (ownerUid) localStorage.setItem(`hidden_jobs:v2:${ownerUid}`, JSON.stringify(Array.from(next))); } catch {}
       return next;
     });
   }
 
-  // N1: hide an employer for good. Server matching is suffix-tolerant (next search);
-  // this light client key removes the currently-shown listings immediately.
   async function hideEmployer(company: string) {
     const name = (company || "").trim();
-    if (!name) return;
+    if (!name || !ownerUid) return;
+    const owner = ownerUid;
+    setHiddenEmployerError("");
     try {
-      await fetch("/api/user/hidden-employers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch("/api/user/hidden-employers", {
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, reason: hideReason.trim() || undefined }),
       });
-    } catch {}
-    setHiddenEmployerKeys((prev) => new Set(prev).add(lightEmployerKey(name)));
-    setHideEmployerFor(null);
-    setHideReason("");
+      const body = await response.json();
+      if (!response.ok || typeof body.employer?.id !== "string" || typeof body.employer?.display_name !== "string") throw new Error();
+      if (ownerRef.current !== owner) return;
+      setHiddenEmployers(previous => [...previous.filter(item => item.id !== body.employer.id), body.employer]);
+      setHideEmployerFor(null); setHideReason("");
+    } catch { if (ownerRef.current === owner) setHiddenEmployerError("That employer was not confirmed hidden. Please try again."); }
+  }
+
+  async function restoreEmployer(id: string) {
+    if (restoringEmployer || !ownerUid) return;
+    const owner = ownerUid;
+    setRestoringEmployer(id); setHiddenEmployerError("");
+    try {
+      const response = await fetch("/api/user/hidden-employers", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+      if (!response.ok) throw new Error();
+      if (ownerRef.current !== owner) return;
+      setHiddenEmployers(previous => previous.filter(item => item.id !== id));
+      setPreferencesNotice("Employer restored. Run Find Jobs again to include its available listings.");
+    } catch { if (ownerRef.current === owner) setHiddenEmployerError("That employer could not be restored. Please try again."); }
+    finally { if (ownerRef.current === owner) setRestoringEmployer(null); }
+  }
+
+  function showDismissedJobs() {
+    setHiddenJobs(new Set());
+    try { if (ownerUid) localStorage.removeItem(`hidden_jobs:v2:${ownerUid}`); } catch {}
+  }
+
+  function showBroaderResults() {
+    const broader = broadenJobSearch(filters);
+    setFilters(broader); setRemoteOnly(false); showDismissedJobs();
+    setPreferencesNotice("Searching with fewer requirements. Saved exclusions and hidden employers still apply. Your saved search choices are unchanged.");
+    void searchJobs(broader);
   }
 
   // ─── Derived ────────────────────────────────────────────────────────────
@@ -465,7 +477,7 @@ function JobBoardPage() {
     return true;
   });
   if (prioritizeRecordEvidence) visibleJobs.sort((a, b) => Number(b.second_chance) - Number(a.second_chance));
-  const hiddenCount = jobs.length - visibleJobs.length;
+  const dismissedCount = jobs.filter(job => hiddenJobs.has(job.id)).length;
   const savedCount = savedJobs.size;
 
   return (
@@ -529,10 +541,10 @@ function JobBoardPage() {
       )}
 
       {/* Search form */}
-      <JobFitChoices onChange={setJobFit} />
+      <div id="job-fit-choices"><JobFitChoices key={ownerUid || "signed-out"} onChange={setJobFit} /></div>
       {preferencesError && <p role="alert" className="mb-4 border border-t-red p-3 text-sm text-t-red">{preferencesError} <button type="button" onClick={() => setPreferenceReload(n=>n+1)} className="t-focus min-h-touch underline">Retry</button></p>}
       {!preferencesReady && !preferencesError && <p role="status" className="mb-4 text-sm text-t-phos-dim">Loading this lane’s search choices...</p>}
-      <div className="bg-t-panel p-5 border border-t-line mb-6" aria-busy={!preferencesReady}>
+      <div id="refinery-tool-jobs-search" role="group" aria-label="Job search choices" className="bg-t-panel p-5 border border-t-line mb-6" aria-busy={!preferencesReady}>
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
@@ -601,12 +613,13 @@ function JobBoardPage() {
             />
           </div>
 
+          <p className="mb-3 text-sm text-t-phos">{preferenceSource === "built-in" ? "The starting defaults are within 25 miles and posted in the last 30 days, keeping unknown details. These are not saved personal choices. Your current choices are shown below; review them before Find Jobs." : preferenceSource === "lane" ? "Your saved choices for this lane are loaded. Review them before searching." : "Your saved account defaults are loaded. Review them before searching."}</p>
           <SearchFilters key={laneKey || "loading"} value={filters} onChange={setFilters} disabled={!preferencesReady || searching} />
           <div className="flex flex-wrap gap-2" aria-label="Active search choices">{activeSearchFilters(filters).map(line=><span key={line} className="border border-t-line px-2 py-1 text-xs text-t-phos-dim">{line}</span>)}</div>
           <div className="flex flex-wrap gap-3 text-xs"><button type="button" disabled={!preferencesReady || savingPreferences} onClick={()=>void rememberSearch("lane")} className="t-focus min-h-touch text-t-amber-bright underline">Remember for this lane</button><button type="button" disabled={!preferencesReady || savingPreferences} onClick={()=>void rememberSearch("account")} className="t-focus min-h-touch text-t-phos-dim underline">Use as account defaults</button></div>
           {preferencesNotice && <p role="status" className="text-xs text-t-phos-dim">{preferencesNotice}</p>}
           <button
-            onClick={searchJobs}
+            onClick={() => void searchJobs()}
             disabled={!preferencesReady || searching || (!context.targetRole && !context.location)}
             data-tour="jobs-search-button"
             className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
@@ -616,6 +629,17 @@ function JobBoardPage() {
         </div>
       </div>
 
+      <section aria-label="Broaden or restore job results" className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos">
+        <p>Broader results stop screening listings by distance, date, pay and other search requirements. Your entered location, saved exclusions and hidden employers still apply. Provider search areas and result limits still apply.</p>
+        <button type="button" disabled={!preferencesReady || searching || (!context.targetRole && !context.location)} onClick={showBroaderResults} className="t-focus mt-3 min-h-touch border border-t-line px-4">Show broader results</button>
+        <p className="mt-3 text-xs">To undo saved exclusions, review <a href="#job-fit-choices" className="underline">Work that fits your life</a> and the search filters, save your choices, then search again.</p>
+        {dismissedCount > 0 && <button type="button" onClick={showDismissedJobs} className="t-focus mt-3 min-h-touch underline">Show {dismissedCount} dismissed listings</button>}
+        <details className="mt-3"><summary className="t-focus min-h-touch cursor-pointer">Review hidden employers ({hiddenEmployers.length})</summary>
+          {hiddenEmployers.length === 0 && !hiddenEmployerError && <p>No saved hidden employers are loaded.</p>}
+          <ul>{hiddenEmployers.map(employer => <li key={employer.id} className="flex flex-wrap items-center justify-between gap-2 py-2"><span>{employer.display_name}</span><button type="button" disabled={restoringEmployer !== null} onClick={() => void restoreEmployer(employer.id)} className="t-focus min-h-touch underline">{restoringEmployer === employer.id ? "Restoring..." : "Show jobs from this employer"}</button></li>)}</ul>
+        </details>
+        {hiddenEmployerError && <p role="alert">{hiddenEmployerError} <button type="button" onClick={() => setHiddenReload(value => value + 1)} className="t-focus min-h-touch underline">Reload hidden employers</button></p>}
+      </section>
       {summary && !searching && preferencesReady && <section aria-label="Loaded search results" className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos-dim"><p>{summary.matched} kept from {summary.loaded} loaded listings. {summary.excluded} excluded. {summary.unknownIncluded} kept with fields to check.</p><p className="mt-1 text-xs">This is a bounded search, not a count of every opening. Listings fetched {new Date(summary.fetchedAt).toLocaleString()}. {source === "cache" ? "Reused from a cached search." : ""}</p>{summary.notices.map(line=><p key={line} className="mt-1 text-xs">{line}</p>)}{submittedFilters.current !== canonicalSearchFilters(filters) && <p className="mt-2 text-xs text-t-amber-bright">Choices changed. Run Find Jobs to apply them.</p>}</section>}
       {prioritizeRecordEvidence && <p className="mb-3 text-sm text-t-phos-dim">Employers with verified evidence appear first. Other openings stay visible: missing evidence does not mean an employer won’t hire you.</p>}
       {summary && summary.excluded > 0 && <details className="mb-4 text-sm text-t-phos-dim"><summary className="cursor-pointer">Why were openings excluded?</summary><ul className="mt-2 space-y-1">{Object.entries(summary.excludedBy).map(([key, count]) => <li key={key}>{key === "personal" ? "Your saved exclusions or hidden employers" : key.startsWith("unknown_") ? `Missing ${FILTER_LABELS[key.slice(8)] || key.slice(8)}` : FILTER_LABELS[key] || key}: {count}</li>)}</ul><p className="mt-2">One opening can fail more than one requirement. Change a requirement only if it works for you, then run Find Jobs again.</p></details>}
@@ -1007,18 +1031,6 @@ function JobBoardPage() {
               </div>
             );
           })}
-
-          {/* Hidden jobs toggle */}
-          {hiddenCount > 0 && (
-            <div className="flex justify-center pt-2">
-              <button
-                onClick={() => setHiddenJobs(new Set())}
-                className="text-xs text-t-phos-dim hover:text-t-white underline underline-offset-2"
-              >
-                Show {hiddenCount} hidden job{hiddenCount !== 1 ? "s" : ""}
-              </button>
-            </div>
-          )}
 
           <p className="text-xs text-t-phos-dim text-center py-4">
             Listings sourced from real job boards. Updated daily.

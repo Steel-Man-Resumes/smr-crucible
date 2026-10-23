@@ -13,6 +13,8 @@
  * Loads Forge session data for personalized strengths + narrative context.
  */
 
+import { useEffectiveRole } from "@/components/RoleProvider";
+import { saveArtifactReceipt } from "@/lib/artifact-save";
 import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
@@ -103,6 +105,7 @@ export default function DisclosurePlannerPageWrapper() {
 }
 
 function DisclosurePlannerPage() {
+  const effectiveRole = useEffectiveRole();
   const searchParams = useSearchParams();
   const [consentGiven, setConsentGiven] = useState(false);
   const [showConsentGate, setShowConsentGate] = useState(false);
@@ -125,6 +128,24 @@ function DisclosurePlannerPage() {
   });
   const [timing, setTiming] = useState("");
   const [plan, setPlan] = useState<any>(null);
+  const [planSave, setPlanSave] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const planSavePayload = useRef<{ accountId: string; payload: Record<string, unknown> } | null>(null);
+  const planSaveBusy = useRef(false);
+  const planVersion = useRef(0);
+  async function savePlan() {
+    const snapshot = planSavePayload.current;
+    if (!snapshot || planSaveBusy.current) return;
+    const version = planVersion.current;
+    planSaveBusy.current = true;
+    setPlanSave("saving");
+    try {
+      await saveArtifactReceipt(snapshot.payload, snapshot.accountId);
+      if (version !== planVersion.current) return;
+      setPlanSave("saved");
+      window.dispatchEvent(new Event("disclosure-saved"));
+    } catch { if (version === planVersion.current) setPlanSave("error"); }
+    finally { planSaveBusy.current = false; }
+  }
   const [generating, setGenerating] = useState(false);
   const [rateLimitError, setRateLimitError] = useState("");
   const [targetJob, setTargetJob] = useState("");
@@ -311,6 +332,9 @@ function DisclosurePlannerPage() {
     answersOverride?: IntakeAnswer[],
     consentOverride?: boolean
   ) {
+    if (planSaveBusy.current || generating) return;
+    const accountId = effectiveRole?.accountId;
+    if (!accountId) { setRateLimitError("Your account is still loading. Try again in a moment."); return; }
     const answers = answersOverride ?? intakeAnswers;
     // Record data is sent ONLY with affirmative consent. For the record path
     // without consent, omit `record` entirely -- the server returns the static
@@ -352,31 +376,27 @@ function DisclosurePlannerPage() {
         if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
         if (!refinementNote) setShowCelebration(true);
 
-        // Persist the disclosure plan (the user's deliverable -- a frame, not
-        // their rehearsal words) so they can return to it and the journey engine
-        // advances past Stage 4. Fire-and-forget; never block the plan view.
-        fetch("/api/artifacts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "disclosure_plan",
-            targetContext: { targetJob: targetJob || null, applicationId: searchParams.get("applicationId") || undefined },
-            content: {
-              timing_advice: data.timing_advice ?? null,
-              legal_context: data.legal_context ?? null,
-              script: data.script ?? null,
-              tips: data.tips ?? [],
-              targetJob: targetJob || null,
-              completedAt: new Date().toISOString(),
-            },
-            scaffoldLevel: 1.0,
-          }),
-        }).then(() => {
-          window.dispatchEvent(new Event("disclosure-saved"));
-        }).catch(() => {});
+        // Freeze this plan for retry; changing setup never changes what is saved.
+        planVersion.current++;
+        planSavePayload.current = { accountId, payload: {
+          type: "disclosure_plan",
+          targetContext: { targetJob: targetJob || null, applicationId: searchParams.get("applicationId") || searchParams.get("job") || undefined },
+          content: {
+            timing_advice: data.timing_advice ?? null,
+            legal_context: data.legal_context ?? null,
+            script: data.script ?? null,
+            tips: data.tips ?? [],
+            targetJob: targetJob || null,
+            completedAt: new Date().toISOString(),
+          },
+          scaffoldLevel: 1.0,
+        } };
+        await savePlan();
+      } else {
+        setRateLimitError("Your plan could not be prepared. Your answers are still here. Try again.");
       }
     } catch {
-      // Silent failure
+      setRateLimitError("The connection dropped. Your answers are still here. Try again.");
     } finally {
       setGenerating(false);
     }
@@ -1013,20 +1033,13 @@ ${plan.tips?.length ? `<h2>Key Tips</h2><ul>${plan.tips.map((t: string) => `<li>
           </p>
         </div>
 
-        {/* Persistent confirmation -- the plan is saved to Materials */}
-        <div className="flex items-center justify-between gap-3 bg-t-panel-2 px-4 py-3 border border-t-amber mb-6">
+        <div role="status" aria-live="polite" className="flex flex-wrap items-center justify-between gap-3 bg-t-panel-2 px-4 py-3 border border-t-amber mb-6">
           <p className="text-sm text-t-amber-bright">
-            <span className="font-semibold">Saved to your Library.</span> Come
-            back to it anytime. No program or employer can read it. If you share your progress with a
-            program, it sees only that you have a plan.
+            {planSave === "saved" ? "Saved to your Library. You can return to this plan there." : planSave === "saving" ? "Saving your plan..." : "Your plan is ready in this tab. Its save has not been confirmed. Check your Library before retrying, or download a copy."}
           </p>
-          <a
-            href="/dashboard/vault"
-            className="text-sm font-medium text-t-amber-bright hover:text-t-amber whitespace-nowrap"
-          >
-            View Library
-          </a>
+          {planSave === "saved" ? <a href="/dashboard/vault" className="t-focus min-h-touch text-sm font-medium text-t-amber-bright underline">Open Library</a> : planSave !== "saving" && <button onClick={() => void savePlan()} className="t-focus min-h-touch text-sm font-medium text-t-amber-bright underline">Retry saving plan</button>}
         </div>
+        {rateLimitError && <p role="alert" className="mb-4 text-sm text-t-red">{rateLimitError}</p>}
 
         {/* Adjust panel -- inline refinement, never a full reset */}
         {adjustPanelOpen && (

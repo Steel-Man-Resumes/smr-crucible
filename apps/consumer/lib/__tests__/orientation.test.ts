@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { gradeOrientation } from '../orientation-grade';
 import { ORIENTATION_VERSION, ORIENTATION_QUESTIONS } from '../orientation';
 import { ORIENTATION_LESSONS, SETTINGS_LESSONS } from '../orientation-lessons';
+import { GUIDED_LESSONS } from '../guided-lessons';
 import { TOUR_STOP_COUNT } from '../guidedTour';
 import { captionDeltaFromEvent, turnFromRealtimeEvent } from '../voice-transcript';
 
@@ -27,7 +28,7 @@ test('malformed, forged scores, client grants and obsolete versions cannot pass'
     { ...pass, answers: Object.create(answers) }, { ...pass, answers: { facts: 1 } }]) assert.equal(gradeOrientation(input), null);
 });
 test('every lesson action reaches an existing page; chapter count follows the catalog', () => {
-  assert.equal(TOUR_STOP_COUNT, ORIENTATION_LESSONS.length);
+  assert.equal(TOUR_STOP_COUNT, GUIDED_LESSONS.length + 1);
   for (const lesson of ORIENTATION_LESSONS) {
     const path = lesson.href.split(/[?#]/)[0].replace('/dashboard', '');
     assert.ok(existsSync(join(import.meta.dirname, '../../app/(dashboard)/dashboard', path, 'page.tsx')), lesson.href);

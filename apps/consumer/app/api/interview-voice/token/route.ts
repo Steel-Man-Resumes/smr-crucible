@@ -29,6 +29,7 @@ import { withRateLimit } from "@/lib/withRateLimit";
 import { currentAiOperation } from "@/lib/ai-operation-context";
 import { queryAsUser, reserveVoiceSession } from "@crucible/core";
 import { sanitizeOrEmpty } from "@/lib/sanitize";
+import { loadVoiceWork } from "@/lib/voice-work-context";
 import { REALTIME_MODEL, type VoiceSessionBody } from "@/lib/voice-instructions";
 
 export const maxDuration = 15;
@@ -65,6 +66,12 @@ async function handlePost(request: Request) {
   } catch {
     body = {};
   }
+
+  // Validate owned selectors before reserving any voice time. The call route
+  // resolves them again before sending documents to the provider.
+  let selected;
+  try { selected = await loadVoiceWork(userId, body); body = selected.body; }
+  catch { return NextResponse.json({ error: "The selected job or resume could not be loaded. Choose it again before starting." }, { status: 409 }); }
 
   // Stored in voice_session.target_role: a blank role is NULL, never the
   // prompt label "not specified".
@@ -121,6 +128,7 @@ async function handlePost(request: Request) {
 
   return NextResponse.json({
     sessionId: reservation.session.id,
+    selection: selected.selection,
     reservedSeconds: reservation.session.reserved_seconds,
   });
 }

@@ -22,3 +22,10 @@ test("a foreign or missing lane fails before its defaults or preferences can be 
  await assert.rejects(()=>resolveSearchLane(USER,"not-a-lane",store),/Invalid/);
  assert.equal(await resolveSearchLane(USER,"main",store),null);
 });
+
+test("built-in starting settings are distinguishable from saved account and lane choices", async () => {
+ assert.equal((await loadJobSearchPreferences(USER,A,store)).source,"lane");
+ assert.equal((await loadJobSearchPreferences(USER,"main",store)).source,"account");
+ const fresh=await loadJobSearchPreferences(USER,"main",{...store,preferences:async()=>null});
+ assert.equal(fresh.source,"built-in");assert.equal(fresh.saved.filters.radiusMiles.value,25);
+});
