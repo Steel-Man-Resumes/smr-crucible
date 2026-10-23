@@ -20,8 +20,8 @@ export const GUIDED_PART_LABELS: Record<GuidedPart, string> = {
 
 export const GUIDED_LESSONS: readonly GuidedLesson[] = [
   {
-    id: 'story-process', part: 'story', title: 'Put your work to use',
-    message: 'A resume is one part of finding work. You also choose a job, apply and practice for the interview. After an offer, there may be checks and more steps.',
+    id: 'story-process', part: 'story', title: 'You did the hard part. Take a look around.',
+    message: 'The Forge helped you put your work into words. Here, we put it to use. Find a job, prepare, apply, then practice for the conversation. After an offer, there may be checks and more steps.',
     observation: 'You can return to any part when your plans change.',
     route: '/dashboard', targets: [], concept: 'process',
   },
@@ -59,43 +59,43 @@ export const GUIDED_LESSONS: readonly GuidedLesson[] = [
     id: 'page-overview', part: 'pages', title: 'Overview',
     message: "This is your home base. See what's here and choose one next step. When you return, start here to get your bearings.",
     observation: 'One useful next step is enough to begin.',
-    route: '/dashboard', targets: ['refinery-page-overview'],
+    route: '/dashboard', targets: ['refinery-tool-overview-next'],
   },
   {
     id: 'page-jobs', part: 'pages', title: 'Find work',
-    message: "Search job listings, then add what we know about employers. No research mark does not mean no chance. Read duties and shift times. You choose how to narrow your search.",
-    observation: 'Research adds evidence, not a hiring promise. Missing details need checking.',
-    route: '/dashboard/jobs', targets: ['refinery-page-jobs'],
+    message: "Start with ordinary job listings. Add what we know about employers for more context. No research mark does not mean no chance. You choose the filters; research adds possibilities.",
+    observation: 'Start with the work you want. Then set the place and check your search choices.',
+    route: '/dashboard/jobs', targets: ['refinery-tool-jobs-query'],
   },
   {
     id: 'page-resumes', part: 'pages', title: 'My resumes',
     message: 'Build from your Master Draft. Keep a separate version for each job, using the same facts. Check any suggested changes before using the document.',
-    observation: 'Other directions, including creative work and a CV, live here too.',
-    route: '/dashboard/vault', targets: ['refinery-page-resumes'],
+    observation: 'This choice tells you which goal these documents belong to.',
+    route: '/dashboard/vault', targets: ['refinery-tool-resume-lane'],
   },
   {
     id: 'page-applications', part: 'pages', title: 'Applications',
     message: 'Track each job here. A prepared packet has not been submitted. Apply the way the employer asks, then mark the job Applied.',
     observation: 'Update the status when something actually happens.',
-    route: '/dashboard/applications', targets: ['refinery-page-applications'],
+    route: '/dashboard/applications', targets: ['refinery-tool-application-overview'],
   },
   {
     id: 'page-interview', part: 'pages', title: 'Interview prep',
     message: "Practice with a real example in your own words. If you can't explain a line, fix it. Use feedback to make your next answer clearer.",
-    observation: 'Practice the follow-up, not just the first answer.',
-    route: '/dashboard/interview', targets: ['refinery-page-interview'],
+    observation: 'Name the role here. Practice its questions with real examples, then try the follow-up.',
+    route: '/dashboard/interview', targets: ['refinery-tool-interview-role'],
   },
   {
     id: 'page-support', part: 'pages', title: 'Support & disclosure',
     message: 'Look for help with a practical need. Check service details before relying on a listing. Disclosure tools help you prepare a record conversation.',
     observation: 'Check who can use a service. Ask t.ROY to file a request for Troy; you confirm what is sent.',
-    route: '/dashboard/resources', targets: ['refinery-page-support'],
+    route: '/dashboard/resources', targets: ['refinery-tool-support-query'],
   },
   {
     id: 'page-settings', part: 'pages', title: 'Settings',
     message: 'Choose reading help and coaching style here. Before sharing, check what information is requested and who sees it. Sponsored access does not mean you share everything.',
-    observation: 'The deeper settings lesson is here when you need it.',
-    route: '/dashboard/settings', targets: ['refinery-page-settings'],
+    observation: 'Reading help, coaching and sharing each have their own place. The deeper lesson is here too.',
+    route: '/dashboard/settings', targets: ['refinery-tool-settings-map'],
   },
 ];
 

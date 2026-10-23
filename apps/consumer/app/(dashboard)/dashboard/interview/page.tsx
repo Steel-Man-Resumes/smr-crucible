@@ -817,7 +817,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
           )}
 
           {/* Target role */}
-          <div>
+          <div id="refinery-tool-interview-role">
             <label className="text-sm font-medium text-t-white block mb-1">
               What role are you interviewing for?
             </label>

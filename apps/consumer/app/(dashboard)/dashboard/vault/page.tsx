@@ -799,7 +799,7 @@ ${body}
       </p>
 
       {/* Career lanes (074): which lane's work is shown. */}
-      <div className="mb-6 space-y-3">
+      <div id="refinery-tool-resume-lane" className="mb-6 space-y-3">
         <LaneSwitcher
           lanes={lanes}
           value={laneFilter}
