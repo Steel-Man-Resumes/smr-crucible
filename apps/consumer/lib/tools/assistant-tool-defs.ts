@@ -17,6 +17,7 @@ export const REFINERY_PAGES: Record<string, string> = {
   documents: "/dashboard/documents",
   help: "/dashboard/help",
   jobs: "/dashboard/jobs",
+  paths: "/dashboard/paths",
   applications: "/dashboard/applications",
   "application-tailor": "/dashboard/application-tailor",
   disclosure: "/dashboard/disclosure",

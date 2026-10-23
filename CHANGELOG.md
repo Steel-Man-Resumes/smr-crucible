@@ -2,6 +2,13 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## Unreleased: Search choices and guided access
+
+- Share explicit job-search filters and saved lane choices between Job Board and the coach. Preserve source pay periods, unknown fields and bounded result counts; retries keep the chosen search constraints.
+- Open a sourced work-direction explorer from the job-search invitation, with explicit lane selection before searching current openings.
+- Show guided stages and earned access in navigation and Overview. Preserve urgent practice, support and existing access, with routine early unlocks and consented requests for owner review.
+- Add modest starter AI allowances, durable milestones, capped bonuses and owner policy controls. Track retries and failed calls without inventing zero provider cost, and keep role and paid-access boundaries separate.
+
 ## Unreleased: Guided Refinery workspace
 
 - Organize participant navigation into six destinations with a shared goal, document and next action. Keep resume versions in creation order and make additional career directions optional lanes.

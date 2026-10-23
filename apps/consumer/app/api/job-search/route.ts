@@ -1,76 +1,23 @@
-/**
- * Job Search API — thin HTTP wrapper around lib/job-search-core (runJobSearch).
- * All search logic (cache, JSearch, CareerOneStop fallback, AI enrichment,
- * decision logging, mock mode) lives in the core module so t.ROY's search_jobs
- * tool can call it in-process.
- */
-
+/** Page and coach call the same typed search core. Personal filters run after shared cache reads. */
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { runJobSearch } from "@/lib/job-search-core";
-import { getHiddenEmployerSet, isHiddenEmployer } from "@crucible/core";
-
-// 60s, not 30. JSearch stalls intermittently on arbitrary queries (verified
-// 2026-09-19), so the core walks a retry ladder before giving up. At 30s the
-// ladder had to be cut so short that it abandoned retries which succeed in ~3s.
-// Sibling routes in this app already run at 60/90/120, so this is not a new
-// platform ceiling. Everything inside the route is individually bounded; this
-// raises the outer limit only so honest work can finish.
-export const maxDuration = 60;
-
-async function handlePost(request: Request) {
-  const contentLength = request.headers.get("content-length");
-  if (contentLength && parseInt(contentLength) > 1_000_000) {
-    return NextResponse.json({ error: "Request too large" }, { status: 413 });
-  }
-
-  try {
-    const { targetRole, location, skills, hasRecord, recordType } =
-      await request.json();
-
-    // Resolve the caller once: userId attributes the enrichment AI cost to the
-    // right person (else it lands user_id NULL and is invisible in own/per-user
-    // rollups), and the same session drives the hidden-employer filter below.
-    const session = await auth();
-    const userId = session?.user?.id ?? null;
-
-    const result = await runJobSearch({
-      role: targetRole,
-      location,
-      skills,
-      hasRecord,
-      recordType,
-      userId,
-    });
-
-    // N1: filter out employers this user has hidden. Applied per-user AFTER the
-    // (shared, per-role) cache, so hiding is honored on cache hits too. Fail-open:
-    // a hidden-set lookup error never blocks the search.
-    try {
-      if (userId && Array.isArray(result.jobs) && result.jobs.length > 0) {
-        const hidden = await getHiddenEmployerSet(userId);
-        if (hidden.size > 0) {
-          result.jobs = result.jobs.filter((j) => !isHiddenEmployer(j.company, hidden));
-        }
-      }
-    } catch (filterErr) {
-      console.error("Hidden-employer filter skipped:", filterErr);
-    }
-
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error("Job search error:", error);
-    return NextResponse.json({
-      jobs: [],
-      fair_chance_info: "",
-      error: "search_failed",
-    });
+import { InvalidJobSearchFilters } from "@crucible/core/src/jobSearchFilters";
+export const maxDuration=60;
+async function handlePost(request:Request){
+  if(Number(request.headers.get("content-length")||0)>32000)return NextResponse.json({error:"Request too large"},{status:413});
+  try{
+    const body=await request.json();
+    if(!body||typeof body!=="object"||Array.isArray(body))return NextResponse.json({error:"Invalid search"},{status:400});
+    if((body.targetRole!==undefined&&(typeof body.targetRole!=="string"||body.targetRole.length>200))||(body.location!==undefined&&(typeof body.location!=="string"||body.location.length>200)))return NextResponse.json({error:"Use a short role and city or ZIP."},{status:400});
+    const session=await auth();
+    const result=await runJobSearch({role:body.targetRole,location:body.location,skills:body.skills,hasRecord:body.hasRecord===true,userId:session?.user?.id||null,laneId:body.laneId,filters:body.filters});
+    return NextResponse.json(result,{headers:{"Cache-Control":"private, no-store"}});
+  }catch(error){
+    if(error instanceof InvalidJobSearchFilters)return NextResponse.json({error:"invalid_filters",message:error.message},{status:400});
+    console.error("Job search failed:",error instanceof Error?error.name:"Unknown error");
+    return NextResponse.json({jobs:[],fair_chance_info:"",error:"search_failed"},{status:503});
   }
 }
-
-export const POST = withRateLimit(handlePost, {
-  mode: "user",
-  endpoint: "jobs",
-  requiredTier: "client",
-});
+export const POST=withRateLimit(handlePost,{mode:"user",endpoint:"jobs",requiredTier:"client"});

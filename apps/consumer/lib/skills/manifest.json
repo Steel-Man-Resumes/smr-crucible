@@ -343,6 +343,20 @@
         "applications",
         "disclosure-rehearsal"
       ]
+    },
+    {
+      "id": "path-exploration",
+      "title": "Exploring work directions",
+      "file": "path-exploration/SKILL.md",
+      "version": 1,
+      "roles": [
+        "participant"
+      ],
+      "always": false,
+      "pages": [
+        "paths"
+      ],
+      "summary": "Compare sourced occupational directions with saved skill labels and optional needs; distinguish transfer suggestions, current openings and explicit goal selection."
     }
   ]
 }

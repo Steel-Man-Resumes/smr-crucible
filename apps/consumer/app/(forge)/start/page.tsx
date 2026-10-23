@@ -194,7 +194,7 @@ function StartInner() {
   // ---- "Something else" routes, signed out: they live in the free account ----
   if (step === "documents" || step === "explore" || step === "support") {
     const task = step as LaneTask;
-    const dest = task === "documents" ? "/dashboard/creative" : task === "explore" ? "/dashboard/resources#paths" : "/dashboard/resources#support";
+    const dest = task === "documents" ? "/dashboard/creative" : task === "explore" ? "/dashboard/paths" : "/dashboard/resources#support";
     return (
       <div className="mx-auto w-full max-w-2xl px-4 py-8 sm:px-6" data-testid={`${task}-step`}>
         <Link href={`${START_PATH}?change=1`} className="t-focus inline-flex min-h-touch items-center text-sm text-t-bone-dim hover:text-t-amber-bright">

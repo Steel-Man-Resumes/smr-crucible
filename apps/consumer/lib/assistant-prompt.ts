@@ -240,6 +240,8 @@ function buildPageContext(context: AssistantContext): string {
 
   // Deep page-specific intelligence
   const pageIntel: Record<string, string> = {
+    paths: `PAGE: WORK DIRECTIONS
+Compare the sourced occupational directions with the person’s saved skills and optional needs. Explain transferable experience and what needs checking. These are exploration suggestions, not verified vacancies or proof of eligibility. The person explicitly chooses whether to save a direction in a lane. Offer to search current jobs after that choice.`,
     intro: `PAGE: INTRO ("Who are you?")
 The user just arrived. They're choosing their path: client (rebuilding career), partner (org evaluating the tool), or observer (funder/researcher). This is the front door.
 YOU KNOW: They haven't started yet. They may be nervous, skeptical, or just curious.

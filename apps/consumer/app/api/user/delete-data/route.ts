@@ -150,6 +150,9 @@ export async function DELETE(req: Request) {
     // tables, so deleted AS the person; the lane screens only ever archive.
     // Today's task (083) points at a lane: deleted first, AS the person.
     await deleteLaneFocus(userId);
+    await queryAsUser(userId,"DELETE FROM progression_request WHERE user_id=$1",[userId]);
+    await queryAsUser(userId,"DELETE FROM progression_grant WHERE user_id=$1",[userId]);
+    await queryAsUser(userId,"DELETE FROM progression_account WHERE user_id=$1",[userId]);
     await queryAsUser(userId, "DELETE FROM career_lane WHERE user_id = $1", [userId]);
     await queryAsUser(userId, "DELETE FROM lane_tool_intro WHERE user_id = $1", [userId]);
     // The practice record (076): owner only, deleted as the person.

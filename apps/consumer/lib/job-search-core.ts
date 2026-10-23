@@ -1,26 +1,9 @@
 /**
- * Job search core — real listings via JSearch + AI enrichment, callable
- * in-process (used by the /api/job-search route and by t.ROY's search_jobs
- * tool). Extracted from the route so the assistant can search without an
- * HTTP round-trip; behavior is identical to the pre-extraction route.
- *
- * Flow:
- *   1. Check cache (query_hash match within 6 hours)
- *   2. If miss: call every configured provider CONCURRENTLY --
- *      JSearch (hedged; it has a heavy latency tail), Adzuna, and USAJOBS --
- *      then merge and dedupe. Providers fail independently, so one being slow,
- *      unconfigured, or down costs the others nothing.
- *   3. AI enrichment: plain-language descriptions only
- *   4. Cache results for next query
- *   5. Return native job cards (no outbound URLs)
- *
- * Fair-chance flags come from ONE source of truth regardless of provider:
- * exact-name matches against the verified employer table. A new job source is
- * never a new way to earn a badge.
- *
- * Geo comes from tenant config (default: Milwaukee + Waukesha, 25mi), which is
- * now overridable by TENANT_CONFIG_PATH or the TENANT_GEO_* env vars rather
- * than requiring a source edit.
+ * One bounded provider search and deterministic filter path for Job Board and coach.
+ * Cache public source listings; apply current lane choices after cache reads.
+ * Source fields remain separate from plain-language AI descriptions. Missing
+ * evidence stays unknown, and no retry widens the person's chosen constraints.
+ * Verified employer marks remain the only source of second-chance badges.
  */
 
 import { sanitizeOrEmpty } from "@/lib/sanitize";
@@ -29,37 +12,16 @@ import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { getEmployerMarks, isMarked, getOneAsUser, type EmployerMarks } from "@crucible/core";
-import { fetchAdzunaJobs, fetchUsaJobs, mergeJobs } from "./job-providers";
+import { fetchJSearchJobs, fetchAdzunaJobs, fetchUsaJobs, mergeJobs } from "./job-providers";
+import { assessJobSearch, canonicalSearchFilters, defaultJobSearchFilters, readJobSearchFilters, type JobSearchFilters } from "@crucible/core/src/jobSearchFilters";
+import { evidenceForJob, formatSourceSalary } from "./job-search-evidence";
+import { loadJobSearchPreferences } from "./job-search-preferences";
+import type { JSearchJob, EnrichedJob, JobSearchOutcome, JobSearchSummary } from "./job-search-types";
+export type { JSearchJob, EnrichedJob, JobSearchOutcome } from "./job-search-types";
 import crypto from "crypto";
 import { readJobFit, jobFitExclusion } from "./job-fit";
 
-// Every upstream call is individually bounded so a slow provider can never hold
-// the route open to its maxDuration and 504. What each bound should BE is
-// measured, not guessed -- see below and fetchJSearchJobs.
-//
-// Hedging parameters. See fetchJSearchJobs for the measured latency profile
-// these come from (12 live calls: every one returned 200, time-to-first-byte
-// ranged 1.6s to 55.8s, median ~10s).
-//
-// Launch a second attempt if the first has not answered in this long, WITHOUT
-// cancelling the first. Set just above the observed median so the common case
-// costs one call and only the slow tail pays for a hedge.
-const JSEARCH_HEDGE_DELAY_MS = 5000;
-// Cap on concurrent in-flight attempts, so a bad window cannot fan out
-// unboundedly against quota. Three covers the tail: if ~38% of draws are slow,
-// three independent draws leave roughly 5% still slow.
-const JSEARCH_MAX_IN_FLIGHT = 3;
-// Whole-operation ceiling. Must leave room for what runs after: AI enrichment
-// (10s) plus the bounded cache write and decision log (3s each), inside the
-// route's 60s maxDuration. 24s of hedged attempts lands the worst successful
-// path near 40s with headroom.
-const JSEARCH_TOTAL_BUDGET_MS = 24000;
-// Adzuna and USAJOBS run alongside the hedged JSearch attempts, not after them.
-// Both are consistently fast (measured 2026-09-19: Adzuna 166-417ms, USAJOBS
-// 150-531ms) and neither shows JSearch's latency tail, so a plain bound is
-// enough -- no hedging needed.
 const PARALLEL_PROVIDER_TIMEOUT_MS = 8000;
-const CAREERONESTOP_TIMEOUT_MS = 7000;
 const AI_ENRICH_TIMEOUT_MS = 10000;
 
 // Full-lifecycle deadline (Codex 10): fetch() resolves at HEADERS, so a slow/stalled
@@ -106,54 +68,12 @@ const DB_DEADLINE_MS = 3000;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export interface JSearchJob {
-  job_id: string;
-  job_title: string;
-  employer_name: string;
-  employer_logo: string | null;
-  job_city: string;
-  job_state: string;
-  job_country: string;
-  job_description: string;
-  job_min_salary: number | null;
-  job_max_salary: number | null;
-  job_salary_currency: string | null;
-  job_salary_period: string | null;
-  job_employment_type: string;
-  job_posted_at_datetime_utc: string;
-  job_is_remote: boolean;
-  employer_website: string | null;
-  job_apply_link?: string | null;
-  job_google_link?: string | null;
-  job_highlights?: {
-    Qualifications?: string[];
-    Responsibilities?: string[];
-    Benefits?: string[];
-  };
-}
-
-export interface EnrichedJob {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  salary: string | null;
-  description: string;
-  full_description: string;
-  requirements: string[];
-  benefits: string[];
-  employment_type: string;
-  posted: string;
-  second_chance: boolean;
-  fair_chance_reason: string | null;
-  remote: boolean;
-  apply_url: string | null;
-  employer_website: string | null;
-}
-
 export interface JobSearchParams {
-  role: string;
+  role?: string;
   location?: string;
+  filters?: unknown;
+  laneId?: string | null;
+  resolvedFilters?: JobSearchFilters;
   skills?: string[];
   hasRecord?: boolean;
   recordType?: string;
@@ -164,18 +84,10 @@ export interface JobSearchParams {
   userId?: string | null;
 }
 
-export interface JobSearchOutcome {
-  jobs: EnrichedJob[];
-  fair_chance_info: string;
-  source: string;
-  error?: string;
-}
-
 // ─── Cache Helpers ──────────────────────────────────────────────────────────
 
-function hashQuery(params: Record<string, unknown>): string {
-  const normalized = JSON.stringify(params, Object.keys(params).sort());
-  return crypto.createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+export function hashQuery(params: Record<string, unknown>): string {
+  return crypto.createHash("sha256").update(JSON.stringify(Object.fromEntries(Object.entries(params).sort(([a],[b]) => a.localeCompare(b))))).digest("hex").slice(0, 24);
 }
 
 interface CachedSearchResult {
@@ -241,324 +153,6 @@ export async function findCachedJob(jobId: string): Promise<EnrichedJob | null> 
   }
 }
 
-// ─── JSearch API ────────────────────────────────────────────────────────────
-
-// US state abbreviation -> full name. JSearch's upstream is sensitive to how a
-// location is phrased: some `<city>, <ST>` strings stall indefinitely while the
-// same place spelled out returns in seconds (see ATTEMPT LADDER below).
-const US_STATE_NAMES: Record<string, string> = {
-  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
-  CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
-  HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
-  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
-  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi",
-  MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada",
-  NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
-  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma",
-  OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
-  SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
-  VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin",
-  WY: "Wyoming", DC: "District of Columbia",
-};
-
-/** "Deer Lodge, MT" -> "Deer Lodge, Montana". Unchanged if no trailing state code. */
-function spellOutState(location: string): string {
-  return location.replace(
-    /,\s*([A-Za-z]{2})\s*$/,
-    (whole, code: string) => {
-      const full = US_STATE_NAMES[code.toUpperCase()];
-      return full ? `, ${full}` : whole;
-    }
-  );
-}
-
-interface JSearchAttempt {
-  query: string;
-  radius: number;
-}
-
-/**
- * Ordered attempts for one logical search.
- *
- * WHY THIS EXISTS (verified against the live API, 2026-09-19):
- *   "welder in Deer Lodge, MT"      -> stalls past 25s, 3 of 3 attempts
- *   "welder in Deer Lodge, Montana" -> 4.1s, returns listings
- *   "welder Deer Lodge MT"          -> 6.2s, returns listings
- *   "welder in Butte, MT"           -> 8.6s, returns listings
- * The pathology is specific to a query string, not to the provider being down,
- * so a single attempt is a coin flip on wording the caller does not control.
- * Deer Lodge is Montana State Prison / MCE -- the likeliest search a Montana
- * corrections audience would name -- which is how this surfaced.
- *
- * Radius also escalates: a 25-mile ring is a metro default and returns almost
- * nothing in rural counties (Libby, MT: 1 listing at 25mi, 10 at 150mi).
- * Widening can cross a state line; results carry their own city/state, so an
- * out-of-state listing is visibly labeled rather than silently blended in.
- */
-function buildJSearchAttempts(role: string, location: string, radiusMiles: number): JSearchAttempt[] {
-  const spelled = spellOutState(location);
-  const wide = Math.max(radiusMiles, 100);
-  const attempts: JSearchAttempt[] = [
-    { query: `${role} in ${location}`, radius: radiusMiles },
-  ];
-  if (spelled !== location) {
-    attempts.push({ query: `${role} in ${spelled}`, radius: radiusMiles });
-  }
-  attempts.push({ query: `${role} ${location}`, radius: wide });
-  if (spelled !== location) {
-    attempts.push({ query: `${role} in ${spelled}`, radius: wide });
-  }
-  return attempts;
-}
-
-async function fetchJSearchOnce(
-  apiKey: string,
-  attempt: JSearchAttempt,
-  timeoutMs: number
-): Promise<{ jobs: JSearchJob[]; failed: boolean; status?: number }> {
-  // JSearch retired /search (404 as of 2026-08); /search-v2 returns the same
-  // job objects wrapped in { data: { jobs, cursor } }.
-  // num_pages=1 (10 listings, ~6s) instead of 2 (20 listings, ~12-14s): the
-  // enrichment/board only ever surfaces 15, so the second page mostly added
-  // latency that pushed the request past the route cap. One page keeps the board
-  // fast and reliable; fair-chance-first sorting still applies.
-  const url = new URL("https://jsearch.p.rapidapi.com/search-v2");
-  url.searchParams.set("query", attempt.query);
-  url.searchParams.set("page", "1");
-  url.searchParams.set("num_pages", "1");
-  url.searchParams.set("date_posted", "month");
-  url.searchParams.set("radius", String(attempt.radius));
-
-  try {
-    const res = await fetchJsonWithTimeout(
-      url.toString(),
-      {
-        headers: {
-          "X-RapidAPI-Key": apiKey,
-          "X-RapidAPI-Host": "jsearch.p.rapidapi.com",
-        },
-      },
-      timeoutMs
-    );
-
-    if (!res.ok) {
-      console.error(`JSearch API error: ${res.status} ${res.statusText}`);
-      return { jobs: [], failed: true, status: res.status };
-    }
-
-    // v2 envelope is { data: { jobs, cursor } }; tolerate the old flat array
-    // shape too in case the provider flips again.
-    const payload = res.json?.data;
-    const jobs = Array.isArray(payload) ? payload : (payload?.jobs ?? []);
-    return { jobs, failed: false };
-  } catch (err) {
-    console.error("JSearch fetch failed:", err);
-    return { jobs: [], failed: true };
-  }
-}
-
-/**
- * HEDGED requests, not sequential retries.
- *
- * WHAT THE PROVIDER ACTUALLY DOES (measured 2026-09-19, 12 consecutive calls
- * with a 90s ceiling and a full timing breakdown):
- *
- *   every call returned HTTP 200 with data -- zero hangs, zero errors
- *   DNS + TCP + TLS was always ~0.15s total, so the network is never the problem
- *   time-to-first-byte: 1.6, 3.0, 5.4, 7.2, 7.3, 9.7, 10.3, 12.2, 23.8, 23.9,
- *                       38.7, 55.8 seconds
- *
- * JSearch does not stall. It has a very heavy latency TAIL. An earlier version
- * of this code used a 7s timeout and a sequential ladder, and reported a "38%
- * stall rate" -- that number was really "38% of healthy responses took longer
- * than 7 seconds", and the code was aborting them and starting over. Worse: it
- * cancelled a request that might have answered at 8s, then paid full price for
- * a fresh draw from the same ugly distribution.
- *
- * Because the latency is random per request, a SECOND CONCURRENT request is an
- * independent draw. Keeping both alive and taking whichever answers first turns
- * the tail into a race the slow draw loses. If ~38% of draws exceed the hedge
- * delay, two in flight leaves ~14% slow and three leaves ~5%. This is the
- * standard tail-at-scale mitigation and it is a real fix, not a workaround.
- *
- * Cost: a hedge spends an extra quota call only when the first is already slow.
- * Quota is 10,000/month against very low usage, so latency is worth far more
- * than the calls. Hedges are capped to keep that bounded.
- *
- * Attempts also vary the query phrasing and radius (see buildJSearchAttempts),
- * so hedging doubles as coverage against a single unlucky phrasing.
- */
-async function fetchJSearchJobs(
-  role: string,
-  location: string,
-  radiusMiles: number
-): Promise<{ jobs: JSearchJob[]; failed: boolean; status?: number; attemptsUsed: number }> {
-  const apiKey = process.env.JSEARCH_API_KEY;
-  if (!apiKey) {
-    console.error("JSEARCH_API_KEY not set");
-    return { jobs: [], failed: true, attemptsUsed: 0 };
-  }
-
-  const attempts = buildJSearchAttempts(role, location, radiusMiles).slice(
-    0,
-    JSEARCH_MAX_IN_FLIGHT
-  );
-  const startedAt = Date.now();
-
-  return new Promise((resolve) => {
-    let settled = false;
-    let launched = 0;
-    let completed = 0;
-    let lastFailure: { failed: boolean; status?: number } = { failed: true };
-    const timers: ReturnType<typeof setTimeout>[] = [];
-
-    const finish = (r: { jobs: JSearchJob[]; failed: boolean; status?: number }) => {
-      if (settled) return;
-      settled = true;
-      timers.forEach(clearTimeout);
-      resolve({ ...r, attemptsUsed: launched });
-    };
-
-    const launch = (i: number) => {
-      if (settled || i >= attempts.length) return;
-      launched++;
-      const n = launched;
-      // Each in-flight attempt is bounded by whatever is left of the budget,
-      // never by a short per-attempt cap -- cutting a live request short is the
-      // exact mistake this replaces.
-      const remaining = JSEARCH_TOTAL_BUDGET_MS - (Date.now() - startedAt);
-      if (remaining < 1500) return;
-
-      fetchJSearchOnce(apiKey, attempts[i], remaining).then((res) => {
-        completed++;
-        if (res.jobs.length > 0) {
-          if (n > 1) {
-            console.warn(
-              `[job-search] hedge #${n} won at ${Date.now() - startedAt}ms: "${attempts[i].query}"`
-            );
-          }
-          finish(res);
-          return;
-        }
-        // A rate limit will not improve by racing more requests at it.
-        if (res.status === 429) {
-          finish(res);
-          return;
-        }
-        lastFailure = res.failed ? { failed: true, status: res.status } : { failed: false };
-        // Every launched attempt has now answered and none had listings. If
-        // there are no more to launch, this is the honest final answer.
-        if (completed === launched && launched >= attempts.length) {
-          finish({ jobs: [], ...lastFailure });
-        }
-      });
-    };
-
-    launch(0);
-    for (let i = 1; i < attempts.length; i++) {
-      timers.push(setTimeout(() => launch(i), i * JSEARCH_HEDGE_DELAY_MS));
-    }
-    // Whole-operation ceiling: report honestly rather than hold the route open.
-    timers.push(
-      setTimeout(() => finish({ jobs: [], ...lastFailure }), JSEARCH_TOTAL_BUDGET_MS)
-    );
-  });
-}
-
-// ─── AI Enrichment ──────────────────────────────────────────────────────────
-//
-// Fair-chance flags come from ONE source of truth: exact-name matches against the
-// verified `employer` table (core `isVerifiedFairChance`). Codex 12 killed the old
-// hardcoded substring list (which flagged "Targeted Staffing" because it contains
-// "target") and the AI's ability to guess the flag. The AI now only simplifies
-// copy; it never stamps an employer fair-chance. Unknown is not a "no" -- it just
-// means the platform hasn't verified this employer, so no badge is shown.
-
-// ─── CareerOneStop (DOL) Fallback ───────────────────────────────────────────
-// Free, official job source used when JSearch returns zero. Env-gated and
-// fail-safe (returns [] on any error, so the board degrades to "no results").
-// Mapping follows the documented COS jobsearch response shape (Jobs[]).
-//
-// STATUS 2026-09-19 -- NOT A WORKING FALLBACK. VERIFIED, NOT ASSUMED.
-// The credentials are valid: the SAME userId + Bearer token returns 200 OK with
-// real data on /v1/occupation. Only /v1/jobsearch returns 401, and it does so for
-// every auth-header and location variant tried (raw token, lowercase bearer, no
-// content-type, city, state code, ZIP). A deliberately bogus userId returns the
-// identical 401, so 401 is this API's generic rejection, not a credential error.
-// Conclusion: the account is not entitled to the jobsearch endpoint, which serves
-// National Labor Exchange data behind a separate access request. No code change
-// fixes this -- it needs an access grant from CareerOneStop.
-// Until that lands: this returns [] and JSearch has no secondary source, so do
-// NOT describe a working DOL fallback in any claim, packet, or demo.
-// The response-shape mapping below is still UNVERIFIED against a real 200.
-
-interface CareerOneStopJob {
-  JvId?: string;
-  JobTitle?: string;
-  Company?: string;
-  Location?: string;
-  AccquisitionDate?: string;
-  URL?: string | null;
-}
-
-async function fetchCareerOneStopJobs(
-  keyword: string,
-  location: string,
-  marks: EmployerMarks,
-  radiusMiles: number
-): Promise<EnrichedJob[]> {
-  const uid = process.env.CAREERONESTOP_USER_ID;
-  const tok = process.env.CAREERONESTOP_TOKEN;
-  if (!uid || !tok) return [];
-
-  const kw = encodeURIComponent(keyword || "jobs");
-  const loc = encodeURIComponent(location || "United States");
-  // v1/jobsearch/{userId}/{keyword}/{location}/{radius}/{sort}/{order}/{start}/{pageSize}/{days}
-  // Radius was hardcoded to 25 -- a metro default that returns almost nothing in
-  // rural counties. It now follows the same ring the primary provider used.
-  const url = `https://api.careeronestop.org/v1/jobsearch/${uid}/${kw}/${loc}/${radiusMiles}/0/0/0/15/30`;
-
-  try {
-    const res = await fetchJsonWithTimeout(
-      url,
-      { headers: { Authorization: `Bearer ${tok}`, "Content-Type": "application/json" } },
-      CAREERONESTOP_TIMEOUT_MS
-    );
-    if (!res.ok) {
-      console.error(`CareerOneStop API error: ${res.status}`);
-      return [];
-    }
-    const jobs: CareerOneStopJob[] = res.json?.Jobs ?? [];
-    return jobs.slice(0, 15).map((j, i) => {
-      const company = j.Company || "Employer";
-      // CareerOneStop gives "City, ST" in one string.
-      const [cosCity, cosState] = (j.Location || "").split(",").map((x) => x.trim());
-      const fair = isMarked(company, { city: cosCity || null, state: cosState || null, title: j.JobTitle }, marks);
-      return {
-        id: `cos-${j.JvId || i}`,
-        title: j.JobTitle || "Job",
-        company,
-        location: j.Location || location,
-        salary: null,
-        description: "",
-        full_description: "",
-        requirements: [],
-        benefits: [],
-        employment_type: "",
-        posted: j.AccquisitionDate || "",
-        second_chance: fair,
-        fair_chance_reason: fair ? "We checked: this employer hires people with records here." : null,
-        remote: false,
-        apply_url: j.URL || null,
-        employer_website: null,
-      };
-    });
-  } catch (err) {
-    console.error("CareerOneStop fetch failed:", err);
-    return [];
-  }
-}
-
 async function enrichJobsWithAI(
   jobs: JSearchJob[],
   context: { hasRecord: boolean; recordType?: string; location: string; userId?: string | null },
@@ -567,8 +161,9 @@ async function enrichJobsWithAI(
   const apiKey = process.env.OPENAI_API_KEY;
 
   // Pre-process: build basic enriched jobs without AI
-  const basicJobs: EnrichedJob[] = jobs.slice(0, 15).map((j) => {
-    const salary = formatSalary(j);
+  const basicJobs: EnrichedJob[] = jobs.map((j) => {
+    const evidence = evidenceForJob(j);
+    const salary = formatSourceSalary(evidence.salary);
     const posted = formatPosted(j.job_posted_at_datetime_utc);
     const title = unwrapMaybeJsonArray(j.job_title);
     const company = unwrapMaybeJsonArray(j.employer_name);
@@ -585,21 +180,19 @@ async function enrichJobsWithAI(
       // which joined to an empty string and rendered a job card with no
       // location at all. Fall back to what the person actually searched --
       // the listing did match that search -- rather than showing a blank.
-      location:
-        [j.job_city, j.job_state].filter(Boolean).join(", ") ||
-        context.location ||
-        "",
+      location: [j.job_city, j.job_state].filter(Boolean).join(", ") || "Location not supplied",
       salary,
       description: truncateDescription(j.job_description, 200),
-      full_description: truncateDescription(j.job_description, 2000),
+      full_description: truncateDescription(j.job_description, 20000),
       requirements: j.job_highlights?.Qualifications?.slice(0, 3) ?? [],
       benefits: j.job_highlights?.Benefits?.slice(0, 3) ?? [],
-      employment_type: j.job_employment_type || "Full-time",
+      employment_type: j.job_employment_type || "Type not supplied",
       posted,
       second_chance: fair,
       fair_chance_reason: fair ? "We checked: this employer hires people with records here." : null,
-      remote: j.job_is_remote,
-      apply_url: j.job_apply_link || j.job_google_link || null,
+      remote: j.job_is_remote === true,
+      evidence, source_fields: j.source_fields, source_variants: j.source_variants,
+      apply_url: j.apply_options?.find((option) => option.is_direct === true && option.apply_link)?.apply_link || j.job_apply_link || j.job_google_link || null,
       employer_website: j.employer_website || null,
     };
   });
@@ -613,7 +206,7 @@ async function enrichJobsWithAI(
   // to decide (Codex 12) -- they are set deterministically from the verified
   // employer table above and passed through untouched.
   try {
-    const jobSummaries = basicJobs.map((j, i) => ({
+    const jobSummaries = basicJobs.slice(0, 15).map((j, i) => ({
       index: i,
       title: j.title,
       company: j.company,
@@ -702,32 +295,11 @@ RULES:
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function formatSalary(job: JSearchJob): string | null {
-  if (!job.job_min_salary && !job.job_max_salary) return null;
-  const period = job.job_salary_period?.toLowerCase() ?? "year";
-  const isHourly = period === "hour";
-  const min = job.job_min_salary;
-  const max = job.job_max_salary;
-
-  if (min && max) {
-    if (isHourly) return `$${min}-${max}/hr`;
-    return `$${Math.round(min / 1000)}k-${Math.round(max / 1000)}k/yr`;
-  }
-  if (min) {
-    if (isHourly) return `$${min}/hr+`;
-    return `$${Math.round(min / 1000)}k+/yr`;
-  }
-  if (max) {
-    if (isHourly) return `Up to $${max}/hr`;
-    return `Up to $${Math.round(max / 1000)}k/yr`;
-  }
-  return null;
-}
-
 function formatPosted(datetime: string): string {
-  if (!datetime) return "Recently";
+  if (!datetime || !Number.isFinite(Date.parse(datetime))) return "Posting date not supplied";
   const diff = Date.now() - new Date(datetime).getTime();
   const days = Math.floor(diff / 86400000);
+  if (days < 0) return "Check source posting date";
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
   if (days < 7) return `${days} days ago`;
@@ -765,14 +337,36 @@ function truncateDescription(desc: string, maxLen: number): string {
 
 // ─── Search ─────────────────────────────────────────────────────────────────
 
-/** Apply personal choices after shared cache reads, including coach tool calls. */
+/** Page and coach resolve the same saved lane/default choices before provider and cache work. */
 export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOutcome> {
-  const result = await searchListings(params);
-  if (!params.userId) return result;
-  const row = await getOneAsUser<{ job_fit: unknown }>(params.userId,
-    "SELECT preferences->'jobFit' AS job_fit FROM consumer_profile WHERE user_id=$1", [params.userId]);
-  const preferences = readJobFit(row?.job_fit);
-  return { ...result, jobs: result.jobs.filter((job) => !jobFitExclusion(job, preferences)) };
+  const saved = params.userId ? await loadJobSearchPreferences(params.userId, params.laneId) : null;
+  const filters = readJobSearchFilters(params.filters, saved?.saved.filters || defaultJobSearchFilters());
+  const result = await searchListings({ ...params, role: params.role === undefined ? saved?.saved.role || "" : params.role, location: params.location === undefined ? saved?.saved.location || "" : params.location, resolvedFilters: filters });
+  let hidden = new Set<string>();
+  let personal = readJobFit(null);
+  if (params.userId) {
+    const { getHiddenEmployerSet } = await import("@crucible/core");
+    const [row, employers] = await Promise.all([getOneAsUser<{ job_fit: unknown }>(params.userId, "SELECT preferences->'jobFit' AS job_fit FROM consumer_profile WHERE user_id=$1", [params.userId]), getHiddenEmployerSet(params.userId)]);
+    personal = readJobFit(row?.job_fit); hidden = employers;
+  }
+  const { isHiddenEmployer } = await import("@crucible/core");
+  const excludedBy: Record<string, number> = {}, unknownBy: Record<string, number> = {};
+  const loaded = result.jobs.length;
+  const jobs = result.jobs.flatMap((job) => {
+    const assessment = assessJobSearch(job, filters);
+    const personalReason = jobFitExclusion(job, personal);
+    if (personalReason || isHiddenEmployer(job.company, hidden)) { excludedBy.personal = (excludedBy.personal || 0) + 1; return []; }
+    assessment.unmet.forEach(key => { excludedBy[key] = (excludedBy[key] || 0) + 1; });
+    if (!filters.includeUnknown) assessment.requiredUnknown.forEach(key => { excludedBy[`unknown_${key}`] = (excludedBy[`unknown_${key}`] || 0) + 1; });
+    if (!assessment.included) return [];
+    assessment.unknown.forEach(key => { unknownBy[key] = (unknownBy[key] || 0) + 1; });
+    return [{ ...job, filterAssessment: assessment }];
+  });
+  jobs.sort((a,b) => (a.filterAssessment.preferred.length + a.filterAssessment.unknown.length) - (b.filterAssessment.preferred.length + b.filterAssessment.unknown.length));
+  const summary: JobSearchSummary = { loaded, matched: jobs.length, excluded: loaded - jobs.length, unknownIncluded: jobs.filter(j => j.filterAssessment.unknown.length > 0).length, excludedBy, unknownBy, providerRequests: result.metadata?.providerRequests || 0, partial: true, fetchedAt: result.jobs[0]?.evidence?.fetchedAt || new Date().toISOString(), filters, laneId: saved?.laneId || null,
+    notices: ["Counts cover the listings loaded for this search, not every opening.", ...(!filters.origin && filters.radiusMiles.value !== null ? ["Distance is unverified without an exact search center. Provider radius is approximate."] : []), ...(result.metadata?.notices || [])] };
+  const { metadata: _metadata, ...publicResult } = result;
+  return { ...publicResult, jobs, summary };
 }
 
 async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome> {
@@ -781,14 +375,18 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
   }
 
   const { role, location, skills, hasRecord, recordType, userId } = params;
+  const filters = params.resolvedFilters || defaultJobSearchFilters();
 
   const tenantGeo = getTenantConfig().geo;
-  const searchLocation = sanitizeOrEmpty(location) || tenantGeo.primaryLocations[0];
+  const searchLocation = sanitizeOrEmpty(location) || (filters.radiusMiles.value === null && filters.arrangements.value.length === 1 && filters.arrangements.value[0] === "remote" ? "United States" : "");
+  if (!searchLocation) return { jobs: [], source: "none", fair_chance_info: "", error: "location_required" };
 
   // Build cache key from search params
   const cacheParams = {
     role: sanitizeOrEmpty(role),
     location: searchLocation,
+    version: 2,
+    filtersHash: hashQuery({ filters: canonicalSearchFilters(filters) }),
   };
   const queryHash = hashQuery(cacheParams);
 
@@ -828,55 +426,34 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
   const searchRole = roleClean || "jobs";
   const providerNames: string[] = [];
   const settled = await Promise.all([
-    fetchJSearchJobs(searchRole, searchLocation, tenantGeo.searchRadiusMiles).then((r) => {
+    fetchJSearchJobs(searchRole, searchLocation, filters.radiusMiles.value ?? tenantGeo.searchRadiusMiles, { filters }).then((r) => {
       if (r.jobs.length) providerNames.push("jsearch");
       return r;
     }),
     fetchAdzunaJobs(
       searchRole,
       searchLocation,
-      Math.max(tenantGeo.searchRadiusMiles, 50),
-      PARALLEL_PROVIDER_TIMEOUT_MS
+      filters.radiusMiles.value ?? tenantGeo.searchRadiusMiles,
+      PARALLEL_PROVIDER_TIMEOUT_MS,
+      { filters }
     ).then((r) => {
       if (r.jobs.length) providerNames.push("adzuna");
       return r;
     }),
-    fetchUsaJobs(roleClean, tenantGeo.stateFullName, PARALLEL_PROVIDER_TIMEOUT_MS).then((r) => {
+    fetchUsaJobs(roleClean, searchLocation, PARALLEL_PROVIDER_TIMEOUT_MS, { filters }).then((r) => {
       if (r.jobs.length) providerNames.push("usajobs");
       return r;
     }),
   ]);
   const [jsearch, adzuna, usajobs] = settled;
+  const metadata = { providerRequests: settled.reduce((n,r) => n + (r.requests || 0), 0), notices: settled.some(r => r.failed || r.partial) ? ["Some providers were unavailable or reached the bounded page limit."] : [] };
 
   // JSearch first: it is the only source with structured qualifications and
   // benefits, so its records enrich best. The others fill in behind it, deduped.
-  const rawJobs = mergeJobs(
-    [jsearch.jobs, adzuna.jobs, usajobs.jobs],
-    tenantGeo.stateFullName
-  );
+  const rawJobs = mergeJobs([jsearch.jobs, adzuna.jobs, usajobs.jobs]);
   const allFailed = settled.every((r) => r.failed || r.jobs.length === 0);
 
   if (rawJobs.length === 0) {
-    // Fallback to CareerOneStop (DOL) -- free + official. Env-gated, fail-safe.
-    // NOTE: currently returns nothing; the account is not entitled to the
-    // jobsearch endpoint (see the block above fetchCareerOneStopJobs).
-    const cosJobs = await fetchCareerOneStopJobs(
-      searchRole,
-      searchLocation,
-      marks,
-      tenantGeo.searchRadiusMiles
-    );
-    if (cosJobs.length > 0) {
-      cosJobs.sort((a, b) =>
-        a.second_chance === b.second_chance ? 0 : a.second_chance ? -1 : 1
-      );
-      await withDeadline(cacheResults(queryHash, cacheParams, cosJobs, ""), DB_DEADLINE_MS, undefined, "cache write (cos)");
-      return {
-        jobs: cosJobs,
-        fair_chance_info: "",
-        source: "careeronestop",
-      };
-    }
     // Provider failed (quota/outage/key) vs. genuinely zero matches --
     // never let a failure render as "no jobs found". With several providers the
     // distinction is: did ANY of them actually answer with a clean empty result?
@@ -886,6 +463,7 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
         jobs: [],
         fair_chance_info: "",
         source: "none",
+        metadata,
         error: settled.some((r) => r.status === 429)
           ? "provider_rate_limited"
           : "provider_unavailable",
@@ -895,6 +473,7 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
       jobs: [],
       fair_chance_info: "",
       source: "none",
+      metadata,
     };
   }
 
@@ -958,5 +537,6 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
     // Which providers actually contributed, so a degraded search is visible
     // rather than silently looking like a healthy one.
     source: providerNames.length ? providerNames.join("+") : "none",
+    metadata,
   };
 }

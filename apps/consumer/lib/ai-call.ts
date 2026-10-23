@@ -16,6 +16,7 @@
  * rare exception path and is logged to the server console.
  */
 
+import { currentAiOperation } from './ai-operation-context';
 import { MODEL_CHAT, FALLBACK_CHAT } from "./ai/models";
 import { recordTokenUsage, type AiCallMeta } from "./ai-usage-log";
 
@@ -52,6 +53,8 @@ async function callAnthropic(
       })),
   };
 
+  const operation = currentAiOperation();
+  if (operation) operation.providerAttempted = true;
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -105,6 +108,8 @@ async function callOpenAI(
     ? [{ role: "system", content: system }, ...messages]
     : messages;
 
+  const operation = currentAiOperation();
+  if (operation) operation.providerAttempted = true;
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {

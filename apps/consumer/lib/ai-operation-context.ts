@@ -6,6 +6,8 @@ export interface OperationContext {
   endpoint: string;
   pending: Promise<unknown>[];
   accountingIncomplete?: boolean;
+  /** Set immediately before a tracked provider call starts. */
+  providerAttempted?: boolean;
   /** Provider work failed even when the product returns a soft fallback response. */
   failed?: boolean;
 }

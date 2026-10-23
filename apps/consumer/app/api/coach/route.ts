@@ -48,8 +48,6 @@ import {
   buildMemorySection,
   appendCoachMessage,
   loadCoachHistory,
-  getUserDailyLimit,
-  incrementUserUsage,
   isConsentGranted,
 } from "@crucible/core";
 
@@ -96,13 +94,6 @@ export async function POST(request: Request) {
   if (await (await import("@crucible/core")).isPlatformAdmin(userId)) return NextResponse.json({ error: "Use the platform assistant for owner operations." }, { status: 403 });
   const actor = await (await import("@crucible/core")).resolveOrgActor(userId);
   if (actor) return NextResponse.json({ error: "Use the staff assistant for organization work." }, { status: 403 });
-
-  // Daily quota (atomic increment-then-check), action "coach"
-  const limit = await getUserDailyLimit(userId);
-  const newCount = await incrementUserUsage(userId, "coach");
-  if (limit !== 0 && newCount > limit) {
-    return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
-  }
 
   const body = await request.json().catch(() => ({}));
   const messages = pluckMessages(body?.messages);
@@ -163,10 +154,11 @@ export async function POST(request: Request) {
 
   const startTime = Date.now();
 
-  const operation = await beginChatOperation(userId ?? null, "coach", MODEL);
+  const operation = await beginChatOperation(userId ?? null, "coach", MODEL, { rateLimitMessage: RATE_LIMIT_MESSAGE });
   if (operation.response) return operation.response;
   return operation.run(async () => {
   try {
+  operation.markProviderAttempted();
   const result = streamText({
     model: troyChatModel(),
     system: systemPrompt,

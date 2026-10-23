@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TaskPicker } from "@/components/lanes/TaskPicker";
 import { LaneHome } from "@/components/lanes/LaneHome";
+import { ProgressOverview } from "@/components/progression/ProgressOverview";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
 import { routeHref } from "@/lib/lane-task";
 import { useSession } from "next-auth/react";
@@ -220,7 +221,8 @@ export default function DashboardPage() {
   if (onboarding.state === "needs_profile" && !isAdmin) {
     return (
       <div className="space-y-10">
-        {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} profileFirst />}
+        <ProgressOverview />
+        {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} profileFirst hidePrimaryAction />}
         <div id="profile-setup" className="scroll-mt-48">
           <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />
         </div>
@@ -233,7 +235,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-7">
       <MiniForgeBanner />
-      {focus.task ? <LaneHome laneId={focus.laneId} task={focus.task} /> : <h1 className="text-2xl font-bold text-t-white">Overview</h1>}
+      <ProgressOverview />
+      {focus.task ? <LaneHome laneId={focus.laneId} task={focus.task} hidePrimaryAction /> : <h1 className="text-2xl font-bold text-t-white">Overview</h1>}
       <MySharedTasks />
       <MySuggestions />
       <SavedJobsPanel heading="Applications to keep moving" limit={3} />

@@ -65,6 +65,7 @@
  * cached by a browser, proxy, or CDN.
  */
 
+import { exportProgression } from '@/lib/progression-server';
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
@@ -249,6 +250,7 @@ export async function POST(req: Request) {
       payload.laneToolNotesDismissed = await listDismissedIntros(userId);
       // Today's task (083): what the person picked on "What do you need today?".
       payload.laneFocus = await getLaneFocus(userId);
+      payload.progression = await exportProgression(userId);
       // The practice record (076): every entry, in the person's own words.
       payload.practiceRecord = await listPracticeEntries(userId);
     }

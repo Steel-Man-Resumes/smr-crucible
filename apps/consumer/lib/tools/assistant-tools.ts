@@ -1,3 +1,4 @@
+import { getProgression, requestProgressionAccess } from '../progression-server';
 import { executionBudget } from "./tool-execution";
 /**
  * t.ROY's hands -- the assistant tool factory (10x wave, 2026-08-03).
@@ -21,6 +22,7 @@ import { executionBudget } from "./tool-execution";
 import { tool, jsonSchema, type ToolSet } from "ai";
 import { buildDataTools } from "./assistant-data-tools";
 import type { SelectedWork } from "../assistant-work-context";
+import { JOB_SEARCH_FILTER_SCHEMA } from "@crucible/core/src/jobSearchFilters";
 import { runJobSearch, findCachedJob } from "@/lib/job-search-core";
 import { jobSourceForSave } from "@/lib/job-source";
 import {
@@ -147,6 +149,19 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
   if (!userId) return tools;
 
   Object.assign(tools, buildDataTools(userId, opts.selectedWork));
+  if (opts.surface === 'refinery') {
+    tools.get_my_progress = tool({
+      description:'Read actual guided steps, earned access, current AI allowance and your review-request status. Use before explaining locks or rewards. Early access never counts as completed preparation.',
+      parameters:jsonSchema<Record<string,never>>({type:'object',properties:{},additionalProperties:false}),
+      execute:async()=>{try{return await getProgression(userId,opts.selectedWork?.selection);}catch{return {error:'Progress could not be loaded. Do not guess access or allowance.'};}},
+    });
+    tools.request_tool_access = tool({
+      description:'Only after the person asks, request early guided-tool access or a small AI bonus. The server decides eligibility and amount. This never changes premium access, account roles, security or pricing. If review_required, direct them to the progress bar to review and consent to the summary; do not claim it was sent to Troy.',
+      parameters:jsonSchema<{stepId:string;reason:string;requestKind:'unlock'|'ai_bonus'}>({type:'object',properties:{stepId:{type:'string',enum:['foundation','direction','tailor','apply','interview','offer']},reason:{type:'string',maxLength:1000},requestKind:{type:'string',enum:['unlock','ai_bonus']}},required:['stepId','reason','requestKind'],additionalProperties:false}),
+      execute:async(args)=>{try{return await requestProgressionAccess(userId,{...args,idempotencyKey:args.requestKind==='ai_bonus'?`coach-bonus-${new Date().toISOString().slice(0,10)}`:`coach-unlock-${args.stepId}`,selection:opts.selectedWork?.selection});}catch{return {error:'The access request did not finish. Try the progress bar.'};}},
+    });
+  }
+
   tools.contextual_handoff = tool({
     description: "Prepare a button to continue with this exact selected job, lane and saved revision. Use for tailoring, interview practice and applications. The user chooses when to move.",
     parameters: jsonSchema<{page: "application-tailor" | "interview" | "applications"}>({ type: "object", properties: { page: { type: "string", enum: ["application-tailor", "interview", "applications"] } }, required: ["page"], additionalProperties: false }),
@@ -174,7 +189,8 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         if (!profile) {
           return "No profile yet. This user has not finished the Forge, so there is no journey data to read.";
         }
-        const next = await getNextStep(userId);
+        const next = opts.surface === 'refinery' ? null : await getNextStep(userId);
+        const progress = opts.surface === 'refinery' ? await getProgression(userId,opts.selectedWork?.selection) : null;
         const jobs = await queryAsUser<{
           id: string;
           job_title: string;
@@ -195,8 +211,8 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
           selectedWork: opts.selectedWork ? { selection: opts.selectedWork.selection, task: opts.selectedWork.task, lane: opts.selectedWork.lane, revisionStatus: opts.selectedWork.revision?.status } : null,
           readAt: new Date().toISOString(),
           freshness: "read live from the database just now",
-          journeyStage: next?.stage ?? profile.currentStage,
-          nextStep: next
+          journeyStage: progress?.currentStepId ?? next?.stage ?? profile.currentStage,
+          nextStep: progress ? {action:progress.nextAction.label,href:progress.nextAction.href} : next
             ? { action: next.action, href: next.href }
             : null,
           savedJobs: jobs.map((j) => ({
@@ -234,8 +250,8 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
 
   tools.search_jobs = tool({
     description:
-      "Search real, current job listings in the user's area. Employers known to hire people with records are listed first. Returns up to 5 compact results with ids. Costs one of the user's daily job searches, so do not repeat an identical search in the same conversation.",
-    parameters: jsonSchema<{ query: string; location?: string }>({
+      "Search current listings using the selected lane’s saved choices and Job Board filters. Apply only changes the person requested. Never invent coordinates, annualize pay, infer eligibility or silently widen requirements. Unknown fields need checking. Returns up to 5 compact results from a bounded loaded set. Costs one daily job search; avoid repeating identical searches.",
+    parameters: jsonSchema<{ query: string; location?: string; laneId?: string|null; filters?: unknown }>({
       type: "object",
       properties: {
         query: {
@@ -246,13 +262,15 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         location: {
           type: "string",
           description:
-            "Optional city/area. Defaults to the platform's home area (Milwaukee).",
+            "City or ZIP the person chose. Omit to retain the saved lane location; never substitute a home city.",
         },
+        laneId: {type:["string","null"],description:"Owned selected lane. Omit to use the server-resolved active lane."},
+        filters: {...JOB_SEARCH_FILTER_SCHEMA,properties:Object.fromEntries(Object.entries(JOB_SEARCH_FILTER_SCHEMA.properties as Record<string,unknown>).filter(([key])=>key!=="origin"))},
       },
       required: ["query"],
       additionalProperties: false,
     }),
-    execute: async ({ query: searchQuery, location }) => {
+    execute: async ({ query: searchQuery, location, laneId, filters }) => {
       try {
         const { getUserDailyLimit, incrementUserUsage } = await import(
           "@crucible/core"
@@ -262,14 +280,14 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         if (limit !== 0 && newCount > limit) {
           return "The user's daily job-search quota is used up. Tell them plainly and suggest trying again tomorrow, or browsing their already-saved jobs.";
         }
-        const result = await runJobSearch({ role: searchQuery, location, userId });
+        const safeFilters=filters&&typeof filters==='object'&&!Array.isArray(filters)?{...filters,origin:null}:filters;
+        const result = await runJobSearch({ role: searchQuery, location, userId, laneId, filters:safeFilters });
         if (result.error) {
-          return `Job search is unavailable right now (${result.error}). Say so plainly and suggest the Job Board later today.`;
-        }
-        if (!result.jobs.length) {
-          return "No matches for that search right now. Suggest broadening the role or trying different keywords.";
+          return {error:result.error,guidance:result.error==='location_required'?'Ask which city or ZIP to use. Nationwide remote requires explicit Remote and Anywhere choices.':'Search could not finish. This is not evidence of an empty job market.'};
         }
         return {
+          summary:result.summary,
+          guidance:result.jobs.length?undefined:"No loaded listings meet these choices. Explain the excluded/unknown counts and offer one specific change for the person to choose. Do not widen automatically.",
           freshness:
             result.source === "cache"
               ? "from a search cached within the last 6 hours"
@@ -280,6 +298,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
             company: j.company,
             location: j.location,
             salary: j.salary,
+            employmentType:j.employment_type,evidence:j.evidence,filterAssessment:j.filterAssessment,
             fairChance: j.second_chance,
             posted: j.posted,
           })),

@@ -9,6 +9,11 @@
  */
 
 import { useState, useEffect, useRef, Suspense } from "react";
+import { useSession } from "next-auth/react";
+import { useLaneFocus } from "@/components/lanes/useLaneFocus";
+import { SearchFilters, activeSearchFilters, FILTER_LABELS } from "@/components/jobs/SearchFilters";
+import { defaultJobSearchFilters, readJobSearchFilters, canonicalSearchFilters, type JobSearchFilters } from "@crucible/core/src/jobSearchFilters";
+import type { EnrichedJob, JobSearchSummary } from "@/lib/job-search-types";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
@@ -21,25 +26,6 @@ import { JobFitChoices } from "@/components/JobFitChoices";
 import { jobFitExclusion, type JobFitPreferences } from "@/lib/job-fit";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-
-interface EnrichedJob {
-  id: string;
-  title: string;
-  company: string;
-  location: string;
-  salary: string | null;
-  description: string;
-  full_description?: string;
-  requirements: string[];
-  benefits: string[];
-  employment_type: string;
-  posted: string;
-  second_chance: boolean;
-  fair_chance_reason: string | null;
-  remote: boolean;
-  apply_url?: string | null;
-  employer_website?: string | null;
-}
 
 interface SavedJob {
   id: string;
@@ -87,6 +73,24 @@ export default function JobBoardPageWrapper() {
 
 function JobBoardPage() {
   const searchParams = useSearchParams();
+  const ownerUid = useSession().data?.user?.id;
+  const focus = useLaneFocus();
+  const explicitLane = searchParams.get("laneId");
+  const laneKey = explicitLane || (focus.loaded ? focus.laneId || "main" : null);
+  const laneRef = useRef(laneKey); laneRef.current = laneKey;
+  const [loadedLane, setLoadedLane] = useState<string | null>(null);
+  const preferencesReady = !!laneKey && loadedLane === laneKey;
+  const [filters, setFilters] = useState<JobSearchFilters>(defaultJobSearchFilters);
+  const [summary, setSummary] = useState<JobSearchSummary | null>(null);
+  const [preferencesError, setPreferencesError] = useState("");
+  const [preferencesNotice, setPreferencesNotice] = useState("");
+  const [preferenceRevision, setPreferenceRevision] = useState(0);
+  const [accountRevision, setAccountRevision] = useState(0);
+  const [savingPreferences, setSavingPreferences] = useState(false);
+  const [preferenceReload, setPreferenceReload] = useState(0);
+  const searchController = useRef<AbortController | null>(null);
+  const searchSequence = useRef(0);
+  const submittedFilters = useRef("");
   const autoSearched = useRef(false);
   const forgeLoadedRef = useRef(false);
   const { context: userContext } = useUserContext();
@@ -113,25 +117,53 @@ function JobBoardPage() {
   const [hideReason, setHideReason] = useState("");
   const [fairChanceOnly, setFairChanceOnly] = useState(false);
   const [remoteOnly, setRemoteOnly] = useState(false);
-  const [roleFromResume, setRoleFromResume] = useState(false);
+  const [roleFromLane, setRoleFromLane] = useState(false);
 
-  // Restore the last search (query + results) so navigating away and back
-  // doesn't wipe the user's work. Kept for 6 hours to match the server cache.
+  // Restore only this signed-in person's validated lane. A URL path choice
+  // wins over the previous search; requests from a former lane are aborted.
   useEffect(() => {
+    if (!ownerUid || !laneKey) return;
+    const controller = new AbortController();
+    searchController.current?.abort(); searchSequence.current++;
+    setLoadedLane(null); setJobs([]); setSearched(false); setSummary(null); setSearching(false); setSavingPreferences(false);
+    setPreferencesError(""); setPreferencesNotice(""); forgeLoadedRef.current = false; autoSearched.current = false;
+    const requestedRole = searchParams.get("q"), requestedLocation = searchParams.get("location");
+    fetch(`/api/job-search/preferences?laneId=${encodeURIComponent(laneKey)}`, { cache: "no-store", signal: controller.signal })
+      .then(async response => { if (!response.ok) throw new Error("Preferences unavailable"); return response.json(); })
+      .then(data => {
+        if (controller.signal.aborted || laneRef.current !== laneKey) return;
+        let nextFilters = readJobSearchFilters(data.saved?.filters);
+        let nextContext: UserContext = { targetRole: requestedRole || data.saved?.role || data.target || (focus.laneId === data.laneId ? focus.target : "") || "", location: requestedLocation || data.saved?.location || "", skills: [], hasRecord: false };
+        try {
+          const raw = sessionStorage.getItem(`job_search:v2:${ownerUid}:${laneKey}`);
+          const cached = raw ? JSON.parse(raw) : null;
+          if (!requestedRole && !requestedLocation && cached?.version === 2 && Date.now() - cached.ts < 6*60*60*1000 && Array.isArray(cached.jobs)) {
+            nextFilters = readJobSearchFilters(cached.filters);
+            nextContext = { ...nextContext, ...cached.context };
+            setJobs(cached.jobs); setSummary(cached.summary || null); setFairChanceInfo(cached.fairChanceInfo || ""); setSource(cached.source || ""); setSearched(true);
+            submittedFilters.current = canonicalSearchFilters(nextFilters);
+          }
+        } catch { setPreferencesNotice("Your last search could not be restored. Your saved lane choices are loaded."); }
+        setFilters(nextFilters); setContext(nextContext); setPreferenceRevision(data.revision || 0); setAccountRevision(data.accountRevision || 0); setLoadedLane(laneKey);
+      })
+      .catch(() => { if (!controller.signal.aborted) setPreferencesError("Your lane search choices could not be loaded. Try again before searching."); });
+    return () => { controller.abort(); searchController.current?.abort(); searchSequence.current++; };
+  }, [ownerUid, laneKey, preferenceReload, searchParams]);
+
+  async function rememberSearch(scope: "lane" | "account") {
+    if (!laneKey || savingPreferences) return;
+    const targetLane = laneKey;
+    setSavingPreferences(true); setPreferencesNotice("");
     try {
-      const raw = localStorage.getItem("refinery_last_job_search");
-      if (!raw) return;
-      const saved = JSON.parse(raw);
-      if (!saved?.ts || Date.now() - saved.ts > 6 * 60 * 60 * 1000) return;
-      if (Array.isArray(saved.jobs) && saved.jobs.length > 0) {
-        setContext((prev) => ({ ...prev, ...(saved.context || {}) }));
-        setJobs(saved.jobs);
-        setFairChanceInfo(saved.fairChanceInfo || "");
-        setSource(saved.source || "");
-        setSearched(true);
-      }
-    } catch {}
-  }, []);
+      const response = await fetch("/api/job-search/preferences", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ laneId: targetLane, scope, revision: scope === "lane" ? preferenceRevision : accountRevision, role: context.targetRole, location: context.location, filters: readJobSearchFilters(filters) }) });
+      const data = await response.json();
+      if (laneRef.current !== targetLane) return;
+      if (!response.ok) throw new Error(data.error || "Your choices did not save.");
+      if (scope === "lane") setPreferenceRevision(data.saved.revision); else setAccountRevision(data.saved.revision);
+      setPreferencesNotice(scope === "lane" ? "Search choices saved for this lane. Device location is not remembered." : "Account defaults saved. A lane’s own saved choices take priority. Device location is not remembered.");
+    } catch (error) { if (laneRef.current === targetLane) setPreferencesNotice(error instanceof Error ? error.message : "Your choices did not save. Try again."); }
+    finally { if (laneRef.current === targetLane) setSavingPreferences(false); }
+  }
 
   // Load saved/hidden state
   useEffect(() => {
@@ -184,18 +216,12 @@ function JobBoardPage() {
   // or that came from a URL param. Record details stay private -- /api/user/context
   // exposes only the hasRecord flag (drives fair-chance filtering), not the type.
   useEffect(() => {
-    if (!userContext || forgeLoadedRef.current) return;
+    if (!userContext || !preferencesReady || forgeLoadedRef.current) return;
     forgeLoadedRef.current = true;
     const f = userContext.forge;
 
-    const top = f?.careerPaths?.[0];
-    const careerRole = top ? (typeof top === "string" ? top : top.title) : "";
-    // Phase 4C: prefer the user's most recent tailored resume's target role over
-    // the generic Forge career path -- it is the job they actually built toward.
-    const resumeRole =
-      ((userContext as any).resumes ?? []).find((r: any) => r && r.targetJob)?.targetJob || "";
-    const role = resumeRole || careerRole;
-    if (resumeRole) setRoleFromResume(true);
+    const role = !explicitLane || explicitLane === (focus.laneId || "main") ? focus.target || "" : "";
+    setRoleFromLane(!!role);
     const loc = [userContext.profile?.city, userContext.profile?.state]
       .filter(Boolean)
       .join(", ");
@@ -212,29 +238,37 @@ function JobBoardPage() {
       hasRecord: f?.hasCriminalRecord ?? prev.hasRecord,
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userContext]);
+  }, [userContext, preferencesReady, focus.target]);
 
   // Auto-search from URL param (e.g., ?q=Warehouse+Associate from dashboard CTA)
   useEffect(() => {
     const q = searchParams.get("q");
-    if (q && !autoSearched.current) {
+    if (q && preferencesReady && !autoSearched.current) {
       autoSearched.current = true;
       setContext((prev) => ({ ...prev, targetRole: q }));
     }
-  }, [searchParams]);
+  }, [searchParams, preferencesReady]);
 
   // Trigger search when context is set from URL param
   useEffect(() => {
-    if (autoSearched.current && context.targetRole && !searched) {
+    if (preferencesReady && autoSearched.current && context.targetRole && !searched) {
       searchJobs();
     }
-  }, [context.targetRole]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [context.targetRole, preferencesReady]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Actions ────────────────────────────────────────────────────────────
 
   async function searchJobs() {
-    if (!context.targetRole && !context.location) return;
+    if (!preferencesReady || !laneKey) return;
+    let chosenFilters: JobSearchFilters;
+    try { chosenFilters = readJobSearchFilters(filters); } catch (error) { setSearchError(error instanceof Error ? error.message : "Check your filters."); return; }
+    const targetLane = laneKey;
+    const request = ++searchSequence.current;
+    searchController.current?.abort();
+    const controller = new AbortController(); searchController.current = controller;
     setSearching(true);
+    setJobs([]);
+    setSummary(null);
     setSearched(true);
     setRateLimitError("");
     setSearchError("");
@@ -243,20 +277,25 @@ function JobBoardPage() {
       const res = await fetch("/api/job-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(context),
+        body: JSON.stringify({ ...context, filters: chosenFilters, laneId: targetLane }),
+        signal: controller.signal,
       });
+      if (controller.signal.aborted || request !== searchSequence.current || laneRef.current !== targetLane) return;
 
       if (res.status === 429) {
         const data = await res.json();
+        if (controller.signal.aborted || request !== searchSequence.current || laneRef.current !== targetLane) return;
         setRateLimitError(data.error);
       } else if (res.ok) {
         const data = await res.json();
+        if (controller.signal.aborted || request !== searchSequence.current || laneRef.current !== targetLane) return;
         if (data.error) {
           // The job-data provider failed (quota/outage) -- say so plainly
           // instead of showing a misleading "no jobs found".
           setJobs([]);
           setSearchError(
-            data.error === "provider_rate_limited"
+            data.error === "location_required" ? "Add a city or ZIP. For a nationwide remote search, choose Remote and Anywhere."
+              : data.error === "provider_rate_limited"
               ? "Our job-listing provider hit its limit for right now. This is on our side, not yours. Your search was fine. Try again in a little while."
               : "We couldn't reach the job listings just now. This is on our side, not yours. Try again in a few minutes."
           );
@@ -264,32 +303,25 @@ function JobBoardPage() {
           setJobs(data.jobs || []);
           setFairChanceInfo(data.fair_chance_info || "");
           setSource(data.source || "");
-          try {
-            localStorage.setItem(
-              "refinery_last_job_search",
-              JSON.stringify({
-                ts: Date.now(),
-                context,
-                jobs: data.jobs || [],
-                fairChanceInfo: data.fair_chance_info || "",
-                source: data.source || "",
-              })
-            );
-          } catch {}
+          setSummary(data.summary || null);
+          submittedFilters.current = canonicalSearchFilters(chosenFilters);
+          try { if (chosenFilters.origin) sessionStorage.removeItem(`job_search:v2:${ownerUid}:${targetLane}`); else sessionStorage.setItem(`job_search:v2:${ownerUid}:${targetLane}`, JSON.stringify({ version: 2, ts: Date.now(), context, filters: { ...chosenFilters, origin: null }, jobs: data.jobs || [], summary: data.summary ? { ...data.summary, filters: { ...data.summary.filters, origin: null } } : null, fairChanceInfo: data.fair_chance_info || "", source: data.source || "" })); } catch {}
+
         }
       } else {
+        const data = await res.json().catch(() => null);
+        if (controller.signal.aborted || request !== searchSequence.current || laneRef.current !== targetLane) return;
         setJobs([]);
-        setSearchError(
-          "Something went wrong on our end running that search. Try again in a few minutes."
-        );
+        setSearchError(data?.message || data?.error || "Something went wrong running that search. Try again.");
       }
     } catch {
+      if (controller.signal.aborted || request !== searchSequence.current || laneRef.current !== targetLane) return;
       setJobs([]);
       setSearchError(
         "We couldn't reach the server. Check your connection and try again."
       );
     } finally {
-      setSearching(false);
+      if (request === searchSequence.current && laneRef.current === targetLane) setSearching(false);
     }
 
     // Track search
@@ -328,7 +360,7 @@ function JobBoardPage() {
           source_id: job.id,
           apply_url: job.apply_url || null,
           employer_website: job.employer_website || null,
-          // Phase 3.2: persist the fuller JD (full_description is the 2000-char
+          // Phase 3.2: persist the fuller JD (full_description retains up to 20,000 characters of the
           // HTML-stripped body) so the saved snapshot is not the 200-char
           // truncated `description`. Provenance = the board provider + apply URL.
           jdFullText: job.full_description || job.description,
@@ -424,7 +456,7 @@ function JobBoardPage() {
 
   // ─── Derived ────────────────────────────────────────────────────────────
 
-  const visibleJobs = jobs.filter((j) => {
+  const visibleJobs = (preferencesReady ? jobs : []).filter((j) => {
     if (!jobFit || jobFitExclusion(j, jobFit)) return false;
     if (hiddenJobs.has(j.id)) return false;
     if (hiddenEmployerKeys.has(lightEmployerKey(j.company))) return false;
@@ -442,18 +474,18 @@ function JobBoardPage() {
       </h1>
       <GhostGuide message={getOpusMessage("jobs")} pageId="jobs" />
       <p className="text-base text-t-phos-dim mb-6">
-        Real job listings updated daily. Employers we checked for hiring people with records are marked.
+        Job listings from connected providers. Posting dates and available details vary. Employers we checked for hiring people with records are marked.
         Everything stays right here in your dashboard.
       </p>
 
       {/* Cross-link into the curated job paths (completes the loop) */}
       <Link
-        href="/dashboard/resources"
+        href="/dashboard/paths"
         className="t-focus flex items-center justify-between gap-3 bg-t-panel border border-t-line px-4 py-3 mb-6 hover:border-t-phos-dim transition-colors"
       >
         <span className="text-sm text-t-phos">
           <span className="font-semibold text-t-white">Not sure where to start?</span>{" "}
-          Explore job paths for your field that are realistic with a record.
+          Explore work paths, the evidence you already have, and what you would need next.
         </span>
         <svg
           width="16"
@@ -497,13 +529,17 @@ function JobBoardPage() {
 
       {/* Search form */}
       <JobFitChoices onChange={setJobFit} />
-      <div className="bg-t-panel p-5 border border-t-line mb-6">
+      {preferencesError && <p role="alert" className="mb-4 border border-t-red p-3 text-sm text-t-red">{preferencesError} <button type="button" onClick={() => setPreferenceReload(n=>n+1)} className="t-focus min-h-touch underline">Retry</button></p>}
+      {!preferencesReady && !preferencesError && <p role="status" className="mb-4 text-sm text-t-phos-dim">Loading this lane’s search choices...</p>}
+      <div className="bg-t-panel p-5 border border-t-line mb-6" aria-busy={!preferencesReady}>
         <div className="space-y-4">
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">
               What kind of work?
             </label>
             <input
+              disabled={!preferencesReady}
+              aria-label="What kind of work?"
               value={context.targetRole}
               onChange={(e) =>
                 setContext({ ...context, targetRole: e.target.value })
@@ -518,9 +554,9 @@ function JobBoardPage() {
             <p className="text-xs text-t-phos-dim mt-1">
               You can combine terms. Try &quot;Forklift, Warehouse&quot; or &quot;CNA, Medical&quot;.
             </p>
-            {roleFromResume && context.targetRole && (
+            {roleFromLane && context.targetRole && (
               <p className="text-xs text-t-amber-bright mt-1">
-                Seeded from your most recent resume. Edit it anytime.
+                From this lane’s goal. Edit it anytime.
               </p>
             )}
             {/* Quick picks — click to set or append */}
@@ -550,9 +586,11 @@ function JobBoardPage() {
           <div>
             <label className="text-sm font-medium text-t-white block mb-1">Where?</label>
             <input
+              disabled={!preferencesReady}
+              aria-label="Search city or ZIP"
               value={context.location}
               onChange={(e) =>
-                setContext({ ...context, location: e.target.value })
+                { setContext({ ...context, location: e.target.value }); setFilters(f=>({...f,origin:null})); }
               }
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (context.targetRole || context.location)) searchJobs();
@@ -562,9 +600,13 @@ function JobBoardPage() {
             />
           </div>
 
+          <SearchFilters key={laneKey || "loading"} value={filters} onChange={setFilters} disabled={!preferencesReady || searching} />
+          <div className="flex flex-wrap gap-2" aria-label="Active search choices">{activeSearchFilters(filters).map(line=><span key={line} className="border border-t-line px-2 py-1 text-xs text-t-phos-dim">{line}</span>)}</div>
+          <div className="flex flex-wrap gap-3 text-xs"><button type="button" disabled={!preferencesReady || savingPreferences} onClick={()=>void rememberSearch("lane")} className="t-focus min-h-touch text-t-amber-bright underline">Remember for this lane</button><button type="button" disabled={!preferencesReady || savingPreferences} onClick={()=>void rememberSearch("account")} className="t-focus min-h-touch text-t-phos-dim underline">Use as account defaults</button></div>
+          {preferencesNotice && <p role="status" className="text-xs text-t-phos-dim">{preferencesNotice}</p>}
           <button
             onClick={searchJobs}
-            disabled={searching || (!context.targetRole && !context.location)}
+            disabled={!preferencesReady || searching || (!context.targetRole && !context.location)}
             data-tour="jobs-search-button"
             className="t-focus w-full px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
           >
@@ -573,6 +615,7 @@ function JobBoardPage() {
         </div>
       </div>
 
+      {summary && !searching && preferencesReady && <section aria-label="Loaded search results" className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos-dim"><p>{summary.matched} kept from {summary.loaded} loaded listings. {summary.excluded} excluded. {summary.unknownIncluded} kept with fields to check.</p><p className="mt-1 text-xs">This is a bounded search, not a count of every opening. Listings fetched {new Date(summary.fetchedAt).toLocaleString()}. {source === "cache" ? "Reused from a cached search." : ""}</p>{summary.notices.map(line=><p key={line} className="mt-1 text-xs">{line}</p>)}{submittedFilters.current !== canonicalSearchFilters(filters) && <p className="mt-2 text-xs text-t-amber-bright">Choices changed. Run Find Jobs to apply them.</p>}</section>}
       {/* Phase 4C: result filters -- refine the listings you already pulled */}
       {jobs.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 mb-4">
@@ -639,12 +682,12 @@ function JobBoardPage() {
       {!searching && searched && !searchError && visibleJobs.length === 0 && (
         <div className="text-center py-12">
           <p className="text-t-phos-dim mb-3">
-            No listings found for this search right now. Try:
+            No listings kept from this loaded search. You can change a choice and search again:
           </p>
           <ul className="text-sm text-t-phos-dim space-y-1">
-            <li>A broader role (e.g., &quot;General Labor&quot; instead of a specific title)</li>
-            <li>A different location or just &quot;Milwaukee, WI&quot;</li>
-            <li>Searching again in a day. New jobs post every day.</li>
+            {summary && Object.entries(summary.excludedBy).map(([key,count])=><li key={key}>{key.startsWith("unknown_") ? `Not supplied: ${FILTER_LABELS[key.slice(8)] || key.slice(8)}` : FILTER_LABELS[key] || key}: {count} loaded listing{count===1?"":"s"}. Reasons can overlap.</li>)}
+            <li>Adjust the role, distance or a must-have filter above. Your radius is never widened automatically.</li>
+            {!filters.includeUnknown && <li>Allow unknown fields if you want to inspect listings with missing details.</li>}
           </ul>
         </div>
       )}
@@ -675,6 +718,9 @@ function JobBoardPage() {
                 data-tour={jobIndex === 0 ? "jobs-first-result" : undefined}
                 className="bg-t-panel border border-t-line overflow-hidden transition-colors hover:border-t-phos-dim"
               >
+                {job.filterAssessment && <div className="border-b border-t-line px-4 py-2 text-xs text-t-phos-dim">{job.filterAssessment.distanceMiles === null ? "Distance unverified" : `About ${job.filterAssessment.distanceMiles.toFixed(1)} miles in a straight line`}{job.filterAssessment.unknown.length>0?` · Check: ${job.filterAssessment.unknown.map(key=>FILTER_LABELS[key]||key).join(", ")}`:""}{job.filterAssessment.preferred.length>0?` · Preferences not matched: ${job.filterAssessment.preferred.map(key=>FILTER_LABELS[key]||key).join(", ")}`:""}</div>}
+                {job.evidence && <p className="px-4 pt-2 text-xs text-t-phos-dim">Source: {job.evidence.source}. Posted: {job.evidence.postedAt && Number.isFinite(Date.parse(job.evidence.postedAt)) ? new Date(job.evidence.postedAt).toLocaleDateString() : "not supplied"}. Fetched: {new Date(job.evidence.fetchedAt).toLocaleString()}.</p>}
+                {job.evidence?.warnings.map(warning=><p key={warning} className="px-4 pt-1 text-xs text-t-amber-bright">{warning}</p>)}
                 {/* Header — always visible */}
                 <button
                   onClick={() =>

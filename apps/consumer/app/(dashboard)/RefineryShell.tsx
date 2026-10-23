@@ -54,7 +54,9 @@ import { useUserContext } from "@/lib/use-user-context";
 import { previewIdForHref } from "@/lib/featurePreviews";
 import { clientToolUnlocked, lockedToolLine } from "@crucible/core/src/journeyStages";
 import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
-import { ExternalLink, LockKeyhole, LogOut, Menu, Sparkles, X } from "lucide-react";
+import { ExternalLink, LockKeyhole, CheckCircle2, LogOut, Menu, X } from "lucide-react";
+import { ProgressionProvider, useProgression } from "@/components/progression/ProgressionProvider";
+import { stepForNav, navKeepsDirectAccess, progressStateLabel } from "@/lib/progression-ui";
 
 /**
  * Dashboard Layout -- Authenticated area
@@ -98,6 +100,7 @@ const NAV_GROUPS: NavGroup[] = [
       ] },
       { href: "/dashboard/jobs", label: "Find work", targetId: "refinery-nav-jobs", minTier: "client", minState: "needs_profile", children: [
         { href: "/dashboard/jobs", label: "Jobs", minTier: "client", minState: "needs_profile" },
+        { href: "/dashboard/paths", label: "Explore paths", minTier: "client", minState: "needs_profile" },
         { href: "/dashboard/employers", label: "Employers", minTier: "client", minState: "needs_profile" },
       ] },
       { href: "/dashboard/vault", label: "My resumes", targetId: "refinery-nav-resumes", minTier: "client", minState: "needs_profile", children: [
@@ -110,7 +113,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/applications", label: "Applications", targetId: "refinery-nav-applications", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/interview", label: "Interview prep", targetId: "refinery-nav-interview", minTier: "client", minState: "needs_profile" },
       { href: "/dashboard/resources", label: "Support & disclosure", targetId: "refinery-nav-support", minTier: "client", minState: "needs_profile", children: [
-        { href: "/dashboard/resources", label: "Local help & job paths", minTier: "client", minState: "needs_profile" },
+        { href: "/dashboard/resources", label: "Local help", minTier: "client", minState: "needs_profile" },
         { href: "/dashboard/disclosure", label: "Disclosure plan", minTier: "client", minState: "needs_profile" },
         { href: "/dashboard/documents", label: "Private records & documents", minTier: "client", minState: "needs_profile" },
       ] },
@@ -137,6 +140,7 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/dashboard/help", label: "Help & tour", minTier: "observer", minState: "needs_profile" },
       { href: "/dashboard/settings", label: "Settings", minTier: "observer", minState: "needs_profile" },
       { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
+      { href: "/dashboard/admin/access-requests", label: "Access requests", minTier: "admin", minState: "needs_profile" },
     ],
   },
 ];
@@ -357,11 +361,12 @@ function ViewAsToggle() {
   );
 }
 
-export function RefineryShell({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function RefineryShell({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<p className="p-6 text-sm text-t-phos-dim">Loading your workspace...</p>}><ProgressionProvider><RefineryShellContent>{children}</RefineryShellContent></ProgressionProvider></Suspense>;
+}
+
+function RefineryShellContent({ children }: { children: ReactNode }) {
+  const progression = useProgression();
   const userTier = useUserTier();
   const { data: sessionData, status: authStatus } = useSession();
   const pathname = usePathname();
@@ -416,7 +421,6 @@ export function RefineryShell({
       navTrigger.current?.focus();
     };
   }, [drawerOpen]);
-  const [unlockToast, setUnlockToast] = useState<string | null>(null);
   // Shared-computer rule: the "Is it yours?" card for an unowned Forge run.
   const [forgePrompt, setForgePrompt] = useState<"none" | "ask" | "saving" | "saved" | "failed">("none");
   const [forgeSyncTick, setForgeSyncTick] = useState(0);
@@ -433,8 +437,6 @@ export function RefineryShell({
     const t = setTimeout(() => setForgeNotice(null), 6000);
     return () => clearTimeout(t);
   }, [forgeNotice]);
-  const prevState = useRef<string>("loading");
-  const prevDisclosure = useRef(false);
 
   // R6: keys an earlier account left in this browser (its saved jobs, last
   // search, approved-resume pointer) are read by pages the moment they mount,
@@ -452,24 +454,6 @@ export function RefineryShell({
   const derivedReady =
     authStatus === "unauthenticated" ||
     (authStatus === "authenticated" && !!shellUid && derivedSettledFor.current === shellUid);
-
-  // Show unlock toast when key milestones flip
-  useEffect(() => {
-    const prev = prevState.current;
-    const cur = onboarding.state;
-    if (prev !== cur) {
-      if (cur === "full_access" && prev !== "loading") {
-        setUnlockToast("Tools unlocked. Disclosure Planner and more are ready.");
-        setTimeout(() => setUnlockToast(null), 5000);
-      }
-      prevState.current = cur;
-    }
-    if (!prevDisclosure.current && onboarding.disclosureComplete && cur === "full_access") {
-      setUnlockToast("Your disclosure plan is saved. Practice using it in Interview Prep.");
-      setTimeout(() => setUnlockToast(null), 5000);
-    }
-    prevDisclosure.current = onboarding.disclosureComplete;
-  }, [onboarding.state, onboarding.disclosureComplete]);
 
   // Close mobile drawer on navigation
   useEffect(() => {
@@ -755,21 +739,27 @@ export function RefineryShell({
 
   function renderNavItems(onItemClick?: () => void, mobile = false) {
     function renderItem(item: NavItem, secondary = false) {
-      const unlocked = isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete);
+      const step = userTier === "client" && (!secondary || item.href === "/dashboard/application-tailor")
+        ? stepForNav(progression?.data?.steps ?? [], item.href) : null;
+      const guidedLocked = step?.access === "locked";
+      const directAccess = !guidedLocked || navKeepsDirectAccess(item.href);
+      // Missing progress is not evidence that an existing user lost access.
+      // Server APIs still decide whether the requested operation is allowed.
+      const unlocked = userTier === "client" ? directAccess : isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete);
       const active = secondary ? pathname === item.href : navContains(item, pathname);
-      // Only one copy owns each tour target. A closed mobile menu leaves the
-      // desktop target hidden on small screens; the tour uses its readable fallback.
       const targetId = item.targetId && (mobile ? drawerOpen : !drawerOpen) ? item.targetId : undefined;
-      const lockLine = lockedToolLine({ state: onboarding.state, requiresDisclosure: item.requiresDisclosure, disclosureComplete: onboarding.disclosureComplete });
-      const cls = `t-focus flex min-h-[40px] items-center justify-between gap-2 rounded-[4px] border-l-[3px] px-3 py-2 text-sm transition-colors ${secondary ? "font-normal" : "font-medium"} ${active ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]" : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"}`;
-      const previewId = !unlocked ? previewIdForHref(item.href) : null;
+      const lockLine = step?.reason || lockedToolLine({ state: onboarding.state, requiresDisclosure: item.requiresDisclosure, disclosureComplete: onboarding.disclosureComplete });
+      const cls = `t-focus flex min-h-[40px] w-full items-center justify-between gap-2 rounded-[4px] border-l-[3px] px-3 py-2 text-left text-sm transition-colors ${secondary ? "font-normal" : "font-medium"} ${active ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]" : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"}`;
+      const previewId = !unlocked && !guidedLocked ? previewIdForHref(item.href) : null;
       const content = <>
-        <span className="min-w-0"><span className="block">{navItemLabel(item)}</span>{!unlocked && <span className="mt-0.5 block text-[11px] font-normal leading-snug text-t-bone-dim">{lockLine}</span>}</span>
-        {!unlocked && <LockKeyhole size={13} className="shrink-0 opacity-60" aria-hidden="true" />}
+        <span className="min-w-0"><span className="block">{navItemLabel(item)}</span>{step && <span className="mt-0.5 block text-[10px] font-normal leading-snug">{guidedLocked && directAccess ? "Guided stage: " : ""}{progressStateLabel(step)}</span>}{!unlocked && <span className="mt-0.5 block text-[11px] font-normal leading-snug text-t-bone-dim">{lockLine}</span>}</span>
+        {guidedLocked ? <LockKeyhole size={13} className="shrink-0 opacity-70" aria-hidden="true" /> : step?.state === "completed" ? <CheckCircle2 size={14} className="shrink-0 text-[#4f6b57]" aria-hidden="true" /> : !unlocked ? <LockKeyhole size={13} className="shrink-0 opacity-60" aria-hidden="true" /> : null}
       </>;
       return (
         <div key={`${item.href}:${item.label}`}>
-          {unlocked || previewId ? (
+          {guidedLocked && !directAccess && step ? (
+            <button id={targetId} type="button" aria-haspopup="dialog" onClick={() => { onItemClick?.(); progression?.ask(step); }} className={cls} title={lockLine}>{content}</button>
+          ) : unlocked || previewId ? (
             <Link id={targetId} href={unlocked ? item.href : `/dashboard/preview/${previewId}`} onClick={onItemClick}
               data-tour={`nav-${item.href.split("/").pop()}`} aria-current={unlocked && pathname === item.href ? "page" : undefined}
               title={!unlocked ? `${lockLine} See a preview.` : undefined} className={cls}>
@@ -778,6 +768,7 @@ export function RefineryShell({
           ) : (
             <div id={targetId} aria-disabled="true" title={lockLine} className={`${cls} cursor-not-allowed opacity-70`}>{content}</div>
           )}
+          {guidedLocked && directAccess && step ? <button type="button" aria-haspopup="dialog" onClick={() => { onItemClick?.(); progression?.ask(step); }} className="t-focus ml-4 mb-1 flex min-h-touch items-center gap-1.5 text-left text-[11px] text-t-amber-bright underline underline-offset-2"><LockKeyhole size={11} aria-hidden="true" />Ask t.ROY about this stage</button> : null}
           {!secondary && active && item.children && (
             <div aria-label={`${item.label} views`} className="my-1 ml-4 border-l border-t-line pl-1">
               {item.children.filter((child) => shouldShowItem(child, userTier)).map((child) => renderItem(child, true))}
@@ -1107,15 +1098,6 @@ export function RefineryShell({
         )}
       </AssistantDrawer>
 
-      {/* Unlock toast */}
-      {unlockToast && (
-        <div className="fixed bottom-24 sm:bottom-8 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div className="flex items-center gap-2 rounded-[6px] border border-[#b9cdbd] bg-[#e3ede5] px-5 py-3 text-sm font-medium text-[#344b38] shadow-[0_8px_22px_rgba(22,26,21,0.14)]">
-            <Sparkles size={16} aria-hidden="true" />
-            {unlockToast}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

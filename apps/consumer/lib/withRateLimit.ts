@@ -10,6 +10,8 @@
  * - Trusted IP extraction (x-real-ip on Vercel, last x-forwarded-for as fallback)
  */
 
+import { progressionLegacyBonus, checkProgressionTool } from './progression-server';
+import { countsForProgression } from './progression-policy';
 import { runAiOperation } from "./ai-operation-server";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
@@ -134,12 +136,23 @@ export function withRateLimit(
         if (locked) return locked;
       }
 
+      try {
+        const guided = await checkProgressionTool(userId,opts.workflow ?? opts.endpoint);
+        if(guided)return guided;
+      } catch { return NextResponse.json({error:'Tool access could not be checked. Please try again.'},{status:503}); }
       // Atomic: increment first, then check if over limit
       const limit = await getUserDailyLimit(userId);
+      const eligibleBonus = countsForProgression(opts.workflow ?? opts.endpoint);
+      let bonus = 0;
+      if (eligibleBonus) {
+        try { bonus = await progressionLegacyBonus(userId); }
+        catch { return NextResponse.json({error:'Access could not be checked. Please try again.'},{status:503}); }
+      }
       const newCount = await incrementUserUsage(userId, opts.endpoint);
 
       // limit 0 means unlimited (admin/unlimited tier)
-      if (limit !== 0 && newCount > limit) {
+      if (limit !== 0 && newCount > limit + bonus) {
+        await refundUserUsage(userId,opts.endpoint);
         return NextResponse.json(
           { error: RATE_LIMIT_MESSAGE },
           { status: 429 }
@@ -159,7 +172,11 @@ export function withRateLimit(
         });
       }
 
-      return runAiOperation({ userId, endpoint: opts.workflow ?? opts.endpoint }, () => handler(request));
+      try {
+        const response = await runAiOperation({ userId, endpoint: opts.workflow ?? opts.endpoint, legacyOverage:limit!==0 && newCount>limit }, () => handler(request), () => refundUserUsage(userId,opts.endpoint));
+        if (!response.ok) await refundUserUsage(userId,opts.endpoint);
+        return response;
+      } catch(error) { await refundUserUsage(userId,opts.endpoint); throw error; }
     }
 
     // The Forge, signed in: count per account, with per-IP as the floor.

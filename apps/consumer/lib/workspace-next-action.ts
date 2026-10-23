@@ -39,7 +39,7 @@ export function workspaceNextAction({ work, task, profileFirst = false }: {
   switch (chosen) {
     case "interview": return { label: "Practice for your interview", href: "/dashboard/interview" };
     case "support": return { label: "Find help near you", href: "/dashboard/resources#support" };
-    case "explore": return { label: "See job paths", href: "/dashboard/resources#paths" };
+    case "explore": return { label: "See job paths", href: "/dashboard/paths" };
     case "job": return { label: "Pick a job to go after", href: "/dashboard/jobs" };
     case "documents": return documentHref ? { label: "Open this lane’s documents", href: documentHref } : { label: "Choose documents in My resumes", href: "/dashboard/vault" };
     case "resume":
