@@ -201,6 +201,7 @@ export default function DashboardPage() {
         <div className="py-4">
           {pickError && <p role="alert" className="mb-3 text-t-red">{pickError}</p>}
           <TaskPicker
+            tourTargetId="refinery-tool-overview-next"
             current={focus.task}
             busy={picking}
             helpHref="/dashboard/resources#support"

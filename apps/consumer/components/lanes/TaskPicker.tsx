@@ -27,12 +27,14 @@ export function TaskPicker({
   helpHref,
   busy = false,
   headingLevel = 1,
+  tourTargetId,
 }: {
   current?: LaneTask | null;
   onPick: (task: LaneTask) => void;
   helpHref: string;
   busy?: boolean;
   headingLevel?: 1 | 2;
+  tourTargetId?: string;
 }) {
   const [more, setMore] = useState<boolean>(!!current && (OTHER_TASKS as readonly string[]).includes(current));
   const H = headingLevel === 1 ? "h1" : "h2";
@@ -58,10 +60,10 @@ export function TaskPicker({
 
   return (
     <section aria-labelledby="first-screen-title" data-testid="task-picker" className="mx-auto w-full max-w-2xl">
-      <H id="first-screen-title" className="text-2xl font-bold text-t-white sm:text-3xl">
+      <header id={tourTargetId}><H id="first-screen-title" className="text-2xl font-bold text-t-white sm:text-3xl">
         {FIRST_SCREEN_TITLE}
       </H>
-      <p className="mt-1 text-sm text-t-phos-dim">{FIRST_SCREEN_SUBTITLE}</p>
+      <p className="mt-1 text-sm text-t-phos-dim">{FIRST_SCREEN_SUBTITLE}</p></header>
 
       <div className="mt-5 flex flex-col gap-3">{MAIN_TASKS.map((t) => card(t, false))}</div>
 
