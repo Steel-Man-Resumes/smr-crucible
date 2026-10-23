@@ -21,7 +21,6 @@ function artifactUrls(src: string): string[] {
 describe("screens that list resumes ask for no examples", () => {
   const screens: Array<[string, string]> = [
     ["Interview picker", "app/(dashboard)/dashboard/interview/page.tsx"],
-    ["dashboard home (recent work)", "app/(dashboard)/dashboard/page.tsx"],
     ["DashboardResumeCard", "components/DashboardResumeCard.tsx"],
   ];
   for (const [name, file] of screens) {
@@ -31,10 +30,16 @@ describe("screens that list resumes ask for no examples", () => {
       for (const u of urls) assert.match(u, /[?&]examples=hide(&|$)/, u);
     });
   }
-  it("the three keep newest-edit-first (order=recent), as before", () => {
+  it("the remaining artifact pickers keep newest-edit-first (order=recent), as before", () => {
     for (const [, file] of screens) {
       for (const u of artifactUrls(read(file))) assert.match(u, /order=recent/, u);
     }
+  });
+  it("Overview delegates selection to the example-free server context", () => {
+    assert.match(read("app/(dashboard)/dashboard/page.tsx"), /<LaneHome/);
+    assert.match(read("components/lanes/LaneHome.tsx"), /api\/workspace-context/);
+    assert.match(read("lib/assistant-work-context.ts"), /examples: "hide"/);
+    assert.match(read("lib/assistant-work-context.ts"), /artifact\.is_demo/);
   });
   it("the Library keeps its own explicit toggle", () => {
     const v = read("app/(dashboard)/dashboard/vault/page.tsx");
@@ -44,7 +49,7 @@ describe("screens that list resumes ask for no examples", () => {
   it("the artifacts route reads examples and order", () => {
     const r = read("app/api/artifacts/route.ts");
     assert.match(r, /parseExamplesParam\(examplesParam\)/);
-    assert.match(r, /order: orderRecent \? "recent" : undefined/);
+    assert.match(r, /order: artifactOrder/);
     assert.equal(parseExamplesParam("hide"), "hide");
   });
 });

@@ -23,114 +23,19 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { TaskPicker } from "@/components/lanes/TaskPicker";
 import { LaneHome } from "@/components/lanes/LaneHome";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
-import { routeHref, taskNeedsResume } from "@/lib/lane-task";
+import { routeHref } from "@/lib/lane-task";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import { useUserTier } from "@/lib/useUserTier";
-import { useOnboarding, type OnboardingState, type UserContact } from "@/lib/useOnboarding";
-import { JourneyHeader } from "@/components/JourneyHeader";
-import { DashboardResumeCard } from "@/components/DashboardResumeCard";
+import { useOnboarding, type UserContact } from "@/lib/useOnboarding";
 import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
 import { PartnerToolsOverview } from "@/components/PartnerToolsOverview";
-import { WallText } from "@/components/forge/WallText";
 import { OrgDashboard } from "@/components/org/OrgDashboard";
 import { AdminHome } from "@/components/admin/AdminHome";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { TBtn } from "@crucible/consumer-ui";
-import { clientToolUnlocked, lockedToolLine } from "@crucible/core/src/journeyStages";
 
-// ─── Tool definitions ──────────────────────────────────────────────────────
-
-interface ToolCard {
-  href: string;
-  title: string;
-  description: string;
-  color: string;
-  accent: string;
-  /** Minimum onboarding state to unlock */
-  minState: OnboardingState;
-  /** Builds on a disclosure plan, like the sidebar item of the same name. */
-  requiresDisclosure?: boolean;
-}
-
-const ALL_TOOLS: ToolCard[] = [
-  {
-    href: "/dashboard/jobs",
-    title: "Job Board",
-    description: "Real job listings. Employers we checked for hiring people with records are marked.",
-    color: "bg-t-panel border-t-phos",
-    accent: "text-t-phos",
-    minState: "needs_resume",
-  },
-  {
-    href: "/dashboard/application-tailor",
-    title: "Application Tailor",
-    description: "Tailor your resume to a specific job, with a matching cover letter and disclosure brief.",
-    color: "bg-t-panel border-t-steel",
-    accent: "text-t-steel",
-    minState: "needs_resume",
-  },
-  {
-    href: "/dashboard/disclosure",
-    title: "Disclosure Planner",
-    description: "Plan when and how to talk about your record with employers.",
-    color: "bg-t-panel border-t-amber",
-    accent: "text-t-amber-bright",
-    minState: "full_access",
-  },
-  {
-    href: "/dashboard/interview",
-    title: "Interview Practice",
-    description: "Text or live voice mock interviews tailored to your target role.",
-    color: "bg-t-panel border-t-steel",
-    accent: "text-t-steel",
-    minState: "needs_profile",
-    // No disclosure plan needed first (Codex review A6).
-  },
-  {
-    href: "/dashboard/resources",
-    title: "Get support",
-    description: "Local help with rides, ID, housing and food, plus job paths that are realistic with a record.",
-    color: "bg-t-panel border-t-amber",
-    accent: "text-t-amber-bright",
-    // Same as the sidebar: Get support is open from the start.
-    minState: "needs_profile",
-  },
-  {
-    href: "/dashboard/applications",
-    title: "Applications",
-    description: "Track your job applications from saved to offered.",
-    color: "bg-t-panel border-t-phos",
-    accent: "text-t-phos",
-    minState: "needs_profile",
-  },
-  {
-    href: "/dashboard/progress",
-    title: "Progress",
-    description: "See how far you've come.",
-    color: "bg-t-panel border-t-phos",
-    accent: "text-t-phos",
-    minState: "full_access",
-  },
-];
-
-function isToolUnlocked(
-  tool: ToolCard,
-  state: OnboardingState,
-  isAdmin: boolean,
-  disclosureComplete: boolean
-): boolean {
-  if (isAdmin) return true;
-  // Same rule as the sidebar (one gate, two displays).
-  return clientToolUnlocked({
-    state,
-    minState: tool.minState,
-    requiresDisclosure: tool.requiresDisclosure,
-    disclosureComplete,
-  });
-}
-
-// ─── Types ──────────────────────────────────────────────────────────────────
+// Shared fact-history snapshot for a compact progress recap.
 
 interface DashboardData {
   narrative?: { headline?: string; summary?: string };
@@ -149,33 +54,6 @@ const TYPE_LABELS: Record<string, string> = {
   disclosure_plan: "disclosure plans",
   interview_prep: "interview sessions",
 };
-
-const TYPE_TOOL_HREF: Record<string, string> = {
-  resume: "/dashboard/application-tailor",
-  disclosure_plan: "/dashboard/disclosure",
-  interview_prep: "/dashboard/interview",
-  job_match: "/dashboard/jobs",
-  resource_list: "/dashboard/resources",
-};
-
-interface ArtifactSummary {
-  id: string;
-  artifact_type: string;
-  target_context: { targetJob?: string; targetCompany?: string };
-  updated_at: string;
-}
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString();
-}
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
@@ -201,14 +79,14 @@ export default function DashboardPage() {
   // Forge data
   const [forgeData, setForgeData] = useState<DashboardData>({});
   const [artifactCounts, setArtifactCounts] = useState<Record<string, number>>({});
-  const [recentArtifacts, setRecentArtifacts] = useState<ArtifactSummary[]>([]);
 
   // Load Forge output
   useEffect(() => {
     let cancelled = false;
+    setForgeData({});
     async function loadData() {
       try {
-        const res = await fetch("/api/forge/load");
+        const res = await fetch("/api/forge/load", { cache: "no-store" });
         if (res.ok) {
           const { data: profile } = await res.json();
           if (!cancelled && profile?.forgeOutput) {
@@ -231,55 +109,17 @@ export default function DashboardPage() {
     };
   }, [ownerUid]);
 
-  // Load artifact counts
+  // Account totals are labeled across all lanes; they never select a resume.
   useEffect(() => {
-    async function loadArtifacts() {
-      try {
-        const [countsRes, recentRes] = await Promise.all([
-          fetch("/api/artifacts/counts"),
-          fetch("/api/artifacts?limit=5&examples=hide&order=recent"),
-        ]);
-        if (countsRes.ok) {
-          const { data } = await countsRes.json();
-          setArtifactCounts(data || {});
-        }
-        if (recentRes.ok) {
-          const { data } = await recentRes.json();
-          setRecentArtifacts(data || []);
-        }
-      } catch {}
-    }
-    loadArtifacts();
-  }, []);
-
-  const [deletingArtifact, setDeletingArtifact] = useState<string | null>(null);
-
-  async function deleteArtifact(id: string) {
-    setDeletingArtifact(id);
-    try {
-      const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
-      if (res.status === 409) {
-        window.alert(
-          "This is a locked baseline. Unlock it in My resumes before deleting."
-        );
-        return;
-      }
-      if (res.ok) {
-        setRecentArtifacts((prev) => prev.filter((a) => a.id !== id));
-        // Refresh counts
-        const countsRes = await fetch("/api/artifacts/counts");
-        if (countsRes.ok) {
-          const { data } = await countsRes.json();
-          setArtifactCounts(data || {});
-        }
-        onboarding.refresh();
-      }
-    } catch {} finally {
-      setDeletingArtifact(null);
-    }
-  }
-
-  const hasForgeData = !!(forgeData.narrative || forgeData.skills?.length);
+    if (!ownerUid) return;
+    let live = true;
+    setArtifactCounts({});
+    fetch("/api/artifacts/counts", { cache: "no-store" })
+      .then((res) => res.ok ? res.json() : null)
+      .then((body) => { if (live && body?.data) setArtifactCounts(body.data); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [ownerUid]);
   const totalArtifacts = Object.values(artifactCounts).reduce((a, b) => a + b, 0);
 
   // ─── State: Loading ───────────────────────────────────────────────────
@@ -380,318 +220,40 @@ export default function DashboardPage() {
   if (onboarding.state === "needs_profile" && !isAdmin) {
     return (
       <div className="space-y-10">
-        {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} profileFirst={taskNeedsResume(focus.task)} />}
-        <div id="profile-setup" className="scroll-mt-24">
+        {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} profileFirst />}
+        <div id="profile-setup" className="scroll-mt-48">
           <ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} />
         </div>
       </div>
     );
   }
 
-  // ─── State: needs_resume OR full_access ───────────────────────────────
+  // The lane home carries one current resume and one next action. The
+  // navigation holds the tool catalog; saved work stays in its own library.
   return (
-    <div className="space-y-10">
+    <div className="space-y-7">
       <MiniForgeBanner />
-      {/* Lanes first (R2): the lane home, then "All tools" below. */}
-      {focus.task && <LaneHome laneId={focus.laneId} task={focus.task} />}
-      {focus.task && (
-        <h2 id="all-tools" className="border-t border-t-line pt-6 text-lg font-bold text-t-white">
-          All tools
-        </h2>
-      )}
-      <JourneyHeader />
+      {focus.task ? <LaneHome laneId={focus.laneId} task={focus.task} /> : <h1 className="text-2xl font-bold text-t-white">Overview</h1>}
       <MySharedTasks />
       <MySuggestions />
-      {/* Welcome / Narrative */}
-      <section>
-        {hasForgeData ? (
-          <div className="bg-t-panel p-6 sm:p-8 border border-t-line">
-            <h1 className="text-2xl font-bold text-t-white mb-2">
-              {forgeData.narrative?.headline || "Welcome back"}
-            </h1>
-            {forgeData.narrative?.summary && (
-              <p className="text-base text-t-phos-dim leading-relaxed">
-                {forgeData.narrative.summary}
-              </p>
-            )}
+      <SavedJobsPanel heading="Applications to keep moving" limit={3} />
+      {(forgeData.narrative?.summary || forgeData.skills?.length || totalArtifacts > 0) && (
+        <section aria-labelledby="your-foundation-heading" className="border border-t-line bg-t-panel p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="your-foundation-heading" className="text-base font-semibold text-t-white">The work you can build on</h2>
+            <Link href="/dashboard/progress" className="t-focus inline-flex min-h-touch items-center text-sm text-t-amber-bright underline underline-offset-2">Your progress</Link>
           </div>
-        ) : (
-          <div className="max-w-lg mx-auto py-8">
-            {/* t.ROY — clear gate */}
-            <div className="bg-t-panel-2 border border-t-amber p-6 mb-6">
-              <div className="flex items-start gap-4">
-                <div className="w-10 h-10 bg-t-panel border border-t-line flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <svg width="20" height="20" viewBox="0 0 16 16" fill="none" className="text-t-amber">
-                    <path d="M8 1C5.58 1 3 3.13 3 6v4c0 1 .5 2 1 2.5s1 1.5 1 2.5h6c0-1 .5-2 1-2.5S13 11 13 10V6c0-2.87-2.58-5-5-5z" stroke="currentColor" strokeWidth="1.2" fill="none" />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-t-amber-bright mb-1">t.ROY</p>
-                  <p className="text-sm text-t-phos leading-relaxed">
-                    I&apos;m t.ROY, your AI career coach. Build a resume, prepare for an interview,
-                    find work, or work through what is getting in your way. Start with what you
-                    need today. You can practice an interview before building a resume.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-t-panel p-6 sm:p-8 border border-t-line text-center">
-              <h1 className="text-2xl font-bold text-t-white mb-3">
-                Start with The Forge
-              </h1>
-              <p className="text-base text-t-phos-dim mb-6">
-                The Forge reads your work history, finds your strengths, and builds you
-                one strong resume. It is a general resume. The Refinery then makes it fit
-                each job you go after.
-              </p>
-              <Link
-                href="/intro"
-                className="t-focus inline-flex items-center justify-center px-8 py-4 bg-t-amber text-white shadow-[0_3px_8px_rgba(22,26,21,0.15)] text-lg font-bold hover:bg-t-amber-bright transition-colors min-h-touch"
-              >
-                Start The Forge
-              </Link>
-              <p className="text-xs text-t-phos-dim mt-4">
-                <WallText open={<>Free. No account needed until you&apos;re ready to save.</>} up="Free, and it uses the account you are signed in with." />
-              </p>
-              <p className="text-xs text-t-phos-dim mt-2">
-                Already completed The Forge on another device? Your data syncs automatically.
-              </p>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Saved jobs -- the pending-work view (R1). Renders only when the user
-          has saved jobs, so it stays out of a brand-new user's way. This is the
-          entry point for "find the job I already tailored -> dial in -> apply". */}
-      <SavedJobsPanel heading="Your saved jobs" limit={4} />
-
-      {/* The resume itself -- front and center, collapsible */}
-      <DashboardResumeCard />
-
-      {/* Skills snapshot */}
-      {forgeData.skills && forgeData.skills.length > 0 && (
-        <section>
-          <h2 className="text-lg font-bold text-t-white mb-3">Your Skills</h2>
-          <div className="flex flex-wrap gap-2">
-            {forgeData.skills.slice(0, 15).map((s, i) => (
-              <span
-                key={i}
-                className={`px-3 py-1.5 text-sm font-medium border bg-t-panel-2 ${
-                  s.category === "hard"
-                    ? "border-t-steel text-t-steel"
-                    : s.category === "soft"
-                      ? "border-t-amber text-t-amber-bright"
-                      : "border-t-phos text-t-phos"
-                }`}
-              >
-                {s.name}
-              </span>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Career paths */}
-      {forgeData.career_paths && forgeData.career_paths.length > 0 && (
-        <section>
-          <h2 className="text-lg font-bold text-t-white mb-3">Career Paths</h2>
-          <div className="grid min-w-0 sm:grid-cols-2 gap-3">
-            {forgeData.career_paths.slice(0, 4).map((cp, i) => (
-              <div key={i} className="min-w-0 bg-t-panel p-4 border border-t-line">
-                <div className="flex min-w-0 flex-col items-start gap-1">
-                  <h3 className="max-w-full break-words font-semibold text-t-white">{cp.title}</h3>
-                  {cp.salary_range && (
-                    <span className="max-w-full break-words text-xs font-medium text-t-amber-bright">{cp.salary_range}</span>
-                  )}
-                </div>
-                <p className="text-sm text-t-phos-dim mt-1 line-clamp-2">{cp.match_reason}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Saved work */}
-      {totalArtifacts > 0 && (
-        <section>
-          <h2 className="text-lg font-bold text-t-white mb-4">Your Saved Work</h2>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {Object.entries(artifactCounts).map(([type, count]) => (
-              <Link
-                key={type}
-                href={TYPE_TOOL_HREF[type] || "/dashboard"}
-                className="px-3 py-1.5 text-sm font-medium border border-t-line bg-t-panel text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
-              >
-                {count} {TYPE_LABELS[type] || type}
-              </Link>
-            ))}
-          </div>
-          {recentArtifacts.length > 0 && (
-            <div className="space-y-2">
-              {recentArtifacts.map((a) => {
-                const href = TYPE_TOOL_HREF[a.artifact_type]
-                  ? `${TYPE_TOOL_HREF[a.artifact_type]}?id=${a.id}`
-                  : "/dashboard";
-                return (
-                  <div
-                    key={a.id}
-                    className="flex items-center bg-t-panel border border-t-line hover:border-t-phos-dim transition-colors"
-                  >
-                    <Link
-                      href={href}
-                      className="flex-1 px-4 py-3"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium text-t-white truncate">
-                          {a.target_context?.targetJob || TYPE_LABELS[a.artifact_type] || a.artifact_type}
-                        </span>
-                        <span className="text-xs text-t-phos-dim ml-2 flex-shrink-0">{timeAgo(a.updated_at)}</span>
-                      </div>
-                    </Link>
-                    <button
-                      onClick={() => deleteArtifact(a.id)}
-                      disabled={deletingArtifact === a.id}
-                      className="px-3 py-3 text-t-phos-dim hover:text-t-red transition-colors flex-shrink-0 disabled:opacity-50"
-                      title="Delete"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                        <path d="M3 3l8 8M11 3l-8 8" />
-                      </svg>
-                    </button>
-                  </div>
-                );
-              })}
+          {forgeData.narrative?.headline && <p className="mt-1 font-medium text-t-white">{forgeData.narrative.headline}</p>}
+          {forgeData.narrative?.summary && <p className="mt-2 line-clamp-3 text-sm leading-relaxed text-t-phos-dim">{forgeData.narrative.summary}</p>}
+          {!!forgeData.skills?.length && (
+            <div className="mt-3 flex flex-wrap gap-2" aria-label="Skills from your shared history">
+              {forgeData.skills.slice(0, 6).map((skill, index) => <span key={`${skill.name}:${index}`} className="border border-t-line bg-t-panel-2 px-2 py-1 text-xs text-t-phos">{skill.name}</span>)}
             </div>
           )}
+          {totalArtifacts > 0 && <p className="mt-3 text-xs text-t-bone-dim">Saved across all lanes: {Object.entries(artifactCounts).filter(([, count]) => count > 0).map(([type, count]) => `${count} ${TYPE_LABELS[type] || type.replaceAll("_", " ")}`).join(" · ")}.</p>}
         </section>
       )}
-
-      {/* What's Next — contextual suggestions based on what they've done */}
-      {onboarding.state === "full_access" && recentArtifacts.length > 0 && (() => {
-        const latestResume = recentArtifacts.find((a) => a.artifact_type === "resume");
-        const targetJob = latestResume?.target_context?.targetJob;
-        const targetCompany = latestResume?.target_context?.targetCompany;
-        const hasDisclosure = (artifactCounts.disclosure_plan || 0) > 0;
-        const hasInterview = (artifactCounts.interview_prep || 0) > 0;
-
-        if (!targetJob || (hasDisclosure && hasInterview)) return null;
-
-        return (
-          <section className="bg-t-panel border border-t-line p-6">
-            <h2 className="font-semibold text-t-white mb-3">
-              What&apos;s Next
-            </h2>
-            <p className="text-sm text-t-phos-dim mb-4">
-              You built a resume for <span className="font-medium text-t-white">{targetJob}</span>
-              {targetCompany ? <> at <span className="font-medium text-t-white">{targetCompany}</span></> : ""}.
-              Keep preparing:
-            </p>
-            <div className="flex flex-wrap gap-3">
-              {!hasDisclosure && (
-                <Link
-                  href={`/dashboard/disclosure${targetCompany ? `?company=${encodeURIComponent(targetCompany)}` : ""}`}
-                  className="t-focus px-4 py-2.5 bg-t-panel-2 border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
-                >
-                  Plan your disclosure
-                </Link>
-              )}
-              {!hasInterview && (
-                <Link
-                  href={`/dashboard/interview${targetJob ? `?role=${encodeURIComponent(targetJob)}` : ""}`}
-                  className="t-focus px-4 py-2.5 bg-t-panel-2 border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
-                >
-                  Practice {targetJob} interview
-                </Link>
-              )}
-              <Link
-                href="/dashboard/jobs"
-                className="t-focus px-4 py-2.5 bg-t-panel-2 border border-t-line text-sm font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white transition-colors"
-              >
-                Find another job
-              </Link>
-            </div>
-          </section>
-        );
-      })()}
-
-      {/* Tool cards — all visible, locked ones greyed out */}
-      <section>
-        <h2 className="text-lg font-bold text-t-white mb-4">Your Tools</h2>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {ALL_TOOLS.map((tool) => {
-            const unlocked = isToolUnlocked(tool, onboarding.state, isAdmin, onboarding.disclosureComplete);
-            const typeForTool = Object.entries(TYPE_TOOL_HREF).find(
-              ([, href]) => href === tool.href
-            )?.[0];
-            const count = typeForTool ? artifactCounts[typeForTool] : 0;
-
-            if (!unlocked) {
-              // RD4: say plainly why it is locked and what opens it. The title
-              // and description stay quiet; the unlock line does not.
-              const lockLine = lockedToolLine({
-                state: onboarding.state,
-                requiresDisclosure: tool.requiresDisclosure,
-                disclosureComplete: onboarding.disclosureComplete,
-              });
-              return (
-                <div
-                  key={tool.href}
-                  className="p-5 border border-t-line bg-t-panel"
-                >
-                  <div className="flex items-start justify-between gap-2 opacity-60">
-                    <h3 className="font-semibold mb-1 text-t-phos-dim">{tool.title}</h3>
-                    <svg width="14" height="14" viewBox="0 0 12 12" fill="currentColor" className="text-t-phos-dim flex-shrink-0 mt-0.5" aria-hidden="true">
-                      <path d="M9 5V4a3 3 0 10-6 0v1H2v5a1 1 0 001 1h6a1 1 0 001-1V5H9zM4 4a2 2 0 114 0v1H4V4z" />
-                    </svg>
-                  </div>
-                  <p className="text-sm text-t-phos-dim leading-relaxed opacity-60">{tool.description}</p>
-                  <p className="text-xs font-medium text-t-white mt-2">
-                    <span className="sr-only">Locked. </span>
-                    {lockLine}
-                  </p>
-                </div>
-              );
-            }
-
-            return (
-              <Link
-                key={tool.href}
-                href={tool.href}
-                className={`block p-5 border transition-all hover:bg-t-panel-2 ${tool.color}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className={`font-semibold mb-1 ${tool.accent}`}>{tool.title}</h3>
-                  {count > 0 && (
-                    <span className="text-xs font-medium text-t-amber-bright border border-t-amber px-2 py-0.5 flex-shrink-0">
-                      {count} saved
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-t-phos-dim leading-relaxed">{tool.description}</p>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Settings -- get people in early (RT2). Real features only, named. */}
-      <section className="border-t border-t-line pt-8">
-        <h2 className="text-lg font-bold text-t-white mb-1">What Settings lets you do</h2>
-        <ul className="mb-4 mt-2 space-y-1.5 text-sm text-t-bone-dim">
-          <li>Name your coach and pick how direct it is.</li>
-          <li>See the reason behind each suggestion t.ROY made.</li>
-          <li>Choose what a partner organization can see of your progress.</li>
-          <li>Hide employers so they never show up in your job search.</li>
-        </ul>
-        <Link
-          href="/dashboard/settings"
-          className="t-focus inline-flex items-center bg-t-panel px-4 py-3 text-sm font-semibold text-t-white border border-t-line hover:border-t-line-strong transition-colors"
-        >
-          Open Settings
-        </Link>
-      </section>
+      <p className="text-sm text-t-phos-dim">Aiming at another kind of work? <Link href="/dashboard/vault" className="t-focus text-t-amber-bright underline underline-offset-2">Start a lane in My resumes</Link>. Your work history stays together while each goal keeps its own documents.</p>
     </div>
   );
 }

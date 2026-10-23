@@ -9,6 +9,11 @@ import { isUsableResume } from "./writer-changes";
 
 const REPAIRABLE = new Set(["objective", "summary", "generic_summary", "soft_skill_list", "duty_phrasing", "weak_bullet", "bullets", "heading"]);
 
+export function forgeQualityIssueCount(text: string): number {
+  return runQualityCheck(text).filter((finding) => REPAIRABLE.has(finding.rule)).length;
+}
+
+/** Bound model prompt size; use the full count for acceptance and reporting. */
 export function forgeQualityIssues(text: string): Array<{ line: string; why: string }> {
   return runQualityCheck(text)
     .filter((finding) => REPAIRABLE.has(finding.rule))
@@ -25,7 +30,7 @@ const contactLines = (text: string) => text.split("\n").filter((line) => CONTACT
 
 /** The retry may improve wording only. The first checked page remains the fallback. */
 export function acceptForgeQualityRevision(before: string, after: string, source: string): boolean {
-  if (!isUsableResume(after) || forgeQualityIssues(after).length >= forgeQualityIssues(before).length) return false;
+  if (!isUsableResume(after) || forgeQualityIssueCount(after) >= forgeQualityIssueCount(before)) return false;
   if (firstLine(before) !== firstLine(after) || !same(contactLines(before), contactLines(after))) return false;
   if (!same(jobHeaderLines(before), jobHeaderLines(after))) return false;
   if (!same(numbers(before), numbers(after)) || !same(credentials(before), credentials(after))) return false;

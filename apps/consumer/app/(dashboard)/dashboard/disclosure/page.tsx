@@ -17,7 +17,6 @@ import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { CardSelect, FlowPage, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
-import { OnboardingGate } from "@/components/OnboardingGate";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { escapeHtml } from "@/lib/escape-html";
 import { useUserContext } from "@/lib/use-user-context";
@@ -97,9 +96,7 @@ const DISCLOSURE_TIMING = [
 export default function DisclosurePlannerPageWrapper() {
   return (
     <TierGate requiredTier="client">
-      <OnboardingGate toolName="The Disclosure Planner" previewFeature="disclosure">
         <Suspense><DisclosurePlannerPage /></Suspense>
-      </OnboardingGate>
     </TierGate>
   );
 }

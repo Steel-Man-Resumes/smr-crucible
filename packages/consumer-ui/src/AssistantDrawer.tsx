@@ -125,6 +125,7 @@ export function AssistantDrawer({
           The label stays visible so new users can identify the coach. */}
       {(
         <button
+          id="refinery-coach-trigger"
           ref={triggerRef}
           hidden={isOpen}
           style={isOpen ? { display: "none" } : undefined}

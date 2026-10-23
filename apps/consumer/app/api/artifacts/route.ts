@@ -86,10 +86,11 @@ export async function GET(request: Request) {
   const laneIdParam = searchParams.get("laneId");
   const examplesParam = searchParams.get("examples");
   // ?order=recent: newest edit first, without the pinned current resume on top.
-  const orderRecent = searchParams.get("order") === "recent";
+  const order = searchParams.get("order");
+  const artifactOrder = order === "created" ? "created" : order === "recent" ? "recent" : undefined;
   const usesPaged =
     q !== null || lane !== null || groupParam !== null || offsetParam !== null ||
-    laneIdParam !== null || examplesParam !== null;
+    laneIdParam !== null || examplesParam !== null || order !== null;
 
   if (usesPaged) {
     if (groupParam && !isResumeGroup(groupParam)) {
@@ -106,7 +107,7 @@ export async function GET(request: Request) {
       group: groupParam && isResumeGroup(groupParam) ? groupParam : undefined,
       laneId: parseLaneIdParam(laneIdParam),
       examples: parseExamplesParam(examplesParam),
-      order: orderRecent ? "recent" : undefined,
+      order: artifactOrder,
       limit: parsedLimit ? Math.min(parsedLimit, 100) : undefined,
       offset,
     });

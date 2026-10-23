@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from "react";
 import { parsePlace } from "@/lib/support-location";
+import { resourceEvidenceLabel } from "@/lib/directory-labels";
 import { SavedResources } from "./SavedResources";
 
 export const SUPPORT_CATEGORIES: { id: string; label: string }[] = [
@@ -109,7 +110,7 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     if(!id||!/^[0-9a-f-]{36}$/i.test(id))return;let live=true;
     fetch(`/api/directory/resources/${id}`,{cache:"no-store"}).then(async res=>{const body=await res.json();if(!live)return;
       if(!res.ok||!body.data){setError(res.status===404?"That listing is no longer current. Search for current help.":"That listing could not be checked. Try again shortly.");return;}
-      const r=body.data;setAnswer(readSupportResponse({resources:[{id:`dir-${r.service_id}`,title:r.service_name||r.org_name,provider:r.org_name,description:r.description,eligibility:r.eligibility,fees:r.fees,whatToBring:r.what_to_bring,limits:r.limits,phone:r.phone,address:r.address,hours:r.hours,website:r.website,sourceUrl:r.source_url,sourceLabel:"Steel Man's checked directory",checkedLine:`Last checked ${r.last_checked}.`}]}));
+      const r=body.data;const evidence=resourceEvidenceLabel(r.band,r.last_checked,r.band_reason);setAnswer(readSupportResponse({resources:[{id:`dir-${r.service_id}`,title:r.service_name||r.org_name,provider:r.org_name,description:r.description,eligibility:r.eligibility,fees:r.fees,whatToBring:r.what_to_bring,limits:r.limits,phone:r.phone,address:r.address,hours:r.hours,website:r.website,sourceUrl:r.source_url,sourceLabel:evidence.label,checkedLine:evidence.detail,mayBeOutOfDate:evidence.uncertain}]}));
     }).catch(()=>{if(live)setError("That listing could not be checked. Try searching again.");});return()=>{live=false;};
   },[]);
 

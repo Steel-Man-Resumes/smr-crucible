@@ -46,7 +46,7 @@ export async function GET(request: Request) {
   const state = new URL(request.url).searchParams.get("state")?.toUpperCase();
   const selectedId=new URL(request.url).searchParams.get("employerId");
   const selected=selectedId ? await getVerifiedEmployer(selectedId) : null;
-  const result = selected ? {...selected,data:selected.data?[selected.data]:[]} : await searchVerifiedEmployers({ q: q || undefined, industry: industry || undefined, state, page });
+  const result = selected ? {...selected,data:selected.data?[selected.data]:[]} : await searchVerifiedEmployers({ q: q || undefined, industry: industry || undefined, state, page, bands: ["A", "B"] });
   if (result.status !== "ok") return NextResponse.json({ error: result.error }, {status:503, headers:{"Cache-Control":"private, no-store"}});
   const employers = result.data.map(e => ({...e, whyGoodFit:e.evidence ? `What we found: ${e.evidence}` : null,lastVerified:e.checkedAt}));
   if(state && /^[A-Z]{2}$/.test(state) && result.data.length===0 && page===0 && !selectedId) {

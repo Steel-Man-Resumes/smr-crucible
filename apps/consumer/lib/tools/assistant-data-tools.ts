@@ -31,9 +31,9 @@ export function buildDataTools(userId: string, selectedWork?: SelectedWork | nul
   }
   return {
     search_verified_employers: tool({
-      description: "Search published employer evidence, separately from live job openings. Explain location, scope, source, checked/expiry dates and caveats. Never infer acceptance of a person's record.",
+      description: "Search published employer evidence, separately from live job openings. Explain location, scope, source, checked/expiry dates and caveats. Band A carries the mark; band B is reported evidence, not the mark. Explain the returned band and reason. Never infer acceptance of a person's record.",
       parameters: objectSchema<{q?: string; state?: string; industry?: string}>({ q: text, state: { type: "string", minLength: 2, maxLength: 2 }, industry: text }),
-      execute: safe(async (args) => { const result = await (await import("@crucible/core")).searchVerifiedEmployers(args); return { ...result, data: result.data.slice(0, 8), more: result.data.length > 8 }; }),
+      execute: safe(async (args) => { const result = await (await import("@crucible/core")).searchVerifiedEmployers({ ...args, bands: ["A", "B"] }); return { ...result, data: result.data.slice(0, 8), more: result.data.length > 8 }; }),
     }),
     get_verified_employer: tool({
       description: "Read one current published employer by canonical ID. Unavailable/withdrawn evidence is never a recommendation.",
@@ -41,9 +41,9 @@ export function buildDataTools(userId: string, selectedWork?: SelectedWork | nul
       execute: safe(async ({ id }) => (await import("@crucible/core")).getVerifiedEmployer(id)),
     }),
     search_verified_resources: tool({
-      description: "Find published support services for a location and needs the person supplied. Ask only missing eligibility questions. Do not infer location or eligibility from private papers. Empty coverage and lookup failure are different.",
+      description: "Find published support services for a location and needs the person supplied. Ask only missing eligibility questions. Do not infer location or eligibility from private papers. Band A is checked, B is listed and C is found/unconfirmed. Never call B or C checked. Lead with stronger evidence and explain unknown eligibility. Empty coverage and lookup failure are different.",
       parameters: objectSchema<{state: string | null; areas: string[]; countyKeys?: string[]; cityKey?: string; zip?: string}>({ state: { type: ["string", "null"], maxLength: 2 }, areas: { type: "array", items: { type: "string", enum: [...RESOURCE_AREAS] }, minItems: 1, maxItems: 5 }, countyKeys: { type: "array", items: text, maxItems: 5 }, cityKey: text, zip: { type: "string", maxLength: 10 } }, ["state", "areas"]),
-      execute: safe(async (args) => resourceGate(async () => { const result = await (await import("@crucible/core")).searchVerifiedResources(args); return { ...result, data: result.data.slice(0, 8), more: result.data.length > 8 }; })),
+      execute: safe(async (args) => resourceGate(async () => { const result = await (await import("@crucible/core")).searchVerifiedResources({ ...args, bands: ["A", "B", "C"] }); return { ...result, data: result.data.slice(0, 8), more: result.data.length > 8 }; })),
     }),
     get_verified_resource: tool({
       description: "Read current published service contact/apply details, eligibility, fees, documents and limits by canonical ID. Unknown requirements stay unknown. Never invent an appointment or receipt of service.",

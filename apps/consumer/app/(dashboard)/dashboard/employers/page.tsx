@@ -9,10 +9,13 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLanes } from "@/components/lanes/useLanes";
+import { employerEvidenceLabel } from "@/lib/directory-labels";
 import { TierGate } from "@/components/TierGate";
 
 interface Employer {
   id: string;
+  band?: "A" | "B";
+  band_reason?: string;
   name: string;
   industry: string | null;
   location: string | null;
@@ -133,7 +136,7 @@ function EmployersList() {
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">Employers That Hire People With Records</h1>
       <p className="text-t-phos-dim mt-1 mb-4">
-        Employers we checked for hiring people with records. Each one shows where we checked
+        Employers with published hiring evidence. Checked and reported evidence are labeled separately. Each one shows where we looked
         and when, and the words we found. Read the notes. Some have honest caveats.
       </p>
 
@@ -217,7 +220,7 @@ function EmployersList() {
       ) : employers.length === 0 && !error ? (
         <div className="text-center text-t-phos-dim bg-t-panel border border-t-line px-5 py-12">
           {query || industry !== "all"
-            ? "No checked employers match that yet. Try another word, or show all."
+            ? "No employers in the directory match that yet. Try another word, or show all."
             : "No employers carry the mark here yet. Check back soon."}
         </div>
       ) : (
@@ -231,7 +234,7 @@ function EmployersList() {
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-t-phos-dim">
                       {e.industry && <span>{e.industry}</span>}
                       {e.location && <span>{e.location}</span>}
-                      {e.relationshipTier && <span>{e.relationshipTier} employer evidence</span>}
+                      <span>{employerEvidenceLabel(e.band)}</span>
                     </div>
                   </div>
                   {e.applyUrl && (
@@ -246,6 +249,8 @@ function EmployersList() {
                   )}
                 </div>
 
+                {e.band_reason && <p className="mt-2 text-xs text-t-phos-dim">{e.band_reason}</p>}
+                {e.sourceUrl && <a href={e.sourceUrl} target="_blank" rel="noopener noreferrer" className="t-focus mt-2 inline-block text-xs text-t-amber-bright underline">Read the evidence{e.lastVerified ? ` (${e.lastVerified.slice(0, 10)})` : ""}</a>}
                 {e.roleTypes && (
                   <p className="text-sm text-t-phos mt-3">
                     <span className="text-t-phos-dim">Roles: </span>
@@ -357,7 +362,7 @@ function EmployersList() {
           )}
 
           <p className="text-xs text-t-phos-dim mt-6">
-            Verified by the Steel Man team. Always confirm current openings directly with the employer.
+            Evidence describes a reported hiring practice, not a job offer or a decision about your history. Confirm current openings directly with the employer.
           </p>
         </>
       )}

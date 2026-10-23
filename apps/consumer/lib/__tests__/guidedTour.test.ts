@@ -59,13 +59,14 @@ test("a request still opens when the tour state could not be read", () => {
   assert.equal(isTourVisible({ ...base, state: FALLBACK_TOUR_STATE, requested: true }), true);
 });
 
-test("defer is offered only on a first run with deferrals left; replay gets a close", () => {
+test("pause and close remain available on first run and replay", () => {
   assert.equal(canDeferTour(fresh), true);
-  assert.equal(canDeferTour({ ...fresh, tourDeferrals: 2 }), false);
-  assert.equal(canDeferTour(done), false);
+  assert.equal(canDeferTour({ ...fresh, tourDeferrals: 2 }), true);
+  assert.equal(canDeferTour(done), true);
   assert.equal(canDeferTour(null), false);
   assert.equal(canCloseTour(done), true);
-  assert.equal(canCloseTour(fresh), false);
+  assert.equal(canCloseTour(fresh), true);
+  assert.equal(canCloseTour(null), false);
 });
 
 test("progress arc: Foundation is not current once the Forge is done", () => {

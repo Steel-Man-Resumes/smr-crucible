@@ -2,6 +2,14 @@
 
 A dated, high-level history of what shipped, built from the commit log. Product facts only.
 
+## Unreleased: Guided Refinery workspace
+
+- Organize participant navigation into six destinations with a shared goal, document and next action. Keep resume versions in creation order and make additional career directions optional lanes.
+- Introduce a skippable, resumable t.ROY tour with keyboard support, reduced motion, a small illustrative celebration and the next action from saved work.
+- Preserve the selected application through interview practice and keep interview invitations visible after returning to Overview. Distinguish submitted snapshots from editable resumes.
+- Strengthen supported duty wording without inventing responsibility, and retain disclosure choices through final wording cleanup.
+- Use evidence-specific directory labels and focused coaching for employment, independent work, trades, creative records and CVs. Keep omitted records outside the coach's visible-document context.
+
 ## Unreleased: Forge return, writing and Refinery fit
 
 - Keep returning users in unfinished Forge work instead of routing them away merely because they chose a task. Refresh verified sign-in claims before continuing to saved work.

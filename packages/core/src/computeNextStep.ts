@@ -45,6 +45,7 @@ export function deadlineStep(p: UserProfile, now: number = Date.now()): NextStep
   if (interview) {
     const where = interview.company?.trim() || interview.jobTitle?.trim() || "your interview";
     const q = new URLSearchParams();
+    q.set("applicationId", interview.id);
     if (interview.jobTitle?.trim()) q.set("role", interview.jobTitle.trim());
     if (interview.company?.trim()) q.set("company", interview.company.trim());
     const qs = q.toString();

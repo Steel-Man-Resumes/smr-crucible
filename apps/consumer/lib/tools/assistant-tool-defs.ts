@@ -80,7 +80,7 @@ export function resolveAssistantPage(
   if (!href) return null;
   const query = new URLSearchParams();
   if (["application-tailor", "disclosure", "interview", "applications", "documents"].includes(page)) {
-    if (jobApplicationId && /^[a-zA-Z0-9-]+$/.test(jobApplicationId)) query.set("job", jobApplicationId);
+    if (jobApplicationId && /^[a-zA-Z0-9-]+$/.test(jobApplicationId)) query.set(page === "interview" ? "applicationId" : "job", jobApplicationId);
     if (selection?.laneId === null) query.set("laneId", "main");
     for (const field of ["laneId", "artifactId", "revisionId"] as const) {
       const value = selection?.[field];

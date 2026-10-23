@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { acceptForgeQualityRevision, forgeQualityIssues } from "../forge-quality-pass";
+import { acceptForgeQualityRevision, forgeQualityIssues, forgeQualityIssueCount } from "../forge-quality-pass";
 
 const source = `MORGAN SAMPLE
 WORK EXPERIENCE
@@ -42,4 +42,14 @@ test("the writing pass keeps the person's contact line", () => {
 test("a missing career summary is included in the writing repair request", () => {
   const bare = "MORGAN SAMPLE\nPROFESSIONAL EXPERIENCE\nWarehouse Associate | Midstate Distribution | 8/2021 - Present\n- Loaded trucks and moved 40 pallets a night with a pallet jack.";
   assert.ok(forgeQualityIssues(bare).some((finding) => /summary/i.test(finding.why)));
+});
+
+test("acceptance compares every finding when both repair prompts are capped at six", () => {
+  const bodies = "ABCDEFGH".split("").map((dock) => `- Responsible for loading trucks at dock ${dock}.`);
+  const before = header + bodies.join("\n");
+  const after = before.replace("Responsible for loading trucks at dock A.", "Load trucks at dock A.");
+  assert.equal(forgeQualityIssues(before).length, 6);
+  assert.equal(forgeQualityIssues(after).length, 6);
+  assert.equal(forgeQualityIssueCount(before) - forgeQualityIssueCount(after), 1);
+  assert.equal(acceptForgeQualityRevision(before, after, before), true);
 });

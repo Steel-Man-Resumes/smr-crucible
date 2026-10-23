@@ -6,10 +6,8 @@
  * practice records. Reuses the refinery_artifact store (private to the account,
  * encrypted at rest). View, save as PDF, or delete; resumes open in the builder.
  *
- * Resumes sub-group into Masters (locked baselines), Company variants (tailored
- * to a company), and Other -- derived with the pure resolveResumeGroup() helper
- * so the client bucket matches the server count. Search is server-side
- * (?q=, debounced); sections are collapsible.
+ * Resumes appear in creation order within the selected lane. Related outputs
+ * are available separately. Search is server-side (?q=, debounced).
  *
  * The document Vault (uploaded files: IDs, certificates, references) is a
  * SEPARATE page at /dashboard/documents.
@@ -21,19 +19,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { formatResumeDownload, type ResumeDocument } from "@/components/resume/resumeModel";
 import { printResumePdf } from "@/components/resume/resumePrint";
-import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
-import { resolveResumeGroup, type ResumeGroup } from "@crucible/core/src/libraryGroupingShared";
 import { MAIN_LANE_KEY } from "@crucible/core/src/careerLaneShared";
 import { useLanes } from "@/components/lanes/useLanes";
 import { LaneSwitcher } from "@/components/lanes/LaneSwitcher";
 import { LaneIntro } from "@/components/lanes/LaneIntro";
 import { laneFilterParam, laneIdForSave, MAIN_LANE_LABEL, type LibraryLaneChoice } from "@/lib/lanes";
-
-const RESUME_GROUP_LABELS: { key: ResumeGroup; label: string }[] = [
-  { key: "masters", label: "Masters (locked baselines)" },
-  { key: "company", label: "Company variants" },
-  { key: "other", label: "Other resumes" },
-];
 
 interface Artifact {
   id: string;
@@ -51,6 +41,7 @@ interface Artifact {
   lane_id?: string | null;
   is_demo?: boolean;
   updated_at: string;
+  created_at: string;
 }
 
 const GROUPS: { type: string; label: string }[] = [
@@ -144,6 +135,10 @@ export default function VaultPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [showRelated, setShowRelated] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const requestSequence = useRef(0);
+  const visibleScope = useRef("");
   const [total, setTotal] = useState(0);
   const [pinning, setPinning] = useState<string | null>(null);
   // R6: lock a resume as an approved per-lane baseline.
@@ -172,24 +167,32 @@ export default function VaultPage() {
   const [moving, setMoving] = useState<string | null>(null);
 
   const PAGE = 100;
+  const scope = `${laneFilter}:${showRelated}:${q}`;
+  visibleScope.current = scope;
 
   // Server-side search + pagination. A blank query loads the first page; a query
   // hits ?q= so search covers everything, not just the loaded page.
   const load = useCallback((query: string, offset = 0, append = false) => {
-    const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset), examples: "hide" });
+    const sequence = ++requestSequence.current;
+    const requestedScope = visibleScope.current;
+    const current = () => sequence === requestSequence.current && requestedScope === visibleScope.current;
+    setLoadError("");
+    const params = new URLSearchParams({ limit: String(PAGE), offset: String(offset), examples: "hide", order: "created" });
+    if (!showRelated) params.set("type", "resume");
     if (query.trim()) params.set("q", query.trim());
     const laneParam = laneFilterParam(laneFilter);
     if (laneParam) params.set("laneId", laneParam);
     return fetch(`/api/artifacts?${params.toString()}`)
-      .then((r) => (r.ok ? r.json() : { items: [], total: 0 }))
+      .then((r) => { if (!r.ok) throw new Error("load_failed"); return r.json(); })
       .then((d) => {
+        if (!current()) return;
         const rows = d.items || d.data || [];
         setItems((prev) => (append ? [...prev, ...rows] : rows));
         setTotal(typeof d.total === "number" ? d.total : rows.length);
       })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [laneFilter]);
+      .catch(() => { if (current()) setLoadError("Your saved work could not be loaded. Please try again."); })
+      .finally(() => { if (current()) setLoading(false); });
+  }, [laneFilter, showRelated]);
 
   const loadExamples = useCallback(() => {
     fetch("/api/artifacts?examples=only&limit=100")
@@ -201,6 +204,10 @@ export default function VaultPage() {
   // Initial load (once the lane is known), and again when the lane changes.
   useEffect(() => {
     if (laneFilterState === null) return;
+    setItems([]);
+    setTotal(0);
+    setExpanded(null);
+    setLoading(true);
     load(q);
   }, [load, laneFilterState]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -220,6 +227,7 @@ export default function VaultPage() {
         body: JSON.stringify({ laneId }),
       });
       if (res.ok) {
+        window.dispatchEvent(new Event("resume-saved"));
         const name = laneId ? lanes.lanes.find((l) => l.id === laneId)?.name : MAIN_LANE_LABEL;
         setStatusMsg(`Moved to ${name}.`);
         setMoveChoice((m) => {
@@ -250,6 +258,7 @@ export default function VaultPage() {
         body: JSON.stringify({ isDemo }),
       });
       if (res.ok) {
+        window.dispatchEvent(new Event("resume-saved"));
         setStatusMsg(isDemo ? "Moved to examples." : "Back in My resumes.");
         if (isDemo) {
           setItems((prev) => prev.filter((x) => x.id !== a.id));
@@ -308,6 +317,7 @@ export default function VaultPage() {
         body: JSON.stringify({ setCurrent: makeCurrent }),
       });
       if (res.ok) {
+        window.dispatchEvent(new Event("resume-saved"));
         // Locally mirror the "one current per user" invariant.
         setItems((prev) =>
           prev.map((a) =>
@@ -317,7 +327,8 @@ export default function VaultPage() {
           )
         );
       }
-    } catch {} finally {
+      else setStatusMsg("Your current resume choice did not save. Try again.");
+    } catch { setStatusMsg("Your current resume choice did not save. Try again."); } finally {
       setPinning(null);
     }
   }
@@ -334,6 +345,7 @@ export default function VaultPage() {
         body: JSON.stringify(lock ? { lock: true, lane: lane || null } : { lock: false }),
       });
       if (res.ok) {
+        window.dispatchEvent(new Event("resume-saved"));
         const { data } = await res.json();
         setItems((prev) =>
           prev.map((a) => (a.id === id ? { ...a, is_locked: data.is_locked, lane: data.lane } : a))
@@ -495,6 +507,7 @@ ${body}
     try {
       const res = await fetch(`/api/artifacts/${id}`, { method: "DELETE" });
       if (res.ok) {
+        window.dispatchEvent(new Event("resume-saved"));
         setItems((prev) => prev.filter((x) => x.id !== id));
         setTotal((t) => Math.max(0, t - 1));
         setStatusMsg("Item deleted.");
@@ -770,21 +783,19 @@ ${body}
   // the loaded page (also keeps the pinned resume surfaced on its own).
   const query = q.trim().toLowerCase();
   const filtered = query ? items.filter((a) => haystack(a).includes(query)) : items;
-  const currentResume = filtered.find((a) => a.artifact_type === "resume" && a.is_current) || null;
+  const currentResume = filtered.find((a) => a.artifact_type === "resume") || null;
 
   const resumes = filtered.filter(
-    (a) => a.artifact_type === "resume" && !(a.is_current && a === currentResume)
+    (a) => a.artifact_type === "resume" && a !== currentResume
   );
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white">My resumes</h1>
       <p className="text-t-phos-dim mt-1 mb-6">
-        Everything you have created, in one place. Private to your account and never shared
-        unless you choose to. Pin your current resume, lock an approved baseline for each
-        career lane (so tailoring sharpens it without ever downgrading it), save anything as a
-        PDF or Word file, or delete it, anytime. Uploaded documents like your ID, certificates,
-        and reference letters live in your <Link href="/dashboard/documents" className="text-t-amber-bright hover:text-t-amber font-medium">Private documents</Link>.
+        Start with your first resume, then follow the versions you create for each job.
+        Your currently selected resume is labeled on its card. Change lanes to see work for another goal.
+        Uploaded evidence and certificates stay in <Link href="/dashboard/documents" className="text-t-amber-bright underline">Private documents</Link>.
       </p>
 
       {/* Career lanes (074): which lane's work is shown. */}
@@ -794,20 +805,17 @@ ${body}
           value={laneFilter}
           includeAll
           label="Showing"
-          onChange={(c) => {
-            setLaneFilter(c);
-            if (c !== "all") lanes.setActive(c);
+          onChange={async (c) => {
+            if (c === "all" || await lanes.setActive(c)) setLaneFilter(c);
           }}
         />
         <LaneIntro lanes={lanes} tool="library" laneId={laneIdForSave(laneFilter)} />
       </div>
 
-      {/* Saved jobs surfaced here too (R1) -- "my stuff" is where people look for
-          them. Renders nothing when there are none. */}
-      <div className="mb-8">
-        <SavedJobsPanel heading="Your saved jobs" limit={5} />
-      </div>
-
+      <button type="button" aria-pressed={showRelated} onClick={() => setShowRelated((v) => !v)} className="t-focus mb-4 min-h-touch text-sm text-t-amber-bright underline">
+        {showRelated ? "Show resumes only" : "Show related letters, plans and practice"}
+      </button>
+      {loadError && <div role="alert" className="mb-4 border border-t-amber p-4 text-t-phos"><p>{loadError}</p><button type="button" onClick={() => load(q)} className="t-focus min-h-touch underline">Try again</button></div>}
       <p aria-live="polite" role="status" className="mb-2 min-h-[1rem] text-xs text-t-phos-dim" data-testid="library-status">{statusMsg}</p>
 
       {items.length === 0 && !query ? (
@@ -822,7 +830,7 @@ ${body}
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search your library by job, company, or text"
+              placeholder="Search your library by job or company"
               className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
@@ -836,37 +844,24 @@ ${body}
             </div>
           )}
 
-          {/* N4: the pinned current resume, surfaced first. */}
+          {/* The first resume in this lane, independent of pinning. */}
           {currentResume && (
             <section className="mb-8">
               <h2 className="text-sm font-semibold uppercase text-t-amber-bright mb-3">
-                Current Resume
+                {query ? "First matching resume" : "Starting resume"}
               </h2>
               {renderCard(currentResume)}
             </section>
           )}
 
           <div className="space-y-8">
-            {/* Resumes: sub-grouped into Masters / Company variants / Other via
-                the pure resolveResumeGroup() helper. */}
-            {resumes.length > 0 &&
-              RESUME_GROUP_LABELS.map(({ key, label }) => {
-                const group = resumes.filter((a) => resolveResumeGroup(a) === key);
-                if (group.length === 0) return null;
-                return (
-                  <CollapsibleSection
-                    key={`resume-${key}`}
-                    sectionKey={`resume-${key}`}
-                    label={label}
-                    count={group.length}
-                  >
-                    {group.map((a) => renderCard(a))}
-                  </CollapsibleSection>
-                );
-              })}
+            {/* Later resumes retain creation order. */}
+            {resumes.length > 0 && <CollapsibleSection sectionKey="later-resumes" label="Later resumes, in the order you made them" count={resumes.length}>
+              {resumes.map((a) => renderCard(a))}
+            </CollapsibleSection>}
 
             {/* All the non-resume artifact types, each its own collapsible group. */}
-            {GROUPS.filter((g) => g.type !== "resume").map((g) => {
+            {showRelated && GROUPS.filter((g) => g.type !== "resume").map((g) => {
               const group = filtered.filter((a) => a.artifact_type === g.type);
               if (group.length === 0) return null;
               return (

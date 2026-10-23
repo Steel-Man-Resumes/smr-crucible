@@ -78,9 +78,11 @@ test("the dashboard asks first, then becomes the lane home with All tools second
   const picker = d.indexOf("<TaskPicker");
   const profile = d.indexOf("<ProfileSetup contact");
   assert.ok(picker > 0 && profile > picker, "the question comes before the profile form");
-  const home = d.indexOf("{focus.task && <LaneHome laneId={focus.laneId} task={focus.task} />}\n      {focus.task && (");
-  const tools = d.indexOf("All tools\n        </h2>");
-  assert.ok(home > 0 && tools > home, "lane home first, All tools second");
+  const home = d.indexOf("{focus.task ? <LaneHome");
+  const work = d.indexOf("<SavedJobsPanel");
+  assert.ok(home > 0 && work > home, "current goal precedes saved applications");
+  assert.doesNotMatch(d, /All tools\n/);
+  assert.match(read("app/(dashboard)/RefineryShell.tsx"), /refinery-nav-jobs/);
 });
 
 // ---- the lane header --------------------------------------------------------------
@@ -93,7 +95,7 @@ test("lane header: 'Working toward: <target or a job> · Today: <task>', with Ch
   assert.match(h, /Today:/);
   assert.match(h, /Change/);
   assert.match(read("app/(forge)/ForgeShell.tsx"), /<ForgeLaneHeader \/>/);
-  assert.match(read("app/(dashboard)/RefineryShell.tsx"), /<RefineryLaneHeader \/>/);
+  assert.match(read("app/(dashboard)/RefineryShell.tsx"), /<RefineryLaneHeader state=\{onboarding.state\} \/>/);
 });
 
 // ---- routes -----------------------------------------------------------------------
@@ -440,7 +442,7 @@ test("Check and finish appears on the lane home, My resumes and the Tailor resul
 
 test("Refinery names: Get support, My resumes, Private documents; every tool still in the nav", () => {
   const shell = read("app/(dashboard)/RefineryShell.tsx");
-  for (const label of ["Get support", "My resumes", "Private documents", "Job Board", "Applications", "Application Tailor", "Creative Work", "CV", "Performer", "Disclosure", "Interview Prep", "Progress"]) {
+  for (const label of ["Support & disclosure", "My resumes", "Private documents", "Find work", "Applications", "Tailor for a job", "Creative work", "CV", "Performer page", "Disclosure plan", "Interview prep", "Progress"]) {
     assert.ok(shell.includes(`label: "${label}"`), label);
   }
   for (const old of ['label: "Job Paths"', 'label: "Library"', 'label: "Vault"']) assert.ok(!shell.includes(old), old);

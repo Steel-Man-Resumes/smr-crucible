@@ -35,3 +35,15 @@ it("client convenience does not weaken server validation for explicit document o
  }
  assert.throws(()=>readWorkSelection(assistantClientSelection({applicationId:"invalid"},new URLSearchParams(),remembered)),/invalid_selection/);
 });
+
+it("interview and editor links select actual saved work without stale lane", () => {
+ assert.deepEqual(assistantClientSelection(undefined,new URLSearchParams({applicationId:selected}),remembered,"/dashboard/interview"),{applicationId:selected});
+ assert.deepEqual(assistantClientSelection(undefined,new URLSearchParams({id:selected}),remembered,"/dashboard/application-tailor"),{artifactId:selected});
+ assert.deepEqual(assistantClientSelection(undefined,new URLSearchParams({id:selected}),remembered,"/dashboard/settings"),{});
+ for (const kind of ["cv","creative","performer"]) assert.deepEqual(assistantClientSelection(undefined,new URLSearchParams({lane:explicit}),remembered,`/dashboard/${kind}`),{laneId:explicit});
+});
+
+it("Refinery uses account focus instead of stale browser lane convenience", () => {
+ assert.deepEqual(assistantClientSelection(undefined,new URLSearchParams(),remembered,"/dashboard"),{});
+ assert.deepEqual(assistantClientSelection(undefined,new URLSearchParams(),remembered,"/dashboard/vault"),{});
+});

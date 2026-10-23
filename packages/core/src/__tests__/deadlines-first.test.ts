@@ -71,7 +71,11 @@ test("an interview coming up beats every lesson, the mandatory tour and the Forg
     assert.equal(r.reason, "interview_upcoming");
     assert.equal(r.stage, 5);
     assert.equal(r.action, "Get ready for your interview at Sample Diner");
-    assert.equal(r.href, "/dashboard/interview?role=Line+Cook&company=Sample+Diner");
+    const link = new URL(r.href, "https://example.test");
+    assert.equal(link.pathname, "/dashboard/interview");
+    assert.equal(link.searchParams.get("applicationId"), interviewing[0].id);
+    assert.equal(link.searchParams.get("role"), "Line Cook");
+    assert.equal(link.searchParams.get("company"), "Sample Diner");
   }
 });
 
@@ -91,7 +95,7 @@ test("a follow-up in the future is not due", () => {
 test("no company: plain words, no broken query", () => {
   const r = deadlineStep(mkProfile({ savedJobs: [job({ status: "interviewing", company: "", jobTitle: "" })] }), NOW)!;
   assert.equal(r.action, "Get ready for your interview");
-  assert.equal(r.href, "/dashboard/interview");
+  assert.equal(r.href, "/dashboard/interview?applicationId=j1");
 });
 
 test("disclosure is optional: 'I don't need this now' skips it for 30 days, then it may come back", () => {

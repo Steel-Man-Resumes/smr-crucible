@@ -8,9 +8,13 @@
  * be brought back.
  */
 
-import { useId, useState } from "react";
-import type { CareerLane, LaneLength } from "@crucible/core/src/careerLaneShared";
-import { LANE_LENGTHS, MAIN_LANE_KEY } from "@crucible/core/src/careerLaneShared";
+import { useEffect, useId, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { LANE_GOAL_PRESETS, laneToolHref } from "@/lib/lane-goals";
+import { CV_TYPE_COPY } from "@crucible/core/src/cvShared";
+import type { CareerLane, LaneLength, CvType } from "@crucible/core/src/careerLaneShared";
+import { CV_TYPES, LANE_LENGTHS, MAIN_LANE_KEY, laneKindOf } from "@crucible/core/src/careerLaneShared";
 import {
   FACTS_CARRY_COPY,
   FORMAT_COPY,
@@ -50,9 +54,17 @@ export function LaneSwitcher({
   includeAll?: boolean;
   label?: string;
 }) {
+  const router = useRouter();
   const selectId = useId();
   const [panel, setPanel] = useState<Panel>(null);
+  const [openingLane, setOpeningLane] = useState<CareerLane | null>(null);
   const shownLane = api.lanes.find((l) => l.id === value) ?? null;
+  useEffect(() => {
+    if (!openingLane || api.switching || api.error || api.active !== openingLane.id) return;
+    const href = laneToolHref(laneKindOf(openingLane), openingLane.id);
+    if (href) router.push(href);
+    setOpeningLane(null);
+  }, [openingLane, api.switching, api.error, api.active, router]);
 
   if (!api.loaded) {
     return <div className="h-12 border border-t-line bg-t-panel" aria-hidden="true" />;
@@ -61,6 +73,7 @@ export function LaneSwitcher({
   return (
     <section data-testid="lane-switcher" aria-label="Career lanes" className="border border-t-line bg-t-panel p-3 sm:p-4">
       {api.error && <p role="alert" className="mb-2 text-sm text-t-red">{api.error} <button type="button" onClick={() => void api.refresh()} className="underline">Reload</button></p>}
+      {openingLane && <p role="status" className="mb-2 text-sm text-t-phos-dim">{api.error ? <>The lane was created. <button type="button" onClick={() => void api.setActive(openingLane.id)} className="t-focus min-h-touch text-t-amber-bright underline">Try opening it again</button></> : "Opening your lane..."}</p>}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-2">
         <label htmlFor={selectId} className="shrink-0 text-xs font-mono uppercase tracking-wide text-t-phos-dim">
@@ -113,7 +126,7 @@ export function LaneSwitcher({
       {shownLane && panel !== "edit" && (
         <p className="mt-2 text-xs text-t-phos-dim" data-testid="lane-summary">
           {shownLane.target_role ? `Aiming at ${shownLane.target_role}. ` : ""}
-          {formatSummaryLabel(shownLane.format)}. {LENGTH_COPY[shownLane.length_pref].label}.
+          {laneKindOf(shownLane) === "resume" ? `${formatSummaryLabel(shownLane.format)}. ${LENGTH_COPY[shownLane.length_pref].label}.` : `${LANE_GOAL_PRESETS.find((goal) => goal.kind === laneKindOf(shownLane))?.label || "Documents"} lane.`}
         </p>
       )}
 
@@ -123,7 +136,9 @@ export function LaneSwitcher({
           onCreated={(lane) => {
             setPanel(null);
             api.adoptLane(lane);
-            onChange(lane.id);
+            const toolHref = laneToolHref(lane.kind || "resume", lane.id);
+            if (toolHref) setOpeningLane(lane);
+            else onChange(lane.id);
           }}
         />
       )}
@@ -185,6 +200,9 @@ const inputCls =
   "t-focus w-full min-h-touch bg-t-bg border border-t-line px-3 py-2 text-sm text-t-white focus:border-t-steel focus:outline-none";
 
 function NewLaneForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: (lane: CareerLane) => void }) {
+  const [goalId, setGoalId] = useState("employment");
+  const goal = LANE_GOAL_PRESETS.find((preset) => preset.id === goalId) || LANE_GOAL_PRESETS[0];
+  const [cvType, setCvType] = useState<CvType>("academic");
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [busy, setBusy] = useState(false);
@@ -198,21 +216,37 @@ function NewLaneForm({ onCancel, onCreated }: { onCancel: () => void; onCreated:
         if (busy) return;
         setBusy(true);
         setError("");
-        const r = await send("/api/lanes", "POST", { name, targetRole: target });
+        const r = await send("/api/lanes", "POST", { name: name.trim() || goal.name, targetRole: target, kind: goal.kind, ...(goal.kind === "cv" ? { cvType } : {}) });
         setBusy(false);
         if (r.ok) onCreated(r.lane);
         else setError(r.message);
       }}
     >
-      <p className="text-sm text-t-phos">{FACTS_CARRY_COPY}</p>
+      <h3 className="font-semibold text-t-white">What are you working toward?</h3>
+      <p className="text-sm text-t-phos">{FACTS_CARRY_COPY} A lane holds one goal and its documents. Format stays inside the lane.</p>
+      <label className="block text-sm text-t-white">
+        Your goal
+        <select className={`${inputCls} mt-1`} value={goalId} onChange={(e) => setGoalId(e.target.value)} disabled={busy} data-testid="lane-goal">
+          {LANE_GOAL_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+        </select>
+      </label>
+      <p className="text-sm text-t-phos-dim" data-testid="lane-goal-description">{goal.description}</p>
+      {goal.kind === "cv" && <label className="block text-sm text-t-white">
+        CV type
+        <select className={`${inputCls} mt-1`} value={cvType} onChange={(e) => setCvType(e.target.value as CvType)} disabled={busy}>
+          {CV_TYPES.map((type) => <option key={type} value={type}>{CV_TYPE_COPY[type].label}</option>)}
+        </select>
+      </label>}
+      <label className="block text-sm text-t-white">
+        What work are you aiming at? <span className="text-t-phos-dim">(optional)</span>
+        <input className={`${inputCls} mt-1`} value={target} maxLength={200} placeholder={goal.example} onChange={(e) => setTarget(e.target.value)} disabled={busy} />
+      </label>
       <label className="block text-sm text-t-white">
         Lane name
-        <input className={`${inputCls} mt-1`} value={name} maxLength={60} placeholder="Kitchen" onChange={(e) => setName(e.target.value)} required />
+        <input className={`${inputCls} mt-1`} value={name} maxLength={60} placeholder={goal.name} onChange={(e) => setName(e.target.value)} disabled={busy} />
+        <span className="mt-1 block text-xs text-t-phos-dim">Leave blank to use “{goal.name}”.</span>
       </label>
-      <label className="block text-sm text-t-white">
-        What kind of job?
-        <input className={`${inputCls} mt-1`} value={target} maxLength={200} placeholder="Line cook" onChange={(e) => setTarget(e.target.value)} />
-      </label>
+      <p className="text-xs text-t-phos-dim">Caregiving, returning to work and gaps in work can be part of a conversation with t.ROY. Use the goal you choose for your lane name.</p>
       {error && <p className="text-sm text-t-red" role="alert">{error}</p>}
       <div className="flex gap-2">
         <button type="submit" disabled={busy} className="t-focus min-h-touch px-4 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50">
@@ -243,6 +277,8 @@ function EditLaneForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const resumeLane = laneKindOf(lane) === "resume";
+  const documentHref = laneToolHref(laneKindOf(lane), lane.id);
 
   return (
     <form
@@ -258,7 +294,7 @@ function EditLaneForm({
         const r = await send(`/api/lanes/${lane.id}`, "PATCH", {
           name,
           targetRole: target,
-          lengthPref: length,
+          ...(resumeLane ? { lengthPref: length } : {}),
         });
         setBusy(false);
         if (r.ok) onSaved();
@@ -270,10 +306,11 @@ function EditLaneForm({
         <input className={`${inputCls} mt-1`} value={name} maxLength={60} onChange={(e) => setName(e.target.value)} required />
       </label>
       <label className="block text-sm text-t-white">
-        What kind of job?
+        What work are you aiming at?
         <input className={`${inputCls} mt-1`} value={target} maxLength={200} onChange={(e) => setTarget(e.target.value)} />
       </label>
 
+      {resumeLane ? <>
       <section className="space-y-2" data-testid="lane-format" aria-labelledby="lane-format-heading">
         <h3 id="lane-format-heading" className="text-sm font-semibold text-t-white">Resume format</h3>
         <div className="border border-t-line p-3">
@@ -296,6 +333,7 @@ function EditLaneForm({
           </label>
         ))}
       </fieldset>
+      </> : documentHref ? <p className="text-sm text-t-phos-dim">This lane’s document choices are in <Link href={documentHref} className="t-focus text-t-amber-bright underline underline-offset-2">its own workspace</Link>.</p> : null}
 
       {error && <p className="text-sm text-t-red" role="alert">{error}</p>}
       <div className="flex flex-wrap gap-2">

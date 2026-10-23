@@ -115,7 +115,7 @@ export function taskNeedsResume(task: LaneTask | null | undefined): boolean {
  * and performer documents. "A person needing food or transport should not
  * have to finish a resume to find it" (Codex C).
  */
-export const OPEN_WITHOUT_RESUME = ["/dashboard/help","/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
+export const OPEN_WITHOUT_RESUME = ["/dashboard/documents", "/dashboard/vault", "/dashboard/employers", "/dashboard/progress", "/dashboard/disclosure", "/dashboard/help","/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
 
 /**
  * The Refinery sends a person with no Forge resume to the Forge's first

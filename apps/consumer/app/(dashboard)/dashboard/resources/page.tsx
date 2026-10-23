@@ -51,6 +51,13 @@ export default function SecondChanceBoardPageWrapper() {
 }
 
 function SecondChanceBoardPage() {
+  const [pathsOpen, setPathsOpen] = useState(false);
+  useEffect(() => {
+    const reveal = () => { if (window.location.hash === "#paths") setPathsOpen(true); };
+    reveal();
+    window.addEventListener("hashchange", reveal);
+    return () => window.removeEventListener("hashchange", reveal);
+  }, []);
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [query, setQuery] = useState("");
   const [careerTitles, setCareerTitles] = useState<string[]>([]);
@@ -133,19 +140,22 @@ function SecondChanceBoardPage() {
           Get support
         </h1>
         <p className="text-base text-t-phos-dim leading-relaxed">
-          Local help first. Below it, job paths that are realistic with a record.
+          Find help for what is in your way today. You choose what to share.
         </p>
       </header>
 
       <SupportSearch initialLocation={location} barriers={barriers} />
 
+      <nav aria-label="Support tools" className="grid gap-3 sm:grid-cols-2">
+        <Link href="/dashboard/disclosure" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">Disclosure planner</strong><span className="text-sm text-t-phos-dim">Work through your situation, choose what to say and practice with t.ROY.</span></Link>
+        <Link href="/dashboard/record-check" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">Get your records</strong><span className="text-sm text-t-phos-dim">Find official information and steps for records you need.</span></Link>
+      </nav>
+      <details open={pathsOpen} onToggle={(event) => setPathsOpen(event.currentTarget.open)} className="border border-t-line bg-t-panel p-4"><summary className="t-focus cursor-pointer font-semibold text-t-phos">Explore general job-path ideas</summary><p className="my-3 text-sm text-t-phos-dim">These are general starting points from our earlier guide, not current openings or an eligibility decision. Use Find work for live jobs and dated employer evidence.</p>
       <header id="paths" className="max-w-3xl scroll-mt-24">
-        <h2 className="text-xl font-bold text-t-white mb-2">Job paths that are realistic with a record</h2>
+        <h2 className="text-xl font-bold text-t-white mb-2">Job paths to explore</h2>
         <GhostGuide message={getOpusMessage("resources")} pageId="resources" />
         <p className="text-base text-t-phos-dim leading-relaxed">
-          Start with job lanes and employers more likely to evaluate people
-          individually, then move into live listings, targeted resumes,
-          interview practice, and disclosure planning.
+          Compare the work with your interests, skills and practical needs. t.ROY can help you investigate the requirements of a specific opening.
         </p>
         <div className="mt-4 border border-t-amber bg-t-panel-2 px-4 py-3">
           <p className="text-sm text-t-amber-bright leading-relaxed">
@@ -263,6 +273,7 @@ function SecondChanceBoardPage() {
           </a>
         </div>
       </section>
+      </details>
     </div>
   );
 }

@@ -177,7 +177,7 @@ test("H1: the preview account's state (a raw first save later opened in check mo
   // The lane home reads the server's word for it.
   const route = read("app/api/revisions/route.ts");
   assert.match(route, /fromWriter: fromWriterNewest\(rev\)/);
-  assert.match(read("components/lanes/LaneHome.tsx"), /fromWriter: r\.fromWriter === true/);
+  assert.match(read("lib/assistant-work-context.ts"), /fromWriter: fromWriterNewest\(revision\)/);
 });
 
 test("M4: check mode checks and saves nothing until the person picks; the choice screen reads a read-only route", () => {

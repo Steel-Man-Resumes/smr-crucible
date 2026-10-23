@@ -151,7 +151,9 @@ test("sidebar and dashboard cards share one gate (a tool that needs a disclosure
   // Both displays call this function (no private copy of the rule).
   const shell = readFileSync(join(ROOT, "app", "(dashboard)", "RefineryShell.tsx"), "utf8");
   const dash = readFileSync(join(DASH, "page.tsx"), "utf8");
-  assert.ok(shell.includes("clientToolUnlocked(") && dash.includes("clientToolUnlocked("));
+  assert.ok(shell.includes("clientToolUnlocked("));
+  assert.match(dash, /<LaneHome/);
+  assert.doesNotMatch(dash, /const TOOLS/);
 });
 
 test("Settings headings state what it does, with no comparison to other apps", () => {
@@ -167,9 +169,10 @@ test("Phase 5 R4.5 (A6): Interview Prep no longer needs a disclosure plan, in th
   assert.ok(navItem.length > 0);
   assert.ok(!navItem.includes("requiresDisclosure"), navItem);
   const dash = strip(readFileSync(join(DASH, "page.tsx"), "utf8"));
-  const card = dash.slice(dash.indexOf('href: "/dashboard/interview"'), dash.indexOf("}", dash.indexOf('href: "/dashboard/interview"')));
-  assert.ok(card.length > 0);
-  assert.ok(!card.includes("requiresDisclosure"), card);
+  assert.match(dash, /<LaneHome/);
+  const home = readFileSync(join(ROOT, "components/lanes/LaneHome.tsx"), "utf8");
+  assert.match(home, /case "interview":/);
+  assert.match(home, /href: "\/dashboard\/interview"/);
   // Unlocked at full access with no disclosure plan.
   assert.equal(clientToolUnlocked({ state: "full_access", minState: "full_access", disclosureComplete: false }), true);
 });

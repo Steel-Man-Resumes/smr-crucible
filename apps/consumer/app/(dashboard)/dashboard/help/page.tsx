@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
 import {
   SUPPORT_CATEGORIES,
@@ -25,6 +26,7 @@ import {
   type SupportCategory,
 } from "@crucible/core/src/supportRequestShared";
 import { findHelpArticle } from "@/lib/helpArticles";
+import { TOUR_HREF } from "@crucible/core/src/journeyStages";
 
 interface MineRow {
   id: string;
@@ -151,6 +153,10 @@ export default function HelpPage() {
         One place to get help, report a problem, share an idea, or send Troy a
         note. Pick what fits.
       </p>
+
+      <Link href={TOUR_HREF} className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber mb-6">
+        Replay the Refinery tour
+      </Link>
 
       {/* Mode picker */}
       <div className="flex flex-wrap gap-2 mb-5">

@@ -1,390 +1,341 @@
 "use client";
 
-/**
- * GuidedTour -- the mandatory one-time orientation (master plan Section 3, Stage 0).
- *
- * Five screens: the promise, what the Forge resume is (and what the Refinery
- * adds), the real tools along the six steps, Settings, and meet/name your coach.
- * Only tools that exist today are taught; planned ones are named once, plainly,
- * as not built yet.
- * DB-persisted via /api/onboarding/tour (cannot be reset by clearing
- * localStorage). Two "remind me" deferrals are allowed; after that the defer
- * option disappears. Client tier only -- partners/observers/admin are not nagged.
- */
-
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useUserTier } from "@/lib/useUserTier";
+import {
+  FALLBACK_TOUR_STATE, NEXT_STEP_CHANGED_EVENT, TOUR_STOP_COUNT, TOUR_VERSION,
+  isTourRequested, isTourVisible, type TourState,
+} from "@/lib/guidedTour";
+import { TourGuide } from "@/components/tour/TourGuide";
+import { TourTrail } from "@/components/tour/TourTrail";
+import { useTourAnchor } from "@/components/tour/useTourAnchor";
 import { usePremium } from "@/components/premium/PremiumGate";
 import { PREMIUM_INCLUDED_LINE } from "@/lib/premium";
-import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
-import {
-  FALLBACK_TOUR_STATE,
-  NEXT_STEP_CHANGED_EVENT,
-  TOUR_SETTINGS_PICKS,
-  TOUR_TOOLS,
-  TOUR_NOT_BUILT_YET,
-  canCloseTour,
-  canDeferTour,
-  isTourRequested,
-  isTourVisible,
-  type TourState,
-} from "@/lib/guidedTour";
+import "@/components/tour/tour.css";
 
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-// Once deferred/closed, don't re-pop on every remount this session ("remind me
-// next login" means next session, not next page nav).
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const SUPPRESS_KEY = "guided_tour_suppressed";
+const STOPS = [
+  { label: "Your starting point", targets: ["refinery-workspace-context", "refinery-nav-overview"] },
+  { label: "Meet t.ROY", targets: ["refinery-coach-trigger"] },
+  { label: "One job at a time", targets: ["refinery-nav-jobs", "refinery-nav-resumes"] },
+  { label: "When an interview comes", targets: ["refinery-nav-applications", "refinery-nav-interview"] },
+  { label: "Help and room to grow", targets: ["refinery-nav-support", "refinery-workspace-context"] },
+  { label: "Your next move", targets: ["refinery-workspace-context", "refinery-nav-overview"] },
+] as const;
+type Write = { action: "progress"; version: number; stop: number } | { action: "complete" | "skip" };
+type Notice = { text: string; retry?: Write; resume?: boolean };
 
-const SCREENS = 5;
-const COACH_SCREEN = SCREENS - 1;
-
-// The six plain steps, read from the one vocabulary the dashboard uses.
-const JOURNEY = JOURNEY_STAGES.filter((st) => st.stage >= 1).map((st) => st.short);
-
+/** Six short stops. Only orientation preferences are written by this controller. */
 export function GuidedTour({ held = false }: { held?: boolean } = {}) {
   const tier = useUserTier();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  // ?tour=1 is an explicit request (the "Your next step" card links here). It
-  // overrides "closed" and "deferred this session" so the button always opens it.
-  const requested = isTourRequested(searchParams);
-  const [state, setState] = useState<TourState | null>(null);
-  const [screen, setScreen] = useState(0);
-  const [coachName, setCoachName] = useState("");
-  const [closed, setClosed] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
-  // RL4: what is free says so plainly once the premium gate is on.
   const { status: premium } = usePremium();
   const premiumGate = !!premium?.gate;
-
-  // The tour is a full-screen modal; only show it on the dashboard HOME so it can
-  // never cover a tool page's form (F7 -- it was overlaying the disclosure planner).
+  const requested = isTourRequested(searchParams);
   const onHome = pathname === "/dashboard";
-
-  useEffect(() => {
-    if (tier !== "client" || !onHome) return;
-    if (requested) {
-      // Explicit request: forget any earlier close or defer and start from screen 1.
-      try {
-        sessionStorage.removeItem(SUPPRESS_KEY);
-      } catch {}
-      setClosed(false);
-      setScreen(0);
-    } else {
-      try {
-        if (sessionStorage.getItem(SUPPRESS_KEY) === "1") {
-          setClosed(true);
-          return;
-        }
-      } catch {}
-    }
-    let cancelled = false;
-    fetch("/api/onboarding/tour")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((j) => {
-        if (cancelled) return;
-        if (j?.data) {
-          setState(j.data as TourState);
-          // Pre-fill only a real custom name, not the default "Guide"
-          if (j.data.coachName && j.data.coachName !== "Guide") {
-            setCoachName(j.data.coachName);
-          }
-        } else if (requested) {
-          // Could not read the state: an explicit request still opens the tour.
-          setState(FALLBACK_TOUR_STATE);
-        }
-      })
-      .catch(() => {
-        if (!cancelled && requested) setState(FALLBACK_TOUR_STATE);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [tier, onHome, requested]);
-
-  // Held while the shell's "Is it yours?" question is open: the card first.
+  const [mounted, setMounted] = useState(false);
+  const [state, setState] = useState<TourState | null>(null);
+  const [screen, setScreen] = useState(0);
+  const [closed, setClosed] = useState(false);
+  const [motionPaused, setMotionPaused] = useState(false);
+  const [pageHidden, setPageHidden] = useState(false);
+  const [illustrationOpen, setIllustrationOpen] = useState(false);
+  const [readFailed, setReadFailed] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const previousFocus = useRef<HTMLElement | null>(null);
+  const writes = useRef<Promise<void>>(Promise.resolve());
+  const writeGeneration = useRef(0);
+  const alive = useRef(true);
+  const pendingProgress = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visible = isTourVisible({ tier, onHome, closed, state, requested, held });
-  const canDefer = canDeferTour(state);
-  const canClose = canCloseTour(state);
+  const anchor = useTourAnchor(visible, STOPS[screen].targets, panelRef);
 
-  // Focus the panel when the tour opens (WCAG 2.4.3 focus order).
   useEffect(() => {
-    if (visible) panelRef.current?.focus();
-  }, [visible]);
+    setMounted(true);
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
 
-  // Trap Tab/Shift+Tab within the panel; Escape mirrors the existing "Remind
-  // me next login" dismiss action (only available while defers remain).
   useEffect(() => {
     if (!visible) return;
-    function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        if (canDefer) {
-          e.preventDefault();
-          defer();
-        } else if (canClose) {
-          e.preventDefault();
-          close();
-        }
-        return;
+    const sync = () => setPageHidden(document.hidden);
+    sync();
+    document.addEventListener("visibilitychange", sync);
+    return () => document.removeEventListener("visibilitychange", sync);
+  }, [visible]);
+
+  useEffect(() => {
+    if (tier !== "client" || !onHome || held) return;
+    let cancelled = false;
+    if (requested) {
+      setClosed(false);
+    }
+    void fetch("/api/onboarding/tour", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Tour state unavailable");
+        const json = await response.json();
+        if (!json?.data) throw new Error("Tour state unavailable");
+        if (cancelled) return;
+        const data = json.data as TourState;
+        try {
+          if (requested) sessionStorage.removeItem(`${SUPPRESS_KEY}:${data.accountId}`);
+          else if (sessionStorage.getItem(`${SUPPRESS_KEY}:${data.accountId}`) === "1") setClosed(true);
+        } catch {}
+        setState(data);
+        setReadFailed(false);
+        setScreen(data.version === TOUR_VERSION && data.inProgress && Number.isInteger(data.stop)
+          ? Math.max(0, Math.min(TOUR_STOP_COUNT - 1, data.stop!)) : 0);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReadFailed(true);
+        if (requested) { setState(FALLBACK_TOUR_STATE); setScreen(0); }
+      });
+    return () => { cancelled = true; };
+  }, [tier, onHome, requested, held]);
+
+  // The final action gets a fresh server read. No model call and no simulated
+  // progress: another tab may have saved work during the introduction.
+  useEffect(() => {
+    if (!visible || screen !== TOUR_STOP_COUNT - 1) return;
+    let cancelled = false;
+    void fetch("/api/onboarding/tour", { cache: "no-store" }).then(async (response) => {
+      if (!response.ok) throw new Error("Next action unavailable");
+      const json = await response.json();
+      if (!json?.data) throw new Error("Next action unavailable");
+      if (!cancelled) { setState(json.data as TourState); setReadFailed(false); }
+    }).catch(() => {
+      if (!cancelled) {
+        setReadFailed(true);
+        setState((current) => current ? { ...current, nextStep: undefined } : current);
       }
-      if (e.key !== "Tab") return;
+    });
+    return () => { cancelled = true; };
+  }, [visible, screen]);
+
+  // Serialize bounded stop writes. Rapid Next/Back cannot leave an older stop
+  // as the final saved value. Errors remain visible after the dialog closes.
+  const persist = useCallback((body: Write): Promise<void> => {
+    const operation = writes.current.then(async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12_000);
+      try {
+        const response = await fetch("/api/onboarding/tour", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body), keepalive: true, signal: controller.signal,
+        });
+        if (!response.ok) throw new Error("Tour preference did not save");
+        if (body.action !== "progress") window.dispatchEvent(new Event(NEXT_STEP_CHANGED_EVENT));
+      } finally { clearTimeout(timeout); }
+    });
+    writes.current = operation.catch(() => {});
+    return operation;
+  }, []);
+
+  const saveWithRecovery = useCallback((body: Write) => {
+    const generation = ++writeGeneration.current;
+    void persist(body).then(() => {
+      if (alive.current && generation === writeGeneration.current) setNotice((current) => current?.retry ? null : current);
+    }).catch(() => {
+      if (alive.current && generation === writeGeneration.current) setNotice({ text: "Your tour choice did not save. Your career work is unchanged.", retry: body });
+    });
+  }, [persist]);
+
+  useEffect(() => {
+    if (!visible) return;
+    pendingProgress.current = setTimeout(() => {
+      pendingProgress.current = null;
+      saveWithRecovery({ action: "progress", version: TOUR_VERSION, stop: screen });
+    }, 350);
+    return () => {
+      if (pendingProgress.current) clearTimeout(pendingProgress.current);
+      pendingProgress.current = null;
+    };
+  }, [visible, screen, saveWithRecovery]);
+
+  const close = useCallback((mode: "pause" | "skip" | "complete", destination?: string) => {
+    if (pendingProgress.current) clearTimeout(pendingProgress.current);
+    pendingProgress.current = null;
+    try { if (state?.accountId) sessionStorage.setItem(`${SUPPRESS_KEY}:${state.accountId}`, "1"); } catch {}
+    setClosed(true);
+    if (mode === "pause") {
+      setNotice({ text: "Tour paused. Pick it up here or replay it from Help.", resume: true });
+      saveWithRecovery({ action: "progress", version: TOUR_VERSION, stop: screen });
+    } else {
+      setState((current) => current ? { ...current, tourComplete: true, inProgress: false } : current);
+      setNotice(null);
+      saveWithRecovery({ action: mode });
+    }
+    if (destination) router.push(destination);
+    else if (requested) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete("tour");
+      router.replace(params.size ? `${pathname}?${params}` : pathname, { scroll: false });
+    }
+  }, [pathname, requested, router, saveWithRecovery, screen, searchParams, state?.accountId]);
+  const closeRef = useRef(close);
+  closeRef.current = close;
+
+  useEffect(() => {
+    if (!visible) return;
+    previousFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const body = document.body;
+    const html = document.documentElement;
+    const scroll = { x: window.scrollX, y: window.scrollY };
+    const bodyStyle = { position: body.style.position, top: body.style.top, left: body.style.left,
+      width: body.style.width, overflow: body.style.overflow, paddingRight: body.style.paddingRight };
+    const htmlStyle = { overflow: html.style.overflow, scrollBehavior: html.style.scrollBehavior };
+    const gutter = Math.max(0, window.innerWidth - html.clientWidth);
+    const paddingRight = parseFloat(getComputedStyle(body).paddingRight) || 0;
+    // Fixed body also prevents touch scrolling behind the phone sheet. Keep
+    // the original position and scrollbar space so the spotlight does not jump.
+    Object.assign(body.style, { position: "fixed", top: `${-scroll.y}px`, left: `${-scroll.x}px`,
+      width: "100%", overflow: "hidden", paddingRight: `${paddingRight + gutter}px` });
+    html.style.overflow = "hidden";
+    const overlay = overlayRef.current;
+    const oldInert = new Map<HTMLElement, boolean>();
+    // The dialog lives directly under body. Keep the rendered page visible to
+    // the spotlight while making its controls unavailable to keyboard users.
+    for (const child of Array.from(document.body.children)) {
+      if (child instanceof HTMLElement && child !== overlay) { oldInert.set(child, child.inert); child.inert = true; }
+    }
+    titleRef.current?.focus({ preventScroll: true });
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current("pause"); return; }
+      if (event.key !== "Tab") return;
       const panel = panelRef.current;
       if (!panel) return;
-      const focusables = Array.from(
-        panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-      ).filter((el) => el.offsetParent !== null);
-      if (focusables.length === 0) return;
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
-      if (e.shiftKey) {
-        if (document.activeElement === first || !panel.contains(document.activeElement)) {
-          e.preventDefault();
-          last.focus();
-        }
-      } else if (document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
+      const items = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((item) => item.getClientRects().length > 0);
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first || !last) { event.preventDefault(); panel.focus(); return; }
+      if (event.shiftKey && (document.activeElement === first || !panel.contains(document.activeElement))) {
+        event.preventDefault(); last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !panel.contains(document.activeElement))) {
+        event.preventDefault(); first.focus();
       }
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [visible, canDefer, canClose]);
+    };
+    document.addEventListener("keydown", keydown);
+    return () => {
+      document.removeEventListener("keydown", keydown);
+      oldInert.forEach((value, element) => { element.inert = value; });
+      Object.assign(body.style, bodyStyle);
+      html.style.overflow = htmlStyle.overflow;
+      html.style.scrollBehavior = "auto";
+      window.scrollTo(scroll.x, scroll.y);
+      html.style.scrollBehavior = htmlStyle.scrollBehavior;
+      const restore = previousFocus.current;
+      if (restore?.isConnected && restore !== document.body) restore.focus({ preventScroll: true });
+      else document.getElementById("refinery-nav-overview")?.focus({ preventScroll: true });
+    };
+  }, [visible]);
 
-  if (!visible) return null;
+  useEffect(() => {
+    if (!visible) return;
+    setIllustrationOpen(false);
+    titleRef.current?.focus({ preventScroll: true });
+  }, [screen, visible]);
 
-  // Close the modal and drop ?tour=1 so the same card link can be pressed again.
-  function close() {
-    setClosed(true);
-    if (requested) router.replace("/dashboard", { scroll: false });
+  function resume() {
+    try { if (state?.accountId) sessionStorage.removeItem(`${SUPPRESS_KEY}:${state.accountId}`); } catch {}
+    setNotice(null);
+    setClosed(false);
+    if (!onHome || state?.tourComplete) router.push("/dashboard?tour=1");
   }
 
-  function announceNextStepChanged() {
-    try {
-      window.dispatchEvent(new Event(NEXT_STEP_CHANGED_EVENT));
-    } catch {}
-  }
+  if (!mounted || (!visible && !notice)) return null;
+  const next = state?.nextStep;
+  // Only internal destinations returned by the server are used. A failed state
+  // read leads back to the real Overview instead of guessing a career stage.
+  const destination = next?.href && /^\/(?!\/)/.test(next.href) && !next.href.includes("tour=1") ? next.href : "/dashboard";
 
-  async function complete(openSettings = false) {
-    setSaving(true);
-    try {
-      await fetch("/api/onboarding/tour", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "complete",
-          coachName: coachName.trim() || undefined,
-        }),
-      });
-    } catch {}
-    announceNextStepChanged();
-    close();
-    if (openSettings) router.push("/dashboard/settings");
-  }
-
-  async function defer() {
-    try {
-      sessionStorage.setItem(SUPPRESS_KEY, "1");
-    } catch {}
-    try {
-      await fetch("/api/onboarding/tour", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "defer" }),
-      });
-    } catch {}
-    announceNextStepChanged();
-    close();
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      <div
-        ref={panelRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="guided-tour-heading"
-        className="bg-t-panel border border-t-line max-w-lg w-full max-h-[92vh] overflow-y-auto p-5 sm:p-8 shadow-xl"
-      >
-        {/* progress bars */}
-        <div className="flex gap-1.5 mb-5" aria-hidden="true">
-          {Array.from({ length: SCREENS }).map((_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 flex-1 ${i <= screen ? "bg-t-amber" : "bg-t-line"}`}
-            />
-          ))}
+  return createPortal(
+    <div ref={overlayRef} className="refinery-tour-root" data-motion-paused={motionPaused || pageHidden}>
+      {visible ? <>
+        <div className={`refinery-tour-shade ${anchor.rect ? "refinery-tour-shade-clear" : ""}`} aria-hidden="true" />
+        {anchor.rect ? <div className="refinery-tour-spotlight" style={anchor.rect} aria-hidden="true" /> : null}
+        <TourTrail rect={anchor.rect} stop={screen} ready={STOPS[screen].targets.some((id) => id === anchor.targetId)} />
+        <div
+          ref={panelRef} role="dialog" aria-modal="true" aria-labelledby="guided-tour-heading"
+          aria-describedby="guided-tour-description" tabIndex={-1}
+          className={`refinery-tour-panel ${anchor.panel ? "refinery-tour-anchored" : ""}`}
+          style={anchor.panel ? { top: anchor.panel.top, left: anchor.panel.left } : undefined}
+        >
+          <header className="refinery-tour-top">
+            <p>Welcome to the Refinery</p>
+            <button type="button" onClick={() => close("skip")}>Skip tour</button>
+          </header>
+          <div className="refinery-tour-body">
+            <div className="refinery-tour-intro">
+              <TourGuide paused={motionPaused || pageHidden} />
+              <div><p className="refinery-tour-step">Stop {screen + 1} of {TOUR_STOP_COUNT}</p>
+                <p className="refinery-tour-coach">t.ROY · your AI coach</p></div>
+            </div>
+            <div className="refinery-tour-progress" aria-hidden="true">
+              {STOPS.map((stop, index) => <span key={stop.label} data-complete={index <= screen} />)}
+            </div>
+            <h2 id="guided-tour-heading" ref={titleRef} tabIndex={-1}>{screen === 0 && state?.forgeComplete ? "You finished the Forge." : STOPS[screen].label}</h2>
+            <div id="guided-tour-description" className="refinery-tour-copy">
+              {screen === 0 ? <>
+                <p>{state?.forgeComplete ? "Your Forge starting resume is saved. You did the work of getting your experience down. Next, refine it for each real job you go after." : "This is your workspace for the work ahead. Your next step follows what you have actually saved."}</p>
+                <p>The bar above keeps your goal, current resume and next action together. My resumes keeps your starting resume and later versions.</p>
+              </> : null}
+              {screen === 1 ? <>
+                <p>I’m t.ROY. I can help explain a screen, work through your experience, prepare for a job and practice an answer.</p>
+                <p>Open my coach button when you need help. I can get things wrong, so check suggestions against your facts. You choose what to use.</p>
+                <p className="refinery-tour-small">Coach preferences are in Settings. Available tools and usage limits still apply.</p>
+                {premiumGate ? <p className="refinery-tour-small" data-testid="tour-included">{PREMIUM_INCLUDED_LINE} Usage limits still apply.</p> : null}
+              </> : null}
+              {screen === 2 ? <>
+                <p>Find work starts with a real posting. Choose a job, tailor a resume to it, then prepare your application.</p>
+                <div className="refinery-tour-flow" aria-label="Find work, tailor a resume, prepare an application"><span>Find work</span><span aria-hidden="true">→</span><span>Tailor</span><span aria-hidden="true">→</span><span>Apply</span></div>
+                <p>Keep the starting resume. Each job gets its own version, and Applications keeps the job and its documents together. You confirm when you actually apply.</p>
+              </> : null}
+              {screen === 3 ? <>
+                <p>You can practice in Interview prep early. When you get an invitation, tell Applications “I got an interview” to make that job the priority.</p>
+                <div className="refinery-tour-example">
+                  <p className="refinery-tour-small">Example only · changes nothing in your account</p>
+                  <div className="refinery-tour-example-row"><span>{illustrationOpen ? "Interview · preparation is the next action" : "Applied · interview not scheduled"}</span><span aria-hidden="true">{illustrationOpen ? <svg className="refinery-tour-reward" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="m12 1 3.1 7.9L23 12l-7.9 3.1L12 23l-3.1-7.9L1 12l7.9-3.1Z" /></svg> : null}{illustrationOpen ? "Ready" : "Waiting"}</span></div>
+                  <button type="button" aria-pressed={illustrationOpen} onClick={() => setIllustrationOpen((value) => !value)}>{illustrationOpen ? "Reset example" : "Preview “I got an interview”"}</button>
+                </div>
+                <p className="refinery-tour-small">There is no application-count requirement for practice.</p>
+              </> : null}
+              {screen === 4 ? <>
+                <p>Support &amp; disclosure helps with practical hurdles and planning what to say. Disclosure is your choice. Get your records is there when you need it.</p>
+                <p>Add a lane in My resumes when you want another direction: a trade, self-employment, freelance work, a creative path or a CV. Lanes share your factual history and keep their work distinct.</p>
+                <p className="refinery-tour-small">My information holds your profile, private documents and data controls. Support and practice stay reachable.</p>
+              </> : null}
+              {screen === 5 ? <>
+                <p>You know where to find the tools. Start with the next action based on your saved work.</p>
+                <div className="refinery-tour-next"><span>Your next action</span><strong>{next?.action || "See your next step on Overview"}</strong></div>
+                <p className="refinery-tour-small">You can replay this tour from Help. Your saved career work stays yours.</p>
+              </> : null}
+            </div>
+            {readFailed ? <p className="refinery-tour-warning" role="status">Your saved tour state could not be loaded. You can still look around or leave.</p> : null}
+            {notice?.retry ? <p className="refinery-tour-warning" role="status">{notice.text} <button type="button" onClick={() => { const body = notice.retry; setNotice(null); if (body) saveWithRecovery(body.action === "progress" ? { ...body, stop: screen } : body); }}>Retry save</button></p> : null}
+            <p className="refinery-tour-anchor-note">{anchor.rect ? "Highlighted in your workspace." : "This control may be inside the menu on your screen. You can follow the tour here."}</p>
+          </div>
+          <footer className="refinery-tour-controls">
+            <div className="refinery-tour-navigation"><button type="button" disabled={screen === 0} onClick={() => setScreen((value) => Math.max(0, value - 1))}>Back</button>
+              {screen < TOUR_STOP_COUNT - 1 ? <button type="button" className="refinery-tour-primary" onClick={() => setScreen((value) => Math.min(TOUR_STOP_COUNT - 1, value + 1))}>Next</button>
+                : <button type="button" className="refinery-tour-primary" onClick={() => close("complete", destination)}>{next?.action ? "Start my next step" : "Open Overview"}</button>}
+            </div>
+            <div className="refinery-tour-utility"><button type="button" onClick={() => close("pause")}>Pause tour</button><button type="button" onClick={() => { setScreen(0); setIllustrationOpen(false); }}>Replay from start</button><button type="button" aria-pressed={motionPaused} onClick={() => setMotionPaused((value) => !value)}>{motionPaused ? "Resume motion" : "Pause motion"}</button></div>
+          </footer>
         </div>
-        <p className="font-term text-[11px] font-semibold uppercase text-t-bone-dim mb-2">
-          {screen + 1} of {SCREENS}
-        </p>
-
-        {screen === 0 && (
-          <div>
-            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
-              {premiumGate ? "Free with your account." : "Every tool. For free."}
-            </h2>
-            <p className="text-base text-t-bone-dim leading-relaxed mb-3">
-              Steel Man walks you from your resume to a job offer, one step at a time.
-            </p>
-            {premiumGate && (
-              <p className="text-sm text-t-bone-dim leading-relaxed mb-3" data-testid="tour-included">
-                {PREMIUM_INCLUDED_LINE} You never pay for any of it.
-              </p>
-            )}
-            <p className="text-base text-t-white font-medium">
-              Here is how the pieces fit. It takes about a minute.
-            </p>
-          </div>
-        )}
-
-        {screen === 1 && (
-          <div>
-            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
-              Your Forge resume is a general one
-            </h2>
-            <p className="text-base text-t-bone-dim leading-relaxed mb-4">
-              The Forge built you one strong resume that works for many jobs. The Refinery
-              makes it fit each job you go after.
-            </p>
-            <ol className="space-y-2 mb-4">
-              {JOURNEY.map((label, i) => (
-                <li key={label} className="flex items-center gap-3 text-base text-t-white">
-                  <span className="flex items-center justify-center w-6 h-6 border border-t-line bg-t-panel-2 text-t-amber-bright text-sm font-semibold flex-shrink-0">
-                    {i + 1}
-                  </span>
-                  {label}
-                </li>
-              ))}
-            </ol>
-            <p className="text-sm text-t-bone-dim">
-              Tools open as you work through these. You can look at what is locked and see what opens it.
-            </p>
-          </div>
-        )}
-
-        {screen === 2 && (
-          <div>
-            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
-              The tools, in order
-            </h2>
-            <ul className="space-y-2.5 mb-4">
-              {TOUR_TOOLS.map((t) => (
-                <li key={t.name} className="text-sm leading-snug">
-                  <span className="font-semibold text-t-white">{t.name}.</span>{" "}
-                  <span className="text-t-bone-dim">{t.line}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-xs text-t-bone-dim leading-relaxed">
-              {TOUR_NOT_BUILT_YET}
-            </p>
-          </div>
-        )}
-
-        {screen === 3 && (
-          <div>
-            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">
-              What you can do in Settings
-            </h2>
-            <ul className="space-y-3 mb-4">
-              {TOUR_SETTINGS_PICKS.map((t) => (
-                <li key={t.name} className="text-base leading-snug">
-                  <span className="font-semibold text-t-white">{t.name}.</span>{" "}
-                  <span className="text-t-bone-dim">{t.line}</span>
-                </li>
-              ))}
-            </ul>
-            <p className="text-sm text-t-bone-dim">
-              Take a look early. You will find it in the menu.
-            </p>
-          </div>
-        )}
-
-        {screen === COACH_SCREEN && (
-          <div>
-            <h2 id="guided-tour-heading" className="text-2xl font-bold text-t-white mb-3">Meet your coach</h2>
-            <p className="text-base text-t-bone-dim leading-relaxed mb-4">
-              This is your coach. They know your story and are here to help you move. What
-              would you like to call them? Many people use a name from someone who believed
-              in them.
-            </p>
-            <input
-              value={coachName}
-              onChange={(e) => setCoachName(e.target.value)}
-              maxLength={40}
-              placeholder="Guide"
-              aria-label="Name your coach"
-              className="w-full px-4 py-3 border border-t-line text-base min-h-touch"
-            />
-            <p className="text-xs text-t-bone-dim mt-2">
-              You can change this anytime in Settings.
-            </p>
-          </div>
-        )}
-
-        {/* actions */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mt-6">
-          <div>
-            {canDefer && (
-              <button
-                onClick={defer}
-                className="t-focus text-sm text-t-bone-dim hover:text-t-white transition-colors"
-              >
-                Remind me next login
-              </button>
-            )}
-            {canClose && (
-              <button
-                onClick={close}
-                className="t-focus text-sm text-t-bone-dim hover:text-t-white transition-colors"
-              >
-                Close
-              </button>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            {screen > 0 && (
-              <button
-                onClick={() => setScreen(screen - 1)}
-                className="t-focus px-4 py-2.5 text-sm font-medium text-t-bone-dim hover:text-t-white"
-              >
-                Back
-              </button>
-            )}
-            {screen < SCREENS - 1 ? (
-              <button
-                onClick={() => setScreen(screen + 1)}
-                className="t-focus px-6 py-3 bg-t-amber text-white text-sm font-semibold hover:bg-t-amber-bright transition-colors min-h-touch"
-              >
-                Continue
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => complete(true)}
-                  disabled={saving}
-                  className="t-focus px-4 py-3 border border-t-amber text-t-amber-bright text-sm font-semibold hover:bg-t-panel-2 disabled:opacity-60 transition-colors min-h-touch"
-                >
-                  Start, then open Settings
-                </button>
-                <button
-                  onClick={() => complete()}
-                  disabled={saving}
-                  className="t-focus px-6 py-3 bg-t-amber text-white text-sm font-semibold hover:bg-t-amber-bright disabled:opacity-60 transition-colors min-h-touch"
-                >
-                  {saving ? "Starting..." : "Start"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
+      </> : notice ? <div className="refinery-tour-notice" role="status"><p>{notice.text}</p><div>
+        {notice.retry ? <button type="button" onClick={() => { const body = notice.retry; setNotice(null); if (body) saveWithRecovery(body); }}>Retry save</button> : null}
+        {notice.resume ? <button type="button" onClick={resume}>Resume tour</button> : null}
+        <button type="button" onClick={() => setNotice(null)}>Dismiss</button>
+      </div></div> : null}
+    </div>, document.body,
   );
 }

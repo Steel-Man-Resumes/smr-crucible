@@ -54,7 +54,7 @@ export function useAssistant({ context, sessionId, coach, onToolCall }: UseAssis
     window.addEventListener(LANES_CHANGED_EVENT, read);
     return () => window.removeEventListener(LANES_CHANGED_EVENT, read);
   }, [userId, pathname]);
-  const selectedWork = assistantClientSelection(context.selectedWork, search, lane);
+  const selectedWork = assistantClientSelection(context.selectedWork, search, lane, pathname);
   const chat = useChat({
     api: coach ? "/api/coach" : "/api/assistant",
     body: {
