@@ -1547,9 +1547,11 @@ function OutputPageInner() {
                   setDocState("idle");
                 }}
               />
-              {!finished && (!autoFinish || (!settling && settle.status === "done")) && <DefendPanel view={view} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onBulk={onBulk} onCut={onCut} actions={cardActions} numberPrompts={autoFinish ? [] : numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />}
+              {!finished && (!autoFinish || (!settling && settle.status === "done")) && <DefendPanel view={{ ...gateView, state }} pageText={resumeText} onAnswer={onAnswer} onChange={onChange} onAssist={onAssist} onBulk={onBulk} onCut={onCut} actions={cardActions} numberPrompts={autoFinish ? [] : numberPrompts} onSkipNumber={(line) => setSkippedNumbers((s) => (s.includes(line) ? s : [...s, line]))} />}
             </aside>
           </div>
+
+          {!finished && (lengthOver || needsCheck) && <p className="mt-5 text-sm text-t-phos-dim" role="status">The document questions above are counted separately from {lengthOver && needsCheck ? "page length and the final document check" : lengthOver ? "page length" : "the final document check"}. The next action includes these remaining checks.</p>}
 
           {/* 3. One main action, with the email box and the explainer beside it */}
           <div className="mt-8 grid gap-4 lg:grid-cols-2 lg:items-start">

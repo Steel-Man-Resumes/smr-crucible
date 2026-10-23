@@ -16,7 +16,9 @@
 
 import { useState, type ReactNode } from "react";
 import { type ResumeDocument, scoreResume } from "./resumeModel";
-import { ResumePreview } from "./ResumePreview";
+import { ResumePage } from "./ResumePage";
+import { formatResumeDownload } from "./resumeModel";
+import { LineReview } from "./LineReview";
 import { SectionWrapper } from "./SectionWrapper";
 import {
   ContactSection,
@@ -28,6 +30,8 @@ import {
 } from "./sections";
 
 interface ResumeEditorProps {
+  guided?: boolean;
+  draft?: boolean;
   doc: ResumeDocument;
   onChange: (fn: (prev: ResumeDocument) => ResumeDocument) => void;
   /** Sticky action-bar contents (context-specific buttons). */
@@ -46,6 +50,8 @@ interface ResumeEditorProps {
 
 export function ResumeEditor({
   doc,
+  guided = false,
+  draft = true,
   onChange,
   actions,
   actionsHint,
@@ -55,13 +61,14 @@ export function ResumeEditor({
   onUseSummarySuggestion,
   readinessStage,
 }: ResumeEditorProps) {
-  const [mobileView, setMobileView] = useState<"edit" | "preview">("edit");
+  const [mobileView, setMobileView] = useState<"edit" | "preview">(guided ? "preview" : "edit");
   const { overall, sections } = scoreResume(doc);
 
   return (
     <>
+      {guided && <LineReview key={formatResumeDownload(doc)} text={formatResumeDownload(doc)} />}
       {/* Mobile toggle */}
-      <div className="flex gap-1 mb-4 lg:hidden bg-t-panel border border-t-line p-1">
+      <div className={`flex gap-1 mb-4 ${guided ? "" : "lg:hidden"} bg-t-panel border border-t-line p-1`}>
         <button
           onClick={() => setMobileView("edit")}
           className={`flex-1 py-2 text-sm font-medium transition-colors ${
@@ -70,7 +77,7 @@ export function ResumeEditor({
               : "text-t-phos-dim"
           }`}
         >
-          Edit
+          {guided ? "Fine-tune it yourself" : "Edit"}
         </button>
         <button
           onClick={() => setMobileView("preview")}
@@ -80,15 +87,15 @@ export function ResumeEditor({
               : "text-t-phos-dim"
           }`}
         >
-          Preview ({overall}%)
+          {guided ? "Review printable pages" : `Preview (${overall}%)`}
         </button>
       </div>
 
       {/* Split layout -- preview column sized so the page reads like real paper */}
-      <div className="lg:grid lg:grid-cols-[1fr_440px] lg:gap-6">
+      <div className={guided ? "mx-auto max-w-3xl" : "lg:grid lg:grid-cols-[1fr_440px] lg:gap-6"}>
         {/* Editor panel */}
         <div
-          className={`space-y-3 ${mobileView === "preview" ? "hidden lg:block" : ""}`}
+          className={`space-y-3 ${mobileView === "preview" ? guided ? "hidden" : "hidden lg:block" : ""}`}
         >
           <SectionWrapper
             score={sections.find((s) => s.section === "contact")!}
@@ -148,7 +155,7 @@ export function ResumeEditor({
           <ReviewTraySection doc={doc} update={onChange} />
 
           {/* Action bar -- sticky so it stays visible while editing */}
-          {actions && (
+          {actions && !guided && (
             <div className="sticky bottom-0 bg-t-bg border-t border-t-line pt-3 pb-3 -mx-1 px-1 mt-3">
               <div className="flex flex-wrap gap-2 items-center">{actions}</div>
               {actionsHint && (
@@ -159,19 +166,19 @@ export function ResumeEditor({
         </div>
 
         {/* Preview panel */}
-        <div className={`${mobileView === "edit" ? "hidden lg:block" : ""}`}>
+        <div className={`${mobileView === "edit" ? guided ? "hidden" : "hidden lg:block" : ""}`}>
           <div className="lg:sticky lg:top-20">
             <div className="mb-2">
-              <p className="text-sm font-semibold text-t-white">Live preview</p>
+              <p className="text-sm font-semibold text-t-white">Print layout preview</p>
               <p className="text-xs text-t-phos-dim">
-                This is what your printed resume will look like. Check it before
-                you move on.
+                Uses the PDF page layout. Save the package to review the exact downloadable file. Word may paginate differently.
               </p>
             </div>
-            <ResumePreview doc={doc} sections={sections} overall={overall} />
+            <ResumePage text={formatResumeDownload(doc)} draft={draft} />
           </div>
         </div>
       </div>
+      {guided && actions && <div className="mt-5 border-t border-t-line py-4"><div className="flex flex-wrap gap-2">{actions}</div><p className="mt-2 text-xs text-t-phos-dim">{actionsHint}</p></div>}
     </>
   );
 }

@@ -1,9 +1,9 @@
 .progress-access-dialog{width:min(550px,calc(100vw - 24px));max-height:calc(100dvh - 32px);overflow-y:auto;overscroll-behavior:contain;border:1px solid #85704e;border-radius:12px;background:var(--t-panel,#151a21);color:var(--t-white,#eee9dc);padding:24px;box-shadow:0 18px 70px #0008}
 .progress-access-dialog::backdrop{background:rgba(8,11,16,.72)}
 .progress-access-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
-.progress-celebration{position:fixed;right:20px;bottom:24px;z-index:55;width:min(390px,calc(100vw - 32px));padding:22px;border:2px solid #9c7c3d;background:var(--t-panel,#151a21);color:var(--t-white,#eee9dc);box-shadow:5px 5px 0 #8e682c50;isolation:isolate}
-.progress-celebration-mark{display:inline-block;position:relative;transform:rotate(-3deg);padding:6px 12px;color:#171c22;background:#e8aa48;font:700 20px/1.1 "Segoe Print","Comic Sans MS",cursive;animation:progress-praise-arrive .65s ease-out 1}
-.progress-celebration-mark::before,.progress-celebration-mark::after{content:"";position:absolute;left:-4px;right:-7px;height:4px;background:#e8aa48;z-index:-1;transform:rotate(-2deg)}
+.progress-celebration{position:fixed;right:20px;bottom:24px;z-index:55;width:min(390px,calc(100vw - 32px));padding:22px;border:2px solid #8b5cf6;background:var(--t-panel,#151a21);color:var(--t-white,#eee9dc);box-shadow:5px 5px 0 #7c3aed40;isolation:isolate}
+.progress-celebration-mark{display:inline-block;position:relative;transform:rotate(-3deg);padding:6px 12px;color:#171c22;background:#c4b5fd;font:700 20px/1.1 "IBM Plex Mono",monospace;animation:progress-praise-arrive .65s ease-out 1}
+.progress-celebration-mark::before,.progress-celebration-mark::after{content:"";position:absolute;left:-4px;right:-7px;height:4px;background:#c4b5fd;z-index:-1;transform:rotate(-2deg)}
 .progress-celebration-mark::before{top:2px}.progress-celebration-mark::after{bottom:0;transform:rotate(2deg)}
 .progress-celebration[data-paused=true] *{animation-play-state:paused!important}
 .progress-celebration-quiet *{animation:none!important}

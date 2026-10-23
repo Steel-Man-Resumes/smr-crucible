@@ -81,7 +81,7 @@ export function RefineryLaneHeader({ state }: { state: OnboardingState }) {
   const laneLabel = work ? work.lane?.target || work.lane?.name || "Main" : current?.error ? "Workspace unavailable" : "Loading your workspace...";
   return (
     <section id="refinery-workspace-context" aria-label="Current workspace" data-testid="refinery-workspace-context"
-      className="sticky top-[72px] z-20 border-b border-t-line bg-t-panel/95 px-4 py-2 shadow-[0_2px_7px_rgba(22,26,21,0.06)] backdrop-blur sm:px-7 lg:px-10">
+      className="relative z-20 border-b border-t-line bg-t-panel/95 px-4 py-2 shadow-[0_2px_7px_rgba(22,26,21,0.06)] backdrop-blur sm:px-7 lg:px-10">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <p className="min-w-0 break-words text-sm text-t-white"><span className="text-t-bone-dim">Working toward:</span> <strong>{laneLabel}</strong>
           {work && <Link href="/dashboard?change=1" className="t-focus ml-3 inline-flex min-h-touch items-center text-xs text-t-amber-bright underline underline-offset-2"><span className="sm:hidden">Change</span><span className="hidden sm:inline">Change today&apos;s task</span></Link>}
@@ -89,15 +89,18 @@ export function RefineryLaneHeader({ state }: { state: OnboardingState }) {
         </p>
         <JourneyProgressBanner state={state} work={work || null} contextStatus={current?.error ? "error" : work ? "ready" : "loading"} contextKey={requestKey} />
       </div>
-      {work && <p className="hidden flex-wrap gap-x-4 text-xs leading-6 text-t-bone-dim sm:flex">
+      <details className="mt-1 text-xs text-t-bone-dim"><summary className="t-focus cursor-pointer py-1 font-mono text-purple-300">Workspace details, progress &amp; rewards</summary>
+      {work && <p className="flex flex-wrap gap-x-4 text-xs leading-6 text-t-bone-dim sm:flex">
         {work.lane && work.lane.name !== work.lane.target && <span>Lane: {work.lane.name}</span>}
         {work.application && <span>Application: <Link href={`/dashboard/application-tailor?job=${encodeURIComponent(work.application.id)}`} className="t-focus text-t-white underline underline-offset-2">{work.application.job_title}{work.application.company ? ` at ${work.application.company}` : ""}</Link></span>}
         <span>{work.revision ? <><span>Current resume: </span><Link href={`/dashboard/application-tailor?id=${encodeURIComponent(work.revision.artifactId)}`} className="t-focus text-t-white underline underline-offset-2">Version {work.revision.number}, {work.revision.status}</Link></> : work.lane && work.lane.kind && work.lane.kind !== "resume" ? "Use this lane’s document tool in My resumes." : "No saved resume version in this workspace."}</span>
       </p>}
-      {progression?.data ? <div className="hidden flex-wrap items-center gap-x-4 text-xs leading-6 text-t-bone-dim sm:flex">
+      {progression?.data ? <div className="flex flex-wrap items-center gap-x-4 text-xs leading-6 text-t-bone-dim">
         <ProgressAllowance compact />
         {progression.data.nextReward ? <span className="max-w-sm truncate" title={progression.data.nextReward.requirement}>Next reward: {progression.data.nextReward.label}</span> : null}
       </div> : null}
+      <Link href="/dashboard/master" className="t-focus inline-flex min-h-touch items-center text-purple-300 underline">Build your Master Draft</Link>
+      </details>
     </section>
   );
 }
