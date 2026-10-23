@@ -233,13 +233,13 @@ function ApplicationsPage() {
 
   return (
     <div className="max-w-4xl">
-      <h1 className="text-2xl font-bold text-t-white mb-2">
+      <header id={activeApps.length === 0 && archivedApps.length > 0 ? "refinery-tool-application-overview" : undefined}><h1 className="text-2xl font-bold text-t-white mb-2">
         Application Tracker
       </h1>
       <p className="text-base text-t-phos-dim mb-6">
         Track your job applications from saved to offered. Each step has tools
         to help you prepare.
-      </p>
+      </p></header>
 
       {statusNotice && <div role="status" className="mb-5 border border-t-amber bg-t-panel p-4 text-t-phos">
         <p>{statusNotice}</p>
@@ -248,7 +248,7 @@ function ApplicationsPage() {
       <p className="mb-5 text-sm text-t-phos-dim">You can <Link href="/dashboard/interview" className="t-focus text-t-amber-bright underline">practice an interview anytime</Link>. An invitation moves that job straight to preparation.</p>
 
       {activeApps.length === 0 && archivedApps.length === 0 && (
-        <div className="text-center py-16">
+        <div id="refinery-tool-application-overview" className="text-center py-16">
           <p className="text-t-phos-dim mb-4">
             No applications yet. Save jobs from the Job Board to start
             tracking.
@@ -265,7 +265,7 @@ function ApplicationsPage() {
       {activeApps.length > 0 && (
         <>
           {/* Pipeline summary */}
-          <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
+          <div id="refinery-tool-application-overview" className="flex gap-2 mb-6 overflow-x-auto pb-2">
             {PIPELINE.map((stage) => {
               const count = activeApps.filter(
                 (a) => a.status === stage.status

@@ -934,7 +934,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
 
         {/* Left sidebar -- desktop only */}
         <aside className="hidden w-60 flex-shrink-0 border-r border-t-line bg-t-panel md:block">
-          <div className="sticky top-[72px] h-[calc(100vh-72px)] space-y-1 overflow-y-auto px-3 py-5">
+          <div id="refinery-desktop-navigation" className="sticky top-[72px] h-[calc(100vh-72px)] space-y-1 overflow-y-auto px-3 py-5">
             <p className="mb-4 px-3 font-term text-[10px] font-semibold uppercase text-[#4f6b57]">
               {isOrgPartner ? "Organization" : "Career workspace"}
             </p>

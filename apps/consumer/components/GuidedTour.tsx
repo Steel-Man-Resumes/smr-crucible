@@ -9,6 +9,7 @@ import { GUIDED_ENDING, GUIDED_LESSONS, GUIDED_PART_LABELS } from '@/lib/guided-
 import { TOUR_VERSION, NEXT_STEP_CHANGED_EVENT, type TourState } from '@/lib/guidedTour';
 import { nextPaint, safeTourRoute, visibleGuidedRect, waitForGuidedTarget, type GuidedRect } from '@/lib/guided-attention';
 import { OrientationQuiz, type OrientationDraft } from './tour/OrientationQuiz';
+import { directGuidedCamera, guidedHold, GUIDED_CAMERA_MS } from '@/lib/guided-camera';
 import './tour/guided-learning.css';
 
 type Phase = 'explain' | 'revealing' | 'travel' | 'ready';
@@ -45,6 +46,8 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
   const [notice, setNotice] = useState('');
   const [unsavedWarning, setUnsavedWarning] = useState(false);
   const dock = useRef<HTMLElement>(null);
+  const restoreCamera = useRef<(() => void) | null>(null);
+  const resetCamera = useCallback(() => { restoreCamera.current?.(); restoreCamera.current = null; }, []);
   const heading = useRef<HTMLHeadingElement>(null);
   const roy = useRef<HTMLSpanElement>(null);
   const revealedTarget = useRef<HTMLElement | null>(null);
@@ -66,6 +69,13 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
   const lesson = GUIDED_LESSONS[step];
   const ending = !lesson;
   const motionOff = reduced || quiet;
+  const priorMotionOff = useRef(motionOff);
+  useEffect(() => {
+    const changed = motionOff && !priorMotionOff.current;
+    priorMotionOff.current = motionOff;
+    if (!changed || !active) return;
+    transition.current?.abort(); resetCamera(); setRect(null); setPath(''); setPhase('explain');
+  }, [motionOff, active, resetCamera]);
 
   useEffect(() => {
     alive.current = true; setMounted(true);
@@ -80,11 +90,11 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
     };
     document.addEventListener('input', changed, true); document.addEventListener('change', changed, true);
     return () => {
-      alive.current = false; requestController.current?.abort(); transition.current?.abort();
+      resetCamera(); alive.current = false; requestController.current?.abort(); transition.current?.abort();
       mutation.disconnect(); media.removeEventListener('change', sync); document.removeEventListener('visibilitychange', visibility);
       document.removeEventListener('input', changed, true); document.removeEventListener('change', changed, true);
     };
-  }, []);
+  }, [resetCamera]);
 
   const persist = useCallback((action: Write['action'], stop: number): Promise<void> => {
     const current = run.current;
@@ -164,11 +174,11 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
   }, [tier, held, requested, pathname, active, load]);
 
   const pause = useCallback(() => {
-    navigationIntent.current++; setLoading(false);
+    resetCamera(); navigationIntent.current++; setLoading(false);
     transition.current?.abort(); expectedRoute.current = null; setActive(false); setRect(null); setQuiz(false); onNavigationReveal?.(false);
     if (run.current.account) { try { sessionStorage.setItem(PAUSE_KEY + run.current.account, '1'); } catch {} }
     setNotice('Lesson paused. Resume here when you are ready.'); save('progress', stepRef.current);
-  }, [save, onNavigationReveal]);
+  }, [save, onNavigationReveal, resetCamera]);
 
   useEffect(() => {
     if (previousRoute.current === pathname) return;
@@ -197,8 +207,8 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
       else if (!event.shiftKey && (document.activeElement === last || !dock.current?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     };
     document.addEventListener('keydown', onKey);
-    return () => { delete html.dataset.guidedLearning; if (shell) shell.inert = wasInert; document.removeEventListener('keydown', onKey); if (oldFocus.current?.isConnected) oldFocus.current.focus({ preventScroll: true }); };
-  }, [active, held, tier, pause]);
+    return () => { resetCamera(); delete html.dataset.guidedLearning; if (shell) shell.inert = wasInert; document.removeEventListener('keydown', onKey); if (oldFocus.current?.isConnected) oldFocus.current.focus({ preventScroll: true }); };
+  }, [active, held, tier, pause, resetCamera]);
 
   useEffect(() => {
     if (!active) return;
@@ -208,63 +218,98 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
   }, [active, step, quiz]);
   useEffect(() => {
     if (!active || phase === 'explain') return;
-    const reset = () => { transition.current?.abort(); setRect(null); setPhase('explain'); setError('The layout changed. Choose Show me to point to this area again.'); };
+    const reset = () => { resetCamera(); transition.current?.abort(); setRect(null); setPhase('explain'); setError('The layout changed. Choose Show me to point to this area again.'); };
     window.addEventListener('resize', reset);
     return () => window.removeEventListener('resize', reset);
-  }, [active, phase]);
+  }, [active, phase, resetCamera]);
 
   useEffect(() => {
     const target = revealedTarget.current;
     if (!active || phase !== 'ready' || !target || lesson?.part === 'story') return;
+    let frame = 0;
     const measure = () => {
-      if (!target.isConnected) { setRect(null); setPhase('explain'); return; }
-      setRect(visibleGuidedRect(target.getBoundingClientRect(), window.innerWidth >= 1200 ? window.innerWidth - 400 : window.innerWidth, window.innerHeight, window.innerWidth < 1200 ? Math.min(280, window.innerHeight / 2) : 0));
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const screen = target.isConnected ? visibleGuidedRect(target.getBoundingClientRect(), window.innerWidth, window.innerHeight, window.innerHeight - (dock.current?.getBoundingClientRect().top ?? window.innerHeight) + 20) : null;
+        if (!screen) { resetCamera(); setRect(null); setPhase('explain'); setError('The page changed. Choose Show me to find this area again.'); return; }
+        setRect(screen);
+      });
     };
+    const page = target.closest<HTMLElement>('[data-tour-page]');
     const observer = new ResizeObserver(measure);
     observer.observe(target);
+    if (page) observer.observe(page);
+    if (dock.current) observer.observe(dock.current);
+    // Async siblings can move a control without resizing it or scrolling.
+    const mutations = new MutationObserver(measure);
+    if (page) mutations.observe(page, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['class', 'style', 'hidden'] });
     window.addEventListener('scroll', measure, { capture: true, passive: true });
-    return () => { observer.disconnect(); window.removeEventListener('scroll', measure, true); };
-  }, [active, phase, lesson]);
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); mutations.disconnect(); window.removeEventListener('scroll', measure, true); };
+  }, [active, phase, lesson, resetCamera]);
 
   async function reveal(index = targetIndex) {
     if (!lesson || !safeTourRoute(lesson.route)) return;
     transition.current?.abort(); const controller = new AbortController(); transition.current = controller;
-    setError(''); setRect(null); setPhase('revealing'); setTargetIndex(index);
+    resetCamera(); setError(''); setRect(null); setPhase('revealing'); setTargetIndex(index);
     try {
-      if (lesson.part === 'story') { await nextPaint(controller.signal); setPhase('ready'); return; }
+      if (lesson.part === 'story') {
+        await nextPaint(controller.signal);
+        if (!motionOff) {
+          await guidedHold(GUIDED_CAMERA_MS, controller.signal);
+          const subject = document.querySelector<HTMLElement>('.learning-stage .learning-process b, .learning-stage .learning-facts span, .learning-stage .learning-coach-hero');
+          if (subject) setPath(attentionPath(roy.current, subject.getBoundingClientRect()));
+          setPhase('travel'); await guidedHold(700, controller.signal);
+        }
+        setPhase('ready'); return;
+      }
       const mobile = window.innerWidth < 768;
       onNavigationReveal?.(mobile && lesson.part === 'map');
       if (location.pathname !== lesson.route) { expectedRoute.current = lesson.route; router.push(lesson.route); }
-      const target = await waitForGuidedTarget(lesson.targets[index], lesson.route, controller.signal);
-      // Use the actual scroll containers. Text is never scaled to fake a zoom.
-      const oldMargins = [target.style.scrollMarginTop, target.style.scrollMarginBottom];
-      target.style.scrollMarginTop = '90px'; target.style.scrollMarginBottom = window.innerWidth < 1200 ? '220px' : '24px';
-      revealedTarget.current = target;
-      target.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
-      [target.style.scrollMarginTop, target.style.scrollMarginBottom] = oldMargins;
-      await nextPaint(controller.signal);
-      const screen = visibleGuidedRect(target.getBoundingClientRect(), window.innerWidth >= 1200 ? window.innerWidth - 400 : window.innerWidth, window.innerHeight, window.innerWidth < 1200 ? Math.min(280, window.innerHeight / 2) : 0);
-      if (!screen) throw new Error('This area does not fit above the guide. Continue the explanation, or pause to explore it.');
-      setRect(screen);
-      const origin = roy.current?.getBoundingClientRect();
-      const sx = origin ? origin.left + origin.width / 2 : screen.left, sy = origin ? origin.top + origin.height / 2 : screen.top;
-      const ex = screen.left + Math.min(28, screen.width / 2), ey = screen.top + 8;
-      setPath(`M ${sx} ${sy} Q ${sx} ${Math.min(sy, ey) - 35} ${ex} ${ey}`);
-      if (motionOff) { setPhase('ready'); return; }
-      setPhase('travel');
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(resolve, 700);
-        controller.signal.addEventListener('abort', () => { clearTimeout(timeout); reject(new DOMException('Cancelled', 'AbortError')); }, { once: true });
-      });
-      if (!controller.signal.aborted) setPhase('ready');
+      // A real page may briefly render its controls, then replace them while
+      // its lane or saved work loads. Reacquire within one bounded deadline.
+      const deadline = performance.now() + 12000;
+      for (let attempt = 0; attempt < 3 && performance.now() < deadline; attempt++) {
+        resetCamera(); setRect(null); setPath(''); setPhase('revealing');
+        const target = await waitForGuidedTarget(lesson.targets[index], lesson.route, controller.signal, Math.max(1, deadline - performance.now()));
+        const currentTarget = () => target.isConnected && document.getElementById(lesson.targets[index]) === target && location.pathname === lesson.route && !!document.querySelector(`[data-assistant-page-ready="${lesson.route}"]`);
+        // Establish the real page, then frame the exact teaching target.
+        const oldMargins = [target.style.scrollMarginTop, target.style.scrollMarginBottom];
+        target.style.scrollMarginTop = '90px'; target.style.scrollMarginBottom = `${window.innerHeight - (dock.current?.getBoundingClientRect().top ?? window.innerHeight) + 32}px`;
+        revealedTarget.current = target;
+        target.scrollIntoView({ block: 'start', inline: 'nearest', behavior: 'instant' });
+        [target.style.scrollMarginTop, target.style.scrollMarginBottom] = oldMargins;
+        await nextPaint(controller.signal);
+        if (!currentTarget()) continue;
+        const page = target.closest<HTMLElement>('[data-tour-page]');
+        if (lesson.part === 'pages' && page) {
+          const bottom = dock.current?.getBoundingClientRect().top ?? innerHeight - 260;
+          // Keep the desktop navigation as a stable landmark beside the camera.
+          const left = innerWidth >= 768 ? Math.max(16, page.getBoundingClientRect().left) : 16;
+          restoreCamera.current = directGuidedCamera(page, target, { left, top: 82, width: innerWidth - left - 16, height: Math.max(100, bottom - 110) }, motionOff);
+          if (!motionOff) await guidedHold(GUIDED_CAMERA_MS, controller.signal);
+          await nextPaint(controller.signal);
+        }
+        if (!currentTarget()) continue;
+        const screen = visibleGuidedRect(target.getBoundingClientRect(), window.innerWidth, window.innerHeight, window.innerHeight - (dock.current?.getBoundingClientRect().top ?? window.innerHeight) + 20);
+        if (!screen) throw new Error('This area does not fit above the guide. Continue the explanation, or pause to explore it.');
+        setRect(screen);
+        setPath(attentionPath(roy.current, screen));
+        if (motionOff) { setPhase('ready'); return; }
+        setPhase('travel');
+        await guidedHold(700, controller.signal);
+        if (!currentTarget()) continue;
+        if (!controller.signal.aborted) setPhase('ready');
+        return;
+      }
+      throw new Error('This page is still changing. Choose Show me to try again.');
     } catch (e) {
       if (controller.signal.aborted || !alive.current) return;
-      setPhase('explain'); setError(e instanceof Error ? e.message : 'The page could not be shown. Try again.');
+      resetCamera(); setPhase('explain'); setError(e instanceof Error ? e.message : 'The page could not be shown. Try again.');
     }
   }
 
   function move(next: number) {
-    transition.current?.abort(); onNavigationReveal?.(false); setRect(null); setPath(''); setPhase('explain'); setTargetIndex(0); setError(''); setQuiz(false);
+    resetCamera(); transition.current?.abort(); onNavigationReveal?.(false); setRect(null); setPath(''); setPhase('explain'); setTargetIndex(0); setError(''); setQuiz(false);
     stepRef.current = next; setStep(next); save('progress', next);
   }
   async function finish(destination?: string) {
@@ -274,7 +319,7 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
     try {
       await persist('complete', GUIDED_LESSONS.length);
       if (!alive.current || run.current !== identity || navigationIntent.current !== intent) return;
-      transition.current?.abort(); setActive(false); setNotice('Your tour is complete. You can ask t.ROY for help on any page.');
+      resetCamera(); transition.current?.abort(); setActive(false); setNotice('Your tour is complete. You can ask t.ROY for help on any page.');
       if (stateRef.current) { stateRef.current = { ...stateRef.current, tourComplete: true, inProgress: false }; setState(stateRef.current); }
       const href = destination || stateRef.current?.nextStep?.href;
       if (href && /^\/dashboard(?:[/?#]|$)/.test(href) && !href.includes('tour=1')) router.push(href);
@@ -291,16 +336,18 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
   const showing = phase === 'ready' || phase === 'travel' || phase === 'revealing';
   return createPortal(<div className="learning-root" data-phase={phase} data-part={lesson?.part || 'check'} data-quiz={quiz} data-still={motionOff} data-hidden={hidden}>
     <div className="learning-backdrop" aria-hidden="true" />
+    <div className="learning-chapters" aria-hidden="true">{Object.entries(GUIDED_PART_LABELS).map(([key, label], i) => <span key={key} data-current={lesson?.part === key}><b>0{i + 1}</b> {label}</span>)}<span data-current={ending}><b>04</b> Your next move</span></div>
     {rect && phase === 'ready' && <div className="learning-focus" aria-hidden="true" style={rect} />}
     {path && phase === 'travel' && !motionOff && <svg className="learning-particles" aria-hidden="true"><path d={path} fill="none" stroke="#bc9aff" strokeWidth="1" opacity=".3" />{Array.from({ length: 9 }, (_, i) => <circle key={i} r={i % 3 ? 2 : 4} fill={i % 3 ? '#d5b8fa' : '#e8aa48'} style={{ offsetPath: `path('${path}')`, animationDelay: `${i * 20}ms` } as CSSProperties} />)}</svg>}
-    {lesson?.part === 'story' && <div className="learning-stage" aria-hidden="true" data-revealed={phase === 'ready'}><Concept concept={lesson.concept} /></div>}
+    {lesson?.part === 'story' && <div key={lesson.id} className="learning-stage" aria-hidden="true" data-revealed={showing}><Concept concept={lesson.concept} /></div>}
     <section ref={dock} className="learning-guide" role="dialog" aria-modal="true" aria-labelledby="learning-heading">
       <header className="learning-top"><span>{lesson ? `${GUIDED_PART_LABELS[lesson.part]} · ${partIndex} of ${partLessons.length}` : quiz ? 'Your optional check' : 'Your next move'}</span><button aria-label="Pause lesson and keep my place" onClick={pause}>Pause</button></header>
       <div className="learning-reading">
         <div className="learning-speaker"><span ref={roy}><TroyMark size={72} /></span><div><strong>t.ROY</strong><span>Your guide</span></div></div>
         <h2 id="learning-heading" ref={heading} tabIndex={-1}>{lesson?.title || GUIDED_ENDING.title}</h2>
         {!quiz && <p className="learning-message">{lesson?.message || GUIDED_ENDING.message}</p>}
-        {lesson && <div className="learning-observation" role="status">{phase === 'ready' ? <><span>{lesson.observation}</span>{lesson.part !== 'story' && <small>Showing {targetLabel(lesson.targets[targetIndex], lesson.title)}.</small>}{lesson.part === 'map' && lesson.targets.length > 1 && <small>Area {targetIndex + 1} of {lesson.targets.length} in this group</small>}</> : phase === 'revealing' ? <TroyWork topic="plan" label="Opening the page and finding this area" /> : <span className="learning-read-cue">Read at your pace. Choose Show me when you’re ready.</span>}</div>}
+        {lesson && <div className="learning-observation" role="status">{phase === 'ready' ? <><span>{targetObservation(lesson.targets[targetIndex], lesson.observation)}</span>{lesson.part !== 'story' && <small>Showing {targetLabel(lesson.targets[targetIndex], lesson.title)}.</small>}{lesson.part === 'map' && lesson.targets.length > 1 && <small>Area {targetIndex + 1} of {lesson.targets.length} in this group</small>}</> : phase === 'revealing' ? <TroyWork topic="plan" label={lesson.part === 'story' ? 'Connecting your work to the next steps' : 'Framing this part of your workspace'} /> : <span className="learning-read-cue">Read this first. Then I’ll show you where it fits.</span>}</div>}
+        {lesson && phase === 'ready' && <details className="learning-recap"><summary>Read that again</summary><p>{lesson.message}</p></details>}
         {lesson?.part === 'story' && phase === 'ready' && <div className="learning-mobile-concept"><Concept concept={lesson.concept} /></div>}
         {!lesson && !quiz && <>{state?.nextStep?.action && <p className="learning-next-action">Your next move: {state.nextStep.action}</p>}<p className="learning-check-note">This is a check of the tools, not a test of your ability. Review explanations and retry. Passing does not change sponsored features or usage limits.</p><button className="learning-primary" onClick={() => { setQuizPassed(false); setQuiz(true); }}>{GUIDED_ENDING.action}</button></>}
         {!lesson && quiz && state?.accountId && <OrientationQuiz accountId={state.accountId} draft={quizDraft} onDraftChange={setQuizDraft} onContinue={finish} onPassed={() => setQuizPassed(true)} />}
@@ -324,11 +371,32 @@ export function GuidedTour({ held = false, onNavigationReveal }: { held?: boolea
 
 function Concept({ concept }: { concept?: 'process' | 'facts' | 'coach' }) {
   return <><span className="learning-stage-kicker">THE FORGE → THE REFINERY</span>
-    {concept === 'process' ? <><h3>Your story has somewhere to go.</h3><div className="learning-process">{['Find work', 'Prepare', 'Apply', 'Practice', 'Next steps'].map((label, i) => <span key={label}><b>{i + 1}</b>{label}</span>)}</div><p>Return to any part. Keep moving with what you learn.</p></> : concept === 'facts' ? <><h3>One true history.<br />More than one direction.</h3><div className="learning-facts"><span>Your real work</span><span>A job version</span><span>Your own words</span></div><p>The emphasis can change. The facts stay yours.</p></> : <><div className="learning-coach-hero"><TroyMark size={120} /></div><h3>Help beside your work.</h3><p>Ask. Check. Choose.<br />You keep the final say.</p></>}
+    {concept === 'process' ? <><h3>The resume is the start.</h3><div className="learning-process">{['Find work', 'Prepare', 'Apply', 'Practice', 'Next steps'].map((label, i) => <span key={label} style={{ '--beat': i } as CSSProperties}><b>{String(i + 1).padStart(2, '0')}</b>{label}</span>)}</div><p>Return to any part. Keep moving with what you learn.</p></> : concept === 'facts' ? <><h3>One true history.<br />More than one direction.</h3><div className="learning-facts"><span>Your real work</span><span>A job version</span><span>Your own words</span></div><p>The emphasis can change. The facts stay yours.</p></> : <><div className="learning-coach-hero"><TroyMark size={120} /></div><h3>Help beside your work.</h3><p>Ask. Check. Choose.<br />You keep the final say.</p></>}
   </>;
 }
 
 function targetLabel(id: string, fallback: string): string {
   const labels: Record<string, string> = { 'refinery-nav-overview': 'Overview', 'refinery-nav-jobs': 'Find work', 'refinery-nav-resumes': 'My resumes', 'refinery-nav-applications': 'Applications', 'refinery-nav-interview': 'Interview prep', 'refinery-nav-support': 'Support & disclosure', 'refinery-nav-settings': 'Settings' };
   return labels[id] || fallback;
+}
+
+function targetObservation(id: string, fallback: string): string {
+  const notes: Record<string, string> = {
+    'refinery-nav-jobs': 'Start here to choose work worth preparing for.',
+    'refinery-nav-resumes': 'Your documents live here. Build each job version from the same true history.',
+    'refinery-nav-applications': 'Keep track of what actually happened with each job.',
+    'refinery-nav-interview': 'Practice explaining the work behind your resume.',
+    'refinery-nav-overview': 'Come back here when you need your next useful step.',
+    'refinery-nav-support': 'Practical help and record conversations have their own place.',
+    'refinery-nav-settings': 'Make the tool work for you: reading, coaching and sharing choices.',
+  };
+  return notes[id] || fallback;
+}
+
+function attentionPath(roy: HTMLElement | null, screen: GuidedRect): string {
+  const origin = roy?.getBoundingClientRect();
+  const sx = origin ? origin.left + origin.width / 2 : screen.left;
+  const sy = origin ? origin.top + origin.height / 2 : screen.top;
+  const ex = screen.left + Math.min(28, screen.width / 2), ey = screen.top + 8;
+  return `M ${sx} ${sy} Q ${sx} ${Math.min(sy, ey) - 35} ${ex} ${ey}`;
 }

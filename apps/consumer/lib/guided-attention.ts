@@ -7,7 +7,7 @@ export function visibleGuidedRect(rect: GuidedRect, width: number, height: numbe
   return right > left && end > top ? { left, top, width: right - left, height: end - top } : null;
 }
 export function safeTourRoute(href: string): boolean { return /^\/dashboard(?:\/[a-z-]+)?$/.test(href); }
-export function waitForGuidedTarget(id: string, route: string, signal: AbortSignal): Promise<HTMLElement> {
+export function waitForGuidedTarget(id: string, route: string, signal: AbortSignal, timeoutMs = 10000): Promise<HTMLElement> {
   return new Promise((resolve, reject) => {
     let frame = 0;
     const started = performance.now();
@@ -21,7 +21,7 @@ export function waitForGuidedTarget(id: string, route: string, signal: AbortSign
         const rect = target.getBoundingClientRect();
         if (rect.width > 0 && rect.height > 0) { stop(); resolve(target); return; }
       }
-      if (performance.now() - started > 10000) { stop(); reject(new Error('This part of the page is not ready. Try again, or continue the explanation.')); return; }
+      if (performance.now() - started > timeoutMs) { stop(); reject(new Error('This part of the page is not ready. Try again, or continue the explanation.')); return; }
       frame = requestAnimationFrame(check);
     };
     signal.addEventListener('abort', abort, { once: true }); check();

@@ -190,7 +190,7 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
         Help near you
       </h2>
       <p className="mt-1 text-sm text-t-phos-dim">Rides, ID, a place to stay, food, and legal help with a record. You don&apos;t need a finished resume for this.</p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
+      <div id="refinery-tool-support-query" className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
         <div>
           <label htmlFor="support-location" className="block text-sm font-medium text-t-white">
             Where are you?

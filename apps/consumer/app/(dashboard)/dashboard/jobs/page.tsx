@@ -546,7 +546,7 @@ function JobBoardPage() {
       {!preferencesReady && !preferencesError && <p role="status" className="mb-4 text-sm text-t-phos-dim">Loading this lane’s search choices...</p>}
       <div id="refinery-tool-jobs-search" role="group" aria-label="Job search choices" className="bg-t-panel p-5 border border-t-line mb-6" aria-busy={!preferencesReady}>
         <div className="space-y-4">
-          <div>
+          <div id="refinery-tool-jobs-query">
             <label className="text-sm font-medium text-t-white block mb-1">
               What kind of work?
             </label>

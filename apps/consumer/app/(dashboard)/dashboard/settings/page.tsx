@@ -384,6 +384,7 @@ export default function SettingsPage() {
 
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
       <nav
+        id="refinery-tool-settings-map"
         aria-label="Settings sections"
         className="sticky top-[72px] z-10 -mx-1 mb-8 flex flex-wrap gap-1 border-b border-t-line bg-t-bg/95 py-2 backdrop-blur"
       >
