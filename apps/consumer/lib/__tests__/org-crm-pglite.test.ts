@@ -97,4 +97,11 @@ test('owner-only staff writes and the consent-gated client header, in real SQL',
   assert.deepEqual({ name: self[0]?.name, email: self[0]?.email, stage: self[0]?.current_stage, src: self[0]?.identity_source },
     { name: null, email: null, stage: null, src: 'none' }, 'self-joined non-sharer: nothing from their account, even for the owner');
   assert.equal((await scoped(org, admin, CLIENT_HEADER_WHO_SQL, [invited, org, false, admin])).length, 0, 'not in reach: no row');
+
+  // ---- SF2: a saved check-in draft is kind 'draft' (097 widened the check) --
+  const draftNote = await scoped(org, cm, `INSERT INTO case_note (access_code_id, client_user_id, author_user_id, kind, body) VALUES ($1, $2, $3, 'draft', 'Hi, checking in.') RETURNING id`, [org, invited, cm]);
+  assert.equal(draftNote.length, 1);
+  await scoped(org, cm, `UPDATE case_note SET kind = 'email' WHERE id = $1`, [draftNote[0].id]);
+  const kept = (await q(`SELECT kind FROM case_note_version WHERE note_id = $1`, [draftNote[0].id])).rows as { kind: string }[];
+  assert.deepEqual(kept.map((k) => k.kind), ['draft'], 'marking it sent keeps the draft as an earlier version');
 });

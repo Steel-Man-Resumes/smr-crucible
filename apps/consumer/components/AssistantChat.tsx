@@ -48,7 +48,8 @@ const TOOL_ACTIVITY: Record<string, string> = {
   read_owner_directory_coverage: "Reading coverage suggestions",
   read_staff_tasks: "Reading your scoped tasks",
   read_participant_progress: "Reading shared progress",
-  draft_staff_check_in: "Preparing a check-in draft",
+  draft_staff_check_in: "Preparing a draft",
+  offer_staff_draft: "Preparing the draft for their page",
   search_verified_employers: "Checking employer evidence",
   get_verified_employer: "Reading employer details",
   search_verified_resources: "Finding checked support",
@@ -697,13 +698,14 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             if (part.type !== "tool-invocation") return [];
             const inv = part.toolInvocation as { toolName?: string; state?: string; result?: Record<string, unknown> } | undefined;
             const r = inv?.result;
-            if (inv?.toolName !== "draft_staff_check_in" || inv.state !== "result" || r?.status !== "draft_only" || r.saved !== false || r.sent !== false) return [];
-            return typeof r.participantId === "string" && /^[0-9a-f-]{36}$/i.test(r.participantId)
-              ? [{ id: r.participantId, purpose: r.purpose === "case_note" ? "case_note" : "check_in" }] : [];
+            // Only the draft body the model passed to offer_staff_draft, never
+            // the whole reply: the reply talks TO the staff member, and a note
+            // is permanent (review SF2).
+            if (inv?.toolName !== "offer_staff_draft" || inv.state !== "result" || r?.status !== "draft_only" || r.saved !== false || r.sent !== false) return [];
+            return typeof r.participantId === "string" && /^[0-9a-f-]{36}$/i.test(r.participantId) && typeof r.body === "string" && r.body.trim()
+              ? [{ id: r.participantId, purpose: r.purpose === "case_note" ? "case_note" : "check_in", body: r.body.trim() }] : [];
           })[0] : undefined;
-          const draftText = draftFor
-            ? parts.filter((p) => p.type === "text" && typeof p.text === "string").map((p) => String(p.text)).join("\n\n").trim()
-            : "";
+          const draftText = draftFor?.body ?? "";
 
           // Assistant message with parts: text bubbles + tool activity lines
           return (

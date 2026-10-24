@@ -572,7 +572,9 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
       if (typeof d.body !== "string" || !d.body.trim()) return;
       setBody(d.body.slice(0, 8000));
       const purpose = d.purpose === "case_note" ? "case_note" : "check_in";
-      setKind(purpose === "check_in" ? "email" : "note");
+      // A check-in nobody has sent is a 'draft' until a person marks it sent.
+      // A case note draft keeps the staff member's own default kind.
+      if (purpose === "check_in") setKind("draft");
       setDraft({ purpose });
     } catch { /* no draft */ }
   }, [draftKey]);
@@ -586,6 +588,15 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
       body: JSON.stringify({ action: "add_note", body, kind, draftedByAssistant: !!draft }) });
     setBusy(false);
     if (res.ok) { setBody(""); setKind(defaultKind); clearDraft(); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+  }
+  // A draft check-in becomes an "Email" only when the person who saved it
+  // says they sent it. The kind change is kept as an earlier version.
+  async function markSent(n: Note) {
+    setBusy(true); setMsg(null);
+    const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "edit_note", noteId: n.id, body: n.body, kind: "email" }) });
+    setBusy(false);
+    if (res.ok) onSaved(); else setMsg((await res.json().catch(() => ({}))).error || "Could not mark it sent.");
   }
   async function saveCorrection() {
     if (!editing) return;
@@ -603,7 +614,7 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
           {draft && (
             <div role="status" className="border border-t-amber bg-t-panel-2 px-3 py-2 mb-3 text-xs text-t-amber-bright">
               {draft.purpose === "check_in"
-                ? "Draft check-in from t.ROY. Nothing was sent. Send it yourself if you want to, then save a note that you did, or throw it away."
+                ? "Draft check-in from t.ROY. Nothing was sent. If you save it, it is filed as a draft until you mark it sent."
                 : "Draft case note from t.ROY. It is not saved. Read it, fix anything that is wrong, then save it or throw it away."}
               {" "}If you save it, the note says it was drafted with t.ROY.
               <button type="button" onClick={() => { setBody(""); setKind(defaultKind); clearDraft(); }} className="t-focus ml-2 underline">Throw it away</button>
@@ -614,6 +625,7 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
           <div className="flex flex-wrap items-center gap-4">
             <label className="text-xs text-t-phos-dim">Type{" "}
               <select value={kind} onChange={(e) => setKind(e.target.value)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5 ml-1">
+                {kind === "draft" && <option value="draft">Check-in draft, not sent</option>}
                 {NOTE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
             </label>
@@ -635,7 +647,7 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
             return (
               <li key={n.id} className="bg-t-panel border border-t-line p-4">
                 <p className="text-xs text-t-phos-dim mb-1">
-                  {NOTE_KINDS.find(([k]) => k === n.kind)?.[1] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
+                  {n.kind === "draft" ? "Check-in draft, not sent" : NOTE_KINDS.find(([k]) => k === n.kind)?.[1] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
                   {n.drafted_by_assistant ? " · drafted with t.ROY" : ""}{n.edited_at ? ` · corrected ${day(n.edited_at)}` : ""}
                 </p>
                 {isEditing ? (
@@ -654,7 +666,12 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
                   <p className="text-sm text-t-white whitespace-pre-wrap">{n.body}</p>
                 )}
                 {!isEditing && mine && (
-                  <button onClick={() => setEditing({ id: n.id, body: n.body })} className="t-focus text-xs text-t-phos underline mt-2">Correct this note</button>
+                  <span className="flex flex-wrap gap-4 mt-2">
+                    <button onClick={() => setEditing({ id: n.id, body: n.body })} className="t-focus text-xs text-t-phos underline">Correct this note</button>
+                    {n.kind === "draft" && (
+                      <button onClick={() => markSent(n)} disabled={busy} className="t-focus text-xs text-t-amber-bright underline">I sent it</button>
+                    )}
+                  </span>
                 )}
                 {(n.earlier?.length ?? 0) > 0 && (
                   <details className="mt-2">

@@ -391,7 +391,10 @@ export async function getClientNotes(actor: OrgActor, clientId: string): Promise
   return { ok: true, rows: notes };
 }
 
-const NOTE_KINDS = new Set(["note", "call", "meeting", "text", "email", "referral"]);
+// 'draft' (migration 097): a saved check-in draft nobody has sent yet. Not a
+// kind staff pick by hand; the page sets it for a t.ROY check-in draft, and
+// "I sent it" corrects it to 'email'.
+const NOTE_KINDS = new Set(["note", "call", "meeting", "text", "email", "referral", "draft"]);
 
 export async function addClientNote(actor: OrgActor, clientId: string, input: {
   body: string; kind?: string; visibleToParticipant?: boolean; draftedByAssistant?: boolean;

@@ -22,8 +22,9 @@
 --
 -- APPLY BEFORE THE APP RELEASE that ships the admin organization actions: the
 -- app reads max_staff, and without the trigger an owner or seat change is
--- recorded only by a best-effort event. Additive: one column, one function,
--- one trigger. No policy changes, so the protected-table list is unchanged.
+-- recorded only by a best-effort event, and a saved check-in draft needs the
+-- 'draft' kind. Additive: one column, one widened check, one function, one
+-- trigger. No policy changes, so the protected-table list is unchanged.
 SET LOCAL lock_timeout = '5s';
 
 -- org_audit is FORCE RLS with no INSERT policy, so the trigger's owner must
@@ -38,6 +39,15 @@ END $$;
 
 ALTER TABLE access_code ADD COLUMN IF NOT EXISTS max_staff INTEGER NOT NULL DEFAULT 10
   CHECK (max_staff >= 0 AND max_staff <= 1000);
+
+-- 3. A check-in that t.ROY drafted and a staff member saved is kind 'draft'
+--    until that person marks it sent (the correction keeps the draft wording
+--    as an earlier version). Before this a draft could only be filed as an
+--    "Email", which says it was sent. The constraint is widened, never
+--    narrowed: every existing row still passes.
+ALTER TABLE case_note DROP CONSTRAINT IF EXISTS case_note_kind_check;
+ALTER TABLE case_note ADD CONSTRAINT case_note_kind_check
+  CHECK (kind IN ('note', 'call', 'meeting', 'text', 'email', 'referral', 'draft'));
 
 CREATE OR REPLACE FUNCTION public.access_code_admin_audit() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$

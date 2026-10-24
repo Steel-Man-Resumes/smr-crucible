@@ -22,16 +22,25 @@ it("the draft tool always reports saved: false and sent: false, and never writes
   assert.doesNotMatch(draft, /addClientNote|INSERT|UPDATE|sendOrgEmail|resend/i);
 });
 
-it("the chat only offers to place a draft that is draft_only, unsaved and unsent, and places it unsaved", () => {
+it("the chat places only the draft body offer_staff_draft returned, unsaved, never the whole reply", () => {
   const chat = read("../../components/AssistantChat.tsx");
-  assert.match(chat, /r\?\.status !== "draft_only" \|\| r\.saved !== false \|\| r\.sent !== false/);
-  assert.match(chat, /sessionStorage\.setItem\(`org-note-draft:/);
+  assert.match(chat, /inv\?\.toolName !== "offer_staff_draft" \|\| inv\.state !== "result" \|\| r\?\.status !== "draft_only" \|\| r\.saved !== false \|\| r\.sent !== false/);
+  assert.match(chat, /const draftText = draftFor\?\.body \?\? "";/);
+  assert.match(chat, /sessionStorage\.setItem\(/);
   assert.doesNotMatch(chat.slice(chat.indexOf("draftFor")), /action: "add_note"/);
+  const tools = read("../tools/assistant-staff-tools.ts");
+  const offer = tools.slice(tools.indexOf("offer_staff_draft: tool("), tools.indexOf("const executeOnce"));
+  assert.match(offer, /status: "draft_only", saved: false, sent: false, participantId: clientId/);
+  assert.match(offer, /getClientHeader\(await actor\(\), clientId\)/, "reach re-checked before a draft is offered");
+  assert.doesNotMatch(offer, /addClientNote|INSERT|UPDATE|sendOrgEmail/);
 });
 
-it("the participant page marks the draft as unsaved and saves only on the staff member's click", () => {
+it("a check-in draft is filed as a draft until a person marks it sent; the page saves only on a click", () => {
   const page = read("../../components/org/ClientPage.tsx");
+  assert.match(page, /if \(purpose === "check_in"\) setKind\("draft"\);/);
+  assert.match(page, /kind: "email" \}\) \}\);/, "I sent it corrects the kind to email");
   assert.match(page, /It is not saved\. Read it, fix anything that is wrong, then save it or throw it away\./);
-  assert.match(page, /Nothing was sent\./);
   assert.match(page, /draftedByAssistant: !!draft/);
+  const mig = read("../../../../packages/core/migrations/097_org_seats.sql");
+  assert.match(mig, /'referral', 'draft'/);
 });
