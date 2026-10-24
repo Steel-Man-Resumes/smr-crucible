@@ -277,7 +277,7 @@ test("(7) a suggest-fix 422 or a failed call shows a plain line on the card, nev
   assert.equal(suggestFixNotice(server), server);
   assert.equal(suggestFixNotice(""), SUGGEST_FIX_FALLBACK);
   assert.equal(suggestFixNotice("Could not draft this line."), SUGGEST_FIX_FALLBACK);
-  assert.doesNotMatch(SUGGEST_FIX_FALLBACK, /[—–]|--/);
+  assert.doesNotMatch(SUGGEST_FIX_FALLBACK, /[\u2014\u2013]|--/);
   const panel = src("components", "forge", "finish", "DefendPanel.tsx");
   // The notice is set on every failure, the automatic first ask too, and the idle card renders it.
   assert.match(panel, /setNotice\(suggestFixNotice\(/);
