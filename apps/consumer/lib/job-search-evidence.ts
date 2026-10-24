@@ -30,8 +30,9 @@ export function evidenceForJob(j:JSearchJob,now=new Date().toISOString()):JobSea
   const travel=text.match(/\b(?:travel[^.!?\n]{0,20}?(\d{1,3})\s*%|(\d{1,3})\s*%[^.!?\n]{0,15}travel)/i);
   const min=finite(j.job_min_salary),max=finite(j.job_max_salary);
   if(payPeriod(j.job_salary_period)==="hour"&&((min??0)>10000||(max??0)>10000))warnings.push("Unusually high source pay. Verify the original posting.");
-  if(min!==null&&max!==null&&min>max)warnings.push("Source pay range is inconsistent. Check the posting.");
-  if((min!==null||max!==null)&&!payPeriod(j.job_salary_period))warnings.push("Source did not identify a comparable pay period.");
+  if(min!==null&&max!==null&&min>max&&j.job_salary_currency&&payPeriod(j.job_salary_period))warnings.push("Source pay range is inconsistent. Check the posting.");
+  // No warning when the source gave no period: the card then shows no pay at
+  // all (formatSourceSalary), so a line about missing pay fields is noise.
   const latitude=j.job_latitude,longitude=j.job_longitude;
   const coords=typeof latitude==="number"&&Number.isFinite(latitude)&&Math.abs(latitude)<=90&&typeof longitude==="number"&&Number.isFinite(longitude)&&Math.abs(longitude)<=180?{latitude,longitude}:null;
   return {salary:{minimum:min,maximum:max,currency:j.job_salary_currency||null,period:payPeriod(j.job_salary_period),rawPeriod:j.job_salary_period||null,estimated:j.salary_is_predicted===true},coordinates:coords,
@@ -39,10 +40,17 @@ export function evidenceForJob(j:JSearchJob,now=new Date().toISOString()):JobSea
     experienceYears:noExperience?0:experience?Number(experience[1]):null,noExperienceRequired:noExperience?true:experience?false:null,employerKind:j.employer_kind||(/\b(?:staffing|recruitment|employment) agency\b/i.test(text)?"staffing":null),travelPercent:/\bno travel (?:is )?required\b/i.test(text)?0:travel&&Number(travel[1]||travel[2])<=100?Number(travel[1]||travel[2]):null,
     source:j.source||"jsearch",fetchedAt:j.fetched_at||now,warnings};
 }
+/**
+ * Pay is shown only when the source states both the currency and a pay period
+ * we recognize. A bare number ("6,240") or a number with no period cannot be
+ * compared; it used to render with placeholder text for the missing currency
+ * and period on almost every card. Show nothing instead.
+ */
 export function formatSourceSalary(e:JobSearchEvidence["salary"]):string|null {
   const {minimum:min,maximum:max}=e;
   if(min===null&&max===null)return null;
+  if(!e.currency||!e.period)return null;
   const n=(v:number)=>new Intl.NumberFormat("en-US",{maximumFractionDigits:2}).format(v);
   const range=min!==null&&max!==null?min===max?n(min):`${n(min)} to ${n(max)}`:min!==null?`${n(min)}+`:`Up to ${n(max!)}`;
-  return `${e.currency||"Currency not supplied"} ${range} / ${e.period||e.rawPeriod||"period not supplied"}${e.estimated?" (provider estimate)":""}`;
+  return `${e.currency} ${range} / ${e.period}${e.estimated?" (provider estimate)":""}`;
 }

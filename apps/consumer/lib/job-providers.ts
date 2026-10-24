@@ -62,7 +62,7 @@ export function adzunaUrl(role:string,location:string,radiusMiles:number,filters
 }
 export function mapAdzunaJob(r:any,index=0):JSearchJob{
   const area=Array.isArray(r.location?.area)?r.location.area:[];
-  return{job_id:`adzuna-${r.id??index}`,job_title:r.title||"Job",employer_name:r.company?.display_name||"Employer",employer_logo:null,job_city:area.length>2?area.at(-1):r.location?.display_name||null,job_state:area[1]||null,job_country:"US",job_description:r.description||"",
+  return{job_id:`adzuna-${r.id??index}`,job_title:r.title||"Job",employer_name:r.company?.display_name||"Employer",employer_logo:null,job_city:area.length>2?area.at(-1):(typeof r.location?.display_name==="string"?r.location.display_name.split(",")[0].trim()||null:null),job_state:area[1]||null,job_country:"US",job_description:r.description||"",
     job_min_salary:finite(r.salary_min),job_max_salary:finite(r.salary_max),job_salary_currency:r.salary_currency||null,job_salary_period:r.salary_period||null,salary_is_predicted:r.salary_is_predicted===1||r.salary_is_predicted==="1",
     job_employment_type:r.contract_time==="part_time"?"Part-time":r.contract_time==="full_time"?"Full-time":r.contract_type==="contract"?"Contract":null,
     job_posted_at_datetime_utc:r.created||"",job_is_remote:null,employer_website:null,job_apply_link:r.redirect_url||null,job_latitude:finite(r.latitude),job_longitude:finite(r.longitude),source:"adzuna",fetched_at:new Date().toISOString(),
@@ -92,7 +92,7 @@ export function mapUsaJobsJob(item:any,index=0,location="",filters=defaultJobSea
   if(filters.origin){const withCoords=locations.filter((l:any)=>finite(l.Latitude)!==null&&finite(l.Longitude)!==null);withCoords.sort((a:any,b:any)=>distanceMiles(filters.origin!,{latitude:Number(a.Latitude),longitude:Number(a.Longitude)})-distanceMiles(filters.origin!,{latitude:Number(b.Latitude),longitude:Number(b.Longitude)}));if(withCoords.length)place=withCoords[0];}
   const parts=String(place.LocationName||"").split(",").map((s:string)=>s.trim());const pay=d.PositionRemuneration?.[0];const details=d.UserArea?.Details||{};
   return{job_id:`usajobs-${item.MatchedObjectId||d.PositionID||index}`,job_title:d.PositionTitle||"Job",employer_name:d.OrganizationName||"Federal agency",employer_logo:null,
-    job_city:place.CityName||parts[0]||null,job_state:place.CountrySubDivisionName||parts[1]||null,job_country:place.CountryCode||"US",job_description:[details.JobSummary,d.QualificationSummary,details.Requirements,details.MajorDuties].filter(Boolean).join("\n"),
+    job_city:String(place.CityName||parts[0]||"").split(",")[0].trim()||null,job_state:place.CountrySubDivisionName||place.CountrySubDivisionCode||parts[1]||null,job_country:place.CountryCode||"US",job_description:[details.JobSummary,d.QualificationSummary,details.Requirements,details.MajorDuties].filter(Boolean).join("\n"),
     job_min_salary:finite(pay?.MinimumRange),job_max_salary:finite(pay?.MaximumRange),job_salary_currency:"USD",job_salary_period:pay?.RateIntervalCode||pay?.Description?.replace(/^Per /i,"")||null,
     job_employment_type:d.PositionSchedule?.[0]?.Name||null,job_posted_at_datetime_utc:d.PublicationStartDate||"",job_is_remote:typeof details.RemoteIndicator==="boolean"?details.RemoteIndicator:null,
     job_latitude:finite(place.Latitude),job_longitude:finite(place.Longitude),employer_website:null,job_apply_link:d.ApplyURI?.[0]||d.PositionURI||null,job_apply_is_direct:true,employer_kind:"direct",source:"usajobs",fetched_at:new Date().toISOString(),
@@ -105,10 +105,47 @@ export async function fetchUsaJobs(role:string,location:string,timeoutMs:number,
     try{const r=await getJson(usaJobsUrl(role,location,filters,page).toString(),{headers:{Host:"data.usajobs.gov","User-Agent":ua,"Authorization-Key":key}},timeoutMs);if(!r.ok)return{jobs,failed:jobs.length===0,status:r.status,requests,partial:jobs.length>0};const values=Array.isArray(r.json?.SearchResult?.SearchResultItems)?r.json.SearchResult.SearchResultItems:[];jobs.push(...values.map((v:any,i:number)=>mapUsaJobsJob(v,i,location,filters)).filter(Boolean));if(values.length<PAGE_SIZE)break;if(page===maxPages(options.maxPages))partial=true;}catch{return{jobs,failed:jobs.length===0,requests,partial:jobs.length>0};}
   }return{jobs,failed:false,requests,partial};
 }
-function key(j:JSearchJob){const n=(s:string|null)=>String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");return `${n(j.job_title)}|${n(j.employer_name)}|${n(j.job_city)}|${n(j.job_state)}`;}
-/** Keep provenance from duplicates and prefer an explicitly direct apply option. */
-export function mergeJobs(lists:JSearchJob[][],_preferState?:string):JSearchJob[]{
-  const found=new Map<string,JSearchJob>();
-  for(const list of lists)for(const job of list){const k=key(job),previous=found.get(k);if(!previous){found.set(k,{...job});continue;}previous.source_variants=[...(previous.source_variants||[]),{source:job.source||"unknown",id:job.job_id,fields:job.source_fields||{}}];if(job.job_apply_is_direct===true&&previous.job_apply_is_direct!==true){previous.job_apply_link=job.job_apply_link;previous.job_apply_is_direct=true;}}
-  return [...found.values()];
+import { normalizeLocation, placeKey } from "./job-location";
+const CORP=/\b(?:inc|incorporated|llc|l l c|ltd|limited|corp|corporation|co|company|plc|lp|llp|usa|us|the)\b/g;
+const norm=(s:unknown)=>String(s??"").toLowerCase().replace(/&/g," and ").replace(/[^a-z0-9]+/g," ").trim();
+export function employerKey(name:unknown):string{return norm(name).replace(CORP," ").replace(/\s+/g," ").trim();}
+/** Title without the place it is posted in, so "Technician - Germantown, WI" and "Technician - Menomonee Falls" are one posting. */
+export function titleKey(j:Pick<JSearchJob,"job_title"|"job_city"|"job_state">):string{
+  let t=` ${norm(j.job_title)} `;
+  for(const part of [j.job_city,j.job_state])for(const seg of String(part||"").split(",")){const n=norm(seg);if(n.length>1)t=t.split(` ${n} `).join(" ");}
+  const state=placeKey(String(j.job_state||""));if(state.startsWith("state:")){const full=state.slice(6);t=t.split(` ${full} `).join(" ");}
+  return t.replace(/\s+/g," ").trim();
+}
+export const jobPlace=(j:JSearchJob)=>normalizeLocation(j.job_city,j.job_state);
+/**
+ * One card per posting. The same employer and title (place words removed) is one
+ * posting, whether a provider lists it once per town or two providers list it
+ * with different ids or apply links; a repeated provider id is also one posting. Other towns are kept as job_locations,
+ * provenance as source_variants, and an explicitly direct apply option wins.
+ * The card shown is the listing in the searched city when there is one.
+ */
+export function mergeJobs(lists:JSearchJob[][],searchLocation?:string):JSearchJob[]{
+  const groups=new Map<string,JSearchJob[]>(),byId=new Map<string,string>();
+  for(const list of lists)for(const job of list){
+    // The same provider id is the same posting even if a later page retitled
+    // it. An apply URL alone is not used: small employers point every opening
+    // at one careers page, and that would merge different jobs.
+    let k=`${employerKey(job.employer_name)}|${titleKey(job)}`;
+    const id=`${job.source||""}:${job.job_id}`;if(byId.has(id))k=byId.get(id)!;else byId.set(id,k);
+    const g=groups.get(k);if(g)g.push(job);else groups.set(k,[job]);
+  }
+  const wanted=norm(String(searchLocation||"").split(",")[0]);
+  return [...groups.values()].map(group=>{
+    const pick=(wanted&&group.find(j=>norm(j.job_city)===wanted))||group[0];
+    const merged:JSearchJob={...pick};
+    const here=jobPlace(pick),places:string[]=[],seenPlaces=new Set([here.toLowerCase()]);
+    for(const j of group){
+      if(j===pick)continue;
+      merged.source_variants=[...(merged.source_variants||[]),{source:j.source||"unknown",id:j.job_id,fields:j.source_fields||{}}];
+      const place=jobPlace(j);if(place&&!seenPlaces.has(place.toLowerCase())){seenPlaces.add(place.toLowerCase());places.push(place);}
+      if(j.job_apply_is_direct===true&&merged.job_apply_is_direct!==true&&norm(j.job_city)===norm(pick.job_city)){merged.job_apply_link=j.job_apply_link;merged.job_apply_is_direct=true;}
+    }
+    if(places.length)merged.job_locations=places;
+    return merged;
+  });
 }

@@ -1,4 +1,5 @@
-import { searchRoles, jobRelevance } from './job-search-relevance';
+import { searchRoles, jobRelevance, relatedTerms } from './job-search-relevance';
+import { normalizeLocation } from './job-location';
 /**
  * One bounded provider search and deterministic filter path for Job Board and coach.
  * Cache public source listings; apply current lane choices after cache reads.
@@ -182,7 +183,10 @@ async function enrichJobsWithAI(
       // which joined to an empty string and rendered a job card with no
       // location at all. Fall back to what the person actually searched --
       // the listing did match that search -- rather than showing a blank.
-      location: [j.job_city, j.job_state].filter(Boolean).join(", ") || "Location not supplied",
+      // normalizeLocation drops a state or country the provider repeated inside
+      // the city field ("Milwaukee, Wisconsin, Wisconsin").
+      location: normalizeLocation(j.job_city, j.job_state) || "Location not supplied",
+      ...(j.job_locations?.length ? { other_locations: j.job_locations } : {}),
       salary,
       description: truncateDescription(j.job_description, 200),
       full_description: truncateDescription(j.job_description, 20000),
@@ -347,6 +351,8 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   const skills = profile?.topSkills || params.skills || [];
   const requestedRole = params.role === undefined ? saved?.saved.role || "" : params.role;
   const roles = searchRoles(requestedRole, saved?.target || (!saved?.laneId ? profile?.topCareerPaths[0] || "" : ""), skills);
+  const related = roles.length ? relatedTerms(roles[0]) : [];
+  const relatedUsed = roles.slice(1).filter(r => related.some(t => t.toLowerCase() === r.toLowerCase()));
   const result = await searchListings({ ...params, role: roles[0] || requestedRole, searchRoles: roles, location: params.location === undefined ? saved?.saved.location || "" : params.location, resolvedFilters: filters });
   let hidden = new Set<string>();
   let personal = readJobFit(null);
@@ -366,11 +372,20 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     if (!filters.includeUnknown) assessment.requiredUnknown.forEach(key => { excludedBy[`unknown_${key}`] = (excludedBy[`unknown_${key}`] || 0) + 1; });
     if (!assessment.included) return [];
     assessment.unknown.forEach(key => { unknownBy[key] = (unknownBy[key] || 0) + 1; });
-    return [{ ...job, relevance: jobRelevance(job, roles, skills), filterAssessment: assessment }];
+    const relevance = jobRelevance(job, roles, skills, related);
+    // Off-topic listings (none of the search words in title or description)
+    // are dropped and counted, never silently: the summary says how many.
+    if (relevance.tier === "none") { excludedBy.off_topic = (excludedBy.off_topic || 0) + 1; return []; }
+    return [{ ...job, relevance, filterAssessment: assessment }];
   });
   jobs.sort((a,b) => b.relevance.score - a.relevance.score || a.filterAssessment.preferred.length - b.filterAssessment.preferred.length);
+  const offTopic = excludedBy.off_topic || 0, alsoFound = jobs.filter(j => j.relevance.tier === "description").length;
   const summary: JobSearchSummary = { loaded, matched: jobs.length, excluded: loaded - jobs.length, unknownIncluded: jobs.filter(j => j.filterAssessment.unknown.length > 0).length, excludedBy, unknownBy, providerRequests: result.metadata?.providerRequests || 0, partial: true, fetchedAt: result.jobs[0]?.evidence?.fetchedAt || new Date().toISOString(), filters, laneId: saved?.laneId || null,
-    notices: [...(roles.length ? [`Search directions: ${roles.join("; ")}. Ordered by title and saved skill overlap, not confirmed eligibility.`] : ["Add a role or save a career direction for more focused results."]), "Counts cover the listings loaded for this search, not every opening.", ...(!filters.origin && filters.radiusMiles.value !== null ? ["Distance is unverified without an exact search center. Provider radius is approximate."] : []), ...(result.metadata?.notices || [])] };
+    offTopic, alsoFound, ...(relatedUsed.length ? { relatedTerms: relatedUsed } : {}),
+    notices: [...(roles.length ? [`Search directions: ${roles.join("; ")}. Ordered by title match first, then description and saved skill overlap, not confirmed eligibility.`] : ["Add a role or save a career direction for more focused results."]),
+      ...(relatedUsed.length ? [`We also searched ${relatedUsed.map(r => `"${r}"`).join(" and ")}, a related term for "${roles[0]}". Cards say when only the related term matched.`] : []),
+      ...(offTopic ? [`${offTopic} loaded listing${offTopic === 1 ? "" : "s"} left out because none of your search words appear in the title or description.`] : []),
+      ...(alsoFound ? [`${alsoFound} listing${alsoFound === 1 ? "" : "s"} only mention your search words in the description. They are under "Also found" below the main list.`] : []), "Counts cover the listings loaded for this search, not every opening.", ...(!filters.origin && filters.radiusMiles.value !== null ? ["Distance is unverified without an exact search center. Provider radius is approximate."] : []), ...(result.metadata?.notices || [])] };
   const { metadata: _metadata, ...publicResult } = result;
   return { ...publicResult, jobs, summary };
 }
@@ -391,7 +406,7 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
   const cacheParams = {
     role: sanitizeOrEmpty(role),
     location: searchLocation,
-    version: 3,
+    version: 4,
     roles: params.searchRoles || [],
     filtersHash: hashQuery({ filters: canonicalSearchFilters(filters) }),
   };
@@ -439,15 +454,25 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
     ...roles.map(r => fetchAdzunaJobs(r, searchLocation, filters.radiusMiles.value ?? tenantGeo.searchRadiusMiles, PARALLEL_PROVIDER_TIMEOUT_MS, { filters, maxPages: multi ? 1 : 2 }).then(result => { if(result.jobs.length) providerNames.push("adzuna"); return result; })),
     fetchUsaJobs(roleClean, searchLocation, PARALLEL_PROVIDER_TIMEOUT_MS, { filters, maxPages: multi ? 1 : 2 }).then(result => { if(result.jobs.length) providerNames.push("usajobs"); return result; }),
   ]);
-  const metadata = { providerRequests: settled.reduce((n,r) => n + (r.requests || 0), 0), notices: settled.some(r => r.failed || r.partial) ? ["Some providers were unavailable or reached the bounded page limit."] : [] };
-  const rawJobs = mergeJobs(settled.map(result => result.jobs));
+  const sources = [...roles.map(() => "JSearch"), ...roles.map(() => "Adzuna"), "USAJOBS"];
+  const failedSources = [...new Set(settled.flatMap((r, i) => r.failed ? [sources[i]] : []))];
+  const cutShort = settled.some(r => r.partial);
+  const metadata = { providerRequests: settled.reduce((n,r) => n + (r.requests || 0), 0), notices: [
+    ...(failedSources.length ? [`${failedSources.join(" and ")} did not answer this search, so ${failedSources.length === 1 ? "its" : "their"} listings are missing.`] : []),
+    ...(cutShort ? ["Some providers reached the bounded page limit. More openings may exist."] : []),
+  ] };
+  const rawJobs = mergeJobs(settled.map(result => result.jobs), searchLocation);
   const allFailed = settled.every((r) => r.failed || r.jobs.length === 0);
 
   if (rawJobs.length === 0) {
     // Provider failed (quota/outage/key) vs. genuinely zero matches --
-    // never let a failure render as "no jobs found". With several providers the
-    // distinction is: did ANY of them actually answer with a clean empty result?
-    const anyCleanEmpty = settled.some((r) => !r.failed);
+    // never let a failure render as "no jobs found". USAJOBS lists federal
+    // openings only, so a clean empty answer from it alone says nothing about
+    // trade or private-sector jobs: when every general board (JSearch, Adzuna)
+    // failed, this is a source outage, not an empty market. (Before this, a
+    // clean USAJOBS zero turned two failed boards into "0 kept from 0 loaded".)
+    const generalBoards = settled.slice(0, roles.length * 2);
+    const anyCleanEmpty = generalBoards.some((r) => !r.failed);
     if (!anyCleanEmpty && allFailed) {
       return {
         jobs: [],

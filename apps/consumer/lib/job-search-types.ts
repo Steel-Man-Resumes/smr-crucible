@@ -1,3 +1,4 @@
+import type { JobRelevance } from "./job-search-relevance";
 import type { JobFilterAssessment, JobSearchEvidence, JobSearchFilters } from "@crucible/core/src/jobSearchFilters";
 export interface JSearchJob {
   job_id: string; job_title: string; employer_name: string; employer_logo: string | null;
@@ -10,13 +11,17 @@ export interface JSearchJob {
   job_highlights?: { Qualifications?: string[]; Responsibilities?: string[]; Benefits?: string[] };
   source?: string; fetched_at?: string; salary_is_predicted?: boolean; employer_kind?: "direct" | "staffing" | null;
   source_fields?: Record<string, unknown>; source_variants?: { source: string; id: string; fields: Record<string, unknown> }[];
+  /** Other places the same posting is listed (set by mergeJobs). */
+  job_locations?: string[];
 }
 export interface EnrichedJob {
   id: string; title: string; company: string; location: string; salary: string | null;
   description: string; full_description: string; requirements: string[]; benefits: string[];
   employment_type: string; posted: string; second_chance: boolean; fair_chance_reason: string | null;
   remote: boolean; apply_url: string | null; employer_website: string | null;
-  relevance?: { score: number; reason: string };
+  /** Other places the same posting is listed. The card shows one card, not one per town. */
+  other_locations?: string[];
+  relevance?: JobRelevance;
   evidence?: JobSearchEvidence; filterAssessment?: JobFilterAssessment;
   source_fields?: Record<string, unknown>; source_variants?: JSearchJob["source_variants"];
 }
@@ -26,6 +31,12 @@ export interface JobSearchSummary {
   providerRequests: number; partial: boolean; fetchedAt: string;
   filters: JobSearchFilters; laneId: string | null;
   notices: string[];
+  /** Listings dropped because none of the search words appear in title or description. */
+  offTopic?: number;
+  /** Kept below the main list: search words only in the description. */
+  alsoFound?: number;
+  /** Related terms searched alongside the person's own words. */
+  relatedTerms?: string[];
 }
 export interface JobSearchOutcome {
   jobs: EnrichedJob[]; fair_chance_info: string; source: string; error?: string;
