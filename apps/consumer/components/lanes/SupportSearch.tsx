@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { readCoverageReceipt, type CoverageReceipt } from "@/lib/coverage-receipt";
+import { deepLinkCategory, deepLinkSearchPlace } from "@/lib/support-deep-link";
 import { parsePlace } from "@/lib/support-location";
 import { resourceEvidenceLabel } from "@/lib/directory-labels";
 import { SavedResources } from "./SavedResources";
@@ -120,13 +121,13 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
   // With a saved place it searches once, so the card lands on answers.
   const [deepLinked, setDeepLinked] = useState(false);
   useEffect(() => {
-    const wanted = new URL(window.location.href).searchParams.get("category");
-    if (wanted && wanted !== "all" && SUPPORT_CATEGORIES.some((c) => c.id === wanted)) { setCategory(wanted); setDeepLinked(true); }
+    const wanted = deepLinkCategory(window.location.search, SUPPORT_CATEGORIES.map((c) => c.id));
+    if (wanted) { setCategory(wanted); setDeepLinked(true); }
   }, []);
   useEffect(() => {
     // The saved place only: typing a place never fires a search by itself.
-    const place = location.trim() || initialLocation.trim();
-    if (!deepLinked || !place) return;
+    const place = deepLinkSearchPlace(deepLinked, initialLocation);
+    if (!place) return;
     setDeepLinked(false);
     void search(place);
     // eslint-disable-next-line react-hooks/exhaustive-deps

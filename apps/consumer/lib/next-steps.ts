@@ -13,11 +13,11 @@ export interface NextCategory {
 }
 
 export const NEXT_CATEGORIES: readonly NextCategory[] = [
-  { id: "education", label: "School and training", line: "Schools and training programs that fit around work." },
+  { id: "education", label: "School and training", line: "School and training programs." },
   { id: "financial", label: "Money and benefits", line: "Benefits, bills and getting your money steady." },
   { id: "legal", label: "Legal help with a record", line: "Legal aid, record clearing and court help." },
-  { id: "mental_health", label: "Mental health", line: "Someone to talk to, close to home." },
-  { id: "substance", label: "Recovery", line: "Recovery support near you." },
+  { id: "mental_health", label: "Mental health", line: "Someone to talk to." },
+  { id: "substance", label: "Recovery", line: "Recovery support." },
   { id: "housing", label: "A place to stay", line: "Shelter and housing help." },
   { id: "transportation", label: "Getting to work", line: "Rides and ways to get to the job." },
   { id: "id_documents", label: "ID and documents", line: "State ID, birth certificate, Social Security card." },
@@ -39,5 +39,5 @@ export const NATIONAL_STARTING_POINTS: readonly { label: string; href: string; c
   { label: "Replace a lost ID card (USA.gov)", href: "https://www.usa.gov/replace-vital-documents", checked: "2026-10-23" },
   { label: "Health coverage (HealthCare.gov)", href: "https://www.healthcare.gov/", checked: "2026-10-23" },
   { label: "Treatment for mental health or substance use (FindTreatment.gov)", href: "https://findtreatment.gov/", checked: "2026-10-23" },
-  { label: "211, local help by phone or online (211.org)", href: "https://www.211.org/", checked: "2026-10-23" },
+  { label: "211, local help by phone or online (211.org)", href: "https://211.org/", checked: "2026-10-23" },
 ];

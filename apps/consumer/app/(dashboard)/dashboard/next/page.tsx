@@ -3,7 +3,8 @@
 /**
  * What comes next: the last station on the Refinery path. The job is one
  * piece; school, money, health, a ride and an ID hold it up. Each card opens
- * Local help with that kind of help chosen and the person's saved place.
+ * Local help with that kind of help chosen. The place shown is the one Local
+ * help will fill in (same order as that page: own Forge run, then account).
  */
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -11,6 +12,8 @@ import { useSession } from "next-auth/react";
 import { ExternalLink } from "lucide-react";
 import { TierGate } from "@/components/TierGate";
 import { NATIONAL_STARTING_POINTS, NEXT_CATEGORIES, nextCategoryHref } from "@/lib/next-steps";
+import { readOwnForgeSession } from "@/lib/forge-carry";
+import { savedSearchPlace } from "@/lib/support-deep-link";
 
 function checkedLabel(iso: string): string {
   const d = new Date(`${iso}T12:00:00Z`);
@@ -23,10 +26,15 @@ function NextPage() {
   useEffect(() => {
     let live = true;
     if (!ownerUid) return;
+    let forgeLocation: string | undefined;
+    try {
+      const run = readOwnForgeSession(ownerUid) as { preferences?: { location?: string } } | null;
+      forgeLocation = run?.preferences?.location;
+    } catch {}
+    const fromForge = savedSearchPlace(forgeLocation, null);
+    if (fromForge) { setPlace(fromForge); return; }
     fetch("/api/user/context", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((d) => {
-      if (!live || !d) return;
-      const saved = [d.profile?.city, d.profile?.state].filter((v: unknown) => typeof v === "string" && v.trim()).join(", ");
-      if (saved) setPlace(saved);
+      if (live && d) setPlace(savedSearchPlace(null, d.profile));
     }).catch(() => {});
     return () => { live = false; };
   }, [ownerUid]);
@@ -39,18 +47,18 @@ function NextPage() {
         <div className="mt-4 border-l-4 border-t-amber bg-t-panel px-4 py-3">
           <p className="text-xs font-semibold text-t-amber-bright">t.ROY</p>
           <p className="mt-1 text-base leading-relaxed text-t-white">
-            A job is one piece. School, money, your health, a ride, your ID... that stuff holds the job up. Pick what&apos;s in your way and I&apos;ll show you who helps near you.
+            A job is one piece. School, money, your health, a ride, your ID... that stuff holds the job up. Pick what&apos;s in your way and search local help by place and need.
           </p>
           <p className="mt-2 text-sm leading-relaxed text-t-phos-dim">
-            The more you work in here and tell me, the better I can help. With the job and with the rest of life.
+            We haven&apos;t checked every area yet. Where we haven&apos;t, the search says so and shows help that works anywhere.
           </p>
         </div>
       </header>
 
       <section aria-labelledby="next-help-heading">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 id="next-help-heading" className="text-lg font-bold text-t-white">Help near you</h2>
-          <p className="text-sm text-t-phos-dim">{place ? <>Looking near <strong className="text-t-white">{place}</strong>. You can change it on the next screen.</> : "Add your city and state or ZIP on the next screen."}</p>
+          <h2 id="next-help-heading" className="text-lg font-bold text-t-white">Search local help</h2>
+          <p className="text-sm text-t-phos-dim">{place ? <>The search will use <strong className="text-t-white">{place}</strong>. You can change it on the next screen.</> : "Add your city and state or ZIP on the next screen."}</p>
         </div>
         <ul className="mt-3 grid gap-3 sm:grid-cols-2">
           {NEXT_CATEGORIES.map((c) => (
