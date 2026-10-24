@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { revisionCaller } from '@/lib/revision-route';
 import { isSameOriginJsonPost } from '@/lib/same-origin';
 import { getOneAsUser, queryAsUser, listArtifacts, incrementUserUsage } from '@crucible/core';
-import { readMasterDraft, isMasterResume } from '@/lib/master-draft';
+import { readMasterDraft, isMasterResume, stampConfirmedAt } from '@/lib/master-draft';
 export const dynamic = 'force-dynamic';
 export async function GET() {
   const caller=await revisionCaller();if(!caller.ok)return NextResponse.json({error:caller.error},{status:caller.status});const userId=caller.userId;
@@ -20,7 +20,9 @@ export async function PUT(request:Request) {
   let body;try{body=JSON.parse(raw);}catch{return NextResponse.json({error:'Invalid request.'},{status:400});}
   if(!Number.isInteger(body?.revision)||body.revision<0||!Array.isArray(body?.facts)||body.facts.length>40)return NextResponse.json({error:'Reload your Master Draft before saving.'},{status:400});
   if(body.facts.some((f:unknown)=>{if(!f||typeof f!=='object')return true;const fact=f as Record<string,unknown>;return typeof fact.id!=='string'||!/^[a-zA-Z0-9_-]{1,80}$/.test(fact.id)||typeof fact.text!=='string'||!fact.text.trim()||fact.text.length>700||!['confirmed','needs_check'].includes(String(fact.status));})||new Set(body.facts.map((f:{id:string})=>f.id)).size!==body.facts.length)return NextResponse.json({error:'Each detail needs its own ID, up to 700 characters, and a confirmation status.'},{status:400});
-  const master=readMasterDraft(body);master.revision++;
+  const prior=await getOneAsUser<{master:unknown}>(userId,"SELECT profile_data->'masterDraft' AS master FROM consumer_profile WHERE user_id=$1",[userId]);
+  // The revision check below still guards the write; this read only carries confirmation times forward.
+  const master=stampConfirmedAt(readMasterDraft(body),readMasterDraft(prior?.master),new Date());master.revision++;
   const rows=await queryAsUser(userId,`INSERT INTO consumer_profile(user_id,profile_data)
     SELECT $1,jsonb_build_object('masterDraft',$2::jsonb) WHERE $3::int=0 OR EXISTS(SELECT 1 FROM consumer_profile WHERE user_id=$1)
     ON CONFLICT(user_id) DO UPDATE SET profile_data=COALESCE(consumer_profile.profile_data,'{}'::jsonb)||jsonb_build_object('masterDraft',$2::jsonb),updated_at=now()

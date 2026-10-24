@@ -27,8 +27,9 @@ export async function progressionAllowance(userId:string) {
  (SELECT count(*)::int FROM ai_operation WHERE user_id=$1 AND progression_bonus_used AND status<>'failed' AND created_at>=${DAY}) AS "bonusUsed",
  COALESCE((SELECT sum(GREATEST(o.reserved_usd,COALESCE((SELECT sum(t.cost_usd) FROM ai_token_usage t WHERE t.operation_id=o.id),0))) FROM ai_operation o WHERE o.user_id=$1 AND o.progression_counted AND o.created_at>=${DAY}),0)::float8 AS spent,
  EXISTS(SELECT 1 FROM ai_operation o WHERE o.user_id=$1 AND o.progression_counted AND o.created_at>=${DAY} AND (o.accounting_incomplete OR EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id AND t.cost_status='unpriced'))) AS unknown`,[userId]);
- const earned=await getOneAsUser<{tailored:boolean;applied:boolean}>(userId,"SELECT COALESCE(bool_or(grant_key='first-tailored'),false) AS tailored,COALESCE(bool_or(grant_key='first-applied'),false) AS applied FROM progression_grant WHERE user_id=$1 AND kind='milestone'",[userId]);
- const base=account.existing?account.legacyLimit:baseAllowance(policy,{tailored:snapshot.metrics.resumeTailored||!!earned?.tailored,applied:snapshot.metrics.applicationsSent>0||!!earned?.applied});
+ const earned=await getOneAsUser<{tailored:boolean;applied:boolean;steel:boolean}>(userId,"SELECT COALESCE(bool_or(grant_key='first-tailored'),false) AS tailored,COALESCE(bool_or(grant_key='first-applied'),false) AS applied,COALESCE(bool_or(grant_key='meter:steel-man'),false) AS steel FROM progression_grant WHERE user_id=$1 AND kind='milestone'",[userId]);
+ // meter:steel-man is written only from server-recorded work (lib/steelman/moments.ts); policy.steel_man_bonus_calls ships 0.
+ const base=account.existing?account.legacyLimit:baseAllowance(policy,{tailored:snapshot.metrics.resumeTailored||!!earned?.tailored,applied:snapshot.metrics.applicationsSent>0||!!earned?.applied,steelMan:!!earned?.steel});
  return {policy,account,snapshot,base,bonus:row?.bonus??0,used:row?.used??0,bonusUsed:row?.bonusUsed??0,blockedReason:!account.existing&&(row?.unknown||((row?.spent??0)+policy.reserve_usd>policy.daily_usd))?'Today’s AI spending allowance is reserved or used. Saved work and non-AI tools remain available. It resets at midnight UTC.':undefined};
 }
 export async function progressionLegacyBonus(userId:string):Promise<number> {
@@ -75,7 +76,7 @@ export async function getProgression(userId:string,selection:WorkSelection={},re
  const expiresAt=new Date();expiresAt.setUTCHours(24,0,0,0);
  const taskAction=workspaceNextAction({work});
  const bonusRemaining=Math.max(0,allow.bonus-allow.bonusUsed);
- const latest=grants.find(g=>g.kind==='milestone');
+ const latest=grants.find(g=>g.kind==='milestone'&&!g.grant_key.startsWith('meter:'));// meter:* are internal markers, never a celebration
  return {contextKey:JSON.stringify(work.selection),steps,currentStepId:current,nextAction:taskAction??{label:STEP_COPY[current].label,href:steps.find(s=>s.id===current)!.href},
  nextReward:{label:allow.account.existing?'Earn progress celebrations and request a small AI bonus':allow.snapshot.metrics.applicationsSent>0?'Ask t.ROY for a small extra allowance':allow.snapshot.metrics.resumeTailored?'12 daily AI actions for new accounts':'10 daily AI actions for new accounts',requirement:allow.snapshot.metrics.resumeTailored?'Record your application when you send it.':'Save a resume tailored to a real job.'},
  allowance:{enabled:true,blockedReason:allow.blockedReason,remaining:allow.account.existing?null:Math.max(0,allow.base+allow.bonus-allow.used),unit:'AI actions',expiresAt:expiresAt.toISOString(),description:allow.account.existing?`Your existing per-tool allowance continues. ${bonusRemaining} extra AI actions are available across tools until midnight UTC.`:`${allow.base} daily Refinery AI actions${allow.bonus?` + ${allow.bonus} bonus`:''}. Resets at midnight UTC. Other tool and spending limits still apply.`,base:allow.base,bonus:allow.bonus},

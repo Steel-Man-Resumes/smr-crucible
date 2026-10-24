@@ -32,3 +32,24 @@ test("source budget is bounded and defaults to the existing audit window",()=>{
     assert.equal(groundingSourceWindow(long,1e9).length,80000);
   } finally {console.warn=warn;}
 });
+
+test("confirmedAt is server-owned: kept, stamped on first confirm, never taken from the browser", async () => {
+  const { stampConfirmedAt } = await import("../master-draft");
+  const now = new Date("2026-10-23T12:00:00Z");
+  const prior = readMasterDraft({ revision: 3, facts: [
+    { id: "old", text: "Ran forklift", status: "confirmed" },
+    { id: "kept", text: "Led crew", status: "confirmed", confirmedAt: "2026-10-01T00:00:00.000Z" },
+    { id: "later", text: "Trained two", status: "needs_check" },
+  ] });
+  const next = readMasterDraft({ revision: 3, facts: [
+    { id: "old", text: "Ran forklift", status: "confirmed", confirmedAt: "2020-01-01T00:00:00Z" },
+    { id: "kept", text: "Led crew", status: "confirmed" },
+    { id: "later", text: "Trained two", status: "confirmed", confirmedAt: "1999-01-01T00:00:00Z" },
+    { id: "new", text: "Counted stock", status: "needs_check", confirmedAt: "2026-10-02T00:00:00Z" },
+  ] });
+  const out = stampConfirmedAt(next, prior, now).facts;
+  assert.equal(out[0].confirmedAt, undefined);
+  assert.equal(out[1].confirmedAt, "2026-10-01T00:00:00.000Z");
+  assert.equal(out[2].confirmedAt, now.toISOString());
+  assert.equal(out[3].confirmedAt, undefined);
+});

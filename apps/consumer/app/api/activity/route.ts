@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
-import { recordProgressEvent, isProgressEventType } from "@crucible/core";
+import { recordProgressEvent, isProgressEventType, runAsUser } from "@crucible/core";
 
 const MAX_BODY_BYTES = 2_000;
 
@@ -24,6 +24,11 @@ export async function POST(request: Request) {
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+  // A view-only impersonation never writes into the account it is looking at
+  // (same guard as /api/steelman). The page carries on as if it was counted.
+  if (session.impersonation?.mode === "view") {
+    return NextResponse.json({ ok: true, skipped: "view-only" });
   }
 
   const raw = await request.text();
@@ -51,6 +56,18 @@ export async function POST(request: Request) {
       : {};
 
   try {
+    if (type === "session_start") {
+      // One session_start per account per UTC day, whatever page or tab sends it.
+      // The lock serializes two tabs opening at once so neither double-counts.
+      await runAsUser(userId, (sql) => [
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 875))`,
+        sql`INSERT INTO user_progress_event(user_id,event_type,context)
+          SELECT ${userId}::uuid,'session_start',${JSON.stringify(eventContext)}::jsonb
+          WHERE NOT EXISTS (SELECT 1 FROM user_progress_event WHERE user_id=${userId}::uuid AND event_type='session_start'
+            AND created_at >= date_trunc('day', now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`,
+      ]);
+      return NextResponse.json({ ok: true });
+    }
     await recordProgressEvent(userId, type, eventContext);
   } catch (err: any) {
     console.error("recordProgressEvent error:", err?.message || err);
