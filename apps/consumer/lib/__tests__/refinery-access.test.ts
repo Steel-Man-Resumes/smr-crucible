@@ -41,7 +41,8 @@ import {
   type DecideSeatDeps,
   type SeatDeps,
 } from "../refinery-access-server";
-import { CODE_ALPHABET, CODE_REFUSAL, codeAttemptLimits, generateSeatCode, mintCodeChoice } from "../access-code-guard";
+import { CODE_REFUSAL, codeAttemptLimits, mintCodeChoice } from "../access-code-guard";
+import { ORG_CODE_ALPHABET as CODE_ALPHABET, generateOrgCode as generateSeatCode, seatsFull } from "@crucible/core/src/orgCode";
 import { checkAuthRateLimits, memoryRateLimitStore, setAuthRateLimitStore } from "../auth-rate-limit";
 import { ACCOUNT_LS_EXTRA_KEYS, clearForgeBrowserKeys, clearRunSessionStorage } from "../refinery-guards";
 import { canSwitchView } from "../useUserTier";
@@ -122,8 +123,14 @@ test("gate: wired in authorized() after revocation, the second-step hold and ter
   // The claim is read from the definer functions, after the Google last check.
   const read1 = at("public.smr_has_refinery_seat(${token.sub}::uuid)");
   assert.ok(read1 > at("throw new GoogleLinkRefused()"));
-  assert.match(src, /seatFrom\(rows\[0\]\.seat, token\.email, rows\[0\]\.proven === true\)/);
-  assert.match(src, /u\.email_proven_at IS NOT NULL FROM users u/);
+  assert.match(src, /seatFrom\(rows\[0\]\.seat, token\.email, proven\)/);
+  assert.match(src, /SELECT email_proof_source IS NOT NULL AS proven FROM users/);
+  // SF-7 (review 2): the proof is its own query, inside its own try, after the seat read, so a
+  // missing column can only make the pre-auth part false; the seat query names no proof column.
+  const seatQuery = src.slice(src.indexOf("public.smr_refinery_signup_open() AS open"), src.indexOf("public.smr_refinery_signup_open() AS open") + 200);
+  assert.doesNotMatch(seatQuery, /email_pro/);
+  const proofBlock = src.slice(src.indexOf("if (!rows[0].seat && isPartnerPreAuthorized(token.email))"), src.indexOf("(token as any).seatOpen = rows[0].open;"));
+  assert.match(proofBlock, /try \{[\s\S]*email_proof_source[\s\S]*\} catch \{\s*proven = false;/);
   // The signIn callback does not mention seats at all (S2).
   const signIn = src.slice(src.indexOf("async signIn("), src.indexOf("async authorized("));
   assert.doesNotMatch(signIn, /seat/i);
@@ -685,9 +692,9 @@ test("SF-2: one staff reply whatever the address was, no kind in it, and one off
   assert.doesNotMatch(invite, /kind: created\.kind|already has an account|emailFailed/);
   assert.match(invite, /if \(created\.notify\) \{/);
   const offerSql = fs.readFileSync(path.join(REPO, "packages", "core", "src", "refineryAccess.ts"), "utf8");
-  assert.match(offerSql, /o\.status = 'pending'\s*OR o\.created_at > now\(\) - make_interval\(hours => \$\{OFFER_WINDOW_HOURS\}\)\s*OR o\.decided_at > now\(\)/);
+  assert.match(offerSql, /o\.status = 'pending'\s*OR o\.created_at > now\(\) - make_interval\(hours => \$4::int\)\s*OR o\.decided_at > now\(\)/);
   assert.match(offerSql, /OFFER_WINDOW_HOURS = 24/);
-  assert.match(offerSql, /RETURNING id/);
+  assert.match(offerSql, /OFFER_INSERT_SQL, \[\s*opts\.accessCodeId,\s*opts\.userId,\s*opts\.offeredBy,\s*OFFER_WINDOW_HOURS,/);
 });
 
 test("SF-2: a seat approval asked already today sends no second email", async () => {
@@ -737,4 +744,80 @@ test("N-11 and N-10: the policy row is admin-read only; the constraint swap is s
   const read1 = MIGRATION.slice(MIGRATION.indexOf("CREATE POLICY refinery_access_policy_read"), MIGRATION.indexOf("CREATE POLICY refinery_access_policy_admin"));
   assert.match(read1, /platform_admin/);
   assert.match(MIGRATION, /DROP CONSTRAINT IF EXISTS progression_request_kind_check/);
+});
+
+/* ------------------------------------------------- security review 2 -- */
+
+import { COOKIE_CODE_LIMITS, cookieAttemptLimits } from "../access-code-guard";
+
+test("SF-7: readSeat's proof read fails closed and uses the real proof, not 068's backfill", () => {
+  const src = code(read("lib", "refinery-access-server.ts"));
+  assert.match(src, /SELECT email_proof_source IS NOT NULL AS proven FROM users WHERE id = \$1/);
+  assert.match(src, /\.then\(\(r\) => r\?\.proven === true, \(\) => false\)/);
+  assert.doesNotMatch(src, /email_proven_at/);
+});
+
+test("N-13: a stale cookie code has its own small budget and one try per code per hour", async () => {
+  const lim = cookieAttemptLimits("ip", UID, "OLDCODE1");
+  assert.deepEqual(lim.map((l) => l.key), [`code:cookie:user:${UID}:OLDCODE1`, `code:cookie:user:${UID}`, "code:try:ip:ip"]);
+  assert.equal(COOKIE_CODE_LIMITS.perUserCode.maxRequests, 1);
+  assert.ok(!lim.some((l) => l.key === `code:try:user:${UID}`), "never the typed-code budget");
+  setAuthRateLimitStore(memoryRateLimitStore);
+  try {
+    const u = `c-${Date.now()}`;
+    assert.equal((await checkAuthRateLimits(cookieAttemptLimits("ip-c", u, "OLDCODE1"))).allowed, true);
+    assert.equal((await checkAuthRateLimits(cookieAttemptLimits("ip-c", u, "OLDCODE1"))).allowed, false, "same code again within the hour: no try");
+    assert.equal((await checkAuthRateLimits(codeAttemptLimits("ip-c2", u))).allowed, true, "the person's typed tries are untouched");
+  } finally { setAuthRateLimitStore(null); }
+});
+
+test("N-15: the org email sender logs no recipient address", () => {
+  const src = code(read("lib", "org-invite-email.ts"));
+  const send = src.slice(src.indexOf("export async function sendOrgEmail"));
+  for (const m of send.matchAll(/console\.(log|error|info|warn)\(([^;]*)\);/g)) assert.doesNotMatch(m[2], /\$\{to\}|\bto\b,/, m[0]);
+});
+
+test("addendum: offers have their own resend (once a day, offer email) and withdraw; ordinary invite paths skip them", () => {
+  const core = fs.readFileSync(path.join(REPO, "packages", "core", "src", "orgInvite.ts"), "utf8");
+  const resend = core.slice(core.indexOf("export async function touchOrgInviteResend"), core.indexOf("export async function revokeOrgInvite"));
+  const offerBranch = resend.indexOf('if (row.offer_status === "offered")');
+  assert.ok(offerBranch > 0 && offerBranch < resend.indexOf("if (!row.pending)"), "before the 'already joined' answer");
+  assert.match(resend, /last_sent_at <= now\(\) - make_interval\(hours => \$3\)/);
+  assert.match(resend, /offer: true/);
+  const revoke = core.slice(core.indexOf("export async function revokeOrgInvite"));
+  const wBranch = revoke.indexOf('if (row.offer_status === "offered")');
+  assert.ok(wBranch > 0 && wBranch < revoke.indexOf("if (!row.pending)"));
+  assert.match(revoke, /smr_withdraw_seat_offer\(/);
+  const route = code(read("app", "api", "partner", "org", "route.ts"));
+  assert.match(route, /if \(touched\.offer\) \{[\s\S]*buildOfferEmail\(/);
+  assert.match(route, /Invite removed\. Any seat it held is free again\./);
+  assert.match(MIGRATION, /CHECK \(status IN \('pending','accepted','declined','withdrawn'\)\)/);
+  const w = MIGRATION.slice(MIGRATION.indexOf("FUNCTION public.smr_withdraw_seat_offer"));
+  assert.match(w.slice(0, 900), /requires an organization scope/);
+});
+
+test("addendum: one code generator, in core, 31 characters with no L; 0 seats means full everywhere", () => {
+  assert.equal(CODE_ALPHABET.length, 31);
+  assert.doesNotMatch(CODE_ALPHABET, /[01OIL]/);
+  // Unbiased: a byte stream of 255s is all dropped, so the generator keeps reading.
+  let calls = 0;
+  const code12 = generateSeatCode(12, (n) => { calls++; return Buffer.alloc(n, calls === 1 ? 255 : 7); });
+  assert.equal(code12, CODE_ALPHABET[7].repeat(12));
+  assert.equal(calls, 2);
+  assert.equal(fs.existsSync(path.join(APP, "lib", "access-code-guard.ts")) && /randomInt|CODE_ALPHABET =/.test(read("lib", "access-code-guard.ts")), false, "no app copy");
+  assert.equal(seatsFull(null, 99), false);
+  assert.equal(seatsFull(0, 0), true, "0 is a cap of zero, as in smr_redeem_code");
+  assert.equal(seatsFull(5, 4), false);
+  assert.equal(seatsFull(5, 5), true);
+  assert.match(fs.readFileSync(path.join(REPO, "packages", "core", "src", "accessCode.ts"), "utf8"), /if \(seatsFull\(ac\.max_redemptions, ac\.times_redeemed\)\)/);
+  assert.match(read("app", "api", "admin", "access-code", "mint", "route.ts"), /seatsRaw >= 1/);
+});
+
+test("BL-4: both leave functions keep the live sharing revocation (054), scoped right", () => {
+  const all = MIGRATION.slice(MIGRATION.indexOf("CREATE OR REPLACE FUNCTION public.smr_leave_all_orgs"), MIGRATION.indexOf("REVOKE ALL ON FUNCTION public.smr_redeem_code"));
+  for (const t of ["UPDATE public.sharing_grant SET revoked_at = now(), revoked_reason = 'left_organization' WHERE user_id = p_user AND revoked_at IS NULL",
+    "UPDATE public.sharing_request SET status = 'cancelled' WHERE user_id = p_user AND status = 'pending'",
+    "UPDATE public.sharing_ack SET ended_at = now() WHERE user_id = p_user AND ended_at IS NULL"]) assert.ok(all.includes(t), t);
+  const one = MIGRATION.slice(MIGRATION.indexOf("CREATE OR REPLACE FUNCTION public.smr_leave_org"), MIGRATION.indexOf("-- smr_redeem_code (048), redefined"));
+  for (const t of ["sharing_grant", "sharing_request", "sharing_ack"]) assert.match(one, new RegExp(`UPDATE public\\.${t} SET[\\s\\S]*?access_code_id = p_org`), t);
 });

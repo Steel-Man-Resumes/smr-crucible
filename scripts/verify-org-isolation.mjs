@@ -732,6 +732,14 @@ async function requiredSharingChecks() {
   await core.leaveAllOrgs(pat); await core.redeemAccessCode(pat, org.code);
   const mine3 = await core.getMyPolicies(pat);
   check("after leaving and rejoining, the person is asked again and nothing is open", mine3[0]?.acknowledged === false && (await core.getClientApplications(aOwner, pat)).ok === false);
+  // Review 2, BL-4: the same after leaving ONE organization (096).
+  if ((await sql`SELECT to_regprocedure('public.smr_leave_org(uuid,uuid)') IS NOT NULL AS has`)[0].has) {
+    const again = await core.getMyPolicies(pat);
+    if (again[0]) await core.acknowledgePolicy(pat, again[0].id);
+    await core.leaveOrg(pat, org.id); await core.redeemAccessCode(pat, org.code);
+    const mine4 = await core.getMyPolicies(pat);
+    check("after leaving one organization and rejoining, the person is asked again and nothing is open", mine4[0]?.acknowledged === false && (await core.getClientApplications(aOwner, pat)).ok === false);
+  }
   check("the owner can stop requiring anything", (await core.setOrgSharingPolicy(aOwner, { scopes: [], audience: "", purpose: "", coversExisting: false })).ok === true && (await core.getMyPolicies(pat)).length === 0);
   await sql`DELETE FROM job_application WHERE user_id = ${pat}`;
 }
@@ -1038,6 +1046,17 @@ async function sharingChecks() {
   check("leaving the organization revokes everything shared with it", live === 0 && (await core.getClientApplications(aOwner, wes)).ok === false, `live grants=${live}`);
   await core.redeemAccessCode(wes, org.code);
   check("rejoining does NOT bring the old sharing back", (await core.getClientApplications(aOwner, wes)).reason === "not_shared");
+  // Review 2, BL-4: leaving ONE organization (096 smr_leave_org) does the same, and the free rejoin (096) still asks again.
+  if ((await sql`SELECT to_regprocedure('public.smr_leave_org(uuid,uuid)') IS NOT NULL AS has`)[0].has) {
+    await core.grantSharing(wes, org.id, "applications");
+    check("shared again after rejoining (a fresh yes)", (await core.getClientApplications(aOwner, wes)).ok === true);
+    await core.leaveOrg(wes, org.id);
+    const [{ n: liveOne }] = await sql`SELECT count(*)::int AS n FROM sharing_grant WHERE user_id = ${wes} AND access_code_id = ${org.id} AND revoked_at IS NULL`;
+    const [{ n: pendOne }] = await sql`SELECT count(*)::int AS n FROM sharing_request WHERE user_id = ${wes} AND access_code_id = ${org.id} AND status = 'pending'`;
+    check("leaving one organization revokes everything shared with it and cancels its requests", liveOne === 0 && pendOne === 0 && (await core.getClientApplications(aOwner, wes)).ok === false, `live=${liveOne} pending=${pendOne}`);
+    await core.redeemAccessCode(wes, org.code);
+    check("rejoining after leaving one organization does NOT bring the old sharing back", (await core.getClientApplications(aOwner, wes)).reason === "not_shared");
+  }
   await sql`DELETE FROM data_access_log WHERE target_user_id = ${wes}`;
   await sql`DELETE FROM job_application WHERE id = ${appRow.id}`;
 }
