@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { loadSteelMan, type RunAsUser } from '../steelman/read';
 import { valueDue } from '../steelman/moments';
 import { LINK_APPLICATION_SQL, LINK_ARTIFACT_CONTEXT_SQL } from '../resume-application-link';
+import { LATEST_REVISION_STATUS_SQL, pickLaneResume } from '../lane-resume-pick';
 
 const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, '@electric-sql/pglite')) ? 'set SMR_PGLITE_DIR to run the pglite tests' : false;
@@ -118,4 +119,18 @@ test('resume link: fills a missing link both ways, never replaces one, never cro
   assert.equal((await asUser(U, LINK_APPLICATION_SQL, [R2, JO, U])).length, 0);
   assert.equal((await asUser(U, LINK_APPLICATION_SQL, [RO, (await app(U)), U])).length, 0);
   assert.equal(((await q('SELECT resume_artifact_id FROM job_application WHERE id=$1', [JO])).rows[0] as { resume_artifact_id: string | null }).resume_artifact_id, null);
+});
+
+test('lane resume: the latest-status read picks the finished base over a newer copy with no version', { skip }, async () => {
+  const { q, asUser } = await setup();
+  const H = 'a'.repeat(64);
+  const art = async (user: string) => ((await q(`INSERT INTO refinery_artifact(user_id,artifact_type,content) VALUES ($1,'resume','{}'::jsonb) RETURNING id`, [user])).rows[0] as { id: string }).id;
+  const BASE = await art(U), TAILORED = await art(U), THEIRS = await art(OTHER);
+  const rev = (user: string, a: string, n: number, status: string) => q(`INSERT INTO artifact_revision(user_id,artifact_id,revision_number,source,resume_text,confirmed_credentials,defend_answers,checker_version,status,page_count,page_limit,content_hash)
+    VALUES ($1,$2,$3,'forge_finish','text','[]'::jsonb,'[]'::jsonb,'v1',$4,1,1,$5)`, [user, a, n, status, H]);
+  await rev(U, BASE, 1, 'draft'); await rev(U, BASE, 2, 'finished'); await rev(OTHER, THEIRS, 1, 'finished');
+  const rows = await asUser(U, LATEST_REVISION_STATUS_SQL, [U, [TAILORED, BASE, THEIRS]]) as Array<{ artifact_id: string; status: string }>;
+  assert.deepEqual(rows.map((r) => [r.artifact_id, r.status]), [[BASE, 'finished']], 'latest per artifact, own rows only');
+  const pick = pickLaneResume([{ id: TAILORED }, { id: BASE }], new Map(rows.map((r) => [r.artifact_id, r.status])));
+  assert.equal(pick?.id, BASE);
 });
