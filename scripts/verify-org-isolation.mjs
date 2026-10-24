@@ -909,8 +909,12 @@ async function sharingChecks() {
   check("and a refused read writes no 'opened' entry", logged0 === 0, `rows=${logged0}`);
   const head = await core.getClientHeader(aRuss, wes);
   check("progress signals are absent until the person turns on progress sharing", head.ok && head.rows[0].progress === null);
+  check("and so are their account name, email and stage (review BL1)",
+    head.ok && head.rows[0].currentStage === null && head.rows[0].identitySource !== "account",
+    JSON.stringify({ src: head.rows?.[0]?.identitySource, stage: head.rows?.[0]?.currentStage }));
   await joinCohortConsent(wes);
   const headP = await core.getClientHeader(aRuss, wes);
+  check("with sharing on, the stage and the account's own details appear", headP.ok && headP.rows[0].identitySource === "account" && headP.rows[0].currentStage !== null);
   check("with progress sharing on, staff get counts and a next step, and still no content",
     headP.ok && headP.rows[0].progress?.applications === 1 && !JSON.stringify(headP.rows[0]).includes("PRIVATE-NOTE") && !JSON.stringify(headP.rows[0]).includes("RESUME-BODY"));
   check("they CAN see who the person is and that nothing is shared", head.ok && head.rows[0].scopes.resume.shared === false && head.rows[0].assignedStaffId === russ);
