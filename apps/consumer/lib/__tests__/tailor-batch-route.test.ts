@@ -204,3 +204,13 @@ test("R4: recovery after a killed run records the claim row's application, not t
   assert.equal(acct.claimRows.get(`${BATCH}:0`)?.applicationId, acct.applications[0].id);
   assert.equal(retry.applicationId, acct.applications[0].id);
 });
+
+test("GET scope=single reads only the allowance: no batch claim table, no batch lane rule (fix-tailor S3)", async () => {
+  const { route } = setup({ notReady: true, lane: "not_resume" });
+  const single = await (await route.GET(new Request(`https://app.example/api/tailor-batch?scope=single&laneId=${LANE}`))).json();
+  assert.deepEqual(single, { remaining: 3, blockedReason: null, locked: false });
+  assert.notEqual(single.blockedReason, NOT_READY_LINE);
+  // The batch read keeps its gates.
+  const batch = await (await route.GET(new Request("https://app.example/api/tailor-batch"))).json();
+  assert.equal(batch.blockedReason, NOT_READY_LINE);
+});

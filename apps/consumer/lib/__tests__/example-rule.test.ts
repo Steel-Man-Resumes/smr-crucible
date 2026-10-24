@@ -38,7 +38,9 @@ describe("screens that list resumes ask for no examples", () => {
   it("Overview delegates selection to the example-free server context", () => {
     assert.match(read("app/(dashboard)/dashboard/page.tsx"), /<LaneHome/);
     assert.match(read("components/lanes/LaneHome.tsx"), /api\/workspace-context/);
-    assert.match(read("lib/assistant-work-context.ts"), /examples: "hide"/);
+    // The lane's resume comes from core's id-only pick, which keeps examples out (fix-tailor S4).
+    assert.match(read("lib/assistant-work-context.ts"), /c\.getLaneResume\(/);
+    assert.match(readFileSync(join(root, "..", "..", "packages", "core", "src", "refineryArtifact.ts"), "utf8"), /LANE_RESUME_PICK_SQL = `[\s\S]*?a\.\$\{ARTIFACT_NOT_DEMO_SQL\}/);
     assert.match(read("lib/assistant-work-context.ts"), /artifact\.is_demo/);
   });
   it("the Library keeps its own explicit toggle", () => {
@@ -83,5 +85,13 @@ describe("guard: no other consumer route reads resumes around the rule", () => {
       .filter((f) => f && !f.includes("__tests__") && /artifact_type\s*=\s*'resume'/.test(read(f)));
     const allowed = new Set(["app/api/user/delete-data/route.ts", "app/api/user/export-data/route.ts"]);
     assert.deepEqual(out.filter((f) => !allowed.has(f)), []);
+  });
+});
+
+describe("guard: writes that link a resume to a job keep hidden examples out", () => {
+  it("the PATCH-time application link only links a non-example resume", () => {
+    // This file names no resume type in SQL (the type is checked in JS from the
+    // server-loaded row), so the listing guard above does not see it.
+    assert.match(read("lib/resume-application-link.ts"), /a\.id = \$1 AND a\.user_id = \$3 AND a\.is_demo = false/);
   });
 });

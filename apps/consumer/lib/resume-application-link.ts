@@ -12,20 +12,25 @@
  * Every workspace save of a tailored resume carries content.jobPackage
  * .applicationId. On PATCH this fills the gaps only:
  * - job_application.resume_artifact_id, only when it is still NULL (an
- *   existing link, including "what did I send", is never replaced);
+ *   existing link, including "what did I send", is never replaced), only
+ *   while the job is still 'saved' (an application already sent is left as
+ *   it is: a resume attached after the fact would be recorded as what was
+ *   sent; same rule as the multi-job tailor, tailor-batch-server.ts), and
+ *   never to a hidden example resume (is_demo, the example rule);
  * - the artifact's target_context.applicationId, only when it is missing.
  * Both writes run AS the person and check ownership in SQL; a foreign or bogus
  * id touches zero rows. Only resumes reach the SQL (linkResumeOnUpdate checks
- * the type the server loaded); the SQL names no artifact type, so it is not a
- * resume listing for the example rule (example-rule.test.ts) to police.
+ * the type the server loaded); the SQL names no artifact type. It is a
+ * write scoped to one id, not a resume listing, and it still keeps hidden
+ * examples out (a.is_demo = false); example-rule.test.ts checks that.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const LINK_APPLICATION_SQL = `UPDATE job_application SET resume_artifact_id = $1, updated_at = now()
-     WHERE id = $2 AND user_id = $3 AND resume_artifact_id IS NULL
+     WHERE id = $2 AND user_id = $3 AND resume_artifact_id IS NULL AND status = 'saved'
        AND EXISTS (SELECT 1 FROM refinery_artifact a
-                    WHERE a.id = $1 AND a.user_id = $3)
+                    WHERE a.id = $1 AND a.user_id = $3 AND a.is_demo = false)
      RETURNING id`;
 
 export const LINK_ARTIFACT_CONTEXT_SQL = `UPDATE refinery_artifact

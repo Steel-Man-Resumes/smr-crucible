@@ -118,12 +118,12 @@ export function boardHandoff(raw: string | null): PendingTailor | null {
  * allowance has not been read (or could not be): the line still says what it
  * costs and the server still enforces the limit.
  */
-export function singleTailorCost(allowance: { remaining: number | null; blockedReason: string | null } | undefined): { line: string; canRun: boolean } {
+export function singleTailorCost(allowance: { remaining: number | null; blockedReason: string | null } | undefined, saved = false): { line: string; canRun: boolean } {
   const what = "It makes a resume and a cover letter for this job.";
   if (!allowance) return { line: `Tailoring this job uses 1 AI action from your allowance. ${what}`, canRun: true };
   if (allowance.blockedReason) return { line: allowance.blockedReason, canRun: false };
   if (allowance.remaining === null) return { line: `Tailoring this job uses 1 AI action. ${what}`, canRun: true };
   const left = Math.max(0, Math.floor(allowance.remaining));
-  if (left === 0) return { line: "Tailoring this job uses 1 AI action. You have no AI actions left today. Ask t.ROY through the progress bar for more, or come back after midnight UTC. This job stays saved.", canRun: false };
+  if (left === 0) return { line: `Tailoring this job uses 1 AI action. You have no AI actions left today. Ask t.ROY through the progress bar for more, or come back after midnight UTC.${saved ? " This job stays saved." : ""}`, canRun: false };
   return { line: `Tailoring this job uses 1 AI action from your allowance. You have ${left} left today. ${what}`, canRun: true };
 }

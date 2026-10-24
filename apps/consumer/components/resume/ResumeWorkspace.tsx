@@ -848,20 +848,22 @@ export function ResumeWorkspace() {
     setTailorAllowance(undefined);
     (async () => {
       try {
-        const res = await fetch(`/api/tailor-batch?laneId=${encodeURIComponent(lanes.active || "main")}`, { cache: "no-store" });
+        const res = await fetch("/api/tailor-batch?scope=single", { cache: "no-store" });
         const body = await res.json().catch(() => null);
         if (cancelled || !res.ok || !body || !("remaining" in body)) return;
         setTailorAllowance({ remaining: typeof body.remaining === "number" ? body.remaining : null, blockedReason: body.blockedReason || null });
       } catch {}
     })();
     return () => { cancelled = true; };
-  }, [pendingTailor, lanes.active]);
+  }, [pendingTailor]);
 
   // The ONLY way a picked job reaches the generator: the person's click.
-  function tailorPendingNow() {
+  async function tailorPendingNow() {
     const pending = pendingTailor;
     if (!pending || !lanes.loaded || lanes.switching) return;
     setPendingTailor(null);
+    // Picked with the editor open: keep the open resume's last edits first.
+    if (!showSetup && artifactId) await save(true);
     runCareerPackage(pending.job, pending.applicationId ? { existingApplicationId: pending.applicationId } : {});
   }
 
@@ -1175,6 +1177,39 @@ export function ResumeWorkspace() {
     router.replace("/dashboard/application-tailor", { scroll: false });
   }
 
+  // The picked job's card. Shown on the setup screen and, when a ?job= link is
+  // followed with the editor open, above the editor, so the pick is never invisible.
+  const pendingCard = pendingTailor ? (() => {
+          const cost = singleTailorCost(tailorAllowance, !!pendingTailor.applicationId);
+          return (
+            <section data-testid="tailor-pending" className="mb-5 border border-t-amber bg-t-panel p-4">
+              <h2 className="font-bold text-t-white">
+                Tailor for {pendingTailor.job.title || "this job"}{pendingTailor.job.company ? ` at ${pendingTailor.job.company}` : ""}
+              </h2>
+              <p data-testid="tailor-pending-cost" className="mt-2 text-sm text-t-phos">{cost.line}</p>
+              <p className="mt-1 text-xs text-t-phos-dim">Nothing runs until you press the button.</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  data-testid="tailor-pending-run"
+                  onClick={tailorPendingNow}
+                  disabled={!cost.canRun || !lanes.loaded || lanes.switching}
+                  className="t-focus min-h-touch px-5 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50"
+                >
+                  Tailor now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingTailor(null)}
+                  className="t-focus min-h-touch px-4 text-sm text-t-phos-dim underline underline-offset-2 hover:text-t-white"
+                >
+                  Not now
+                </button>
+              </div>
+            </section>
+          );
+  })() : null;
+
   // --- Full resume generation loading state ---
   if (hydrating) return <p role="status" className="p-6 font-mono text-purple-300">Opening your saved work…</p>;
   if (generatingFull) {
@@ -1252,36 +1287,7 @@ export function ResumeWorkspace() {
             </div>
           )}
         </div>
-        {pendingTailor && (() => {
-          const cost = singleTailorCost(tailorAllowance);
-          return (
-            <section data-testid="tailor-pending" className="mb-5 border border-t-amber bg-t-panel p-4">
-              <h2 className="font-bold text-t-white">
-                Tailor for {pendingTailor.job.title || "this job"}{pendingTailor.job.company ? ` at ${pendingTailor.job.company}` : ""}
-              </h2>
-              <p data-testid="tailor-pending-cost" className="mt-2 text-sm text-t-phos">{cost.line}</p>
-              <p className="mt-1 text-xs text-t-phos-dim">Nothing runs until you press the button.</p>
-              <div className="mt-3 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  data-testid="tailor-pending-run"
-                  onClick={tailorPendingNow}
-                  disabled={!cost.canRun || !lanes.loaded || lanes.switching}
-                  className="t-focus min-h-touch px-5 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50"
-                >
-                  Tailor now
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPendingTailor(null)}
-                  className="t-focus min-h-touch px-4 text-sm text-t-phos-dim underline underline-offset-2 hover:text-t-white"
-                >
-                  Not now
-                </button>
-              </div>
-            </section>
-          );
-        })()}
+        {pendingCard}
         <p className="text-base text-t-phos-dim mb-2">
           Aim your base resume at a specific job. We use your Forge profile to
           tailor your resume, cover letter, and disclosure plan to the exact
@@ -1558,6 +1564,7 @@ export function ResumeWorkspace() {
   // --- Workspace ---
   return (
     <div className="max-w-6xl">
+      {pendingCard}
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="min-w-0">

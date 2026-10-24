@@ -65,7 +65,8 @@ test("a link failure never fails the save", async () => {
 test("the SQL only fills gaps and checks ownership", () => {
   assert.match(LINK_APPLICATION_SQL, /resume_artifact_id IS NULL/);
   assert.match(LINK_APPLICATION_SQL, /user_id = \$3/);
-  assert.match(LINK_APPLICATION_SQL, /a\.id = \$1 AND a\.user_id = \$3/);
+  assert.match(LINK_APPLICATION_SQL, /a\.id = \$1 AND a\.user_id = \$3 AND a\.is_demo = false/, "never a hidden example");
+  assert.match(LINK_APPLICATION_SQL, /resume_artifact_id IS NULL AND status = 'saved'/, "a job already sent is left as it is");
   assert.match(LINK_ARTIFACT_CONTEXT_SQL, /COALESCE\(target_context->>'applicationId', ''\) = ''/);
   assert.match(LINK_ARTIFACT_CONTEXT_SQL, /j\.resume_artifact_id = \$1/);
 });

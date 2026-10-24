@@ -64,6 +64,9 @@ test("the cost line says what one tailor costs, and blocks when nothing is left"
     canRun: true,
   });
   assert.equal(singleTailorCost({ remaining: 0, blockedReason: null }).canRun, false);
+  // "stays saved" is true only for a saved application, not a Job Board arrival.
+  assert.match(singleTailorCost({ remaining: 0, blockedReason: null }, true).line, /This job stays saved\.$/);
+  assert.doesNotMatch(singleTailorCost({ remaining: 0, blockedReason: null }, false).line, /stays saved/);
   assert.match(singleTailorCost({ remaining: 0, blockedReason: null }).line, /no AI actions left today/);
   assert.deepEqual(singleTailorCost({ remaining: 5, blockedReason: "This tool is not open on your account yet." }), { line: "This tool is not open on your account yet.", canRun: false });
   assert.match(singleTailorCost({ remaining: null, blockedReason: null }).line, /^Tailoring this job uses 1 AI action\./);
@@ -107,7 +110,7 @@ test("no useEffect in the workspace calls the generator (a page load never spend
 test("the generator runs only from the two buttons", () => {
   const calls = [...code.matchAll(/runCareerPackage\(/g)].length;
   assert.equal(calls, 2, "tailorForJob and tailorPendingNow are the only callers");
-  assert.match(code, /function tailorPendingNow\(\) \{[\s\S]*?runCareerPackage\(pending\.job/);
+  assert.match(code, /async function tailorPendingNow\(\) \{[\s\S]*?runCareerPackage\(pending\.job/);
   assert.match(code, /function tailorForJob\(\) \{[\s\S]*?runCareerPackage\(/);
   // Each is wired to a click and nothing else.
   assert.deepEqual([...code.matchAll(/tailorPendingNow\b/g)].length, 2, "declared once, used once");
@@ -119,4 +122,25 @@ test("the picked job shows the cost line and a Tailor now button", () => {
   assert.match(code, /data-testid="tailor-pending-cost"[^>]*>\{cost\.line\}/);
   assert.match(code, /data-testid="tailor-pending-run"[\s\S]{0,200}?onClick=\{tailorPendingNow\}[\s\S]{0,200}?disabled=\{!cost\.canRun/);
   assert.match(code, />\s*Tailor now\s*</);
+});
+
+test("indirection cannot start the tailor from an effect either", () => {
+  // Every reference to the two entry points, counted: declaration plus the one click each.
+  assert.equal([...code.matchAll(/\btailorForJob\b/g)].length, 2, "tailorForJob: declared once, onClick once");
+  assert.equal([...code.matchAll(/\btailorPendingNow\b/g)].length, 2, "tailorPendingNow: declared once, onClick once");
+  // runCareerPackage: the useCallback, the two calls, and the dependency-free mentions nowhere else.
+  assert.equal([...code.matchAll(/\brunCareerPackage\b/g)].length, 3, "declared once, called twice; never stored in a ref or passed on");
+  for (const b of effectBodies(code)) assert.doesNotMatch(b, /\.click\(\)/, "no effect clicks a button");
+});
+
+test("the picked job's card shows on the setup screen and above an open editor", () => {
+  assert.match(code, /const pendingCard = pendingTailor \?/);
+  assert.equal([...code.matchAll(/\{pendingCard\}/g)].length, 2);
+  assert.match(code, /<div className="max-w-6xl">\s*\{pendingCard\}/, "editor view");
+  assert.match(code, /if \(!showSetup && artifactId\) await save\(true\);[\s\S]{0,80}runCareerPackage\(/, "the open resume is saved before a new tailor starts");
+});
+
+test("the single-job cost line reads the single scope, not the batch gates", () => {
+  assert.match(code, /fetch\("\/api\/tailor-batch\?scope=single"/);
+  assert.doesNotMatch(code, /tailor-batch\?laneId=/);
 });

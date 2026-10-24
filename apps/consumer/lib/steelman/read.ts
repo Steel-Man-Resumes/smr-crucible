@@ -103,15 +103,21 @@ export async function loadSteelMan(userId: string, run: RunAsUser = coreRunAsUse
     // it; every voice practice runs on a server voice lease (voice_session).
     // Until 10/24 only the first was read, so a voice practice run without
     // saving its words counted nowhere (its client ping is excluded from S11 by
-    // design). A lease counts when the person ended it after at least 60
-    // seconds of call time (DESIGN HYPOTHESIS: under a minute is a mis-tap,
-    // not practice) and no saved transcript already counts the same call.
+    // design). A lease counts when a provider call really connected (call_id
+    // set and not 'pending', the same test as interview-voice/end/route.ts),
+    // the person ended it after at least 60 seconds (DESIGN HYPOTHESIS: under
+    // a minute is a mis-tap, not practice; measured from lease start, which
+    // includes the mic prompt), and no saved transcript already counts the
+    // same call. DESIGN HYPOTHESIS: a transcript belongs to a lease when it
+    // started from 5 minutes before the lease to the lease's end (the page
+    // opens the transcript just before the lease; errors only undercount).
     sql`SELECT at FROM (
        SELECT COALESCE(t.ended_at, t.started_at) AS at FROM interview_voice_session t
         WHERE t.owner_user_id=${userId}::uuid AND t.status='ended'
        UNION ALL
        SELECT vs.ended_at AS at FROM voice_session vs
         WHERE vs.user_id=${userId}::uuid AND vs.status='ended' AND vs.ended_reason='user_ended'
+          AND vs.call_id IS NOT NULL AND vs.call_id <> 'pending'
           AND vs.ended_at IS NOT NULL AND vs.ended_at - vs.started_at >= interval '60 seconds'
           AND NOT EXISTS (SELECT 1 FROM interview_voice_session t2
                            WHERE t2.owner_user_id=vs.user_id AND t2.status='ended'
