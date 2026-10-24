@@ -1,0 +1,611 @@
+{
+ "as_of": "2026-10-23",
+ "source": "Rows follow the services lane's REPLACES table (what a person would otherwise stitch together). Each row names services from the catalog below, which is the services lane's chart.json (station, service, status), program-workspace rows excluded because they run for demo organizations only. No counts: the chart shows none.",
+ "rows": [
+  {
+   "id": "resume",
+   "need": "Resume builder",
+   "services": [
+    "Bring what you have",
+    "Resume and cover letter",
+    "Fix cards",
+    "Downloads in four formats"
+   ],
+   "status": "here"
+  },
+  {
+   "id": "check",
+   "need": "Resume checker",
+   "services": [
+    "Free resume check",
+    "ATS scorecard, 5 lenses",
+    "Machine-read preview"
+   ],
+   "status": "limits",
+   "limit": "Five lenses, no one score"
+  },
+  {
+   "id": "jobs",
+   "need": "Job board",
+   "services": [
+    "Job board, three sources",
+    "Real job filters",
+    "Records mark on listings"
+   ],
+   "status": "here"
+  },
+  {
+   "id": "employers",
+   "need": "Employer list",
+   "services": [
+    "Employers That Hire",
+    "Public employer directory",
+    "Coverage map"
+   ],
+   "status": "limits",
+   "limit": "Small, dated, checked"
+  },
+  {
+   "id": "tailor",
+   "need": "Tailoring tool",
+   "services": [
+    "Application Tailor",
+    "Pull posting from a link",
+    "Disclosure brief per job"
+   ],
+   "status": "here"
+  },
+  {
+   "id": "interview",
+   "need": "Interview app",
+   "services": [
+    "Text mock interviews",
+    "Live voice interviewer",
+    "Interview report"
+   ],
+   "status": "limits",
+   "limit": "Voice is sponsored"
+  },
+  {
+   "id": "disclosure",
+   "need": "Disclosure coach",
+   "services": [
+    "Disclosure Planner",
+    "Practice the conversation",
+    "State law pages"
+   ],
+   "status": "limits",
+   "limit": "Coaching, not legal advice"
+  },
+  {
+   "id": "local",
+   "need": "Local help directory",
+   "services": [
+    "Local help search",
+    "HUD housing counselors",
+    "Save help to your plan"
+   ],
+   "status": "limits",
+   "limit": "Finds places, no matching"
+  },
+  {
+   "id": "track",
+   "need": "Application tracker",
+   "services": [
+    "Save and track jobs",
+    "Follow-up notes",
+    "Honest apply link"
+   ],
+   "status": "here"
+  },
+  {
+   "id": "vault",
+   "need": "Document safe",
+   "services": [
+    "Private documents vault",
+    "Library of your work"
+   ],
+   "status": "here"
+  },
+  {
+   "id": "coach",
+   "need": "AI career coach",
+   "services": [
+    "Coach on every page",
+    "Take me there",
+    "Proposes fixes you approve"
+   ],
+   "status": "here"
+  },
+  {
+   "id": "network",
+   "need": "Employer network",
+   "here": "No employer hires through Steel Man, and nobody posts jobs here",
+   "status": "absent"
+  },
+  {
+   "id": "apply",
+   "need": "Apply for me",
+   "here": "Nothing submits an application for you. You apply the employer's way",
+   "status": "absent"
+  },
+  {
+   "id": "ats",
+   "need": "One ATS score",
+   "here": "No single score, and no imitation of a named tracking system",
+   "status": "absent"
+  }
+ ],
+ "catalog": [
+  {
+   "station": "Overview",
+   "service": "One account, two tools",
+   "status": "LIVE"
+  },
+  {
+   "station": "Overview",
+   "service": "What do you need today",
+   "status": "LIVE"
+  },
+  {
+   "station": "Overview",
+   "service": "Your next step",
+   "status": "LIVE"
+  },
+  {
+   "station": "Overview",
+   "service": "Guided tour",
+   "status": "LIVE"
+  },
+  {
+   "station": "Overview",
+   "service": "Orientation check",
+   "status": "LIVE"
+  },
+  {
+   "station": "Overview",
+   "service": "Progress page",
+   "status": "LIVE"
+  },
+  {
+   "station": "Overview",
+   "service": "Earned AI allowance",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Find work",
+   "service": "Job board, three sources",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Find work",
+   "service": "Records mark on listings",
+   "status": "LIVE"
+  },
+  {
+   "station": "Find work",
+   "service": "Real job filters",
+   "status": "LIVE"
+  },
+  {
+   "station": "Find work",
+   "service": "Work that fits your life",
+   "status": "LIVE"
+  },
+  {
+   "station": "Find work",
+   "service": "Hide an employer",
+   "status": "LIVE"
+  },
+  {
+   "station": "Find work",
+   "service": "Show broader results",
+   "status": "LIVE"
+  },
+  {
+   "station": "Find work",
+   "service": "Employers That Hire",
+   "status": "LIVE"
+  },
+  {
+   "station": "Find work",
+   "service": "Explore paths",
+   "status": "LIVE"
+  },
+  {
+   "station": "Find work",
+   "service": "Career lanes",
+   "status": "LIVE"
+  },
+  {
+   "station": "Find work",
+   "service": "Public employer directory",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Free resume check",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Bring what you have",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Is this right?",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Direction questions",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "What is in your way",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Watch the build",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Resume and cover letter",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Your story, spotlighted",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Record on the page",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Fix cards",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Titles on one card",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Source confidence",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Hard-rules check",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Dates and wording check",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Second-model trace",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "ATS scorecard, 5 lenses",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Page length check",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Downloads in four formats",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Email me my package",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Rush mode",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Master Draft",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Application Tailor",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Pull posting from a link",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Disclosure brief per job",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Lock a baseline",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Check and finish",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Machine-read preview",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Creative work pages",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Academic or clinical CV",
+   "status": "LIVE"
+  },
+  {
+   "station": "Tailor and package",
+   "service": "Performer resume",
+   "status": "LIVE"
+  },
+  {
+   "station": "Plan what to say",
+   "service": "Disclosure Planner",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Plan what to say",
+   "service": "Your rights in the plan",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Plan what to say",
+   "service": "Find your strengths",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Plan what to say",
+   "service": "Practice the conversation",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Plan what to say",
+   "service": "Save and print the plan",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Plan what to say",
+   "service": "State law pages",
+   "status": "LIVE"
+  },
+  {
+   "station": "Plan what to say",
+   "service": "Guides",
+   "status": "LIVE"
+  },
+  {
+   "station": "Practice",
+   "service": "Text mock interviews",
+   "status": "LIVE"
+  },
+  {
+   "station": "Practice",
+   "service": "Live voice interviewer",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Practice",
+   "service": "Interview report",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Practice",
+   "service": "Disclosure practice round",
+   "status": "LIVE"
+  },
+  {
+   "station": "Practice",
+   "service": "Practice history",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Apply and track",
+   "service": "Save and track jobs",
+   "status": "LIVE"
+  },
+  {
+   "station": "Apply and track",
+   "service": "Posting snapshot kept",
+   "status": "LIVE"
+  },
+  {
+   "station": "Apply and track",
+   "service": "Fit check",
+   "status": "LIVE"
+  },
+  {
+   "station": "Apply and track",
+   "service": "Honest apply link",
+   "status": "LIVE"
+  },
+  {
+   "station": "Apply and track",
+   "service": "Application email draft",
+   "status": "LIVE"
+  },
+  {
+   "station": "Apply and track",
+   "service": "One-click attach",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Apply and track",
+   "service": "Follow-up notes",
+   "status": "LIVE"
+  },
+  {
+   "station": "What comes next",
+   "service": "Local help search",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "What comes next",
+   "service": "Honest labels on help",
+   "status": "LIVE"
+  },
+  {
+   "station": "What comes next",
+   "service": "HUD housing counselors",
+   "status": "LIVE"
+  },
+  {
+   "station": "What comes next",
+   "service": "Save help to your plan",
+   "status": "LIVE"
+  },
+  {
+   "station": "What comes next",
+   "service": "Ask us to cover your area",
+   "status": "LIVE"
+  },
+  {
+   "station": "What comes next",
+   "service": "Public local help search",
+   "status": "LIVE"
+  },
+  {
+   "station": "What comes next",
+   "service": "Coverage map",
+   "status": "LIVE"
+  },
+  {
+   "station": "What comes next",
+   "service": "Private documents vault",
+   "status": "LIVE"
+  },
+  {
+   "station": "Toolbox",
+   "service": "Library of your work",
+   "status": "LIVE"
+  },
+  {
+   "station": "Toolbox",
+   "service": "Earlier versions",
+   "status": "LIVE"
+  },
+  {
+   "station": "Toolbox",
+   "service": "Make it easier to use",
+   "status": "LIVE"
+  },
+  {
+   "station": "Toolbox",
+   "service": "Download or delete data",
+   "status": "LIVE WITH LIMIT"
+  },
+  {
+   "station": "Toolbox",
+   "service": "Help and feedback",
+   "status": "LIVE"
+  },
+  {
+   "station": "Toolbox",
+   "service": "Organization code",
+   "status": "LIVE"
+  },
+  {
+   "station": "Toolbox",
+   "service": "Troy's letter",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Coach on every page",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "23 coaching skills",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Take me there",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Searches jobs for you",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Looks up checked employers",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Looks up local help",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Follow-up reminders",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Proposes fixes you approve",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Knows your access",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Name it, set the style",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Why t.ROY suggested that",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Files your feedback",
+   "status": "LIVE"
+  },
+  {
+   "station": "t.ROY the coach",
+   "service": "Public t.ROY on the site",
+   "status": "LIVE WITH LIMIT"
+  }
+ ]
+}
