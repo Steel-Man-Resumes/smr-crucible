@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { ExternalLink } from "lucide-react";
 import { TierGate } from "@/components/TierGate";
+import { CrisisLine } from "@/components/CrisisLine";
 import { NATIONAL_STARTING_POINTS, NEXT_CATEGORIES, nextCategoryHref } from "@/lib/next-steps";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import { savedSearchPlace } from "@/lib/support-deep-link";
@@ -54,6 +55,8 @@ function NextPage() {
           </p>
         </div>
       </header>
+
+      <CrisisLine />
 
       <section aria-labelledby="next-help-heading">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
