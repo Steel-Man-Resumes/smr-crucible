@@ -33,6 +33,10 @@ export default function AdminOrgsPage() {
         Every partner org on the platform. &quot;Open dashboard&quot; shows you exactly what
         that org&apos;s admins see.
       </p>
+      <p className="text-t-phos-dim text-xs mb-6">
+        A seat is claimed when someone joins or is invited and stays claimed if they leave, so
+        free seats are the total minus claimed. Active now is who is a member today.
+      </p>
       {error && <p className="text-sm text-t-red">{error}</p>}
       {!orgs && !error && <p className="text-t-phos-dim text-sm">Loading...</p>}
       {orgs && (
@@ -43,7 +47,9 @@ export default function AdminOrgsPage() {
                 <th className="px-4 py-3 font-semibold">Organization</th>
                 <th className="px-4 py-3 font-semibold">Code</th>
                 <th className="px-4 py-3 font-semibold">Owner</th>
-                <th className="px-4 py-3 font-semibold text-center">Joined</th>
+                <th className="px-4 py-3 font-semibold text-center">Seats claimed</th>
+                <th className="px-4 py-3 font-semibold text-center">Active now</th>
+                <th className="px-4 py-3 font-semibold text-center">Free</th>
                 <th className="px-4 py-3 font-semibold text-center">Staff</th>
                 <th className="px-4 py-3 font-semibold"></th>
               </tr>
@@ -69,7 +75,11 @@ export default function AdminOrgsPage() {
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-t-phos">{o.code}</td>
                   <td className="px-4 py-3 text-xs text-t-phos-dim">{o.owner_email || "--"}</td>
-                  <td className="px-4 py-3 text-center text-t-white">{o.joined}</td>
+                  <td className="px-4 py-3 text-center text-t-white">
+                    {o.seats?.seatsTotal != null ? `${o.seats.seatsClaimed} of ${o.seats.seatsTotal}` : `${o.seats?.seatsClaimed ?? 0}, no limit`}
+                  </td>
+                  <td className="px-4 py-3 text-center text-t-white">{o.seats?.seatsActive ?? o.joined}</td>
+                  <td className="px-4 py-3 text-center text-t-white">{o.seats?.seatsFree ?? "--"}</td>
                   <td className="px-4 py-3 text-center text-t-white">{o.staff_count}</td>
                   <td className="px-4 py-3 text-right">
                     <Link

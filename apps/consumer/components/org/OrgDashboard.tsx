@@ -38,6 +38,7 @@ import { summarizeStaffPerformance } from "@crucible/core/src/orgStaffPerformanc
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 // Pure wording for an empty staff list (tested in packages/core).
 import { staffEmptyState } from "@crucible/core/src/orgVisibilityShared";
+import { seatLedgerLine, SEAT_LEDGER_HELP, type SeatLedger } from "@crucible/core/src/orgSeatsShared";
 import { SeeEveryonePanel } from "@/components/org/SeeEveryonePanel";
 import {
   DEFAULT_STAFF_PREFS,
@@ -113,6 +114,8 @@ interface OrgPayload {
   /** The organization's own threshold; 14 unless the owner changed it. */
   quietAfterDays?: number;
   org: { name: string; code: string; logoUrl: string | null; role: string; seatLimit: number | null };
+  /** Seat truth for people who may see seats; null otherwise. */
+  seats?: SeatLedger | null;
   staff: StaffMember[];
   cohort: Cohort;
   invites?: PendingInvite[];
@@ -461,6 +464,10 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
   // "See everyone" for them). Their empty list gets words they can act on.
   const ownCaseloadOnly = isStaffView && data?.seesEveryone === false;
   const seatLimit = data?.org.seatLimit ?? null;
+  // Seats come from the ledger: claimed is what the cap is checked against,
+  // and it does not go down when someone leaves. The member count is not a
+  // seat count (it showed a free seat that did not exist after a departure).
+  const seats = data?.seats ?? null;
   // Invited-but-not-yet-active people hold a seat (they count in totalJoined
   // and, having no sharing consent, in pendingCount) but have not actually
   // joined -- split them out so both numbers stay honest.
@@ -655,7 +662,12 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           { label: "Active this week", value: String(summary.activeThisWeek) },
           { label: "Hired", value: String(summary.hired) },
           ...(canManage
-            ? [{ label: "Seats used", value: seatLimit != null ? `${totalJoined}/${seatLimit}` : "Unlimited" }]
+            ? [{
+                label: "Seats claimed",
+                value: seats
+                  ? seats.seatsTotal != null ? `${seats.seatsClaimed}/${seats.seatsTotal}` : `${seats.seatsClaimed}, no limit`
+                  : seatLimit != null ? `?/${seatLimit}` : "No limit",
+              }]
             : []),
           ...(showCosts ? [{ label: "AI cost (all time)", value: usd(totalAiCost) }] : []),
         ].map((s) => (
@@ -730,10 +742,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 <h2 className="text-lg font-bold text-t-white">Team</h2>
                 <div className="flex items-center gap-3 text-xs">
                   <span className="text-t-phos-dim">
-                    {staff.length} {staff.length === 1 ? "member" : "members"}
-                    {seatLimit != null
-                      ? `, ${totalJoined}/${seatLimit} seats used`
-                      : ", unlimited seats"}
+                    {staff.length} on staff
+                    {seats ? `. ${seatLedgerLine(seats)}` : seatLimit != null ? "" : ". No seat limit."}
                   </span>
                   <a
                     href={`mailto:hmu@themidnightgarden.club?subject=${encodeURIComponent(
@@ -745,6 +755,9 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   </a>
                 </div>
               </div>
+              {seats && seats.seatsClaimed > seats.seatsActive && (
+                <p className="-mt-1 mb-3 text-[11px] text-t-phos-dim">{SEAT_LEDGER_HELP}</p>
+              )}
               {staff.length === 0 ? (
                 <p className="text-sm text-t-phos-dim bg-t-panel border border-t-line px-4 py-4">
                   No staff yet. Add your team below, then assign clients to them.

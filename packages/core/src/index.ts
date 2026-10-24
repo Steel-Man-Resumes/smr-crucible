@@ -88,6 +88,8 @@ export * from './orgStaffPerformance';
 export * from './orgStaffAdmin';
 export * from './joinSharingPrompt';
 export * from './orgVisibilityShared';
+export * from './orgSeatsShared';
+export * from './orgSeats';
 
 // The second check (2026-10-07): a different model family reads the page
 // against the person's own words. Off by default (SECOND_CHECK_ENABLED).

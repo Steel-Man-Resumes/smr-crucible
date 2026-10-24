@@ -41,6 +41,7 @@ import {
   touchOrgInviteResend,
   revokeOrgInvite,
   recordDataAccess,
+  getOrgSeatLedger,
 } from "@crucible/core";
 import { isValidEmail } from "@/lib/auth-rate-limit";
 import { adminSecondFactorOk } from "@/lib/session-policy";
@@ -122,6 +123,15 @@ export async function GET(request: Request) {
       return null;
     });
 
+    // Seat truth: claimed (what the cap is checked against), active (members
+    // now) and free (total minus claimed). Only for people who may see seats.
+    const seats = seesSeats
+      ? await getOrgSeatLedger(org.accessCodeId, userId).catch((err) => {
+          console.error("org seat ledger failed:", err?.message || err);
+          return null;
+        })
+      : null;
+
     // The per-participant pages and scoped sharing, switched on per org.
     const flag = await getOne<{ crm_v2: boolean }>(
       `SELECT crm_v2 FROM access_code WHERE id = $1`,
@@ -139,6 +149,7 @@ export async function GET(request: Request) {
         // Seat cap is org-admin/owner information (null = unlimited).
         seatLimit: seesSeats ? org.seatLimit : null,
       },
+      seats,
       staff,
       cohort: { ...cohort, clients },
       invites,
