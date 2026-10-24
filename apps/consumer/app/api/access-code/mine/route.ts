@@ -14,6 +14,9 @@ export async function GET() {
 
   return NextResponse.json({
     codes: codes.map((c) => ({
+      // The organization id, so Settings can offer "Leave this organization".
+      // Never the code itself: a code is a seat key.
+      org_id: c.id,
       partner_name: c.partner_name,
       tier: c.tier,
       daily_limit: c.daily_limit,

@@ -1,27 +1,26 @@
 import { NextResponse } from "next/server";
 import { createAccessCode } from "@crucible/core";
 import { requirePlatformAdmin } from "@/lib/org-guard";
+import { mintCodeChoice } from "@/lib/access-code-guard";
 
 export async function POST(req: Request) {
   const guard = await requirePlatformAdmin();
   if (!guard.ok) return guard.response;
 
-  const body = await req.json();
-  const { code, partnerName, dailyLimit, maxRedemptions, expiresAt, tier: requestedTier } = body;
+  const body = await req.json().catch(() => ({}));
+  const { partnerName, dailyLimit, maxRedemptions, expiresAt, tier: requestedTier } = body;
 
-  if (!code || !partnerName) {
-    return NextResponse.json(
-      { error: "code and partnerName are required" },
-      { status: 400 }
-    );
+  if (!partnerName) {
+    return NextResponse.json({ error: "partnerName is required" }, { status: 400 });
   }
 
-  if (!/^[A-Z0-9]{4,20}$/.test(code)) {
-    return NextResponse.json(
-      { error: "code must be 4-20 uppercase alphanumeric characters" },
-      { status: 400 }
-    );
+  // A code is a seat key anyone signed in can try. Random by default; a chosen
+  // code only with an explicit confirm (lib/access-code-guard.ts).
+  const choice = mintCodeChoice(body);
+  if (!choice.ok) {
+    return NextResponse.json({ error: choice.error }, { status: 400 });
   }
+  const code = choice.code;
 
   // Mintable tiers only -- 'client' = cohort seat code (keeps the redeemer's
   // client journey; role stays with the code owner), 'partner' = org staff.

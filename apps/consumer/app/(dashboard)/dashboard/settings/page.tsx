@@ -11,6 +11,7 @@
  * - Daily AI usage display
  */
 
+import { LeaveOrgButton } from "@/components/settings/LeaveOrgButton";
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
 import { SettingsLesson } from "@/components/tour/SettingsLesson";
@@ -44,6 +45,7 @@ interface UsageData {
 }
 
 interface RedeemedCode {
+  org_id?: string;
   partner_name: string;
   tier: string;
   daily_limit: number | null;
@@ -56,8 +58,6 @@ export default function SettingsPage() {
   const ownerUid = useSession().data?.user?.id;
   const realTier = useRealTier();
   const effectiveRole = useEffectiveRole();
-  const isAdmin = realTier === "admin";
-  const [testMode, setTestMode] = useState(false);
   // Phase 7.4: delete is now two distinct actions -- "data" keeps the login,
   // "account" removes everything including the login. Track which one is armed.
   const [deleteMode, setDeleteMode] = useState<null | "data" | "account">(null);
@@ -80,12 +80,6 @@ export default function SettingsPage() {
   const [reauthPassword, setReauthPassword] = useState("");
   const [reauthTyped, setReauthTyped] = useState("");
 
-  // Load admin test mode on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setTestMode(localStorage.getItem("admin_test_mode") === "client");
-    }
-  }, []);
   const [exportStatus, setExportStatus] = useState<
     "idle" | "exporting" | "done"
   >("idle");
@@ -398,41 +392,6 @@ export default function SettingsPage() {
           </a>
         ))}
       </nav>
-
-      {/* Admin Test Mode Toggle */}
-      {isAdmin && (
-        <section className="mb-8">
-          <div className="bg-t-panel-2 p-5 border border-t-amber">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-t-amber-bright">Admin Mode</h3>
-                <p className="text-sm text-t-phos-dim mt-1">
-                  {testMode
-                    ? "Testing as a regular client. Toggle off to restore admin access."
-                    : "You have full admin access. Toggle on to see the real user experience."}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  if (testMode) {
-                    localStorage.removeItem("admin_test_mode");
-                  } else {
-                    localStorage.setItem("admin_test_mode", "client");
-                  }
-                  window.location.reload();
-                }}
-                className={`t-focus px-4 py-2 text-sm font-medium transition-colors min-h-touch ${
-                  testMode
-                    ? "bg-t-amber text-white hover:bg-t-amber-bright"
-                    : "bg-transparent border border-t-amber text-t-amber-bright hover:bg-t-amber/10"
-                }`}
-              >
-                {testMode ? "Back to Admin" : "Test as Client"}
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
 
       {isOrgStaff && (
         <div id="workflow" className="scroll-mt-32 mb-10">
@@ -984,9 +943,12 @@ function AccountExtras({
                           : `${code.daily_limit ?? 200} calls/day`}
                       </p>
                     </div>
-                    <span className="text-xs text-t-phos-dim">
-                      {new Date(code.redeemed_at).toLocaleDateString()}
-                    </span>
+                    <div className="text-right">
+                      <span className="block text-xs text-t-phos-dim">
+                        {new Date(code.redeemed_at).toLocaleDateString()}
+                      </span>
+                      {code.org_id && <LeaveOrgButton orgId={code.org_id} orgName={code.partner_name} />}
+                    </div>
                   </div>
                 ))}
               </div>
