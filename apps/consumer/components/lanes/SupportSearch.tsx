@@ -115,6 +115,12 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     if (initialLocation) setLocation((l) => l || initialLocation);
   }, [initialLocation]);
 
+  // A link can open on one kind of help (the career planner's training move: ?category=education).
+  useEffect(() => {
+    const wanted = new URL(window.location.href).searchParams.get("category");
+    if (wanted && SUPPORT_CATEGORIES.some((c) => c.id === wanted)) setCategory(wanted);
+  }, []);
+
   // Public directory handoff keeps the canonical service through sign-in.
   useEffect(()=>{const id=new URL(window.location.href).searchParams.get("resourceId");
     if(!id||!/^[0-9a-f-]{36}$/i.test(id))return;let live=true;
