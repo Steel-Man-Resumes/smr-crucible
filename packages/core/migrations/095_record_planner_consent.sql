@@ -1,4 +1,4 @@
--- 094_record_planner_consent.sql
+-- 095_record_planner_consent.sql
 -- The hurdle planner's own yes for record answers (Plan what to say, 2026-10-23).
 --
 -- WHAT THIS ADDS
@@ -24,7 +24,7 @@
 --   2. As the owner role, in one transaction:
 --        DELETE FROM consumer_consent_event WHERE consent_layer = 'record_planner';
 --        DELETE FROM consumer_consent WHERE consent_layer = 'record_planner';
---        DELETE FROM _migrations WHERE filename = '094_record_planner_consent.sql';
+--        DELETE FROM _migrations WHERE filename = '095_record_planner_consent.sql';
 --      (Leave the widened CHECKs in place.)
 
 SET LOCAL lock_timeout = '5s';

@@ -15,6 +15,8 @@ interface Props {
   save: SaveState;
   jobFilter: { status: "idle" | "saving" | "saved" | "failed"; message: string };
   onRetryWording: () => void;
+  showReading: boolean;
+  onToggleReading: () => void;
   onRetrySave: () => void;
   onUseInJobSearch: () => void;
   onPractice: () => void;
@@ -36,7 +38,7 @@ function List({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording, onRetrySave, onUseInJobSearch, onPractice, onEdit, onDownload, onCopyRecord, copyNote }: Props) {
+export function HurdlePlanView({ plan, wording, showReading, onToggleReading, save, jobFilter, onRetryWording, onRetrySave, onUseInJobSearch, onPractice, onEdit, onDownload, onCopyRecord, copyNote }: Props) {
   const constraintLines = describeConstraints(plan.constraints);
   return (
     <div className="max-w-2xl">
@@ -52,7 +54,7 @@ export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording,
         <p className="text-xs text-t-phos leading-relaxed">
           <span className="font-semibold text-t-white">This is coaching, not legal advice.</span>{" "}
           It is built from your answers. Anything you did not answer stays open. Nothing here is filled in with a guess.
-          {" "}What gets saved: this plan, without the record part and without anything you typed, goes to your Library (and stays with a job if you came here from one). The record part stays only on this screen until you copy or download it.
+          {" "}What gets saved to your Library: the job you named and your plan for the other hurdles (and it stays with a job if you came here from one). Not saved: the record part, anything else you typed, and t.ROY&apos;s reading. The record part stays only on this screen until you copy or download it.
         </p>
       </div>
 
@@ -67,7 +69,15 @@ export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording,
         ) : null}
       </div>
 
-      <div role="status" aria-live="polite" className="bg-t-panel px-4 py-3 border border-t-line mb-3" data-testid="plan-wording-status">
+      <div className="bg-t-panel px-4 py-3 border border-t-line mb-3" data-testid="plan-reading-toggle">
+        <label className="flex items-center gap-2 text-sm text-t-white min-h-touch">
+          <input type="checkbox" checked={showReading} onChange={onToggleReading} />
+          Show t.ROY&apos;s reading of your answers
+        </label>
+        <p className="text-xs text-t-phos-dim mt-1">Off unless you turn it on. Your answers for each hurdle (record answers only with your yes) go to an AI service, which reads them back in plain sentences. Never saved.</p>
+      </div>
+
+      {showReading && <div role="status" aria-live="polite" className="bg-t-panel px-4 py-3 border border-t-line mb-3" data-testid="plan-wording-status">
         {wording.status === "working" && <p className="text-sm text-t-phos">Putting your answers into plain sentences...</p>}
         {wording.status === "failed" && (
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -83,8 +93,8 @@ export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording,
               : " Nothing was added."}
           </p>
         )}
-        {wording.status === "off" && <p className="text-sm text-t-phos">This plan uses your answers as they are. No AI wording was used.</p>}
-      </div>
+        {wording.status === "off" && <p className="text-sm text-t-phos">Nothing to read back for these hurdles.</p>}
+      </div>}
 
       <div className="bg-t-panel px-4 py-3 border border-t-line mb-6" data-testid="plan-coverage">
         <p className="text-sm text-t-phos">{plan.coverage.line}</p>
@@ -132,7 +142,7 @@ export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording,
         <section key={s.hurdle} className="bg-t-panel p-5 border border-t-line mb-4" aria-labelledby={`plan-${s.hurdle}`} data-testid={`plan-${s.hurdle}`}>
           <h2 id={`plan-${s.hurdle}`} className="font-semibold text-t-amber-bright">{s.label}</h2>
           {s.hurdle !== "record" && <List title="What you told us" items={s.known} />}
-          {wording.summaries[s.hurdle] && (
+          {showReading && wording.summaries[s.hurdle] && (
             <p className="text-sm text-t-phos mt-3"><span className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim">t.ROY&apos;s reading: </span>{wording.summaries[s.hurdle]}</p>
           )}
           <List title="Still open" items={s.open} />

@@ -92,13 +92,14 @@ function DisclosurePlannerPage() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [jobFilter, setJobFilter] = useState<{ status: "idle" | "saving" | "saved" | "failed"; message: string }>({ status: "idle", message: "" });
 
-  // Record consent is the person's STORED yes (migration 094, /api/hurdle-plan/consent).
+  // Record consent is the person's STORED yes (migration 095, /api/hurdle-plan/consent).
   // Record answers reach an AI service only while it is granted at the current version.
   const [aiConsent, setAiConsent] = useState(false);
   const [consentAsked, setConsentAsked] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [consentError, setConsentError] = useState("");
   const [copyNote, setCopyNote] = useState("");
+  const [showReading, setShowReading] = useState(false);
 
   const [targetJob, setTargetJob] = useState("");
   const [targetCompany, setTargetCompany] = useState("");
@@ -277,11 +278,17 @@ function DisclosurePlannerPage() {
     setJobFilter({ status: "idle", message: "" });
     markChanged();
     window.scrollTo({ top: 0, behavior: "smooth" });
-    const w = await requestWording();
-    setWording(w);
-    payloadRef.current = buildPayload(p, w);
-    // Save once the wording has settled, worded or not.
+    // t.ROY's reading is off until the person turns it on; the save never holds it.
+    setShowReading(false);
+    setWording(NO_WORDING);
+    payloadRef.current = buildPayload(p, NO_WORDING);
     await doSave();
+  }
+
+  async function toggleReading() {
+    const next = !showReading;
+    setShowReading(next);
+    if (next && wording.status !== "done" && wording.status !== "working") await retryWording();
   }
 
   async function retryWording() {
@@ -393,6 +400,8 @@ function DisclosurePlannerPage() {
           save={save}
           jobFilter={jobFilter}
           onRetryWording={() => void retryWording()}
+          showReading={showReading}
+          onToggleReading={() => void toggleReading()}
           onRetrySave={() => void doSave()}
           onUseInJobSearch={() => void useInJobSearch()}
           onPractice={() => { window.scrollTo({ top: 0, behavior: "smooth" }); setStep("rehearse"); }}

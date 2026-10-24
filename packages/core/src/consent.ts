@@ -25,7 +25,7 @@ export type ConsentLayer =
   // types is sent to the AI to build a checklist. Its own yes, separate from
   // every other layer; default declined.
   | "record_check"
-  // Migration 094: the hurdle planner's yes for record answers going to an AI
+  // Migration 095: the hurdle planner's yes for record answers going to an AI
   // service (wording and practice). Its own layer; default declined.
   | "record_planner";
 

@@ -338,7 +338,7 @@ describe("fix round 1", () => {
 
 import { INITIAL_SAVE, runSave, saveLine, saveReducer, type SaveEvent, type SaveState } from "../hurdles/save-state";
 import { saveArtifactReceipt } from "../artifact-save";
-import { planForSave, buildSavePayload } from "../hurdles/plan";
+import { planForSave, buildSavePayload, recordAndSensitiveText } from "../hurdles/plan";
 
 describe("save truth", () => {
   async function attempt(response: Response): Promise<SaveState> {
@@ -380,6 +380,13 @@ describe("save truth", () => {
     s = saveReducer(s, { type: "ok", version: s.version, id: "id" });
     assert.equal(saveReducer(s, { type: "begin", version: s.version }).status, "saved");
   });
+  it("a not-sure path that found a background check saves nothing that reveals it", () => {
+    const st = run([...pick("not_sure"), { type: "start" }, ans("not_sure.signs", "check", "ride")]);
+    const payload = buildSavePayload(buildHurdlePlan(st), st, { summaries: {}, strippedCount: 0, wording: "off", targetJob: null });
+    const blob = JSON.stringify(payload).toLowerCase();
+    for (const line of recordAndSensitiveText()) assert.ok(!blob.includes(line.toLowerCase()), `saved: ${line}`);
+    assert.ok(!/background check/.test(blob));
+  });
   it("the saved artifact and any snapshot of it hold nothing from the record (B1)", () => {
     const st = run([...pick("record", "gaps", "other"), { type: "start" }, ans("record.where", "form", "check"), txt("record.form_question", "Have you been convicted of a felony in the last 7 years?"),
       ans("record.check_stage", "notice"), ans("record.kind", "pending"), ans("record.when", "lt1"), ans("record.supervision", "yes"), ans("record.conditions", "yes"),
@@ -390,9 +397,12 @@ describe("save truth", () => {
     assert.ok(plan.record, "the record plan exists on screen");
     const payload = buildSavePayload(plan, st, { summaries: { record: "You want to wait.", gaps: "You were caring for family." }, strippedCount: 0, wording: "done", targetJob: "Driver", applicationId: "123e4567-e89b-12d3-a456-426614174000" });
     // The application_document snapshot copies payload.content as is, so one check covers both.
-    const blob = JSON.stringify(payload);
-    for (const bad of [/armed robbery/i, /three years/i, /convicted/i, /felony/i, /officer/i, /lawyer/i, /pending/i, /letter/i, /record\./, /wait/i, /time inside/i, /inside/i, /private words/i, /work days at the yard/i, /supervision/i])
-      assert.doesNotMatch(blob, bad, String(bad));
+    // Generated forbidden set: every record and sensitive fact, label, action and ask in the graph.
+    const blob = JSON.stringify(payload).toLowerCase();
+    const forbidden = recordAndSensitiveText();
+    assert.ok(forbidden.length > 40, `forbidden set has ${forbidden.length} lines`);
+    for (const line of forbidden) assert.ok(!blob.includes(JSON.stringify(line).slice(1, -1).toLowerCase()), `saved: ${line}`);
+    for (const typed of ["armed robbery", "convicted of a felony", "work days at the yard", "my private words", "\"wi\""]) assert.ok(!blob.includes(typed), typed);
     assert.equal((payload.content.hurdlePlan as any).record, undefined);
     assert.equal(payload.content.script, null);
     assert.equal(payload.content.timing_advice, null);

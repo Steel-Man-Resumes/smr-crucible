@@ -160,7 +160,7 @@ export async function POST(request: Request) {
   // memory reads, no coach_conversation writes for these turns.
   const isDisclosureRehearsal = context.currentPage === "disclosure-rehearsal";
   // Record words in a practice prompt need the person's stored record planner
-  // consent (migration 094) at the current version. Without it, refuse.
+  // consent (migration 095) at the current version. Without it, refuse.
   if (isDisclosureRehearsal && typeof systemOverride === "string" && systemOverride.includes(RECORD_WORDS_HEADER)) {
     const consent = userId ? await recordPlannerConsent(userId).catch(() => ({ granted: false })) : { granted: false };
     if (!consent.granted) {

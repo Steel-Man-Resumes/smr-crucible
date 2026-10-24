@@ -515,7 +515,7 @@ const NODE_LIST: HurdleNode[] = [
     choices: [
       { id: "ride", label: "Missed or turned down work because of a ride", addsHurdle: "transport", fact: "Rides have cost you work." },
       { id: "papers", label: "Got asked for ID or papers I didn't have", addsHurdle: "documents", fact: "Missing papers have slowed you down." },
-      { id: "check", label: "Got turned down after a background check", addsHurdle: "record", fact: "A background check has come up." },
+      { id: "check", label: "Got turned down after a background check", addsHurdle: "record", fact: "A background check has come up.", sensitive: true },
       { id: "gap", label: "Got asked about time between jobs", addsHurdle: "gaps", fact: "Gaps have come up." },
       { id: "hours", label: "Kids, family or school made the hours hard", addsHurdle: "schedule", fact: "Hours have been hard to fit." },
       { id: "health", label: "Health got in the way", addsHurdle: "health", fact: "Health has gotten in the way." },

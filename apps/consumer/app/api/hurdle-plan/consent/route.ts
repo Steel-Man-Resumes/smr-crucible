@@ -1,5 +1,5 @@
 /**
- * /api/hurdle-plan/consent: the planner's own yes for record answers (migration 094).
+ * /api/hurdle-plan/consent: the planner's own yes for record answers (migration 095).
  *   GET    -> { granted, version, current }
  *   POST   -> records the yes at the current text version
  *   DELETE -> takes the yes back

@@ -217,7 +217,7 @@ export function planForSave(plan: HurdlePlan, state: Pick<PlannerState, "selecte
       if (keep.length) choices[id] = { choices: keep };
     }
   }
-  const sensitiveFacts = new Set(Object.values(NODES).flatMap((n) => (n.choices ?? []).filter((c) => c.sensitive).map((c) => c.fact ?? c.label)));
+  const sensitiveFacts = new Set(recordAndSensitiveText());
   return {
     version: 2 as const,
     selected: state.selected.filter((h) => h !== "record"),
@@ -227,6 +227,26 @@ export function planForSave(plan: HurdlePlan, state: Pick<PlannerState, "selecte
     constraints: plan.constraints,
     coverage: { line: "Saved without the record part. " + plan.coverage.line },
   };
+}
+
+/**
+ * Every fact and label that can reveal a record: all of the record hurdle,
+ * every choice on a sensitive node, and every choice marked sensitive. A
+ * saved plan must contain none of them (the test checks the whole payload).
+ */
+export function recordAndSensitiveText(): string[] {
+  const out: string[] = [];
+  for (const n of Object.values(NODES)) {
+    const all = n.hurdle === "record" || n.sensitive;
+    for (const c of n.choices ?? []) if (all || c.sensitive) out.push(c.fact ?? c.label, c.label, ...(c.action ? [c.action] : []), ...(c.ask ? [c.ask] : []));
+  }
+  // Text that is also an ordinary answer elsewhere ("1 to 3 years" for a gap) reveals nothing by itself.
+  const ordinary = new Set<string>();
+  for (const n of Object.values(NODES)) {
+    if (n.hurdle === "record" || n.sensitive) continue;
+    for (const c of n.choices ?? []) if (!c.sensitive) ordinary.add(c.label).add(c.fact ?? c.label);
+  }
+  return [...new Set(out)].filter((t) => t && !ordinary.has(t));
 }
 
 /** The whole artifact body for POST /api/artifacts. Pure, so tests can prove what is in it. */
