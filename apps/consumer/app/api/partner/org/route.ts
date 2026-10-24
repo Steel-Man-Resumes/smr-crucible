@@ -393,7 +393,7 @@ export async function POST(request: Request) {
       if (!body.userId) {
         return NextResponse.json({ error: "userId required" }, { status: 400 });
       }
-      const touched = await touchOrgInviteResend(org.accessCodeId, body.userId);
+      const touched = await touchOrgInviteResend(org.accessCodeId, body.userId, { actorUserId: userId });
       if (!touched.ok) {
         return NextResponse.json({ error: touched.error }, { status: 400 });
       }

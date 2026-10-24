@@ -127,6 +127,10 @@ export async function createSeatOffer(opts: {
   accessCodeId: string;
   userId: string;
   offeredBy: string;
+  /** Default OFFER_WINDOW_HOURS. 0 = only "not while one is open": the
+   *  Invited list re-opens an offer that way and keeps its own email window
+   *  on org_invite.last_sent_at (orgInvite.ts, boss ruling 2026-10-23). */
+  windowHours?: number;
 }): Promise<boolean> {
   const [rows] = await runScoped<[{ id: string }[]]>(
     { orgId: opts.accessCodeId, userId: opts.offeredBy, role: "org_admin" },
@@ -135,7 +139,7 @@ export async function createSeatOffer(opts: {
         opts.accessCodeId,
         opts.userId,
         opts.offeredBy,
-        OFFER_WINDOW_HOURS,
+        opts.windowHours ?? OFFER_WINDOW_HOURS,
       ]),
     ]
   );

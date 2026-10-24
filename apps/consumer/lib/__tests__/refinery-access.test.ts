@@ -391,11 +391,13 @@ test("door org code shown only to holders of org.seats.view", () => {
 test("door org invite of an existing account: an offer first, the seat is spent on accept", () => {
   const core = fs.readFileSync(path.join(REPO, "packages", "core", "src", "orgInvite.ts"), "utf8");
   const existing = core.slice(core.indexOf("if (existing) {"), core.indexOf("} else {", core.indexOf("if (existing) {")));
-  const offer = existing.indexOf("createSeatOffer(");
+  // The offer is made through openListedOffer, which calls createSeatOffer.
+  const offer = existing.indexOf("openListedOffer(");
+  assert.match(core.slice(core.indexOf("export async function openListedOffer")), /^[\s\S]{0,600}createSeatOffer\(/);
   const redeem = existing.indexOf("redeemAccessCode(");
   assert.ok(offer > 0 && redeem > offer, "an account that signed in gets an offer before any redemption path");
   assert.ok(existing.slice(0, offer).includes("if (!pending)"));
-  assert.match(existing.slice(offer, offer + 1400), /return \{ ok: true, userId, kind: "offered", notify: fresh \}/);
+  assert.match(existing.slice(offer, offer + 1400), /return \{ ok: true, userId, kind: "offered", notify: sent \}/);
   // The accept function spends the seat through the one membership path.
   const accept = MIGRATION.slice(MIGRATION.indexOf("FUNCTION public.smr_accept_seat_offer"), MIGRATION.indexOf("FUNCTION public.smr_decline_seat_offer"));
   assert.match(accept, /o\.user_id = p_user AND o\.status = 'pending' FOR UPDATE/);
@@ -694,7 +696,12 @@ test("SF-2: one staff reply whatever the address was, no kind in it, and one off
   const offerSql = fs.readFileSync(path.join(REPO, "packages", "core", "src", "refineryAccess.ts"), "utf8");
   assert.match(offerSql, /o\.status = 'pending'\s*OR o\.created_at > now\(\) - make_interval\(hours => \$4::int\)\s*OR o\.decided_at > now\(\)/);
   assert.match(offerSql, /OFFER_WINDOW_HOURS = 24/);
-  assert.match(offerSql, /OFFER_INSERT_SQL, \[\s*opts\.accessCodeId,\s*opts\.userId,\s*opts\.offeredBy,\s*OFFER_WINDOW_HOURS,/);
+  assert.match(offerSql, /OFFER_INSERT_SQL, \[\s*opts\.accessCodeId,\s*opts\.userId,\s*opts\.offeredBy,\s*opts\.windowHours \?\? OFFER_WINDOW_HOURS,/);
+  // The Invited list re-opens offers with window 0 (boss ruling 2026-10-23); its
+  // email still goes at most once a day, on org_invite.last_sent_at.
+  const inv = fs.readFileSync(path.join(REPO, "packages", "core", "src", "orgInvite.ts"), "utf8");
+  assert.match(inv, /last_sent_at = CASE WHEN org_invite\.last_sent_at <= now\(\) - make_interval\(hours => \$6\)/);
+  assert.match(inv, /o\.email,\s*OFFER_WINDOW_HOURS,\s*\]\)/);
 });
 
 test("SF-2: a seat approval asked already today sends no second email", async () => {
@@ -784,9 +791,9 @@ test("addendum: offers have their own resend (once a day, offer email) and withd
   assert.ok(offerBranch > 0 && offerBranch < resend.indexOf("if (!row.pending)"), "before the 'already joined' answer");
   assert.match(resend, /last_sent_at <= now\(\) - make_interval\(hours => \$3\)/);
   // offer is true only for an open offer (behaviour tested in core orgInvite.test.ts).
-  assert.match(resend, /const offer = row\.offer_status === "offered";[\s\S]*return \{ ok: true, email: row\.email, name: offer \? row\.invited_name \?\? row\.name : row\.name, offer \}/);
+  assert.match(resend, /const offer = row\.offer_status === "offered" \|\| row\.offer_status === "declined";[\s\S]*return \{ ok: true, email: row\.email, name: offer \? row\.invited_name \?\? row\.name : row\.name, offer \}/);
   const revoke = core.slice(core.indexOf("export async function revokeOrgInvite"));
-  const wBranch = revoke.indexOf('if (row.offer_status === "offered")');
+  const wBranch = revoke.indexOf('row.offer_status === "offered"');
   assert.ok(wBranch > 0 && wBranch < revoke.indexOf("if (!row.pending)"));
   assert.match(revoke, /smr_withdraw_seat_offer\(/);
   const route = code(read("app", "api", "partner", "org", "route.ts"));

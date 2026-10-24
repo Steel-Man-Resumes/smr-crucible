@@ -9,7 +9,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { PENDING_INVITE_LIST_SQL, RESEND_TOO_SOON, touchOrgInviteResend } from "@crucible/core/src/orgInvite";
+import { OFFER_RELIST_SQL, PENDING_INVITE_LIST_SQL, RESEND_TOO_SOON, touchOrgInviteResend } from "@crucible/core/src/orgInvite";
+import { OFFER_INSERT_SQL } from "@crucible/core/src/refineryAccess";
 
 const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, "@electric-sql/pglite")) ? "set SMR_PGLITE_DIR to run the pglite invite test" : false;
@@ -25,12 +26,15 @@ test("offers and invites: one list shape, one resend window, one refusal", { ski
     catch { await db.exec("ROLLBACK").catch(() => {}); }
   }
   const q = async (t: string, p: unknown[] = []) => (await db.query(t, p)).rows as Record<string, any>[];
-  const deps = { getOne: async <T,>(t: string, p: unknown[] = []) => ((await q(t, p))[0] ?? null) as T | null };
+  const getOne = async <T,>(t: string, p: unknown[] = []) => ((await q(t, p))[0] ?? null) as T | null;
+  // The real offer insert, with the window the Invited list uses (0: only an open offer blocks).
+  const openOffer = (orgId: string, user: string, actor: string) => q(OFFER_INSERT_SQL, [orgId, user, actor || null, 0]);
+  const deps = { deps: { getOne, openOffer }, actorUserId: "00000000-0000-0000-0000-000000000001" };
   const id = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, "0")}`;
-  const U = { owner: id(1), offered: id(2), shell: id(3), joined: id(4), oldOffer: id(5), oldShell: id(6) };
+  const U = { owner: id(1), offered: id(2), shell: id(3), joined: id(4), oldOffer: id(5), oldShell: id(6), declined: id(7), withdrawn: id(8), oldWithdrawn: id(9), removedShell: id(10) };
   for (const [k, u] of Object.entries(U)) await q(`INSERT INTO users(id, email, name, tier) VALUES ($1, $2, $3, 'client')`, [u, `${k}@x.test`, `Own ${k}`]);
   // Accounts that have signed in: the offered ones and the joined invitee.
-  await q(`UPDATE users SET "emailVerified" = now() WHERE id IN ($1, $2, $3, $4)`, [U.owner, U.offered, U.joined, U.oldOffer]);
+  await q(`UPDATE users SET "emailVerified" = now() WHERE id IN ($1, $2, $3, $4, $5, $6, $7)`, [U.owner, U.offered, U.joined, U.oldOffer, U.declined, U.withdrawn, U.oldWithdrawn]);
   const org = (await q(`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, max_redemptions) VALUES ('PGINV0001', 'PG inv', 'client', $1, true, 5) RETURNING id`, [U.owner]))[0].id;
   const add = (u: string, typed: string, status: string | null, ago: string) =>
     q(`INSERT INTO org_invite (access_code_id, user_id, invited_by, invited_name, invited_email, offer_status, last_sent_at)
@@ -68,4 +72,52 @@ test("offers and invites: one list shape, one resend window, one refusal", { ski
   const j = await touchOrgInviteResend(org, U.joined, deps);
   assert.equal(j.ok, false);
   assert.notEqual((j as { error: string }).error, RESEND_TOO_SOON);
+
+  // ---- boss ruling 2026-10-23: the organization never learns of a decline ----
+  const answered = (u: string, status: string, ago: string) =>
+    q(`INSERT INTO org_seat_offer (access_code_id, user_id, offered_by, status, created_at, decided_at)
+       VALUES ($1, $2, $3, $4, now() - $5::interval, now() - $5::interval)`, [org, u, U.owner, status, ago]);
+  await answered(U.declined, "declined", "5 minutes");
+  await add(U.declined, "Typed Declined", "declined", "5 minutes");
+  await answered(U.withdrawn, "withdrawn", "2 hours");
+  await add(U.withdrawn, "Old Typed", "withdrawn", "2 hours");
+  await answered(U.oldWithdrawn, "withdrawn", "30 hours");
+  await add(U.oldWithdrawn, "Long Gone", "withdrawn", "30 hours");
+
+  // A declined offer stays on the list, looking like an unanswered invite.
+  const list2 = new Map((await q(PENDING_INVITE_LIST_SQL, [org])).map((r) => [r.user_id, r]));
+  assert.ok(list2.has(U.declined), "a declined offer is still listed");
+  assert.equal(list2.get(U.declined)!.name, "Typed Declined");
+  assert.deepEqual(Object.keys(list2.get(U.declined)!).sort(), Object.keys(list2.get(U.shell)!).sort());
+  assert.ok(!list2.has(U.withdrawn) && !list2.has(U.oldWithdrawn), "withdrawn rows are off the list, like a removed invite");
+  // Resend inside the day: the one refusal. After it: asked again, the decline kept as history.
+  assert.deepEqual(await touchOrgInviteResend(org, U.declined, deps), early[0]);
+  await q(`UPDATE org_invite SET last_sent_at = now() - interval '25 hours' WHERE user_id = $1`, [U.declined]);
+  assert.deepEqual(await touchOrgInviteResend(org, U.declined, deps), { ok: true, email: "declined@x.test", name: "Typed Declined", offer: true });
+  const dOffers = await q(`SELECT status FROM org_seat_offer WHERE user_id = $1 ORDER BY created_at`, [U.declined]);
+  assert.deepEqual(dOffers.map((r) => r.status), ["declined", "pending"], "the decline stays recorded; a new offer is open");
+  assert.equal((await q(`SELECT offer_status FROM org_invite WHERE user_id = $1`, [U.declined]))[0].offer_status, "offered");
+
+  // Re-adding a withdrawn offer, the way createOrgInvite does (openListedOffer):
+  // the gate's 24-hour insert would have refused it; the list's insert does not.
+  assert.equal((await q(OFFER_INSERT_SQL, [org, U.withdrawn, U.owner, 24])).length, 0, "the old window blocked a re-add");
+  assert.equal((await q(OFFER_INSERT_SQL, [org, U.withdrawn, U.owner, 0])).length, 1, "only an open offer blocks now");
+  assert.equal((await q(OFFER_INSERT_SQL, [org, U.withdrawn, U.owner, 0])).length, 0, "and an open one still does");
+  const relist = (u: string, typed: string) => q(OFFER_RELIST_SQL, [org, u, U.owner, typed, `${typed}@typed.test`, 24]);
+  assert.deepEqual(await relist(U.withdrawn, "New Typed"), [{ sent: false }], "listed at once; no email inside 24 hours of the last send");
+  await q(OFFER_INSERT_SQL, [org, U.oldWithdrawn, U.owner, 0]);
+  assert.deepEqual(await relist(U.oldWithdrawn, "Long Gone"), [{ sent: true }], "after the window the email goes");
+  const list3 = new Map((await q(PENDING_INVITE_LIST_SQL, [org])).map((r) => [r.user_id, r]));
+  assert.equal(list3.get(U.withdrawn)!.name, "New Typed", "relisted with the name typed this time");
+  assert.equal(list3.get(U.oldWithdrawn)!.name, "Long Gone");
+  // Same look as a removed new invite added again: a fresh row, invited now, sent once.
+  await add(U.removedShell, "Re Added", null, "0 seconds");
+  const fresh = list3.get(U.withdrawn)!;
+  const reAdded = new Map((await q(PENDING_INVITE_LIST_SQL, [org])).map((r) => [r.user_id, r])).get(U.removedShell)!;
+  assert.deepEqual(Object.keys(fresh).sort(), Object.keys(reAdded).sort());
+  assert.equal(Number(fresh.send_count), Number(reAdded.send_count));
+  assert.ok(Date.now() - new Date(fresh.invited_at).getTime() < 60_000, "invited_at is now, as for a re-added invite");
+  // And Resend right after a relist is refused alike for both.
+  assert.deepEqual(await touchOrgInviteResend(org, U.withdrawn, deps), early[0]);
+  assert.deepEqual(await touchOrgInviteResend(org, U.removedShell, deps), early[0]);
 });
