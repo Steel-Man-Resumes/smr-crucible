@@ -341,6 +341,16 @@ export function ResumeWorkspace() {
         setArtifactId(artifact.id);
         setDoc(content.formatVersion === 2 || content.formatVersion === 3 ? upgradeToV3(content) : migrateLegacyResume(content));
         setCoverLetterText(letter);
+        // A multi-job result carries its truth check with it: every flagged
+        // line is listed here too, never only in the queue (DEC-46).
+        if (searchParams.get("batch")) {
+          const t = artifact.target_context?.batchTruth;
+          setTruthCheck(t && typeof t === "object" ? {
+            blocked: !!t.blocked,
+            notice: typeof t.notice === "string" ? t.notice : "",
+            flags: Array.isArray(t.flags) ? t.flags.filter((f: unknown): f is string => typeof f === "string").slice(0, 8) : [],
+          } : null);
+        }
         setSaveStatus(artifact.is_locked ? "locked" : "idle");
         lastSaved.current = JSON.stringify(content);
         setShowSetup(false);
@@ -1236,9 +1246,9 @@ export function ResumeWorkspace() {
           posting.
         </p>
         <p className="text-sm text-t-phos-dim mb-4">
-          You work one job at a time. Save as many as you want on the Job Board,
-          then tailor and apply to them one by one. They wait for you under
-          your saved jobs.
+          Tailor one job here, or pick up to 3 on the Job Board and tailor them
+          together. Each job still gets its own resume and its own AI action.
+          Saved jobs wait for you under your saved jobs.
         </p>
         <section className="mb-5 border border-purple-400/40 bg-t-panel p-4">
           <h2 className="font-bold text-t-white">Start with a real opening</h2>

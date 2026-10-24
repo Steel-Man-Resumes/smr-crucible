@@ -26,12 +26,29 @@ import { jobSourceForSave } from "@/lib/job-source";
 import { JobFitChoices } from "@/components/JobFitChoices";
 import { jobFitExclusion, type JobFitPreferences } from "@/lib/job-fit";
 import { broadenJobSearch } from "@/lib/job-search-broaden";
+import { BATCH_HANDOFF_KEY, MAX_BATCH_JOBS, SELECTION_FULL_LINE, toggleSelection, type BatchJob } from "@/lib/tailor-batch";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 interface SavedJob {
   id: string;
   status: "saved" | "applied" | "heard_back" | "interviewing" | "offered";
+}
+
+/** A saved application row, as much as multi-job tailoring needs. */
+interface SavedRow {
+  id: string; job_title: string; company: string; status: string; source_id?: string | null; source?: string | null;
+  location?: string | null; salary?: string | null; employment_type?: string | null; description?: string | null;
+  jd_full_text?: string | null; apply_url?: string | null; employer_website?: string | null; resume_artifact_id?: string | null;
+}
+
+function batchJobFromSaved(row: SavedRow): BatchJob {
+  return {
+    selectKey: row.source_id || row.id, title: row.job_title, company: row.company, location: row.location || "",
+    salary: row.salary || null, employment_type: row.employment_type || "", description: row.jd_full_text || row.description || "",
+    id: row.source_id || undefined, apply_url: row.apply_url || null, employer_website: row.employer_website || null,
+    source: row.source || "jsearch", existingApplicationId: row.id,
+  };
 }
 
 interface UserContext {
@@ -114,6 +131,10 @@ function JobBoardPage() {
   const [searchError, setSearchError] = useState("");
   const [expandedJob, setExpandedJob] = useState<string | null>(null);
   const [savedJobs, setSavedJobs] = useState<Map<string, SavedJob>>(new Map());
+  const [savedRows, setSavedRows] = useState<SavedRow[]>([]);
+  // Multi-job tailoring: up to three picks from results or saved jobs, in pick order.
+  const [picked, setPicked] = useState<BatchJob[]>([]);
+  const [pickNotice, setPickNotice] = useState("");
   const [hiddenJobs, setHiddenJobs] = useState<Set<string>>(new Set());
   // N1: persistent per-employer hiding (normalized name keys) + the card being confirmed.
   const [hiddenEmployers, setHiddenEmployers] = useState<Array<{ id: string; display_name: string }>>([]);
@@ -177,7 +198,7 @@ function JobBoardPage() {
   // Shared browsers never reuse another account's hidden or saved job state.
   useEffect(() => {
     const controller = new AbortController();
-    setHiddenEmployers([]); setSavedJobs(new Map()); setHiddenJobs(new Set());
+    setHiddenEmployers([]); setSavedJobs(new Map()); setHiddenJobs(new Set()); setSavedRows([]); setPicked([]); setPickNotice("");
     setHiddenEmployerError(""); setRestoringEmployer(null);
     if (!ownerUid) return () => controller.abort();
     try {
@@ -197,6 +218,7 @@ function JobBoardPage() {
         const map = new Map<string, SavedJob>();
         for (const app of body.applications || []) map.set(app.source_id || app.id, { id: app.id, status: app.status });
         setSavedJobs(map);
+        setSavedRows((body.applications || []).filter((app: SavedRow) => typeof app?.id === "string" && typeof app?.job_title === "string" && typeof app?.company === "string"));
       }).catch(() => {});
     return () => controller.abort();
   }, [ownerUid, hiddenReload]);
@@ -414,6 +436,31 @@ function JobBoardPage() {
     }
   }
 
+  function togglePick(job: BatchJob) {
+    const keys = picked.map(item => item.selectKey);
+    const result = toggleSelection(keys, job.selectKey, MAX_BATCH_JOBS);
+    if (result.refused) { setPickNotice(SELECTION_FULL_LINE); return; }
+    setPickNotice("");
+    setPicked(previous => result.selected.map(key => previous.find(item => item.selectKey === key) || job));
+  }
+
+  function batchJobFromResult(job: EnrichedJob): BatchJob {
+    return {
+      selectKey: job.id, title: job.title, company: job.company, location: job.location, salary: job.salary,
+      employment_type: job.employment_type, description: job.full_description || job.description,
+      requirements: job.requirements, id: job.id, apply_url: job.apply_url || null,
+      employer_website: job.employer_website || null, source: jobSourceForSave(job.id, source),
+    };
+  }
+
+  function tailorPicked() {
+    if (!ownerUid || picked.length === 0) return;
+    try {
+      sessionStorage.setItem(BATCH_HANDOFF_KEY, JSON.stringify({ ownerUid, laneId: laneKey && laneKey !== "main" ? laneKey : null, jobs: picked }));
+    } catch { setPickNotice("This browser would not hold your picks. Tailor them one at a time instead."); return; }
+    window.location.href = "/dashboard/application-tailor?from=batch";
+  }
+
   function dismissJob(jobId: string) {
     setHiddenJobs((prev) => {
       const next = new Set(prev);
@@ -537,6 +584,25 @@ function JobBoardPage() {
               Track applications
             </Link>
           </div>
+          {savedRows.some(row => row.status === "saved") && (
+            <details className="mt-3 text-sm text-t-phos" data-testid="saved-jobs-picker">
+              <summary className="t-focus min-h-touch cursor-pointer text-t-white">Pick saved jobs to tailor (up to {MAX_BATCH_JOBS})</summary>
+              <ul className="mt-2 space-y-1">
+                {savedRows.filter(row => row.status === "saved").slice(0, 20).map(row => {
+                  const item = batchJobFromSaved(row);
+                  const isPicked = picked.some(p => p.selectKey === item.selectKey);
+                  return (
+                    <li key={row.id}>
+                      <label className="flex min-h-touch items-center gap-3">
+                        <input type="checkbox" className="h-5 w-5 flex-shrink-0" checked={isPicked} onChange={() => togglePick(item)} />
+                        <span>{row.job_title} at {row.company}{row.resume_artifact_id ? <span className="text-xs text-t-phos-dim"> · already has a tailored resume</span> : null}</span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
+          )}
         </div>
       )}
 
@@ -751,6 +817,16 @@ function JobBoardPage() {
                 {job.evidence && <p className="px-4 pt-2 text-xs text-t-phos-dim">Source: {job.evidence.source}. Posted: {job.evidence.postedAt && Number.isFinite(Date.parse(job.evidence.postedAt)) ? new Date(job.evidence.postedAt).toLocaleDateString() : "not supplied"}. Fetched: {new Date(job.evidence.fetchedAt).toLocaleString()}.</p>}
                 {job.evidence?.warnings.map(warning=><p key={warning} className="px-4 pt-1 text-xs text-t-amber-bright">{warning}</p>)}
                 {job.relevance && <p className="px-4 pt-2 text-sm text-t-phos-dim">{job.relevance.reason}</p>}
+                <label className="flex min-h-touch items-center gap-3 px-4 pt-2 text-sm text-t-phos" data-testid="job-pick">
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 flex-shrink-0"
+                    checked={picked.some(item => item.selectKey === job.id)}
+                    onChange={() => togglePick(batchJobFromResult(job))}
+                    aria-label={`Pick to tailor (up to 3): ${job.title} at ${job.company}`}
+                  />
+                  Pick to tailor (up to 3)
+                </label>
                 {/* Header — always visible */}
                 <button
                   onClick={() =>
@@ -1068,6 +1144,24 @@ function JobBoardPage() {
           </div>
         </div>
       </div>
+
+      {(picked.length > 0 || pickNotice) && (
+        <div role="region" aria-label="Jobs picked to tailor" data-testid="pick-bar" className="sticky bottom-0 z-20 mt-6 border border-t-amber bg-t-panel-2 p-3 shadow-[0_-3px_8px_rgba(22,26,21,0.25)]">
+          {pickNotice && <p role="status" className="mb-2 text-sm text-t-amber-bright">{pickNotice}</p>}
+          {picked.length > 0 && (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-t-white" aria-live="polite">
+                <strong>{picked.length} selected</strong>
+                <span className="text-t-phos-dim"> · {picked.length === 1 ? "1 job = 1 AI action" : `${picked.length} jobs = ${picked.length} AI actions`}, one resume each</span>
+              </p>
+              <button type="button" onClick={tailorPicked} data-testid="pick-bar-tailor" className="t-focus min-h-touch bg-t-amber px-4 font-bold text-white hover:bg-t-amber-bright">
+                Tailor for {picked.length === 1 ? "this job" : "these"}
+              </button>
+              <button type="button" onClick={() => { setPicked([]); setPickNotice(""); }} className="t-focus min-h-touch text-sm text-t-phos-dim underline">Clear</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
