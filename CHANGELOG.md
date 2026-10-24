@@ -1,3 +1,13 @@
+## 2026-10-24: Check and finish reads what the person already gave (local, unreleased)
+
+- Check and finish counts the person's confirmed Master Draft details and the lines of their other finished resumes as their own words. Never a draft, an unchecked detail, the resume being checked, Forge analysis or a record line.
+- A skills term is read as a kind of work: the person's own explicit claim of the same family covers it ("supervise the production employees" covers "Crew supervision"). A word nothing supports is named on the card.
+- A second-check flag that the person's evidence states word for word under the same job, or their own job's exact dates beside its employer, is not a flag.
+- Cutting one skill takes off only that item and keeps the line's separators. A second-check claim no longer on the page never blocks; reworded on one line, that line is the card.
+- "You chose to leave this line out" appears only for a cut made on that page. A Tailor result no longer carries its parent's cut answers.
+- A fix t.ROY could not draft says so on the card.
+- No schema migration or production change in this local build.
+
 ## 2026-10-23: Refinery orientation and work feedback (local, unreleased)
 
 - Teach the application process through twelve resumable tour chapters and eight settings lessons linked to real controls.
