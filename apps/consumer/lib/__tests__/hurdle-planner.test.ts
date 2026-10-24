@@ -6,12 +6,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { HURDLES, HURDLE_IDS, NODES, getNode, resolveNext } from "../hurdles/graph";
-import { INITIAL_STATE, plannerReducer, walk, fullPath, reachedAnswers, type PlannerState, type PlannerAction } from "../hurdles/reducer";
+import { INITIAL_STATE, plannerReducer, walk, fullPath, reachedAnswers, hurdlesOf, type PlannerState, type PlannerAction } from "../hurdles/reducer";
 import { coverageOf } from "../hurdles/coverage";
 import { stripUnsupported } from "../hurdles/fact-check";
 import { applyConstraints, mergeConstraints } from "../hurdles/filters";
 import { buildHurdlePlan, supportHref } from "../hurdles/plan";
-import { buildPhrasePrompt, checkPhraseReply, phraseHurdlePlan, readPhraseRequest, mockPhraseReply } from "../hurdles/phrase";
+import { buildPhrasePrompt, phraseHurdlePlan, readPhraseRequest, mockPhraseReply, hasRecordContent, withoutRecordContent, type PhraseRequest } from "../hurdles/phrase";
+import { mergeAcrossHurdles } from "../hurdles/filters";
+import { buildRehearsalSystemOverride, RECORD_WORDS_HEADER } from "../rehearsal-personas";
 import { legalFloorFor } from "../hurdles/legal-floor";
 
 const run = (actions: PlannerAction[], from: PlannerState = INITIAL_STATE) => actions.reduce(plannerReducer, from);
@@ -114,7 +116,8 @@ describe("reducer", () => {
   });
   it("not sure adds the hurdles the person recognizes", () => {
     let s = run([...pick("not_sure"), { type: "start" }, ans("not_sure.signs", "ride", "papers")]);
-    assert.deepEqual(s.selected, ["not_sure", "transport", "documents"]);
+    assert.deepEqual(s.selected, ["not_sure"], "the person's own picks stay theirs");
+    assert.deepEqual(hurdlesOf(s), ["not_sure", "transport", "documents"]);
     assert.equal(s.cursor, "transport.what");
   });
   it("ignores answers for a node that is not on screen, and unknown choices", () => {
@@ -224,35 +227,49 @@ describe("phrasing pipeline", () => {
     ans("record.kind", "felony"), ans("record.when", "3to7"), ans("record.supervision", "no"), txt("record.state", "WI"),
     ans("record.worry", "details"), ans("record.lead", "work"), txt("record.own_words", "I have a felony from 2019."), txt("record.now_words", "I've loaded trucks for a year."),
     ans("transport.what", "bus_hours")]);
-  it("without record consent no record detail reaches the prompt", () => {
-    const req = readPhraseRequest({ selected: state.selected, answers: state.answers, recordConsent: false })!;
+  const withConsent = (b: unknown): PhraseRequest => ({ ...readPhraseRequest(b)!, recordConsent: true });
+  it("the body cannot turn record consent on", () => {
+    const req = readPhraseRequest({ selected: state.selected, answers: state.answers, recordConsent: true })!;
+    assert.equal(req.recordConsent, false);
     const p = buildPhrasePrompt(req);
     assert.ok(!/felony|2019|Felony/.test(p.user));
     assert.deepEqual(p.hurdles, ["transport"]);
   });
-  it("with consent the record words are there to phrase", () => {
-    const req = readPhraseRequest({ selected: state.selected, answers: state.answers, recordConsent: true })!;
-    const p = buildPhrasePrompt(req);
-    assert.match(p.user, /felony from 2019/);
-    assert.ok(p.hurdles.includes("record"));
+  it("record content is detected, and the page can strip it before sending", () => {
+    assert.ok(hasRecordContent({ answers: state.answers }));
+    assert.ok(!hasRecordContent({ answers: withoutRecordContent(state.answers) }));
+    const gaps = { "gaps.length": { choices: ["1to3"] }, "gaps.filled": { choices: ["inside", "family"] } };
+    assert.ok(hasRecordContent({ answers: gaps }), "time inside counts as record content");
+    assert.deepEqual(withoutRecordContent(gaps)["gaps.filled"], { choices: ["family"] });
   });
-  it("a model that adds facts gets them stripped and counted", async () => {
-    const req = readPhraseRequest({ selected: state.selected, answers: state.answers, recordConsent: true })!;
-    const r = await phraseHurdlePlan(req, async () => JSON.stringify({
-      summaries: { transport: "Bus or train hours do not always line up with work. Route 12 stops at 10 pm.", record: "You want to wait until they ask. You have been sober for 2 years." },
-      record: { open: "I have a felony from 2019. I took full responsibility and it is behind me now, all resolved.", next: "I've loaded trucks for a year." },
-    }));
-    assert.equal(r.phrasing.summaries.transport, "Bus or train hours do not always line up with work.");
+  it("time inside never reaches the prompt without consent", () => {
+    const req = readPhraseRequest({ selected: ["gaps"], answers: { "gaps.length": { choices: ["1to3"] }, "gaps.filled": { choices: ["inside", "family"] } } })!;
+    assert.doesNotMatch(buildPhrasePrompt(req).user, /inside/i);
+  });
+  it("with stored consent the record hurdle gets a reading, never a rewritten opening", async () => {
+    const req = withConsent({ selected: state.selected, answers: state.answers });
+    const p = buildPhrasePrompt(req);
+    assert.ok(p.hurdles.includes("record"));
+    assert.doesNotMatch(p.user, /"open"|"next"/);
+    const r = await phraseHurdlePlan(req, async () => JSON.stringify({ summaries: { record: "You want to wait until they ask." }, record: { open: "AI words", next: "AI words" } }));
+    assert.equal((r.phrasing as any).record, undefined);
     assert.equal(r.phrasing.summaries.record, "You want to wait until they ask.");
-    assert.equal(r.phrasing.record?.open, "I have a felony from 2019.");
+  });
+  it("a model that adds facts gets them stripped and counted, per hurdle", async () => {
+    const req = withConsent({ selected: state.selected, answers: state.answers });
+    const r = await phraseHurdlePlan(req, async () => JSON.stringify({
+      summaries: { transport: "Bus or train hours don't always line up with work. Route 12 stops at 10 pm. Your record is a Felony from 2019.", record: "You want to wait until they ask. You have been sober for 2 years." },
+    }));
+    assert.equal(r.phrasing.summaries.transport, "Bus or train hours don't always line up with work.", "a record fact cannot support a transport sentence");
+    assert.equal(r.phrasing.summaries.record, "You want to wait until they ask.");
     assert.equal(r.stripped.length, 3);
   });
   it("a model reply that is not JSON throws (the route reports it, the plan stays)", async () => {
-    const req = readPhraseRequest({ selected: ["transport"], answers: { "transport.what": { choices: ["cost"] } }, recordConsent: false })!;
+    const req = readPhraseRequest({ selected: ["transport"], answers: { "transport.what": { choices: ["cost"] } } })!;
     await assert.rejects(() => phraseHurdlePlan(req, async () => "Sorry, I cannot help."));
   });
   it("the mock reply always passes the checker", async () => {
-    const req = readPhraseRequest({ selected: state.selected, answers: state.answers, recordConsent: true })!;
+    const req = withConsent({ selected: state.selected, answers: state.answers });
     const r = await phraseHurdlePlan(req, async () => mockPhraseReply(req));
     assert.equal(r.stripped.length, 0);
   });
@@ -267,9 +284,61 @@ describe("phrasing pipeline", () => {
   });
 });
 
+describe("reviewer's lines that passed the old checker must strip", () => {
+  const recordSources = ["You are on supervision right now.", "Yes", "Your conditions touch work.", "I have a felony from 2019.", "Felony", "Your record includes a felony."];
+  const transportSources = ["No car right now", "You don't have a car right now.", "No license, or it is suspended", "Your license is a problem right now.", "Suspended or revoked", "Your license is suspended or revoked.", "Under 5 miles", "You can get to work within about 5 miles."];
+  const record = ["I'm not on supervision right now.", "My conditions don't touch work.", "My record will not show up on the check.", "I did two years for it.", "I owned it and I have grown since then."];
+  const transport = ["You have a car right now.", "Your license is valid now.", "Your license was reinstated.", "You own a dependable truck.", "You can get to work within two miles.", "Walmart is close to the bus line.", "Most employers do not mind a suspended license.", "Your employer will be flexible about this."];
+  for (const line of record) it(`strips: ${line}`, () => assert.equal(stripUnsupported(line, recordSources).text, "", line));
+  for (const line of transport) it(`strips: ${line}`, () => assert.equal(stripUnsupported(line, transportSources).text, "", line));
+  it("still keeps true lines", () => {
+    assert.equal(stripUnsupported("You don't have a car right now.", transportSources).stripped.length, 0);
+    assert.equal(stripUnsupported("Your license is suspended or revoked.", transportSources).stripped.length, 0);
+  });
+});
+
+describe("fix round 1", () => {
+  it("a hurdle added on the way leaves the list when the answer changes (S3)", () => {
+    let s = run([...pick("gaps"), { type: "start" }, ans("gaps.length", "1to3"), ans("gaps.filled", "inside"), ans("gaps.inside", "yes")]);
+    assert.deepEqual(hurdlesOf(s), ["gaps", "record"]);
+    s = run([{ type: "back" }, ans("gaps.inside", "no")], s);
+    assert.deepEqual(hurdlesOf(s), ["gaps"]);
+    assert.ok(!fullPath(s).some((id) => id.startsWith("record.")));
+  });
+  it("not sure keeps at most three signs, in the order picked (S4)", () => {
+    const s = run([...pick("not_sure"), { type: "start" }, ans("not_sure.signs", "money", "ride", "papers", "check", "gap")]);
+    assert.deepEqual(s.answers["not_sure.signs"].choices, ["money", "ride", "papers"]);
+    assert.deepEqual(hurdlesOf(s), ["not_sure", "money", "transport", "documents"]);
+  });
+  it("shift filters narrow across hurdles, never add up (S5)", () => {
+    const s = run([...pick("transport", "schedule"), { type: "start" },
+      ans("schedule.what", "job"), ans("schedule.hours", "night", "day"), ans("schedule.total", "full"), ans("schedule.tell", "nothing"),
+      ans("transport.what", "bus_hours"), ans("transport.bus_when", "late"), ans("transport.shift_fit", "day")]);
+    assert.deepEqual(buildHurdlePlan(s).constraints.shifts, ["day"]);
+    const none = mergeAcrossHurdles([[{ shifts: ["day"] }], [{ shifts: ["night"] }]]);
+    assert.equal(none.shifts, undefined);
+    assert.equal(none.shiftConflict, true);
+  });
+  it("health links only to what the person picked (S7)", () => {
+    const lift = run([...pick("health"), { type: "start" }, ans("health.impact", "lifting")]);
+    assert.ok(!buildHurdlePlan(lift).hurdles[0].whoCanHelp.some((l) => l.category === "mental_health"));
+    const focus = run([...pick("health"), { type: "start" }, ans("health.impact", "focus")]);
+    assert.ok(buildHurdlePlan(focus).hurdles[0].whoCanHelp.some((l) => l.category === "mental_health"));
+  });
+  it("legal floor warns when a source is older than 180 days (N2)", () => {
+    assert.equal(legalFloorFor("MT", new Date("2026-10-23")).staleNote, null);
+    assert.match(legalFloorFor("MT", new Date("2027-06-01")).staleNote ?? "", /more than 180 days ago/);
+  });
+  it("practice marks record words so the assistant route can check the stored consent", () => {
+    const o = buildRehearsalSystemOverride({ personaId: "hiring_warm", gentlenessId: "balanced", recordWords: "I'd say: \"I have a felony.\"" });
+    assert.ok(o.includes(RECORD_WORDS_HEADER));
+    assert.ok(!buildRehearsalSystemOverride({ personaId: "hiring_warm", gentlenessId: "balanced", preparedScript: "Housing: nothing" }).includes(RECORD_WORDS_HEADER));
+  });
+});
+
 import { INITIAL_SAVE, runSave, saveLine, saveReducer, type SaveEvent, type SaveState } from "../hurdles/save-state";
 import { saveArtifactReceipt } from "../artifact-save";
-import { planForSave } from "../hurdles/plan";
+import { planForSave, buildSavePayload } from "../hurdles/plan";
 
 describe("save truth", () => {
   async function attempt(response: Response): Promise<SaveState> {
@@ -311,14 +380,23 @@ describe("save truth", () => {
     s = saveReducer(s, { type: "ok", version: s.version, id: "id" });
     assert.equal(saveReducer(s, { type: "begin", version: s.version }).status, "saved");
   });
-  it("a save keeps no record detail and no free text but the state code", () => {
-    const st = run([...pick("record", "other"), { type: "start" }, ans("record.where", "check"), ans("record.check_stage", "notice"), ans("record.kind", "felony"),
-      ans("record.when", "lt1"), ans("record.supervision", "yes"), ans("record.conditions", "yes"), txt("record.state", "WI"), ans("record.worry", "details"),
-      ans("record.lead", "work"), txt("record.own_words", "I have a felony."), txt("record.now_words", "I work days."), txt("other.what", "my private words")]);
-    const saved = planForSave(buildHurdlePlan(st), st);
-    const blob = JSON.stringify(saved.choices) + JSON.stringify(saved.hurdles);
-    assert.ok(!/felony|private words|record\.kind|record\.supervision/.test(blob), blob);
-    assert.deepEqual(saved.choices["record.state"], { text: "WI" });
-    assert.ok(saved.hurdles.find((h) => h.hurdle === "record")!.doNow.some((d) => /officer/.test(d)));
+  it("the saved artifact and any snapshot of it hold nothing from the record (B1)", () => {
+    const st = run([...pick("record", "gaps", "other"), { type: "start" }, ans("record.where", "form", "check"), txt("record.form_question", "Have you been convicted of a felony in the last 7 years?"),
+      ans("record.check_stage", "notice"), ans("record.kind", "pending"), ans("record.when", "lt1"), ans("record.supervision", "yes"), ans("record.conditions", "yes"),
+      txt("record.state", "WI"), ans("record.worry", "details"), ans("record.lead", "work"), txt("record.own_words", "I did three years for armed robbery in 2019."), txt("record.now_words", "I work days at the yard."),
+      ans("gaps.length", "1to3"), ans("gaps.filled", "inside", "family"), ans("gaps.inside", "no"), { type: "skip", nodeId: "gaps.proof" }, ans("gaps.asked", "no"), ans("gaps.tell", "nothing"),
+      txt("other.what", "my private words")]);
+    const plan = buildHurdlePlan(st);
+    assert.ok(plan.record, "the record plan exists on screen");
+    const payload = buildSavePayload(plan, st, { summaries: { record: "You want to wait.", gaps: "You were caring for family." }, strippedCount: 0, wording: "done", targetJob: "Driver", applicationId: "123e4567-e89b-12d3-a456-426614174000" });
+    // The application_document snapshot copies payload.content as is, so one check covers both.
+    const blob = JSON.stringify(payload);
+    for (const bad of [/armed robbery/i, /three years/i, /convicted/i, /felony/i, /officer/i, /lawyer/i, /pending/i, /letter/i, /record\./, /wait/i, /time inside/i, /inside/i, /private words/i, /work days at the yard/i, /supervision/i])
+      assert.doesNotMatch(blob, bad, String(bad));
+    assert.equal((payload.content.hurdlePlan as any).record, undefined);
+    assert.equal(payload.content.script, null);
+    assert.equal(payload.content.timing_advice, null);
+    assert.equal(payload.content.hurdlePlan.recordPlanSaved, false);
+    assert.ok(payload.content.hurdlePlan.hurdles.some((h) => h.hurdle === "gaps"));
   });
 });

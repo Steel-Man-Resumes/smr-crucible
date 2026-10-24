@@ -8,18 +8,18 @@
  * never filled in with a guess.
  */
 
-import { HURDLES, getNode, type Constraint, type HurdleId, type SupportCategory } from "./graph";
+import { HURDLES, NODES, getNode, type Constraint, type HurdleId, type SupportCategory } from "./graph";
 import { coverageOf, isUnsure, type Coverage } from "./coverage";
-import { mergeConstraints } from "./filters";
+import { mergeAcrossHurdles } from "./filters";
 import { legalFloorFor, type LegalFloor } from "./legal-floor";
-import { reachedAnswers, walk, type Answer, type PlannerState } from "./reducer";
+import { hurdlesOf, reachedAnswers, walk, type Answer, type PlannerState } from "./reducer";
 
 export const COACHING_LINE = "This is coaching, not legal advice.";
 
 export const SUPPORT_LABELS: Record<SupportCategory, string> = {
   transportation: "Getting to work", housing: "A place to stay", id_documents: "ID and documents",
   legal: "Legal help with a record", financial: "Money and benefits", employment: "Job help",
-  education: "School and training", mental_health: "Mental health", substance: "Recovery",
+  education: "School and training", mental_health: "Mental health (only if you want it)", substance: "Recovery",
 };
 
 export interface HelpLink { category: SupportCategory; label: string; href: string }
@@ -55,7 +55,7 @@ export interface HurdlePlan {
   version: 1;
   hurdles: HurdleSection[];
   record: RecordConversation | null;
-  constraints: Constraint;
+  constraints: Constraint & { shiftConflict?: boolean };
   coverage: Coverage;
 }
 
@@ -157,31 +157,37 @@ export function recordConversation(answers: Record<string, Answer>): RecordConve
 export function buildHurdlePlan(state: Pick<PlannerState, "selected" | "answers">, ctx: { location?: string | null } = {}): HurdlePlan {
   const full = { phase: "done" as const, cursor: null, ...state };
   const answers = reachedAnswers(full);
-  const hurdles = state.selected.map((h) => sectionFor(h, answers, ctx.location));
-  const constraints: Constraint[] = [];
-  for (const h of state.selected) for (const id of walk(h, answers).path) {
-    const node = getNode(id)!;
-    for (const c of node.choices ?? []) if (c.constraint && answers[id]?.choices?.includes(c.id)) constraints.push(c.constraint);
-  }
+  const active = hurdlesOf(state);
+  const hurdles = active.map((h) => sectionFor(h, answers, ctx.location));
+  const groups: Constraint[][] = active.map((h) => {
+    const g: Constraint[] = [];
+    for (const id of walk(h, answers).path) {
+      const node = getNode(id)!;
+      for (const c of node.choices ?? []) if (c.constraint && answers[id]?.choices?.includes(c.id)) g.push(c.constraint);
+    }
+    return g;
+  });
   return {
     version: 1,
     hurdles,
-    record: state.selected.includes("record") ? recordConversation(answers) : null,
-    constraints: mergeConstraints(constraints),
+    record: active.includes("record") ? recordConversation(answers) : null,
+    constraints: mergeAcrossHurdles(groups),
     coverage: coverageOf({ selected: state.selected, answers }),
   };
 }
 
 /** Plain text of a saved plan, for the Library copy and download. */
-export function hurdlePlanText(plan: Pick<HurdlePlan, "hurdles" | "record">, phrased?: Record<string, string>): string {
+export function hurdlePlanText(plan: { hurdles: HurdleSection[]; record: RecordConversation | null }, phrased?: Record<string, string>): string {
   const out: string[] = [];
   if (plan.record) {
-    out.push("PLAN WHAT TO SAY ABOUT THE RECORD", ...plan.record.whenToBringItUp, plan.record.open, plan.record.next, plan.record.disclaimer);
+    out.push("PLAN WHAT TO SAY ABOUT THE RECORD (not saved anywhere; this copy is yours)", ...plan.record.whenToBringItUp, plan.record.open, plan.record.next,
+      `Dated sources (verify before relying, list as of ${plan.record.legalFloor.asOf}):`, ...plan.record.legalFloor.sources.map((x) => `- ${x.title}: ${x.url} (checked ${x.asOf})`),
+      ...(plan.record.legalFloor.staleNote ? [plan.record.legalFloor.staleNote] : []), plan.record.disclaimer);
   }
   for (const s of plan.hurdles) {
     if (s.hurdle === "record" && plan.record) continue;
     out.push("", s.label.toUpperCase());
-    if (phrased?.[s.hurdle]) out.push(phrased[s.hurdle]);
+    if (phrased?.[s.hurdle]) out.push(`t.ROY's reading of your answers: ${phrased[s.hurdle]}`);
     if (s.known.length) out.push("What you know:", ...s.known.map((x) => `- ${x}`));
     if (s.open.length) out.push("Still open:", ...s.open.map((x) => `- ${x}`));
     if (s.doNow.length) out.push("Do now:", ...s.doNow.map((x) => `- ${x}`));
@@ -192,29 +198,59 @@ export function hurdlePlanText(plan: Pick<HurdlePlan, "hurdles" | "record">, phr
 }
 
 /**
- * What a save keeps. The Library copy holds the plan and the choices that
- * rebuild it, never the free text the person typed while narrowing (except the
- * job's state code) and never record detail: record choices are left out, and
- * the record section keeps its steps and the conversation lines the person
- * made, not the facts behind them.
+ * What a save keeps (Library artifact, and any application snapshot of it).
+ * NOTHING from the record hurdle: no record sentence, no record answer, no
+ * timing or lead choice, no record "do now" line (those can reveal supervision
+ * or a pending case). The record plan lives on screen, in the download and in
+ * what the person copies. Also left out: every free-text answer except the
+ * job's state code, and any choice marked sensitive ("time inside").
  */
 export function planForSave(plan: HurdlePlan, state: Pick<PlannerState, "selected" | "answers">) {
-  const full = { phase: "done" as const, cursor: null, ...state };
   const choices: Record<string, Answer> = {};
-  for (const [id, a] of Object.entries(reachedAnswers(full))) {
+  for (const [id, a] of Object.entries(reachedAnswers(state))) {
     const node = getNode(id)!;
-    if (node.sensitive) continue;
+    if (node.sensitive || node.hurdle === "record") continue;
     if (a.skipped) choices[id] = { skipped: true };
-    else if (node.kind === "text") { if (node.format === "state" && a.text) choices[id] = { text: a.text }; }
-    else if (a.choices?.length) choices[id] = { choices: a.choices };
+    else if (node.kind === "text") continue;
+    else {
+      const keep = (a.choices ?? []).filter((c) => !(node.choices ?? []).find((x) => x.id === c)?.sensitive);
+      if (keep.length) choices[id] = { choices: keep };
+    }
   }
+  const sensitiveFacts = new Set(Object.values(NODES).flatMap((n) => (n.choices ?? []).filter((c) => c.sensitive).map((c) => c.fact ?? c.label)));
   return {
-    version: 1 as const,
-    selected: state.selected,
+    version: 2 as const,
+    selected: state.selected.filter((h) => h !== "record"),
     choices,
-    hurdles: plan.hurdles.map((s) => ({ ...s, ownWords: [], known: s.hurdle === "record" ? [] : s.known })),
-    record: plan.record,
+    recordPlanSaved: false as const,
+    hurdles: plan.hurdles.filter((s) => s.hurdle !== "record").map((s) => ({ ...s, ownWords: [], known: s.known.filter((k) => !sensitiveFacts.has(k)) })),
     constraints: plan.constraints,
-    coverage: { onPath: plan.coverage.onPath, answered: plan.coverage.answered, skipped: plan.coverage.skipped, notSure: plan.coverage.notSure, line: plan.coverage.line },
+    coverage: { line: "Saved without the record part. " + plan.coverage.line },
+  };
+}
+
+/** The whole artifact body for POST /api/artifacts. Pure, so tests can prove what is in it. */
+export function buildSavePayload(plan: HurdlePlan, state: Pick<PlannerState, "selected" | "answers">, opts: { summaries: Partial<Record<HurdleId, string>>; strippedCount: number; wording: string; targetJob: string | null; applicationId?: string; now?: string }) {
+  const saved = planForSave(plan, state);
+  // t.ROY's reading is not saved: it can echo words the person typed, and the
+  // copy promises nothing typed is saved. The person's answers are the plan.
+  const summaries: Record<string, string> = {};
+  void opts.summaries;
+  const nonRecord = { hurdles: saved.hurdles, record: null };
+  return {
+    type: "disclosure_plan",
+    targetContext: { targetJob: opts.targetJob, applicationId: opts.applicationId },
+    content: {
+      // Older readers (Library, application snapshot) read these four fields.
+      timing_advice: null,
+      legal_context: COACHING_LINE,
+      script: null,
+      tips: saved.hurdles.flatMap((s) => s.doNow).slice(0, 8),
+      targetJob: opts.targetJob,
+      completedAt: opts.now ?? new Date().toISOString(),
+      hurdlePlan: { ...saved, summaries, strippedCount: opts.strippedCount, wording: opts.wording },
+      planText: hurdlePlanText(nonRecord, summaries as Record<string, string>),
+    },
+    scaffoldLevel: 1.0,
   };
 }

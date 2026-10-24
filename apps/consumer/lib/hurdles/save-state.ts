@@ -26,7 +26,7 @@ export function saveReducer(s: SaveState, e: SaveEvent): SaveState {
 
 export function saveLine(s: SaveState): string {
   switch (s.status) {
-    case "saved": return "Saved to your Library. You can come back to this plan there.";
+    case "saved": return "Saved to your Library, without the record part. You can come back to it there.";
     case "saving": return "Saving your plan...";
     case "failed": return `${s.error} Your plan is still here. Try saving again, or download a copy.`;
     default: return "Not saved yet.";

@@ -15,9 +15,14 @@ export interface LegalFloor {
   asOf: string;
   sources: ShownSource[];
   note: string;
+  /** Sources last checked more than 180 days ago (shown with a warning, never as current). */
+  staleIds: string[];
+  staleNote: string | null;
 }
 
-export function legalFloorFor(state: string | null | undefined): LegalFloor {
+export const STALE_DAYS = 180;
+
+export function legalFloorFor(state: string | null | undefined, now: Date = new Date()): LegalFloor {
   const st = typeof state === "string" && /^[A-Z]{2}$/.test(state) ? state : null;
   const all = st ? showableSourcesFor(st) : showableSourcesFor("US");
   const sources = all.filter((s) => FLOOR_TOPICS.has(s.topic)).slice(0, 8);
@@ -27,5 +32,10 @@ export function legalFloorFor(state: string | null | undefined): LegalFloor {
     : own
       ? `Dated sources for ${st} and national ones. Each says what it covers. Check current law before you rely on any of it.`
       : `We don't have checked sources for ${st} yet. The national ones below still apply. A legal aid office near you can tell you what applies there.`;
-  return { state: st, asOf: SOURCE_LIST_AS_OF, sources, note };
+  const cutoff = now.getTime() - STALE_DAYS * 86_400_000;
+  const staleIds = sources.filter((x) => !(Date.parse(x.asOf) >= cutoff)).map((x) => x.id);
+  const staleNote = staleIds.length
+    ? `${staleIds.length === sources.length ? "These sources were" : "Some of these sources were"} last checked more than ${STALE_DAYS} days ago. Laws change. Check the current law, or ask a legal aid office, before you rely on them.`
+    : null;
+  return { state: st, asOf: SOURCE_LIST_AS_OF, sources, note, staleIds, staleNote };
 }

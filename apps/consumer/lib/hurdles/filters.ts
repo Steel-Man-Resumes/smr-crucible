@@ -23,14 +23,34 @@ export function mergeConstraints(list: Constraint[]): Constraint {
   return out;
 }
 
+/**
+ * Across hurdles, shifts NARROW: a shift goes in only if every hurdle that
+ * answered a shift question allows it (the bus reaches days, care covers
+ * days and evenings: days). Inside one hurdle the picks add up. Distance
+ * takes the smallest. If the shift answers share nothing, no shift filter is
+ * set and shiftConflict says so.
+ */
+export function mergeAcrossHurdles(groups: Constraint[][]): Constraint & { shiftConflict?: boolean } {
+  const perHurdle = groups.map((g) => mergeConstraints(g));
+  const out: Constraint & { shiftConflict?: boolean } = mergeConstraints(perHurdle.map(({ shifts: _s, ...rest }) => rest));
+  const sets = perHurdle.filter((c) => c.shifts?.length).map((c) => new Set(c.shifts));
+  if (sets.length) {
+    const shared = [...sets[0]].filter((x) => sets.every((st) => st.has(x)));
+    if (shared.length) out.shifts = shared;
+    else out.shiftConflict = true;
+  }
+  return out;
+}
+
 export function hasConstraints(c: Constraint): boolean {
   return !!(c.shifts?.length || typeof c.radiusMiles === "number" || c.remote || c.partTime || c.fullTime);
 }
 
 const SHIFT_WORDS: Record<JobShift, string> = { day: "days", evening: "evenings", night: "nights", weekend: "weekends", rotating: "a rotating schedule" };
 
-export function describeConstraints(c: Constraint): string[] {
+export function describeConstraints(c: Constraint & { shiftConflict?: boolean }): string[] {
   const lines: string[] = [];
+  if (c.shiftConflict) lines.push("No shift filter: your shift answers for different hurdles don't share a shift");
   if (c.shifts?.length) lines.push(`Shifts: ${c.shifts.map((s) => SHIFT_WORDS[s]).join(", ")}`);
   if (c.remote) lines.push("Work from home only");
   else if (typeof c.radiusMiles === "number") lines.push(`Within ${c.radiusMiles} miles`);

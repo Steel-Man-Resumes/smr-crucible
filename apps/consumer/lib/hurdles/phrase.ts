@@ -1,24 +1,26 @@
 /**
- * AI phrasing for the hurdle plan (PURE pipeline; the model call is injected).
+ * AI wording for the hurdle plan (PURE pipeline; the model call is injected).
  *
- * The model gets only the person's own answers (picked labels and the words
- * they typed) and returns a short summary per hurdle, plus the record opening
- * and follow-up when the person gave record consent. It is told to add nothing.
- * Then stripUnsupported() removes any sentence that carries a fact the answers
- * do not hold, and the caller reports how many lines came out.
+ * The model gets only the person's own answers (picked labels and words they
+ * typed) and returns a short "t.ROY's reading" per hurdle. It NEVER writes the
+ * record opening or follow-up: those are the person's own words (DEC-46).
+ * Each sentence is then checked against that hurdle's own answers only, and
+ * any sentence with a fact the answers do not hold is removed and counted.
  *
- * Record detail (nodes marked sensitive) never reaches the model without the
- * record consent. Without it, the record hurdle is left out of the prompt and
- * its plan stays exactly as built from the answers.
+ * Record content (record hurdle answers, and sensitive choices like "time
+ * inside") goes to the model only when the server found the person's stored
+ * record planner consent at the current version (route.ts sets recordConsent;
+ * the request body cannot).
  */
 
 import { HURDLES, getNode, isHurdleId, type HurdleId } from "./graph";
 import { stripUnsupported } from "./fact-check";
-import { cleanText, reachedAnswers, type Answer, type PlannerState } from "./reducer";
+import { activeHurdles, cleanText, reachedAnswers, type Answer } from "./reducer";
 
 export interface PhraseRequest {
   selected: HurdleId[];
   answers: Record<string, Answer>;
+  /** Set by the server from the stored consent, never from the request body. */
   recordConsent: boolean;
   targetJob?: string;
   strengths?: string[];
@@ -26,17 +28,15 @@ export interface PhraseRequest {
 
 export interface Phrasing {
   summaries: Partial<Record<HurdleId, string>>;
-  record?: { open: string; next: string };
 }
 
 export interface PhraseResult {
   status: "phrased" | "nothing_to_phrase";
   phrasing: Phrasing;
-  /** Sentences the checker removed because the answers did not support them. */
   stripped: string[];
 }
 
-/** Parse an untrusted request body into a clean PhraseRequest, or null. */
+/** Parse an untrusted request body into a clean PhraseRequest (consent off), or null. */
 export function readPhraseRequest(body: unknown): PhraseRequest | null {
   if (!body || typeof body !== "object") return null;
   const b = body as Record<string, unknown>;
@@ -57,62 +57,74 @@ export function readPhraseRequest(body: unknown): PhraseRequest | null {
   }
   const str = (v: unknown, n: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, n) : "");
   return {
-    selected, answers, recordConsent: b.recordConsent === true,
+    selected, answers, recordConsent: false,
     targetJob: str(b.targetJob, 120) || undefined,
     strengths: Array.isArray(b.strengths) ? b.strengths.map((s) => str(s, 80)).filter(Boolean).slice(0, 6) : undefined,
   };
 }
 
-/** The answer lines the model may use, per hurdle, and the source text the checker trusts. */
-export function phraseSources(req: PhraseRequest): { lines: Partial<Record<HurdleId, string[]>>; picked: Partial<Record<HurdleId, string[]>>; sources: string[]; hurdles: HurdleId[] } {
-  const state: PlannerState = { phase: "done", selected: req.selected, answers: req.answers, cursor: null };
-  const answers = reachedAnswers(state);
+/** True when the request carries any record answer or sensitive choice. */
+export function hasRecordContent(req: Pick<PhraseRequest, "answers">): boolean {
+  for (const [id, a] of Object.entries(req.answers)) {
+    const node = getNode(id);
+    if (!node || a.skipped) continue;
+    if (node.hurdle === "record" || node.sensitive) return true;
+    if ((node.choices ?? []).some((c) => c.sensitive && a.choices?.includes(c.id))) return true;
+  }
+  return false;
+}
+
+/** The answer lines the model may use, per hurdle, and the per-hurdle source text the checker trusts. */
+export function phraseSources(req: PhraseRequest): {
+  lines: Partial<Record<HurdleId, string[]>>; picked: Partial<Record<HurdleId, string[]>>;
+  sources: Partial<Record<HurdleId, string[]>>; hurdles: HurdleId[];
+} {
+  const answers = reachedAnswers({ selected: req.selected, answers: req.answers });
+  const active = activeHurdles(req.selected, answers);
   const lines: Partial<Record<HurdleId, string[]>> = {};
   const picked: Partial<Record<HurdleId, string[]>> = {};
-  const sources: string[] = [];
-  const hurdles = req.selected.filter((h) => h !== "not_sure" && (h !== "record" || req.recordConsent));
+  const sources: Partial<Record<HurdleId, string[]>> = {};
+  const allowed = active.filter((h) => h !== "not_sure" && (h !== "record" || req.recordConsent));
+  const common = [req.targetJob ?? "", ...(req.strengths ?? [])];
   for (const [id, a] of Object.entries(answers)) {
     const node = getNode(id)!;
-    if (!hurdles.includes(node.hurdle) || a.skipped) continue;
+    const h = node.hurdle;
+    if (!allowed.includes(h) || a.skipped) continue;
     if (node.sensitive && !req.recordConsent) continue;
-    const out = (lines[node.hurdle] ??= []);
+    const out = (lines[h] ??= []), src = (sources[h] ??= [HURDLES[h].label, ...common]), pk = (picked[h] ??= []);
     if (node.kind === "text") {
-      if (a.text) { out.push(`${node.question} ${a.text}`); (picked[node.hurdle] ??= []).push(a.text); sources.push(a.text); }
+      if (a.text) { out.push(`${node.question} ${a.text}`); pk.push(a.text); src.push(a.text); }
       continue;
     }
     for (const c of node.choices ?? []) if (a.choices?.includes(c.id)) {
+      if (c.sensitive && !req.recordConsent) continue;
       out.push(`${node.question} ${c.label}`);
-      (picked[node.hurdle] ??= []).push(c.label);
-      sources.push(c.label, c.fact ?? "");
+      pk.push(c.label);
+      src.push(c.label, c.fact ?? "");
     }
   }
-  if (req.targetJob) sources.push(req.targetJob);
-  for (const s of req.strengths ?? []) sources.push(s);
-  for (const h of hurdles) sources.push(HURDLES[h].label);
-  return { lines, picked, sources, hurdles: hurdles.filter((h) => (lines[h]?.length ?? 0) > 0) };
+  return { lines, picked, sources, hurdles: allowed.filter((h) => (lines[h]?.length ?? 0) > 0) };
 }
 
-export function buildPhrasePrompt(req: PhraseRequest): { system: string; user: string; hurdles: HurdleId[]; sources: string[] } {
+export function buildPhrasePrompt(req: PhraseRequest): { system: string; user: string; hurdles: HurdleId[]; sources: Partial<Record<HurdleId, string[]>> } {
   const { lines, sources, hurdles } = phraseSources(req);
   const blocks = hurdles.map((h) => `HURDLE ${h} (${HURDLES[h].label}):\n${(lines[h] ?? []).map((l) => `- ${l}`).join("\n")}`);
-  const wantRecord = hurdles.includes("record");
-  const system = `You put a job seeker's own answers into plain, warm sentences for their private plan. You are a careful writer, not an advisor.
+  const system = `You read a job seeker's own answers back to them in plain, warm sentences for their private plan. You are a careful writer, not an advisor.
 
 RULES:
-- Use ONLY what is in their answers. Add no fact: no number, name, place, employer, program, date, diagnosis, outcome or claim they did not give.
+- Use ONLY what is in their answers for that hurdle. Add no fact: no number, name, place, employer, program, date, diagnosis, outcome or claim they did not give.
 - Never say a hurdle is solved, handled, resolved or in place unless their answer says exactly that. If something is not sure, say it is still open.
-- Never label the person. Never guess their feelings or motives.
-- No legal statements. No promises about what an employer will do.
-- Second person ("you"), 6th grade reading level, two or three short sentences per summary.
+- Never predict what will happen and never promise what an employer will do.
+- Never write words for them to say. Never label the person. Never guess their feelings or motives.
+- No legal statements.
+- Second person ("you"), 6th grade reading level, two or three short sentences per hurdle.
 - Never use a dash as punctuation (no em dash, no "--"). No emojis.
 - Return JSON only.`;
-  const shape = `{"summaries": {${hurdles.map((h) => `"${h}": "..."`).join(", ")}}${wantRecord ? `, "record": {"open": "what they could say first, in their own words, under 25 words", "next": "what they could say if asked more, under 30 words"}` : ""}}`;
-  const user = `${req.targetJob ? `TARGET JOB: ${req.targetJob}\n` : ""}${req.strengths?.length ? `STRENGTHS THEY CONFIRMED: ${req.strengths.join("; ")}\n` : ""}
-THEIR ANSWERS:
+  const user = `${req.targetJob ? `TARGET JOB: ${req.targetJob}\n` : ""}THEIR ANSWERS:
 ${blocks.join("\n\n")}
 
-${wantRecord ? "For the record, write the opening and the follow-up as the person would say them, first person, built only from their own words above. If they gave no words, keep it to a plain sentence with no details.\n\n" : ""}Return exactly this JSON shape:
-${shape}`;
+Return exactly this JSON shape:
+{"summaries": {${hurdles.map((h) => `"${h}": "..."`).join(", ")}}}`;
   return { system, user, hurdles, sources };
 }
 
@@ -120,32 +132,24 @@ function plainDashes(s: string): string {
   return s.replace(/\s*[—–]\s*/g, ", ").replace(/\s+--\s+/g, ", ");
 }
 
-/** Parse and check the model's reply. Unparseable output phrases nothing. */
-export function checkPhraseReply(raw: string, hurdles: HurdleId[], sources: string[]): PhraseResult {
+/** Parse and check the model's reply against each hurdle's own answers. */
+export function checkPhraseReply(raw: string, hurdles: HurdleId[], sources: Partial<Record<HurdleId, string[]>>): PhraseResult {
   const stripped: string[] = [];
   const phrasing: Phrasing = { summaries: {} };
   const m = typeof raw === "string" ? raw.match(/\{[\s\S]*\}/) : null;
   let parsed: any = null;
   try { parsed = m ? JSON.parse(m[0]) : null; } catch { parsed = null; }
   if (!parsed || typeof parsed !== "object") throw new Error("unparseable");
-  const take = (v: unknown, max: number): string => {
-    if (typeof v !== "string") return "";
-    const r = stripUnsupported(plainDashes(v).slice(0, max), sources);
-    stripped.push(...r.stripped);
-    return r.text;
-  };
   for (const h of hurdles) {
-    const t = take(parsed.summaries?.[h], 600);
-    if (t) phrasing.summaries[h] = t;
-  }
-  if (hurdles.includes("record") && parsed.record && typeof parsed.record === "object") {
-    const open = take(parsed.record.open, 300), next = take(parsed.record.next, 400);
-    if (open || next) phrasing.record = { open, next };
+    const v = parsed.summaries?.[h];
+    if (typeof v !== "string") continue;
+    const r = stripUnsupported(plainDashes(v).slice(0, 600), sources[h] ?? []);
+    stripped.push(...r.stripped);
+    if (r.text) phrasing.summaries[h] = r.text;
   }
   return { status: "phrased", phrasing, stripped };
 }
 
-/** The whole pipeline with the model call injected (the route and the tests both use it). */
 export async function phraseHurdlePlan(req: PhraseRequest, callModel: (system: string, user: string) => Promise<string>): Promise<PhraseResult> {
   const prompt = buildPhrasePrompt(req);
   if (!prompt.hurdles.length) return { status: "nothing_to_phrase", phrasing: { summaries: {} }, stripped: [] };
@@ -158,6 +162,21 @@ export function mockPhraseReply(req: PhraseRequest): string {
   const { picked, hurdles } = phraseSources(req);
   const summaries: Record<string, string> = {};
   for (const h of hurdles) summaries[h] = `You picked: ${(picked[h] ?? []).slice(0, 2).join(", ").replace(/[.!?]+$/, "")}.`;
-  const own = req.answers["record.own_words"]?.text;
-  return JSON.stringify({ summaries, ...(hurdles.includes("record") ? { record: { open: own ?? "I have a record.", next: req.answers["record.now_words"]?.text ?? "" } } : {}) });
+  return JSON.stringify({ summaries });
+}
+
+/** The answers with every record answer and sensitive choice removed (what the page sends without consent). */
+export function withoutRecordContent(answers: Record<string, Answer>): Record<string, Answer> {
+  const out: Record<string, Answer> = {};
+  for (const [id, a] of Object.entries(answers)) {
+    const node = getNode(id);
+    if (!node || node.hurdle === "record" || node.sensitive) continue;
+    if (a.choices) {
+      const keep = a.choices.filter((c) => !(node.choices ?? []).find((x) => x.id === c)?.sensitive);
+      if (keep.length) out[id] = { choices: keep };
+      continue;
+    }
+    out[id] = a;
+  }
+  return out;
 }

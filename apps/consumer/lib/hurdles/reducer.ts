@@ -88,41 +88,41 @@ export function walk(hurdle: HurdleId, answers: Record<string, Answer>): { path:
   return { path, complete: true };
 }
 
-/** Hurdles added by "not sure" (or "add the record plan too") answers on reached nodes. */
-function addedHurdles(state: PlannerState): HurdleId[] {
-  const added: HurdleId[] = [];
-  for (const h of state.selected) {
-    for (const id of walk(h, state.answers).path) {
+/**
+ * The hurdles being worked: the ones the person picked, then any added by an
+ * answer on the current path ("not sure" signs, "add the record plan too").
+ * Recomputed from the answers every time, so going back and changing that
+ * answer takes the added hurdle off the list again.
+ */
+export function activeHurdles(selected: HurdleId[], answers: Record<string, Answer>): HurdleId[] {
+  const out = [...selected];
+  for (let i = 0; i < out.length; i++) {
+    for (const id of walk(out[i], answers).path) {
       const node = getNode(id)!;
-      const a = state.answers[id];
-      for (const c of node.choices ?? []) {
-        if (c.addsHurdle && a?.choices?.includes(c.id) && !a.skipped) added.push(c.addsHurdle);
+      const a = answers[id];
+      if (!a || a.skipped) continue;
+      // In the order the person picked them (the one that matters most first).
+      for (const id2 of a.choices ?? []) {
+        const c = (node.choices ?? []).find((x) => x.id === id2);
+        if (c?.addsHurdle && !out.includes(c.addsHurdle)) out.push(c.addsHurdle);
       }
     }
-  }
-  return added;
-}
-
-/** selected plus anything added along the way, without repeats. */
-function withAdded(state: PlannerState): HurdleId[] {
-  const out = [...state.selected];
-  // Repeat until stable: an added hurdle could add another.
-  for (let i = 0; i < HURDLE_ORDER.length; i++) {
-    const before = out.length;
-    for (const h of addedHurdles({ ...state, selected: out })) if (!out.includes(h)) out.push(h);
-    if (out.length === before) break;
   }
   return out;
 }
 
+export function hurdlesOf(state: Pick<PlannerState, "selected" | "answers">): HurdleId[] {
+  return activeHurdles(state.selected, state.answers);
+}
+
 /** Every node on screen order across hurdles: the full flat path. */
-export function fullPath(state: PlannerState): string[] {
-  return state.selected.flatMap((h) => walk(h, state.answers).path);
+export function fullPath(state: Pick<PlannerState, "selected" | "answers">): string[] {
+  return hurdlesOf(state).flatMap((h) => walk(h, state.answers).path);
 }
 
 /** First unanswered node across hurdles, or null when every hurdle is complete. */
-export function nextOpen(state: PlannerState): string | null {
-  for (const h of state.selected) {
+export function nextOpen(state: Pick<PlannerState, "selected" | "answers">): string | null {
+  for (const h of hurdlesOf(state)) {
     const w = walk(h, state.answers);
     if (!w.complete) return w.path[w.path.length - 1];
   }
@@ -130,8 +130,7 @@ export function nextOpen(state: PlannerState): string | null {
 }
 
 function advanceFrom(state: PlannerState, from: string): PlannerState {
-  const selected = withAdded(state);
-  const s = { ...state, selected };
+  const s = state;
   const path = fullPath(s);
   const i = path.indexOf(from);
   const next = i >= 0 && i + 1 < path.length ? path[i + 1] : nextOpen(s);
@@ -144,7 +143,8 @@ function cleanChoices(node: HurdleNode, choices: unknown): string[] {
   const picked = [...new Set(choices.filter((c): c is string => typeof c === "string" && ids.has(c)))];
   if (node.kind === "one") return picked.slice(0, 1);
   // "Not sure" and "none" stand alone: picking them with others keeps the others.
-  return picked.length > 1 ? picked.filter((c) => c !== "not_sure" && c !== "rather_not") : picked;
+  const kept = picked.length > 1 ? picked.filter((c) => c !== "not_sure" && c !== "rather_not") : picked;
+  return node.maxPicks ? kept.slice(0, node.maxPicks) : kept;
 }
 
 export function cleanText(node: HurdleNode, text: unknown): string {
@@ -165,9 +165,8 @@ export function plannerReducer(state: PlannerState, action: PlannerAction): Plan
     }
     case "start": {
       if (!state.selected.length) return state;
-      const s = { ...state, selected: withAdded(state) };
-      const first = fullPath(s)[0] ?? null;
-      return first ? { ...s, phase: "narrow", cursor: first } : state;
+      const first = fullPath(state)[0] ?? null;
+      return first ? { ...state, phase: "narrow", cursor: first } : state;
     }
     case "answer": {
       const node = getNode(action.nodeId);
@@ -213,9 +212,8 @@ export function plannerReducer(state: PlannerState, action: PlannerAction): Plan
       }
       if (!selected.length) return INITIAL_STATE;
       const s: PlannerState = { phase: "narrow", selected, answers, cursor: null };
-      const s2 = { ...s, selected: withAdded(s) };
-      const open = nextOpen(s2);
-      return open ? { ...s2, cursor: open } : { ...s2, phase: "done" };
+      const open = nextOpen(s);
+      return open ? { ...s, cursor: open } : { ...s, phase: "done" };
     }
     default:
       return state;
@@ -223,7 +221,7 @@ export function plannerReducer(state: PlannerState, action: PlannerAction): Plan
 }
 
 /** Only the answers the current path reaches (what a plan or a save may use). */
-export function reachedAnswers(state: PlannerState): Record<string, Answer> {
+export function reachedAnswers(state: Pick<PlannerState, "selected" | "answers">): Record<string, Answer> {
   const out: Record<string, Answer> = {};
   for (const id of fullPath(state)) if (state.answers[id] && isAnswered(state.answers[id])) out[id] = state.answers[id];
   return out;
@@ -235,5 +233,5 @@ export function position(state: PlannerState): { hurdle: HurdleId | null; hurdle
   const node = getNode(state.cursor);
   const hurdle = node?.hurdle ?? null;
   const path = hurdle ? walk(hurdle, state.answers).path : [];
-  return { hurdle, hurdleIndex: hurdle ? state.selected.indexOf(hurdle) : -1, step: path.indexOf(state.cursor) + 1, stepsSoFar: path.length };
+  return { hurdle, hurdleIndex: hurdle ? hurdlesOf(state).indexOf(hurdle) : -1, step: path.indexOf(state.cursor) + 1, stepsSoFar: path.length };
 }

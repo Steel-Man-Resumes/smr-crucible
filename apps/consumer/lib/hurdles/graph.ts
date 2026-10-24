@@ -60,6 +60,8 @@ export interface Choice {
   uncertain?: boolean;
   /** Picking this adds another hurdle to the person's list (used by "not sure"). */
   addsHurdle?: HurdleId;
+  /** Record detail inside a non-record hurdle ("time inside"): treated like a record answer. */
+  sensitive?: boolean;
 }
 
 export type NodeKind = "one" | "many" | "text";
@@ -78,8 +80,10 @@ export interface HurdleNode {
   placeholder?: string;
   maxLength?: number;
   format?: "state" | "text";
-  /** Record detail: never sent to a model without the record consent. */
+  /** Record detail: never sent to a model, never saved. */
   sensitive?: boolean;
+  /** "many" nodes: at most this many picks, kept in the order picked. */
+  maxPicks?: number;
 }
 
 export interface HurdleDef {
@@ -102,7 +106,7 @@ export const HURDLES: Record<HurdleId, HurdleDef> = {
   schedule: { id: "schedule", label: "Schedule and caregiving", blurb: "Kids, family, school, another job, or appointments.", start: "schedule.what", support: ["employment"], firstStep: "Write down the hours you can work, every day of the week, so you can say it in one breath." },
   transport: { id: "transport", label: "Getting to work", blurb: "No car, bus hours, a license, or the cost of the trip.", start: "transport.what", support: ["transportation"], firstStep: "Before you apply, check how you would get to that address at the shift's start and end time." },
   housing: { id: "housing", label: "Housing", blurb: "Staying with someone, a shelter, or a place that may change.", start: "housing.now", support: ["housing"], firstStep: "Make sure you have one address and one phone number that can reach you for the next month." },
-  health: { id: "health", label: "Health and work adjustments", blurb: "Limits, breaks, appointments, or what helps you work well.", start: "health.impact", support: ["mental_health"], firstStep: "Write what helps you do the work well, in plain words. You never have to name a condition." },
+  health: { id: "health", label: "Health and work adjustments", blurb: "Limits, breaks, appointments, or what helps you work well.", start: "health.impact", support: ["employment"], firstStep: "Write what helps you do the work well, in plain words. This plan never asks you to name a condition." },
   documents: { id: "documents", label: "ID, documents and licenses", blurb: "State ID, Social Security card, a driver's or work license.", start: "documents.missing", support: ["id_documents"], firstStep: "Make a list of what you have and what you are missing. Most jobs ask for ID before your first day." },
   skills: { id: "skills", label: "Skills, computers and phone access", blurb: "Online applications, a phone that runs out, or a skill to learn.", start: "skills.what", support: ["education"], firstStep: "Find one place you can get online for an hour, a few times a week." },
   money: { id: "money", label: "Money", blurb: "Need pay fast, costs to start, fines, or benefits.", start: "money.what", support: ["financial"], firstStep: "Write the least you can take home each week and still cover your bills." },
@@ -257,14 +261,14 @@ const NODE_LIST: HurdleNode[] = [
     choices: [
       { id: "family", label: "Caring for family", fact: "You were caring for family." },
       { id: "health", label: "Health", fact: "Health took some of that time." },
-      { id: "inside", label: "Time inside", fact: "Some of the gap was time inside.", next: "gaps.inside" },
+      { id: "inside", label: "Time inside", fact: "Some of the gap was time inside.", next: "gaps.inside", sensitive: true },
       { id: "searching", label: "Looking for work", fact: "You were looking for work." },
       { id: "school", label: "School or training", fact: "You were in school or training.", next: "gaps.proof" },
       { id: "informal", label: "Cash or side work", fact: "You did cash or side work.", next: "gaps.informal" },
       { id: "moving", label: "Moving or housing", fact: "Moving or housing took some of that time." },
       RATHER_NOT,
     ], next: "gaps.proof" }),
-  n({ id: "gaps.inside", hurdle: "gaps", kind: "one", decision: "whether to plan the record conversation too",
+  n({ id: "gaps.inside", hurdle: "gaps", kind: "one", sensitive: true, decision: "whether to plan the record conversation too",
     question: "Do you want to plan the record conversation too?",
     choices: [
       { id: "yes", label: "Yes, add it", addsHurdle: "record", fact: "You added the record conversation to your plan." },
@@ -338,14 +342,14 @@ const NODE_LIST: HurdleNode[] = [
 
   // ── Health and work adjustments ──────────────────────────────────────────
   n({ id: "health.impact", hurdle: "health", kind: "many", decision: "how it touches the work",
-    question: "How does it touch the work? You don't have to name a condition.",
+    question: "How does it touch the work?", help: "This plan never asks you to name a condition.",
     choices: [
       { id: "lifting", label: "Limits on standing or lifting", fact: "You have limits on standing or lifting.", ask: "How much of the shift is standing or lifting?" },
       { id: "breaks", label: "I need breaks", fact: "You need breaks during a shift.", ask: "How are breaks scheduled on this team?" },
       { id: "schedule", label: "I need a certain schedule", fact: "You need a certain schedule." },
       { id: "appointments", label: "Appointments", fact: "You have appointments to keep." },
-      { id: "focus", label: "Focus or memory", fact: "Focus or memory can make some tasks harder.", ask: "How do people usually learn the job here?" },
-      { id: "settings", label: "Some settings are hard (noise, crowds, stress)", fact: "Some work settings are hard for you." },
+      { id: "focus", label: "Focus or memory", fact: "Focus or memory can make some tasks harder.", ask: "How do people usually learn the job here?", support: ["mental_health"] },
+      { id: "settings", label: "Some settings are hard (noise, crowds, stress)", fact: "Some work settings are hard for you.", support: ["mental_health"] },
       NOT_SURE,
     ], next: "health.helped" }),
   n({ id: "health.helped", hurdle: "health", kind: "many", decision: "what has helped before",
@@ -507,7 +511,7 @@ const NODE_LIST: HurdleNode[] = [
 
   // ── Not sure yet ─────────────────────────────────────────────────────────
   n({ id: "not_sure.signs", hurdle: "not_sure", kind: "many", decision: "what has happened lately",
-    question: "Have any of these happened in the last few months?", help: "Each one you pick adds a short set of questions.",
+    question: "Have any of these happened in the last few months?", help: "Pick up to three, the one that matters most first. Each adds a short set of questions. You can add more later from the start screen.", maxPicks: 3,
     choices: [
       { id: "ride", label: "Missed or turned down work because of a ride", addsHurdle: "transport", fact: "Rides have cost you work." },
       { id: "papers", label: "Got asked for ID or papers I didn't have", addsHurdle: "documents", fact: "Missing papers have slowed you down." },

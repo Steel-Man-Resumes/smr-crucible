@@ -8,7 +8,7 @@
  */
 
 import { getNode, type HurdleId } from "./graph";
-import { isAnswered, walk, type Answer, type PlannerState } from "./reducer";
+import { hurdlesOf, isAnswered, walk, type Answer, type PlannerState } from "./reducer";
 
 export interface HurdleCoverage {
   hurdle: HurdleId;
@@ -57,7 +57,7 @@ export function hurdleCoverage(hurdle: HurdleId, answers: Record<string, Answer>
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 export function coverageOf(state: Pick<PlannerState, "selected" | "answers">): Coverage {
-  const byHurdle = state.selected.map((h) => hurdleCoverage(h, state.answers));
+  const byHurdle = hurdlesOf(state).map((h) => hurdleCoverage(h, state.answers));
   const sum = (k: "onPath" | "answered" | "skipped" | "notSure") => byHurdle.reduce((t, c) => t + c[k], 0);
   const onPath = sum("onPath"), answered = sum("answered"), skipped = sum("skipped"), notSure = sum("notSure");
   const complete = byHurdle.every((c) => c.complete);
