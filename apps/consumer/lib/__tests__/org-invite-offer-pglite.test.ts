@@ -98,6 +98,9 @@ test("offers and invites: one list shape, one resend window, one refusal", { ski
   assert.deepEqual(dOffers.map((r) => r.status), ["declined", "pending"], "the decline stays recorded; a new offer is open");
   assert.equal((await q(`SELECT offer_status FROM org_invite WHERE user_id = $1`, [U.declined]))[0].offer_status, "offered");
 
+  // An OPEN offer blocks a second one at any window, 0 included (CI SF-2 check).
+  for (const w of [0, 24]) assert.equal((await q(OFFER_INSERT_SQL, [org, U.oldOffer, U.owner, w])).length, 0, `open offer blocks at window ${w}`);
+  assert.equal((await q(`SELECT COUNT(*)::int AS n FROM org_seat_offer WHERE user_id = $1 AND status = 'pending'`, [U.oldOffer]))[0].n, 1);
   // Re-adding a withdrawn offer, the way createOrgInvite does (openListedOffer):
   // the gate's 24-hour insert would have refused it; the list's insert does not.
   assert.equal((await q(OFFER_INSERT_SQL, [org, U.withdrawn, U.owner, 24])).length, 0, "the old window blocked a re-add");

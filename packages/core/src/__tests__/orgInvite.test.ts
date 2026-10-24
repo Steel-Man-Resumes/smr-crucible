@@ -183,6 +183,8 @@ describe("a declined or withdrawn offer behaves like an invite nobody answered (
     const open = SRC.slice(SRC.indexOf("export async function openListedOffer"), SRC.indexOf("/** Who sent this organization"));
     assert.match(open, /createSeatOffer\(\{[^}]*windowHours: 0 \}\)/, "an earlier answer does not block a new offer, only an open one");
     assert.match(open, /OFFER_WINDOW_HOURS,\s*\]\)/);
+    assert.match(open, /const fresh = await createSeatOffer\(/);
+    assert.match(open, /return fresh && !!row\?\.sent;/, "an open offer is never emailed again from a re-add");
     const create = SRC.slice(SRC.indexOf("export async function createOrgInvite"), SRC.indexOf("export async function openListedOffer"));
     assert.match(create, /const sent = await openListedOffer\([\s\S]*return \{ ok: true, userId, kind: "offered", notify: sent \}/);
   });

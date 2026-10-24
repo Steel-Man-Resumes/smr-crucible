@@ -241,7 +241,8 @@ export async function createOrgInvite(opts: {
 /**
  * Make sure the person has a pending offer from this organization (an
  * earlier decline or withdrawal does not block it; only an open one does),
- * then list the row (OFFER_RELIST_SQL). Returns whether to send the email.
+ * then list the row (OFFER_RELIST_SQL). Returns whether to send the email:
+ * only for a newly written offer, and only after the 24-hour window.
  */
 export async function openListedOffer(o: {
   accessCodeId: string;
@@ -250,7 +251,10 @@ export async function openListedOffer(o: {
   name: string | null;
   email: string;
 }): Promise<boolean> {
-  await createSeatOffer({ accessCodeId: o.accessCodeId, userId: o.userId, offeredBy: o.actorUserId, windowHours: 0 });
+  // An OPEN offer always blocks a second one (OFFER_INSERT_SQL's pending test
+  // and the one-open unique index hold whatever the window), and it is never
+  // emailed again from here: only a newly written offer may send.
+  const fresh = await createSeatOffer({ accessCodeId: o.accessCodeId, userId: o.userId, offeredBy: o.actorUserId, windowHours: 0 });
   const row = await getOne<{ sent: boolean }>(OFFER_RELIST_SQL, [
     o.accessCodeId,
     o.userId,
@@ -259,7 +263,7 @@ export async function openListedOffer(o: {
     o.email,
     OFFER_WINDOW_HOURS,
   ]);
-  return !!row?.sent;
+  return fresh && !!row?.sent;
 }
 
 /** Who sent this organization's invite to this person. undefined = no invite; null = no recorded sender. */

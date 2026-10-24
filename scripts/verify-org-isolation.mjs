@@ -1456,9 +1456,35 @@ async function seatChecks() {
   // SF8: the offer is in the organization's own invite record, flipped on yes.
   const [rec] = await sql`SELECT invited_name, offer_status FROM org_invite WHERE access_code_id = ${org.id} AND user_id = ${asked}`;
   check("an accepted offer is recorded in org_invite with the typed name, status joined", rec?.invited_name === "Asked" && rec?.offer_status === "joined", JSON.stringify(rec));
-  // SF-2: a second "Add" within a day writes no new offer and asks for no email.
+  // SF-2 with the boss ruling (2026-10-23): an OPEN offer always blocks a
+  // second offer and a second email; the org never learns of a decline, so a
+  // declined offer stays on the Invited list and a second "Add" gets the same
+  // "already on your invited list" answer an unanswered invite gets; a
+  // withdrawn offer is relisted at once, emailed only after the 24 hours.
+  const twice = await mkUser("seat-open-twice");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${twice}`;
+  const [{ email: tEmail }] = await sql`SELECT email FROM users WHERE id = ${twice}`;
+  const first = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "T", email: tEmail, invitedBy: owner });
+  const second = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "T", email: tEmail, invitedBy: owner });
+  const direct = await core.createSeatOffer({ accessCodeId: org.id, userId: twice, offeredBy: owner, windowHours: 0 });
+  check("an open offer blocks a second offer and a second email, whatever the window",
+    first.ok && first.notify === true && !second.ok && second.error === core.ALREADY_INVITED && direct === false
+      && (await core.listMySeatOffers(twice)).length === 1,
+    JSON.stringify({ first, second, direct }));
   const again = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "D", email: dEmail, invitedBy: owner });
-  check("a second offer to the same person within 24 hours is not made and not emailed", again.ok && again.notify === false && (await core.listMySeatOffers(declines)).length === 0, JSON.stringify(again));
+  check("a second offer to a person who declined within 24 hours is not made and not emailed, with the listed answer",
+    !again.ok && again.error === core.ALREADY_INVITED && (await core.listMySeatOffers(declines)).length === 0, JSON.stringify(again));
+  const gone = await mkUser("seat-withdrawn");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${gone}`;
+  const [{ email: gEmail }] = await sql`SELECT email FROM users WHERE id = ${gone}`;
+  await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "G", email: gEmail, invitedBy: owner });
+  const removed = await core.revokeOrgInvite(org.id, gone, owner);
+  const back2 = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "G again", email: gEmail, invitedBy: owner });
+  const [gRow] = await sql`SELECT invited_name, offer_status FROM org_invite WHERE access_code_id = ${org.id} AND user_id = ${gone}`;
+  check("a withdrawn offer re-added within 24 hours is relisted at once and not emailed",
+    removed.ok && back2.ok && back2.notify === false && gRow?.offer_status === "offered" && gRow?.invited_name === "G again"
+      && (await core.listMySeatOffers(gone)).length === 1,
+    JSON.stringify({ removed, back2, gRow }));
 
   // Review 1, BL-2: grandfather once. Run the close statements as the app, as a platform admin.
   const legacyBefore = (await sql`SELECT user_id FROM refinery_seat_legacy`).map((r) => r.user_id);
