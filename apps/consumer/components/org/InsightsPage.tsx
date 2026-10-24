@@ -13,7 +13,7 @@ import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 
 interface Insights {
   asOf: string; quietAfterDays: number;
-  people: { joined: number; sharingProgress: number; notSharing: number; pendingInvites: number };
+  people: { joined: number; sharingProgress: number; notSharing: number; pendingInvites: number; offersOpen?: number };
   stages: { stage: number; count: number }[];
   activity: { activeThisWeek: number; quiet: number; neverStarted: number };
   outcomes: { withAnApplication: number; applications: number; practicing: number; tailoredResume: number; hired: number };
@@ -89,7 +89,11 @@ export function InsightsPage() {
           <Tile value={d.people.joined} label="Joined" />
           <Tile value={n} label="Sharing progress" note={d.people.joined ? `${Math.round((n / d.people.joined) * 100)}% of those who joined` : undefined} />
           <Tile value={d.people.notSharing} label="Joined, not sharing" note="Counted, never named. Their choice." />
-          <Tile value={d.people.pendingInvites} label="Invited, not yet signed in" />
+          <Tile
+            value={d.people.pendingInvites}
+            label="Invited, not yet signed in"
+            note={d.people.offersOpen ? `New invites only, and ${d.people.offersOpen} ${d.people.offersOpen === 1 ? "offer" : "offers"} open` : "New invites only"}
+          />
         </div>
       </section>
 

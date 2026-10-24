@@ -51,7 +51,7 @@ export async function GET() {
   // sweeping the table -- and the member count had the same defect the staff
   // count once did: an unscoped subquery that reads zero for everybody.
   const { runPerOrg } = await import("@crucible/core");
-  const counts = await runPerOrg<{ staff: number; joined: number; invited: number }>(
+  const counts = await runPerOrg<{ staff: number; joined: number; invited: number; offers: number }>(
     orgs.map((o) => o.id),
     guard.userId,
     `SELECT (SELECT COUNT(*)::int FROM org_staff WHERE access_code_id = $1) AS staff,
@@ -60,7 +60,9 @@ export async function GET() {
               WHERE oi.access_code_id = $1
                 AND u."emailVerified" IS NULL AND u.password_hash IS NULL
                 AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)
-                AND EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.access_code_id = $1 AND r.user_id = oi.user_id)) AS invited`,
+                AND EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.access_code_id = $1 AND r.user_id = oi.user_id)) AS invited,
+            (SELECT COUNT(*)::int FROM org_invite oi
+              WHERE oi.access_code_id = $1 AND oi.offer_status IN ('offered', 'declined')) AS offers`,
     (orgId) => [orgId]
   );
   // Seats from the ledger, never from the member count: claimed seats do not
@@ -73,7 +75,7 @@ export async function GET() {
       ...o,
       joined,
       staff_count: c?.staff ?? 0,
-      seats: seatLedgerFromCounts(o, { joined, invited: c?.invited ?? 0, staff: c?.staff ?? 0 }),
+      seats: seatLedgerFromCounts(o, { joined, invited: c?.invited ?? 0, offers: c?.offers ?? 0, staff: c?.staff ?? 0 }),
     };
   });
 

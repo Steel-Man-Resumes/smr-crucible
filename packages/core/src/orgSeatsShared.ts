@@ -24,8 +24,14 @@ export interface SeatLedger {
   seatsActive: number;
   /** null when there is no cap. Never negative. */
   seatsFree: number | null;
-  /** Invited, never signed in. Inside seatsActive, shown on its own. */
+  /** New invites never signed in. Inside seatsActive, shown on its own.
+   *  Offers are NOT in it: an offer holds no seat until it is accepted. */
   seatsInvited: number;
+  /** Offers to existing accounts still on the Invited list (open, or declined
+   *  and shown as open). They hold no seat, so they are in no other number;
+   *  this says so beside the invited count, so the list is never longer than
+   *  the numbers without a reason. */
+  offersOpen: number;
   /** Staff places: people on org_staff now, and the cap (access_code.max_staff). null when not read. */
   staffCount: number | null;
   staffTotal: number | null;
@@ -41,6 +47,7 @@ export function computeSeatLedger(input: {
   timesRedeemed: number | null | undefined;
   activeMembers: number | null | undefined;
   pendingInvites?: number | null;
+  openOffers?: number | null;
   staffCount?: number | null;
   maxStaff?: number | null;
 }): SeatLedger {
@@ -58,7 +65,8 @@ export function computeSeatLedger(input: {
   const seatsFree = seatsTotal === null ? null : Math.max(0, seatsTotal - seatsClaimed);
   const staffCount = input.staffCount === null || input.staffCount === undefined ? null : wholeOrZero(input.staffCount);
   const staffTotal = input.maxStaff === null || input.maxStaff === undefined || !Number.isFinite(Number(input.maxStaff)) ? null : wholeOrZero(input.maxStaff);
-  return { seatsTotal, seatsClaimed, seatsActive, seatsFree, seatsInvited, staffCount, staffTotal };
+  const offersOpen = wholeOrZero(input.openOffers);
+  return { seatsTotal, seatsClaimed, seatsActive, seatsFree, seatsInvited, offersOpen, staffCount, staffTotal };
 }
 
 /** "3 of 10 staff", or null when the staff numbers were not read. */
@@ -69,10 +77,13 @@ export function staffLedgerLine(l: SeatLedger): string | null {
 
 /** One plain line for a header or a table cell. */
 export function seatLedgerLine(l: SeatLedger): string {
+  const offers = l.offersOpen > 0
+    ? ` ${l.offersOpen} ${l.offersOpen === 1 ? "offer" : "offers"} open, holding no seat until accepted.`
+    : "";
   if (l.seatsTotal === null) {
-    return `No seat limit. ${l.seatsClaimed} claimed, ${l.seatsActive} active now.`;
+    return `No seat limit. ${l.seatsClaimed} claimed, ${l.seatsActive} active now.${offers}`;
   }
-  return `${l.seatsClaimed} of ${l.seatsTotal} seats claimed, ${l.seatsActive} active now, ${l.seatsFree} free.`;
+  return `${l.seatsClaimed} of ${l.seatsTotal} seats claimed, ${l.seatsActive} active now, ${l.seatsFree} free.${offers}`;
 }
 
 /** Why claimed can be larger than active, for a help line under the numbers. */

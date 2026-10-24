@@ -11,7 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRealTier } from "@/lib/useUserTier";
 
-interface Seats { seatsTotal: number | null; seatsClaimed: number; seatsActive: number; seatsFree: number | null; seatsInvited: number; staffCount: number | null; staffTotal: number | null }
+interface Seats { seatsTotal: number | null; seatsClaimed: number; seatsActive: number; seatsFree: number | null; seatsInvited: number; offersOpen?: number; staffCount: number | null; staffTotal: number | null }
 interface StaffRow { userId: string; name: string | null; email: string | null; role: "org_admin" | "staff"; title: string | null }
 interface OrgRow {
   id: string; code: string; partner_name: string; tier: string; is_active: boolean; org_logo_url: string | null;

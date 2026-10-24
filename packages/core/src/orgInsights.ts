@@ -25,7 +25,8 @@ import { listOutcomes, summarizeOutcomes, type OutcomeSummary } from "./orgOutco
 export interface OrgInsights {
   asOf: string;
   quietAfterDays: number;
-  people: { joined: number; sharingProgress: number; notSharing: number; pendingInvites: number };
+  /** pendingInvites: new invites nobody has signed in to (offers excluded). offersOpen: offers to existing accounts still on the Invited list, so the two add up to the list. */
+  people: { joined: number; sharingProgress: number; notSharing: number; pendingInvites: number; offersOpen: number };
   stages: { stage: number; count: number }[];
   activity: { activeThisWeek: number; quiet: number; neverStarted: number };
   outcomes: { withAnApplication: number; applications: number; practicing: number; tailoredResume: number; hired: number };
@@ -55,7 +56,7 @@ export async function getOrgInsights(actor: OrgActor): Promise<OrgInsights | nul
     { sharers: number; applied: number; interviewing: number; offered: number; hired: number }[],
     { week_of: string; joined: number }[],
     StaffRow[],
-    { n: number }[],
+    { n: number; offers: number }[],
   ]>(scope, (sql) => [
     run(sql)(`SELECT scope, COUNT(DISTINCT user_id)::int AS people FROM sharing_grant
                WHERE access_code_id = $1::uuid AND revoked_at IS NULL GROUP BY scope`, [actor.orgId]),
@@ -80,8 +81,15 @@ export async function getOrgInsights(actor: OrgActor): Promise<OrgInsights | nul
          FROM (SELECT user_id FROM org_staff WHERE access_code_id = $1::uuid
                UNION SELECT DISTINCT staff_user_id FROM client_staff_assignment WHERE access_code_id = $1::uuid) p
          JOIN users u ON u.id = p.user_id`, [actor.orgId]),
-    run(sql)(`SELECT COUNT(*)::int AS n FROM org_invite oi JOIN users u ON u.id = oi.user_id
-               WHERE oi.access_code_id = $1::uuid AND u."emailVerified" IS NULL AND u.password_hash IS NULL`, [actor.orgId]),
+    // The Invited list in two numbers (orgInvite.ts PENDING_INVITE_LIST_SQL):
+    // new invites never signed in, and offers open or declined (a decline is
+    // shown as still open; the org never learns of it).
+    run(sql)(`SELECT
+                COUNT(*) FILTER (WHERE oi.offer_status IS NULL AND u."emailVerified" IS NULL AND u.password_hash IS NULL
+                                   AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id))::int AS n,
+                COUNT(*) FILTER (WHERE oi.offer_status IN ('offered', 'declined'))::int AS offers
+               FROM org_invite oi JOIN users u ON u.id = oi.user_id
+              WHERE oi.access_code_id = $1::uuid`, [actor.orgId]),
   ]);
 
   const quietDays = await getQuietAfterDays(actor.orgId);
@@ -93,7 +101,7 @@ export async function getOrgInsights(actor: OrgActor): Promise<OrgInsights | nul
   return {
     asOf: new Date().toISOString(),
     quietAfterDays: quietDays,
-    people: { joined: cohort.totalJoined, sharingProgress: clients.length, notSharing: cohort.pendingCount, pendingInvites: invites[0]?.n ?? 0 },
+    people: { joined: cohort.totalJoined, sharingProgress: clients.length, notSharing: cohort.pendingCount, pendingInvites: invites[0]?.n ?? 0, offersOpen: invites[0]?.offers ?? 0 },
     stages: [0, 1, 2, 3, 4, 5, 6].map((stage) => ({ stage, count: clients.filter((c) => c.currentStage === stage).length })),
     activity: { activeThisWeek: sum("activeThisWeek"), quiet: sum("stalled"), neverStarted: sum("neverStarted") },
     outcomes: {
