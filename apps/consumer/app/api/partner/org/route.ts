@@ -373,10 +373,17 @@ export async function POST(request: Request) {
       if (!body.userId) {
         return NextResponse.json({ error: "userId required" }, { status: 400 });
       }
+      // ONE ORGANIZATION for the check and the write (review SF1). The guard
+      // honours ?codeId for anyone who belongs to that org, while the context
+      // the write runs in ignores it for non-admins, so a person on staff in
+      // two orgs could pass the check in one and revoke in the other.
+      if (inviteGuard.actor.orgId !== org.accessCodeId) {
+        return NextResponse.json({ error: "No invite found for that person." }, { status: 404 });
+      }
       if (!inviteActionAllowed({
         capabilities: inviteGuard.actor.capabilities,
         actorUserId: inviteGuard.actor.userId,
-        invitedBy: await getOrgInviteSender(inviteGuard.actor.orgId, String(body.userId)),
+        invitedBy: await getOrgInviteSender(org.accessCodeId, String(body.userId)),
       })) {
         return NextResponse.json({ error: "No invite found for that person." }, { status: 404 });
       }
