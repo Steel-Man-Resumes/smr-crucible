@@ -18,3 +18,11 @@ test('bonus evidence and retry receipt are independent unique keys',()=>{const m
 test('view impersonation does not create milestone records',()=>{assert.match(read('../../app/api/progression/route.ts'),/session.impersonation\?\.mode==='view'/);assert.match(read('../progression-server.ts'),/if\(!readOnly\)await syncMilestones/);const account=read('../progression-server.ts').split('export async function progressionAccount')[1].split('export async function progressionAllowance')[0];assert.doesNotMatch(account,/INSERT INTO/);});
 test('consent confirms exact server summary and follow-ups check affected rows',()=>{const s=read('../progression-server.ts');assert.match(s,/input.consentToShare!==true\|\|input.summary!==summary/);assert.match(s,/if\(!changed.length\)/);assert.match(s,/decision_history=decision_history\|\|jsonb_build_array/);});
 test('known no-provider failures can release a reservation without forgiving unknown bills',()=>{const s=read('../ai-operation-server.ts');assert.match(s,/!context.providerAttempted&&!context.accountingIncomplete&&context.pending.length===0/);assert.match(read('../ai-call.ts'),/operation.providerAttempted = true/);assert.equal(countsForProgression('quick-apply'),false);});
+test('Steel Man step-up ships off and stays bounded (migration 093)',()=>{
+ assert.equal(baseAllowance(p,{tailored:true,applied:true,steelMan:true}),12);
+ assert.equal(baseAllowance({...p,steel_man_bonus_calls:0},{tailored:true,applied:true,steelMan:true}),12);
+ assert.equal(baseAllowance({...p,steel_man_bonus_calls:2},{tailored:true,applied:true,steelMan:true}),14);
+ assert.equal(baseAllowance({...p,steel_man_bonus_calls:2},{tailored:true,applied:true,steelMan:false}),12);
+ assert.equal(baseAllowance({...p,steel_man_bonus_calls:999},{tailored:false,applied:false,steelMan:true}),28);
+ const m=read('../../../../packages/core/migrations/093_steelman.sql');assert.match(m,/steel_man_bonus_calls integer NOT NULL DEFAULT 0/);const code=m.split('\n').filter(l=>!l.trim().startsWith('--')).join('\n');assert.doesNotMatch(code,/\b(DROP|DELETE|UPDATE)\b/i);
+});

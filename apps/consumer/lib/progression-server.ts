@@ -27,8 +27,9 @@ export async function progressionAllowance(userId:string) {
  (SELECT count(*)::int FROM ai_operation WHERE user_id=$1 AND progression_bonus_used AND status<>'failed' AND created_at>=${DAY}) AS "bonusUsed",
  COALESCE((SELECT sum(GREATEST(o.reserved_usd,COALESCE((SELECT sum(t.cost_usd) FROM ai_token_usage t WHERE t.operation_id=o.id),0))) FROM ai_operation o WHERE o.user_id=$1 AND o.progression_counted AND o.created_at>=${DAY}),0)::float8 AS spent,
  EXISTS(SELECT 1 FROM ai_operation o WHERE o.user_id=$1 AND o.progression_counted AND o.created_at>=${DAY} AND (o.accounting_incomplete OR EXISTS(SELECT 1 FROM ai_token_usage t WHERE t.operation_id=o.id AND t.cost_status='unpriced'))) AS unknown`,[userId]);
- const earned=await getOneAsUser<{tailored:boolean;applied:boolean}>(userId,"SELECT COALESCE(bool_or(grant_key='first-tailored'),false) AS tailored,COALESCE(bool_or(grant_key='first-applied'),false) AS applied FROM progression_grant WHERE user_id=$1 AND kind='milestone'",[userId]);
- const base=account.existing?account.legacyLimit:baseAllowance(policy,{tailored:snapshot.metrics.resumeTailored||!!earned?.tailored,applied:snapshot.metrics.applicationsSent>0||!!earned?.applied});
+ const earned=await getOneAsUser<{tailored:boolean;applied:boolean;steel:boolean}>(userId,"SELECT COALESCE(bool_or(grant_key='first-tailored'),false) AS tailored,COALESCE(bool_or(grant_key='first-applied'),false) AS applied,COALESCE(bool_or(grant_key='meter:steel-man'),false) AS steel FROM progression_grant WHERE user_id=$1 AND kind='milestone'",[userId]);
+ // meter:steel-man is written only from server-recorded work (lib/steelman/moments.ts); policy.steel_man_bonus_calls ships 0.
+ const base=account.existing?account.legacyLimit:baseAllowance(policy,{tailored:snapshot.metrics.resumeTailored||!!earned?.tailored,applied:snapshot.metrics.applicationsSent>0||!!earned?.applied,steelMan:!!earned?.steel});
  return {policy,account,snapshot,base,bonus:row?.bonus??0,used:row?.used??0,bonusUsed:row?.bonusUsed??0,blockedReason:!account.existing&&(row?.unknown||((row?.spent??0)+policy.reserve_usd>policy.daily_usd))?'Today’s AI spending allowance is reserved or used. Saved work and non-AI tools remain available. It resets at midnight UTC.':undefined};
 }
 export async function progressionLegacyBonus(userId:string):Promise<number> {
