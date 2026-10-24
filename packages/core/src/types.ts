@@ -97,6 +97,7 @@ export type EventType =
   // Consumer: Access control
   | 'ACCESS_CODE_CREATED'
   | 'ACCESS_CODE_REDEEMED'
+  | 'ORG_ADMIN_CHANGED'
   | 'RATE_LIMIT_EXCEEDED';
 
 // --- Event Envelope ---
