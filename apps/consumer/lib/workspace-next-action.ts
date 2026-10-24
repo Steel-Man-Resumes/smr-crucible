@@ -15,6 +15,11 @@ export function resumeWorkspaceAction(revision: Revision): WorkspaceNextAction {
     : { label: BUILD_WITH_TROY_LABEL, href: rebuildHref(revision.artifactId) };
 }
 
+/** A lane resume that has no saved version yet. */
+export function savedResumeAction(artifactId: string): WorkspaceNextAction {
+  return { label: "Review this resume", href: `/dashboard/application-tailor?id=${encodeURIComponent(artifactId)}` };
+}
+
 /** Null leaves room for the global journey engine when no task is chosen. */
 export function workspaceNextAction({ work, task, profileFirst = false }: {
   work: RefineryWorkspaceContext | null;
@@ -45,7 +50,11 @@ export function workspaceNextAction({ work, task, profileFirst = false }: {
     case "resume":
       if (documentHref) return { label: "Open this lane’s documents", href: documentHref };
       if (!work) return null; // Unavailable work is different from a known empty lane.
-      return work.revision ? resumeWorkspaceAction(work.revision) : { label: "Start your resume", href: "/resume" };
+      if (work.revision) return resumeWorkspaceAction(work.revision);
+      // A saved resume with no version yet (often a tailored copy) is work to
+      // review, not a resume to start.
+      if (work.selection?.artifactId) return savedResumeAction(work.selection.artifactId);
+      return { label: "Start your resume", href: "/resume" };
     default: return null;
   }
 }

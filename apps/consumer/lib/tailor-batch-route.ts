@@ -74,7 +74,11 @@ export function createTailorBatchRoute(deps: TailorBatchRouteDeps) {
     if ("error" in who) return who.error;
     const userId = who.userId;
     try {
-      const rawLane = new URL(request.url).searchParams.get("laneId");
+      const params = new URL(request.url).searchParams;
+      // scope=single: the one-job "Tailor now" on the Tailor page. It uses no
+      // batch claim and no batch lane rule, so only the allowance is read.
+      if (params.get("scope") === "single") return json(await deps.allowance(userId));
+      const rawLane = params.get("laneId");
       const laneId = !rawLane || rawLane === "main" ? null : rawLane;
       try { await deps.claims(userId).ready(); }
       catch (error) { if (isNotReady(error)) return json({ remaining: 0, blockedReason: NOT_READY_LINE, locked: false }); throw error; }
