@@ -374,6 +374,7 @@ async function main() {
   await outcomeChecks();
   await ownerOnlyChecks();
   await participantTableChecks();
+  await seatChecks();
 }
 
 /**
@@ -1276,6 +1277,92 @@ async function platformAdminChecks() {
   await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
   const [revoked] = await sql`SELECT tier FROM users WHERE id = ${boss}`;
   check("revoking platform admin drops the cached tier", revoked.tier !== "admin", `tier is ${revoked.tier}`);
+}
+
+/**
+ * Refinery seats (migration 093). The seat rule is one definer function; these
+ * prove each of its five inputs, that nothing else counts, that the app role
+ * cannot write the grandfather list or flip the switch without being a
+ * platform admin, and that an offer spends a seat only on the person's yes.
+ */
+async function seatChecks() {
+  console.log("\n  -- Refinery seats (093) --");
+  const [{ has }] = await sql`SELECT to_regclass('public.refinery_access_policy') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  093 not applied; skipped"); return; }
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+  const seat = async (u) => (await app`SELECT smr_has_refinery_seat(${u}::uuid) AS s`)[0].s;
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+
+  const [{ open }] = await app`SELECT smr_refinery_signup_open() AS open`;
+  check("the switch is readable by the app role through its function", typeof open === "boolean");
+
+  const owner = await mkUser("s-owner"), staff = await mkUser("s-staff"), member = await mkUser("s-member");
+  const nobody = await mkUser("s-nobody"), boss = await mkUser("s-boss"), legacy = await mkUser("s-legacy");
+  const lapsed = await mkUser("s-lapsed"), closedMember = await mkUser("s-closed"), selfTier = await mkUser("s-tier");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, max_redemptions) VALUES (${"ISOS" + uniq}, ${P + " seats"}, 'client', ${owner}, true, 5) RETURNING id, code`;
+  const [old] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active, expires_at) VALUES (${"ISOX" + uniq}, ${P + " expired"}, 'client', true, now() - interval '1 day') RETURNING id`;
+  const [off] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active) VALUES (${"ISOO" + uniq}, ${P + " inactive"}, 'client', false) RETURNING id`;
+  created.codes.push(org.id, old.id, off.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${staff}, 'staff')`;
+  await sql`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES (${member}, ${org.id})`;
+  await sql`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES (${lapsed}, ${old.id})`;
+  await sql`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES (${closedMember}, ${off.id})`;
+  await sql`INSERT INTO platform_admin (user_id, note) VALUES (${boss}, 'isolation fixture')`;
+  await sql`INSERT INTO refinery_seat_legacy (user_id) VALUES (${legacy})`;
+  await sql`UPDATE users SET tier = 'partner' WHERE id = ${selfTier}`;
+  await sql`INSERT INTO progression_grant (user_id, grant_key, kind, step_id, label) VALUES (${selfTier}, 'early:tailor', 'unlock', 'tailor', 'fixture')`.catch(() => {});
+
+  check("seat: platform admin", (await seat(boss)) === true);
+  check("seat: organization owner", (await seat(owner)) === true);
+  check("seat: organization staff", (await seat(staff)) === true);
+  check("seat: member of an active code", (await seat(member)) === true);
+  check("seat: grandfathered account", (await seat(legacy)) === true);
+  check("no seat: a fresh account", (await seat(nobody)) === false);
+  check("no seat: member of an expired code", (await seat(lapsed)) === false);
+  check("no seat: member of an inactive code", (await seat(closedMember)) === false);
+  check("no seat: users.tier partner and a progression unlock count for nothing", (await seat(selfTier)) === false);
+
+  const unscoped = await app`SELECT (SELECT count(*) FROM refinery_access_policy)::int AS p, (SELECT count(*) FROM refinery_seat_legacy)::int AS l, (SELECT count(*) FROM org_seat_offer)::int AS o`;
+  check("an unscoped app read sees no policy row, no grandfather rows, no offers", unscoped[0].p === 0 && unscoped[0].l === 0 && unscoped[0].o === 0, JSON.stringify(unscoped[0]));
+  const selfLegacy = await raised(() => app.transaction([app`SELECT set_config('app.user_id', ${nobody}, true)`, app`INSERT INTO refinery_seat_legacy (user_id) VALUES (${nobody})`]));
+  check("a person cannot put themselves on the grandfather list", !!selfLegacy && /row-level security|permission denied/i.test(selfLegacy), selfLegacy ?? "insert succeeded");
+  const flip = await app.transaction([app`SELECT set_config('app.user_id', ${nobody}, true)`, app`UPDATE refinery_access_policy SET public_signup_open = NOT public_signup_open WHERE id RETURNING id`]);
+  check("a non-admin cannot flip the switch", flip[1].length === 0);
+  const del = await raised(() => app.transaction([app`SELECT set_config('app.user_id', ${boss}, true)`, app`DELETE FROM refinery_access_policy`]));
+  check("not even an admin can delete the policy row from the app", !!del && /permission denied/i.test(del), del ?? "delete ran");
+
+  // Offers: an existing account that has signed in is asked first.
+  const asked = await mkUser("s-asked");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${asked}`;
+  const [{ email: askedEmail }] = await sql`SELECT email FROM users WHERE id = ${asked}`;
+  const [{ t: seatsBefore }] = await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`;
+  const inv = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "Asked", email: askedEmail, invitedBy: owner });
+  const [{ n: memAfterOffer }] = await sql`SELECT count(*)::int AS n FROM access_code_redemption WHERE user_id = ${asked}`;
+  const [{ t: seatsAfterOffer }] = await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`;
+  check("inviting an existing account makes an offer: no membership, no seat spent", inv.ok && inv.kind === "offered" && memAfterOffer === 0 && seatsAfterOffer === seatsBefore, JSON.stringify(inv));
+  const offers = await core.listMySeatOffers(asked);
+  check("the person sees the offer, with the organization's name", offers.length === 1 && offers[0].orgName === P + " seats");
+  check("another account cannot accept it", (await core.acceptSeatOffer(nobody, offers[0].id)) === "not_found");
+  check("accepting spends the seat through the one membership path", (await core.acceptSeatOffer(asked, offers[0].id)) === "ok"
+    && (await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`)[0].t === seatsBefore + 1 && (await seat(asked)) === true);
+  check("an answered offer cannot be answered again", (await core.acceptSeatOffer(asked, offers[0].id)) === "not_found");
+
+  const declines = await mkUser("s-declines");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${declines}`;
+  const [{ email: dEmail }] = await sql`SELECT email FROM users WHERE id = ${declines}`;
+  await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "D", email: dEmail, invitedBy: owner });
+  const [dOffer] = await core.listMySeatOffers(declines);
+  check("declining spends nothing", (await core.declineSeatOffer(declines, dOffer.id)) === "ok" && (await seat(declines)) === false);
+
+  // Leave one organization: the membership ends, the seat is not refunded.
+  const [{ t: beforeLeave }] = await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`;
+  check("leaving one organization ends that membership", (await core.leaveOrg(asked, org.id)) === true && (await seat(asked)) === false);
+  check("leaving does not hand the seat back (durable seats)", (await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`)[0].t === beforeLeave);
+
+  await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
 }
 
 main()
