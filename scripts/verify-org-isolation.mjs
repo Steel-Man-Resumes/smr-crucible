@@ -991,6 +991,17 @@ async function sharingChecks() {
     const del = await raised(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`DELETE FROM case_note WHERE id = ${note.id}`]));
     check("a note cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "delete succeeded");
   }
+  if (note.ok) {
+    const fixed = await core.editClientNote(aRuss, wes, note.id, { body: "Met Tuesday. Bringing ID, SS card and pay stub Thursday." });
+    const notes = await core.getClientNotes(aRuss, wes);
+    const mineNow = notes.ok ? notes.rows.find((n) => n.id === note.id) : null;
+    check("the author can correct a note through the app, and every earlier wording is shown with it",
+      fixed.ok === true && !!mineNow?.edited_at && (mineNow?.earlier?.length ?? 0) >= 2, JSON.stringify(fixed));
+    check("somebody who did not write it cannot correct it", (await core.editClientNote(aNora, wes, note.id, { body: "rewritten by a colleague" })).ok === false);
+    const shown = await core.addClientNote(aRuss, wes, { body: "NOT-SHOWN-TO-PARTICIPANT", visibleToParticipant: true });
+    const [{ v }] = shown.ok ? await sql`SELECT visible_to_participant AS v FROM case_note WHERE id = ${shown.id}` : [{ v: null }];
+    check("a note is never marked visible to the participant, since no participant screen shows notes", v === false, String(v));
+  }
 
   // -- helping without touching their work: a suggested job, a comment beside a shared document
   const [sharedResume] = await sql`SELECT id FROM refinery_artifact WHERE user_id = ${wes} AND artifact_type = 'resume' AND is_current`;

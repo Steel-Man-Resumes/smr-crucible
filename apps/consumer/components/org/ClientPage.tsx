@@ -43,6 +43,8 @@ interface Client {
 interface Note {
   id: string; kind: string; body: string; occurred_at: string; author_name: string | null;
   visible_to_participant: boolean; drafted_by_assistant: boolean; edited_at: string | null;
+  author_user_id?: string | null;
+  earlier?: { body: string; kind: string; replaced_at: string }[];
 }
 
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "--");
@@ -60,7 +62,7 @@ function readable(content: unknown, depth = 0): string[] {
 export function ClientPage({ clientId }: { clientId: string }) {
   const [client, setClient] = useState<Client | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [viewer, setViewer] = useState<{ canWriteNotes: boolean; canRequest: boolean; canSuggest?: boolean } | null>(null);
+  const [viewer, setViewer] = useState<{ userId?: string; canWriteNotes: boolean; canRequest: boolean; canSuggest?: boolean } | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Scope | "notes" | "screen" | "tasks" | "outcomes" | "suggestions">("notes");
@@ -151,8 +153,8 @@ export function ClientPage({ clientId }: { clientId: string }) {
       ) : tab === "screen" ? (
         <TheirScreen client={client} first={first} onOpen={openTab} />
       ) : tab === "notes" ? (
-        <NotesPanel clientId={clientId} first={first} notes={notes} canWrite={!!viewer?.canWriteNotes} onSaved={load}
-          defaultKind={prefs.noteKind} defaultVisible={prefs.noteVisible} />
+        <NotesPanel clientId={clientId} notes={notes} canWrite={!!viewer?.canWriteNotes} viewerId={viewer?.userId ?? null} onSaved={load}
+          defaultKind={prefs.noteKind} />
       ) : client.scopes[tab].shared ? (
         <section aria-live="polite">
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-4">
@@ -536,23 +538,31 @@ function AskPanel({ clientId, first, scope, pending, canRequest, onAsked }: {
   );
 }
 
-function NotesPanel({ clientId, first, notes, canWrite, onSaved, defaultKind, defaultVisible }: {
-  clientId: string; first: string; notes: Note[]; canWrite: boolean; onSaved: () => void; defaultKind: string; defaultVisible: boolean;
+function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind }: {
+  clientId: string; notes: Note[]; canWrite: boolean; viewerId: string | null; onSaved: () => void; defaultKind: string;
 }) {
   const [body, setBody] = useState("");
   const [kind, setKind] = useState(defaultKind);
-  const [visible, setVisible] = useState(defaultVisible);
   // Preferences arrive a moment after the page; adopt them unless the person
   // has already started writing.
-  useEffect(() => { if (!body) { setKind(defaultKind); setVisible(defaultVisible); } }, [defaultKind, defaultVisible]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!body) setKind(defaultKind); }, [defaultKind]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
   async function save() {
     setBusy(true); setMsg(null);
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "add_note", body, kind, visibleToParticipant: visible }) });
+      body: JSON.stringify({ action: "add_note", body, kind }) });
     setBusy(false);
-    if (res.ok) { setBody(""); setVisible(defaultVisible); setKind(defaultKind); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+    if (res.ok) { setBody(""); setKind(defaultKind); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+  }
+  async function saveCorrection() {
+    if (!editing) return;
+    setBusy(true); setMsg(null);
+    const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "edit_note", noteId: editing.id, body: editing.body }) });
+    setBusy(false);
+    if (res.ok) { setEditing(null); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that correction.");
   }
   return (
     <section>
@@ -567,31 +577,61 @@ function NotesPanel({ clientId, first, notes, canWrite, onSaved, defaultKind, de
                 {NOTE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
             </label>
-            <label className="text-xs text-t-phos-dim flex items-center gap-2">
-              <input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} className="t-focus" />
-              Let {first} see this note
-            </label>
             <button onClick={save} disabled={busy || !body.trim()} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 disabled:opacity-50 ml-auto">
               {busy ? "Saving..." : "Save note"}
             </button>
           </div>
           <p className="text-xs text-t-phos-dim mt-3">
-            Notes belong to your organization. They can be corrected, and earlier wording is kept. They cannot be deleted.
+            Notes belong to your organization and only staff see them. The person who wrote a note can correct it, and the earlier wording is kept. Notes cannot be deleted.
           </p>
           {msg && <p className="text-xs text-t-amber-bright mt-2" role="alert">{msg}</p>}
         </div>
       )}
       {notes.length === 0 ? <p className="text-sm text-t-phos-dim">No notes yet.</p> : (
         <ol className="space-y-3">
-          {notes.map((n) => (
-            <li key={n.id} className="bg-t-panel border border-t-line p-4">
-              <p className="text-xs text-t-phos-dim mb-1">
-                {NOTE_KINDS.find(([k]) => k === n.kind)?.[1] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
-                {n.drafted_by_assistant ? " · drafted with t.ROY" : ""}{n.edited_at ? " · corrected" : ""}{n.visible_to_participant ? ` · ${first} can see this` : ""}
-              </p>
-              <p className="text-sm text-t-white whitespace-pre-wrap">{n.body}</p>
-            </li>
-          ))}
+          {notes.map((n) => {
+            const mine = canWrite && !!viewerId && n.author_user_id === viewerId;
+            const isEditing = editing?.id === n.id;
+            return (
+              <li key={n.id} className="bg-t-panel border border-t-line p-4">
+                <p className="text-xs text-t-phos-dim mb-1">
+                  {NOTE_KINDS.find(([k]) => k === n.kind)?.[1] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
+                  {n.drafted_by_assistant ? " · drafted with t.ROY" : ""}{n.edited_at ? ` · corrected ${day(n.edited_at)}` : ""}
+                </p>
+                {isEditing ? (
+                  <div>
+                    <label htmlFor={`fix-${n.id}`} className="sr-only">Corrected wording</label>
+                    <textarea id={`fix-${n.id}`} value={editing.body} onChange={(e) => setEditing({ id: n.id, body: e.target.value })} rows={3} maxLength={8000}
+                      className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-2" />
+                    <div className="flex gap-3">
+                      <button onClick={saveCorrection} disabled={busy || !editing.body.trim() || editing.body.trim() === n.body}
+                        className="t-focus bg-t-amber text-[#14100a] text-xs font-semibold px-3 py-1.5 disabled:opacity-50">{busy ? "Saving..." : "Save correction"}</button>
+                      <button onClick={() => setEditing(null)} className="t-focus text-xs text-t-phos-dim underline">Cancel</button>
+                    </div>
+                    <p className="text-[11px] text-t-phos-dim mt-1">The current wording is kept as an earlier version.</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-t-white whitespace-pre-wrap">{n.body}</p>
+                )}
+                {!isEditing && mine && (
+                  <button onClick={() => setEditing({ id: n.id, body: n.body })} className="t-focus text-xs text-t-phos underline mt-2">Correct this note</button>
+                )}
+                {(n.earlier?.length ?? 0) > 0 && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-t-phos-dim cursor-pointer">Earlier wording ({n.earlier!.length})</summary>
+                    <ol className="mt-2 space-y-2">
+                      {n.earlier!.map((v, i) => (
+                        <li key={i} className="border-l border-t-line pl-3">
+                          <p className="text-[11px] text-t-phos-dim">Replaced {day(v.replaced_at)}</p>
+                          <p className="text-xs text-t-phos whitespace-pre-wrap">{v.body}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>
