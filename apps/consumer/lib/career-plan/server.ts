@@ -5,11 +5,14 @@
  */
 
 import { getOneAsUser } from "@crucible/core";
-import { buildSavedFacts, type CareerFact } from "./facts";
+import { buildForgeReading, buildSavedFacts, type CareerFact, type ForgeReading } from "./facts";
 import { readPlanNotes, type CareerPlanNote } from "./plan";
 
 export interface CareerContext {
+  /** The person's own words (Master Draft). */
   facts: CareerFact[];
+  /** The Forge run's AI analysis: labeled t.ROY's reading, never quoted. */
+  reading: ForgeReading[];
   location: string;
   notes: CareerPlanNote[];
 }
@@ -24,7 +27,8 @@ export async function loadCareerContext(userId: string): Promise<CareerContext> 
   );
   const location = typeof row?.location === "string" ? row.location.replace(/\s+/g, " ").trim().slice(0, 160) : "";
   return {
-    facts: buildSavedFacts({ master: row?.master, skills: row?.skills, forgeOutput: row?.forge_output }),
+    facts: buildSavedFacts({ master: row?.master }),
+    reading: buildForgeReading({ skills: row?.skills, forgeOutput: row?.forge_output }),
     location,
     notes: readPlanNotes(row?.notes),
   };

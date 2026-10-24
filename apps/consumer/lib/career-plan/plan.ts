@@ -15,8 +15,8 @@
  * Pure and client-safe.
  */
 
-import { CAREER_DIRECTIONS, RECORD_LEVEL_LABEL, RECORD_NOTE_FOOTER, type CareerDirection } from "./catalog";
-import { normalizeForMatch, verifyQuotes, cleanLink, type CareerFact, type CheckedQuote } from "./facts";
+import { CAREER_DIRECTIONS, RECORD_NOTE_FOOTER, type CareerDirection } from "./catalog";
+import { normalizeForMatch, verifyQuotes, cleanLink, type CareerFact, type CheckedQuote, type ForgeReading } from "./facts";
 import type { PlanAnswers, Soon, Schedule, Transport, Physical, Licensing, Training } from "./questions";
 import { pathJobsHref } from "../paths/explore";
 import type { LaneTask } from "../lane-task";
@@ -51,9 +51,12 @@ export interface PlanDirection {
   plain: string;
   firstJob: string;
   laterJob: string;
+  /** The person's own words only (Master Draft, typed today), whole facts. */
   quotes: CheckedQuote[];
+  /** Forge analysis that tied to this work, shown labeled as t.ROY's reading, never as the person's words. */
+  forgeReading: string[];
   link: string | null;
-  record: { label: string; note: string; footer: string };
+  record: { note: string; footer: string; source: { title: string; url: string; checkedAt: string } | null };
   /** Only ever filled from a wired source with its name and date. Null today. */
   pay: { text: string; source: string; asOf: string } | null;
   payNote: string;
@@ -94,16 +97,28 @@ export function allowedDirections(answers: PlanAnswers, all: CareerDirection[] =
 const words = (s: string) => ` ${normalizeForMatch(s).replace(/[^a-z0-9]+/g, " ").trim()} `;
 const mentions = (text: string, term: string) => words(text).includes(words(term));
 
+const tiesTo = (d: CareerDirection, text: string) => d.terms.some((t) => mentions(text, t)) || mentions(text, d.searchRole) || mentions(text, d.title);
+
 /** Facts that tie to a direction by its own words. Tapped ("felt good") facts first. */
 export function matchingFacts(d: CareerDirection, facts: CareerFact[], liked: string[] = []): CareerFact[] {
-  const hits = facts.filter((f) => d.terms.some((t) => mentions(f.text, t)) || mentions(f.text, d.searchRole) || mentions(f.text, d.title));
+  const hits = facts.filter((f) => tiesTo(d, f.text));
   return hits.sort((a, b) => Number(liked.includes(b.id)) - Number(liked.includes(a.id)) || Number(b.source === "today") - Number(a.source === "today"));
 }
 
-export function scoreDirection(d: CareerDirection, facts: CareerFact[], answers: PlanAnswers): number {
+/** Forge analysis lines that tie to a direction. Ranking hint only. */
+export function matchingReading(d: CareerDirection, reading: ForgeReading[]): ForgeReading[] {
+  return reading.filter((r) => tiesTo(d, r.text));
+}
+
+/** The rules path's quotes: the person's matching facts, through the same stripper as the model's. */
+export function ownQuotes(d: CareerDirection, facts: CareerFact[], liked: string[] = []): CheckedQuote[] {
+  return verifyQuotes(matchingFacts(d, facts, liked).map((f) => ({ factId: f.id, quote: f.text })), facts).kept.slice(0, 2);
+}
+
+export function scoreDirection(d: CareerDirection, facts: CareerFact[], answers: PlanAnswers, reading: ForgeReading[] = []): number {
   const liked = answers.liked?.factIds ?? [];
-  const hits = matchingFacts(d, facts, liked);
-  let score = hits.length * 3 + hits.filter((f) => liked.includes(f.id) || f.source === "today").length * 2;
+  const hits = ownQuotes(d, facts, liked);
+  let score = hits.length * 3 + hits.filter((f) => liked.includes(f.factId) || f.source === "today").length * 2 + matchingReading(d, reading).length;
   if (answers.physical === "no_standing" || answers.physical === "both") score -= d.onFeetAllDay ? 2 : 0;
   if (answers.soon === "this_week" || answers.soon === "month") score += d.preparation === "on_job" ? 2 : 0;
   if (answers.training === "long") score += d.preparation === "extended" ? 1 : 0;
@@ -111,16 +126,8 @@ export function scoreDirection(d: CareerDirection, facts: CareerFact[], answers:
   return score;
 }
 
-export function rankDirections(candidates: CareerDirection[], facts: CareerFact[], answers: PlanAnswers): CareerDirection[] {
-  return [...candidates].sort((a, b) => scoreDirection(b, facts, answers) - scoreDirection(a, facts, answers) || a.title.localeCompare(b.title));
-}
-
-/** A quote that is, by construction, a piece of the fact: the whole fact, or its first words. */
-export function quoteFromFact(f: CareerFact, max = 160): string {
-  if (f.text.length <= max) return f.text;
-  const cut = f.text.slice(0, max);
-  const space = cut.lastIndexOf(" ");
-  return space > 40 ? cut.slice(0, space) : cut;
+export function rankDirections(candidates: CareerDirection[], facts: CareerFact[], answers: PlanAnswers, reading: ForgeReading[] = []): CareerDirection[] {
+  return [...candidates].sort((a, b) => scoreDirection(b, facts, answers, reading) - scoreDirection(a, facts, answers, reading) || a.title.localeCompare(b.title));
 }
 
 /* ------------------------------------------------------------- first move -- */
@@ -152,7 +159,7 @@ export const PLAN_SYSTEM = `You help a job seeker who doesn't know what work the
 
 Rules:
 - Pick exactly 3 directions by id from CANDIDATES. Never name a direction that is not on the list.
-- For each, give up to 2 quotes. A quote is copied word for word from one FACT, with that fact's id. Never paraphrase inside a quote. Never quote anything that is not in FACTS.
+- For each, point to up to 2 FACTS that connect: give the fact's id and at least four words copied word for word from it. Never paraphrase. Never point at anything that is not in FACTS. Never point at a fact that says the person did not like or did not do something.
 - If no fact connects, give no quotes for that direction. That is fine.
 - "link" is one plain sentence about how the work uses what the quotes show. Talk about the work. Never state anything new about the person: no jobs, dates, numbers, titles, tools or skills they didn't say.
 - No pay, no numbers, no promises about getting hired, nothing about the law.
@@ -183,7 +190,7 @@ export function answerLines(answers: PlanAnswers): string[] {
 export function buildPlanPrompt(facts: CareerFact[], answers: PlanAnswers, candidates: CareerDirection[]): string {
   const liked = new Set(answers.liked?.factIds ?? []);
   return [
-    "FACTS (the person's own words and saved work details):",
+    "FACTS (what the person wrote themselves):",
     JSON.stringify(facts.map((f) => ({ id: f.id, text: f.text, feltGood: liked.has(f.id) || undefined }))),
     "ANSWERS:",
     JSON.stringify(answerLines(answers)),
@@ -215,18 +222,23 @@ export function parseModelPlan(raw: string): ModelDirection[] {
 /* --------------------------------------------------------------- assembly -- */
 
 export interface PlanInput {
+  /** The person's own words only. */
   facts: CareerFact[];
+  /** The Forge run's AI analysis: ranking hint, shown labeled, never quoted. */
+  reading?: ForgeReading[];
   answers: PlanAnswers;
   location: string;
   /** The model's reply, already parsed. Omit for the rules-only plan. */
   model?: ModelDirection[];
+  /** The candidate ids the model was shown. A model pick outside these is ignored. */
+  offered?: string[];
 }
 
-function direction(d: CareerDirection, quotes: CheckedQuote[], link: string | null, answers: PlanAnswers, location: string): PlanDirection {
+function direction(d: CareerDirection, quotes: CheckedQuote[], link: string | null, answers: PlanAnswers, location: string, reading: ForgeReading[]): PlanDirection {
   return {
     id: d.id, title: d.title, searchRole: d.searchRole, plain: d.plain, firstJob: d.firstJob, laterJob: d.laterJob,
-    quotes, link,
-    record: { label: RECORD_LEVEL_LABEL[d.record.level], note: d.record.note, footer: RECORD_NOTE_FOOTER },
+    quotes, forgeReading: matchingReading(d, reading).slice(0, 2).map((r) => r.text), link,
+    record: { note: d.record.note, footer: RECORD_NOTE_FOOTER, source: d.record.source ?? null },
     pay: null, payNote: PAY_NOTE,
     firstMove: firstMoveFor(d, answers, location),
     source: d.source,
@@ -235,8 +247,10 @@ function direction(d: CareerDirection, quotes: CheckedQuote[], link: string | nu
 
 export function assemblePlan(input: PlanInput): CareerPlan {
   const { facts, answers, location } = input;
+  const reading = input.reading ?? [];
   const allowed = allowedDirections(answers);
-  const ranked = rankDirections(allowed, facts, answers);
+  const ranked = rankDirections(allowed, facts, answers, reading);
+  const offered = input.offered ? new Set(input.offered) : null;
   const liked = answers.liked?.factIds ?? [];
   const notes: string[] = [];
   const picked: PlanDirection[] = [];
@@ -246,23 +260,22 @@ export function assemblePlan(input: PlanInput): CareerPlan {
 
   for (const m of input.model ?? []) {
     if (picked.length >= DIRECTION_COUNT) break;
-    const d = allowed.find((x) => x.id === m.id);
+    const d = allowed.find((x) => x.id === m.id && (!offered || offered.has(x.id)));
     if (!d || picked.some((p) => p.id === d.id)) continue;
     const check = verifyQuotes(m.quotes, facts);
     stripped += check.stripped;
     const link = cleanLink(m.link);
     if (link.dropped) linkDropped = true;
     // All the model's quotes stripped: show the person's own matching facts instead, never nothing made up.
-    const quotes = check.kept.length ? check.kept.slice(0, 2) : matchingFacts(d, facts, liked).slice(0, 2).map((f) => ({ factId: f.id, quote: quoteFromFact(f), source: f.source }));
-    picked.push(direction(d, quotes, check.kept.length ? link.text : null, answers, location));
+    const quotes = check.kept.length ? check.kept.slice(0, 2) : ownQuotes(d, facts, liked);
+    picked.push(direction(d, quotes, check.kept.length ? link.text : null, answers, location, reading));
     usedModel = true;
   }
   // Fill (or build entirely) from the rules: quotes are slices of the facts themselves.
   for (const d of ranked) {
     if (picked.length >= DIRECTION_COUNT) break;
     if (picked.some((p) => p.id === d.id)) continue;
-    const quotes = matchingFacts(d, facts, liked).slice(0, 2).map((f) => ({ factId: f.id, quote: quoteFromFact(f), source: f.source }));
-    picked.push(direction(d, quotes, null, answers, location));
+    picked.push(direction(d, ownQuotes(d, facts, liked), null, answers, location, reading));
   }
 
   if (stripped) notes.push(STRIPPED_NOTE(stripped));
