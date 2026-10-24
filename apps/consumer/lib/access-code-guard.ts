@@ -3,8 +3,8 @@
  * so trying is rate limited, every refusal reads the same, and new codes are
  * random unless Troy deliberately picks one.
  */
-import { randomInt } from "node:crypto";
 import type { RateLimitConfig } from "./auth-rate-limit";
+import { ORG_CODE_SHAPE, generateOrgCode } from "@crucible/core/src/orgCode";
 
 /**
  * The one answer to any code that did not work: unknown, closed, expired,
@@ -16,9 +16,10 @@ export const CODE_REFUSAL = "That code did not work. Check it with the organizat
 /**
  * The only shape a person may type or carry in a cookie: what the mint route
  * makes. The hub codes contain "-" and are reachable only through the
- * secret-gated hub-unlock route (security review 1, BL-3).
+ * secret-gated hub-unlock route (security review 1, BL-3). Defined once, in
+ * core (orgCode.ts), with the one random generator.
  */
-export const CODE_SHAPE = /^[A-Z0-9]{4,20}$/;
+export const CODE_SHAPE = ORG_CODE_SHAPE;
 
 /** Code tries (redeem and the "what does it require" check share them). */
 export const CODE_ATTEMPT_LIMITS = {
@@ -26,22 +27,30 @@ export const CODE_ATTEMPT_LIMITS = {
   perIp: { maxRequests: 60, windowMs: 3_600_000 } as RateLimitConfig,
 };
 
+/**
+ * Cookie codes (lib/code-attribution.ts) have their OWN per-account budget,
+ * so a stale cookie never uses up the tries a person needs to type a real
+ * code (review 2, N-13), and each cookie code is tried at most once an hour
+ * per account. The per-IP budget is shared with typed codes (SF-1).
+ */
+export const COOKIE_CODE_LIMITS = {
+  perUser: { maxRequests: 5, windowMs: 3_600_000 } as RateLimitConfig,
+  perUserCode: { maxRequests: 1, windowMs: 3_600_000 } as RateLimitConfig,
+};
+
+export function cookieAttemptLimits(ip: string, userId: string, code: string) {
+  return [
+    { key: `code:cookie:user:${userId}:${code}`, config: COOKIE_CODE_LIMITS.perUserCode },
+    { key: `code:cookie:user:${userId}`, config: COOKIE_CODE_LIMITS.perUser },
+    { key: `code:try:ip:${ip}`, config: CODE_ATTEMPT_LIMITS.perIp },
+  ];
+}
+
 export function codeAttemptLimits(ip: string, userId: string) {
   return [
     { key: `code:try:user:${userId}`, config: CODE_ATTEMPT_LIMITS.perUser },
     { key: `code:try:ip:${ip}`, config: CODE_ATTEMPT_LIMITS.perIp },
   ];
-}
-
-/** No 0/O, 1/I/L: a code gets read out loud and copied from paper. */
-export const CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-export const RANDOM_CODE_LENGTH = 12;
-
-/** A random code: 12 characters from 31, about 59 bits. */
-export function generateSeatCode(length = RANDOM_CODE_LENGTH, pick: (n: number) => number = randomInt): string {
-  let out = "";
-  for (let i = 0; i < length; i++) out += CODE_ALPHABET[pick(CODE_ALPHABET.length)];
-  return out;
 }
 
 /**
@@ -53,7 +62,7 @@ export function mintCodeChoice(body: { code?: unknown; confirmChosenCode?: unkno
   | { ok: true; code: string; chosen: boolean }
   | { ok: false; error: string } {
   const raw = typeof body.code === "string" ? body.code.trim() : "";
-  if (!raw) return { ok: true, code: generateSeatCode(), chosen: false };
+  if (!raw) return { ok: true, code: generateOrgCode(), chosen: false };
   if (body.confirmChosenCode !== true) {
     return { ok: false, error: "A chosen code is easier to guess. Leave it empty for a random one, or confirm that you want this one." };
   }

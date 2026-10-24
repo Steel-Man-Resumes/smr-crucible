@@ -343,17 +343,25 @@ export async function POST(request: Request) {
       }
       try {
         const inviterName = (await auth())?.user?.name || null;
-        const url = await mintInviteMagicLink(touched.email, origin);
-        await sendOrgEmail(
-          touched.email,
-          buildInviteEmail({
-            inviteeName: touched.name,
-            inviterName,
-            orgName: org.orgName,
-            url,
-            origin,
-          })
-        );
+        if (touched.offer) {
+          // An open offer to an existing account: the offer email, never a sign-in link.
+          await sendOrgEmail(
+            touched.email,
+            buildOfferEmail({ inviteeName: touched.name, inviterName, orgName: org.orgName, origin })
+          );
+        } else {
+          const url = await mintInviteMagicLink(touched.email, origin);
+          await sendOrgEmail(
+            touched.email,
+            buildInviteEmail({
+              inviteeName: touched.name,
+              inviterName,
+              orgName: org.orgName,
+              url,
+              origin,
+            })
+          );
+        }
       } catch (err: any) {
         console.error("invite resend failed:", err?.message || err);
         return NextResponse.json(
@@ -372,7 +380,8 @@ export async function POST(request: Request) {
       if (!revoked.ok) {
         return NextResponse.json({ error: revoked.error }, { status: 400 });
       }
-      return NextResponse.json({ ok: true, message: "Invite removed and the seat freed." });
+      // One message for an invite and an offer: any seat it held is free again (an offer held none).
+      return NextResponse.json({ ok: true, message: "Invite removed. Any seat it held is free again." });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });

@@ -38,6 +38,7 @@ export * from './coachProactive';
 export * from './partnerDashboard';
 export * from './orgInvite';
 export * from './refineryAccess';
+export * from './orgCode';
 export * from './systemHealth';
 export * from './employer';
 export * from './resourceDirectory';

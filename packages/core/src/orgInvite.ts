@@ -15,7 +15,7 @@
 
 import { query, getOne, runScoped } from "./db";
 import { redeemAccessCode, validateAccessCode } from "./accessCode";
-import { createSeatOffer } from "./refineryAccess";
+import { OFFER_WINDOW_HOURS, createSeatOffer } from "./refineryAccess";
 
 /** SQL fragment: the users row aliased `u` has never signed in by any door. */
 const PENDING_SQL = `(u."emailVerified" IS NULL
@@ -197,14 +197,33 @@ export async function createOrgInvite(opts: {
 export async function touchOrgInviteResend(
   accessCodeId: string,
   userId: string
-): Promise<{ ok: true; email: string; name: string | null } | { ok: false; error: string }> {
-  const row = await getOne<{ email: string; name: string | null; last_sent_at: string; send_count: number; pending: boolean }>(
-    `SELECT u.email, u.name, oi.last_sent_at, oi.send_count, ${PENDING_SQL} AS pending
+): Promise<{ ok: true; email: string; name: string | null; offer: boolean } | { ok: false; error: string }> {
+  const row = await getOne<{ email: string; name: string | null; invited_name: string | null; last_sent_at: string; send_count: number; pending: boolean; offer_status: string | null }>(
+    `SELECT u.email, u.name, oi.invited_name, oi.last_sent_at, oi.send_count, ${PENDING_SQL} AS pending, oi.offer_status
        FROM org_invite oi JOIN users u ON u.id = oi.user_id
       WHERE oi.access_code_id = $1 AND oi.user_id = $2`,
     [accessCodeId, userId]
   );
   if (!row) return { ok: false, error: "No invite found for that person." };
+  // An open OFFER to an existing account (096): its own resend, at most once
+  // a day (OFFER_WINDOW_HOURS), never a sign-in link. The caller sends the
+  // offer email. Answered offers are not resendable.
+  if (row.offer_status === "offered") {
+    if (Number(row.send_count) >= 10) {
+      return { ok: false, error: "Resend limit reached for this invite. Check the address, or remove and re-add them." };
+    }
+    const touched = await getOne<{ ok: boolean }>(
+      `UPDATE org_invite SET last_sent_at = NOW(), send_count = send_count + 1
+        WHERE access_code_id = $1 AND user_id = $2 AND offer_status = 'offered'
+          AND last_sent_at <= now() - make_interval(hours => $3)
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = $2)
+        RETURNING true AS ok`,
+      [accessCodeId, userId, OFFER_WINDOW_HOURS]
+    );
+    if (!touched) return { ok: false, error: "That invite went out in the last day. They can answer it when they sign in." };
+    return { ok: true, email: row.email, name: row.invited_name ?? row.name, offer: true };
+  }
+  if (row.offer_status) return { ok: false, error: "There is no open invite to resend." };
   if (!row.pending) return { ok: false, error: "They have already joined, so there is no invite to resend." };
   if (Number(row.send_count) >= 10) {
     return { ok: false, error: "Resend limit reached for this invite. Check the address, or remove and re-add them." };
@@ -217,7 +236,7 @@ export async function touchOrgInviteResend(
       WHERE access_code_id = $1 AND user_id = $2`,
     [accessCodeId, userId]
   );
-  return { ok: true, email: row.email, name: row.name };
+  return { ok: true, email: row.email, name: row.name, offer: false };
 }
 
 /**
@@ -232,13 +251,23 @@ export async function revokeOrgInvite(
   userId: string,
   actorUserId = ""
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const row = await getOne<{ email: string; pending: boolean }>(
-    `SELECT u.email, ${PENDING_SQL} AS pending
+  const row = await getOne<{ email: string; pending: boolean; offer_status: string | null }>(
+    `SELECT u.email, ${PENDING_SQL} AS pending, oi.offer_status
        FROM org_invite oi JOIN users u ON u.id = oi.user_id
       WHERE oi.access_code_id = $1 AND oi.user_id = $2`,
     [accessCodeId, userId]
   );
   if (!row) return { ok: false, error: "No invite found for that person." };
+  // An open OFFER (096): withdraw it. Nothing was spent, so nothing to refund,
+  // and the account is the person's own, so nothing else is touched.
+  if (row.offer_status === "offered") {
+    const [out] = await runScoped<[{ outcome: string }[]]>(
+      { orgId: accessCodeId, userId: actorUserId, role: "org_admin" },
+      (sql) => [sql`SELECT public.smr_withdraw_seat_offer(${userId}::uuid) AS outcome`]
+    );
+    return out?.[0]?.outcome === "ok" ? { ok: true } : { ok: false, error: "There is no open invite to remove." };
+  }
+  if (row.offer_status) return { ok: false, error: "There is no open invite to remove." };
   if (!row.pending) {
     return { ok: false, error: "They have already joined, so this invite can't be removed." };
   }

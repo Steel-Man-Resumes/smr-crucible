@@ -104,6 +104,18 @@ export async function leaveOrg(userId: string, orgId: string): Promise<boolean> 
 /** One offer per person per organization per day, answered or not (review 1, SF-2). */
 export const OFFER_WINDOW_HOURS = 24;
 
+/** The offer insert ($1 org, $2 person, $3 offered by, $4 window hours). Exported for the pglite test. */
+export const OFFER_INSERT_SQL = `INSERT INTO org_seat_offer (access_code_id, user_id, offered_by)
+  SELECT $1::uuid, $2::uuid, $3::uuid
+   WHERE NOT EXISTS (
+     SELECT 1 FROM org_seat_offer o
+      WHERE o.access_code_id = $1::uuid AND o.user_id = $2::uuid
+        AND (o.status = 'pending'
+             OR o.created_at > now() - make_interval(hours => $4::int)
+             OR o.decided_at > now() - make_interval(hours => $4::int)))
+  ON CONFLICT (access_code_id, user_id) WHERE status = 'pending' DO NOTHING
+  RETURNING id`;
+
 /**
  * Record an organization's offer to an existing account. Scoped to that
  * organization (the insert policy checks app.org_id). Returns true only when
@@ -119,16 +131,12 @@ export async function createSeatOffer(opts: {
   const [rows] = await runScoped<[{ id: string }[]]>(
     { orgId: opts.accessCodeId, userId: opts.offeredBy, role: "org_admin" },
     (sql) => [
-      sql`INSERT INTO org_seat_offer (access_code_id, user_id, offered_by)
-          SELECT ${opts.accessCodeId}::uuid, ${opts.userId}::uuid, ${opts.offeredBy}::uuid
-           WHERE NOT EXISTS (
-             SELECT 1 FROM org_seat_offer o
-              WHERE o.access_code_id = ${opts.accessCodeId}::uuid AND o.user_id = ${opts.userId}::uuid
-                AND (o.status = 'pending'
-                     OR o.created_at > now() - make_interval(hours => ${OFFER_WINDOW_HOURS})
-                     OR o.decided_at > now() - make_interval(hours => ${OFFER_WINDOW_HOURS})))
-          ON CONFLICT (access_code_id, user_id) WHERE status = 'pending' DO NOTHING
-          RETURNING id`,
+      (sql as unknown as (s: string, p: unknown[]) => unknown)(OFFER_INSERT_SQL, [
+        opts.accessCodeId,
+        opts.userId,
+        opts.offeredBy,
+        OFFER_WINDOW_HOURS,
+      ]),
     ]
   );
   return (rows?.length ?? 0) > 0;
