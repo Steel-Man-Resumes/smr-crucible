@@ -7,7 +7,8 @@
  * Signals read (memo section 1): S1 facts, S2 defended lines, S3 finished
  * resumes, S4 confirmed credentials (counted as proof, boss Q4), S5 lanes,
  * S7 tailored snapshots, S8 applications sent, S9 outcomes (moments only),
- * S10 voice practice, S11 text practice (client-reported), S12 disclosure
+ * S10 voice practice (saved transcripts and server voice leases), S11 text
+ * practice (client-reported), S12 disclosure
  * plan, S13 rehearsals, S14 vault proof, S15 feedback, S19 package delivered
  * (moment only), S23 grants (moments log).
  * Deliberately not read: S6 task pick, S16 resource feedback, S17 support
@@ -97,8 +98,25 @@ export async function loadSteelMan(userId: string, run: RunAsUser = coreRunAsUse
        WHERE user_id=${userId}::uuid AND document_type='resume' AND provenance = ANY(string_to_array(${tailored.join(",")}, ',')) GROUP BY application_id`,
     // S8: distinct applications moved to applied (append-only ledger).
     sql`SELECT min(created_at) AS at FROM application_status_event WHERE user_id=${userId}::uuid AND to_status='applied' GROUP BY application_id`,
-    // S10: ended voice practice (server truth).
-    sql`SELECT COALESCE(ended_at, started_at) AS at FROM interview_voice_session WHERE owner_user_id=${userId}::uuid AND status='ended' ORDER BY 1 DESC LIMIT 100`,
+    // S10: voice practice, server truth from two tables. A saved transcript
+    // (interview_voice_session) is only made when the person chooses to save
+    // it; every voice practice runs on a server voice lease (voice_session).
+    // Until 10/24 only the first was read, so a voice practice run without
+    // saving its words counted nowhere (its client ping is excluded from S11 by
+    // design). A lease counts when the person ended it after at least 60
+    // seconds of call time (DESIGN HYPOTHESIS: under a minute is a mis-tap,
+    // not practice) and no saved transcript already counts the same call.
+    sql`SELECT at FROM (
+       SELECT COALESCE(t.ended_at, t.started_at) AS at FROM interview_voice_session t
+        WHERE t.owner_user_id=${userId}::uuid AND t.status='ended'
+       UNION ALL
+       SELECT vs.ended_at AS at FROM voice_session vs
+        WHERE vs.user_id=${userId}::uuid AND vs.status='ended' AND vs.ended_reason='user_ended'
+          AND vs.ended_at IS NOT NULL AND vs.ended_at - vs.started_at >= interval '60 seconds'
+          AND NOT EXISTS (SELECT 1 FROM interview_voice_session t2
+                           WHERE t2.owner_user_id=vs.user_id AND t2.status='ended'
+                             AND t2.started_at >= vs.started_at - interval '5 minutes' AND t2.started_at <= vs.ended_at)
+     ) v ORDER BY 1 DESC LIMIT 100`,
     // S11: client-reported completions, minus voice (voice is counted from S10).
     sql`SELECT created_at AS at FROM user_progress_event WHERE user_id=${userId}::uuid AND event_type='interview_completed'
        AND COALESCE(context->>'mode','')<>'voice' ORDER BY created_at DESC LIMIT 100`,

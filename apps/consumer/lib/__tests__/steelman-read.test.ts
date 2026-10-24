@@ -58,3 +58,10 @@ test('the destructure matches the runAsUser contract in db.ts', () => {
   assert.match(readFileSync(new URL('../../../../packages/core/src/db.ts', import.meta.url), 'utf8'), /return \(results as unknown\[\]\)\.slice\(setup\.length\)/);
   assert.match(readFileSync(new URL('../steelman/read.ts', import.meta.url), 'utf8'), /const \[masterRows, finRows,/);
 });
+test('S10 reads server voice leases too, so voice practice without a saved transcript counts (walk 10/24)', () => {
+  const src = readFileSync(new URL('../steelman/read.ts', import.meta.url), 'utf8');
+  assert.match(src, /FROM voice_session vs\s+WHERE vs\.user_id=\$\{userId\}::uuid AND vs\.status='ended' AND vs\.ended_reason='user_ended'/);
+  assert.match(src, /vs\.ended_at - vs\.started_at >= interval '60 seconds'/);
+  assert.match(src, /NOT EXISTS \(SELECT 1 FROM interview_voice_session t2/, 'a call with a saved transcript is counted once');
+  assert.match(src, /COALESCE\(context->>'mode',''\)<>'voice'/, 'the voice ping still never counts as text practice');
+});
