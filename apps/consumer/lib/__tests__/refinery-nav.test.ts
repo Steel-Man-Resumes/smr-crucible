@@ -181,13 +181,6 @@ test("the record check is never linked while its switch is off", () => {
   assert.match(readFileSync(join(ROOT, "app", "(dashboard)", "dashboard", "resources", "layout.tsx"), "utf8"), /recordStep: recordStepOn\(\)/);
 });
 
-test("the meter stub answers 404 until the meter lane replaces it", async () => {
-  const { GET } = await import("../../app/api/steelman/route");
-  const res = GET();
-  assert.equal(res.status, 404);
-  assert.deepEqual(await res.json(), { error: "not ready" });
-});
-
 // ---- Fix round 1: render the board, not just its data -------------------------
 
 function fixtureSteps(): ProgressStep[] {
@@ -205,11 +198,14 @@ async function renderBoard(over: Record<string, unknown> = {}) {
   // The app compiles JSX with the classic runtime under tsx; give it React.
   (globalThis as { React?: unknown }).React = React;
   const { RefineryBoard } = await import("../../components/nav/RefineryBoard");
-  return renderToStaticMarkup(React.createElement(RefineryBoard, {
+  const board = React.createElement(RefineryBoard, {
     userTier: "client", pathname: "/dashboard/interview", steps: fixtureSteps(), currentStepId: "tailor",
     onboardingState: "full_access", disclosureComplete: false, isUnlocked: () => true, labelFor: (i: { label: string }) => i.label,
-    ask: () => {}, hidePartner: true, carryIds: true, switches: { recordStep: false }, focusStation: null, ...over,
-  } as never));
+    ask: () => {}, hidePartner: true, carryIds: true, switches: { recordStep: false }, focusStation: null,
+    // The live meter reads the session; the shell provides it. Tests render a still placeholder.
+    meter: React.createElement("span", { "data-testid": "meter-placeholder" }), ...over,
+  } as never);
+  return renderToStaticMarkup(board);
 }
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 function toneOf(html: string, station: string): string | undefined {

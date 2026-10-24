@@ -1,5 +1,7 @@
 "use client";
 
+import type React from "react";
+
 /**
  * The Refinery nav as a game board: one vertical path of stations in the
  * order the work happens, lit by the server-owned progression. Below it the
@@ -24,6 +26,8 @@ import { SteelManMeter } from "@/components/steelman/SteelManMeter";
 // Styles: components/nav/refinery-board.css, imported by RefineryShell (keeps this file renderable in tests).
 
 export interface RefineryBoardProps {
+  /** What sits at the foot of the path. Defaults to the live Steel Man meter; tests pass a placeholder. */
+  meter?: React.ReactNode;
   userTier: UserTier;
   pathname: string;
   steps: readonly ProgressStep[] | null;
@@ -173,7 +177,7 @@ export function RefineryBoard(props: RefineryBoardProps) {
         })}
       </ol>
       <div id={carryIds ? "refinery-meter" : undefined} data-tour="refinery-meter" className="board-meter">
-        <SteelManMeter compact />
+        {props.meter === undefined ? <SteelManMeter compact /> : props.meter}
       </div>
       {BOARD_GROUPS.map((group) => {
         const items = group.items.filter((item) => boardShowsItem(item, userTier) && boardSwitchAllows(item, props.switches) && !(group.id === "program" && props.hidePartner));
