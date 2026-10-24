@@ -10,17 +10,13 @@ import { readTourReward, type TourReward } from '@/lib/tour/reward';
 import { PROGRESSION_CHANGED_EVENT } from '@/lib/progression-ui';
 import { TourPlayer, ENDING_INDEX } from './tour/TourPlayer';
 import type { OrientationDraft } from './tour/OrientationQuiz';
+import { lockPageForTour, leaveAction, safeTourDestination } from '@/lib/tour/page-lock';
 import './tour/entrance-tour.css';
 
 type Write = { action: 'start' | 'progress' | 'complete'; version: number; runId: string; sequence: number; stop: number; previousRunId?: string | null };
 type Saved = { ok: true; runId: string; sequence: number; reward?: unknown };
 const FOCUSABLE = 'button:not(:disabled),a[href],input:not(:disabled),summary,[tabindex="0"]';
 const PAUSE_KEY = 'guided-learning-paused:';
-
-/** A destination inside the workspace only. */
-export function safeTourDestination(href: string | undefined): string | null {
-  return href && /^\/dashboard(?:[/?#]|$)/.test(href) && !/[\r\n\\]/.test(href) && !href.includes('tour=1') ? href : null;
-}
 
 /** The shell mounts this. The tour belongs to signed-in clients only. */
 export function GuidedTour(props: { held?: boolean; onNavigationReveal?: (open: boolean) => void }) {
@@ -65,6 +61,7 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
   const previousRoute = useRef(pathname);
   const dirty = useRef(false);
   const oldFocus = useRef<HTMLElement | null>(null);
+  const completed = useRef(false);
 
   useEffect(() => {
     alive.current = true; setMounted(true);
@@ -120,6 +117,7 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
     const stop = resume && data.version === TOUR_VERSION && data.inProgress ? data.stop ?? 0 : 0;
     pendingStart.current = null;
     run.current = { id: resume && data.runId ? data.runId : crypto.randomUUID(), sequence: resume ? data.sequence ?? 0 : 0, account: data.accountId || '' };
+    completed.current = false;
     beatRef.current = stop; savedChapter.current = chapterOf(stop); setStart(stop); setError(''); setNotice(''); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (data.accountId) { try { sessionStorage.removeItem(PAUSE_KEY + data.accountId); } catch {} }
@@ -158,11 +156,13 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
   }, [tier, held, requested, pathname, active, load]);
 
   const pause = useCallback(() => {
+    // After a confirmed finish, leaving is closing: nothing is paused and nothing restarts.
+    if (leaveAction(completed.current) === 'close') { setActive(false); onNavigationReveal?.(false); setNotice(''); setSaveError(''); return; }
     requestController.current?.abort(); setLoading(false);
     expectedRoute.current = null; setActive(false); onNavigationReveal?.(false);
     if (run.current.account) { try { sessionStorage.setItem(PAUSE_KEY + run.current.account, '1'); } catch {} }
     setNotice(TOUR_COPY.paused);
-    if (beatRef.current < ENDING_INDEX || lastWrite.current?.action !== 'complete') save('progress', Math.min(beatRef.current, ENDING_INDEX));
+    save('progress', Math.min(beatRef.current, ENDING_INDEX));
   }, [save, onNavigationReveal]);
 
   useEffect(() => {
@@ -178,11 +178,7 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
   /* While open: the shell is inert, focus stays in the tour, Escape leaves and keeps the place. */
   useEffect(() => {
     if (!active || held || tier !== 'client') return;
-    const html = document.documentElement;
-    html.dataset.guidedLearning = 'true';
-    const shell = document.querySelector<HTMLElement>('.refinery-app');
-    const wasInert = shell?.inert ?? false;
-    if (shell) shell.inert = true;
+    const unlock = lockPageForTour(document.documentElement, document.body, document.querySelector<HTMLElement>('.refinery-app'));
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { event.preventDefault(); pause(); return; }
       if (event.key !== 'Tab') return;
@@ -193,7 +189,7 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
       else if (!event.shiftKey && (document.activeElement === last || !root.current?.contains(document.activeElement))) { event.preventDefault(); first.focus(); }
     };
     document.addEventListener('keydown', onKey);
-    return () => { delete html.dataset.guidedLearning; if (shell) shell.inert = wasInert; document.removeEventListener('keydown', onKey); if (oldFocus.current?.isConnected) oldFocus.current.focus({ preventScroll: true }); };
+    return () => { unlock(); document.removeEventListener('keydown', onKey); if (oldFocus.current?.isConnected) oldFocus.current.focus({ preventScroll: true }); };
   }, [active, held, tier, pause]);
 
   /* Progress is saved by beat index at each chapter boundary, and on pause. */
@@ -210,6 +206,7 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
     const identity = run.current;
     try {
       const result = await persist('complete', ENDING_INDEX);
+      completed.current = true;
       if (stateRef.current) { stateRef.current = { ...stateRef.current, tourComplete: true, inProgress: false }; setState(stateRef.current); }
       const reward = readTourReward(result.reward);
       if (reward.status === 'granted') window.dispatchEvent(new Event(PROGRESSION_CHANGED_EVENT));
@@ -238,7 +235,7 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
     {(notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p><button disabled={loading} onClick={() => void load(state?.inProgress || notice ? 'resume' : 'replay')}>{loading ? TOUR_COPY.loading : TOUR_COPY.resume}</button><button onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>{TOUR_COPY.dismiss}</button></div>}
   </>;
   return createPortal(<div ref={root}>
-    <TourPlayer key={run.current.id} start={start} accountId={state?.accountId ?? ''} rewardClaimedAt={state?.rewardClaimedAt} nextStep={state?.nextStep}
+    <TourPlayer key={run.current.id} start={start} accountId={state?.accountId ?? ''} forgeComplete={state?.forgeComplete} rewardClaimedAt={state?.rewardClaimedAt} nextStep={state?.nextStep}
       quizDraft={quizDraft} onQuizDraft={setQuizDraft} onBeat={onBeat} onLeave={pause} onFinish={finish} onDone={done}
       onNavigationReveal={onNavigationReveal} saveError={saveError} onRetrySave={lastWrite.current?.action === 'complete' ? undefined : retrySave} />
   </div>, document.body);

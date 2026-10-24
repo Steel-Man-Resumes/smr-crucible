@@ -4,42 +4,50 @@
  *
  * Act one plays on its own fixed stage: a camera frames a spotlight box in a
  * composed scene (the /walkthrough model: 1100ms ease, zoom capped, gold
- * spotlight, lower-third caption). Act two shrinks the stage into a corner
- * caption and points at the real navigation through a fixed cutout. The page
- * is never transformed or zoomed and no real control is clicked.
+ * spotlight, lower-third caption). Phones get scenes composed for a tall
+ * screen (TourPortrait.tsx), never the landscape canvas shrunk. Act two shrinks
+ * the stage into a corner caption and points at the real navigation through a
+ * fixed cutout. The page is never transformed or zoomed and no real control is
+ * clicked. Act two's stops are resolved once, when it starts, from what this
+ * build's navigation actually has.
  *
- * Pause, step and chapter jump are always available. Reduced motion turns the
- * camera into cuts, removes particles and the cursor glide, and waits for Next.
+ * Pause, step, chapter jump and a motion switch are always available. Reduced
+ * motion turns the camera into cuts, removes particles and the cursor glide,
+ * and waits for Next.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Pause, Play, X } from 'lucide-react';
 import { TroyLivingIcon } from '@crucible/consumer-ui';
 import { CompletionConfetti } from '@/components/CompletionConfetti';
 import { OrientationQuiz, type OrientationDraft } from './OrientationQuiz';
 import { BoardScene, ChartScene, LockScene, MeterScene, TitleScene, ASK_POINT, CLICK_AT } from './TourScenes';
-import { TOUR_BEATS, TOUR_CHAPTERS, TOUR_COPY, TOUR_ENDING, TOUR_REWARD_COPY, type RoomBeat, type StageBeat } from '@/lib/tour/beats';
+import { PortraitBoard, PortraitChart, PortraitLock, PortraitMeter, PortraitTitle } from './TourPortrait';
+import { BOARD_STATIONS, TOUR_BEATS, TOUR_CHAPTERS, TOUR_COPY, TOUR_ENDING, TOUR_REWARD_COPY, type RoomBeat, type StageBeat } from '@/lib/tour/beats';
 import { ACT_CHANGE_MS, CAMERA_EASE, CAMERA_MS, holdMs } from '@/lib/tour/timing';
-import { CHART_NARROW, SCENE_SIZE, chartSceneSize, spotBox } from '@/lib/tour/layout';
-import { captionPlacement, frameCamera, onStage, particlePath, spotlightRect, type Box, type Camera } from '@/lib/tour/geometry';
+import { P_CHART_FIRST, PORTRAIT_MIN_SCALE, SCENE_SIZE, portraitSceneSize, portraitSpot, spotBox } from '@/lib/tour/layout';
+import { captionPlacement, frameCamera, onStage, particlePath, spotlightRect, unionBox, type Box, type Camera } from '@/lib/tour/geometry';
 import { gapStart, serviceRows } from '@/lib/tour/services';
-import { rewardCelebrates, type TourReward } from '@/lib/tour/reward';
+import { rewardCelebrates, rewardMessage, type TourReward } from '@/lib/tour/reward';
 import './entrance-tour.css';
 
 export const ENDING_INDEX = TOUR_BEATS.length;
 const FIRST_ROOM = TOUR_BEATS.findIndex(b => b.kind === 'room');
-const ROOM_TOTAL = TOUR_BEATS.length - FIRST_ROOM;
 const NAV_BREAK = 768;
 const NARROW = 640;
-const FIND_MS = 1800;
-const REACQUIRE = { attempts: 3, deadlineMs: 12000 };
+/** Act two: how long to wait for the menu (and the phone drawer) before deciding what is there. */
+const RESOLVE_MS = 1500;
+/** A stop whose element vanishes for this long is skipped. */
+const LOST_MS = 1200;
 const DEV = process.env.NODE_ENV !== 'production';
 const ROWS = serviceRows();
 const GAP = gapStart(ROWS);
 const CHAPTER_START = TOUR_CHAPTERS.map(c => TOUR_BEATS.findIndex(b => b.chapter === c.id));
+const MOTION_KEY = 'tour-motion-off:';
 
 export interface TourPlayerProps {
   start: number;
   accountId: string;
+  forgeComplete?: boolean;
   rewardClaimedAt?: string | null;
   nextStep?: { action: string; href: string };
   quizDraft: OrientationDraft;
@@ -54,34 +62,48 @@ export interface TourPlayerProps {
   onRetrySave?: () => void;
 }
 
-function readReduced() {
+function osReduced() {
   try { return matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('reduce-motion'); } catch { return false; }
 }
+function readQuiet(account: string) {
+  try { return sessionStorage.getItem(MOTION_KEY + account) === '1'; } catch { return false; }
+}
 
-/** The real element for a nav contract id: the visible one, never one inside a closed drawer. */
-export function findNavTarget(ids: readonly string[]): { el: HTMLElement; id: string } | null {
+/** The visible element for one of these ids, never one inside a closed drawer or hidden copy. */
+export function findNavElement(ids: readonly string[]): HTMLElement | null {
   for (const id of ids) {
     const found = Array.from(document.querySelectorAll<HTMLElement>(`[id="${id}"], [data-tour="${id}"]`))
       .find(el => el.getClientRects().length > 0 && !el.closest('[aria-hidden="true"], [hidden]') && el.getBoundingClientRect().width > 0);
-    if (found) return { el: found, id };
+    if (found) return found;
   }
   return null;
 }
+function findStop(beat: RoomBeat): HTMLElement[] {
+  return beat.targets.map(findNavElement).filter((el): el is HTMLElement => !!el);
+}
+
+/** The words a stage beat shows: the plain variant when the person has not finished the Forge. */
+function stageCopy(beat: StageBeat, forgeComplete?: boolean) {
+  return beat.noForge && forgeComplete === false ? beat.noForge : beat;
+}
 
 export function TourPlayer(props: TourPlayerProps) {
-  const { start, onBeat, onLeave, onNavigationReveal } = props;
+  const { start, onBeat, onLeave, onNavigationReveal, accountId, forgeComplete } = props;
   const [i, setI] = useState(() => Math.max(0, Math.min(ENDING_INDEX, start)));
-  const [reduced, setReduced] = useState(readReduced);
-  const [playing, setPlaying] = useState(() => !readReduced());
+  const [systemReduced, setSystemReduced] = useState(osReduced);
+  const [quiet, setQuiet] = useState(() => readQuiet(accountId));
+  const reduced = systemReduced || quiet;
+  const [playing, setPlaying] = useState(() => !(osReduced() || readQuiet(accountId)));
   const [hidden, setHidden] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [view, setView] = useState({ w: typeof window === 'undefined' ? 1280 : innerWidth, h: typeof window === 'undefined' ? 800 : innerHeight });
   const [stage, setStage] = useState({ w: 0, h: 0 });
   const [cam, setCam] = useState<Camera & { ms: number }>({ s: 1, tx: 0, ty: 0, ms: 0 });
   const [shrink, setShrink] = useState<Box | null>(null);
-  const [ready, setReady] = useState(true);
+  /** Which act-two beats this build can show, decided once when act two starts. */
+  const [roomOk, setRoomOk] = useState<Record<number, boolean> | null>(null);
   const [cut, setCut] = useState<Box | null>(null);
-  const [cardH, setCardH] = useState(190);
+  const [cardH, setCardH] = useState(200);
   const [particles, setParticles] = useState<{ key: number; d: string } | null>(null);
   const [announce, setAnnounce] = useState('');
   const stageRef = useRef<HTMLDivElement>(null);
@@ -90,22 +112,24 @@ export function TourPlayer(props: TourPlayerProps) {
   const playRef = useRef<HTMLButtonElement>(null);
   const prevScene = useRef('');
   const dir = useRef(1);
-  const target = useRef<HTMLElement | null>(null);
   const clock = useRef(0);
 
   const beat = TOUR_BEATS[i];
   const ending = i >= ENDING_INDEX;
   const stageBeat = beat?.kind === 'stage' ? beat as StageBeat : null;
   const roomBeat = beat?.kind === 'room' ? beat as RoomBeat : null;
-  const hold = beat ? holdMs(beat) : 0;
-  const narrow = view.w < NARROW;
+  const copy = stageBeat ? stageCopy(stageBeat, forgeComplete) : beat;
+  const hold = beat ? holdMs({ title: copy.title, body: copy.body, extra: stageBeat?.extra }) : 0;
+  const portrait = view.w < NARROW;
   const mobileNav = view.w < NAV_BREAK;
   const still = reduced;
+  const roomList = useMemo(() => roomOk ? TOUR_BEATS.map((_, n) => n).filter(n => roomOk[n]) : [], [roomOk]);
+  const ready = !roomBeat || (!!roomOk && !!cut);
 
   /* Environment */
   useEffect(() => {
     const media = matchMedia('(prefers-reduced-motion: reduce)');
-    const sync = () => { const r = readReduced(); setReduced(r); if (r) setPlaying(false); };
+    const sync = () => { const r = osReduced(); setSystemReduced(r); if (r) setPlaying(false); };
     const mutation = new MutationObserver(sync);
     mutation.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     const vis = () => setHidden(document.hidden);
@@ -116,6 +140,15 @@ export function TourPlayer(props: TourPlayerProps) {
   }, []);
   useEffect(() => { playRef.current?.focus({ preventScroll: true }); }, []);
 
+  const toggleMotion = useCallback(() => {
+    setQuiet(q => {
+      const next = !q;
+      try { if (next) sessionStorage.setItem(MOTION_KEY + accountId, '1'); else sessionStorage.removeItem(MOTION_KEY + accountId); } catch {}
+      if (next) setPlaying(false);
+      return next;
+    });
+  }, [accountId]);
+
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -124,12 +157,17 @@ export function TourPlayer(props: TourPlayerProps) {
     return () => ro.disconnect();
   }, [stageBeat ? 'stage' : 'other']); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Navigation between beats */
+  /* Navigation between beats. Act-two stops this build cannot show are passed over. */
   const go = useCallback((n: number) => {
-    const next = Math.max(0, Math.min(ENDING_INDEX, n));
-    setI(cur => { dir.current = next >= cur ? 1 : -1; return next; });
+    setI(cur => {
+      const d = n >= cur ? 1 : -1;
+      dir.current = d;
+      let next = Math.max(0, Math.min(ENDING_INDEX, n));
+      while (roomOk && next < ENDING_INDEX && next >= FIRST_ROOM && !roomOk[next]) next += d;
+      return Math.max(0, Math.min(ENDING_INDEX, next));
+    });
     clock.current = 0; setElapsed(0); setShrink(null);
-  }, []);
+  }, [roomOk]);
 
   useEffect(() => { onBeat(i); }, [i, onBeat]);
 
@@ -161,27 +199,35 @@ export function TourPlayer(props: TourPlayerProps) {
   useEffect(() => { if (running && elapsed >= hold) advance(); }, [elapsed, hold, running, advance]);
 
   /* Screen reader: one announcement per beat. */
+  const roomPos = roomBeat ? roomList.indexOf(i) + 1 : 0;
+  const stationIndex = stageBeat?.station ? BOARD_STATIONS.findIndex(s => s.id === stageBeat.station) + 1 : 0;
   useEffect(() => {
     if (ending) { setAnnounce(`${TOUR_ENDING.title} ${TOUR_ENDING.quizLine}`); return; }
-    const where = roomBeat ? TOUR_COPY.roomOf(i - FIRST_ROOM + 1, ROOM_TOTAL) : TOUR_COPY.stepOf(i + 1, FIRST_ROOM);
-    const title = /[.!?]$/.test(beat.title) ? beat.title : `${beat.title}.`;
-    setAnnounce(`${where}. ${title} ${beat.body}${stageBeat ? ` ${stageBeat.sr}` : ''}`);
-  }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (roomBeat && !roomOk) return;
+    const where = roomBeat ? TOUR_COPY.roomOf(roomPos, roomList.length) : TOUR_COPY.stepOf(i + 1, FIRST_ROOM);
+    const head = stageBeat?.station ? `${TOUR_COPY.moveOf(stationIndex, BOARD_STATIONS.length)}, ${BOARD_STATIONS[stationIndex - 1].label}.` : /[.!?]$/.test(copy.title) ? copy.title : `${copy.title}.`;
+    setAnnounce(`${where}. ${head} ${copy.body}${stageBeat ? ` ${'sr' in copy ? copy.sr : ''}` : ''}`);
+  }, [i, roomOk]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Act one camera */
-  // On a phone the services chart is one column: the camera takes the top rows, then pans down.
+  /* Act one camera. Phones use portrait scenes and a scale floor that keeps text at 13 px or more. */
   const panAt = Math.round(hold * 0.42);
-  const spotName = stageBeat && narrow && stageBeat.chart === 'rows' && !reduced && elapsed >= panAt && GAP > CHART_NARROW.firstShot ? 'chart-rest' : stageBeat?.spot;
-  const spot = useMemo(() => stageBeat ? spotBox(stageBeat.scene, spotName, { rows: ROWS.length, gapStart: GAP, narrow }) : null, [stageBeat, spotName, narrow]);
-  const sceneSize = stageBeat?.scene === 'chart' ? chartSceneSize(ROWS.length, narrow) : stageBeat ? SCENE_SIZE[stageBeat.scene] : SCENE_SIZE.title;
-  const reserve = narrow || !stageBeat || stageBeat.scene === 'title' ? 0 : Math.min(230, stage.h * 0.3);
+  const spotName = stageBeat && portrait && stageBeat.chart === 'rows' && elapsed >= panAt && GAP > P_CHART_FIRST ? 'chart-rest' : stageBeat?.spot;
+  const spot = useMemo(() => {
+    if (!stageBeat) return null;
+    const chart = { rows: ROWS.length, gapStart: GAP };
+    return portrait ? portraitSpot(stageBeat.scene, spotName, chart) : spotBox(stageBeat.scene, spotName, chart);
+  }, [stageBeat, spotName, portrait]);
+  const sceneSize = !stageBeat ? SCENE_SIZE.title : portrait ? portraitSceneSize(stageBeat.scene, ROWS.length) : SCENE_SIZE[stageBeat.scene];
+  const reserve = portrait || !stageBeat || stageBeat.scene === 'title' ? 0 : Math.min(230, stage.h * 0.3);
+  const minScale = portrait ? PORTRAIT_MIN_SCALE : 0;
   useLayoutEffect(() => {
     if (!stageBeat || !stage.w) return;
-    const changed = prevScene.current !== stageBeat.scene;
-    prevScene.current = stageBeat.scene;
-    const next = frameCamera(stage, sceneSize, spot, reserve);
+    const key = `${stageBeat.scene}:${portrait}`;
+    const changed = prevScene.current !== key;
+    prevScene.current = key;
+    const next = frameCamera(stage, sceneSize, spot, reserve, minScale);
     setCam({ ...next, ms: reduced || changed ? 0 : CAMERA_MS });
-  }, [i, stage.w, stage.h, reserve, spotName, narrow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [i, stage.w, stage.h, reserve, spotName, portrait]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* t.ROY's particles: from the caption mark to whatever the beat is about. */
   useEffect(() => {
@@ -191,70 +237,94 @@ export function TourPlayer(props: TourPlayerProps) {
       const mark = markRef.current?.getBoundingClientRect();
       const st = stageRef.current?.getBoundingClientRect();
       if (!mark || !st) return;
-      const to = onStage(spot, frameCamera(stage, sceneSize, spot, reserve));
+      const to = onStage(spot, frameCamera(stage, sceneSize, spot, reserve, minScale));
       setParticles({ key: Date.now(), d: particlePath({ x: mark.left + mark.width / 2, y: mark.top + mark.height / 2 }, { x: st.left + to.x + to.w / 2, y: st.top + to.y + Math.min(to.h / 2, 60) }) });
     }, 420);
     const clear = setTimeout(() => setParticles(null), 1500);
     return () => { clearTimeout(t); clearTimeout(clear); };
   }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* Act two: find the real target, keep the cutout on it. */
+  /* Act two, once: open the menu, wait for it, and decide which stops exist. */
   useEffect(() => {
-    if (!roomBeat) { target.current = null; setCut(null); setReady(true); return; }
+    if (!roomBeat || roomOk) return;
     onNavigationReveal?.(mobileNav);
-    setReady(false); setCut(null); target.current = null;
     let raf = 0;
     let alive = true;
-    let attempts = 0;
     const began = performance.now();
-    const ids = [roomBeat.target, ...roomBeat.legacy];
-    const skip = (why: string) => {
-      if (DEV) console.warn(`[tour] skipped ${roomBeat.id}: ${why}`);
-      go(i + dir.current);
+    let lastCount = -1;
+    let stable = 0;
+    const poll = () => {
+      if (!alive) return;
+      const counts = TOUR_BEATS.map(b => b.kind === 'room' ? findStop(b).length : 0);
+      const total = counts.reduce((a, b) => a + b, 0);
+      stable = total > 0 && total === lastCount ? stable + 1 : 0;
+      lastCount = total;
+      // A few steady frames after the drawer opens, or the deadline.
+      if (stable >= 6 || performance.now() - began > RESOLVE_MS) {
+        const ok: Record<number, boolean> = {};
+        TOUR_BEATS.forEach((b, n) => { if (b.kind === 'room') ok[n] = counts[n] >= b.minFound; });
+        if (DEV) TOUR_BEATS.forEach((b, n) => { if (b.kind === 'room' && !ok[n]) console.warn(`[tour] left out ${b.id}: ${b.targets.map(t => t[0]).join(', ')} not on this build`); });
+        setRoomOk(ok);
+        const first = TOUR_BEATS.findIndex((b, n) => n >= i && ok[n]);
+        const firstBack = dir.current < 0 ? [...TOUR_BEATS.keys()].reverse().find(n => n <= i && ok[n]) : undefined;
+        const target = dir.current < 0 ? firstBack ?? FIRST_ROOM - 1 : first < 0 ? ENDING_INDEX : first;
+        if (target !== i) { setI(target); clock.current = 0; setElapsed(0); }
+        return;
+      }
+      raf = requestAnimationFrame(poll);
     };
+    poll();
+    return () => { alive = false; cancelAnimationFrame(raf); };
+  }, [roomBeat ? 'room' : 'other', roomOk]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Act two, each stop: keep the cutout on the real element(s). */
+  useEffect(() => {
+    if (!roomBeat || !roomOk || !roomOk[i]) { setCut(null); return; }
+    onNavigationReveal?.(mobileNav);
+    setCut(null);
+    let raf = 0;
+    let alive = true;
+    let lostSince = 0;
+    let first = true;
     const measure = () => {
       if (!alive) return;
-      const el = target.current;
-      if (!el || !el.isConnected || el.getClientRects().length === 0) {
-        // The page replaced the element. Reacquire within one bounded deadline.
-        if (++attempts > REACQUIRE.attempts || performance.now() - began > REACQUIRE.deadlineMs) { skip('target went away'); return; }
-        acquire(performance.now() + FIND_MS); return;
+      const els = findStop(roomBeat);
+      if (!els.length) {
+        lostSince ||= performance.now();
+        if (performance.now() - lostSince > LOST_MS) { if (DEV) console.warn(`[tour] ${roomBeat.id} went away`); go(i + dir.current); return; }
+        raf = requestAnimationFrame(measure); return;
       }
-      const r = el.getBoundingClientRect();
-      const next = spotlightRect(r, innerWidth, innerHeight, 6);
+      lostSince = 0;
+      if (first) {
+        first = false;
+        const r = els[0].getBoundingClientRect();
+        if (r.top < 60 || r.bottom > innerHeight - 20) els[0].scrollIntoView({ block: 'nearest', behavior: 'auto' });
+      }
+      const box = unionBox(els.map(el => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; }));
+      const next = box && spotlightRect({ left: box.x, top: box.y, width: box.w, height: box.h }, innerWidth, innerHeight, 6);
       setCut(prev => !next ? prev : prev && Math.abs(prev.x - next.x) < 0.5 && Math.abs(prev.y - next.y) < 0.5 && Math.abs(prev.w - next.w) < 0.5 && Math.abs(prev.h - next.h) < 0.5 ? prev : next);
       raf = requestAnimationFrame(measure);
     };
-    const acquire = (deadline: number) => {
-      const poll = () => {
-        if (!alive) return;
-        const found = findNavTarget(ids);
-        if (found) {
-          if (DEV && found.id !== roomBeat.target) console.warn(`[tour] ${roomBeat.target} is not on this build; using ${found.id}`);
-          target.current = found.el;
-          const r = found.el.getBoundingClientRect();
-          if (r.top < 60 || r.bottom > innerHeight - 20) found.el.scrollIntoView({ block: 'nearest', behavior: 'auto' });
-          setReady(true);
-          requestAnimationFrame(() => {
-            const mark = markRef.current?.getBoundingClientRect();
-            const box = found.el.getBoundingClientRect();
-            if (mark && !readReduced()) setParticles({ key: Date.now(), d: particlePath({ x: mark.left + mark.width / 2, y: mark.top + mark.height / 2 }, { x: box.left + Math.min(box.width / 2, 60), y: box.top + box.height / 2 }) });
-          });
-          measure();
-          return;
-        }
-        if (performance.now() > deadline) { skip(`none of ${ids.join(', ')} found`); return; }
-        raf = requestAnimationFrame(poll);
-      };
-      poll();
-    };
-    acquire(performance.now() + FIND_MS);
+    measure();
+    return () => { alive = false; cancelAnimationFrame(raf); };
+  }, [i, roomOk]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* Particles toward each act-two stop once it is lit. */
+  const cutKey = cut ? `${i}` : '';
+  useEffect(() => {
+    if (!cut || reduced) return;
+    const t = requestAnimationFrame(() => {
+      const mark = markRef.current?.getBoundingClientRect();
+      if (mark) setParticles({ key: Date.now(), d: particlePath({ x: mark.left + mark.width / 2, y: mark.top + mark.height / 2 }, { x: cut.x + Math.min(cut.w / 2, 60), y: cut.y + Math.min(cut.h / 2, 30) }) });
+    });
     const clear = setTimeout(() => setParticles(null), 1600);
-    return () => { alive = false; cancelAnimationFrame(raf); clearTimeout(clear); };
-  }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => { cancelAnimationFrame(t); clearTimeout(clear); };
+  }, [cutKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { if (!roomBeat) onNavigationReveal?.(false); }, [roomBeat ? 'room' : 'other']); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onNavigationReveal?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Focus follows the act change: the stage's Pause goes away, so the card's Pause takes focus.
+  useEffect(() => { if (roomBeat && roomOk) playRef.current?.focus({ preventScroll: true }); }, [roomBeat ? 'room' : 'other', !!roomOk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const el = cardRef.current;
@@ -262,21 +332,18 @@ export function TourPlayer(props: TourPlayerProps) {
     const ro = new ResizeObserver(([e]) => setCardH(Math.ceil(e.contentRect.height) + 30));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [roomBeat ? 'room' : 'other']); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [roomBeat && roomOk ? 'room' : 'other']); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Controls */
-  const toggle = useCallback(() => {
-    if (ending) return;
-    setPlaying(p => !p);
-  }, [ending]);
+  const toggle = useCallback(() => { if (!ending) setPlaying(p => !p); }, [ending]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (ending || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
       const el = e.target as HTMLElement | null;
       const native = !!el?.closest('button, a, input, textarea, select, label, summary');
       if ((e.key === ' ' && !native) || e.key === 'k') { e.preventDefault(); toggle(); }
-      else if (e.key === 'ArrowRight' && !el?.closest('input')) { e.preventDefault(); go(i + 1); }
-      else if (e.key === 'ArrowLeft' && !el?.closest('input')) { e.preventDefault(); go(i - 1); }
+      else if (e.key === 'ArrowRight' && !el?.closest('input, select')) { e.preventDefault(); go(i + 1); }
+      else if (e.key === 'ArrowLeft' && !el?.closest('input, select')) { e.preventDefault(); go(i - 1); }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -286,75 +353,94 @@ export function TourPlayer(props: TourPlayerProps) {
   const progress = hold ? Math.min(1, elapsed / hold) : 0;
   const t = elapsed;
 
+  const motionButton = <button type="button" className="et-motion" onClick={toggleMotion} disabled={systemReduced} aria-label={reduced ? TOUR_COPY.motionToggleOn : TOUR_COPY.motionToggleOff}>
+    {reduced ? TOUR_COPY.motionToggleOn : TOUR_COPY.motionToggleOff}
+  </button>;
+
   const controls = (compact: boolean) => <div className={compact ? 'et-bar__row' : 'et-bar'} data-compact={compact}>
     <div className="et-bar__row">
       <button type="button" onClick={() => go(i - 1)} disabled={i === 0} aria-label={TOUR_COPY.previous}><ChevronLeft size={18} aria-hidden="true" /></button>
-      <button ref={playRef} type="button" className="et-primary" onClick={toggle} aria-label={playing ? TOUR_COPY.pause : TOUR_COPY.play} aria-pressed={!playing}>
-        {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{!compact && <span>{playing ? TOUR_COPY.pause : TOUR_COPY.play}</span>}
+      <button ref={playRef} type="button" className="et-primary" onClick={toggle} aria-label={playing ? TOUR_COPY.pause : TOUR_COPY.play}>
+        {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{!compact && <span aria-hidden="true">{playing ? TOUR_COPY.pause : TOUR_COPY.play}</span>}
       </button>
       <button type="button" onClick={() => go(i + 1)} aria-label={TOUR_COPY.next}><ChevronRight size={18} aria-hidden="true" /></button>
       {!compact && <div className="et-bar__grow et-segs" role="presentation">
-        {TOUR_BEATS.map((b, n) => <button key={b.id} type="button" className="et-seg" tabIndex={-1} aria-hidden="true" data-gap={n > 0 && TOUR_BEATS[n - 1].chapter !== b.chapter} onClick={() => go(n)}>
+        {TOUR_BEATS.map((b, n) => (b.kind === 'room' && roomOk && !roomOk[n]) ? null : <button key={b.id} type="button" className="et-seg" tabIndex={-1} aria-hidden="true" data-gap={n > 0 && TOUR_BEATS[n - 1].chapter !== b.chapter} onClick={() => go(n)}>
           <span><i style={{ width: n < i ? '100%' : n > i ? '0%' : `${progress * 100}%` }} /></span>
         </button>)}
       </div>}
       {compact && <span className="et-bar__grow" />}
-      <button type="button" onClick={onLeave} aria-label={`${TOUR_COPY.leave}. Escape`}><X size={16} aria-hidden="true" />{!compact && !narrow && <span>{TOUR_COPY.leave}</span>}</button>
+      {!compact && !portrait && motionButton}
+      <button type="button" onClick={onLeave} aria-label={`${TOUR_COPY.leave}. Escape`}><X size={16} aria-hidden="true" />{!compact && !portrait && <span aria-hidden="true">{TOUR_COPY.leave}</span>}</button>
     </div>
-    {!compact && <div className="et-chaps" role="group" aria-label="Chapters">
-      {TOUR_CHAPTERS.map((c, n) => <button key={c.id} type="button" className="et-chap" aria-current={n === chapterIndex} onClick={() => go(CHAPTER_START[n])}>{String(n + 1).padStart(2, '0')} {c.label}</button>)}
-      <button type="button" className="et-chap" aria-current={ending} onClick={() => go(ENDING_INDEX)}>{String(TOUR_CHAPTERS.length + 1).padStart(2, '0')} Finish</button>
-    </div>}
+    {!compact && (portrait
+      ? <div className="et-bar__row">
+          <select className="et-chapsel" aria-label={TOUR_COPY.chapter} value={chapterIndex} onChange={e => { const n = Number(e.target.value); go(n >= TOUR_CHAPTERS.length ? ENDING_INDEX : CHAPTER_START[n]); }}>
+            {TOUR_CHAPTERS.map((c, n) => <option key={c.id} value={n}>{`${TOUR_COPY.chapter} ${n + 1} of ${TOUR_CHAPTERS.length + 1}: ${c.label}`}</option>)}
+            <option value={TOUR_CHAPTERS.length}>{`${TOUR_COPY.chapter} ${TOUR_CHAPTERS.length + 1} of ${TOUR_CHAPTERS.length + 1}: Finish`}</option>
+          </select>
+          {motionButton}
+        </div>
+      : <div className="et-chaps" role="group" aria-label="Chapters">
+          {TOUR_CHAPTERS.map((c, n) => <button key={c.id} type="button" className="et-chap" aria-current={n === chapterIndex} onClick={() => go(CHAPTER_START[n])}>{String(n + 1).padStart(2, '0')} {c.label}</button>)}
+          <button type="button" className="et-chap" aria-current={ending} onClick={() => go(ENDING_INDEX)}>{String(TOUR_CHAPTERS.length + 1).padStart(2, '0')} Finish</button>
+        </div>)}
     {!compact && reduced && <p className="et-note">{TOUR_COPY.motionOff}</p>}
   </div>;
 
-  const caption = stageBeat && stageBeat.scene !== 'title' && <div key={`cap-${i}`} className={`et-cap${narrow ? ' et-cap--narrow' : ''}`}>
-    <span ref={markRef} className="et-cap__mark"><TroyLivingIcon size={narrow ? 36 : 46} attention={!!particles} /></span>
+  const kicker = stageBeat?.station ? `${TOUR_COPY.moveOf(stationIndex, BOARD_STATIONS.length)} · ${TOUR_COPY.guide}` : `${TOUR_CHAPTERS[chapterIndex]?.label} · ${TOUR_COPY.guide}`;
+  const caption = stageBeat && stageBeat.scene !== 'title' && <div key={`cap-${i}`} className={`et-cap${portrait ? ' et-cap--narrow' : ''}`}>
+    <span ref={markRef} className="et-cap__mark"><TroyLivingIcon size={portrait ? 36 : 46} attention={!!particles} /></span>
     <div>
-      <p className="et-cap__k">{TOUR_CHAPTERS[chapterIndex]?.label} · {TOUR_COPY.guide}</p>
-      <p className="et-cap__t">{stageBeat.title}</p>
-      <p className="et-cap__b">{stageBeat.body}</p>
+      <p className="et-cap__k">{kicker}</p>
+      {copy.title && <p className="et-cap__t">{copy.title}</p>}
+      <p className="et-cap__b">{copy.body}</p>
     </div>
   </div>;
 
   const shrinkStyle: CSSProperties | undefined = shrink ? { transform: `translate(${shrink.x}px, ${shrink.y}px) scale(${shrink.w / view.w}, ${shrink.h / view.h})` } : undefined;
   const cardBox = captionPlacement(cut, view.w, view.h, { w: 360, h: cardH });
+  const scene = stageBeat && (portrait
+    ? stageBeat.scene === 'title' ? <PortraitTitle title={copy.title} body={copy.body} />
+      : stageBeat.scene === 'board' ? <PortraitBoard station={stageBeat.station} start={stageBeat.spot === 'start'} noForge={forgeComplete === false} t={t} still={still} />
+      : stageBeat.scene === 'lock' ? <PortraitLock phase={stageBeat.lock ?? 'locked'} t={t} still={still} />
+      : stageBeat.scene === 'chart' ? <PortraitChart phase={stageBeat.chart ?? 'rows'} t={t} still={still} rows={ROWS} gap={GAP} panAt={panAt} />
+      : <PortraitMeter t={t} still={still} />
+    : stageBeat.scene === 'title' ? <TitleScene title={copy.title} body={copy.body} />
+      : stageBeat.scene === 'board' ? <BoardScene station={stageBeat.station} start={stageBeat.spot === 'start'} noForge={forgeComplete === false} t={t} still={still} />
+      : stageBeat.scene === 'lock' ? <LockScene phase={stageBeat.lock ?? 'locked'} t={t} still={still} />
+      : stageBeat.scene === 'chart' ? <ChartScene phase={stageBeat.chart ?? 'rows'} t={t} still={still} rows={ROWS} gap={GAP} />
+      : <MeterScene t={t} still={still} />);
 
-  return <div className="et-root" role="dialog" aria-modal="true" aria-label={TOUR_COPY.dialogLabel} aria-describedby="et-keys" data-playing={running} data-act={ending ? 'end' : roomBeat ? 'room' : 'stage'}>
+  return <div className="et-root" role="dialog" aria-modal="true" aria-label={TOUR_COPY.dialogLabel} aria-describedby="et-keys" data-playing={running} data-act={ending ? 'end' : roomBeat ? 'room' : 'stage'} data-beat={beat?.id ?? 'ending'}>
     <p id="et-keys" className="et-sr">{TOUR_COPY.keys}</p>
     <p className="et-sr" aria-live="polite">{announce}</p>
 
     {stageBeat && <div className="et-wrap" data-shrink={!!shrink} style={shrinkStyle}>
       <div ref={stageRef} className="et-stage" aria-hidden="true" onClick={e => { if (e.isTrusted) toggle(); }}>
         {stage.w > 0 && <div className="et-cam" style={{ width: sceneSize.w, height: sceneSize.h, transform: `translate3d(${cam.tx}px, ${cam.ty}px, 0) scale(${cam.s})`, transition: cam.ms ? `transform ${cam.ms}ms ${CAMERA_EASE}` : 'none' }}>
-          <div key={stageBeat.scene} className="et-scene">
-            {stageBeat.scene === 'title' ? <TitleScene title={stageBeat.title} body={stageBeat.body} />
-              : stageBeat.scene === 'board' ? <BoardScene station={stageBeat.station} start={stageBeat.spot === 'start'} t={t} still={still} />
-              : stageBeat.scene === 'lock' ? <LockScene phase={stageBeat.lock ?? 'locked'} t={t} still={still} />
-              : stageBeat.scene === 'chart' ? <ChartScene phase={stageBeat.chart ?? 'rows'} t={t} still={still} rows={ROWS} gap={GAP} narrow={narrow} panAt={panAt} />
-              : <MeterScene t={t} still={still} />}
-          </div>
+          <div key={`${stageBeat.scene}:${portrait}`} className="et-scene">{scene}</div>
           {spot && <div className="et-spot" style={{ left: spot.x, top: spot.y, width: spot.w, height: spot.h, borderRadius: 14 / cam.s,
-            boxShadow: `0 0 0 ${3 / cam.s}px #dbc173, 0 0 ${26 / cam.s}px ${5 / cam.s}px rgba(219,193,115,.35), 0 0 0 99999px rgba(8,7,6,.6)`,
+            boxShadow: `0 0 0 ${3 / cam.s}px #dbc173, 0 0 ${26 / cam.s}px ${5 / cam.s}px rgba(219,193,115,.35), 0 0 0 99999px rgba(8,7,6,.8)`,
             transition: reduced ? 'none' : `left ${CAMERA_MS}ms ${CAMERA_EASE}, top ${CAMERA_MS}ms ${CAMERA_EASE}, width ${CAMERA_MS}ms ${CAMERA_EASE}, height ${CAMERA_MS}ms ${CAMERA_EASE}` }} />}
-          {stageBeat.lock === 'opened' && <Cursor t={t} still={still} scale={cam.s} />}
+          {stageBeat.lock === 'opened' && !portrait && <Cursor t={t} still={still} scale={cam.s} />}
         </div>}
-        {!narrow && caption}
-        {!playing && !reduced && <div className="et-paused" aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+        {!portrait && caption}
+        {!playing && !reduced && <div aria-hidden="true" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <span style={{ borderRadius: 999, background: '#000a', padding: 20 }}><Play size={34} aria-hidden="true" /></span>
         </div>}
       </div>
-      {narrow && <div style={{ padding: '10px 0 0', background: '#0b0a09' }}>{caption}</div>}
+      {portrait && <div style={{ padding: '10px 0 0', background: '#0b0a09' }}>{caption}</div>}
       {controls(false)}
     </div>}
 
     {roomBeat && <>
       <div className="et-dim" style={{ background: cut ? 'transparent' : undefined }} aria-hidden="true" />
       {cut && <div className="et-cutout" data-still={reduced} aria-hidden="true" style={{ left: cut.x, top: cut.y, width: cut.w, height: cut.h }} />}
-      <div ref={cardRef} key="room-card" className="et-card" data-still={reduced} style={{ left: cardBox.x, top: cardBox.y, width: cardBox.w }}>
+      {roomOk && cut && <div ref={cardRef} key="room-card" className="et-card" data-still={reduced} style={{ left: cardBox.x, top: cardBox.y, width: cardBox.w }}>
         <div className="et-card__head">
           <span ref={markRef}><TroyLivingIcon size={40} attention={!!particles} /></span>
-          <p className="et-cap__k">{TOUR_COPY.roomOf(i - FIRST_ROOM + 1, ROOM_TOTAL)}</p>
+          <p className="et-cap__k">{TOUR_COPY.roomOf(roomPos, roomList.length)}</p>
         </div>
         <div key={`room-${i}`} className="et-card__text" style={{ animation: reduced ? 'none' : 'etCap 420ms cubic-bezier(.16,1,.3,1) both' }}>
           <p className="et-cap__t">{roomBeat.title}</p>
@@ -362,10 +448,11 @@ export function TourPlayer(props: TourPlayerProps) {
         </div>
         <div className="et-mini" aria-hidden="true"><i style={{ width: `${progress * 100}%` }} /></div>
         {controls(true)}
-      </div>
+        <div className="et-bar__row">{motionButton}</div>
+      </div>}
     </>}
 
-    {ending && <Ending {...props} />}
+    {ending && <Ending {...props} reduced={reduced} onBack={() => go(ENDING_INDEX - 1)} />}
 
     {particles && !reduced && <svg key={particles.key} className="et-particles" aria-hidden="true">
       <path d={particles.d} fill="none" stroke="#bc9aff" strokeWidth="1.2" opacity=".35" />
@@ -394,13 +481,7 @@ function Cursor({ t, still, scale }: { t: number; still: boolean; scale: number 
   </>;
 }
 
-function formatDay(iso?: string) {
-  if (!iso) return 'an earlier day';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? 'an earlier day' : d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
-}
-
-function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, onFinish, onDone }: TourPlayerProps) {
+function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, onFinish, onDone, reduced, onBack }: TourPlayerProps & { reduced: boolean; onBack: () => void }) {
   const [quiz, setQuiz] = useState(false);
   const [passed, setPassed] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -424,13 +505,10 @@ function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, 
 
   if (reward) {
     const celebrate = rewardCelebrates(reward);
-    const [title, body] = reward.status === 'granted' ? [TOUR_REWARD_COPY.grantedTitle, TOUR_REWARD_COPY.granted(reward.calls)]
-      : reward.status === 'already' ? [TOUR_REWARD_COPY.alreadyTitle, TOUR_REWARD_COPY.already(formatDay(reward.grantedAt))]
-      : reward.status === 'capped' ? [TOUR_REWARD_COPY.cappedTitle, TOUR_REWARD_COPY.capped]
-      : [TOUR_REWARD_COPY.unavailableTitle, TOUR_REWARD_COPY.unavailable];
+    const [title, body] = rewardMessage(reward);
     const go = destination || nextStep?.href;
-    return <div className="et-end">
-      {celebrate && <CompletionConfetti />}
+    return <div className="et-end" data-reward={reward.status}>
+      {celebrate && !reduced && <CompletionConfetti />}
       <div className="et-end__card et-reward" role="group" aria-labelledby="et-end-title">
         <div className="et-reward__icon"><TroyLivingIcon size={84} attention={celebrate} /></div>
         <h2 id="et-end-title" ref={heading} tabIndex={-1}>{title}</h2>
@@ -456,6 +534,7 @@ function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, 
       {quiz && <OrientationQuiz accountId={accountId} draft={quizDraft} onDraftChange={onQuizDraft} onPassed={() => setPassed(true)} onContinue={href => finish(href)} />}
       {error && <p className="et-end__err" role="alert">{error}</p>}
       <div className="et-end__actions">
+        {!quiz && <button type="button" onClick={onBack}><ChevronLeft size={16} aria-hidden="true" />{TOUR_ENDING.previous}</button>}
         {!quiz && <button type="button" className="et-primary" onClick={() => setQuiz(true)}>{TOUR_ENDING.quizButton}</button>}
         {quiz && !passed && <button type="button" onClick={() => setQuiz(false)}>{TOUR_ENDING.quizBack}</button>}
         <button type="button" className={quiz && passed ? 'et-primary' : ''} disabled={busy} onClick={() => void finish()}>{busy ? TOUR_ENDING.finishing : TOUR_ENDING.finish}</button>

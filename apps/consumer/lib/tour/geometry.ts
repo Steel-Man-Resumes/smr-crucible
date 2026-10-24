@@ -14,7 +14,7 @@ export const ZOOM_MAX = 2.6;
  * Frame a spot in a scene on a stage. `reserveBottom` is the stage height the
  * lower-third caption covers; the spot is framed in the space above it.
  */
-export function frameCamera(stage: Size, scene: Size, spot: Box | null, reserveBottom = 0): Camera {
+export function frameCamera(stage: Size, scene: Size, spot: Box | null, reserveBottom = 0, minScale = 0): Camera {
   const base = Math.min(stage.w / scene.w, stage.h / scene.h);
   const usableH = Math.max(1, stage.h - reserveBottom);
   let z: number;
@@ -28,7 +28,11 @@ export function frameCamera(stage: Size, scene: Size, spot: Box | null, reserveB
   } else {
     z = Math.min(1, usableH / (scene.h * base));
   }
-  const s = base * z;
+  // A floor keeps text readable: below it the camera holds the scale and shows
+  // the top of the spot instead of shrinking it.
+  const s = Math.max(base * z, minScale);
+  if (spot && spot.h * s > usableH) cy = spot.y + (usableH / 2 - 8) / s;
+  if (spot && spot.w * s > stage.w) cx = spot.x + stage.w / 2 / s;
   const fit = (size: number, view: number, centre: number, c: number) => {
     const scaled = size * s;
     if (scaled <= view) return (view - scaled) / 2;
@@ -67,12 +71,18 @@ function overlap(a: Box, b: Box): number {
 }
 
 /**
- * Put the corner caption where it covers the least of the target. Ties go to
- * bottom-right, then bottom-left, so the caption mostly stays put.
+ * Place the act-two caption. When the target sits in a left rail on a wide
+ * screen, the caption goes right beside it, top aligned, so the eye moves a
+ * short way. Otherwise it takes the corner that covers the least of the
+ * target; ties go to bottom-right, then bottom-left.
  */
 export function captionPlacement(target: Box | null, vw: number, vh: number, card: Size, margin = 16): Box {
   const w = Math.min(card.w, vw - margin * 2);
   const h = card.h;
+  if (target && vw >= 768 && target.x + target.w <= vw * 0.4 && target.x + target.w + 20 + w <= vw - margin) {
+    const y = Math.max(margin, Math.min(target.y, vh - margin - h));
+    return { x: target.x + target.w + 20, y, w, h };
+  }
   const options: Box[] = [
     { x: vw - margin - w, y: vh - margin - h, w, h },
     { x: margin, y: vh - margin - h, w, h },
@@ -87,6 +97,14 @@ export function captionPlacement(target: Box | null, vw: number, vh: number, car
     if (area < bestArea - 1) { bestArea = area; best = option; }
   }
   return best;
+}
+
+/** One box around several, for a spotlight over a group of elements. */
+export function unionBox(boxes: Box[]): Box | null {
+  if (!boxes.length) return null;
+  const x = Math.min(...boxes.map(b => b.x)), y = Math.min(...boxes.map(b => b.y));
+  const r = Math.max(...boxes.map(b => b.x + b.w)), bottom = Math.max(...boxes.map(b => b.y + b.h));
+  return { x, y, w: r - x, h: bottom - y };
 }
 
 /** A gentle arc for t.ROY's particles, from the caption mark to the target. */

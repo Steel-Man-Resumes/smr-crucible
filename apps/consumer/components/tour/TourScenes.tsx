@@ -10,7 +10,7 @@ import type { CSSProperties } from 'react';
 import { Flag, LockKeyhole, LockKeyholeOpen, Mic, Search } from 'lucide-react';
 import { TroyLivingIcon } from '@crucible/consumer-ui';
 import { BOARD_STATIONS, type ChartPhase, type LockPhase, type StationId } from '@/lib/tour/beats';
-import { BOARD_TILES, CHART, LIMITS_PANEL, LOCK_CARD, METER_PANEL, SCENE_SIZE, TILE, chartRevealAt, chartRows, chartSceneSize, tileCentre } from '@/lib/tour/layout';
+import { BOARD_TILES, CHART, LIMITS_PANEL, LOCK_CARD, METER_PANEL, SCENE_SIZE, TILE, chartRevealAt, chartRows, tileCentre } from '@/lib/tour/layout';
 import { SERVICE_STATUS_LABEL, type ServiceRow } from '@/lib/tour/services';
 import { STEP_COPY } from '@/lib/progression-policy';
 
@@ -34,7 +34,7 @@ export function TitleScene({ title, body }: { title: string; body: string }) {
 
 const ORDER: (keyof typeof BOARD_TILES)[] = ['start', 'find', 'tailor', 'package', 'plan', 'practice', 'track', 'offer'];
 
-export function BoardScene({ station, start, t, still }: { station?: StationId; start?: boolean; t: number; still: boolean }) {
+export function BoardScene({ station, start, noForge, t, still }: { station?: StationId; start?: boolean; noForge?: boolean; t: number; still: boolean }) {
   const { w, h } = SCENE_SIZE.board;
   const litIndex = station ? BOARD_STATIONS.findIndex(s => s.id === station) : -1;
   const lit = (id: StationId) => BOARD_STATIONS.findIndex(s => s.id === id) <= litIndex;
@@ -51,12 +51,12 @@ export function BoardScene({ station, start, t, still }: { station?: StationId; 
     </svg>
 
     <div className="sc-tile" data-kind="start" data-active={!!start} style={px(BOARD_TILES.start)}>
-      <div className="sc-tile__head"><span className="sc-num" style={{ borderStyle: 'dashed' }}>0</span><p className="sc-tile__label">From the Forge</p></div>
-      <p className="sc-tile__line">Your base resume</p>
+      <div className="sc-tile__head"><span className="sc-num" style={{ borderStyle: 'dashed' }}>0</span><p className="sc-tile__label">{noForge ? 'Your base' : 'From the Forge'}</p></div>
+      <p className="sc-tile__line">Your true history</p>
       <div className="sc-art" style={{ background: '#2a2620' }}>
         <div className="sc-paper" style={{ left: 54, top: 12, width: 156, height: 170 }}>
-          <i className="h" /><i style={{ width: '70%' }} /><i className="rough" style={{ width: '88%' }} /><i className="rough mark" style={{ width: '62%' }} />
-          <i style={{ width: '80%' }} /><i className="rough" style={{ width: '45%' }} /><i className="rough mark" style={{ width: '76%' }} /><i style={{ width: '58%' }} />
+          <i className="h" /><i style={{ width: '70%' }} /><i style={{ width: '88%' }} /><i style={{ width: '62%' }} />
+          <i style={{ width: '80%' }} /><i style={{ width: '45%' }} /><i style={{ width: '76%' }} /><i style={{ width: '58%' }} />
         </div>
       </div>
     </div>
@@ -92,8 +92,8 @@ function art(id: StationId, on: (id: StationId, ms: number) => boolean, t: numbe
       const done = on('tailor', 1000);
       return <>
         <div className="sc-paper" style={{ left: 18, top: 10, width: 150, height: 150 }}>
-          <i className="h" /><i className={done ? 'gold' : 'rough'} style={{ width: done ? '84%' : '70%' }} /><i className={done ? '' : 'rough mark'} style={{ width: done ? '78%' : '88%' }} />
-          <i className={done ? 'gold' : 'rough'} style={{ width: done ? '72%' : '50%' }} /><i style={{ width: '80%' }} /><i className={done ? '' : 'rough mark'} style={{ width: done ? '66%' : '76%' }} />
+          <i className="h" /><i className={done ? 'gold' : ''} style={{ width: '84%' }} /><i style={{ width: '78%' }} />
+          <i className={done ? 'gold' : ''} style={{ width: '72%' }} /><i style={{ width: '80%' }} /><i style={{ width: '66%' }} />
         </div>
         <span className="sc-chip" style={{ right: 12, top: 16, opacity: done ? 1 : 0.4 }}>This job</span>
         <span className="sc-chip" style={{ right: 12, top: 48, opacity: done ? 1 : 0, transform: done ? 'none' : 'translateY(6px)' }}>Same facts</span>
@@ -101,13 +101,12 @@ function art(id: StationId, on: (id: StationId, ms: number) => boolean, t: numbe
       </>;
     }
     case 'package': {
-      const slid = on('package', 700);
-      const closed = on('package', 1700);
-      return <>
-        <div className="sc-slip" style={{ left: 40, top: 8, transform: slid ? 'translate(14px,40px) rotate(-4deg)' : 'none', opacity: closed ? 0 : 1 }}><div className="sc-paper" style={{ inset: 6, padding: 6, boxShadow: 'none' }}><i className="h" /><i /><i /><i /></div></div>
-        <div className="sc-slip" style={{ left: 150, top: 8, transform: slid ? 'translate(-24px,40px) rotate(5deg)' : 'none', opacity: closed ? 0 : 1 }}><div className="sc-paper" style={{ inset: 6, padding: 6, boxShadow: 'none' }}><i /><i /><i /><i /></div></div>
-        <div className="sc-env" data-closed={closed}><div className="sc-env__flap" /><span className="sc-env__to">To: you</span></div>
-      </>;
+      const packed = on('package', 900);
+      return <div className="sc-env2" data-packed={packed}>
+        <span className="sc-slip2" style={{ left: 64 }}><span className="sc-paper"><i className="h" /><i /><i /><i /></span></span>
+        <span className="sc-slip2" style={{ left: 138 }}><span className="sc-paper"><i /><i /><i /><i /></span></span>
+        <div className="sc-pocket"><span>To: you</span></div>
+      </div>;
     }
     case 'plan':
       return <>
@@ -151,38 +150,39 @@ export function LockScene({ phase, t, still }: { phase: LockPhase; t: number; st
       {!open && <span className="sc-ask" data-ask="true"><TroyLivingIcon size={30} />Ask t.ROY to open it early</span>}
       {open && <span className="sc-done"><LockKeyholeOpen size={18} aria-hidden="true" />{step.label} opened at your request.</span>}
     </div>
-    <div className="sc-limits" style={{ ...px(LIMITS_PANEL), opacity: lim ? 1 : 0.35 }}>
+    <div className="sc-limits" style={{ ...px(LIMITS_PANEL), opacity: lim ? 1 : 0, transform: lim ? 'none' : 'translateY(40px)' }}>
       <div>
         <h4>AI actions per day</h4>
         <div className="sc-stairs">
           {['To start', 'After you tailor', 'After you apply'].map((label, i) => <div key={label}>
-            <b style={{ height: `${40 + i * 30}%`, transform: lim && !after(t, 400 + i * 500, still) ? 'scaleY(0)' : 'none' }} />
+            <b style={{ height: `${40 + i * 30}%`, transform: lim && !after(t, 300 + i * 450, still) ? 'scaleY(0)' : 'none' }} />
             <span>{label}</span>
           </div>)}
         </div>
       </div>
       <div className="sc-flow">
         <h4>Need more?</h4>
-        <div data-on={!lim || after(t, 2000, still)}><b>Ask t.ROY.</b></div>
-        <div data-on={!lim || after(t, 2800, still)}><b>Earned it?</b> It&apos;s added.</div>
-        <div data-on={!lim || after(t, 3600, still)}><b>Not yet?</b> You okay a short note, and Troy reviews it.</div>
+        <div data-on={true}><b>Ask t.ROY.</b></div>
+        <div data-on={!lim || after(t, 1800, still)}><b>Earned it?</b> It&apos;s added.</div>
+        <div data-on={!lim || after(t, 2600, still)}><b>Not yet?</b> You okay a short note, and Troy reviews it.</div>
       </div>
     </div>
   </div>;
 }
 
 /** Where the cursor goes and clicks in the lock scene, in scene pixels. */
-export const ASK_POINT = { x: LOCK_CARD.x + 30 + 150, y: LOCK_CARD.y + LOCK_CARD.h - 58 };
+/** Centre of the drawn Ask button: card padding, state line, title, two-line reason, then the button. */
+export const ASK_POINT = { x: LOCK_CARD.x + 30 + 150, y: LOCK_CARD.y + 212 };
 export const CLICK_AT = 1900;
 
-export function ChartScene({ phase, t, still, rows, gap, narrow = false, panAt = 0 }: { phase: ChartPhase; t: number; still: boolean; rows: ServiceRow[]; gap: number; narrow?: boolean; panAt?: number }) {
-  const { w, h } = chartSceneSize(rows.length, narrow);
-  const boxes = chartRows(rows.length, narrow ? 1 : 2);
+export function ChartScene({ phase, t, still, rows, gap }: { phase: ChartPhase; t: number; still: boolean; rows: ServiceRow[]; gap: number }) {
+  const { w, h } = SCENE_SIZE.chart;
+  const boxes = chartRows(rows.length);
   return <div className="sc" style={{ width: w, height: h }}>
     <div className="sc-grid" />
     <p className="sc-chart__k" style={{ left: CHART.x, top: CHART.y + 10 }}>What you&apos;d otherwise stitch together, and what&apos;s here</p>
     {rows.map((row, i) => <div key={row.id} className="sc-row" data-s={row.status}
-      data-on={phase === 'gaps' || after(t, chartRevealAt(i, narrow, panAt), still)}
+      data-on={phase === 'gaps' || after(t, chartRevealAt(i, false, 0), still)}
       data-dim={phase === 'gaps' && i < gap}
       style={{ left: boxes[i].x, top: boxes[i].y, width: boxes[i].w, height: boxes[i].h }}>
       <div className="sc-row__top">
@@ -195,33 +195,39 @@ export function ChartScene({ phase, t, still, rows, gap, narrow = false, panAt =
 }
 
 const BARS = 6;
+/** Empty, one bar ground to the top, then breadth, then the breadth example held with the honest line. */
+export function meterPhase(t: number): 0 | 1 | 2 | 3 { return t < 1400 ? 0 : t < 3800 ? 1 : t < 6200 ? 2 : 3; }
+export const METER_SAY = [
+  'It fills as you do the work.',
+  'One thing, over and over, barely moves it.',
+  'A little of everything moves it far.',
+  'This one is an example. Yours starts at the real number.',
+] as const;
 export function MeterScene({ t, still }: { t: number; still: boolean }) {
   const { w, h } = SCENE_SIZE.meter;
   if (still) {
     return <div className="sc" style={{ width: w, height: h }}>
       <div className="sc-grid" />
       <div className="sc-meter" style={px(METER_PANEL)}>
-        <p className="sc-meter__k">Steel Man meter (an illustration)</p>
+        <p className="sc-meter__k">Steel Man meter, an example</p>
         <div className="sc-meter__split">
           <MeterExample label="One thing, over and over" fill={16} bars={[100, 0, 0, 0, 0, 0]} />
           <MeterExample label="A little of everything" fill={72} bars={[50, 45, 55, 40, 50, 45]} />
         </div>
-        <p className="sc-meter__say">It fills as you do the work.</p>
+        <p className="sc-meter__say">{METER_SAY[3]}</p>
       </div>
     </div>;
   }
-  // Empty, then one bar ground to the top, then breadth, then back to empty.
-  const phase = t < 1600 ? 0 : t < 4300 ? 1 : t < 7300 ? 2 : 3;
-  const bars = phase === 1 ? [100, 0, 0, 0, 0, 0] : phase === 2 ? [50, 45, 55, 40, 50, 45] : [0, 0, 0, 0, 0, 0];
-  const fill = phase === 1 ? 16 : phase === 2 ? 72 : 0;
-  const say = ['It starts empty and fills as you do the work.', 'One thing, over and over, barely moves it.', 'A little of everything moves it far.', 'That is how Steel Man status gets earned.'][phase];
+  const phase = meterPhase(t);
+  const bars = phase === 1 ? [100, 0, 0, 0, 0, 0] : phase >= 2 ? [50, 45, 55, 40, 50, 45] : [0, 0, 0, 0, 0, 0];
+  const fill = phase === 1 ? 16 : phase >= 2 ? 72 : 0;
   return <div className="sc" style={{ width: w, height: h }}>
     <div className="sc-grid" />
     <div className="sc-meter" style={px(METER_PANEL)}>
-      <p className="sc-meter__k">Steel Man meter (an illustration)</p>
+      <p className="sc-meter__k">Steel Man meter, an example</p>
       <div className="sc-meter__track"><div className="sc-meter__fill" style={{ width: `${fill}%` }} /></div>
       <div className="sc-meter__bars">{Array.from({ length: BARS }, (_, i) => <div key={i}><b style={{ height: `${bars[i]}%` }} /></div>)}</div>
-      <p key={phase} className="sc-meter__say sc-rise">{say}</p>
+      <p key={phase} className="sc-meter__say sc-rise">{METER_SAY[phase]}</p>
     </div>
   </div>;
 }
