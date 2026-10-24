@@ -421,7 +421,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
-      // Refinery seat (migration 093, lib/refinery-access.ts): once a platform
+      // Refinery seat (migration 096, lib/refinery-access.ts): once a platform
       // admin closes public sign-ups, an account without a seat keeps the
       // Forge, its settings and its data, and reaches no other Refinery page
       // or API. After the revocation check, the second-step hold and the terms
@@ -685,7 +685,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
-      // Refinery seat (migration 093): read at sign-in, on update() (the seat
+      // Refinery seat (migration 096): read at sign-in, on update() (the seat
       // page calls it after a code or an accepted offer), hourly while the
       // answer is "closed, no seat", and at least daily. Only ever from the
       // database, never from anything the client sent. On a database error the
@@ -704,14 +704,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           const rows = (await sqlEdge`
             SELECT public.smr_refinery_signup_open() AS open,
-                   public.smr_has_refinery_seat(${token.sub}::uuid) AS seat`) as any[];
+                   public.smr_has_refinery_seat(${token.sub}::uuid) AS seat,
+                   (SELECT u.email_proven_at IS NOT NULL FROM users u WHERE u.id = ${token.sub}::uuid) AS proven`) as any[];
           if (rows.length && typeof rows[0].open === "boolean" && typeof rows[0].seat === "boolean") {
             (token as any).seatOpen = rows[0].open;
-            (token as any).seat = seatFrom(rows[0].seat, token.email);
+            (token as any).seat = seatFrom(rows[0].seat, token.email, rows[0].proven === true);
             (token as any).seatAt = nowSeconds();
           }
         } catch {
-          // Kept as it was (see above). Before migration 093 there is nothing to read.
+          // Kept as it was (see above). Before migration 096 there is nothing to read.
         }
       }
 

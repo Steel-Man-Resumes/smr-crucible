@@ -70,6 +70,10 @@ async function resolveContext(request: Request) {
   return { org, userId: session.user.id, tier, adminPowers };
 }
 
+/** The one reply to "Add participant", whatever the address turned out to be. */
+const INVITE_NEUTRAL_MESSAGE =
+  "Done. If that address can be added, they get an email from us. New accounts show under Invited until they open it; people who already have an account join when they say yes.";
+
 export async function GET(request: Request) {
   const ctx = await resolveContext(request);
   if ("error" in ctx) {
@@ -299,43 +303,34 @@ export async function POST(request: Request) {
         );
       }
 
-      // State is committed; the email is the last step. If it fails, say so
-      // plainly -- the pending panel's Resend button is the retry path.
-      try {
-        const inviterName = (await auth())?.user?.name || null;
-        if (created.kind === "invited") {
-          const url = await mintInviteMagicLink(email, origin);
-          await sendOrgEmail(
-            email,
-            buildInviteEmail({ inviteeName: name, inviterName, orgName: org.orgName, url, origin })
-          );
-        } else {
-          await sendOrgEmail(
-            email,
-            buildOfferEmail({ inviteeName: name, inviterName, orgName: org.orgName, origin })
-          );
+      // State is committed; the email is the last step. ONE answer to staff
+      // whether the address was new, already had an account, or was asked in
+      // the last day (security review 1, SF-2; R3 S4 for this path), and no
+      // kind in the response. An offer made or answered in the last 24 hours
+      // sends nothing again (createOrgInvite notify).
+      if (created.notify) {
+        try {
+          const inviterName = (await auth())?.user?.name || null;
+          if (created.kind === "invited") {
+            const url = await mintInviteMagicLink(email, origin);
+            await sendOrgEmail(
+              email,
+              buildInviteEmail({ inviteeName: name, inviterName, orgName: org.orgName, url, origin })
+            );
+          } else {
+            await sendOrgEmail(
+              email,
+              buildOfferEmail({ inviteeName: name, inviterName, orgName: org.orgName, origin })
+            );
+          }
+        } catch (err: any) {
+          // Logged, not shown: a different answer here would tell staff which
+          // kind of address it was. New invitees can be re-sent from the list.
+          console.error("invite email failed:", err?.message || err);
         }
-      } catch (err: any) {
-        console.error("invite email failed:", err?.message || err);
-        return NextResponse.json({
-          ok: true,
-          kind: created.kind,
-          message:
-            created.kind === "invited"
-              ? "The seat is reserved, but the email could not be sent. Use Resend in the pending list, or check the address."
-              : "They were asked to join, but the email could not be sent. They will still see the question when they sign in.",
-          emailFailed: true,
-        });
       }
 
-      return NextResponse.json({
-        ok: true,
-        kind: created.kind,
-        message:
-          created.kind === "invited"
-            ? `Invite sent to ${email}. They'll appear here as invited until they open it.`
-            : `${name} already has an account, so we asked them first. No seat is used unless they say yes.`,
-      });
+      return NextResponse.json({ ok: true, message: INVITE_NEUTRAL_MESSAGE });
     }
 
     if (body.action === "resend_invite") {

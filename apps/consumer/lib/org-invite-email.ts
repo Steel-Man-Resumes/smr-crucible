@@ -49,6 +49,20 @@ export async function mintInviteMagicLink(
   return `${origin}${EMAIL_LINK_PAGE}?${params}`;
 }
 
+/**
+ * HTML-escape a value placed in an email body or attribute (security review
+ * 1, SF-3). Names and organization names are typed by people; a name like
+ * <a href=...> must arrive as text, never as a link from our sender address.
+ */
+export function esc(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function firstName(name: string | null | undefined): string {
   const n = (name || "").trim();
   return n ? n.split(/\s+/)[0] : "there";
@@ -86,19 +100,19 @@ export function buildInviteEmail(opts: {
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
       <h1 style="font-size:22px;margin:0 0 12px">Your account is ready</h1>
-      <p>Hi ${hello},</p>
-      <p>${inviter} set up a free Steel Man Resumes account for you. It gives you
+      <p>Hi ${esc(hello)},</p>
+      <p>${esc(inviter)} set up a free Steel Man Resumes account for you. It gives you
       tools to build a resume that tells your story with strength, find real job
       openings, and get ready for interviews.</p>
       <p style="margin:24px 0">
-        <a href="${opts.url}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Open your account</a>
+        <a href="${esc(opts.url)}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Open your account</a>
       </p>
       <p style="font-size:13px;color:#666">No password needed. The button signs you in directly. If it does not work, copy and paste this link:</p>
-      <p style="font-size:13px;word-break:break-all;color:#4a6741">${opts.url}</p>
-      <p style="font-size:13px;color:#666">This link works for ${INVITE_TTL_DAYS} days. If it stops working, go to
-      <a href="${loginUrl}" style="color:#4a6741">${loginUrl}</a>, enter this email address, and choose "Email me a sign-in link."</p>
+      <p style="font-size:13px;word-break:break-all;color:#4a6741">${esc(opts.url)}</p>
+      <p style="font-size:13px;color:#666">This link works for ${esc(INVITE_TTL_DAYS)} days. If it stops working, go to
+      <a href="${esc(loginUrl)}" style="color:#4a6741">${esc(loginUrl)}</a>, enter this email address, and choose "Email me a sign-in link."</p>
       <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.<br>
-      You received this because ${inviter} added you to their program.</p>
+      You received this because ${esc(inviter)} added you to their program.</p>
     </div>
   `;
   return { subject, html, text };
@@ -133,17 +147,17 @@ export function buildStaffInviteEmail(opts: {
     `Steel Man Resumes\nTruth. Told Strong.`;
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
-      <h1 style="font-size:22px;margin:0 0 12px">You are on the ${opts.orgName} team</h1>
-      <p>Hi ${hello},</p>
-      <p>${body}</p>
-      <p>${privacy}</p>
+      <h1 style="font-size:22px;margin:0 0 12px">You are on the ${esc(opts.orgName)} team</h1>
+      <p>Hi ${esc(hello)},</p>
+      <p>${esc(body)}</p>
+      <p>${esc(privacy)}</p>
       <p style="margin:24px 0">
-        <a href="${opts.url}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Open your account</a>
+        <a href="${esc(opts.url)}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Open your account</a>
       </p>
       <p style="font-size:13px;color:#666">No password needed. If the button does not work, copy and paste this link:</p>
-      <p style="font-size:13px;word-break:break-all;color:#4a6741">${opts.url}</p>
-      <p style="font-size:13px;color:#666">This link works for ${INVITE_TTL_DAYS} days. After that, go to
-      <a href="${loginUrl}" style="color:#4a6741">${loginUrl}</a>, enter this email address, and choose "Email me a sign-in link."</p>
+      <p style="font-size:13px;word-break:break-all;color:#4a6741">${esc(opts.url)}</p>
+      <p style="font-size:13px;color:#666">This link works for ${esc(INVITE_TTL_DAYS)} days. After that, go to
+      <a href="${esc(loginUrl)}" style="color:#4a6741">${esc(loginUrl)}</a>, enter this email address, and choose "Email me a sign-in link."</p>
       <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
     </div>
   `;
@@ -170,16 +184,16 @@ export function buildAddedEmail(opts: {
     `Steel Man Resumes\nTruth. Told Strong.`;
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
-      <h1 style="font-size:22px;margin:0 0 12px">You are connected to ${opts.orgName}</h1>
-      <p>Hi ${hello},</p>
-      <p>${inviter} connected your existing Steel Man Resumes account to their organization.
+      <h1 style="font-size:22px;margin:0 0 12px">You are connected to ${esc(opts.orgName)}</h1>
+      <p>Hi ${esc(hello)},</p>
+      <p>${esc(inviter)} connected your existing Steel Man Resumes account to their organization.
       Your account and your work are unchanged, and your privacy rules stay the same: they
       only ever see progress you choose to share from your Settings. They never see your resume
       text, disclosure plans, or practice answers.</p>
       <p style="margin:24px 0">
-        <a href="${loginUrl}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Sign in</a>
+        <a href="${esc(loginUrl)}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Sign in</a>
       </p>
-      <p style="font-size:13px;word-break:break-all;color:#4a6741">${loginUrl}</p>
+      <p style="font-size:13px;word-break:break-all;color:#4a6741">${esc(loginUrl)}</p>
       <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
     </div>
   `;
@@ -188,7 +202,7 @@ export function buildAddedEmail(opts: {
 
 /**
  * The notice for someone who already has an account and was asked to join an
- * organization (migration 093). Nothing changes until they say yes on the seat
+ * organization (migration 096). Nothing changes until they say yes on the seat
  * page, so the email says exactly that. Neutral on purpose: it names the
  * organization that asked and nothing about anyone else.
  */
@@ -211,15 +225,15 @@ export function buildOfferEmail(opts: {
     `Steel Man Resumes\nTruth. Told Strong.`;
   const html = `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
-      <h1 style="font-size:22px;margin:0 0 12px">${opts.orgName} asked you to join</h1>
-      <p>Hi ${hello},</p>
-      <p>${inviter} asked to add your Steel Man Resumes account to their organization.
+      <h1 style="font-size:22px;margin:0 0 12px">${esc(opts.orgName)} asked you to join</h1>
+      <p>Hi ${esc(hello)},</p>
+      <p>${esc(inviter)} asked to add your Steel Man Resumes account to their organization.
       Nothing changes unless you say yes. If you join, they only see progress you choose to
       share from your Settings. They never see your resume text, disclosure plans, or practice answers.</p>
       <p style="margin:24px 0">
-        <a href="${seatUrl}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Sign in to answer</a>
+        <a href="${esc(seatUrl)}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Sign in to answer</a>
       </p>
-      <p style="font-size:13px;word-break:break-all;color:#4a6741">${seatUrl}</p>
+      <p style="font-size:13px;word-break:break-all;color:#4a6741">${esc(seatUrl)}</p>
       <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
     </div>
   `;

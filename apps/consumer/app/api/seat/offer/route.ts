@@ -12,6 +12,7 @@ import { isSameOriginJsonPost } from "@/lib/same-origin";
 const ACCEPT_MESSAGES: Record<string, { status: number; message: string }> = {
   ok: { status: 200, message: "You joined. The Refinery is open to you." },
   already_member: { status: 200, message: "You were already part of this organization." },
+  other_org: { status: 409, message: "You already belong to another organization. Ask Steel Man Resumes if you should move to this one." },
   full: { status: 409, message: "That organization has no seats left right now. Ask them about it." },
   inactive: { status: 409, message: "That offer is no longer open." },
   expired: { status: 409, message: "That offer is no longer open." },

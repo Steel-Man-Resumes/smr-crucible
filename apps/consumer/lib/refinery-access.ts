@@ -7,7 +7,7 @@
  * account and use the Forge; the Forge needs one (lib/forge-access.ts, wall up).
  * The Refinery needs a SEAT once a platform admin closes public sign-ups. What
  * counts as a seat is decided by the database (smr_has_refinery_seat,
- * migration 093) plus one rule only the environment knows (PARTNER_PRE_AUTH).
+ * migration 096) plus one rule only the environment knows (PARTNER_PRE_AUTH).
  * Nothing in this file reads users.tier, progression grants, premium grants or
  * browser storage, and nothing here may start to.
  *
@@ -87,6 +87,7 @@ export const SEAT_EXEMPT_API: Readonly<Record<string, string>> = {
   "/api/seat/": "the seat page: ask for a seat, accept or decline an offer",
   "/api/consent": "consent records the person can always change",
   "/api/session-status": "session status for this browser",
+  "/api/access-name": "the /access partner landing greets the organization; public, capped per IP, reads only an organization name",
   "/api/support-request": "ask for help",
   "/api/support-request/mine": "see your own help requests",
 };
@@ -131,7 +132,7 @@ export function seatExemptPage(path: string): boolean {
 
 /**
  * Does this session pass? Open sign-ups pass everyone (the default, so
- * applying migration 093 changes nothing). Closed: only a seat passes. A claim
+ * applying migration 096 changes nothing). Closed: only a seat passes. A claim
  * never read (undefined) passes at the edge, and the AI admission check, which
  * reads the database on every call, is the backstop for that window.
  */
@@ -179,11 +180,19 @@ export function seatNeedsReread(t: {
 
 /**
  * The seat rule's last part: the database answer, or an address on the
- * PARTNER_PRE_AUTH list. Self-set tier, progression and premium grants, and
- * any browser value are never inputs.
+ * PARTNER_PRE_AUTH list whose inbox the account has PROVEN (users.
+ * email_proven_at, set by an email-link or matched Google sign-in; a password
+ * sign-up never sets it). Security review 1, SF-4: otherwise registering a
+ * listed address nobody has claimed yet would be a seat. Self-set tier,
+ * progression and premium grants, and any browser value are never inputs.
  */
-export function seatFrom(dbSeat: boolean, email: unknown, preAuthRaw: string | undefined | null = process.env.PARTNER_PRE_AUTH): boolean {
-  return dbSeat === true || isPartnerPreAuthorized(email, preAuthRaw);
+export function seatFrom(
+  dbSeat: boolean,
+  email: unknown,
+  inboxProven: boolean,
+  preAuthRaw: string | undefined | null = process.env.PARTNER_PRE_AUTH
+): boolean {
+  return dbSeat === true || (inboxProven === true && isPartnerPreAuthorized(email, preAuthRaw));
 }
 
 /** A browser session that is signed in, past sign-ups, without a seat. For page copy only. */
