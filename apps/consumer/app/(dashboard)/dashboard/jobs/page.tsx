@@ -752,7 +752,7 @@ function JobBoardPage() {
             Job search is having trouble right now
           </p>
           <p className="text-sm text-t-phos leading-relaxed">{searchError}</p>
-          {summary && (summary.removedByChoices || 0) > 0 && <p className="mt-2 text-sm text-t-phos" data-testid="jobs-removed-by-choices">{summary.removedByChoices} listing{summary.removedByChoices === 1 ? "" : "s"} that did load {summary.removedByChoices === 1 ? "was" : "were"} removed by your choices. See why below.</p>}
+          {summary && (summary.removedByChoices || 0) > 0 && <p className="mt-2 text-sm text-t-phos" data-testid="jobs-removed-by-choices">{summary.removedByChoices} listing{summary.removedByChoices === 1 ? "" : "s"} that did load {summary.removedByChoices === 1 ? "was" : "were"} removed by your choices. See why above.</p>}
         </div>
       )}
 

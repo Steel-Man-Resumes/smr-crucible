@@ -19,14 +19,14 @@ export function meaningfulRole(role: string): boolean { return !!role.trim() && 
  */
 const FAMILY_TITLES: Record<string, string[]> = {
   'production': ['production associate', 'production worker', 'production operator', 'machine operator', 'assembler', 'assembly worker', 'assembly line', 'line worker', 'fabricator', 'packaging operator', 'packer', 'manufacturing associate', 'manufacturing technician'],
-  'material-moving': ['material handler', 'materials handler', 'dock lead', 'dock worker', 'dock supervisor', 'warehouse associate', 'warehouse worker', 'warehouse lead', 'warehouse supervisor', 'forklift operator', 'forklift driver', 'order picker', 'picker packer', 'loader', 'unloader', 'shipping clerk', 'receiving clerk', 'shipping receiving', 'stock associate', 'stocker', 'inventory clerk', 'freight handler', 'order selector', 'package handler'],
-  'maintenance': ['millwright', 'maintenance technician', 'maintenance mechanic', 'industrial mechanic', 'maintenance worker', 'facilities technician', 'hvac technician', 'repair technician', 'building maintenance'],
+  'material-moving': ['material handler', 'materials handler', 'dock lead', 'dock worker', 'dock supervisor', 'warehouse associate', 'warehouse worker', 'warehouse lead', 'warehouse supervisor', 'forklift operator', 'forklift driver', 'order picker', 'picker packer', 'loader', 'unloader', 'shipping clerk', 'receiving clerk', 'shipping receiving', 'stock associate', 'stocker', 'inventory clerk', 'freight handler', 'order selector', 'package handler', 'shipping associate', 'receiving associate', 'shipping lead', 'receiving lead', 'distribution center', 'fulfillment center', 'fulfillment associate'],
+  'maintenance': ['millwright', 'maintenance technician', 'maintenance mechanic', 'industrial mechanic', 'maintenance worker', 'facilities technician', 'hvac technician', 'hvac tech', 'repair technician', 'building maintenance'],
   'electrical': ['electrician', 'electrical technician', 'electrical apprentice', 'electrical helper', 'electrical installer', 'wireman'],
   'cooking': ['cook', 'line cook', 'prep cook', 'kitchen', 'chef', 'food prep'],
   'production-management': ['production supervisor', 'production manager', 'production lead', 'plant manager', 'manufacturing supervisor'],
 };
 /** Office and professional words: a family match alone never admits these ("Electrical Engineer" for "electrician"). */
-const PROFESSIONAL = new Set(['accountant','accounting','analyst','administrator','engineer','engineering','sales','consultant','designer','developer','attorney','recruiter','scientist','architect','planner','actuary','auditor','underwriter','pharmacist','physician','nurse','video','marketing','finance','financial']);
+const PROFESSIONAL = new Set(['accountant','accounting','analyst','administrator','engineer','engineering','sales','consultant','designer','developer','attorney','recruiter','scientist','architect','planner','actuary','auditor','underwriter','pharmacist','physician','nurse','video','marketing','finance','financial','coordinator','specialist']);
 const families = [
   { id: 'production', terms: ['production', 'manufacturing', 'assembly', 'machine operator'], variants: ['Production associate', 'Machine operator'] },
   ...PATH_OCCUPATIONS.map(p => ({ id: p.id, terms: p.terms, variants: [p.searchRole] })),

@@ -295,7 +295,9 @@ test("R-S2: one broad family word never admits an office title; trade titles sta
   assert.equal(plan("machine operator")("Video Production Assistant"), "none");
   assert.equal(warehouse("Material Handler"), "title");
   assert.equal(warehouse("Dock Lead"), "title");
-  assert.equal(warehouse("Distribution Center Associate"), "none", "distribution plus a level word is still one family word");
+  for (const t of ["Shipping Associate", "Receiving Associate", "Fulfillment Center Associate", "Distribution Center Associate"]) assert.equal(warehouse(t), "title", t);
+  assert.equal(plan("maintenance technician")("HVAC Tech"), "title");
+  for (const t of ["Freight Order Coordinator", "Order Inventory Specialist"]) assert.equal(warehouse(t), "none", t);
   assert.equal(warehouse("Shipping and Receiving Dock Worker"), "title");
   assert.equal(warehouse("Forklift and Warehouse Crew"), "title", "two different family words together");
   assert.equal(plan("maintenance technician")("Millwright"), "title");
