@@ -38,7 +38,7 @@ function CreateOrgForm({ onDone }: { onDone: (msg: string) => void }) {
     if (!ok) { setError(data?.error || "The organization was not created."); return; }
     setF({ name: "", ownerEmail: "", ownerName: "", seats: "10" });
     const owner = data.ownerCreated
-      ? data.emailed ? "The owner had no account, so one was made and a sign-in link was emailed." : "The owner had no account, so one was made. The sign-in email did not send; they can use \"Email me a sign-in link\" at the login page."
+      ? data.emailed ? "That address was new to Steel Man, so an account was made and a sign-in link was emailed." : "That address was new to Steel Man, so an account was made. The sign-in email did not send; they can use \"Email me a sign-in link\" at the login page."
       : "The owner already had an account and can sign in now.";
     onDone(`Created. Code ${data.code}. ${owner}${data.warning ? ` ${data.warning}` : ""}`);
   };
@@ -56,7 +56,7 @@ function CreateOrgForm({ onDone }: { onDone: (msg: string) => void }) {
           <input className={input} type="number" min={1} max={1000} value={f.seats} onChange={(e) => setF({ ...f, seats: e.target.value })} required /></label>
         <label className="block"><span className="text-xs text-t-phos-dim block mb-1">Owner email</span>
           <input className={input} type="email" value={f.ownerEmail} onChange={(e) => setF({ ...f, ownerEmail: e.target.value })} required /></label>
-        <label className="block"><span className="text-xs text-t-phos-dim block mb-1">Owner name (used only if they have no account yet)</span>
+        <label className="block"><span className="text-xs text-t-phos-dim block mb-1">Owner name (used only for an address new to Steel Man)</span>
           <input className={input} value={f.ownerName} onChange={(e) => setF({ ...f, ownerName: e.target.value })} /></label>
       </div>
       {error && <p className="text-sm text-t-red mt-3">{error}</p>}
