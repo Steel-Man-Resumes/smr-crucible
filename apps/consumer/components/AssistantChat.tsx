@@ -12,6 +12,7 @@
 
 "use client";
 
+import { orgNoteDraftKey } from "@/lib/org-note-draft";
 import { TroyWork } from "@crucible/consumer-ui";
 import { assistantErrorMessage } from "@/lib/assistant-error-message";
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
@@ -48,7 +49,8 @@ const TOOL_ACTIVITY: Record<string, string> = {
   read_owner_directory_coverage: "Reading coverage suggestions",
   read_staff_tasks: "Reading your scoped tasks",
   read_participant_progress: "Reading shared progress",
-  draft_staff_check_in: "Preparing a check-in draft",
+  draft_staff_check_in: "Preparing a draft",
+  offer_staff_draft: "Preparing the draft for their page",
   search_verified_employers: "Checking employer evidence",
   get_verified_employer: "Reading employer details",
   search_verified_resources: "Finding checked support",
@@ -76,7 +78,8 @@ function getQuickPrompts(context: AssistantContext, coach?: boolean, staff?: boo
   if (staff) {
     return [
       "Who needs attention this week?",
-      "Draft a check-in message",
+      "Draft a check-in for you to send",
+      "Draft a case note for your review",
       "Summarize my caseload",
     ];
   }
@@ -688,6 +691,22 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             return href ? [{ key: i, href, label: pageLabel(args.page ?? "") }] : [];
           });
           const replyStillComing = isLoading && message.id === messages[messages.length - 1]?.id;
+          // A staff draft (check-in or case note): t.ROY saved and sent
+          // nothing. Offer to put the words on the participant's page as an
+          // UNSAVED draft, so the staff member reads, changes and saves it
+          // themselves, or throws it away.
+          const draftFor = staff ? parts.flatMap((part) => {
+            if (part.type !== "tool-invocation") return [];
+            const inv = part.toolInvocation as { toolName?: string; state?: string; result?: Record<string, unknown> } | undefined;
+            const r = inv?.result;
+            // Only the draft body the model passed to offer_staff_draft, never
+            // the whole reply: the reply talks TO the staff member, and a note
+            // is permanent (review SF2).
+            if (inv?.toolName !== "offer_staff_draft" || inv.state !== "result" || r?.status !== "draft_only" || r.saved !== false || r.sent !== false) return [];
+            return typeof r.participantId === "string" && /^[0-9a-f-]{36}$/i.test(r.participantId) && typeof r.body === "string" && r.body.trim()
+              ? [{ id: r.participantId, purpose: r.purpose === "case_note" ? "case_note" : "check_in", body: r.body.trim() }] : [];
+          })[0] : undefined;
+          const draftText = draftFor?.body ?? "";
 
           // Assistant message with parts: text bubbles + tool activity lines
           return (
@@ -741,6 +760,23 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                 }
                 return null;
               })}
+              {!replyStillComing && draftFor && draftText && (
+                <div className="flex flex-col items-start gap-1 pl-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      try {
+                        if (accountId) sessionStorage.setItem(orgNoteDraftKey(accountId, draftFor.id), JSON.stringify({ body: draftText.slice(0, 8000), purpose: draftFor.purpose, at: new Date().toISOString() }));
+                      } catch { /* storage blocked: the words are still in this reply */ }
+                      router.push(`/dashboard/clients/${draftFor.id}`);
+                    }}
+                    className="min-h-touch rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
+                  >
+                    Put this draft on their page to review
+                  </button>
+                  <span className="text-[11px] text-muted">Nothing is saved or sent until you do it.</span>
+                </div>
+              )}
               {!replyStillComing &&
                 goTo.map((g) => (
                   <div key={`go-${g.key}`} className="flex justify-start pl-1">

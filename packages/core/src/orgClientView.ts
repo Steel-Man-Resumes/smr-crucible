@@ -94,9 +94,19 @@ function params(actor: OrgActor, clientId: string, scope?: SharingScope) {
 
 export interface ClientHeader {
   userId: string;
+  /**
+   * WHO THIS IS, BY CONSENT (review BL1). With progress sharing on: the
+   * account's name and email. Off: only the name and email this organization
+   * typed when it invited them (org_invite), or null for someone who joined
+   * by code and has not shared. Never the account's own details without
+   * sharing.
+   */
   name: string | null;
   email: string | null;
-  currentStage: number;
+  /** "account" = from their account (sharing on); "invite" = what the org typed; "none". */
+  identitySource: "account" | "invite" | "none";
+  /** Journey stage, ONLY with progress sharing on. null = not shared. */
+  currentStage: number | null;
   joinedAt: string | null;
   assignedStaffId: string | null;
   assignedStaffName: string | null;
@@ -123,13 +133,32 @@ export interface ClientHeader {
 }
 
 /**
+ * The identity row of the client header, exported so the database test runs
+ * this exact statement. Params: $1 client, $2 org, $3 sees-all, $4 actor.
+ */
+export const CLIENT_HEADER_WHO_SQL = `WITH s AS (SELECT EXISTS (SELECT 1 FROM staff_progress_counts pc WHERE pc.user_id = $1::uuid) AS on_)
+         SELECT u.id,
+                CASE WHEN s.on_ THEN u.name  ELSE oi.invited_name  END AS name,
+                CASE WHEN s.on_ THEN u.email ELSE oi.invited_email END AS email,
+                CASE WHEN s.on_ THEN 'account' WHEN oi.user_id IS NOT NULL THEN 'invite' ELSE 'none' END AS identity_source,
+                CASE WHEN s.on_ THEN u.current_stage END AS current_stage,
+                (SELECT MIN(r.redeemed_at) FROM access_code_redemption r WHERE r.user_id = u.id AND r.access_code_id = $2::uuid) AS joined_at,
+                a.staff_user_id AS staff_id, su.name AS staff_name
+           FROM users u
+           CROSS JOIN s
+           LEFT JOIN org_invite oi ON oi.user_id = u.id AND oi.access_code_id = $2::uuid
+           LEFT JOIN client_staff_assignment a ON a.client_user_id = u.id AND a.access_code_id = $2::uuid
+           LEFT JOIN users su ON su.id = a.staff_user_id
+          WHERE u.id = $1::uuid AND ${IN_REACH}`;
+
+/**
  * Who this is and what they have chosen to share. Needs reach (steps 1-4) but
  * no grant: knowing THAT a resume is not shared is how staff know to ask.
  */
 export async function getClientHeader(actor: OrgActor, clientId: string): Promise<ClientViewResult<ClientHeader>> {
   const refused = refuseActor(actor);
   if (refused) return { ok: false, reason: refused };
-  type Row = { id: string; name: string | null; email: string | null; current_stage: number | null; joined_at: string | null; staff_id: string | null; staff_name: string | null };
+  type Row = { id: string; name: string | null; email: string | null; identity_source: "account" | "invite" | "none"; current_stage: number | null; joined_at: string | null; staff_id: string | null; staff_name: string | null };
   const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
   type PolicyRow = { scopes: string[]; acked: boolean; stopped: string[] | null };
   type ProgressRow = { next_step_reason: string | null; next_step_stage: string | null; applications: number; saved_jobs: number; practice_sessions: number; has_tailored: boolean; last_active_at: string | null };
@@ -137,13 +166,11 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
     scopeOf(actor),
     (sql) => [
       run(sql)(
-        `SELECT u.id, u.name, u.email, u.current_stage,
-                (SELECT MIN(r.redeemed_at) FROM access_code_redemption r WHERE r.user_id = u.id AND r.access_code_id = $2::uuid) AS joined_at,
-                a.staff_user_id AS staff_id, su.name AS staff_name
-           FROM users u
-           LEFT JOIN client_staff_assignment a ON a.client_user_id = u.id AND a.access_code_id = $2::uuid
-           LEFT JOIN users su ON su.id = a.staff_user_id
-          WHERE u.id = $1::uuid AND ${IN_REACH}`,
+        // Identity and stage are gated IN THE STATEMENT on the same consent the
+        // caseload uses: staff_progress_counts has a row only for a member of
+        // the scoped org with progress sharing on. Without it, staff get what
+        // their own organization typed on the invite, or nothing.
+        CLIENT_HEADER_WHO_SQL,
         params(actor, clientId)
       ),
       run(sql)(
@@ -201,7 +228,8 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
   return {
     ok: true,
     rows: [{
-      userId: row.id, name: row.name, email: row.email, currentStage: row.current_stage ?? 0,
+      userId: row.id, name: row.name, email: row.email, identitySource: row.identity_source,
+      currentStage: row.identity_source === "account" ? row.current_stage ?? 0 : null,
       joinedAt: row.joined_at, assignedStaffId: row.staff_id, assignedStaffName: row.staff_name, scopes,
       awaitingAcknowledgement: !!policy[0] && !policy[0].acked,
       progress: progress[0] ? {
@@ -338,6 +366,8 @@ export interface CaseNote {
   visible_to_participant: boolean;
   drafted_by_assistant: boolean;
   edited_at: string | null;
+  /** Earlier wordings, newest first, kept by the version trigger (051). */
+  earlier: { body: string; kind: string; replaced_at: string }[];
 }
 
 export async function getClientNotes(actor: OrgActor, clientId: string): Promise<ClientViewResult<CaseNote>> {
@@ -348,7 +378,9 @@ export async function getClientNotes(actor: OrgActor, clientId: string): Promise
     run(sql)(`SELECT (${IN_REACH}) AS ok`, params(actor, clientId)),
     run(sql)(
       `SELECT n.id, n.kind, n.body, n.occurred_at, u.name AS author_name, n.author_user_id,
-              n.visible_to_participant, n.drafted_by_assistant, n.edited_at
+              n.visible_to_participant, n.drafted_by_assistant, n.edited_at,
+              COALESCE((SELECT json_agg(json_build_object('body', v.body, 'kind', v.kind, 'replaced_at', v.replaced_at) ORDER BY v.replaced_at DESC)
+                          FROM case_note_version v WHERE v.note_id = n.id AND v.access_code_id = n.access_code_id), '[]'::json) AS earlier
          FROM case_note n LEFT JOIN users u ON u.id = n.author_user_id
         WHERE n.client_user_id = $1::uuid AND n.access_code_id = $2::uuid AND ${IN_REACH}
         ORDER BY n.occurred_at DESC LIMIT 200`,
@@ -359,7 +391,10 @@ export async function getClientNotes(actor: OrgActor, clientId: string): Promise
   return { ok: true, rows: notes };
 }
 
-const NOTE_KINDS = new Set(["note", "call", "meeting", "text", "email", "referral"]);
+// 'draft' (migration 097): a saved check-in draft nobody has sent yet. Not a
+// kind staff pick by hand; the page sets it for a t.ROY check-in draft, and
+// "I sent it" corrects it to 'email'.
+const NOTE_KINDS = new Set(["note", "call", "meeting", "text", "email", "referral", "draft"]);
 
 export async function addClientNote(actor: OrgActor, clientId: string, input: {
   body: string; kind?: string; visibleToParticipant?: boolean; draftedByAssistant?: boolean;
@@ -373,10 +408,39 @@ export async function addClientNote(actor: OrgActor, clientId: string, input: {
     run(sql)(
       `INSERT INTO case_note (access_code_id, client_user_id, author_user_id, kind, body, visible_to_participant, drafted_by_assistant)
        SELECT $2::uuid, $1::uuid, $4::uuid, $5::text, $6, $7, $8 WHERE ${IN_REACH} RETURNING id`,
-      [...params(actor, clientId), kind, body, !!input.visibleToParticipant, !!input.draftedByAssistant]
+      // visible_to_participant is always written false. No participant
+      // screen reads case notes, so "they can see this" was not true (R3
+      // review S9). Showing notes to participants is a wording decision for
+      // Troy first; until then nothing claims it.
+      [...params(actor, clientId), kind, body, false, !!input.draftedByAssistant]
     ),
   ]);
   return made[0] ? { ok: true, id: made[0].id } : { ok: false, error: "That person is not on your caseload." };
+}
+
+/**
+ * Correct a note. Only its author, only in this organization, only while the
+ * person is still in reach. Never a delete: the version trigger (051) keeps
+ * the earlier wording in case_note_version and stamps edited_at, and the
+ * update policy already limits it to the author.
+ */
+export async function editClientNote(actor: OrgActor, clientId: string, noteId: string, input: { body: string; kind?: string }):
+  Promise<{ ok: true } | { ok: false; error: string }> {
+  if (actor.viaPlatformAdmin || !actor.capabilities.has("org.note.write")) return { ok: false, error: "You do not have access to that." };
+  const body = (input.body ?? "").trim();
+  if (!body || body.length > 8000) return { ok: false, error: "A note needs some text, up to 8000 characters." };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+    run(sql)(
+      `UPDATE case_note n SET body = $6, kind = COALESCE($7::text, n.kind)
+        WHERE n.id = $5::uuid AND n.client_user_id = $1::uuid AND n.access_code_id = $2::uuid
+          AND n.author_user_id = $4::uuid AND ${IN_REACH}
+          AND (n.body IS DISTINCT FROM $6 OR n.kind IS DISTINCT FROM COALESCE($7::text, n.kind))
+        RETURNING n.id`,
+      [...params(actor, clientId), noteId, body, input.kind && NOTE_KINDS.has(input.kind) ? input.kind : null]
+    ),
+  ]);
+  return rows[0] ? { ok: true } : { ok: false, error: "Nothing changed. Only the person who wrote a note can correct it, and the wording has to be different." };
 }
 
 /* ------------------------------------------------ across the whole caseload -- */

@@ -29,6 +29,8 @@ export interface OrgPendingInvite {
   lastSentAt: string;
   sendCount: number;
   invitedByName: string | null;
+  /** Who sent it, so a caller can show each staff member only their own. */
+  invitedById: string | null;
 }
 
 export type CreateOrgInviteResult =
@@ -53,9 +55,10 @@ export async function getOrgPendingInvites(
     last_sent_at: string;
     send_count: number;
     invited_by_name: string | null;
+    invited_by: string | null;
   }>(
     `SELECT oi.user_id, u.name, u.email, oi.invited_at, oi.last_sent_at,
-            oi.send_count, inviter.name AS invited_by_name
+            oi.send_count, inviter.name AS invited_by_name, oi.invited_by
        FROM org_invite oi
        JOIN users u ON u.id = oi.user_id
        LEFT JOIN users inviter ON inviter.id = oi.invited_by
@@ -71,6 +74,7 @@ export async function getOrgPendingInvites(
     lastSentAt: r.last_sent_at,
     sendCount: Number(r.send_count),
     invitedByName: r.invited_by_name,
+    invitedById: r.invited_by,
   }));
 }
 
@@ -159,6 +163,32 @@ export async function createOrgInvite(opts: {
   );
 
   return { ok: true, userId, kind };
+}
+
+/** Who sent this organization's invite to this person. undefined = no invite; null = no recorded sender. */
+export async function getOrgInviteSender(accessCodeId: string, userId: string): Promise<string | null | undefined> {
+  const row = await getOne<{ invited_by: string | null }>(
+    `SELECT invited_by FROM org_invite WHERE access_code_id = $1 AND user_id = $2`,
+    [accessCodeId, userId]
+  );
+  return row ? row.invited_by : undefined;
+}
+
+/**
+ * May this person resend or remove a pending invite? Pure.
+ * Needs "Invite participants". Someone who sees the whole organization may act
+ * on any invite; anyone else only on invites they sent themselves.
+ */
+export function inviteActionAllowed(input: {
+  capabilities: ReadonlySet<string>;
+  actorUserId: string;
+  /** undefined = no invite exists. */
+  invitedBy: string | null | undefined;
+}): boolean {
+  if (!input.capabilities.has("org.participant.invite")) return false;
+  if (input.invitedBy === undefined) return false;
+  if (input.capabilities.has("org.client.view_all")) return true;
+  return !!input.invitedBy && input.invitedBy === input.actorUserId;
 }
 
 /**

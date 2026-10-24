@@ -636,6 +636,20 @@ async function todayAndTaskChecks() {
     JSON.stringify({ today: qd.filter((i) => i.section === "quiet").length, insights: ins.activity }));
   check("another organization keeps its own number", (await core.getQuietAfterDays(org2.id)) === 14);
   await sql`DELETE FROM data_access_log WHERE target_user_id IN (${pat}, ${hers})`;
+  // -- invited by the org, not sharing (R3 review S8): assignable, still unnamed beyond what the org typed
+  const invEmail = `${P}-t-invited-${uniq.toLowerCase()}@example.invalid`;
+  const invd = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "Invited Person", email: invEmail, invitedBy: owner });
+  if (invd.ok) created.users.push(invd.userId);
+  const selfJoin = await mkUser("t-selfjoin"); await core.redeemAccessCode(selfJoin, org.code);
+  const invitedList = await core.getInvitedNotSharing(org.id, owner);
+  check("someone the org invited, not sharing, is listed for assignment with only the name the org typed",
+    invd.ok && invitedList.some((p) => p.userId === invd.userId && p.name === "Invited Person") && !invitedList.some((p) => p.userId === selfJoin),
+    JSON.stringify(invitedList.map((p) => [p.name, p.pending])));
+  check("and no other organization sees them", (await core.getInvitedNotSharing(org2.id, spy)).length === 0);
+  if (invd.ok) await core.assignClientStaff(org.id, invd.userId, cm, owner);
+  check("they can be assigned without sharing anything, and nothing of theirs opens",
+    invd.ok && (await core.getInvitedNotSharing(org.id, owner)).find((p) => p.userId === invd.userId)?.assignedStaffId === cm
+      && (await core.getClientApplications(await A(cm), invd.userId)).ok === false);
 }
 
 /**
@@ -768,6 +782,19 @@ async function accessChecks() {
   check("the owner can take something away from one person (deny wins)", deny.ok && !(await A(cm)).capabilities.has("org.note.write"));
 
   check("an admin can adjust staff", (await core.setStaffCapability(aAdmin, cm, "org.insights.view", true, "staff")).ok === true);
+
+  // Only the owner makes, changes or removes an admin (R3 review S1). Before
+  // this, org.staff.manage was enough, and admins hold it.
+  check("an admin cannot promote a case manager to admin", (await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "org_admin", actorUserId: admin })).ok === false);
+  check("an admin cannot demote another admin", (await core.setOrgStaffRole({ orgId: org.id, userId: admin2, role: "staff", actorUserId: admin })).ok === false);
+  check("an admin cannot demote another admin through add_staff's re-role", (await core.addOrgStaff({ orgId: org.id, userId: admin2, role: "staff", addedBy: admin })).ok === false);
+  check("an admin cannot remove another admin", (await core.removeOrgStaff({ orgId: org.id, userId: admin2, actorUserId: admin })).ok === false);
+  const [{ role: admin2Role }] = await sql`SELECT role FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${admin2}`;
+  check("and the refused writes changed nothing in the database", admin2Role === "org_admin", admin2Role);
+  const ownerPromote = await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "org_admin", actorUserId: owner });
+  const ownerDemote = await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "staff", actorUserId: owner });
+  check("the owner can promote and demote an admin", ownerPromote.ok === true && ownerDemote.ok === true, `${ownerPromote.reason ?? ""} ${ownerDemote.reason ?? ""}`);
+  aCm = await A(cm);
   check("an admin cannot adjust another admin", (await core.setStaffCapability(aAdmin, admin2, "org.costs.view", true, "org_admin")).ok === false);
   check("nobody adjusts their own access", (await core.setStaffCapability(aAdmin, admin, "org.costs.view", true, "org_admin")).ok === false);
   check("the owner's access cannot be changed", (await core.setStaffCapability(aAdmin, owner, "org.costs.view", false, "owner")).ok === false);
@@ -792,6 +819,12 @@ async function accessChecks() {
   const overview = await core.getOrgAccessOverview(aOwner);
   const hire = overview?.find((m) => m.userId === inv.userId);
   check("the owner can invite someone to staff by email, and they show as invited", inv.ok && !!hire && hire.pending && hire.role === "staff" && hire.title === "Employment Specialist", JSON.stringify(inv));
+  const vol = await core.inviteOrgStaff(aOwner, { name: "Volunteer", email: `${P}-a-vol-${uniq.toLowerCase()}@example.invalid`, role: "volunteer" });
+  if (vol.ok) created.users.push(vol.userId);
+  const aVol = vol.ok ? await core.resolveOrgActor(vol.userId) : null;
+  check("a volunteer invite lands as staff who cannot invite participants or record placements, and sees only their caseload",
+    !!aVol && aVol.role === "staff" && !aVol.capabilities.has("org.participant.invite") && !aVol.capabilities.has("org.outcome.write") && aVol.reach === "assigned",
+    JSON.stringify(vol));
   check("an admin cannot create another admin", (await core.inviteOrgStaff(aAdmin, { name: "X", email: `${P}-a-x-${uniq.toLowerCase()}@example.invalid`, role: "org_admin" })).ok === false);
   const [{ email: outsiderEmail }] = await sql`SELECT email FROM users WHERE id = ${outsider}`;
   check("an address that already has an account elsewhere is not attached to this roster", (await core.inviteOrgStaff(aOwner, { name: "X", email: outsiderEmail, role: "staff" })).ok === false);
@@ -876,8 +909,12 @@ async function sharingChecks() {
   check("and a refused read writes no 'opened' entry", logged0 === 0, `rows=${logged0}`);
   const head = await core.getClientHeader(aRuss, wes);
   check("progress signals are absent until the person turns on progress sharing", head.ok && head.rows[0].progress === null);
+  check("and so are their account name, email and stage (review BL1)",
+    head.ok && head.rows[0].currentStage === null && head.rows[0].identitySource !== "account",
+    JSON.stringify({ src: head.rows?.[0]?.identitySource, stage: head.rows?.[0]?.currentStage }));
   await joinCohortConsent(wes);
   const headP = await core.getClientHeader(aRuss, wes);
+  check("with sharing on, the stage and the account's own details appear", headP.ok && headP.rows[0].identitySource === "account" && headP.rows[0].currentStage !== null);
   check("with progress sharing on, staff get counts and a next step, and still no content",
     headP.ok && headP.rows[0].progress?.applications === 1 && !JSON.stringify(headP.rows[0]).includes("PRIVATE-NOTE") && !JSON.stringify(headP.rows[0]).includes("RESUME-BODY"));
   check("they CAN see who the person is and that nothing is shared", head.ok && head.rows[0].scopes.resume.shared === false && head.rows[0].assignedStaffId === russ);
@@ -957,6 +994,17 @@ async function sharingChecks() {
     check("editing a note keeps the earlier wording", versions === 1, `versions=${versions}`);
     const del = await raised(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`DELETE FROM case_note WHERE id = ${note.id}`]));
     check("a note cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "delete succeeded");
+  }
+  if (note.ok) {
+    const fixed = await core.editClientNote(aRuss, wes, note.id, { body: "Met Tuesday. Bringing ID, SS card and pay stub Thursday." });
+    const notes = await core.getClientNotes(aRuss, wes);
+    const mineNow = notes.ok ? notes.rows.find((n) => n.id === note.id) : null;
+    check("the author can correct a note through the app, and every earlier wording is shown with it",
+      fixed.ok === true && !!mineNow?.edited_at && (mineNow?.earlier?.length ?? 0) >= 2, JSON.stringify(fixed));
+    check("somebody who did not write it cannot correct it", (await core.editClientNote(aNora, wes, note.id, { body: "rewritten by a colleague" })).ok === false);
+    const shown = await core.addClientNote(aRuss, wes, { body: "NOT-SHOWN-TO-PARTICIPANT", visibleToParticipant: true });
+    const [{ v }] = shown.ok ? await sql`SELECT visible_to_participant AS v FROM case_note WHERE id = ${shown.id}` : [{ v: null }];
+    check("a note is never marked visible to the participant, since no participant screen shows notes", v === false, String(v));
   }
 
   // -- helping without touching their work: a suggested job, a comment beside a shared document

@@ -24,7 +24,7 @@ interface Insights {
   unassigned: number;
   placements: {
     placements: number; bySource: Record<string, number>; stillEmployed: number; ended: number; leftForBetter: number; medianWage: number | null; wageKnownFor: number;
-    retention: { dayMark: number; eligible: number; employed: number; notEmployed: number; unknown: number; notAskedYet: number }[];
+    retention: { dayMark: number; eligible: number; employed: number; notEmployed: number; endedBeforeMark?: number; unknown: number; notAskedYet: number }[];
   };
 }
 const SCOPE: Record<string, string> = { applications: "Applications", resume: "Resumes", documents: "Cover letters" };
@@ -158,6 +158,7 @@ export function InsightsPage() {
             </div>
             <p className="text-xs text-t-phos-dim mt-2">
               A retention rate is &ldquo;still there&rdquo; out of &ldquo;old enough to ask&rdquo;, and nothing else belongs under it. Someone placed last week is not a 30-day failure, and someone you could not reach is not counted as either answer.
+              {" "}A placement with an end date before a check-in counts as &ldquo;no longer there&rdquo; at that check-in, even if nobody asked.
             </p>
           </>
         )}

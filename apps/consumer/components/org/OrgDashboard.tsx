@@ -38,6 +38,7 @@ import { summarizeStaffPerformance } from "@crucible/core/src/orgStaffPerformanc
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 // Pure wording for an empty staff list (tested in packages/core).
 import { staffEmptyState } from "@crucible/core/src/orgVisibilityShared";
+import { seatLedgerLine, staffLedgerLine, SEAT_LEDGER_HELP, type SeatLedger } from "@crucible/core/src/orgSeatsShared";
 import { SeeEveryonePanel } from "@/components/org/SeeEveryonePanel";
 import {
   DEFAULT_STAFF_PREFS,
@@ -113,6 +114,8 @@ interface OrgPayload {
   /** The organization's own threshold; 14 unless the owner changed it. */
   quietAfterDays?: number;
   org: { name: string; code: string; logoUrl: string | null; role: string; seatLimit: number | null };
+  /** Seat truth for people who may see seats; null otherwise. */
+  seats?: SeatLedger | null;
   staff: StaffMember[];
   cohort: Cohort;
   invites?: PendingInvite[];
@@ -125,6 +128,9 @@ interface OrgPayload {
   unassignedJoined?: number | null;
   /** People assigned to the viewer, sharing or not; null = unknown. */
   assignedToViewer?: number | null;
+  canAssign?: boolean;
+  /** Invited by this organization, not sharing progress: name and email it typed, nothing else. */
+  invitedNotSharing?: { userId: string; name: string | null; email: string | null; joinedAt: string; assignedStaffId: string | null; pending: boolean }[];
 }
 
 function fmtDate(s: string | null): string {
@@ -461,6 +467,10 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
   // "See everyone" for them). Their empty list gets words they can act on.
   const ownCaseloadOnly = isStaffView && data?.seesEveryone === false;
   const seatLimit = data?.org.seatLimit ?? null;
+  // Seats come from the ledger: claimed is what the cap is checked against,
+  // and it does not go down when someone leaves. The member count is not a
+  // seat count (it showed a free seat that did not exist after a departure).
+  const seats = data?.seats ?? null;
   // Invited-but-not-yet-active people hold a seat (they count in totalJoined
   // and, having no sharing consent, in pendingCount) but have not actually
   // joined -- split them out so both numbers stay honest.
@@ -655,7 +665,12 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           { label: "Active this week", value: String(summary.activeThisWeek) },
           { label: "Hired", value: String(summary.hired) },
           ...(canManage
-            ? [{ label: "Seats used", value: seatLimit != null ? `${totalJoined}/${seatLimit}` : "Unlimited" }]
+            ? [{
+                label: "Seats claimed",
+                value: seats
+                  ? seats.seatsTotal != null ? `${seats.seatsClaimed}/${seats.seatsTotal}` : `${seats.seatsClaimed}, no limit`
+                  : seatLimit != null ? `?/${seatLimit}` : "No limit",
+              }]
             : []),
           ...(showCosts ? [{ label: "AI cost (all time)", value: usd(totalAiCost) }] : []),
         ].map((s) => (
@@ -730,10 +745,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 <h2 className="text-lg font-bold text-t-white">Team</h2>
                 <div className="flex items-center gap-3 text-xs">
                   <span className="text-t-phos-dim">
-                    {staff.length} {staff.length === 1 ? "member" : "members"}
-                    {seatLimit != null
-                      ? `, ${totalJoined}/${seatLimit} seats used`
-                      : ", unlimited seats"}
+                    {seats && staffLedgerLine(seats) ? staffLedgerLine(seats) : `${staff.length} on staff`}
+                    {seats ? `. ${seatLedgerLine(seats)}` : seatLimit != null ? "" : ". No seat limit."}
                   </span>
                   <a
                     href={`mailto:hmu@themidnightgarden.club?subject=${encodeURIComponent(
@@ -745,6 +758,9 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   </a>
                 </div>
               </div>
+              {seats && seats.seatsClaimed > seats.seatsActive && (
+                <p className="-mt-1 mb-3 text-[11px] text-t-phos-dim">{SEAT_LEDGER_HELP}</p>
+              )}
               {staff.length === 0 ? (
                 <p className="text-sm text-t-phos-dim bg-t-panel border border-t-line px-4 py-4">
                   No staff yet. Add your team below, then assign clients to them.
@@ -1013,6 +1029,44 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               && (!staffFilter || (staffFilter === UNASSIGNED ? !c.assignedStaffId : c.assignedStaffId === staffFilter)))}
             showAssign={!!data}
           />
+
+          {(data?.invitedNotSharing?.length ?? 0) > 0 && (
+            <div id="invited" className="mt-6 scroll-mt-24 bg-t-panel border border-t-line">
+              <div className="border-b border-t-line px-4 py-3">
+                <h2 className="text-sm font-bold text-t-white">Invited by your organization, not sharing progress</h2>
+                <p className="mt-0.5 text-[11px] text-t-phos-dim">
+                  You can put them on a caseload now. You see only the name and email you entered.
+                  Their progress and their work stay private until they turn on sharing.
+                </p>
+              </div>
+              <ul className="divide-y divide-t-line">
+                {data!.invitedNotSharing!.map((p) => (
+                  <li key={p.userId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
+                    <span>
+                      <span className="block text-sm text-t-white">{p.name || p.email}</span>
+                      <span className="block text-xs text-t-phos-dim">
+                        {p.pending ? "Invited, has not signed in yet" : `Joined ${fmtDate(p.joinedAt)}`}
+                      </span>
+                    </span>
+                    {(data?.canAssign ?? canManage) ? (
+                      <select
+                        aria-label={`Assign ${p.name || p.email}`}
+                        value={p.assignedStaffId || ""}
+                        onChange={(e) => assign(p.userId, e.target.value)}
+                        disabled={saving === p.userId}
+                        className="t-focus bg-t-panel-2 border border-t-line text-xs text-t-phos px-2 py-1.5 disabled:opacity-50"
+                      >
+                        <option value="">Unassigned</option>
+                        {staff.map((m) => (
+                          <option key={m.userId} value={m.userId}>{m.name || m.email}</option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {clients.length > 0 && joinedNotSharing > 0 && (
             <p className="text-xs text-t-phos-dim mt-4">

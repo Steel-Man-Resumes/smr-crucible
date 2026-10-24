@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { query } from "@crucible/core";
+import { query, seatLedgerFromCounts } from "@crucible/core";
 import { requirePlatformAdmin } from "@/lib/org-guard";
 
 export async function GET() {
@@ -29,8 +29,15 @@ export async function GET() {
     org_logo_url: string | null;
     owner_email: string | null;
     joined: number;
+    max_redemptions: number | null;
+    times_redeemed: number;
+    daily_limit: number | null;
+    crm_v2: boolean;
+    partner_user_id: string | null;
+    max_staff: number | null;
   }>(
     `SELECT ac.id, ac.code, ac.partner_name, ac.tier, ac.is_active, ac.org_logo_url,
+            ac.max_redemptions, ac.times_redeemed, ac.daily_limit, ac.crm_v2, ac.partner_user_id, ac.max_staff,
             u.email AS owner_email,
             0 AS joined
        FROM access_code ac
@@ -44,16 +51,30 @@ export async function GET() {
   // sweeping the table -- and the member count had the same defect the staff
   // count once did: an unscoped subquery that reads zero for everybody.
   const { runPerOrg } = await import("@crucible/core");
-  const counts = await runPerOrg<{ staff: number; joined: number }>(
+  const counts = await runPerOrg<{ staff: number; joined: number; invited: number }>(
     orgs.map((o) => o.id),
     guard.userId,
     `SELECT (SELECT COUNT(*)::int FROM org_staff WHERE access_code_id = $1) AS staff,
-            (SELECT COUNT(DISTINCT user_id)::int FROM access_code_redemption WHERE access_code_id = $1) AS joined`,
+            (SELECT COUNT(DISTINCT user_id)::int FROM access_code_redemption WHERE access_code_id = $1) AS joined,
+            (SELECT COUNT(*)::int FROM org_invite oi JOIN users u ON u.id = oi.user_id
+              WHERE oi.access_code_id = $1
+                AND u."emailVerified" IS NULL AND u.password_hash IS NULL
+                AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)
+                AND EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.access_code_id = $1 AND r.user_id = oi.user_id)) AS invited`,
     (orgId) => [orgId]
   );
+  // Seats from the ledger, never from the member count: claimed seats do not
+  // come back when someone leaves (Troy, 2026-06-10), so "joined" overstated
+  // the free seats after any departure.
   const withStaff = orgs.map((o) => {
     const c = counts.get(o.id)?.[0];
-    return { ...o, joined: c?.joined ?? 0, staff_count: c?.staff ?? 0 };
+    const joined = c?.joined ?? 0;
+    return {
+      ...o,
+      joined,
+      staff_count: c?.staff ?? 0,
+      seats: seatLedgerFromCounts(o, { joined, invited: c?.invited ?? 0, staff: c?.staff ?? 0 }),
+    };
   });
 
   return NextResponse.json({ orgs: withStaff });

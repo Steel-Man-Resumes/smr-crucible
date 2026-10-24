@@ -209,3 +209,61 @@ export const DELEGABLE_CAPABILITIES: { capability: OrgCapability; label: string;
   { capability: "org.seats.view", label: "See seats used", help: "" },
   { capability: "org.costs.view", label: "See AI cost", help: "What each participant's AI use has cost." },
 ];
+
+/**
+ * Staff presets: a named starting point over the EXISTING roles, stored as
+ * ordinary per-person exceptions. No new role, so the database function and
+ * the role constraint stay as they are (R3 review S11).
+ *
+ * VOLUNTEER: a staff member who works only the people assigned to them, and
+ * who cannot spend the organization's seats (no participant invites) or write
+ * the numbers a funder reads (no placements or retention checks). Seats, AI
+ * cost, exports and the organization's numbers are already outside the staff
+ * role, and the denies below keep them out even if the role's defaults widen
+ * later. Whether the organization's code is shown to someone follows their
+ * capabilities (handled with the seat gate), and a volunteer holds none that
+ * show it.
+ */
+export const STAFF_PRESETS = {
+  volunteer: {
+    label: "Volunteer",
+    help: "Works only the people assigned to them. Cannot invite participants, which uses seats, or record placements and retention checks.",
+    role: "staff" as const,
+    denies: [
+      "org.participant.invite",
+      "org.outcome.write",
+      "org.client.view_all",
+      "org.client.assign",
+      "org.seats.view",
+      "org.costs.view",
+      "org.export",
+      "org.insights.view",
+    ] as readonly OrgCapability[],
+  },
+} as const;
+
+export type StaffPreset = keyof typeof STAFF_PRESETS;
+
+export function isStaffPreset(v: unknown): v is StaffPreset {
+  return typeof v === "string" && Object.prototype.hasOwnProperty.call(STAFF_PRESETS, v);
+}
+
+/**
+ * The exception writes a preset needs for someone at `role`: a deny for each
+ * preset capability the role would otherwise give, and a clear for every other
+ * preset capability, so applying a preset twice changes nothing and an old
+ * grant cannot outlive it.
+ */
+export function presetOverrideWrites(preset: StaffPreset, role: OrgStaffRole = STAFF_PRESETS[preset].role):
+  { capability: OrgCapability; effect: "deny" | "clear" }[] {
+  const base = new Set(capabilitiesForRole(role));
+  const delegable = new Set(DELEGABLE_CAPABILITIES.map((d) => d.capability));
+  return STAFF_PRESETS[preset].denies
+    .filter((c) => delegable.has(c))
+    .map((capability) => ({ capability, effect: base.has(capability) ? "deny" as const : "clear" as const }));
+}
+
+/** Does this effective capability set match the preset (nothing it denies is on)? */
+export function matchesPreset(preset: StaffPreset, effective: ReadonlySet<string>): boolean {
+  return STAFF_PRESETS[preset].denies.every((c) => !effective.has(c));
+}

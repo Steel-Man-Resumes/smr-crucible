@@ -18,7 +18,7 @@
  */
 import { runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
-import { getPartnerCohort } from "./partnerDashboard";
+import { getPartnerCohort, getInvitedNotSharing } from "./partnerDashboard";
 import { getQuietAfterDays } from "./orgStaffPerformance";
 import { listStaffTasks } from "./staffTasks";
 import { listOutcomes } from "./orgOutcomes";
@@ -158,6 +158,18 @@ export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null
     if (seesAll && actor.capabilities.has("org.client.assign") && !c.assignedStaffId) {
       items.push({ key: `un:${c.userId}`, section: "unassigned", clientId: c.userId, clientName: c.name, when: c.joinedAt,
         reason: `${first(c.name)} is not assigned to anyone, so they are on nobody's list.`, action: { label: "Assign them", href: "/dashboard" } });
+    }
+  }
+  // People the organization invited who have not turned on sharing: they are
+  // on nobody's list until someone is assigned, and assigning them needs no
+  // shared content. Only the name and email the organization typed are used.
+  if (seesAll && actor.capabilities.has("org.client.assign")) {
+    const invited = await getInvitedNotSharing(actor.orgId, actor.userId).catch(() => []);
+    for (const p of invited) {
+      if (p.assignedStaffId) continue;
+      items.push({ key: `un:${p.userId}`, section: "unassigned", clientId: p.userId, clientName: p.name, when: p.joinedAt,
+        reason: `${first(p.name)} was invited by your organization and is not assigned to anyone. They have not turned on progress sharing, so you see only the name you entered.`,
+        action: { label: "Assign them", href: "/dashboard#invited" } });
     }
   }
   return items;

@@ -40,12 +40,33 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       }),
     }),
     draft_staff_check_in: tool({
-      description: "Prepare the facts for a check-in draft for a participant you may see. Write the draft in your reply using only these facts and what the staff member reported. Nothing is saved or sent; they review and use their existing task/note screen.",
-      parameters: jsonSchema<{clientId: string}>({ type: "object", properties: { clientId: { type: "string", pattern: "^[0-9a-fA-F-]{36}$" } }, required: ["clientId"], additionalProperties: false }),
-      execute: safe(async ({ clientId }) => {
+      description: "Prepare the facts for a draft about a participant you may see: a check-in message the staff member will send themselves (purpose check_in, the default) or a case note for their review (purpose case_note). Write the draft in your reply using only these facts and what the staff member reported. Nothing is saved or sent. The staff member can place the draft on the participant's page, where it stays unsaved until they save it.",
+      parameters: jsonSchema<{clientId: string; purpose?: "check_in" | "case_note"}>({ type: "object", properties: { clientId: { type: "string", pattern: "^[0-9a-fA-F-]{36}$" }, purpose: { type: "string", enum: ["check_in", "case_note"] } }, required: ["clientId"], additionalProperties: false }),
+      execute: safe(async ({ clientId, purpose }) => {
         const result = await (await import("@crucible/core")).getClientHeader(await actor(), clientId);
         if (!result.ok) return result;
-        return { status: "draft_only", saved: false, sent: false, source: result.rows.map((h) => ({ firstName: h.name?.split(/\s+/)[0], progress: h.progress })), instruction: "Offer one next step and ask what help they want. Do not invent a meeting, promise or contact attempt." };
+        const kind = purpose === "case_note" ? "case_note" : "check_in";
+        return {
+          status: "draft_only", saved: false, sent: false, purpose: kind, participantId: clientId,
+          source: result.rows.map((h) => ({ firstName: h.name?.split(/\s+/)[0], progress: h.progress })),
+          instruction: (kind === "case_note"
+            ? "Write the note only from what the staff member told you, in plain professional language. Do not add anything they did not say."
+            : "Offer one next step and ask what help they want. Do not invent a meeting, promise or contact attempt.")
+            + " Then call offer_staff_draft with the draft text ONLY: no greeting to the staff member, no explanation, no note that it is a draft. In your reply, tell the staff member it is a draft and nothing was saved or sent.",
+        };
+      }),
+    }),
+    offer_staff_draft: tool({
+      description: "Offer the staff member a draft to place on the participant's page, where it stays unsaved until they save it. Pass ONLY the draft text itself (the note or the message), never your words to the staff member. Nothing is saved or sent.",
+      parameters: jsonSchema<{clientId: string; purpose: "check_in" | "case_note"; body: string}>({ type: "object", properties: { clientId: { type: "string", pattern: "^[0-9a-fA-F-]{36}$" }, purpose: { type: "string", enum: ["check_in", "case_note"] }, body: { type: "string", minLength: 1, maxLength: 4000 } }, required: ["clientId", "purpose", "body"], additionalProperties: false }),
+      execute: safe(async ({ clientId, purpose, body }) => {
+        // Reach is re-checked: a draft is offered only about someone this
+        // staff member may see.
+        const result = await (await import("@crucible/core")).getClientHeader(await actor(), clientId);
+        if (!result.ok) return result;
+        const text = String(body ?? "").trim().slice(0, 4000);
+        if (!text) return { status: "unavailable", error: "There was no draft text to offer." };
+        return { status: "draft_only", saved: false, sent: false, participantId: clientId, purpose: purpose === "case_note" ? "case_note" : "check_in", body: text };
       }),
     }),
   };

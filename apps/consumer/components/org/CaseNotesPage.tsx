@@ -53,8 +53,8 @@ export function CaseNotesPage() {
               <p className="text-xs text-t-phos-dim mb-1">
                 <Link href={`/dashboard/clients/${n.client_user_id}`} className="t-focus text-t-white font-medium underline decoration-t-line underline-offset-4 hover:decoration-t-amber">
                   {n.client_name || "Participant"}
-                </Link>{" "}· {NOTE_KIND_LABELS[n.kind as NoteKind] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
-                {n.drafted_by_assistant ? " · drafted with t.ROY" : ""}{n.edited_at ? " · corrected" : ""}{n.visible_to_participant ? " · they can see this" : ""}
+                </Link>{" "}· {n.kind === "draft" ? "Check-in draft, not sent" : NOTE_KIND_LABELS[n.kind as NoteKind] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
+                {n.drafted_by_assistant ? " · drafted with t.ROY" : ""}{n.edited_at ? " · corrected" : ""}
               </p>
               <p className="text-sm text-t-white whitespace-pre-wrap">{n.body}</p>
             </li>
