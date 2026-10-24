@@ -205,11 +205,34 @@ export const RESOURCE_BAND_FIELDS = `service_id,org_name,service_name,descriptio
  * poor band can never push the checked band off the page and a big state's dataset rows
  * cannot bury its own county. Order: band, then closest, then newest.
  */
-export function resourceBandSql(opts: ResourcePlaceQuery & { bands?: readonly ResourceBand[] }): { sql: string; params: unknown[] } {
+/** Paged state reads (Troy 2026-10-24): a state page walks the whole list, RESOURCE_PAGE_MAX rows a page. */
+export const RESOURCE_PAGE_MAX = 200;
+export const RESOURCE_PAGE_LIMIT = 60;
+
+export function resourceBandSql(opts: ResourcePlaceQuery & { bands?: readonly ResourceBand[]; page?: number | null; pageSize?: number | null }): { sql: string; params: unknown[] } {
   const { where, params } = resourcePlaceWhere(opts);
   const bands = (opts.bands ?? ["A"]).filter(isResourceBand);
   params.push(bands.length ? bands : ["A"]);
   const bandAt = params.length;
+  const paged = !!opts.wholeState && Number.isInteger(opts.page) && (opts.page as number) >= 1 && (opts.page as number) <= RESOURCE_PAGE_LIMIT;
+  if (paged) {
+    // Walk the whole state list instead of the per-level cap. Same columns, same order, so page 1 starts where the capped read starts.
+    const size = Math.min(RESOURCE_PAGE_MAX, Math.max(1, Math.floor(Number(opts.pageSize) || RESOURCE_PAGE_MAX)));
+    params.push(size, ((opts.page as number) - 1) * size);
+    const cols = ["service_id", "org_name", "service_name", "description", "eligibility", "area_id", "area_label", "geo_scope",
+      "state", "county", "counties", "city", "address", "zip", "phone", "hours", "website", "source_url",
+      "fees", "what_to_bring", "limits", "verification_tier", "tier_confidence", "corroboration_points", "version", "band", "band_reason"];
+    return {
+      sql: `SELECT ${[...cols, "last_checked::text AS last_checked", "expires_on::text AS expires_on"].join(", ")}
+         FROM resource_band_publication_v
+        WHERE ${where} AND band = ANY($${bandAt}::text[])
+        ORDER BY band,
+                 CASE geo_scope WHEN 'city' THEN 0 WHEN 'county' THEN 1 WHEN 'multi_county' THEN 1 WHEN 'statewide' THEN 2 ELSE 3 END,
+                 resource_band_publication_v.last_checked DESC, org_name, service_id
+        LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    };
+  }
   params.push(RESOURCE_APP_LEVEL_CAP);
   const plain = ["service_id", "org_name", "service_name", "description", "eligibility", "area_id", "area_label", "geo_scope",
     "state", "county", "counties", "city", "address", "zip", "phone", "hours", "website", "source_url",
