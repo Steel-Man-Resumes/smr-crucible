@@ -56,6 +56,10 @@ interface ConfidenceCoachProps {
   record: { type?: string; most_recent?: string; supervision?: string };
   strengths: Array<{ title: string; evidence?: string }>;
   forgePromptContext: string;
+  /** The words the person just prepared in the planner. Practice uses them. */
+  preparedScript?: string;
+  /** The person's own record lines. Pass only under the stored record planner consent. */
+  recordWords?: string;
   onBack: () => void;
 }
 
@@ -65,9 +69,12 @@ export function ConfidenceCoach({
   record,
   strengths,
   forgePromptContext,
+  preparedScript,
+  recordWords,
   onBack,
 }: ConfidenceCoachProps) {
   const [personaId, setPersonaId] = useState("hiring_warm");
+  const [askVariant, setAskVariant] = useState<"asks" | "does_not_ask">("asks");
   const [gentlenessId, setGentlenessId] = useState("balanced");
   const [started, setStarted] = useState(false);
 
@@ -245,6 +252,9 @@ export function ConfidenceCoach({
       hurdleLabel,
       strengths: strengths.map((s) => s.title).filter(Boolean),
       forgeContext: forgePromptContext,
+      preparedScript,
+      recordWords,
+      askVariant,
     });
 
     try {
@@ -392,6 +402,31 @@ export function ConfidenceCoach({
               }`}
             >
               {g.label}
+            </button>
+          ))}
+        </div>
+
+        {(preparedScript || recordWords) && (
+          <div className="bg-t-panel p-4 border border-t-line mb-4" data-testid="prepared-plan">
+            <h2 className="font-semibold text-t-white mb-1">You are practicing the plan you just made</h2>
+            <p className="text-sm text-t-phos whitespace-pre-line">{[recordWords, preparedScript].filter(Boolean).join("\n")}</p>
+            <p className="text-xs text-t-phos-dim mt-2">Say it your way. It does not have to match word for word.</p>
+          </div>
+        )}
+
+        <h2 className="font-semibold text-t-white mb-1">Does this person ask about it?</h2>
+        <p className="text-xs text-t-phos-dim mb-3">Practice both. Some people ask, some never do, and you still get to choose.</p>
+        <div className="flex gap-2 mb-6">
+          {([["asks", "They ask"], ["does_not_ask", "They never ask"]] as const).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setAskVariant(id)}
+              aria-pressed={askVariant === id}
+              className={`t-focus flex-1 px-3 py-2.5 border text-sm font-medium transition-colors ${
+                askVariant === id ? "bg-t-amber text-white border-t-amber" : "bg-t-panel text-t-white border-t-line hover:border-t-amber"
+              }`}
+            >
+              {label}
             </button>
           ))}
         </div>

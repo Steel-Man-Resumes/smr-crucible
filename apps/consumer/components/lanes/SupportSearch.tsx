@@ -126,6 +126,10 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
   useEffect(() => {
     const wanted = deepLinkCategory(window.location.search, SUPPORT_CATEGORIES.map((c) => c.id));
     if (wanted) { setCategory(wanted); setDeepLinked(true); }
+    // The hurdle planner may also pass the place the person named. It fills the
+    // field only; a search still waits for the saved place or the Find button.
+    const loc = new URL(window.location.href).searchParams.get("location");
+    if (loc) setLocation(loc.slice(0, 120));
   }, []);
   useEffect(() => {
     // The saved place only: typing a place never fires a search by itself.
