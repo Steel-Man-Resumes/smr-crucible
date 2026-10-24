@@ -5,7 +5,7 @@ export const AI_WORKFLOWS = [
   'forge-suggest-fix','forge-recheck','second-check','resume','resume-full',
   'interview','interview-voice-token',
   'quick-apply','follow-up','intake-followups','disclosure','disclosure-takeaways',
-  'apply-email','parse','rush-resume','resume-fine-tune','next-step-why','fit-check','disclosure-strengths',
+  'apply-email','parse','rush-resume','resume-fine-tune','next-step-why','fit-check','disclosure-strengths','career-plan',
 ] as const;
 export type AiWorkflow = typeof AI_WORKFLOWS[number];
 export function isAiWorkflow(value: string): value is AiWorkflow {

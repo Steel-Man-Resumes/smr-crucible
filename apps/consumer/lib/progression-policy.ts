@@ -14,7 +14,7 @@ export function validProgressionPolicy(p: unknown): p is ProgressionPolicy {
  return Number(o.starter_calls)>=1 && Number(o.starter_calls)<=Number(o.tailored_calls) && Number(o.tailored_calls)<=Number(o.applied_calls) && Number(o.applied_calls)<=100 && Number(o.bonus_calls)>=1 && Number(o.bonus_calls)<=10 && Number(o.bonus_daily_cap)<=20 && Number(o.bonus_monthly_cap)<=100 && Number.isFinite(o.daily_usd) && Number(o.daily_usd)>=0.1 && Number(o.daily_usd)<=20 && Number.isFinite(o.reserve_usd) && Number(o.reserve_usd)>=0.01 && Number(o.reserve_usd)<=2 && Number(o.reserve_usd)<=Number(o.daily_usd);
 }
 /** Forge and essential support retain their own allowances. Voice is separately sponsored. */
-export const PROGRESSION_AI = ['assistant','coach','resume','resume-full','resume-fine-tune','interview','follow-up','apply-email','fit-check','next-step-why'] as const;
+export const PROGRESSION_AI = ['assistant','coach','resume','resume-full','resume-fine-tune','interview','follow-up','apply-email','fit-check','next-step-why','career-plan'] as const;
 export function countsForProgression(endpoint: string) { return (PROGRESSION_AI as readonly string[]).includes(endpoint); }
 export function baseAllowance(policy: ProgressionPolicy, facts: {tailored:boolean;applied:boolean}) { return facts.applied ? policy.applied_calls : facts.tailored ? policy.tailored_calls : policy.starter_calls; }
 export function canGrantBonus(policy: ProgressionPolicy, day: number, month: number) { return day + policy.bonus_calls <= policy.bonus_daily_cap && month + policy.bonus_calls <= policy.bonus_monthly_cap; }
