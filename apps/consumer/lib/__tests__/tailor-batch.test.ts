@@ -278,3 +278,12 @@ test("sign-out clears every batch key and the hand-offs; a new owner keeps only 
   clearTailorBatchStorage(storage());
   assert.deepEqual([...data.keys()], ["unrelated"]);
 });
+
+test("R1: only a fresh session read with nobody signed in counts as signed out", async () => {
+  const { confirmedSignedOut } = await import("../tailor-batch");
+  const reply = (status: number, body: unknown) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+  assert.equal(await confirmedSignedOut((async () => { throw new TypeError("offline"); }) as unknown as typeof fetch), false, "a failed read keeps the batch");
+  assert.equal(await confirmedSignedOut(reply(503, {})), false, "a server error keeps the batch");
+  assert.equal(await confirmedSignedOut(reply(200, { user: { id: OWNER } })), false, "still signed in keeps the batch");
+  assert.equal(await confirmedSignedOut(reply(200, {})), true, "a confirmed sign-out clears it");
+});

@@ -13,7 +13,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import {
-  BATCH_HANDOFF_KEY, BATCH_STORAGE_PREFIX, PHASE_LABEL, admitBatch, clearTailorBatchStorage, batchSummary, createBatch, plural, readBatch, runBatch, runnableIndexes,
+  BATCH_HANDOFF_KEY, BATCH_STORAGE_PREFIX, PHASE_LABEL, admitBatch, clearTailorBatchStorage, confirmedSignedOut, batchSummary, createBatch, plural, readBatch, runBatch, runnableIndexes,
   type BatchJob, type BatchState, type TailorResult,
 } from "@/lib/tailor-batch";
 import { loadTailorContext, type TailorContext } from "@/lib/tailor-context";
@@ -42,10 +42,18 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
   const contextRef = useRef<{ owner: string; lane: string | null; value: TailorContext } | null>(null);
   const sessionStatus = useSession().status;
 
-  // Signed out, or another person signed in on this tab: their picks and queues go.
+  // Another person signed in on this tab: only their own queues stay. A session
+  // read that merely failed is not a sign-out: the batch is cleared only when a
+  // fresh read confirms nobody is signed in (confirmedSignOut also clears it).
   useEffect(() => {
-    if (sessionStatus === "unauthenticated") { clearTailorBatchStorage(); runToken.current++; setBatch(null); return; }
-    if (ownerUid) clearTailorBatchStorage(typeof sessionStorage === "undefined" ? null : sessionStorage, ownerUid);
+    let live = true;
+    if (sessionStatus === "unauthenticated") {
+      void confirmedSignedOut().then(out => {
+        if (!live || !out) return;
+        clearTailorBatchStorage(); runToken.current++; setBatch(null);
+      });
+    } else if (ownerUid) clearTailorBatchStorage(typeof sessionStorage === "undefined" ? null : sessionStorage, ownerUid);
+    return () => { live = false; };
   }, [sessionStatus, ownerUid]);
 
   // Restore or create the batch for this person only.
@@ -248,6 +256,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
         </div>
       )}
       {running && <p role="status" className="mt-3 text-sm text-t-phos-dim">Working one job at a time. You can stay on this page.</p>}
+      <p className="mt-3 text-xs text-t-phos-dim">If a resume is made but does not save, we keep it encrypted for up to 7 days so a retry can save it. Then it is deleted.</p>
 
       {summary.saved > 0 && (
         <div className="mt-3 space-y-2 text-xs text-t-phos-dim">

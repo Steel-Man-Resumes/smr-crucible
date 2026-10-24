@@ -283,6 +283,22 @@ export const PHASE_LABEL: Record<BatchPhase, string> = {
 export const BATCH_STORAGE_PREFIX = "tailor_batch:v1:";
 export const BATCH_HANDOFF_KEY = "resume_target_batch";
 
+/**
+ * True only when a fresh session read says nobody is signed in. A failed or
+ * non-ok read is NOT a sign-out (next-auth reports both as "unauthenticated"),
+ * so browser work is kept, the same rule as lib/confirmed-sign-out.ts.
+ */
+export async function confirmedSignedOut(send: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const response = await send("/api/auth/session", { cache: "no-store" });
+    if (!response.ok) return false;
+    const session = await response.json();
+    return !session?.user;
+  } catch {
+    return false;
+  }
+}
+
 /** Everything this feature keeps in the browser tab. Cleared on sign-out (lib/confirmed-sign-out.ts). */
 export function clearTailorBatchStorage(storage: Pick<Storage, "length" | "key" | "removeItem" | "getItem"> | null = typeof sessionStorage === "undefined" ? null : sessionStorage, keepOwner?: string | null) {
   if (!storage) return;
