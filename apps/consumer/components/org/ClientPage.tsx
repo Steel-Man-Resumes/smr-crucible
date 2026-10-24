@@ -14,6 +14,7 @@
  * Every open of a shared tab is written to a log the participant can read.
  * The page says so, above the content, every time.
  */
+import { orgNoteDraftKey } from "@/lib/org-note-draft";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { OutcomesPanel } from "@/components/org/OutcomesPanel";
@@ -562,9 +563,10 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
   // A draft t.ROY wrote, placed here from the assistant. It is NOT saved:
   // it sits in this box, marked, until the staff member saves or discards it.
-  const draftKey = `org-note-draft:${clientId}`;
+  const draftKey = viewerId ? orgNoteDraftKey(viewerId, clientId) : null;
   const [draft, setDraft] = useState<{ purpose: "case_note" | "check_in" } | null>(null);
   useEffect(() => {
+    if (!draftKey) return;
     try {
       const raw = sessionStorage.getItem(draftKey);
       if (!raw) return;
@@ -579,7 +581,7 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
     } catch { /* no draft */ }
   }, [draftKey]);
   function clearDraft() {
-    try { sessionStorage.removeItem(draftKey); } catch { /* ignore */ }
+    try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { /* ignore */ }
     setDraft(null);
   }
   async function save() {

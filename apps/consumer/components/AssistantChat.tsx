@@ -12,6 +12,7 @@
 
 "use client";
 
+import { orgNoteDraftKey } from "@/lib/org-note-draft";
 import { TroyWork } from "@crucible/consumer-ui";
 import { assistantErrorMessage } from "@/lib/assistant-error-message";
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
@@ -765,7 +766,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     type="button"
                     onClick={() => {
                       try {
-                        sessionStorage.setItem(`org-note-draft:${draftFor.id}`, JSON.stringify({ body: draftText.slice(0, 8000), purpose: draftFor.purpose, at: new Date().toISOString() }));
+                        if (accountId) sessionStorage.setItem(orgNoteDraftKey(accountId, draftFor.id), JSON.stringify({ body: draftText.slice(0, 8000), purpose: draftFor.purpose, at: new Date().toISOString() }));
                       } catch { /* storage blocked: the words are still in this reply */ }
                       router.push(`/dashboard/clients/${draftFor.id}`);
                     }}
