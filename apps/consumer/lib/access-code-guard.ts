@@ -13,6 +13,13 @@ import type { RateLimitConfig } from "./auth-rate-limit";
  */
 export const CODE_REFUSAL = "That code did not work. Check it with the organization that gave it to you.";
 
+/**
+ * The only shape a person may type or carry in a cookie: what the mint route
+ * makes. The hub codes contain "-" and are reachable only through the
+ * secret-gated hub-unlock route (security review 1, BL-3).
+ */
+export const CODE_SHAPE = /^[A-Z0-9]{4,20}$/;
+
 /** Code tries (redeem and the "what does it require" check share them). */
 export const CODE_ATTEMPT_LIMITS = {
   perUser: { maxRequests: 20, windowMs: 3_600_000 } as RateLimitConfig,
@@ -50,6 +57,6 @@ export function mintCodeChoice(body: { code?: unknown; confirmChosenCode?: unkno
   if (body.confirmChosenCode !== true) {
     return { ok: false, error: "A chosen code is easier to guess. Leave it empty for a random one, or confirm that you want this one." };
   }
-  if (!/^[A-Z0-9]{4,20}$/.test(raw)) return { ok: false, error: "code must be 4-20 uppercase alphanumeric characters" };
+  if (!CODE_SHAPE.test(raw)) return { ok: false, error: "code must be 4-20 uppercase alphanumeric characters" };
   return { ok: true, code: raw, chosen: true };
 }

@@ -13,6 +13,7 @@
 import { progressionLegacyBonus, checkProgressionTool } from './progression-server';
 import { countsForProgression } from './progression-policy';
 import { runAiOperation } from "./ai-operation-server";
+import { attributeFromCookie } from "./code-attribution";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
@@ -23,7 +24,6 @@ import {
   refundUserUsage,
   validateAccessCode,
   logPartnerUsage,
-  ensureUserAttribution,
   FORGE_IP_LIMITS,
 } from "@crucible/core";
 import type { UserTier } from "@crucible/core";
@@ -164,7 +164,8 @@ export function withRateLimit(
       // (first code wins) and the call is logged to the funder/compliance ledger.
       const authedCode = getAccessCodeCookie(request);
       if (authedCode) {
-        void ensureUserAttribution(userId, authedCode).catch(() => {});
+        // Within the code-try budget (lib/code-attribution.ts, review 1 SF-1).
+        void attributeFromCookie(getClientIp(request), userId, authedCode);
         void logPartnerUsage({
           code: authedCode,
           ...(opts.partnerUsageWithoutUser ? {} : { userId }),
@@ -244,7 +245,7 @@ export function withRateLimit(
           );
         }
         if (authedCode) {
-          void ensureUserAttribution(plan.userId, authedCode).catch(() => {});
+          void attributeFromCookie(getClientIp(request), plan.userId, authedCode);
           void logPartnerUsage({ code: authedCode, userId: plan.userId, endpoint: opts.endpoint });
         }
         return runAiOperation({ userId: plan.userId, endpoint: opts.workflow ?? opts.endpoint }, () => handler(request));

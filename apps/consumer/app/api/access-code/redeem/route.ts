@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { redeemAccessCode } from "@crucible/core";
 import { checkAuthRateLimits, getClientIp } from "@/lib/auth-rate-limit";
-import { CODE_REFUSAL, codeAttemptLimits } from "@/lib/access-code-guard";
+import { CODE_REFUSAL, CODE_SHAPE, codeAttemptLimits } from "@/lib/access-code-guard";
+import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 /**
  * Join an organization with its code. A code is a seat key, so tries are
@@ -11,6 +12,9 @@ import { CODE_REFUSAL, codeAttemptLimits } from "@/lib/access-code-guard";
  * exists, is full, expired or closed.
  */
 export async function POST(request: Request) {
+  if (!isSameOriginJsonPost(request.headers)) {
+    return NextResponse.json({ error: "Request not allowed." }, { status: 403 });
+  }
   const session = await auth();
   const userId = session?.user?.id;
 
@@ -25,7 +29,9 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => null);
   const code = typeof body?.code === "string" ? body.code.trim() : "";
-  if (!code || code.length > 40) {
+  // Only the shape the mint route makes. Anything else (the hub codes contain
+  // "-") gets the same answer as a wrong code, and never reaches the database.
+  if (!CODE_SHAPE.test(code)) {
     return NextResponse.json({ error: CODE_REFUSAL }, { status: 400 });
   }
 
