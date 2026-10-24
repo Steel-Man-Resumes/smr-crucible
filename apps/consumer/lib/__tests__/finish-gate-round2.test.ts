@@ -134,7 +134,8 @@ test("S3: a claim-trace credential is not cleared by reordering its words", () =
 
 test("S3: a claim found with a number word, across lines, or reworded is still held", () => {
   const r = page(["Supervised the night crew of five cooks.", ...BASE]);
-  const src = `${SOURCE}\nI supervised the night crew of five cooks.`;
+  // Fix lane check: the claim is not in the person's words (a claim word for word in them is theirs, never held).
+  const src = SOURCE;
   const at = (claim: string, status = "still_there") =>
     buildFinishView({ resumeText: r, ownWords: src, defendAnswers: [], grounding: { outcomes: [{ claim, doc: "resume", status }] } }).openItems.filter((i) => i.trace);
   assert.equal(at("supervised the night crew of 5 cooks").length, 1);

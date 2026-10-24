@@ -32,6 +32,13 @@ const BTN_SOFT = `${BTN} border-t-line bg-t-panel text-t-phos hover:border-t-pho
 /** One tap answers for "who or what": the common true answers; the box takes anything else. */
 const SCOPE_CHIPS = ["My crew", "My shift", "My team", "The whole department", "New hires", "Customers"] as const;
 
+/** The plain line a card shows when t.ROY could not draft a fix (a 422 or a failed call): never silent. */
+export const SUGGEST_FIX_FALLBACK = "t.ROY couldn't draft a safe fix for this line from what you gave us. Say it's true, change it, or cut it.";
+export function suggestFixNotice(serverMessage: string): string {
+  const m = (serverMessage || "").trim();
+  return m && m !== "Could not draft this line." && m.length <= 240 ? m : SUGGEST_FIX_FALLBACK;
+}
+
 function uniqueQuestions(items: OpenItem[]): string[] {
   return Array.from(new Set(items.map((i) => i.question)));
 }
@@ -651,12 +658,13 @@ function GroupCard({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source, page: pageText, target: group.target, current: editableLine(group.line), concern: uniqueQuestions(group.items).join(" "), variation: Math.min(3, suggestions.length) }),
       });
-      const data = await response.json();
-      if (!response.ok || typeof data.suggestion !== "string") throw new Error(typeof data.error === "string" ? data.error : "Could not draft this line.");
-      setSuggestions((prev) => [...prev, data.suggestion]);
+      const data = (await response.json().catch(() => null)) as { suggestion?: unknown; error?: unknown } | null;
+      if (!response.ok || typeof data?.suggestion !== "string") throw new Error(typeof data?.error === "string" ? data.error : "");
+      const suggestion = data.suggestion;
+      setSuggestions((prev) => [...prev, suggestion]);
       setSuggestionIndex(suggestions.length);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Could not draft this line.");
+      setNotice(suggestFixNotice(error instanceof Error ? error.message : ""));
     } finally {
       setSuggesting(false);
     }
@@ -804,6 +812,10 @@ function GroupCard({
               <button onClick={() => setMode("cut")} className={BTN_SOFT}>
                 Cut it
               </button>
+              {/* Fix lane check (Valjean defect 7): a draft t.ROY could not make is said on the card, never silent. */}
+              {notice && !suggesting && (
+                <p role="status" className="basis-full text-xs text-t-amber-bright" data-testid="suggest-fix-notice">{notice}</p>
+              )}
             </div>
           )}
         </>

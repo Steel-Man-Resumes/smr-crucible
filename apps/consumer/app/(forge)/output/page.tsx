@@ -102,6 +102,7 @@ import {
   cutCredentialEverywhere,
   optionalNumberPrompts,
   recordJobOk,
+  changeListEntry,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
 import { finishPayload, payloadMark, readRunEvidence, type RunEvidence } from "@/lib/finish-payload";
@@ -295,6 +296,8 @@ function OutputPageInner() {
   // The server's receipt over the writer's documents and their check (review M1).
   const [receipt, setReceipt] = useState<string>("");
   const [defendAnswers, setDefendAnswers] = useState<DefendAnswer[]>([]);
+  // Lines the person cut on this page in this visit: only these say "You chose to leave this line out".
+  const [cutHere, setCutHere] = useState<ReadonlySet<string>>(() => new Set());
   const [changeNotes, setChangeNotes] = useState<Record<string, string>>({});
   // Skill terms the person added from a job posting; each is asked about.
   const [addedTerms, setAddedTerms] = useState<string[]>([]);
@@ -909,6 +912,7 @@ function OutputPageInner() {
     else if (group.target === "letter") setCoverLetterText((t) => cutLine(t, group.line));
     else setResumeText((t) => cutLine(t, group.line));
     setDefendAnswers((a) => recordAnswer(a, group.line, "", "cut"));
+    setCutHere((c) => new Set(c).add(group.line.trim()));
   };
 
   const confirmedLineSet = new Set(confirmedCredentials.flatMap((c) => [c.text, ...(c.line ? [c.line] : [])]));
@@ -1127,6 +1131,7 @@ function OutputPageInner() {
   const onLengthCut = (line: string) => {
     setResumeText((t) => cutLine(t, line));
     setDefendAnswers((a) => recordAnswer(a, line, "", "cut"));
+    setCutHere((c) => new Set(c).add(line.trim()));
   };
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard?.writeText(text).catch(() => undefined);
@@ -1436,9 +1441,9 @@ function OutputPageInner() {
                         <p className="text-xs text-t-phos-dim">Before</p>
                         <p>{a.replaced || a.line}</p>
                         <p className="mt-2 text-xs text-t-phos-dim">After</p>
-                        <p className="text-t-white">{a.verdict === "cut" ? "Removed from the page" : a.line}</p>
+                        <p className="text-t-white">{changeListEntry(a, checkMode ? cutHere : null).after}</p>
                         {(changeNotes[a.line] || (a.replaced && changeNotes[a.replaced])) && <p className="mt-2 text-xs"><strong>What this addresses:</strong> {changeNotes[a.line] || changeNotes[a.replaced!]}</p>}
-                        <p className="mt-2 text-xs">{a.verdict === "cut" ? "You chose to leave this line out." : a.kind === "assisted" ? "The new wording uses facts from the experience you shared, so you can explain it in an interview." : "This puts your correction directly on the page."}</p>
+                        <p className="mt-2 text-xs">{changeListEntry(a, checkMode ? cutHere : null).note}</p>
                       </li>
                     ))}
                   </ul>

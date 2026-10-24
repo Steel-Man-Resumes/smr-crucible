@@ -447,7 +447,10 @@ export function editInput(base: RevisionInput | null, resumeText: string, letter
       lengthChoice: base?.lengthChoice ?? "auto",
       resumeText,
       coverLetterText: letter,
-      defendAnswers: remapAnswers(base?.defendAnswers ?? [], [resumeText, letter]),
+      // Fix lane check (Valjean defect 2): a fork (a Tailor result) is a new page. The parent's "cut" answers
+      // were choices about the parent's lines; carried here they read as "You chose to leave this line out"
+      // for lines the person never touched on this resume. They stay on the parent's own versions.
+      defendAnswers: remapAnswers((base?.defendAnswers ?? []).filter((a) => !(opts.fork && a.verdict === "cut")), [resumeText, letter]),
       keptTerms: base?.keptTerms ?? [],
       confirmedCredentials: base?.confirmedCredentials ?? [],
     },

@@ -71,6 +71,7 @@ import {
   type CredentialRow,
 } from "@crucible/core/src/credentialMentions";
 import { normalizeForMatch, flagOutcome } from "./grounding-accounting";
+import { claimInEvidence } from "./evidence-claim";
 import type { SecondCheckFinding } from "@crucible/core/src/secondCheckShared";
 import { withholdRecordLines } from "./record-lines";
 import { isRecordChoice, keepSourceRecordLines, recordChoiceFrom, recordChoiceWords, type RecordChoice } from "./record-choice";
@@ -352,6 +353,30 @@ export function ownWordsFor(
     .map((s) => (typeof s === "string" ? s.trim() : ""))
     .filter(Boolean)
     .join("\n\n");
+}
+
+// ---- the "before and after" list ----------------------------------------------------
+
+/** Fix lane check (Valjean defect 2): said only when the person tapped Cut or picked the line to leave off, here. */
+export const CUT_BY_YOU_NOTE = "You chose to leave this line out.";
+/** A cut answer that came with the saved resume: say what is true, never a choice the person did not make here. */
+export const CUT_EARLIER_NOTE = "This line was not on the page when we opened this resume. Nothing on this page took it off.";
+
+/**
+ * What the "Your changes: before and after" list says for one answer. A cut
+ * says "You chose" only when the person cut that line on this page in this
+ * visit (`cutHere`); a cut carried in with a saved version says what the
+ * system knows instead. `cutHere` null: every answer is this run's own (the
+ * Forge finish, where only the person's taps record a cut).
+ */
+export function changeListEntry(a: DefendAnswer, cutHere: ReadonlySet<string> | null): { after: string; note: string } {
+  if (a.verdict === "cut") {
+    return !cutHere || cutHere.has(a.line.trim()) ? { after: "Removed from the page", note: CUT_BY_YOU_NOTE } : { after: "Not on this page", note: CUT_EARLIER_NOTE };
+  }
+  return {
+    after: a.line,
+    note: a.kind === "assisted" ? "The new wording uses facts from the experience you shared, so you can explain it in an interview." : "This puts your correction directly on the page.",
+  };
 }
 
 // ---- answers and edits -----------------------------------------------------------
@@ -646,6 +671,25 @@ function listLineKinds(lines: string[]): Map<number, "skills" | "credentials"> {
 }
 
 /** Take one skill term off its skills line. Returns the text unchanged when it is not a listed item there. */
+/**
+ * The list body with one whole item taken off (items split at | , ; or a
+ * bullet dot, the way the skills checker reads them), its separators kept as
+ * written. Null when no whole item is the term.
+ */
+function removeListItem(body: string, termLower: string): string | null {
+  const parts = body.split(/(\s*[|,;•·]\s*)/);
+  // parts: item, sep, item, sep, ..., item
+  const norm = (p: string) => p.replace(/^\(|\)$/g, "").trim().toLowerCase();
+  const at = parts.findIndex((p, i) => i % 2 === 0 && norm(p) === termLower);
+  if (at < 0) return null;
+  const items = parts.filter((_, i) => i % 2 === 0).filter((p) => p.trim()).length;
+  if (items <= 1) return "";
+  // Take the item with the separator after it; the last item takes the separator before it.
+  if (at + 1 < parts.length) parts.splice(at, 2);
+  else parts.splice(at - 1, 2);
+  return parts.join("");
+}
+
 export function cutTerm(text: string, term: string): string {
   const t = term.trim().toLowerCase();
   if (!t) return text;
@@ -665,6 +709,11 @@ export function cutTerm(text: string, term: string): string {
       }
       const m = l.match(/^(\s*(?:[-•*]\s*)?(?:[A-Za-z &/]+:\s*)?)(.*)$/);
       const prefix = m?.[1] ?? "";
+      // Fix lane check (Valjean defect 4): the term is one whole item of the line as the checker reads it
+      // (skillTermsOf: split at | , ;). Only that item comes off, with one separator next to it; every other
+      // item and separator stays exactly as written. "Training and mentoring new workers" is never split.
+      const itemed = removeListItem(m?.[2] ?? l, t);
+      if (itemed !== null) return itemed.trim() ? prefix + itemed : "";
       // Integration r2 (L3): a slash term ("Lockout/tagout") is one term: read the line
       // with slash pairs whole first, and split at a slash only when the term is one half.
       const norm = (p: string) => p.replace(/^\(|\)$/g, "").trim().toLowerCase();
@@ -1821,7 +1870,26 @@ function lineWithClaim(text: string, claim: string): string | undefined {
  * claim is gone (flagOutcome "removed"); reordering its words does not. A
  * claim still on the page but across lines is held in the general list.
  */
-function groundingItems(grounding: unknown, resumeText: string, letterText: string, written?: WrittenDocs | null): GateItem[] {
+/**
+ * Fix lane check (Valjean defect 5): the one line on the current page that still carries a flagged claim in
+ * other words (two of its words side by side, or most of its words). Undefined when no single line does:
+ * then the claim is not on the page as it reads now, and it cannot block.
+ */
+function lineWithRewordedClaim(text: string, claim: string): string | undefined {
+  const words = normalizeForMatch(claim).split(" ").filter((w) => w.length > 2 && !CLAIM_STOP.has(w));
+  if (!words.length) return undefined;
+  const pairs = words.slice(1).map((w, i) => `${words[i]} ${w}`);
+  const lines = linesOf(text).filter((l) => {
+    const n = ` ${normalizeForMatch(l)} `;
+    if (pairs.some((p) => n.includes(` ${p} `))) return true;
+    const found = words.filter((w) => n.includes(` ${w} `)).length;
+    return words.length >= 2 && found >= Math.max(2, Math.ceil(words.length / 2));
+  });
+  return lines.length === 1 ? lines[0] : undefined;
+}
+const CLAIM_STOP = new Set(["and", "the", "for", "with", "from", "into", "that", "this", "our", "you", "your"]);
+
+function groundingItems(grounding: unknown, resumeText: string, letterText: string, written?: WrittenDocs | null, source = ""): GateItem[] {
   const outcomes = (grounding as { outcomes?: unknown })?.outcomes;
   if (!Array.isArray(outcomes)) return [];
   const items: GateItem[] = [];
@@ -1831,11 +1899,17 @@ function groundingItems(grounding: unknown, resumeText: string, letterText: stri
     const target: GroupTarget = o.doc === "cover_letter" ? "letter" : "resume";
     const text = target === "letter" ? letterText : resumeText;
     const original = written ? (target === "letter" ? written.letter : written.resume) : text;
+    const credential = o.status === "credential";
+    // Fix lane check (Valjean defect 6): a claim the person's own evidence states is theirs (lib/evidence-claim.ts).
+    if (!credential && claimInEvidence(o.claim, text, source)) continue;
     const now = flagOutcome({ claim: o.claim, why: "" }, original || text, text);
     if (now === "removed") continue;
     if (now === "unmatched" && !lineWithClaim(text, o.claim)) continue;
-    const line = lineWithClaim(text, o.claim) ?? "";
-    const credential = o.status === "credential";
+    // Recomputed against the page as it reads now (defect 5): reworded on one line, that line is the card;
+    // on no single line, it is not on the page and cannot block.
+    const reworded = now === "changed" && !lineWithClaim(text, o.claim) ? lineWithRewordedClaim(text, o.claim) : undefined;
+    if (now === "changed" && !lineWithClaim(text, o.claim) && !reworded) continue;
+    const line = lineWithClaim(text, o.claim) ?? reworded ?? "";
     items.push({
       rule: credential ? "STD-T03" : "STD-C04",
       severity: "BLOCK",
@@ -1848,7 +1922,9 @@ function groundingItems(grounding: unknown, resumeText: string, letterText: stri
         : "Our second check couldn't match this to anything you told us.",
       question: credential
         ? "Change it to what you actually hold, the way your card or papers say it, or cut it."
-        : line
+        : reworded
+          ? `Our second check flagged "${o.claim.trim().slice(0, 80)}". This line still says it in other words. Change it or cut it.`
+          : line
           ? "Tell me in one sentence how you'd describe this, in your own words. If it isn't true, change it or cut it."
           : `Our second check flagged "${o.claim.trim().slice(0, 80)}". Find it on the page and change it or cut it.`,
     });
@@ -2265,7 +2341,7 @@ export function buildFinishView(input: {
   }
 
   // The claim trace, settled by a standing answer when it asks for one.
-  for (const g of groundingItems(input.grounding, input.resumeText, letter, input.written)) {
+  for (const g of groundingItems(input.grounding, input.resumeText, letter, input.written, source)) {
     if (g.line && g.rule === "STD-C04" && answerStands(answerFor(answers, g.line), g.line, source)) continue;
     // Already held on that line under the same rule: mark it as the claim trace's too.
     const same = g.line ? items.find((i) => i.target === g.target && i.line === g.line && i.rule === g.rule) : undefined;
