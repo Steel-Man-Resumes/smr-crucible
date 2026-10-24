@@ -69,7 +69,7 @@ export function SteelManMeter({ compact = false }: { compact?: boolean }) {
   if (status === "signed_out") return null;
   if (!data) {
     return (
-      <div id={compact ? "refinery-meter" : undefined} data-tour={compact ? "refinery-meter" : undefined} className={compact ? "px-3 py-2 text-xs text-t-phos-dim" : "border border-t-line bg-t-panel p-5 text-sm text-t-phos-dim"} aria-busy={status === "loading"}>
+      <div className={compact ? "px-3 py-2 text-xs text-t-phos-dim" : "border border-t-line bg-t-panel p-5 text-sm text-t-phos-dim"} aria-busy={status === "loading"}>
         {status === "loading" ? "Loading your Steel Man meter." : "Your meter is resting. Your work is saved."}
       </div>
     );
@@ -78,7 +78,7 @@ export function SteelManMeter({ compact = false }: { compact?: boolean }) {
   const nextLine = next ? (next.pointsAway > 0 ? `${next.pointsAway} points to ${next.label}.` : `The points for ${next.label} are there. The checklist shows what's left.`) : "Steel Man: your whole job search is built and running.";
   if (compact) {
     return (
-      <div id="refinery-meter" data-tour="refinery-meter" className="px-3 py-2">
+      <div className="px-3 py-2">
         {/* The link names the destination; the meter sits beside it, not inside it. */}
         <Link href="/dashboard/progress" className="t-focus flex min-h-touch items-baseline justify-between gap-2 text-xs">
           <span className="font-semibold text-t-amber-bright">Steel Man meter</span>
