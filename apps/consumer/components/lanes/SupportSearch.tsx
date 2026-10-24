@@ -30,6 +30,9 @@ export const SUPPORT_CATEGORIES: { id: string; label: string }[] = [
   { id: "education", label: "School and training" },
   { id: "mental_health", label: "Mental health" },
   { id: "substance", label: "Recovery" },
+  { id: "health", label: "Health care" },
+  // Opt-in, last on purpose (lib/support-search.ts OPT_IN_CATEGORIES).
+  { id: "faith", label: "Faith and spiritual support" },
 ];
 
 export interface SupportResultView {

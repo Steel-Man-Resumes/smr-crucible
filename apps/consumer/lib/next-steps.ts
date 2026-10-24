@@ -17,10 +17,13 @@ export const NEXT_CATEGORIES: readonly NextCategory[] = [
   { id: "financial", label: "Money and benefits", line: "Benefits, bills and getting your money steady." },
   { id: "legal", label: "Legal help with a record", line: "Legal aid, record clearing and court help." },
   { id: "mental_health", label: "Mental health", line: "Someone to talk to." },
-  { id: "substance", label: "Recovery", line: "Recovery support." },
+  { id: "substance", label: "Recovery support", line: "Support for your recovery, when you want it." },
+  { id: "health", label: "Health care", line: "Clinics, check-ups and getting covered." },
   { id: "housing", label: "A place to stay", line: "Shelter and housing help." },
   { id: "transportation", label: "Getting to work", line: "Rides and ways to get to the job." },
   { id: "id_documents", label: "ID and documents", line: "State ID, birth certificate, Social Security card." },
+  // Opt-in and last. Interfaith and chaplaincy listings come first in the search.
+  { id: "faith", label: "Faith and community", line: "If faith is part of your life. Interfaith and chaplain listings show first." },
 ];
 
 /** Local help with the category chosen. The saved location fills in on that page. */

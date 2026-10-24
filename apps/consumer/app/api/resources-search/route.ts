@@ -18,7 +18,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { findHudCounselors } from "@/lib/hud-counselors";
-import { searchSupport, requestedWants } from "@/lib/support-search";
+import { searchSupport, requestedWants, OPT_IN_CATEGORIES } from "@/lib/support-search";
 import { countiesOf, isPlaceIn } from "@/lib/support-place-index";
 import { searchVerifiedResources, requestDirectoryCoverage } from "@crucible/core";
 
@@ -33,6 +33,9 @@ async function handlePost(request: Request) {
   try {
     const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
     const { category, barriers, location } = body ?? {};
+    // An opt-in choice (faith) is never tied to the person: no coverage ticket
+    // under their id, and the log row carries no user id.
+    const optIn = typeof category === "string" && (OPT_IN_CATEGORIES as readonly string[]).includes(category);
 
     // A function call, not a fetch to our own URL (security review 3a Part 2
     // r1, L5): this route is already signed in and premium-gated. HUD is
@@ -44,7 +47,7 @@ async function handlePost(request: Request) {
 
     // A real searched area with no checked local match creates one minimal owner ticket.
     // A failed read never becomes a false coverage gap. No person or barrier text is stored.
-    if(directoryRead && place.state && !resources.some(r=>r.source === "directory" && r.band === "A" && (r.scope === "city" || r.scope === "county"))) {
+    if(!optIn && directoryRead && place.state && !resources.some(r=>r.source === "directory" && r.band === "A" && (r.scope === "city" || r.scope === "county"))) {
       const session=await auth().catch(()=>null);
       if(session?.user?.id){const areas=requestedWants(category,undefined).areas;
         const selected=typeof category === "string" && category !== "all" ? areas.slice(0,3) : ["community"];
@@ -60,7 +63,7 @@ async function handlePost(request: Request) {
       const session = await auth().catch(() => null);
       const bySource = (s: string) => resources.filter((r) => r.source === s).length;
       await logDecision({
-        userId: session?.user?.id ?? null,
+        userId: optIn ? null : session?.user?.id ?? null,
         contextPage: "resources-search",
         modelProvider: bySource("directory") ? "resource-directory" : "curated-directory",
         modelId: "resource-directory-v2",
