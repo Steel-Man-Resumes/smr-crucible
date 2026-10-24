@@ -15,7 +15,7 @@ export default function PathsPage() {
     <div className="space-y-10">
       <CareerPlanner />
       <section aria-label="Compare directions yourself" className="border-t border-t-line pt-6">
-        {compare ? <PathExplorer /> : (
+        {compare ? <PathExplorer headingLevel={2} /> : (
           <button type="button" aria-expanded={false} onClick={() => setCompare(true)} className="t-focus inline-flex min-h-touch items-center text-sm font-medium text-t-amber-bright underline underline-offset-2">
             Already have some idea? Compare directions yourself
           </button>

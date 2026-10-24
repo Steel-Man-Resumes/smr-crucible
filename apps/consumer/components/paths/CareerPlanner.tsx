@@ -13,7 +13,7 @@ import Link from "next/link";
 import { useEffect, useReducer, useRef, useState } from "react";
 import { useLanes } from "@/components/lanes/useLanes";
 import { LANES_CHANGED_EVENT } from "@/lib/lanes";
-import { FACT_SOURCE_LABEL, type CareerFact } from "@/lib/career-plan/facts";
+import { FACT_SOURCE_LABEL, FORGE_READING_LABEL, type CareerFact, type ForgeReading } from "@/lib/career-plan/facts";
 import { INITIAL_PLANNER_STATE, QUESTIONS, SKIP_LABEL, TEXT_MAX, nextQuestion, plannerReducer, progressOf, type Question } from "@/lib/career-plan/questions";
 import type { CareerPlan, CareerPlanNote, PlanDirection } from "@/lib/career-plan/plan";
 import { chooseCareerDirection } from "@/lib/career-plan/handoff";
@@ -26,6 +26,7 @@ export function CareerPlanner() {
   const lanes = useLanes();
   const [state, dispatch] = useReducer(plannerReducer, INITIAL_PLANNER_STATE);
   const [facts, setFacts] = useState<CareerFact[] | null>(null);
+  const [reading, setReading] = useState<ForgeReading[]>([]);
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState<CareerPlanNote[]>([]);
   const [loadError, setLoadError] = useState("");
@@ -43,8 +44,8 @@ export function CareerPlanner() {
   const currentLane = useRef(lanes.active);
   currentLane.current = lanes.active;
 
+  // Load on mount and when the account changes; never wait on the lane list (a stuck session must not hang question 1).
   useEffect(() => {
-    if (!lanes.userId) return;
     let live = true;
     setLoadError("");
     fetch("/api/career-plan", { cache: "no-store" })
@@ -52,7 +53,7 @@ export function CareerPlanner() {
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || "Your saved work couldn't be loaded.");
         if (!live) return;
-        setFacts(data.facts ?? []); setLocation(data.location ?? ""); setNotes(data.notes ?? []);
+        setFacts(data.facts ?? []); setReading(data.reading ?? []); setLocation(data.location ?? ""); setNotes(data.notes ?? []);
       })
       .catch((e) => { if (live) { setLoadError(e instanceof Error ? e.message : "Try again."); setFacts([]); } });
     return () => { live = false; };
@@ -148,6 +149,11 @@ export function CareerPlanner() {
                   </div>
                 </fieldset>
               ) : <p className="text-sm text-t-phos-dim">We don&apos;t have your work saved yet. That&apos;s fine. Just tell me.</p>}
+              {reading.length > 0 && (
+                <div className="text-sm text-t-phos-dim">
+                  <p>{FORGE_READING_LABEL} (not your words): {reading.slice(0, 6).map((r) => r.text).join("; ")}.</p>
+                </div>
+              )}
               <label className="block text-sm text-t-phos">Your own words (optional)
                 <textarea className="t-focus mt-1 w-full border border-t-line bg-t-panel px-3 py-2 text-t-white" rows={3} maxLength={TEXT_MAX} value={draftText} onChange={(e) => setDraftText(e.target.value)} aria-describedby="planner-help" />
               </label>
@@ -195,7 +201,7 @@ export function CareerPlanner() {
       {plan && (
         <div className="space-y-4" aria-busy={busy}>
           <h2 ref={headingRef} tabIndex={-1} className="text-xl font-bold text-t-white outline-none">Three directions worth a look</h2>
-          <p className="text-sm text-t-phos-dim">{plan.method === "ai" ? "t.ROY picked these from your answers. Every quote below is checked against what you told us." : "These come from matching your own words against real kinds of work."}{plan.ruledOut > 0 ? ` Your answers ruled out ${plan.ruledOut} other kinds of work.` : ""}</p>
+          <p className="text-sm text-t-phos-dim">{plan.method === "ai" ? "t.ROY picked these from your answers. Anything under \"You said\" is your own words, checked against what you wrote." : "These come from matching your own words against real kinds of work."}{plan.ruledOut > 0 ? ` Your answers ruled out ${plan.ruledOut} other kinds of work.` : ""}</p>
           {plan.notes.map((n) => <p key={n} role="note" className="border-l-2 border-t-amber pl-3 text-sm text-t-phos">{n}</p>)}
           <ol className="space-y-4">
             {plan.directions.map((d, i) => (
@@ -208,13 +214,14 @@ export function CareerPlanner() {
                     {d.quotes.length ? d.quotes.map((q) => (
                       <p key={q.factId + q.quote}>You said: <q className="text-t-white">{q.quote}</q> <span className="text-xs text-t-phos-dim">({FACT_SOURCE_LABEL[q.source]})</span></p>
                     )) : <p className="text-t-phos-dim">Nothing you&apos;ve told us ties to this one yet. It&apos;s here because it fits your answers.</p>}
+                    {d.forgeReading.length > 0 && <p className="text-t-phos-dim">{FORGE_READING_LABEL}, not your words: {d.forgeReading.join("; ")}.</p>}
                     {d.link && <p>{d.link}</p>}
                   </div>
                   <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
                     <dt className="text-t-phos-dim">First job</dt><dd className="text-t-phos">{d.firstJob}</dd>
                     <dt className="text-t-phos-dim">Later on</dt><dd className="text-t-phos">{d.laterJob}</dd>
                     <dt className="text-t-phos-dim">Pay</dt><dd className="text-t-phos">{d.pay ? `${d.pay.text} (${d.pay.source}, ${d.pay.asOf})` : d.payNote}</dd>
-                    <dt className="text-t-phos-dim">A record</dt><dd className="text-t-phos"><strong className="font-semibold">{d.record.label}.</strong> {d.record.note} <span className="text-xs text-t-phos-dim">{d.record.footer}</span></dd>
+                    <dt className="text-t-phos-dim">A record</dt><dd className="text-t-phos">{d.record.note} <span className="text-xs text-t-phos-dim">({d.record.footer})</span>{d.record.source && <span className="text-xs text-t-phos-dim"> Source: <a className="t-focus underline" href={d.record.source.url} target="_blank" rel="noreferrer">{d.record.source.title}</a>, checked {d.record.source.checkedAt}.</span>}</dd>
                   </dl>
                   <p className="text-xs text-t-phos-dim">About the work: <a className="t-focus underline" href={d.source.url} target="_blank" rel="noreferrer">{d.source.title}<span className="sr-only"> (opens in a new tab)</span></a>, US overview, checked {d.source.reviewedAt}.</p>
                   {chosen?.id === d.id ? (
@@ -224,7 +231,7 @@ export function CareerPlanner() {
                     </div>
                   ) : confirming === d.id ? (
                     <div className="space-y-2 border border-t-amber p-3 text-sm text-t-phos">
-                      <p>Make {d.title.toLowerCase()} your lane? This opens a {d.searchRole.toLowerCase()} lane or uses one you already have. It adds nothing to your work history.</p>
+                      <p>Make {d.title} your lane? This opens a lane for {d.searchRole} or uses one you already have. It adds nothing to your work history.</p>
                       <div className="flex flex-wrap gap-2">
                         <button type="button" className={primary} disabled={choosing || !lanes.loaded} onClick={() => void choose(d)}>{choosing ? "Saving..." : "Yes, go with this"}</button>
                         <button type="button" className={quiet} disabled={choosing} onClick={() => setConfirming(null)}>Not yet</button>

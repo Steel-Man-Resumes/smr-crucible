@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { INITIAL_PLANNER_STATE, QUESTION_ORDER, nextQuestion, plannerReducer, progressOf, readPlanAnswers, type PlannerState, type PlanAnswers } from "../career-plan/questions";
-import { buildSavedFacts, cleanLink, todayFacts, verifyQuotes, type CareerFact } from "../career-plan/facts";
-import { CAREER_DIRECTIONS } from "../career-plan/catalog";
+import { buildForgeReading, buildSavedFacts, cleanLink, todayFacts, verifyQuotes, FORGE_READING_LABEL, type CareerFact } from "../career-plan/facts";
+import { CAREER_DIRECTIONS, RECORD_NOTE_FOOTER } from "../career-plan/catalog";
 import { allowedDirections, assemblePlan, buildPlanNote, parseModelPlan, PAY_NOTE, STRIPPED_NOTE, LINK_DROPPED_NOTE, SUPPORT_TRAINING_HREF, RESUME_LANE_HREF } from "../career-plan/plan";
 import { chooseCareerDirection } from "../career-plan/handoff";
 
@@ -66,21 +66,42 @@ test("server answer reader drops unknown keys and bad values", () => {
 
 const facts: CareerFact[] = [
   { id: "m1", text: "Ran the grill on Friday nights at a diner", source: "master" },
-  { id: "k1", text: "Forklift operation", source: "forge_skill" },
+  { id: "m2", text: "Forklift operation", source: "master_unchecked" },
   { id: "t-good", text: "keeping track of money for my uncle's shop", source: "today" },
 ];
 
-test("quotes survive only when they appear word for word in the person's facts", () => {
+test("quotes survive only as four or more whole words in a row (or the whole fact), and the WHOLE fact is shown", () => {
   const r = verifyQuotes([
     { factId: "m1", quote: "Ran the grill on Friday nights" },
     { factId: "m1", quote: "Managed a team of 12 cooks" },
-    { factId: "k1", quote: "keeping track of money" },
+    { factId: "m2", quote: "keeping track of money" },
     { factId: "zz", quote: "Forklift operation." },
-    { factId: "m1", quote: "a" },
+    { factId: "m1", quote: "the grill" },
     "not even an object",
   ], facts);
-  assert.deepEqual(r.kept.map((k) => [k.factId, k.source]), [["m1", "master"], ["t-good", "today"], ["k1", "forge_skill"]]);
+  assert.deepEqual(r.kept.map((k) => [k.factId, k.source, k.quote]), [
+    ["m1", "master", "Ran the grill on Friday nights at a diner"],
+    ["t-good", "today", "keeping track of money for my uncle's shop"],
+    ["m2", "master_unchecked", "Forklift operation"],
+  ]);
   assert.equal(r.stripped, 3, "invented, too short and malformed quotes are counted");
+});
+
+test("reviewer cases: a word piece, a two-word slice and a negated fact all strip", () => {
+  const own: CareerFact[] = [
+    { id: "m1", text: "I take care of my kids", source: "master" },
+    { id: "m2", text: "Didn't like cooking at all", source: "master" },
+    { id: "m3", text: "I never led a crew, I just showed up", source: "today" },
+  ];
+  for (const [factId, quote] of [["m1", "car"], ["m2", "like cooking"], ["m3", "led a crew"], ["m2", "Didn't like cooking at all"], ["m3", "I just showed up"]]) {
+    const r = verifyQuotes([{ factId, quote }], own);
+    assert.equal(r.kept.length, 0, `${quote} must strip`);
+    assert.equal(r.stripped, 1);
+  }
+  // The no-AI path uses the same stripper: a negated fact never shows under "Why it might fit you".
+  const plan = assemblePlan({ facts: own, answers: {}, location: "", model: [{ id: "cooking", quotes: [], link: null }] });
+  assert.deepEqual(plan.directions[0].quotes, []);
+  assert.ok(plan.directions.every((d) => d.quotes.every((q) => !/Didn't|never/.test(q.quote))));
 });
 
 test("an all-invented model plan is stripped to nothing about the person, with a visible note", () => {
@@ -96,9 +117,14 @@ test("an all-invented model plan is stripped to nothing about the person, with a
   assert.equal(STRIPPED_NOTE(2).includes("2 things"), true);
 });
 
-test("the link line may talk about the work but never claim a fact, a number or pay", () => {
+test("the link line may talk about the work but never claim a fact, a number, pay, a promise or a record rule", () => {
   assert.equal(cleanLink("Kitchens run on the same calm you described.").text, "Kitchens run on the same calm you described.");
-  for (const bad of ["You managed a crew before.", "Starts around 18 an hour.", "Pays $40k a year.", "You have a CDL already."]) assert.equal(cleanLink(bad).dropped, true, bad);
+  assert.equal(cleanLink("This work is about keeping a shop's books in order.").text, "This work is about keeping a shop's books in order.");
+  for (const bad of [
+    "You managed a crew before.", "Starts around 18 an hour.", "Pays $40k a year.", "You have a CDL already.",
+    "This work pays roughly fifteen dollars to start.", "Employers here will hire you fast.", "Your record won't matter in this field.",
+    "Your crew work shows you can lead.", "Since you know engines, this fits.", "It pays well.", "Shops hire fast.",
+  ]) assert.equal(cleanLink(bad).dropped, true, bad);
   const plan = assemblePlan({ facts, answers: {}, location: "", model: [{ id: "cooking", quotes: [{ factId: "m1", quote: "Ran the grill" }], link: "You led the kitchen for 3 years." }] });
   assert.ok(plan.notes.includes(LINK_DROPPED_NOTE));
 });
@@ -109,10 +135,11 @@ test("no pay is ever shown without a wired source; every direction names its rec
   for (const d of plan.directions) {
     assert.equal(d.pay, null);
     assert.equal(d.payNote, PAY_NOTE);
-    assert.ok(d.record.label && d.record.note && /not legal advice/i.test(d.record.footer));
+    assert.ok(d.record.note);
+    assert.equal(d.record.footer, "coaching, not legal advice");
     assert.equal(new URL(d.source.url).hostname, "www.bls.gov");
     assert.match(d.source.reviewedAt, /^2026-10-2[23]$/);
-    for (const q of d.quotes) assert.ok(facts.some((f) => f.id === q.factId && f.text.includes(q.quote)), "rules quotes are slices of the facts");
+    for (const q of d.quotes) assert.ok(facts.some((f) => f.id === q.factId && f.text === q.quote), "rules quotes are whole facts");
   }
   assert.equal(plan.directions[0].id, "bookkeeping", "what the person said today weighs most");
   assert.ok(plan.directions.some((d) => d.id === "cooking"), "the grill fact brings cooking in");
@@ -122,6 +149,40 @@ test("everyday words tie a person's own fact to the work", () => {
   const plan = assemblePlan({ facts: [{ id: "m1", text: "Fixed the walk-in cooler door with the owner", source: "master" }], answers: {}, location: "" });
   assert.equal(plan.directions[0].id, "maintenance");
   assert.equal(plan.directions[0].quotes[0].quote, "Fixed the walk-in cooler door with the owner");
+});
+
+test("record notes are advice, never claims about employers or rules, unless a dated source is attached", () => {
+  assert.equal(RECORD_NOTE_FOOTER, "coaching, not legal advice");
+  for (const d of CAREER_DIRECTIONS) {
+    const note = d.record.note;
+    if (d.record.source) { assert.match(d.record.source.checkedAt, /^\d{4}-\d{2}-\d{2}$/); assert.ok(new URL(d.record.source.url)); continue; }
+    assert.match(note, /\b(?:ask|check)\b/i, `${d.id}: advice`);
+    assert.ok(!/\b(?:often|many|most|plenty|a lot of|usually|commonly|open to|hire people|hires people|bar you|strict)\b/i.test(note), `${d.id}: claim in "${note}"`);
+    assert.ok(!("level" in d.record), `${d.id}: no level label`);
+  }
+});
+
+test("Forge analysis is t.ROY's reading: it can rank, it is labeled, and it is never a quote", () => {
+  const rows = { skills: [{ name: "Leadership" }, "Cooking"], forgeOutput: { strengths: [{ evidence: "Took charge of a busy kitchen" }] } };
+  assert.deepEqual(buildSavedFacts(rows), [], "Forge items are not the person's facts");
+  const reading = buildForgeReading(rows);
+  assert.deepEqual(reading.map((r) => r.text), ["Took charge of a busy kitchen", "Leadership", "Cooking"]);
+  const plan = assemblePlan({ facts: [], reading, answers: {}, location: "", model: [{ id: "cooking", quotes: [{ factId: "r1", quote: "Took charge of a busy kitchen" }], link: "Kitchens need someone who takes charge." }] });
+  assert.equal(plan.directions[0].id, "cooking");
+  assert.deepEqual(plan.directions[0].quotes, [], "a model quote of Forge text strips");
+  assert.ok(plan.directions[0].forgeReading.includes("Took charge of a busy kitchen"));
+  assert.ok(plan.notes.includes(STRIPPED_NOTE(1)));
+  const rules = assemblePlan({ facts: [], reading, answers: {}, location: "" });
+  assert.equal(rules.directions[0].id, "cooking", "the reading still helps ranking");
+  assert.ok(rules.directions.every((d) => d.quotes.length === 0));
+  const ui = read("components/paths/CareerPlanner.tsx");
+  assert.match(ui, /FORGE_READING_LABEL/);
+  assert.equal(FORGE_READING_LABEL, "From your Forge run, t.ROY's reading");
+});
+
+test("a model pick outside the candidates it was shown is ignored", () => {
+  const plan = assemblePlan({ facts: [], answers: {}, location: "", model: [{ id: "welding", quotes: [], link: null }, { id: "cooking", quotes: [], link: null }], offered: ["cooking", "janitorial", "grounds"] });
+  assert.equal(plan.directions[0].id, "cooking");
 });
 
 test("constraints filter the catalogue before anything is picked", () => {
@@ -153,13 +214,13 @@ test("first moves: on-the-job work opens a job search, long training opens schoo
 
 /* ------------------------------------------------------------- facts source -- */
 
-test("saved facts come from server rows only, with their source marked", () => {
+test("saved facts come from server rows only: Master Draft, with its check mark", () => {
   const f = buildSavedFacts({
     master: { facts: [{ id: "a", text: "Trained new hires on the line", status: "confirmed" }, { id: "b", text: "Drove a forklift", status: "needs_check" }] },
     skills: [{ name: "Inventory" }, "Inventory", 7],
     forgeOutput: { strengths: [{ title: "x", evidence: "Kept the stock room in order" }] },
   });
-  assert.deepEqual(f.map((x) => [x.id, x.source]), [["m1", "master"], ["m2", "master_unchecked"], ["s1", "forge_strength"], ["k1", "forge_skill"]]);
+  assert.deepEqual(f.map((x) => [x.id, x.source]), [["m1", "master"], ["m2", "master_unchecked"]]);
   assert.deepEqual(todayFacts({ goodAt: "  fixing bikes ", proud: "" }), [{ id: "t-good", text: "fixing bikes", source: "today" }]);
   const ui = read("components/paths/CareerPlanner.tsx");
   assert.ok(!/localStorage|sessionStorage/.test(ui), "the planner never reads facts from the browser");
@@ -229,7 +290,9 @@ test("the planner's AI call goes through admission, the router and failover; cop
   const route = read("app/api/career-plan/route.ts");
   assert.match(route, /withRateLimit\(/);
   assert.match(route, /endpoint: ENDPOINT/);
-  assert.match(route, /callAI\(PLAN_SYSTEM/);
+  assert.match(route, /callAIWithProvider\(PLAN_SYSTEM/);
+  assert.match(route, /modelProvider: answeredBy\.provider/, "the decision log names the provider that actually answered");
+  assert.match(route, /offered: candidates\.map/);
   assert.match(read("lib/ai-operation-policy.ts"), /'career-plan'/);
   assert.match(read("lib/ai-call.ts"), /\.find\(\(b: \{ type\?: string \}\) => b\.type === "text"\)/);
   for (const p of ["components/paths/CareerPlanner.tsx", "lib/career-plan/questions.ts", "lib/career-plan/catalog.ts", "lib/career-plan/plan.ts"]) {
