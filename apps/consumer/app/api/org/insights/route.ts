@@ -49,6 +49,9 @@ function toCsv(orgName: string, i: OrgInsights): string {
       const over = `${r.eligible} placements old enough for a ${r.dayMark}-day check-in`;
       return [
         [`Retention, ${r.dayMark} days`, "Still there", r.employed, over], [`Retention, ${r.dayMark} days`, "No longer there", r.notEmployed, over],
+        // Part of the line above, not added to it. Exports made before
+        // 2026-10-23 counted these under "Not asked yet".
+        [`Retention, ${r.dayMark} days`, "Of those, ended before this check-in (from the end date)", r.endedBeforeMark ?? 0, over],
         [`Retention, ${r.dayMark} days`, "Could not reach", r.unknown, over], [`Retention, ${r.dayMark} days`, "Not asked yet", r.notAskedYet, over],
       ] as [string, string, number, string][];
     }),

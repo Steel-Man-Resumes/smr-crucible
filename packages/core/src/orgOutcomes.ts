@@ -151,7 +151,13 @@ export async function getMyOutcomes(userId: string) {
 export interface OutcomeSummary {
   placements: number; bySource: Record<string, number>; stillEmployed: number; ended: number; leftForBetter: number;
   medianWage: number | null; wageKnownFor: number;
-  retention: { dayMark: number; eligible: number; employed: number; notEmployed: number; unknown: number; notAskedYet: number }[];
+  /**
+   * notEmployed includes endedBeforeMark: a placement whose recorded end date
+   * is before this check-in date was not there at the mark, whether or not
+   * anyone asked. endedBeforeMark is that part on its own, so an export can
+   * say how much of "no longer there" came from an end date.
+   */
+  retention: { dayMark: number; eligible: number; employed: number; notEmployed: number; endedBeforeMark: number; unknown: number; notAskedYet: number }[];
 }
 
 /** Pure, so it can be tested without a database and used identically by Insights and any export. */
@@ -166,10 +172,19 @@ export function summarizeOutcomes(all: readonly Outcome[], now = Date.now()): Ou
     leftForBetter: rows.filter((o) => o.end_reason === "left_for_better_job").length, medianWage: median, wageKnownFor: wages.length,
     retention: RETENTION_MARKS.map((m) => {
       // ELIGIBLE = old enough to have been asked at this mark. Nothing else is in the denominator.
-      const eligible = rows.filter((o) => new Date(o.start_date + "T00:00:00Z").getTime() + m * 86400000 <= now);
+      const markAt = (o: Outcome) => new Date(o.start_date + "T00:00:00Z").getTime() + m * 86400000;
+      const eligible = rows.filter((o) => markAt(o) <= now);
       const ans = (s: string) => eligible.filter((o) => o.checks.some((k) => k.day_mark === m && k.status === s)).length;
-      const employed = ans("employed"), notEmployed = ans("not_employed"), unknown = ans("unknown");
-      return { dayMark: m, eligible: eligible.length, employed, notEmployed, unknown, notAskedYet: eligible.length - employed - notEmployed - unknown };
+      const employed = ans("employed"), answeredNotEmployed = ans("not_employed"), unknown = ans("unknown");
+      // ENDED BEFORE THE MARK, NOT ASKED: withDue stops asking once the end
+      // date has passed, so these were counted as "not asked yet" forever.
+      // The record already answers the question: they were not there. An
+      // answer someone did record still wins.
+      const endedBeforeMark = eligible.filter((o) =>
+        !!o.ended_on && new Date(o.ended_on + "T00:00:00Z").getTime() < markAt(o) && !o.checks.some((k) => k.day_mark === m)
+      ).length;
+      const notEmployed = answeredNotEmployed + endedBeforeMark;
+      return { dayMark: m, eligible: eligible.length, employed, notEmployed, endedBeforeMark, unknown, notAskedYet: eligible.length - employed - notEmployed - unknown };
     }),
   };
 }
