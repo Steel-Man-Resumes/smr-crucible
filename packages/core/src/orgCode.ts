@@ -1,16 +1,11 @@
 /**
- * The ONE random organization-code generator (B7 + B8 merge, 2026-10-23).
+ * The ONE random organization-code generator (2026-10-23).
  * Used by the admin mint route (apps/consumer) and by orgAdmin's create and
- * rotate actions (B8). Codes are seat keys anyone signed in can try, so they
+ * rotate actions. Codes are seat keys anyone signed in can try, so they
  * are random by default.
  *
  * Alphabet: no 0/O, 1/I/L. A code gets read out loud and copied from paper.
  * 31 characters, 12 long: about 59 bits. Unbiased: rejection sampling.
- *
- * MERGE NOTE (B8 orgAdmin.ts): B8 defined generateOrgCode, ORG_CODE_ALPHABET
- * and ORG_CODE_LENGTH in orgAdmin.ts with a 32-character alphabet (with L).
- * On merge, delete those three from orgAdmin.ts and import them from here,
- * so index.ts exports each name once.
  */
 import { randomBytes } from "node:crypto";
 
