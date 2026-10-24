@@ -128,6 +128,9 @@ interface OrgPayload {
   unassignedJoined?: number | null;
   /** People assigned to the viewer, sharing or not; null = unknown. */
   assignedToViewer?: number | null;
+  canAssign?: boolean;
+  /** Invited by this organization, not sharing progress: name and email it typed, nothing else. */
+  invitedNotSharing?: { userId: string; name: string | null; email: string | null; joinedAt: string; assignedStaffId: string | null; pending: boolean }[];
 }
 
 function fmtDate(s: string | null): string {
@@ -1026,6 +1029,44 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               && (!staffFilter || (staffFilter === UNASSIGNED ? !c.assignedStaffId : c.assignedStaffId === staffFilter)))}
             showAssign={!!data}
           />
+
+          {(data?.invitedNotSharing?.length ?? 0) > 0 && (
+            <div id="invited" className="mt-6 scroll-mt-24 bg-t-panel border border-t-line">
+              <div className="border-b border-t-line px-4 py-3">
+                <h2 className="text-sm font-bold text-t-white">Invited by your organization, not sharing progress</h2>
+                <p className="mt-0.5 text-[11px] text-t-phos-dim">
+                  You can put them on a caseload now. You see only the name and email you entered.
+                  Their progress and their work stay private until they turn on sharing.
+                </p>
+              </div>
+              <ul className="divide-y divide-t-line">
+                {data!.invitedNotSharing!.map((p) => (
+                  <li key={p.userId} className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5">
+                    <span>
+                      <span className="block text-sm text-t-white">{p.name || p.email}</span>
+                      <span className="block text-xs text-t-phos-dim">
+                        {p.pending ? "Invited, has not signed in yet" : `Joined ${fmtDate(p.joinedAt)}`}
+                      </span>
+                    </span>
+                    {(data?.canAssign ?? canManage) ? (
+                      <select
+                        aria-label={`Assign ${p.name || p.email}`}
+                        value={p.assignedStaffId || ""}
+                        onChange={(e) => assign(p.userId, e.target.value)}
+                        disabled={saving === p.userId}
+                        className="t-focus bg-t-panel-2 border border-t-line text-xs text-t-phos px-2 py-1.5 disabled:opacity-50"
+                      >
+                        <option value="">Unassigned</option>
+                        {staff.map((m) => (
+                          <option key={m.userId} value={m.userId}>{m.name || m.email}</option>
+                        ))}
+                      </select>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {clients.length > 0 && joinedNotSharing > 0 && (
             <p className="text-xs text-t-phos-dim mt-4">

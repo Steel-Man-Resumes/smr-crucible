@@ -636,6 +636,20 @@ async function todayAndTaskChecks() {
     JSON.stringify({ today: qd.filter((i) => i.section === "quiet").length, insights: ins.activity }));
   check("another organization keeps its own number", (await core.getQuietAfterDays(org2.id)) === 14);
   await sql`DELETE FROM data_access_log WHERE target_user_id IN (${pat}, ${hers})`;
+  // -- invited by the org, not sharing (R3 review S8): assignable, still unnamed beyond what the org typed
+  const invEmail = `${P}-t-invited-${uniq.toLowerCase()}@example.invalid`;
+  const invd = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "Invited Person", email: invEmail, invitedBy: owner });
+  if (invd.ok) created.users.push(invd.userId);
+  const selfJoin = await mkUser("t-selfjoin"); await core.redeemAccessCode(selfJoin, org.code);
+  const invitedList = await core.getInvitedNotSharing(org.id, owner);
+  check("someone the org invited, not sharing, is listed for assignment with only the name the org typed",
+    invd.ok && invitedList.some((p) => p.userId === invd.userId && p.name === "Invited Person") && !invitedList.some((p) => p.userId === selfJoin),
+    JSON.stringify(invitedList.map((p) => [p.name, p.pending])));
+  check("and no other organization sees them", (await core.getInvitedNotSharing(org2.id, spy)).length === 0);
+  if (invd.ok) await core.assignClientStaff(org.id, invd.userId, cm, owner);
+  check("they can be assigned without sharing anything, and nothing of theirs opens",
+    invd.ok && (await core.getInvitedNotSharing(org.id, owner)).find((p) => p.userId === invd.userId)?.assignedStaffId === cm
+      && (await core.getClientApplications(await A(cm), invd.userId)).ok === false);
 }
 
 /**

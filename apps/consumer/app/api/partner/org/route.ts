@@ -43,6 +43,7 @@ import {
   recordDataAccess,
   getOrgSeatLedger,
   getOrgInviteSender,
+  getInvitedNotSharing,
   inviteActionAllowed,
 } from "@crucible/core";
 import { isValidEmail } from "@/lib/auth-rate-limit";
@@ -134,6 +135,17 @@ export async function GET(request: Request) {
         })
       : null;
 
+    // People the organization invited who have not turned on sharing, so they
+    // can be assigned (R3 review S8). Names and emails the organization typed,
+    // nothing else. Only for people who assign and see everyone.
+    const canAssign = can("org.client.assign", roleIsAdmin);
+    const invitedNotSharing = canAssign && isOrgAdmin
+      ? await getInvitedNotSharing(org.accessCodeId, userId).catch((err) => {
+          console.error("invited-not-sharing read failed:", err?.message || err);
+          return [];
+        })
+      : [];
+
     // The per-participant pages and scoped sharing, switched on per org.
     const flag = await getOne<{ crm_v2: boolean }>(
       `SELECT crm_v2 FROM access_code WHERE id = $1`,
@@ -159,7 +171,8 @@ export async function GET(request: Request) {
       cohort: { ...cohort, clients },
       invites: isOrgAdmin ? invites : invites.filter((i) => i.invitedById === userId),
       canManage: managesStaff,
-      canAssign: can("org.client.assign", roleIsAdmin),
+      canAssign,
+      invitedNotSharing,
       seesEveryone: isOrgAdmin,
       unassignedJoined: counts?.unassignedJoined ?? null,
       assignedToViewer: counts?.assignedToViewer ?? null,
