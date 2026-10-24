@@ -1,4 +1,6 @@
 import { beginChatOperation } from "@/lib/ai-chat-operation";
+import { RECORD_WORDS_HEADER } from "@/lib/rehearsal-personas";
+import { recordPlannerConsent } from "@/lib/hurdles/consent-server";
 import { buildOwnerTools, OWNER_ASSISTANT_PROMPT } from "@/lib/tools/assistant-owner-tools";
 import { createStaffEvidenceCollector } from "@/lib/staff-tool-evidence";
 import { assistantStepUsage } from "@/lib/ai/assistant-step-usage";
@@ -157,6 +159,14 @@ export async function POST(request: Request) {
   // its purpose-built consented store exists (Phase 5): no cross-session
   // memory reads, no coach_conversation writes for these turns.
   const isDisclosureRehearsal = context.currentPage === "disclosure-rehearsal";
+  // Record words in a practice prompt need the person's stored record planner
+  // consent (migration 094) at the current version. Without it, refuse.
+  if (isDisclosureRehearsal && typeof systemOverride === "string" && systemOverride.includes(RECORD_WORDS_HEADER)) {
+    const consent = userId ? await recordPlannerConsent(userId).catch(() => ({ granted: false })) : { granted: false };
+    if (!consent.granted) {
+      return new Response(JSON.stringify({ code: "consent_required", error: "Your record words need your yes before they go to an AI service." }), { status: 403, headers: { "Content-Type": "application/json" } });
+    }
+  }
   // "enhanced" consent gates all memory personalization (read AND write).
   // Absent row defaults to granted (see consentDefaultFor doctrine), so this
   // is a no-op for every user until someone actually revokes it. Computed

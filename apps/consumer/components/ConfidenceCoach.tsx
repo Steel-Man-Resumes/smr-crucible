@@ -58,6 +58,8 @@ interface ConfidenceCoachProps {
   forgePromptContext: string;
   /** The words the person just prepared in the planner. Practice uses them. */
   preparedScript?: string;
+  /** The person's own record lines. Pass only under the stored record planner consent. */
+  recordWords?: string;
   onBack: () => void;
 }
 
@@ -68,6 +70,7 @@ export function ConfidenceCoach({
   strengths,
   forgePromptContext,
   preparedScript,
+  recordWords,
   onBack,
 }: ConfidenceCoachProps) {
   const [personaId, setPersonaId] = useState("hiring_warm");
@@ -250,6 +253,7 @@ export function ConfidenceCoach({
       strengths: strengths.map((s) => s.title).filter(Boolean),
       forgeContext: forgePromptContext,
       preparedScript,
+      recordWords,
       askVariant,
     });
 
@@ -402,10 +406,10 @@ export function ConfidenceCoach({
           ))}
         </div>
 
-        {preparedScript && (
+        {(preparedScript || recordWords) && (
           <div className="bg-t-panel p-4 border border-t-line mb-4" data-testid="prepared-plan">
             <h2 className="font-semibold text-t-white mb-1">You are practicing the plan you just made</h2>
-            <p className="text-sm text-t-phos whitespace-pre-line">{preparedScript}</p>
+            <p className="text-sm text-t-phos whitespace-pre-line">{[recordWords, preparedScript].filter(Boolean).join("\n")}</p>
             <p className="text-xs text-t-phos-dim mt-2">Say it your way. It does not have to match word for word.</p>
           </div>
         )}
