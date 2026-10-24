@@ -175,10 +175,19 @@ async function cleanup() {
   created.codes = [];
 }
 
+// Each fixture account gets its own label, and its email carries this run's id,
+// so two blocks can never mint the same address (users_email_key) and a row
+// left behind by an earlier, crashed run cannot collide with this one.
+// scripts/lib/check-isolation-fixtures.mjs checks the labels statically.
+const RUN = Date.now().toString(36);
+const usedLabels = new Set();
+
 async function mkUser(label) {
+  if (usedLabels.has(label)) throw new Error(`mkUser label used twice in one run: ${label}`);
+  usedLabels.add(label);
   const [row] = await sql`
     INSERT INTO users (name, email, tier)
-    VALUES (${P + " " + label}, ${`${P}-${label}@example.invalid`}, 'client')
+    VALUES (${P + " " + label}, ${`${P}-${label}-${RUN}@example.invalid`}, 'client')
     RETURNING id`;
   created.users.push(row.id);
   return row.id;
@@ -1366,12 +1375,12 @@ async function seatChecks() {
   const [{ open }] = await app`SELECT smr_refinery_signup_open() AS open`;
   check("the switch is readable by the app role through its function", typeof open === "boolean");
 
-  const owner = await mkUser("s-owner"), staff = await mkUser("s-staff"), member = await mkUser("s-member");
-  const nobody = await mkUser("s-nobody"), boss = await mkUser("s-boss"), legacy = await mkUser("s-legacy");
-  const lapsed = await mkUser("s-lapsed"), closedMember = await mkUser("s-closed"), selfTier = await mkUser("s-tier");
-  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, max_redemptions) VALUES (${"ISOS" + uniq}, ${P + " seats"}, 'client', ${owner}, true, 5) RETURNING id, code`;
-  const [old] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active, expires_at) VALUES (${"ISOX" + uniq}, ${P + " expired"}, 'client', true, now() - interval '1 day') RETURNING id`;
-  const [off] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active) VALUES (${"ISOO" + uniq}, ${P + " inactive"}, 'client', false) RETURNING id`;
+  const owner = await mkUser("seat-owner"), staff = await mkUser("seat-staff"), member = await mkUser("seat-member");
+  const nobody = await mkUser("seat-nobody"), boss = await mkUser("seat-boss"), legacy = await mkUser("seat-legacy");
+  const lapsed = await mkUser("seat-lapsed"), closedMember = await mkUser("seat-closed"), selfTier = await mkUser("seat-tier");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, max_redemptions) VALUES (${"ISOSEATS" + uniq}, ${P + " seats"}, 'client', ${owner}, true, 5) RETURNING id, code`;
+  const [old] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active, expires_at) VALUES (${"ISOSEATX" + uniq}, ${P + " expired"}, 'client', true, now() - interval '1 day') RETURNING id`;
+  const [off] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active) VALUES (${"ISOSEATO" + uniq}, ${P + " inactive"}, 'client', false) RETURNING id`;
   created.codes.push(org.id, old.id, off.id);
   await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${staff}, 'staff')`;
   await sql`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES (${member}, ${org.id})`;
@@ -1402,7 +1411,7 @@ async function seatChecks() {
   check("not even an admin can delete the policy row from the app", !!del && /permission denied/i.test(del), del ?? "delete ran");
 
   // Offers: an existing account that has signed in is asked first.
-  const asked = await mkUser("s-asked");
+  const asked = await mkUser("seat-asked");
   await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${asked}`;
   const [{ email: askedEmail }] = await sql`SELECT email FROM users WHERE id = ${asked}`;
   const [{ t: seatsBefore }] = await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`;
@@ -1417,7 +1426,7 @@ async function seatChecks() {
     && (await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`)[0].t === seatsBefore + 1 && (await seat(asked)) === true);
   check("an answered offer cannot be answered again", (await core.acceptSeatOffer(asked, offers[0].id)) === "not_found");
 
-  const declines = await mkUser("s-declines");
+  const declines = await mkUser("seat-declines");
   await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${declines}`;
   const [{ email: dEmail }] = await sql`SELECT email FROM users WHERE id = ${declines}`;
   await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "D", email: dEmail, invitedBy: owner });
@@ -1435,12 +1444,12 @@ async function seatChecks() {
     JSON.stringify(back));
 
   // Review 1, N-4: an offer accepted after joining another organization is refused.
-  const other = await mkUser("s-other");
+  const other = await mkUser("seat-other");
   await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${other}`;
   const [{ email: oEmail }] = await sql`SELECT email FROM users WHERE id = ${other}`;
   await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "O", email: oEmail, invitedBy: owner });
   const [oOffer] = await core.listMySeatOffers(other);
-  const [otherOrg] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active) VALUES (${"ISOT" + uniq}, ${P + " other"}, 'client', true) RETURNING id, code`;
+  const [otherOrg] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active) VALUES (${"ISOSEATT" + uniq}, ${P + " other"}, 'client', true) RETURNING id, code`;
   created.codes.push(otherOrg.id);
   await core.redeemAccessCode(other, otherOrg.code);
   check("accepting an offer re-checks the other-organization rule", (await core.acceptSeatOffer(other, oOffer.id)) === "other_org");
@@ -1467,7 +1476,7 @@ async function seatChecks() {
     check("the first close flips the switch", first[3].length === 1);
     const second = await close();
     check("a second close while closed changes nothing", second[3].length === 0);
-    const late = await mkUser("s-late");
+    const late = await mkUser("seat-late");
     await app.transaction([app`SELECT set_config('app.user_id', ${boss}, true)`, app`UPDATE refinery_access_policy SET public_signup_open=true WHERE id`]);
     const reclose = await close();
     check("open, then close again: an account made in between is NOT grandfathered", reclose[3].length === 1 && (await seat(late)) === false);
