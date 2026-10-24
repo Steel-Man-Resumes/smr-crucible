@@ -8,10 +8,10 @@ import type { TourBeat } from './beats';
 
 /** Time for the camera to land and the eye to find the caption. */
 export const ORIENT_MS = 1100;
-/** About 240 words a minute: comfortable for most adults, not a speed read. */
-export const MS_PER_WORD = 250;
+/** About 200 words a minute: unhurried for a tired reader who is also watching the scene. */
+export const MS_PER_WORD = 300;
 export const READ_FLOOR_MS = 3200;
-export const READ_CAP_MS = 9000;
+export const READ_CAP_MS = 11000;
 /** The stage shrinking into the corner caption between the acts. */
 export const ACT_CHANGE_MS = 900;
 /** Camera ease, the walkthrough's tempo. */

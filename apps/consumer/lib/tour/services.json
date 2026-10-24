@@ -32,7 +32,8 @@
     "Real job filters",
     "Records mark on listings"
    ],
-   "status": "here"
+   "status": "limits",
+   "limit": "A source can be down"
   },
   {
    "id": "employers",
@@ -53,7 +54,8 @@
     "Pull posting from a link",
     "Disclosure brief per job"
    ],
-   "status": "here"
+   "status": "limits",
+   "limit": "Some sites block links"
   },
   {
    "id": "interview",
