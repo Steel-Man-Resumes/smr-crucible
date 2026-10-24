@@ -768,6 +768,19 @@ async function accessChecks() {
   check("the owner can take something away from one person (deny wins)", deny.ok && !(await A(cm)).capabilities.has("org.note.write"));
 
   check("an admin can adjust staff", (await core.setStaffCapability(aAdmin, cm, "org.insights.view", true, "staff")).ok === true);
+
+  // Only the owner makes, changes or removes an admin (R3 review S1). Before
+  // this, org.staff.manage was enough, and admins hold it.
+  check("an admin cannot promote a case manager to admin", (await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "org_admin", actorUserId: admin })).ok === false);
+  check("an admin cannot demote another admin", (await core.setOrgStaffRole({ orgId: org.id, userId: admin2, role: "staff", actorUserId: admin })).ok === false);
+  check("an admin cannot demote another admin through add_staff's re-role", (await core.addOrgStaff({ orgId: org.id, userId: admin2, role: "staff", addedBy: admin })).ok === false);
+  check("an admin cannot remove another admin", (await core.removeOrgStaff({ orgId: org.id, userId: admin2, actorUserId: admin })).ok === false);
+  const [{ role: admin2Role }] = await sql`SELECT role FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${admin2}`;
+  check("and the refused writes changed nothing in the database", admin2Role === "org_admin", admin2Role);
+  const ownerPromote = await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "org_admin", actorUserId: owner });
+  const ownerDemote = await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "staff", actorUserId: owner });
+  check("the owner can promote and demote an admin", ownerPromote.ok === true && ownerDemote.ok === true, `${ownerPromote.reason ?? ""} ${ownerDemote.reason ?? ""}`);
+  aCm = await A(cm);
   check("an admin cannot adjust another admin", (await core.setStaffCapability(aAdmin, admin2, "org.costs.view", true, "org_admin")).ok === false);
   check("nobody adjusts their own access", (await core.setStaffCapability(aAdmin, admin, "org.costs.view", true, "org_admin")).ok === false);
   check("the owner's access cannot be changed", (await core.setStaffCapability(aAdmin, owner, "org.costs.view", false, "owner")).ok === false);

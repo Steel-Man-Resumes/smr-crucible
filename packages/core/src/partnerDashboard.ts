@@ -438,7 +438,9 @@ export async function getOrgContext(
     `SELECT os.access_code_id, os.role, ac.code, ac.partner_name, ac.org_logo_url, ac.max_redemptions
        FROM org_staff os
        JOIN access_code ac ON ac.id = os.access_code_id
-      WHERE os.user_id = $1
+      -- Same rule as resolveOrgActor: staff of a turned-off organization
+      -- reach nothing in it (R3 review S2).
+      WHERE os.user_id = $1 AND ac.is_active = true
       ORDER BY os.created_at ASC LIMIT 1`,
     [userId]
   );

@@ -42,6 +42,8 @@ import {
   revokeOrgInvite,
   recordDataAccess,
   getOrgSeatLedger,
+  getOrgInviteSender,
+  inviteActionAllowed,
 } from "@crucible/core";
 import { isValidEmail } from "@/lib/auth-rate-limit";
 import { adminSecondFactorOk } from "@/lib/session-policy";
@@ -150,9 +152,12 @@ export async function GET(request: Request) {
         seatLimit: seesSeats ? org.seatLimit : null,
       },
       seats,
-      staff,
+      // Contact details by need (R3 review S3): staff emails only to people
+      // who manage staff; pending invites (names and emails the organization
+      // typed) only to people who see everyone, or to the person who sent each.
+      staff: managesStaff ? staff : staff.map((m) => ({ ...m, email: null })),
       cohort: { ...cohort, clients },
-      invites,
+      invites: isOrgAdmin ? invites : invites.filter((i) => i.invitedById === userId),
       canManage: managesStaff,
       canAssign: can("org.client.assign", roleIsAdmin),
       seesEveryone: isOrgAdmin,
@@ -342,6 +347,26 @@ export async function POST(request: Request) {
             ? `Invite sent to ${email}. They'll appear here as invited until they open it.`
             : `${name} already had an account. They've been added to your organization and notified.`,
       });
+    }
+
+    // Resend and revoke run the same capability check as sending an invite
+    // (R3 review S2): before this, anyone the context resolved could revoke
+    // any pending invite (freeing that seat) or re-send sign-in links, even
+    // with "Invite participants" switched off. Someone who does not see the
+    // whole organization may act only on invites they sent themselves.
+    if (body.action === "resend_invite" || body.action === "revoke_invite") {
+      const inviteGuard = await requireOrgCapability("org.participant.invite", { orgId: selectedOrgId });
+      if (!inviteGuard.ok) return inviteGuard.response;
+      if (!body.userId) {
+        return NextResponse.json({ error: "userId required" }, { status: 400 });
+      }
+      if (!inviteActionAllowed({
+        capabilities: inviteGuard.actor.capabilities,
+        actorUserId: inviteGuard.actor.userId,
+        invitedBy: await getOrgInviteSender(inviteGuard.actor.orgId, String(body.userId)),
+      })) {
+        return NextResponse.json({ error: "No invite found for that person." }, { status: 404 });
+      }
     }
 
     if (body.action === "resend_invite") {
