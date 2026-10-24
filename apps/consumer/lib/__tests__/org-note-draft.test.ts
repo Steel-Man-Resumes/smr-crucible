@@ -28,8 +28,9 @@ it("sign-out clears every staff draft and nothing else", () => {
 
 it("confirmedSignOut clears drafts only once the server says signed out; both writers use the keyed form", () => {
   const so = readFileSync(new URL("../confirmed-sign-out.ts", import.meta.url), "utf8");
-  // Other tab-scoped state (the multi-job batch) may be cleared in the same confirmed block.
-  assert.match(so, /if \(!session\?\.user\) \{\s*\/\/[^\n]*\n(\s*clear\w+\(\);\s*)*clearOrgNoteDrafts\(\);(\s*clear\w+\(\);\s*)*\s*return;/);
+  // Other tab-scoped state (the multi-job batch, run storage) is cleared in the same confirmed block;
+  // the comment may span more than one line.
+  assert.match(so, /if \(!session\?\.user\) \{\s*(\/\/[^\n]*\n\s*)*(clear\w+\(\);\s*)*clearOrgNoteDrafts\(\);(\s*clear\w+\(\);)*\s*return;/);
   const chat = readFileSync(new URL("../../components/AssistantChat.tsx", import.meta.url), "utf8");
   const page = readFileSync(new URL("../../components/org/ClientPage.tsx", import.meta.url), "utf8");
   assert.match(chat, /orgNoteDraftKey\(accountId, draftFor\.id\)/);
