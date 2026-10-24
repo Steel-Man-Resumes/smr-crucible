@@ -1,5 +1,5 @@
 /**
- * Refinery seats (migration 093): the database half.
+ * Refinery seats (migration 096): the database half.
  *
  * THE SEAT RULE LIVES IN ONE PLACE, the definer function smr_has_refinery_seat.
  * Nothing here re-implements it. The app adds exactly one rule the database
@@ -62,8 +62,8 @@ export async function listMySeatOffers(userId: string): Promise<SeatOffer[]> {
   return rows.map((r) => ({ id: r.id, orgName: r.partner_name, createdAt: r.created_at }));
 }
 
-export type OfferOutcome = "ok" | "already_member" | "not_found" | "inactive" | "expired" | "full";
-const OFFER_OUTCOMES: readonly OfferOutcome[] = ["ok", "already_member", "not_found", "inactive", "expired", "full"];
+export type OfferOutcome = "ok" | "already_member" | "other_org" | "not_found" | "inactive" | "expired" | "full";
+const OFFER_OUTCOMES: readonly OfferOutcome[] = ["ok", "already_member", "other_org", "not_found", "inactive", "expired", "full"];
 
 function offerOutcome(raw: unknown): OfferOutcome {
   return (OFFER_OUTCOMES as readonly string[]).includes(String(raw)) ? (raw as OfferOutcome) : "not_found";
@@ -101,22 +101,35 @@ export async function leaveOrg(userId: string, orgId: string): Promise<boolean> 
   return left;
 }
 
+/** One offer per person per organization per day, answered or not (review 1, SF-2). */
+export const OFFER_WINDOW_HOURS = 24;
+
 /**
  * Record an organization's offer to an existing account. Scoped to that
- * organization (the insert policy checks app.org_id). An open offer already
- * there is reused, so a second "Add" never makes a second offer.
+ * organization (the insert policy checks app.org_id). Returns true only when
+ * a NEW offer was written: not when one is open, and not when one was made or
+ * answered in the last OFFER_WINDOW_HOURS. The caller emails only on true, so
+ * repeating "Add" neither repeats the email nor tells staff anything new.
  */
 export async function createSeatOffer(opts: {
   accessCodeId: string;
   userId: string;
   offeredBy: string;
-}): Promise<void> {
-  await runScoped(
+}): Promise<boolean> {
+  const [rows] = await runScoped<[{ id: string }[]]>(
     { orgId: opts.accessCodeId, userId: opts.offeredBy, role: "org_admin" },
     (sql) => [
       sql`INSERT INTO org_seat_offer (access_code_id, user_id, offered_by)
-          VALUES (${opts.accessCodeId}::uuid, ${opts.userId}::uuid, ${opts.offeredBy}::uuid)
-          ON CONFLICT (access_code_id, user_id) WHERE status = 'pending' DO NOTHING`,
+          SELECT ${opts.accessCodeId}::uuid, ${opts.userId}::uuid, ${opts.offeredBy}::uuid
+           WHERE NOT EXISTS (
+             SELECT 1 FROM org_seat_offer o
+              WHERE o.access_code_id = ${opts.accessCodeId}::uuid AND o.user_id = ${opts.userId}::uuid
+                AND (o.status = 'pending'
+                     OR o.created_at > now() - make_interval(hours => ${OFFER_WINDOW_HOURS})
+                     OR o.decided_at > now() - make_interval(hours => ${OFFER_WINDOW_HOURS})))
+          ON CONFLICT (access_code_id, user_id) WHERE status = 'pending' DO NOTHING
+          RETURNING id`,
     ]
   );
+  return (rows?.length ?? 0) > 0;
 }

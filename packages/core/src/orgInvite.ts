@@ -38,8 +38,11 @@ export type CreateOrgInviteResult =
       userId: string;
       /** invited = never signed in, gets a magic-link welcome;
        *  offered = existing account that has signed in: asked first, and the
-       *  seat is spent only when they accept (migration 093, R3 S5). */
+       *  seat is spent only when they accept (migration 096, R3 S5). */
       kind: "invited" | "offered";
+      /** Send the email? False for an offer already made or answered in the
+       *  last 24 hours: one email per person per organization per day. */
+      notify: boolean;
     }
   | { ok: false; error: string };
 
@@ -136,8 +139,23 @@ export async function createOrgInvite(opts: {
       // Fail fast on a full or closed code so the offer is not a dead end.
       const v = await validateAccessCode(opts.code);
       if (!v.valid) return { ok: false, error: v.reason || "This code is not accepting new seats." };
-      await createSeatOffer({ accessCodeId: opts.accessCodeId, userId, offeredBy: opts.invitedBy });
-      return { ok: true, userId, kind: "offered" };
+      const fresh = await createSeatOffer({ accessCodeId: opts.accessCodeId, userId, offeredBy: opts.invitedBy });
+      if (fresh) {
+        // The organization's own record of whom it asked, with what it typed
+        // (CRM cross-lane SF8): the person shows in its invited lists once
+        // they say yes. offer_status flips to joined or declined in 096's
+        // functions.
+        await query(
+          `INSERT INTO org_invite (access_code_id, user_id, invited_by, invited_name, invited_email, offer_status)
+           VALUES ($1, $2, $3, $4, $5, 'offered')
+           ON CONFLICT (access_code_id, user_id)
+           DO UPDATE SET invited_by = EXCLUDED.invited_by, invited_name = EXCLUDED.invited_name,
+                         invited_email = EXCLUDED.invited_email, offer_status = 'offered',
+                         last_sent_at = NOW(), send_count = org_invite.send_count + 1`,
+          [opts.accessCodeId, userId, opts.invitedBy, name || null, email]
+        );
+      }
+      return { ok: true, userId, kind: "offered", notify: fresh };
     }
     // A shell nobody has signed in to yet (made by an earlier invite): no one
     // to ask, so the seat is claimed now, as for a new invitee.
@@ -169,7 +187,7 @@ export async function createOrgInvite(opts: {
     [opts.accessCodeId, userId, opts.invitedBy, name || null, email]
   );
 
-  return { ok: true, userId, kind: "invited" };
+  return { ok: true, userId, kind: "invited", notify: true };
 }
 
 /**
