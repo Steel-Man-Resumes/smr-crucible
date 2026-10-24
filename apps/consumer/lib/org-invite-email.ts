@@ -187,6 +187,46 @@ export function buildAddedEmail(opts: {
 }
 
 /**
+ * The notice for someone who already has an account and was asked to join an
+ * organization (migration 093). Nothing changes until they say yes on the seat
+ * page, so the email says exactly that. Neutral on purpose: it names the
+ * organization that asked and nothing about anyone else.
+ */
+export function buildOfferEmail(opts: {
+  inviteeName: string | null;
+  inviterName: string | null;
+  orgName: string;
+  origin: string;
+}): EmailContent {
+  const hello = firstName(opts.inviteeName);
+  const inviter = opts.inviterName ? `${opts.inviterName} at ${opts.orgName}` : opts.orgName;
+  const seatUrl = `${opts.origin}/seat`;
+  const subject = `${opts.orgName} asked you to join them on Steel Man Resumes`;
+  const text =
+    `Hi ${hello},\n\n` +
+    `${inviter} asked to add your Steel Man Resumes account to their organization. ` +
+    `Nothing changes unless you say yes. If you join, they only see progress you choose to share ` +
+    `from your Settings. They never see your resume text, disclosure plans, or practice answers.\n\n` +
+    `Sign in to say yes or no: ${seatUrl}\n\n` +
+    `Steel Man Resumes\nTruth. Told Strong.`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
+      <h1 style="font-size:22px;margin:0 0 12px">${opts.orgName} asked you to join</h1>
+      <p>Hi ${hello},</p>
+      <p>${inviter} asked to add your Steel Man Resumes account to their organization.
+      Nothing changes unless you say yes. If you join, they only see progress you choose to
+      share from your Settings. They never see your resume text, disclosure plans, or practice answers.</p>
+      <p style="margin:24px 0">
+        <a href="${seatUrl}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Sign in to answer</a>
+      </p>
+      <p style="font-size:13px;word-break:break-all;color:#4a6741">${seatUrl}</p>
+      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
+    </div>
+  `;
+  return { subject, html, text };
+}
+
+/**
  * Send via Resend. Throws on any failure -- silent email failure doctrine:
  * the caller must surface it, never report success on an unsent invite.
  * Returns the Resend email id so delivery can be verified.

@@ -47,7 +47,7 @@ import { adminSecondFactorOk } from "@/lib/session-policy";
 import {
   mintInviteMagicLink,
   buildInviteEmail,
-  buildAddedEmail,
+  buildOfferEmail,
   sendOrgEmail,
 } from "@/lib/org-invite-email";
 
@@ -133,7 +133,9 @@ export async function GET(request: Request) {
       quietAfterDays: await (await import("@crucible/core")).getQuietAfterDays(org.accessCodeId),
       org: {
         name: org.orgName,
-        code: org.code,
+        // The code IS the seat key (anyone signed in can redeem it), so only
+        // people who may see seats get it (R3 B2 item 4).
+        code: seesSeats ? org.code : null,
         logoUrl: org.logoUrl,
         role: org.role,
         // Seat cap is org-admin/owner information (null = unlimited).
@@ -290,7 +292,8 @@ export async function POST(request: Request) {
       }
 
       // A staff inviter takes responsibility for their invitee automatically.
-      if (org.role === "staff") {
+      // Not for an offer: that person is not a member until they say yes.
+      if (org.role === "staff" && created.kind === "invited") {
         await assignClientStaff(org.accessCodeId, created.userId, userId, userId).catch(
           (err) => console.error("invite auto-assign failed:", err?.message || err)
         );
@@ -309,7 +312,7 @@ export async function POST(request: Request) {
         } else {
           await sendOrgEmail(
             email,
-            buildAddedEmail({ inviteeName: name, inviterName, orgName: org.orgName, origin })
+            buildOfferEmail({ inviteeName: name, inviterName, orgName: org.orgName, origin })
           );
         }
       } catch (err: any) {
@@ -318,7 +321,9 @@ export async function POST(request: Request) {
           ok: true,
           kind: created.kind,
           message:
-            "The seat is reserved, but the email could not be sent. Use Resend in the pending list, or check the address.",
+            created.kind === "invited"
+              ? "The seat is reserved, but the email could not be sent. Use Resend in the pending list, or check the address."
+              : "They were asked to join, but the email could not be sent. They will still see the question when they sign in.",
           emailFailed: true,
         });
       }
@@ -329,7 +334,7 @@ export async function POST(request: Request) {
         message:
           created.kind === "invited"
             ? `Invite sent to ${email}. They'll appear here as invited until they open it.`
-            : `${name} already had an account. They've been added to your organization and notified.`,
+            : `${name} already has an account, so we asked them first. No seat is used unless they say yes.`,
       });
     }
 

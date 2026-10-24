@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRealTier } from "@/lib/useUserTier";
 import type { ProgressRequest } from "@/lib/progression-ui";
+import { RefineryAccessPanel, seatsLeft, type AdminPolicy } from "@/components/admin/RefineryAccessPanel";
 
 interface AccessRequest extends ProgressRequest { userId: string; summary: string }
 const POLICY_FIELDS = [
@@ -20,6 +21,13 @@ type PolicyKey = typeof POLICY_FIELDS[number][0];
 type Policy = Record<PolicyKey, number>;
 type PolicyForm = Record<PolicyKey, string>;
 
+/** The approve button for a seat request says where the seat comes from. */
+function approveSeatLabel(policy: AdminPolicy | null): string {
+  if (!policy?.houseCodeId) return "Approve (set a house organization first)";
+  const left = seatsLeft(policy);
+  return `Approve and give a seat from my organization (${left === null ? "no limit" : `${left} left`})`;
+}
+
 export default function AccessRequestsPage() {
   const tier = useRealTier();
   const [requests, setRequests] = useState<AccessRequest[] | null>(null);
@@ -32,6 +40,7 @@ export default function AccessRequestsPage() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [reload, setReload] = useState(0);
+  const [seatPolicy, setSeatPolicy] = useState<AdminPolicy | null>(null);
   const requestSequence = useRef(0);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -61,7 +70,7 @@ export default function AccessRequestsPage() {
       const response = await fetch("/api/admin/access-requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: request.id, decision, note }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error || "The decision did not save.");
-      if (live.current) { setMessage(decision === "question" ? "Question saved for the participant." : "Decision saved and applied by the server."); await load(); }
+      if (live.current) { setMessage(decision === "question" ? "Question saved for the participant." : request.kind === "seat" && decision === "approve" ? (body?.emailFailed ? "Seat offered. The email did not send; they will see it on the seat page when they sign in." : "Seat offered from your organization. They accept it on the seat page.") : "Decision saved and applied by the server."); await load(); }
     } catch (caught) { if (live.current) setError(caught instanceof Error ? caught.message : "The decision did not save."); }
     finally { if (live.current) setBusy(null); }
   }
@@ -86,6 +95,7 @@ export default function AccessRequestsPage() {
     <header><Link href="/dashboard/admin" className="t-focus inline-flex min-h-touch items-center text-sm text-t-amber-bright underline">Back to admin</Link><h1 className="mt-2 text-2xl font-bold text-t-white">Access requests</h1><p className="mt-2 text-sm leading-relaxed text-t-phos-dim">Review the participant’s shared summary. Early access opens a guided tool without marking preparation completed. Bonus approval uses server caps. No external message is sent here.</p></header>
     {error ? <div role="alert" className="border border-t-red p-4 text-sm text-t-red"><p>{error}</p><button type="button" disabled={!!busy} onClick={() => setReload((value) => value + 1)} className="t-focus min-h-touch underline">Reload requests</button></div> : null}
     {message ? <p role="status" className="border border-t-line p-4 text-sm text-t-phos">{message}</p> : null}
+    <RefineryAccessPanel onPolicy={setSeatPolicy} />
     <details className="border border-t-line bg-t-panel p-4"><summary className="t-focus min-h-touch cursor-pointer text-base font-semibold text-t-white">Allowance settings</summary><p className="mt-3 text-sm leading-relaxed text-t-phos-dim">Existing accounts retain their allowance. These daily actions are pooled across covered Refinery text AI workflows. Failed generations refund actions; provider cost still counts. Dollar limits reserve admission budget and do not guarantee an absolute bill ceiling. Premium access and pricing use their existing controls.</p>
       {policy ? <form onSubmit={savePolicy} className="mt-4 space-y-4"><div className="grid gap-4 sm:grid-cols-2">{POLICY_FIELDS.map(([key, label, min, max, step]) => <label key={key} className="block text-sm text-t-phos">{label}<input type="number" required min={min} max={max} step={step} disabled={!!busy} value={policy[key]} onChange={(event) => { setPolicy((current) => current ? { ...current, [key]: event.target.value } : current); setPolicyDirty(true); }} className="t-focus mt-1 block w-full border border-t-line bg-t-panel-2 px-3 py-2 text-t-white" /></label>)}</div><p className="text-xs text-t-phos-dim">Starting allowance ≤ tailored allowance ≤ application allowance. The server validates bounds and applies the policy after real platform admin and two-step checks.</p><button type="submit" disabled={!!busy || !policyDirty} className="t-focus min-h-touch bg-t-amber px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{busy === "policy" ? "Saving..." : "Save allowance settings"}</button></form> : <p className="mt-3 text-sm text-t-phos-dim">Load the queue to inspect current settings.</p>}
     </details>
@@ -93,8 +103,8 @@ export default function AccessRequestsPage() {
     {requests?.length === 0 ? <p className="border border-t-line p-5 text-sm text-t-phos-dim">No access requests.</p> : null}
     <ul className="space-y-4">{requests?.map((request) => {
       const open = request.status === "pending" || request.status === "question";
-      return <li key={request.id} className="border border-t-line bg-t-panel p-5"><div className="flex flex-wrap justify-between gap-2 text-xs text-t-phos-dim"><p>Account {request.userId.slice(0, 8)} · {request.kind.replace(/_/g, " ")} · {request.stepId}</p><p>{request.status.replace(/_/g, " ")}</p></div><p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-t-white">{request.summary}</p>{request.decisionNote ? <p className="mt-3 whitespace-pre-wrap text-sm text-t-phos-dim">Last response: {request.decisionNote}</p> : null}
-        {open ? <div className="mt-4 space-y-3"><label className="block text-sm text-t-phos">Response the participant will see<textarea maxLength={1000} rows={3} disabled={!!busy} value={notes[request.id] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [request.id]: event.target.value }))} className="t-focus mt-1 block w-full border border-t-line bg-t-panel-2 px-3 py-2 text-t-white" /></label><div className="flex flex-wrap gap-2">{([["approve", "Approve"], ["deny", "Deny"], ["question", "Ask a question"]] as const).map(([decision, label]) => <button type="button" key={decision} disabled={!!busy || (notes[request.id]?.trim().length ?? 0) < 3} onClick={() => void decide(request, decision)} className="t-focus min-h-touch border border-t-line px-3 py-2 text-sm font-semibold text-t-white disabled:opacity-50">{busy === request.id ? "Saving..." : label}</button>)}</div></div> : null}
+      return <li key={request.id} className="border border-t-line bg-t-panel p-5"><div className="flex flex-wrap justify-between gap-2 text-xs text-t-phos-dim"><p>Account {request.userId.slice(0, 8)} · {request.kind === "seat" ? "Seat" : `${request.kind.replace(/_/g, " ")} · ${request.stepId}`}</p><p>{request.status.replace(/_/g, " ")}</p></div><p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-t-white">{request.summary}</p>{request.decisionNote ? <p className="mt-3 whitespace-pre-wrap text-sm text-t-phos-dim">Last response: {request.decisionNote}</p> : null}
+        {open ? <div className="mt-4 space-y-3"><label className="block text-sm text-t-phos">Response the participant will see<textarea maxLength={1000} rows={3} disabled={!!busy} value={notes[request.id] ?? ""} onChange={(event) => setNotes((current) => ({ ...current, [request.id]: event.target.value }))} className="t-focus mt-1 block w-full border border-t-line bg-t-panel-2 px-3 py-2 text-t-white" /></label><div className="flex flex-wrap gap-2">{([["approve", request.kind === "seat" ? approveSeatLabel(seatPolicy) : "Approve"], ["deny", "Deny"], ["question", "Ask a question"]] as const).map(([decision, label]) => <button type="button" key={decision} disabled={!!busy || (notes[request.id]?.trim().length ?? 0) < 3} onClick={() => void decide(request, decision)} className="t-focus min-h-touch border border-t-line px-3 py-2 text-sm font-semibold text-t-white disabled:opacity-50">{busy === request.id ? "Saving..." : label}</button>)}</div></div> : null}
       </li>;
     })}</ul>
   </div>;

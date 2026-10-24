@@ -112,7 +112,7 @@ interface OrgPayload {
   crmV2?: boolean;
   /** The organization's own threshold; 14 unless the owner changed it. */
   quietAfterDays?: number;
-  org: { name: string; code: string; logoUrl: string | null; role: string; seatLimit: number | null };
+  org: { name: string; code: string | null; logoUrl: string | null; role: string; seatLimit: number | null };
   staff: StaffMember[];
   cohort: Cohort;
   invites?: PendingInvite[];
@@ -622,7 +622,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   ? ownCaseloadOnly
                     ? "Staff view: the clients assigned to you who chose to share progress."
                     : "Staff view: everyone in your organization who chose to share progress."
-                  : `Your organization's mission control for team, client progress, and program reach. Code ${data.org.code}.`
+                  : `Your organization's mission control for team, client progress, and program reach.${data.org.code ? ` Code ${data.org.code}.` : ""}`
                 : "Progress for the people you support who chose to share it."}
             </p>
           </div>
@@ -737,7 +737,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   </span>
                   <a
                     href={`mailto:hmu@themidnightgarden.club?subject=${encodeURIComponent(
-                      `More seats for ${data?.org.name || "our org"} (${data?.org.code || ""})`
+                      `More seats for ${data?.org.name || "our org"}${data?.org.code ? ` (${data.org.code})` : ""}`
                     )}`}
                     className="t-focus text-t-amber-bright hover:text-t-amber"
                   >
