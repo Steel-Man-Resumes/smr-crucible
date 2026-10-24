@@ -1,0 +1,90 @@
+/* Refinery game-board nav (2026-10-23). Lives inside a .forge-workshop scope,
+   so t-* tokens are the terminal skin: near-black, bone, amber, gold, phos. */
+.refinery-board { font-family: var(--t-body); }
+.refinery-board .board-eyebrow {
+  margin: 0 0 6px; padding: 0 8px;
+  font: 600 9px/1.4 var(--t-mono); letter-spacing: .14em; text-transform: uppercase;
+  color: var(--t-amber);
+}
+.refinery-board .board-path { position: relative; margin: 0; padding: 0; list-style: none; }
+/* The rail: decorative, behind the dots. */
+.refinery-board .board-path::before {
+  content: ""; position: absolute; left: 19px; top: 14px; bottom: 14px; width: 2px;
+  background: linear-gradient(var(--t-line-strong), var(--t-line));
+  pointer-events: none;
+}
+.refinery-board .board-station { position: relative; padding: 2px 0; }
+.refinery-board .board-station-head { display: flex; align-items: flex-start; gap: 8px; padding-left: 8px; }
+.refinery-board .board-dot {
+  position: relative; z-index: 1; flex: none; margin-top: 9px;
+  display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px;
+  border: 2px solid var(--t-line-strong); background: var(--t-panel); color: var(--t-bone-dim);
+}
+.refinery-board .board-dot-num { font: 600 10px/1 var(--t-mono); }
+.refinery-board .board-dot[data-tone="completed"] { border-color: var(--t-phos); color: var(--t-phos); }
+.refinery-board .board-dot[data-tone="open"] { border-color: var(--t-amber); color: var(--t-white); }
+.refinery-board .board-dot[data-tone="early"] { border-color: var(--t-amber-bright); border-style: dashed; color: var(--t-amber-bright); }
+.refinery-board .board-dot[data-tone="locked"] { border-color: var(--t-line-strong); color: var(--t-bone-dim); opacity: .85; }
+.refinery-board .board-dot[data-tone="current"] {
+  border-color: var(--t-amber-bright); background: var(--t-amber); color: #121110;
+  box-shadow: 0 0 0 3px rgba(219, 193, 115, .22), 0 0 14px rgba(219, 193, 115, .45);
+  animation: board-glow 2.6s ease-in-out infinite;
+}
+@keyframes board-glow {
+  50% { box-shadow: 0 0 0 4px rgba(219, 193, 115, .3), 0 0 22px rgba(219, 193, 115, .6); }
+}
+.refinery-board .board-station-link,
+.refinery-board .board-child-link {
+  display: flex; width: 100%; align-items: center; gap: 8px; min-height: 40px;
+  padding: 8px 10px; border-radius: 4px; border-left: 3px solid transparent;
+  text-align: left; color: var(--t-white); transition: background-color .15s, color .15s;
+}
+.refinery-board .board-station-link { font-size: 14px; font-weight: 600; }
+.refinery-board .board-child-link { font-size: 13px; font-weight: 400; color: var(--t-bone-dim); min-height: 36px; padding: 6px 10px; }
+.refinery-board .board-station-link:hover,
+.refinery-board .board-child-link:hover { background: var(--t-panel-2); color: var(--t-white); }
+.refinery-board .is-here { background: var(--t-panel-3); border-left-color: var(--t-amber-bright); color: var(--t-white); }
+.refinery-board .board-station[data-tone="current"] > .board-station-head .board-station-link { color: var(--t-amber-bright); }
+.refinery-board .board-sub { display: block; margin-top: 2px; font-size: 10.5px; font-weight: 400; line-height: 1.35; color: var(--t-bone-dim); }
+.refinery-board .board-station[data-tone="completed"] .board-station-link .board-sub { color: var(--t-phos); }
+.refinery-board .board-lock-line { color: var(--t-bone-dim); }
+.refinery-board .board-ask-hint { color: var(--t-amber-bright); }
+.refinery-board .board-ask { padding: 2px 10px 6px; }
+.refinery-board .board-toggle {
+  flex: none; margin-top: 4px; display: grid; place-items: center; width: 32px; height: 32px;
+  border-radius: 4px; color: var(--t-bone-dim);
+}
+.refinery-board .board-toggle:hover { background: var(--t-panel-2); color: var(--t-white); }
+.refinery-board .board-toggle svg { transition: transform .15s; }
+.refinery-board .board-children { margin: 0 0 4px 40px; padding: 0 0 0 6px; list-style: none; border-left: 1px dashed var(--t-line-strong); }
+.refinery-board .board-meter:not(:empty) { margin: 10px 0 2px 8px; border: 1px solid var(--t-line); background: var(--t-panel-2); border-radius: 4px; }
+.refinery-board .board-group { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--t-line); }
+.refinery-board .board-group ul { margin: 0; padding: 0; list-style: none; }
+.refinery-board .board-group .board-child-link { color: var(--t-bone-dim); }
+
+/* Mobile strip: seven stations, the current one lit and named. */
+.board-strip {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  height: calc(56px + env(safe-area-inset-bottom, 0px)); padding-bottom: env(safe-area-inset-bottom, 0px);
+  border-top: 1px solid var(--t-line); background: var(--t-panel);
+}
+.board-strip ol { position: relative; display: flex; height: 56px; align-items: center; justify-content: space-between; margin: 0; padding: 0 16px; list-style: none; }
+.board-strip ol::before { content: ""; position: absolute; left: 30px; right: 30px; top: 50%; height: 2px; background: var(--t-line); pointer-events: none; }
+.board-strip li { position: relative; z-index: 1; display: flex; }
+.board-strip button { display: flex; align-items: center; gap: 6px; min-width: 32px; min-height: 44px; justify-content: center; color: var(--t-bone-dim); }
+.board-strip .strip-dot { display: block; width: 12px; height: 12px; border-radius: 999px; border: 2px solid var(--t-line-strong); background: var(--t-panel); }
+.board-strip [data-tone="completed"] .strip-dot { border-color: var(--t-phos); background: var(--t-phos); }
+.board-strip [data-tone="open"] .strip-dot { border-color: var(--t-amber); }
+.board-strip [data-tone="early"] .strip-dot { border-color: var(--t-amber-bright); border-style: dashed; }
+.board-strip [aria-current] .strip-dot { width: 16px; height: 16px; border-color: var(--t-amber-bright); background: var(--t-amber); box-shadow: 0 0 10px rgba(219, 193, 115, .55); }
+.board-strip .strip-label { padding: 2px 6px; font: 600 11px/1.2 var(--t-mono); color: var(--t-amber-bright); background: var(--t-panel); white-space: nowrap; }
+@media (min-width: 768px) { .board-strip { display: none; } }
+/* Keep t.ROY's corner button clear of the strip where it floats (640-767px). */
+@media (min-width: 640px) and (max-width: 767px) {
+  .refinery-app[data-board-strip] #refinery-coach-trigger { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refinery-board .board-dot[data-tone="current"] { animation: none; }
+  .refinery-board *, .board-strip * { transition: none !important; }
+}

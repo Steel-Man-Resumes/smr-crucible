@@ -164,7 +164,7 @@ test("Settings headings state what it does, with no comparison to other apps", (
 
 test("Phase 5 R4.5 (A6): Interview Prep no longer needs a disclosure plan, in the sidebar or on the dashboard", () => {
   const strip = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-  const shell = strip(readFileSync(join(ROOT, "app", "(dashboard)", "RefineryShell.tsx"), "utf8"));
+  const shell = strip(readFileSync(join(ROOT, "lib", "refinery-nav.ts"), "utf8"));
   const navItem = shell.slice(shell.indexOf('href: "/dashboard/interview"'), shell.indexOf("}", shell.indexOf('href: "/dashboard/interview"')));
   assert.ok(navItem.length > 0);
   assert.ok(!navItem.includes("requiresDisclosure"), navItem);
