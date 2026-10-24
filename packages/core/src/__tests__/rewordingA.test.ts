@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 
 import { RESUME_RULES, RESUME_RULES_VERSION, resumeRulesBlock } from "../resumeRules";
 import { isSectionHeader } from "../pageFitShared";
-import { scopeHitsNotTheirs } from "../scopeWords";
+import { scopeHitsNotTheirs, skillScopeNotTheirs } from "../scopeWords";
 
 test("rulebook A: reword freely, facts locked; duty phrasing always rewritten", () => {
   assert.match(resumeRulesBlock("truth"), /Supervising people is scope/);
@@ -169,9 +169,16 @@ test("H1: the mint check's skills reading agrees (scope words read the same ever
     runMintCheck({ output: page(term + ", Welding"), source: `Dana Example\nWelded steel.\n${src}`, kind: "resume" }).findings.some((f) => f.line === term && f.kind === "grid_scope_term");
   assert.ok(flagged("I ran the kitchen at night.", "Kitchen supervision"));
   assert.ok(flagged("Responsible for 3rd shift.", "Shift supervision"));
+  // Fix lane check (2026-10-24, Valjean walk defect 3): a skills term names a kind of work, not one job's
+  // people, so it is read by the skills-term rule (skillScopeNotTheirs): the person's own explicit claim of
+  // the same family over people covers it. The same rule everywhere a skills term is read.
   for (const [src, term] of [["In charge of the guys on my shift.", "Crew supervision"], ["I supervised the crew.", "Crew supervision"]]) {
-    assert.equal(flagged(src, term), scopeHitsNotTheirs(term, `Dana Example\nWelded steel.\n${src}`).length > 0, term);
+    assert.equal(flagged(src, term), skillScopeNotTheirs(term, `Dana Example\nWelded steel.\n${src}`).length > 0, term);
   }
+  assert.equal(flagged("I supervised the crew.", "Crew supervision"), false, "their own explicit supervision covers the skill");
+  assert.equal(flagged("In charge of the guys on my shift.", "Crew supervision"), true, "another family (lead) is still asked");
+  assert.equal(flagged("I was a crew supervisor.", "Crew supervision"), true, "a title is never the claim");
+  assert.equal(flagged("I want to supervise a crew someday.", "Crew supervision"), true, "a goal is never the claim");
 });
 
 // ---- Round 4 (review r3, CC rulings) ------------------------------------------------------------------------

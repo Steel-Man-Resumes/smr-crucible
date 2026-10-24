@@ -993,6 +993,43 @@ export function scopeHitsNotTheirs(line: string, sourceText: string, ctx: ScopeC
 }
 
 /**
+ * Fix lane check (2026-10-24, Valjean walk defect 3): a skills term is a noun phrase that names a kind of work
+ * ("Crew supervision", "Work assignment and task delegation"). It names no job, no headcount and no result, so
+ * the per-job, same-people reading a resume line gets is the wrong test for it: that reading flagged "Crew
+ * supervision" for a person whose own words say "supervise the production employees". A skills term's scope
+ * claim is the person's when their own words (active, theirs, not denied, not goal text) make a claim of the
+ * same family; for being over people (supervise, lead, oversee, direct, manage) that claim must itself be
+ * explicit over people ("supervised the production employees"), never a title or a possessive. Handing out
+ * work ("assign the daily work", "assigned tasks") is the person's delegation claim. Returns the scope hits in
+ * the term that are still not theirs; an empty list means the evidence supports the term.
+ */
+export function skillScopeNotTheirs(term: string, sourceText: string): ScopeHit[] {
+  const hits = scopeHitsNotTheirs(term, sourceText);
+  if (!hits.length) return hits;
+  // A duty bullet of their own work history ("- Supervise production employees", a finished resume's line)
+  // has no "I"; read it as "I supervise production employees", with every frame check still applied.
+  const work = paragraphs(sourceText).filter((p) => !p.goal);
+  const bullets = work
+    .map((p) => p.text.match(/^\s*[-\u2022*]\s*([A-Za-z].*)$/)?.[1])
+    .filter((b): b is string => !!b)
+    .map((b) => `I ${b.charAt(0).toLowerCase()}${b.slice(1)}`);
+  const theirs = [...personClaims(sourceText), ...(bullets.length ? personClaims(bullets.join("\n")) : [])];
+  const handsOutWork = [...work.map((p) => p.text), ...bullets].some((text) =>
+    straightQuotes(text).split(/[.;!?]+/).some((sent) => {
+      const m = sent.match(ASSIGN_WORK_RE);
+      const before = sent.slice(0, m?.index ?? 0);
+      return !!m && !NEGATION_BEFORE.test(before) && !PASSIVE_BEFORE.test(before) && !SHARED_BEFORE.test(before);
+    })
+  );
+  return hits.filter((h) => {
+    if (h.family === "delegate" && handsOutWork) return false;
+    return !theirs.some((c) => c.family === h.family && c.self && (!RUN_PAGE.has(h.family) || c.overPeople === true));
+  });
+}
+// "assign the daily work", "assigned tasks to the crew", "assigning jobs": handing out work, done by the person.
+const ASSIGN_WORK_RE = /\bassign(?:ed|s|ing)?\s+(?:(?:the|our|my|their|all|each|every)\s+)?(?:[a-z-]+\s+){0,2}(?:work|tasks?|jobs?|duties|assignments?|orders?)\b/i;
+
+/**
  * Kept for older callers. Round 5: the gate never reads an answer for scope;
  * a scope claim is settled only by a rewrite or a cut. This only reports
  * whether an answer names a scope claim of its own, not a denial.
