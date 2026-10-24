@@ -21,6 +21,8 @@ export interface EnrichedJob {
   remote: boolean; apply_url: string | null; employer_website: string | null;
   /** Other places the same posting is listed. The card shows one card, not one per town. */
   other_locations?: string[];
+  /** A record mark earned at another merged town, not at the place shown. second_chance stays false for it. */
+  marked_elsewhere?: { town: string; reason: string };
   /** Every other copy merged into this card, each with its own place and apply link. */
   other_listings?: { place: string; apply_url: string | null; source: string }[];
   relevance?: JobRelevance;
@@ -37,6 +39,8 @@ export interface JobSearchSummary {
   offTopic?: number;
   /** Kept below the main list: search words only in the description. */
   alsoFound?: number;
+  /** Loaded listings removed by the person's own filters, job-fit choices or hidden employers (not off-topic drops). */
+  removedByChoices?: number;
   /** Related terms searched alongside the person's own words. */
   relatedTerms?: string[];
 }

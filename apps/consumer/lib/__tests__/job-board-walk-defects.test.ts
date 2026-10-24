@@ -11,6 +11,7 @@ import { runJobSearch, basicJob, providerFailureNotices, CACHE_MINUTES_DEGRADED,
 import { normalizeEmployerName, _resetMarkCaches, type EmployerMarks } from "@crucible/core";
 import { mapAdzunaJob, mapUsaJobsJob, mergeJobs, jsearchUrl } from "../job-providers";
 import { normalizeLocation } from "../job-location";
+import { coachJobView } from "../job-coach-view";
 import { evidenceForJob, formatSourceSalary } from "../job-search-evidence";
 import { searchRoles, searchPlan, jobRelevance, relatedTerms } from "../job-search-relevance";
 import { defaultJobSearchFilters } from "@crucible/core/src/jobSearchFilters";
@@ -191,10 +192,16 @@ test("Mark after merge: a record mark earned in any merged town stays on the car
   assert.equal(merged.job_city, "Milwaukee");
   const marks: EmployerMarks = { source: "directory", byKey: new Map([[normalizeEmployerName("Example Plastics"), [{ basis: "employer", roleFamily: null, roleTitle: null, placeKind: "site", state: "WI", county: null, city: "Germantown" }]]]) };
   const card = basicJob(merged, marks);
-  assert.equal(card.second_chance, true);
-  assert.match(card.fair_chance_reason || "", /in Germantown, WI\. Apply to that location/);
+  assert.equal(card.second_chance, false, "the Milwaukee card is not marked: only Germantown was checked");
+  assert.equal(card.fair_chance_reason, null);
+  assert.equal(card.marked_elsewhere?.town, "Germantown, WI");
+  assert.match(card.marked_elsewhere?.reason || "", /in Germantown, WI\. We did not check Milwaukee, WI\./);
+  const coach = coachJobView(card);
+  assert.deepEqual({ checkedAt: coach.recordMark?.checkedAt, notCheckedAt: (coach.recordMark as { notCheckedAt?: string })?.notCheckedAt }, { checkedAt: "Germantown, WI", notCheckedAt: "Milwaukee, WI" }, "t.ROY gets the checked town, not a bare true");
+  assert.ok(!JSON.stringify(coach).includes('"fairChance":true'));
   const here = basicJob(merged, { source: "directory", byKey: new Map([[normalizeEmployerName("Example Plastics"), [{ basis: "employer", roleFamily: null, roleTitle: null, placeKind: "site", state: "WI", county: null, city: "Milwaukee" }]]]) });
-  assert.match(here.fair_chance_reason || "", /here\.$/);
+  assert.equal(here.second_chance, true); assert.match(here.fair_chance_reason || "", /here\.$/); assert.equal(here.marked_elsewhere, undefined);
+  assert.equal(coachJobView(here).recordMark?.checkedAt, "Milwaukee, WI");
   assert.equal(basicJob(merged, { source: "directory", byKey: new Map() }).second_chance, false, "no mark is invented");
 });
 
@@ -262,4 +269,36 @@ test("No pay warning on a card that shows no pay", () => {
   assert.equal(formatSourceSalary(e.salary), null);
   assert.deepEqual(e.warnings.filter(w => /pay/i.test(w)), []);
   assert.ok(evidenceForJob(listing({ job_min_salary: 20000, job_salary_currency: "USD", job_salary_period: "HOUR" })).warnings.some(w => /Unusually high/.test(w)));
+});
+
+test("R-S1: the person's own choices removing everything is said as that, not as our outage; a full outage keeps the counts", async () => {
+  const partTime = listing({ job_id: "pt-1", job_employment_type: "PARTTIME", job_employment_types: ["PARTTIME"] });
+  const run = (route: Route) => withProviders(route, () => runJobSearch({ role: "warehouse lead", location: "Milwaukee, WI", userId: null, filters: { radiusMiles: { value: null }, employmentTypes: { value: ["full_time"], mode: "must" }, includeUnknown: false } }));
+  const usaDown: Route = (provider, role) => provider === "usajobs" ? { status: 503, body: {} } : provider === "jsearch" && role === "warehouse lead" ? { status: 200, body: { data: { cursor: null, jobs: [partTime] } } } : fixtureRoute(provider, role === "warehouse lead" ? "none" : role);
+  const mine = await run(usaDown);
+  assert.equal(mine.error, undefined, "not 'on our side' when the choice removed the only listing");
+  assert.equal(mine.summary?.removedByChoices, 1); assert.equal(mine.summary?.excludedBy.type, 1);
+  assert.ok(mine.summary?.notices.some(n => /^USAJOBS did not answer/.test(n)), "the failed source is still named");
+  const boardsDown: Route = provider => provider === "usajobs"
+    ? { status: 200, body: { SearchResult: { SearchResultItems: [{ MatchedObjectId: "w-1", MatchedObjectDescriptor: { PositionTitle: "Warehouse Lead", OrganizationName: "Example Agency", PositionLocation: [{ CityName: "Milwaukee, Wisconsin", CountrySubDivisionCode: "Wisconsin" }], PositionSchedule: [{ Name: "Part-time" }], UserArea: { Details: { JobSummary: "Lead the warehouse." } } } }] } } }
+    : { status: 503, body: {} };
+  const full = await run(boardsDown);
+  assert.equal(full.error, "provider_unavailable");
+  assert.equal(full.summary?.removedByChoices, 1, "the page can say one loaded listing was removed by the person's choices");
+});
+
+test("R-S2: one broad family word never admits an office title; trade titles stay", () => {
+  const plan = (q: string) => { const p = searchPlan(q, "", []); return (title: string) => jobRelevance({ title, full_description: "" }, p.roles, [], p.related, p.familyTitles).tier; };
+  const warehouse = plan("warehouse lead");
+  for (const t of ["Stock Plan Administrator", "Inventory Accountant", "Materials Engineer", "Distribution Sales Manager"]) assert.equal(warehouse(t), "none", t);
+  assert.equal(plan("electrician")("Electrical Engineer"), "none");
+  assert.equal(plan("machine operator")("Video Production Assistant"), "none");
+  assert.equal(warehouse("Material Handler"), "title");
+  assert.equal(warehouse("Dock Lead"), "title");
+  assert.equal(warehouse("Distribution Center Associate"), "none", "distribution plus a level word is still one family word");
+  assert.equal(warehouse("Shipping and Receiving Dock Worker"), "title");
+  assert.equal(warehouse("Forklift and Warehouse Crew"), "title", "two different family words together");
+  assert.equal(plan("maintenance technician")("Millwright"), "title");
+  assert.equal(plan("electrician")("Electrical Technician"), "title");
+  assert.equal(plan("rigger")("Crane Rigging Technician"), "title");
 });

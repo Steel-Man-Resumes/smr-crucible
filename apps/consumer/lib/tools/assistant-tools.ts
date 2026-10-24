@@ -24,6 +24,7 @@ import { buildDataTools } from "./assistant-data-tools";
 import type { SelectedWork } from "../assistant-work-context";
 import { JOB_SEARCH_FILTER_SCHEMA } from "@crucible/core/src/jobSearchFilters";
 import { runJobSearch, findCachedJob } from "@/lib/job-search-core";
+import { coachJobView } from "@/lib/job-coach-view";
 import { jobSourceForSave } from "@/lib/job-source";
 import {
   resolveAssistantPage,
@@ -283,7 +284,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
         const safeFilters=filters&&typeof filters==='object'&&!Array.isArray(filters)?{...filters,origin:null}:filters;
         const result = await runJobSearch({ role: searchQuery, location, userId, laneId, filters:safeFilters });
         if (result.error) {
-          return {error:result.error,guidance:result.error==='location_required'?'Ask which city or ZIP to use. Nationwide remote requires explicit Remote and Anywhere choices.':'Search could not finish. This is not evidence of an empty job market.'};
+          return {error:result.error,summary:result.summary,guidance:result.error==='location_required'?'Ask which city or ZIP to use. Nationwide remote requires explicit Remote and Anywhere choices.':`Search could not finish. This is not evidence of an empty job market.${result.summary?.removedByChoices?` ${result.summary.removedByChoices} listing(s) that did load were removed by the person's own choices; explain the excluded counts too.`:''}`};
         }
         return {
           summary:result.summary,
@@ -292,16 +293,8 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
             result.source === "cache"
               ? "from a search cached within the last 6 hours"
               : "fetched live just now",
-          jobs: result.jobs.slice(0, 5).map((j) => ({
-            id: j.id,
-            title: j.title,
-            company: j.company,
-            location: j.location,
-            salary: j.salary,
-            employmentType:j.employment_type,evidence:j.evidence,filterAssessment:j.filterAssessment,relevance:j.relevance,
-            fairChance: j.second_chance,
-            posted: j.posted,
-          })),
+          // recordMark names the place it was checked at (coachJobView).
+          jobs: result.jobs.slice(0, 5).map(coachJobView),
         };
       } catch (err) {
         console.error("[assistant-tools] search_jobs failed:", err);

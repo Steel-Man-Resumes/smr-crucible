@@ -301,6 +301,9 @@ function JobBoardPage() {
           // The job-data provider failed (quota/outage) -- say so plainly
           // instead of showing a misleading "no jobs found".
           setJobs([]);
+          // Keep the counts: listings the person's own choices removed are
+          // shown next to the outage line, not hidden behind it.
+          setSummary(data.summary || null);
           setSearchError(
             data.error === "location_required" ? "Add a city or ZIP. For a nationwide remote search, choose Remote and Anywhere."
               : data.error === "provider_partial"
@@ -749,6 +752,7 @@ function JobBoardPage() {
             Job search is having trouble right now
           </p>
           <p className="text-sm text-t-phos leading-relaxed">{searchError}</p>
+          {summary && (summary.removedByChoices || 0) > 0 && <p className="mt-2 text-sm text-t-phos" data-testid="jobs-removed-by-choices">{summary.removedByChoices} listing{summary.removedByChoices === 1 ? "" : "s"} that did load {summary.removedByChoices === 1 ? "was" : "were"} removed by your choices. See why below.</p>}
         </div>
       )}
 
@@ -848,6 +852,11 @@ function JobBoardPage() {
                             Hires people with records
                           </span>
                         )}
+                        {!job.second_chance && job.marked_elsewhere && (
+                          <span data-testid="job-marked-elsewhere" className="text-[10px] font-medium border border-t-amber text-t-amber-bright px-2 py-0.5">
+                            Hires people with records in {job.marked_elsewhere.town}
+                          </span>
+                        )}
                         {job.remote && (
                           <span className="text-[10px] font-medium border border-t-steel text-t-steel px-2 py-0.5 whitespace-nowrap">
                             Remote
@@ -937,6 +946,12 @@ function JobBoardPage() {
                         <p className="text-xs font-medium text-t-amber-bright">
                           {job.fair_chance_reason}
                         </p>
+                      </div>
+                    )}
+
+                    {!job.second_chance && job.marked_elsewhere && (
+                      <div className="bg-t-panel-2 px-3 py-2 border border-t-amber">
+                        <p className="text-xs font-medium text-t-amber-bright">{job.marked_elsewhere.reason}</p>
                       </div>
                     )}
 

@@ -180,7 +180,9 @@ export function basicJob(j: JSearchJob, marks: EmployerMarks): EnrichedJob {
     // earned at a place, sometimes for one role (DIRECTORY_MARK_ENABLED).
     const markedHere = isMarked(company, { city: j.job_city ?? null, state: j.job_state ?? null, title }, marks);
     const markedElsewhere = markedHere ? null : (j.job_listings || []).find(l => isMarked(company, { city: l.city, state: l.state, title: unwrapMaybeJsonArray(l.title) }, marks)) || null;
-    const fair = markedHere || !!markedElsewhere;
+    // second_chance is a claim about the place on the card. A mark earned in
+    // another merged town is carried separately and always names that town.
+    const fair = markedHere;
     const pickPlace = placeId(j.job_city, j.job_state);
     const otherPlaces = [...new Map((j.job_listings || []).filter(l => l.placeId !== pickPlace).map(l => [l.placeId, l.place])).values()].filter(Boolean);
 
@@ -206,7 +208,8 @@ export function basicJob(j: JSearchJob, marks: EmployerMarks): EnrichedJob {
       employment_type: j.job_employment_type || "Type not supplied",
       posted,
       second_chance: fair,
-      fair_chance_reason: markedHere ? "We checked: this employer hires people with records here." : markedElsewhere ? `We checked: this employer hires people with records in ${markedElsewhere.place}. Apply to that location.` : null,
+      fair_chance_reason: markedHere ? "We checked: this employer hires people with records here." : null,
+      ...(markedElsewhere ? { marked_elsewhere: { town: markedElsewhere.place, reason: `We checked: this employer hires people with records in ${markedElsewhere.place}. We did not check ${normalizeLocation(j.job_city, j.job_state) || "the place shown"}. Apply to the ${markedElsewhere.place} listing.` } } : {}),
       remote: j.job_is_remote === true,
       evidence, source_fields: j.source_fields, source_variants: j.source_variants,
       apply_url: j.apply_options?.find((option) => option.is_direct === true && option.apply_link)?.apply_link || j.job_apply_link || j.job_google_link || null,
@@ -417,8 +420,9 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   });
   jobs.sort((a,b) => b.relevance.score - a.relevance.score || a.filterAssessment.preferred.length - b.filterAssessment.preferred.length);
   const offTopic = excludedBy.off_topic || 0, alsoFound = jobs.filter(j => j.relevance.tier === "description").length;
+  const removedByChoices = loaded - jobs.length - offTopic;
   const summary: JobSearchSummary = { loaded, matched: jobs.length, excluded: loaded - jobs.length, unknownIncluded: jobs.filter(j => j.filterAssessment.unknown.length > 0).length, excludedBy, unknownBy, providerRequests: result.metadata?.providerRequests || 0, partial: true, fetchedAt: result.jobs[0]?.evidence?.fetchedAt || new Date().toISOString(), filters, laneId: saved?.laneId || null,
-    offTopic, alsoFound, ...(relatedUsed.length ? { relatedTerms: relatedUsed } : {}),
+    offTopic, alsoFound, removedByChoices, ...(relatedUsed.length ? { relatedTerms: relatedUsed } : {}),
     notices: [...(roles.length ? [`Search directions: ${roles.join("; ")}. Ordered by title match first, then description and saved skill overlap, not confirmed eligibility.`] : ["Add a role or save a career direction for more focused results."]),
       ...(relatedUsed.length ? [`We also searched ${relatedUsed.map(r => `"${r}"`).join(" and ")}, a related term for "${roles[0]}". Cards say when only the related term matched.`] : []),
       ...(!relatedUsed.length && related.length && jobs.some(j => j.relevance.matchedRelatedOnly) ? [`Titles that use a related term (${related.join(", ")}) also count as matches for "${roles[0]}". Cards say when only the related term matched.`] : []),
@@ -428,7 +432,13 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   // A provider failed and nothing survived: say the source is down, not
   // "change your choices", even when another provider sent only off-topic or
   // filtered rows. The summary still carries the counts and notices.
-  if (!jobs.length && !result.error && result.metadata?.outage) return { ...publicResult, jobs, summary, error: result.metadata.outage };
+  // Exception: when only part of the sources failed and the person's own
+  // choices removed everything that did load, that is the honest reason. It
+  // gets the normal empty view with its counts; the provider notice stays in
+  // summary.notices. A full outage stays an outage, with the summary attached
+  // so the page can also say how many loaded listings the choices removed.
+  const outage = result.metadata?.outage;
+  if (!jobs.length && !result.error && outage && (outage !== "provider_partial" || removedByChoices === 0)) return { ...publicResult, jobs, summary, error: outage };
   return { ...publicResult, jobs, summary };
 }
 
