@@ -1,4 +1,5 @@
 import { signOut } from "next-auth/react";
+import { clearRunSessionStorage } from "./refinery-guards";
 
 /** Keep browser work until the server confirms the account is signed out. */
 export async function confirmedSignOut(): Promise<void> {
@@ -11,7 +12,12 @@ export async function confirmedSignOut(): Promise<void> {
       const response = await fetch("/api/auth/session", { cache: "no-store" });
       if (!response.ok) throw new Error("Sign-out could not be confirmed");
       const session = await response.json();
-      if (!session?.user) return;
+      if (!session?.user) {
+        // This tab's run-derived sessionStorage (Rush result, record choice)
+        // never outlives the account that wrote it (R4 DESIGN.md section 8).
+        clearRunSessionStorage();
+        return;
+      }
       lastError = new Error("Still signed in");
     } catch (error) {
       lastError = error instanceof Error ? error : new Error("Sign-out could not be confirmed");

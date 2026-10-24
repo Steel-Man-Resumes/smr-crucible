@@ -3,10 +3,11 @@
 /**
  * Developer Switcher (Troy-only: rendered for admin tier).
  *
- * One control, every capacity:
- *   Me: Job Seeker   -> own account, real client experience (view_as=client)
- *   Me: Observer     -> the evidence landing a funder/researcher sees
- *   Me: Admin        -> home base (clears view_as)
+ * One control, every capacity, all of it audited server-side impersonation.
+ * The soft "Me: Job Seeker / Observer / Admin" preview is gone (B7,
+ * 2026-10-23): it drew a job seeker's screens while every save landed in the
+ * admin's own account. See a job seeker by viewing one (below) or by signing
+ * in to a separate job-seeker account.
  *   Personas         -> one-click blue-view impersonation of seeded org roles
  *                       (org leader, staff) -- their REAL landing + data
  *   View as org...   -> org directory (blue, read-only dashboards)
@@ -17,12 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { clearForgeBrowserKeysEverywhere } from "@/lib/refinery-guards";
-import {
-  useRealTier,
-  getViewAs,
-  setViewAs,
-  type ViewAs,
-} from "@/lib/useUserTier";
+import { useRealTier, setViewAs } from "@/lib/useUserTier";
 
 interface Persona {
   userId: string;
@@ -50,15 +46,16 @@ export function DevSwitcher() {
   const clearAdminId = (clearAuth?.user as { id?: string } | undefined)?.id ?? null;
   const realTier = useRealTier();
   const [open, setOpen] = useState(false);
-  const [viewAs, setViewAsState] = useState<ViewAs | null>(null);
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [openOrg, setOpenOrg] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
+  // An admin browser may still hold the retired soft-preview keys (view_as,
+  // admin_test_mode). Clear them once, so nothing that reads them branches.
   useEffect(() => {
-    setViewAsState(getViewAs());
-  }, []);
+    if (realTier === "admin") setViewAs(null);
+  }, [realTier]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -78,11 +75,6 @@ export function DevSwitcher() {
   }, [open, personas]);
 
   if (realTier !== "admin") return null;
-
-  function setSelfView(view: ViewAs | null) {
-    setViewAs(view);
-    window.location.href = "/dashboard";
-  }
 
   async function startViewImpersonation(targetUserId: string) {
     setStarting(targetUserId);
@@ -105,9 +97,6 @@ export function DevSwitcher() {
 
   const item =
     "t-focus block w-full text-left px-3 py-2 text-sm text-t-phos hover:bg-t-panel-2 hover:text-t-white";
-  const current = (
-    <span className="ml-2 text-[10px] text-t-amber-bright">(current)</span>
-  );
 
   return (
     <div ref={ref} className="relative">
@@ -123,31 +112,6 @@ export function DevSwitcher() {
       </button>
       {open && (
         <div className="absolute right-0 top-full mt-1 w-64 border border-t-line bg-t-panel shadow-lg z-[60] max-h-[80vh] overflow-y-auto">
-          <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase text-t-phos-dim">
-            Operate as
-          </p>
-          <button className={item} onClick={() => setSelfView("client")}>
-            Me: Job Seeker
-            {viewAs === "client" && current}
-            <span className="block text-[11px] text-t-phos-dim">
-              Your own real client journey
-            </span>
-          </button>
-          <button className={item} onClick={() => setSelfView("observer")}>
-            Me: Observer
-            {viewAs === "observer" && current}
-            <span className="block text-[11px] text-t-phos-dim">
-              The evidence view funders see
-            </span>
-          </button>
-          <button className={item} onClick={() => setSelfView(null)}>
-            Me: Admin
-            {viewAs === null && current}
-            <span className="block text-[11px] text-t-phos-dim">
-              Operator home base
-            </span>
-          </button>
-
           {personas !== null && personas.length > 0 && (
             <>
               <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase text-t-phos-dim border-t border-t-line mt-1">
