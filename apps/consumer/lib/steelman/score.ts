@@ -69,9 +69,9 @@ export const COMPONENTS: Record<ComponentId, ComponentSpec> = {
   disclosure: { label: "Disclosure ready", minutes: 25, multiplier: 1.3, cap: 5, href: "/dashboard/disclosure", unit: ["step", "steps"],
     why: "Having your words ready for the record question puts you in control of it.",
     action: (n) => n === 0 ? "Build your disclosure plan" : "Rehearse your words out loud" },
-  proof: { label: "Proof gathered", minutes: 10, multiplier: 1, cap: 8, href: "/dashboard/documents", unit: ["record", "records"],
-    why: "Every record you track down is a fact nobody can argue with.",
-    action: () => "Add one record to your documents" },
+  proof: { label: "Proof gathered", minutes: 10, multiplier: 1, cap: 8, href: "/dashboard/documents", unit: ["document", "documents"],
+    why: "Every proof document you track down is a fact nobody can argue with.",
+    action: () => "Add one proof document" },
   feedback: { label: "Feedback offered", minutes: 5, multiplier: 1, cap: 4, href: "/dashboard", unit: ["note", "notes"],
     why: "Telling us what worked and what broke makes this better for the next person.",
     action: () => "Tell us what worked and what broke" },
@@ -151,6 +151,7 @@ export const MARKS = {
 export const BANDS: Array<{ id: BandId; from: number; label: string; why: string }> = [
   { id: "showing_up", from: 0, label: "Showing up", why: "You started. Every piece of real work moves this bar." },
   { id: "in_the_game", from: MARKS.firstLoop, label: "In the game", why: "You built a resume, aimed it at a real job and sent it." },
+  // The in_the_game line above claims the first loop; bandWhy() swaps in IN_THE_GAME_NEUTRAL when it has not happened (boss S3).
   { id: "covering_ground", from: MARKS.everyPart, label: "Covering ground", why: "More of the Refinery is working for you." },
   { id: "putting_in_work", from: MARKS.breadth, label: "Putting in work", why: "Your work is going wide and deep." },
   { id: "steel_man", from: MARKS.depth, label: "Steel Man", why: "Your whole job search is built and running." },
@@ -203,6 +204,13 @@ export function bandFor(score: number, steelMan: boolean) {
   return BANDS[0];
 }
 
+export const IN_THE_GAME_NEUTRAL = "Your work is adding up. The first finished, tailored and sent resume is the loop this mark stands for.";
+/** The band's line, true to this person's work: never claims a sent application that does not exist. */
+export function bandWhy(band: { id: BandId; why: string }, counts: ComponentCounts): string {
+  if (band.id !== "in_the_game") return band.why;
+  return (counts.resumes ?? 0) >= 1 && (counts.tailored ?? 0) >= 1 && (counts.sent ?? 0) >= 1 ? band.why : IN_THE_GAME_NEUTRAL;
+}
+
 export function nextMark(score: number, steelMan: boolean): { score: number; label: string; pointsAway: number } | null {
   if (steelMan) return null;
   const next = BANDS.slice(1).find((b) => score < b.from) ?? BANDS[4];
@@ -241,6 +249,7 @@ export function nextGain(counts: ComponentCounts): { label: string; href: string
 
 // ─── Time views: the 30-day strip and the week streak ───────────────────────
 
+/** DESIGN HYPOTHESIS (UTC days and Monday-start UTC weeks): the memo sets no time zone. Evening work in Montana can land on the next UTC day. */
 const DAY_MS = 86_400_000;
 const dayNumber = (iso: string) => { const t = Date.parse(iso); return Number.isNaN(t) ? null : Math.floor(t / DAY_MS); };
 const dayIso = (n: number) => new Date(n * DAY_MS).toISOString().slice(0, 10);

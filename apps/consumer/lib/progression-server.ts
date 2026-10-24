@@ -76,7 +76,7 @@ export async function getProgression(userId:string,selection:WorkSelection={},re
  const expiresAt=new Date();expiresAt.setUTCHours(24,0,0,0);
  const taskAction=workspaceNextAction({work});
  const bonusRemaining=Math.max(0,allow.bonus-allow.bonusUsed);
- const latest=grants.find(g=>g.kind==='milestone');
+ const latest=grants.find(g=>g.kind==='milestone'&&!g.grant_key.startsWith('meter:'));// meter:* are internal markers, never a celebration
  return {contextKey:JSON.stringify(work.selection),steps,currentStepId:current,nextAction:taskAction??{label:STEP_COPY[current].label,href:steps.find(s=>s.id===current)!.href},
  nextReward:{label:allow.account.existing?'Earn progress celebrations and request a small AI bonus':allow.snapshot.metrics.applicationsSent>0?'Ask t.ROY for a small extra allowance':allow.snapshot.metrics.resumeTailored?'12 daily AI actions for new accounts':'10 daily AI actions for new accounts',requirement:allow.snapshot.metrics.resumeTailored?'Record your application when you send it.':'Save a resume tailored to a real job.'},
  allowance:{enabled:true,blockedReason:allow.blockedReason,remaining:allow.account.existing?null:Math.max(0,allow.base+allow.bonus-allow.used),unit:'AI actions',expiresAt:expiresAt.toISOString(),description:allow.account.existing?`Your existing per-tool allowance continues. ${bonusRemaining} extra AI actions are available across tools until midnight UTC.`:`${allow.base} daily Refinery AI actions${allow.bonus?` + ${allow.bonus} bonus`:''}. Resets at midnight UTC. Other tool and spending limits still apply.`,base:allow.base,bonus:allow.bonus},

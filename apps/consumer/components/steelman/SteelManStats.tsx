@@ -103,7 +103,7 @@ function Bands({ data }: { data: SteelManPayload }) {
           return (
             <li key={b.id} className={`flex items-start gap-3 border p-3 text-sm ${here ? "border-t-amber bg-t-panel-2" : "border-t-line bg-t-panel"}`} aria-current={here ? "step" : undefined}>
               <span className="w-24 shrink-0 tabular-nums text-t-phos-dim">{b.to === null ? `${b.from} and up` : `${b.from} to ${b.to}`}</span>
-              <span className="flex-1"><span className={`font-semibold ${here ? "text-t-amber-bright" : "text-t-white"}`}>{b.label}</span><span className="block text-t-phos-dim">{b.why}</span></span>
+              <span className="flex-1"><span className={`font-semibold ${here ? "text-t-amber-bright" : "text-t-white"}`}>{b.label}</span><span className="block text-t-phos-dim">{here ? data.band.why : b.id === "in_the_game" ? "A resume finished, aimed at a real job and sent." : b.why}</span></span>
               {here ? <span className="shrink-0 text-xs font-semibold text-t-amber-bright">Your score is here</span> : null}
             </li>
           );

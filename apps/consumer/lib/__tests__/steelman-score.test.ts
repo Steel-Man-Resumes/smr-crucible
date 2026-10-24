@@ -95,7 +95,7 @@ test('no component is ever negative and bad input counts as zero', () => {
 });
 test('copy: next-gain lines say minutes as information, never quick, never a prediction', () => {
   const all = [...gainOptions({}), ...gainOptions(week6)].map((g) => g.label).join(' ');
-  assert.doesNotMatch(all, /quick|ready|hireable|likely|chance|odds|predict|—/i);
+  assert.doesNotMatch(all, /quick|ready|hireable|likely|chance|odds|predict|\u2014/i);
 });
 test('30-day strip counts units per UTC day, oldest first', () => {
   const now = new Date('2026-10-23T12:00:00Z');

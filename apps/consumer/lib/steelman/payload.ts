@@ -1,5 +1,5 @@
 /** Steel Man meter: turns a read into the GET /api/steelman payload. Pure. */
-import { BANDS, MARKS, MAX_SCORE, bandFor, componentViews, dailyUnits, gainOptions, isSteelMan, nextGain, nextMark, scoreOf, steelManRequirements, weekStreak } from "./score";
+import { BANDS, MARKS, MAX_SCORE, bandFor, bandWhy, componentViews, dailyUnits, gainOptions, isSteelMan, nextGain, nextMark, scoreOf, steelManRequirements, weekStreak } from "./score";
 import type { ComponentCounts, DatedUnit, MeterMoment, SteelManPayload } from "./types";
 
 export interface PayloadInput {
@@ -15,14 +15,15 @@ export function buildPayload(input: PayloadInput, now: Date, awarded: string[] =
   const steelMan = isSteelMan(input.counts) || input.grantKeys.has("moment:steel-man");
   const band = bandFor(score, steelMan);
   const moments: MeterMoment[] = input.recent
-    .filter((g) => g.kind === "milestone" && g.created_at)
+    // meter:* rows are internal markers (the Steel Man allowance), not moments.
+    .filter((g) => g.kind === "milestone" && g.created_at && !g.grant_key.startsWith("meter:"))
     .slice(0, 12)
     .map((g) => ({ key: g.grant_key, label: g.label, at: g.created_at, kind: "milestone" as const }));
   return {
     asOf: now.toISOString(),
     score,
     maxScore: MAX_SCORE,
-    band: { id: band.id, label: band.label, why: band.why },
+    band: { id: band.id, label: band.label, why: bandWhy(band, input.counts) },
     components: componentViews(input.counts).map(({ id, label, value, max, weight, why, href, count, cap }) => ({ id, label, value, max, weight, why, href, count, cap })),
     steelMan,
     nextGain: nextGain(input.counts),
