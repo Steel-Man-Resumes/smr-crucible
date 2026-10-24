@@ -23,6 +23,7 @@ export default function AdminEvidenceDashboard() {
     dailyLimit: "200",
     tier: "client",
     seats: "10",
+    confirmChosen: false,
   });
   const [mintMsg, setMintMsg] = useState<string | null>(null);
 
@@ -51,7 +52,9 @@ export default function AdminEvidenceDashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          // Empty = a random 12-character code (lib/access-code-guard.ts).
           code: mintForm.code.toUpperCase().trim(),
+          confirmChosenCode: mintForm.confirmChosen,
           partnerName: mintForm.partnerName.trim(),
           dailyLimit: parseInt(mintForm.dailyLimit) || 200,
           tier: mintForm.tier === "partner" ? "partner" : "client",
@@ -67,7 +70,7 @@ export default function AdminEvidenceDashboard() {
         setMintMsg(
           `Code ${json.accessCode.code} created for ${json.accessCode.partner_name} (${json.accessCode.tier}, ${seatsLabel}, ${json.accessCode.daily_limit}/day each)`
         );
-        setMintForm({ code: "", partnerName: "", dailyLimit: "200", tier: "client", seats: "10" });
+        setMintForm({ code: "", partnerName: "", dailyLimit: "200", tier: "client", seats: "10", confirmChosen: false });
         // Reload data
         fetch("/api/admin/evidence").then((r) => r.json()).then(setData).catch(() => {});
       } else {
@@ -118,14 +121,23 @@ export default function AdminEvidenceDashboard() {
         </p>
         <form onSubmit={mintCode} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
-            <label className="text-xs text-t-phos-dim block mb-1">Code (uppercase A-Z 0-9)</label>
+            <label className="text-xs text-t-phos-dim block mb-1">Code (leave empty for a random one)</label>
             <input
               className="w-full border border-t-line bg-t-panel-2 text-t-white px-3 py-2 text-sm uppercase focus:border-t-amber focus:outline-none"
-              placeholder="ORGCODE"
+              placeholder="Random"
               value={mintForm.code}
-              onChange={(e) => setMintForm((f) => ({ ...f, code: e.target.value }))}
-              required
+              onChange={(e) => setMintForm((f) => ({ ...f, code: e.target.value, confirmChosen: false }))}
             />
+            {mintForm.code.trim() && (
+              <label className="mt-2 flex items-start gap-2 text-xs text-t-amber-bright">
+                <input
+                  type="checkbox"
+                  checked={mintForm.confirmChosen}
+                  onChange={(e) => setMintForm((f) => ({ ...f, confirmChosen: e.target.checked }))}
+                />
+                <span>Use this code anyway. A code anyone can guess is a seat anyone can take.</span>
+              </label>
+            )}
           </div>
           <div>
             <label className="text-xs text-t-phos-dim block mb-1">Partner Name</label>

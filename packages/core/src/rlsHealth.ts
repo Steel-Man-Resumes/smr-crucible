@@ -58,6 +58,11 @@ export const RLS_PROTECTED_TABLES = [
   "progression_grant",
   "progression_request",
   "tailor_batch_claim",
+  // Refinery seats (migration 096)
+  "refinery_access_policy",
+  "refinery_seat_legacy",
+  "org_seat_offer",
+  "access_code_departure",
 ] as const;
 
 export interface RlsHealth {

@@ -15,6 +15,7 @@
 
 import { query, getOne, runScoped } from "./db";
 import { redeemAccessCode, validateAccessCode } from "./accessCode";
+import { OFFER_WINDOW_HOURS, createSeatOffer } from "./refineryAccess";
 
 /** SQL fragment: the users row aliased `u` has never signed in by any door. */
 const PENDING_SQL = `(u."emailVerified" IS NULL
@@ -38,8 +39,12 @@ export type CreateOrgInviteResult =
       ok: true;
       userId: string;
       /** invited = never signed in, gets a magic-link welcome;
-       *  attached = existing active account, gets a notification email. */
-      kind: "invited" | "attached";
+       *  offered = existing account that has signed in: asked first, and the
+       *  seat is spent only when they accept (migration 096, R3 S5). */
+      kind: "invited" | "offered";
+      /** Send the email? False for an offer already made or answered in the
+       *  last 24 hours: one email per person per organization per day. */
+      notify: boolean;
     }
   | { ok: false; error: string };
 
@@ -100,7 +105,6 @@ export async function createOrgInvite(opts: {
   );
 
   let userId: string;
-  let kind: "invited" | "attached";
 
   if (existing) {
     // Is this person already attached somewhere? That is a question about
@@ -127,14 +131,40 @@ export async function createOrgInvite(opts: {
           "That email already belongs to another organization on Steel Man Resumes. Contact Steel Man Resumes if they should move to yours.",
       };
     }
-    const res = await redeemAccessCode(existing.id, opts.code, { actorUserId: opts.invitedBy });
-    if (!res.success) return { ok: false, error: res.error || "Could not claim a seat." };
     userId = existing.id;
     const pending = await getOne<{ id: string }>(
       `SELECT u.id FROM users u WHERE u.id = $1 AND ${PENDING_SQL}`,
       [userId]
     );
-    kind = pending ? "invited" : "attached";
+    if (!pending) {
+      // CONSENT ON ATTACH (R3 S5). This account has been used by its owner, so
+      // it is theirs to say yes to: the organization makes an offer, and the
+      // seat is spent only when the person accepts (smr_accept_seat_offer).
+      // Fail fast on a full or closed code so the offer is not a dead end.
+      const v = await validateAccessCode(opts.code);
+      if (!v.valid) return { ok: false, error: v.reason || "This code is not accepting new seats." };
+      const fresh = await createSeatOffer({ accessCodeId: opts.accessCodeId, userId, offeredBy: opts.invitedBy });
+      if (fresh) {
+        // The organization's own record of whom it asked, with what it typed
+        // (CRM cross-lane SF8): the person shows in its invited lists once
+        // they say yes. offer_status flips to joined or declined in 096's
+        // functions.
+        await query(
+          `INSERT INTO org_invite (access_code_id, user_id, invited_by, invited_name, invited_email, offer_status)
+           VALUES ($1, $2, $3, $4, $5, 'offered')
+           ON CONFLICT (access_code_id, user_id)
+           DO UPDATE SET invited_by = EXCLUDED.invited_by, invited_name = EXCLUDED.invited_name,
+                         invited_email = EXCLUDED.invited_email, offer_status = 'offered',
+                         last_sent_at = NOW(), send_count = org_invite.send_count + 1`,
+          [opts.accessCodeId, userId, opts.invitedBy, name || null, email]
+        );
+      }
+      return { ok: true, userId, kind: "offered", notify: fresh };
+    }
+    // A shell nobody has signed in to yet (made by an earlier invite): no one
+    // to ask, so the seat is claimed now, as for a new invitee.
+    const res = await redeemAccessCode(existing.id, opts.code, { actorUserId: opts.invitedBy });
+    if (!res.success) return { ok: false, error: res.error || "Could not claim a seat." };
   } else {
     // Fail fast on a full code before creating anything.
     const v = await validateAccessCode(opts.code);
@@ -151,7 +181,6 @@ export async function createOrgInvite(opts: {
       await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {});
       return { ok: false, error: res.error || "Could not claim a seat." };
     }
-    kind = "invited";
   }
 
   await query(
@@ -162,7 +191,7 @@ export async function createOrgInvite(opts: {
     [opts.accessCodeId, userId, opts.invitedBy, name || null, email]
   );
 
-  return { ok: true, userId, kind };
+  return { ok: true, userId, kind: "invited", notify: true };
 }
 
 /** Who sent this organization's invite to this person. undefined = no invite; null = no recorded sender. */
@@ -198,14 +227,33 @@ export function inviteActionAllowed(input: {
 export async function touchOrgInviteResend(
   accessCodeId: string,
   userId: string
-): Promise<{ ok: true; email: string; name: string | null } | { ok: false; error: string }> {
-  const row = await getOne<{ email: string; name: string | null; last_sent_at: string; send_count: number; pending: boolean }>(
-    `SELECT u.email, u.name, oi.last_sent_at, oi.send_count, ${PENDING_SQL} AS pending
+): Promise<{ ok: true; email: string; name: string | null; offer: boolean } | { ok: false; error: string }> {
+  const row = await getOne<{ email: string; name: string | null; invited_name: string | null; last_sent_at: string; send_count: number; pending: boolean; offer_status: string | null }>(
+    `SELECT u.email, u.name, oi.invited_name, oi.last_sent_at, oi.send_count, ${PENDING_SQL} AS pending, oi.offer_status
        FROM org_invite oi JOIN users u ON u.id = oi.user_id
       WHERE oi.access_code_id = $1 AND oi.user_id = $2`,
     [accessCodeId, userId]
   );
   if (!row) return { ok: false, error: "No invite found for that person." };
+  // An open OFFER to an existing account (096): its own resend, at most once
+  // a day (OFFER_WINDOW_HOURS), never a sign-in link. The caller sends the
+  // offer email. Answered offers are not resendable.
+  if (row.offer_status === "offered") {
+    if (Number(row.send_count) >= 10) {
+      return { ok: false, error: "Resend limit reached for this invite. Check the address, or remove and re-add them." };
+    }
+    const touched = await getOne<{ ok: boolean }>(
+      `UPDATE org_invite SET last_sent_at = NOW(), send_count = send_count + 1
+        WHERE access_code_id = $1 AND user_id = $2 AND offer_status = 'offered'
+          AND last_sent_at <= now() - make_interval(hours => $3)
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = $2)
+        RETURNING true AS ok`,
+      [accessCodeId, userId, OFFER_WINDOW_HOURS]
+    );
+    if (!touched) return { ok: false, error: "That invite went out in the last day. They can answer it when they sign in." };
+    return { ok: true, email: row.email, name: row.invited_name ?? row.name, offer: true };
+  }
+  if (row.offer_status) return { ok: false, error: "There is no open invite to resend." };
   if (!row.pending) return { ok: false, error: "They have already joined, so there is no invite to resend." };
   if (Number(row.send_count) >= 10) {
     return { ok: false, error: "Resend limit reached for this invite. Check the address, or remove and re-add them." };
@@ -218,7 +266,7 @@ export async function touchOrgInviteResend(
       WHERE access_code_id = $1 AND user_id = $2`,
     [accessCodeId, userId]
   );
-  return { ok: true, email: row.email, name: row.name };
+  return { ok: true, email: row.email, name: row.name, offer: false };
 }
 
 /**
@@ -233,13 +281,23 @@ export async function revokeOrgInvite(
   userId: string,
   actorUserId = ""
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const row = await getOne<{ email: string; pending: boolean }>(
-    `SELECT u.email, ${PENDING_SQL} AS pending
+  const row = await getOne<{ email: string; pending: boolean; offer_status: string | null }>(
+    `SELECT u.email, ${PENDING_SQL} AS pending, oi.offer_status
        FROM org_invite oi JOIN users u ON u.id = oi.user_id
       WHERE oi.access_code_id = $1 AND oi.user_id = $2`,
     [accessCodeId, userId]
   );
   if (!row) return { ok: false, error: "No invite found for that person." };
+  // An open OFFER (096): withdraw it. Nothing was spent, so nothing to refund,
+  // and the account is the person's own, so nothing else is touched.
+  if (row.offer_status === "offered") {
+    const [out] = await runScoped<[{ outcome: string }[]]>(
+      { orgId: accessCodeId, userId: actorUserId, role: "org_admin" },
+      (sql) => [sql`SELECT public.smr_withdraw_seat_offer(${userId}::uuid) AS outcome`]
+    );
+    return out?.[0]?.outcome === "ok" ? { ok: true } : { ok: false, error: "There is no open invite to remove." };
+  }
+  if (row.offer_status) return { ok: false, error: "There is no open invite to remove." };
   if (!row.pending) {
     return { ok: false, error: "They have already joined, so this invite can't be removed." };
   }

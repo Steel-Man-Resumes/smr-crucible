@@ -11,6 +11,8 @@ import { useRouter } from "next/navigation";
 import { TBtn } from "@crucible/consumer-ui";
 import { ClearThisComputerPanel } from "@/components/ClearThisComputer";
 import { GOOGLE_REVIEW_URL } from "@/lib/finish-gate";
+import { useSeatless } from "@/components/forge/useSeatless";
+import { SEAT_PAGE } from "@/lib/refinery-access";
 
 export const LETTERS_URL = "https://steelmanresumes.com/letters";
 
@@ -49,6 +51,9 @@ export function NextStep({
   refinerySubtext: string;
 }) {
   const router = useRouter();
+  // No Refinery seat yet (public sign-ups closed): the button asks for one
+  // instead of sending the person into a wall. Download and email stay above.
+  const seatless = useSeatless();
 
   return (
     <section id="finish-next" aria-labelledby="finish-next-heading" className="scroll-mt-20 border-t border-t-line pt-8">
@@ -90,11 +95,12 @@ export function NextStep({
             hiring people with records. When you create your free account, your story and the answers you gave in the
             Forge can be saved there with your corrected resume. Check that this page says your version is saved
             before you leave. You can also download a copy.
+            {seatless && " The Refinery opens with a seat from an organization. You can ask for one."}
           </p>
-          <TBtn onClick={() => router.push("/login?from=forge")} className="mb-2 w-full text-base">
-            {refineryCta.toLowerCase()}
+          <TBtn onClick={() => router.push(seatless ? SEAT_PAGE : "/login?from=forge")} className="mb-2 w-full text-base">
+            {seatless ? "ask for a refinery seat" : refineryCta.toLowerCase()}
           </TBtn>
-          <p className="text-center text-xs text-t-phos-dim">{refinerySubtext}</p>
+          {!seatless && <p className="text-center text-xs text-t-phos-dim">{refinerySubtext}</p>}
         </div>
       )}
 

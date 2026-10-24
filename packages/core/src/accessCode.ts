@@ -3,6 +3,7 @@
  * Partners distribute codes to clients for higher rate limits.
  */
 
+import { seatsFull } from "./orgCode";
 import { query, getOne, queryAsUser, runAsUser } from "./db";
 import { emitEvent } from "./events";
 import { syncUserTierFromCodes } from "./userTier";
@@ -103,7 +104,8 @@ export async function validateAccessCode(
   if (ac.expires_at && new Date(ac.expires_at) < new Date()) {
     return { valid: false, reason: "Code has expired" };
   }
-  if (ac.max_redemptions && ac.times_redeemed >= ac.max_redemptions) {
+  // Same rule as smr_redeem_code: 0 is a cap of zero, not "no limit".
+  if (seatsFull(ac.max_redemptions, ac.times_redeemed)) {
     return { valid: false, reason: "This code's seats are all taken. Ask your organization for another code." };
   }
 

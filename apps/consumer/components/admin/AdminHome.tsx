@@ -11,7 +11,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { setViewAs } from "@/lib/useUserTier";
 
 interface FunnelCounts {
   forge_sessions_started: number;
@@ -40,12 +39,6 @@ export function AdminHome() {
       cancelled = true;
     };
   }, []);
-
-  function enterView(view: "client" | "observer") {
-    setViewAs(view);
-    // Full reload so every session-derived branch re-resolves in the new view
-    window.location.assign("/dashboard");
-  }
 
   const stats = funnel
     ? [
@@ -83,25 +76,16 @@ export function AdminHome() {
       <section>
         <h2 className="text-lg font-bold text-t-white mb-3">Operate as</h2>
         <div className="grid sm:grid-cols-2 gap-4">
-          <button
-            onClick={() => enterView("client")}
-            className="t-focus block text-left bg-t-panel border border-t-phos p-5 hover:bg-t-panel-2 transition-colors"
+          <Link
+            href="/dashboard/admin/users"
+            className="block bg-t-panel border border-t-phos p-5 hover:bg-t-panel-2 transition-colors"
           >
-            <h3 className="font-semibold text-t-white mb-1">My job search</h3>
+            <h3 className="font-semibold text-t-white mb-1">See it as a job seeker</h3>
             <p className="text-sm text-t-phos-dim">
-              Your own client account, with jobs, applications and t.ROY. The real thing,
-              not a preview. A banner marks the view; switch back from the top bar.
+              Open a real job-seeker account read-only. It is recorded and it times out. For your
+              own job search, use a separate job-seeker account, not this one.
             </p>
-          </button>
-          <button
-            onClick={() => enterView("observer")}
-            className="t-focus block text-left bg-t-panel border border-t-steel p-5 hover:bg-t-panel-2 transition-colors"
-          >
-            <h3 className="font-semibold text-t-white mb-1">Observer view</h3>
-            <p className="text-sm text-t-phos-dim">
-              The evidence-and-citations landing a researcher or funder sees.
-            </p>
-          </button>
+          </Link>
           <Link
             href="/dashboard/admin/orgs"
             className="block bg-t-panel border border-t-amber p-5 hover:bg-t-panel-2 transition-colors"

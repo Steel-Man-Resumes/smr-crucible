@@ -1,6 +1,7 @@
 import { signOut } from "next-auth/react";
 import { clearTailorBatchStorage } from "./tailor-batch";
 import { clearOrgNoteDrafts } from "./org-note-draft";
+import { clearRunSessionStorage } from "./refinery-guards";
 
 /** Keep browser work until the server confirms the account is signed out. */
 export async function confirmedSignOut(): Promise<void> {
@@ -14,9 +15,11 @@ export async function confirmedSignOut(): Promise<void> {
       if (!response.ok) throw new Error("Sign-out could not be confirmed");
       const session = await response.json();
       if (!session?.user) {
-        // Signed out for sure: multi-job picks and queues and staff drafts in this tab go with the account.
+        // Signed out for sure: multi-job picks and queues, staff drafts and this
+        // tab's run-derived sessionStorage never outlive the account that wrote them.
         clearTailorBatchStorage();
         clearOrgNoteDrafts();
+        clearRunSessionStorage();
         return;
       }
       lastError = new Error("Still signed in");

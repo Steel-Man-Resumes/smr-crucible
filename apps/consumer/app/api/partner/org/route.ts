@@ -51,7 +51,7 @@ import { adminSecondFactorOk } from "@/lib/session-policy";
 import {
   mintInviteMagicLink,
   buildInviteEmail,
-  buildAddedEmail,
+  buildOfferEmail,
   sendOrgEmail,
 } from "@/lib/org-invite-email";
 
@@ -73,6 +73,10 @@ async function resolveContext(request: Request) {
   if (!org) return { error: 403 as const };
   return { org, userId: session.user.id, tier, adminPowers };
 }
+
+/** The one reply to "Add participant", whatever the address turned out to be. */
+const INVITE_NEUTRAL_MESSAGE =
+  "Done. If that address can be added, they get an email from us. New accounts show under Invited until they open it; people who already have an account join when they say yes.";
 
 export async function GET(request: Request) {
   const ctx = await resolveContext(request);
@@ -157,7 +161,9 @@ export async function GET(request: Request) {
       quietAfterDays: await (await import("@crucible/core")).getQuietAfterDays(org.accessCodeId),
       org: {
         name: org.orgName,
-        code: org.code,
+        // The code IS the seat key (anyone signed in can redeem it), so only
+        // people who may see seats get it (R3 B2 item 4).
+        code: seesSeats ? org.code : null,
         logoUrl: org.logoUrl,
         role: org.role,
         // Seat cap is org-admin/owner information (null = unlimited).
@@ -319,47 +325,41 @@ export async function POST(request: Request) {
       }
 
       // A staff inviter takes responsibility for their invitee automatically.
-      if (org.role === "staff") {
+      // Not for an offer: that person is not a member until they say yes.
+      if (org.role === "staff" && created.kind === "invited") {
         await assignClientStaff(org.accessCodeId, created.userId, userId, userId).catch(
           (err) => console.error("invite auto-assign failed:", err?.message || err)
         );
       }
 
-      // State is committed; the email is the last step. If it fails, say so
-      // plainly -- the pending panel's Resend button is the retry path.
-      try {
-        const inviterName = (await auth())?.user?.name || null;
-        if (created.kind === "invited") {
-          const url = await mintInviteMagicLink(email, origin);
-          await sendOrgEmail(
-            email,
-            buildInviteEmail({ inviteeName: name, inviterName, orgName: org.orgName, url, origin })
-          );
-        } else {
-          await sendOrgEmail(
-            email,
-            buildAddedEmail({ inviteeName: name, inviterName, orgName: org.orgName, origin })
-          );
+      // State is committed; the email is the last step. ONE answer to staff
+      // whether the address was new, already had an account, or was asked in
+      // the last day (security review 1, SF-2; R3 S4 for this path), and no
+      // kind in the response. An offer made or answered in the last 24 hours
+      // sends nothing again (createOrgInvite notify).
+      if (created.notify) {
+        try {
+          const inviterName = (await auth())?.user?.name || null;
+          if (created.kind === "invited") {
+            const url = await mintInviteMagicLink(email, origin);
+            await sendOrgEmail(
+              email,
+              buildInviteEmail({ inviteeName: name, inviterName, orgName: org.orgName, url, origin })
+            );
+          } else {
+            await sendOrgEmail(
+              email,
+              buildOfferEmail({ inviteeName: name, inviterName, orgName: org.orgName, origin })
+            );
+          }
+        } catch (err: any) {
+          // Logged, not shown: a different answer here would tell staff which
+          // kind of address it was. New invitees can be re-sent from the list.
+          console.error("invite email failed:", err?.message || err);
         }
-      } catch (err: any) {
-        console.error("invite email failed:", err?.message || err);
-        return NextResponse.json({
-          ok: true,
-          kind: created.kind,
-          message:
-            "The seat is reserved, but the email could not be sent. Use Resend in the pending list, or check the address.",
-          emailFailed: true,
-        });
       }
 
-      return NextResponse.json({
-        ok: true,
-        kind: created.kind,
-        message:
-          created.kind === "invited"
-            ? `Invite sent to ${email}. They'll appear here as invited until they open it.`
-            : `${name} already had an account. They've been added to your organization and notified.`,
-      });
+      return NextResponse.json({ ok: true, message: INVITE_NEUTRAL_MESSAGE });
     }
 
     // Resend and revoke run the same capability check as sending an invite
@@ -399,17 +399,25 @@ export async function POST(request: Request) {
       }
       try {
         const inviterName = (await auth())?.user?.name || null;
-        const url = await mintInviteMagicLink(touched.email, origin);
-        await sendOrgEmail(
-          touched.email,
-          buildInviteEmail({
-            inviteeName: touched.name,
-            inviterName,
-            orgName: org.orgName,
-            url,
-            origin,
-          })
-        );
+        if (touched.offer) {
+          // An open offer to an existing account: the offer email, never a sign-in link.
+          await sendOrgEmail(
+            touched.email,
+            buildOfferEmail({ inviteeName: touched.name, inviterName, orgName: org.orgName, origin })
+          );
+        } else {
+          const url = await mintInviteMagicLink(touched.email, origin);
+          await sendOrgEmail(
+            touched.email,
+            buildInviteEmail({
+              inviteeName: touched.name,
+              inviterName,
+              orgName: org.orgName,
+              url,
+              origin,
+            })
+          );
+        }
       } catch (err: any) {
         console.error("invite resend failed:", err?.message || err);
         return NextResponse.json(
@@ -428,7 +436,8 @@ export async function POST(request: Request) {
       if (!revoked.ok) {
         return NextResponse.json({ error: revoked.error }, { status: 400 });
       }
-      return NextResponse.json({ ok: true, message: "Invite removed and the seat freed." });
+      // One message for an invite and an offer: any seat it held is free again (an offer held none).
+      return NextResponse.json({ ok: true, message: "Invite removed. Any seat it held is free again." });
     }
 
     return NextResponse.json({ error: "Unknown action" }, { status: 400 });

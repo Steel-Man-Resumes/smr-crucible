@@ -3,6 +3,7 @@ import { countsForProgression } from './progression-policy';
 import { randomUUID } from 'node:crypto';
 import { getOneAsUser, queryAsUser, runAsUser } from '@crucible/core';
 import { checkPremium } from './premium-server';
+import { refinerySeatAdmission } from './refinery-access-server';
 import { isAiWorkflow, type ToolPolicy } from './ai-operation-policy';
 import { withAiOperation, type OperationContext } from './ai-operation-context';
 import type { AiCallMeta } from './ai-usage-log';
@@ -29,8 +30,15 @@ export async function beginAiOperation(input: {userId: string; endpoint: string;
   const context: OperationContext = {operationId:id, ...input, pending:[]};
   const result: OperationHandle = {meta:{...input,operationId:id},context,finish:async()=>{}};
   if (!isAiWorkflow(input.endpoint)) return result;
-  let admissionStage = 'policy';
+  let admissionStage = 'seat';
   try {
+    // Refinery seat (migration 096): read from the database on every call, so
+    // a stale or missing session claim can never spend Refinery AI. Forge
+    // workflows pass (lib/refinery-access.ts FORGE_AI_WORKFLOWS). A database
+    // error falls to the 503 below, like every other admission check.
+    const seatRefusal = await refinerySeatAdmission(input.userId, input.endpoint);
+    if (seatRefusal) { result.response = seatRefusal; return result; }
+    admissionStage = 'policy';
     const policy = await readToolPolicy(input.userId,input.endpoint);
     admissionStage = 'progression';
     const progress = countsForProgression(input.endpoint) ? await progressionAllowance(input.userId) : null;

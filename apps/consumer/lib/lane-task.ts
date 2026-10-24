@@ -13,6 +13,7 @@
  * required decisions from sign-in to a first saved resume section).
  */
 
+import { seatAwareHref } from "./refinery-access";
 import { isLaneTask, MAIN_TASKS, OTHER_TASKS, type LaneTask } from "@crucible/core/src/laneFocusShared";
 
 export type { LaneTask };
@@ -170,7 +171,14 @@ export interface NextAction {
   href: string;
 }
 
-export function nextActionFor(task: LaneTask | null | undefined, ctx: { signedIn: boolean; finished: boolean }): NextAction {
+export function nextActionFor(task: LaneTask | null | undefined, ctx: { signedIn: boolean; finished: boolean; seatless?: boolean }): NextAction {
+  // No Refinery seat yet (lib/refinery-access.ts): the finished resume is the
+  // next step, and the Refinery links go to the seat page instead of a wall.
+  if (ctx.seatless && ctx.signedIn) {
+    if (task === "job") return { label: "Ask for a Refinery seat", href: seatAwareHref("/dashboard/jobs", true) };
+    if (task === "interview") return { label: "Ask for a Refinery seat", href: seatAwareHref("/dashboard/interview", true) };
+    return ctx.finished ? { label: "Download your resume", href: "#finish-download" } : { label: "Check it and finish", href: "#fix-list" };
+  }
   switch (task) {
     case "job":
       return ctx.signedIn ? { label: "Pick a job to go after", href: "/dashboard/jobs" } : { label: "Pick a job to go after", href: "/login?callbackUrl=%2Fdashboard%2Fjobs" };

@@ -19,7 +19,8 @@
 import { NextResponse } from "next/server";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
-import { query, ensureUserAttribution, queryAsUser, getOneAsUser } from "@crucible/core";
+import { query, queryAsUser, getOneAsUser } from "@crucible/core";
+import { attributeFromCookie } from "@/lib/code-attribution";
 import { CONSENT_CONTEXT, CONSENT_EVENT_SQL, CONSENT_UPSERT_SQL, TERMS_VERSION } from "@/lib/terms";
 import { persistForgeSession } from "@/lib/forge-persist";
 import { forgeRunToPersist, MAX_REGISTER_BODY_BYTES } from "@/lib/forge-carry";
@@ -280,11 +281,8 @@ export async function POST(request: Request) {
     // with, so funder/compliance data collects from day one (best-effort).
     const orgCode = accessCodeFromCookie(request);
     if (orgCode && newUserId) {
-      try {
-        await ensureUserAttribution(newUserId, orgCode);
-      } catch (e: any) {
-        console.error("[register] org attribution failed:", e?.code || e?.name || "error");
-      }
+      // Within the code-try budget, like every other code try (review 1 SF-1).
+      await attributeFromCookie(ip, newUserId, orgCode);
     }
 
     // userId lets the form mark a run the person said "Yes" to as theirs, so
