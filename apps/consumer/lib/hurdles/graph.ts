@@ -93,7 +93,7 @@ export interface HurdleDef {
 }
 
 const NOT_SURE: Choice = { id: "not_sure", label: "Not sure", uncertain: true };
-const RATHER_NOT: Choice = { id: "rather_not", label: "Rather not say", uncertain: true, fact: "You chose not to say. That is fine." };
+const RATHER_NOT: Choice = { id: "rather_not", label: "Rather not say", uncertain: true, fact: "You chose not to say. That's fine." };
 export const TELL = "TELL";
 
 export const HURDLES: Record<HurdleId, HurdleDef> = {
@@ -131,21 +131,21 @@ const NODE_LIST: HurdleNode[] = [
   n({ id: "transport.what", hurdle: "transport", kind: "many", decision: "what gets in the way of the trip",
     question: "What gets in the way of getting to work?", help: "Pick all that fit.",
     choices: [
-      { id: "no_car", label: "No car right now", fact: "You do not have a car right now.", next: "transport.options" },
-      { id: "bus_hours", label: "Bus or train hours", fact: "Bus or train hours do not always line up with work.", next: "transport.bus_when" },
-      { id: "license", label: "No license, or it is suspended", fact: "Your license is a problem right now.", next: "transport.license" },
+      { id: "no_car", label: "No car right now", fact: "You don't have a car right now.", next: "transport.options" },
+      { id: "bus_hours", label: "Bus or train hours", fact: "Bus or train hours don't always line up with work.", next: "transport.bus_when" },
+      { id: "license", label: "No license, or it's suspended", fact: "Your license is a problem right now.", next: "transport.license" },
       { id: "cost", label: "Cost of gas, fares or repairs", fact: "The cost of getting to work is a problem.", next: "transport.cost", support: ["financial"] },
-      { id: "ride", label: "A ride I cannot count on", fact: "Your ride is not always there.", next: "transport.backup" },
+      { id: "ride", label: "A ride I can't count on", fact: "Your ride isn't always there.", next: "transport.backup" },
       { id: "access", label: "Getting on and off is hard (accessibility)", fact: "Parts of the trip are hard to get through.", next: "transport.access" },
       { ...NOT_SURE, next: "transport.distance" },
     ], next: "transport.distance" }),
-  n({ id: "transport.bus_when", hurdle: "transport", kind: "many", decision: "when transit does not work",
+  n({ id: "transport.bus_when", hurdle: "transport", kind: "many", decision: "when transit doesn't work",
     question: "When does the bus or train not work for you?",
     choices: [
-      { id: "early", label: "Early mornings", fact: "Transit does not run early enough for you.", ask: "What time does the shift start, and does that ever change?" },
+      { id: "early", label: "Early mornings", fact: "Transit doesn't run early enough for you.", ask: "What time does the shift start, and does that ever change?" },
       { id: "late", label: "Late nights", fact: "Transit stops before late shifts end.", ask: "What time does the shift end on a normal day?" },
-      { id: "weekends", label: "Weekends", fact: "Weekend transit does not work for you." },
-      { id: "route", label: "The route does not reach the job", fact: "Some job sites are off the route.", action: "Check the trip on a transit map from your address to the job address before you apply." },
+      { id: "weekends", label: "Weekends", fact: "Weekend transit doesn't work for you." },
+      { id: "route", label: "The route doesn't reach the job", fact: "Some job sites are off the route.", action: "Check the trip on a transit map from your address to the job address before you apply." },
       NOT_SURE,
     ], next: "transport.shift_fit" }),
   n({ id: "transport.shift_fit", hurdle: "transport", kind: "many", decision: "which shifts you can reach",
@@ -164,7 +164,7 @@ const NODE_LIST: HurdleNode[] = [
   n({ id: "transport.license", hurdle: "transport", kind: "one", decision: "where your license stands",
     question: "Where does your license stand?",
     choices: [
-      { id: "never", label: "Never had one", fact: "You have not had a driver's license.", action: "If a job needs driving, ask what it takes to test for a license where you live." },
+      { id: "never", label: "Never had one", fact: "You haven't had a driver's license.", action: "If a job needs driving, ask what it takes to test for a license where you live." },
       { id: "suspended", label: "Suspended or revoked", fact: "Your license is suspended or revoked.", action: "Ask the DMV or the court what it takes to get it back, and write down every step and cost they name.", support: ["legal"] },
       { id: "expired", label: "Expired", fact: "Your license is expired.", action: "Check what renewing it costs and what papers you need to bring." },
       NOT_SURE,
@@ -298,10 +298,10 @@ const NODE_LIST: HurdleNode[] = [
     question: "What is going on with housing?", help: "Pick the closest one. No details needed.",
     choices: [
       { id: "stable", label: "Stable for now", fact: "Housing is stable for now.", next: "housing.impact" },
-      { id: "staying", label: "Staying with someone", fact: "You are staying with someone.", next: "housing.stay" },
-      { id: "shelter", label: "In a shelter", fact: "You are staying in a shelter.", next: "housing.address", support: ["housing"] },
+      { id: "staying", label: "Staying with someone", fact: "You're staying with someone.", next: "housing.stay" },
+      { id: "shelter", label: "In a shelter", fact: "You're staying in a shelter.", next: "housing.address", support: ["housing"] },
       { id: "at_risk", label: "I may lose my place", fact: "You may lose your place.", next: "housing.when" },
-      { id: "no_address", label: "No address to use", fact: "You do not have an address to use right now.", next: "housing.address" },
+      { id: "no_address", label: "No address to use", fact: "You don't have an address to use right now.", next: "housing.address" },
       { ...RATHER_NOT, next: "housing.impact" },
     ], next: "housing.impact" }),
   n({ id: "housing.address", hurdle: "housing", kind: "many", decision: "how employers can reach you",
@@ -309,7 +309,7 @@ const NODE_LIST: HurdleNode[] = [
     choices: [
       { id: "mail", label: "An address that gets mail", fact: "You have an address that gets mail." },
       { id: "phone", label: "A phone that works", fact: "You have a phone that works." },
-      { id: "neither", label: "Neither right now", fact: "You do not have a mail address or a working phone yet.", action: "Ask a shelter, library or job center if you can use their address for mail, and get one number employers can leave a message on." },
+      { id: "neither", label: "Neither right now", fact: "You don't have a mail address or a working phone yet.", action: "Ask a shelter, library or job center if you can use their address for mail, and get one number employers can leave a message on." },
       NOT_SURE,
     ], next: "housing.impact" }),
   n({ id: "housing.when", hurdle: "housing", kind: "one", decision: "when housing could change",
@@ -329,16 +329,16 @@ const NODE_LIST: HurdleNode[] = [
   n({ id: "housing.impact", hurdle: "housing", kind: "many", decision: "how housing touches work",
     question: "How does it touch work?",
     choices: [
-      { id: "rest", label: "Hard to rest before shifts", fact: "It is hard to rest before shifts." },
-      { id: "calls", label: "Hard to get calls or mail", fact: "Calls or mail do not always reach you." },
+      { id: "rest", label: "Hard to rest before shifts", fact: "It's hard to rest before shifts." },
+      { id: "calls", label: "Hard to get calls or mail", fact: "Calls or mail don't always reach you." },
       { id: "moving", label: "I may move soon", fact: "You may move soon.", ask: "Is there more than one location I could work from?" },
-      { id: "fine", label: "It does not right now", fact: "Housing does not touch work right now." },
+      { id: "fine", label: "It doesn't right now", fact: "Housing doesn't touch work right now." },
       NOT_SURE,
     ], next: TELL }),
 
   // ── Health and work adjustments ──────────────────────────────────────────
   n({ id: "health.impact", hurdle: "health", kind: "many", decision: "how it touches the work",
-    question: "How does it touch the work? You do not have to name a condition.",
+    question: "How does it touch the work? You don't have to name a condition.",
     choices: [
       { id: "lifting", label: "Limits on standing or lifting", fact: "You have limits on standing or lifting.", ask: "How much of the shift is standing or lifting?" },
       { id: "breaks", label: "I need breaks", fact: "You need breaks during a shift.", ask: "How are breaks scheduled on this team?" },
@@ -362,8 +362,8 @@ const NODE_LIST: HurdleNode[] = [
     question: "Do you want to ask an employer for a change that helps you work?",
     choices: [
       { id: "before", label: "Yes, before I start", fact: "You want to ask for a change before you start.", action: "Write the change you need in one line, framed around the work (for example, a stool at the station)." },
-      { id: "after", label: "Yes, after I start", fact: "You want to ask for a change after you start.", action: "Write the change you need in one line so it is ready when you ask." },
-      { id: "no", label: "Not now", fact: "You do not want to ask for a change right now." },
+      { id: "after", label: "Yes, after I start", fact: "You want to ask for a change after you start.", action: "Write the change you need in one line so it's ready when you ask." },
+      { id: "no", label: "Not now", fact: "You don't want to ask for a change right now." },
       NOT_SURE,
     ], next: TELL }),
 
@@ -389,7 +389,7 @@ const NODE_LIST: HurdleNode[] = [
   n({ id: "documents.drivers", hurdle: "documents", kind: "one", decision: "where your license stands",
     question: "Where does your license stand?",
     choices: [
-      { id: "never", label: "Never had one", fact: "You have not had a driver's license." },
+      { id: "never", label: "Never had one", fact: "You haven't had a driver's license." },
       { id: "suspended", label: "Suspended or revoked", fact: "Your license is suspended or revoked.", action: "Ask the DMV or the court what it takes to get it back.", support: ["legal"] },
       { id: "expired", label: "Expired", fact: "Your license is expired." },
       NOT_SURE,
@@ -401,7 +401,7 @@ const NODE_LIST: HurdleNode[] = [
     question: "Have you asked the people who issue it what they need from you?",
     choices: [
       { id: "yes", label: "Yes", fact: "You have asked what they need." },
-      { id: "no", label: "Not yet", fact: "You have not asked what they need yet.", action: "Call or check the website of whoever issues that license and write down what they need from you." },
+      { id: "no", label: "Not yet", fact: "You haven't asked what they need yet.", action: "Call or check the website of whoever issues that license and write down what they need from you." },
       NOT_SURE,
     ], next: "documents.need_by" }),
   n({ id: "documents.need_by", hurdle: "documents", kind: "one", decision: "when you need it",
@@ -416,7 +416,7 @@ const NODE_LIST: HurdleNode[] = [
   n({ id: "skills.what", hurdle: "skills", kind: "many", decision: "what gets in the way",
     question: "What gets in the way?", help: "Pick all that fit.",
     choices: [
-      { id: "computer", label: "No computer", fact: "You do not have a computer.", next: "skills.online" },
+      { id: "computer", label: "No computer", fact: "You don't have a computer.", next: "skills.online" },
       { id: "phone", label: "My phone or data runs out", fact: "Your phone or data runs out.", next: "skills.online" },
       { id: "online", label: "Email or online applications", fact: "Email or online applications are hard.", next: "skills.online" },
       { id: "job_skill", label: "A skill the job asks for", fact: "A job asks for a skill you want to build.", next: "skills.which" },
@@ -459,7 +459,7 @@ const NODE_LIST: HurdleNode[] = [
       { id: "fast", label: "I need pay fast", fact: "You need a paycheck soon.", next: "money.when" },
       { id: "start", label: "Costs to start (boots, clothes, tools, fares)", fact: "Starting a job has costs you need to cover.", next: "money.start" },
       { id: "debt", label: "Debt, fines or fees", fact: "Debt, fines or fees are part of the picture.", next: "money.debt" },
-      { id: "benefits", label: "Benefits I could lose", fact: "You are worried a job could change your benefits.", next: "money.benefits" },
+      { id: "benefits", label: "Benefits I could lose", fact: "You're worried a job could change your benefits.", next: "money.benefits" },
       NOT_SURE,
     ], next: TELL }),
   n({ id: "money.when", hurdle: "money", kind: "one", decision: "how soon you need pay",
@@ -482,14 +482,14 @@ const NODE_LIST: HurdleNode[] = [
     question: "Do fines, fees or support orders touch your license or your pay?",
     choices: [
       { id: "yes", label: "Yes", fact: "Fines, fees or support orders touch your license or pay.", action: "Ask a legal aid office if there is a payment plan or a way to reduce what you owe.", support: ["legal"] },
-      { id: "no", label: "No", fact: "Fines do not touch your license or pay." },
+      { id: "no", label: "No", fact: "Fines don't touch your license or pay." },
       NOT_SURE,
     ], next: TELL }),
   n({ id: "money.benefits", hurdle: "money", kind: "one", decision: "which benefits",
     question: "Do you want to know how a paycheck could change your benefits before you take a job?",
     choices: [
       { id: "yes", label: "Yes", fact: "You want to know how a paycheck could change your benefits.", action: "Ask a benefits office or counselor how much you can earn before your benefits change." },
-      { id: "no", label: "No", fact: "You are not worried about benefits right now." },
+      { id: "no", label: "No", fact: "You're not worried about benefits right now." },
       NOT_SURE,
     ], next: TELL }),
 
@@ -510,7 +510,7 @@ const NODE_LIST: HurdleNode[] = [
     question: "Have any of these happened in the last few months?", help: "Each one you pick adds a short set of questions.",
     choices: [
       { id: "ride", label: "Missed or turned down work because of a ride", addsHurdle: "transport", fact: "Rides have cost you work." },
-      { id: "papers", label: "Got asked for ID or papers I did not have", addsHurdle: "documents", fact: "Missing papers have slowed you down." },
+      { id: "papers", label: "Got asked for ID or papers I didn't have", addsHurdle: "documents", fact: "Missing papers have slowed you down." },
       { id: "check", label: "Got turned down after a background check", addsHurdle: "record", fact: "A background check has come up." },
       { id: "gap", label: "Got asked about time between jobs", addsHurdle: "gaps", fact: "Gaps have come up." },
       { id: "hours", label: "Kids, family or school made the hours hard", addsHurdle: "schedule", fact: "Hours have been hard to fit." },
@@ -524,7 +524,7 @@ const NODE_LIST: HurdleNode[] = [
     placeholder: "You can skip this.", maxLength: 200, next: null }),
 
   // ── Record and background checks (the only path to a disclosure plan) ────
-  n({ id: "record.where", hurdle: "record", kind: "many", decision: "where it is coming up",
+  n({ id: "record.where", hurdle: "record", kind: "many", decision: "where it's coming up",
     question: "Where is it coming up?", help: "Pick all that fit.",
     choices: [
       { id: "form", label: "A question on an application", fact: "An application asks about it.", next: "record.form_question" },
@@ -541,7 +541,7 @@ const NODE_LIST: HurdleNode[] = [
     choices: [
       { id: "not_started", label: "It has not started", fact: "The check has not started." },
       { id: "signed", label: "I signed the form for it", fact: "You signed the form for the check.", action: "Ask the employer for a copy of the report when it comes back." },
-      { id: "notice", label: "I got a letter saying they may not hire me because of it", fact: "You got a letter that they may not hire you because of the check.", action: "Read the letter for any date it gives to answer, and answer before that date. Ask for a copy of the report if it is not attached." },
+      { id: "notice", label: "I got a letter saying they may not hire me because of it", fact: "You got a letter that they may not hire you because of the check.", action: "Read the letter for any date it gives to answer, and answer before that date. Ask for a copy of the report if it isn't attached." },
       NOT_SURE,
     ], next: "record.kind" }),
   n({ id: "record.raise", hurdle: "record", kind: "one", sensitive: true, decision: "whether you bring it up or wait",
@@ -572,19 +572,19 @@ const NODE_LIST: HurdleNode[] = [
   n({ id: "record.supervision", hurdle: "record", kind: "one", sensitive: true, decision: "whether you are on supervision",
     question: "Are you on probation, parole or other supervision right now?",
     choices: [
-      { id: "yes", label: "Yes", fact: "You are on supervision right now.", next: "record.conditions" },
-      { id: "no", label: "No", fact: "You are not on supervision right now." },
+      { id: "yes", label: "Yes", fact: "You're on supervision right now.", next: "record.conditions" },
+      { id: "no", label: "No", fact: "You're not on supervision right now." },
       { ...RATHER_NOT },
     ], next: "record.state" }),
   n({ id: "record.conditions", hurdle: "record", kind: "one", sensitive: true, decision: "whether your conditions touch work",
     question: "Do your conditions touch work? (hours, travel, kind of job, internet use)",
     choices: [
       { id: "yes", label: "Yes", fact: "Your conditions touch work.", action: "Check your written conditions with your officer before you accept a job." },
-      { id: "no", label: "No", fact: "Your conditions do not touch work." },
+      { id: "no", label: "No", fact: "Your conditions don't touch work." },
       { ...NOT_SURE, action: "Ask your officer which jobs and hours your conditions allow, before you accept an offer." },
     ], next: "record.state" }),
   n({ id: "record.state", hurdle: "record", kind: "text", format: "state", decision: "which state the job is in",
-    question: "Which state is the job in?", help: "Two letters, like MT or WI. It is used to show dated sources for that state.",
+    question: "Which state is the job in?", help: "Two letters, like MT or WI. It's used to show dated sources for that state.",
     placeholder: "MT", maxLength: 2, next: "record.worry" }),
   n({ id: "record.worry", hurdle: "record", kind: "many", sensitive: true, decision: "what worries you about the conversation",
     question: "What worries you most about the conversation?",
@@ -592,7 +592,7 @@ const NODE_LIST: HurdleNode[] = [
       { id: "details", label: "Being pushed for details", fact: "You worry about being pushed for details.", action: "Practice one more true sentence for when they push, then turn back to the work." },
       { id: "turned_down", label: "Being turned down", fact: "You worry about being turned down." },
       { id: "too_much", label: "Saying too much", fact: "You worry about saying too much.", action: "Keep the first answer to two sentences. Stop there and let them ask." },
-      { id: "surprise", label: "The check showing something I did not expect", fact: "You worry the check could show something you did not expect.", action: "Think about getting a copy of your own record first, so nothing on the check surprises you.", support: ["legal"] },
+      { id: "surprise", label: "The check showing something I didn't expect", fact: "You worry the check could show something you didn't expect.", action: "Think about getting a copy of your own record first, so nothing on the check surprises you.", support: ["legal"] },
       NOT_SURE,
     ], next: "record.lead" }),
   n({ id: "record.lead", hurdle: "record", kind: "many", decision: "what you want them to hear about you now",

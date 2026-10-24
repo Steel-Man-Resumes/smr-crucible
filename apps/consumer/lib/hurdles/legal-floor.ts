@@ -26,6 +26,6 @@ export function legalFloorFor(state: string | null | undefined): LegalFloor {
     ? "Add the job's state to see dated sources for that state. The national sources below apply everywhere."
     : own
       ? `Dated sources for ${st} and national ones. Each says what it covers. Check current law before you rely on any of it.`
-      : `We do not have checked sources for ${st} yet. The national ones below still apply. A legal aid office near you can tell you what applies there.`;
+      : `We don't have checked sources for ${st} yet. The national ones below still apply. A legal aid office near you can tell you what applies there.`;
   return { state: st, asOf: SOURCE_LIST_AS_OF, sources, note };
 }

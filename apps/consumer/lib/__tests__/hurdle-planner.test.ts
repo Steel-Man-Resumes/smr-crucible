@@ -180,7 +180,7 @@ describe("plan", () => {
     assert.equal(r.fromYou, false);
   });
   it("legal floor with an unknown state says so", () => {
-    assert.match(legalFloorFor("ZZ").note, /do not have checked sources for ZZ/);
+    assert.match(legalFloorFor("ZZ").note, /don't have checked sources for ZZ/);
     assert.equal(legalFloorFor("lower").state, null);
   });
 });
@@ -264,5 +264,61 @@ describe("phrasing pipeline", () => {
   });
   it("walk ends at the first open question", () => {
     assert.deepEqual(walk("money", {}).path, ["money.what"]);
+  });
+});
+
+import { INITIAL_SAVE, runSave, saveLine, saveReducer, type SaveEvent, type SaveState } from "../hurdles/save-state";
+import { saveArtifactReceipt } from "../artifact-save";
+import { planForSave } from "../hurdles/plan";
+
+describe("save truth", () => {
+  async function attempt(response: Response): Promise<SaveState> {
+    let s = saveReducer(INITIAL_SAVE, { type: "changed" });
+    const dispatch = (e: SaveEvent) => { s = saveReducer(s, e); };
+    const fake = (async () => response) as unknown as typeof fetch;
+    await runSave(s, () => saveArtifactReceipt({ type: "disclosure_plan" }, "acct-1", fake), dispatch);
+    return s;
+  }
+  it("a 500 never shows Saved, and offers a retry", async () => {
+    const s = await attempt(new Response(JSON.stringify({ error: "boom" }), { status: 500 }));
+    assert.equal(s.status, "failed");
+    assert.doesNotMatch(saveLine(s), /^Saved/);
+    assert.match(saveLine(s), /Try saving again/);
+  });
+  it("a 200 without a real artifact id is not a save", async () => {
+    const s = await attempt(new Response(JSON.stringify({ data: { id: "nope" } }), { status: 200 }));
+    assert.equal(s.status, "failed");
+  });
+  it("a 200 with an id is saved", async () => {
+    const s = await attempt(new Response(JSON.stringify({ data: { id: "123e4567-e89b-12d3-a456-426614174000" } }), { status: 200 }));
+    assert.equal(s.status, "saved");
+    assert.match(saveLine(s), /^Saved to your Library/);
+  });
+  it("a late receipt for an older plan does not mark the new plan saved", () => {
+    let s = saveReducer(INITIAL_SAVE, { type: "changed" });
+    s = saveReducer(s, { type: "begin", version: s.version });
+    const old = s.version;
+    s = saveReducer(s, { type: "changed" });
+    s = saveReducer(s, { type: "ok", version: old, id: "x" });
+    assert.equal(s.status, "idle");
+  });
+  it("retry after failure can save once; a second begin after saved is ignored", () => {
+    let s = saveReducer(INITIAL_SAVE, { type: "changed" });
+    s = saveReducer(s, { type: "begin", version: s.version });
+    s = saveReducer(s, { type: "fail", version: s.version });
+    s = saveReducer(s, { type: "begin", version: s.version });
+    assert.equal(s.status, "saving");
+    s = saveReducer(s, { type: "ok", version: s.version, id: "id" });
+    assert.equal(saveReducer(s, { type: "begin", version: s.version }).status, "saved");
+  });
+  it("a save keeps no record detail and no free text but the state code", () => {
+    const st = run([...pick("record", "other"), { type: "start" }, ans("record.where", "check"), ans("record.check_stage", "notice"), ans("record.kind", "felony"),
+      ans("record.when", "lt1"), ans("record.supervision", "yes"), ans("record.conditions", "yes"), txt("record.state", "WI"), ans("record.worry", "details"),
+      ans("record.lead", "work"), txt("record.own_words", "I have a felony."), txt("record.now_words", "I work days."), txt("other.what", "my private words")]);
+    const saved = planForSave(buildHurdlePlan(st), st);
+    const blob = JSON.stringify(saved.choices) + JSON.stringify(saved.hurdles);
+    assert.ok(!/felony|private words|record\.kind|record\.supervision/.test(blob), blob);
+    assert.deepEqual(saved.choices["record.state"], { text: "WI" });
+    assert.ok(saved.hurdles.find((h) => h.hurdle === "record")!.doNow.some((d) => /officer/.test(d)));
   });
 });

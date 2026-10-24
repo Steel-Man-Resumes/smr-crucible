@@ -115,6 +115,16 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     if (initialLocation) setLocation((l) => l || initialLocation);
   }, [initialLocation]);
 
+  // Deep links (the hurdle planner) can open this with a category and a place.
+  // Only known categories are taken; the place is the person's own text.
+  useEffect(() => {
+    const params = new URL(window.location.href).searchParams;
+    const c = params.get("category");
+    if (c && SUPPORT_CATEGORIES.some((x) => x.id === c)) setCategory(c);
+    const loc = params.get("location");
+    if (loc) setLocation(loc.slice(0, 120));
+  }, []);
+
   // Public directory handoff keeps the canonical service through sign-in.
   useEffect(()=>{const id=new URL(window.location.href).searchParams.get("resourceId");
     if(!id||!/^[0-9a-f-]{36}$/i.test(id))return;let live=true;

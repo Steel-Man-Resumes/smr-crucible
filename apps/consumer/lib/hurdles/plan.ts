@@ -128,13 +128,13 @@ export function recordConversation(answers: Record<string, Answer>): RecordConve
   const when: string[] = [];
   if (where.includes("form")) {
     const q = textOf(answers, "record.form_question");
-    when.push("On the application: answer the question the form asks, the way it is written, fully and truthfully. Answer only what it asks.");
+    when.push("On the application: answer the question the form asks, the way it's written, fully and truthfully. Answer only what it asks.");
     if (q) when.push(`The form asks: "${q}" Read it twice. Its own words, and any time limit in it, decide what it covers.`);
   }
   if (where.includes("interview") || where.includes("work") || where.includes("not_sure") || !where.length) {
     if (raise === "me") when.push("In conversation: you chose to bring it up yourself. One way is to wait until they have seen you fit the job, say it in two sentences, then turn back to the work.");
     else if (raise === "wait") when.push("In conversation: you chose to wait until they ask. Have your two sentences ready, so you are not making it up on the spot.");
-    else when.push("In conversation: practice it both ways, once where they ask and once where they do not. Then decide which feels right.");
+    else when.push("In conversation: practice it both ways, once where they ask and once where they don't. Then decide which feels right.");
   }
   if (where.includes("check")) when.push("The background check: the report can show it whether or not you talk about it. What you say should match what the report will show.");
 
@@ -189,4 +189,32 @@ export function hurdlePlanText(plan: Pick<HurdlePlan, "hurdles" | "record">, phr
     if (s.tell) out.push(`What you tell an employer: ${s.tell}`);
   }
   return out.join("\n");
+}
+
+/**
+ * What a save keeps. The Library copy holds the plan and the choices that
+ * rebuild it, never the free text the person typed while narrowing (except the
+ * job's state code) and never record detail: record choices are left out, and
+ * the record section keeps its steps and the conversation lines the person
+ * made, not the facts behind them.
+ */
+export function planForSave(plan: HurdlePlan, state: Pick<PlannerState, "selected" | "answers">) {
+  const full = { phase: "done" as const, cursor: null, ...state };
+  const choices: Record<string, Answer> = {};
+  for (const [id, a] of Object.entries(reachedAnswers(full))) {
+    const node = getNode(id)!;
+    if (node.sensitive) continue;
+    if (a.skipped) choices[id] = { skipped: true };
+    else if (node.kind === "text") { if (node.format === "state" && a.text) choices[id] = { text: a.text }; }
+    else if (a.choices?.length) choices[id] = { choices: a.choices };
+  }
+  return {
+    version: 1 as const,
+    selected: state.selected,
+    choices,
+    hurdles: plan.hurdles.map((s) => ({ ...s, ownWords: [], known: s.hurdle === "record" ? [] : s.known })),
+    record: plan.record,
+    constraints: plan.constraints,
+    coverage: { onPath: plan.coverage.onPath, answered: plan.coverage.answered, skipped: plan.coverage.skipped, notSure: plan.coverage.notSure, line: plan.coverage.line },
+  };
 }

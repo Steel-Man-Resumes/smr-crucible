@@ -64,10 +64,11 @@ export function readPhraseRequest(body: unknown): PhraseRequest | null {
 }
 
 /** The answer lines the model may use, per hurdle, and the source text the checker trusts. */
-export function phraseSources(req: PhraseRequest): { lines: Partial<Record<HurdleId, string[]>>; sources: string[]; hurdles: HurdleId[] } {
+export function phraseSources(req: PhraseRequest): { lines: Partial<Record<HurdleId, string[]>>; picked: Partial<Record<HurdleId, string[]>>; sources: string[]; hurdles: HurdleId[] } {
   const state: PlannerState = { phase: "done", selected: req.selected, answers: req.answers, cursor: null };
   const answers = reachedAnswers(state);
   const lines: Partial<Record<HurdleId, string[]>> = {};
+  const picked: Partial<Record<HurdleId, string[]>> = {};
   const sources: string[] = [];
   const hurdles = req.selected.filter((h) => h !== "not_sure" && (h !== "record" || req.recordConsent));
   for (const [id, a] of Object.entries(answers)) {
@@ -76,18 +77,19 @@ export function phraseSources(req: PhraseRequest): { lines: Partial<Record<Hurdl
     if (node.sensitive && !req.recordConsent) continue;
     const out = (lines[node.hurdle] ??= []);
     if (node.kind === "text") {
-      if (a.text) { out.push(`${node.question} ${a.text}`); sources.push(a.text); }
+      if (a.text) { out.push(`${node.question} ${a.text}`); (picked[node.hurdle] ??= []).push(a.text); sources.push(a.text); }
       continue;
     }
     for (const c of node.choices ?? []) if (a.choices?.includes(c.id)) {
       out.push(`${node.question} ${c.label}`);
+      (picked[node.hurdle] ??= []).push(c.label);
       sources.push(c.label, c.fact ?? "");
     }
   }
   if (req.targetJob) sources.push(req.targetJob);
   for (const s of req.strengths ?? []) sources.push(s);
   for (const h of hurdles) sources.push(HURDLES[h].label);
-  return { lines, sources, hurdles: hurdles.filter((h) => (lines[h]?.length ?? 0) > 0) };
+  return { lines, picked, sources, hurdles: hurdles.filter((h) => (lines[h]?.length ?? 0) > 0) };
 }
 
 export function buildPhrasePrompt(req: PhraseRequest): { system: string; user: string; hurdles: HurdleId[]; sources: string[] } {
@@ -153,12 +155,9 @@ export async function phraseHurdlePlan(req: PhraseRequest, callModel: (system: s
 
 /** MOCK_AI reply: built only from the answers, so it always passes the checker. */
 export function mockPhraseReply(req: PhraseRequest): string {
-  const { lines, hurdles } = phraseSources(req);
+  const { picked, hurdles } = phraseSources(req);
   const summaries: Record<string, string> = {};
-  for (const h of hurdles) {
-    const facts = (lines[h] ?? []).slice(0, 2).map((l) => l.replace(/^.*\?\s*/, ""));
-    summaries[h] = `You picked: ${facts.join(", ")}.`;
-  }
+  for (const h of hurdles) summaries[h] = `You picked: ${(picked[h] ?? []).slice(0, 2).join(", ").replace(/[.!?]+$/, "")}.`;
   const own = req.answers["record.own_words"]?.text;
   return JSON.stringify({ summaries, ...(hurdles.includes("record") ? { record: { open: own ?? "I have a record.", next: req.answers["record.now_words"]?.text ?? "" } } : {}) });
 }
