@@ -109,6 +109,46 @@ export type StaffWriteAuthority = "owner" | "owner_or_platform_admin";
 const ownerSql = (authority: StaffWriteAuthority | undefined, org: string, actor: string) =>
   authority === "owner_or_platform_admin" ? ACTOR_IS_OWNER_OR_PLATFORM_ADMIN(org, actor) : ACTOR_IS_OWNER(org, actor);
 
+/**
+ * The three staff write statements, exported so the database test
+ * (apps/consumer/lib/__tests__/org-crm-pglite.test.ts) runs EXACTLY these
+ * strings against the real schema, with the friendly pre-checks bypassed.
+ * Parameters: add ($1 org, $2 user, $3 role, $4 title, $5 actor);
+ * setRole ($1 org, $2 user, $3 role, $4 actor); remove ($1 org, $2 user, $3 actor).
+ */
+export const STAFF_SQL = {
+  add: () => `INSERT INTO org_staff (access_code_id, user_id, role, title, created_by)
+     SELECT $1, $2, $3, $4, $5
+      WHERE EXISTS (SELECT 1 FROM access_code WHERE id = $1 AND is_active = true)
+        AND ($3 <> 'org_admin' OR ${ACTOR_IS_OWNER("$1", "$5")})
+        -- Staff cap (097): a NEW staff row needs a free staff place; a
+        -- re-role of someone already on staff does not.
+        AND (EXISTS (SELECT 1 FROM org_staff os_e WHERE os_e.access_code_id = $1 AND os_e.user_id = $2)
+             OR (SELECT COUNT(*) FROM org_staff os_c WHERE os_c.access_code_id = $1) < (SELECT ac_c.max_staff FROM access_code ac_c WHERE ac_c.id = $1))
+        AND (
+          EXISTS (
+            SELECT 1 FROM access_code_redemption acr
+             WHERE acr.access_code_id = $1 AND acr.user_id = $2
+          )
+          OR EXISTS (
+            SELECT 1 FROM org_staff os
+             WHERE os.access_code_id = $1 AND os.user_id = $2
+          )
+        )
+     ON CONFLICT (access_code_id, user_id)
+     DO UPDATE SET role = EXCLUDED.role, title = EXCLUDED.title
+      WHERE (org_staff.role <> 'org_admin' AND EXCLUDED.role <> 'org_admin') OR ${ACTOR_IS_OWNER("$1", "$5")}
+     RETURNING id`,
+  setRole: (authority?: StaffWriteAuthority) => `UPDATE org_staff SET role = $3
+      WHERE access_code_id = $1 AND user_id = $2
+        AND ((role <> 'org_admin' AND $3 <> 'org_admin') OR ${ownerSql(authority, "$1", "$4")})
+      RETURNING user_id`,
+  remove: (authority?: StaffWriteAuthority) => `DELETE FROM org_staff
+      WHERE access_code_id = $1 AND user_id = $2
+        AND (role <> 'org_admin' OR ${ownerSql(authority, "$1", "$3")})
+      RETURNING user_id`,
+};
+
 async function currentStaffRole(orgId: string, userId: string, actorUserId: string): Promise<string | null> {
   const rows = await scopedQuery<{ role: string }>(
     orgId,
@@ -198,28 +238,7 @@ export async function addOrgStaff(params: {
 
   const written = await scopedQuery<{ id: string }>(
     orgId,
-    `INSERT INTO org_staff (access_code_id, user_id, role, title, created_by)
-     SELECT $1, $2, $3, $4, $5
-      WHERE EXISTS (SELECT 1 FROM access_code WHERE id = $1 AND is_active = true)
-        AND ($3 <> 'org_admin' OR ${ACTOR_IS_OWNER("$1", "$5")})
-        -- Staff cap (097): a NEW staff row needs a free staff place; a
-        -- re-role of someone already on staff does not.
-        AND (EXISTS (SELECT 1 FROM org_staff os_e WHERE os_e.access_code_id = $1 AND os_e.user_id = $2)
-             OR (SELECT COUNT(*) FROM org_staff os_c WHERE os_c.access_code_id = $1) < (SELECT ac_c.max_staff FROM access_code ac_c WHERE ac_c.id = $1))
-        AND (
-          EXISTS (
-            SELECT 1 FROM access_code_redemption acr
-             WHERE acr.access_code_id = $1 AND acr.user_id = $2
-          )
-          OR EXISTS (
-            SELECT 1 FROM org_staff os
-             WHERE os.access_code_id = $1 AND os.user_id = $2
-          )
-        )
-     ON CONFLICT (access_code_id, user_id)
-     DO UPDATE SET role = EXCLUDED.role, title = EXCLUDED.title
-      WHERE (org_staff.role <> 'org_admin' AND EXCLUDED.role <> 'org_admin') OR ${ACTOR_IS_OWNER("$1", "$5")}
-     RETURNING id`,
+    STAFF_SQL.add(),
     [orgId, userId, role, title, addedBy],
     addedBy
   );
@@ -268,10 +287,7 @@ export async function setOrgStaffRole(params: {
   // no-op that needs no owner.
   const written = await scopedQuery<{ user_id: string }>(
     orgId,
-    `UPDATE org_staff SET role = $3
-      WHERE access_code_id = $1 AND user_id = $2
-        AND ((role <> 'org_admin' AND $3 <> 'org_admin') OR ${ownerSql(authority, "$1", "$4")})
-      RETURNING user_id`,
+    STAFF_SQL.setRole(authority),
     [orgId, userId, role, actorUserId],
     actorUserId
   );
@@ -319,10 +335,7 @@ export async function removeOrgStaff(params: {
 
   const removed = await scopedQuery<{ user_id: string }>(
     orgId,
-    `DELETE FROM org_staff
-      WHERE access_code_id = $1 AND user_id = $2
-        AND (role <> 'org_admin' OR ${ownerSql(authority, "$1", "$3")})
-      RETURNING user_id`,
+    STAFF_SQL.remove(authority),
     [orgId, userId, actorUserId],
     actorUserId
   );

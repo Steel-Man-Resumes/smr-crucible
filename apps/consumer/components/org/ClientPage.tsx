@@ -36,7 +36,7 @@ const LAST_TAB_KEY = "smr.staff.clientTab";
 
 interface ScopeState { shared: boolean; sharedAt: string | null; requestPending: boolean; required: boolean; stoppedByParticipant: boolean; fromDate: string | null }
 interface Client {
-  userId: string; name: string | null; email: string | null; currentStage: number; joinedAt: string | null;
+  userId: string; name: string | null; email: string | null; currentStage: number | null; identitySource?: "account" | "invite" | "none"; joinedAt: string | null;
   assignedStaffName: string | null; scopes: Record<Scope, ScopeState>; awaitingAcknowledgement: boolean;
   progress: { nextStepAction: string | null; applications: number; savedJobs: number; practiceSessions: number; hasTailoredResume: boolean; lastActiveAt: string | null } | null;
 }
@@ -116,9 +116,20 @@ export function ClientPage({ clientId }: { clientId: string }) {
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-t-white">{client.name || "Participant"}</h1>
         <p className="text-sm text-t-phos-dim mt-1">
-          {client.email} · Stage {client.currentStage} of 6, {STAGES[client.currentStage] ?? ""} · Joined {day(client.joinedAt)}
+          {[
+            client.email,
+            client.currentStage != null ? `Stage ${client.currentStage} of 6, ${STAGES[client.currentStage] ?? ""}` : null,
+            `Joined ${day(client.joinedAt)}`,
+          ].filter(Boolean).join(" · ")}
           {client.assignedStaffName ? ` · Case manager: ${client.assignedStaffName}` : " · Unassigned"}
         </p>
+        {client.identitySource !== "account" && (
+          <p className="text-xs text-t-phos-dim mt-1">
+            {client.identitySource === "invite"
+              ? "They have not turned on progress sharing. You see only the name and email your organization entered when it invited them."
+              : "They have not turned on progress sharing, so their name and progress are not shown."}
+          </p>
+        )}
         <ul className="flex flex-wrap gap-2 mt-3" aria-label="What this person has shared">
           {SCOPES.map((s) => {
             const st = client.scopes[s.key];
@@ -218,7 +229,7 @@ function TheirScreen({ client, first, onOpen }: { client: Client; first: string;
         <p className="text-[10px] uppercase tracking-wider text-t-phos-dim">Overview</p>
         {p ? (
           <p className="text-sm text-t-white mt-1">
-            Stage {client.currentStage} of 6, {STAGES[client.currentStage] ?? ""}. {p.nextStepAction ? `The next step ${first} is being shown: ${p.nextStepAction}.` : "No next step is showing right now."}
+            {client.currentStage != null ? `Stage ${client.currentStage} of 6, ${STAGES[client.currentStage] ?? ""}. ` : ""}{p.nextStepAction ? `The next step ${first} is being shown: ${p.nextStepAction}.` : "No next step is showing right now."}
             <span className="block text-xs text-t-phos-dim mt-1">
               {p.applications} {p.applications === 1 ? "application" : "applications"} · {p.savedJobs} saved · {p.practiceSessions} practice {p.practiceSessions === 1 ? "session" : "sessions"} · {p.hasTailoredResume ? "has tailored a resume" : "has not tailored a resume yet"} · last active {day(p.lastActiveAt)}
             </span>

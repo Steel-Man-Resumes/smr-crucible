@@ -94,9 +94,19 @@ function params(actor: OrgActor, clientId: string, scope?: SharingScope) {
 
 export interface ClientHeader {
   userId: string;
+  /**
+   * WHO THIS IS, BY CONSENT (review BL1). With progress sharing on: the
+   * account's name and email. Off: only the name and email this organization
+   * typed when it invited them (org_invite), or null for someone who joined
+   * by code and has not shared. Never the account's own details without
+   * sharing.
+   */
   name: string | null;
   email: string | null;
-  currentStage: number;
+  /** "account" = from their account (sharing on); "invite" = what the org typed; "none". */
+  identitySource: "account" | "invite" | "none";
+  /** Journey stage, ONLY with progress sharing on. null = not shared. */
+  currentStage: number | null;
   joinedAt: string | null;
   assignedStaffId: string | null;
   assignedStaffName: string | null;
@@ -123,13 +133,32 @@ export interface ClientHeader {
 }
 
 /**
+ * The identity row of the client header, exported so the database test runs
+ * this exact statement. Params: $1 client, $2 org, $3 sees-all, $4 actor.
+ */
+export const CLIENT_HEADER_WHO_SQL = `WITH s AS (SELECT EXISTS (SELECT 1 FROM staff_progress_counts pc WHERE pc.user_id = $1::uuid) AS on_)
+         SELECT u.id,
+                CASE WHEN s.on_ THEN u.name  ELSE oi.invited_name  END AS name,
+                CASE WHEN s.on_ THEN u.email ELSE oi.invited_email END AS email,
+                CASE WHEN s.on_ THEN 'account' WHEN oi.user_id IS NOT NULL THEN 'invite' ELSE 'none' END AS identity_source,
+                CASE WHEN s.on_ THEN u.current_stage END AS current_stage,
+                (SELECT MIN(r.redeemed_at) FROM access_code_redemption r WHERE r.user_id = u.id AND r.access_code_id = $2::uuid) AS joined_at,
+                a.staff_user_id AS staff_id, su.name AS staff_name
+           FROM users u
+           CROSS JOIN s
+           LEFT JOIN org_invite oi ON oi.user_id = u.id AND oi.access_code_id = $2::uuid
+           LEFT JOIN client_staff_assignment a ON a.client_user_id = u.id AND a.access_code_id = $2::uuid
+           LEFT JOIN users su ON su.id = a.staff_user_id
+          WHERE u.id = $1::uuid AND ${IN_REACH}`;
+
+/**
  * Who this is and what they have chosen to share. Needs reach (steps 1-4) but
  * no grant: knowing THAT a resume is not shared is how staff know to ask.
  */
 export async function getClientHeader(actor: OrgActor, clientId: string): Promise<ClientViewResult<ClientHeader>> {
   const refused = refuseActor(actor);
   if (refused) return { ok: false, reason: refused };
-  type Row = { id: string; name: string | null; email: string | null; current_stage: number | null; joined_at: string | null; staff_id: string | null; staff_name: string | null };
+  type Row = { id: string; name: string | null; email: string | null; identity_source: "account" | "invite" | "none"; current_stage: number | null; joined_at: string | null; staff_id: string | null; staff_name: string | null };
   const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
   type PolicyRow = { scopes: string[]; acked: boolean; stopped: string[] | null };
   type ProgressRow = { next_step_reason: string | null; next_step_stage: string | null; applications: number; saved_jobs: number; practice_sessions: number; has_tailored: boolean; last_active_at: string | null };
@@ -137,13 +166,11 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
     scopeOf(actor),
     (sql) => [
       run(sql)(
-        `SELECT u.id, u.name, u.email, u.current_stage,
-                (SELECT MIN(r.redeemed_at) FROM access_code_redemption r WHERE r.user_id = u.id AND r.access_code_id = $2::uuid) AS joined_at,
-                a.staff_user_id AS staff_id, su.name AS staff_name
-           FROM users u
-           LEFT JOIN client_staff_assignment a ON a.client_user_id = u.id AND a.access_code_id = $2::uuid
-           LEFT JOIN users su ON su.id = a.staff_user_id
-          WHERE u.id = $1::uuid AND ${IN_REACH}`,
+        // Identity and stage are gated IN THE STATEMENT on the same consent the
+        // caseload uses: staff_progress_counts has a row only for a member of
+        // the scoped org with progress sharing on. Without it, staff get what
+        // their own organization typed on the invite, or nothing.
+        CLIENT_HEADER_WHO_SQL,
         params(actor, clientId)
       ),
       run(sql)(
@@ -201,7 +228,8 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
   return {
     ok: true,
     rows: [{
-      userId: row.id, name: row.name, email: row.email, currentStage: row.current_stage ?? 0,
+      userId: row.id, name: row.name, email: row.email, identitySource: row.identity_source,
+      currentStage: row.identity_source === "account" ? row.current_stage ?? 0 : null,
       joinedAt: row.joined_at, assignedStaffId: row.staff_id, assignedStaffName: row.staff_name, scopes,
       awaitingAcknowledgement: !!policy[0] && !policy[0].acked,
       progress: progress[0] ? {
