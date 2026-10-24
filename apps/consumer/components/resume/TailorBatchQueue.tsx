@@ -10,9 +10,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import {
-  BATCH_HANDOFF_KEY, BATCH_STORAGE_PREFIX, PHASE_LABEL, admitBatch, batchSummary, createBatch, plural, readBatch, runBatch, runnableIndexes,
+  BATCH_HANDOFF_KEY, BATCH_STORAGE_PREFIX, PHASE_LABEL, admitBatch, clearTailorBatchStorage, batchSummary, createBatch, plural, readBatch, runBatch, runnableIndexes,
   type BatchJob, type BatchState, type TailorResult,
 } from "@/lib/tailor-batch";
 import { loadTailorContext, type TailorContext } from "@/lib/tailor-context";
@@ -39,6 +40,13 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
   const runToken = useRef(0);
   const ownerRef = useRef(ownerUid); ownerRef.current = ownerUid;
   const contextRef = useRef<{ owner: string; lane: string | null; value: TailorContext } | null>(null);
+  const sessionStatus = useSession().status;
+
+  // Signed out, or another person signed in on this tab: their picks and queues go.
+  useEffect(() => {
+    if (sessionStatus === "unauthenticated") { clearTailorBatchStorage(); runToken.current++; setBatch(null); return; }
+    if (ownerUid) clearTailorBatchStorage(typeof sessionStorage === "undefined" ? null : sessionStorage, ownerUid);
+  }, [sessionStatus, ownerUid]);
 
   // Restore or create the batch for this person only.
   useEffect(() => {
@@ -71,10 +79,11 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
 
   useEffect(() => () => { runToken.current++; }, []);
 
+  const laneParam = batch?.laneId ?? "main";
   const loadAllowance = useCallback(async () => {
     setAllowanceError("");
     try {
-      const response = await fetch("/api/tailor-batch", { cache: "no-store" });
+      const response = await fetch(`/api/tailor-batch?laneId=${encodeURIComponent(laneParam)}`, { cache: "no-store" });
       const body = await response.json().catch(() => null);
       if (!response.ok || !body || !("remaining" in body)) throw new Error();
       setAllowance({ remaining: typeof body.remaining === "number" ? body.remaining : null, blockedReason: body.blockedReason || null });
@@ -82,7 +91,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
       setAllowance(null);
       setAllowanceError("Your allowance could not be checked. Try again before running.");
     }
-  }, []);
+  }, [laneParam]);
   useEffect(() => { if (batch && ownerUid) void loadAllowance(); }, [batch?.batchId, ownerUid, loadAllowance]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pending = batch ? runnableIndexes(batch) : [];
@@ -113,19 +122,21 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
           const body = await response.json().catch(() => null);
           return response.ok && body?.ok && typeof body.text === "string" ? { text: body.text, source: "fetched" } : null;
         },
-        async tailor({ key, index, size, job, postingText, pendingSave, applicationId }) {
+        async tailor({ key, index, size, job, postingText, applicationId }) {
           const response = await fetch("/api/tailor-batch", {
-            method: "POST", headers: { "Content-Type": "application/json" },
+            // The account that started the batch; the server refuses any other.
+            method: "POST", headers: { "Content-Type": "application/json", "X-Expected-Account-Id": batch.ownerUid },
             body: JSON.stringify({
               batchId: batch.batchId, index, size, laneId: batch.laneId,
               job: { ...job, description: postingText, jdSourceProvider: job.source, jdSourceUrl: job.apply_url ?? null },
               context: context.generator, parentArtifactId: context.parentArtifactId,
               applicationId: applicationId || job.existingApplicationId || null,
-              ...(pendingSave ? { pendingSave } : {}),
             }),
           });
           const body = (await response.json().catch(() => null)) as (TailorResult & { key?: string }) | null;
           if (!body || (body.key && body.key !== key)) return { ok: false, code: "unreadable", error: "The answer for this job could not be read. Retry this one." };
+          // A changed lane or base resume: read the person context again on the next try.
+          if (!body.ok) contextRef.current = null;
           return body;
         },
         async confirm(artifactId) {
@@ -183,7 +194,21 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
                   </p>
                   {j.error && j.phase !== "saved" && <p className="mt-1 text-xs text-t-phos" role={j.phase === "failed" ? "alert" : undefined}>{j.error}</p>}
                   {j.phase === "saved" && j.truth && (j.truth.blocked || j.truth.flags.length > 0) && (
-                    <p className="mt-1 text-xs text-t-amber-bright">{j.truth.notice || "Some lines need your check before this is finished."}</p>
+                    <div className="mt-1 text-xs text-t-amber-bright" data-testid="batch-flags">
+                      {j.truth.notice && <p>{j.truth.notice}</p>}
+                      {j.truth.flags.length > 0 ? (
+                        <>
+                          <p>The truth check could not match {j.truth.flags.length === 1 ? "this line" : "these lines"} to what you told us. Make sure each one is true, or take it out, before you send this:</p>
+                          <ul className="ml-4 list-disc">{j.truth.flags.map((claim, i) => <li key={i}>{claim}</li>)}</ul>
+                        </>
+                      ) : !j.truth.notice ? <p>Some lines need your check before this is finished.</p> : null}
+                    </div>
+                  )}
+                  {j.phase === "saved" && j.linked === false && (
+                    <p className="mt-1 text-xs text-t-phos">This job is already marked {j.applicationStatus === "heard_back" ? "heard back" : j.applicationStatus || "past saved"} in Applications, so it keeps the resume it has. The new one is in your Library.</p>
+                  )}
+                  {j.phase === "saved" && j.letterSaved === false && (
+                    <p className="mt-1 text-xs text-t-phos">The cover letter did not save. The resume did. You can write a letter from the resume.</p>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -192,7 +217,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
                   )}
                   {j.phase === "failed" && (
                     <button type="button" disabled={running} onClick={() => void run([j.index])} className="t-focus min-h-touch border border-t-amber px-3 text-sm font-bold text-t-amber-bright disabled:opacity-50">
-                      {j.pendingSave || j.code === "not_confirmed" ? "Retry the save" : "Retry this job"}
+                      {j.code === "save_failed" || j.code === "not_confirmed" ? "Retry the save" : "Retry this job"}
                     </button>
                   )}
                 </div>
@@ -226,7 +251,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
 
       {summary.saved > 0 && (
         <div className="mt-3 space-y-2 text-xs text-t-phos-dim">
-          <p>Each saved resume is added to that job in Applications as prepared, not applied. Mark it applied after you send it.</p>
+          <p>Each saved resume is linked to its job in Applications, unless that job was already marked applied or further along. Mark it applied after you send it.</p>
           <p>A tailored resume starts as a draft. Use Check and finish on each one. Finishing is what queues its package to your email, once your email is confirmed. Nothing is emailed before you finish it.</p>
           {nextSaved?.artifactId && currentIndex >= 0 && (
             <button type="button" onClick={() => open(nextSaved.artifactId!)} className="t-focus min-h-touch border border-t-steel px-3 text-sm font-bold text-t-steel">Next job: {nextSaved.job.title}</button>

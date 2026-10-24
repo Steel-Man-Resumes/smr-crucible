@@ -594,7 +594,7 @@ function JobBoardPage() {
                   return (
                     <li key={row.id}>
                       <label className="flex min-h-touch items-center gap-3">
-                        <input type="checkbox" className="h-5 w-5 flex-shrink-0" checked={isPicked} onChange={() => togglePick(item)} aria-label={`Pick ${row.job_title} at ${row.company} to tailor`} />
+                        <input type="checkbox" className="h-5 w-5 flex-shrink-0" checked={isPicked} onChange={() => togglePick(item)} />
                         <span>{row.job_title} at {row.company}{row.resume_artifact_id ? <span className="text-xs text-t-phos-dim"> · already has a tailored resume</span> : null}</span>
                       </label>
                     </li>
@@ -823,7 +823,7 @@ function JobBoardPage() {
                     className="h-5 w-5 flex-shrink-0"
                     checked={picked.some(item => item.selectKey === job.id)}
                     onChange={() => togglePick(batchJobFromResult(job))}
-                    aria-label={`Pick ${job.title} at ${job.company} to tailor`}
+                    aria-label={`Pick to tailor (up to 3): ${job.title} at ${job.company}`}
                   />
                   Pick to tailor (up to 3)
                 </label>

@@ -341,6 +341,16 @@ export function ResumeWorkspace() {
         setArtifactId(artifact.id);
         setDoc(content.formatVersion === 2 || content.formatVersion === 3 ? upgradeToV3(content) : migrateLegacyResume(content));
         setCoverLetterText(letter);
+        // A multi-job result carries its truth check with it: every flagged
+        // line is listed here too, never only in the queue (DEC-46).
+        if (searchParams.get("batch")) {
+          const t = artifact.target_context?.batchTruth;
+          setTruthCheck(t && typeof t === "object" ? {
+            blocked: !!t.blocked,
+            notice: typeof t.notice === "string" ? t.notice : "",
+            flags: Array.isArray(t.flags) ? t.flags.filter((f: unknown): f is string => typeof f === "string").slice(0, 8) : [],
+          } : null);
+        }
         setSaveStatus(artifact.is_locked ? "locked" : "idle");
         lastSaved.current = JSON.stringify(content);
         setShowSetup(false);

@@ -8,62 +8,42 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_BATCH_JOBS, SELECTION_FULL_LINE, admitBatch, batchJobKey, batchSummary, createBatch, readBatch, runBatch, runnableIndexes, toggleSelection,
-  type BatchDeps, type BatchJob, type BatchState,
+  MAX_BATCH_JOBS, SELECTION_FULL_LINE, admitBatch, batchJobKey, batchSummary, clearTailorBatchStorage, createBatch, readBatch, runBatch, runnableIndexes, toggleSelection,
+  BATCH_HANDOFF_KEY, BATCH_STORAGE_PREFIX, type BatchDeps, type BatchJob, type BatchState, type TailorResult,
 } from "../tailor-batch";
-import { generatorFailure, parseBatchJobRequest, remainingActions, runBatchJob, type BatchJobDeps, type BatchJobRequest } from "../tailor-batch-server";
+import { generatorFailure, parseBatchJobRequest, remainingActions } from "../tailor-batch-server";
+import { createTailorBatchRoute } from "../tailor-batch-route";
+import { makeAccount, type AccountOptions } from "./tailor-batch-fakes";
 
 const BATCH = "11111111-2222-4333-8444-555555555555";
-const OWNER = "owner-1";
+const OWNER = "00000000-0000-4000-8000-0000000000a1";
 const LONG = "Load and unload trucks. ".repeat(40);
 
 function job(n: number, extra: Partial<BatchJob> = {}): BatchJob {
   return { selectKey: `job-${n}`, id: `job-${n}`, title: `Warehouse Associate ${n}`, company: `Example Co ${n}`, description: LONG, source: "jsearch", apply_url: `https://example.com/apply/${n}`, ...extra };
 }
-const RESUME = { formatVersion: 3, meta: { targetJob: "x" }, experience: [], skills: [] };
 
-/** An in-memory account: application rows, artifacts, AI action count. */
-function account(opts: { failTitles?: Set<string>; failSaveOnce?: Set<string>; allowance?: number } = {}) {
-  const applications: Array<{ id: string; title: string; company: string; source_id: string }> = [];
-  const artifacts: Array<{ id: string; type: string; targetContext: Record<string, unknown>; content: unknown }> = [];
-  let actions = 0;
-  let generatorCalls = 0;
-  let seq = 0;
-  const id = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, "0")}`;
-  const failSave = new Set(opts.failSaveOnce ?? []);
-  const deps: BatchJobDeps = {
-    async findSaved(key) {
-      const a = artifacts.find(x => x.type === "resume" && x.targetContext.batchKey === key);
-      return a ? { artifactId: a.id, applicationId: (a.targetContext.applicationId as string) ?? null } : null;
-    },
-    async ownsApplication(applicationId) { return applications.some(a => a.id === applicationId); },
-    async saveApplication(j) {
-      const existing = applications.find(a => a.source_id && a.source_id === j.id);
-      if (existing) return existing.id;
-      const row = { id: id(), title: j.title, company: j.company, source_id: j.id || "" };
-      applications.push(row);
-      return row.id;
-    },
-    async generate(payload) {
-      generatorCalls++;
-      const title = (payload.job as any).title as string;
-      if (opts.allowance !== undefined && actions >= opts.allowance) return { ok: false, status: 429, body: { code: "tool_allowance_used", error: "Your current AI allowance or spending limit is reached." } };
-      if (opts.failTitles?.has(title)) return { ok: false, status: 500, body: { error: "Could not generate career package. Please try again." } };
-      actions++;
-      return { ok: true, status: 200, body: { resume: { ...RESUME, meta: { targetJob: title } }, coverLetter: `Letter for ${title}`, grounding: { flags: [] }, tailoringNotes: ["note"] } };
-    },
-    async saveResume({ content, targetContext }) {
-      if (failSave.has(targetContext.targetJob as string)) { failSave.delete(targetContext.targetJob as string); return null; }
-      const row = { id: id(), type: "resume", targetContext, content };
-      artifacts.push(row);
-      return row.id;
-    },
-    async saveCoverLetter({ text, targetContext }) { artifacts.push({ id: id(), type: "cover_letter", targetContext, content: { text } }); },
+/** An in-memory account behind the REAL route handler (lib/tailor-batch-route.ts). */
+function account(opts: AccountOptions = {}) {
+  const acct = makeAccount(OWNER, opts);
+  const route = createTailorBatchRoute({
+    async session() { return { userId: OWNER, impersonating: false, realUserId: OWNER }; },
+    sameOrigin: () => true,
+    async laneKind() { return "ok"; },
+    claims: () => acct.claims,
+    async applicationStatus(_u, appId) { return acct.applications.find(a => a.id === appId)?.status ?? null; },
+    inner: acct.inner,
+    async allowance() { return { remaining: null, blockedReason: null, locked: false }; },
+    now: () => acct.counters.clock,
+  });
+  return {
+    ...acct, route,
+    get actions() { return acct.counters.actions; },
+    get generatorCalls() { return acct.counters.generatorCalls; },
   };
-  return { deps, applications, artifacts, get actions() { return actions; }, get generatorCalls() { return generatorCalls; } };
 }
 
-/** The client coordinator wired straight to the server runner. */
+/** The client coordinator posting to the route, the way TailorBatchQueue does. */
 function clientDeps(acct: ReturnType<typeof account>, extra: Partial<BatchDeps> = {}): BatchDeps & { updates: BatchState[] } {
   const updates: BatchState[] = [];
   return {
@@ -71,9 +51,12 @@ function clientDeps(acct: ReturnType<typeof account>, extra: Partial<BatchDeps> 
     isCurrent: () => true,
     onUpdate: s => updates.push(s),
     async readPosting() { return null; },
-    async tailor({ key, index, size, job: j, postingText, pendingSave, applicationId }) {
-      const req: BatchJobRequest = { batchId: key.split(":")[0], index, size, job: { ...j, description: postingText }, context: {}, laneId: null, applicationId: applicationId || j.existingApplicationId || null, pendingSave: pendingSave ?? null };
-      return runBatchJob(req, acct.deps);
+    async tailor({ key, index, size, job: j, postingText, applicationId }) {
+      const response = await acct.route.POST(new Request("https://app.example/api/tailor-batch", {
+        method: "POST", headers: { "content-type": "application/json", "x-expected-account-id": OWNER },
+        body: JSON.stringify({ batchId: key.split(":")[0], index, size, job: { ...j, description: postingText }, context: {}, laneId: null, applicationId: applicationId || j.existingApplicationId || null }),
+      }));
+      return (await response.json()) as TailorResult;
     },
     async confirm(artifactId) { return acct.artifacts.some(a => a.id === artifactId); },
     ...extra,
@@ -148,6 +131,7 @@ test("a forced failure on job 2 shows an error there and never touches job 1", a
   assert.match(failed.error!, /used no AI action/);
   assert.equal(failed.actionUsed, false);
   const job1Artifact = final.jobs[0].artifactId;
+  assert.equal(acct.claimRows.get(batchJobKey(BATCH, 1))?.status, "failed", "the failed key is released for a retry");
   // Job 1 was saved before job 2 failed and every later update leaves it as it was.
   const job1States = deps.updates.map(s => s.jobs[0]).filter(j => j.phase === "saved");
   assert.ok(job1States.every(j => j.artifactId === job1Artifact));
@@ -188,8 +172,10 @@ test("a made-but-unsaved resume retries the save only, with no new AI action", a
   assert.equal(first.jobs[0].phase, "failed");
   assert.equal(first.jobs[0].code, "save_failed");
   assert.equal(first.jobs[0].actionUsed, true);
-  assert.ok(first.jobs[0].pendingSave);
   assert.equal(acct.actions, 1);
+  // The finished result waits with the server-side claim, not in the browser state.
+  assert.equal(acct.claimRows.get(batchJobKey(BATCH, 0))?.status, "generated");
+  assert.doesNotMatch(JSON.stringify(first), /formatVersion/);
   const second = await runBatch(first, [0], clientDeps(acct));
   assert.equal(second.jobs[0].phase, "saved");
   assert.equal(acct.actions, 1, "the retry did not run the generator");
@@ -236,8 +222,9 @@ test("the posting is read once per job, and only when the board text is thin", a
 
 test("a picked saved job uses its own application row", async () => {
   const acct = account();
-  const appId = await acct.deps.saveApplication({ title: "Line Cook", company: "Corner Diner", description: "", id: "saved-1" });
-  const final = await runBatch(newBatch([job(1, { selectKey: "saved-1", id: "saved-1", existingApplicationId: appId! })]), [0], clientDeps(acct));
+  acct.applications.push({ id: "00000000-0000-4000-8000-00000000aaaa", title: "Line Cook", company: "Corner Diner", source_id: "saved-1", status: "saved" });
+  const appId = acct.applications[0].id;
+  const final = await runBatch(newBatch([job(1, { selectKey: "saved-1", id: "saved-1", existingApplicationId: appId })]), [0], clientDeps(acct));
   assert.equal(final.jobs[0].phase, "saved");
   assert.equal(final.jobs[0].applicationId, appId);
   assert.equal(acct.applications.length, 1);
@@ -256,4 +243,38 @@ test("generator refusals map to per-job codes", () => {
   assert.equal(generatorFailure({ ok: false, status: 429, body: { code: "tool_allowance_used", error: "x" } }).code, "tool_allowance_used");
   assert.equal(generatorFailure({ ok: false, status: 403, body: { code: "progression_locked", error: "x" } }).code, "progression_locked");
   assert.equal(generatorFailure({ ok: false, status: 500, body: {} }).code, "tailor_failed");
+});
+
+test("an application already past saved keeps its resume; the new one goes to the Library", async () => {
+  const acct = account();
+  acct.applications.push({ id: "00000000-0000-4000-8000-00000000bbbb", title: "Warehouse Associate 1", company: "Example Co 1", source_id: "job-1", status: "interviewing" });
+  const final = await runBatch(newBatch([job(1)]), [0], clientDeps(acct));
+  assert.equal(final.jobs[0].phase, "saved");
+  assert.equal(final.jobs[0].linked, false);
+  assert.equal(final.jobs[0].applicationStatus, "interviewing");
+  const resume = acct.artifacts.find(a => a.type === "resume")!;
+  assert.equal(resume.targetContext.applicationId, undefined, "no applicationId, so the artifacts route re-points nothing");
+  const letter = acct.artifacts.find(a => a.type === "cover_letter")!;
+  assert.equal(letter.targetContext.applicationId, undefined);
+});
+
+test("flagged lines travel with the saved resume and show in the queue state (DEC-46)", async () => {
+  const acct = account({ flags: ["Ran a crew of 12"] });
+  const final = await runBatch(newBatch([job(1)]), [0], clientDeps(acct));
+  assert.deepEqual(final.jobs[0].truth?.flags, ["Ran a crew of 12"]);
+  const resume = acct.artifacts.find(a => a.type === "resume")!;
+  assert.deepEqual((resume.targetContext.batchTruth as { flags: string[] }).flags, ["Ran a crew of 12"]);
+});
+
+test("sign-out clears every batch key and the hand-offs; a new owner keeps only their own", () => {
+  const data = new Map<string, string>([
+    [BATCH_STORAGE_PREFIX + "a", JSON.stringify({ ownerUid: OWNER })],
+    [BATCH_STORAGE_PREFIX + "b", JSON.stringify({ ownerUid: "someone-else" })],
+    [BATCH_HANDOFF_KEY, "{}"], ["resume_target_job", "{}"], ["unrelated", "x"],
+  ]);
+  const storage = () => ({ get length() { return data.size; }, key: (i: number) => [...data.keys()][i] ?? null, getItem: (k: string) => data.get(k) ?? null, removeItem: (k: string) => { data.delete(k); } });
+  clearTailorBatchStorage(storage(), OWNER);
+  assert.deepEqual([...data.keys()].sort(), [BATCH_STORAGE_PREFIX + "a", BATCH_HANDOFF_KEY, "resume_target_job", "unrelated"].sort());
+  clearTailorBatchStorage(storage());
+  assert.deepEqual([...data.keys()], ["unrelated"]);
 });

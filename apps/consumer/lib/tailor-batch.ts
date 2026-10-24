@@ -13,10 +13,12 @@
  * Idempotency: every job carries the key `${batchId}:${index}`. The server
  * returns the saved resume for a key it has already finished instead of running
  * the generator again, and this coordinator never re-runs a job it holds as
- * saved. A failed generation is not counted (failed operations are excluded
- * from the allowance and the per-tool count is refunded), so retrying it is
- * not a second charge. A generation that succeeded but did not save keeps its
- * result here and retries the save only.
+ * saved. The server claims each key before the generator runs (migration
+ * 093), so a second tab is refused instead of charged. A failed generation is
+ * not counted (failed operations are excluded from the allowance and the
+ * per-tool count is refunded), so retrying it is not a second charge. A
+ * generation that succeeded but did not save is held by the server (encrypted
+ * with the claim), never in the browser, and the retry saves it only.
  *
  * Stale guard: results are written only while `isCurrent()` holds for this
  * run, and a batch never writes into an open document. Each job lands as its
@@ -62,9 +64,12 @@ export interface BatchJobState {
   artifactId?: string;
   /** True once the server reports the generator ran and was admitted for this job. */
   actionUsed: boolean;
-  /** A finished generation whose save did not land: retried as save-only, no new AI action. */
-  pendingSave?: { resume: unknown; coverLetter: string | null };
   truth?: BatchTruth | null;
+  /** False when the job's application was already past "saved" and kept its own resume. */
+  linked?: boolean;
+  applicationStatus?: string | null;
+  /** False when the cover letter did not save (the resume did). */
+  letterSaved?: boolean | null;
   code?: string;
   error?: string;
 }
@@ -144,7 +149,7 @@ export function admitBatch(jobsToRun: number, remaining: number | null, blockedR
   if (blockedReason) return { kind: "none", runnable: 0, line: blockedReason };
   const cost = `${plural(n, "job")} = ${plural(n, "AI action")} from your allowance.`;
   if (remaining === null) {
-    return { kind: "all", runnable: n, line: `${cost} Each job gets its own resume. If a daily limit stops one, that job uses nothing and the rest stay saved.` };
+    return { kind: "all", runnable: n, line: `${plural(n, "job")} = ${plural(n, "AI action")}. Each job gets its own resume. If a daily limit stops one, that job uses nothing and the rest stay saved.` };
   }
   const left = Math.max(0, Math.floor(remaining));
   if (left === 0) return { kind: "none", runnable: 0, line: `${cost} You have no AI actions left today. Ask t.ROY through the progress bar for more, or come back after midnight UTC. Your picks stay here.` };
@@ -157,7 +162,8 @@ export function runnableIndexes(state: BatchState): number[] {
   return state.jobs.filter(j => j.phase !== "saved").map(j => j.index);
 }
 
-export const ALLOWANCE_CODES = new Set(["tool_allowance_used", "allowance_used", "progression_locked", "tool_paused", "tier_required"]);
+/** Refusals that would repeat for every later job: the run stops and the rest are not tried. */
+export const ALLOWANCE_CODES = new Set(["tool_allowance_used", "allowance_used", "progression_locked", "tool_paused", "tier_required", "account_changed", "signed_out", "invalid_lane", "not_ready", "impersonation"]);
 
 export interface TailorResult {
   ok: boolean;
@@ -169,13 +175,15 @@ export interface TailorResult {
   actionUsed?: boolean;
   reused?: boolean;
   truth?: BatchTruth | null;
-  pendingSave?: { resume: unknown; coverLetter: string | null };
+  linked?: boolean;
+  applicationStatus?: string | null;
+  letterSaved?: boolean | null;
 }
 
 export interface BatchDeps {
   /** Read the posting once. Returns null to use the text the job already carries. */
   readPosting(job: BatchJob): Promise<{ text: string; source: "fetched" } | null>;
-  tailor(input: { key: string; index: number; size: number; job: BatchJob; postingText: string; pendingSave?: BatchJobState["pendingSave"]; applicationId?: string }): Promise<TailorResult>;
+  tailor(input: { key: string; index: number; size: number; job: BatchJob; postingText: string; applicationId?: string }): Promise<TailorResult>;
   /** Read the saved resume back from the server. */
   confirm(artifactId: string): Promise<boolean>;
   /** False once a newer run, another account or a closed screen owns the batch. */
@@ -225,7 +233,7 @@ export async function runBatch(initial: BatchState, indexes: number[], deps: Bat
     if (!set(index, { phase: "tailoring" })) return state;
     let result: TailorResult;
     try {
-      result = await deps.tailor({ key: current.key, index, size: state.jobs.length, job: current.job, postingText, pendingSave: state.jobs[index].pendingSave, applicationId: state.jobs[index].applicationId });
+      result = await deps.tailor({ key: current.key, index, size: state.jobs.length, job: current.job, postingText, applicationId: state.jobs[index].applicationId });
     } catch {
       result = { ok: false, code: "network", error: "We lost the connection on this job. Nothing else changed. Retry when you are back online." };
     }
@@ -236,7 +244,6 @@ export async function runBatch(initial: BatchState, indexes: number[], deps: Bat
         phase: "failed", actionUsed: used, code: result.code || "tailor_failed",
         error: result.error || "This job did not finish. Your other jobs are safe. Retry this one.",
         applicationId: result.applicationId ?? state.jobs[index].applicationId ?? undefined,
-        pendingSave: result.pendingSave ?? state.jobs[index].pendingSave,
       });
       if (result.code && ALLOWANCE_CODES.has(result.code)) {
         for (const later of order.slice(n + 1)) {
@@ -246,7 +253,7 @@ export async function runBatch(initial: BatchState, indexes: number[], deps: Bat
       }
       continue;
     }
-    if (!set(index, { phase: "checking", actionUsed: used, applicationId: result.applicationId ?? undefined, artifactId: result.artifactId, truth: result.truth ?? null, pendingSave: undefined })) return state;
+    if (!set(index, { phase: "checking", actionUsed: used, applicationId: result.applicationId ?? undefined, artifactId: result.artifactId, truth: result.truth ?? null, linked: result.linked ?? true, applicationStatus: result.applicationStatus ?? null, letterSaved: result.letterSaved ?? null })) return state;
     let confirmed = false;
     try { confirmed = await deps.confirm(result.artifactId); } catch { confirmed = false; }
     if (!deps.isCurrent()) return state;
@@ -268,10 +275,31 @@ export const PHASE_LABEL: Record<BatchPhase, string> = {
   reading: "Reading the posting",
   tailoring: "Tailoring and checking each line against your facts",
   checking: "Making sure it saved",
-  saved: "Saved. Prepared, not applied",
+  saved: "Saved",
   failed: "Did not finish",
   skipped: "Not run",
 };
 
 export const BATCH_STORAGE_PREFIX = "tailor_batch:v1:";
 export const BATCH_HANDOFF_KEY = "resume_target_batch";
+
+/** Everything this feature keeps in the browser tab. Cleared on sign-out (lib/confirmed-sign-out.ts). */
+export function clearTailorBatchStorage(storage: Pick<Storage, "length" | "key" | "removeItem" | "getItem"> | null = typeof sessionStorage === "undefined" ? null : sessionStorage, keepOwner?: string | null) {
+  if (!storage) return;
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < storage.length; i++) {
+      const key = storage.key(i);
+      if (!key) continue;
+      if (key === BATCH_HANDOFF_KEY || key === "resume_target_job") { if (!keepOwner) doomed.push(key); continue; }
+      if (!key.startsWith(BATCH_STORAGE_PREFIX)) continue;
+      if (!keepOwner) { doomed.push(key); continue; }
+      try {
+        const raw = storage.getItem(key);
+        const owner = raw ? (JSON.parse(raw) as { ownerUid?: unknown }).ownerUid : null;
+        if (owner !== keepOwner) doomed.push(key);
+      } catch { doomed.push(key); }
+    }
+    for (const key of doomed) storage.removeItem(key);
+  } catch {}
+}
