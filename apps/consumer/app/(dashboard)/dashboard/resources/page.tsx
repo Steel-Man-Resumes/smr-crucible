@@ -17,6 +17,7 @@ import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
+import { CrisisLine } from "@/components/CrisisLine";
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { SupportSearch } from "@/components/lanes/SupportSearch";
 import { GhostGuide } from "@crucible/consumer-ui";
@@ -146,6 +147,8 @@ function SecondChanceBoardPage() {
           Find help for what is in your way today. You choose what to share.
         </p>
       </header>
+
+      <CrisisLine />
 
       <SupportSearch initialLocation={location} barriers={barriers} />
 
