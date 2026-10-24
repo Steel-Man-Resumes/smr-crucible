@@ -506,7 +506,10 @@ function buildFullUserSection(ctx: UserFullContext): string {
     lines.push(`\n### DISCLOSURE PLAN`);
     if (ctx.disclosurePlan.targetJob) lines.push(`Plan built for: ${ctx.disclosurePlan.targetJob}`);
     if (ctx.disclosurePlan.timingAdvice) lines.push(`Timing advice: ${ctx.disclosurePlan.timingAdvice}`);
-    if (ctx.disclosurePlan.scriptExcerpt) lines.push(`Script opening: "${ctx.disclosurePlan.scriptExcerpt.slice(0, 200)}..."`);
+    if (ctx.disclosurePlan.scriptExcerpt) {
+      const older = ctx.disclosurePlan.scriptSavedAt && ctx.disclosurePlan.completedAt && ctx.disclosurePlan.scriptSavedAt !== ctx.disclosurePlan.completedAt;
+      lines.push(`Script opening${older ? ` (from an earlier plan saved ${ctx.disclosurePlan.scriptSavedAt!.slice(0, 10)}; the newest plan's record words were not saved)` : ""}: "${ctx.disclosurePlan.scriptExcerpt.slice(0, 200)}..."`);
+    }
     lines.push(`Status: plan exists. Has the user practiced out loud? That's the next question.`);
   } else if (ctx.journey.onboardingState === "full_access") {
     lines.push(`\n### DISCLOSURE PLAN\nNot built yet. This is the next important step.`);

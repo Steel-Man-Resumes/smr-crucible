@@ -41,6 +41,7 @@ export interface UserFullContext {
     targetJob?: string | null;
     scriptExcerpt?: string | null;
     timingAdvice?: string | null;
+    scriptSavedAt?: string | null;
     completedAt?: string;
   };
   applications: Array<{

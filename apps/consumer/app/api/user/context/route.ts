@@ -9,6 +9,7 @@
  */
 
 import { readJobFit } from "@/lib/job-fit";
+import { disclosurePlanContext, LATEST_DISCLOSURE_PLAN_SQL, LATEST_DISCLOSURE_SCRIPT_SQL, type DisclosureRow } from "@/lib/disclosure-context";
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { getUserProfile, queryAsUser, getOneAsUser, RECENT_RESUMES_FOR_CONTEXT_SQL } from "@crucible/core";
@@ -50,18 +51,13 @@ export async function GET() {
     [userId]
   );
 
-  // Most recent disclosure plan
-  const disclosureRow = await getOneAsUser<{
-    target_context: Record<string, any>;
-    content: Record<string, any>;
-    created_at: string;
-  }>(userId, 
-    `SELECT target_context, content, created_at
-     FROM refinery_artifact
-     WHERE user_id = $1 AND artifact_type = 'disclosure_plan'
-     ORDER BY created_at DESC LIMIT 1`,
-    [userId]
-  );
+  // The disclosure plan: newest record conversation plan, with the script
+  // from the newest one that holds one (lib/disclosure-context.ts). A hurdle
+  // plan without the record hurdle is a hurdle_plan and never read here.
+  const [disclosureRow, disclosureScriptRow] = await Promise.all([
+    getOneAsUser<DisclosureRow>(userId, LATEST_DISCLOSURE_PLAN_SQL, [userId]),
+    getOneAsUser<DisclosureRow>(userId, LATEST_DISCLOSURE_SCRIPT_SQL, [userId]),
+  ]);
 
   // Onboarding state (mirrors useOnboarding logic)
   const hasProfile = !!(profile.name?.trim());
@@ -116,18 +112,7 @@ export async function GET() {
       summary: r.content?.summary ?? null,
       createdAt: r.created_at,
     })),
-    disclosurePlan: disclosureRow
-      ? {
-          exists: true,
-          targetJob: disclosureRow.target_context?.targetJob ?? null,
-          scriptExcerpt:
-            typeof disclosureRow.content?.script === "string"
-              ? (disclosureRow.content.script as string).slice(0, 500)
-              : null,
-          timingAdvice: disclosureRow.content?.timing_advice ?? null,
-          completedAt: disclosureRow.created_at,
-        }
-      : { exists: false },
+    disclosurePlan: disclosurePlanContext(disclosureRow, disclosureScriptRow),
     applications: profile.savedJobs.slice(0, 10).map((j) => ({
       id: j.id,
       company: j.company,
