@@ -10,7 +10,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { buildFinishView, changeListEntry, cutTerm, finishedLineWhy, CUT_BY_YOU_NOTE, CUT_EARLIER_NOTE, type DefendAnswer } from "../finish-gate";
+import { buildFinishView, changeListEntry, cutTerm, finishedLineWhy, TITLE_CHECK_WARNING, CUT_BY_YOU_NOTE, CUT_EARLIER_NOTE, type DefendAnswer } from "../finish-gate";
 import { editInput, inputFromRevision, type RevisionInput } from "../revision-status";
 import { finishedLinesOf, personEvidenceFrom } from "../person-evidence";
 import { NO_PERSON_EVIDENCE, type PersonEvidence } from "../person-evidence-shape";
@@ -354,4 +354,13 @@ test("(7) and N2 render: the notice shows under the buttons and names only the b
   // While t.ROY is still drafting, no notice.
   assert.ok(!renderToStaticMarkup(React.createElement(IdleActions, { target: "resume", answerable: true, suggesting: true, notice: "x", onDraft() {}, onAnswer() {}, onChange() {}, onCut() {} })).includes("suggest-fix-notice"));
   for (const n of [yes.notice, no.notice]) assert.doesNotMatch(n, /[\u2014\u2013]|--/);
+});
+
+test("R2-N1: a title card on a line he finished elsewhere keeps its background-check warning", () => {
+  const header = "Production Worker | Digne Lumber & Stone, June 2015 - March 2019";
+  const finished = [{ name: "your Forge resume", lines: ["PROFESSIONAL EXPERIENCE", header, "- Operated forklift and hoisting equipment."] }];
+  const card = view(TAILORED, { finishedLines: finished }).groups.find((g) => g.title && g.line === header);
+  assert.ok(card, "still asked: checked once is not evidence");
+  const why = card!.items.find((i) => i.kind === "title_unsaid")!.why;
+  assert.equal(why, `${finishedLineWhy("your Forge resume")} ${TITLE_CHECK_WARNING}`);
 });

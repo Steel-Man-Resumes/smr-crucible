@@ -26,3 +26,10 @@ test("B3: the person's own handing out of work clears it: plain, adverb, duty bu
     "I manage day-to-day production operations, supervise the production employees, and assign the daily work.",
   ]) assert.equal(clears(s), true, s);
 });
+
+test("R2-S1: 'assigned' as an adjective is not the person handing out work", () => {
+  assert.equal(clears("I clocked in and assigned tasks were waiting."), false);
+  assert.equal(clears("I came in early and assigned jobs piled up on the board."), false);
+  assert.equal(clears("I assigned the daily work."), true);
+  assert.equal(clears("I manage the floor, supervise the crew, and assigned the daily work."), true);
+});

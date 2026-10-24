@@ -363,6 +363,9 @@ function phraseIn(text: string, phrase: string): boolean {
   return !!n && ` ${normalizeForMatch(text)} `.includes(` ${n} `);
 }
 
+/** What a title card says about a title that does not match the person's paperwork (core titleFindings). */
+export const TITLE_CHECK_WARNING = "A title that doesn't match your paperwork comes up at the background check.";
+
 /** Boss ruling S1: a finished line is checked once. Said instead of "that isn't in anything you told us". */
 export function finishedLineWhy(resumeName: string): string {
   return `You finished this line on ${resumeName}. Confirm it stands here.`;
@@ -380,7 +383,9 @@ export function unconfirmedDetailLine(detail: string): string {
 function finishedOn(item: { line: string; target?: string }, resumeText: string, blocks: ReadonlyArray<{ name: string; lines: string[] }>): string | undefined {
   const k = squash(stripBullet(item.line));
   if (!k) return undefined;
-  const pageJob = item.target === "resume" ? jobHeaderFor(resumeText, item.line) : undefined;
+  // A job header is its own job; any other line sits under the header above it.
+  const isHeader = jobsIn(resumeText).some((j) => j.lines.some((h) => squash(stripBullet(h)) === k));
+  const pageJob = item.target !== "resume" ? undefined : isHeader ? stripBullet(item.line) : jobHeaderFor(resumeText, item.line);
   for (const b of blocks) {
     if (item.target === "skill" || item.target === "skillset") {
       if (b.lines.some((l) => skillTermsOf(l).some((t) => squash(t) === k))) return b.name;
@@ -389,7 +394,7 @@ function finishedOn(item: { line: string; target?: string }, resumeText: string,
     const at = b.lines.findIndex((l) => squash(stripBullet(l)) === k);
     if (at < 0) continue;
     if (!pageJob) return b.name;
-    const theirs = jobsIn(b.lines.join("\n")).find((j) => j.body.some((x) => squash(stripBullet(x)) === k));
+    const theirs = jobsIn(b.lines.join("\n")).find((j) => [...j.lines, ...j.body].some((x) => squash(stripBullet(x)) === k));
     if (theirs && employersMatch(readJobHeader(pageJob).employer, theirs.employer)) return b.name;
   }
   return undefined;
@@ -2463,7 +2468,8 @@ export function buildFinishView(input: {
   for (const i of items) {
     if (!/in anything you told us|to anything you told us/.test(i.why)) continue;
     const done = finishedOn(i, input.resumeText, input.finishedLines ?? []);
-    if (done) i.why = finishedLineWhy(done);
+    // Round 2 (R2-N1): a title card keeps its background-check warning beside the finished-line copy.
+    if (done) i.why = i.kind === "title_unsaid" ? `${finishedLineWhy(done)} ${TITLE_CHECK_WARNING}` : finishedLineWhy(done);
   }
   // Review Q6: a skill a not-yet-confirmed Master Draft detail would settle points at that detail.
   for (const i of items) {

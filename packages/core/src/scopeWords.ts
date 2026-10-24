@@ -1018,6 +1018,10 @@ export function skillScopeNotTheirs(term: string, sourceText: string): ScopeHit[
     straightQuotes(text).split(/[.;!?]+/).some((sent) => {
       const m = sent.match(ASSIGN_WORK_RE);
       const before = sent.slice(0, m?.index ?? 0);
+      // Round 2 (R2-S1): "assigned" as an adjective ("I clocked in and assigned tasks were waiting"): the work
+      // is the subject of its own verb, so nobody handed it out here.
+      const after = m ? sent.slice((m.index ?? 0) + m[0].length) : "";
+      if (m && OWN_VERB_AFTER_RE.test(after)) return false;
       return !!m && personIsSubject(before) && !NEGATION_BEFORE.test(before) && !PASSIVE_BEFORE.test(before) && !SHARED_BEFORE.test(before);
     })
   );
@@ -1042,6 +1046,8 @@ function personIsSubject(before: string): boolean {
     !/\b(?:my|the|our|his|her|their|a|an)\s+(?:[a-z-]+\s+)?(?:supervisor|boss|lead|manager|foreman|owner|director|coordinator|dispatcher)s?\b/i.test(rest) &&
     !/\b(?:would|will|could|should|might|wanted|tried|hoped|planned|asked|told)\b/i.test(rest);
 }
+// The work named after "assigned" takes its own verb: "assigned tasks were waiting", "assigned jobs piled up".
+const OWN_VERB_AFTER_RE = /^\s+(?:were|was|are|is|got|get|gets|piled|pile|sat|sit|sits|waited|wait|waits|waiting|stood|came|come|kept|remained|had|lay|lie|sitting|stayed|went|ran|needed|showed)\b/i;
 // "assign the daily work", "assigned tasks to the crew", "assigning jobs": handing out work, done by the person.
 const ASSIGN_WORK_RE = /\bassign(?:ed|s|ing)?\s+(?:(?:the|our|my|their|all|each|every)\s+)?(?:[a-z-]+\s+){0,2}(?:work|tasks?|jobs?|duties|assignments?|orders?)\b/i;
 
