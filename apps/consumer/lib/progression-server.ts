@@ -5,7 +5,8 @@ import { buildJourneySnapshot, getOneAsUser, queryAsUser, runAsUser, getUserDail
 import { encryptString, decryptString, type EncryptedPayload } from '@crucible/core/src/crypto';
 import { loadSelectedWork, readWorkSelection, type WorkSelection } from './assistant-work-context';
 import { PROGRESSION_STEPS, STEP_COPY, baseAllowance, isProgressionStep, type ProgressionPolicy, type ProgressionStep } from './progression-policy';
-import { TOUR_REWARD_KEY, tourRewardOutcome, type TourReward, type TourRewardRow } from './tour/reward';
+import { TOUR_REWARD_KEY, type TourReward } from './tour/reward';
+import { grantTourRewardWith } from './tour/tour-sql';
 
 const DAY = "date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
 export async function readProgressionPolicy(userId:string):Promise<ProgressionPolicy> {
@@ -151,28 +152,9 @@ export async function grantBonus(userId:string,key:string,step:ProgressionStep,a
  if(rows[1]?.length)return true;
  return !!await getOneAsUser(actorId,'SELECT id FROM progression_grant WHERE user_id=$1 AND (request_key=$3 OR ($3::text IS NULL AND grant_key=$2)) AND expires_at>now()',[userId,key,requestKey]);
 }
-/**
- * One-time tour bonus (grant key 'tour:complete'), through the same bonus path,
- * lock and caps as every other bonus. Account bound: the row belongs to the
- * signed-in user under RLS. Idempotent: the earlier grant is read under the
- * lock before the conditional insert, so a second completion grants nothing
- * and is told so; a retry of the same run reads as the same grant. Unlike the
- * other bonuses (next UTC midnight), the tour grant lasts 24 hours from now, so
- * finishing late in the day is not a reward that vanishes in minutes.
- */
+/** One-time tour bonus: the SQL lives in lib/tour/tour-sql.ts so a pglite test runs it for real. */
 export async function grantTourReward(userId:string,runId:string):Promise<TourReward>{
- const p=await readProgressionPolicy(userId);
- const rows=await runAsUser<unknown[][]>(userId,sql=>[
-  sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 874))`,
-  sql`SELECT calls,created_at,expires_at,request_key FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${TOUR_REWARD_KEY}`,
-  sql`INSERT INTO progression_grant(user_id,grant_key,request_key,kind,step_id,calls,label,expires_at)
-   SELECT ${userId}::uuid,${TOUR_REWARD_KEY},${runId},'bonus','foundation',${p.bonus_calls},'Tour finished: extra AI actions',now()+interval '24 hours'
-   WHERE NOT EXISTS(SELECT 1 FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${TOUR_REWARD_KEY})
-    AND COALESCE((SELECT sum(calls) FROM progression_grant WHERE user_id=${userId}::uuid AND kind='bonus' AND created_at>=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)+${p.bonus_calls}<=${p.bonus_daily_cap}
-    AND COALESCE((SELECT sum(calls) FROM progression_grant WHERE user_id=${userId}::uuid AND kind='bonus' AND created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)+${p.bonus_calls}<=${p.bonus_monthly_cap}
-   ON CONFLICT DO NOTHING RETURNING calls,created_at,expires_at,request_key`,
- ]);
- return tourRewardOutcome({prior:(rows[1]?.[0] as TourRewardRow|undefined)??null,inserted:(rows[2]?.[0] as TourRewardRow|undefined)??null,runId});
+ return grantTourRewardWith({batchAsUser:(u,build)=>runAsUser<unknown[][]>(u,build as never)},userId,runId);
 }
 /** Read only: whether this account already has the tour bonus, so the ending never promises one twice. */
 export async function tourRewardClaimed(userId:string):Promise<string|null>{

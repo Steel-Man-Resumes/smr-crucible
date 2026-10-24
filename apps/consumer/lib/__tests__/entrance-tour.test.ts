@@ -166,6 +166,25 @@ test('caption sits beside a left-rail target on desktop, avoids it elsewhere', (
   assert.ok(phone.y + phone.h < 700);
 });
 
+test('the act-two card stays inside the viewport on every stop at 360x780, 390x844 and 1366x768', () => {
+  // Targets where the real menu puts each stop: a left rail on a laptop (the meter
+  // sits low), a drawer on a phone. Card heights cover the measured range of the
+  // card (title, body, progress, controls, motion row) and more.
+  const cases: [number, number, { x: number; y: number; w: number; h: number }[]][] = [
+    [1366, 768, [{ x: 8, y: 70, w: 240, h: 40 }, { x: 8, y: 115, w: 240, h: 240 }, { x: 8, y: 360, w: 240, h: 40 }, { x: 8, y: 410, w: 240, h: 40 }, { x: 8, y: 640, w: 240, h: 70 }]],
+    [390, 844, [{ x: 8, y: 20, w: 290, h: 40 }, { x: 8, y: 65, w: 290, h: 240 }, { x: 8, y: 310, w: 290, h: 40 }, { x: 8, y: 360, w: 290, h: 40 }, { x: 8, y: 470, w: 290, h: 70 }]],
+    [360, 780, [{ x: 8, y: 20, w: 300, h: 40 }, { x: 8, y: 65, w: 300, h: 240 }, { x: 8, y: 310, w: 300, h: 40 }, { x: 8, y: 360, w: 300, h: 40 }, { x: 8, y: 470, w: 300, h: 70 }]],
+  ];
+  for (const [vw, vh, targets] of cases) for (const t of targets) for (const h of [200, 260, 300, 340]) {
+    const box = captionPlacement(t, vw, vh, { w: 360, h });
+    assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.w <= vw && box.y + box.h <= vh, `${vw}x${vh} target y ${t.y}, card ${h}px: ${JSON.stringify(box)}`);
+  }
+  // The card is measured where it mounts (a callback ref), not from a ref read before it exists.
+  const player = read('components/tour/TourPlayer.tsx');
+  assert.match(player, /ref=\{setCardEl\}/);
+  assert.match(player, /useLayoutEffect\(\(\) => \{\n    if \(!cardEl\) return;/);
+});
+
 test('particle path starts at the mark and ends at the target', () => {
   assert.match(particlePath({ x: 10, y: 20 }, { x: 300, y: 400 }), /^M 10 20 Q [\d.]+ [-\d.]+ 300 400$/);
 });
@@ -176,21 +195,21 @@ const RUN = '11111111-1111-4111-8111-111111111111';
 const RUN2 = '22222222-2222-4222-8222-222222222222';
 function memoryStore() {
   let now = 1_000_000;
-  const place: { runId?: string; sequence: number; inProgress: boolean; startedAt?: number } = { sequence: 0, inProgress: false };
+  const place: { runId?: string; sequence: number; inProgress: boolean; startedAt?: number; completedAt?: number } = { sequence: 0, inProgress: false };
   const grants: { runId: string; at: number }[] = [];
   const calls = { grant: 0 };
   const store: TourWriteStore = {
     async start(_u, runId, previous) {
       if (place.runId === runId) return 'same';
       if ((place.runId ?? null) !== previous) return 'conflict';
-      Object.assign(place, { runId, sequence: 0, inProgress: true, startedAt: now });
+      Object.assign(place, { runId, sequence: 0, inProgress: true, startedAt: now, completedAt: undefined });
       return 'started';
     },
     async advance(_u, runId, sequence, _stop, complete) {
-      if (place.runId === runId && place.inProgress && place.sequence < sequence) { place.sequence = sequence; if (complete) place.inProgress = false; return 'saved'; }
+      if (place.runId === runId && place.inProgress && place.sequence < sequence) { place.sequence = sequence; if (complete) { place.inProgress = false; place.completedAt = now; } return 'saved'; }
       return place.runId === runId && !place.inProgress ? 'already-complete' : 'conflict';
     },
-    async watchedMs(_u, runId) { return place.runId === runId && place.startedAt != null ? now - place.startedAt : null; },
+    async watchedMs(_u, runId) { return place.runId === runId && place.startedAt != null ? (place.completedAt ?? now) - place.startedAt : null; },
     async grant(_u, runId): Promise<TourReward> {
       calls.grant++;
       const prior = grants[0];
@@ -229,6 +248,18 @@ test('handler: a run open a minute or more gets the bonus once; a retry is the s
   const again = await write(m.store, { action: 'complete', runId: RUN2, sequence: 1, stop: TOUR_STOP_COUNT - 1 });
   assert.equal((again.json.reward as TourReward).status, 'already');
   assert.equal((again.json.reward as TourReward).calls, 0);
+});
+
+test('handler: a run finished early stays early, even if complete is posted again later', async () => {
+  const m = memoryStore();
+  await write(m.store, { action: 'start', previousRunId: null });
+  m.tick(5_000);
+  assert.equal(((await write(m.store, { action: 'complete', sequence: 1, stop: TOUR_STOP_COUNT - 1 })).json.reward as TourReward).status, 'early');
+  m.tick(TOUR_MIN_WATCH_MS * 2);
+  const again = await write(m.store, { action: 'complete', sequence: 2, stop: TOUR_STOP_COUNT - 1 });
+  assert.equal(again.status, 200);
+  assert.equal((again.json.reward as TourReward).status, 'early');
+  assert.equal(m.calls.grant, 0);
 });
 
 test('handler: 59 seconds is not a minute', async () => {
@@ -273,12 +304,12 @@ test('reward outcomes and client reading', () => {
 });
 
 test('the tour grant lasts 24 hours from now, through the shared bonus lock and caps', () => {
-  const server = read('lib/progression-server.ts');
-  const fn = server.slice(server.indexOf('export async function grantTourReward'), server.indexOf('export async function tourRewardClaimed'));
+  // Source shape only; tour-reward-pglite.test.ts runs this SQL for real.
+  const fn = read('lib/tour/tour-sql.ts');
   assert.match(fn, /now\(\)\+interval '24 hours'/);
   assert.match(fn, /pg_advisory_xact_lock\(hashtextextended\(\$\{userId\}, 874\)\)/);
   assert.match(fn, /bonus_daily_cap/); assert.match(fn, /bonus_monthly_cap/);
-  const store = read('lib/tour/tour-store.ts');
+  const store = fn;
   assert.match(store, /jsonb_build_object\('startedAt', now\(\)\)/, 'startedAt is set by the database clock at start');
   assert.match(store, /'startedAt', preferences->'guidedTour'->'startedAt'/, 'progress keeps startedAt');
 });
