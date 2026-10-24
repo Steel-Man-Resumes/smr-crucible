@@ -48,7 +48,7 @@ export type BatchJobResponse =
 export interface GenerateOutcome { ok: boolean; status: number; body: any }
 
 export type ClaimResult =
-  | { kind: "claimed"; attempts: number }
+  | { kind: "claimed"; attempts: number; applicationId?: string | null }
   | { kind: "pending"; pending: PendingResult; applicationId: string | null }
   | { kind: "saved"; artifactId: string; applicationId: string | null }
   | { kind: "busy" };
@@ -127,7 +127,8 @@ export async function runBatchJob(input: BatchJobRequest, deps: BatchJobDeps): P
   if (claim.kind === "claimed" && claim.attempts > 1) {
     const landed = await deps.findSaved(key).catch(() => null);
     if (landed) {
-      const appId = input.applicationId ?? null;
+      // The claim row's record wins; the browser's copy is only a fallback.
+      const appId = claim.applicationId ?? input.applicationId ?? null;
       await deps.markSaved(key, landed, appId).catch(() => {});
       return { ok: true, key, artifactId: landed, applicationId: appId, actionUsed: false, reused: true, truth: null, tailoringNotes: [], linked: true, applicationStatus: null, letterSaved: null };
     }
@@ -198,7 +199,7 @@ export async function runBatchJob(input: BatchJobRequest, deps: BatchJobDeps): P
     let stored = false;
     try { await deps.markGenerated(key, result, applicationId); stored = true; } catch { stored = false; }
     return fail("save_failed", 503, stored
-      ? "The resume was made but did not save. Retry saves it and uses no new AI action."
+      ? "The resume was made but did not save. Retry saves it and uses no new AI action. We keep it encrypted for up to 7 days so a retry can save it, then delete it."
       : "The resume was made but did not save, and it could not be held for a retry. Wait a few minutes, then retry this one.",
       { applicationId, actionUsed, keepClaim: true });
   }

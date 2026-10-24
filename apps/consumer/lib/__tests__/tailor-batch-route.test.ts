@@ -166,3 +166,41 @@ test("GET reports a non-resume lane up front", async () => {
   assert.equal(pre.remaining, 0);
   assert.match(pre.blockedReason, /not resumes/);
 });
+
+test("R3: an unexpected throw after the claim gives the claim back, so a retry is not told another tab has it", async () => {
+  const acct = makeAccount(A);
+  let calls = 0;
+  const route = createTailorBatchRoute({
+    async session() { return { userId: A, impersonating: false, realUserId: A }; },
+    sameOrigin: () => true,
+    async laneKind() { return "ok"; },
+    claims: () => acct.claims,
+    async applicationStatus() { return null; },
+    inner: acct.inner,
+    async allowance() { return { remaining: 3, blockedReason: null, locked: false }; },
+    // The first read starts the request clock; the next one (inside the job) blows up.
+    now: () => { if (++calls > 1 && calls < 3) throw new Error("boom"); return acct.counters.clock; },
+  });
+  const crashed = await route.POST(post(jobBody()));
+  assert.equal(crashed.status, 503);
+  assert.equal((await crashed.json()).code, "unavailable");
+  assert.equal(acct.claimRows.get(`${BATCH}:0`)?.status, "failed", "released, not left running");
+  const retry = await (await route.POST(post(jobBody()))).json();
+  assert.equal(retry.ok, true, "the retry runs instead of answering in_progress");
+  assert.equal(acct.counters.generatorCalls, 1);
+});
+
+test("R4: recovery after a killed run records the claim row's application, not the browser's", async () => {
+  const { acct, route } = setup();
+  const markSaved = acct.claims.markSaved;
+  acct.claims.markSaved = async () => { throw new Error("killed"); };
+  await route.POST(post(jobBody()));
+  const row = acct.claimRows.get(`${BATCH}:0`)!;
+  row.applicationId = acct.applications[0].id; // what the server recorded for this key
+  acct.claims.markSaved = markSaved;
+  acct.counters.clock += 7 * 60_000;
+  const retry = await (await route.POST(post(jobBody(0, { applicationId: null })))).json();
+  assert.equal(retry.reused, true);
+  assert.equal(acct.claimRows.get(`${BATCH}:0`)?.applicationId, acct.applications[0].id);
+  assert.equal(retry.applicationId, acct.applications[0].id);
+});

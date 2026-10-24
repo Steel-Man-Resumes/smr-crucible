@@ -62,7 +62,7 @@ function claimStore(userId: string): ClaimStore {
           try { return { kind: "pending", pending: decryptJSON<PendingResult>(row.pending_encrypted, aad(key)), applicationId: row.application_id }; }
           catch { /* An unreadable result is dropped; the job runs again. */ }
         }
-        return { kind: "claimed", attempts: row.attempts };
+        return { kind: "claimed", attempts: row.attempts, applicationId: row.application_id };
       }
       const held = await getOneAsUser<{ status: string; artifact_id: string | null; application_id: string | null }>(userId,
         "SELECT status, artifact_id, application_id FROM tailor_batch_claim WHERE user_id = $1 AND batch_key = $2", [userId, key]);

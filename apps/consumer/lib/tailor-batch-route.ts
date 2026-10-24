@@ -108,14 +108,22 @@ export function createTailorBatchRoute(deps: TailorBatchRouteDeps) {
     for (const key of TAILOR_BATCH_CONTEXT_KEYS) if (input.context[key] !== undefined) context[key] = input.context[key];
     input.context = context;
     const key = `${input.batchId}:${input.index}`;
+    let heldKey: string | null = null;
+    let claimStore: ClaimStore | null = null;
 
     try {
       const lane = await deps.laneKind(userId, input.laneId);
       if (lane !== "ok") return json({ ok: false, key, code: "invalid_lane", error: LANE_LINE, actionUsed: false }, 400);
 
       const claims = deps.claims(userId);
+      claimStore = claims;
       const jobDeps: BatchJobDeps = {
-        claim: k => claims.claim(k),
+        async claim(k) {
+          const result = await claims.claim(k);
+          // Taken by THIS request: an unexpected throw later must give it back.
+          if (result.kind === "claimed" || result.kind === "pending") heldKey = k;
+          return result;
+        },
         release: k => claims.release(k),
         markGenerated: (k, p, a) => claims.markGenerated(k, p, a),
         markSaved: (k, a, app) => claims.markSaved(k, a, app),
@@ -162,6 +170,8 @@ export function createTailorBatchRoute(deps: TailorBatchRouteDeps) {
       const result = await runBatchJob(input, jobDeps);
       return json(result, result.ok ? 200 : result.status);
     } catch (error) {
+      // Never leave "running in another tab" behind for a request that crashed.
+      if (heldKey && claimStore) await claimStore.release(heldKey).catch(() => {});
       if (isNotReady(error)) return json({ ok: false, key, code: "not_ready", error: NOT_READY_LINE, actionUsed: false }, 503);
       console.error("TAILOR_BATCH_JOB_FAILED", (error as Error)?.name || "error");
       return json({ ok: false, key, code: "unavailable", error: "This job could not run right now. Your other jobs are safe. Retry this one.", actionUsed: false }, 503);

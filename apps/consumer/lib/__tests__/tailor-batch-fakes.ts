@@ -39,7 +39,7 @@ export function makeAccount(userId = "00000000-0000-4000-8000-0000000000a1", opt
       if (takeover) {
         Object.assign(row, { status: "running", attempts: Math.min(row.attempts + 1, 50), claimedAt: counters.clock });
         if (row.pending) return { kind: "pending", pending: row.pending, applicationId: row.applicationId };
-        return { kind: "claimed", attempts: row.attempts };
+        return { kind: "claimed", attempts: row.attempts, applicationId: row.applicationId };
       }
       if (row.status === "saved" && row.artifactId) return { kind: "saved", artifactId: row.artifactId, applicationId: row.applicationId };
       return { kind: "busy" };
