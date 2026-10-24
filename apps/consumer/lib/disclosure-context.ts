@@ -11,6 +11,11 @@
  * existence, job and date come from the newest disclosure_plan, and the
  * script and timing come from the newest one that actually holds a script.
  * A newer plan without stored words never hides the person's own saved words.
+ *
+ * Consent (boss ruling, fix round 1): saved record words (script, timing)
+ * leave this function only while the person's record_planner consent (095)
+ * is current, the same rule the planner's AI route uses. Without it the plan
+ * still shows as existing, with no words and wordsWithheld true.
  */
 
 export interface DisclosureRow {
@@ -35,8 +40,10 @@ export interface DisclosurePlanContext {
   targetJob?: string | null;
   scriptExcerpt?: string | null;
   timingAdvice?: string | null;
-  /** When the plan that holds the script was saved (null when no saved plan holds one). */
+  /** When the plan that holds the script was saved (null when none is shared). */
   scriptSavedAt?: string | null;
+  /** True when a saved script exists but the record consent is not current. */
+  wordsWithheld?: boolean;
   completedAt?: string;
 }
 
@@ -45,9 +52,10 @@ function scriptOf(row: DisclosureRow | null): string | null {
   return typeof s === "string" && s.trim() ? s : null;
 }
 
-export function disclosurePlanContext(latest: DisclosureRow | null, latestWithScript: DisclosureRow | null): DisclosurePlanContext {
+export function disclosurePlanContext(latest: DisclosureRow | null, latestWithScript: DisclosureRow | null, opts: { recordConsent: boolean }): DisclosurePlanContext {
   if (!latest) return { exists: false };
-  const scripted = scriptOf(latest) ? latest : scriptOf(latestWithScript) ? latestWithScript : null;
+  const found = scriptOf(latest) ? latest : scriptOf(latestWithScript) ? latestWithScript : null;
+  const scripted = opts.recordConsent ? found : null;
   const timing = scripted?.content?.timing_advice;
   return {
     exists: true,
@@ -55,6 +63,7 @@ export function disclosurePlanContext(latest: DisclosureRow | null, latestWithSc
     scriptExcerpt: scripted ? scriptOf(scripted)!.slice(0, 500) : null,
     timingAdvice: typeof timing === "string" && timing.trim() ? timing : null,
     scriptSavedAt: scripted ? scripted.created_at : null,
+    wordsWithheld: !!found && !opts.recordConsent,
     completedAt: latest.created_at,
   };
 }

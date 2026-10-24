@@ -13,7 +13,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { INITIAL_STATE, plannerReducer, type PlannerState, type PlannerAction } from "../hurdles/reducer";
-import { buildHurdlePlan, buildSavePayload, newestRestorablePlan, savedPlanType } from "../hurdles/plan";
+import { buildHurdlePlan, buildSavePayload, newestRestorablePlan, recordAndSensitiveText, savedPlanType } from "../hurdles/plan";
+import { disclosureWordLines } from "../assistant-prompt";
 import { disclosurePlanContext, LATEST_DISCLOSURE_PLAN_SQL, LATEST_DISCLOSURE_SCRIPT_SQL, type DisclosureRow } from "../disclosure-context";
 
 const run = (actions: PlannerAction[], from: PlannerState = INITIAL_STATE) => actions.reduce(plannerReducer, from);
@@ -41,7 +42,7 @@ describe("which artifact a plan becomes", () => {
     const payload = buildSavePayload(plan, st, opts);
     assert.equal(payload.type, "hurdle_plan");
     assert.equal(payload.content.recordPlanned, false);
-    assert.ok(payload.content.hurdlePlan.selected.includes("transport"));
+    assert.ok((payload.content.hurdlePlan.selected as string[]).includes("transport"));
   });
   it("a plan with the record conversation is the disclosure_plan, still with no record words", () => {
     const st = withRecord();
@@ -50,7 +51,7 @@ describe("which artifact a plan becomes", () => {
     assert.equal(payload.content.recordPlanned, true);
     assert.equal(payload.content.script, null);
     assert.equal(payload.content.timing_advice, null);
-    assert.ok(!payload.content.hurdlePlan.selected.includes("record"));
+    assert.ok(!(payload.content.hurdlePlan.selected as string[]).includes("record"));
   });
   it("the not-sure path that turns up a background check plans the record conversation", () => {
     const st = run([...pick("not_sure"), { type: "start" }, ans("not_sure.signs", "check", "ride")]);
@@ -60,20 +61,27 @@ describe("which artifact a plan becomes", () => {
 
 describe("the disclosure plan in the user context", () => {
   it("a saved hurdle plan never changes which disclosure plan the context returns", () => {
-    const before = disclosurePlanContext(legacy, legacy);
-    // A hurdle_plan save adds no disclosure_plan row, so both queries return the same rows.
+    // The two context queries, over an in-memory table: newest disclosure_plan, newest one with a script.
+    type Row = DisclosureRow & { artifact_type: string };
+    const table: Row[] = [{ ...legacy, artifact_type: "disclosure_plan" }];
+    const byType = () => table.filter((r) => r.artifact_type === "disclosure_plan").sort((x, y) => y.created_at.localeCompare(x.created_at));
+    const ctx = () => disclosurePlanContext(byType()[0] ?? null, byType().find((r) => typeof r.content?.script === "string" && r.content.script.trim()) ?? null, { recordConsent: true });
+    const before = ctx();
     const st = transportOnly();
-    assert.notEqual(buildSavePayload(buildHurdlePlan(st), st, opts).type, "disclosure_plan");
-    const after = disclosurePlanContext(legacy, legacy);
-    assert.deepEqual(after, before);
-    assert.equal(after.scriptExcerpt, legacy.content!.script);
-    assert.equal(after.timingAdvice, legacy.content!.timing_advice);
+    const p = buildSavePayload(buildHurdlePlan(st), st, opts);
+    table.push({ artifact_type: p.type, target_context: p.targetContext, content: p.content, created_at: "2026-10-24T15:20:40.871Z" });
+    assert.deepEqual(ctx(), before);
+    assert.equal(before.scriptExcerpt, legacy.content!.script);
+    assert.equal(before.completedAt, legacy.created_at);
+    // The old save type would have moved it: the bug, shown on the same table.
+    table[1].artifact_type = "disclosure_plan";
+    assert.equal(ctx().completedAt, "2026-10-24T15:20:40.871Z");
   });
   it("a newer record plan without stored words keeps the older saved script, dated", () => {
     const st = withRecord();
     const p = buildSavePayload(buildHurdlePlan(st), st, { ...opts, now: "2026-10-24T15:20:40.000Z" });
     const newer: DisclosureRow = { target_context: p.targetContext, content: p.content, created_at: "2026-10-24T15:20:40.000Z" };
-    const ctx = disclosurePlanContext(newer, legacy);
+    const ctx = disclosurePlanContext(newer, legacy, { recordConsent: true });
     assert.equal(ctx.exists, true);
     assert.equal(ctx.completedAt, newer.created_at);
     assert.equal(ctx.targetJob, "Production Supervisor");
@@ -81,11 +89,68 @@ describe("the disclosure plan in the user context", () => {
     assert.equal(ctx.scriptSavedAt, legacy.created_at);
   });
   it("no plan at all is exists false; a plan with no script anywhere has no excerpt", () => {
-    assert.deepEqual(disclosurePlanContext(null, null), { exists: false });
+    assert.deepEqual(disclosurePlanContext(null, null, { recordConsent: true }), { exists: false });
     const bare: DisclosureRow = { target_context: {}, content: { script: null, timing_advice: null }, created_at: "2026-10-24T00:00:00Z" };
-    const ctx = disclosurePlanContext(bare, null);
+    const ctx = disclosurePlanContext(bare, null, { recordConsent: true });
     assert.equal(ctx.scriptExcerpt, null);
     assert.equal(ctx.scriptSavedAt, null);
+  });
+});
+
+describe("saved record words need the current record consent (boss ruling)", () => {
+  it("without the consent the plan exists but no script or timing goes out", () => {
+    const ctx = disclosurePlanContext(legacy, legacy, { recordConsent: false });
+    assert.equal(ctx.exists, true);
+    assert.equal(ctx.scriptExcerpt, null);
+    assert.equal(ctx.timingAdvice, null);
+    assert.equal(ctx.scriptSavedAt, null);
+    assert.equal(ctx.wordsWithheld, true);
+    assert.deepEqual(disclosureWordLines(ctx), []);
+    assert.equal(disclosurePlanContext(legacy, legacy, { recordConsent: true }).wordsWithheld, false);
+  });
+  it("older timing and script are both labeled with the earlier plan's date", () => {
+    const lines = disclosureWordLines({ exists: true, timingAdvice: "Wait until they ask.", scriptExcerpt: "I want to be upfront.", scriptSavedAt: "2026-10-23T16:25:44.878Z", completedAt: "2026-10-24T17:00:00Z" });
+    assert.equal(lines[0], "Timing advice (from your earlier plan, 2026-10-23): Wait until they ask.");
+    assert.match(lines[1], /^Script opening \(from your earlier plan, 2026-10-23\): "I want to be upfront\./);
+    assert.match(lines[2], /not saved/);
+    const same = disclosureWordLines({ exists: true, timingAdvice: "T", scriptExcerpt: "S", scriptSavedAt: "2026-10-23T16:25:44.878Z", completedAt: "2026-10-23T16:25:44.878Z" });
+    assert.deepEqual(same, ["Timing advice: T", 'Script opening: "S..."']);
+  });
+  it("the context route uses both queries and the consent gate, and the prompt uses the labeled lines", () => {
+    const route = read("../../app/api/user/context/route.ts");
+    for (const x of ["LATEST_DISCLOSURE_PLAN_SQL", "LATEST_DISCLOSURE_SCRIPT_SQL", "recordPlannerConsent(userId)", "actingForSomeoneElse()", "recordConsent: recordConsent.granted && !actingFor"]) assert.ok(route.includes(x), x);
+    assert.doesNotMatch(route, /artifact_type = 'disclosure_plan'\s*\n\s*ORDER BY created_at DESC LIMIT 1/);
+    const prompt = read("../assistant-prompt.ts");
+    assert.match(prompt, /lines\.push\(\.\.\.disclosureWordLines\(ctx\.disclosurePlan\)\)/);
+    assert.doesNotMatch(prompt, /ctx\.disclosurePlan\.timingAdvice\) lines\.push/);
+  });
+});
+
+describe("privacy: the generated forbidden set over both saved kinds (S3)", () => {
+  const forbiddenHits = (payload: unknown) => {
+    const blob = JSON.stringify(payload).toLowerCase();
+    return recordAndSensitiveText().filter((line) => blob.includes(JSON.stringify(line).slice(1, -1).toLowerCase()));
+  };
+  it("gaps with time inside, then not now: a hurdle_plan holding nothing from the record or the sensitive choice", () => {
+    const st = run([...pick("gaps", "transport"), { type: "start" }, ans("gaps.length", "1to3"), ans("gaps.filled", "inside", "family"), ans("gaps.inside", "no"),
+      { type: "skip", nodeId: "gaps.proof" }, ans("gaps.asked", "no"), ans("gaps.tell", "nothing"), ans("transport.what", "ride"), ans("transport.backup", "no")]);
+    const plan = buildHurdlePlan(st);
+    assert.equal(plan.record, null);
+    const payload = buildSavePayload(plan, st, opts);
+    assert.equal(payload.type, "hurdle_plan");
+    assert.ok(recordAndSensitiveText().length > 40);
+    assert.deepEqual(forbiddenHits(payload), []);
+    assert.ok(!/time inside/i.test(JSON.stringify(payload)));
+  });
+  it("gaps with time inside, then yes: a disclosure_plan holding nothing from the record or the sensitive choice", () => {
+    const st = run([...pick("gaps"), { type: "start" }, ans("gaps.length", "1to3"), ans("gaps.filled", "inside"), ans("gaps.inside", "yes"),
+      { type: "skip", nodeId: "gaps.proof" }, ans("gaps.asked", "no"), ans("gaps.tell", "nothing"), ans("record.where", "interview"), ans("record.raise", "wait")]);
+    const plan = buildHurdlePlan(st);
+    assert.ok(plan.record);
+    const payload = buildSavePayload(plan, st, opts);
+    assert.equal(payload.type, "disclosure_plan");
+    assert.deepEqual(forbiddenHits(payload), []);
+    assert.ok(!/time inside/i.test(JSON.stringify(payload)));
   });
 });
 
@@ -96,6 +161,11 @@ describe("restore on the planner page", () => {
     const hpRow = { created_at: "2026-10-24T15:00:00Z", content: buildSavePayload(buildHurdlePlan(hp), hp, opts).content };
     assert.deepEqual(newestRestorablePlan([hpRow, recRow])!.selected, recRow.content.hurdlePlan.selected);
     assert.deepEqual(newestRestorablePlan([{ ...hpRow, created_at: "2026-10-25T00:00:00Z" }, recRow])!.selected, hpRow.content.hurdlePlan.selected);
+    // The newest save is a record-only plan (empty selected): offer nothing, never the older hurdle plan.
+    const recOnly = run([...pick("record"), { type: "start" }, ans("record.where", "interview")]);
+    const recOnlyRow = { created_at: "2026-10-24T18:00:00Z", content: buildSavePayload(buildHurdlePlan(recOnly), recOnly, opts).content };
+    assert.deepEqual(recOnlyRow.content.hurdlePlan.selected, []);
+    assert.equal(newestRestorablePlan([hpRow, recRow, recOnlyRow]), null);
     // A pre-B5 plan has no hurdlePlan to restore; nothing is invented.
     assert.equal(newestRestorablePlan([{ created_at: legacy.created_at, content: legacy.content }, null]), null);
   });
@@ -153,7 +223,7 @@ test("real schema: a hurdle_plan saves, and the context and the disclosure count
   const ins = (type: string, tc: unknown, content: unknown, at: string) =>
     q("INSERT INTO refinery_artifact(user_id,artifact_type,target_context,content,created_at) VALUES ($1,$2,$3::jsonb,$4::jsonb,$5)", [u, type, JSON.stringify(tc), JSON.stringify(content), at]);
   const one = async (sql: string) => ((await q(sql, [u])).rows[0] ?? null) as DisclosureRow | null;
-  const ctx = async () => disclosurePlanContext(await one(LATEST_DISCLOSURE_PLAN_SQL), await one(LATEST_DISCLOSURE_SCRIPT_SQL));
+  const ctx = async () => disclosurePlanContext(await one(LATEST_DISCLOSURE_PLAN_SQL), await one(LATEST_DISCLOSURE_SCRIPT_SQL), { recordConsent: true });
   const count = async () => Number(((await q("SELECT COUNT(*) FILTER (WHERE artifact_type = 'disclosure_plan') AS n FROM refinery_artifact WHERE user_id = $1", [u])).rows[0] as { n: number }).n);
 
   await ins("disclosure_plan", legacy.target_context, legacy.content, legacy.created_at);

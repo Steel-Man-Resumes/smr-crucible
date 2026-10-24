@@ -9,6 +9,7 @@
  */
 
 import { readJobFit } from "@/lib/job-fit";
+import { recordPlannerConsent, actingForSomeoneElse } from "@/lib/hurdles/consent-server";
 import { disclosurePlanContext, LATEST_DISCLOSURE_PLAN_SQL, LATEST_DISCLOSURE_SCRIPT_SQL, type DisclosureRow } from "@/lib/disclosure-context";
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
@@ -54,9 +55,13 @@ export async function GET() {
   // The disclosure plan: newest record conversation plan, with the script
   // from the newest one that holds one (lib/disclosure-context.ts). A hurdle
   // plan without the record hurdle is a hurdle_plan and never read here.
-  const [disclosureRow, disclosureScriptRow] = await Promise.all([
+  // Saved record words go out only with the person's current record consent
+  // (095), and never while staff act for them.
+  const [disclosureRow, disclosureScriptRow, recordConsent, actingFor] = await Promise.all([
     getOneAsUser<DisclosureRow>(userId, LATEST_DISCLOSURE_PLAN_SQL, [userId]),
     getOneAsUser<DisclosureRow>(userId, LATEST_DISCLOSURE_SCRIPT_SQL, [userId]),
+    recordPlannerConsent(userId).catch(() => ({ granted: false })),
+    actingForSomeoneElse().catch(() => true),
   ]);
 
   // Onboarding state (mirrors useOnboarding logic)
@@ -112,7 +117,7 @@ export async function GET() {
       summary: r.content?.summary ?? null,
       createdAt: r.created_at,
     })),
-    disclosurePlan: disclosurePlanContext(disclosureRow, disclosureScriptRow),
+    disclosurePlan: disclosurePlanContext(disclosureRow, disclosureScriptRow, { recordConsent: recordConsent.granted && !actingFor }),
     applications: profile.savedJobs.slice(0, 10).map((j) => ({
       id: j.id,
       company: j.company,

@@ -264,18 +264,20 @@ export function savedPlanType(plan: Pick<HurdlePlan, "record">): SavedPlanType {
 }
 
 /**
- * "Pick up where I left off": the newest saved plan of either kind that
- * carries restorable choices. Rows are /api/artifacts items (any order).
+ * "Pick up where I left off": the newest saved plan of either kind. When the
+ * newest save has no restorable choices (a record-only plan saves an empty
+ * selected list), nothing is offered, as before the fix; an older plan's
+ * choices are never offered in its place. Rows are /api/artifacts items.
  */
 export function newestRestorablePlan(rows: Array<{ created_at?: string; content?: any } | null | undefined>): { selected: unknown; choices: unknown } | null {
-  let best: { at: number; selected: unknown; choices: unknown } | null = null;
+  let newest: { at: number; content?: any } | null = null;
   for (const row of rows) {
-    const hp = row?.content?.hurdlePlan;
-    if (!hp || !Array.isArray(hp.selected) || !hp.selected.length) continue;
-    const at = Date.parse(row?.created_at ?? "") || 0;
-    if (!best || at > best.at) best = { at, selected: hp.selected, choices: hp.choices };
+    if (!row) continue;
+    const at = Date.parse(row.created_at ?? "") || 0;
+    if (!newest || at > newest.at) newest = { at, content: row.content };
   }
-  return best ? { selected: best.selected, choices: best.choices } : null;
+  const hp = newest?.content?.hurdlePlan;
+  return hp && Array.isArray(hp.selected) && hp.selected.length ? { selected: hp.selected, choices: hp.choices } : null;
 }
 
 /** The whole artifact body for POST /api/artifacts. Pure, so tests can prove what is in it. */
