@@ -132,19 +132,18 @@ function DisclosurePlannerPage() {
   const planSavePayload = useRef<{ accountId: string; payload: Record<string, unknown> } | null>(null);
   const planSaveBusy = useRef(false);
   const planVersion = useRef(0);
-  async function savePlan(): Promise<boolean> {
+  async function savePlan() {
     const snapshot = planSavePayload.current;
-    if (!snapshot || planSaveBusy.current) return false;
+    if (!snapshot || planSaveBusy.current) return;
     const version = planVersion.current;
     planSaveBusy.current = true;
     setPlanSave("saving");
     try {
       await saveArtifactReceipt(snapshot.payload, snapshot.accountId);
-      if (version !== planVersion.current) return false;
+      if (version !== planVersion.current) return;
       setPlanSave("saved");
       window.dispatchEvent(new Event("disclosure-saved"));
-      return true;
-    } catch { if (version === planVersion.current) setPlanSave("error"); return false; }
+    } catch { if (version === planVersion.current) setPlanSave("error"); }
     finally { planSaveBusy.current = false; }
   }
   const [generating, setGenerating] = useState(false);
@@ -375,6 +374,7 @@ function DisclosurePlannerPage() {
         setPlan(data);
         setStep("plan");
         if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
+        if (!refinementNote) setShowCelebration(true);
 
         // Freeze this plan for retry; changing setup never changes what is saved.
         planVersion.current++;
@@ -391,8 +391,7 @@ function DisclosurePlannerPage() {
           },
           scaffoldLevel: 1.0,
         } };
-        // "Saved to your materials" shows only after the save came back ok.
-        if ((await savePlan()) && !refinementNote) setShowCelebration(true);
+        await savePlan();
       } else {
         setRateLimitError("Your plan could not be prepared. Your answers are still here. Try again.");
       }

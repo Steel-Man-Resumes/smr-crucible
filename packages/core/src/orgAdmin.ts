@@ -14,7 +14,7 @@
  * WHAT IT WRITES: access_code (the organization's own row, not row-level
  * protected) and, for a brand-new owner address, a users shell, the same shell
  * the staff and participant invites create. Every write runs with app.user_id
- * set to the admin, so the access_code audit trigger (migration 094) records
+ * set to the admin, so the access_code audit trigger (migration 097) records
  * who acted. Each action also emits an event, best effort.
  *
  * WHAT IT NEVER DOES: release a claimed seat (seats are durable, Troy
@@ -96,7 +96,7 @@ const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
 function logAdminEvent(actorUserId: string, action: string, payload: Record<string, unknown>) {
   // The event table needs a real org FK and this sentinel may not exist, so
   // this can fail quietly. The durable record is the access_code audit trigger
-  // in org_audit (migration 094). Never put the code itself in the payload.
+  // in org_audit (migration 097). Never put the code itself in the payload.
   emitEvent({
     org_id: "00000000-0000-0000-0000-000000000000",
     project_id: null, run_id: null, step_id: null,

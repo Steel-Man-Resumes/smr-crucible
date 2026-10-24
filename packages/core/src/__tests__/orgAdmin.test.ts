@@ -75,7 +75,7 @@ describe("what a created organization is", () => {
     assert.match(src, /UPDATE access_code SET code = \$2, updated_at = now\(\) WHERE id = \$1::uuid RETURNING code/);
   });
   it("audit trigger never records the code value", () => {
-    const m = readFileSync(new URL("../../migrations/094_org_seats.sql", import.meta.url), "utf8");
+    const m = readFileSync(new URL("../../migrations/097_org_seats.sql", import.meta.url), "utf8");
     assert.match(m, /'code_rotated', true/);
     assert.doesNotMatch(m, /NEW\.code\b(?! IS DISTINCT)/);
   });
