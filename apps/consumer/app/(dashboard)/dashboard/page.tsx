@@ -54,6 +54,7 @@ const TYPE_LABELS: Record<string, string> = {
   resume: "resumes",
   cover_letter: "cover letters",
   disclosure_plan: "disclosure plans",
+  hurdle_plan: "hurdle plans",
   interview_prep: "interview sessions",
 };
 

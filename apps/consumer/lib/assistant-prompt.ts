@@ -433,6 +433,21 @@ function labelOf(v: unknown): string {
   return "";
 }
 
+/**
+ * The saved record words for t.ROY, labeled when they come from an earlier
+ * plan than the newest one. The context only carries them under the record
+ * consent (lib/disclosure-context.ts).
+ */
+export function disclosureWordLines(d: UserFullContext["disclosurePlan"]): string[] {
+  const out: string[] = [];
+  const older = !!d.scriptSavedAt && !!d.completedAt && d.scriptSavedAt !== d.completedAt;
+  const from = older ? ` (from your earlier plan, ${d.scriptSavedAt!.slice(0, 10)})` : "";
+  if (d.timingAdvice) out.push(`Timing advice${from}: ${d.timingAdvice}`);
+  if (d.scriptExcerpt) out.push(`Script opening${from}: "${d.scriptExcerpt.slice(0, 200)}..."`);
+  if (older && (d.timingAdvice || d.scriptExcerpt)) out.push("The newest plan's record words were not saved.");
+  return out;
+}
+
 function buildFullUserSection(ctx: UserFullContext): string {
   const lines: string[] = [];
 
@@ -505,8 +520,7 @@ function buildFullUserSection(ctx: UserFullContext): string {
   if (ctx.disclosurePlan.exists) {
     lines.push(`\n### DISCLOSURE PLAN`);
     if (ctx.disclosurePlan.targetJob) lines.push(`Plan built for: ${ctx.disclosurePlan.targetJob}`);
-    if (ctx.disclosurePlan.timingAdvice) lines.push(`Timing advice: ${ctx.disclosurePlan.timingAdvice}`);
-    if (ctx.disclosurePlan.scriptExcerpt) lines.push(`Script opening: "${ctx.disclosurePlan.scriptExcerpt.slice(0, 200)}..."`);
+    lines.push(...disclosureWordLines(ctx.disclosurePlan));
     lines.push(`Status: plan exists. Has the user practiced out loud? That's the next question.`);
   } else if (ctx.journey.onboardingState === "full_access") {
     lines.push(`\n### DISCLOSURE PLAN\nNot built yet. This is the next important step.`);

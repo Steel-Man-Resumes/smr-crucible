@@ -38,7 +38,7 @@ import { HurdlePlanView, type WordingStatus } from "@/components/hurdles/HurdleP
 import { HURDLES, type HurdleId } from "@/lib/hurdles/graph";
 import { INITIAL_STATE, hurdlesOf, plannerReducer, position, reachedAnswers } from "@/lib/hurdles/reducer";
 import { coverageOf } from "@/lib/hurdles/coverage";
-import { buildHurdlePlan, buildSavePayload, hurdlePlanText, COACHING_LINE, type HurdlePlan } from "@/lib/hurdles/plan";
+import { buildHurdlePlan, buildSavePayload, hurdlePlanText, newestRestorablePlan, SAVED_PLAN_TYPES, COACHING_LINE, type HurdlePlan } from "@/lib/hurdles/plan";
 import { withoutRecordContent } from "@/lib/hurdles/phrase";
 import { getNode } from "@/lib/hurdles/graph";
 import { applyConstraints } from "@/lib/hurdles/filters";
@@ -185,13 +185,18 @@ function DisclosurePlannerPage() {
   }, [searchParams]);
 
   // Offer to pick up the last saved plan's choices (record choices are never saved).
+  // A plan saves as a hurdle_plan or, with the record conversation, a disclosure_plan
+  // (savedPlanType): look at the newest of each and offer the newer one.
   useEffect(() => {
     let live = true;
-    fetch("/api/artifacts?type=disclosure_plan&limit=1", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        const hp = d?.data?.[0]?.content?.hurdlePlan;
-        if (live && hp && Array.isArray(hp.selected) && hp.selected.length) setLastSaved({ selected: hp.selected, choices: hp.choices });
+    Promise.all(SAVED_PLAN_TYPES.map((t) =>
+      fetch(`/api/artifacts?type=${t}&limit=1`, { cache: "no-store" })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => d?.data?.[0] ?? null)
+        .catch(() => null)))
+      .then((rows) => {
+        const last = newestRestorablePlan(rows);
+        if (live && last) setLastSaved(last);
       })
       .catch(() => {});
     return () => { live = false; };

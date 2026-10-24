@@ -50,6 +50,8 @@ export type ArtifactType =
   | "cover_letter"
   | "follow_up"
   | "disclosure_plan"
+  /** A hurdle plan with no record section (migration 098). Never counts as the disclosure plan. */
+  | "hurdle_plan"
   | "interview_prep"
   | "resource_list"
   | "job_match"

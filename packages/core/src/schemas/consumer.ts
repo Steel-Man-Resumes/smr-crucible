@@ -97,7 +97,7 @@ export const DecisionLogV1 = z.object({
 
 export const RefineryArtifactV1 = z.object({
   artifact_type: z.enum([
-    "resume", "cover_letter", "disclosure_plan",
+    "resume", "cover_letter", "disclosure_plan", "hurdle_plan",
     "interview_prep", "resource_list", "job_match",
   ]),
   target_context: z.object({
