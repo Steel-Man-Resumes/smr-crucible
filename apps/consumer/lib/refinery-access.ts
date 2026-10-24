@@ -181,8 +181,8 @@ export function seatNeedsReread(t: {
 /**
  * The seat rule's last part: the database answer, or an address on the
  * PARTNER_PRE_AUTH list whose inbox the account has PROVEN (users.
- * email_proven_at, set by an email-link or matched Google sign-in; a password
- * sign-up never sets it). Security review 1, SF-4: otherwise registering a
+ * email_proof_source, set only by a real email-link, matched Google or reset
+ * proof; a password sign-up and 068's backfill never set it). Security review 1, SF-4: otherwise registering a
  * listed address nobody has claimed yet would be a seat. Self-set tier,
  * progression and premium grants, and any browser value are never inputs.
  */

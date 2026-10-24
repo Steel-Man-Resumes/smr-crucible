@@ -269,6 +269,7 @@ export async function sendOrgEmail(to: string, content: EmailContent): Promise<s
     throw new Error(`Resend send failed: ${res.status} ${detail.slice(0, 300)}`);
   }
   const data = (await res.json()) as { id?: string };
-  console.log(`org-invite email queued to ${to} (resend id ${data.id || "unknown"})`);
+  // No recipient address in logs (review 2, N-15): the Resend id is enough to trace a send.
+  console.log(`org email queued (resend id ${data.id || "unknown"})`);
   return data.id || "";
 }

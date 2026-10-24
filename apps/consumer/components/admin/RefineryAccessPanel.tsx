@@ -109,6 +109,7 @@ export function RefineryAccessPanel({ onPolicy }: { onPolicy?: (p: AdminPolicy |
                 <input value={unlegacy} onChange={(e) => setUnlegacy(e.target.value)} type="email" className="t-focus mt-1 block border border-t-line bg-t-panel-2 px-3 py-2 text-t-white" />
               </label>
               <button type="submit" disabled={busy || !unlegacy.trim()} className="t-focus min-h-touch border border-t-line px-3 py-2 disabled:opacity-50">Remove</button>
+              <p className="w-full text-xs text-t-phos-dim">Their Refinery AI stops right away. Pages they already had open can keep working for up to a day.</p>
             </form>
           )}
 

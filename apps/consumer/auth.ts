@@ -22,7 +22,7 @@ import {
   termsCurrent,
   revocationCheck,
 } from "@/lib/session-policy";
-import { parsePartnerPreAuth } from "@/lib/partner-pre-auth";
+import { isPartnerPreAuthorized, parsePartnerPreAuth } from "@/lib/partner-pre-auth";
 import { SEAT_PAGE, SEAT_REQUIRED_MESSAGE, seatFrom, seatGateVerdict, seatNeedsReread } from "@/lib/refinery-access";
 import { CONSENT_LOOKUP_SQL, TERMS_PAGE, TERMS_VERSION, termsNeedsReread } from "@/lib/terms";
 import {
@@ -704,11 +704,25 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         try {
           const rows = (await sqlEdge`
             SELECT public.smr_refinery_signup_open() AS open,
-                   public.smr_has_refinery_seat(${token.sub}::uuid) AS seat,
-                   (SELECT u.email_proven_at IS NOT NULL FROM users u WHERE u.id = ${token.sub}::uuid) AS proven`) as any[];
+                   public.smr_has_refinery_seat(${token.sub}::uuid) AS seat`) as any[];
           if (rows.length && typeof rows[0].open === "boolean" && typeof rows[0].seat === "boolean") {
+            // PARTNER_PRE_AUTH counts only with a REAL inbox proof (review 1
+            // SF-4, review 2 SF-7): email_proof_source, which 068's backfill
+            // never set. Read separately and only when it can matter, so a
+            // missing column makes the pre-auth part false (fail closed) and
+            // never stops the database seat from being read.
+            let proven = false;
+            if (!rows[0].seat && isPartnerPreAuthorized(token.email)) {
+              try {
+                const p = (await sqlEdge`
+                  SELECT email_proof_source IS NOT NULL AS proven FROM users WHERE id = ${token.sub}::uuid`) as any[];
+                proven = p[0]?.proven === true;
+              } catch {
+                proven = false;
+              }
+            }
             (token as any).seatOpen = rows[0].open;
-            (token as any).seat = seatFrom(rows[0].seat, token.email, rows[0].proven === true);
+            (token as any).seat = seatFrom(rows[0].seat, token.email, proven);
             (token as any).seatAt = nowSeconds();
           }
         } catch {

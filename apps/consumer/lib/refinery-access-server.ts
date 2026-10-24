@@ -23,7 +23,7 @@ import { FORGE_AI_WORKFLOWS, SEAT_REQUIRED_MESSAGE, seatAdmissionVerdict, seatFr
 
 export interface SeatDeps {
   readGate: (userId: string) => Promise<RefineryGate>;
-  /** The account email and whether its inbox was proven (users.email_proven_at). */
+  /** The account email and whether its inbox was really proven (users.email_proof_source). */
   readEmail: (userId: string) => Promise<{ email: string | null; proven: boolean } | null>;
   preAuthRaw?: string | null;
 }
@@ -31,11 +31,15 @@ export interface SeatDeps {
 export const defaultSeatDeps: SeatDeps = {
   readGate: readRefineryGate,
   readEmail: async (userId) => {
-    const row = await getOne<{ email: string | null; proven: boolean }>(
-      `SELECT email, email_proven_at IS NOT NULL AS proven FROM users WHERE id = $1`,
+    const row = await getOne<{ email: string | null }>(`SELECT email FROM users WHERE id = $1`, [userId]);
+    if (!row) return null;
+    // A REAL proof only (email_proof_source, migration 079; 068's backfill of
+    // email_proven_at does not count). A missing column reads as unproven.
+    const proven = await getOne<{ proven: boolean }>(
+      `SELECT email_proof_source IS NOT NULL AS proven FROM users WHERE id = $1`,
       [userId]
-    );
-    return row ? { email: row.email, proven: row.proven === true } : null;
+    ).then((r) => r?.proven === true, () => false);
+    return { email: row.email, proven };
   },
 };
 
