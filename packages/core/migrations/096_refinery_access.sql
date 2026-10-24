@@ -88,7 +88,7 @@ CREATE TABLE org_seat_offer (
   access_code_id uuid NOT NULL REFERENCES access_code(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   offered_by uuid REFERENCES users(id) ON DELETE SET NULL,
-  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','declined')),
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','accepted','declined','withdrawn')),
   created_at timestamptz NOT NULL DEFAULT now(),
   decided_at timestamptz
 );
@@ -101,7 +101,7 @@ CREATE INDEX org_seat_offer_user ON org_seat_offer(user_id, status);
 -- organization typed, so once the person says yes they appear in the
 -- organization's invited lists like any invitee. NULL = an ordinary invite.
 ALTER TABLE org_invite ADD COLUMN IF NOT EXISTS offer_status text
-  CHECK (offer_status IS NULL OR offer_status IN ('offered','joined','declined'));
+  CHECK (offer_status IS NULL OR offer_status IN ('offered','joined','declined','withdrawn'));
 
 -- ----------------------------------------------------- seat request kind --
 -- A person without a seat asks Troy for one through his existing review queue.
@@ -157,6 +157,11 @@ CREATE POLICY org_seat_offer_admin ON org_seat_offer FOR SELECT
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+    -- Revoke first: production's default privileges hand new tables to the
+    -- app role, which would otherwise keep DELETE on the policy row and
+    -- UPDATE on offers and departures (review 2, found writing the pglite
+    -- test). Same lists as scripts/lib/restricted-grants.mjs.
+    REVOKE ALL ON refinery_access_policy, refinery_seat_legacy, org_seat_offer, access_code_departure FROM smr_app;
     GRANT SELECT, UPDATE ON refinery_access_policy TO smr_app;
     GRANT SELECT, INSERT, DELETE ON refinery_seat_legacy TO smr_app;
     GRANT SELECT ON access_code_departure TO smr_app;
@@ -220,6 +225,14 @@ BEGIN
   IF NOT FOUND THEN RETURN 'not_found'; END IF;
   SELECT ac.code INTO v_code FROM public.access_code ac WHERE ac.id = v_offer.access_code_id;
   IF v_code IS NULL THEN RETURN 'not_found'; END IF;
+  -- Already a member of this organization: the answer is already yes (review 2, N-12).
+  IF EXISTS (SELECT 1 FROM public.access_code_redemption r
+              WHERE r.user_id = p_user AND r.access_code_id = v_offer.access_code_id) THEN
+    UPDATE public.org_seat_offer SET status = 'accepted', decided_at = now() WHERE id = p_offer;
+    UPDATE public.org_invite SET offer_status = 'joined'
+     WHERE access_code_id = v_offer.access_code_id AND user_id = p_user AND offer_status = 'offered';
+    RETURN 'already_member';
+  END IF;
   -- The invite rule, again at the moment of yes (review 1, N-4): sharing
   -- consent is still one switch per person, so someone who joined another
   -- organization after the offer is not attached to a second one this way.
@@ -253,10 +266,37 @@ BEGIN
 END;
 $$;
 
+-- An organization withdraws ITS OWN open offer (the Invited list's Remove;
+-- B8 lists offers there). Scoped like smr_invite_binding: it answers only
+-- inside an organization scope, and only for that organization's offer.
+-- Nothing was spent, so nothing is refunded. Returns ok | not_found.
+CREATE OR REPLACE FUNCTION public.smr_withdraw_seat_offer(p_user uuid)
+RETURNS text
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_org uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
+BEGIN
+  IF v_org IS NULL THEN
+    RAISE EXCEPTION 'smr_withdraw_seat_offer requires an organization scope'
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  IF p_user IS NULL THEN RETURN 'not_found'; END IF;
+  UPDATE public.org_seat_offer SET status = 'withdrawn', decided_at = now()
+   WHERE access_code_id = v_org AND user_id = p_user AND status = 'pending';
+  IF NOT FOUND THEN RETURN 'not_found'; END IF;
+  UPDATE public.org_invite SET offer_status = 'withdrawn'
+   WHERE access_code_id = v_org AND user_id = p_user AND offer_status = 'offered';
+  RETURN 'ok';
+END;
+$$;
+
 -- Leave ONE organization (Settings, "Leave this organization"). Before this
--- the only way out was delete-my-data (smr_leave_all_orgs). Same shape: the
--- membership and that organization's staff assignment go; the seat is NOT
--- handed back (durable seats, Troy 2026-06-10). Returns rows removed (0 or 1).
+-- the only way out was delete-my-data (smr_leave_all_orgs). Same shape as the
+-- live smr_leave_all_orgs (054), scoped to this one organization: what was
+-- shared with it is revoked, its pending requests are cancelled, its
+-- acknowledgements end (so a rejoin asks again), and the membership and staff
+-- assignment go. The seat is NOT handed back (durable seats, Troy
+-- 2026-06-10). Returns rows removed (0 or 1).
 CREATE OR REPLACE FUNCTION public.smr_leave_org(p_user uuid, p_org uuid)
 RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -264,6 +304,15 @@ DECLARE
   v_n integer;
 BEGIN
   IF p_user IS NULL OR p_org IS NULL THEN RETURN 0; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.access_code_redemption r WHERE r.user_id = p_user AND r.access_code_id = p_org) THEN
+    RETURN 0;
+  END IF;
+  UPDATE public.sharing_grant SET revoked_at = now(), revoked_reason = 'left_organization'
+   WHERE user_id = p_user AND access_code_id = p_org AND revoked_at IS NULL;
+  UPDATE public.sharing_request SET status = 'cancelled'
+   WHERE user_id = p_user AND access_code_id = p_org AND status = 'pending';
+  UPDATE public.sharing_ack SET ended_at = now()
+   WHERE user_id = p_user AND access_code_id = p_org AND ended_at IS NULL;
   DELETE FROM public.client_staff_assignment WHERE client_user_id = p_user AND access_code_id = p_org;
   DELETE FROM public.access_code_redemption WHERE user_id = p_user AND access_code_id = p_org;
   GET DIAGNOSTICS v_n = ROW_COUNT;
@@ -313,8 +362,11 @@ BEGIN
 END;
 $$;
 
--- smr_leave_all_orgs (048), redefined to record each departure, so deleting
--- your data and joining again does not spend a second seat either.
+-- smr_leave_all_orgs, redefined from the LIVE body (054_required_sharing.sql,
+-- which already ends grants, requests and acknowledgements; 048 and 051 are
+-- older) with ONE addition: each departure is recorded, so deleting your data
+-- and joining again does not spend a second seat. Security review 2, BL-4:
+-- an earlier draft started from 048 and dropped the sharing revocation.
 CREATE OR REPLACE FUNCTION public.smr_leave_all_orgs(p_user uuid)
 RETURNS integer
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -325,6 +377,9 @@ BEGIN
   INSERT INTO public.access_code_departure (user_id, access_code_id)
     SELECT r.user_id, r.access_code_id FROM public.access_code_redemption r WHERE r.user_id = p_user
     ON CONFLICT (user_id, access_code_id) DO UPDATE SET left_at = now();
+  UPDATE public.sharing_grant SET revoked_at = now(), revoked_reason = 'left_organization' WHERE user_id = p_user AND revoked_at IS NULL;
+  UPDATE public.sharing_request SET status = 'cancelled' WHERE user_id = p_user AND status = 'pending';
+  UPDATE public.sharing_ack SET ended_at = now() WHERE user_id = p_user AND ended_at IS NULL;
   DELETE FROM public.client_staff_assignment WHERE client_user_id = p_user;
   DELETE FROM public.access_code_redemption WHERE user_id = p_user;
   GET DIAGNOSTICS v_n = ROW_COUNT;
@@ -339,6 +394,7 @@ REVOKE ALL ON FUNCTION public.smr_has_refinery_seat(uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.smr_accept_seat_offer(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.smr_decline_seat_offer(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.smr_leave_org(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.smr_withdraw_seat_offer(uuid) FROM PUBLIC;
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
@@ -349,5 +405,6 @@ BEGIN
     GRANT EXECUTE ON FUNCTION public.smr_accept_seat_offer(uuid, uuid) TO smr_app;
     GRANT EXECUTE ON FUNCTION public.smr_decline_seat_offer(uuid, uuid) TO smr_app;
     GRANT EXECUTE ON FUNCTION public.smr_leave_org(uuid, uuid) TO smr_app;
+    GRANT EXECUTE ON FUNCTION public.smr_withdraw_seat_offer(uuid) TO smr_app;
   END IF;
 END $$;
