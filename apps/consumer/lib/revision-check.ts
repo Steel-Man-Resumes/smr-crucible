@@ -26,7 +26,8 @@
  */
 
 import type { ArtifactRevision } from "@crucible/core/src/artifactRevision";
-import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence } from "./revision-status";
+import { cleanRevisionInput, computeRevision, editInput, inputFromRevision, revisionRecord, withPersonEvidence, type RevisionEvidence } from "./revision-status";
+import { NO_PERSON_EVIDENCE } from "./person-evidence-shape";
 import { resumeTextToDocument } from "./revision-to-doc";
 import { readMarker, withRevisionMarker } from "./revision-marker";
 import { artifactText, textFromBase } from "./revision-current";
@@ -101,6 +102,8 @@ export async function loadCheckSource(userId: string, artifactId: string, store:
   if (art.is_locked) return { ok: false, status: 409, reason: LOCKED_REASON };
   const rev = await currentChecked(userId, art, store);
   if (!rev) return { ok: false, status: 409, reason: NEEDS_CHECK_REASON };
+  // Review B5: the person's evidence as their rows say NOW, never as an older check stored it.
+  const pe = store.personEvidence ? await store.personEvidence(userId, artifactId).catch(() => NO_PERSON_EVIDENCE) : NO_PERSON_EVIDENCE;
   const ev = (rev.evidence ?? {}) as Partial<RevisionEvidence>;
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   const tc = (art.target_context ?? {}) as { targetJob?: unknown };
@@ -118,6 +121,9 @@ export async function loadCheckSource(userId: string, artifactId: string, store:
         credentialsAnswer: str(ev.credentialsAnswer),
         credentialRows: Array.isArray(ev.credentialRows) ? ev.credentialRows : [],
         ownResumeText: str(ev.ownResumeText),
+        personFacts: pe.facts,
+        unconfirmedFacts: pe.unconfirmed,
+        finishedLines: pe.finished,
       },
       written: w && typeof w.resume === "string" && typeof w.letter === "string" ? { resume: w.resume, letter: w.letter } : null,
       grounding: ev.grounding ?? null,
@@ -156,13 +162,15 @@ export async function saveCheckRevision(userId: string, artifactId: string, raw:
   // Everything else from the stored, checked version (R1's carry-over).
   const edited = editInput(base, page.input.resumeText, page.input.letterText);
   if (!edited.ok) return { ok: false, status: edited.reason === "too long" ? 413 : 400, reason: edited.reason };
-  const input = {
+  // Review B5: the person's evidence fresh from their rows, never carried from the stored check or a request.
+  const pe = store.personEvidence ? await store.personEvidence(userId, artifactId).catch(() => NO_PERSON_EVIDENCE) : NO_PERSON_EVIDENCE;
+  const input = withPersonEvidence({
     ...edited.input,
     lengthChoice: page.input.lengthChoice,
     defendAnswers: page.input.defendAnswers,
     keptTerms: page.input.keptTerms,
     confirmedCredentials: page.input.confirmedCredentials,
-  };
+  }, pe);
   const verdict = computeRevision(input);
   const r = await store.insertRevision(userId, revisionRecord(artifactId, "forge_finish", input, verdict));
   if (r.status === "not_ready") return { ok: false, status: 503, reason: "not_ready" };

@@ -25,7 +25,7 @@
 import { normalizeDigits, numberTokens, numberValues } from "./numberRead";
 import { stemOf } from "./wordStem";
 import { isCredentialTerm } from "./credentialWords";
-import { scopeNotTheirs } from "./scopeWords";
+import { skillScopeNotTheirs } from "./scopeWords";
 import { RESUME_RULES_VERSION } from "./resumeRules";
 
 export type MintSeverity = "BLOCK" | "FIX";
@@ -417,16 +417,23 @@ function checkGrid(out: string, src: string, f: MintFinding[]) {
       if (srcFlat.includes(` ${words.join(" ")} `)) continue;
       // A scope word they never used never passes on another word's match.
       // Round 6: a people-scope word (supervise, manage, lead, train...) is theirs only per claim
-      // (scopeWords: active, not denied, not inside a credential name, same people).
-      const scopeUnsaid =
-        words.some((w) => {
-          const sc = scopeOf(w);
-          return sc !== undefined && PLAN_STEMS.has(sc) && !srcWordList.some((x) => x.startsWith(sc));
-        }) || !!scopeNotTheirs(term, src);
+      // (scopeWords: active, not denied, not inside a credential name).
+      // Fix lane check (Valjean defect 3): a skills term names a kind of work, not a job's people, so it is
+      // read with the skills-term rule (skillScopeNotTheirs): their own claim of the same family covers it,
+      // and being over people needs their own explicit claim over people.
+      const planUnsaid = words.filter((w) => {
+        const sc = scopeOf(w);
+        return sc !== undefined && PLAN_STEMS.has(sc) && !srcWordList.some((x) => x.startsWith(sc));
+      });
+      const scopeHitsUnsaid = skillScopeNotTheirs(term, src);
+      const scopeUnsaid = planUnsaid.length > 0 || scopeHitsUnsaid.length > 0;
       if (!scopeUnsaid && words.some((w) => srcStems.has(stemOf(w)))) continue;
+      // Name the word that is not theirs, so the card says what to change ("mentoring"), not the whole term.
+      const unsaidWords = Array.from(new Set([...scopeHitsUnsaid.map((h) => h.word.toLowerCase()), ...planUnsaid]));
+      const named = unsaidWords.length && unsaidWords.join(" ") !== term.toLowerCase() ? ` "${unsaidWords.join('", "')}" is` : " that is";
       f.push(
         scopeUnsaid
-          ? { rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" says you ran or led something, and that isn't in anything you told us.`, kind: "grid_scope_term" }
+          ? { rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" says you ran or led something, and${named}n't in anything you told us.`, kind: "grid_scope_term" }
           : { rule: "STD-T01", severity: "FIX", line: term, why: `"${term}" isn't in anything you told us. Keep it only if you can give a real example of it.`, kind: "grid_term" }
       );
     }

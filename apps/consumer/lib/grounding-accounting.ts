@@ -30,6 +30,8 @@ export interface FlagOutcome {
   claim: string;
   doc: GroundedDoc;
   status: FlagStatus;
+  /** The verifier's kind for the flag, when it gave one (review S3). */
+  kind?: string;
 }
 
 const NUMBER_WORDS: Record<string, string> = {
@@ -128,21 +130,21 @@ export function accountFlags(
 ): { removed: number; changed: number; residual: number; unmatched: number; alsoIn: number; outcomes: FlagOutcome[] } {
   const outcomes: FlagOutcome[] = [];
   const seen = new Set<string>();
-  const add = (claim: string, doc: GroundedDoc, status: FlagStatus) => {
+  const add = (claim: string, doc: GroundedDoc, status: FlagStatus, kind?: string) => {
     const key = `${doc}|${normalizeForMatch(claim)}`;
     if (seen.has(key)) return;
     seen.add(key);
     // Shown on a job-seeker page, so it gets the same dash sweep as the documents.
-    outcomes.push({ claim: plainPunctuationText(claim).text.slice(0, 200), doc, status });
+    outcomes.push({ claim: plainPunctuationText(claim).text.slice(0, 200), doc, status, ...(kind ? { kind } : {}) });
   };
   for (const c of checks) {
     for (const f of c.flags) {
       if (!normalizeForMatch(f.claim)) continue;
-      add(f.claim, c.doc, flagOutcome(f, c.original, c.final));
+      add(f.claim, c.doc, flagOutcome(f, c.original, c.final), f.kind);
       for (const other of checks) {
         if (other.doc === c.doc) continue;
         const status = inOtherDocument(f, other.final);
-        if (status) add(f.claim, other.doc, status);
+        if (status) add(f.claim, other.doc, status, f.kind);
       }
     }
   }

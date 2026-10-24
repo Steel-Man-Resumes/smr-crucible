@@ -1,3 +1,14 @@
+## 2026-10-24: Check and finish reads what the person already gave (local, unreleased)
+
+- Check and finish reads the person's confirmed Master Draft details fresh on every check, in their own field, never in their saved words and never carried into a copy. A detail clears a claim only under the job it names, or in a letter sentence that names no other employer.
+- Lines of the person's other finished resumes are "checked once": a card on such a line says where it was finished and asks them to confirm it stands here. They never clear a card by themselves. A resume counts only when its newest version is finished, and a job block about the record is left out whole.
+- A skills term is read as a kind of work: the person's own explicit claim of the same family covers it, and handing out work counts as delegation only when the person is the one doing it. A word nothing supports is named on the card, with the unconfirmed Master Draft detail that would settle it.
+- The evidence override respects the second check's reason: never a number, result, title or employer, never a supported fragment of a longer line, and dates only in a sentence that names that one employer. Its rewrite never drops a line the override cleared.
+- Cutting one skill takes off only that item and keeps the line's separators. A second-check claim on no line of the page never blocks; on one line, that line is the card; on several, it stays in the general list.
+- "You chose to leave this line out" appears only for a cut made on that page. A Tailor result no longer carries its parent's cut answers.
+- A fix t.ROY could not draft says so on the card, naming only the buttons the card shows.
+- No schema migration or production change in this local build.
+
 ## 2026-10-23: Refinery orientation and work feedback (local, unreleased)
 
 - Teach the application process through twelve resumable tour chapters and eight settings lessons linked to real controls.

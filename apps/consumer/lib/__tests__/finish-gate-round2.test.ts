@@ -142,6 +142,25 @@ test("S3: a claim found with a number word, across lines, or reworded is still h
   assert.equal(at("Ran the grill", "changed").length, 1);
 });
 
+// Fix lane check, round 1 (review S6): the same claim, in the person's own words, read by the evidence rule.
+test("S3 (fix round 1): a claim in their words clears only under the job it names; elsewhere, or only in an unconfirmed detail, it is held", () => {
+  const r = page(["Supervised the night crew of five cooks.", ...BASE]);
+  const trace = (ownWords: string, extra: Partial<Input> = {}) =>
+    buildFinishView({ resumeText: r, ownWords, defendAnswers: [], grounding: { outcomes: [{ claim: "Supervised the night crew of 5 cooks", doc: "resume", status: "still_there", kind: "scope" }] }, ...extra } as Input).openItems.filter((i) => i.trace);
+  // Their sentence names no job: it never moves onto one (held, as before this lane).
+  assert.equal(trace(`${SOURCE}\nI supervised the night crew of five cooks.`).length, 1);
+  // Their sentence names this job's employer: cleared.
+  assert.equal(trace(`${SOURCE}\nAt Harbor Street Diner I supervised the night crew of five cooks.`).length, 0);
+  // It names another employer: held.
+  assert.equal(trace(`${SOURCE}\nAt Lakeside Grill I supervised the night crew of five cooks.`).length, 1);
+  // A confirmed Master Draft detail naming this job clears it; an unconfirmed one is never evidence.
+  assert.equal(trace(SOURCE, { personFacts: ["At Harbor Street Diner I supervised the night crew of five cooks."] }).length, 0);
+  assert.equal(trace(SOURCE, { unconfirmedFacts: ["At Harbor Street Diner I supervised the night crew of five cooks."] }).length, 1);
+  // A number or result kind is never cleared by the evidence rule.
+  const numberKind = buildFinishView({ resumeText: r, ownWords: `${SOURCE}\nAt Harbor Street Diner I supervised the night crew of five cooks.`, defendAnswers: [], grounding: { outcomes: [{ claim: "Supervised the night crew of 5 cooks", doc: "resume", status: "still_there", kind: "number" }] } } as Input);
+  assert.equal(numberKind.openItems.filter((i) => i.trace).length, 1);
+});
+
 // ---- burden --------------------------------------------------------------------------
 
 test("burden: the person's own number in another form is theirs: no number card, and the prefill keeps it", () => {

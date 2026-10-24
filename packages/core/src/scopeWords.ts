@@ -993,6 +993,65 @@ export function scopeHitsNotTheirs(line: string, sourceText: string, ctx: ScopeC
 }
 
 /**
+ * Fix lane check (2026-10-24, Valjean walk defect 3): a skills term is a noun phrase that names a kind of work
+ * ("Crew supervision", "Work assignment and task delegation"). It names no job, no headcount and no result, so
+ * the per-job, same-people reading a resume line gets is the wrong test for it: that reading flagged "Crew
+ * supervision" for a person whose own words say "supervise the production employees". A skills term's scope
+ * claim is the person's when their own words (active, theirs, not denied, not goal text) make a claim of the
+ * same family; for being over people (supervise, lead, oversee, direct, manage) that claim must itself be
+ * explicit over people ("supervised the production employees"), never a title or a possessive. Handing out
+ * work ("assign the daily work", "assigned tasks") is the person's delegation claim. Returns the scope hits in
+ * the term that are still not theirs; an empty list means the evidence supports the term.
+ */
+export function skillScopeNotTheirs(term: string, sourceText: string): ScopeHit[] {
+  const hits = scopeHitsNotTheirs(term, sourceText);
+  if (!hits.length) return hits;
+  // A duty bullet of their own work history ("- Supervise production employees", a finished resume's line)
+  // has no "I"; read it as "I supervise production employees", with every frame check still applied.
+  const work = paragraphs(sourceText).filter((p) => !p.goal);
+  const bullets = work
+    .map((p) => p.text.match(/^\s*[-\u2022*]\s*([A-Za-z].*)$/)?.[1])
+    .filter((b): b is string => !!b)
+    .map((b) => `I ${b.charAt(0).toLowerCase()}${b.slice(1)}`);
+  const theirs = [...personClaims(sourceText), ...(bullets.length ? personClaims(bullets.join("\n")) : [])];
+  const handsOutWork = [...work.map((p) => p.text), ...bullets].some((text) =>
+    straightQuotes(text).split(/[.;!?]+/).some((sent) => {
+      const m = sent.match(ASSIGN_WORK_RE);
+      const before = sent.slice(0, m?.index ?? 0);
+      // Round 2 (R2-S1): "assigned" as an adjective ("I clocked in and assigned tasks were waiting"): the work
+      // is the subject of its own verb, so nobody handed it out here.
+      const after = m ? sent.slice((m.index ?? 0) + m[0].length) : "";
+      if (m && OWN_VERB_AFTER_RE.test(after)) return false;
+      return !!m && personIsSubject(before) && !NEGATION_BEFORE.test(before) && !PASSIVE_BEFORE.test(before) && !SHARED_BEFORE.test(before);
+    })
+  );
+  return hits.filter((h) => {
+    if (h.family === "delegate" && handsOutWork) return false;
+    return !theirs.some((c) => c.family === h.family && c.self && (!RUN_PAGE.has(h.family) || c.overPeople === true));
+  });
+}
+/**
+ * Fix round 1 (review B3): the person is the one doing it. "I assign the daily work", "I usually assign
+ * tasks", a duty bullet (read as "I ..."), or a list of their own duties with no other subject in it
+ * ("I manage the floor, supervise the crew, and assign the daily work"). Never "My supervisor assigned tasks
+ * to me", "The lead assigned the daily work and I did it", "Shift manager would assign duties".
+ */
+function personIsSubject(before: string): boolean {
+  const b = straightQuotes(before);
+  if (/^\s*I\s+(?:(?:also|always|usually|often|then|still|personally|each\s+morning|every\s+day|[a-z]+ly)\s+)?$/i.test(b)) return true;
+  const list = b.match(/^\s*I\s+([a-z'-]+\b[^.;!?]*?)(?:,|\band)\s+(?:and\s+)?$/i);
+  if (!list) return false;
+  const rest = list[1];
+  return !/\bI\b/.test(rest) && !OTHER_SUBJECT_IN_LIST.test(rest) &&
+    !/\b(?:my|the|our|his|her|their|a|an)\s+(?:[a-z-]+\s+)?(?:supervisor|boss|lead|manager|foreman|owner|director|coordinator|dispatcher)s?\b/i.test(rest) &&
+    !/\b(?:would|will|could|should|might|wanted|tried|hoped|planned|asked|told)\b/i.test(rest);
+}
+// The work named after "assigned" takes its own verb: "assigned tasks were waiting", "assigned jobs piled up".
+const OWN_VERB_AFTER_RE = /^\s+(?:were|was|are|is|got|get|gets|piled|pile|sat|sit|sits|waited|wait|waits|waiting|stood|came|come|kept|remained|had|lay|lie|sitting|stayed|went|ran|needed|showed)\b/i;
+// "assign the daily work", "assigned tasks to the crew", "assigning jobs": handing out work, done by the person.
+const ASSIGN_WORK_RE = /\bassign(?:ed|s|ing)?\s+(?:(?:the|our|my|their|all|each|every)\s+)?(?:[a-z-]+\s+){0,2}(?:work|tasks?|jobs?|duties|assignments?|orders?)\b/i;
+
+/**
  * Kept for older callers. Round 5: the gate never reads an answer for scope;
  * a scope claim is settled only by a rewrite or a cut. This only reports
  * whether an answer names a scope claim of its own, not a denial.
