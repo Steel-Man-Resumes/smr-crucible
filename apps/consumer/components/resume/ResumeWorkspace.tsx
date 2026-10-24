@@ -1236,9 +1236,9 @@ export function ResumeWorkspace() {
           posting.
         </p>
         <p className="text-sm text-t-phos-dim mb-4">
-          You work one job at a time. Save as many as you want on the Job Board,
-          then tailor and apply to them one by one. They wait for you under
-          your saved jobs.
+          Tailor one job here, or pick up to 3 on the Job Board and tailor them
+          together. Each job still gets its own resume and its own AI action.
+          Saved jobs wait for you under your saved jobs.
         </p>
         <section className="mb-5 border border-purple-400/40 bg-t-panel p-4">
           <h2 className="font-bold text-t-white">Start with a real opening</h2>
