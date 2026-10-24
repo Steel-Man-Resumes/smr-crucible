@@ -11,6 +11,7 @@
 import { TroyWork } from "@crucible/consumer-ui";
 import { SavedPackagePreview } from "./SavedPackagePreview";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
+import { boardHandoff, loadJobHandoff, singleTailorCost, type PendingTailor } from "@/lib/tailor-handoff";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -173,6 +174,12 @@ export function ResumeWorkspace() {
   // set, the saved resume artifact is linked to it (Stage 3 journey gate).
   const [targetApplicationId, setTargetApplicationId] = useState<string | null>(null);
 
+  // A job picked by arriving with ?job= or from the Job Board. Arriving never
+  // spends: the person sees the job, the cost and a "Tailor now" button, and
+  // the generator runs only on that click (lib/tailor-handoff.ts).
+  const [pendingTailor, setPendingTailor] = useState<PendingTailor | null>(null);
+  const [tailorAllowance, setTailorAllowance] = useState<{ remaining: number | null; blockedReason: string | null } | undefined>(undefined);
+
   // Where to actually APPLY once the resume is ready (Wave R / R8). The ladder is
   // apply_url -> employer_website -> t.ROY-drafted email; `applied` reflects the
   // saved application's status so the CTA can flip to "Applied".
@@ -214,6 +221,7 @@ export function ResumeWorkspace() {
     setTargetApplicationId(null); setApplyInfo({applyUrl:null,employerWebsite:null,applied:false});
     setCoverLetterText(null); setDisclosureBrief(null); setTailoringNotes([]); setPackageTab("resume");
     setExportRev(null); setEmailState(""); setExportError(""); tailorParentRef.current=null;
+    setPendingTailor(null);
   }
 
 
@@ -461,18 +469,17 @@ export function ResumeWorkspace() {
     }
   }, [searchParams]);
 
-  // --- Import from Job Board (AI-generated targeted resume, via sessionStorage) ---
+  // --- Job Board hand-off (via sessionStorage) ---
+  // Picks the job only. Nothing is generated until "Tailor now" is pressed.
   useEffect(() => {
     if (!lanes.loaded || searchParams.get("from") !== "job") return;
     const jobData = sessionStorage.getItem("resume_target_job");
     if (!jobData) return;
     sessionStorage.removeItem("resume_target_job");
-    try {
-      runCareerPackage(JSON.parse(jobData), {});
-    } catch {
-      setGenError("Could not read the selected job. Try importing from Forge instead.");
-    }
-  }, [searchParams, lanes.loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+    const pending = boardHandoff(jobData);
+    if (pending) setPendingTailor(pending);
+    else setGenError("Could not read the selected job. Try importing from Forge instead.");
+  }, [searchParams, lanes.loaded]);
 
   // --- Updater function passed to section editors ---
   const updateDoc = useCallback(
@@ -805,53 +812,58 @@ export function ResumeWorkspace() {
     [updateDoc]
   );
 
-  // --- Next-step card hand-off (?job=<applicationId>) ---
-  // The journey "Tailor your resume for X" action lands here. Load the saved
-  // application, then tailor against it (or open the existing tailored resume).
+  // --- Saved-job hand-off (?job=<applicationId>) ---
+  // The tracker, saved jobs, lane header and next-step links land here. An
+  // already tailored job opens its resume (no AI spend). Otherwise the job is
+  // picked and waits for the person's click: a page load never runs the tailor.
   useEffect(() => {
     const appId = searchParams.get("job");
     if (!appId || !lanes.loaded) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch("/api/applications");
-        if (!res.ok) return;
-        const { applications } = await res.json();
-        const app = (applications || []).find((a: any) => a.id === appId);
-        if (!app || cancelled) return;
+        const handoff = await loadJobHandoff(appId, (url) => fetch(url, { cache: "no-store" }));
+        if (cancelled || handoff.kind === "none") return;
         // Carry the saved job's apply target + applied-state so the Apply CTA
         // (R8) shows the right rung whether or not the resume already exists.
-        setApplyInfo({
-          applyUrl: app.apply_url || null,
-          employerWebsite: app.employer_website || null,
-          applied: app.status === "applied",
-        });
-        // Already tailored: open it for editing rather than regenerating (no AI spend).
-        if (app.resume_artifact_id) {
-          setTargetApplicationId(app.id);
-          router.replace(`/dashboard/application-tailor?id=${app.resume_artifact_id}`, { scroll: false });
+        setApplyInfo(handoff.applyInfo);
+        if (handoff.kind === "open") {
+          setTargetApplicationId(handoff.applicationId);
+          router.replace(`/dashboard/application-tailor?id=${handoff.artifactId}`, { scroll: false });
           return;
         }
-        await runCareerPackage(
-          {
-            title: app.job_title,
-            company: app.company,
-            description: app.jd_full_text || app.jd_excerpt || app.description,
-            location: app.location,
-            salary: app.salary,
-            employment_type: app.employment_type,
-            id: app.source_id,
-            apply_url: app.apply_url,
-            employer_website: app.employer_website,
-          },
-          { existingApplicationId: app.id }
-        );
+        setPendingTailor(handoff.pending);
       } catch {}
     })();
     return () => {
       cancelled = true;
     };
-  }, [searchParams, runCareerPackage, router, lanes.loaded]);
+  }, [searchParams, router, lanes.loaded]);
+
+  // The honest cost line for the picked job: the same allowance the multi-job
+  // queue reads. A failed read still shows the cost; the server enforces it.
+  useEffect(() => {
+    if (!pendingTailor) return;
+    let cancelled = false;
+    setTailorAllowance(undefined);
+    (async () => {
+      try {
+        const res = await fetch(`/api/tailor-batch?laneId=${encodeURIComponent(lanes.active || "main")}`, { cache: "no-store" });
+        const body = await res.json().catch(() => null);
+        if (cancelled || !res.ok || !body || !("remaining" in body)) return;
+        setTailorAllowance({ remaining: typeof body.remaining === "number" ? body.remaining : null, blockedReason: body.blockedReason || null });
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, [pendingTailor, lanes.active]);
+
+  // The ONLY way a picked job reaches the generator: the person's click.
+  function tailorPendingNow() {
+    const pending = pendingTailor;
+    if (!pending || !lanes.loaded || lanes.switching) return;
+    setPendingTailor(null);
+    runCareerPackage(pending.job, pending.applicationId ? { existingApplicationId: pending.applicationId } : {});
+  }
 
   // --- Save ---
   const save = useCallback(
@@ -1240,6 +1252,36 @@ export function ResumeWorkspace() {
             </div>
           )}
         </div>
+        {pendingTailor && (() => {
+          const cost = singleTailorCost(tailorAllowance);
+          return (
+            <section data-testid="tailor-pending" className="mb-5 border border-t-amber bg-t-panel p-4">
+              <h2 className="font-bold text-t-white">
+                Tailor for {pendingTailor.job.title || "this job"}{pendingTailor.job.company ? ` at ${pendingTailor.job.company}` : ""}
+              </h2>
+              <p data-testid="tailor-pending-cost" className="mt-2 text-sm text-t-phos">{cost.line}</p>
+              <p className="mt-1 text-xs text-t-phos-dim">Nothing runs until you press the button.</p>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  data-testid="tailor-pending-run"
+                  onClick={tailorPendingNow}
+                  disabled={!cost.canRun || !lanes.loaded || lanes.switching}
+                  className="t-focus min-h-touch px-5 bg-t-amber text-white font-bold hover:bg-t-amber-bright disabled:opacity-50"
+                >
+                  Tailor now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPendingTailor(null)}
+                  className="t-focus min-h-touch px-4 text-sm text-t-phos-dim underline underline-offset-2 hover:text-t-white"
+                >
+                  Not now
+                </button>
+              </div>
+            </section>
+          );
+        })()}
         <p className="text-base text-t-phos-dim mb-2">
           Aim your base resume at a specific job. We use your Forge profile to
           tailor your resume, cover letter, and disclosure plan to the exact
