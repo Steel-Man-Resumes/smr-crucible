@@ -15,6 +15,7 @@
 
 import { query, getOne, runScoped } from "./db";
 import { redeemAccessCode, validateAccessCode } from "./accessCode";
+import { createSeatOffer } from "./refineryAccess";
 
 /** SQL fragment: the users row aliased `u` has never signed in by any door. */
 const PENDING_SQL = `(u."emailVerified" IS NULL
@@ -36,8 +37,9 @@ export type CreateOrgInviteResult =
       ok: true;
       userId: string;
       /** invited = never signed in, gets a magic-link welcome;
-       *  attached = existing active account, gets a notification email. */
-      kind: "invited" | "attached";
+       *  offered = existing account that has signed in: asked first, and the
+       *  seat is spent only when they accept (migration 093, R3 S5). */
+      kind: "invited" | "offered";
     }
   | { ok: false; error: string };
 
@@ -96,7 +98,6 @@ export async function createOrgInvite(opts: {
   );
 
   let userId: string;
-  let kind: "invited" | "attached";
 
   if (existing) {
     // Is this person already attached somewhere? That is a question about
@@ -123,14 +124,25 @@ export async function createOrgInvite(opts: {
           "That email already belongs to another organization on Steel Man Resumes. Contact Steel Man Resumes if they should move to yours.",
       };
     }
-    const res = await redeemAccessCode(existing.id, opts.code, { actorUserId: opts.invitedBy });
-    if (!res.success) return { ok: false, error: res.error || "Could not claim a seat." };
     userId = existing.id;
     const pending = await getOne<{ id: string }>(
       `SELECT u.id FROM users u WHERE u.id = $1 AND ${PENDING_SQL}`,
       [userId]
     );
-    kind = pending ? "invited" : "attached";
+    if (!pending) {
+      // CONSENT ON ATTACH (R3 S5). This account has been used by its owner, so
+      // it is theirs to say yes to: the organization makes an offer, and the
+      // seat is spent only when the person accepts (smr_accept_seat_offer).
+      // Fail fast on a full or closed code so the offer is not a dead end.
+      const v = await validateAccessCode(opts.code);
+      if (!v.valid) return { ok: false, error: v.reason || "This code is not accepting new seats." };
+      await createSeatOffer({ accessCodeId: opts.accessCodeId, userId, offeredBy: opts.invitedBy });
+      return { ok: true, userId, kind: "offered" };
+    }
+    // A shell nobody has signed in to yet (made by an earlier invite): no one
+    // to ask, so the seat is claimed now, as for a new invitee.
+    const res = await redeemAccessCode(existing.id, opts.code, { actorUserId: opts.invitedBy });
+    if (!res.success) return { ok: false, error: res.error || "Could not claim a seat." };
   } else {
     // Fail fast on a full code before creating anything.
     const v = await validateAccessCode(opts.code);
@@ -147,7 +159,6 @@ export async function createOrgInvite(opts: {
       await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {});
       return { ok: false, error: res.error || "Could not claim a seat." };
     }
-    kind = "invited";
   }
 
   await query(
@@ -158,7 +169,7 @@ export async function createOrgInvite(opts: {
     [opts.accessCodeId, userId, opts.invitedBy, name || null, email]
   );
 
-  return { ok: true, userId, kind };
+  return { ok: true, userId, kind: "invited" };
 }
 
 /**
