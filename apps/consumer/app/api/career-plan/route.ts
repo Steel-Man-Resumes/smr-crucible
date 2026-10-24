@@ -20,7 +20,7 @@ import { revisionCaller } from "@/lib/revision-route";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { isMockEnabled } from "@/lib/mock-ai";
-import { callAI, AI_PROVIDER } from "@/lib/ai-call";
+import { callAIWithProvider } from "@/lib/ai-call";
 import { MODEL_CHAT } from "@/lib/ai/models";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { readPlanAnswers } from "@/lib/career-plan/questions";
@@ -62,18 +62,20 @@ export async function POST(request: Request) {
   // Taps can only point at facts the server just loaded.
   if (answers.liked) answers.liked = { ...answers.liked, factIds: answers.liked.factIds.filter((id) => ctx.facts.some((f) => f.id === id)) };
   const facts = [...ctx.facts, ...todayFacts(answers)];
-  const base = { facts, answers, location: ctx.location };
+  const base = { facts, reading: ctx.reading, answers, location: ctx.location };
 
   if (isMockEnabled() || (!process.env.ANTHROPIC_API_KEY && !process.env.OPENAI_API_KEY)) {
     return NextResponse.json({ plan: assemblePlan(base), location: ctx.location }, { headers });
   }
 
-  const candidates = rankDirections(allowedDirections(answers), facts, answers).slice(0, 8);
+  const candidates = rankDirections(allowedDirections(answers), facts, answers, ctx.reading).slice(0, 8);
   const prompt = buildPlanPrompt(facts, answers, candidates);
   const userId = caller.userId;
+  let answeredBy = { provider: "anthropic", model: MODEL_CHAT };
   const ai = withRateLimit(async () => {
-    const text = await callAI(PLAN_SYSTEM, [{ role: "user", content: prompt }], 900, MODEL_CHAT, { userId, endpoint: ENDPOINT });
-    return NextResponse.json({ text });
+    const result = await callAIWithProvider(PLAN_SYSTEM, [{ role: "user", content: prompt }], 900, MODEL_CHAT, { userId, endpoint: ENDPOINT });
+    answeredBy = { provider: result.provider, model: result.model };
+    return NextResponse.json({ text: result.text });
   }, { mode: "user", endpoint: ENDPOINT });
 
   let note: string | null = null;
@@ -92,13 +94,13 @@ export async function POST(request: Request) {
     note = NO_AI_NOTE;
   }
 
-  const plan = assemblePlan({ ...base, model });
+  const plan = assemblePlan({ ...base, model, offered: candidates.map((d) => d.id) });
   if (note) plan.notes.unshift(note);
   if (plan.method === "ai") {
     try {
       const { logDecision } = await import("@crucible/core");
       await logDecision({
-        userId, contextPage: ENDPOINT, modelProvider: AI_PROVIDER, modelId: MODEL_CHAT,
+        userId, contextPage: ENDPOINT, modelProvider: answeredBy.provider, modelId: answeredBy.model,
         input: `${facts.length} facts, ${Object.keys(answers).length} answers`,
         explanation: "Ranked three catalogue directions and quoted the person's own facts; quotes not found in the facts were stripped.",
         outputSummary: { directions: plan.directions.map((d) => d.id), notes: plan.notes.length },

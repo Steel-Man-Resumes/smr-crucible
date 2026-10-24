@@ -11,7 +11,7 @@
 
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { queryAsUser, incrementUserUsage } from "@crucible/core";
+import { queryAsUser, incrementUserUsage, refundUserUsage } from "@crucible/core";
 import { revisionCaller } from "@/lib/revision-route";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { readPlanAnswers } from "@/lib/career-plan/questions";
@@ -41,8 +41,11 @@ export async function POST(request: Request) {
   const note = buildPlanNote({ id: randomUUID(), now: new Date(), directionIds: body?.directionIds, answers });
   if (!note) return NextResponse.json({ error: "Nothing to save yet. Get your three directions first." }, { status: 400, headers });
   const userId = caller.userId;
+  let counted = false;
   try {
-    if ((await incrementUserUsage(userId, "career-plan-note")) > 30) return NextResponse.json({ error: "You've saved a lot of notes today. Your earlier ones are safe. Try again tomorrow." }, { status: 429, headers });
+    const used = await incrementUserUsage(userId, "career-plan-note");
+    counted = true;
+    if (used > 30) return NextResponse.json({ error: "You've saved a lot of notes today. Your earlier ones are safe. Try again tomorrow." }, { status: 429, headers });
     const rows = await queryAsUser(userId,
       `INSERT INTO consumer_profile (user_id, profile_data) VALUES ($1, jsonb_build_object('careerPlanNotes', jsonb_build_array($2::jsonb)))
        ON CONFLICT (user_id) DO UPDATE SET
@@ -55,6 +58,8 @@ export async function POST(request: Request) {
     if (!rows.length) throw new Error("no row");
     return NextResponse.json({ note }, { headers });
   } catch {
+    // A failed save does not use up one of today's saves.
+    if (counted) await refundUserUsage(userId, "career-plan-note").catch(() => {});
     return NextResponse.json({ error: "Your note wasn't saved. Try again." }, { status: 503, headers });
   }
 }
