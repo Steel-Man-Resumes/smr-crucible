@@ -72,9 +72,33 @@ export const PARENT_CUTS = [
   { line: "- Handle hiring, training, and scheduling of employees.", answer: "", verdict: "cut" as const },
 ];
 
-/** A finished revision row of his Forge resume, and a draft row of the Tailor result. */
+/** His resumes, as the store lists them (the names a card uses). */
+export const ARTIFACTS = [
+  { id: "forge", target_context: { source: "forge", targetJob: "" } },
+  { id: "tailored", target_context: { source: "job", targetJob: "Production Supervisor" } },
+  { id: "older", target_context: { source: "job", targetJob: "Shift Lead" } },
+];
+
+/** Revision rows: his Forge resume finished last; an older resume finished once, then a newer draft (review S2); the Tailor draft. */
 export const REVISIONS = [
   { artifact_id: "forge", status: "finished", resume_text: FINISHED, created_at: "2026-10-23T01:49:37.374Z", revision_number: 2 },
   { artifact_id: "forge", status: "draft", resume_text: `${FINISHED}\n- Ran the whole plant.`, created_at: "2026-10-22T23:18:19.122Z", revision_number: 1 },
+  { artifact_id: "older", status: "finished", resume_text: "JEAN VALJEAN\n\nPROFESSIONAL EXPERIENCE\n\nShift Lead | Madeleine Glassworks, 2019 - Present\n- Trained 12 new hires.", created_at: "2026-10-20T10:00:00.000Z", revision_number: 1 },
+  { artifact_id: "older", status: "draft", resume_text: "JEAN VALJEAN\n\nPROFESSIONAL EXPERIENCE\n\nShift Lead | Madeleine Glassworks, 2019 - Present\n- Trained new hires.", created_at: "2026-10-21T10:00:00.000Z", revision_number: 2 },
   { artifact_id: "tailored", status: "draft", resume_text: TAILORED, created_at: "2026-10-24T14:49:35.130Z", revision_number: 1 },
 ];
+
+/** A finished resume where the person kept inside work on the page (review B2): the block must go whole. */
+export const FINISHED_WITH_RECORD = `JEAN VALJEAN
+
+PROFESSIONAL EXPERIENCE
+
+Production Worker | Digne Lumber & Stone, June 2015 - March 2019
+- Operated forklift and hoisting equipment.
+
+Kitchen Lead | Stanley Correctional Institution, 2010 - 2014
+- Supervised a crew of twelve kitchen workers on every shift.
+- Planned weekly menus and ordered food for 1,500 meals a day.
+
+SKILLS
+Forklift operation | Menu planning`;

@@ -102,7 +102,6 @@ import {
   cutCredentialEverywhere,
   optionalNumberPrompts,
   recordJobOk,
-  changeListEntry,
 } from "@/lib/finish-gate";
 import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
 import { finishPayload, payloadMark, readRunEvidence, type RunEvidence } from "@/lib/finish-payload";
@@ -117,6 +116,7 @@ import { storyIsChecked } from "@/lib/story-verification";
 import { DefendPanel, fetchSuggestion, type BulkPick, type CardActions } from "@/components/forge/finish/DefendPanel";
 import { settleFinishPage, type SettleNote } from "@/lib/auto-settle";
 import { DownloadBox } from "@/components/forge/finish/DownloadBox";
+import { ApprovedChanges } from "@/components/forge/finish/ApprovedChanges";
 import { EmailPackageBox } from "@/components/forge/finish/EmailPackageBox";
 import { FinishedEmailLine } from "@/components/forge/finish/FinishedEmailLine";
 import { useSession } from "next-auth/react";
@@ -613,8 +613,12 @@ function OutputPageInner() {
         credentialCutRemnants,
         credentialRows,
         ownResumeText,
+        // Check and finish: the person's evidence the server read fresh (lib/person-evidence.ts).
+        personFacts: runEvidence?.personFacts,
+        unconfirmedFacts: runEvidence?.unconfirmedFacts,
+        finishedLines: runEvidence?.finishedLines,
       }),
-    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer, credentialCutRemnants, credentialRows, ownResumeText]
+    [resumeText, ownWords, defendAnswers, coverLetterText, addedTerms, keptTerms, confirmedCredentials, grounding, written, credentialsAnswer, credentialCutRemnants, credentialRows, ownResumeText, runEvidence]
   );
   const ready = docState === "done" && !!resumeText;
 
@@ -1432,23 +1436,7 @@ function OutputPageInner() {
                   <p className="text-sm text-t-phos">The resume came back empty. Try again below.</p>
                 )}
               </div>
-              {defendAnswers.some((a) => a.replaced || a.verdict === "cut") && (
-                <details open className="mt-3 border border-t-line bg-t-panel px-4 py-3" data-testid="approved-changes">
-                  <summary className="t-focus cursor-pointer text-sm font-semibold text-t-white">Your changes: before and after</summary>
-                  <ul className="mt-3 space-y-4 text-sm text-t-phos">
-                    {defendAnswers.filter((a) => a.replaced || a.verdict === "cut").map((a, i) => (
-                      <li key={`${a.line}-${i}`}>
-                        <p className="text-xs text-t-phos-dim">Before</p>
-                        <p>{a.replaced || a.line}</p>
-                        <p className="mt-2 text-xs text-t-phos-dim">After</p>
-                        <p className="text-t-white">{changeListEntry(a, checkMode ? cutHere : null).after}</p>
-                        {(changeNotes[a.line] || (a.replaced && changeNotes[a.replaced])) && <p className="mt-2 text-xs"><strong>What this addresses:</strong> {changeNotes[a.line] || changeNotes[a.replaced!]}</p>}
-                        <p className="mt-2 text-xs">{changeListEntry(a, checkMode ? cutHere : null).note}</p>
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
+              <ApprovedChanges answers={defendAnswers} cutHere={checkMode ? cutHere : null} changeNotes={changeNotes} />
               {forgeRepairs.length > 0 && (
                 <details className="mt-3 border border-t-line bg-t-panel px-4 py-3" data-testid="forge-repairs">
                   <summary className="cursor-pointer text-sm font-semibold text-t-white">

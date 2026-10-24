@@ -43,7 +43,7 @@
  */
 
 import { recordChoiceFrom } from "./record-choice";
-import { withPersonEvidence } from "./person-evidence";
+import { NO_PERSON_EVIDENCE } from "./person-evidence-shape";
 import { buildTrustedSource } from "./grounding-verify";
 import type { verifyGrounding as VerifyFn } from "./grounding-verify";
 import { accountFlags } from "./grounding-accounting";
@@ -51,7 +51,7 @@ import { credentialStatuses, findOverstatedCredentialLines, findOverstatedCreden
 import { plainPunctuationText } from "./legal-sanitize";
 import { MAX_RENDER_CHARS } from "./resume-render";
 import { writerReceipt, writerSourceFrom, type WriterSource } from "./writer-receipt";
-import { computeRevision, editInput, inputFromRevision, revisionRecord, type RevisionEvidence } from "./revision-status";
+import { computeRevision, editInput, inputFromRevision, revisionRecord, withPersonEvidence, type RevisionEvidence } from "./revision-status";
 import { artifactText, baseRevisionFor, textFromBase } from "./revision-current";
 import { pickForgeArtifact, type RevisionStore, type SavedRevisionSummary } from "./revision-save";
 import { revisionKind, rewordingAFor, withRewording, writerOriginOf, type SourceKind } from "./source-kind";
@@ -273,10 +273,11 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
       : store.serverSource
         ? await store.serverSource(userId, false)
         : null;
-  // Fix lane check (Valjean defects 3 and 6): what the person already gave counts as their words here too:
-  // confirmed Master Draft details and the lines of their other finished resumes (lib/person-evidence.ts).
-  const given = store.personEvidence ? await store.personEvidence(userId, art.id).catch(() => []) : [];
-  const source: WriterSource = withPersonEvidence(held ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] }, given);
+  const source: WriterSource = held ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] };
+  // Fix lane check (Valjean defects 3 and 6; round 1, review B5 and S1): what the person already gave, read
+  // fresh from their rows now. Their confirmed Master Draft details join what the second check reads; their
+  // finished resumes' lines do not (checked once, card copy only). None of it enters ownWords.
+  const given = store.personEvidence ? await store.personEvidence(userId, art.id).catch(() => NO_PERSON_EVIDENCE) : NO_PERSON_EVIDENCE;
   const answers = [
     ...(baseInput?.defendAnswers ?? []).map((a) => a.answer),
     ...(baseInput?.confirmedCredentials ?? []).map((c) => c.text),
@@ -289,7 +290,7 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
   // Integration r2 (H1): a page checked on another artifact's version (a Tailor fork) is page_only.
   const baseKind: SourceKind = base && base.artifact_id === art.id ? revisionKind(base, lineage, resume) : "page_only";
   const kind: SourceKind = baseKind === "own_words" && base && base.resume_text !== resume ? "unknown" : baseKind;
-  const grounding = withRewording(await runCheck(written, { resumeText: [source.ownResumeText, source.ownWords].filter(Boolean).join("\n\n"), extra: answers }, deps.verify, rewordingAFor(kind)), kind);
+  const grounding = withRewording(await runCheck(written, { resumeText: [source.ownResumeText, source.ownWords, given.facts.join("\n")].filter(Boolean).join("\n\n"), extra: answers }, deps.verify, rewordingAFor(kind)), kind);
   const runId = artifactRunId(art.id);
   const signed = sign(written, grounding, userId, runId, source, deps);
   if (deps.record) await deps.record(userId, runId, signed.nonce, signed.now);
@@ -312,7 +313,7 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
     // Phase 6 integration (H1): a check of the writer's own version of this resume keeps that origin.
     ...(base && base.artifact_id === art.id && writerOriginOf(base) ? { writerOrigin: true } : { writerOrigin: undefined }),
   };
-  const checked = { ...edited.input, evidence };
+  const checked = withPersonEvidence({ ...edited.input, evidence }, given);
   const verdict = computeRevision(checked);
   const saved = await store.insertRevision(userId, revisionRecord(art.id, "refinery_edit", checked, verdict));
   if (saved.status !== "saved") return { ok: false, status: saved.status === "not_ready" ? 503 : 400, error: "We couldn't save the checked version." };

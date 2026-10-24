@@ -563,7 +563,7 @@ test("M1: a page's docKind is ignored (a 3-page resume sent as cv_academic stays
 });
 
 test("M1 (reviewer P3): dropping or editing the grounding without the writer's receipt cannot finish", () => {
-  const flagged = { verifierRan: true, removed: 0, residual: 1, unmatched: 0, outcomes: [{ claim: "Ran the grill", status: "still_there", doc: "resume" }] };
+  const flagged = { verifierRan: true, removed: 0, residual: 1, unmatched: 0, outcomes: [{ claim: "Ran the grill on the breakfast line", status: "still_there", doc: "resume" }] };
   assert.equal(computeRevision(input({ grounding: flagged })).status, "draft", "the real flag (signed)");
   // The page drops the flag, keeping the old receipt: the receipt no longer matches.
   const signedForFlag = finishState({ grounding: flagged }).writerReceipt;
@@ -997,7 +997,7 @@ test("r3 M-1: what the fresh check flags comes back as a card (still a draft, ne
   const pre = finishState({ writerReceipt: "" });
   const flagging = async ({ kind }: { kind: string }) =>
     kind === "resume"
-      ? { text: "", hasFabrication: true, applied: false, flags: [{ claim: "Ran the grill", reason: "not in source" }], verifierRan: true }
+      ? { text: "", hasFabrication: true, applied: false, flags: [{ claim: "Ran the grill on the breakfast line", reason: "not in source" }], verifierRan: true }
       : { text: "", hasFabrication: false, applied: false, flags: [], verifierRan: true };
   const r = await recheckDocs(
     { documents: { resume: pre.resumeText, letter: pre.coverLetterText }, written: pre.written, source: { resumeText: SOURCE, goalNarrative: "I want to keep cooking." }, runId: RUN.startedAt },
@@ -1043,12 +1043,12 @@ test("Check it again (artifact): an owned resume whose second check BLOCKs stays
   const { f, art } = await finishedForge();
   const flagging = async ({ kind }: { kind: string }) =>
     kind === "resume"
-      ? { text: "", hasFabrication: true, applied: false, flags: [{ claim: "Ran the grill", reason: "not in source" }], verifierRan: true }
+      ? { text: "", hasFabrication: true, applied: false, flags: [{ claim: "Ran the grill on the breakfast line", reason: "not in source" }], verifierRan: true }
       : { text: "", hasFabrication: false, applied: false, flags: [], verifierRan: true };
   const r = await recheckDocs({ kind: "artifact", artifactId: art.id }, UID, { verify: flagging as any, random: fixedRandom, store: f.store });
   assert.ok(r.ok);
   assert.equal(r.ok && r.revision?.status, "draft");
-  assert.ok(r.ok && (r.revision?.openItems ?? []).some((i) => /Ran the grill/.test(i)), r.ok ? JSON.stringify(r.revision?.openItems) : "");
+  assert.ok(r.ok && (r.revision?.openItems ?? []).some((i) => /Ran the grill on the breakfast line/.test(i)), r.ok ? JSON.stringify(r.revision?.openItems) : "");
   assert.equal(r.ok && needsRecheck(r.revision?.openItems), false, "the receipt is fresh; the card is the flagged line");
   const saved = f.revs.at(-1)!;
   assert.equal((saved.evidence as any).writerVerified, true);

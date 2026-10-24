@@ -6,7 +6,7 @@
  * approve or revise; the person's own explanation and cut choices remain.
  */
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { fixPanelIntro, OWN_WORDS_LINE } from "@/lib/finish-copy";
 import {
   editableLine,
@@ -32,11 +32,63 @@ const BTN_SOFT = `${BTN} border-t-line bg-t-panel text-t-phos hover:border-t-pho
 /** One tap answers for "who or what": the common true answers; the box takes anything else. */
 const SCOPE_CHIPS = ["My crew", "My shift", "My team", "The whole department", "New hires", "Customers"] as const;
 
-/** The plain line a card shows when t.ROY could not draft a fix (a 422 or a failed call): never silent. */
-export const SUGGEST_FIX_FALLBACK = "t.ROY couldn't draft a safe fix for this line from what you gave us. Say it's true, change it, or cut it.";
-export function suggestFixNotice(serverMessage: string): string {
-  const m = (serverMessage || "").trim();
-  return m && m !== "Could not draft this line." && m.length <= 240 ? m : SUGGEST_FIX_FALLBACK;
+/**
+ * The plain line a card shows when t.ROY could not draft a fix (a 422 or a
+ * failed call): never silent. Review N2: it names only the buttons the card
+ * shows ("This is true as written" only on a card that has it).
+ */
+export function suggestFixNotice(card: { answerable: boolean }): string {
+  return `t.ROY couldn't draft a safe fix for this line from what you gave us. ${card.answerable ? "Say it's true as written, change it, or cut it." : "Change it or cut it."}`;
+}
+
+/** The idle card's buttons, and the notice under them (exported so a render test reads what the person sees). */
+export function IdleActions({
+  target,
+  answerable,
+  suggesting,
+  notice,
+  firstAction,
+  onDraft,
+  onAnswer,
+  onChange,
+  onCut,
+}: {
+  target: LineGroup["target"];
+  answerable: boolean;
+  suggesting: boolean;
+  notice: string;
+  firstAction?: React.Ref<HTMLButtonElement>;
+  onDraft: () => void;
+  onAnswer: () => void;
+  onChange: () => void;
+  onCut: () => void;
+}) {
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {target !== "skill" && (
+        <button ref={firstAction} onClick={onDraft} disabled={suggesting} className={`${BTN_MAIN} disabled:opacity-60`} data-testid="draft-fix">
+          {suggesting ? "t.ROY is drafting a fix..." : "Let t.ROY draft a fix"}
+        </button>
+      )}
+      {answerable && (
+        <button ref={target === "skill" ? firstAction : undefined} onClick={onAnswer} className={BTN_SOFT}>
+          This is true as written
+        </button>
+      )}
+      {target !== "skill" && (
+        <button onClick={onChange} className={BTN_SOFT}>
+          Change it
+        </button>
+      )}
+      <button onClick={onCut} className={BTN_SOFT}>
+        Cut it
+      </button>
+      {/* Fix lane check (Valjean defect 7): a draft t.ROY could not make is said on the card, never silent. */}
+      {notice && !suggesting && (
+        <p role="status" className="basis-full text-xs text-t-amber-bright" data-testid="suggest-fix-notice">{notice}</p>
+      )}
+    </div>
+  );
 }
 
 function uniqueQuestions(items: OpenItem[]): string[] {
@@ -659,12 +711,12 @@ function GroupCard({
         body: JSON.stringify({ source, page: pageText, target: group.target, current: editableLine(group.line), concern: uniqueQuestions(group.items).join(" "), variation: Math.min(3, suggestions.length) }),
       });
       const data = (await response.json().catch(() => null)) as { suggestion?: unknown; error?: unknown } | null;
-      if (!response.ok || typeof data?.suggestion !== "string") throw new Error(typeof data?.error === "string" ? data.error : "");
+      if (!response.ok || typeof data?.suggestion !== "string") throw new Error("no suggestion");
       const suggestion = data.suggestion;
       setSuggestions((prev) => [...prev, suggestion]);
       setSuggestionIndex(suggestions.length);
     } catch (error) {
-      setNotice(suggestFixNotice(error instanceof Error ? error.message : ""));
+      setNotice(suggestFixNotice({ answerable: group.answerable }));
     } finally {
       setSuggesting(false);
     }
@@ -787,36 +839,20 @@ function GroupCard({
             </div>
           )}
           {mode === "idle" && !scope && !suggestions[suggestionIndex] && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {group.target !== "skill" && (
-                <button ref={firstAction} onClick={() => void askTroy()} disabled={suggesting} className={`${BTN_MAIN} disabled:opacity-60`} data-testid="draft-fix">
-                  {suggesting ? "t.ROY is drafting a fix..." : "Let t.ROY draft a fix"}
-                </button>
-              )}
-              {group.answerable && (
-                <button ref={group.target === "skill" ? firstAction : undefined} onClick={() => setMode("answer")} className={BTN_SOFT}>
-                  This is true as written
-                </button>
-              )}
-              {group.target !== "skill" && (
-                <button
-                  onClick={() => {
-                    setNotice("");
-                    setMode("change");
-                  }}
-                  className={BTN_SOFT}
-                >
-                  Change it
-                </button>
-              )}
-              <button onClick={() => setMode("cut")} className={BTN_SOFT}>
-                Cut it
-              </button>
-              {/* Fix lane check (Valjean defect 7): a draft t.ROY could not make is said on the card, never silent. */}
-              {notice && !suggesting && (
-                <p role="status" className="basis-full text-xs text-t-amber-bright" data-testid="suggest-fix-notice">{notice}</p>
-              )}
-            </div>
+            <IdleActions
+              target={group.target}
+              answerable={group.answerable}
+              suggesting={suggesting}
+              notice={notice}
+              firstAction={firstAction}
+              onDraft={() => void askTroy()}
+              onAnswer={() => setMode("answer")}
+              onChange={() => {
+                setNotice("");
+                setMode("change");
+              }}
+              onCut={() => setMode("cut")}
+            />
           )}
         </>
       )}

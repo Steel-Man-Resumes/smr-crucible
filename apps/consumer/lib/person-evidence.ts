@@ -1,25 +1,35 @@
 /**
- * The person's own evidence set for "Check and finish" (fix lane check,
- * 2026-10-24, Valjean walk defects 3 and 6). Pure; the store reads the rows.
+ * What the person already gave, for "Check and finish" (fix lane check,
+ * 2026-10-24; fix round 1 after review). Pure; the store reads the rows.
  *
- * What the person already gave, and nothing else:
- *   - Master Draft details they confirmed (status "confirmed"; an unchecked
- *     detail is not evidence),
- *   - every line of a resume they FINISHED: the newest finished revision of
- *     each of their other resumes (the gate passed it, so every line on it was
- *     defended or was their own words),
- *   - their typed Forge answers, which already arrive through serverSource
- *     (upload, goal box, licenses answer).
- * Never Forge AI analysis (skills and strengths the model wrote), never a
- * draft, never the resume being checked, and never a line about the record.
+ * Two kinds, kept apart (boss ruling on review S1, DEC-46):
+ *   - facts: Master Draft details the person CONFIRMED. With the answers and
+ *     rewrites they typed on the page, these are the only things beside their
+ *     own uploaded words that clear a flag.
+ *   - finished: the lines of their other resumes whose NEWEST version is
+ *     finished (review S2), one block per resume (review B2). "Checked once":
+ *     they never clear a flag by themselves. A card on a line they already
+ *     finished says so ("You finished this line on ...; confirm it stands
+ *     here") with the same answer path.
+ * Also `unconfirmed`: details not confirmed yet, used only to point a card at
+ * the detail that would settle it (review Q6). Never evidence.
  *
- * A claim supported by this set is never asked about as "not in anything you
- * told us": the check reads it as the person's own words.
+ * Never Forge AI analysis, never the resume being checked, never a record
+ * line: a job block whose header is about the record goes whole, header and
+ * every line under it, so an inside duty can never sit under an outside job.
+ *
+ * Rebuilt fresh on every check, load and check save (review B5). Stored in
+ * its own evidence fields, never in ownWords, never carried by an edit or a
+ * fork (lib/revision-status.ts editInput).
  */
 
-import { masterWorkFacts } from "./master-draft";
+import { readMasterDraft } from "./master-draft";
 import { isJusticeSensitive } from "./grounding-verify";
-import type { WriterSource } from "./writer-receipt";
+import { jobsIn } from "@crucible/core/src/jobResolver";
+import { isSectionHeader } from "@crucible/core/src/pageFitShared";
+import type { FinishedBlock, PersonEvidence } from "./person-evidence-shape";
+export type { FinishedBlock, PersonEvidence } from "./person-evidence-shape";
+export { NO_PERSON_EVIDENCE, readPersonEvidence } from "./person-evidence-shape";
 
 /** A revision row, only the fields this reads. */
 export interface EvidenceRevision {
@@ -30,49 +40,75 @@ export interface EvidenceRevision {
   revision_number: number;
 }
 
-/** Most text the set may add, so a verifier prompt stays inside its source window. */
-export const PERSON_EVIDENCE_MAX = 24000;
-
-const lineKey = (l: string) => l.toLowerCase().replace(/^\s*[-•*]\s*/, "").replace(/[^a-z0-9%]+/g, " ").trim();
 
 /**
- * The evidence lines, in order: confirmed Master Draft details first, then
- * the lines of each finished resume (newest first), one copy of each line.
- * `excludeArtifactId` is the resume being checked: its own draft is never its
- * own evidence.
+ * The most detail text kept. The model verifier reads at most VERIFY_MAX
+ * (lib/limits.ts) of its whole source, the upload first, so details past that
+ * window reach only the deterministic gate, never the model (that errs
+ * strict). The cap bounds the stored evidence and the page payload.
  */
-export function personEvidenceLines(masterDraft: unknown, revisions: ReadonlyArray<EvidenceRevision>, excludeArtifactId?: string): string[] {
-  const out: string[] = [];
-  const seen = new Set<string>();
-  const add = (raw: string) => {
-    const l = raw.replace(/\s+/g, " ").trim();
-    const k = lineKey(l);
-    if (!k || seen.has(k) || isJusticeSensitive(l)) return;
-    seen.add(k);
-    out.push(l);
-  };
-  for (const fact of masterWorkFacts(masterDraft)) add(fact);
-  const newestFinished = new Map<string, EvidenceRevision>();
-  for (const r of revisions) {
-    if (!r || r.status !== "finished" || typeof r.resume_text !== "string" || !r.resume_text.trim()) continue;
-    if (excludeArtifactId && r.artifact_id === excludeArtifactId) continue;
-    const prev = newestFinished.get(r.artifact_id);
-    if (!prev || r.created_at > prev.created_at || (r.created_at === prev.created_at && r.revision_number > prev.revision_number)) newestFinished.set(r.artifact_id, r);
-  }
-  const finished = Array.from(newestFinished.values()).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
-  for (const r of finished) for (const l of r.resume_text.split("\n")) add(l);
+export const PERSON_EVIDENCE_MAX = 24000;
+const FINISHED_MAX_LINES = 400;
+
+const clip = (lines: string[], max: number) => {
   let size = 0;
-  return out.filter((l) => (size += l.length + 1) <= PERSON_EVIDENCE_MAX);
+  return lines.filter((l) => (size += l.length + 1) <= max);
+};
+
+/** A finished resume's lines without any job block about the record (review B2) or any record line. */
+export function finishedLinesOf(text: string): string[] {
+  const lines = (text || "").split("\n").map((l) => l.trim());
+  const drop = new Set<number>();
+  // A job block runs from its header to the next job header or section header.
+  const jobs = jobsIn(text);
+  for (const j of jobs) {
+    if (!isJusticeSensitive([...j.lines, j.employer, j.title, j.place].join(" "))) continue;
+    const start = lines.findIndex((l, i) => !drop.has(i) && l === j.lines[0]);
+    if (start < 0) continue;
+    drop.add(start);
+    for (let i = start + 1; i < lines.length; i++) {
+      const l = lines[i];
+      if (!l) continue;
+      if (isSectionHeader(l) || jobs.some((o) => o !== j && o.lines[0] === l)) break;
+      drop.add(i);
+    }
+  }
+  return lines.filter((l, i) => l && !drop.has(i) && !isJusticeSensitive(l));
+}
+
+/** The name a card uses for a resume ("your Forge resume", "your resume for Production Supervisor"). */
+export function resumeNameOf(targetContext: unknown): string {
+  const tc = (targetContext ?? {}) as { source?: unknown; targetJob?: unknown };
+  const job = typeof tc.targetJob === "string" ? tc.targetJob.replace(/\s+/g, " ").trim().slice(0, 80) : "";
+  if (job) return `your resume for ${job}`;
+  return tc.source === "forge" ? "your Forge resume" : "another resume of yours";
 }
 
 /**
- * The server-held source with the evidence lines added to the person's own
- * words. Lines already in their words are not repeated. Kept as its own
- * paragraph, so it never runs into the goal box.
+ * The person's evidence from their own rows. `excludeArtifactId` is the
+ * resume being checked: never its own evidence.
  */
-export function withPersonEvidence(source: WriterSource, lines: ReadonlyArray<string>): WriterSource {
-  const have = new Set(`${source.ownWords}\n${source.ownResumeText}`.split("\n").map(lineKey).filter(Boolean));
-  const extra = lines.filter((l) => !have.has(lineKey(l)));
-  if (!extra.length) return source;
-  return { ...source, ownWords: [source.ownWords.trim(), extra.join("\n")].filter(Boolean).join("\n\n") };
+export function personEvidenceFrom(
+  masterDraft: unknown,
+  revisions: ReadonlyArray<EvidenceRevision>,
+  artifacts: ReadonlyArray<{ id: string; target_context?: unknown }>,
+  excludeArtifactId?: string
+): PersonEvidence {
+  const md = readMasterDraft(masterDraft);
+  const keep = (status: "confirmed" | "needs_check") =>
+    clip(md.facts.filter((f) => f.status === status && !isJusticeSensitive(f.text)).map((f) => f.text.replace(/\s+/g, " ").trim()), PERSON_EVIDENCE_MAX);
+  // Newest revision per resume; its lines count only when that newest one is finished (review S2).
+  const newest = new Map<string, EvidenceRevision>();
+  for (const r of revisions) {
+    if (!r || typeof r.artifact_id !== "string" || (excludeArtifactId && r.artifact_id === excludeArtifactId)) continue;
+    const prev = newest.get(r.artifact_id);
+    if (!prev || r.created_at > prev.created_at || (r.created_at === prev.created_at && r.revision_number > prev.revision_number)) newest.set(r.artifact_id, r);
+  }
+  const names = new Map(artifacts.map((a) => [a.id, resumeNameOf(a.target_context)]));
+  const finished = Array.from(newest.values())
+    .filter((r) => r.status === "finished" && typeof r.resume_text === "string" && r.resume_text.trim())
+    .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+    .map((r) => ({ name: names.get(r.artifact_id) ?? "another resume of yours", lines: clip(finishedLinesOf(r.resume_text), PERSON_EVIDENCE_MAX).slice(0, FINISHED_MAX_LINES) }))
+    .filter((b) => b.lines.length);
+  return { facts: keep("confirmed"), unconfirmed: keep("needs_check"), finished };
 }

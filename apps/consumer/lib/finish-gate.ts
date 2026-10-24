@@ -36,13 +36,13 @@ import {
   type OpenItem,
   type ResumeStatus,
 } from "@crucible/core/src/resumeStatus";
-import { hasCredentialStatus, isEntryHeader, isSectionEnd, linesOf, numbersIn, runMintCheck } from "@crucible/core/src/resumeMintCheckShared";
+import { hasCredentialStatus, isEntryHeader, isSectionEnd, linesOf, numbersIn, runMintCheck, skillTermsOf } from "@crucible/core/src/resumeMintCheckShared";
 import { normalizeDigits, numberTokens } from "@crucible/core/src/numberRead";
 import { isSectionHeader } from "@crucible/core/src/pageFitShared";
 import { employerKey, employersMatch, jobsIn, matchOwnJob, placeKey, readJobHeader, sameDates, titleKey, type JobFacts } from "@crucible/core/src/jobResolver";
 import { stemOf } from "@crucible/core/src/wordStem";
 import { namedCredentialRe, credentialInitialsRe } from "@crucible/core/src/credentialWords";
-import { scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion, markGoalText, sameTitle, isPeopleScopeHit, ownLineFor, OVER_PEOPLE_QUESTION, OVER_PEOPLE_YES } from "@crucible/core/src/scopeWords";
+import { skillScopeNotTheirs, scopeNotTheirs, scopeHits, straightQuotes, isScopeWhoAnswer, isScopeCopy, helpedForm, scopeWhoQuestion, markGoalText, sameTitle, isPeopleScopeHit, ownLineFor, OVER_PEOPLE_QUESTION, OVER_PEOPLE_YES } from "@crucible/core/src/scopeWords";
 import { isStrictCredentialWhen } from "@crucible/core/src/credentialStatus";
 import {
   credentialHomes,
@@ -353,6 +353,46 @@ export function ownWordsFor(
     .map((s) => (typeof s === "string" ? s.trim() : ""))
     .filter(Boolean)
     .join("\n\n");
+}
+
+// ---- what the person already finished, and details not confirmed yet (fix round 1) ---------
+
+/** A phrase in a text, case and punctuation aside. */
+function phraseIn(text: string, phrase: string): boolean {
+  const n = normalizeForMatch(phrase);
+  return !!n && ` ${normalizeForMatch(text)} `.includes(` ${n} `);
+}
+
+/** Boss ruling S1: a finished line is checked once. Said instead of "that isn't in anything you told us". */
+export function finishedLineWhy(resumeName: string): string {
+  return `You finished this line on ${resumeName}. Confirm it stands here.`;
+}
+
+/** Review Q6: the unconfirmed Master Draft detail that would settle this skill. */
+export function unconfirmedDetailLine(detail: string): string {
+  return `You wrote "${detail.length > 160 ? `${detail.slice(0, 157)}...` : detail}" in your Master Draft but haven't confirmed it. Confirm it there, or cut it.`;
+}
+
+/**
+ * The finished resume an item's line (or skill term) is on, word for word. A
+ * job line counts only under the same employer there and here.
+ */
+function finishedOn(item: { line: string; target?: string }, resumeText: string, blocks: ReadonlyArray<{ name: string; lines: string[] }>): string | undefined {
+  const k = squash(stripBullet(item.line));
+  if (!k) return undefined;
+  const pageJob = item.target === "resume" ? jobHeaderFor(resumeText, item.line) : undefined;
+  for (const b of blocks) {
+    if (item.target === "skill" || item.target === "skillset") {
+      if (b.lines.some((l) => skillTermsOf(l).some((t) => squash(t) === k))) return b.name;
+      continue;
+    }
+    const at = b.lines.findIndex((l) => squash(stripBullet(l)) === k);
+    if (at < 0) continue;
+    if (!pageJob) return b.name;
+    const theirs = jobsIn(b.lines.join("\n")).find((j) => j.body.some((x) => squash(stripBullet(x)) === k));
+    if (theirs && employersMatch(readJobHeader(pageJob).employer, theirs.employer)) return b.name;
+  }
+  return undefined;
 }
 
 // ---- the "before and after" list ----------------------------------------------------
@@ -687,6 +727,9 @@ function removeListItem(body: string, termLower: string): string | null {
   // Take the item with the separator after it; the last item takes the separator before it.
   if (at + 1 < parts.length) parts.splice(at, 2);
   else parts.splice(at - 1, 2);
+  // Review N1: "Rigging, heavy lifting, and forklift" less its middle item reads "Rigging and forklift",
+  // never "Rigging, and forklift".
+  if (parts.length === 3 && /^\s*,\s*$/.test(parts[1]) && /^and\s/i.test(parts[2].trim())) return `${parts[0]} ${parts[2].trim()}`;
   return parts.join("");
 }
 
@@ -1854,7 +1897,7 @@ export function readsAsFragment(text: string): boolean {
   return !hasVerb;
 }
 
-type GroundingOutcome = { claim?: unknown; doc?: unknown; status?: unknown };
+type GroundingOutcome = { claim?: unknown; doc?: unknown; status?: unknown; kind?: unknown };
 
 /** The page line holding a claim, matched the way the claim trace matches it (number words, punctuation). */
 function lineWithClaim(text: string, claim: string): string | undefined {
@@ -1871,25 +1914,24 @@ function lineWithClaim(text: string, claim: string): string | undefined {
  * claim still on the page but across lines is held in the general list.
  */
 /**
- * Fix lane check (Valjean defect 5): the one line on the current page that still carries a flagged claim in
- * other words (two of its words side by side, or most of its words). Undefined when no single line does:
- * then the claim is not on the page as it reads now, and it cannot block.
+ * Fix lane check (Valjean defect 5; round 1, review B4): the lines on the current page that still carry a
+ * flagged claim in other words (two of its words side by side, or most of its words). None: the claim is not
+ * on the page and cannot block. One: that line is the card. Two or more: held in the general list.
  */
-function lineWithRewordedClaim(text: string, claim: string): string | undefined {
+function linesWithRewordedClaim(text: string, claim: string): string[] {
   const words = normalizeForMatch(claim).split(" ").filter((w) => w.length > 2 && !CLAIM_STOP.has(w));
-  if (!words.length) return undefined;
+  if (!words.length) return [];
   const pairs = words.slice(1).map((w, i) => `${words[i]} ${w}`);
-  const lines = linesOf(text).filter((l) => {
+  return linesOf(text).filter((l) => {
     const n = ` ${normalizeForMatch(l)} `;
     if (pairs.some((p) => n.includes(` ${p} `))) return true;
     const found = words.filter((w) => n.includes(` ${w} `)).length;
     return words.length >= 2 && found >= Math.max(2, Math.ceil(words.length / 2));
   });
-  return lines.length === 1 ? lines[0] : undefined;
 }
 const CLAIM_STOP = new Set(["and", "the", "for", "with", "from", "into", "that", "this", "our", "you", "your"]);
 
-function groundingItems(grounding: unknown, resumeText: string, letterText: string, written?: WrittenDocs | null, source = ""): GateItem[] {
+function groundingItems(grounding: unknown, resumeText: string, letterText: string, written?: WrittenDocs | null, source = "", employers: string[] = []): GateItem[] {
   const outcomes = (grounding as { outcomes?: unknown })?.outcomes;
   if (!Array.isArray(outcomes)) return [];
   const items: GateItem[] = [];
@@ -1900,15 +1942,17 @@ function groundingItems(grounding: unknown, resumeText: string, letterText: stri
     const text = target === "letter" ? letterText : resumeText;
     const original = written ? (target === "letter" ? written.letter : written.resume) : text;
     const credential = o.status === "credential";
-    // Fix lane check (Valjean defect 6): a claim the person's own evidence states is theirs (lib/evidence-claim.ts).
-    if (!credential && claimInEvidence(o.claim, text, source)) continue;
+    // Fix lane check (Valjean defect 6; round 1): a claim the person's own evidence states, whole and under the
+    // same job, is theirs; the flag's kind is respected (lib/evidence-claim.ts).
+    if (!credential && claimInEvidence(o.claim, text, source, { kind: typeof o.kind === "string" ? o.kind : undefined, employers })) continue;
     const now = flagOutcome({ claim: o.claim, why: "" }, original || text, text);
     if (now === "removed") continue;
     if (now === "unmatched" && !lineWithClaim(text, o.claim)) continue;
-    // Recomputed against the page as it reads now (defect 5): reworded on one line, that line is the card;
-    // on no single line, it is not on the page and cannot block.
-    const reworded = now === "changed" && !lineWithClaim(text, o.claim) ? lineWithRewordedClaim(text, o.claim) : undefined;
-    if (now === "changed" && !lineWithClaim(text, o.claim) && !reworded) continue;
+    // Recomputed against the page as it reads now (defect 5, review B4): reworded on no line, it is not on the
+    // page and cannot block; on one line, that line is the card; on two or more, the general list holds it.
+    const rewordedLines = now === "changed" && !lineWithClaim(text, o.claim) ? linesWithRewordedClaim(text, o.claim) : [];
+    if (now === "changed" && !lineWithClaim(text, o.claim) && rewordedLines.length === 0) continue;
+    const reworded = rewordedLines.length === 1 ? rewordedLines[0] : undefined;
     const line = lineWithClaim(text, o.claim) ?? reworded ?? "";
     items.push({
       rule: credential ? "STD-T03" : "STD-C04",
@@ -2132,12 +2176,22 @@ export function buildFinishView(input: {
   credentialRows?: ReadonlyArray<CredentialRow>;
   /** The person's own uploaded resume (record lines held back as they chose). Whole lines of it may cover a credential. */
   ownResumeText?: string;
+  /**
+   * Fix lane check (round 1): Master Draft details the person confirmed, read fresh by the server. They count
+   * as the person's words. Never from a request (lib/person-evidence.ts).
+   */
+  personFacts?: string[];
+  /** Details not confirmed yet: only a pointer on the card they would settle (review Q6). Never evidence. */
+  unconfirmedFacts?: string[];
+  /** Their other finished resumes' lines: "checked once", card copy only (boss ruling S1). Never evidence. */
+  finishedLines?: ReadonlyArray<{ name: string; lines: string[] }>;
 }): FinishView {
   const letter = input.coverLetterText ?? "";
   const answers = input.defendAnswers;
   // Round 3: what the person settles on a card settles only that card's item.
   // Kept terms and confirmed credentials never join the person's words.
-  const source = gateSource(input.ownWords, answers, [input.resumeText, letter], input.written);
+  const facts = (input.personFacts ?? []).filter((f) => typeof f === "string" && f.trim());
+  const source = gateSource([input.ownWords, facts.join("\n")].filter((t) => t.trim()).join("\n\n"), answers, [input.resumeText, letter], input.written);
   const kept = new Set((input.keptTerms ?? []).map((t) => t.trim().toLowerCase()));
   // A confirmation counts only when it is valid and its line is on the page
   // exactly as the person typed it. That one line is theirs and is not checked
@@ -2341,7 +2395,8 @@ export function buildFinishView(input: {
   }
 
   // The claim trace, settled by a standing answer when it asks for one.
-  for (const g of groundingItems(input.grounding, input.resumeText, letter, input.written, source)) {
+  const pageEmployers = [...jobsIn(input.resumeText).map((j) => j.employer), ...(input.finishedLines ?? []).flatMap((b) => jobsIn(b.lines.join("\n")).map((j) => j.employer))];
+  for (const g of groundingItems(input.grounding, input.resumeText, letter, input.written, source, pageEmployers)) {
     if (g.line && g.rule === "STD-C04" && answerStands(answerFor(answers, g.line), g.line, source)) continue;
     // Already held on that line under the same rule: mark it as the claim trace's too.
     const same = g.line ? items.find((i) => i.target === g.target && i.line === g.line && i.rule === g.rule) : undefined;
@@ -2389,6 +2444,32 @@ export function buildFinishView(input: {
       if (pageJob && matchOwnJob(pageJob, jobsIn(input.ownResumeText ?? input.ownWords, { own: true })).kind === "one") continue;
     }
     items.push({ rule: "STD-C04", severity: "BLOCK", line: header, target: "resume", kind: "job_confirm", why: JOB_WHY, question: JOB_QUESTION });
+  }
+
+  // Fix lane check (defect 6): a job title the person confirmed in a Master Draft detail that names the same
+  // employer ("At Digne Lumber & Stone I was a Production Worker ...") is their title for that job.
+  for (let k = items.length - 1; k >= 0; k--) {
+    const it = items[k];
+    if (it.kind !== "title_unsaid" || it.target !== "resume" || it.roleTitle) continue;
+    const job = readJobHeader(stripBullet(it.line));
+    const employer = job.employer.split(/,/)[0].trim();
+    const title = titleOfHeader(stripBullet(it.line));
+    if (title && employer.length > 2 && facts.some((f) => phraseIn(f, title) && phraseIn(f, employer))) items.splice(k, 1);
+  }
+
+  // Fix lane check (round 1, boss ruling S1): a line the person already finished on another resume is
+  // "checked once". It never clears an item; the card says where they finished it and asks them to confirm it
+  // stands here, with the same answer path.
+  for (const i of items) {
+    if (!/in anything you told us|to anything you told us/.test(i.why)) continue;
+    const done = finishedOn(i, input.resumeText, input.finishedLines ?? []);
+    if (done) i.why = finishedLineWhy(done);
+  }
+  // Review Q6: a skill a not-yet-confirmed Master Draft detail would settle points at that detail.
+  for (const i of items) {
+    if (i.kind !== "grid_scope_term") continue;
+    const detail = (input.unconfirmedFacts ?? []).find((f) => skillScopeNotTheirs(i.line, `${source}\n\n${f}`).length === 0);
+    if (detail) i.why = `${i.why} ${unconfirmedDetailLine(detail)}`;
   }
 
   // An item whose line is not on its page cannot be changed or cut there.

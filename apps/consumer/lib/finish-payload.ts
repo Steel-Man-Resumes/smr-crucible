@@ -9,6 +9,7 @@
  */
 
 import { readStoryDraft, type StoryDraft } from "./story-verification";
+import { readPersonEvidence, type FinishedBlock } from "./person-evidence-shape";
 import { keepSourceRecordLines, recordChoiceFrom, type RecordChoice } from "./record-choice";
 import { CREDENTIALS_KEY } from "./forge-path";
 import { finishKey, ownWordsFor, readStoredFinish, FINISH_STATE_VERSION, type StoredFinish } from "./finish-gate";
@@ -66,6 +67,10 @@ export interface RunEvidence {
   credentialsAnswer: string;
   credentialRows: unknown[];
   ownResumeText: string;
+  /** Check and finish only: the person's evidence the server read fresh (lib/person-evidence.ts). Shown to the gate, never sent back as trusted. */
+  personFacts?: string[];
+  unconfirmedFacts?: string[];
+  finishedLines?: FinishedBlock[];
 }
 
 export function readRunEvidence(raw: unknown): RunEvidence | null {
@@ -77,6 +82,12 @@ export function readRunEvidence(raw: unknown): RunEvidence | null {
     credentialsAnswer: typeof r.credentialsAnswer === "string" ? r.credentialsAnswer : "",
     credentialRows: Array.isArray(r.credentialRows) ? r.credentialRows : [],
     ownResumeText: typeof r.ownResumeText === "string" ? r.ownResumeText : "",
+    ...(Array.isArray(r.personFacts) || Array.isArray(r.finishedLines)
+      ? (() => {
+          const pe = readPersonEvidence(r);
+          return { personFacts: pe.facts, unconfirmedFacts: pe.unconfirmed, finishedLines: pe.finished };
+        })()
+      : {}),
   };
 }
 

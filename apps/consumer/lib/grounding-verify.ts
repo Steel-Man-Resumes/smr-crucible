@@ -26,6 +26,7 @@ import { VERIFY_MAX } from "@/lib/limits";
 import { onlyRewordedFrom, onlySupervisionUnsupported } from "@/lib/fact-trace";
 import { sourceExplicitlySupportsSkill } from "@/lib/skill-source";
 import { claimInEvidence } from "@/lib/evidence-claim";
+import { normalizeForMatch } from "@/lib/grounding-accounting";
 
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
@@ -65,6 +66,8 @@ export type GroundingKind = "resume" | "cover_letter" | "report" | "summary";
 export interface GroundingFlag {
   claim: string;
   why: string;
+  /** Fix round 1 (review S3): the verifier's kind, kept so the evidence override can respect it. */
+  kind?: GroundingFlagKind;
 }
 
 /**
@@ -343,15 +346,16 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
     const match = resolvePageJob(owners[0].header, source);
     return match.kind === "one" ? match.job.body.join("\n") : null;
   };
+  // Fix lane check (Valjean defect 6; round 1, reviews B1, S3, S4): a claim the person's own words state, whole,
+  // under the same job, or their own job's exact dates beside its one employer, is not a flag (lib/evidence-claim.ts).
+  const clearedByEvidence = graded.filter((f) => claimInEvidence(f.claim, output, source, { kind: f.kind })).map((f) => f.claim);
   const factFlags = graded.filter(
     (f) =>
-      // Fix lane check (Valjean defect 6): a claim the person's own words already state, word for word under
-      // the same job, or their own job's exact dates beside its employer, is never a flag (lib/evidence-claim.ts).
-      !claimInEvidence(f.claim, output, source) &&
+      !clearedByEvidence.includes(f.claim) &&
       !(f.kind === "wording" && !truncated && flagSource(f.claim) !== null && onlyRewordedFrom(f.claim, flagSource(f.claim)!)) &&
       !(askSupervision && f.kind === "supervision" && flagSource(f.claim) !== null && onlySupervisionUnsupported(f.claim, flagSource(f.claim)!))
   );
-  const flags: GroundingFlag[] = factFlags.map((f) => ({ claim: f.claim, why: f.why }));
+  const flags: GroundingFlag[] = factFlags.map((f) => ({ claim: f.claim, why: f.why, kind: f.kind }));
   const hasFabrication = flags.length > 0 || (parsed.hasFabrication === true && graded.length === 0);
   const cleaned = typeof parsed.cleaned === "string" ? parsed.cleaned.trim() : "";
 
@@ -362,9 +366,14 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   // is not itself a bare drop marker. Below any guard we still surface flags.
   const lengthFloor = Math.floor(output.trim().length * 0.4);
   const withinAuditWindow = output.trim().length <= MAX_VERIFY_CHARS;
+  // Review S5: the model's rewrite was made before the override, so it may have taken out a claim the
+  // override just cleared. Never apply a rewrite that drops a cleared claim (STD-T08: never silently drop a
+  // line); the remaining flags still surface for the person.
+  const keepsCleared = clearedByEvidence.every((c) => ` ${normalizeForMatch(cleaned)} `.includes(` ${normalizeForMatch(c)} `));
   const applyRewrite =
     hasFabrication &&
     withinAuditWindow &&
+    keepsCleared &&
     !isDropMarker(cleaned) &&
     cleaned.length >= Math.max(40, lengthFloor);
 
