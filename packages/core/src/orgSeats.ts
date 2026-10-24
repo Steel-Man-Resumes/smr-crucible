@@ -11,12 +11,12 @@ import { getOne, runScoped } from "./db";
 import { computeSeatLedger, type SeatLedger } from "./orgSeatsShared";
 
 export async function getOrgSeatLedger(orgId: string, actorUserId = ""): Promise<SeatLedger | null> {
-  const ac = await getOne<{ max_redemptions: number | null; times_redeemed: number }>(
-    `SELECT max_redemptions, times_redeemed FROM access_code WHERE id = $1`,
+  const ac = await getOne<{ max_redemptions: number | null; times_redeemed: number; max_staff: number | null }>(
+    `SELECT max_redemptions, times_redeemed, max_staff FROM access_code WHERE id = $1`,
     [orgId]
   );
   if (!ac) return null;
-  const [rows] = await runScoped<[{ active: number; invited: number }[]]>(
+  const [rows] = await runScoped<[{ active: number; invited: number; staff: number }[]]>(
     { orgId, userId: actorUserId, role: "org_admin" },
     (sql) => [
       (sql as unknown as (s: string, p: unknown[]) => unknown)(
@@ -26,7 +26,8 @@ export async function getOrgSeatLedger(orgId: string, actorUserId = ""): Promise
              WHERE oi.access_code_id = $1::uuid
                AND u."emailVerified" IS NULL AND u.password_hash IS NULL
                AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)
-               AND EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.access_code_id = $1::uuid AND r.user_id = oi.user_id)) AS invited`,
+               AND EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.access_code_id = $1::uuid AND r.user_id = oi.user_id)) AS invited,
+           (SELECT COUNT(*)::int FROM org_staff os WHERE os.access_code_id = $1::uuid) AS staff`,
         [orgId]
       ),
     ]
@@ -36,18 +37,22 @@ export async function getOrgSeatLedger(orgId: string, actorUserId = ""): Promise
     timesRedeemed: ac.times_redeemed,
     activeMembers: rows?.[0]?.active ?? 0,
     pendingInvites: rows?.[0]?.invited ?? 0,
+    staffCount: rows?.[0]?.staff ?? 0,
+    maxStaff: ac.max_staff,
   });
 }
 
 /** Many organizations at once, for the platform-admin directory. */
 export function seatLedgerFromCounts(
-  ac: { max_redemptions: number | null; times_redeemed: number },
-  counts: { joined: number; invited?: number }
+  ac: { max_redemptions: number | null; times_redeemed: number; max_staff?: number | null },
+  counts: { joined: number; invited?: number; staff?: number }
 ): SeatLedger {
   return computeSeatLedger({
     maxRedemptions: ac.max_redemptions,
     timesRedeemed: ac.times_redeemed,
     activeMembers: counts.joined,
     pendingInvites: counts.invited ?? 0,
+    staffCount: counts.staff ?? null,
+    maxStaff: ac.max_staff ?? null,
   });
 }

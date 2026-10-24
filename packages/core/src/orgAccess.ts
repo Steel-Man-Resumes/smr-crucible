@@ -142,6 +142,11 @@ export async function setStaffCapability(actor: OrgActor, targetUserId: string, 
  * whether an address has an account is not this organization's to learn more
  * about than "we could not add that address".
  */
+/** The plain refusal when an organization's staff places are all in use. */
+export function staffCapReason(inUse: number, max: number): string {
+  return `Your organization has ${inUse} of ${max} staff places in use. Remove someone from the team, or ask Steel Man Resumes for more places.`;
+}
+
 export async function inviteOrgStaff(actor: OrgActor, input: { name: string; email: string; role: string; title?: string | null }):
   Promise<{ ok: true; userId: string; email: string; name: string } | { ok: false; error: string }> {
   if (!canManage(actor)) return { ok: false, error: REFUSALS.refused };
@@ -166,6 +171,17 @@ export async function inviteOrgStaff(actor: OrgActor, input: { name: string; ema
     if ((mine[0]?.n ?? 0) > 0) return { ok: false, error: "That person is already on your staff." };
     return { ok: false, error: "We could not add that address. If they already use Steel Man Resumes, contact us and we will help." };
   }
+  // STAFF CAP (migration 097, access_code.max_staff). Staff hold a Refinery
+  // seat of their own, outside the participant seat count, so the number of
+  // staff places is capped per organization. Checked here for a plain answer
+  // and again inside the INSERT below, so a race cannot pass it.
+  const [cap] = await runScoped<[{ n: number; max: number }[]]>(scopeOf(actor), (sql) => [
+    sql`SELECT (SELECT COUNT(*)::int FROM org_staff WHERE access_code_id = ${actor.orgId}::uuid) AS n,
+               (SELECT max_staff FROM access_code WHERE id = ${actor.orgId}::uuid) AS max`,
+  ]);
+  if (cap[0] && cap[0].n >= cap[0].max) {
+    return { ok: false, error: staffCapReason(cap[0].n, cap[0].max) };
+  }
   const made = await query<{ id: string }>(`INSERT INTO users (name, email, tier) VALUES ($1, $2, 'partner') RETURNING id`, [name, email]);
   userId = made[0].id;
   const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
@@ -175,7 +191,9 @@ export async function inviteOrgStaff(actor: OrgActor, input: { name: string; ema
   const out = await runScoped<[{ id: string }[], ...{ r: string }[][]]>(scopeOf(actor), (sql) => [
     run(sql)(
       `INSERT INTO org_staff (access_code_id, user_id, role, title, created_by, invited_at, invited_email)
-       VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid, now(), $6) RETURNING id`,
+       SELECT $1::uuid, $2::uuid, $3, $4, $5::uuid, now(), $6
+        WHERE (SELECT COUNT(*) FROM org_staff os_c WHERE os_c.access_code_id = $1::uuid) < (SELECT ac_c.max_staff FROM access_code ac_c WHERE ac_c.id = $1::uuid)
+       RETURNING id`,
       [actor.orgId, userId, role, input.title?.trim() || (preset ? STAFF_PRESETS[preset].label : null), actor.userId, email]
     ),
     ...writes.map((w) => sql`SELECT smr_set_capability_override(${userId}::uuid, ${w.capability}, ${w.effect}) AS r`),

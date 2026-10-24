@@ -6,6 +6,10 @@
  *      { action: "set_daily_limit", orgId, dailyLimit }
  *      { action: "rotate_code", orgId }
  *      { action: "set_owner", orgId, ownerEmail, ownerName? }
+ *      { action: "set_staff_cap", orgId, maxStaff }
+ *      { action: "set_staff_role", orgId, userId, role }   (support path: owner-only rule widened to platform admins)
+ *      { action: "remove_staff", orgId, userId }
+ * GET  ?orgId=  -> { staff } for the support panel (names, roles, titles)
  *
  * Platform admins only, with a second-factor session (requirePlatformAdmin).
  * The writes and their audit live in packages/core/src/orgAdmin.ts. A new
@@ -23,6 +27,10 @@ import {
   setOrgDailyLimit,
   rotateOrgCode,
   setOrgOwner,
+  setOrgStaffCap,
+  setOrgStaffRole,
+  removeOrgStaff,
+  getOrgStaff,
 } from "@crucible/core";
 import { mintInviteMagicLink, buildStaffInviteEmail, sendOrgEmail } from "@/lib/org-invite-email";
 
@@ -42,6 +50,15 @@ async function emailNewOwner(request: Request, actorUserId: string, email: strin
     console.error("new owner email failed:", (err as Error)?.message || err);
     return false;
   }
+}
+
+export async function GET(request: Request) {
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok) return guard.response;
+  const orgId = new URL(request.url).searchParams.get("orgId") ?? "";
+  if (!UUID.test(orgId)) return NextResponse.json({ error: "Pick an organization." }, { status: 400 });
+  const staff = await getOrgStaff(orgId);
+  return NextResponse.json({ staff: staff.map((m) => ({ userId: m.userId, name: m.name, email: m.email, role: m.role, title: m.title })) });
 }
 
 export async function POST(request: Request) {
@@ -93,6 +110,22 @@ export async function POST(request: Request) {
         typeof body.ownerName === "string" ? body.ownerName.trim() || null : null, org?.partner_name ?? "your organization");
     }
     return NextResponse.json({ ok: true, ownerCreated: res.ownerCreated, emailed, warning: res.warning ?? null });
+  }
+  if (action === "set_staff_cap") {
+    const res = await setOrgStaffCap(orgId, Number(body.maxStaff), guard.userId);
+    return res.ok ? NextResponse.json(res) : NextResponse.json({ error: res.error }, { status: 400 });
+  }
+  // Support path for a locked-out organization (review N4): the same staff
+  // writes the owner makes, allowed here for a platform admin, read from the
+  // platform_admin table inside each statement. The org console stays
+  // owner-only. The org_staff audit trigger records this admin as the actor.
+  if (action === "set_staff_role" || action === "remove_staff") {
+    const userId = String(body.userId ?? "");
+    if (!UUID.test(userId)) return NextResponse.json({ error: "Pick a staff member." }, { status: 400 });
+    const res = action === "set_staff_role"
+      ? await setOrgStaffRole({ orgId, userId, role: body.role === "org_admin" ? "org_admin" : "staff", actorUserId: guard.userId, authority: "owner_or_platform_admin" })
+      : await removeOrgStaff({ orgId, userId, actorUserId: guard.userId, authority: "owner_or_platform_admin" });
+    return res.ok ? NextResponse.json({ ...res, ok: true }) : NextResponse.json({ error: res.reason }, { status: 403 });
   }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });
 }

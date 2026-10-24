@@ -18,7 +18,7 @@
  */
 
 export interface SeatLedger {
-  /** null = no cap set. */
+  /** null = no cap set. 0 is a real cap: no seats (smr_redeem_code refuses every join). */
   seatsTotal: number | null;
   seatsClaimed: number;
   seatsActive: number;
@@ -26,6 +26,9 @@ export interface SeatLedger {
   seatsFree: number | null;
   /** Invited, never signed in. Inside seatsActive, shown on its own. */
   seatsInvited: number;
+  /** Staff places: people on org_staff now, and the cap (access_code.max_staff). null when not read. */
+  staffCount: number | null;
+  staffTotal: number | null;
 }
 
 function wholeOrZero(n: unknown): number {
@@ -38,11 +41,14 @@ export function computeSeatLedger(input: {
   timesRedeemed: number | null | undefined;
   activeMembers: number | null | undefined;
   pendingInvites?: number | null;
+  staffCount?: number | null;
+  maxStaff?: number | null;
 }): SeatLedger {
   const capRaw = input.maxRedemptions;
-  // 0 or a missing cap both mean "no cap": smr_redeem_code treats a falsy
-  // max_redemptions as unlimited, so the screen must too.
-  const seatsTotal = capRaw === null || capRaw === undefined || !(Number(capRaw) > 0) ? null : Math.floor(Number(capRaw));
+  // Match smr_redeem_code (048): NULL is no cap; any number, 0 included, is a
+  // cap it checks with times_redeemed >= max_redemptions. So 0 means full.
+  const capNum = Number(capRaw);
+  const seatsTotal = capRaw === null || capRaw === undefined || !Number.isFinite(capNum) ? null : Math.max(0, Math.floor(capNum));
   const seatsActive = wholeOrZero(input.activeMembers);
   // claimed can never be below active: every current member spent a seat. If
   // the counter disagrees (rows written before the counter existed), the
@@ -50,7 +56,15 @@ export function computeSeatLedger(input: {
   const seatsClaimed = Math.max(wholeOrZero(input.timesRedeemed), seatsActive);
   const seatsInvited = Math.min(wholeOrZero(input.pendingInvites), seatsActive);
   const seatsFree = seatsTotal === null ? null : Math.max(0, seatsTotal - seatsClaimed);
-  return { seatsTotal, seatsClaimed, seatsActive, seatsFree, seatsInvited };
+  const staffCount = input.staffCount === null || input.staffCount === undefined ? null : wholeOrZero(input.staffCount);
+  const staffTotal = input.maxStaff === null || input.maxStaff === undefined || !Number.isFinite(Number(input.maxStaff)) ? null : wholeOrZero(input.maxStaff);
+  return { seatsTotal, seatsClaimed, seatsActive, seatsFree, seatsInvited, staffCount, staffTotal };
+}
+
+/** "3 of 10 staff", or null when the staff numbers were not read. */
+export function staffLedgerLine(l: SeatLedger): string | null {
+  if (l.staffCount === null || l.staffTotal === null) return null;
+  return `${l.staffCount} of ${l.staffTotal} staff`;
 }
 
 /** One plain line for a header or a table cell. */

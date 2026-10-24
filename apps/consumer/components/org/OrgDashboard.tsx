@@ -38,7 +38,7 @@ import { summarizeStaffPerformance } from "@crucible/core/src/orgStaffPerformanc
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 // Pure wording for an empty staff list (tested in packages/core).
 import { staffEmptyState } from "@crucible/core/src/orgVisibilityShared";
-import { seatLedgerLine, SEAT_LEDGER_HELP, type SeatLedger } from "@crucible/core/src/orgSeatsShared";
+import { seatLedgerLine, staffLedgerLine, SEAT_LEDGER_HELP, type SeatLedger } from "@crucible/core/src/orgSeatsShared";
 import { SeeEveryonePanel } from "@/components/org/SeeEveryonePanel";
 import {
   DEFAULT_STAFF_PREFS,
@@ -745,7 +745,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 <h2 className="text-lg font-bold text-t-white">Team</h2>
                 <div className="flex items-center gap-3 text-xs">
                   <span className="text-t-phos-dim">
-                    {staff.length} on staff
+                    {seats && staffLedgerLine(seats) ? staffLedgerLine(seats) : `${staff.length} on staff`}
                     {seats ? `. ${seatLedgerLine(seats)}` : seatLimit != null ? "" : ". No seat limit."}
                   </span>
                   <a

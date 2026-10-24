@@ -26,7 +26,10 @@ describe("who may make, change or remove an admin", () => {
   });
   it("the database statements carry the owner check too, read from access_code", () => {
     const src = readFileSync(new URL("../orgStaffAdmin.ts", import.meta.url), "utf8");
-    assert.equal((src.match(/ACTOR_IS_OWNER\("\$1"/g) ?? []).length, 4, "insert, on-conflict re-role, update, delete");
+    // Shape only; the real proof is the pglite test (apps/consumer/lib/__tests__/org-owner-sql-pglite.test.ts).
+    assert.equal((src.match(/ACTOR_IS_OWNER\("\$1", "\$5"\)/g) ?? []).length, 2, "insert and on-conflict re-role");
+    assert.equal((src.match(/ownerSql\(authority, "\$1"/g) ?? []).length, 2, "update and delete");
+    assert.match(src, /EXISTS \(SELECT 1 FROM platform_admin pa WHERE pa\.user_id = \$\{actor\}::uuid\)/);
     assert.match(src, /partner_user_id = \$\{actor\}::uuid/);
   });
 });

@@ -11,10 +11,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRealTier } from "@/lib/useUserTier";
 
-interface Seats { seatsTotal: number | null; seatsClaimed: number; seatsActive: number; seatsFree: number | null; seatsInvited: number }
+interface Seats { seatsTotal: number | null; seatsClaimed: number; seatsActive: number; seatsFree: number | null; seatsInvited: number; staffCount: number | null; staffTotal: number | null }
+interface StaffRow { userId: string; name: string | null; email: string | null; role: "org_admin" | "staff"; title: string | null }
 interface OrgRow {
   id: string; code: string; partner_name: string; tier: string; is_active: boolean; org_logo_url: string | null;
-  owner_email: string | null; joined: number; staff_count: number; daily_limit: number | null; crm_v2: boolean; seats?: Seats;
+  owner_email: string | null; joined: number; staff_count: number; daily_limit: number | null; crm_v2: boolean; max_staff?: number | null; seats?: Seats;
 }
 
 const input = "w-full bg-t-bg border border-t-line px-3 py-2 text-sm text-t-white focus:border-t-amber outline-none";
@@ -69,6 +70,15 @@ function OrgActions({ org, onDone }: { org: OrgRow; onDone: (msg: string) => voi
   const [seats, setSeats] = useState("5");
   const [limit, setLimit] = useState(String(org.daily_limit ?? 30));
   const [ownerEmail, setOwnerEmail] = useState("");
+  const [staffCap, setStaffCap] = useState(String(org.max_staff ?? 10));
+  const [team, setTeam] = useState<StaffRow[] | null>(null);
+  const loadTeam = useCallback(() => {
+    fetch(`/api/admin/orgs?orgId=${org.id}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((d) => setTeam(d.staff))
+      .catch(() => setTeam([]));
+  }, [org.id]);
+  useEffect(loadTeam, [loadTeam]);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const act = async (name: string, body: Record<string, unknown>, ok: (d: any) => string, confirmText?: string) => {
@@ -109,10 +119,44 @@ function OrgActions({ org, onDone }: { org: OrgRow; onDone: (msg: string) => voi
         </div>
       </div>
       <div>
+        <div className="text-t-phos-dim mb-1">Staff places (staff use the Refinery outside the seat count)</div>
+        <div className="flex gap-2">
+          <input className={input} type="number" min={0} max={1000} value={staffCap} onChange={(e) => setStaffCap(e.target.value)} />
+          <button className={btn} disabled={!!busy}
+            onClick={() => act("staffcap", { action: "set_staff_cap", maxStaff: Number(staffCap) }, (d) => `${org.partner_name} can now have up to ${d.maxStaff} staff.`)}>Set</button>
+        </div>
+      </div>
+      <div>
         <div className="text-t-phos-dim mb-1">Rotate the code</div>
         <button className={btn} disabled={!!busy}
           onClick={() => act("rotate", { action: "rotate_code" }, (d) => `${org.partner_name} has a new code: ${d.code}. The old one no longer works.`,
             `Give ${org.partner_name} a new code? The old code stops working right away, including links already shared. Members and seats stay.`)}>New code</button>
+      </div>
+      <div className="sm:col-span-2">
+        <div className="text-t-phos-dim mb-1">Team, for support (every change is recorded with your name)</div>
+        {!team ? <p className="text-t-phos-dim">Loading...</p> : team.length === 0 ? <p className="text-t-phos-dim">No staff yet.</p> : (
+          <ul className="divide-y divide-t-line border border-t-line">
+            {team.map((m) => (
+              <li key={m.userId} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+                <span className="text-t-white">{m.name || m.email} <span className="text-t-phos-dim">{m.role === "org_admin" ? "Admin" : "Staff"}{m.title ? `, ${m.title}` : ""}</span></span>
+                <span className="flex gap-2">
+                  <button className={btn} disabled={!!busy}
+                    onClick={() => act("role", { action: "set_staff_role", userId: m.userId, role: m.role === "org_admin" ? "staff" : "org_admin" },
+                      () => { loadTeam(); return `${m.name || m.email} is now ${m.role === "org_admin" ? "staff" : "an admin"} at ${org.partner_name}.`; },
+                      `Make ${m.name || m.email} ${m.role === "org_admin" ? "staff" : "an admin"} at ${org.partner_name}?`)}>
+                    {m.role === "org_admin" ? "Make staff" : "Make admin"}
+                  </button>
+                  <button className={btn} disabled={!!busy}
+                    onClick={() => act("remove", { action: "remove_staff", userId: m.userId },
+                      () => { loadTeam(); return `${m.name || m.email} was removed from ${org.partner_name}'s team.`; },
+                      `Remove ${m.name || m.email} from ${org.partner_name}'s team? Their caseload goes back to unassigned.`)}>
+                    Remove
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
       {error && <p className="sm:col-span-2 text-sm text-t-red">{error}</p>}
     </div>
@@ -201,7 +245,9 @@ export default function AdminOrgsPage() {
                   </td>
                   <td className="px-4 py-3 text-center text-t-white">{o.seats?.seatsActive ?? o.joined}</td>
                   <td className="px-4 py-3 text-center text-t-white">{o.seats?.seatsFree ?? "--"}</td>
-                  <td className="px-4 py-3 text-center text-t-white">{o.staff_count}</td>
+                  <td className="px-4 py-3 text-center text-t-white">
+                    {o.seats?.staffTotal != null ? `${o.staff_count} of ${o.seats.staffTotal}` : o.staff_count}
+                  </td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
                     <button onClick={() => setOpen(open === o.id ? null : o.id)} className={`${btn} mr-2`} aria-expanded={open === o.id}>
                       Manage

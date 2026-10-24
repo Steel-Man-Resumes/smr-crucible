@@ -187,7 +187,7 @@ export async function addOrgSeats(orgId: string, seats: number, actorUserId: str
   const [rows] = await runAsUser<[{ max_redemptions: number }[]]>(actorUserId, (sql) => [
     run(sql)(
       `UPDATE access_code SET max_redemptions = max_redemptions + $2::int, updated_at = now()
-        WHERE id = $1::uuid AND max_redemptions IS NOT NULL AND max_redemptions > 0
+        WHERE id = $1::uuid AND max_redemptions IS NOT NULL
         RETURNING max_redemptions`,
       [orgId, v.value]
     ),
@@ -195,6 +195,29 @@ export async function addOrgSeats(orgId: string, seats: number, actorUserId: str
   if (!rows?.[0]) return { ok: false, error: "No change. That organization was not found, or it has no seat limit to add to." };
   logAdminEvent(actorUserId, "add_seats", { orgId, added: v.value, total: rows[0].max_redemptions });
   return { ok: true, seatsTotal: rows[0].max_redemptions };
+}
+
+/** Pure: the staff cap for an organization (staff hold a Refinery seat outside the participant seats). */
+export function validateStaffCap(raw: unknown): { ok: true; value: number } | { ok: false; error: string } {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0 || n > 1000) return { ok: false, error: "The staff limit must be a whole number from 0 to 1000." };
+  return { ok: true, value: n };
+}
+
+/**
+ * Set how many staff places an organization has (access_code.max_staff,
+ * migration 097). Lowering it below the current staff count removes nobody;
+ * it only stops new staff until someone leaves.
+ */
+export async function setOrgStaffCap(orgId: string, maxStaff: number, actorUserId: string): Promise<OrgAdminResult<{ maxStaff: number }>> {
+  const v = validateStaffCap(maxStaff);
+  if (!v.ok) return v;
+  const [rows] = await runAsUser<[{ max_staff: number }[]]>(actorUserId, (sql) => [
+    run(sql)(`UPDATE access_code SET max_staff = $2::int, updated_at = now() WHERE id = $1::uuid RETURNING max_staff`, [orgId, v.value]),
+  ]);
+  if (!rows?.[0]) return { ok: false, error: "That organization was not found." };
+  logAdminEvent(actorUserId, "set_staff_cap", { orgId, maxStaff: v.value });
+  return { ok: true, maxStaff: rows[0].max_staff };
 }
 
 /** Set the per-person daily limit for members. 30 keeps the new-account caps. */

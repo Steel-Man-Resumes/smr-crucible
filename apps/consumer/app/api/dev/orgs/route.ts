@@ -34,9 +34,10 @@ export async function GET() {
     daily_limit: number | null;
     crm_v2: boolean;
     partner_user_id: string | null;
+    max_staff: number | null;
   }>(
     `SELECT ac.id, ac.code, ac.partner_name, ac.tier, ac.is_active, ac.org_logo_url,
-            ac.max_redemptions, ac.times_redeemed, ac.daily_limit, ac.crm_v2, ac.partner_user_id,
+            ac.max_redemptions, ac.times_redeemed, ac.daily_limit, ac.crm_v2, ac.partner_user_id, ac.max_staff,
             u.email AS owner_email,
             0 AS joined
        FROM access_code ac
@@ -72,7 +73,7 @@ export async function GET() {
       ...o,
       joined,
       staff_count: c?.staff ?? 0,
-      seats: seatLedgerFromCounts(o, { joined, invited: c?.invited ?? 0 }),
+      seats: seatLedgerFromCounts(o, { joined, invited: c?.invited ?? 0, staff: c?.staff ?? 0 }),
     };
   });
 

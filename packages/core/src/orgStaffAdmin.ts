@@ -96,6 +96,19 @@ const OWNER_ONLY_REASON = "Only the owner can add, change or remove an admin.";
 const ACTOR_IS_OWNER = (org: string, actor: string) =>
   `EXISTS (SELECT 1 FROM access_code ac_o WHERE ac_o.id = ${org} AND ac_o.partner_user_id = ${actor}::uuid)`;
 
+/**
+ * SQL for the platform-admin support path (/api/admin/orgs only): the actor
+ * owns the org OR is a row in platform_admin, read from the database. The org
+ * console (/api/partner/org) never uses this: viewing an org is not owning it.
+ */
+const ACTOR_IS_OWNER_OR_PLATFORM_ADMIN = (org: string, actor: string) =>
+  `(${ACTOR_IS_OWNER(org, actor)} OR EXISTS (SELECT 1 FROM platform_admin pa WHERE pa.user_id = ${actor}::uuid))`;
+
+/** Which owner predicate a write uses. */
+export type StaffWriteAuthority = "owner" | "owner_or_platform_admin";
+const ownerSql = (authority: StaffWriteAuthority | undefined, org: string, actor: string) =>
+  authority === "owner_or_platform_admin" ? ACTOR_IS_OWNER_OR_PLATFORM_ADMIN(org, actor) : ACTOR_IS_OWNER(org, actor);
+
 async function currentStaffRole(orgId: string, userId: string, actorUserId: string): Promise<string | null> {
   const rows = await scopedQuery<{ role: string }>(
     orgId,
@@ -106,13 +119,13 @@ async function currentStaffRole(orgId: string, userId: string, actorUserId: stri
   return rows[0]?.role ?? null;
 }
 
-async function actorOwns(orgId: string, actorUserId: string): Promise<boolean> {
+async function actorOwns(orgId: string, actorUserId: string, authority?: StaffWriteAuthority): Promise<boolean> {
   if (!actorUserId) return false;
-  const row = await getOne<{ id: string }>(
-    `SELECT id FROM access_code WHERE id = $1 AND partner_user_id = $2`,
+  const row = await getOne<{ ok: boolean }>(
+    `SELECT ${ownerSql(authority, "$1::uuid", "$2")} AS ok`,
     [orgId, actorUserId]
   );
-  return !!row;
+  return !!row?.ok;
 }
 
 /**
@@ -170,6 +183,18 @@ export async function addOrgStaff(params: {
   if (staffWriteNeedsOwner({ action: "add", targetCurrentRole: targetRole, newRole: role }) && !(await actorOwns(orgId, addedBy))) {
     return { ok: false, reason: OWNER_ONLY_REASON };
   }
+  if (!targetRole) {
+    const cap = await scopedQuery<{ n: number; max: number }>(
+      orgId,
+      `SELECT (SELECT COUNT(*)::int FROM org_staff WHERE access_code_id = $1) AS n,
+              (SELECT max_staff FROM access_code WHERE id = $1) AS max`,
+      [orgId],
+      addedBy
+    );
+    if (cap[0] && cap[0].n >= cap[0].max) {
+      return { ok: false, reason: `Your organization has ${cap[0].n} of ${cap[0].max} staff places in use. Remove someone from the team, or ask Steel Man Resumes for more places.` };
+    }
+  }
 
   const written = await scopedQuery<{ id: string }>(
     orgId,
@@ -177,6 +202,10 @@ export async function addOrgStaff(params: {
      SELECT $1, $2, $3, $4, $5
       WHERE EXISTS (SELECT 1 FROM access_code WHERE id = $1 AND is_active = true)
         AND ($3 <> 'org_admin' OR ${ACTOR_IS_OWNER("$1", "$5")})
+        -- Staff cap (097): a NEW staff row needs a free staff place; a
+        -- re-role of someone already on staff does not.
+        AND (EXISTS (SELECT 1 FROM org_staff os_e WHERE os_e.access_code_id = $1 AND os_e.user_id = $2)
+             OR (SELECT COUNT(*) FROM org_staff os_c WHERE os_c.access_code_id = $1) < (SELECT ac_c.max_staff FROM access_code ac_c WHERE ac_c.id = $1))
         AND (
           EXISTS (
             SELECT 1 FROM access_code_redemption acr
@@ -215,8 +244,10 @@ export async function setOrgStaffRole(params: {
   userId: string;
   role: AssignableStaffRole;
   actorUserId: string;
+  /** Default "owner". Only the platform-admin support route passes the wider one. */
+  authority?: StaffWriteAuthority;
 }): Promise<OrgStaffWriteResult> {
-  const { orgId, userId, role, actorUserId } = params;
+  const { orgId, userId, role, actorUserId, authority } = params;
 
   if (!isAssignableRole(role)) {
     return { ok: false, reason: "That is not a role that can be assigned." };
@@ -228,7 +259,7 @@ export async function setOrgStaffRole(params: {
   }
 
   const targetRole = await currentStaffRole(orgId, userId, actorUserId);
-  if (targetRole && staffWriteNeedsOwner({ action: "set_role", targetCurrentRole: targetRole, newRole: role }) && !(await actorOwns(orgId, actorUserId))) {
+  if (targetRole && staffWriteNeedsOwner({ action: "set_role", targetCurrentRole: targetRole, newRole: role }) && !(await actorOwns(orgId, actorUserId, authority))) {
     return { ok: false, reason: OWNER_ONLY_REASON };
   }
 
@@ -239,7 +270,7 @@ export async function setOrgStaffRole(params: {
     orgId,
     `UPDATE org_staff SET role = $3
       WHERE access_code_id = $1 AND user_id = $2
-        AND ((role <> 'org_admin' AND $3 <> 'org_admin') OR ${ACTOR_IS_OWNER("$1", "$4")})
+        AND ((role <> 'org_admin' AND $3 <> 'org_admin') OR ${ownerSql(authority, "$1", "$4")})
       RETURNING user_id`,
     [orgId, userId, role, actorUserId],
     actorUserId
@@ -264,8 +295,10 @@ export async function removeOrgStaff(params: {
   orgId: string;
   userId: string;
   actorUserId: string;
+  /** Default "owner". Only the platform-admin support route passes the wider one. */
+  authority?: StaffWriteAuthority;
 }): Promise<OrgStaffWriteResult & { releasedClients?: number }> {
-  const { orgId, userId, actorUserId } = params;
+  const { orgId, userId, actorUserId, authority } = params;
 
   if (userId === actorUserId) {
     return { ok: false, reason: "You cannot remove yourself from your own organization." };
@@ -280,7 +313,7 @@ export async function removeOrgStaff(params: {
   }
 
   const targetRole = await currentStaffRole(orgId, userId, actorUserId);
-  if (targetRole && staffWriteNeedsOwner({ action: "remove", targetCurrentRole: targetRole }) && !(await actorOwns(orgId, actorUserId))) {
+  if (targetRole && staffWriteNeedsOwner({ action: "remove", targetCurrentRole: targetRole }) && !(await actorOwns(orgId, actorUserId, authority))) {
     return { ok: false, reason: OWNER_ONLY_REASON };
   }
 
@@ -288,7 +321,7 @@ export async function removeOrgStaff(params: {
     orgId,
     `DELETE FROM org_staff
       WHERE access_code_id = $1 AND user_id = $2
-        AND (role <> 'org_admin' OR ${ACTOR_IS_OWNER("$1", "$3")})
+        AND (role <> 'org_admin' OR ${ownerSql(authority, "$1", "$3")})
       RETURNING user_id`,
     [orgId, userId, actorUserId],
     actorUserId

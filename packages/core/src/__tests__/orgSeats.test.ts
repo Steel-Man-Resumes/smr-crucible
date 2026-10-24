@@ -6,12 +6,12 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { computeSeatLedger, seatLedgerLine } from "../orgSeatsShared";
+import { computeSeatLedger, seatLedgerLine, staffLedgerLine } from "../orgSeatsShared";
 
 describe("seat ledger", () => {
   it("free is total minus claimed, not total minus active", () => {
     const l = computeSeatLedger({ maxRedemptions: 2, timesRedeemed: 2, activeMembers: 1 });
-    assert.deepEqual(l, { seatsTotal: 2, seatsClaimed: 2, seatsActive: 1, seatsFree: 0, seatsInvited: 0 });
+    assert.deepEqual(l, { seatsTotal: 2, seatsClaimed: 2, seatsActive: 1, seatsFree: 0, seatsInvited: 0, staffCount: null, staffTotal: null });
   });
 
   it("a fresh organization has every seat free", () => {
@@ -20,13 +20,17 @@ describe("seat ledger", () => {
     assert.equal(l.seatsClaimed, 0);
   });
 
-  it("no cap means no free number, and 0 is treated as no cap like the database does", () => {
-    for (const cap of [null, undefined, 0]) {
+  it("NULL means no cap; 0 is a real cap with no seats, as smr_redeem_code checks times_redeemed >= max_redemptions", () => {
+    for (const cap of [null, undefined]) {
       const l = computeSeatLedger({ maxRedemptions: cap, timesRedeemed: 4, activeMembers: 3 });
       assert.equal(l.seatsTotal, null);
       assert.equal(l.seatsFree, null);
       assert.equal(l.seatsClaimed, 4);
     }
+    const zero = computeSeatLedger({ maxRedemptions: 0, timesRedeemed: 0, activeMembers: 0 });
+    assert.equal(zero.seatsTotal, 0);
+    assert.equal(zero.seatsFree, 0);
+    assert.equal(seatLedgerLine(zero), "0 of 0 seats claimed, 0 active now, 0 free.");
   });
 
   it("free never goes negative when claimed is above the cap (cap lowered later)", () => {
@@ -47,7 +51,7 @@ describe("seat ledger", () => {
 
   it("garbage inputs read as zero, never NaN", () => {
     const l = computeSeatLedger({ maxRedemptions: 5, timesRedeemed: Number.NaN, activeMembers: -3 });
-    assert.deepEqual(l, { seatsTotal: 5, seatsClaimed: 0, seatsActive: 0, seatsFree: 5, seatsInvited: 0 });
+    assert.deepEqual(l, { seatsTotal: 5, seatsClaimed: 0, seatsActive: 0, seatsFree: 5, seatsInvited: 0, staffCount: null, staffTotal: null });
   });
 
   it("the line says claimed and active plainly", () => {
@@ -59,5 +63,10 @@ describe("seat ledger", () => {
       seatLedgerLine(computeSeatLedger({ maxRedemptions: null, timesRedeemed: 3, activeMembers: 2 })),
       "No seat limit. 3 claimed, 2 active now."
     );
+  });
+
+  it("staff places read N of M, and stay silent when not read", () => {
+    assert.equal(staffLedgerLine(computeSeatLedger({ maxRedemptions: 5, timesRedeemed: 1, activeMembers: 1, staffCount: 3, maxStaff: 10 })), "3 of 10 staff");
+    assert.equal(staffLedgerLine(computeSeatLedger({ maxRedemptions: 5, timesRedeemed: 1, activeMembers: 1 })), null);
   });
 });
