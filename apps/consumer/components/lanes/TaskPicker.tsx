@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * "What do you need today?" (Phase 5 lane R2): three main routes, a quieter
+ * "What do you need today?" (Phase 5 lane R2): four main routes (the fourth,
+ * "I don't know what I want yet", added 2026-10-23 for people with no lane), a quieter
  * "Something else", and a quiet help link. Used as the Forge's first screen
  * (/start) and as the Refinery's first screen after sign-in (/dashboard,
  * before a task is picked).

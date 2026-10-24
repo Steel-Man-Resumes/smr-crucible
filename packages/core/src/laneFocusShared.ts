@@ -9,14 +9,18 @@
 
 import { isUuid } from "./careerLaneShared";
 
-/** The three main routes, then the "Something else" ones. Order is the screen's order. */
+/** Every task, in migration 083's order. The screen's order is MAIN_TASKS then OTHER_TASKS. */
 export const LANE_TASKS = ["resume", "job", "interview", "documents", "explore", "support"] as const;
 export type LaneTask = (typeof LANE_TASKS)[number];
 
-/** The routes shown big on the first screen. */
-export const MAIN_TASKS: readonly LaneTask[] = ["resume", "job", "interview"];
+/**
+ * The routes shown big on the first screen. "explore" ("I don't know what I
+ * want yet") joined them 2026-10-23 on Troy's word: some people have no lane
+ * at all, and that answer has to be as easy to pick as the others.
+ */
+export const MAIN_TASKS: readonly LaneTask[] = ["resume", "job", "interview", "explore"];
 /** The routes behind the quieter "Something else". */
-export const OTHER_TASKS: readonly LaneTask[] = ["documents", "explore", "support"];
+export const OTHER_TASKS: readonly LaneTask[] = ["documents", "support"];
 
 export const LANE_FOCUS_TARGET_MAX = 200;
 

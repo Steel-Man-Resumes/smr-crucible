@@ -155,6 +155,18 @@ export async function callAI(
   meta?: AiCallMeta,
   signal?: AbortSignal
 ): Promise<string> {
+  return (await callAIWithProvider(system, messages, maxTokens, model, meta, signal)).text;
+}
+
+/** callAI, plus which provider and model actually answered (for an honest decision log after a fallback). */
+export async function callAIWithProvider(
+  system: string,
+  messages: Msg[],
+  maxTokens = 2048,
+  model: string = AI_MODEL,
+  meta?: AiCallMeta,
+  signal?: AbortSignal
+): Promise<{ text: string; provider: string; model: string }> {
   const hasAnthropic = !!process.env.ANTHROPIC_API_KEY;
   const hasOpenAI = !!process.env.OPENAI_API_KEY;
 
@@ -162,13 +174,13 @@ export async function callAI(
   // fallback, and no console line carrying the provider's error text.
   if (meta?.anthropicOnly) {
     if (!hasAnthropic) throw new Error("ANTHROPIC_API_KEY not set");
-    try { return await callAnthropic(system, messages, maxTokens, model, meta, signal); }
+    try { return { text: await callAnthropic(system, messages, maxTokens, model, meta, signal), provider: AI_PROVIDER, model }; }
     catch (error) { await recordTokenUsage('anthropic',model,{inputTokens:0,outputTokens:0},{...meta,outcome:'failed',usageMissing:true}); throw error; }
   }
 
   if (hasAnthropic) {
     try {
-      return await callAnthropic(system, messages, maxTokens, model, meta, signal);
+      return { text: await callAnthropic(system, messages, maxTokens, model, meta, signal), provider: AI_PROVIDER, model };
     } catch (err) {
       await recordTokenUsage('anthropic',model,{inputTokens:0,outputTokens:0},{...meta,outcome:'failed',usageMissing:true});
       // A caller-initiated abort (deadline) is intentional -- do NOT start a fresh
@@ -179,11 +191,11 @@ export async function callAI(
         "[ai-call] Anthropic failed, falling back to OpenAI:",
         "provider request failed"
       );
-      return await trackedOpenAI(system, messages, maxTokens, meta, signal);
+      return { text: await trackedOpenAI(system, messages, maxTokens, meta, signal), provider: AI_FALLBACK_PROVIDER, model: AI_FALLBACK_MODEL };
     }
   }
 
-  if (hasOpenAI) return await trackedOpenAI(system, messages, maxTokens, meta, signal);
+  if (hasOpenAI) return { text: await trackedOpenAI(system, messages, maxTokens, meta, signal), provider: AI_FALLBACK_PROVIDER, model: AI_FALLBACK_MODEL };
 
   throw new Error("No AI provider key set (ANTHROPIC_API_KEY or OPENAI_API_KEY)");
 }
