@@ -57,7 +57,7 @@ html[data-guided-learning] body{overflow:hidden;overflow-anchor:none}
 .et-dim{position:fixed;inset:0;background:#08070659;pointer-events:auto}
 .et-cutout{position:fixed;pointer-events:none;border-radius:10px;box-shadow:0 0 0 3px var(--et-gold),0 0 26px 6px #dbc17359,0 0 0 200vmax #080706a6;transition:left 1100ms cubic-bezier(.65,0,.3,1),top 1100ms cubic-bezier(.65,0,.3,1),width 1100ms cubic-bezier(.65,0,.3,1),height 1100ms cubic-bezier(.65,0,.3,1),opacity 400ms ease}
 .et-cutout[data-still=true]{transition:none}
-.et-card{position:fixed;pointer-events:auto;display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid #ffffff1f;border-left:3px solid var(--et-gold);border-radius:10px;background:#121110f2;box-shadow:0 24px 60px #000a;transition:left 600ms cubic-bezier(.65,0,.3,1),top 600ms cubic-bezier(.65,0,.3,1);animation:etCap 460ms cubic-bezier(.16,1,.3,1) both}
+.et-card{position:fixed;pointer-events:auto;display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid #ffffff1f;border-left:3px solid var(--et-gold);border-radius:10px;background:#121110f2;box-shadow:0 24px 60px #000a;transition:left 600ms cubic-bezier(.65,0,.3,1),top 600ms cubic-bezier(.65,0,.3,1),bottom 600ms cubic-bezier(.65,0,.3,1);animation:etCap 460ms cubic-bezier(.16,1,.3,1) both}
 .et-card[data-still=true]{transition:none;animation:none}
 .et-card__head{display:flex;align-items:center;gap:10px}
 .et-card__text{min-height:3.2em}

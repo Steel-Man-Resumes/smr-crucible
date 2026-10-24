@@ -121,8 +121,8 @@ export const P_ROW = { h: 44, gap: 5, top: 6 };
 export const P_ORDER: ('start' | StationId | 'offer')[] = ['start', 'find', 'tailor', 'package', 'plan', 'practice', 'track', 'offer'];
 const P_LIST_H = P_ROW.top + P_ORDER.length * (P_ROW.h + P_ROW.gap);
 export const P_CARD: Box = { x: 0, y: P_LIST_H + 14, w: PW, h: 370 };
-export const P_LOCK_CARD: Box = { x: 0, y: 0, w: PW, h: 340 };
-export const P_LIMITS: Box = { x: 0, y: 360, w: PW, h: 400 };
+export const P_LOCK_CARD: Box = { x: 0, y: 0, w: PW, h: 290 };
+export const P_LIMITS: Box = { x: 0, y: 306, w: PW, h: 400 };
 export const P_METER: Box = { x: 0, y: 0, w: PW, h: 400 };
 export const P_CHART = { top: 44, rowH: 60, gap: 6 };
 

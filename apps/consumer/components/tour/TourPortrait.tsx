@@ -10,7 +10,7 @@
 import type { CSSProperties } from 'react';
 import { Flag, LockKeyhole, LockKeyholeOpen, Mic, Search } from 'lucide-react';
 import { TroyLivingIcon } from '@crucible/consumer-ui';
-import { BOARD_STATIONS, TOUR_COPY, type ChartPhase, type LockPhase, type StationId } from '@/lib/tour/beats';
+import { BOARD_STATIONS, type ChartPhase, type LockPhase, type StationId } from '@/lib/tour/beats';
 import { P_CARD, P_LIMITS, P_LOCK_CARD, P_METER, P_ORDER, P_ROW, PORTRAIT_SIZE, PW, chartRevealAt, portraitChartRows, portraitSceneSize } from '@/lib/tour/layout';
 import { SERVICE_STATUS_LABEL, type ServiceRow } from '@/lib/tour/services';
 import { STEP_COPY } from '@/lib/progression-policy';
@@ -48,7 +48,6 @@ export function PortraitBoard({ station, start, noForge, t, still }: { station?:
     })}
     <div className="ps-card" style={box(P_CARD)}>
       {current ? <>
-        <p className="ps-k">{TOUR_COPY.moveOf(litIndex + 1, BOARD_STATIONS.length)}</p>
         <p className="ps-card__t">{current.label}</p>
         <div className="ps-art">{art(current.id, t, still)}</div>
       </> : <>

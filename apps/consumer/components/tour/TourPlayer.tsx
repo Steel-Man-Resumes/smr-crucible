@@ -103,12 +103,12 @@ export function TourPlayer(props: TourPlayerProps) {
   /** Which act-two beats this build can show, decided once when act two starts. */
   const [roomOk, setRoomOk] = useState<Record<number, boolean> | null>(null);
   const [cut, setCut] = useState<Box | null>(null);
-  const [cardH, setCardH] = useState(200);
+  const [cardH, setCardH] = useState(() => (typeof window !== 'undefined' && innerWidth < NARROW ? 320 : 230));
   const [particles, setParticles] = useState<{ key: number; d: string } | null>(null);
   const [announce, setAnnounce] = useState('');
   const stageRef = useRef<HTMLDivElement>(null);
   const markRef = useRef<HTMLSpanElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
   const playRef = useRef<HTMLButtonElement>(null);
   const prevScene = useRef('');
   const dir = useRef(1);
@@ -281,7 +281,7 @@ export function TourPlayer(props: TourPlayerProps) {
   useEffect(() => {
     if (!roomBeat || !roomOk || !roomOk[i]) { setCut(null); return; }
     onNavigationReveal?.(mobileNav);
-    setCut(null);
+    // The previous cutout stays until this stop is measured, so the card never unmounts between stops.
     let raf = 0;
     let alive = true;
     let lostSince = 0;
@@ -323,16 +323,18 @@ export function TourPlayer(props: TourPlayerProps) {
 
   useEffect(() => { if (!roomBeat) onNavigationReveal?.(false); }, [roomBeat ? 'room' : 'other']); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onNavigationReveal?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
-  // Focus follows the act change: the stage's Pause goes away, so the card's Pause takes focus.
-  useEffect(() => { if (roomBeat && roomOk) playRef.current?.focus({ preventScroll: true }); }, [roomBeat ? 'room' : 'other', !!roomOk]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    const el = cardRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(([e]) => setCardH(Math.ceil(e.contentRect.height) + 30));
-    ro.observe(el);
+  // The act-two card mounts once (when the first stop is lit) and stays. Measure it
+  // before paint so its placement uses its real height, and hand it focus: the
+  // stage's Pause went away with act one.
+  useLayoutEffect(() => {
+    if (!cardEl) return;
+    const measure = () => setCardH(Math.ceil(cardEl.getBoundingClientRect().height));
+    measure();
+    cardEl.querySelector<HTMLButtonElement>('button.et-primary')?.focus({ preventScroll: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(cardEl);
     return () => ro.disconnect();
-  }, [roomBeat && roomOk ? 'room' : 'other']); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cardEl]);
 
   /* Controls */
   const toggle = useCallback(() => { if (!ending) setPlaying(p => !p); }, [ending]);
@@ -364,7 +366,8 @@ export function TourPlayer(props: TourPlayerProps) {
         {playing ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}{!compact && <span aria-hidden="true">{playing ? TOUR_COPY.pause : TOUR_COPY.play}</span>}
       </button>
       <button type="button" onClick={() => go(i + 1)} aria-label={TOUR_COPY.next}><ChevronRight size={18} aria-hidden="true" /></button>
-      {!compact && <div className="et-bar__grow et-segs" role="presentation">
+      {!compact && portrait && <span className="et-bar__grow" />}
+      {!compact && !portrait && <div className="et-bar__grow et-segs" role="presentation">
         {TOUR_BEATS.map((b, n) => (b.kind === 'room' && roomOk && !roomOk[n]) ? null : <button key={b.id} type="button" className="et-seg" tabIndex={-1} aria-hidden="true" data-gap={n > 0 && TOUR_BEATS[n - 1].chapter !== b.chapter} onClick={() => go(n)}>
           <span><i style={{ width: n < i ? '100%' : n > i ? '0%' : `${progress * 100}%` }} /></span>
         </button>)}
@@ -400,6 +403,12 @@ export function TourPlayer(props: TourPlayerProps) {
 
   const shrinkStyle: CSSProperties | undefined = shrink ? { transform: `translate(${shrink.x}px, ${shrink.y}px) scale(${shrink.w / view.w}, ${shrink.h / view.h})` } : undefined;
   const cardBox = captionPlacement(cut, view.w, view.h, { w: 360, h: cardH });
+  // A card placed against the bottom edge is anchored by its bottom, so a taller
+  // caption grows upward and never slides off screen while it moves.
+  const bottomAnchored = cardBox.y + cardBox.h >= view.h - 17;
+  const cardStyle: CSSProperties = bottomAnchored
+    ? { left: cardBox.x, bottom: view.h - cardBox.y - cardBox.h, width: cardBox.w, maxHeight: view.h - 32, overflowY: 'auto' }
+    : { left: cardBox.x, top: cardBox.y, width: cardBox.w, maxHeight: view.h - 32, overflowY: 'auto' };
   const scene = stageBeat && (portrait
     ? stageBeat.scene === 'title' ? <PortraitTitle title={copy.title} body={copy.body} />
       : stageBeat.scene === 'board' ? <PortraitBoard station={stageBeat.station} start={stageBeat.spot === 'start'} noForge={forgeComplete === false} t={t} still={still} />
@@ -437,7 +446,7 @@ export function TourPlayer(props: TourPlayerProps) {
     {roomBeat && <>
       <div className="et-dim" style={{ background: cut ? 'transparent' : undefined }} aria-hidden="true" />
       {cut && <div className="et-cutout" data-still={reduced} aria-hidden="true" style={{ left: cut.x, top: cut.y, width: cut.w, height: cut.h }} />}
-      {roomOk && cut && <div ref={cardRef} key="room-card" className="et-card" data-still={reduced} style={{ left: cardBox.x, top: cardBox.y, width: cardBox.w }}>
+      {roomOk && cut && <div ref={setCardEl} key="room-card" className="et-card" data-still={reduced} style={cardStyle}>
         <div className="et-card__head">
           <span ref={markRef}><TroyLivingIcon size={40} attention={!!particles} /></span>
           <p className="et-cap__k">{TOUR_COPY.roomOf(roomPos, roomList.length)}</p>
@@ -534,10 +543,10 @@ function Ending({ accountId, rewardClaimedAt, nextStep, quizDraft, onQuizDraft, 
       {quiz && <OrientationQuiz accountId={accountId} draft={quizDraft} onDraftChange={onQuizDraft} onPassed={() => setPassed(true)} onContinue={href => finish(href)} />}
       {error && <p className="et-end__err" role="alert">{error}</p>}
       <div className="et-end__actions">
-        {!quiz && <button type="button" onClick={onBack}><ChevronLeft size={16} aria-hidden="true" />{TOUR_ENDING.previous}</button>}
         {!quiz && <button type="button" className="et-primary" onClick={() => setQuiz(true)}>{TOUR_ENDING.quizButton}</button>}
         {quiz && !passed && <button type="button" onClick={() => setQuiz(false)}>{TOUR_ENDING.quizBack}</button>}
         <button type="button" className={quiz && passed ? 'et-primary' : ''} disabled={busy} onClick={() => void finish()}>{busy ? TOUR_ENDING.finishing : TOUR_ENDING.finish}</button>
+        {!quiz && <button type="button" onClick={onBack}><ChevronLeft size={16} aria-hidden="true" />{TOUR_ENDING.previous}</button>}
       </div>
       {rewardClaimedAt === null && <p className="et-end__small">{TOUR_ENDING.rewardNote}</p>}
     </div>
