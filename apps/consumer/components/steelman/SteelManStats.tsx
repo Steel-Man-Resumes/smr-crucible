@@ -69,7 +69,7 @@ function Strip({ data }: { data: SteelManPayload }) {
           ))}
         </svg>
         <figcaption className="mt-2 text-sm text-t-phos">{text}</figcaption>
-        <p className="mt-1 text-xs text-t-phos-dim">Work facts confirmed before dates were kept still count in your score. They just do not show on this strip.</p>
+        <p className="mt-1 text-xs text-t-phos-dim">Work facts confirmed before dates were kept still count in your score. They just don't show on this strip.</p>
       </figure>
     </section>
   );
@@ -155,7 +155,7 @@ function Streak({ data }: { data: SteelManPayload }) {
       <h2 id="sm-streak" className={H2}>Active weeks</h2>
       {s?.show ? (
         <p className="text-sm text-t-phos"><span className="text-2xl font-bold tabular-nums text-t-amber-bright">{s.weeks}</span> active weeks in a row.{" "}
-          {s.reserveLeft > 0 ? `${s.reserveLeft} reserve ${s.reserveLeft === 1 ? "week" : "weeks"} left, so a quiet week will not end it.` : "Your reserve weeks come back as the weeks roll on."}</p>
+          {s.reserveLeft > 0 ? `${s.reserveLeft} reserve ${s.reserveLeft === 1 ? "week" : "weeks"} left, so a quiet week won't end it.` : "Your reserve weeks come back as the weeks roll on."}</p>
       ) : <p className="text-sm text-t-phos-dim">A week counts when you add any work in it. Two weeks in a row starts a streak, and quiet weeks get reserves.</p>}
     </section>
   );
@@ -168,12 +168,12 @@ function HowItWorks() {
         <summary id="sm-how" className="t-focus min-h-touch cursor-pointer text-base font-semibold text-t-white">How the meter works</summary>
         <div className="mt-3 space-y-3 text-sm text-t-phos">
           <p>{HONESTY_LINE}</p>
-          <p>Each part counts real units of work. The first unit counts the most, every doubling adds the same again, and each part stops adding at its limit. So the fastest way up is to use a part you have not touched yet, not to repeat one.</p>
+          <p>Each part counts real units of work. The first unit counts the most, every doubling adds the same again, and each part stops adding at its limit. So the fastest way up is to use a part you haven't touched yet, not to repeat one.</p>
           <p>The marks are worked out from that math: {MARKS.firstLoop} is your first resume, first tailored resume and first application; {MARKS.everyPart} is every part started once; {MARKS.breadth} is every part used past its first steps; {MARKS.depth} is every part used in depth.</p>
           <ul className="list-disc space-y-1 pl-5">
             {COMPONENT_IDS.map((id) => <li key={id}><span className="text-t-white">{COMPONENTS[id].label}</span> (first one {firstUnit(id)} points). {COMPONENTS[id].why}</li>)}
           </ul>
-          <p>Nothing here looks at speed, logins or time on screen. Going slow costs you nothing. Removing your own work is your right; the bar just follows what is saved.</p>
+          <p>Nothing here looks at speed, logins or time on screen. Going slow doesn't cost you a thing. Removing your own work is your right; the bar just follows what is saved.</p>
           <p>The meter counts work you did. It does not predict hiring.</p>
         </div>
       </details>

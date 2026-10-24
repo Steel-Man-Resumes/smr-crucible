@@ -74,9 +74,9 @@ async function load(userId: string): Promise<SteelManRead> {
      cred AS (SELECT lower(btrim(CASE jsonb_typeof(c) WHEN 'object' THEN c->>'text' WHEN 'string' THEN c#>>'{}' END)) AS k, f.created_at
        FROM fin f, jsonb_array_elements(f.confirmed_credentials) c WHERE f.rn=1)
      SELECT min(created_at) AS at FROM cred WHERE k IS NOT NULL AND k<>'' GROUP BY k`,
-    // S5: open lanes that hold a non-demo resume.
+    // S5: open lanes that hold non-example work (examples hidden by is_demo, the example rule).
     sql`SELECT GREATEST(l.created_at, min(a.created_at)) AS at FROM career_lane l
-       JOIN refinery_artifact a ON a.lane_id=l.id AND a.user_id=l.user_id AND NOT a.is_demo AND a.artifact_type='resume'
+       JOIN refinery_artifact a ON a.lane_id=l.id AND a.user_id=l.user_id AND NOT a.is_demo
        WHERE l.user_id=${userId}::uuid AND l.archived_at IS NULL GROUP BY l.id, l.created_at`,
     // S7: distinct applications with a tailored resume snapshot (the gate's own provenance list).
     sql`SELECT min(created_at) AS at FROM application_document

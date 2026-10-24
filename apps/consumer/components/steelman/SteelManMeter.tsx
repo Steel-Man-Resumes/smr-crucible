@@ -74,7 +74,7 @@ export function SteelManMeter({ compact = false }: { compact?: boolean }) {
     );
   }
   const next = data.nextMark;
-  const nextLine = next ? (next.pointsAway > 0 ? `${next.pointsAway} points to ${next.label}.` : `The points for ${next.label} are there. The checklist shows what is left.`) : "Steel Man: your whole job search is built and running.";
+  const nextLine = next ? (next.pointsAway > 0 ? `${next.pointsAway} points to ${next.label}.` : `The points for ${next.label} are there. The checklist shows what's left.`) : "Steel Man: your whole job search is built and running.";
   if (compact) {
     return (
       <div id="refinery-meter" data-tour="refinery-meter" className="px-3 py-2">

@@ -36,7 +36,7 @@ export const FIRST_MOMENTS: Record<ComponentId, { step: ProgressionStep; label: 
   sent: { step: "direction", label: "Your first application is out. That puts you in the running." },
   practice: { step: "interview", label: "You ran your first practice interview. Every run makes the real one smaller." },
   disclosure: { step: "interview", label: "You have your words ready for the record question." },
-  proof: { step: "foundation", label: "You tracked down your first record. That is a fact nobody can argue with." },
+  proof: { step: "foundation", label: "You tracked down your first record. That's a fact nobody can argue with." },
   feedback: { step: "foundation", label: "Thank you. Troy reads these." },
 };
 const OUTCOMES: Record<SteelManRead["outcomes"][number], { step: ProgressionStep; label: string }> = {
