@@ -156,7 +156,9 @@ export async function grantBonus(userId:string,key:string,step:ProgressionStep,a
  * lock and caps as every other bonus. Account bound: the row belongs to the
  * signed-in user under RLS. Idempotent: the earlier grant is read under the
  * lock before the conditional insert, so a second completion grants nothing
- * and is told so; a retry of the same run reads as the same grant.
+ * and is told so; a retry of the same run reads as the same grant. Unlike the
+ * other bonuses (next UTC midnight), the tour grant lasts 24 hours from now, so
+ * finishing late in the day is not a reward that vanishes in minutes.
  */
 export async function grantTourReward(userId:string,runId:string):Promise<TourReward>{
  const p=await readProgressionPolicy(userId);
@@ -164,7 +166,7 @@ export async function grantTourReward(userId:string,runId:string):Promise<TourRe
   sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 874))`,
   sql`SELECT calls,created_at,expires_at,request_key FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${TOUR_REWARD_KEY}`,
   sql`INSERT INTO progression_grant(user_id,grant_key,request_key,kind,step_id,calls,label,expires_at)
-   SELECT ${userId}::uuid,${TOUR_REWARD_KEY},${runId},'bonus','foundation',${p.bonus_calls},'Tour finished: extra AI actions',date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'+interval '1 day'
+   SELECT ${userId}::uuid,${TOUR_REWARD_KEY},${runId},'bonus','foundation',${p.bonus_calls},'Tour finished: extra AI actions',now()+interval '24 hours'
    WHERE NOT EXISTS(SELECT 1 FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${TOUR_REWARD_KEY})
     AND COALESCE((SELECT sum(calls) FROM progression_grant WHERE user_id=${userId}::uuid AND kind='bonus' AND created_at>=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)+${p.bonus_calls}<=${p.bonus_daily_cap}
     AND COALESCE((SELECT sum(calls) FROM progression_grant WHERE user_id=${userId}::uuid AND kind='bonus' AND created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)+${p.bonus_calls}<=${p.bonus_monthly_cap}
