@@ -57,6 +57,7 @@ export const RLS_PROTECTED_TABLES = [
   "progression_account",
   "progression_grant",
   "progression_request",
+  "tailor_batch_claim",
 ] as const;
 
 export interface RlsHealth {
