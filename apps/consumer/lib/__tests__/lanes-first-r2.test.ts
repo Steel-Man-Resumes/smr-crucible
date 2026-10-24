@@ -82,7 +82,8 @@ test("the dashboard asks first, then becomes the lane home with All tools second
   const work = d.indexOf("<SavedJobsPanel");
   assert.ok(home > 0 && work > home, "current goal precedes saved applications");
   assert.doesNotMatch(d, /All tools\n/);
-  assert.match(read("app/(dashboard)/RefineryShell.tsx"), /refinery-nav-jobs/);
+  assert.match(read("lib/refinery-nav.ts"), /legacyId: "refinery-nav-jobs"/);
+  assert.match(read("app/(dashboard)/RefineryShell.tsx"), /<RefineryBoard/);
 });
 
 // ---- the lane header --------------------------------------------------------------
@@ -440,9 +441,10 @@ test("Check and finish appears on the lane home, My resumes and the Tailor resul
 
 // ---- Refinery names and Get support -----------------------------------------------
 
-test("Refinery names: Get support, My resumes, Private documents; every tool still in the nav", () => {
-  const shell = read("app/(dashboard)/RefineryShell.tsx");
-  for (const label of ["Support & disclosure", "My resumes", "Private documents", "Find work", "Applications", "Tailor for a job", "Creative work", "CV", "Performer page", "Disclosure plan", "Interview prep", "Progress"]) {
+test("Refinery names: the board's stations and every tool still in the nav", () => {
+  // The nav became a path of stations (2026-10-23); its labels live in lib/refinery-nav.ts.
+  const shell = read("lib/refinery-nav.ts");
+  for (const label of ["Overview", "Find work", "Tailor and package", "Plan what to say", "Practice", "Apply and track", "What comes next", "Local help", "Private records and documents", "Tailor for a job", "Creative work", "CV", "Performer page", "Disclosure plan", "Progress", "Settings"]) {
     assert.ok(shell.includes(`label: "${label}"`), label);
   }
   for (const old of ['label: "Job Paths"', 'label: "Library"', 'label: "Vault"']) assert.ok(!shell.includes(old), old);

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { RoleProvider } from "@/components/RoleProvider";
 import { RefineryShell } from "./RefineryShell";
+import { ServerSwitchesProvider } from "@/components/ServerSwitches";
+import { recordStepOn } from "@/lib/server-switch";
 
 export const metadata: Metadata = {
   title: "The Refinery",
@@ -14,7 +16,10 @@ export const metadata: Metadata = {
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   return (
     <RoleProvider>
-      <RefineryShell>{children}</RefineryShell>
+      {/* The nav hides switched-off steps (lib/server-switch.ts); default OFF. */}
+      <ServerSwitchesProvider value={{ recordStep: recordStepOn() }}>
+        <RefineryShell>{children}</RefineryShell>
+      </ServerSwitchesProvider>
     </RoleProvider>
   );
 }

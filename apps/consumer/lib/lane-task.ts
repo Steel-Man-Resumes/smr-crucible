@@ -117,7 +117,7 @@ export function taskNeedsResume(task: LaneTask | null | undefined): boolean {
  */
 export const OPEN_WITHOUT_RESUME = [
   "/dashboard/orientation", // Learning the process does not require a completed resume.
-  "/dashboard/paths", "/dashboard/documents", "/dashboard/vault", "/dashboard/employers", "/dashboard/progress", "/dashboard/disclosure", "/dashboard/help","/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
+  "/dashboard/paths", "/dashboard/documents", "/dashboard/vault", "/dashboard/employers", "/dashboard/progress", "/dashboard/disclosure", "/dashboard/help","/dashboard/interview", "/dashboard/applications", "/dashboard/resources", "/dashboard/next", "/dashboard/jobs", "/dashboard/creative", "/dashboard/cv", "/dashboard/performer"] as const;
 
 /**
  * The Refinery sends a person with no Forge resume to the Forge's first
