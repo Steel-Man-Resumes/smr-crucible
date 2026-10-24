@@ -18,7 +18,7 @@ export const HONESTY_LINE = "Your Steel Man score counts the real work you have 
 const UNIT_WORDS: Record<ComponentId, string> = {
   facts: "a confirmed fact", lines: "a line you stand behind", resumes: "a finished resume", lanes: "a lane in use",
   tailored: "a resume shaped to a job", sent: "an application sent", practice: "interview practice", disclosure: "your words ready",
-  proof: "a record gathered", feedback: "feedback shared",
+  proof: "a proof document gathered", feedback: "feedback shared",
 };
 
 /** "+7: a confirmed fact." when the score went up since this browser last saw it. A drop is silent (memo 7, rule 3). */
@@ -45,10 +45,11 @@ function useGainToast(data: SteelManPayload | null, enabled: boolean) {
 
 function Bar({ data, tall }: { data: SteelManPayload; tall?: boolean }) {
   const pct = (n: number) => `${Math.max(0, Math.min(100, (n / data.maxScore) * 100))}%`;
-  // Animate only a rise seen in this visit. The first paint is at the real score, never a refill from zero.
-  const first = useRef(true);
+  // Animate only a rise seen in this visit. The first paint is at the real score, never a refill
+  // from zero, and a drop moves without motion (memo 6: only a rise animates).
+  const prev = useRef<number | null>(null);
   const [animate, setAnimate] = useState(false);
-  useEffect(() => { if (first.current) { first.current = false; return; } setAnimate(true); }, [data.score]);
+  useEffect(() => { setAnimate(prev.current !== null && data.score > prev.current); prev.current = data.score; }, [data.score]);
   const next = data.nextMark;
   const text = `Score ${data.score} of ${data.maxScore}. Band: ${data.band.label}.${next ? ` Next mark: ${next.label} at ${next.score}${next.pointsAway ? `, ${next.pointsAway} points away` : ""}.` : ""}`;
   return (
@@ -78,14 +79,13 @@ export function SteelManMeter({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <div id="refinery-meter" data-tour="refinery-meter" className="px-3 py-2">
-        <Link href="/dashboard/progress" className="t-focus block min-h-touch">
-          <span className="flex items-baseline justify-between gap-2 text-xs">
-            <span className="font-semibold text-t-amber-bright">Steel Man meter</span>
-            <span className="tabular-nums text-t-white">{data.score} / {data.maxScore}</span>
-          </span>
-          <span className="mt-1.5 block"><Bar data={data} /></span>
-          <span className="mt-1 block text-xs text-t-phos">{data.band.label}</span>
+        {/* The link names the destination; the meter sits beside it, not inside it. */}
+        <Link href="/dashboard/progress" className="t-focus flex min-h-touch items-baseline justify-between gap-2 text-xs">
+          <span className="font-semibold text-t-amber-bright">Steel Man meter</span>
+          <span className="tabular-nums text-t-white">{data.score} / {data.maxScore}</span>
         </Link>
+        <div className="mt-1"><Bar data={data} /></div>
+        <p className="mt-1 text-xs text-t-phos">{data.band.label}</p>
         <Link href={safeProgressHref(data.nextGain.href)} className="t-focus mt-1 block text-xs leading-snug text-t-phos-dim underline-offset-2 hover:underline">{data.nextGain.label}</Link>
         <p aria-live="polite" className="text-xs text-t-amber-bright">{toast ?? ""}</p>
       </div>
