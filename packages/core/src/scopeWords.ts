@@ -1018,13 +1018,29 @@ export function skillScopeNotTheirs(term: string, sourceText: string): ScopeHit[
     straightQuotes(text).split(/[.;!?]+/).some((sent) => {
       const m = sent.match(ASSIGN_WORK_RE);
       const before = sent.slice(0, m?.index ?? 0);
-      return !!m && !NEGATION_BEFORE.test(before) && !PASSIVE_BEFORE.test(before) && !SHARED_BEFORE.test(before);
+      return !!m && personIsSubject(before) && !NEGATION_BEFORE.test(before) && !PASSIVE_BEFORE.test(before) && !SHARED_BEFORE.test(before);
     })
   );
   return hits.filter((h) => {
     if (h.family === "delegate" && handsOutWork) return false;
     return !theirs.some((c) => c.family === h.family && c.self && (!RUN_PAGE.has(h.family) || c.overPeople === true));
   });
+}
+/**
+ * Fix round 1 (review B3): the person is the one doing it. "I assign the daily work", "I usually assign
+ * tasks", a duty bullet (read as "I ..."), or a list of their own duties with no other subject in it
+ * ("I manage the floor, supervise the crew, and assign the daily work"). Never "My supervisor assigned tasks
+ * to me", "The lead assigned the daily work and I did it", "Shift manager would assign duties".
+ */
+function personIsSubject(before: string): boolean {
+  const b = straightQuotes(before);
+  if (/^\s*I\s+(?:(?:also|always|usually|often|then|still|personally|each\s+morning|every\s+day|[a-z]+ly)\s+)?$/i.test(b)) return true;
+  const list = b.match(/^\s*I\s+([a-z'-]+\b[^.;!?]*?)(?:,|\band)\s+(?:and\s+)?$/i);
+  if (!list) return false;
+  const rest = list[1];
+  return !/\bI\b/.test(rest) && !OTHER_SUBJECT_IN_LIST.test(rest) &&
+    !/\b(?:my|the|our|his|her|their|a|an)\s+(?:[a-z-]+\s+)?(?:supervisor|boss|lead|manager|foreman|owner|director|coordinator|dispatcher)s?\b/i.test(rest) &&
+    !/\b(?:would|will|could|should|might|wanted|tried|hoped|planned|asked|told)\b/i.test(rest);
 }
 // "assign the daily work", "assigned tasks to the crew", "assigning jobs": handing out work, done by the person.
 const ASSIGN_WORK_RE = /\bassign(?:ed|s|ing)?\s+(?:(?:the|our|my|their|all|each|every)\s+)?(?:[a-z-]+\s+){0,2}(?:work|tasks?|jobs?|duties|assignments?|orders?)\b/i;
