@@ -11,7 +11,11 @@ import {
   setArtifactLane,
   setArtifactDemo,
   isCreativeType,
+  queryAsUser,
+  snapshotApplicationDocument,
+  invalidateNextStep,
 } from "@crucible/core";
+import { linkResumeOnUpdate } from "@/lib/resume-application-link";
 import { validateResumeContent } from "@/lib/resume-validate";
 import { parseLaneIdBody } from "@/lib/lanes";
 import { isSameOriginJsonPost, isSameOriginRequest } from "@/lib/same-origin";
@@ -151,6 +155,14 @@ export async function PATCH(request: Request, context: RouteContext) {
   }
 
   if (result.status === "conflict") return NextResponse.json({ error: "This resume changed. Reload it before saving." }, { status: 409 });
+  // A tailored resume names its saved job in content.jobPackage. Fill a
+  // missing link both ways (never replaces one). See lib/resume-application-link.ts.
+  await linkResumeOnUpdate(userId, id, result.artifact.artifact_type, body.content, {
+    query: (uid, sql, params) => queryAsUser(uid, sql, params),
+    snapshot: ({ userId: uid, applicationId, artifactId, content }) =>
+      snapshotApplicationDocument({ userId: uid, applicationId, artifactId, documentType: "resume", provenance: "tailored", content }),
+    invalidate: (uid) => invalidateNextStep(uid),
+  });
   return NextResponse.json({ data: result.artifact });
 }
 
