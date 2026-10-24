@@ -29,7 +29,8 @@ export function evidenceForJob(j:JSearchJob,now=new Date().toISOString()):JobSea
   const noExperience=/\bno (?:prior )?experience (?:is )?(?:required|necessary)\b/i.test(text);
   const travel=text.match(/\b(?:travel[^.!?\n]{0,20}?(\d{1,3})\s*%|(\d{1,3})\s*%[^.!?\n]{0,15}travel)/i);
   const min=finite(j.job_min_salary),max=finite(j.job_max_salary);
-  if(payPeriod(j.job_salary_period)==="hour"&&((min??0)>10000||(max??0)>10000))warnings.push("Unusually high source pay. Verify the original posting.");
+  // Pay warnings only where the card shows pay (currency and period known).
+  if(j.job_salary_currency&&payPeriod(j.job_salary_period)==="hour"&&((min??0)>10000||(max??0)>10000))warnings.push("Unusually high source pay. Verify the original posting.");
   if(min!==null&&max!==null&&min>max&&j.job_salary_currency&&payPeriod(j.job_salary_period))warnings.push("Source pay range is inconsistent. Check the posting.");
   // No warning when the source gave no period: the card then shows no pay at
   // all (formatSourceSalary), so a line about missing pay fields is noise.

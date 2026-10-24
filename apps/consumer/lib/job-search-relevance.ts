@@ -2,20 +2,33 @@
 import { PATH_OCCUPATIONS } from './paths/occupations';
 const normalize = (s: string) => s.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, ' ').trim();
 const contains = (s: string, term: string) => (` ${normalize(s)} `).includes(` ${normalize(term)} `);
-/** Whole word, allowing a plain plural ("rigger" finds "Riggers"). Inputs are already normalized. */
-const hasWord = (text: string, word: string) => new RegExp(`(?:^| )${word}(?:s|es)?(?: |$)`).test(text);
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+/** Whole word or phrase, allowing a plain plural ("rigger" finds "Riggers"). Text is already normalized. */
+const hasPhrase = (text: string, phrase: string) => { const p = normalize(phrase); return !!p && new RegExp(`(?:^| )${escape(p)}(?:s|es)?(?: |$)`).test(text); };
 const GENERIC = /^(?:jobs?|work|anything|any|employment|help|not sure|i need (?:a )?(?:job|work))$/i;
 export function meaningfulRole(role: string): boolean { return !!role.trim() && !GENERIC.test(role.trim()); }
+/**
+ * Title words for each job family. A title that uses one of these is the same
+ * kind of work as the search even when it does not repeat the person's words
+ * ("Material Handler" or "Dock Lead" for "warehouse lead", "Millwright" for
+ * "maintenance technician", "Electrical Technician" for "electrician").
+ */
+const FAMILY_TITLES: Record<string, string[]> = {
+  'production': ['production', 'manufacturing', 'assembly', 'assembler', 'machine operator', 'fabricator', 'packaging'],
+  'material-moving': ['warehouse', 'material handler', 'materials handler', 'dock', 'shipping', 'receiving', 'forklift', 'order picker', 'picker', 'packer', 'loader', 'inventory', 'stock', 'freight', 'order selector', 'distribution'],
+  'maintenance': ['maintenance', 'millwright', 'mechanic', 'repair', 'hvac', 'facilities technician'],
+  'electrical': ['electrician', 'electrical', 'wiring'],
+  'cooking': ['cook', 'kitchen', 'chef', 'food prep'],
+  'production-management': ['production', 'manufacturing', 'plant manager'],
+};
 const families = [
-  { terms: ['production', 'manufacturing', 'assembly', 'machine operator'], variants: ['Production associate', 'Machine operator'] },
-  ...PATH_OCCUPATIONS.map(p => ({ terms: p.terms, variants: [p.searchRole] })),
+  { id: 'production', terms: ['production', 'manufacturing', 'assembly', 'machine operator'], variants: ['Production associate', 'Machine operator'] },
+  ...PATH_OCCUPATIONS.map(p => ({ id: p.id, terms: p.terms, variants: [p.searchRole] })),
 ];
 /**
- * Small, reviewed list of words employers use for the same trade work. The
- * person's own words are always searched first; a related term only fills the
- * second search slot, and the page says it was used. Keys are normalized with
- * "and" removed, so "shipping & receiving lead" and "shipping and receiving
- * lead" share an entry.
+ * Small, reviewed list of words employers use for the same trade work. Keys
+ * are normalized with "and" removed, so "shipping & receiving lead" and
+ * "shipping and receiving lead" share an entry.
  */
 const RELATED: Record<string, string[]> = {
   'rigger': ['rigging', 'ironworker'],
@@ -31,54 +44,70 @@ const RELATED: Record<string, string[]> = {
   'welder': ['welding'],
   'line cook': ['cook'],
 };
+/** Extra title words for trades with no job family above. */
+const RELATED_TITLES: Record<string, string[]> = { 'rigger': ['crane'], 'ironworker': ['crane', 'rigging'], 'welder': ['fabricator'] };
 const relatedKey = (role: string) => normalize(role).split(' ').filter(w => w !== 'and').join(' ');
 export function relatedTerms(role: string): string[] { return meaningfulRole(role) ? RELATED[relatedKey(role)] || [] : []; }
-export function searchRoles(role: string, target: string, skills: string[]): string[] {
+export interface SearchPlan { roles: string[]; related: string[]; familyTitles: string[] }
+/**
+ * At most two searches per provider (the existing budget). The person's own
+ * words go first, word for word. The job family search (for example "Material
+ * handler" for "warehouse lead") keeps the second slot. A related trade term
+ * only takes the second slot when no family search exists (rigger, welder,
+ * millwright); otherwise it is used to recognize titles, not searched.
+ */
+export function searchPlan(role: string, target: string, skills: string[]): SearchPlan {
   const primary = (meaningfulRole(role) ? role.trim() : meaningfulRole(target) ? target.trim() : '').slice(0, 200);
   const evidence = primary || skills.join(' ');
   const matches = families.map(f => ({ ...f, score: f.terms.filter(t => contains(evidence, t)).length }))
     .filter(f => f.score > 0).sort((a, b) => b.score - a.score);
   const variants = matches.flatMap(f => f.variants);
-  // Two focused queries share the existing provider budget. No invented role
-  // when neither a goal nor saved skill supplies a useful starting point. A
-  // related trade term (when one exists) takes the second slot ahead of a
-  // broad occupation family, because it names the same work.
-  return [...new Map([primary, ...relatedTerms(primary), ...variants].filter(Boolean).map(r => [normalize(r), r])).values()].slice(0, 2);
+  const related = relatedTerms(primary);
+  const roles = [...new Map([primary, ...variants, ...related].filter(Boolean).map(r => [normalize(r), r])).values()].slice(0, 2);
+  const familyTitles = [...new Set([...matches.flatMap(f => FAMILY_TITLES[f.id] || []), ...(RELATED_TITLES[relatedKey(primary)] || [])])];
+  return { roles, related, familyTitles };
 }
+export function searchRoles(role: string, target: string, skills: string[]): string[] { return searchPlan(role, target, skills).roles; }
 const STOP = new Set(['a','an','the','and','or','in','of','for','to','job','jobs','work','with','i','my','experience']);
 /** Words that say the level or schedule, not the work. "warehouse lead" is about the warehouse. */
 const MODIFIER = new Set(['lead','leader','senior','junior','manager','supervisor','associate','assistant','head','chief','principal','staff','level','entry','shift','day','night','part','full','time','team','crew','worker','general','specialist','trainee','ii','iii']);
+/** Work nouns shared by unrelated jobs: "operator" alone does not make a Call Center Operator a forklift job. */
+const GENERIC_NOUN = new Set(['operator','technician','tech','line','driver','clerk','handler','helper','attendant','representative','rep','coordinator','laborer','agent','officer','aide']);
 function tokens(s: string) { return [...new Set(normalize(s).split(' ').filter(t => t.length > 2 && !STOP.has(t)))]; }
-function coreWords(s: string) { const all = tokens(s); const core = all.filter(t => !MODIFIER.has(t)); return core.length ? core : all; }
+/** The words that name the work: level words and generic nouns removed, unless nothing else is left. */
+function workWords(s: string) {
+  const all = tokens(s), core = all.filter(t => !MODIFIER.has(t)), specific = core.filter(t => !GENERIC_NOUN.has(t));
+  return specific.length ? specific : core.length ? core : all;
+}
 export type RelevanceTier = 'title' | 'description' | 'none';
 export interface JobRelevance { score: number; reason: string; tier?: RelevanceTier; matchedRelatedOnly?: boolean }
 /**
- * roles[0] is the person's own search; later roles are related terms or a
- * broader family search. Tier "title": a work word (not a level word) from the
- * search is in the job title. Tier "description": a word from the person's own
- * search or a related term appears only in the description; the page keeps
- * these in a labeled "also found" fold. Tier "none": no search word anywhere;
- * the core drops these and counts them. Family variant words count for titles
- * only, since words like "material" turn up in unrelated descriptions.
+ * roles[0] is the person's own search; later roles are a family or related
+ * search. Tier "title": a work word from the search, a related term, a family
+ * search word, or a family title word is in the job title. Tier "description":
+ * a work word from the person's search or a related term is only in the
+ * description; the page keeps these in a labeled "Also found" fold. Tier
+ * "none": no search word anywhere; the core drops and counts these.
  */
-export function jobRelevance(job: {title: string; full_description: string}, roles: string[], skills: string[], related: string[] = []) {
+export function jobRelevance(job: {title: string; full_description: string}, roles: string[], skills: string[], related: string[] = [], familyTitles: string[] = []) {
   const title = normalize(job.title), description = normalize(job.full_description || '');
   const roleWords = tokens(roles.join(' '));
-  const own = roles[0] ? coreWords(roles[0]) : [];
-  const relatedWords = [...new Set(related.flatMap(coreWords))].filter(w => !own.includes(w));
-  const familyWords = [...new Set(roles.slice(1).flatMap(coreWords))].filter(w => !own.includes(w) && !relatedWords.includes(w));
-  const ownTitle = own.filter(w => hasWord(title, w)), relatedTitle = relatedWords.filter(w => hasWord(title, w)), familyTitle = familyWords.filter(w => hasWord(title, w));
-  const ownDesc = own.filter(w => hasWord(description, w)), relatedDesc = relatedWords.filter(w => hasWord(description, w));
+  const own = roles[0] ? workWords(roles[0]) : [];
+  const relatedWords = [...new Set(related.flatMap(workWords))].filter(w => !own.includes(w));
+  const familyWords = [...new Set([...roles.slice(1).filter(r => !related.includes(r)).flatMap(workWords)])].filter(w => !own.includes(w) && !relatedWords.includes(w));
+  const ownTitle = own.filter(w => hasPhrase(title, w)), relatedTitle = relatedWords.filter(w => hasPhrase(title, w));
+  const familyTitle = [...familyWords.filter(w => hasPhrase(title, w)), ...familyTitles.filter(t => hasPhrase(title, t))];
+  const ownDesc = own.filter(w => hasPhrase(description, w)), relatedDesc = relatedWords.filter(w => hasPhrase(description, w));
   const skillMatches = skills.filter(s => tokens(s).some(w => contains(title, w) || contains(description, w))).slice(0, 5);
   const titleMatches = roleWords.filter(w => contains(title, w));
   const base = titleMatches.length * 8 + roleWords.filter(w => contains(description, w)).length + skillMatches.length;
   if (!roles.length) return { score: base, tier: 'title' as RelevanceTier, reason: skillMatches.length ? 'Saved skill terms appear in this posting. The role and requirements still need checking.' : 'Provider returned this opening for your area. Check the role and requirements.' };
   if (ownTitle.length || relatedTitle.length || familyTitle.length) {
     const relatedOnly = !ownTitle.length && relatedTitle.length > 0;
-    return { score: 1000 + ownTitle.length * 50 + relatedTitle.length * 20 + familyTitle.length * 10 + base, tier: 'title' as RelevanceTier, matchedRelatedOnly: relatedOnly,
-      reason: ownTitle.length ? 'Title overlaps your search direction. Check the requirements before applying.' : relatedOnly ? `Title uses a related term (${relatedTitle.join(', ')}), not your exact words. Check the requirements before applying.` : 'Title matches a broader search for this kind of work. Check the requirements before applying.' };
+    return { score: 1000 + ownTitle.length * 50 + relatedTitle.length * 20 + (familyTitle.length ? 10 : 0) + base, tier: 'title' as RelevanceTier, matchedRelatedOnly: relatedOnly,
+      reason: ownTitle.length ? 'Title overlaps your search direction. Check the requirements before applying.' : relatedOnly ? `Title uses a related term (${relatedTitle.join(', ')}), not your exact words. Check the requirements before applying.` : 'Title names the same kind of work as your search, in other words. Check the requirements before applying.' };
   }
   if (ownDesc.length || relatedDesc.length) return { score: 100 + ownDesc.length * 10 + relatedDesc.length * 5 + base, tier: 'description' as RelevanceTier, matchedRelatedOnly: !ownDesc.length,
-    reason: `Your search words (${[...ownDesc, ...relatedDesc].join(', ')}) appear only in the description, not the title. This may be a different kind of job.` };
+    reason: ownDesc.length ? `Your search words (${ownDesc.join(', ')}) appear only in the description, not the title. This may be a different kind of job.` : `A related term (${relatedDesc.join(', ')}) appears only in the description, not your own words and not the title. This may be a different kind of job.` };
   return { score: base, tier: 'none' as RelevanceTier, reason: 'None of your search words appear in this posting.' };
 }

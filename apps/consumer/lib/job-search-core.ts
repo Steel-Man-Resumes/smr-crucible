@@ -1,4 +1,4 @@
-import { searchRoles, jobRelevance, relatedTerms } from './job-search-relevance';
+import { searchPlan, jobRelevance } from './job-search-relevance';
 import { normalizeLocation } from './job-location';
 /**
  * One bounded provider search and deterministic filter path for Job Board and coach.
@@ -14,11 +14,11 @@ import { isMockEnabled, MOCK_JOB_RESULTS } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER, AI_MODEL } from "@/lib/ai-call";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { getEmployerMarks, isMarked, getOneAsUser, type EmployerMarks } from "@crucible/core";
-import { fetchJSearchJobs, fetchAdzunaJobs, fetchUsaJobs, mergeJobs } from "./job-providers";
+import { fetchJSearchJobs, fetchAdzunaJobs, fetchUsaJobs, mergeJobs, placeId } from "./job-providers";
 import { assessJobSearch, canonicalSearchFilters, defaultJobSearchFilters, readJobSearchFilters, type JobSearchFilters } from "@crucible/core/src/jobSearchFilters";
 import { evidenceForJob, formatSourceSalary } from "./job-search-evidence";
 import { loadJobSearchPreferences } from "./job-search-preferences";
-import type { JSearchJob, EnrichedJob, JobSearchOutcome, JobSearchSummary } from "./job-search-types";
+import type { JSearchJob, EnrichedJob, JobSearchOutcome, JobSearchSummary, SearchMetadata, ProviderOutage } from "./job-search-types";
 export type { JSearchJob, EnrichedJob, JobSearchOutcome } from "./job-search-types";
 import crypto from "crypto";
 import { readJobFit, jobFitExclusion } from "./job-fit";
@@ -96,17 +96,23 @@ export function hashQuery(params: Record<string, unknown>): string {
 interface CachedSearchResult {
   results: EnrichedJob[];
   fair_chance_info: string;
+  /** Notices and outage state of the live search that filled this row. */
+  metadata: SearchMetadata;
 }
+/** A search where any provider failed is cached briefly, so a short outage does not stick for 6 hours. */
+export const CACHE_MINUTES_HEALTHY = 360, CACHE_MINUTES_DEGRADED = 10;
 
 async function getCachedResults(queryHash: string): Promise<CachedSearchResult | null> {
   try {
     const { getOne } = await import("@crucible/core");
-    const row = await getOne<{ results: EnrichedJob[]; fair_chance_info: string }>(
-      `SELECT results, fair_chance_info FROM job_search_cache WHERE query_hash = $1 AND expires_at > NOW()`,
+    const row = await getOne<{ results: EnrichedJob[]; fair_chance_info: string; query_params: { searchMetadata?: SearchMetadata } | null }>(
+      `SELECT results, fair_chance_info, query_params FROM job_search_cache WHERE query_hash = $1 AND expires_at > NOW()`,
       [queryHash]
     );
     if (!row) return null;
-    return { results: row.results, fair_chance_info: row.fair_chance_info || "" };
+    const stored = row.query_params?.searchMetadata;
+    return { results: row.results, fair_chance_info: row.fair_chance_info || "",
+      metadata: { providerRequests: 0, notices: Array.isArray(stored?.notices) ? stored!.notices.filter(n => typeof n === "string") : [], outage: stored?.outage ?? null, degraded: stored?.degraded === true } };
   } catch {
     return null;
   }
@@ -116,16 +122,19 @@ async function cacheResults(
   queryHash: string,
   queryParams: Record<string, unknown>,
   results: EnrichedJob[],
-  fairChanceInfo: string
+  fairChanceInfo: string,
+  metadata: SearchMetadata
 ): Promise<void> {
   try {
     const { query } = await import("@crucible/core");
+    // The notices ride in query_params (jsonb) so no migration is needed.
+    const minutes = metadata.degraded ? CACHE_MINUTES_DEGRADED : CACHE_MINUTES_HEALTHY;
     await query(
       `INSERT INTO job_search_cache (query_hash, query_params, results, result_count, fair_chance_info, expires_at)
-       VALUES ($1, $2, $3, $4, $5, NOW() + INTERVAL '6 hours')
+       VALUES ($1, $2, $3, $4, $5, NOW() + make_interval(mins => $6::int))
        ON CONFLICT (query_hash)
-       DO UPDATE SET results = $3, result_count = $4, fair_chance_info = $5, fetched_at = NOW(), expires_at = NOW() + INTERVAL '6 hours'`,
-      [queryHash, JSON.stringify(queryParams), JSON.stringify(results), results.length, fairChanceInfo]
+       DO UPDATE SET query_params = $2, results = $3, result_count = $4, fair_chance_info = $5, fetched_at = NOW(), expires_at = NOW() + make_interval(mins => $6::int)`,
+      [queryHash, JSON.stringify({ ...queryParams, searchMetadata: { notices: metadata.notices, outage: metadata.outage ?? null, degraded: metadata.degraded === true } }), JSON.stringify(results), results.length, fairChanceInfo, minutes]
     );
   } catch (err) {
     console.error("Cache write failed:", err);
@@ -156,15 +165,12 @@ export async function findCachedJob(jobId: string): Promise<EnrichedJob | null> 
   }
 }
 
-async function enrichJobsWithAI(
-  jobs: JSearchJob[],
-  context: { hasRecord: boolean; recordType?: string; location: string; userId?: string | null },
-  marks: EmployerMarks
-): Promise<{ enrichedJobs: EnrichedJob[]; fairChanceInfo: string }> {
-  const apiKey = process.env.OPENAI_API_KEY;
-
-  // Pre-process: build basic enriched jobs without AI
-  const basicJobs: EnrichedJob[] = jobs.map((j) => {
+/**
+ * Deterministic card for one merged posting. The record mark is checked at the
+ * shown place and at every other place merged into the card, so a mark earned
+ * in Germantown is not lost when the card shows the Milwaukee copy.
+ */
+export function basicJob(j: JSearchJob, marks: EmployerMarks): EnrichedJob {
     const evidence = evidenceForJob(j);
     const salary = formatSourceSalary(evidence.salary);
     const posted = formatPosted(j.job_posted_at_datetime_utc);
@@ -172,7 +178,11 @@ async function enrichJobsWithAI(
     const company = unwrapMaybeJsonArray(j.employer_name);
     // The mark needs the listing's own place and title: a directory mark is
     // earned at a place, sometimes for one role (DIRECTORY_MARK_ENABLED).
-    const fair = isMarked(company, { city: j.job_city ?? null, state: j.job_state ?? null, title }, marks);
+    const markedHere = isMarked(company, { city: j.job_city ?? null, state: j.job_state ?? null, title }, marks);
+    const markedElsewhere = markedHere ? null : (j.job_listings || []).find(l => isMarked(company, { city: l.city, state: l.state, title: unwrapMaybeJsonArray(l.title) }, marks)) || null;
+    const fair = markedHere || !!markedElsewhere;
+    const pickPlace = placeId(j.job_city, j.job_state);
+    const otherPlaces = [...new Map((j.job_listings || []).filter(l => l.placeId !== pickPlace).map(l => [l.placeId, l.place])).values()].filter(Boolean);
 
     return {
       id: j.job_id,
@@ -186,7 +196,8 @@ async function enrichJobsWithAI(
       // normalizeLocation drops a state or country the provider repeated inside
       // the city field ("Milwaukee, Wisconsin, Wisconsin").
       location: normalizeLocation(j.job_city, j.job_state) || "Location not supplied",
-      ...(j.job_locations?.length ? { other_locations: j.job_locations } : {}),
+      ...(otherPlaces.length ? { other_locations: otherPlaces } : {}),
+      ...(j.job_listings?.length ? { other_listings: j.job_listings.map(l => ({ place: l.place, apply_url: l.apply_url, source: l.source })) } : {}),
       salary,
       description: truncateDescription(j.job_description, 200),
       full_description: truncateDescription(j.job_description, 20000),
@@ -195,13 +206,23 @@ async function enrichJobsWithAI(
       employment_type: j.job_employment_type || "Type not supplied",
       posted,
       second_chance: fair,
-      fair_chance_reason: fair ? "We checked: this employer hires people with records here." : null,
+      fair_chance_reason: markedHere ? "We checked: this employer hires people with records here." : markedElsewhere ? `We checked: this employer hires people with records in ${markedElsewhere.place}. Apply to that location.` : null,
       remote: j.job_is_remote === true,
       evidence, source_fields: j.source_fields, source_variants: j.source_variants,
       apply_url: j.apply_options?.find((option) => option.is_direct === true && option.apply_link)?.apply_link || j.job_apply_link || j.job_google_link || null,
       employer_website: j.employer_website || null,
     };
-  });
+}
+
+async function enrichJobsWithAI(
+  jobs: JSearchJob[],
+  context: { hasRecord: boolean; recordType?: string; location: string; userId?: string | null },
+  marks: EmployerMarks
+): Promise<{ enrichedJobs: EnrichedJob[]; fairChanceInfo: string }> {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  // Pre-process: build basic enriched jobs without AI
+  const basicJobs: EnrichedJob[] = jobs.map((j) => basicJob(j, marks));
 
   // If no API key, return basic enrichment
   if (!apiKey) {
@@ -341,6 +362,23 @@ function truncateDescription(desc: string, maxLen: number): string {
   return clean.slice(0, maxLen).replace(/\s\S*$/, "") + "...";
 }
 
+const COUNT_WORDS = ["zero", "one", "two", "three", "four"];
+/**
+ * Name a failure at the size it was. All of a provider's searches failing is
+ * "JSearch did not answer"; one of two failing is "One of two JSearch
+ * searches did not answer", because the other one's listings are on screen.
+ */
+export function providerFailureNotices(calls: { source: string; failed: boolean }[]): string[] {
+  const by = new Map<string, { total: number; failed: number }>();
+  for (const c of calls) { const e = by.get(c.source) || { total: 0, failed: 0 }; e.total++; if (c.failed) e.failed++; by.set(c.source, e); }
+  const whole = [...by].filter(([, e]) => e.failed && e.failed === e.total).map(([name]) => name);
+  const part = [...by].filter(([, e]) => e.failed && e.failed < e.total);
+  return [
+    ...(whole.length ? [`${whole.join(" and ")} did not answer this search, so ${whole.length === 1 ? "its" : "their"} listings are missing.`] : []),
+    ...part.map(([name, e]) => { const n = COUNT_WORDS[e.failed] || String(e.failed); return `${n[0].toUpperCase()}${n.slice(1)} of ${COUNT_WORDS[e.total] || e.total} ${name} searches did not answer, so some ${name} listings may be missing.`; }),
+  ];
+}
+
 // ─── Search ─────────────────────────────────────────────────────────────────
 
 /** Page and coach resolve the same saved lane/default choices before provider and cache work. */
@@ -350,8 +388,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
   const profile = params.userId ? await (await import("@crucible/core")).getUserProfile(params.userId) : null;
   const skills = profile?.topSkills || params.skills || [];
   const requestedRole = params.role === undefined ? saved?.saved.role || "" : params.role;
-  const roles = searchRoles(requestedRole, saved?.target || (!saved?.laneId ? profile?.topCareerPaths[0] || "" : ""), skills);
-  const related = roles.length ? relatedTerms(roles[0]) : [];
+  const { roles, related, familyTitles } = searchPlan(requestedRole, saved?.target || (!saved?.laneId ? profile?.topCareerPaths[0] || "" : ""), skills);
   const relatedUsed = roles.slice(1).filter(r => related.some(t => t.toLowerCase() === r.toLowerCase()));
   const result = await searchListings({ ...params, role: roles[0] || requestedRole, searchRoles: roles, location: params.location === undefined ? saved?.saved.location || "" : params.location, resolvedFilters: filters });
   let hidden = new Set<string>();
@@ -372,7 +409,7 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     if (!filters.includeUnknown) assessment.requiredUnknown.forEach(key => { excludedBy[`unknown_${key}`] = (excludedBy[`unknown_${key}`] || 0) + 1; });
     if (!assessment.included) return [];
     assessment.unknown.forEach(key => { unknownBy[key] = (unknownBy[key] || 0) + 1; });
-    const relevance = jobRelevance(job, roles, skills, related);
+    const relevance = jobRelevance(job, roles, skills, related, familyTitles);
     // Off-topic listings (none of the search words in title or description)
     // are dropped and counted, never silently: the summary says how many.
     if (relevance.tier === "none") { excludedBy.off_topic = (excludedBy.off_topic || 0) + 1; return []; }
@@ -384,9 +421,14 @@ export async function runJobSearch(params: JobSearchParams): Promise<JobSearchOu
     offTopic, alsoFound, ...(relatedUsed.length ? { relatedTerms: relatedUsed } : {}),
     notices: [...(roles.length ? [`Search directions: ${roles.join("; ")}. Ordered by title match first, then description and saved skill overlap, not confirmed eligibility.`] : ["Add a role or save a career direction for more focused results."]),
       ...(relatedUsed.length ? [`We also searched ${relatedUsed.map(r => `"${r}"`).join(" and ")}, a related term for "${roles[0]}". Cards say when only the related term matched.`] : []),
+      ...(!relatedUsed.length && related.length && jobs.some(j => j.relevance.matchedRelatedOnly) ? [`Titles that use a related term (${related.join(", ")}) also count as matches for "${roles[0]}". Cards say when only the related term matched.`] : []),
       ...(offTopic ? [`${offTopic} loaded listing${offTopic === 1 ? "" : "s"} left out because none of your search words appear in the title or description.`] : []),
       ...(alsoFound ? [`${alsoFound} listing${alsoFound === 1 ? "" : "s"} only mention your search words in the description. They are under "Also found" below the main list.`] : []), "Counts cover the listings loaded for this search, not every opening.", ...(!filters.origin && filters.radiusMiles.value !== null ? ["Distance is unverified without an exact search center. Provider radius is approximate."] : []), ...(result.metadata?.notices || [])] };
   const { metadata: _metadata, ...publicResult } = result;
+  // A provider failed and nothing survived: say the source is down, not
+  // "change your choices", even when another provider sent only off-topic or
+  // filtered rows. The summary still carries the counts and notices.
+  if (!jobs.length && !result.error && result.metadata?.outage) return { ...publicResult, jobs, summary, error: result.metadata.outage };
   return { ...publicResult, jobs, summary };
 }
 
@@ -419,6 +461,7 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
       jobs: cached.results,
       fair_chance_info: cached.fair_chance_info,
       source: "cache",
+      metadata: cached.metadata,
     };
   }
 
@@ -455,10 +498,13 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
     fetchUsaJobs(roleClean, searchLocation, PARALLEL_PROVIDER_TIMEOUT_MS, { filters, maxPages: multi ? 1 : 2 }).then(result => { if(result.jobs.length) providerNames.push("usajobs"); return result; }),
   ]);
   const sources = [...roles.map(() => "JSearch"), ...roles.map(() => "Adzuna"), "USAJOBS"];
-  const failedSources = [...new Set(settled.flatMap((r, i) => r.failed ? [sources[i]] : []))];
   const cutShort = settled.some(r => r.partial);
-  const metadata = { providerRequests: settled.reduce((n,r) => n + (r.requests || 0), 0), notices: [
-    ...(failedSources.length ? [`${failedSources.join(" and ")} did not answer this search, so ${failedSources.length === 1 ? "its" : "their"} listings are missing.`] : []),
+  const generalBoards = settled.slice(0, roles.length * 2);
+  const generalDown = generalBoards.every(r => r.failed);
+  const anyFailed = settled.some(r => r.failed);
+  const outage: ProviderOutage | null = generalDown ? (settled.some(r => r.status === 429) ? "provider_rate_limited" : "provider_unavailable") : anyFailed ? "provider_partial" : null;
+  const metadata: SearchMetadata = { providerRequests: settled.reduce((n,r) => n + (r.requests || 0), 0), outage, degraded: anyFailed || cutShort, notices: [
+    ...providerFailureNotices(settled.map((r, i) => ({ source: sources[i], failed: r.failed }))),
     ...(cutShort ? ["Some providers reached the bounded page limit. More openings may exist."] : []),
   ] };
   const rawJobs = mergeJobs(settled.map(result => result.jobs), searchLocation);
@@ -471,7 +517,6 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
     // trade or private-sector jobs: when every general board (JSearch, Adzuna)
     // failed, this is a source outage, not an empty market. (Before this, a
     // clean USAJOBS zero turned two failed boards into "0 kept from 0 loaded".)
-    const generalBoards = settled.slice(0, roles.length * 2);
     const anyCleanEmpty = generalBoards.some((r) => !r.failed);
     if (!anyCleanEmpty && allFailed) {
       return {
@@ -514,7 +559,7 @@ async function searchListings(params: JobSearchParams): Promise<JobSearchOutcome
 
   // 5. Cache results (bounded -- including fair_chance_info so cache hits return complete data)
   await withDeadline(
-    cacheResults(queryHash, cacheParams, enrichedJobs, fairChanceInfo),
+    cacheResults(queryHash, cacheParams, enrichedJobs, fairChanceInfo, metadata),
     DB_DEADLINE_MS,
     undefined,
     "cache write"

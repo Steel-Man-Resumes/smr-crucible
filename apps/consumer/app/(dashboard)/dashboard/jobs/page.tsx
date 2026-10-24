@@ -303,6 +303,8 @@ function JobBoardPage() {
           setJobs([]);
           setSearchError(
             data.error === "location_required" ? "Add a city or ZIP. For a nationwide remote search, choose Remote and Anywhere."
+              : data.error === "provider_partial"
+              ? "Part of the job listings did not load just now, and nothing from the rest fit this search. This is on our side, not yours. Try again in a few minutes."
               : data.error === "provider_rate_limited"
               ? "Our job-listing provider hit its limit for right now. This is on our side, not yours. Your search was fine. Try again in a little while."
               : "We couldn't reach the job listings just now. This is on our side, not yours. Try again in a few minutes."
@@ -905,8 +907,18 @@ function JobBoardPage() {
                       {job.remote && <span className="text-t-steel font-medium">Remote</span>}
                     </div>
 
-                    {job.other_locations && job.other_locations.length > 0 && (
-                      <p className="text-xs text-t-phos-dim">Also listed in: {job.other_locations.join("; ")}. One posting shown once. Check the employer&apos;s page for the place you want.</p>
+                    {job.other_listings && job.other_listings.length > 0 && (
+                      <div className="text-xs text-t-phos-dim" data-testid="job-other-listings">
+                        <p>This posting is also listed here. Each copy keeps its own application page.</p>
+                        <ul className="mt-1 space-y-1">
+                          {job.other_listings.map((listing, i) => (
+                            <li key={`${listing.source}-${i}`}>
+                              {listing.place || "Place not supplied"} ({listing.source})
+                              {listing.apply_url && <>{" "}<a href={listing.apply_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-t-steel underline underline-offset-2 hover:opacity-80">Open this listing &#8599;</a></>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
 
                     {/* Full description */}

@@ -117,35 +117,64 @@ export function titleKey(j:Pick<JSearchJob,"job_title"|"job_city"|"job_state">):
   return t.replace(/\s+/g," ").trim();
 }
 export const jobPlace=(j:JSearchJob)=>normalizeLocation(j.job_city,j.job_state);
+/** Place identity from parsed fields, never display text: "Milwaukee, WI" and "Milwaukee, Wisconsin" are one place. */
+export function placeId(city:unknown,state:unknown):string{
+  const c=norm(String(city||"").split(",")[0]);
+  const fromCity=String(city||"").split(",").slice(1).map(x=>x.trim()).find(Boolean);
+  const st=placeKey(String(state||fromCity||""));
+  return `${c}|${st}`;
+}
+const PLACEHOLDER_EMPLOYER=new Set(["","employer","confidential","confidential employer","federal agency","company","unknown","hiring","hiring company","not disclosed","private","anonymous"]);
+export const isPlaceholderEmployer=(name:unknown)=>PLACEHOLDER_EMPLOYER.has(employerKey(name));
+const linkOf=(j:JSearchJob)=>j.job_apply_link||j.job_google_link||null;
+/** Parse "City, ST" from the search box into a place id; state may be absent. */
+function wantedPlace(searchLocation?:string):{city:string;state:string|null}{
+  const [city,state]=String(searchLocation||"").split(",").map(x=>x.trim());
+  return {city:norm(city),state:state?placeKey(state):null};
+}
 /**
- * One card per posting. The same employer and title (place words removed) is one
- * posting, whether a provider lists it once per town or two providers list it
- * with different ids or apply links; a repeated provider id is also one posting. Other towns are kept as job_locations,
- * provenance as source_variants, and an explicitly direct apply option wins.
- * The card shown is the listing in the searched city when there is one.
+ * One card per posting, built in two steps.
+ * Same opening: two listings are one opening when they share employer and
+ * title (place words removed) and either sit in different places (a posting
+ * listed once per town), come from different providers (JSearch and Adzuna
+ * copies), or carry the same apply link. Two listings from one provider in one
+ * place with different apply links are different openings and stay separate.
+ * A repeated provider id is always the same posting. Placeholder employers
+ * ("Employer", "Confidential") never merge.
+ * The card shown is the copy in the searched city and state (city alone when
+ * the search gave no state). Every other copy is kept in job_listings with its
+ * own place and apply link, and provenance stays in source_variants.
  */
 export function mergeJobs(lists:JSearchJob[][],searchLocation?:string):JSearchJob[]{
-  const groups=new Map<string,JSearchJob[]>(),byId=new Map<string,string>();
+  type Card={members:JSearchJob[]};
+  const cards:Card[]=[],byKey=new Map<string,Card[]>(),byId=new Map<string,Card>();
   for(const list of lists)for(const job of list){
-    // The same provider id is the same posting even if a later page retitled
-    // it. An apply URL alone is not used: small employers point every opening
-    // at one careers page, and that would merge different jobs.
-    let k=`${employerKey(job.employer_name)}|${titleKey(job)}`;
-    const id=`${job.source||""}:${job.job_id}`;if(byId.has(id))k=byId.get(id)!;else byId.set(id,k);
-    const g=groups.get(k);if(g)g.push(job);else groups.set(k,[job]);
+    const id=`${job.source||""}:${job.job_id}`;
+    const known=byId.get(id);if(known){known.members.push(job);continue;}
+    let card:Card|undefined;
+    if(!isPlaceholderEmployer(job.employer_name)){
+      const k=`${employerKey(job.employer_name)}|${titleKey(job)}`;
+      const here=placeId(job.job_city,job.job_state),link=linkOf(job);
+      const candidates=byKey.get(k)||[];
+      card=candidates.find(c=>!c.members.some(m=>(m.source||"")===(job.source||"")&&placeId(m.job_city,m.job_state)===here&&linkOf(m)!==link));
+      if(!card){card={members:[]};candidates.push(card);byKey.set(k,candidates);cards.push(card);}
+    }else{card={members:[]};cards.push(card);}
+    card.members.push(job);byId.set(id,card);
   }
-  const wanted=norm(String(searchLocation||"").split(",")[0]);
-  return [...groups.values()].map(group=>{
-    const pick=(wanted&&group.find(j=>norm(j.job_city)===wanted))||group[0];
+  const wanted=wantedPlace(searchLocation);
+  return cards.map(({members})=>{
+    const exact=wanted.city?members.find(j=>{const [c,st]=placeId(j.job_city,j.job_state).split("|");return c===wanted.city&&(!wanted.state||st===wanted.state);}):undefined;
+    const pick=exact||members[0];
     const merged:JSearchJob={...pick};
-    const here=jobPlace(pick),places:string[]=[],seenPlaces=new Set([here.toLowerCase()]);
-    for(const j of group){
+    const pickPlace=placeId(pick.job_city,pick.job_state);
+    const listings:NonNullable<JSearchJob["job_listings"]>=[];
+    for(const j of members){
       if(j===pick)continue;
       merged.source_variants=[...(merged.source_variants||[]),{source:j.source||"unknown",id:j.job_id,fields:j.source_fields||{}}];
-      const place=jobPlace(j);if(place&&!seenPlaces.has(place.toLowerCase())){seenPlaces.add(place.toLowerCase());places.push(place);}
-      if(j.job_apply_is_direct===true&&merged.job_apply_is_direct!==true&&norm(j.job_city)===norm(pick.job_city)){merged.job_apply_link=j.job_apply_link;merged.job_apply_is_direct=true;}
+      listings.push({place:jobPlace(j),placeId:placeId(j.job_city,j.job_state),city:j.job_city||null,state:j.job_state||null,title:j.job_title,apply_url:linkOf(j),source:j.source||"unknown",id:j.job_id});
+      if(j.job_apply_is_direct===true&&merged.job_apply_is_direct!==true&&placeId(j.job_city,j.job_state)===pickPlace){merged.job_apply_link=j.job_apply_link;merged.job_apply_is_direct=true;}
     }
-    if(places.length)merged.job_locations=places;
+    if(listings.length)merged.job_listings=listings;
     return merged;
   });
 }
