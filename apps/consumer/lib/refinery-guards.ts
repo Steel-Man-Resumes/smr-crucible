@@ -8,6 +8,7 @@
  */
 
 import { eraseLocalForgeRun, forgeRunOwner } from "./forge-carry";
+import { TERMS_TICKED_KEY } from "./terms-ticked";
 
 /** "Edit your resume" from the Refinery: the Forge, told it was opened from an account. */
 export const EDIT_RESUME_HREF = "/resume?from=refinery";
@@ -132,12 +133,71 @@ export function settleDerivedKeys(uid: string, storage: Store | null = browserSt
  * mark. Called when an admin starts or ends viewing as someone, so neither
  * side's work is ever read as the other's.
  */
-export function clearForgeBrowserKeys(storage: Store | null = browserStore()): void {
+export function clearForgeBrowserKeys(
+  storage: Store | null = browserStore(),
+  session: SessionStore | null = browserSessionStore()
+): void {
+  clearRunSessionStorage(session);
   if (!storage) return;
   eraseLocalForgeRun(storage);
-  for (const k of [...DERIVED_KEYS, DERIVED_OWNER_KEY]) {
+  for (const k of [...DERIVED_KEYS, DERIVED_OWNER_KEY, ...ACCOUNT_LS_EXTRA_KEYS]) {
     try {
       storage.removeItem(k);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/**
+ * Account keys outside the Forge run and DERIVED_KEYS that RefineryShell's
+ * sign-out list (PERSONAL_LS_KEYS) also clears, plus the address the login
+ * page remembers. Cleared on impersonation start and end too (B7, R3 A1), so
+ * the admin's browser state is never read as the person's or the reverse.
+ * The "impersonation seen" flag is deliberately NOT here: it is what tells
+ * the chrome an impersonation ended.
+ */
+export const ACCOUNT_LS_EXTRA_KEYS: readonly string[] = [
+  "forge_audience",
+  "pending_access_code",
+  "view_as",
+  "admin_test_mode",
+  TERMS_TICKED_KEY,
+];
+
+/**
+ * sessionStorage written from one person's run (one tab survives an account
+ * switch): the Rush result and its target job, the job a resume is aimed at,
+ * and each run's record choice.
+ */
+export const RUN_SESSION_KEYS: readonly string[] = ["rush_result", "rush_target", "resume_target_job"];
+export const RUN_SESSION_PREFIXES: readonly string[] = ["forge-record-choice:"];
+
+type SessionStore = Pick<Storage, "removeItem" | "key" | "length">;
+
+function browserSessionStore(): SessionStore | null {
+  try {
+    return typeof sessionStorage === "undefined" ? null : sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Clear RUN_SESSION_KEYS and every key under RUN_SESSION_PREFIXES. */
+export function clearRunSessionStorage(session: SessionStore | null = browserSessionStore()): void {
+  if (!session) return;
+  const doomed = new Set(RUN_SESSION_KEYS);
+  try {
+    for (let i = 0; i < session.length; i++) {
+      const k = session.key(i);
+      if (k && RUN_SESSION_PREFIXES.some((p) => k.startsWith(p))) doomed.add(k);
+    }
+  } catch {
+    // unreadable: the fixed keys are still removed
+  }
+  for (const k of doomed) {
+    try {
+      session.removeItem(k);
     } catch {
       // ignore
     }

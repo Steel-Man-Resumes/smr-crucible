@@ -14,6 +14,7 @@
  * Every open of a shared tab is written to a log the participant can read.
  * The page says so, above the content, every time.
  */
+import { orgNoteDraftKey } from "@/lib/org-note-draft";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { OutcomesPanel } from "@/components/org/OutcomesPanel";
@@ -36,13 +37,15 @@ const LAST_TAB_KEY = "smr.staff.clientTab";
 
 interface ScopeState { shared: boolean; sharedAt: string | null; requestPending: boolean; required: boolean; stoppedByParticipant: boolean; fromDate: string | null }
 interface Client {
-  userId: string; name: string | null; email: string | null; currentStage: number; joinedAt: string | null;
+  userId: string; name: string | null; email: string | null; currentStage: number | null; identitySource?: "account" | "invite" | "none"; joinedAt: string | null;
   assignedStaffName: string | null; scopes: Record<Scope, ScopeState>; awaitingAcknowledgement: boolean;
   progress: { nextStepAction: string | null; applications: number; savedJobs: number; practiceSessions: number; hasTailoredResume: boolean; lastActiveAt: string | null } | null;
 }
 interface Note {
   id: string; kind: string; body: string; occurred_at: string; author_name: string | null;
   visible_to_participant: boolean; drafted_by_assistant: boolean; edited_at: string | null;
+  author_user_id?: string | null;
+  earlier?: { body: string; kind: string; replaced_at: string }[];
 }
 
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "--");
@@ -60,7 +63,7 @@ function readable(content: unknown, depth = 0): string[] {
 export function ClientPage({ clientId }: { clientId: string }) {
   const [client, setClient] = useState<Client | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
-  const [viewer, setViewer] = useState<{ canWriteNotes: boolean; canRequest: boolean; canSuggest?: boolean } | null>(null);
+  const [viewer, setViewer] = useState<{ userId?: string; canWriteNotes: boolean; canRequest: boolean; canSuggest?: boolean } | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Scope | "notes" | "screen" | "tasks" | "outcomes" | "suggestions">("notes");
@@ -114,9 +117,20 @@ export function ClientPage({ clientId }: { clientId: string }) {
       <header className="mb-6">
         <h1 className="text-2xl font-bold text-t-white">{client.name || "Participant"}</h1>
         <p className="text-sm text-t-phos-dim mt-1">
-          {client.email} · Stage {client.currentStage} of 6, {STAGES[client.currentStage] ?? ""} · Joined {day(client.joinedAt)}
+          {[
+            client.email,
+            client.currentStage != null ? `Stage ${client.currentStage} of 6, ${STAGES[client.currentStage] ?? ""}` : null,
+            `Joined ${day(client.joinedAt)}`,
+          ].filter(Boolean).join(" · ")}
           {client.assignedStaffName ? ` · Case manager: ${client.assignedStaffName}` : " · Unassigned"}
         </p>
+        {client.identitySource !== "account" && (
+          <p className="text-xs text-t-phos-dim mt-1">
+            {client.identitySource === "invite"
+              ? "They have not turned on progress sharing. You see only the name and email your organization entered when it invited them."
+              : "They have not turned on progress sharing, so their name and progress are not shown."}
+          </p>
+        )}
         <ul className="flex flex-wrap gap-2 mt-3" aria-label="What this person has shared">
           {SCOPES.map((s) => {
             const st = client.scopes[s.key];
@@ -151,8 +165,8 @@ export function ClientPage({ clientId }: { clientId: string }) {
       ) : tab === "screen" ? (
         <TheirScreen client={client} first={first} onOpen={openTab} />
       ) : tab === "notes" ? (
-        <NotesPanel clientId={clientId} first={first} notes={notes} canWrite={!!viewer?.canWriteNotes} onSaved={load}
-          defaultKind={prefs.noteKind} defaultVisible={prefs.noteVisible} />
+        <NotesPanel clientId={clientId} notes={notes} canWrite={!!viewer?.canWriteNotes} viewerId={viewer?.userId ?? null} onSaved={load}
+          defaultKind={prefs.noteKind} />
       ) : client.scopes[tab].shared ? (
         <section aria-live="polite">
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-4">
@@ -216,7 +230,7 @@ function TheirScreen({ client, first, onOpen }: { client: Client; first: string;
         <p className="text-[10px] uppercase tracking-wider text-t-phos-dim">Overview</p>
         {p ? (
           <p className="text-sm text-t-white mt-1">
-            Stage {client.currentStage} of 6, {STAGES[client.currentStage] ?? ""}. {p.nextStepAction ? `The next step ${first} is being shown: ${p.nextStepAction}.` : "No next step is showing right now."}
+            {client.currentStage != null ? `Stage ${client.currentStage} of 6, ${STAGES[client.currentStage] ?? ""}. ` : ""}{p.nextStepAction ? `The next step ${first} is being shown: ${p.nextStepAction}.` : "No next step is showing right now."}
             <span className="block text-xs text-t-phos-dim mt-1">
               {p.applications} {p.applications === 1 ? "application" : "applications"} · {p.savedJobs} saved · {p.practiceSessions} practice {p.practiceSessions === 1 ? "session" : "sessions"} · {p.hasTailoredResume ? "has tailored a resume" : "has not tailored a resume yet"} · last active {day(p.lastActiveAt)}
             </span>
@@ -536,62 +550,147 @@ function AskPanel({ clientId, first, scope, pending, canRequest, onAsked }: {
   );
 }
 
-function NotesPanel({ clientId, first, notes, canWrite, onSaved, defaultKind, defaultVisible }: {
-  clientId: string; first: string; notes: Note[]; canWrite: boolean; onSaved: () => void; defaultKind: string; defaultVisible: boolean;
+function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind }: {
+  clientId: string; notes: Note[]; canWrite: boolean; viewerId: string | null; onSaved: () => void; defaultKind: string;
 }) {
   const [body, setBody] = useState("");
   const [kind, setKind] = useState(defaultKind);
-  const [visible, setVisible] = useState(defaultVisible);
   // Preferences arrive a moment after the page; adopt them unless the person
   // has already started writing.
-  useEffect(() => { if (!body) { setKind(defaultKind); setVisible(defaultVisible); } }, [defaultKind, defaultVisible]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!body) setKind(defaultKind); }, [defaultKind]); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
+  // A draft t.ROY wrote, placed here from the assistant. It is NOT saved:
+  // it sits in this box, marked, until the staff member saves or discards it.
+  const draftKey = viewerId ? orgNoteDraftKey(viewerId, clientId) : null;
+  const [draft, setDraft] = useState<{ purpose: "case_note" | "check_in" } | null>(null);
+  useEffect(() => {
+    if (!draftKey) return;
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw) as { body?: unknown; purpose?: unknown };
+      if (typeof d.body !== "string" || !d.body.trim()) return;
+      setBody(d.body.slice(0, 8000));
+      const purpose = d.purpose === "case_note" ? "case_note" : "check_in";
+      // A check-in nobody has sent is a 'draft' until a person marks it sent.
+      // A case note draft keeps the staff member's own default kind.
+      if (purpose === "check_in") setKind("draft");
+      setDraft({ purpose });
+    } catch { /* no draft */ }
+  }, [draftKey]);
+  function clearDraft() {
+    try { if (draftKey) sessionStorage.removeItem(draftKey); } catch { /* ignore */ }
+    setDraft(null);
+  }
   async function save() {
     setBusy(true); setMsg(null);
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "add_note", body, kind, visibleToParticipant: visible }) });
+      body: JSON.stringify({ action: "add_note", body, kind, draftedByAssistant: !!draft }) });
     setBusy(false);
-    if (res.ok) { setBody(""); setVisible(defaultVisible); setKind(defaultKind); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+    if (res.ok) { setBody(""); setKind(defaultKind); clearDraft(); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+  }
+  // A draft check-in becomes an "Email" only when the person who saved it
+  // says they sent it. The kind change is kept as an earlier version.
+  async function markSent(n: Note) {
+    setBusy(true); setMsg(null);
+    const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "edit_note", noteId: n.id, body: n.body, kind: "email" }) });
+    setBusy(false);
+    if (res.ok) onSaved(); else setMsg((await res.json().catch(() => ({}))).error || "Could not mark it sent.");
+  }
+  async function saveCorrection() {
+    if (!editing) return;
+    setBusy(true); setMsg(null);
+    const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "edit_note", noteId: editing.id, body: editing.body }) });
+    setBusy(false);
+    if (res.ok) { setEditing(null); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that correction.");
   }
   return (
     <section>
       {canWrite && (
         <div className="bg-t-panel border border-t-line p-5 mb-5">
           <label htmlFor="note-body" className="block font-semibold text-t-white mb-2">Add to your record</label>
+          {draft && (
+            <div role="status" className="border border-t-amber bg-t-panel-2 px-3 py-2 mb-3 text-xs text-t-amber-bright">
+              {draft.purpose === "check_in"
+                ? "Draft check-in from t.ROY. Nothing was sent. If you save it, it is filed as a draft until you mark it sent."
+                : "Draft case note from t.ROY. It is not saved. Read it, fix anything that is wrong, then save it or throw it away."}
+              {" "}If you save it, the note says it was drafted with t.ROY.
+              <button type="button" onClick={() => { setBody(""); setKind(defaultKind); clearDraft(); }} className="t-focus ml-2 underline">Throw it away</button>
+            </div>
+          )}
           <textarea id="note-body" value={body} onChange={(e) => setBody(e.target.value)} rows={3} maxLength={8000}
             className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-3" />
           <div className="flex flex-wrap items-center gap-4">
             <label className="text-xs text-t-phos-dim">Type{" "}
               <select value={kind} onChange={(e) => setKind(e.target.value)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5 ml-1">
+                {kind === "draft" && <option value="draft">Check-in draft, not sent</option>}
                 {NOTE_KINDS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
-            </label>
-            <label className="text-xs text-t-phos-dim flex items-center gap-2">
-              <input type="checkbox" checked={visible} onChange={(e) => setVisible(e.target.checked)} className="t-focus" />
-              Let {first} see this note
             </label>
             <button onClick={save} disabled={busy || !body.trim()} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 disabled:opacity-50 ml-auto">
               {busy ? "Saving..." : "Save note"}
             </button>
           </div>
           <p className="text-xs text-t-phos-dim mt-3">
-            Notes belong to your organization. They can be corrected, and earlier wording is kept. They cannot be deleted.
+            Notes belong to your organization and only staff see them. The person who wrote a note can correct it, and the earlier wording is kept. Notes cannot be deleted.
           </p>
           {msg && <p className="text-xs text-t-amber-bright mt-2" role="alert">{msg}</p>}
         </div>
       )}
       {notes.length === 0 ? <p className="text-sm text-t-phos-dim">No notes yet.</p> : (
         <ol className="space-y-3">
-          {notes.map((n) => (
-            <li key={n.id} className="bg-t-panel border border-t-line p-4">
-              <p className="text-xs text-t-phos-dim mb-1">
-                {NOTE_KINDS.find(([k]) => k === n.kind)?.[1] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
-                {n.drafted_by_assistant ? " · drafted with t.ROY" : ""}{n.edited_at ? " · corrected" : ""}{n.visible_to_participant ? ` · ${first} can see this` : ""}
-              </p>
-              <p className="text-sm text-t-white whitespace-pre-wrap">{n.body}</p>
-            </li>
-          ))}
+          {notes.map((n) => {
+            const mine = canWrite && !!viewerId && n.author_user_id === viewerId;
+            const isEditing = editing?.id === n.id;
+            return (
+              <li key={n.id} className="bg-t-panel border border-t-line p-4">
+                <p className="text-xs text-t-phos-dim mb-1">
+                  {n.kind === "draft" ? "Check-in draft, not sent" : NOTE_KINDS.find(([k]) => k === n.kind)?.[1] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
+                  {n.drafted_by_assistant ? " · drafted with t.ROY" : ""}{n.edited_at ? ` · corrected ${day(n.edited_at)}` : ""}
+                </p>
+                {isEditing ? (
+                  <div>
+                    <label htmlFor={`fix-${n.id}`} className="sr-only">Corrected wording</label>
+                    <textarea id={`fix-${n.id}`} value={editing.body} onChange={(e) => setEditing({ id: n.id, body: e.target.value })} rows={3} maxLength={8000}
+                      className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-2" />
+                    <div className="flex gap-3">
+                      <button onClick={saveCorrection} disabled={busy || !editing.body.trim() || editing.body.trim() === n.body}
+                        className="t-focus bg-t-amber text-[#14100a] text-xs font-semibold px-3 py-1.5 disabled:opacity-50">{busy ? "Saving..." : "Save correction"}</button>
+                      <button onClick={() => setEditing(null)} className="t-focus text-xs text-t-phos-dim underline">Cancel</button>
+                    </div>
+                    <p className="text-[11px] text-t-phos-dim mt-1">The current wording is kept as an earlier version.</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-t-white whitespace-pre-wrap">{n.body}</p>
+                )}
+                {!isEditing && mine && (
+                  <span className="flex flex-wrap gap-4 mt-2">
+                    <button onClick={() => setEditing({ id: n.id, body: n.body })} className="t-focus text-xs text-t-phos underline">Correct this note</button>
+                    {n.kind === "draft" && (
+                      <button onClick={() => markSent(n)} disabled={busy} className="t-focus text-xs text-t-amber-bright underline">I sent it</button>
+                    )}
+                  </span>
+                )}
+                {(n.earlier?.length ?? 0) > 0 && (
+                  <details className="mt-2">
+                    <summary className="text-xs text-t-phos-dim cursor-pointer">Earlier wording ({n.earlier!.length})</summary>
+                    <ol className="mt-2 space-y-2">
+                      {n.earlier!.map((v, i) => (
+                        <li key={i} className="border-l border-t-line pl-3">
+                          <p className="text-[11px] text-t-phos-dim">Replaced {day(v.replaced_at)}</p>
+                          <p className="text-xs text-t-phos whitespace-pre-wrap">{v.body}</p>
+                        </li>
+                      ))}
+                    </ol>
+                  </details>
+                )}
+              </li>
+            );
+          })}
         </ol>
       )}
     </section>

@@ -120,6 +120,14 @@ export const RESTRICTED_GRANTS = {
   // 081: the newest writer's receipt nonce per run, owner only (moves forward
   // by UPDATE; deleted by delete-my-data).
   forge_writer_receipt: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  // Refinery seats (096). The policy row is updated by admins, never inserted
+  // or deleted from the app; grandfather rows are written by the close action
+  // and removed by an admin; offers are written by organizations and answered
+  // only through definer functions; departures only by definer functions.
+  refinery_access_policy: ["SELECT", "UPDATE"],
+  refinery_seat_legacy: ["SELECT", "INSERT", "DELETE"],
+  org_seat_offer: ["SELECT", "INSERT"],
+  access_code_departure: ["SELECT"],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */

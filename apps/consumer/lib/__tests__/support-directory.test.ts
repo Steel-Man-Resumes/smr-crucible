@@ -277,7 +277,9 @@ describe("pieces", () => {
     assert.deepEqual(requestedWants("housing", undefined).areas, ["shelter"]);
     assert.deepEqual(requestedWants("food", undefined), { categories: [], areas: ["food"] });
     assert.deepEqual(requestedWants(undefined, ["criminal_record"]).areas.sort(), ["courts", "expungement", "jobs", "legal_aid", "training"]);
-    assert.equal(requestedWants(undefined, undefined).areas.length, 20);
+    // Every area but faith: faith is opt-in and shows only when asked for (OPT_IN_CATEGORIES).
+    assert.equal(requestedWants(undefined, undefined).areas.length, 19);
+    assert.ok(!requestedWants(undefined, undefined).areas.includes("faith"));
     assert.deepEqual(requestedWants("bogus", undefined), { categories: [], areas: [] });
   });
 

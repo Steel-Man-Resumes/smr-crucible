@@ -1,26 +1,35 @@
 import { NextResponse } from "next/server";
 import { createAccessCode } from "@crucible/core";
 import { requirePlatformAdmin } from "@/lib/org-guard";
+import { mintCodeChoice, parseSeatsInput } from "@/lib/access-code-guard";
 
 export async function POST(req: Request) {
   const guard = await requirePlatformAdmin();
   if (!guard.ok) return guard.response;
 
-  const body = await req.json();
-  const { code, partnerName, dailyLimit, maxRedemptions, expiresAt, tier: requestedTier } = body;
+  const body = await req.json().catch(() => ({}));
+  const { partnerName, dailyLimit, maxRedemptions, expiresAt, tier: requestedTier } = body;
 
-  if (!code || !partnerName) {
-    return NextResponse.json(
-      { error: "code and partnerName are required" },
-      { status: 400 }
-    );
+  if (!partnerName) {
+    return NextResponse.json({ error: "partnerName is required" }, { status: 400 });
   }
 
-  if (!/^[A-Z0-9]{4,20}$/.test(code)) {
-    return NextResponse.json(
-      { error: "code must be 4-20 uppercase alphanumeric characters" },
-      { status: 400 }
-    );
+  // A code is a seat key anyone signed in can try. Random by default; a chosen
+  // code only with an explicit confirm (lib/access-code-guard.ts).
+  const choice = mintCodeChoice(body);
+  if (!choice.ok) {
+    return NextResponse.json({ error: choice.error }, { status: 400 });
+  }
+  const code = choice.code;
+
+  // Seats the database's way (orgCode.ts seatsFull): empty or null = no
+  // limit; otherwise a whole number of at least 1. A 0 would be a code nobody
+  // can ever use, so it is refused rather than stored.
+  // A form may send the number as a string ("5"); a plain whole-number
+  // string is read as that number (review 3, N-20). Anything else is refused.
+  const seatsRaw = parseSeatsInput(maxRedemptions);
+  if (seatsRaw !== null && !(Number.isInteger(seatsRaw) && seatsRaw >= 1 && seatsRaw <= 100000)) {
+    return NextResponse.json({ error: "Seats must be a whole number of at least 1, or empty for no limit." }, { status: 400 });
   }
 
   // Mintable tiers only -- 'client' = cohort seat code (keeps the redeemer's
@@ -34,7 +43,7 @@ export async function POST(req: Request) {
       partnerName,
       tier: mintTier,
       dailyLimit: dailyLimit ?? 200,
-      maxRedemptions: maxRedemptions ?? null,
+      maxRedemptions: seatsRaw,
       expiresAt: expiresAt ?? null,
       createdBy: guard.userId,
     });

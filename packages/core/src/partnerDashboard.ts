@@ -438,7 +438,9 @@ export async function getOrgContext(
     `SELECT os.access_code_id, os.role, ac.code, ac.partner_name, ac.org_logo_url, ac.max_redemptions
        FROM org_staff os
        JOIN access_code ac ON ac.id = os.access_code_id
-      WHERE os.user_id = $1
+      -- Same rule as resolveOrgActor: staff of a turned-off organization
+      -- reach nothing in it (R3 review S2).
+      WHERE os.user_id = $1 AND ac.is_active = true
       ORDER BY os.created_at ASC LIMIT 1`,
     [userId]
   );
@@ -521,6 +523,57 @@ export async function getOrgAssignmentCounts(
     unassignedJoined: Number(rows[0]?.unassigned ?? 0),
     assignedToViewer: Number(rows[0]?.mine ?? 0),
   };
+}
+
+/**
+ * People THIS ORGANIZATION INVITED who have not turned on progress sharing.
+ *
+ * Assignment never needed shared content, but the assignment controls and
+ * Today were built from the sharing cohort, so an invited person who had not
+ * switched sharing on could not be put on anyone's caseload (R3 review S8).
+ *
+ * WHAT IS RETURNED is only what the organization itself typed when it sent the
+ * invite (org_invite.invited_name and invited_email), the join date, and who
+ * they are assigned to. No progress, no stage, no activity, nothing from the
+ * person's own account. People who joined by typing the code themselves stay
+ * counted and unnamed until they share, as before.
+ */
+export interface InvitedMember {
+  userId: string;
+  name: string | null;
+  email: string | null;
+  joinedAt: string;
+  assignedStaffId: string | null;
+  /** Has not signed in yet. */
+  pending: boolean;
+}
+
+export async function getInvitedNotSharing(accessCodeId: string, actorUserId = ""): Promise<InvitedMember[]> {
+  const rows = await runScopedRows<{
+    user_id: string; name: string | null; email: string | null; joined_at: string; assigned_staff_id: string | null; pending: boolean;
+  }>(
+    `SELECT r.user_id, oi.invited_name AS name, oi.invited_email AS email, r.redeemed_at AS joined_at,
+            a.staff_user_id AS assigned_staff_id,
+            (u."emailVerified" IS NULL AND u.password_hash IS NULL
+               AND NOT EXISTS (SELECT 1 FROM accounts ac2 WHERE ac2."userId" = u.id)) AS pending
+       FROM access_code_redemption r
+       JOIN org_invite oi ON oi.access_code_id = r.access_code_id AND oi.user_id = r.user_id
+       JOIN users u ON u.id = r.user_id
+       LEFT JOIN client_staff_assignment a ON a.access_code_id = r.access_code_id AND a.client_user_id = r.user_id
+      WHERE r.access_code_id = $1::uuid
+        AND NOT EXISTS (SELECT 1 FROM consumer_consent cs
+                         WHERE cs.user_id = r.user_id AND cs.consent_layer = 'sharing' AND cs.status = 'granted')
+        AND NOT EXISTS (SELECT 1 FROM org_staff os WHERE os.access_code_id = r.access_code_id AND os.user_id = r.user_id)
+        AND r.user_id IS DISTINCT FROM (SELECT ac.partner_user_id FROM access_code ac WHERE ac.id = $1::uuid)
+      ORDER BY r.redeemed_at DESC`,
+    [accessCodeId],
+    accessCodeId,
+    actorUserId
+  );
+  return rows.map((r) => ({
+    userId: r.user_id, name: r.name, email: r.email, joinedAt: r.joined_at,
+    assignedStaffId: r.assigned_staff_id, pending: !!r.pending,
+  }));
 }
 
 /** Assign (or reassign) a cohort client to a staff member. Pass null staff to unassign. */

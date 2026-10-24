@@ -13,7 +13,7 @@ import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 
 interface Insights {
   asOf: string; quietAfterDays: number;
-  people: { joined: number; sharingProgress: number; notSharing: number; pendingInvites: number };
+  people: { joined: number; sharingProgress: number; notSharing: number; pendingInvites: number; offersOpen?: number };
   stages: { stage: number; count: number }[];
   activity: { activeThisWeek: number; quiet: number; neverStarted: number };
   outcomes: { withAnApplication: number; applications: number; practicing: number; tailoredResume: number; hired: number };
@@ -24,7 +24,7 @@ interface Insights {
   unassigned: number;
   placements: {
     placements: number; bySource: Record<string, number>; stillEmployed: number; ended: number; leftForBetter: number; medianWage: number | null; wageKnownFor: number;
-    retention: { dayMark: number; eligible: number; employed: number; notEmployed: number; unknown: number; notAskedYet: number }[];
+    retention: { dayMark: number; eligible: number; employed: number; notEmployed: number; endedBeforeMark?: number; unknown: number; notAskedYet: number }[];
   };
 }
 const SCOPE: Record<string, string> = { applications: "Applications", resume: "Resumes", documents: "Cover letters" };
@@ -89,7 +89,11 @@ export function InsightsPage() {
           <Tile value={d.people.joined} label="Joined" />
           <Tile value={n} label="Sharing progress" note={d.people.joined ? `${Math.round((n / d.people.joined) * 100)}% of those who joined` : undefined} />
           <Tile value={d.people.notSharing} label="Joined, not sharing" note="Counted, never named. Their choice." />
-          <Tile value={d.people.pendingInvites} label="Invited, not yet signed in" />
+          <Tile
+            value={d.people.pendingInvites}
+            label="Invited, not yet signed in"
+            note={d.people.offersOpen ? `New invites only, and ${d.people.offersOpen} ${d.people.offersOpen === 1 ? "offer" : "offers"} open` : "New invites only"}
+          />
         </div>
       </section>
 
@@ -158,6 +162,7 @@ export function InsightsPage() {
             </div>
             <p className="text-xs text-t-phos-dim mt-2">
               A retention rate is &ldquo;still there&rdquo; out of &ldquo;old enough to ask&rdquo;, and nothing else belongs under it. Someone placed last week is not a 30-day failure, and someone you could not reach is not counted as either answer.
+              {" "}A placement with an end date before a check-in counts as &ldquo;no longer there&rdquo; at that check-in, even if nobody asked.
             </p>
           </>
         )}

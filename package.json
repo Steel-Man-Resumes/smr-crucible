@@ -12,6 +12,7 @@
   },
   "scripts": {
     "verify:isolation": "node scripts/verify-org-isolation.mjs",
+    "lint:isolation-fixtures": "node scripts/lib/check-isolation-fixtures.mjs",
     "verify:directory": "node scripts/verify-directory.mjs",
     "lint:rls": "node scripts/lint-protected-tables.mjs",
     "test:core": "npm test -w packages/core",

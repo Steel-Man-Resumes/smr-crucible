@@ -23,7 +23,11 @@ export type ResourceCategory =
   | "substance"
   | "education"
   | "financial"
-  | "employment";
+  | "employment"
+  | "health"
+  // Opt-in only: shown when the person picks it, never inferred from a
+  // barrier, a hurdle, a record or a profile, and never saved to one.
+  | "faith";
 
 export type ResourceType = "api" | "link" | "phone" | "chat" | "curated";
 export type ResourceGeo = "milwaukee" | "waukesha" | "wisconsin" | "montana" | "national";
@@ -95,6 +99,16 @@ export const CATEGORY_META: Record<
     label: "Employment Help",
     icon: "\u{1F4BC}",
     description: "Job centers, career counseling, employers that hire people with records",
+  },
+  health: {
+    label: "Health Care",
+    icon: "",
+    description: "Clinics, check-ups, health coverage",
+  },
+  faith: {
+    label: "Faith and Spiritual Support",
+    icon: "",
+    description: "Opt-in only. Interfaith and chaplain support first",
   },
 };
 

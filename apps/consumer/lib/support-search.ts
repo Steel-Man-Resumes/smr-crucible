@@ -104,8 +104,15 @@ const CURATED_SCOPES: Record<ResourceEntry["geo"], ServiceScope> = {
 // ─── Categories ─────────────────────────────────────────────────────────────
 
 export const CURATED_CATEGORIES: readonly ResourceCategory[] = [
-  "housing", "transportation", "legal", "id_documents", "mental_health", "substance", "education", "financial", "employment",
+  "housing", "transportation", "legal", "id_documents", "mental_health", "substance", "education", "financial", "employment", "health", "faith",
 ];
+
+/**
+ * Categories that show only when the person asks for them by name. Not part
+ * of "any kind of help", never mapped from a barrier or hurdle, and a search
+ * for one is not tied to the person in logs or coverage tickets.
+ */
+export const OPT_IN_CATEGORIES: readonly ResourceCategory[] = ["faith"];
 
 function isCuratedCategory(s: unknown): s is ResourceCategory {
   return typeof s === "string" && (CURATED_CATEGORIES as readonly string[]).includes(s);
@@ -122,6 +129,8 @@ export const CATEGORY_AREAS: Record<ResourceCategory, ResourceArea[]> = {
   education: ["education", "training"],
   financial: ["financial"],
   employment: ["jobs", "training"],
+  health: ["physical"],
+  faith: ["faith"],
 };
 
 /** The earlier-list categories an area answers (training answers two). */
@@ -141,7 +150,11 @@ export interface Wanted {
  */
 export function requestedWants(category: unknown, barriers: unknown): Wanted {
   const cats = requestedCategories(category, barriers);
-  if (cats === "all") return { categories: [...CURATED_CATEGORIES], areas: [...RESOURCE_AREAS] };
+  if (cats === "all") {
+    // "Any kind of help" leaves out opt-in categories and their areas.
+    const optInAreas = new Set(OPT_IN_CATEGORIES.flatMap((c) => CATEGORY_AREAS[c]));
+    return { categories: CURATED_CATEGORIES.filter((c) => !OPT_IN_CATEGORIES.includes(c)), areas: RESOURCE_AREAS.filter((a) => !optInAreas.has(a)) };
+  }
   const areas = new Set<ResourceArea>();
   for (const c of cats) CATEGORY_AREAS[c].forEach((a) => areas.add(a));
   if (!cats.length && isResourceArea(category)) areas.add(category);
@@ -473,6 +486,11 @@ export interface SupportSearchResult extends SupportSearchResponse {
   directoryRead: boolean;
 }
 
+/** An interfaith service or a chaplaincy, by its own name. */
+export function isInterfaithOrChaplaincy(r: { title?: string; provider?: string }): boolean {
+  return /interfaith|inter-faith|multifaith|chaplain/i.test(`${r.title ?? ""} ${r.provider ?? ""}`);
+}
+
 export async function searchSupport(input: SupportSearchInput, deps: SupportSearchDeps): Promise<SupportSearchResult> {
   const today = deps.today ?? new Date().toISOString().slice(0, 10);
   const parsed = parsePlace(input.location, { isPlaceIn: deps.isPlaceIn });
@@ -487,7 +505,7 @@ export async function searchSupport(input: SupportSearchInput, deps: SupportSear
   }
   const cats = requestedCategories(input.category, input.barriers);
   const want = requestedWants(input.category, input.barriers);
-  const wanted = (c: string) => cats === "all" || (cats as string[]).includes(c);
+  const wanted = (c: string) => (cats === "all" && !(OPT_IN_CATEGORIES as readonly string[]).includes(c)) || (cats !== "all" && (cats as string[]).includes(c));
 
   // 1. The checked directory first.
   let dirRows: SupportDirectoryRow[] = [];
@@ -550,7 +568,9 @@ export async function searchSupport(input: SupportSearchInput, deps: SupportSear
   const SOURCE_ORDER: Record<ResultSource, number> = { directory: 0, hud: 1, curated: 2 };
   // Closest first; within a level the checked band, then HUD and the earlier list, then listed, then found.
   const rank = (r: SupportResult) => (r.source === "directory" ? BAND_ORDER[r.band ?? "A"] * 10 : 5) + SOURCE_ORDER[r.source];
-  results.sort((a, b) => LEVEL_ORDER[a.scope] - LEVEL_ORDER[b.scope] || rank(a) - rank(b));
+  // Faith: interfaith and chaplaincy first, so nobody lands in a tradition they did not choose.
+  const faithFirst = (r: SupportResult) => (cats !== "all" && cats.includes("faith") && isInterfaithOrChaplaincy(r) ? 0 : 1);
+  results.sort((a, b) => faithFirst(a) - faithFirst(b) || LEVEL_ORDER[a.scope] - LEVEL_ORDER[b.scope] || rank(a) - rank(b));
   return { resources: results, coverage: coverageFor(place, results), place, directoryRead };
 }
 

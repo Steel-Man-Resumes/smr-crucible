@@ -27,7 +27,8 @@ function toCsv(orgName: string, i: OrgInsights): string {
     ["People", "Joined", i.people.joined, "everyone who joined"],
     ["People", "Sharing progress", n, `${i.people.joined} who joined`],
     ["People", "Joined, not sharing", i.people.notSharing, `${i.people.joined} who joined`],
-    ["People", "Invited, not yet signed in", i.people.pendingInvites, "open invitations"],
+    ["People", "Invited, not yet signed in", i.people.pendingInvites, "new invites only, offers not included"],
+    ["People", "Offers open", i.people.offersOpen, "offers to people who already had an account, on the invited list"],
     ...i.stages.map((s) => ["Stage", STAGE[s.stage] ?? `Stage ${s.stage}`, s.count, overProgress] as [string, string, number, string]),
     ["Momentum", "Active this week", i.activity.activeThisWeek, overProgress],
     ["Momentum", `Quiet ${i.quietAfterDays}+ days (includes never started)`, i.activity.quiet, overProgress],
@@ -49,6 +50,9 @@ function toCsv(orgName: string, i: OrgInsights): string {
       const over = `${r.eligible} placements old enough for a ${r.dayMark}-day check-in`;
       return [
         [`Retention, ${r.dayMark} days`, "Still there", r.employed, over], [`Retention, ${r.dayMark} days`, "No longer there", r.notEmployed, over],
+        // Part of the line above, not added to it. Exports made before
+        // 2026-10-23 counted these under "Not asked yet".
+        [`Retention, ${r.dayMark} days`, "Of those, ended before this check-in (from the end date)", r.endedBeforeMark ?? 0, over],
         [`Retention, ${r.dayMark} days`, "Could not reach", r.unknown, over], [`Retention, ${r.dayMark} days`, "Not asked yet", r.notAskedYet, over],
       ] as [string, string, number, string][];
     }),

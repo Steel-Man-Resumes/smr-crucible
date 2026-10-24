@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { readCoverageReceipt, type CoverageReceipt } from "@/lib/coverage-receipt";
+import { deepLinkCategory, deepLinkSearchPlace } from "@/lib/support-deep-link";
 import { parsePlace } from "@/lib/support-location";
 import { resourceEvidenceLabel } from "@/lib/directory-labels";
 import { SavedResources } from "./SavedResources";
@@ -29,6 +30,9 @@ export const SUPPORT_CATEGORIES: { id: string; label: string }[] = [
   { id: "education", label: "School and training" },
   { id: "mental_health", label: "Mental health" },
   { id: "substance", label: "Recovery" },
+  { id: "health", label: "Health care" },
+  // Opt-in, last on purpose (lib/support-search.ts OPT_IN_CATEGORIES).
+  { id: "faith", label: "Faith and spiritual support" },
 ];
 
 export interface SupportResultView {
@@ -115,6 +119,27 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     if (initialLocation) setLocation((l) => l || initialLocation);
   }, [initialLocation]);
 
+  // A deep link (What comes next) picks the kind of help: ?category=education.
+  // Only the categories this search offers are taken; anything else is ignored.
+  // With a saved place it searches once, so the card lands on answers.
+  const [deepLinked, setDeepLinked] = useState(false);
+  useEffect(() => {
+    const wanted = deepLinkCategory(window.location.search, SUPPORT_CATEGORIES.map((c) => c.id));
+    if (wanted) { setCategory(wanted); setDeepLinked(true); }
+    // The hurdle planner may also pass the place the person named. It fills the
+    // field only; a search still waits for the saved place or the Find button.
+    const loc = new URL(window.location.href).searchParams.get("location");
+    if (loc) setLocation(loc.slice(0, 120));
+  }, []);
+  useEffect(() => {
+    // The saved place only: typing a place never fires a search by itself.
+    const place = deepLinkSearchPlace(deepLinked, initialLocation);
+    if (!place) return;
+    setDeepLinked(false);
+    void search(place);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinked, initialLocation]);
+
   // Public directory handoff keeps the canonical service through sign-in.
   useEffect(()=>{const id=new URL(window.location.href).searchParams.get("resourceId");
     if(!id||!/^[0-9a-f-]{36}$/i.test(id))return;let live=true;
@@ -124,14 +149,14 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     }).catch(()=>{if(live)setError("That listing could not be checked. Try searching again.");});return()=>{live=false;};
   },[]);
 
-  async function search() {
+  async function search(placeOverride?: string) {
     setBusy(true);
     setError("");
     try {
       const res = await fetch("/api/resources-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: category === "all" ? undefined : category, location: location.trim(), barriers }),
+        body: JSON.stringify({ category: category === "all" ? undefined : category, location: (placeOverride ?? location).trim(), barriers }),
       });
       const j = await res.json().catch(() => null);
       if (!res.ok) {

@@ -441,8 +441,8 @@ describe("RL4: the Refinery tour names its earned access and remaining limits", 
   it("guided tools and AI limits are explained before the quiz", () => {
     const tour = code(read("components/GuidedTour.tsx"));
     assert.doesNotMatch(tour, /If you qualify/);
-    const lesson = read("lib/guided-lessons.ts");
-    assert.match(lesson, /Passing opens guided tailoring and application tools/);
+    const lesson = read("lib/tour/beats.ts");
+    assert.match(lesson, /open guided tailoring and application tools early/);
     assert.match(lesson, /AI limits still apply/);
     assert.doesNotMatch(tour, /Every tool\. For free\./);
     assert.doesNotMatch(tour, PRICE);

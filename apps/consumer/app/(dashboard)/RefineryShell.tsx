@@ -52,12 +52,15 @@ import {
 import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
 // client bundle -- see @crucible/core/src/gateRank).
-import { previewIdForHref } from "@/lib/featurePreviews";
-import { clientToolUnlocked, lockedToolLine } from "@crucible/core/src/journeyStages";
+import { clientToolUnlocked } from "@crucible/core/src/journeyStages";
 import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
-import { ExternalLink, LockKeyhole, CheckCircle2, LogOut, Menu, X } from "lucide-react";
+import { ExternalLink, LogOut, Menu, X } from "lucide-react";
 import { ProgressionProvider, useProgression } from "@/components/progression/ProgressionProvider";
-import { stepForNav, navKeepsDirectAccess, progressStateLabel } from "@/lib/progression-ui";
+import type { BoardLink, StationId } from "@/lib/refinery-nav";
+import { RefineryBoard } from "@/components/nav/RefineryBoard";
+import { StationStrip } from "@/components/nav/StationStrip";
+import "@/components/nav/refinery-board.css";
+import { useServerSwitches } from "@/components/ServerSwitches";
 
 /**
  * Dashboard Layout -- Authenticated area
@@ -68,21 +71,10 @@ import { stepForNav, navKeepsDirectAccess, progressStateLabel } from "@/lib/prog
  * Admin/partner-only tools hidden for tiers that can never reach them.
  */
 
-interface NavItem {
-  href: string;
-  label: string;
-  minTier: UserTier;
-  minState: OnboardingState;
-  requiresDisclosure?: boolean;
-  targetId?: string;
-  children?: NavItem[];
-}
-
-interface NavGroup {
-  label?: string;
-  items: NavItem[];
-  collapsible?: boolean;
-}
+// The participant nav is the game board in lib/refinery-nav.ts (stations,
+// Toolbox, You) rendered by components/nav/RefineryBoard.tsx. Access rules
+// below are unchanged: tier gate here, server progress in the board.
+type NavItem = BoardLink;
 
 const TIER_RANK: Record<string, number> = {
   admin: 0,
@@ -93,69 +85,10 @@ const TIER_RANK: Record<string, number> = {
   observer: 3,
 };
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    items: [
-      { href: "/dashboard", label: "Overview", targetId: "refinery-nav-overview", minTier: "observer", minState: "needs_profile", children: [
-        { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "needs_profile" },
-      ] },
-      { href: "/dashboard/jobs", label: "Find work", targetId: "refinery-nav-jobs", minTier: "client", minState: "needs_profile", children: [
-        { href: "/dashboard/jobs", label: "Jobs", minTier: "client", minState: "needs_profile" },
-        { href: "/dashboard/paths", label: "Explore paths", minTier: "client", minState: "needs_profile" },
-        { href: "/dashboard/employers", label: "Employers", minTier: "client", minState: "needs_profile" },
-      ] },
-      { href: "/dashboard/vault", label: "My resumes", targetId: "refinery-nav-resumes", minTier: "client", minState: "needs_profile", children: [
-        { href: "/dashboard/master", label: "Master Draft", minTier: "client", minState: "needs_profile" },
-        { href: "/dashboard/vault", label: "Resumes & versions", minTier: "client", minState: "needs_profile" },
-        { href: "/dashboard/application-tailor", label: "Tailor for a job", minTier: "client", minState: "needs_resume" },
-        { href: "/dashboard/creative", label: "Creative work", minTier: "client", minState: "needs_profile" },
-        { href: "/dashboard/cv", label: "CV", minTier: "client", minState: "needs_profile" },
-        { href: "/dashboard/performer", label: "Performer page", minTier: "client", minState: "needs_profile" },
-      ] },
-      { href: "/dashboard/applications", label: "Applications", targetId: "refinery-nav-applications", minTier: "client", minState: "needs_profile" },
-      { href: "/dashboard/interview", label: "Interview prep", targetId: "refinery-nav-interview", minTier: "client", minState: "needs_profile" },
-      { href: "/dashboard/resources", label: "Support & disclosure", targetId: "refinery-nav-support", minTier: "client", minState: "needs_profile", children: [
-        { href: "/dashboard/resources", label: "Local help", minTier: "client", minState: "needs_profile" },
-        { href: "/dashboard/disclosure", label: "Disclosure plan", minTier: "client", minState: "needs_profile" },
-        { href: "/dashboard/documents", label: "Private records & documents", minTier: "client", minState: "needs_profile" },
-      ] },
-    ],
-  },
-  {
-    label: "My information",
-    collapsible: true,
-    items: [
-      { href: "/dashboard/settings#account", label: "Profile & contact details", minTier: "observer", minState: "needs_profile" },
-      { href: "/dashboard/documents", label: "Private documents", minTier: "client", minState: "needs_profile" },
-      { href: "/dashboard/settings#privacy", label: "Sharing & privacy", minTier: "observer", minState: "needs_profile" },
-      { href: "/dashboard/settings#data", label: "Export or delete my data", minTier: "observer", minState: "needs_profile" },
-    ],
-  },
-  {
-    label: "Program",
-    items: [
-      { href: "/dashboard/partner", label: "Partner Dashboard", minTier: "partner", minState: "needs_profile" },
-    ],
-  },
-  {
-    items: [
-      { href: "/dashboard/help", label: "Help & tour", minTier: "observer", minState: "needs_profile" },
-      { href: "/dashboard/help?mode=idea", label: "Share an idea", minTier: "observer", minState: "needs_profile" },
-      { href: "/dashboard/settings", label: "Settings", targetId: "refinery-nav-settings", minTier: "observer", minState: "needs_profile" },
-      { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
-      { href: "/dashboard/admin/access-requests", label: "Access requests", minTier: "admin", minState: "needs_profile" },
-    ],
-  },
-];
-
-function navContains(item: NavItem, pathname: string): boolean {
-  return pathname === item.href || !!item.children?.some((child) => pathname === child.href);
-}
-
 // Org-oversight nav (org-oversight wave, 2026-08-07): an org admin/staff runs
 // the organization -- the participant toolset (Job Board, Tailor, etc.) is NOT
 // their nav; it lives behind the "Client view" toggle. These items lead the
-// sidebar for org leaders instead of NAV_GROUPS.
+// sidebar for org leaders instead of the career board.
 interface OrgNavItem {
   href: string;
   label: string;
@@ -315,13 +248,6 @@ function isNavUnlocked(
   });
 }
 
-// Hide items requiring a tier the user can never reach (partner-only, admin-only)
-function shouldShowItem(item: NavItem, userTier: UserTier): boolean {
-  if (item.minTier === "admin" && userTier !== "admin") return false;
-  if (item.minTier === "partner" && userTier !== "partner" && userTier !== "admin") return false;
-  return true;
-}
-
 /**
  * Role/view switch (walkthrough C7): partner and admin accounts can flip into
  * the real client experience and back. The persistent amber banner
@@ -370,12 +296,17 @@ export function RefineryShell({ children }: { children: ReactNode }) {
 
 function RefineryShellContent({ children }: { children: ReactNode }) {
   const progression = useProgression();
+  const serverSwitches = useServerSwitches();
   const userTier = useUserTier();
   const { data: sessionData, status: authStatus } = useSession();
   const pathname = usePathname();
   const onboarding = useOnboarding();
   const { context: userFullContext } = useUserContext();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // The mobile strip opens the drawer at one station (expanded and focused).
+  const [drawerStation, setDrawerStation] = useState<StationId | null>(null);
+  // Closing a drawer opened from a strip dot returns focus to that dot.
+  const stripReturn = useRef<StationId | null>(null);
   const navTrigger = useRef<HTMLButtonElement>(null);
   const navPanel = useRef<HTMLDivElement>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -422,9 +353,25 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKey);
       window.removeEventListener("resize", closeOnDesktop);
-      if (!document.documentElement.dataset.guidedLearning) navTrigger.current?.focus();
+      if (!document.documentElement.dataset.guidedLearning) {
+        const dot = stripReturn.current ? document.querySelector<HTMLElement>(`[data-strip-station="${stripReturn.current}"]`) : null;
+        stripReturn.current = null;
+        (dot ?? navTrigger.current)?.focus();
+      }
     };
   }, [drawerOpen]);
+  useEffect(() => {
+    if (!drawerOpen) { setDrawerStation(null); return; }
+    if (!drawerStation || document.documentElement.dataset.guidedLearning) return;
+    const frame = requestAnimationFrame(() => {
+      const station = navPanel.current?.querySelector<HTMLElement>(`[data-station="${drawerStation}"]`);
+      const target = station?.querySelector<HTMLElement>("a[href],button:not([disabled])");
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      station?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+      target?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [drawerOpen, drawerStation]);
   // Shared-computer rule: the "Is it yours?" card for an unowned Forge run.
   const [forgePrompt, setForgePrompt] = useState<"none" | "ask" | "saving" | "saved" | "failed">("none");
   const [forgeSyncTick, setForgeSyncTick] = useState(0);
@@ -742,62 +689,24 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   }
 
   function renderNavItems(onItemClick?: () => void, mobile = false) {
-    function renderItem(item: NavItem, secondary = false) {
-      const step = userTier === "client" && (!secondary || item.href === "/dashboard/application-tailor")
-        ? stepForNav(progression?.data?.steps ?? [], item.href) : null;
-      const guidedLocked = step?.access === "locked";
-      const directAccess = !guidedLocked || navKeepsDirectAccess(item.href);
-      // Missing progress is not evidence that an existing user lost access.
-      // Server APIs still decide whether the requested operation is allowed.
-      const unlocked = userTier === "client" ? directAccess : isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete);
-      const active = secondary ? pathname === item.href : navContains(item, pathname);
-      const targetId = item.targetId && (mobile ? drawerOpen : !drawerOpen) ? item.targetId : undefined;
-      const lockLine = step?.reason || lockedToolLine({ state: onboarding.state, requiresDisclosure: item.requiresDisclosure, disclosureComplete: onboarding.disclosureComplete });
-      const cls = `t-focus flex min-h-[40px] w-full items-center justify-between gap-2 rounded-[4px] border-l-[3px] px-3 py-2 text-left text-sm transition-colors ${secondary ? "font-normal" : "font-medium"} ${active ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]" : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"}`;
-      const previewId = !unlocked && !guidedLocked ? previewIdForHref(item.href) : null;
-      const content = <>
-        <span className="min-w-0"><span className="block">{navItemLabel(item)}</span>{step && <span className="mt-0.5 block text-[10px] font-normal leading-snug">{guidedLocked && directAccess ? "Guided stage: " : ""}{progressStateLabel(step)}</span>}{!unlocked && <span className="mt-0.5 block text-[11px] font-normal leading-snug text-t-bone-dim">{lockLine}</span>}</span>
-        {guidedLocked ? <LockKeyhole size={13} className="shrink-0 opacity-70" aria-hidden="true" /> : step?.state === "completed" ? <CheckCircle2 size={14} className="shrink-0 text-[#4f6b57]" aria-hidden="true" /> : !unlocked ? <LockKeyhole size={13} className="shrink-0 opacity-60" aria-hidden="true" /> : null}
-      </>;
-      return (
-        <div key={`${item.href}:${item.label}`}>
-          {guidedLocked && !directAccess && step ? (
-            <button id={targetId} type="button" aria-haspopup="dialog" onClick={() => { onItemClick?.(); progression?.ask(step); }} className={cls} title={lockLine}>{content}</button>
-          ) : unlocked || previewId ? (
-            <Link id={targetId} href={unlocked ? item.href : `/dashboard/preview/${previewId}`} onClick={onItemClick}
-              data-tour={`nav-${item.href.split("/").pop()}`} aria-current={unlocked && pathname === item.href ? "page" : undefined}
-              title={!unlocked ? `${lockLine} See a preview.` : undefined} className={cls}>
-              {content}
-            </Link>
-          ) : (
-            <div id={targetId} aria-disabled="true" title={lockLine} className={`${cls} cursor-not-allowed opacity-70`}>{content}</div>
-          )}
-          {guidedLocked && directAccess && step ? <button type="button" aria-haspopup="dialog" onClick={() => { onItemClick?.(); progression?.ask(step); }} className="t-focus ml-4 mb-1 flex min-h-touch items-center gap-1.5 text-left text-[11px] text-t-amber-bright underline underline-offset-2"><LockKeyhole size={11} aria-hidden="true" />Ask t.ROY about this stage</button> : null}
-          {!secondary && active && item.children && (
-            <div aria-label={`${item.label} views`} className="my-1 ml-4 border-l border-t-line pl-1">
-              {item.children.filter((child) => shouldShowItem(child, userTier)).map((child) => renderItem(child, true))}
-            </div>
-          )}
-        </div>
-      );
-    }
-    return NAV_GROUPS.map((group, gi) => {
-      const visible = group.items.filter((item) => !(item.href === "/dashboard/partner" && isOrgPartner) && shouldShowItem(item, userTier));
-      if (!visible.length) return null;
-      const links = visible.map((item) => renderItem(item));
-      if (group.collapsible) return (
-        <details key={group.label} className="mt-3 border-t border-t-line pt-3" open={pathname === "/dashboard/documents" || pathname === "/dashboard/settings" ? true : undefined}>
-          <summary className="t-focus cursor-pointer px-3 py-2 text-sm font-medium text-t-bone-dim hover:text-t-white">{group.label}</summary>
-          <div className="ml-2">{links}</div>
-        </details>
-      );
-      return (
-        <div key={gi} className={gi > 0 ? "mt-2 border-t border-t-line pt-3" : ""}>
-          {group.label && <p className="mb-1 px-3 font-term text-[9px] font-semibold uppercase text-t-bone-dim">{group.label}</p>}
-          {links}
-        </div>
-      );
-    });
+    return (
+      <RefineryBoard
+        userTier={userTier}
+        pathname={pathname}
+        steps={progression?.data?.steps ?? null}
+        currentStepId={progression?.data?.currentStepId ?? null}
+        onboardingState={onboarding.state}
+        disclosureComplete={onboarding.disclosureComplete}
+        isUnlocked={(item) => isNavUnlocked(item, userTier, onboarding.state, onboarding.disclosureComplete)}
+        labelFor={navItemLabel}
+        ask={(step) => progression?.ask(step)}
+        hidePartner={isOrgPartner}
+        switches={serverSwitches}
+        carryIds={mobile ? drawerOpen : !drawerOpen}
+        focusStation={mobile ? drawerStation : null}
+        onItemClick={onItemClick}
+      />
+    );
   }
 
   function renderOrgNav(onItemClick?: () => void) {
@@ -862,7 +771,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="refinery-app min-h-screen bg-t-bg font-body">
+    <div className="refinery-app min-h-screen bg-t-bg font-body" data-board-strip={!isOrgPartner ? "" : undefined}>
       {/* Applies the user's saved accessibility prefs app-wide (Phase 7.2). */}
       <UiPrefsApplier />
       <a
@@ -933,11 +842,9 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       <div className="flex min-h-[calc(100vh-72px)]">
 
         {/* Left sidebar -- desktop only */}
-        <aside className="hidden w-60 flex-shrink-0 border-r border-t-line bg-t-panel md:block">
+        <aside className={`hidden w-60 flex-shrink-0 border-r border-t-line bg-t-panel md:block${isOrgPartner ? "" : " forge-workshop"}`}>
           <div id="refinery-desktop-navigation" className="sticky top-[72px] h-[calc(100vh-72px)] space-y-1 overflow-y-auto px-3 py-5">
-            <p className="mb-4 px-3 font-term text-[10px] font-semibold uppercase text-[#4f6b57]">
-              {isOrgPartner ? "Organization" : "Career workspace"}
-            </p>
+            {isOrgPartner ? <p className="mb-4 px-3 font-term text-[10px] font-semibold uppercase text-[#4f6b57]">Organization</p> : null}
             {isOrgPartner ? renderOrgNav() : <nav aria-label="Career workspace">{renderNavItems()}</nav>}
           </div>
         </aside>
@@ -945,7 +852,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         {/* Main content */}
         <div className="min-w-0 flex-1">
         {!isOrgPartner && userTier === "client" && <Suspense fallback={null}><RefineryLaneHeader state={onboarding.state} /></Suspense>}
-        <main id="main" className="px-4 py-6 pb-32 sm:px-7 sm:pb-8 lg:px-10">
+        <main id="main" className={`px-4 py-6 pb-32 sm:px-7 ${isOrgPartner ? "sm:pb-8" : "sm:pb-24 md:pb-8"} lg:px-10`}>
           {forgeNotice && (
             <p role="status" className="mb-6 border border-t-line bg-t-panel px-4 py-3 text-sm text-t-white">
               {forgeNotice}
@@ -1022,6 +929,17 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       {/* Developer impersonation frame (blue view / red assist) */}
       <ImpersonationChrome />
 
+      {/* Mobile: the path as a slim strip along the bottom edge */}
+      {!isOrgPartner && (
+        <StationStrip
+          pathname={pathname}
+          steps={progression?.data?.steps ?? null}
+          currentStepId={progression?.data?.currentStepId ?? null}
+          expanded={drawerOpen}
+          onOpen={(station) => { stripReturn.current = station; setDrawerStation(station); setDrawerOpen(true); }}
+        />
+      )}
+
       {/* Mobile drawer overlay */}
       {drawerOpen && (
         <div
@@ -1040,9 +958,9 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         aria-hidden={!drawerOpen}
         inert={!drawerOpen}
         tabIndex={-1}
-        className={`fixed bottom-0 left-0 top-0 z-50 w-[min(19rem,88vw)] overflow-y-auto border-r border-t-line bg-t-panel shadow-xl transition-transform duration-200 md:hidden ${
+        className={`fixed bottom-0 left-0 top-0 z-50 w-[min(19rem,88vw)] overflow-y-auto border-r border-t-line bg-t-panel shadow-xl transition-transform duration-200 motion-reduce:transition-none md:hidden ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        }${isOrgPartner ? "" : " forge-workshop"}`}
       >
         <div className="flex h-[72px] items-center justify-between border-b border-t-line px-4">
           <ProductBrand product="refinery" href="/dashboard" />

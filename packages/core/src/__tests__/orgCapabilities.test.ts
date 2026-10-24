@@ -143,3 +143,33 @@ describe("fail closed", () => {
     assert.equal(new Set(ORG_CAPABILITIES).size, ORG_CAPABILITIES.length);
   });
 });
+
+import { STAFF_PRESETS, presetOverrideWrites, matchesPreset, DELEGABLE_CAPABILITIES } from "../authz/capabilities";
+
+describe("volunteer preset", () => {
+  it("is staff with no invites, no placements, own caseload only", () => {
+    const writes = presetOverrideWrites("volunteer");
+    const denies = writes.filter((w) => w.effect === "deny").map((w) => w.capability).sort();
+    assert.deepEqual(denies, ["org.outcome.write", "org.participant.invite"]);
+    const caps = computeOrgCapabilities("staff", [], denies);
+    assert.equal(caps.has("org.participant.invite"), false);
+    assert.equal(caps.has("org.outcome.write"), false);
+    assert.equal(cohortReach(caps), "assigned");
+    assert.equal(caps.has("org.seats.view"), false, "seats, and with them the code, stay out of sight");
+    assert.equal(caps.has("org.note.write"), true, "still does casework");
+    assert.equal(matchesPreset("volunteer", caps), true);
+  });
+  it("clears any old grant of the other preset capabilities, so it cannot be outlived", () => {
+    const clears = presetOverrideWrites("volunteer").filter((w) => w.effect === "clear").map((w) => w.capability);
+    for (const c of ["org.client.view_all", "org.seats.view", "org.costs.view", "org.export"]) assert.ok(clears.includes(c as never), c);
+    assert.equal(matchesPreset("volunteer", computeOrgCapabilities("staff", ["org.client.view_all"], [])), false);
+  });
+  it("only writes capabilities the database will accept per person", () => {
+    const delegable = new Set(DELEGABLE_CAPABILITIES.map((d) => d.capability));
+    for (const w of presetOverrideWrites("volunteer")) assert.ok(delegable.has(w.capability), w.capability);
+    assert.equal(STAFF_PRESETS.volunteer.role, "staff");
+  });
+  it("a plain staff member does not match", () => {
+    assert.equal(matchesPreset("volunteer", computeOrgCapabilities("staff")), false);
+  });
+});

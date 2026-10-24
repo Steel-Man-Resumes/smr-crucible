@@ -37,6 +37,8 @@ export * from './coachMemory';
 export * from './coachProactive';
 export * from './partnerDashboard';
 export * from './orgInvite';
+export * from './refineryAccess';
+export * from './orgCode';
 export * from './systemHealth';
 export * from './employer';
 export * from './resourceDirectory';
@@ -88,6 +90,9 @@ export * from './orgStaffPerformance';
 export * from './orgStaffAdmin';
 export * from './joinSharingPrompt';
 export * from './orgVisibilityShared';
+export * from './orgSeatsShared';
+export * from './orgSeats';
+export * from './orgAdmin';
 
 // The second check (2026-10-07): a different model family reads the page
 // against the person's own words. Off by default (SECOND_CHECK_ENABLED).

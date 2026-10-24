@@ -111,14 +111,11 @@ import {
   CONVERSATION_TABLES,
 } from "@crucible/core";
 import { REHEARSAL_PERSONA_LABELS, REHEARSAL_PERSONAS } from "@/lib/rehearsal-personas";
-import {
-  HURDLE_TYPES,
-  HURDLE_GUIDANCE,
-  getHurdleGuidance,
-  isRecordHurdle,
-  nonRecordIntakeQuestions,
-} from "@/lib/hurdle-guidance";
-import { computeSufficiency, scoreAnswerText } from "@/lib/sufficiency";
+import { coverageOf } from "@/lib/hurdles/coverage";
+import { INITIAL_STATE, plannerReducer } from "@/lib/hurdles/reducer";
+import { stripUnsupported } from "@/lib/hurdles/fact-check";
+import { buildPhrasePrompt, readPhraseRequest } from "@/lib/hurdles/phrase";
+import { NODES as HURDLE_NODES } from "@/lib/hurdles/graph";
 
 let pass = 0, fail = 0;
 const failures: string[] = [];
@@ -1914,74 +1911,33 @@ section("disclosure phase 5");
       REHEARSAL_PERSONAS.every((p) => typeof p.id === "string" && p.id.length > 0)
   );
 
-  // 5.3 -- every hurdle has a reviewed static entry with a review date.
-  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-  check(
-    "phase5: every hurdle type has a guidance entry with a review date",
-    HURDLE_TYPES.every((h) => {
-      const g = HURDLE_GUIDANCE[h];
-      return !!g && DATE_RE.test(g.reviewDate);
-    })
-  );
+  // 5.3 / 5.4: the static hurdle-guidance module and its intake were retired with
+  // the old routes (2026-10-23 fix round). The planner's own checks follow.
+  // 5.4 (replaced 2026-10-23): the planner measures coverage, never length.
+  // The old meter called twelve "I do not know" strong and a concrete line fair.
+  const one = (text: string) => [
+    { type: "toggle", hurdle: "other" }, { type: "start" }, { type: "answer", nodeId: "other.what", text },
+  ].reduce((st: any, a: any) => plannerReducer(st, a), INITIAL_STATE);
+  const vague = coverageOf(one("I do not know. ".repeat(12)));
+  const concrete = coverageOf(one("Bus stops before my shift ends."));
+  check("phase5: coverage does not reward length", vague.answered === concrete.answered && vague.onPath === concrete.onPath);
+  check("phase5: coverage says it counts answers, not words", /counts answers, not words/.test(concrete.line));
+  check("phase5: coverage copy never scores participation", !/strong|weak|poor|low effort/i.test(concrete.line));
 
-  // 5.3 -- NON-record hurdles carry NO statute / legal-claim text anywhere in
-  // their user-facing coaching (frame + script + intake). Coaching only.
-  const LEGAL_CLAIM_RE =
-    /\b(statute|§|u\.s\.c\.|ordinance|ban[- ]the[- ]box|expungement|eeoc|\bada\b|fmla|felony|misdemeanor|your rights|legal advice|attorney|lawyer|lawsuit|the law\b|by law\b)\b/i;
-  const nonRecord = HURDLE_TYPES.filter((h) => h !== "record");
-  let anyLegal = false;
-  for (const h of nonRecord) {
-    const g = HURDLE_GUIDANCE[h];
-    const blob = [g.coachingFrame, g.scriptScaffold, ...g.intakeQuestions.map((q) => q.label + " " + (q.placeholder ?? ""))].join(" ");
-    if (LEGAL_CLAIM_RE.test(blob)) {
-      anyLegal = true;
-      console.error(`  legal-claim text found in non-record hurdle "${h}"`);
-    }
-  }
-  check("phase5: non-record hurdles carry NO statute/legal-claim text", !anyLegal);
+  // Housing-only and health-only paths never ask about a record or a diagnosis.
+  const nonRecordNodes = Object.values(HURDLE_NODES).filter((n) => n.hurdle !== "record" && n.hurdle !== "not_sure" && n.id !== "gaps.inside");
+  check("phase5: non-record questions never mention a record, conviction or diagnosis",
+    nonRecordNodes.every((n) => !/\b(record|conviction|felony|offense|diagnos)/i.test(n.question + " " + (n.help ?? ""))));
 
-  // 5.3 -- record routes to jurisdiction; non-record does not.
-  check(
-    "phase5: record hurdle routes to jurisdiction, non-record does not",
-    isRecordHurdle("record") &&
-      getHurdleGuidance("record").routesToJurisdiction === true &&
-      nonRecord.every((h) => getHurdleGuidance(h).routesToJurisdiction === false)
-  );
+  // The fact-strip checker removes what the answers do not hold.
+  const stripped = stripUnsupported("You do not have a car right now. You completed probation in 2021.", ["You do not have a car right now."]);
+  check("phase5: fact checker strips invented record status and dates", stripped.text === "You do not have a car right now." && stripped.stripped.length === 1);
 
-  // 5.4 -- minimum collection: no non-record intake question asks for an SSN,
-  // a diagnosis, or a case/docket number.
-  const FORBIDDEN_FIELD_RE = /(ssn|social security|diagnos|case number|case #|docket|conviction detail|what you were charged)/i;
-  let anyForbidden = false;
-  for (const h of nonRecord) {
-    for (const q of nonRecordIntakeQuestions(h)) {
-      if (FORBIDDEN_FIELD_RE.test(q.label + " " + (q.placeholder ?? ""))) {
-        anyForbidden = true;
-        console.error(`  minimum-collection breach in "${h}": ${q.label}`);
-      }
-    }
-  }
-  check("phase5: non-record intake never asks for SSN/diagnosis/case-number", !anyForbidden);
-  check(
-    "phase5: record hurdle exposes no non-record intake set",
-    nonRecordIntakeQuestions("record").length === 0
-  );
-
-  // 5.4 -- sufficiency meter: poor for a tiny answer, strong for a detailed one.
-  check("phase5: sufficiency is poor for a 3-char answer", computeSufficiency(["abc"]) === "poor");
-  const detailed =
-    "I have eight years of warehouse experience, I trained three new hires last year, I show up early every day, and I am proud that one of them became a shift lead.";
-  check("phase5: sufficiency is strong for a detailed answer", computeSufficiency([detailed]) === "strong");
-  // Monotonic-ish: a longer answer never scores lower than a shorter prefix.
-  check(
-    "phase5: scoreAnswerText is monotonic-ish (longer >= shorter)",
-    scoreAnswerText("abc") <= scoreAnswerText("abc def ghi") &&
-      scoreAnswerText("abc def ghi") <= scoreAnswerText(detailed)
-  );
-  // Adding an answer never lowers the level.
-  check(
-    "phase5: adding detail never lowers sufficiency",
-    computeSufficiency([detailed]) === "strong" && computeSufficiency([detailed, detailed]) === "strong"
-  );
+  // Without the record consent, no record answer reaches the wording prompt.
+  const req = readPhraseRequest({ selected: ["record", "housing"], recordConsent: false,
+    answers: { "record.where": { choices: ["interview"] }, "record.kind": { choices: ["felony"] }, "record.own_words": { text: "I have a felony from 2019." }, "housing.now": { choices: ["staying"] } } })!;
+  const prompt = buildPhrasePrompt(req);
+  check("phase5: record answers stay out of the wording prompt without consent", !/felony|2019|record/i.test(prompt.user.replace(/HURDLE housing[^\n]*/g, "")));
 }
 
 // ── interview phase 5 (JD auto-fill, voice transcript mapping, struggle tags) ──

@@ -91,15 +91,15 @@ describe("M2: once the wall is up, terms gate the Refinery and every AI or perso
     assert.ok(checked > 60, String(checked));
   });
 
-  it("named routes are gated: disclosure guide, interview practice, the tailor, t.ROY signed in, the save", () => {
+  it("named routes are gated: hurdle plan, interview practice, the tailor, t.ROY signed in, the save", () => {
     for (const p of [
-      "/api/disclosure-guide",
+      "/api/hurdle-plan",
+      "/api/hurdle-plan/consent",
       "/api/interview-practice",
       "/api/resume-generate",
       "/api/resume-generate-full",
       "/api/resume-fine-tune",
       "/api/fit-check",
-      "/api/intake/followups",
       "/api/fetch-job-posting",
       "/api/next-step-why",
       "/api/assistant",

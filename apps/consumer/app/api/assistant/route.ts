@@ -1,4 +1,6 @@
 import { beginChatOperation } from "@/lib/ai-chat-operation";
+import { RECORD_WORDS_HEADER } from "@/lib/rehearsal-personas";
+import { recordPlannerConsent } from "@/lib/hurdles/consent-server";
 import { buildOwnerTools, OWNER_ASSISTANT_PROMPT } from "@/lib/tools/assistant-owner-tools";
 import { createStaffEvidenceCollector } from "@/lib/staff-tool-evidence";
 import { assistantStepUsage } from "@/lib/ai/assistant-step-usage";
@@ -149,7 +151,7 @@ export async function POST(request: Request) {
     platformOwner = true;
   }
   let staffActor: Awaited<ReturnType<typeof import("@crucible/core").resolveOrgActor>> = null;
-  const toolOptions: import("@/lib/tools/assistant-tools").AssistantToolOptions = {
+  let toolOptions: import("@/lib/tools/assistant-tools").AssistantToolOptions = {
     userId: userId ?? null,
     surface: (userId ? "refinery" : "forge") as "refinery" | "forge",
   };
@@ -157,11 +159,19 @@ export async function POST(request: Request) {
   // its purpose-built consented store exists (Phase 5): no cross-session
   // memory reads, no coach_conversation writes for these turns.
   const isDisclosureRehearsal = context.currentPage === "disclosure-rehearsal";
+  // Record words in a practice prompt need the person's stored record planner
+  // consent (migration 095) at the current version. Without it, refuse.
+  if (isDisclosureRehearsal && typeof systemOverride === "string" && systemOverride.includes(RECORD_WORDS_HEADER)) {
+    const consent = userId ? await recordPlannerConsent(userId).catch(() => ({ granted: false })) : { granted: false };
+    if (!consent.granted) {
+      return new Response(JSON.stringify({ code: "consent_required", error: "Your record words need your yes before they go to an AI service." }), { status: 403, headers: { "Content-Type": "application/json" } });
+    }
+  }
   // "enhanced" consent gates all memory personalization (read AND write).
   // Absent row defaults to granted (see consentDefaultFor doctrine), so this
   // is a no-op for every user until someone actually revokes it. Computed
   // once so the read and both writes below agree within one request.
-  const enhancedConsent = userId ? await isConsentGranted(userId, "enhanced") : false;
+  let enhancedConsent = userId ? await isConsentGranted(userId, "enhanced") : false;
   // Cross-session memory (authed only; pre-auth Forge stays ephemeral).
   // Loaded BEFORE the current turn is persisted so it holds prior work.
 
@@ -232,9 +242,22 @@ export async function POST(request: Request) {
     }
   }
 
+  // Refinery seat (security review 1, BL-1; lib/assistant-seat.ts). A
+  // signed-in account without a seat on a closed policy gets the Forge chat:
+  // no job search, saved jobs, reminders, directory tools or coach memory.
+  const seatGate = userId && !platformOwner && !staffActor
+    ? await (await import("@/lib/refinery-access-server")).readSeat(userId).catch(() => null)
+    : null;
+  const seatSurface = (await import("@/lib/assistant-seat")).assistantSeatSurface({
+    userId: userId ?? null, platformOwner, staff: !!staffActor, gate: seatGate, toolOptions, enhancedConsent,
+  });
+  const seatScope = seatSurface.scope;
+  toolOptions = seatSurface.toolOptions;
+  enhancedConsent = seatSurface.enhancedConsent;
+
   if (platformOwner) skillsContext = loadSkillsForContext(context.currentPage, false, "owner");
   if (staffActor) skillsContext = loadSkillsForContext(context.currentPage, false, staffActor.role);
-  if (userId && !platformOwner && !staffActor && !isDisclosureRehearsal) {
+  if (userId && seatScope === "account" && !platformOwner && !staffActor && !isDisclosureRehearsal) {
     try { toolOptions.selectedWork = await loadSelectedWork(userId, context.selectedWork); }
     catch { return NextResponse.json({ error: "The selected work could not be loaded. Reopen it and try again." }, { status: 409 }); }
   }
@@ -255,6 +278,7 @@ export async function POST(request: Request) {
     (staffActor ? "" : memorySection);
   const allowRoleplayOverride =
     !!userId &&
+    seatScope === "account" &&
     !platformOwner &&
     isDisclosureRehearsal &&
     typeof systemOverride === "string" &&

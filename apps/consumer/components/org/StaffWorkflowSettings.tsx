@@ -109,13 +109,6 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
           </select>
         </div>
 
-        <label className="text-sm text-t-phos flex items-start gap-2">
-          <input type="checkbox" className="t-focus mt-1" checked={p.noteVisible} onChange={(e) => change({ noteVisible: e.target.checked })} />
-          <span>
-            <span className="text-t-white font-medium">Start with &ldquo;let them see this note&rdquo; ticked</span>
-            <span className="block text-xs text-t-phos-dim">You still choose on every note. Off is the safer habit.</span>
-          </span>
-        </label>
 
         </>)}
 

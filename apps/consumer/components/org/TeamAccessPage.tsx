@@ -16,6 +16,8 @@ import { useCallback, useEffect, useState } from "react";
 interface Access { capability: string; on: boolean; fromRole: boolean; override: "grant" | "deny" | null }
 interface Member {
   userId: string; name: string | null; email: string | null; title: string | null; role: "owner" | "org_admin" | "staff";
+  /** Their access matches a named preset (today only "volunteer"). */
+  preset?: "volunteer" | null;
   pending: boolean; invitedAt: string | null; caseload: number; lastSignInAt: string | null; notesLast30Days: number;
   access: Access[]; editable: boolean;
 }
@@ -63,6 +65,14 @@ export function TeamAccessPage() {
     await load();
   }
 
+  async function applyPreset(m: Member) {
+    setMsg(null);
+    const res = await fetch("/api/org/access", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "apply_preset", userId: m.userId, preset: "volunteer" }) });
+    if (!res.ok) setMsg((await res.json().catch(() => ({}))).error || "That did not save.");
+    await load();
+  }
+
   if (!members) return <div className="max-w-5xl mx-auto px-4 py-10 text-sm text-t-phos-dim">Loading...</div>;
   const owner = members.filter((m) => m.role === "owner");
   const admins = members.filter((m) => m.role === "org_admin");
@@ -76,7 +86,7 @@ export function TeamAccessPage() {
         className={`t-focus text-left border px-3 py-3 w-56 transition-colors ${openId === m.userId ? "border-t-amber bg-t-panel-2" : "border-t-line bg-t-panel hover:border-t-line-strong"}`}>
         <div className="flex items-center justify-between gap-2">
           <span className="text-sm font-medium text-t-white truncate">{m.name || m.email}</span>
-          <span className={`text-[10px] px-1.5 py-0.5 border flex-shrink-0 ${m.role === "staff" ? "border-t-line text-t-phos-dim" : "border-t-amber text-t-amber-bright"}`}>{ROLE[m.role]}</span>
+          <span className={`text-[10px] px-1.5 py-0.5 border flex-shrink-0 ${m.role === "staff" ? "border-t-line text-t-phos-dim" : "border-t-amber text-t-amber-bright"}`}>{m.preset === "volunteer" ? "Volunteer" : ROLE[m.role]}</span>
         </div>
         {m.title && <div className="text-xs text-t-phos-dim truncate">{m.title}</div>}
         <div className="mt-2 text-xs text-t-phos">
@@ -139,6 +149,12 @@ export function TeamAccessPage() {
           </ul>
           {open.editable && (
             <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-t-line">
+              {open.role === "staff" && open.preset !== "volunteer" && (
+                <button onClick={() => applyPreset(open)}
+                  className="t-focus text-xs text-t-phos underline hover:text-t-white">
+                  Use volunteer settings (own caseload, no invites, no placements)
+                </button>
+              )}
               {viewerRole === "owner" && (
                 <button onClick={() => staffAction("set_staff_role", open, { role: open.role === "org_admin" ? "staff" : "org_admin" })}
                   className="t-focus text-xs text-t-phos underline hover:text-t-white">
@@ -188,6 +204,7 @@ function InviteStaff({ canAddAdmin, onDone }: { canAddAdmin: boolean; onDone: ()
           <label htmlFor="st-role" className="block text-xs text-t-phos-dim mb-1">Role</label>
           <select id="st-role" className={input} value={role} onChange={(e) => setRole(e.target.value)}>
             <option value="staff">Staff: works their own caseload</option>
+            <option value="volunteer">Volunteer: own caseload only, cannot invite participants or record placements</option>
             {canAddAdmin && <option value="org_admin">Admin: sees everyone, manages the team</option>}
           </select>
         </div>

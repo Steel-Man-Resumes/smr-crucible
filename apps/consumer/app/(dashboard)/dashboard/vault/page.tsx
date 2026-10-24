@@ -75,6 +75,8 @@ function toText(a: Artifact): string {
     case "follow_up":
       return `Subject: ${c.subject || ""}\n\n${c.body || ""}`;
     case "disclosure_plan":
+      // Hurdle planner plans carry their own plain text (lib/hurdles/plan.ts).
+      if (typeof c.planText === "string" && c.planText) return `This is coaching, not legal advice.\n\n${c.planText}`;
       return [
         c.timing_advice && `WHEN TO DISCLOSE\n${c.timing_advice}`,
         c.legal_context && `YOUR RIGHTS\n${c.legal_context}`,
@@ -435,6 +437,10 @@ export default function VaultPage() {
           (c.body ? `<h2>Message</h2>${paras(c.body)}` : "");
         break;
       case "disclosure_plan":
+        if (typeof c.planText === "string" && c.planText) {
+          body = `<p class="meta"><strong>This is coaching, not legal advice.</strong> For legal guidance, contact a reentry attorney or free legal aid in your area.</p>` + paras(c.planText);
+          break;
+        }
         body = [
           // Non-negotiable framing on every disclosure output (master plan s.16)
           `<p class="meta"><strong>This is career coaching, not legal advice.</strong> For legal guidance, contact a reentry attorney or free legal aid in your area.</p>`,

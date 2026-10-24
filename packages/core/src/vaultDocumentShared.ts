@@ -29,7 +29,9 @@ export const VAULT_CATEGORIES: VaultCategoryDef[] = [
   {
     key: "id",
     label: "Government or personal ID",
-    help: "A photo of your state ID, birth certificate, or Social Security card copy you keep for your own records.",
+    // No Social Security card here: the documents page tells people not to
+    // store it, and that is the rule (it is a secret, not a document).
+    help: "A photo of your state ID or birth certificate that you keep for your own records. Not your Social Security card.",
   },
   {
     key: "certificate",

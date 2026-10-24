@@ -54,10 +54,10 @@ const WRITER_ROUTES: Array<[string, string[], RegExp]> = [
 // Other prompt or question sources swept for old rules (no truth block needed).
 const SWEPT_FILES: string[][] = [
   ["app", "api", "analyze", "route.ts"],
-  ["lib", "intake-engine.ts"],
+  ["lib", "hurdles", "phrase.ts"],
   ["lib", "resume-discrepancies.ts"],
   ["app", "api", "interview-practice", "route.ts"],
-  ["app", "api", "disclosure-guide", "route.ts"],
+  ["app", "api", "hurdle-plan", "route.ts"],
 ];
 
 describe("resume rulebook in every writer", () => {

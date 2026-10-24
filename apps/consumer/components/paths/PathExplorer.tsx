@@ -11,7 +11,8 @@ import { choosePathDirection } from "@/lib/paths/choose";
 const field = "t-focus w-full border border-t-line bg-t-panel px-3 py-2 text-t-white";
 const button = "t-focus inline-flex min-h-touch items-center justify-center border border-t-amber px-4 py-2 font-semibold text-t-amber-bright disabled:opacity-50";
 
-export function PathExplorer() {
+export function PathExplorer({ headingLevel = 1 }: { headingLevel?: 1 | 2 } = {}) {
+  const Title = headingLevel === 1 ? "h1" : "h2";
   const lanes = useLanes();
   const [result, setResult] = useState<PathExploration | null>(null);
   const [inputs, setInputs] = useState<PathInputs>(EMPTY_PATH_INPUTS);
@@ -82,7 +83,7 @@ export function PathExplorer() {
     <div className="max-w-5xl space-y-6">
       <header className="max-w-3xl space-y-2">
         <p className="text-sm text-t-amber-bright">Find work / Explore paths</p>
-        <h1 className="text-3xl font-bold text-t-white">Find your next direction</h1>
+        <Title className="text-3xl font-bold text-t-white">Find your next direction</Title>
         <p className="text-t-phos-dim">Compare work you could build toward with what you already bring and what matters today. Choosing a direction is up to you.</p>
       </header>
       {lanes.error && <div role="alert" className="border border-t-line p-4 text-t-phos">{lanes.error} <button className={button} onClick={() => void lanes.refresh()}>Retry</button></div>}

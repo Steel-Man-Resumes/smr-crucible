@@ -13,9 +13,15 @@ export type ViewAs = "client" | "observer";
 const VIEW_AS_KEY = "view_as";
 const LEGACY_ADMIN_KEY = "admin_test_mode";
 
-/** Roles that may switch into client view (Troy C7: operate as a user). */
+/**
+ * Roles that may switch into client view: partners with no organization, to
+ * see what their clients see. NOT platform admins (B7, 2026-10-23): the soft
+ * view drew a job seeker's screens while every save landed in the admin
+ * account. Admins use audited impersonation (lib/effective-auth.ts) or a
+ * separate job-seeker account instead.
+ */
 export function canSwitchView(realTier: UserTier): boolean {
-  return realTier === "admin" || realTier === "partner";
+  return realTier === "partner";
 }
 
 export function getViewAs(): ViewAs | null {
@@ -46,7 +52,7 @@ export function setViewAs(view: ViewAs | null): void {
  * Resolution order:
  * 1. Active impersonation (RoleProvider, server-resolved): the TARGET's tier,
  *    so nav/landings/pages branch exactly as the target user sees them.
- * 2. view_as soft preview (admin/partner only): client or observer.
+ * 2. view_as soft preview (partners only, canSwitchView): client or observer.
  * 3. The database-resolved tier when loaded, then the session tier.
  * The gates and locks are real in every mode.
  */

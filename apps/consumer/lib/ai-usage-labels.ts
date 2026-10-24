@@ -31,6 +31,7 @@ export const ENDPOINT_LABELS: Record<string, string> = {
   parse: "Resume parsing",
   "fit-check": "Fit check",
   "next-step-why": "Next-step advice",
+  "career-plan": "Career planner",
   assistant: "t.ROY chat",
   coach: "t.ROY chat",
   unknown: "Other AI work",

@@ -24,6 +24,7 @@ export const REFINERY_PAGES: Record<string, string> = {
   disclosure: "/dashboard/disclosure",
   interview: "/dashboard/interview",
   resources: "/dashboard/resources",
+  next: "/dashboard/next",
   employers: "/dashboard/employers",
   vault: "/dashboard/vault",
   progress: "/dashboard/progress",
@@ -60,6 +61,17 @@ export const TOUR_TARGETS: Record<string, string> = {
   "tailor-target-job": "the target-job section at the top of the Application Tailor",
   "tailor-generate": "the generate button in the Application Tailor",
   "applications-list": "the list of tracked applications",
+  // The Refinery path (nav stations, lib/refinery-nav.ts) and its groups.
+  "refinery-nav-overview": "Station 1 on the path: Overview, where you are and what is next",
+  "refinery-nav-find": "Station 2 on the path: Find work (jobs, paths, employers)",
+  "refinery-nav-tailor": "Station 3 on the path: Tailor and package (resumes, tailoring, creative, CV)",
+  "refinery-nav-plan": "Station 4 on the path: Plan what to say (disclosure plan, private records)",
+  "refinery-nav-practice": "Station 5 on the path: Practice (interview practice)",
+  "refinery-nav-apply": "Station 6 on the path: Apply and track",
+  "refinery-nav-next": "Station 7 on the path: What comes next (school, money, health, local help)",
+  "refinery-nav-toolbox": "the Toolbox group under the path (help, ideas, settings)",
+  "refinery-nav-you": "the You group under the path (profile, sharing, export or delete data)",
+  "refinery-meter": "the Steel Man meter at the foot of the path",
 };
 
 export interface TakeMeThereArgs {

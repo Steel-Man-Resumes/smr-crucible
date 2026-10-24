@@ -175,10 +175,19 @@ async function cleanup() {
   created.codes = [];
 }
 
+// Each fixture account gets its own label, and its email carries this run's id,
+// so two blocks can never mint the same address (users_email_key) and a row
+// left behind by an earlier, crashed run cannot collide with this one.
+// scripts/lib/check-isolation-fixtures.mjs checks the labels statically.
+const RUN = Date.now().toString(36);
+const usedLabels = new Set();
+
 async function mkUser(label) {
+  if (usedLabels.has(label)) throw new Error(`mkUser label used twice in one run: ${label}`);
+  usedLabels.add(label);
   const [row] = await sql`
     INSERT INTO users (name, email, tier)
-    VALUES (${P + " " + label}, ${`${P}-${label}@example.invalid`}, 'client')
+    VALUES (${P + " " + label}, ${`${P}-${label}-${RUN}@example.invalid`}, 'client')
     RETURNING id`;
   created.users.push(row.id);
   return row.id;
@@ -374,6 +383,7 @@ async function main() {
   await outcomeChecks();
   await ownerOnlyChecks();
   await participantTableChecks();
+  await seatChecks();
 }
 
 /**
@@ -636,6 +646,20 @@ async function todayAndTaskChecks() {
     JSON.stringify({ today: qd.filter((i) => i.section === "quiet").length, insights: ins.activity }));
   check("another organization keeps its own number", (await core.getQuietAfterDays(org2.id)) === 14);
   await sql`DELETE FROM data_access_log WHERE target_user_id IN (${pat}, ${hers})`;
+  // -- invited by the org, not sharing (R3 review S8): assignable, still unnamed beyond what the org typed
+  const invEmail = `${P}-t-invited-${uniq.toLowerCase()}@example.invalid`;
+  const invd = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "Invited Person", email: invEmail, invitedBy: owner });
+  if (invd.ok) created.users.push(invd.userId);
+  const selfJoin = await mkUser("t-selfjoin"); await core.redeemAccessCode(selfJoin, org.code);
+  const invitedList = await core.getInvitedNotSharing(org.id, owner);
+  check("someone the org invited, not sharing, is listed for assignment with only the name the org typed",
+    invd.ok && invitedList.some((p) => p.userId === invd.userId && p.name === "Invited Person") && !invitedList.some((p) => p.userId === selfJoin),
+    JSON.stringify(invitedList.map((p) => [p.name, p.pending])));
+  check("and no other organization sees them", (await core.getInvitedNotSharing(org2.id, spy)).length === 0);
+  if (invd.ok) await core.assignClientStaff(org.id, invd.userId, cm, owner);
+  check("they can be assigned without sharing anything, and nothing of theirs opens",
+    invd.ok && (await core.getInvitedNotSharing(org.id, owner)).find((p) => p.userId === invd.userId)?.assignedStaffId === cm
+      && (await core.getClientApplications(await A(cm), invd.userId)).ok === false);
 }
 
 /**
@@ -731,6 +755,14 @@ async function requiredSharingChecks() {
   await core.leaveAllOrgs(pat); await core.redeemAccessCode(pat, org.code);
   const mine3 = await core.getMyPolicies(pat);
   check("after leaving and rejoining, the person is asked again and nothing is open", mine3[0]?.acknowledged === false && (await core.getClientApplications(aOwner, pat)).ok === false);
+  // Review 2, BL-4: the same after leaving ONE organization (096).
+  if ((await sql`SELECT to_regprocedure('public.smr_leave_org(uuid,uuid)') IS NOT NULL AS has`)[0].has) {
+    const again = await core.getMyPolicies(pat);
+    if (again[0]) await core.acknowledgePolicy(pat, again[0].id);
+    await core.leaveOrg(pat, org.id); await core.redeemAccessCode(pat, org.code);
+    const mine4 = await core.getMyPolicies(pat);
+    check("after leaving one organization and rejoining, the person is asked again and nothing is open", mine4[0]?.acknowledged === false && (await core.getClientApplications(aOwner, pat)).ok === false);
+  }
   check("the owner can stop requiring anything", (await core.setOrgSharingPolicy(aOwner, { scopes: [], audience: "", purpose: "", coversExisting: false })).ok === true && (await core.getMyPolicies(pat)).length === 0);
   await sql`DELETE FROM job_application WHERE user_id = ${pat}`;
 }
@@ -768,6 +800,19 @@ async function accessChecks() {
   check("the owner can take something away from one person (deny wins)", deny.ok && !(await A(cm)).capabilities.has("org.note.write"));
 
   check("an admin can adjust staff", (await core.setStaffCapability(aAdmin, cm, "org.insights.view", true, "staff")).ok === true);
+
+  // Only the owner makes, changes or removes an admin (R3 review S1). Before
+  // this, org.staff.manage was enough, and admins hold it.
+  check("an admin cannot promote a case manager to admin", (await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "org_admin", actorUserId: admin })).ok === false);
+  check("an admin cannot demote another admin", (await core.setOrgStaffRole({ orgId: org.id, userId: admin2, role: "staff", actorUserId: admin })).ok === false);
+  check("an admin cannot demote another admin through add_staff's re-role", (await core.addOrgStaff({ orgId: org.id, userId: admin2, role: "staff", addedBy: admin })).ok === false);
+  check("an admin cannot remove another admin", (await core.removeOrgStaff({ orgId: org.id, userId: admin2, actorUserId: admin })).ok === false);
+  const [{ role: admin2Role }] = await sql`SELECT role FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${admin2}`;
+  check("and the refused writes changed nothing in the database", admin2Role === "org_admin", admin2Role);
+  const ownerPromote = await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "org_admin", actorUserId: owner });
+  const ownerDemote = await core.setOrgStaffRole({ orgId: org.id, userId: cm, role: "staff", actorUserId: owner });
+  check("the owner can promote and demote an admin", ownerPromote.ok === true && ownerDemote.ok === true, `${ownerPromote.reason ?? ""} ${ownerDemote.reason ?? ""}`);
+  aCm = await A(cm);
   check("an admin cannot adjust another admin", (await core.setStaffCapability(aAdmin, admin2, "org.costs.view", true, "org_admin")).ok === false);
   check("nobody adjusts their own access", (await core.setStaffCapability(aAdmin, admin, "org.costs.view", true, "org_admin")).ok === false);
   check("the owner's access cannot be changed", (await core.setStaffCapability(aAdmin, owner, "org.costs.view", false, "owner")).ok === false);
@@ -792,6 +837,12 @@ async function accessChecks() {
   const overview = await core.getOrgAccessOverview(aOwner);
   const hire = overview?.find((m) => m.userId === inv.userId);
   check("the owner can invite someone to staff by email, and they show as invited", inv.ok && !!hire && hire.pending && hire.role === "staff" && hire.title === "Employment Specialist", JSON.stringify(inv));
+  const vol = await core.inviteOrgStaff(aOwner, { name: "Volunteer", email: `${P}-a-vol-${uniq.toLowerCase()}@example.invalid`, role: "volunteer" });
+  if (vol.ok) created.users.push(vol.userId);
+  const aVol = vol.ok ? await core.resolveOrgActor(vol.userId) : null;
+  check("a volunteer invite lands as staff who cannot invite participants or record placements, and sees only their caseload",
+    !!aVol && aVol.role === "staff" && !aVol.capabilities.has("org.participant.invite") && !aVol.capabilities.has("org.outcome.write") && aVol.reach === "assigned",
+    JSON.stringify(vol));
   check("an admin cannot create another admin", (await core.inviteOrgStaff(aAdmin, { name: "X", email: `${P}-a-x-${uniq.toLowerCase()}@example.invalid`, role: "org_admin" })).ok === false);
   const [{ email: outsiderEmail }] = await sql`SELECT email FROM users WHERE id = ${outsider}`;
   check("an address that already has an account elsewhere is not attached to this roster", (await core.inviteOrgStaff(aOwner, { name: "X", email: outsiderEmail, role: "staff" })).ok === false);
@@ -876,8 +927,12 @@ async function sharingChecks() {
   check("and a refused read writes no 'opened' entry", logged0 === 0, `rows=${logged0}`);
   const head = await core.getClientHeader(aRuss, wes);
   check("progress signals are absent until the person turns on progress sharing", head.ok && head.rows[0].progress === null);
+  check("and so are their account name, email and stage (review BL1)",
+    head.ok && head.rows[0].currentStage === null && head.rows[0].identitySource !== "account",
+    JSON.stringify({ src: head.rows?.[0]?.identitySource, stage: head.rows?.[0]?.currentStage }));
   await joinCohortConsent(wes);
   const headP = await core.getClientHeader(aRuss, wes);
+  check("with sharing on, the stage and the account's own details appear", headP.ok && headP.rows[0].identitySource === "account" && headP.rows[0].currentStage !== null);
   check("with progress sharing on, staff get counts and a next step, and still no content",
     headP.ok && headP.rows[0].progress?.applications === 1 && !JSON.stringify(headP.rows[0]).includes("PRIVATE-NOTE") && !JSON.stringify(headP.rows[0]).includes("RESUME-BODY"));
   check("they CAN see who the person is and that nothing is shared", head.ok && head.rows[0].scopes.resume.shared === false && head.rows[0].assignedStaffId === russ);
@@ -958,6 +1013,17 @@ async function sharingChecks() {
     const del = await raised(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`DELETE FROM case_note WHERE id = ${note.id}`]));
     check("a note cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "delete succeeded");
   }
+  if (note.ok) {
+    const fixed = await core.editClientNote(aRuss, wes, note.id, { body: "Met Tuesday. Bringing ID, SS card and pay stub Thursday." });
+    const notes = await core.getClientNotes(aRuss, wes);
+    const mineNow = notes.ok ? notes.rows.find((n) => n.id === note.id) : null;
+    check("the author can correct a note through the app, and every earlier wording is shown with it",
+      fixed.ok === true && !!mineNow?.edited_at && (mineNow?.earlier?.length ?? 0) >= 2, JSON.stringify(fixed));
+    check("somebody who did not write it cannot correct it", (await core.editClientNote(aNora, wes, note.id, { body: "rewritten by a colleague" })).ok === false);
+    const shown = await core.addClientNote(aRuss, wes, { body: "NOT-SHOWN-TO-PARTICIPANT", visibleToParticipant: true });
+    const [{ v }] = shown.ok ? await sql`SELECT visible_to_participant AS v FROM case_note WHERE id = ${shown.id}` : [{ v: null }];
+    check("a note is never marked visible to the participant, since no participant screen shows notes", v === false, String(v));
+  }
 
   // -- helping without touching their work: a suggested job, a comment beside a shared document
   const [sharedResume] = await sql`SELECT id FROM refinery_artifact WHERE user_id = ${wes} AND artifact_type = 'resume' AND is_current`;
@@ -1037,6 +1103,17 @@ async function sharingChecks() {
   check("leaving the organization revokes everything shared with it", live === 0 && (await core.getClientApplications(aOwner, wes)).ok === false, `live grants=${live}`);
   await core.redeemAccessCode(wes, org.code);
   check("rejoining does NOT bring the old sharing back", (await core.getClientApplications(aOwner, wes)).reason === "not_shared");
+  // Review 2, BL-4: leaving ONE organization (096 smr_leave_org) does the same, and the free rejoin (096) still asks again.
+  if ((await sql`SELECT to_regprocedure('public.smr_leave_org(uuid,uuid)') IS NOT NULL AS has`)[0].has) {
+    await core.grantSharing(wes, org.id, "applications");
+    check("shared again after rejoining (a fresh yes)", (await core.getClientApplications(aOwner, wes)).ok === true);
+    await core.leaveOrg(wes, org.id);
+    const [{ n: liveOne }] = await sql`SELECT count(*)::int AS n FROM sharing_grant WHERE user_id = ${wes} AND access_code_id = ${org.id} AND revoked_at IS NULL`;
+    const [{ n: pendOne }] = await sql`SELECT count(*)::int AS n FROM sharing_request WHERE user_id = ${wes} AND access_code_id = ${org.id} AND status = 'pending'`;
+    check("leaving one organization revokes everything shared with it and cancels its requests", liveOne === 0 && pendOne === 0 && (await core.getClientApplications(aOwner, wes)).ok === false, `live=${liveOne} pending=${pendOne}`);
+    await core.redeemAccessCode(wes, org.code);
+    check("rejoining after leaving one organization does NOT bring the old sharing back", (await core.getClientApplications(aOwner, wes)).reason === "not_shared");
+  }
   await sql`DELETE FROM data_access_log WHERE target_user_id = ${wes}`;
   await sql`DELETE FROM job_application WHERE id = ${appRow.id}`;
 }
@@ -1276,6 +1353,169 @@ async function platformAdminChecks() {
   await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
   const [revoked] = await sql`SELECT tier FROM users WHERE id = ${boss}`;
   check("revoking platform admin drops the cached tier", revoked.tier !== "admin", `tier is ${revoked.tier}`);
+}
+
+/**
+ * Refinery seats (migration 096). The seat rule is one definer function; these
+ * prove each of its five inputs, that nothing else counts, that the app role
+ * cannot write the grandfather list or flip the switch without being a
+ * platform admin, and that an offer spends a seat only on the person's yes.
+ */
+async function seatChecks() {
+  console.log("\n  -- Refinery seats (096) --");
+  const [{ has }] = await sql`SELECT to_regclass('public.refinery_access_policy') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  096 not applied; skipped"); return; }
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+  const seat = async (u) => (await app`SELECT smr_has_refinery_seat(${u}::uuid) AS s`)[0].s;
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+
+  const [{ open }] = await app`SELECT smr_refinery_signup_open() AS open`;
+  check("the switch is readable by the app role through its function", typeof open === "boolean");
+
+  const owner = await mkUser("seat-owner"), staff = await mkUser("seat-staff"), member = await mkUser("seat-member");
+  const nobody = await mkUser("seat-nobody"), boss = await mkUser("seat-boss"), legacy = await mkUser("seat-legacy");
+  const lapsed = await mkUser("seat-lapsed"), closedMember = await mkUser("seat-closed"), selfTier = await mkUser("seat-tier");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, max_redemptions) VALUES (${"ISOSEATS" + uniq}, ${P + " seats"}, 'client', ${owner}, true, 5) RETURNING id, code`;
+  const [old] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active, expires_at) VALUES (${"ISOSEATX" + uniq}, ${P + " expired"}, 'client', true, now() - interval '1 day') RETURNING id`;
+  const [off] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active) VALUES (${"ISOSEATO" + uniq}, ${P + " inactive"}, 'client', false) RETURNING id`;
+  created.codes.push(org.id, old.id, off.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${staff}, 'staff')`;
+  await sql`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES (${member}, ${org.id})`;
+  await sql`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES (${lapsed}, ${old.id})`;
+  await sql`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES (${closedMember}, ${off.id})`;
+  await sql`INSERT INTO platform_admin (user_id, note) VALUES (${boss}, 'isolation fixture')`;
+  await sql`INSERT INTO refinery_seat_legacy (user_id) VALUES (${legacy})`;
+  await sql`UPDATE users SET tier = 'partner' WHERE id = ${selfTier}`;
+  await sql`INSERT INTO progression_grant (user_id, grant_key, kind, step_id, label) VALUES (${selfTier}, 'early:tailor', 'unlock', 'tailor', 'fixture')`.catch(() => {});
+
+  check("seat: platform admin", (await seat(boss)) === true);
+  check("seat: organization owner", (await seat(owner)) === true);
+  check("seat: organization staff", (await seat(staff)) === true);
+  check("seat: member of an active code", (await seat(member)) === true);
+  check("seat: grandfathered account", (await seat(legacy)) === true);
+  check("no seat: a fresh account", (await seat(nobody)) === false);
+  check("no seat: member of an expired code", (await seat(lapsed)) === false);
+  check("no seat: member of an inactive code", (await seat(closedMember)) === false);
+  check("no seat: users.tier partner and a progression unlock count for nothing", (await seat(selfTier)) === false);
+
+  const unscoped = await app`SELECT (SELECT count(*) FROM refinery_access_policy)::int AS p, (SELECT count(*) FROM refinery_seat_legacy)::int AS l, (SELECT count(*) FROM org_seat_offer)::int AS o`;
+  check("an unscoped app read sees no policy row, no grandfather rows, no offers", unscoped[0].p === 0 && unscoped[0].l === 0 && unscoped[0].o === 0, JSON.stringify(unscoped[0]));
+  const selfLegacy = await raised(() => app.transaction([app`SELECT set_config('app.user_id', ${nobody}, true)`, app`INSERT INTO refinery_seat_legacy (user_id) VALUES (${nobody})`]));
+  check("a person cannot put themselves on the grandfather list", !!selfLegacy && /row-level security|permission denied/i.test(selfLegacy), selfLegacy ?? "insert succeeded");
+  const flip = await app.transaction([app`SELECT set_config('app.user_id', ${nobody}, true)`, app`UPDATE refinery_access_policy SET public_signup_open = NOT public_signup_open WHERE id RETURNING id`]);
+  check("a non-admin cannot flip the switch", flip[1].length === 0);
+  const del = await raised(() => app.transaction([app`SELECT set_config('app.user_id', ${boss}, true)`, app`DELETE FROM refinery_access_policy`]));
+  check("not even an admin can delete the policy row from the app", !!del && /permission denied/i.test(del), del ?? "delete ran");
+
+  // Offers: an existing account that has signed in is asked first.
+  const asked = await mkUser("seat-asked");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${asked}`;
+  const [{ email: askedEmail }] = await sql`SELECT email FROM users WHERE id = ${asked}`;
+  const [{ t: seatsBefore }] = await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`;
+  const inv = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "Asked", email: askedEmail, invitedBy: owner });
+  const [{ n: memAfterOffer }] = await sql`SELECT count(*)::int AS n FROM access_code_redemption WHERE user_id = ${asked}`;
+  const [{ t: seatsAfterOffer }] = await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`;
+  check("inviting an existing account makes an offer: no membership, no seat spent", inv.ok && inv.kind === "offered" && memAfterOffer === 0 && seatsAfterOffer === seatsBefore, JSON.stringify(inv));
+  const offers = await core.listMySeatOffers(asked);
+  check("the person sees the offer, with the organization's name", offers.length === 1 && offers[0].orgName === P + " seats");
+  check("another account cannot accept it", (await core.acceptSeatOffer(nobody, offers[0].id)) === "not_found");
+  check("accepting spends the seat through the one membership path", (await core.acceptSeatOffer(asked, offers[0].id)) === "ok"
+    && (await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`)[0].t === seatsBefore + 1 && (await seat(asked)) === true);
+  check("an answered offer cannot be answered again", (await core.acceptSeatOffer(asked, offers[0].id)) === "not_found");
+
+  const declines = await mkUser("seat-declines");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${declines}`;
+  const [{ email: dEmail }] = await sql`SELECT email FROM users WHERE id = ${declines}`;
+  await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "D", email: dEmail, invitedBy: owner });
+  const [dOffer] = await core.listMySeatOffers(declines);
+  check("declining spends nothing", (await core.declineSeatOffer(declines, dOffer.id)) === "ok" && (await seat(declines)) === false);
+
+  // Leave one organization: the membership ends, the seat is not refunded.
+  const [{ t: beforeLeave }] = await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`;
+  check("leaving one organization ends that membership", (await core.leaveOrg(asked, org.id)) === true && (await seat(asked)) === false);
+  check("leaving does not hand the seat back (durable seats)", (await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`)[0].t === beforeLeave);
+  // Review 1, SF-5: coming back takes back the old seat, never a second one.
+  const back = await core.redeemAccessCode(asked, org.code);
+  check("leave then re-join with the code spends no second seat", back.success
+    && (await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`)[0].t === beforeLeave && (await seat(asked)) === true,
+    JSON.stringify(back));
+
+  // Review 1, N-4: an offer accepted after joining another organization is refused.
+  const other = await mkUser("seat-other");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${other}`;
+  const [{ email: oEmail }] = await sql`SELECT email FROM users WHERE id = ${other}`;
+  await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "O", email: oEmail, invitedBy: owner });
+  const [oOffer] = await core.listMySeatOffers(other);
+  const [otherOrg] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active) VALUES (${"ISOSEATT" + uniq}, ${P + " other"}, 'client', true) RETURNING id, code`;
+  created.codes.push(otherOrg.id);
+  await core.redeemAccessCode(other, otherOrg.code);
+  check("accepting an offer re-checks the other-organization rule", (await core.acceptSeatOffer(other, oOffer.id)) === "other_org");
+  // SF8: the offer is in the organization's own invite record, flipped on yes.
+  const [rec] = await sql`SELECT invited_name, offer_status FROM org_invite WHERE access_code_id = ${org.id} AND user_id = ${asked}`;
+  check("an accepted offer is recorded in org_invite with the typed name, status joined", rec?.invited_name === "Asked" && rec?.offer_status === "joined", JSON.stringify(rec));
+  // SF-2 with the boss ruling (2026-10-23): an OPEN offer always blocks a
+  // second offer and a second email; the org never learns of a decline, so a
+  // declined offer stays on the Invited list and a second "Add" gets the same
+  // "already on your invited list" answer an unanswered invite gets; a
+  // withdrawn offer is relisted at once, emailed only after the 24 hours.
+  const twice = await mkUser("seat-open-twice");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${twice}`;
+  const [{ email: tEmail }] = await sql`SELECT email FROM users WHERE id = ${twice}`;
+  const first = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "T", email: tEmail, invitedBy: owner });
+  const second = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "T", email: tEmail, invitedBy: owner });
+  const direct = await core.createSeatOffer({ accessCodeId: org.id, userId: twice, offeredBy: owner, windowHours: 0 });
+  check("an open offer blocks a second offer and a second email, whatever the window",
+    first.ok && first.notify === true && !second.ok && second.error === core.ALREADY_INVITED && direct === false
+      && (await core.listMySeatOffers(twice)).length === 1,
+    JSON.stringify({ first, second, direct }));
+  const again = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "D", email: dEmail, invitedBy: owner });
+  check("a second offer to a person who declined within 24 hours is not made and not emailed, with the listed answer",
+    !again.ok && again.error === core.ALREADY_INVITED && (await core.listMySeatOffers(declines)).length === 0, JSON.stringify(again));
+  const gone = await mkUser("seat-withdrawn");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${gone}`;
+  const [{ email: gEmail }] = await sql`SELECT email FROM users WHERE id = ${gone}`;
+  await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "G", email: gEmail, invitedBy: owner });
+  const removed = await core.revokeOrgInvite(org.id, gone, owner);
+  const back2 = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "G again", email: gEmail, invitedBy: owner });
+  const [gRow] = await sql`SELECT invited_name, offer_status FROM org_invite WHERE access_code_id = ${org.id} AND user_id = ${gone}`;
+  check("a withdrawn offer re-added within 24 hours is relisted at once and not emailed",
+    removed.ok && back2.ok && back2.notify === false && gRow?.offer_status === "offered" && gRow?.invited_name === "G again"
+      && (await core.listMySeatOffers(gone)).length === 1,
+    JSON.stringify({ removed, back2, gRow }));
+
+  // Review 1, BL-2: grandfather once. Run the close statements as the app, as a platform admin.
+  const legacyBefore = (await sql`SELECT user_id FROM refinery_seat_legacy`).map((r) => r.user_id);
+  const [policyBefore] = await sql`SELECT public_signup_open, legacy_cutoff, closed_at FROM refinery_access_policy WHERE id`;
+  const close = () => app.transaction([
+    app`SELECT set_config('app.user_id', ${boss}, true)`,
+    app`SELECT public_signup_open, legacy_cutoff FROM refinery_access_policy WHERE id FOR UPDATE`,
+    app`INSERT INTO refinery_seat_legacy (user_id) SELECT u.id FROM users u WHERE EXISTS (SELECT 1 FROM refinery_access_policy p WHERE p.id AND p.public_signup_open AND p.legacy_cutoff IS NULL) ON CONFLICT (user_id) DO NOTHING`,
+    app`UPDATE refinery_access_policy SET public_signup_open=false, closed_at=now(), legacy_cutoff=COALESCE(legacy_cutoff, now()) WHERE id AND public_signup_open RETURNING id`,
+  ]);
+  if (!policyBefore.public_signup_open || policyBefore.legacy_cutoff) {
+    console.log("  note  the policy here was already closed once; grandfather checks skipped");
+  } else {
+    const first = await close();
+    check("the first close flips the switch", first[3].length === 1);
+    const second = await close();
+    check("a second close while closed changes nothing", second[3].length === 0);
+    const late = await mkUser("seat-late");
+    await app.transaction([app`SELECT set_config('app.user_id', ${boss}, true)`, app`UPDATE refinery_access_policy SET public_signup_open=true WHERE id`]);
+    const reclose = await close();
+    check("open, then close again: an account made in between is NOT grandfathered", reclose[3].length === 1 && (await seat(late)) === false);
+    const rm = await app.transaction([app`SELECT set_config('app.user_id', ${boss}, true)`, app`DELETE FROM refinery_seat_legacy WHERE user_id = ${legacy} RETURNING user_id`]);
+    check("a platform admin can take one account off the grandfather list", rm[1].length === 1);
+    const notAdmin = await app.transaction([app`SELECT set_config('app.user_id', ${nobody}, true)`, app`DELETE FROM refinery_seat_legacy RETURNING user_id`]);
+    check("nobody else can", notAdmin[1].length === 0);
+    // Put the disposable database back as it was.
+    await sql`UPDATE refinery_access_policy SET public_signup_open = ${policyBefore.public_signup_open}, legacy_cutoff = NULL, closed_at = ${policyBefore.closed_at} WHERE id`;
+    await sql`DELETE FROM refinery_seat_legacy WHERE NOT (user_id = ANY(${legacyBefore}::uuid[]))`;
+  }
+
+  await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
 }
 
 main()

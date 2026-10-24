@@ -6,7 +6,7 @@ const PAGES: Record<string, [string, string]> = {
   '/dashboard': ['overview', 'Overview'], '/dashboard/jobs': ['jobs', 'Find work'],
   '/dashboard/vault': ['resumes', 'My resumes'], '/dashboard/applications': ['applications', 'Applications'],
   '/dashboard/interview': ['interview', 'Interview prep'], '/dashboard/resources': ['support', 'Support & disclosure'],
-  '/dashboard/settings': ['settings', 'Settings'],
+  '/dashboard/settings': ['settings', 'Settings'], '/dashboard/next': ['next', 'What comes next'],
 };
 export function TourPageFrame({ pathname, children }: { pathname: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);

@@ -4,7 +4,8 @@
  *   GET  ?scope=applications|resume|documents   shared content for one scope
  *   GET  (no scope)                              who they are, what is shared, notes
  *   POST { action: "request_sharing", scope, reason }
- *   POST { action: "add_note", body, kind?, visibleToParticipant?, draftedByAssistant? }
+ *   POST { action: "add_note", body, kind?, draftedByAssistant? }
+ *        { action: "edit_note", noteId, body, kind? }  (author only, keeps the earlier wording)
  *
  * This route decides NOTHING about access. Every read and write goes through
  * orgClientView, which checks capability, membership, caseload reach and the
@@ -21,6 +22,7 @@ import {
   getClientDocuments,
   getClientNotes,
   addClientNote,
+  editClientNote,
   requestSharing,
   listSuggestions,
   suggestJob,
@@ -105,10 +107,17 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
     const res = await addClientNote(actor, params.id, {
       body: String(body.body ?? ""),
       kind: typeof body.kind === "string" ? body.kind : undefined,
-      visibleToParticipant: body.visibleToParticipant === true,
       draftedByAssistant: body.draftedByAssistant === true,
     });
     return res.ok ? NextResponse.json({ ok: true, id: res.id }) : NextResponse.json({ error: res.error }, { status: 400 });
+  }
+  if (body.action === "edit_note") {
+    if (!UUID.test(String(body.noteId ?? ""))) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    const res = await editClientNote(actor, params.id, String(body.noteId), {
+      body: String(body.body ?? ""),
+      kind: typeof body.kind === "string" ? body.kind : undefined,
+    });
+    return res.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: res.error }, { status: 400 });
   }
   if (body.action === "suggest_job") {
     const res = await suggestJob(actor, params.id, { jobTitle: String(body.jobTitle ?? ""), company: String(body.company ?? ""), location: body.location ? String(body.location) : null, applyUrl: body.applyUrl ? String(body.applyUrl) : null, why: String(body.why ?? "") });

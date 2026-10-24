@@ -123,6 +123,9 @@ export function getGentlenessLevel(id: string | undefined): GentlenessLevel {
   return GENTLENESS_LEVELS.find((g) => g.id === id) ?? GENTLENESS_LEVELS[1]; // default: balanced
 }
 
+/** Marks record words in the practice prompt. /api/assistant refuses an override carrying it without the stored consent. */
+export const RECORD_WORDS_HEADER = "THEIR OWN RECORD WORDS";
+
 export interface RehearsalOverrideParams {
   personaId: string;
   gentlenessId: string;
@@ -131,6 +134,12 @@ export interface RehearsalOverrideParams {
   strengths?: string[];
   /** Pre-built Forge context block (already sanitized upstream). */
   forgeContext?: string;
+  /** The words the person prepared in the planner (their plan, not a script to recite). */
+  preparedScript?: string;
+  /** The person's own record words. Only passed when their stored record planner consent is in place; the assistant route checks it again. */
+  recordWords?: string;
+  /** Practice an interviewer who asks about it, or one who never does. */
+  askVariant?: "asks" | "does_not_ask";
 }
 
 /**
@@ -159,6 +168,21 @@ export function buildRehearsalSystemOverride(params: RehearsalOverrideParams): s
   }
   if (params.forgeContext) {
     lines.push(params.forgeContext);
+  }
+  if (params.preparedScript && params.preparedScript.trim()) {
+    lines.push(
+      `WHAT THEY PREPARED (their own plan, made a moment ago; help them practice saying it their way. Do not recite it back, do not add facts to it, do not correct their facts):\n${params.preparedScript.trim().slice(0, 1200)}`
+    );
+  }
+  if (params.recordWords && params.recordWords.trim()) {
+    lines.push(`${RECORD_WORDS_HEADER} (what they plan to say about their record, in their words; help them practice it their way, add nothing to it):\n${params.recordWords.trim().slice(0, 800)}`);
+  }
+  if (params.askVariant === "does_not_ask") {
+    lines.push(
+      "THIS ROUND: you never ask about it. If they choose to bring it up, respond the way a fair person in your role would. If they do not, that is fine. Never treat silence as a mistake."
+    );
+  } else if (params.askVariant === "asks") {
+    lines.push("THIS ROUND: at a natural point, ask about it once, plainly and fairly, the way a real person in your role might.");
   }
   if (params.strengths && params.strengths.length > 0) {
     lines.push(
