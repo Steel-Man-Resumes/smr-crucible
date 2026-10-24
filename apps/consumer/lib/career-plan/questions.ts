@@ -101,7 +101,7 @@ export const QUESTIONS: Record<QuestionId, Question> = {
   },
   licensing: {
     id: "licensing", kind: "choice",
-    prompt: "Some jobs need a state license, and a record can slow some of those down. How do you want to play it?",
+    prompt: "Some jobs need a state license, and licensing rules about records differ by state. Look at those now, or skip them for now?",
     help: "Only you know if this matters for you. Nobody here is asking about your record.",
     options: opts<Licensing>([["avoid", "Skip those for now"], ["keep", "Keep them in"], ["unsure", "Not sure"]]),
   },
