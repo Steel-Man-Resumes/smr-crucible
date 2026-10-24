@@ -119,6 +119,8 @@ import { DownloadBox } from "@/components/forge/finish/DownloadBox";
 import { EmailPackageBox } from "@/components/forge/finish/EmailPackageBox";
 import { FinishedEmailLine } from "@/components/forge/finish/FinishedEmailLine";
 import { useSession } from "next-auth/react";
+import { useSeatless } from "@/components/forge/useSeatless";
+import { seatAwareHref } from "@/lib/refinery-access";
 import { sessionPending } from "@/lib/session-policy";
 import { CheckSection } from "@/components/forge/finish/CheckSection";
 import { FinishTour, type TourStep } from "@/components/forge/finish/FinishTour";
@@ -208,6 +210,8 @@ function OutputPageInner() {
   // Forge before the wall): the person types an address, as before.
   const { data: authData, status: authStatus } = useSession();
   const signedIn = authStatus === "authenticated" && !!authData?.user && !sessionPending(authData.user as any);
+  // No Refinery seat yet: Refinery links go to the seat page (lib/refinery-access.ts).
+  const seatless = useSeatless();
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
   const output = (session.forgeOutput as ForgeOutput) || {};
@@ -1205,7 +1209,7 @@ function OutputPageInner() {
                 </button>
               </div>
             </div>
-            <a href="/dashboard/vault" className="t-focus mt-4 inline-flex min-h-touch items-center text-sm text-t-phos underline underline-offset-2">
+            <a href={seatAwareHref("/dashboard/vault", seatless)} className="t-focus mt-4 inline-flex min-h-touch items-center text-sm text-t-phos underline underline-offset-2">
               Back to My resumes
             </a>
           </aside>
@@ -1732,14 +1736,14 @@ function OutputPageInner() {
 
       {checkMode ? (
         <div className="mt-12 border-t border-t-line pt-8" data-testid="check-next">
-          <a href="/dashboard/vault" className="t-focus inline-flex min-h-touch items-center text-sm font-medium text-t-amber-bright underline underline-offset-2">
+          <a href={seatAwareHref("/dashboard/vault", seatless)} className="t-focus inline-flex min-h-touch items-center text-sm font-medium text-t-amber-bright underline underline-offset-2">
             Back to My resumes
           </a>
         </div>
       ) : lanes ? (
         /* Lanes first (R2): one next action by route; the rest behind "Something else". */
         <div className="mt-12">
-          <LaneNextAction action={nextActionFor(session.laneTask, { signedIn, finished })} onFinish={goFix} checking={checking || settling || (mayAccount && saveShown === "saving")}>
+          <LaneNextAction action={nextActionFor(session.laneTask, { signedIn, finished, seatless })} onFinish={goFix} checking={checking || settling || (mayAccount && saveShown === "saving")}>
             {parkedLetter && !coverLetterText && docState === "done" && (
               <div data-testid="letter-offer">
                 <p className="mb-2 text-sm text-t-phos">Applying somewhere that wants a cover letter? t.ROY wrote one from your story. t.ROY checks it line by line with you, like the resume.</p>

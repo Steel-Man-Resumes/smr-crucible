@@ -21,6 +21,8 @@ import { LaneHeader } from "@/components/lanes/LaneHeader";
 import { useLaneFocus } from "@/components/lanes/useLaneFocus";
 import { planForgePath } from "@/lib/forge-path";
 import { returnToRefinery } from "@/lib/forge-return";
+import { useSeatless } from "@/components/forge/useSeatless";
+import { seatAwareHref } from "@/lib/refinery-access";
 import {
   DRAFT_BADGE,
   DOCUMENT_LINKS,
@@ -82,7 +84,12 @@ function StartInner() {
     if (focus.loaded && !target) setTarget(session.laneJobPosting || focus.target || "");
   }, [focus.loaded, focus.target]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const goToRefinery = returnToRefinery({
+  // No Refinery seat yet: never auto-open the Refinery, and every tile that
+  // jumps into it goes to the seat page instead (lib/refinery-access.ts).
+  const seatless = useSeatless();
+  const seat = (href: string) => seatAwareHref(href, seatless);
+
+  const goToRefinery = !seatless && returnToRefinery({
     loaded: focus.loaded, signedIn: focus.signedIn, task: focus.task,
     forgeComplete, resumeStatus: accountRev?.status ?? null, change, step, fromRefinery,
   });
@@ -118,7 +125,7 @@ function StartInner() {
     setBusy(false);
     if (!saved) { navigating.current = false; setSaveError("Your choice wasn't saved. Try again."); return; }
     keepInRun(task);
-    router.push(entry && task === "resume" ? `/resume?entry=${entry}` : routeHref(task, { signedIn: focus.signedIn, hasResume }));
+    router.push(entry && task === "resume" ? `/resume?entry=${entry}` : seat(routeHref(task, { signedIn: focus.signedIn, hasResume })));
   }
 
   async function continueJob() {
@@ -133,7 +140,7 @@ function StartInner() {
     keepInRun("job", t || null);
     updateSession({ laneJobPosting: posting });
     // A resume on file: aim it at this job. None yet: build only what this job needs.
-    router.push(focus.signedIn && hasResume ? "/dashboard/application-tailor?from=start" : "/resume");
+    router.push(focus.signedIn && hasResume ? seat("/dashboard/application-tailor?from=start") : "/resume");
   }
 
   if (!focus.loaded || goToRefinery) {
@@ -180,10 +187,10 @@ function StartInner() {
           </p>
           <p>
             <Link
-              href={focus.signedIn ? "/dashboard/jobs" : signInFor("/dashboard/jobs")}
+              href={focus.signedIn ? seat("/dashboard/jobs") : signInFor("/dashboard/jobs")}
               className="t-focus text-t-phos underline underline-offset-2 hover:text-t-white"
             >
-              No job in mind yet? Find one.
+              No job in mind yet? Find one.{seatless && " (needs a Refinery seat)"}
             </Link>
           </p>
         </div>
@@ -212,12 +219,12 @@ function StartInner() {
             ))}
           </ul>
         )}
-        <p className="mt-5 text-sm text-t-phos">This part works in your free account, so your work is saved.</p>
+        <p className="mt-5 text-sm text-t-phos">{seatless ? "This part is in the Refinery, which opens with a seat from an organization." : "This part works in your free account, so your work is saved."}</p>
         <Link
-          href={signInFor(dest)}
+          href={seatless ? seat(dest) : signInFor(dest)}
           className="t-focus mt-3 inline-flex min-h-touch items-center bg-t-amber px-6 py-3 text-base font-bold text-white hover:bg-t-amber-bright"
         >
-          Sign in free
+          {seatless ? "Ask for a Refinery seat" : "Sign in free"}
         </Link>
       </div>
     );
@@ -255,7 +262,7 @@ function StartInner() {
             type="button"
             onClick={() => {
               if (session.laneTask !== task) keepInRun(task);
-              router.push(next);
+              router.push(seat(next));
             }}
             className="t-focus mt-5 min-h-touch w-full bg-t-amber px-6 py-3 text-base font-bold text-white hover:bg-t-amber-bright sm:w-auto"
             data-testid="lane-home-continue"
