@@ -8,7 +8,11 @@
  *   2. Upcoming -- application follow-ups
  *   3. Career Roadmap -- visual journey; nodes expand in place
  *   4. Pipeline -- live application stages (saved -> offered)
- *   5. Milestones + Streak -- private, grace-based (Phase 4.3)
+ *   0. Steel Man meter + stats (components/steelman): the score, where the
+ *      points come from, 30 days, next moves, marks and checklist, moments,
+ *      active weeks, how it works. The week streak there replaces the old
+ *      day streak card (memo 2026-10-23: count weeks, keep reserves).
+ *   5. Milestones -- private (Phase 4.3)
  *   6. By the Numbers / Activity Detail -- server-truth counts
  *
  * Phase 4.2: every number here maps to a NAMED server fact (see
@@ -23,7 +27,7 @@
 import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import type { Milestone, StreakResult } from "@crucible/core";
+import type { Milestone } from "@crucible/core";
 import {
   getQuickWins,
   type QuickWin,
@@ -42,7 +46,8 @@ import {
   getSkillNames,
 } from "@/lib/forge-output";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
-import { trackProgress } from "@/lib/track-progress";
+import { SteelManMeter } from "@/components/steelman/SteelManMeter";
+import { SteelManStats } from "@/components/steelman/SteelManStats";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -117,7 +122,6 @@ export default function ProgressPage() {
   const [upcoming, setUpcoming] = useState<UpcomingItem[]>([]);
   const [pipeline, setPipeline] = useState<PipelineCounts | null>(null);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
-  const [streak, setStreak] = useState<StreakResult | null>(null);
   const [celebrate, setCelebrate] = useState<{ id: string; title: string; fact: string } | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -145,7 +149,6 @@ export default function ProgressPage() {
           setMilestones(d.milestones);
           maybeCelebrate(d.milestones);
         }
-        if (d?.streak) setStreak(d.streak);
       })
       .catch(() => {
         // Graceful: leave defaults (zeros). Never fall back to localStorage.
@@ -260,8 +263,8 @@ export default function ProgressPage() {
       setLoading(false)
     );
 
-    // Dual-write only -- session is COUNTED server-side (session_start event).
-    trackProgress("session_start");
+    // session_start now fires once a day from every Refinery page
+    // (components/steelman/SessionPing.tsx); the server dedupes by day.
 
     const refresh = () => {
       loadJourney();
@@ -369,6 +372,10 @@ export default function ProgressPage() {
         Every step counts. Here&apos;s what you&apos;ve accomplished and
         what to do next.
       </p>
+
+      {/* ── Steel Man meter and stats ───────────────────────────────────── */}
+      <SteelManMeter />
+      <SteelManStats />
 
       {/* ── Quick Wins ──────────────────────────────────────────────────── */}
       {quickWins.length > 0 && (
@@ -519,36 +526,12 @@ export default function ProgressPage() {
       )}
 
       {/* ── Milestones + Streak (private) ───────────────────────────────── */}
-      {(milestones.length > 0 || streak) && (
+      {milestones.length > 0 && (
         <section className="mb-10">
           <h2 className="text-lg font-bold text-t-white mb-1">Milestones</h2>
           <p className="text-sm text-t-phos-dim mb-4">
             Just for you. Each one is backed by something you actually did.
           </p>
-
-          {streak && (
-            <div className="bg-t-panel border border-t-line p-4 mb-4">
-              <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-bold text-t-amber-bright">
-                  {streak.current}
-                </span>
-                <span className="text-sm text-t-white">
-                  active {streak.current === 1 ? "day" : "days"}
-                </span>
-                {streak.protected && (
-                  <span className="text-[10px] font-semibold text-t-phos border border-t-phos px-2 py-0.5 ml-auto">
-                    protected
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-t-phos-dim mt-1">{streak.message}</p>
-              {streak.longest > streak.current && (
-                <p className="text-xs text-t-phos-dim mt-1">
-                  Your longest run so far: {streak.longest} days.
-                </p>
-              )}
-            </div>
-          )}
 
           <div className="space-y-2">
             {milestones.map((m) => (
