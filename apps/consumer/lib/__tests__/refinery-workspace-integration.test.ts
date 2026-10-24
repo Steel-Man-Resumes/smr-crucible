@@ -39,7 +39,8 @@ test("the library explicitly asks for oldest-created resumes, with related outpu
  assert.match(core, /created_at ASC, id ASC/);
 });
 test("tour final action uses the same selected-work policy as the workspace", () => {
- const route = read("app/api/onboarding/tour/route.ts");
+ // The tour's writes live in lib/tour/tour-store.ts since the save handler was split out (2026-10-24).
+ const route = read("app/api/onboarding/tour/route.ts") + read("lib/tour/tour-store.ts");
  assert.match(route, /loadSelectedWork\(userId, \{\}, false\)/);
  assert.match(route, /workspaceNextAction\(\{ work/);
  assert.match(route, /jsonb_set/);
