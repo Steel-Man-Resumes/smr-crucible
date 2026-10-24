@@ -6,7 +6,7 @@
  * The database re-derives who the actor is for every access change.
  */
 import { NextResponse } from "next/server";
-import { getOrgAccessOverview, setStaffCapability, inviteOrgStaff, DELEGABLE_CAPABILITIES } from "@crucible/core";
+import { getOrgAccessOverview, setStaffCapability, inviteOrgStaff, applyStaffPreset, DELEGABLE_CAPABILITIES, STAFF_PRESETS } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 import { getOne } from "@crucible/core";
 import { mintInviteMagicLink, buildStaffInviteEmail, sendOrgEmail } from "@/lib/org-invite-email";
@@ -22,6 +22,7 @@ export async function GET() {
   return NextResponse.json({
     members,
     switches: DELEGABLE_CAPABILITIES,
+    presets: Object.entries(STAFF_PRESETS).map(([id, p]) => ({ id, label: p.label, help: p.help })),
     viewer: { userId: guard.actor.userId, role: guard.actor.role, orgName: guard.actor.orgName },
   });
 }
@@ -40,6 +41,15 @@ export async function POST(request: Request) {
     return res.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: res.error }, { status: 403 });
   }
 
+  if (body.action === "apply_preset") {
+    if (!UUID.test(String(body.userId ?? ""))) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    const members = await getOrgAccessOverview(guard.actor);
+    const target = members?.find((m) => m.userId === body.userId);
+    if (!target) return NextResponse.json({ error: "That person is not on your staff." }, { status: 404 });
+    const res = await applyStaffPreset(guard.actor, target.userId, String(body.preset ?? ""), target.role);
+    return res.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: res.error }, { status: 403 });
+  }
+
   if (body.action === "invite_staff") {
     const res = await inviteOrgStaff(guard.actor, {
       name: String(body.name ?? ""), email: String(body.email ?? ""), role: String(body.role ?? "staff"),
@@ -55,7 +65,7 @@ export async function POST(request: Request) {
       const url = await mintInviteMagicLink(res.email, origin);
       await sendOrgEmail(res.email, buildStaffInviteEmail({
         inviteeName: res.name, inviterName: inviter?.name ?? null, orgName: guard.actor.orgName,
-        roleLabel: body.role === "org_admin" ? "an admin" : "staff", url, origin,
+        roleLabel: body.role === "org_admin" ? "an admin" : body.role === "volunteer" ? "a volunteer" : "staff", url, origin,
       }));
     } catch (err) {
       emailed = false;

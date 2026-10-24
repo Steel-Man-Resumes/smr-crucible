@@ -15,6 +15,11 @@ import {
   capabilitiesForRole,
   DELEGABLE_CAPABILITIES,
   isOrgCapability,
+  isStaffPreset,
+  matchesPreset,
+  presetOverrideWrites,
+  STAFF_PRESETS,
+  type StaffPreset,
   type OrgCapability,
   type OrgStaffRole,
 } from "./authz/capabilities";
@@ -38,6 +43,8 @@ export interface OrgAccessMember {
   access: { capability: OrgCapability; on: boolean; fromRole: boolean; override: "grant" | "deny" | null }[];
   /** Can the ACTOR change this person? (not themselves, not the owner, admins only by the owner) */
   editable: boolean;
+  /** A named preset their access currently matches (staff only), or null. */
+  preset: StaffPreset | null;
 }
 
 export async function getOrgAccessOverview(actor: OrgActor): Promise<OrgAccessMember[] | null> {
@@ -94,6 +101,7 @@ export async function getOrgAccessOverview(actor: OrgActor): Promise<OrgAccessMe
         override: mine.find((o) => o.capability === capability)?.effect ?? null,
       })),
       editable: role !== "owner" && p.user_id !== actor.userId && (role !== "org_admin" || actor.role === "owner"),
+      preset: role === "staff" && matchesPreset("volunteer", effective) ? "volunteer" : null,
     };
   });
 }
@@ -139,6 +147,7 @@ export async function inviteOrgStaff(actor: OrgActor, input: { name: string; ema
   if (!canManage(actor)) return { ok: false, error: REFUSALS.refused };
   const email = input.email.toLowerCase().trim();
   const name = input.name.trim();
+  const preset: StaffPreset | null = isStaffPreset(input.role) ? input.role : null;
   const role = input.role === "org_admin" ? "org_admin" : "staff";
   if (role === "org_admin" && actor.role !== "owner") return { ok: false, error: "Only the owner can add an admin." };
   if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "A name and a valid email are needed." };
@@ -160,16 +169,49 @@ export async function inviteOrgStaff(actor: OrgActor, input: { name: string; ema
   const made = await query<{ id: string }>(`INSERT INTO users (name, email, tier) VALUES ($1, $2, 'partner') RETURNING id`, [name, email]);
   userId = made[0].id;
   const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
-  const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+  // A preset is written in the SAME transaction as the staff row, so a
+  // volunteer never exists for a moment with the full staff bundle.
+  const writes = preset ? presetOverrideWrites(preset) : [];
+  const out = await runScoped<[{ id: string }[], ...{ r: string }[][]]>(scopeOf(actor), (sql) => [
     run(sql)(
       `INSERT INTO org_staff (access_code_id, user_id, role, title, created_by, invited_at, invited_email)
        VALUES ($1::uuid, $2::uuid, $3, $4, $5::uuid, now(), $6) RETURNING id`,
-      [actor.orgId, userId, role, input.title?.trim() || null, actor.userId, email]
+      [actor.orgId, userId, role, input.title?.trim() || (preset ? STAFF_PRESETS[preset].label : null), actor.userId, email]
     ),
+    ...writes.map((w) => sql`SELECT smr_set_capability_override(${userId}::uuid, ${w.capability}, ${w.effect}) AS r`),
   ]);
+  const rows = out[0];
+  const presetFailed = writes.length > 0 && out.slice(1).some((r) => (r as { r: string }[])?.[0]?.r !== "ok");
+  if (rows[0] && presetFailed) {
+    // Never leave a volunteer with staff powers: take the row back out.
+    await runScoped(scopeOf(actor), (sql) => [sql`DELETE FROM org_staff WHERE access_code_id = ${actor.orgId}::uuid AND user_id = ${userId}::uuid`]).catch(() => {});
+    await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {});
+    return { ok: false, error: "Could not add them with volunteer settings. Nothing was saved." };
+  }
   if (!rows[0]) {
     await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {}); // just created here, safe to remove
     return { ok: false, error: "Could not add them to your staff." };
   }
   return { ok: true, userId, email, name };
+}
+
+/**
+ * Put one staff member on a preset (today: volunteer). All the exception
+ * writes run in one transaction through smr_set_capability_override, which
+ * re-derives the actor and refuses what it always refuses (yourself, the
+ * owner, an admin unless you are the owner).
+ */
+export async function applyStaffPreset(actor: OrgActor, targetUserId: string, preset: string, targetRole: OrgStaffRole):
+  Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!canManage(actor)) return { ok: false, error: REFUSALS.refused };
+  if (!isStaffPreset(preset)) return { ok: false, error: "That is not a preset." };
+  if (targetRole !== STAFF_PRESETS[preset].role) {
+    return { ok: false, error: "Volunteer settings are for staff. Make them staff first." };
+  }
+  const writes = presetOverrideWrites(preset, targetRole);
+  const out = await runScoped<{ r: string }[][]>(scopeOf(actor), (sql) =>
+    writes.map((w) => sql`SELECT smr_set_capability_override(${targetUserId}::uuid, ${w.capability}, ${w.effect}) AS r`)
+  );
+  const bad = out.map((r) => r?.[0]?.r ?? "refused").find((r) => r !== "ok");
+  return bad ? { ok: false, error: REFUSALS[bad] ?? REFUSALS.refused } : { ok: true };
 }
