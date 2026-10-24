@@ -780,10 +780,11 @@ test("N-15: the org email sender logs no recipient address", () => {
 test("addendum: offers have their own resend (once a day, offer email) and withdraw; ordinary invite paths skip them", () => {
   const core = fs.readFileSync(path.join(REPO, "packages", "core", "src", "orgInvite.ts"), "utf8");
   const resend = core.slice(core.indexOf("export async function touchOrgInviteResend"), core.indexOf("export async function revokeOrgInvite"));
-  const offerBranch = resend.indexOf('if (row.offer_status === "offered")');
+  const offerBranch = resend.indexOf('row.offer_status === "offered"');
   assert.ok(offerBranch > 0 && offerBranch < resend.indexOf("if (!row.pending)"), "before the 'already joined' answer");
   assert.match(resend, /last_sent_at <= now\(\) - make_interval\(hours => \$3\)/);
-  assert.match(resend, /offer: true/);
+  // offer is true only for an open offer (behaviour tested in core orgInvite.test.ts).
+  assert.match(resend, /const offer = row\.offer_status === "offered";[\s\S]*return \{ ok: true, email: row\.email, name: offer \? row\.invited_name \?\? row\.name : row\.name, offer \}/);
   const revoke = core.slice(core.indexOf("export async function revokeOrgInvite"));
   const wBranch = revoke.indexOf('if (row.offer_status === "offered")');
   assert.ok(wBranch > 0 && wBranch < revoke.indexOf("if (!row.pending)"));
@@ -820,4 +821,25 @@ test("BL-4: both leave functions keep the live sharing revocation (054), scoped 
     "UPDATE public.sharing_ack SET ended_at = now() WHERE user_id = p_user AND ended_at IS NULL"]) assert.ok(all.includes(t), t);
   const one = MIGRATION.slice(MIGRATION.indexOf("CREATE OR REPLACE FUNCTION public.smr_leave_org"), MIGRATION.indexOf("-- smr_redeem_code (048), redefined"));
   for (const t of ["sharing_grant", "sharing_request", "sharing_ack"]) assert.match(one, new RegExp(`UPDATE public\\.${t} SET[\\s\\S]*?access_code_id = p_org`), t);
+});
+
+import { parseSeatsInput } from "../access-code-guard";
+test("review 3 N-19 and N-20: mint reads a numeric string, and the admin page shows 0 seats as full", () => {
+  assert.equal(parseSeatsInput("5"), 5);
+  assert.equal(parseSeatsInput(" 12 "), 12);
+  assert.equal(parseSeatsInput(7), 7);
+  assert.equal(parseSeatsInput(""), null);
+  assert.equal(parseSeatsInput(undefined), null);
+  assert.equal(parseSeatsInput(null), null);
+  for (const bad of ["5.5", "5 seats", "-3", true, {}]) {
+    const v = parseSeatsInput(bad);
+    assert.ok(v !== null && !Number.isInteger(v), `refused: ${JSON.stringify(bad)}`);
+  }
+  assert.equal(parseSeatsInput("0"), 0, "0 reaches the range check, which refuses it");
+  const mint = code(read("app", "api", "admin", "access-code", "mint", "route.ts"));
+  assert.match(mint, /const seatsRaw = parseSeatsInput\(maxRedemptions\);/);
+  const page = read("app", "(dashboard)", "dashboard", "admin", "page.tsx");
+  assert.doesNotMatch(page, /json\.accessCode\.max_redemptions\s*\?/, "no truthiness test on seats");
+  assert.match(page, /"0 seats, full"/);
+  assert.doesNotMatch(page, /0 = unlimited/);
 });

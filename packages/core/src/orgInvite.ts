@@ -34,6 +34,9 @@ export interface OrgPendingInvite {
   invitedById: string | null;
 }
 
+/** One refusal for re-adding anyone already on the Invited list (invite or offer). */
+export const ALREADY_INVITED = "That person is already on your invited list. Use Resend there if they need the email again.";
+
 export type CreateOrgInviteResult =
   | {
       ok: true;
@@ -47,6 +50,27 @@ export type CreateOrgInviteResult =
       notify: boolean;
     }
   | { ok: false; error: string };
+
+/**
+ * The Invited list. Open offers to existing accounts (096) are listed with the
+ * new invites and look exactly like them (CRM re-check, SF-8): the name and
+ * email the organization typed, never the account's own name, and one row
+ * shape, so the list never says which addresses already had an account. An
+ * offered person has signed in, so the never-signed-in test alone would hide
+ * the row and staff could neither resend nor withdraw it.
+ * Exported for the test.
+ */
+export const PENDING_INVITE_LIST_SQL = `SELECT oi.user_id,
+            CASE WHEN oi.offer_status = 'offered' THEN oi.invited_name ELSE u.name END AS name,
+            CASE WHEN oi.offer_status = 'offered' THEN COALESCE(oi.invited_email, u.email) ELSE u.email END AS email,
+            oi.invited_at, oi.last_sent_at,
+            oi.send_count, inviter.name AS invited_by_name, oi.invited_by
+       FROM org_invite oi
+       JOIN users u ON u.id = oi.user_id
+       LEFT JOIN users inviter ON inviter.id = oi.invited_by
+      WHERE oi.access_code_id = $1
+        AND (oi.offer_status = 'offered' OR (oi.offer_status IS NULL AND ${PENDING_SQL}))
+      ORDER BY oi.invited_at DESC`;
 
 /** Invites still waiting on a first sign-in (name/email came from the admin). */
 export async function getOrgPendingInvites(
@@ -62,13 +86,7 @@ export async function getOrgPendingInvites(
     invited_by_name: string | null;
     invited_by: string | null;
   }>(
-    `SELECT oi.user_id, u.name, u.email, oi.invited_at, oi.last_sent_at,
-            oi.send_count, inviter.name AS invited_by_name, oi.invited_by
-       FROM org_invite oi
-       JOIN users u ON u.id = oi.user_id
-       LEFT JOIN users inviter ON inviter.id = oi.invited_by
-      WHERE oi.access_code_id = $1 AND ${PENDING_SQL}
-      ORDER BY oi.invited_at DESC`,
+    PENDING_INVITE_LIST_SQL,
     [accessCodeId]
   );
   return rows.map((r) => ({
@@ -107,6 +125,18 @@ export async function createOrgInvite(opts: {
   let userId: string;
 
   if (existing) {
+    // Already on this organization's Invited list, as a new invite or as an
+    // open offer: one answer for both. Without this an invite came back
+    // "already part of your organization" (its shell holds a seat here) while
+    // an offer went through, so re-adding a listed person would tell staff
+    // which one already had an account (SF-8, add path).
+    const listed = await getOne<{ one: number }>(
+      `SELECT 1 AS one FROM org_invite oi JOIN users u ON u.id = oi.user_id
+        WHERE oi.access_code_id = $1 AND oi.user_id = $2
+          AND (oi.offer_status = 'offered' OR (oi.offer_status IS NULL AND ${PENDING_SQL}))`,
+      [opts.accessCodeId, existing.id]
+    );
+    if (listed) return { ok: false, error: ALREADY_INVITED };
     // Is this person already attached somewhere? That is a question about
     // OTHER organizations' membership rows, which row-level security will not
     // show this org -- correctly. Asked as a plain read it would come back
@@ -221,52 +251,75 @@ export function inviteActionAllowed(input: {
 }
 
 /**
+ * ONE resend window and ONE refusal for an invite and an offer (security
+ * review 3, SF-8). Both kinds sit in the same Invited list, so if an offer
+ * waited a day and an invite a minute, two Resend clicks a few minutes apart
+ * would tell staff whether the address already had an account. Both wait the
+ * offer's day (OFFER_WINDOW_HOURS) and answer with the same words.
+ */
+export const RESEND_WINDOW_HOURS = OFFER_WINDOW_HOURS;
+export const RESEND_TOO_SOON = "That invite went out in the last day. You can resend it once a day has passed.";
+export const RESEND_LIMIT_REACHED = "Resend limit reached for this invite. Check the address, or remove and re-add them.";
+const RESEND_JOINED = "They have already joined, so there is no invite to resend.";
+const RESEND_NONE = "There is no open invite to resend.";
+
+/** The row touchOrgInviteResend reads. Exported for its test. */
+export interface ResendRow {
+  email: string;
+  name: string | null;
+  invited_name: string | null;
+  send_count: number;
+  pending: boolean;
+  offer_status: string | null;
+}
+
+/** Database calls touchOrgInviteResend makes; a test passes fakes. */
+export interface ResendDeps {
+  getOne: <T>(sql: string, params?: unknown[]) => Promise<T | null>;
+}
+
+/**
  * Rate-limited resend bookkeeping. Returns the address to send to; the caller
- * mints a fresh magic link and sends.
+ * sends the offer email (offer: true) or mints a fresh magic link.
  */
 export async function touchOrgInviteResend(
   accessCodeId: string,
-  userId: string
+  userId: string,
+  deps: ResendDeps = { getOne }
 ): Promise<{ ok: true; email: string; name: string | null; offer: boolean } | { ok: false; error: string }> {
-  const row = await getOne<{ email: string; name: string | null; invited_name: string | null; last_sent_at: string; send_count: number; pending: boolean; offer_status: string | null }>(
-    `SELECT u.email, u.name, oi.invited_name, oi.last_sent_at, oi.send_count, ${PENDING_SQL} AS pending, oi.offer_status
+  const row = await deps.getOne<ResendRow>(
+    `SELECT u.email, u.name, oi.invited_name, oi.send_count, ${PENDING_SQL} AS pending, oi.offer_status
        FROM org_invite oi JOIN users u ON u.id = oi.user_id
       WHERE oi.access_code_id = $1 AND oi.user_id = $2`,
     [accessCodeId, userId]
   );
   if (!row) return { ok: false, error: "No invite found for that person." };
-  // An open OFFER to an existing account (096): its own resend, at most once
-  // a day (OFFER_WINDOW_HOURS), never a sign-in link. The caller sends the
-  // offer email. Answered offers are not resendable.
-  if (row.offer_status === "offered") {
-    if (Number(row.send_count) >= 10) {
-      return { ok: false, error: "Resend limit reached for this invite. Check the address, or remove and re-add them." };
-    }
-    const touched = await getOne<{ ok: boolean }>(
-      `UPDATE org_invite SET last_sent_at = NOW(), send_count = send_count + 1
-        WHERE access_code_id = $1 AND user_id = $2 AND offer_status = 'offered'
-          AND last_sent_at <= now() - make_interval(hours => $3)
-          AND EXISTS (SELECT 1 FROM users u WHERE u.id = $2)
-        RETURNING true AS ok`,
-      [accessCodeId, userId, OFFER_WINDOW_HOURS]
-    );
-    if (!touched) return { ok: false, error: "That invite went out in the last day. They can answer it when they sign in." };
-    return { ok: true, email: row.email, name: row.invited_name ?? row.name, offer: true };
+  // An open OFFER to an existing account (096) is checked FIRST: that person
+  // has signed in, so the pending test below would call them joined. It gets
+  // the offer email, never a sign-in link. A joined offer answers like a
+  // joined invite; a declined or withdrawn one has nothing open.
+  const offer = row.offer_status === "offered";
+  if (!offer) {
+    if (row.offer_status === "joined") return { ok: false, error: RESEND_JOINED };
+    if (row.offer_status) return { ok: false, error: RESEND_NONE };
+    if (!row.pending) return { ok: false, error: RESEND_JOINED };
   }
-  if (row.offer_status) return { ok: false, error: "There is no open invite to resend." };
-  if (!row.pending) return { ok: false, error: "They have already joined, so there is no invite to resend." };
-  if (Number(row.send_count) >= 10) {
-    return { ok: false, error: "Resend limit reached for this invite. Check the address, or remove and re-add them." };
-  }
-  if (Date.now() - new Date(row.last_sent_at).getTime() < 60_000) {
-    return { ok: false, error: "That invite just went out. Give it a minute before resending." };
-  }
-  await query(
-    `UPDATE org_invite SET last_sent_at = NOW(), send_count = send_count + 1
-      WHERE access_code_id = $1 AND user_id = $2`,
-    [accessCodeId, userId]
+  if (Number(row.send_count) >= 10) return { ok: false, error: RESEND_LIMIT_REACHED };
+  // The window is checked inside the write, so two quick clicks cannot both
+  // pass, and an invitee who signs in between the read and the write is not
+  // sent another link.
+  const touched = await deps.getOne<{ ok: boolean }>(
+    `UPDATE org_invite oi SET last_sent_at = NOW(), send_count = oi.send_count + 1
+      WHERE oi.access_code_id = $1 AND oi.user_id = $2
+        AND oi.last_sent_at <= now() - make_interval(hours => $3)
+        AND (oi.offer_status = 'offered'
+             OR (oi.offer_status IS NULL
+                 AND EXISTS (SELECT 1 FROM users u WHERE u.id = oi.user_id AND ${PENDING_SQL})))
+      RETURNING true AS ok`,
+    [accessCodeId, userId, RESEND_WINDOW_HOURS]
   );
-  return { ok: true, email: row.email, name: row.name, offer: false };
+  if (!touched) return { ok: false, error: RESEND_TOO_SOON };
+  return { ok: true, email: row.email, name: offer ? row.invited_name ?? row.name : row.name, offer };
 }
 
 /**
