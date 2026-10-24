@@ -30,3 +30,24 @@ DO $$ BEGIN
   GRANT SELECT, INSERT, UPDATE, DELETE ON tailor_batch_claim TO smr_app;
  END IF;
 END $$;
+
+-- Retention: a result that never saved (or a try that failed or was abandoned)
+-- is kept at most 7 days, then deleted with its encrypted copy. Same owner-side
+-- pattern as 087's purge_finished_ai_operations: the daily purge cron calls it,
+-- the application role only chooses the age (7 days minimum). Saved claims hold
+-- no document content and stay as the batch's idempotency record.
+CREATE OR REPLACE FUNCTION public.purge_stale_tailor_claims(keep_days integer) RETURNS integer
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+DECLARE n integer;
+BEGIN
+  IF keep_days IS NULL OR keep_days < 7 THEN RAISE EXCEPTION 'purge keeps at least 7 days'; END IF;
+  DELETE FROM public.tailor_batch_claim WHERE status <> 'saved' AND claimed_at < now() - make_interval(days => keep_days);
+  GET DIAGNOSTICS n = ROW_COUNT;
+  RETURN n;
+END $$;
+REVOKE ALL ON FUNCTION public.purge_stale_tailor_claims(integer) FROM PUBLIC;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+    GRANT EXECUTE ON FUNCTION public.purge_stale_tailor_claims(integer) TO smr_app;
+  END IF;
+END $$;
