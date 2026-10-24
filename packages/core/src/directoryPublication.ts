@@ -72,7 +72,7 @@ export function resolvePublishedEmployerAlias(source:string,externalId:string){
 }
 export const RESOURCE_FIELDS=RESOURCE_BAND_FIELDS;
 /** Resources for a place. bands defaults to ['A'] (the checked publication); 'B' and 'C' add the listed and found layers, best first. */
-export function searchVerifiedResources(opts:ResourcePlaceQuery&{bands?:readonly ResourceBand[]}) {
+export function searchVerifiedResources(opts:ResourcePlaceQuery&{bands?:readonly ResourceBand[];page?:number|null;pageSize?:number|null}) {
  return publicationRead<PublishedResource[]>([],async()=>{
  const {sql,params}=resourceBandSql(opts);if(!(params[0] as string[]).length)return [];
  return query<PublishedResource>(sql,params);
