@@ -2,10 +2,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { generateOrgCode, ORG_CODE_ALPHABET, ORG_CODE_LENGTH } from "../orgCode";
 import {
-  generateOrgCode,
-  ORG_CODE_ALPHABET,
-  ORG_CODE_LENGTH,
   NEW_ORG_DAILY_LIMIT,
   validateCreateOrgInput,
   validateSeatsToAdd,

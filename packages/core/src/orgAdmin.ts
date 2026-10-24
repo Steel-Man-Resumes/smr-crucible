@@ -22,13 +22,11 @@
  * or mint a partner-tier code (a partner code raises every participant to
  * partner tier).
  */
-import { randomBytes } from "node:crypto";
 import { getOne, runAsUser } from "./db";
 import { emitEvent } from "./events";
+// One code generator for every org code (also used by the mint route).
+import { generateOrgCode } from "./orgCode";
 
-/** No I, O, 0 or 1: a code read aloud or copied by hand should survive it. */
-export const ORG_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-export const ORG_CODE_LENGTH = 12;
 /**
  * A seat code minted at 30 a day keeps the new-account progression caps for
  * its members: progressionAccount treats any other daily limit as a legacy
@@ -36,21 +34,6 @@ export const ORG_CODE_LENGTH = 12;
  */
 export const NEW_ORG_DAILY_LIMIT = 30;
 export const MAX_SEATS_PER_ACTION = 1000;
-
-/** Random, unbiased (rejection sampling), from the alphabet above. */
-export function generateOrgCode(length = ORG_CODE_LENGTH, bytes: (n: number) => Buffer = randomBytes): string {
-  const n = ORG_CODE_ALPHABET.length; // 32 divides 256, but keep the rejection step honest if it changes
-  const limit = 256 - (256 % n);
-  let out = "";
-  while (out.length < length) {
-    for (const b of bytes(length * 2)) {
-      if (b >= limit) continue;
-      out += ORG_CODE_ALPHABET[b % n];
-      if (out.length === length) break;
-    }
-  }
-  return out;
-}
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
