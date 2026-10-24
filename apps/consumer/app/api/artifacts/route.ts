@@ -46,6 +46,9 @@ const ALLOWED_ARTIFACT_TYPES: ArtifactType[] = [
   "cover_letter",
   "follow_up",
   "disclosure_plan",
+  // Hurdle planner plans with no record section (migration 098). Not linked to
+  // an application and never counted as the disclosure plan.
+  "hurdle_plan",
   "interview_prep",
   "resource_list",
   "job_match",
