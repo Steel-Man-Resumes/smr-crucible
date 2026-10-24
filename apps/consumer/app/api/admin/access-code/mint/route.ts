@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createAccessCode } from "@crucible/core";
 import { requirePlatformAdmin } from "@/lib/org-guard";
-import { mintCodeChoice } from "@/lib/access-code-guard";
+import { mintCodeChoice, parseSeatsInput } from "@/lib/access-code-guard";
 
 export async function POST(req: Request) {
   const guard = await requirePlatformAdmin();
@@ -25,7 +25,9 @@ export async function POST(req: Request) {
   // Seats the database's way (orgCode.ts seatsFull): empty or null = no
   // limit; otherwise a whole number of at least 1. A 0 would be a code nobody
   // can ever use, so it is refused rather than stored.
-  const seatsRaw = maxRedemptions === undefined || maxRedemptions === "" ? null : maxRedemptions;
+  // A form may send the number as a string ("5"); a plain whole-number
+  // string is read as that number (review 3, N-20). Anything else is refused.
+  const seatsRaw = parseSeatsInput(maxRedemptions);
   if (seatsRaw !== null && !(Number.isInteger(seatsRaw) && seatsRaw >= 1 && seatsRaw <= 100000)) {
     return NextResponse.json({ error: "Seats must be a whole number of at least 1, or empty for no limit." }, { status: 400 });
   }

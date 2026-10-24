@@ -58,15 +58,21 @@ export default function AdminEvidenceDashboard() {
           partnerName: mintForm.partnerName.trim(),
           dailyLimit: parseInt(mintForm.dailyLimit) || 200,
           tier: mintForm.tier === "partner" ? "partner" : "client",
-          // Seats = durable redemptions. Blank/0 = unlimited seats.
-          maxRedemptions: parseInt(mintForm.seats) > 0 ? parseInt(mintForm.seats) : null,
+          // Seats = durable redemptions. Blank = no limit. Any number is a cap
+          // (0 would be full, so mint refuses it with a message).
+          maxRedemptions: mintForm.seats.trim() === "" ? null : Number(mintForm.seats),
         }),
       });
       const json = await res.json();
       if (res.ok) {
-        const seatsLabel = json.accessCode.max_redemptions
-          ? `${json.accessCode.max_redemptions} seats`
-          : "unlimited seats";
+        // null = no limit; any number, 0 included, is a cap (orgCode.ts seatsFull).
+        const max = json.accessCode.max_redemptions;
+        const seatsLabel =
+          max === null || max === undefined
+            ? "no seat limit"
+            : Number(max) === 0
+              ? "0 seats, full"
+              : `${max} seats`;
         setMintMsg(
           `Code ${json.accessCode.code} created for ${json.accessCode.partner_name} (${json.accessCode.tier}, ${seatsLabel}, ${json.accessCode.daily_limit}/day each)`
         );
@@ -161,11 +167,11 @@ export default function AdminEvidenceDashboard() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-t-phos-dim block mb-1">Seats (blank or 0 = unlimited)</label>
+            <label className="text-xs text-t-phos-dim block mb-1">Seats (blank = no limit)</label>
             <input
               className="w-full border border-t-line bg-t-panel-2 text-t-white px-3 py-2 text-sm focus:border-t-amber focus:outline-none"
               type="number"
-              min="0"
+              min="1"
               value={mintForm.seats}
               onChange={(e) => setMintForm((f) => ({ ...f, seats: e.target.value }))}
             />

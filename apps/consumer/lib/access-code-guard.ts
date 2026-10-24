@@ -69,3 +69,16 @@ export function mintCodeChoice(body: { code?: unknown; confirmChosenCode?: unkno
   if (!CODE_SHAPE.test(raw)) return { ok: false, error: "code must be 4-20 uppercase alphanumeric characters" };
   return { ok: true, code: raw, chosen: true };
 }
+
+/**
+ * Seats as sent to mint. Empty (undefined, null, "") = no limit, returned as
+ * null. A number, or a plain whole-number string such as "5" (review 3,
+ * N-20), is returned as that number. Anything else comes back as NaN, so the
+ * mint route's range check refuses it, as it refuses 0, negatives and 5.5.
+ */
+export function parseSeatsInput(raw: unknown): number | null {
+  if (raw === undefined || raw === null || raw === "") return null;
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string" && /^\s*\d{1,6}\s*$/.test(raw)) return Number(raw.trim());
+  return Number.NaN;
+}
