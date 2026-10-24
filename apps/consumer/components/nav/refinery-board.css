@@ -18,13 +18,13 @@
 .refinery-board .board-dot {
   position: relative; z-index: 1; flex: none; margin-top: 9px;
   display: grid; place-items: center; width: 24px; height: 24px; border-radius: 999px;
-  border: 2px solid var(--t-line-strong); background: var(--t-panel); color: var(--t-bone-dim);
+  border: 2px solid var(--t-bone-dim); background: var(--t-panel); color: var(--t-bone-dim);
 }
 .refinery-board .board-dot-num { font: 600 10px/1 var(--t-mono); }
 .refinery-board .board-dot[data-tone="completed"] { border-color: var(--t-phos); color: var(--t-phos); }
 .refinery-board .board-dot[data-tone="open"] { border-color: var(--t-amber); color: var(--t-white); }
 .refinery-board .board-dot[data-tone="early"] { border-color: var(--t-amber-bright); border-style: dashed; color: var(--t-amber-bright); }
-.refinery-board .board-dot[data-tone="locked"] { border-color: var(--t-line-strong); color: var(--t-bone-dim); opacity: .85; }
+.refinery-board .board-dot[data-tone="locked"] { border-color: var(--t-bone-dim); border-style: dotted; color: var(--t-bone-dim); }
 .refinery-board .board-dot[data-tone="current"] {
   border-color: var(--t-amber-bright); background: var(--t-amber); color: #121110;
   box-shadow: 0 0 0 3px rgba(219, 193, 115, .22), 0 0 14px rgba(219, 193, 115, .45);
@@ -70,15 +70,22 @@
 }
 .board-strip ol { position: relative; display: flex; height: 56px; align-items: center; justify-content: space-between; margin: 0; padding: 0 16px; list-style: none; }
 .board-strip ol::before { content: ""; position: absolute; left: 30px; right: 30px; top: 50%; height: 2px; background: var(--t-line); pointer-events: none; }
-.board-strip li { position: relative; z-index: 1; display: flex; }
-.board-strip button { display: flex; align-items: center; gap: 6px; min-width: 32px; min-height: 44px; justify-content: center; color: var(--t-bone-dim); }
-.board-strip .strip-dot { display: block; width: 12px; height: 12px; border-radius: 999px; border: 2px solid var(--t-line-strong); background: var(--t-panel); }
+.board-strip li { position: relative; z-index: 1; display: flex; min-width: 0; }
+.board-strip li:has([aria-current]) { flex: 0 1 auto; }
+.board-strip button { display: flex; align-items: center; gap: 6px; min-width: 32px; max-width: 100%; min-height: 44px; justify-content: center; color: var(--t-bone-dim); }
+.board-strip .strip-dot { display: block; flex: none; width: 12px; height: 12px; border-radius: 999px; border: 2px solid var(--t-bone-dim); background: var(--t-panel); }
+.board-strip [data-tone="locked"] .strip-dot { border-radius: 2px; border-style: dotted; }
 .board-strip [data-tone="completed"] .strip-dot { border-color: var(--t-phos); background: var(--t-phos); }
 .board-strip [data-tone="open"] .strip-dot { border-color: var(--t-amber); }
 .board-strip [data-tone="early"] .strip-dot { border-color: var(--t-amber-bright); border-style: dashed; }
 .board-strip [aria-current] .strip-dot { width: 16px; height: 16px; border-color: var(--t-amber-bright); background: var(--t-amber); box-shadow: 0 0 10px rgba(219, 193, 115, .55); }
-.board-strip .strip-label { padding: 2px 6px; font: 600 11px/1.2 var(--t-mono); color: var(--t-amber-bright); background: var(--t-panel); white-space: nowrap; }
+.board-strip .strip-label { min-width: 0; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; padding: 2px 6px; font: 600 11px/1.2 var(--t-mono); color: var(--t-amber-bright); background: var(--t-panel); white-space: nowrap; }
 @media (min-width: 768px) { .board-strip { display: none; } }
+/* Below md the page ends above the strip, so nothing in flow at the bottom
+   (t.ROY's button below 640px) can paint over or steal taps from it. */
+@media (max-width: 767px) {
+  .refinery-app[data-board-strip] { padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+}
 /* Keep t.ROY's corner button clear of the strip where it floats (640-767px). */
 @media (min-width: 640px) and (max-width: 767px) {
   .refinery-app[data-board-strip] #refinery-coach-trigger { bottom: calc(68px + env(safe-area-inset-bottom, 0px)); }

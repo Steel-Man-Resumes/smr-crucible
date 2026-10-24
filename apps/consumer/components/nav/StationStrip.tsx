@@ -7,7 +7,6 @@
  */
 import { STATIONS, stationStatus, stripCurrentStation, type StationId } from "@/lib/refinery-nav";
 import type { ProgressStep, ProgressStepId } from "@/lib/progression-ui";
-import "./refinery-board.css";
 
 export function StationStrip({ pathname, steps, currentStepId, onOpen, expanded }: {
   pathname: string;
@@ -25,13 +24,13 @@ export function StationStrip({ pathname, steps, currentStepId, onOpen, expanded 
           const isCurrent = station.id === current;
           return (
             <li key={station.id} data-tone={status.tone}>
-              <button type="button" className="t-focus" onClick={() => onOpen(station.id)}
+              <button type="button" className="t-focus" data-strip-station={station.id} onClick={() => onOpen(station.id)}
                 aria-current={isCurrent ? "location" : undefined}
                 aria-expanded={expanded}
                 aria-controls="refinery-mobile-navigation"
                 aria-label={`Station ${index + 1}, ${station.label}${status.step ? `, ${status.tone === "completed" ? "completed" : status.tone === "locked" ? "locked" : status.tone === "early" ? "early access" : status.tone === "current" ? "recommended now" : "available"}` : ""}. Open the path here.`}>
                 <span className="strip-dot" aria-hidden="true" />
-                {isCurrent ? <span className="strip-label" aria-hidden="true">{station.label}</span> : null}
+                {isCurrent ? <span className="strip-label" aria-hidden="true">{station.short}</span> : null}
               </button>
             </li>
           );

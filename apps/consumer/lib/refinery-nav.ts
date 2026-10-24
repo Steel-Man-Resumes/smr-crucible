@@ -35,6 +35,8 @@ export interface Station extends BoardLink {
   navId: string;
   /** Short words under the label: what this part of the process is for. */
   blurb: string;
+  /** One word for the mobile strip, where seven stations share a phone's width. */
+  short: string;
   /** Progression steps whose state this station shows, in order. */
   steps: readonly ProgressStepId[];
   /** Steps that make this station the current one (a superset of `steps`). */
@@ -45,17 +47,17 @@ export interface Station extends BoardLink {
 const C = { minTier: "client", minState: "needs_profile" } as const;
 
 export const STATIONS: readonly Station[] = [
-  { id: "overview", navId: "refinery-nav-overview", href: "/dashboard", label: "Overview", blurb: "Where you are and what is next",
+  { id: "overview", short: "Overview", navId: "refinery-nav-overview", href: "/dashboard", label: "Overview", blurb: "Where you are and what is next",
     minTier: "observer", minState: "needs_profile", steps: [], currentFor: [],
     children: [{ href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "needs_profile" }] },
-  { id: "find", navId: "refinery-nav-find", legacyId: "refinery-nav-jobs", href: "/dashboard/jobs", label: "Find work", blurb: "Pick a real job worth going after",
+  { id: "find", short: "Find", navId: "refinery-nav-find", legacyId: "refinery-nav-jobs", href: "/dashboard/jobs", label: "Find work", blurb: "Pick a real job worth going after",
     ...C, steps: ["direction"], currentFor: ["direction"],
     children: [
       { href: "/dashboard/jobs", label: "Jobs", ...C },
       { href: "/dashboard/paths", label: "Explore paths", ...C },
       { href: "/dashboard/employers", label: "Employers", ...C },
     ] },
-  { id: "tailor", navId: "refinery-nav-tailor", legacyId: "refinery-nav-resumes", href: "/dashboard/vault", label: "Tailor and package", blurb: "Your resumes, fitted to the job",
+  { id: "tailor", short: "Tailor", navId: "refinery-nav-tailor", legacyId: "refinery-nav-resumes", href: "/dashboard/vault", label: "Tailor and package", blurb: "Your resumes, fitted to the job",
     ...C, steps: ["foundation", "tailor"], currentFor: ["foundation", "tailor"],
     children: [
       { href: "/dashboard/master", label: "Master Draft", ...C },
@@ -65,17 +67,17 @@ export const STATIONS: readonly Station[] = [
       { href: "/dashboard/cv", label: "CV", ...C },
       { href: "/dashboard/performer", label: "Performer page", ...C },
     ] },
-  { id: "plan", navId: "refinery-nav-plan", href: "/dashboard/disclosure", label: "Plan what to say", blurb: "Your record, in your own words",
+  { id: "plan", short: "Plan", navId: "refinery-nav-plan", href: "/dashboard/disclosure", label: "Plan what to say", blurb: "Your record, in your own words",
     ...C, steps: [], currentFor: [],
     children: [
       { href: "/dashboard/disclosure", label: "Disclosure plan", ...C },
       { href: "/dashboard/documents", label: "Private records and documents", ...C },
     ] },
-  { id: "practice", navId: "refinery-nav-practice", legacyId: "refinery-nav-interview", href: "/dashboard/interview", label: "Practice", blurb: "Interview practice when the time is right",
+  { id: "practice", short: "Practice", navId: "refinery-nav-practice", legacyId: "refinery-nav-interview", href: "/dashboard/interview", label: "Practice", blurb: "Interview practice when the time is right",
     ...C, steps: ["interview"], currentFor: ["interview"], children: [] },
-  { id: "apply", navId: "refinery-nav-apply", legacyId: "refinery-nav-applications", href: "/dashboard/applications", label: "Apply and track", blurb: "Send it, then keep track",
+  { id: "apply", short: "Apply", navId: "refinery-nav-apply", legacyId: "refinery-nav-applications", href: "/dashboard/applications", label: "Apply and track", blurb: "Send it, then keep track",
     ...C, steps: ["apply"], currentFor: ["apply", "offer"], children: [] },
-  { id: "next", navId: "refinery-nav-next", legacyId: "refinery-nav-support", href: "/dashboard/next", label: "What comes next", blurb: "School, money, health, the rest of life",
+  { id: "next", short: "Next", navId: "refinery-nav-next", legacyId: "refinery-nav-support", href: "/dashboard/next", label: "What comes next", blurb: "School, money, health, the rest of life",
     ...C, steps: [], currentFor: [],
     children: [{ href: "/dashboard/resources", label: "Local help", ...C }] },
 ];
@@ -174,6 +176,8 @@ export interface StationStatus {
   /** Lit as the server's current step. */
   current: boolean;
   completed: boolean;
+  /** The station carries more than one step, so its status line names the step. */
+  named?: boolean;
 }
 
 /**
@@ -188,11 +192,15 @@ export function stationStatus(station: Station, steps: readonly ProgressStep[] |
   if (!own.length) return { tone: current ? "current" : "plain", step: null, current, completed: false };
   const completed = own.every((s) => s.state === "completed");
   const step = own.find((s) => s.state !== "completed") ?? own[own.length - 1];
+  // Locked only when nothing on the station is open: a finished step (Tailor
+  // and package's starting resume) keeps its links open even while the next
+  // step there is locked.
+  const allLocked = own.every((s) => s.access === "locked" && s.state !== "completed");
   const tone: StationTone = current && !completed ? "current"
     : completed ? "completed"
-    : step.access === "locked" ? "locked"
+    : allLocked ? "locked"
     : step.access === "early" ? "early" : "open";
-  return { tone, step, current, completed };
+  return { tone, step, current, completed, named: own.length > 1 };
 }
 
 /**

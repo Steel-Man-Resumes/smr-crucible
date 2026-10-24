@@ -59,6 +59,7 @@ import { ProgressionProvider, useProgression } from "@/components/progression/Pr
 import type { BoardLink, StationId } from "@/lib/refinery-nav";
 import { RefineryBoard } from "@/components/nav/RefineryBoard";
 import { StationStrip } from "@/components/nav/StationStrip";
+import "@/components/nav/refinery-board.css";
 import { useServerSwitches } from "@/components/ServerSwitches";
 
 /**
@@ -304,6 +305,8 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   // The mobile strip opens the drawer at one station (expanded and focused).
   const [drawerStation, setDrawerStation] = useState<StationId | null>(null);
+  // Closing a drawer opened from a strip dot returns focus to that dot.
+  const stripReturn = useRef<StationId | null>(null);
   const navTrigger = useRef<HTMLButtonElement>(null);
   const navPanel = useRef<HTMLDivElement>(null);
   const [signingOut, setSigningOut] = useState(false);
@@ -350,7 +353,11 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       document.body.style.overflow = previousOverflow;
       document.removeEventListener("keydown", handleKey);
       window.removeEventListener("resize", closeOnDesktop);
-      if (!document.documentElement.dataset.guidedLearning) navTrigger.current?.focus();
+      if (!document.documentElement.dataset.guidedLearning) {
+        const dot = stripReturn.current ? document.querySelector<HTMLElement>(`[data-strip-station="${stripReturn.current}"]`) : null;
+        stripReturn.current = null;
+        (dot ?? navTrigger.current)?.focus();
+      }
     };
   }, [drawerOpen]);
   useEffect(() => {
@@ -929,7 +936,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
           steps={progression?.data?.steps ?? null}
           currentStepId={progression?.data?.currentStepId ?? null}
           expanded={drawerOpen}
-          onOpen={(station) => { setDrawerStation(station); setDrawerOpen(true); }}
+          onOpen={(station) => { stripReturn.current = station; setDrawerStation(station); setDrawerOpen(true); }}
         />
       )}
 

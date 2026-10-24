@@ -21,7 +21,7 @@ import {
 import type { UserTier } from "@/lib/useUserTier";
 import type { OnboardingState } from "@/lib/useOnboarding";
 import { SteelManMeter } from "@/components/steelman/SteelManMeter";
-import "./refinery-board.css";
+// Styles: components/nav/refinery-board.css, imported by RefineryShell (keeps this file renderable in tests).
 
 export interface RefineryBoardProps {
   userTier: UserTier;
@@ -100,7 +100,7 @@ export function RefineryBoard(props: RefineryBoardProps) {
       <span className="min-w-0 flex-1">
         <span className="block">{label}</span>
         {header && !stepLine && header.blurb ? <span className="board-sub">{header.blurb}</span> : null}
-        {stepLine ? <span className="board-sub">{a.guidedLocked && a.directAccess ? "Guided step: " : ""}{progressStateLabel(stepLine)}</span> : null}
+        {stepLine ? <span className="board-sub">{a.guidedLocked && a.directAccess ? "Guided step: " : ""}{header && opts.status?.named ? `${stepLine.label}: ` : ""}{progressStateLabel(stepLine)}</span> : null}
         {!a.unlocked ? <span className="board-sub board-lock-line">{a.lockLine}</span> : null}
         {a.guidedLocked && !a.directAccess ? <span className="board-sub board-ask-hint"><LockKeyhole size={10} aria-hidden="true" className="mr-1 inline" />{ASK_TROY_ACTION}. {ASK_TROY_HINT}</span> : null}
       </span>
