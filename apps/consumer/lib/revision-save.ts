@@ -29,6 +29,7 @@ import { resumeTextToDocument } from "./revision-to-doc";
 import { readMarker, withRevisionMarker } from "./revision-marker";
 import { CREDENTIALS_KEY } from "./forge-path";
 import { artifactText, ensureExportRevision } from "./revision-current";
+import { personEvidenceLines } from "./person-evidence";
 
 export interface ArtifactLite {
   id: string;
@@ -56,6 +57,11 @@ export interface RevisionStore {
   serverSource?(userId: string, keepInsideLines: boolean, recordChoice?: RecordChoice): Promise<WriterSource | null>;
   /** Every saved version of one of the person's resumes (Phase 6 S1 round 3: its lineage). The real store always has it. */
   listRevisions?(userId: string, artifactId: string): Promise<ArtifactRevision[]>;
+  /**
+   * Fix lane check: what the person already gave (lib/person-evidence.ts): confirmed Master Draft details and
+   * the lines of their other finished resumes. Never the resume being checked. The real store always has it.
+   */
+  personEvidence?(userId: string, excludeArtifactId: string): Promise<string[]>;
 }
 
 /** What the page is told about a saved revision. */
@@ -322,6 +328,13 @@ export async function coreStore(selection: { laneId?: string | null } = {}): Pro
       newestNonce: await core.newestWriterReceiptNonce(userId, runId),
       linked: await core.runBelongsTo(userId, runId),
     }),
+    personEvidence: async (userId, excludeArtifactId) => {
+      const [master, revisions] = await Promise.all([
+        core.getOneAsUser<{ master: unknown }>(userId, "SELECT profile_data->'masterDraft' AS master FROM consumer_profile WHERE user_id=$1", [userId]),
+        core.exportRevisions(userId, 500),
+      ]);
+      return personEvidenceLines(master?.master, revisions, excludeArtifactId);
+    },
     // The person's stored upload and typed answers (consumer_profile), worked
     // out the same way the writer's inputs are.
     serverSource: async (userId, keepInsideLines, recordChoice) => {

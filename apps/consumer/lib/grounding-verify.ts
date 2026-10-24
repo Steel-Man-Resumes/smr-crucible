@@ -25,6 +25,7 @@ import { recordTokenUsage } from "@/lib/ai-usage-log";
 import { VERIFY_MAX } from "@/lib/limits";
 import { onlyRewordedFrom, onlySupervisionUnsupported } from "@/lib/fact-trace";
 import { sourceExplicitlySupportsSkill } from "@/lib/skill-source";
+import { claimInEvidence } from "@/lib/evidence-claim";
 
 /**
  * Build the TRUSTED SOURCE for grounding verification -- the single canonical
@@ -344,6 +345,9 @@ ${output.slice(0, MAX_VERIFY_CHARS)}
   };
   const factFlags = graded.filter(
     (f) =>
+      // Fix lane check (Valjean defect 6): a claim the person's own words already state, word for word under
+      // the same job, or their own job's exact dates beside its employer, is never a flag (lib/evidence-claim.ts).
+      !claimInEvidence(f.claim, output, source) &&
       !(f.kind === "wording" && !truncated && flagSource(f.claim) !== null && onlyRewordedFrom(f.claim, flagSource(f.claim)!)) &&
       !(askSupervision && f.kind === "supervision" && flagSource(f.claim) !== null && onlySupervisionUnsupported(f.claim, flagSource(f.claim)!))
   );

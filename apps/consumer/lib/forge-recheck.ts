@@ -43,6 +43,7 @@
  */
 
 import { recordChoiceFrom } from "./record-choice";
+import { withPersonEvidence } from "./person-evidence";
 import { buildTrustedSource } from "./grounding-verify";
 import type { verifyGrounding as VerifyFn } from "./grounding-verify";
 import { accountFlags } from "./grounding-accounting";
@@ -272,7 +273,10 @@ async function recheckArtifact(b: Record<string, unknown>, userId: string | null
       : store.serverSource
         ? await store.serverSource(userId, false)
         : null;
-  const source: WriterSource = held ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] };
+  // Fix lane check (Valjean defects 3 and 6): what the person already gave counts as their words here too:
+  // confirmed Master Draft details and the lines of their other finished resumes (lib/person-evidence.ts).
+  const given = store.personEvidence ? await store.personEvidence(userId, art.id).catch(() => []) : [];
+  const source: WriterSource = withPersonEvidence(held ?? { ownWords: "", ownResumeText: "", credentialsAnswer: "", credentialRows: [] }, given);
   const answers = [
     ...(baseInput?.defendAnswers ?? []).map((a) => a.answer),
     ...(baseInput?.confirmedCredentials ?? []).map((c) => c.text),
