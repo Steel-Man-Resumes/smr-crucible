@@ -44,6 +44,14 @@ test('public bands default to A, keep place and bands as parameters, and cap eac
  // Every bound parameter is referenced (an unused one has no type and Postgres refuses the query: live 2026-10-18).
  assert.deepEqual(whole.params,[['food'],'MT',['A','B','C'],50]);assert.match(whole.sql,/band = ANY\(\$3::text\[\]\)/);assert.match(whole.sql,/r\.rn <= \$4/);
  for(const x of [whole,resourceBandSql({state:null,areas:['food']})]){const used=new Set((x.sql.match(/\$\d+/g)||[]).map(m=>Number(m.slice(1))));for(let i=1;i<=x.params.length;i++)assert.ok(used.has(i),`$${i} bound but unused`);}
+ // Paged state read (2026-10-24): walks the whole list, no per-level cap, same order; unchanged without page.
+ const pg=resourceBandSql({state:'MI',areas:['food'],wholeState:true,bands:['A','B','C'],page:3,pageSize:200});
+ assert.doesNotMatch(pg.sql,/row_number|rn <=/);assert.match(pg.sql,/LIMIT \$4 OFFSET \$5/);assert.deepEqual(pg.params,[['food'],'MI',['A','B','C'],200,400]);
+ assert.match(pg.sql,/ORDER BY band,\s+CASE geo_scope[\s\S]*last_checked DESC, org_name, service_id/);
+ const used=new Set((pg.sql.match(/\$\d+/g)||[]).map(m=>Number(m.slice(1))));for(let i=1;i<=pg.params.length;i++)assert.ok(used.has(i),`$${i} bound but unused`);
+ assert.equal(resourceBandSql({state:'MI',areas:['food'],wholeState:true,bands:['A'],page:1,pageSize:9999}).params.at(-2),200);
+ for(const bad of [{page:0},{page:-1},{page:1.5},{page:NaN},{page:61},{page:null},{}])assert.match(resourceBandSql({state:'MI',areas:['food'],wholeState:true,bands:['A'],...bad}).sql,/PARTITION BY m\.band/,'unpaged keeps the cap: '+JSON.stringify(bad));
+ assert.match(resourceBandSql({state:'MI',areas:['food'],countyKeys:['kent'],bands:['A'],page:1}).sql,/PARTITION BY m\.band/);
  // The app read (resource_app_v) is unchanged by the refactor: same text shape and parameter order.
  const app=resourceAppSql({state:'MT',areas:['food'],countyKeys:['lincoln'],cityKey:'libby',zip:'59923'});
  assert.match(app.sql,/FROM resource_app_v/);assert.deepEqual(app.params,[['food'],'MT',['lincoln'],'libby','59923',50]);assert.doesNotMatch(app.sql,/band/);
