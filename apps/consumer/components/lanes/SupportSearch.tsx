@@ -115,6 +115,23 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     if (initialLocation) setLocation((l) => l || initialLocation);
   }, [initialLocation]);
 
+  // A deep link (What comes next) picks the kind of help: ?category=education.
+  // Only the categories this search offers are taken; anything else is ignored.
+  // With a saved place it searches once, so the card lands on answers.
+  const [deepLinked, setDeepLinked] = useState(false);
+  useEffect(() => {
+    const wanted = new URL(window.location.href).searchParams.get("category");
+    if (wanted && wanted !== "all" && SUPPORT_CATEGORIES.some((c) => c.id === wanted)) { setCategory(wanted); setDeepLinked(true); }
+  }, []);
+  useEffect(() => {
+    // The saved place only: typing a place never fires a search by itself.
+    const place = location.trim() || initialLocation.trim();
+    if (!deepLinked || !place) return;
+    setDeepLinked(false);
+    void search(place);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinked, initialLocation]);
+
   // Public directory handoff keeps the canonical service through sign-in.
   useEffect(()=>{const id=new URL(window.location.href).searchParams.get("resourceId");
     if(!id||!/^[0-9a-f-]{36}$/i.test(id))return;let live=true;
@@ -124,14 +141,14 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
     }).catch(()=>{if(live)setError("That listing could not be checked. Try searching again.");});return()=>{live=false;};
   },[]);
 
-  async function search() {
+  async function search(placeOverride?: string) {
     setBusy(true);
     setError("");
     try {
       const res = await fetch("/api/resources-search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category: category === "all" ? undefined : category, location: location.trim(), barriers }),
+        body: JSON.stringify({ category: category === "all" ? undefined : category, location: (placeOverride ?? location).trim(), barriers }),
       });
       const j = await res.json().catch(() => null);
       if (!res.ok) {
