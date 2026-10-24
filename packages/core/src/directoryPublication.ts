@@ -1,6 +1,6 @@
 /** One live, versioned publication contract for pages and assistant tools. */
 import { query } from './db';
-import { resourceBandSql, RESOURCE_BAND_FIELDS, parseBands, type ResourceAppRow, type ResourcePlaceQuery, type ResourceBand } from './resourceDirectoryShared';
+import { resourceBandSql, RESOURCE_BAND_FIELDS, parseBands, resourceStatePaging, type ResourceAppRow, type ResourcePlaceQuery, type ResourceBand, type ResourceStatePaging } from './resourceDirectoryShared';
 import { clampEmployerPage, employerLikePattern, publicCaveat } from './employer';
 /** 2026-10-18.v3: resources and chain steps carry band ('A' checked, 'B' listed, 'C' found) and band_reason
  * (migration 089); reads default to band A, so a v2 caller sees the same rows as before. v2 added
@@ -72,7 +72,7 @@ export function resolvePublishedEmployerAlias(source:string,externalId:string){
 }
 export const RESOURCE_FIELDS=RESOURCE_BAND_FIELDS;
 /** Resources for a place. bands defaults to ['A'] (the checked publication); 'B' and 'C' add the listed and found layers, best first. */
-export function searchVerifiedResources(opts:ResourcePlaceQuery&{bands?:readonly ResourceBand[]}) {
+export function searchVerifiedResources(opts:ResourcePlaceQuery&{bands?:readonly ResourceBand[];paging?:ResourceStatePaging|null}) {
  return publicationRead<PublishedResource[]>([],async()=>{
  const {sql,params}=resourceBandSql(opts);if(!(params[0] as string[]).length)return [];
  return query<PublishedResource>(sql,params);
@@ -80,6 +80,8 @@ export function searchVerifiedResources(opts:ResourcePlaceQuery&{bands?:readonly
 }
 /** Band list from a query string ("ABC", "A,B"); anything else means A only. */
 export const publicationBands=parseBands;
+/** page and limit from a query string for a whole-state read; null when absent or out of range. Only a trusted server may use it (the route decides). */
+export const publicationStatePaging=resourceStatePaging;
 export function getVerifiedResource(id:string,bands:readonly ResourceBand[]=['A','B','C']) {
  return publicationRead<PublishedResource|null>(null,async()=>{if(!isPublicationId(id))return null;const rows=await query<PublishedResource>(`SELECT ${RESOURCE_FIELDS} FROM resource_band_publication_v WHERE service_id=$1::uuid AND band=ANY($2::text[])`,[id,[...bands]]);return rows[0]??null;});
 }

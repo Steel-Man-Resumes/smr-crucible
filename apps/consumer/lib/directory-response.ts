@@ -1,6 +1,6 @@
 import {NextResponse} from 'next/server';
 import {timingSafeEqual} from 'node:crypto';
-import {type PublicationResult} from '@crucible/core';
+import {type PublicationResult,publicationStatePaging} from '@crucible/core';
 import {getClientIp,checkAuthRateLimit} from './auth-rate-limit';
 /** A trusted server (the public website, the public desk) presents the shared
  * key and reads under its own ceiling, or under the visitor's IP it forwards.
@@ -32,6 +32,13 @@ export async function directoryReadLimit(request:Request) {
   if(!limit.allowed)return NextResponse.json({error:'Please wait a moment and try again.'},{status:429,headers:{'Cache-Control':'no-store','Retry-After':String(Math.max(1,Math.ceil(limit.resetIn/1000)))}});
   return null;
  }catch{return NextResponse.json({error:'Directory temporarily unavailable.'},{status:503,headers:{'Cache-Control':'no-store'}});}
+}
+/** A whole-state read in pages (scope=state with page, optional limit) is for the trusted website only, which holds the
+ * service key. Any other caller gets the capped slice, so the public API is still never a corpus or export route. */
+export function directoryStatePaging(request:Request,params:URLSearchParams,envKey=process.env.SMR_DIRECTORY_SERVICE_KEY) {
+ if(params.get('scope')!=='state')return null;
+ if(directoryCaller(request,envKey).kind!=='service')return null;
+ return publicationStatePaging(params.get('page'),params.get('limit'));
 }
 export function directoryResponse<T>(result:PublicationResult<T>,detail=false) {
  return NextResponse.json(result,{status:result.status==='unavailable'?503:detail&&result.data===null?404:200,headers:{'Cache-Control':'no-store'}});

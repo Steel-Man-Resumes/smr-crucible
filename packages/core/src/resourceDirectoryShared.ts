@@ -199,23 +199,58 @@ export const RESOURCE_BAND_FIELDS = `service_id,org_name,service_name,descriptio
  state,county,counties,city,address,zip,phone,hours,website,source_url,last_checked::text AS last_checked,
  fees,what_to_bring,limits,expires_on::text AS expires_on,verification_tier,tier_confidence,corroboration_points,version,band,band_reason`;
 
+/** A state page read by a trusted server (the public website): the whole state in pages of up to this many rows. */
+export const RESOURCE_STATE_PAGE_SIZE = 200;
+/** Highest page number served; with the page size this bounds one state to 12,200 rows. */
+export const RESOURCE_STATE_PAGE_MAX = 60;
+export interface ResourceStatePaging { page: number; limit: number }
+/** Paging from a query string, or null when no page was asked for or it is out of range. */
+export function resourceStatePaging(page: unknown, limit?: unknown): ResourceStatePaging | null {
+  if (page === null || page === undefined || page === "") return null;
+  const p = Number(page);
+  if (!Number.isInteger(p) || p < 0 || p > RESOURCE_STATE_PAGE_MAX) return null;
+  const l = limit === null || limit === undefined || limit === "" ? RESOURCE_STATE_PAGE_SIZE : Number(limit);
+  return { page: p, limit: Number.isInteger(l) && l >= 1 ? Math.min(RESOURCE_STATE_PAGE_SIZE, l) : RESOURCE_STATE_PAGE_SIZE };
+}
+
 /**
  * Public rows from resource_band_publication_v for a place, in the bands asked for.
  * Each (band, reach level) pair is capped on its own at RESOURCE_APP_LEVEL_CAP, so the
  * poor band can never push the checked band off the page and a big state's dataset rows
  * cannot bury its own county. Order: band, then closest, then newest.
+ *
+ * `paging` (a state page read by a trusted server only, see the route) drops the cap and returns the whole
+ * state in the same order, one page at a time. Without it nothing changes: a public caller still gets the
+ * capped slice. 2026-10-24: the cap alone left Michigan's page showing 298 of 1,739 public services.
  */
-export function resourceBandSql(opts: ResourcePlaceQuery & { bands?: readonly ResourceBand[] }): { sql: string; params: unknown[] } {
+export function resourceBandSql(opts: ResourcePlaceQuery & { bands?: readonly ResourceBand[]; paging?: ResourceStatePaging | null }): { sql: string; params: unknown[] } {
   const { where, params } = resourcePlaceWhere(opts);
   const bands = (opts.bands ?? ["A"]).filter(isResourceBand);
   params.push(bands.length ? bands : ["A"]);
   const bandAt = params.length;
-  params.push(RESOURCE_APP_LEVEL_CAP);
+  const paged = !!(opts.wholeState && opts.paging);
+  if (paged) params.push(opts.paging!.limit, opts.paging!.page * opts.paging!.limit);
+  else params.push(RESOURCE_APP_LEVEL_CAP);
   const plain = ["service_id", "org_name", "service_name", "description", "eligibility", "area_id", "area_label", "geo_scope",
     "state", "county", "counties", "city", "address", "zip", "phone", "hours", "website", "source_url",
     "fees", "what_to_bring", "limits", "verification_tier", "tier_confidence", "corroboration_points", "version", "band", "band_reason"];
   const inner = [...plain, "last_checked::text AS last_checked", "expires_on::text AS expires_on"].join(", ");
   const outer = [...plain, "last_checked", "expires_on"].map((f) => "r." + f).join(", ");
+  if (paged) {
+    return {
+      sql: `SELECT ${outer}
+       FROM (
+         SELECT ${inner},
+                CASE geo_scope WHEN 'city' THEN 0 WHEN 'county' THEN 1 WHEN 'multi_county' THEN 1
+                               WHEN 'statewide' THEN 2 ELSE 3 END AS lvl
+           FROM resource_band_publication_v
+          WHERE ${where} AND band = ANY($${bandAt}::text[])
+       ) r
+      ORDER BY r.band, r.lvl, r.last_checked DESC, r.org_name, r.service_id
+      LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    };
+  }
   return {
     sql: `SELECT ${outer}
        FROM (
