@@ -5,6 +5,7 @@ import { buildJourneySnapshot, getOneAsUser, queryAsUser, runAsUser, getUserDail
 import { encryptString, decryptString, type EncryptedPayload } from '@crucible/core/src/crypto';
 import { loadSelectedWork, readWorkSelection, type WorkSelection } from './assistant-work-context';
 import { PROGRESSION_STEPS, STEP_COPY, baseAllowance, isProgressionStep, type ProgressionPolicy, type ProgressionStep } from './progression-policy';
+import { TOUR_REWARD_KEY, tourRewardOutcome, type TourReward, type TourRewardRow } from './tour/reward';
 
 const DAY = "date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'";
 export async function readProgressionPolicy(userId:string):Promise<ProgressionPolicy> {
@@ -149,6 +150,32 @@ export async function grantBonus(userId:string,key:string,step:ProgressionStep,a
  ]);
  if(rows[1]?.length)return true;
  return !!await getOneAsUser(actorId,'SELECT id FROM progression_grant WHERE user_id=$1 AND (request_key=$3 OR ($3::text IS NULL AND grant_key=$2)) AND expires_at>now()',[userId,key,requestKey]);
+}
+/**
+ * One-time tour bonus (grant key 'tour:complete'), through the same bonus path,
+ * lock and caps as every other bonus. Account bound: the row belongs to the
+ * signed-in user under RLS. Idempotent: the earlier grant is read under the
+ * lock before the conditional insert, so a second completion grants nothing
+ * and is told so; a retry of the same run reads as the same grant.
+ */
+export async function grantTourReward(userId:string,runId:string):Promise<TourReward>{
+ const p=await readProgressionPolicy(userId);
+ const rows=await runAsUser<unknown[][]>(userId,sql=>[
+  sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 874))`,
+  sql`SELECT calls,created_at,expires_at,request_key FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${TOUR_REWARD_KEY}`,
+  sql`INSERT INTO progression_grant(user_id,grant_key,request_key,kind,step_id,calls,label,expires_at)
+   SELECT ${userId}::uuid,${TOUR_REWARD_KEY},${runId},'bonus','foundation',${p.bonus_calls},'Tour finished: extra AI actions',date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'+interval '1 day'
+   WHERE NOT EXISTS(SELECT 1 FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${TOUR_REWARD_KEY})
+    AND COALESCE((SELECT sum(calls) FROM progression_grant WHERE user_id=${userId}::uuid AND kind='bonus' AND created_at>=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)+${p.bonus_calls}<=${p.bonus_daily_cap}
+    AND COALESCE((SELECT sum(calls) FROM progression_grant WHERE user_id=${userId}::uuid AND kind='bonus' AND created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)+${p.bonus_calls}<=${p.bonus_monthly_cap}
+   ON CONFLICT DO NOTHING RETURNING calls,created_at,expires_at,request_key`,
+ ]);
+ return tourRewardOutcome({prior:(rows[1]?.[0] as TourRewardRow|undefined)??null,inserted:(rows[2]?.[0] as TourRewardRow|undefined)??null,runId});
+}
+/** Read only: whether this account already has the tour bonus, so the ending never promises one twice. */
+export async function tourRewardClaimed(userId:string):Promise<string|null>{
+ const row=await getOneAsUser<{created_at:string|Date}>(userId,'SELECT created_at FROM progression_grant WHERE user_id=$1 AND grant_key=$2',[userId,TOUR_REWARD_KEY]);
+ return row?(row.created_at instanceof Date?row.created_at.toISOString():String(row.created_at)):null;
 }
 export async function listAccessRequests(adminId:string){const rows=await queryAsUser<RequestRow>(adminId,'SELECT * FROM progression_request ORDER BY (status IN (\'pending\',\'question\')) DESC,created_at DESC LIMIT 100');return rows.map(r=>({...requestView(r,true),userId:r.user_id}));}
 export async function decideAccessRequest(adminId:string,id:string,decision:string,note:string){

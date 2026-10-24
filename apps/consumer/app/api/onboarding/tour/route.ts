@@ -9,6 +9,8 @@ import { loadSelectedWork } from "@/lib/assistant-work-context";
 import { workspaceNextAction } from "@/lib/workspace-next-action";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { TOUR_STOP_COUNT, TOUR_VERSION } from "@/lib/guidedTour";
+import { grantTourReward, tourRewardClaimed } from "@/lib/progression-server";
+import type { TourReward } from "@/lib/tour/reward";
 
 export const maxDuration = 10;
 export const revalidate = 0;
@@ -18,11 +20,13 @@ export async function GET() {
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
-  const [profile, row, work] = await Promise.all([
+  const [profile, row, work, rewardClaimedAt] = await Promise.all([
     getUserProfile(userId),
     getOneAsUser<{ progress: { version?: number; stop?: number; inProgress?: boolean; runId?: string; sequence?: number } | null }>(userId,
       `SELECT preferences->'guidedTour' AS progress FROM consumer_profile WHERE user_id = $1`, [userId]),
     loadSelectedWork(userId, {}, false),
+    // Unknown (undefined) rather than a false "never claimed" when the read fails.
+    tourRewardClaimed(userId).catch(() => undefined),
   ]);
   if (!profile) return NextResponse.json({ error: "Account not found" }, { status: 404 });
   const progress = row?.progress;
@@ -44,6 +48,7 @@ export async function GET() {
     runId: progress?.version === TOUR_VERSION ? progress.runId : undefined,
     sequence: progress?.version === TOUR_VERSION ? progress.sequence ?? 0 : 0,
     nextStep: selectedNext ? { action: selectedNext.label, href: selectedNext.href } : { action: nextStep.action, href: nextStep.href },
+    rewardClaimedAt,
   } }, { headers: { "Cache-Control": "no-store" } });
 }
 
@@ -106,7 +111,15 @@ export async function POST(request: Request) {
            AND preferences->'guidedTour'->>'version'=$3::text`, [userId, body.runId, String(TOUR_VERSION)]) : null;
         if (!completed?.done) return NextResponse.json({ error: "Your tour changed in another tab. Reload to pick up its saved place." }, { status: 409, headers });
       }
-      if (body.action === "complete") await invalidateNextStep(userId);
+      if (body.action === "complete") {
+        await invalidateNextStep(userId);
+        // Completion is committed above. The bonus is its own idempotent step, so
+        // a failure here never undoes the completion and a retry is safe.
+        let reward: TourReward;
+        try { reward = await grantTourReward(userId, body.runId); }
+        catch { reward = { status: "unavailable", calls: 0 }; }
+        return NextResponse.json({ ok: true, runId: body.runId, sequence: body.sequence, reward }, { headers });
+      }
     }
     return NextResponse.json({ ok: true, runId: body.runId, sequence: body.sequence }, { headers });
   } catch {

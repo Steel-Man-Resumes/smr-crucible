@@ -11,13 +11,19 @@
  *    never lands on a page where nothing happens.
  */
 
-import { GUIDED_LESSONS } from "./guided-lessons";
+import { TOUR_BEATS } from "./tour/beats";
 import { TOUR_PARAM } from "@crucible/core/src/journeyStages";
 
 /** Fired after persisted completion or skip so the next-step card refetches. */
 export const NEXT_STEP_CHANGED_EVENT = "next-step-changed";
-export const TOUR_VERSION = 4;
-export const TOUR_STOP_COUNT = GUIDED_LESSONS.length + 1;
+/**
+ * 5: the two-act entrance tour (stage, then the real navigation). Saved
+ * progress from 4 (the 13-lesson tour) never resumes into it: the GET only
+ * returns a stop for the current version, and a start may replace an older run.
+ */
+export const TOUR_VERSION = 5;
+/** Every beat, plus the ending (quiz and finish). Progress is saved by beat index. */
+export const TOUR_STOP_COUNT = TOUR_BEATS.length + 1;
 
 export interface TourNextStep {
   action: string;
@@ -40,6 +46,8 @@ export interface TourState {
   previousRunId?: string | null;
   sequence?: number;
   nextStep?: TourNextStep;
+  /** When this account got the one-time tour bonus; null if never; undefined if unknown. */
+  rewardClaimedAt?: string | null;
 }
 
 /** Shown when the tour state cannot be read, so an explicit request still opens. */
