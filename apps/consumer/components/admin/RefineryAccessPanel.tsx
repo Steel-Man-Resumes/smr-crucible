@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Admin panel: who may use the Refinery (migration 093). The public sign-up
+ * Admin panel: who may use the Refinery (migration 096). The public sign-up
  * switch, the house organization seat requests are approved into, and usage
  * per seat. Every action is checked again on the server (platform admin and a
  * second factor on this sign-in).
@@ -16,6 +16,7 @@ export interface AdminPolicy {
   seatsUsed: number | null;
   seatsMax: number | null;
   legacyCount: number;
+  legacyCutoff: string | null;
 }
 interface Org { id: string; partner_name: string; times_redeemed: number; max_redemptions: number | null }
 interface Usage { name: string; seatsUsed: number; seatsMax: number | null; seats: { user_id: string; name: string; email: string; redeemed_at: string; ops_today: number; ops_30d: number; counted_30d: number; cost_30d_usd: number; incomplete_30d: number; last_ai_at: string | null }[] }
@@ -34,6 +35,7 @@ export function RefineryAccessPanel({ onPolicy }: { onPolicy?: (p: AdminPolicy |
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmClose, setConfirmClose] = useState(false);
+  const [unlegacy, setUnlegacy] = useState("");
 
   const load = useCallback(async () => {
     setError("");
@@ -86,7 +88,9 @@ export function RefineryAccessPanel({ onPolicy }: { onPolicy?: (p: AdminPolicy |
           {policy.publicSignupOpen ? (
             confirmClose ? (
               <div className="border border-t-amber p-3">
-                <p>Every account that exists right now keeps the Refinery. New accounts get the Forge and need a seat for the Refinery. You can open it again any time.</p>
+                <p>{policy.legacyCutoff
+                  ? `Accounts from before ${new Date(policy.legacyCutoff).toLocaleDateString()} keep the Refinery. Anyone who joined after that, including while it was open again, needs a seat. Closing again does not add anyone to that list.`
+                  : "Every account that exists right now keeps the Refinery, once. New accounts get the Forge and need a seat for the Refinery. Opening it again later lets everyone in while it is open, and closing again does not grandfather the accounts made in between."}</p>
                 <div className="mt-2 flex gap-2">
                   <button type="button" disabled={busy} onClick={() => void act({ action: "close" })} className="t-focus min-h-touch bg-t-amber px-3 py-2 font-bold text-white disabled:opacity-50">Close public sign-ups</button>
                   <button type="button" disabled={busy} onClick={() => setConfirmClose(false)} className="t-focus min-h-touch border border-t-line px-3 py-2">Cancel</button>
@@ -97,6 +101,15 @@ export function RefineryAccessPanel({ onPolicy }: { onPolicy?: (p: AdminPolicy |
             )
           ) : (
             <button type="button" disabled={busy} onClick={() => void act({ action: "open" })} className="t-focus min-h-touch border border-t-line px-3 py-2 font-semibold text-t-white">Open public sign-ups again</button>
+          )}
+
+          {policy.legacyCount > 0 && (
+            <form onSubmit={(e) => { e.preventDefault(); if (unlegacy.trim()) void act({ action: "unlegacy", email: unlegacy.trim() }).then(() => setUnlegacy("")); }} className="flex flex-wrap items-end gap-2">
+              <label className="block">Take one account off the grandfather list (email)
+                <input value={unlegacy} onChange={(e) => setUnlegacy(e.target.value)} type="email" className="t-focus mt-1 block border border-t-line bg-t-panel-2 px-3 py-2 text-t-white" />
+              </label>
+              <button type="submit" disabled={busy || !unlegacy.trim()} className="t-focus min-h-touch border border-t-line px-3 py-2 disabled:opacity-50">Remove</button>
+            </form>
           )}
 
           <label className="block">House organization (seat requests are approved into it)

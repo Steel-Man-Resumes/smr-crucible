@@ -8,6 +8,7 @@
  * POST {action:"close"}            close public sign-ups (grandfathers every account now)
  * POST {action:"open"}             reopen (the rollback)
  * POST {action:"house", codeId}    set the house organization (codeId null clears it)
+ * POST {action:"unlegacy", email}  take one account off the grandfather list
  */
 import { query } from "@crucible/core";
 import { requirePlatformAdmin } from "@/lib/org-guard";
@@ -18,6 +19,7 @@ import {
   closeRefinerySignups,
   openRefinerySignups,
   readAdminRefineryPolicy,
+  removeLegacySeat,
   setHouseOrg,
 } from "@/lib/refinery-access-server";
 
@@ -37,7 +39,7 @@ export async function GET(request: Request) {
     ]);
     return Response.json({ policy, orgs }, { headers: NO_STORE });
   } catch {
-    return Response.json({ error: "Refinery access could not be read. Check that migration 093 is applied." }, { status: 503, headers: NO_STORE });
+    return Response.json({ error: "Refinery access could not be read. Check that migration 096 is applied." }, { status: 503, headers: NO_STORE });
   }
 }
 
@@ -50,7 +52,10 @@ export async function POST(request: Request) {
     if (body?.action === "close") await closeRefinerySignups(g.userId);
     else if (body?.action === "open") await openRefinerySignups(g.userId);
     else if (body?.action === "house") await setHouseOrg(g.userId, typeof body.codeId === "string" && body.codeId ? body.codeId : null);
-    else return Response.json({ error: "Unknown action." }, { status: 400 });
+    else if (body?.action === "unlegacy") {
+      const removed = await removeLegacySeat(g.userId, String(body.email ?? ""));
+      if (!removed) return Response.json({ error: "That account is not on the grandfather list." }, { status: 404 });
+    } else return Response.json({ error: "Unknown action." }, { status: 400 });
     return Response.json({ ok: true, policy: await readAdminRefineryPolicy(g.userId) });
   } catch (error) {
     if (error instanceof SeatDecisionError) return Response.json({ error: error.message }, { status: 400 });

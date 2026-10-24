@@ -150,7 +150,10 @@ export async function grantBonus(userId:string,key:string,step:ProgressionStep,a
  if(rows[1]?.length)return true;
  return !!await getOneAsUser(actorId,'SELECT id FROM progression_grant WHERE user_id=$1 AND (request_key=$3 OR ($3::text IS NULL AND grant_key=$2)) AND expires_at>now()',[userId,key,requestKey]);
 }
-export async function listAccessRequests(adminId:string){const rows=await queryAsUser<RequestRow>(adminId,'SELECT * FROM progression_request ORDER BY (status IN (\'pending\',\'question\')) DESC,created_at DESC LIMIT 100');return rows.map(r=>({...requestView(r,true),userId:r.user_id}));}
+/** One page of Troy's queue, open requests first. `openTotal` lets the page say how many open requests are not on screen (review 1, N-6). */
+export const ACCESS_REQUEST_PAGE=100;
+export async function listAccessRequests(adminId:string,offset=0){const at=Math.max(0,Math.min(100000,Math.floor(offset)||0));const rows=await queryAsUser<RequestRow>(adminId,'SELECT * FROM progression_request ORDER BY (status IN (\'pending\',\'question\')) DESC,created_at DESC LIMIT $1 OFFSET $2',[ACCESS_REQUEST_PAGE,at]);return rows.map(r=>({...requestView(r,true),userId:r.user_id}));}
+export async function countOpenAccessRequests(adminId:string){const r=await getOneAsUser<{n:number}>(adminId,"SELECT count(*)::int AS n FROM progression_request WHERE status IN ('pending','question')");return r?.n??0;}
 export async function decideAccessRequest(adminId:string,id:string,decision:string,note:string,origin=process.env.APP_URL||''){
  if(!/^[0-9a-f-]{36}$/i.test(id)||!['approve','deny','question'].includes(decision)||note.length>1000||note.trim().length<3)throw new Error('invalid_decision');
  const r=await getOneAsUser<RequestRow>(adminId,'SELECT * FROM progression_request WHERE id=$1',[id]);

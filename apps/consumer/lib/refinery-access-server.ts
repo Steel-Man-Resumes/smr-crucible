@@ -1,7 +1,7 @@
 /**
  * Refinery seats, server side: AI admission, seat requests, Troy's decisions
  * and the admin switch. The rules themselves are in lib/refinery-access.ts
- * (pure) and in the database (smr_has_refinery_seat, migration 093).
+ * (pure) and in the database (smr_has_refinery_seat, migration 096).
  *
  * Every function that touches the database takes its database calls through
  * a small `deps` object, so the unit tests can drive each door without Neon.
@@ -23,14 +23,20 @@ import { FORGE_AI_WORKFLOWS, SEAT_REQUIRED_MESSAGE, seatAdmissionVerdict, seatFr
 
 export interface SeatDeps {
   readGate: (userId: string) => Promise<RefineryGate>;
-  readEmail: (userId: string) => Promise<string | null>;
+  /** The account email and whether its inbox was proven (users.email_proven_at). */
+  readEmail: (userId: string) => Promise<{ email: string | null; proven: boolean } | null>;
   preAuthRaw?: string | null;
 }
 
 export const defaultSeatDeps: SeatDeps = {
   readGate: readRefineryGate,
-  readEmail: async (userId) =>
-    (await getOne<{ email: string | null }>(`SELECT email FROM users WHERE id = $1`, [userId]))?.email ?? null,
+  readEmail: async (userId) => {
+    const row = await getOne<{ email: string | null; proven: boolean }>(
+      `SELECT email, email_proven_at IS NOT NULL AS proven FROM users WHERE id = $1`,
+      [userId]
+    );
+    return row ? { email: row.email, proven: row.proven === true } : null;
+  },
 };
 
 /**
@@ -41,8 +47,8 @@ export const defaultSeatDeps: SeatDeps = {
 export async function readSeat(userId: string, deps: SeatDeps = defaultSeatDeps): Promise<RefineryGate> {
   const gate = await deps.readGate(userId);
   if (gate.open || gate.seat) return gate;
-  const email = await deps.readEmail(userId);
-  return { open: gate.open, seat: seatFrom(false, email, deps.preAuthRaw ?? process.env.PARTNER_PRE_AUTH) };
+  const who = await deps.readEmail(userId);
+  return { open: gate.open, seat: seatFrom(false, who?.email ?? null, who?.proven === true, deps.preAuthRaw ?? process.env.PARTNER_PRE_AUTH) };
 }
 
 /**
@@ -209,6 +215,8 @@ export async function decideSeatRequest(
   // A full pool or another organization: the request stays open.
   if (!created.ok) throw new SeatDecisionError(created.error);
   const status = (await deps.markDecided(adminId, r.id, "approved", note)) ?? r.status;
+  // Asked already in the last day (createOrgInvite notify false): no second email.
+  if (!created.notify) return { status };
   try {
     await deps.notify(created.kind, { email: user.email, name: user.name }, house.partner_name, origin);
     return { status };
@@ -258,13 +266,14 @@ export interface AdminRefineryPolicy {
   seatsUsed: number | null;
   seatsMax: number | null;
   legacyCount: number;
+  legacyCutoff: string | null;
 }
 
 /** Platform admin view of the switch and the house pool. */
 export async function readAdminRefineryPolicy(adminId: string): Promise<AdminRefineryPolicy> {
-  const p = await getOneAsUser<{ public_signup_open: boolean; closed_at: string | null; house_code_id: string | null; legacy: number }>(
+  const p = await getOneAsUser<{ public_signup_open: boolean; closed_at: string | null; house_code_id: string | null; legacy_cutoff: string | null; legacy: number }>(
     adminId,
-    "SELECT public_signup_open, closed_at, house_code_id, (SELECT count(*)::int FROM refinery_seat_legacy) AS legacy FROM refinery_access_policy WHERE id"
+    "SELECT public_signup_open, closed_at, house_code_id, legacy_cutoff, (SELECT count(*)::int FROM refinery_seat_legacy) AS legacy FROM refinery_access_policy WHERE id"
   );
   if (!p) throw new Error("refinery_policy_unavailable");
   const house = p.house_code_id
@@ -281,27 +290,63 @@ export async function readAdminRefineryPolicy(adminId: string): Promise<AdminRef
     seatsUsed: house ? Number(house.times_redeemed) : null,
     seatsMax: house?.max_redemptions ?? null,
     legacyCount: Number(p.legacy ?? 0),
+    legacyCutoff: p.legacy_cutoff,
   };
 }
 
 const HISTORY = (action: string) =>
   `change_history || jsonb_build_array(jsonb_build_object('at',now(),'by',$1::uuid,'action','${action}','previous',to_jsonb(refinery_access_policy)-'change_history'))`;
 
+/** The statements a close runs, in order, in ONE transaction. Exported for the tests. */
+export const CLOSE_STATEMENTS = {
+  // 1. Serialize closes: a second tab or a retry waits here, then sees "closed".
+  lock: "SELECT public_signup_open, legacy_cutoff FROM refinery_access_policy WHERE id FOR UPDATE",
+  // 2. Grandfather ONLY on the first close (security review 1, BL-2): when the
+  //    switch is open now AND no snapshot was ever taken. Reopening and closing
+  //    again never seats the accounts made in between.
+  snapshot: `INSERT INTO refinery_seat_legacy (user_id)
+    SELECT u.id FROM users u
+     WHERE EXISTS (SELECT 1 FROM refinery_access_policy p WHERE p.id AND p.public_signup_open AND p.legacy_cutoff IS NULL)
+    ON CONFLICT (user_id) DO NOTHING`,
+  // 3. Flip, only if open. The cutoff is set once and never moved.
+  flip: `UPDATE refinery_access_policy SET public_signup_open=false, closed_at=now(),
+     legacy_cutoff=COALESCE(legacy_cutoff, now()), updated_by=$1::uuid,
+     change_history=${HISTORY("close")}, updated_at=now()
+   WHERE id AND public_signup_open RETURNING id`,
+} as const;
+
+export const ALREADY_CLOSED = "Public sign-ups are already closed. Nothing changed.";
+
+type Runner = (userId: string, build: (sql: any) => unknown[]) => Promise<unknown[][]>;
+
 /**
- * Close public sign-ups. ONE transaction: every account that exists right now
- * goes on the grandfather list, then the switch flips. Nobody can fall
- * between the two.
+ * Close public sign-ups. ONE transaction: lock the policy row, take the
+ * grandfather snapshot if this is the first close ever, then flip. A close
+ * while already closed changes nothing and says so.
  */
-export async function closeRefinerySignups(adminId: string): Promise<void> {
-  const out = await runAsUser<unknown[][]>(adminId, (sql) => [
-    sql`INSERT INTO refinery_seat_legacy (user_id) SELECT id FROM users ON CONFLICT (user_id) DO NOTHING`,
-    (sql as unknown as (s: string, p: unknown[]) => unknown)(
-      `UPDATE refinery_access_policy SET public_signup_open=false, closed_at=now(), updated_by=$1::uuid,
-         change_history=${HISTORY("close")}, updated_at=now() WHERE id RETURNING id`,
-      [adminId]
-    ),
+export async function closeRefinerySignups(adminId: string, run: Runner = runAsUser as unknown as Runner): Promise<void> {
+  const out = await run(adminId, (sql) => [
+    (sql as (s: string, p?: unknown[]) => unknown)(CLOSE_STATEMENTS.lock, []),
+    (sql as (s: string, p?: unknown[]) => unknown)(CLOSE_STATEMENTS.snapshot, []),
+    (sql as (s: string, p?: unknown[]) => unknown)(CLOSE_STATEMENTS.flip, [adminId]),
   ]);
-  if (!out[1]?.length) throw new Error("refinery_policy_not_changed");
+  if (!out[0]?.length) throw new Error("refinery_policy_unavailable");
+  if (!out[2]?.length) throw new SeatDecisionError(ALREADY_CLOSED);
+}
+
+/**
+ * Take one account off the grandfather list (platform admin only; the admin
+ * policy on refinery_seat_legacy allows the DELETE). By account email.
+ */
+export async function removeLegacySeat(adminId: string, email: string): Promise<boolean> {
+  const addr = email.trim().toLowerCase();
+  if (!addr || addr.length > 320 || !addr.includes("@")) throw new SeatDecisionError("Enter the account's email address.");
+  const rows = await queryAsUser<{ user_id: string }>(
+    adminId,
+    "DELETE FROM refinery_seat_legacy WHERE user_id = (SELECT id FROM users WHERE lower(email) = $1 LIMIT 1) RETURNING user_id",
+    [addr]
+  );
+  return rows.length > 0;
 }
 
 /** Reopen (the rollback). Grandfather rows stay; they are harmless while open. */

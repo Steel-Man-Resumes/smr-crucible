@@ -41,6 +41,9 @@ export default function AccessRequestsPage() {
   const [message, setMessage] = useState("");
   const [reload, setReload] = useState(0);
   const [seatPolicy, setSeatPolicy] = useState<AdminPolicy | null>(null);
+  // Paging (review 1, N-6): the queue shows 100 at a time, open ones first.
+  const [offset, setOffset] = useState(0);
+  const [openTotal, setOpenTotal] = useState<number | null>(null);
   const requestSequence = useRef(0);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
@@ -49,17 +52,18 @@ export default function AccessRequestsPage() {
     const sequence = ++requestSequence.current;
     setError("");
     try {
-      const response = await fetch("/api/admin/access-requests", { cache: "no-store" });
+      const response = await fetch(`/api/admin/access-requests?offset=${offset}`, { cache: "no-store" });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(response.status === 403 ? "Platform admin access and two-step verification are required." : body?.error || "Requests could not be loaded.");
       if (!Array.isArray(body?.requests)) throw new Error("Requests could not be loaded.");
       if (!live.current || sequence !== requestSequence.current) return;
       setRequests(body.requests);
+      setOpenTotal(typeof body.openTotal === "number" ? body.openTotal : null);
       if (!policyDirtyRef.current && body.policy) setPolicy(Object.fromEntries(POLICY_FIELDS.map(([key]) => [key, String(body.policy[key])])) as PolicyForm);
     } catch (caught) {
       if (live.current && sequence === requestSequence.current) setError(caught instanceof Error ? caught.message : "Requests could not be loaded.");
     }
-  }, [tier]);
+  }, [tier, offset]);
   useEffect(() => { void load(); }, [load, reload]);
 
   async function decide(request: AccessRequest, decision: "approve" | "deny" | "question") {
@@ -70,7 +74,7 @@ export default function AccessRequestsPage() {
       const response = await fetch("/api/admin/access-requests", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: request.id, decision, note }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.error || "The decision did not save.");
-      if (live.current) { setMessage(decision === "question" ? "Question saved for the participant." : request.kind === "seat" && decision === "approve" ? (body?.emailFailed ? "Seat offered. The email did not send; they will see it on the seat page when they sign in." : "Seat offered from your organization. They accept it on the seat page.") : "Decision saved and applied by the server."); await load(); }
+      if (live.current) { setMessage(decision === "question" ? "Question saved for the participant." : request.kind === "seat" && decision === "approve" ? (body?.emailFailed ? "Seat offered. The email did not send; they will see it on the seat page when they sign in." : "Seat offered from your organization. They accept it on the seat page, and the Refinery opens for them when they say yes.") : "Decision saved and applied by the server."); await load(); }
     } catch (caught) { if (live.current) setError(caught instanceof Error ? caught.message : "The decision did not save."); }
     finally { if (live.current) setBusy(null); }
   }
@@ -101,6 +105,11 @@ export default function AccessRequestsPage() {
     </details>
     {requests === null && !error ? <p role="status" className="text-sm text-t-phos-dim">Loading requests...</p> : null}
     {requests?.length === 0 ? <p className="border border-t-line p-5 text-sm text-t-phos-dim">No access requests.</p> : null}
+    {openTotal !== null ? <p className="text-sm text-t-phos-dim">{openTotal} open {openTotal === 1 ? "request" : "requests"} in all. Showing {offset + 1} to {offset + (requests?.length ?? 0)}.</p> : null}
+    <div className="flex gap-2">
+      {offset > 0 ? <button type="button" disabled={!!busy} onClick={() => setOffset((o) => Math.max(0, o - 100))} className="t-focus min-h-touch border border-t-line px-3 py-2 text-sm text-t-white">Newer</button> : null}
+      {(requests?.length ?? 0) >= 100 ? <button type="button" disabled={!!busy} onClick={() => setOffset((o) => o + 100)} className="t-focus min-h-touch border border-t-line px-3 py-2 text-sm text-t-white">Older</button> : null}
+    </div>
     <ul className="space-y-4">{requests?.map((request) => {
       const open = request.status === "pending" || request.status === "question";
       return <li key={request.id} className="border border-t-line bg-t-panel p-5"><div className="flex flex-wrap justify-between gap-2 text-xs text-t-phos-dim"><p>Account {request.userId.slice(0, 8)} · {request.kind === "seat" ? "Seat" : `${request.kind.replace(/_/g, " ")} · ${request.stepId}`}</p><p>{request.status.replace(/_/g, " ")}</p></div><p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-t-white">{request.summary}</p>{request.decisionNote ? <p className="mt-3 whitespace-pre-wrap text-sm text-t-phos-dim">Last response: {request.decisionNote}</p> : null}
