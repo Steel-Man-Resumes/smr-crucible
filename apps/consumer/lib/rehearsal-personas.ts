@@ -131,6 +131,10 @@ export interface RehearsalOverrideParams {
   strengths?: string[];
   /** Pre-built Forge context block (already sanitized upstream). */
   forgeContext?: string;
+  /** The words the person prepared in the planner (their plan, not a script to recite). */
+  preparedScript?: string;
+  /** Practice an interviewer who asks about it, or one who never does. */
+  askVariant?: "asks" | "does_not_ask";
 }
 
 /**
@@ -159,6 +163,18 @@ export function buildRehearsalSystemOverride(params: RehearsalOverrideParams): s
   }
   if (params.forgeContext) {
     lines.push(params.forgeContext);
+  }
+  if (params.preparedScript && params.preparedScript.trim()) {
+    lines.push(
+      `WHAT THEY PREPARED (their own plan, made a moment ago; help them practice saying it their way. Do not recite it back, do not add facts to it, do not correct their facts):\n${params.preparedScript.trim().slice(0, 1200)}`
+    );
+  }
+  if (params.askVariant === "does_not_ask") {
+    lines.push(
+      "THIS ROUND: you never ask about it. If they choose to bring it up, respond the way a fair person in your role would. If they do not, that is fine. Never treat silence as a mistake."
+    );
+  } else if (params.askVariant === "asks") {
+    lines.push("THIS ROUND: at a natural point, ask about it once, plainly and fairly, the way a real person in your role might.");
   }
   if (params.strengths && params.strengths.length > 0) {
     lines.push(

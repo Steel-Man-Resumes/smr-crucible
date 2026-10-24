@@ -22,6 +22,8 @@ export interface IntakeContext {
   strengths?: string[];
   skills?: string[];
   hasRecord?: boolean;
+  /** Hurdle ids the person picked. The record framing applies only when "record" is one of them. */
+  hurdles?: string[];
 }
 
 export interface IntakeAnswer {
@@ -32,9 +34,14 @@ export interface IntakeAnswer {
 /** Hard cap on AI follow-up rounds -- defense in depth (the client also bounds it). */
 export const MAX_FOLLOWUP_ROUNDS = 2;
 
-function topicFraming(topic: string): string {
+function topicFraming(topic: string, context: IntakeContext = {}): string {
   switch (topic) {
     case "disclosure":
+      // A non-record hurdle (transport, housing, health...) is never framed as a
+      // record conversation (2026-10-23 assessment finding 2).
+      if (Array.isArray(context.hurdles) && context.hurdles.length && !context.hurdles.includes("record")) {
+        return "They are planning around a hurdle to work that is NOT a criminal record. Do not mention a record, a conviction, redemption, recovery or a diagnosis. Ask only about the practical constraint, what is still unknown, and what they choose to share.";
+      }
       return "They are preparing to talk about their record with an employer: the framing, the timing, and the pivot to their strengths. Focus on how they want to TELL their story now, not the legal details of what happened. Never ask them to relive the offense.";
     case "interview":
       return "They are preparing for a real job interview. Draw out concrete stories and examples they can turn into strong answers: the specifics behind what they have told you. A number only if they know one; never suggest one.";
@@ -67,7 +74,7 @@ export function buildFollowupsSystemPrompt(
     ? context.skills.map((s) => sanitizeOrEmpty(s, 60)).filter(Boolean).slice(0, 12)
     : [];
   if (skills.length) known.push(`Their skills: ${skills.join(", ")}`);
-  if (context.hasRecord) {
+  if (context.hasRecord && (!context.hurdles?.length || context.hurdles.includes("record"))) {
     known.push("They have a criminal record. This is already known, so do NOT ask them to describe the offense.");
   }
   const knownBlock = known.length
@@ -77,7 +84,7 @@ export function buildFollowupsSystemPrompt(
   return `You are an expert career coach for job seekers with records. You ask the SHARPEST possible follow-up questions: the ones that pull the specific, real, usable detail a generic form never would. You are the expert; it is your responsibility to extract what matters, even from someone who does not know what to say.
 
 CONTEXT FOR THIS PERSON:
-${topicFraming(topic)}
+${topicFraming(topic, context)}
 
 WHAT YOU ALREADY KNOW ABOUT THEM (use it to reference their real situation, and never re-ask it):
 ${knownBlock}

@@ -91,7 +91,7 @@ export const HURDLE_GUIDANCE: Record<HurdleType, HurdleGuidance> = {
     coachingFrame:
       "A gap in your work history is common, and it is not a red flag by itself. What an employer really wants to know is that you are ready to work now and that you will show up. Keep the reason short and honest, then move straight to what you bring. You do not owe anyone a long explanation.",
     scriptScaffold:
-      "There is a gap in my work history. During that time I focused on [your reason, in a few words], and I am fully ready to give this job my best. What I bring is [your strength].",
+      "There is a gap in my work history, from [month and year] to [month and year]. During that time I [what you did, in a few words, only if you want to say it]. What I bring to this job is [your strength].",
     intakeQuestions: [
       {
         id: "gap-length",
@@ -120,7 +120,7 @@ export const HURDLE_GUIDANCE: Record<HurdleType, HurdleGuidance> = {
     coachingFrame:
       "You get to decide how much to share about recovery. You do not owe anyone your story. Many people choose to say only that they went through a hard time and came out stronger, and then talk about the steady, reliable person they are today. Lead with what you can do now.",
     scriptScaffold:
-      "I went through a tough stretch a while back, and I did the work to come out of it steadier. Today I am focused and reliable, and what I bring to this job is [your strength].",
+      "I went through a tough stretch a while back. [Only what is true for you about where it stands now, in your words.] What I bring to this job is [your strength].",
     intakeQuestions: [
       {
         id: "rec-comfort",
@@ -168,7 +168,7 @@ export const HURDLE_GUIDANCE: Record<HurdleType, HurdleGuidance> = {
     coachingFrame:
       "Family and caregiving are a normal part of life. You can name that you have responsibilities and that you have a plan to be dependable, without sharing private family details. Employers care that you will show up and do good work.",
     scriptScaffold:
-      "I have family responsibilities, and I have a plan in place so I can be dependable here. You can count on me to show up and bring [your strength].",
+      "I have family responsibilities. The hours I can work are [your hours]. [If you have a backup plan, say what it is. If not, leave this out.] What I bring is [your strength].",
     intakeQuestions: [
       {
         id: "cf-schedule",
@@ -192,7 +192,7 @@ export const HURDLE_GUIDANCE: Record<HurdleType, HurdleGuidance> = {
     coachingFrame:
       "Housing can be unstable, and that is not a reflection of your worth or your work. You can keep this private. The useful thing to show an employer is how they can reach you and how you make sure you get to work on time.",
     scriptScaffold:
-      "The best way to reach me is [phone or email]. I have a plan to get to work on time every day, and what I bring to the job is [your strength].",
+      "The best way to reach me is [phone or email]. [How you will get to work, only if you have worked it out.] What I bring to the job is [your strength].",
     intakeQuestions: [
       {
         id: "house-reach",
@@ -216,7 +216,7 @@ export const HURDLE_GUIDANCE: Record<HurdleType, HurdleGuidance> = {
     coachingFrame:
       "Money troubles are common, and they are usually private. Most jobs do not require you to explain your finances. If a role ever brings up a credit check, you can say briefly that you hit a hard stretch and you are handling it, then move on to what you bring.",
     scriptScaffold:
-      "I had a hard financial stretch, and I am handling it responsibly. What I want to focus on is the work, where I bring [your strength].",
+      "I had a hard financial stretch. [Only what is true for you about where it stands now.] What I want to focus on is the work, where I bring [your strength].",
     intakeQuestions: [
       {
         id: "fin-line",
@@ -264,7 +264,7 @@ export const HURDLE_GUIDANCE: Record<HurdleType, HurdleGuidance> = {
     coachingFrame:
       "Whatever you are facing, you get to choose how much to share. Keep it short and honest, then pivot to what you bring to the job. If you are unsure how to handle your specific situation, a local job coach or reentry organization can help you think it through.",
     scriptScaffold:
-      "I want to be upfront about one thing: [your words, kept short]. I have handled it, and what I bring to this job is [your strength].",
+      "I want to be upfront about one thing: [your words, kept short]. [Only what is true about where it stands now.] What I bring to this job is [your strength].",
     intakeQuestions: [
       {
         id: "other-understand",

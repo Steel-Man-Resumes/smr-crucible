@@ -27,12 +27,6 @@
 import { TroyWork } from "@crucible/consumer-ui";
 import { useRef, useState } from "react";
 import type { IntakeAnswer, IntakeContext } from "@/lib/intake-engine";
-import {
-  computeSufficiency,
-  sufficiencyCopy,
-  sufficiencyIndex,
-  SUFFICIENCY_LEVELS,
-} from "@/lib/sufficiency";
 
 export interface IntakeQuestion {
   id: string;
@@ -90,10 +84,10 @@ export function ProgressiveIntake({
   const aiRounds = rounds.length - 1;
   const canDeepen = aiRounds < maxFollowUpRounds;
 
-  // Live sufficiency across everything answered so far.
-  const allAnswerTexts = Object.values(answers);
-  const sufficiency = computeSufficiency(allAnswerTexts);
-  const sufficiencyPct = ((sufficiencyIndex(sufficiency) + 1) / SUFFICIENCY_LEVELS.length) * 100;
+  // Coverage, not length (2026-10-23 assessment finding 6): how many questions
+  // have an answer. A short answer counts the same as a long one.
+  const questionCount = rounds.reduce((n, r) => n + r.length, 0);
+  const answeredCount = Object.values(answers).filter((a) => typeof a === "string" && a.trim()).length;
 
   function collectAnswers(): IntakeAnswer[] {
     const out: IntakeAnswer[] = [];
@@ -257,27 +251,14 @@ export function ProgressiveIntake({
         </div>
       ))}
 
-      {/* Live sufficiency meter -- encourages, never shames. */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-xs font-medium text-t-white capitalize">
-            Plan strength: {sufficiency}
-          </span>
-          <span className="text-xs text-t-phos-dim">{sufficiencyCopy(sufficiency)}</span>
-        </div>
-        <div className="h-2 w-full bg-t-panel-2 border border-t-line overflow-hidden">
-          <div
-            className="h-full bg-t-amber transition-all"
-            style={{ width: `${sufficiencyPct}%` }}
-          />
-        </div>
-      </div>
+      <p className="text-xs text-t-phos-dim" aria-live="polite">
+        {answeredCount} of {questionCount} answered. This counts answers, not words. Short is fine.
+      </p>
 
       {error && <p className="text-sm text-t-amber-bright">{error}</p>}
 
       <p className="text-xs text-t-phos-dim">
-        You can skip any question. More detail just makes a stronger plan. How
-        much you share is always your choice.
+        You can skip any question. How much you share is always your choice.
       </p>
 
       <div className="flex items-center gap-3 flex-wrap">
