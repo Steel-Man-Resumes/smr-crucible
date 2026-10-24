@@ -36,9 +36,11 @@ import { HurdlePicker } from "@/components/hurdles/HurdlePicker";
 import { HurdleQuestion } from "@/components/hurdles/HurdleQuestion";
 import { HurdlePlanView, type WordingStatus } from "@/components/hurdles/HurdlePlanView";
 import { HURDLES, type HurdleId } from "@/lib/hurdles/graph";
-import { INITIAL_STATE, plannerReducer, position, reachedAnswers } from "@/lib/hurdles/reducer";
+import { INITIAL_STATE, hurdlesOf, plannerReducer, position, reachedAnswers } from "@/lib/hurdles/reducer";
 import { coverageOf } from "@/lib/hurdles/coverage";
-import { buildHurdlePlan, hurdlePlanText, planForSave, COACHING_LINE, type HurdlePlan } from "@/lib/hurdles/plan";
+import { buildHurdlePlan, buildSavePayload, hurdlePlanText, COACHING_LINE, type HurdlePlan } from "@/lib/hurdles/plan";
+import { withoutRecordContent } from "@/lib/hurdles/phrase";
+import { getNode } from "@/lib/hurdles/graph";
 import { applyConstraints } from "@/lib/hurdles/filters";
 import { INITIAL_SAVE, runSave, saveReducer } from "@/lib/hurdles/save-state";
 
@@ -59,7 +61,6 @@ interface Wording {
   status: WordingStatus;
   message: string;
   summaries: Partial<Record<HurdleId, string>>;
-  record?: { open: string; next: string };
   strippedCount: number;
 }
 const NO_WORDING: Wording = { status: "off", message: "", summaries: {}, strippedCount: 0 };
@@ -91,9 +92,13 @@ function DisclosurePlannerPage() {
   const [showCelebration, setShowCelebration] = useState(false);
   const [jobFilter, setJobFilter] = useState<{ status: "idle" | "saving" | "saved" | "failed"; message: string }>({ status: "idle", message: "" });
 
-  // Record consent: record answers reach the AI only after "I understand".
+  // Record consent is the person's STORED yes (migration 094, /api/hurdle-plan/consent).
+  // Record answers reach an AI service only while it is granted at the current version.
   const [aiConsent, setAiConsent] = useState(false);
   const [consentAsked, setConsentAsked] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
+  const [consentError, setConsentError] = useState("");
+  const [copyNote, setCopyNote] = useState("");
 
   const [targetJob, setTargetJob] = useState("");
   const [targetCompany, setTargetCompany] = useState("");
@@ -105,7 +110,36 @@ function DisclosurePlannerPage() {
   const [lastSaved, setLastSaved] = useState<{ selected: unknown; choices: unknown } | null>(null);
 
   const location = [context?.profile?.city, context?.profile?.state].filter(Boolean).join(", ");
-  const isRecord = planner.selected.includes("record");
+  const isRecord = hurdlesOf(planner).includes("record");
+
+  useEffect(() => {
+    let live = true;
+    fetch("/api/hurdle-plan/consent", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (live && d?.granted) { setAiConsent(true); setConsentAsked(true); } })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  async function answerConsent(yes: boolean) {
+    setConsentBusy(true); setConsentError("");
+    try {
+      if (yes) {
+        const r = await fetch("/api/hurdle-plan/consent", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        const d = await r.json().catch(() => null);
+        if (!r.ok || !d?.granted) throw new Error(d?.error || "Your yes did not save, so record answers stay away from the AI. Try again.");
+        setAiConsent(true);
+      } else {
+        if (aiConsent) {
+          const r = await fetch("/api/hurdle-plan/consent", { method: "DELETE" });
+          if (!r.ok) throw new Error("That did not save. Try again.");
+        }
+        setAiConsent(false);
+      }
+      setConsentAsked(true);
+    } catch (e) { setConsentError(e instanceof Error ? e.message : "That did not save. Try again."); }
+    finally { setConsentBusy(false); }
+  }
 
   // Forge context from the server (strengths stay editable here).
   useEffect(() => {
@@ -197,25 +231,8 @@ function DisclosurePlannerPage() {
   }
 
   function buildPayload(p: HurdlePlan, w: Wording): Record<string, unknown> {
-    const saved = planForSave(p, planner);
-    const recordOpen = w.record?.open ? `I'd say: "${w.record.open}"` : p.record?.open;
-    const recordNext = w.record?.next ? `Then: "${w.record.next}"` : p.record?.next;
-    return {
-      type: "disclosure_plan",
-      targetContext: { targetJob: targetJob || null, applicationId: searchParams.get("applicationId") || searchParams.get("job") || undefined },
-      content: {
-        // Older readers (Library, application snapshot) read these four fields.
-        timing_advice: p.record ? p.record.whenToBringItUp.join(" ") : null,
-        legal_context: p.record ? `${p.record.disclaimer} ${p.record.legalFloor.note}` : COACHING_LINE,
-        script: p.record ? [recordOpen, recordNext].filter(Boolean).join(" ") : null,
-        tips: p.hurdles.flatMap((s) => s.doNow).slice(0, 8),
-        targetJob: targetJob || null,
-        completedAt: new Date().toISOString(),
-        hurdlePlan: { ...saved, summaries: w.summaries, strippedCount: w.strippedCount, wording: w.status },
-        planText: hurdlePlanText(p, w.summaries as Record<string, string>),
-      },
-      scaffoldLevel: 1.0,
-    };
+    // Never carries the record part (lib/hurdles/plan.ts planForSave).
+    return buildSavePayload(p, planner, { summaries: w.summaries, strippedCount: w.strippedCount, wording: w.status, targetJob: targetJob || null, applicationId: searchParams.get("applicationId") || undefined });
   }
 
   async function doSave() {
@@ -232,20 +249,22 @@ function DisclosurePlannerPage() {
   }
 
   async function requestWording(): Promise<Wording> {
-    const phrasable = planner.selected.some((h) => h !== "not_sure" && (h !== "record" || aiConsent));
+    const active = hurdlesOf(planner);
+    const phrasable = active.some((h) => h !== "not_sure" && (h !== "record" || aiConsent));
     if (!phrasable) return NO_WORDING;
     setWording({ ...NO_WORDING, status: "working" });
     try {
       const res = await fetch("/api/hurdle-plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ selected: planner.selected, answers: reachedAnswers(planner), recordConsent: aiConsent, targetJob: targetJob || undefined, strengths: confirmedStrengths() }),
+        // Without the stored yes, record answers and sensitive choices are not even sent.
+        body: JSON.stringify({ selected: planner.selected, answers: aiConsent ? reachedAnswers(planner) : withoutRecordContent(reachedAnswers(planner)), targetJob: targetJob || undefined, strengths: confirmedStrengths() }),
         signal: AbortSignal.timeout(30_000),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data) return { ...NO_WORDING, status: "failed", message: data?.error || "The AI wording didn't come through. Your plan is built from your answers and is complete without it." };
       if (data.status === "nothing_to_phrase") return NO_WORDING;
-      return { status: "done", message: "", summaries: data.phrasing?.summaries ?? {}, record: data.phrasing?.record, strippedCount: Number(data.strippedCount) || 0 };
+      return { status: "done", message: "", summaries: data.phrasing?.summaries ?? {}, strippedCount: Number(data.strippedCount) || 0 };
     } catch {
       return { ...NO_WORDING, status: "failed", message: "The connection dropped before the wording came back. Your plan is built from your answers. Try the wording again." };
     }
@@ -269,11 +288,7 @@ function DisclosurePlannerPage() {
     if (!plan) return;
     const w = await requestWording();
     setWording(w);
-    if (w.status === "done") {
-      // New wording is a new version: it shows "Not saved yet" with a save button.
-      payloadRef.current = buildPayload(plan, w);
-      markChanged();
-    }
+    // The reading is never saved, so new wording does not change the saved plan.
   }
 
   async function useInJobSearch() {
@@ -310,16 +325,45 @@ function DisclosurePlannerPage() {
     setTimeout(() => w.print(), 400);
   }
 
+  /** What practice gets: the person's tell choices. Never the AI reading. */
   function preparedScript(): string {
     if (!plan) return "";
-    const lines: string[] = [];
-    if (plan.record) {
-      lines.push(wording.record?.open ? `I'd say: "${wording.record.open}"` : plan.record.open);
-      lines.push(wording.record?.next ? `Then: "${wording.record.next}"` : plan.record.next);
-    }
-    for (const s of plan.hurdles) if (s.hurdle !== "record" && s.tell) lines.push(`${s.label}: ${s.tell}`);
-    return lines.join("\n");
+    return plan.hurdles.filter((s) => s.hurdle !== "record" && s.tell).map((s) => `${s.label}: ${s.tell}`).join("\n");
   }
+
+  /** The person's own record lines, for practice only under the stored yes. */
+  function recordWords(): string | undefined {
+    if (!plan?.record || !aiConsent) return undefined;
+    return [plan.record.open, plan.record.next].join("\n");
+  }
+
+  async function copyRecordPlan() {
+    if (!plan?.record) return;
+    const text = [...plan.record.whenToBringItUp, plan.record.open, plan.record.next, plan.record.disclaimer].join("\n");
+    try { await navigator.clipboard.writeText(text); setCopyNote("Copied. Paste it somewhere you keep private."); }
+    catch { setCopyNote("Copying did not work here. Use Download instead."); }
+  }
+
+  const consentCard = (
+    <div className="bg-t-panel p-5 border border-t-steel mb-6" data-testid="record-consent">
+      <h3 className="font-semibold text-t-white mb-2">Your record answers and AI</h3>
+      <div className="text-sm text-t-phos-dim leading-relaxed space-y-2 mb-4">
+        <p>The record questions ask where it comes up, the kind of record, how long ago, supervision, and your own words. Every one can be skipped. This plan never asks what happened.</p>
+        <p>With your yes, those answers can go to an AI service (our main one, or a backup if it is down) to read your plan back to you, and your own record words go into practice with t.ROY. AI never rewrites your record lines. Without your yes, no record answer goes to any AI.</p>
+        <p>Your yes is saved to your account with the date, and you can take it back here any time.</p>
+        <p>Your record answers and your record words are never saved: not in your plan, not in your Library, not with a job application. Copy or download them before you leave the page.</p>
+      </div>
+      {consentError && <p role="alert" className="text-sm text-t-red mb-3">{consentError}</p>}
+      <div className="flex flex-wrap gap-3">
+        <button disabled={consentBusy} onClick={() => void answerConsent(true)} className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright min-h-touch disabled:opacity-50">
+          Yes, an AI service can use them
+        </button>
+        <button disabled={consentBusy} onClick={() => void answerConsent(false)} className="t-focus px-4 py-3 text-t-phos-dim text-sm hover:text-t-white min-h-touch disabled:opacity-50">
+          No, keep my record answers away from AI
+        </button>
+      </div>
+    </div>
+  );
 
   // --- Rehearse ---
   if (step === "rehearse" && plan) {
@@ -332,6 +376,7 @@ function DisclosurePlannerPage() {
         strengths={forge.strengths.filter((s) => s.title.trim())}
         forgePromptContext={targetJob ? `TARGET ROLE: ${targetJob}` : ""}
         preparedScript={preparedScript()}
+        recordWords={recordWords()}
         onBack={() => setStep("plan")}
       />
     );
@@ -353,6 +398,8 @@ function DisclosurePlannerPage() {
           onPractice={() => { window.scrollTo({ top: 0, behavior: "smooth" }); setStep("rehearse"); }}
           onEdit={() => setStep("planner")}
           onDownload={downloadPlan}
+          onCopyRecord={() => void copyRecordPlan()}
+          copyNote={copyNote}
         />
       </>
     );
@@ -362,6 +409,17 @@ function DisclosurePlannerPage() {
   if (planner.phase === "narrow" && planner.cursor) {
     const pos = position(planner);
     const cov = coverageOf(planner);
+    if (getNode(planner.cursor)?.hurdle === "record" && !consentAsked) {
+      return (
+        <div className="max-w-2xl">
+          <h1 className="text-2xl font-bold text-t-white mb-2">Before the record questions</h1>
+          <p className="text-sm text-t-phos mb-4">Your answers added the record conversation to your plan. One question first.</p>
+          {consentCard}
+          {recordStep && <p className="text-sm text-t-phos-dim mb-4">{RECORD_CHECK_COPY.entryQuestion} <a href="/dashboard/record-check" className="underline text-t-steel">{RECORD_CHECK_COPY.entryButton}</a></p>}
+          <button onClick={() => dispatch({ type: "back" })} className="t-focus px-3 py-2.5 text-sm text-t-phos-dim hover:text-t-white min-h-touch">Back</button>
+        </div>
+      );
+    }
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-4">Plan what to say</h1>
@@ -370,7 +428,7 @@ function DisclosurePlannerPage() {
           nodeId={planner.cursor}
           answer={planner.answers[planner.cursor]}
           hurdleIndex={pos.hurdleIndex}
-          hurdleCount={planner.selected.length}
+          hurdleCount={hurdlesOf(planner).length}
           step={pos.step}
           onAnswer={(v) => dispatch({ type: "answer", nodeId: planner.cursor!, ...v })}
           onSkip={() => dispatch({ type: "skip", nodeId: planner.cursor! })}
@@ -437,27 +495,10 @@ function DisclosurePlannerPage() {
         </div>
       )}
 
-      {isRecord && !consentAsked && (
-        <div className="bg-t-panel p-5 border border-t-steel mb-6" data-testid="record-consent">
-          <h3 className="font-semibold text-t-white mb-2">Your record answers and the AI</h3>
-          <div className="text-sm text-t-phos-dim leading-relaxed space-y-2 mb-4">
-            <p>The record questions ask where it comes up, the kind of record, how long ago, supervision, and your own words. Every one can be skipped. None asks what happened.</p>
-            <p>With your yes, those answers go to the AI service that puts your plan into plain sentences. Without it, your record plan is built from your answers on their own, and no record answer goes to any AI.</p>
-            <p>Record answers are not saved with your plan. Nothing here goes on your resume, and no employer sees it.</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button onClick={() => { setAiConsent(true); setConsentAsked(true); }} className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright min-h-touch">
-              Yes, use the AI for wording
-            </button>
-            <button onClick={() => { setAiConsent(false); setConsentAsked(true); }} className="t-focus px-4 py-3 text-t-phos-dim text-sm hover:text-t-white min-h-touch">
-              No, keep my record answers away from the AI
-            </button>
-          </div>
-        </div>
-      )}
+      {isRecord && !consentAsked && consentCard}
       {isRecord && consentAsked && (
         <p className="text-xs text-t-phos-dim mb-6">
-          {aiConsent ? "Your record answers will be worded by AI. " : "Your record answers stay away from the AI. "}
+          {aiConsent ? "You said yes: record answers can go to an AI service. " : "Your record answers stay away from every AI. "}
           <button onClick={() => setConsentAsked(false)} className="underline">Change this</button>
         </p>
       )}

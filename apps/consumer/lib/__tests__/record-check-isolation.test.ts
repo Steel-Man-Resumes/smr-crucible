@@ -78,7 +78,8 @@ const PROMPT_BUILDERS = [
   "apps/consumer/lib/ai/troy-chat.ts",
   "apps/consumer/lib/context-library.ts",
   "apps/consumer/lib/research-context.ts",
-  "apps/consumer/lib/intake-engine.ts",
+  "apps/consumer/lib/hurdles/phrase.ts",
+  "apps/consumer/app/api/hurdle-plan/route.ts",
   "apps/consumer/lib/mini-forge-ai.ts",
   "apps/consumer/lib/grounding-verify.ts",
   "apps/consumer/lib/interview-jd.ts",
@@ -94,7 +95,6 @@ const PROMPT_BUILDERS = [
   "apps/consumer/app/api/resume-generate-full/route.ts",
   "apps/consumer/app/api/resume-fine-tune/route.ts",
   "apps/consumer/app/api/rush-resume/route.ts",
-  "apps/consumer/app/api/disclosure-guide/route.ts",
   "apps/consumer/app/api/analyze/route.ts",
   "apps/consumer/app/api/user/context/route.ts",
 ];
@@ -110,6 +110,13 @@ test("no reuse: the writer, t.ROY chat, coach, interview, tailor and planner can
   // The tailor's routes, wherever they live.
   for (const f of touching) assert.ok(!/tailor|interview|assistant|coach|resume-|rush|forge\//.test(f), f);
   assert.ok(found >= 20, `checked ${found} prompt builders (paths moved?)`);
+});
+
+test("no reuse: the planner's legal floor imports only the static source list", () => {
+  const src = readFileSync(join(REPO, "apps/consumer/lib/hurdles/legal-floor.ts"), "utf8");
+  const imports = Array.from(src.matchAll(/from "([^"]*record-check[^"]*)"/g)).map((m) => m[1]);
+  assert.deepEqual(imports, ["@/lib/record-check/sources"]);
+  assert.ok(!/record_check_saved|handler|deps|prompt/.test(src.replace(/\/\*[\s\S]*?\*\//g, "")));
 });
 
 test("no reuse: the disclosure planner only links to the step", () => {

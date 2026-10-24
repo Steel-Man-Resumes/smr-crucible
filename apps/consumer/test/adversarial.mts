@@ -111,13 +111,6 @@ import {
   CONVERSATION_TABLES,
 } from "@crucible/core";
 import { REHEARSAL_PERSONA_LABELS, REHEARSAL_PERSONAS } from "@/lib/rehearsal-personas";
-import {
-  HURDLE_TYPES,
-  HURDLE_GUIDANCE,
-  getHurdleGuidance,
-  isRecordHurdle,
-  nonRecordIntakeQuestions,
-} from "@/lib/hurdle-guidance";
 import { coverageOf } from "@/lib/hurdles/coverage";
 import { INITIAL_STATE, plannerReducer } from "@/lib/hurdles/reducer";
 import { stripUnsupported } from "@/lib/hurdles/fact-check";
@@ -1918,58 +1911,8 @@ section("disclosure phase 5");
       REHEARSAL_PERSONAS.every((p) => typeof p.id === "string" && p.id.length > 0)
   );
 
-  // 5.3 -- every hurdle has a reviewed static entry with a review date.
-  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-  check(
-    "phase5: every hurdle type has a guidance entry with a review date",
-    HURDLE_TYPES.every((h) => {
-      const g = HURDLE_GUIDANCE[h];
-      return !!g && DATE_RE.test(g.reviewDate);
-    })
-  );
-
-  // 5.3 -- NON-record hurdles carry NO statute / legal-claim text anywhere in
-  // their user-facing coaching (frame + script + intake). Coaching only.
-  const LEGAL_CLAIM_RE =
-    /\b(statute|§|u\.s\.c\.|ordinance|ban[- ]the[- ]box|expungement|eeoc|\bada\b|fmla|felony|misdemeanor|your rights|legal advice|attorney|lawyer|lawsuit|the law\b|by law\b)\b/i;
-  const nonRecord = HURDLE_TYPES.filter((h) => h !== "record");
-  let anyLegal = false;
-  for (const h of nonRecord) {
-    const g = HURDLE_GUIDANCE[h];
-    const blob = [g.coachingFrame, g.scriptScaffold, ...g.intakeQuestions.map((q) => q.label + " " + (q.placeholder ?? ""))].join(" ");
-    if (LEGAL_CLAIM_RE.test(blob)) {
-      anyLegal = true;
-      console.error(`  legal-claim text found in non-record hurdle "${h}"`);
-    }
-  }
-  check("phase5: non-record hurdles carry NO statute/legal-claim text", !anyLegal);
-
-  // 5.3 -- record routes to jurisdiction; non-record does not.
-  check(
-    "phase5: record hurdle routes to jurisdiction, non-record does not",
-    isRecordHurdle("record") &&
-      getHurdleGuidance("record").routesToJurisdiction === true &&
-      nonRecord.every((h) => getHurdleGuidance(h).routesToJurisdiction === false)
-  );
-
-  // 5.4 -- minimum collection: no non-record intake question asks for an SSN,
-  // a diagnosis, or a case/docket number.
-  const FORBIDDEN_FIELD_RE = /(ssn|social security|diagnos|case number|case #|docket|conviction detail|what you were charged)/i;
-  let anyForbidden = false;
-  for (const h of nonRecord) {
-    for (const q of nonRecordIntakeQuestions(h)) {
-      if (FORBIDDEN_FIELD_RE.test(q.label + " " + (q.placeholder ?? ""))) {
-        anyForbidden = true;
-        console.error(`  minimum-collection breach in "${h}": ${q.label}`);
-      }
-    }
-  }
-  check("phase5: non-record intake never asks for SSN/diagnosis/case-number", !anyForbidden);
-  check(
-    "phase5: record hurdle exposes no non-record intake set",
-    nonRecordIntakeQuestions("record").length === 0
-  );
-
+  // 5.3 / 5.4: the static hurdle-guidance module and its intake were retired with
+  // the old routes (2026-10-23 fix round). The planner's own checks follow.
   // 5.4 (replaced 2026-10-23): the planner measures coverage, never length.
   // The old meter called twelve "I do not know" strong and a concrete line fair.
   const one = (text: string) => [

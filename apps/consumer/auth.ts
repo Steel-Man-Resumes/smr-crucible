@@ -351,7 +351,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (isApi && !session) {
         const protectedPrefixes = [
           "/api/dashboard", "/api/artifacts", "/api/access-code",
-          "/api/disclosure-guide", "/api/interview-practice", "/api/interview-voice",
+          "/api/hurdle-plan", "/api/interview-practice", "/api/interview-voice",
           "/api/job-search", "/api/resources-search",
           "/api/usage", "/api/user/",
         ];

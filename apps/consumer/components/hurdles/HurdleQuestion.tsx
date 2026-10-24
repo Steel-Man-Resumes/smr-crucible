@@ -26,7 +26,7 @@ export function HurdleQuestion({ nodeId, answer, hurdleIndex, hurdleCount, step,
   const many = node.kind === "many";
   const toggle = (id: string) => {
     if (!many) { setPicked([id]); return; }
-    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+    setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : node.maxPicks && p.length >= node.maxPicks ? p : [...p, id]));
   };
   const ready = node.kind === "text" ? text.trim().length > 0 : picked.length > 0;
   const headingId = `q-${node.id.replace(/\W/g, "-")}`;
@@ -64,17 +64,20 @@ export function HurdleQuestion({ nodeId, answer, hurdleIndex, hurdleCount, step,
         <div role="group" aria-labelledby={headingId} className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
           {(node.choices ?? []).map((c) => {
             const on = picked.includes(c.id);
+            const rank = node.maxPicks && on ? picked.indexOf(c.id) + 1 : 0;
+            const full = !!node.maxPicks && !on && picked.length >= node.maxPicks;
             return (
               <button
                 key={c.id}
                 type="button"
                 aria-pressed={on}
+                disabled={full}
                 onClick={() => toggle(c.id)}
-                className={`t-focus text-left px-3 py-2.5 border text-sm transition-colors min-h-touch ${
+                className={`t-focus text-left px-3 py-2.5 border text-sm transition-colors min-h-touch disabled:opacity-40 ${
                   on ? "bg-t-panel-2 border-t-amber text-t-white" : "bg-t-panel border-t-line text-t-phos hover:border-t-amber"
                 }`}
               >
-                {c.label}
+                {rank ? `${rank}. ` : ""}{c.label}
               </button>
             );
           })}

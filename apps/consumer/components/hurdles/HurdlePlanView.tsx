@@ -11,7 +11,7 @@ export type WordingStatus = "off" | "working" | "done" | "failed";
 
 interface Props {
   plan: HurdlePlan;
-  wording: { status: WordingStatus; message: string; summaries: Partial<Record<HurdleId, string>>; record?: { open: string; next: string }; strippedCount: number };
+  wording: { status: WordingStatus; message: string; summaries: Partial<Record<HurdleId, string>>; strippedCount: number };
   save: SaveState;
   jobFilter: { status: "idle" | "saving" | "saved" | "failed"; message: string };
   onRetryWording: () => void;
@@ -20,6 +20,8 @@ interface Props {
   onPractice: () => void;
   onEdit: () => void;
   onDownload: () => void;
+  onCopyRecord: () => void;
+  copyNote: string;
 }
 
 function List({ title, items }: { title: string; items: string[] }) {
@@ -34,7 +36,7 @@ function List({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording, onRetrySave, onUseInJobSearch, onPractice, onEdit, onDownload }: Props) {
+export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording, onRetrySave, onUseInJobSearch, onPractice, onEdit, onDownload, onCopyRecord, copyNote }: Props) {
   const constraintLines = describeConstraints(plan.constraints);
   return (
     <div className="max-w-2xl">
@@ -50,6 +52,7 @@ export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording,
         <p className="text-xs text-t-phos leading-relaxed">
           <span className="font-semibold text-t-white">This is coaching, not legal advice.</span>{" "}
           It is built from your answers. Anything you did not answer stays open. Nothing here is filled in with a guess.
+          {" "}What gets saved: this plan, without the record part and without anything you typed, goes to your Library (and stays with a job if you came here from one). The record part stays only on this screen until you copy or download it.
         </p>
       </div>
 
@@ -74,7 +77,7 @@ export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording,
         )}
         {wording.status === "done" && (
           <p className="text-sm text-t-phos">
-            The summaries were worded by AI from your answers only.
+            t.ROY&apos;s reading under each hurdle was written by an AI service from your answers for that hurdle only. Your own answers are the plan. The reading is not saved.
             {wording.strippedCount > 0
               ? ` We took out ${wording.strippedCount} ${wording.strippedCount === 1 ? "line" : "lines"} it added that you didn't tell us.`
               : " Nothing was added."}
@@ -93,18 +96,25 @@ export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording,
           <List title="When it comes up" items={plan.record.whenToBringItUp} />
           <div className="mt-4">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mb-1">What to say</h4>
-            <blockquote className="text-sm text-t-white leading-relaxed border-l-2 border-t-amber pl-4">
-              {wording.record?.open ? `I'd say: "${wording.record.open}"` : plan.record.open}
-            </blockquote>
+            <blockquote className="text-sm text-t-white leading-relaxed border-l-2 border-t-amber pl-4">{plan.record.open}</blockquote>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mt-3 mb-1">What to say next</h4>
-            <p className="text-sm text-t-phos">{wording.record?.next ? `Then: "${wording.record.next}" If they ask for more: one more true sentence, then back to the job.` : plan.record.next}</p>
+            <p className="text-sm text-t-phos">{plan.record.next}</p>
             <p className="text-xs text-t-phos-dim mt-2">
-              {plan.record.fromYou || wording.record?.open ? "Built from your own words. Say it your way." : "Fill the blank in your own words. Practice can help you find them."}
+              {plan.record.fromYou ? "These are your own words, as you typed them. No AI changed them. Say it your way." : "Fill the blank in your own words. Practice can help you find them."}
             </p>
+          </div>
+          <div className="mt-4 bg-t-panel-2 border border-t-amber p-3" data-testid="record-not-saved">
+            <p className="text-sm text-t-amber-bright font-medium">This record part is not saved anywhere. Copy or download it now if you want to keep it.</p>
+            <div className="flex flex-wrap items-center gap-3 mt-2">
+              <button onClick={onCopyRecord} className="t-focus text-sm font-medium text-t-amber-bright underline min-h-touch">Copy my record plan</button>
+              <button onClick={onDownload} className="t-focus text-sm font-medium text-t-amber-bright underline min-h-touch">Download the whole plan</button>
+              {copyNote && <span role="status" className="text-xs text-t-phos">{copyNote}</span>}
+            </div>
           </div>
           <div className="mt-4">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mb-1">The law, as dated sources (as of {plan.record.legalFloor.asOf})</h4>
             <p className="text-xs text-t-phos-dim mb-2">{plan.record.legalFloor.note}</p>
+            {plan.record.legalFloor.staleNote && <p role="note" className="text-xs text-t-amber-bright mb-2">{plan.record.legalFloor.staleNote}</p>}
             <ul className="space-y-1">
               {plan.record.legalFloor.sources.map((s) => (
                 <li key={s.id} className="text-sm text-t-phos">
@@ -121,8 +131,10 @@ export function HurdlePlanView({ plan, wording, save, jobFilter, onRetryWording,
       {plan.hurdles.map((s) => (
         <section key={s.hurdle} className="bg-t-panel p-5 border border-t-line mb-4" aria-labelledby={`plan-${s.hurdle}`} data-testid={`plan-${s.hurdle}`}>
           <h2 id={`plan-${s.hurdle}`} className="font-semibold text-t-amber-bright">{s.label}</h2>
-          {wording.summaries[s.hurdle] && <p className="text-sm text-t-white mt-2">{wording.summaries[s.hurdle]}</p>}
-          {s.hurdle !== "record" && <List title="What you know" items={s.known} />}
+          {s.hurdle !== "record" && <List title="What you told us" items={s.known} />}
+          {wording.summaries[s.hurdle] && (
+            <p className="text-sm text-t-phos mt-3"><span className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim">t.ROY&apos;s reading: </span>{wording.summaries[s.hurdle]}</p>
+          )}
           <List title="Still open" items={s.open} />
           <List title="Do now" items={s.doNow} />
           {s.whoCanHelp.length > 0 && (
