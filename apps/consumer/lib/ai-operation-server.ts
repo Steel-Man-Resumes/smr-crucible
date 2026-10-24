@@ -32,7 +32,7 @@ export async function beginAiOperation(input: {userId: string; endpoint: string;
   if (!isAiWorkflow(input.endpoint)) return result;
   let admissionStage = 'seat';
   try {
-    // Refinery seat (migration 093): read from the database on every call, so
+    // Refinery seat (migration 096): read from the database on every call, so
     // a stale or missing session claim can never spend Refinery AI. Forge
     // workflows pass (lib/refinery-access.ts FORGE_AI_WORKFLOWS). A database
     // error falls to the 503 below, like every other admission check.

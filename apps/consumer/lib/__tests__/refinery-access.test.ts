@@ -1,5 +1,5 @@
 /**
- * Refinery seats (B7 gate, migration 093). One test per door, the gate
+ * Refinery seats (B7 gate, migration 096). One test per door, the gate
  * function, AI admission, Troy's approve path, and the hardening around codes.
  * Database calls are injected (lib/refinery-access-server.ts deps), so these
  * run without Neon. What only a real database can prove is listed in the B7
@@ -51,14 +51,14 @@ import { SEAT_COPY } from "../seat-copy";
 const APP = path.resolve(__dirname, "..", "..");
 const REPO = path.resolve(APP, "..", "..");
 const read = (...p: string[]) => fs.readFileSync(path.join(APP, ...p), "utf8");
-const MIGRATION = fs.readFileSync(path.join(REPO, "packages", "core", "migrations", "093_refinery_access.sql"), "utf8");
+const MIGRATION = fs.readFileSync(path.join(REPO, "packages", "core", "migrations", "096_refinery_access.sql"), "utf8");
 const UID = "11111111-2222-4333-8444-555555555555";
 /** Source without comments, so an explanation never satisfies or fails a check. */
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
 
 /* ------------------------------------------------------------ the gate -- */
 
-test("gate: open sign-ups pass every path (applying 093 changes nothing)", () => {
+test("gate: open sign-ups pass every path (applying 096 changes nothing)", () => {
   for (const p of ["/dashboard", "/dashboard/jobs", "/api/coach", "/api/applications", "/start"]) {
     assert.equal(seatGateVerdict(p, true, false), "pass", p);
   }
@@ -122,7 +122,8 @@ test("gate: wired in authorized() after revocation, the second-step hold and ter
   // The claim is read from the definer functions, after the Google last check.
   const read1 = at("public.smr_has_refinery_seat(${token.sub}::uuid)");
   assert.ok(read1 > at("throw new GoogleLinkRefused()"));
-  assert.match(src, /seatFrom\(rows\[0\]\.seat, token\.email\)/);
+  assert.match(src, /seatFrom\(rows\[0\]\.seat, token\.email, rows\[0\]\.proven === true\)/);
+  assert.match(src, /u\.email_proven_at IS NOT NULL FROM users u/);
   // The signIn callback does not mention seats at all (S2).
   const signIn = src.slice(src.indexOf("async signIn("), src.indexOf("async authorized("));
   assert.doesNotMatch(signIn, /seat/i);
@@ -163,6 +164,8 @@ function forgeApiLiterals(): Map<string, string> {
   };
   walk(path.join(APP, "app", "(forge)"));
   queue.push(path.join(APP, "app", "(auth)", "seat", "page.tsx"));
+  // The partner landing a seatless signed-in visitor can open (review 1, N-7).
+  queue.push(path.join(APP, "app", "access", "page.tsx"));
   // The lists themselves name routes they do not call.
   const lists = new Set(["session-policy.ts", "forge-access.ts", "refinery-access.ts"].map((f) => path.join(APP, "lib", f)));
   const seen = new Set<string>();
@@ -199,9 +202,18 @@ test("Forge: every API route a Forge page can call is decided (exempt, or gated 
 
 test("Forge: exempt routes run only Forge AI workflows (a seatless account is never refused there)", () => {
   for (const w of FORGE_AI_WORKFLOWS) assert.ok((AI_WORKFLOWS as readonly string[]).includes(w), w);
-  const routes = ["forge/save", "forge/load", "forge/generate-docs", "forge/recheck", "forge/resume-assist", "forge/suggest-fix",
-    "forge/story-check", "forge/second-check", "forge/email-package", "forge/download", "parse", "analyze", "rush-resume", "assistant",
-    "lane-first", "revisions", "revisions/check", "revisions/rebuild", "resume/fit-check"];
+  // Every route under /api/forge/ (the exemption is a prefix, review 1 N-8), found on disk.
+  const forgeRoutes: string[] = [];
+  const walkRoutes = (dir: string, rel: string) => {
+    for (const f of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (f.isDirectory()) walkRoutes(path.join(dir, f.name), `${rel}/${f.name}`);
+      else if (f.name === "route.ts") forgeRoutes.push(rel);
+    }
+  };
+  walkRoutes(path.join(APP, "app", "api", "forge"), "forge");
+  assert.ok(forgeRoutes.length >= 10, `found ${forgeRoutes.length} forge routes`);
+  const routes = [...forgeRoutes, "parse", "analyze", "rush-resume", "assistant",
+    "lane-first", "revisions", "revisions/check", "revisions/rebuild", "resume/fit-check", "access-name"];
   for (const r of routes) {
     const file = path.join(APP, "app", "api", r, "route.ts");
     if (!fs.existsSync(file)) continue;
@@ -217,13 +229,13 @@ test("Forge: exempt routes run only Forge AI workflows (a seatless account is ne
 
 /* --------------------------------------------------------- AI admission -- */
 
-function deps(gate: { open: boolean; seat: boolean }, email: string | null = null, preAuthRaw = ""): SeatDeps & { calls: string[] } {
+function deps(gate: { open: boolean; seat: boolean }, email: string | null = null, preAuthRaw = "", proven = true): SeatDeps & { calls: string[] } {
   const calls: string[] = [];
   return {
     calls,
     preAuthRaw,
     readGate: async (u) => { calls.push(`gate:${u}`); return gate; },
-    readEmail: async (u) => { calls.push(`email:${u}`); return email; },
+    readEmail: async (u) => { calls.push(`email:${u}`); return { email, proven }; },
   };
 }
 
@@ -264,11 +276,14 @@ test("AI admission: the verdict reads nothing but workflow, switch and seat", ()
 test("door PARTNER_PRE_AUTH: a listed address is a seat; unlisted, blank and look-alikes are not", async () => {
   const raw = "Lead@Example.org:CODE1, other@example.org";
   assert.deepEqual(parsePartnerPreAuth(raw).emails, ["lead@example.org", "other@example.org"]);
-  assert.equal(seatFrom(false, "lead@example.org", raw), true);
-  assert.equal(seatFrom(false, " LEAD@example.org ", raw), true);
-  assert.equal(seatFrom(false, "lead@example.org.evil", raw), false);
-  assert.equal(seatFrom(false, null, raw), false);
-  assert.equal(seatFrom(false, "x@example.org", ""), false);
+  assert.equal(seatFrom(false, "lead@example.org", true, raw), true);
+  assert.equal(seatFrom(false, " LEAD@example.org ", true, raw), true);
+  assert.equal(seatFrom(false, "lead@example.org.evil", true, raw), false);
+  assert.equal(seatFrom(false, null, true, raw), false);
+  assert.equal(seatFrom(false, "x@example.org", true, ""), false);
+  // SF-4: a listed address nobody proved (a password sign-up) is not a seat.
+  assert.equal(seatFrom(false, "lead@example.org", false, raw), false);
+  assert.deepEqual(await readSeat(UID, deps({ open: false, seat: false }, "lead@example.org", raw, false)), { open: false, seat: false });
   assert.equal(isPartnerPreAuthorized("lead@example.org", undefined), false);
   const d = deps({ open: false, seat: false }, "other@example.org", raw);
   assert.deepEqual(await readSeat(UID, d), { open: false, seat: true });
@@ -312,12 +327,10 @@ test("doors register, email link and Google: none of them writes a seat", () => 
 
 test("door grandfather snapshot: the list and the switch change in ONE transaction", () => {
   const src = read("lib", "refinery-access-server.ts");
-  const fn = src.slice(src.indexOf("export async function closeRefinerySignups"), src.indexOf("export async function openRefinerySignups"));
-  assert.equal((fn.match(/runAsUser/g) ?? []).length, 1);
-  const ins = fn.indexOf("INSERT INTO refinery_seat_legacy (user_id) SELECT id FROM users");
-  const upd = fn.indexOf("UPDATE refinery_access_policy SET public_signup_open=false");
-  assert.ok(ins > 0 && upd > ins, "snapshot first, then the flip, same statement list");
-  assert.match(fn, /throw new Error\("refinery_policy_not_changed"\)/);
+  const fn = src.slice(src.indexOf("export async function closeRefinerySignups"), src.indexOf("export async function removeLegacySeat"));
+  assert.equal((fn.match(/await run\(/g) ?? []).length, 1, "one transaction");
+  const order = ["CLOSE_STATEMENTS.lock", "CLOSE_STATEMENTS.snapshot", "CLOSE_STATEMENTS.flip"].map((k) => fn.indexOf(k));
+  assert.ok(order[0] > 0 && order[0] < order[1] && order[1] < order[2], "lock, snapshot, flip");
 });
 
 test("door access code: tries are rate limited per account and per connection", async () => {
@@ -339,7 +352,7 @@ test("door access code: tries are rate limited per account and per connection", 
 test("door access code: one neutral refusal, whatever the reason", () => {
   const src = read("app", "api", "access-code", "redeem", "route.ts");
   assert.ok(src.indexOf("checkAuthRateLimits(codeAttemptLimits(") < src.indexOf("redeemAccessCode(userId"), "limit before the try");
-  const refusals = [...src.matchAll(/error: ([^}]+)\}/g)].map((m) => m[1].trim()).filter((e) => !/Not authenticated/.test(e));
+  const refusals = [...src.matchAll(/error: ([^}]+)\}/g)].map((m) => m[1].trim()).filter((e) => !/Not authenticated|Request not allowed/.test(e));
   assert.ok(refusals.length >= 3);
   for (const r of refusals) assert.equal(r, "CODE_REFUSAL");
   assert.doesNotMatch(src, /result\.error|outcome/);
@@ -375,7 +388,7 @@ test("door org invite of an existing account: an offer first, the seat is spent 
   const redeem = existing.indexOf("redeemAccessCode(");
   assert.ok(offer > 0 && redeem > offer, "an account that signed in gets an offer before any redemption path");
   assert.ok(existing.slice(0, offer).includes("if (!pending)"));
-  assert.match(existing.slice(offer - 200, offer + 200), /return \{ ok: true, userId, kind: "offered" \}/);
+  assert.match(existing.slice(offer, offer + 1400), /return \{ ok: true, userId, kind: "offered", notify: fresh \}/);
   // The accept function spends the seat through the one membership path.
   const accept = MIGRATION.slice(MIGRATION.indexOf("FUNCTION public.smr_accept_seat_offer"), MIGRATION.indexOf("FUNCTION public.smr_decline_seat_offer"));
   assert.match(accept, /o\.user_id = p_user AND o\.status = 'pending' FOR UPDATE/);
@@ -395,7 +408,7 @@ function decideDeps(over: Partial<DecideSeatDeps> = {}) {
     readPolicy: async () => ({ house_code_id: "house-id" }),
     readHouse: async () => ({ id: "house-id", code: "HOUSECODE", partner_name: "House Org", is_active: true }),
     readUser: async () => ({ email: "person@example.org", name: "Pat" }),
-    invite: (async (opts: any) => { log.push(`invite:${opts.accessCodeId}:${opts.code}:${opts.email}:${opts.invitedBy}`); return { ok: true, userId: UID, kind: "offered" }; }) as any,
+    invite: (async (opts: any) => { log.push(`invite:${opts.accessCodeId}:${opts.code}:${opts.email}:${opts.invitedBy}`); return { ok: true, userId: UID, kind: "offered", notify: true }; }) as any,
     markDecided: async (_a, id, status) => { log.push(`mark:${id}:${status}`); return status; },
     notify: async (kind, to, org) => { log.push(`notify:${kind}:${to.email}:${org}`); },
     ...over,
@@ -519,4 +532,209 @@ test("copy: plain words, no dashes, no price, and the email line only from a rea
   assert.match(page, /state\.packageEmailed \? \(\s*<p[^>]*>\{C\.emailed\}/);
   assert.doesNotMatch(page, /\/api\/forge\/save|ForgeImport/);
   assert.match(read("app", "api", "seat", "route.ts"), /FROM forge_package_email_sent WHERE user_id=\$1/);
+});
+
+/* ------------------------------------------------- security review 1 -- */
+
+import { assistantSeatSurface } from "../assistant-seat";
+import { buildAssistantTools } from "../tools/assistant-tools";
+import { ALREADY_CLOSED, CLOSE_STATEMENTS, closeRefinerySignups } from "../refinery-access-server";
+import { attributeFromCookie, type CookieAttributionDeps } from "../code-attribution";
+import { CODE_SHAPE } from "../access-code-guard";
+import { buildInviteEmail, buildOfferEmail } from "../org-invite-email";
+
+const ACCOUNT_TOOLS = ["search_jobs", "save_job", "add_follow_up_reminder", "search_verified_employers", "search_verified_resources",
+  "save_resource_list", "get_my_progress", "request_tool_access", "get_my_live_status", "read_saved_resources"];
+
+function surface(gate: { open: boolean; seat: boolean } | null, extra: { platformOwner?: boolean; staff?: boolean } = {}) {
+  return assistantSeatSurface({
+    userId: UID, platformOwner: !!extra.platformOwner, staff: !!extra.staff, gate,
+    toolOptions: { userId: UID, surface: "refinery" }, enhancedConsent: true,
+  });
+}
+
+test("BL-1: a seatless signed-in caller of /api/assistant gets the Forge chat: no account tools, no memory", () => {
+  for (const gate of [{ open: false, seat: false }, null]) {
+    const out = surface(gate);
+    assert.equal(out.scope, "forge");
+    assert.equal(out.enhancedConsent, false, "memory is neither read nor written");
+    const tools = Object.keys(buildAssistantTools(out.toolOptions));
+    for (const t of ACCOUNT_TOOLS) assert.ok(!tools.includes(t), `${t} offered with gate ${JSON.stringify(gate)}`);
+    assert.deepEqual(tools.sort(), ["highlight_element", "take_me_there"]);
+  }
+});
+
+test("BL-1: a seat, open sign-ups, admins and staff keep the account chat", () => {
+  for (const out of [surface({ open: false, seat: true }), surface({ open: true, seat: false }), surface(null, { platformOwner: true }), surface(null, { staff: true })]) {
+    assert.equal(out.scope, "account");
+    assert.equal(out.enhancedConsent, true);
+  }
+  const tools = Object.keys(buildAssistantTools(surface({ open: false, seat: true }).toolOptions));
+  for (const t of ["search_jobs", "save_job", "add_follow_up_reminder"]) assert.ok(tools.includes(t), t);
+});
+
+test("BL-1: the route takes its tools, memory, selected work and rehearsal override from the seat surface", () => {
+  const src = code(read("app", "api", "assistant", "route.ts"));
+  const at = (x: string) => { const i = src.indexOf(x); assert.ok(i > 0, x); return i; };
+  const decided = at("assistantSeatSurface(");
+  assert.ok(decided < at("const memorySection"), "before memory");
+  assert.ok(decided < at("buildAssistantTools(toolOptions)"), "before the tools are built");
+  assert.ok(decided < at("const allowRoleplayOverride"), "before the rehearsal override");
+  assert.match(src, /readSeat\(userId\)\.catch\(\(\) => null\)/, "a failed read is null, and null is the Forge chat");
+  assert.match(src, /toolOptions = seatSurface\.toolOptions;/);
+  assert.match(src, /enhancedConsent = seatSurface\.enhancedConsent;/);
+  assert.match(src, /if \(userId && seatScope === "account" && !platformOwner/);
+  assert.match(src, /!!userId &&\s*seatScope === "account" &&/);
+});
+
+/** A model of the policy row and the three close statements, keyed on the guards the SQL carries. */
+function closeModel(users: string[]) {
+  const st = { open: true, cutoff: null as number | null, legacy: new Set<string>(), users: new Set(users), clock: 1 };
+  const run = async (_u: string, build: (sql: any) => unknown[]) => {
+    const calls: [string, unknown[]][] = [];
+    build((q: string, p: unknown[] = []) => { calls.push([q, p]); return null; });
+    assert.deepEqual(calls.map((c) => c[0]), [CLOSE_STATEMENTS.lock, CLOSE_STATEMENTS.snapshot, CLOSE_STATEMENTS.flip]);
+    const out: unknown[][] = [[{ id: true }]];
+    if (st.open && st.cutoff === null) for (const u of st.users) st.legacy.add(u); // snapshot guard
+    out.push([]);
+    if (st.open) { st.open = false; st.cutoff = st.cutoff ?? st.clock++; out.push([{ id: true }]); } else out.push([]);
+    return out;
+  };
+  return { st, run };
+}
+
+test("BL-2: the close statements grandfather only on the first close and only while open", () => {
+  assert.match(CLOSE_STATEMENTS.lock, /FOR UPDATE/);
+  assert.match(CLOSE_STATEMENTS.snapshot, /p\.public_signup_open AND p\.legacy_cutoff IS NULL/);
+  assert.match(CLOSE_STATEMENTS.flip, /WHERE id AND public_signup_open RETURNING id/);
+  assert.match(CLOSE_STATEMENTS.flip, /legacy_cutoff=COALESCE\(legacy_cutoff, now\(\)\)/);
+  assert.match(MIGRATION, /legacy_cutoff timestamptz/);
+  assert.match(MIGRATION, /GRANT SELECT, INSERT, DELETE ON refinery_seat_legacy TO smr_app/);
+});
+
+test("BL-2: closing twice changes nothing the second time and says so", async () => {
+  const m = closeModel(["a", "b"]);
+  await closeRefinerySignups("admin", m.run as any);
+  await assert.rejects(() => closeRefinerySignups("admin", m.run as any), (e: unknown) => e instanceof SeatDecisionError && e.message === ALREADY_CLOSED);
+  assert.deepEqual([...m.st.legacy].sort(), ["a", "b"]);
+});
+
+test("BL-2: open then close again does not grandfather accounts made in between", async () => {
+  const m = closeModel(["a"]);
+  await closeRefinerySignups("admin", m.run as any);
+  const cutoff = m.st.cutoff;
+  m.st.users.add("stranger-while-closed");
+  m.st.open = true; // the admin "open" action
+  m.st.users.add("stranger-while-open");
+  await closeRefinerySignups("admin", m.run as any);
+  assert.deepEqual([...m.st.legacy], ["a"]);
+  assert.equal(m.st.cutoff, cutoff, "the cutoff never moves");
+  const route = read("app", "api", "admin", "refinery-access", "route.ts");
+  assert.match(route, /action === "unlegacy"/, "an admin can take a row off the list");
+});
+
+test("BL-3: the redeem route takes only the minted shape; hub-style and lowercase codes get the neutral refusal", () => {
+  for (const bad of ["ABCD-REFINERY", "abcd1234", "ABC", "A".repeat(21), "AB CD", "ABCD'--"]) assert.equal(CODE_SHAPE.test(bad), false, bad);
+  assert.equal(CODE_SHAPE.test("K7Q2M9X4P3RT"), true);
+  const src = code(read("app", "api", "access-code", "redeem", "route.ts"));
+  const shape = src.indexOf("if (!CODE_SHAPE.test(code))");
+  assert.ok(shape > 0 && shape < src.indexOf("redeemAccessCode(userId"), "shape checked before the database");
+  assert.match(src.slice(shape, shape + 120), /CODE_REFUSAL/);
+  assert.ok(src.indexOf("isSameOriginJsonPost(request.headers)") < src.indexOf("await auth()"), "same-origin first (N-5)");
+});
+
+function cookieDeps(over: Partial<CookieAttributionDeps> = {}) {
+  const log: string[] = [];
+  const d: CookieAttributionDeps = {
+    hasMembership: async () => { log.push("member?"); return false; },
+    spendTry: async () => { log.push("spend"); return true; },
+    attribute: async (_u, c) => { log.push(`attr:${c}`); return true; },
+    ...over,
+  };
+  return { d, log };
+}
+
+test("SF-1: a cookie code is a try: refused when the budget is spent, free for members, hub shapes never tried", async () => {
+  const spent = cookieDeps({ spendTry: async () => false });
+  assert.equal(await attributeFromCookie("ip", UID, "GUESS1", spent.d), false);
+  assert.ok(!spent.log.some((l) => l.startsWith("attr")));
+  const member = cookieDeps({ hasMembership: async () => true });
+  assert.equal(await attributeFromCookie("ip", UID, "GUESS1", member.d), false);
+  assert.deepEqual(member.log, []);
+  const hub = cookieDeps();
+  assert.equal(await attributeFromCookie("ip", UID, "WAUK-REFINERY", hub.d), false);
+  assert.deepEqual(hub.log, []);
+  const ok = cookieDeps();
+  assert.equal(await attributeFromCookie("ip", UID, " guess1 ", ok.d), true);
+  assert.deepEqual(ok.log, ["member?", "spend", "attr:GUESS1"]);
+  assert.equal(await attributeFromCookie("ip", UID, "GUESS1", cookieDeps({ attribute: async () => { throw new Error("db"); } }).d), false);
+});
+
+test("SF-1: withRateLimit and registration bind cookie codes only through the budget", () => {
+  for (const f of [["lib", "withRateLimit.ts"], ["app", "api", "auth", "register", "route.ts"]]) {
+    const src = code(read(...f));
+    assert.doesNotMatch(src, /ensureUserAttribution\(/, f.join("/"));
+    assert.match(src, /attributeFromCookie\(/, f.join("/"));
+  }
+});
+
+test("SF-2: one staff reply whatever the address was, no kind in it, and one offer email per person per org per day", () => {
+  const route = code(read("app", "api", "partner", "org", "route.ts"));
+  const invite = route.slice(route.indexOf('body.action === "invite"'), route.indexOf('body.action === "resend_invite"'));
+  assert.match(invite, /return NextResponse\.json\(\{ ok: true, message: INVITE_NEUTRAL_MESSAGE \}\);/);
+  assert.doesNotMatch(invite, /kind: created\.kind|already has an account|emailFailed/);
+  assert.match(invite, /if \(created\.notify\) \{/);
+  const offerSql = fs.readFileSync(path.join(REPO, "packages", "core", "src", "refineryAccess.ts"), "utf8");
+  assert.match(offerSql, /o\.status = 'pending'\s*OR o\.created_at > now\(\) - make_interval\(hours => \$\{OFFER_WINDOW_HOURS\}\)\s*OR o\.decided_at > now\(\)/);
+  assert.match(offerSql, /OFFER_WINDOW_HOURS = 24/);
+  assert.match(offerSql, /RETURNING id/);
+});
+
+test("SF-2: a seat approval asked already today sends no second email", async () => {
+  const { d, log } = decideDeps({ invite: (async () => ({ ok: true, userId: UID, kind: "offered", notify: false })) as any });
+  assert.deepEqual(await decideSeatRequest("admin-1", REQ, "approve", "ok", "", d), { status: "approved" });
+  assert.ok(!log.some((l) => l.startsWith("notify")));
+});
+
+test("SF-3: names and organization names are escaped in the email HTML and left as typed in the text", () => {
+  const name = `<a/href=https://example.test>Sign&#32;in</a>"x`;
+  const org = `Org <b>"&'`;
+  for (const m of [
+    buildOfferEmail({ inviteeName: name, inviterName: "<i>Staff</i>", orgName: org, origin: "https://x.test" }),
+    buildInviteEmail({ inviteeName: name, inviterName: null, orgName: org, url: "https://x.test/l?a=1&b=2", origin: "https://x.test" }),
+  ]) {
+    assert.doesNotMatch(m.html, /<a\/href|<b>|<i>/);
+    assert.match(m.html, /&lt;a\/href=https:\/\/example\.test&gt;Sign&amp;#32;in&lt;\/a&gt;&quot;x/);
+    assert.match(m.html, /Org &lt;b&gt;&quot;&amp;&#39;/);
+    assert.match(m.text, /<a\/href=https:\/\/example\.test>Sign&#32;in<\/a>"x/);
+  }
+});
+
+test("SF-5: leaving and coming back takes back the old seat; it never spends a second one", () => {
+  const redeem = MIGRATION.slice(MIGRATION.indexOf("FUNCTION public.smr_redeem_code"), MIGRATION.indexOf("FUNCTION public.smr_leave_all_orgs"));
+  const back = redeem.indexOf("FROM public.access_code_departure d");
+  assert.ok(back > 0 && back < redeem.indexOf("v_code.times_redeemed >= v_code.max_redemptions"), "before the capacity check");
+  const branch = redeem.slice(back, redeem.indexOf("END IF;", back));
+  assert.doesNotMatch(branch, /times_redeemed/);
+  assert.ok(redeem.indexOf("already_member") < back, "an active member is still 'already_member'");
+  for (const fn of ["smr_leave_org", "smr_leave_all_orgs"]) {
+    const body = MIGRATION.slice(MIGRATION.indexOf(`CREATE OR REPLACE FUNCTION public.${fn}(`));
+    assert.match(body.slice(0, 1200), /INSERT INTO public\.access_code_departure/, fn);
+  }
+  assert.ok(fs.readFileSync(path.join(REPO, "packages", "core", "src", "rlsHealth.ts"), "utf8").includes('"access_code_departure"'));
+});
+
+test("N-4 and SF8: accepting re-checks the other-org rule, and offers are in the org's own invite record", () => {
+  const accept = MIGRATION.slice(MIGRATION.indexOf("FUNCTION public.smr_accept_seat_offer"), MIGRATION.indexOf("FUNCTION public.smr_decline_seat_offer"));
+  assert.ok(accept.indexOf("RETURN 'other_org'") > 0 && accept.indexOf("RETURN 'other_org'") < accept.indexOf("smr_redeem_code("));
+  assert.match(accept, /SET offer_status = 'joined'/);
+  assert.match(MIGRATION, /ALTER TABLE org_invite ADD COLUMN IF NOT EXISTS offer_status/);
+  assert.match(fs.readFileSync(path.join(REPO, "packages", "core", "src", "orgInvite.ts"), "utf8"), /invited_name, invited_email, offer_status\)\s*VALUES \(\$1, \$2, \$3, \$4, \$5, 'offered'\)/);
+  assert.match(read("app", "api", "seat", "offer", "route.ts"), /other_org:/);
+});
+
+test("N-11 and N-10: the policy row is admin-read only; the constraint swap is safe to re-run", () => {
+  const read1 = MIGRATION.slice(MIGRATION.indexOf("CREATE POLICY refinery_access_policy_read"), MIGRATION.indexOf("CREATE POLICY refinery_access_policy_admin"));
+  assert.match(read1, /platform_admin/);
+  assert.match(MIGRATION, /DROP CONSTRAINT IF EXISTS progression_request_kind_check/);
 });

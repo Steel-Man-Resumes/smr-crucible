@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * "Leave this organization", one organization at a time (migration 093,
+ * "Leave this organization", one organization at a time (migration 096,
  * smr_leave_org). Asks once, says plainly what happens, then reloads.
  */
 import { useState } from "react";

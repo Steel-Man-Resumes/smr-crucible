@@ -1280,15 +1280,15 @@ async function platformAdminChecks() {
 }
 
 /**
- * Refinery seats (migration 093). The seat rule is one definer function; these
+ * Refinery seats (migration 096). The seat rule is one definer function; these
  * prove each of its five inputs, that nothing else counts, that the app role
  * cannot write the grandfather list or flip the switch without being a
  * platform admin, and that an offer spends a seat only on the person's yes.
  */
 async function seatChecks() {
-  console.log("\n  -- Refinery seats (093) --");
+  console.log("\n  -- Refinery seats (096) --");
   const [{ has }] = await sql`SELECT to_regclass('public.refinery_access_policy') IS NOT NULL AS has`;
-  if (!has) { console.log("  note  093 not applied; skipped"); return; }
+  if (!has) { console.log("  note  096 not applied; skipped"); return; }
   if (!appUrl) { console.log("  skip  needs the app credential"); return; }
   const core = await import("../packages/core/dist/index.js");
   const app = neon(appUrl);
@@ -1361,6 +1361,57 @@ async function seatChecks() {
   const [{ t: beforeLeave }] = await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`;
   check("leaving one organization ends that membership", (await core.leaveOrg(asked, org.id)) === true && (await seat(asked)) === false);
   check("leaving does not hand the seat back (durable seats)", (await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`)[0].t === beforeLeave);
+  // Review 1, SF-5: coming back takes back the old seat, never a second one.
+  const back = await core.redeemAccessCode(asked, org.code);
+  check("leave then re-join with the code spends no second seat", back.success
+    && (await sql`SELECT times_redeemed AS t FROM access_code WHERE id = ${org.id}`)[0].t === beforeLeave && (await seat(asked)) === true,
+    JSON.stringify(back));
+
+  // Review 1, N-4: an offer accepted after joining another organization is refused.
+  const other = await mkUser("s-other");
+  await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${other}`;
+  const [{ email: oEmail }] = await sql`SELECT email FROM users WHERE id = ${other}`;
+  await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "O", email: oEmail, invitedBy: owner });
+  const [oOffer] = await core.listMySeatOffers(other);
+  const [otherOrg] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active) VALUES (${"ISOT" + uniq}, ${P + " other"}, 'client', true) RETURNING id, code`;
+  created.codes.push(otherOrg.id);
+  await core.redeemAccessCode(other, otherOrg.code);
+  check("accepting an offer re-checks the other-organization rule", (await core.acceptSeatOffer(other, oOffer.id)) === "other_org");
+  // SF8: the offer is in the organization's own invite record, flipped on yes.
+  const [rec] = await sql`SELECT invited_name, offer_status FROM org_invite WHERE access_code_id = ${org.id} AND user_id = ${asked}`;
+  check("an accepted offer is recorded in org_invite with the typed name, status joined", rec?.invited_name === "Asked" && rec?.offer_status === "joined", JSON.stringify(rec));
+  // SF-2: a second "Add" within a day writes no new offer and asks for no email.
+  const again = await core.createOrgInvite({ accessCodeId: org.id, code: org.code, name: "D", email: dEmail, invitedBy: owner });
+  check("a second offer to the same person within 24 hours is not made and not emailed", again.ok && again.notify === false && (await core.listMySeatOffers(declines)).length === 0, JSON.stringify(again));
+
+  // Review 1, BL-2: grandfather once. Run the close statements as the app, as a platform admin.
+  const legacyBefore = (await sql`SELECT user_id FROM refinery_seat_legacy`).map((r) => r.user_id);
+  const [policyBefore] = await sql`SELECT public_signup_open, legacy_cutoff, closed_at FROM refinery_access_policy WHERE id`;
+  const close = () => app.transaction([
+    app`SELECT set_config('app.user_id', ${boss}, true)`,
+    app`SELECT public_signup_open, legacy_cutoff FROM refinery_access_policy WHERE id FOR UPDATE`,
+    app`INSERT INTO refinery_seat_legacy (user_id) SELECT u.id FROM users u WHERE EXISTS (SELECT 1 FROM refinery_access_policy p WHERE p.id AND p.public_signup_open AND p.legacy_cutoff IS NULL) ON CONFLICT (user_id) DO NOTHING`,
+    app`UPDATE refinery_access_policy SET public_signup_open=false, closed_at=now(), legacy_cutoff=COALESCE(legacy_cutoff, now()) WHERE id AND public_signup_open RETURNING id`,
+  ]);
+  if (!policyBefore.public_signup_open || policyBefore.legacy_cutoff) {
+    console.log("  note  the policy here was already closed once; grandfather checks skipped");
+  } else {
+    const first = await close();
+    check("the first close flips the switch", first[3].length === 1);
+    const second = await close();
+    check("a second close while closed changes nothing", second[3].length === 0);
+    const late = await mkUser("s-late");
+    await app.transaction([app`SELECT set_config('app.user_id', ${boss}, true)`, app`UPDATE refinery_access_policy SET public_signup_open=true WHERE id`]);
+    const reclose = await close();
+    check("open, then close again: an account made in between is NOT grandfathered", reclose[3].length === 1 && (await seat(late)) === false);
+    const rm = await app.transaction([app`SELECT set_config('app.user_id', ${boss}, true)`, app`DELETE FROM refinery_seat_legacy WHERE user_id = ${legacy} RETURNING user_id`]);
+    check("a platform admin can take one account off the grandfather list", rm[1].length === 1);
+    const notAdmin = await app.transaction([app`SELECT set_config('app.user_id', ${nobody}, true)`, app`DELETE FROM refinery_seat_legacy RETURNING user_id`]);
+    check("nobody else can", notAdmin[1].length === 0);
+    // Put the disposable database back as it was.
+    await sql`UPDATE refinery_access_policy SET public_signup_open = ${policyBefore.public_signup_open}, legacy_cutoff = NULL, closed_at = ${policyBefore.closed_at} WHERE id`;
+    await sql`DELETE FROM refinery_seat_legacy WHERE NOT (user_id = ANY(${legacyBefore}::uuid[]))`;
+  }
 
   await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
 }

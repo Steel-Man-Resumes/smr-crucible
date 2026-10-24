@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The seat page (migration 093, lib/refinery-access.ts). Where a signed-in
+ * The seat page (migration 096, lib/refinery-access.ts). Where a signed-in
  * account without a Refinery seat lands from any Refinery page once public
  * sign-ups are closed.
  *
