@@ -25,6 +25,11 @@ export async function POST(request: Request) {
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+  // A view-only impersonation never writes into the account it is looking at
+  // (same guard as /api/steelman). The page carries on as if it was counted.
+  if (session.impersonation?.mode === "view") {
+    return NextResponse.json({ ok: true, skipped: "view-only" });
+  }
 
   const raw = await request.text();
   if (raw.length > MAX_BODY_BYTES) {
