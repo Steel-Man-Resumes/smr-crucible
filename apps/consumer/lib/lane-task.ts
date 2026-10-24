@@ -58,9 +58,9 @@ export const TASK_COPY: Record<LaneTask, TaskCopy> = {
     today: "your documents",
   },
   explore: {
-    label: "Explore a career",
-    body: "Explore work directions based on your experience and what you need.",
-    today: "exploring careers",
+    label: "I don't know what I want yet",
+    body: "That's fine. We start from what you've done and find three directions worth a look.",
+    today: "finding a direction",
   },
   support: {
     label: "Get support",

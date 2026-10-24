@@ -16,8 +16,8 @@ const MIG = readFileSync(join(import.meta.dirname, "..", "..", "migrations", "08
 const LANE = "00000000-0000-4000-8000-0000000000aa";
 
 test("three main routes, three quieter ones, nothing else", () => {
-  assert.deepEqual([...MAIN_TASKS], ["resume", "job", "interview"]);
-  assert.deepEqual([...OTHER_TASKS], ["documents", "explore", "support"]);
+  assert.deepEqual([...MAIN_TASKS], ["resume", "job", "interview", "explore"]);
+  assert.deepEqual([...OTHER_TASKS], ["documents", "support"]);
   assert.deepEqual([...LANE_TASKS].sort(), [...MAIN_TASKS, ...OTHER_TASKS].sort());
   assert.equal(isLaneTask("rush"), false, "Rush is a branch of the job route, not its own entrance");
   assert.equal(isLaneTask("story"), false);

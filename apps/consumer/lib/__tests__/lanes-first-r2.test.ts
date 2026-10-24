@@ -49,12 +49,13 @@ const UID = "00000000-0000-4000-8000-0000000000a1";
 
 // ---- the first screen -------------------------------------------------------------
 
-test("first screen: 'What do you need today?', three main routes in Troy's words, a quieter Something else, a quiet help link", () => {
+test("first screen: 'What do you need today?', four main routes in Troy's words (one for having no lane yet), a quieter Something else, a quiet help link", () => {
   assert.equal(FIRST_SCREEN_TITLE, "What do you need today?");
-  assert.deepEqual(MAIN_TASKS.map((t) => TASK_COPY[t].label), ["Get a resume I can use", "Go after a job", "Get ready for an interview"]);
-  assert.deepEqual([...OTHER_TASKS], ["documents", "explore", "support"]);
+  // Troy 2026-10-23: "I don't know what I want yet" is a main-sized choice, not hidden under Something else.
+  assert.deepEqual(MAIN_TASKS.map((t) => TASK_COPY[t].label), ["Get a resume I can use", "Go after a job", "Get ready for an interview", "I don't know what I want yet"]);
+  assert.deepEqual([...OTHER_TASKS], ["documents", "support"]);
   assert.match(TASK_COPY.documents.label, /Creative work, a CV, or a performer page/);
-  assert.equal(TASK_COPY.explore.label, "Explore a career");
+  assert.equal(TASK_COPY.explore.label, "I don't know what I want yet");
   assert.equal(TASK_COPY.support.label, "Get support");
   assert.equal(SOMETHING_ELSE_LABEL, "Something else");
   assert.equal(HELP_LINK_LABEL, "Something getting in the way? Get help");
@@ -339,7 +340,9 @@ test("choice count: from sign-in to a first saved resume section, 3 or fewer req
     for (const intake of ["have_one", "build"] as const) {
       const steps = decisionsToFirstSave(task, intake);
       assert.ok(steps.length <= 3, `${task}/${intake}: ${steps.length} decisions`);
-      for (const st of steps) assert.ok(st.options.length >= 1 && st.options.length <= 4, `${st.question}: ${st.options.length} options`);
+      // The first screen carries four main routes plus Something else (Troy 2026-10-23: the
+      // no-lane-yet answer is main-sized); every later screen stays at four options or fewer.
+      for (const st of steps) assert.ok(st.options.length >= 1 && st.options.length <= (st.screen === "/start" ? 5 : 4), `${st.question}: ${st.options.length} options`);
     }
   }
   // Before (e11fb6f): readiness (4) -> short/full (2) -> five intake routes -> builder intro ->
