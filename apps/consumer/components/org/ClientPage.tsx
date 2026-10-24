@@ -549,12 +549,32 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
+  // A draft t.ROY wrote, placed here from the assistant. It is NOT saved:
+  // it sits in this box, marked, until the staff member saves or discards it.
+  const draftKey = `org-note-draft:${clientId}`;
+  const [draft, setDraft] = useState<{ purpose: "case_note" | "check_in" } | null>(null);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(draftKey);
+      if (!raw) return;
+      const d = JSON.parse(raw) as { body?: unknown; purpose?: unknown };
+      if (typeof d.body !== "string" || !d.body.trim()) return;
+      setBody(d.body.slice(0, 8000));
+      const purpose = d.purpose === "case_note" ? "case_note" : "check_in";
+      setKind(purpose === "check_in" ? "email" : "note");
+      setDraft({ purpose });
+    } catch { /* no draft */ }
+  }, [draftKey]);
+  function clearDraft() {
+    try { sessionStorage.removeItem(draftKey); } catch { /* ignore */ }
+    setDraft(null);
+  }
   async function save() {
     setBusy(true); setMsg(null);
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "add_note", body, kind }) });
+      body: JSON.stringify({ action: "add_note", body, kind, draftedByAssistant: !!draft }) });
     setBusy(false);
-    if (res.ok) { setBody(""); setKind(defaultKind); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+    if (res.ok) { setBody(""); setKind(defaultKind); clearDraft(); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
   }
   async function saveCorrection() {
     if (!editing) return;
@@ -569,6 +589,15 @@ function NotesPanel({ clientId, notes, canWrite, viewerId, onSaved, defaultKind 
       {canWrite && (
         <div className="bg-t-panel border border-t-line p-5 mb-5">
           <label htmlFor="note-body" className="block font-semibold text-t-white mb-2">Add to your record</label>
+          {draft && (
+            <div role="status" className="border border-t-amber bg-t-panel-2 px-3 py-2 mb-3 text-xs text-t-amber-bright">
+              {draft.purpose === "check_in"
+                ? "Draft check-in from t.ROY. Nothing was sent. Send it yourself if you want to, then save a note that you did, or throw it away."
+                : "Draft case note from t.ROY. It is not saved. Read it, fix anything that is wrong, then save it or throw it away."}
+              {" "}If you save it, the note says it was drafted with t.ROY.
+              <button type="button" onClick={() => { setBody(""); setKind(defaultKind); clearDraft(); }} className="t-focus ml-2 underline">Throw it away</button>
+            </div>
+          )}
           <textarea id="note-body" value={body} onChange={(e) => setBody(e.target.value)} rows={3} maxLength={8000}
             className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-3" />
           <div className="flex flex-wrap items-center gap-4">

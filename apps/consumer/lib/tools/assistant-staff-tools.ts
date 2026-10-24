@@ -40,12 +40,19 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       }),
     }),
     draft_staff_check_in: tool({
-      description: "Prepare the facts for a check-in draft for a participant you may see. Write the draft in your reply using only these facts and what the staff member reported. Nothing is saved or sent; they review and use their existing task/note screen.",
-      parameters: jsonSchema<{clientId: string}>({ type: "object", properties: { clientId: { type: "string", pattern: "^[0-9a-fA-F-]{36}$" } }, required: ["clientId"], additionalProperties: false }),
-      execute: safe(async ({ clientId }) => {
+      description: "Prepare the facts for a draft about a participant you may see: a check-in message the staff member will send themselves (purpose check_in, the default) or a case note for their review (purpose case_note). Write the draft in your reply using only these facts and what the staff member reported. Nothing is saved or sent. The staff member can place the draft on the participant's page, where it stays unsaved until they save it.",
+      parameters: jsonSchema<{clientId: string; purpose?: "check_in" | "case_note"}>({ type: "object", properties: { clientId: { type: "string", pattern: "^[0-9a-fA-F-]{36}$" }, purpose: { type: "string", enum: ["check_in", "case_note"] } }, required: ["clientId"], additionalProperties: false }),
+      execute: safe(async ({ clientId, purpose }) => {
         const result = await (await import("@crucible/core")).getClientHeader(await actor(), clientId);
         if (!result.ok) return result;
-        return { status: "draft_only", saved: false, sent: false, source: result.rows.map((h) => ({ firstName: h.name?.split(/\s+/)[0], progress: h.progress })), instruction: "Offer one next step and ask what help they want. Do not invent a meeting, promise or contact attempt." };
+        const kind = purpose === "case_note" ? "case_note" : "check_in";
+        return {
+          status: "draft_only", saved: false, sent: false, purpose: kind, participantId: clientId,
+          source: result.rows.map((h) => ({ firstName: h.name?.split(/\s+/)[0], progress: h.progress })),
+          instruction: kind === "case_note"
+            ? "Write the note only from what the staff member told you, in plain professional language. Do not add anything they did not say. Tell them it is a draft for their review and is not saved."
+            : "Offer one next step and ask what help they want. Do not invent a meeting, promise or contact attempt. Tell them it is a draft for them to send; nothing was sent.",
+        };
       }),
     }),
   };

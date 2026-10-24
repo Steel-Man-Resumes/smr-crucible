@@ -41,14 +41,16 @@ function buildActions(ctx: OrgActionContext): Action[] {
         "Look at my caseload and tell me who needs attention first, and why. Shortest path first.",
     },
     {
-      label: "Write a case note",
+      // A draft, never a saved note: t.ROY cannot save or send anything. The
+      // label says so, so the button does not read as an action taken.
+      label: "Draft a case note for your review",
       prompt:
-        `I just spoke with ${who}. Help me write that up as a case note. Ask me what happened first, then put it in plain professional language.`,
+        `I just spoke with ${who}. Help me draft a case note for my review. Ask me what happened first, then put it in plain professional language. I will read it and save it myself.`,
     },
     {
-      label: "Draft a check-in email",
+      label: "Draft a check-in for you to send",
       prompt:
-        `Draft a short, warm check-in email to ${who}. They have gone quiet and I do not want it to read as a telling-off.`,
+        `Draft a short, warm check-in message to ${who} that I will send myself. They have gone quiet and I do not want it to read as a telling-off.`,
     },
     {
       label: "What do I say to them?",
