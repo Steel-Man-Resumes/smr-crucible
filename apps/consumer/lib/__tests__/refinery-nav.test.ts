@@ -12,6 +12,10 @@ import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 import { CURATED_CATEGORIES } from "../support-search";
 import { NEXT_CATEGORIES, NATIONAL_STARTING_POINTS, nextCategoryHref } from "../next-steps";
 import { OPEN_WITHOUT_RESUME } from "../lane-task";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { deepLinkCategory, deepLinkSearchPlace, savedSearchPlace } from "../support-deep-link";
+import { REFINERY_PAGES, TOUR_TARGETS } from "../tools/assistant-tool-defs";
 
 const ROOT = join(__dirname, "..", "..");
 
@@ -90,9 +94,12 @@ test("station status comes from the server's steps only", () => {
   assert.equal(stationStatus(find, null).tone, "plain", "no progress data, no claims");
   assert.equal(stationStatus(find, steps({ direction: { state: "current" } }), "direction").tone, "current");
   // Tailor carries the starting resume and the tailoring step; it shows the first unfinished one.
+  // Its starting resume is done, so the station stays open while the tailoring step is locked.
   const s1 = stationStatus(tailor, steps({ foundation: { state: "completed" }, tailor: { access: "locked" } }), "direction");
-  assert.equal(s1.tone, "locked");
+  assert.equal(s1.tone, "open");
   assert.equal(s1.step?.id, "tailor");
+  assert.equal(s1.named, true);
+  assert.equal(stationStatus(tailor, steps({ foundation: { access: "locked" }, tailor: { access: "locked" } }), "direction").tone, "locked");
   assert.equal(stationStatus(tailor, steps({ foundation: { state: "completed" }, tailor: { state: "completed" } }), "apply").tone, "completed");
   assert.equal(stationStatus(tailor, steps({ tailor: { access: "early" } }), "direction").step?.id, "foundation");
   assert.equal(stationStatus(apply, steps({ apply: { access: "early" } }), "direction").tone, "early");
@@ -179,4 +186,114 @@ test("the meter stub answers 404 until the meter lane replaces it", async () => 
   const res = GET();
   assert.equal(res.status, 404);
   assert.deepEqual(await res.json(), { error: "not ready" });
+});
+
+// ---- Fix round 1: render the board, not just its data -------------------------
+
+function fixtureSteps(): ProgressStep[] {
+  return [
+    { id: "foundation", label: "Your starting resume", href: "/dashboard/vault", state: "completed", access: "earned", reason: "Save your starting resume." },
+    { id: "direction", label: "Choose a job", href: "/dashboard/jobs", state: "completed", access: "earned", reason: "Save a real opening you want to pursue." },
+    { id: "tailor", label: "Tailor your resume", href: "/dashboard/application-tailor", state: "current", access: "earned", reason: "Choose a job and a resume." },
+    { id: "apply", label: "Prepare and apply", href: "/dashboard/applications", state: "next", access: "locked", reason: "Save a resume tailored to your chosen job.", unlockable: true },
+    { id: "interview", label: "Prepare for the interview", href: "/dashboard/interview", state: "next", access: "early", reason: "Practice is available anytime." },
+    { id: "offer", label: "Your next move", href: "/dashboard/applications", state: "next", access: "locked", reason: "Update the application when you receive an offer." },
+  ];
+}
+
+async function renderBoard(over: Record<string, unknown> = {}) {
+  // The app compiles JSX with the classic runtime under tsx; give it React.
+  (globalThis as { React?: unknown }).React = React;
+  const { RefineryBoard } = await import("../../components/nav/RefineryBoard");
+  return renderToStaticMarkup(React.createElement(RefineryBoard, {
+    userTier: "client", pathname: "/dashboard/interview", steps: fixtureSteps(), currentStepId: "tailor",
+    onboardingState: "full_access", disclosureComplete: false, isUnlocked: () => true, labelFor: (i: { label: string }) => i.label,
+    ask: () => {}, hidePartner: true, carryIds: true, switches: { recordStep: false }, focusStation: null, ...over,
+  } as never));
+}
+const count = (html: string, needle: string) => html.split(needle).length - 1;
+function toneOf(html: string, station: string): string | undefined {
+  return html.match(new RegExp(`data-station="${station}" data-tone="([a-z]+)"`))?.[1];
+}
+
+test("rendered board: every contract and legacy id once on the visible copy, none on the hidden copy", async () => {
+  const html = await renderBoard();
+  for (const id of [...BOARD_CONTRACT_IDS.filter((i) => i !== "refinery-meter"), "refinery-meter"]) assert.equal(count(html, `id="${id}"`), 1, id);
+  for (const id of ["refinery-nav-jobs", "refinery-nav-resumes", "refinery-nav-interview", "refinery-nav-applications", "refinery-nav-support", "refinery-nav-settings"]) assert.equal(count(html, `id="${id}"`), 1, id);
+  for (const id of BOARD_CONTRACT_IDS) assert.ok(html.includes(`data-tour="${id}"`), `data-tour ${id}`);
+  const hidden = await renderBoard({ carryIds: false });
+  assert.doesNotMatch(hidden, /id="refinery-(nav-|meter)/, "the other copy carries no ids");
+});
+
+test("rendered board: states come from the server steps; a locked step stays locked on screen", async () => {
+  const html = await renderBoard();
+  assert.equal(toneOf(html, "find"), "completed");
+  assert.equal(toneOf(html, "tailor"), "current");
+  assert.equal(toneOf(html, "practice"), "early");
+  assert.equal(toneOf(html, "apply"), "locked");
+  assert.match(html, /Early access/);
+  // Apply and track is locked and not directly reachable: its header is the ask button, never a link.
+  assert.match(html, /<button id="refinery-nav-applications" type="button" aria-haspopup="dialog"/);
+  assert.doesNotMatch(html, /<a [^>]*href="\/dashboard\/applications"/);
+  assert.match(html, /board-lock-line">Save a resume tailored to your chosen job\.</, "the server's reason is shown as the lock line");
+  // The ask copy says what the server does.
+  assert.match(html, /Ask t\.ROY to open this early\. He opens guided steps when you ask\./);
+  assert.doesNotMatch(html, /asks Troy|Troy reviews/i);
+  // Exactly the active page is aria-current.
+  assert.equal(count(html, 'aria-current="page"'), 1);
+  assert.match(html, /<a id="refinery-nav-interview"[^>]*aria-current="page"[^>]*href="\/dashboard\/interview"/);
+});
+
+test("rendered board: Tailor and package shows locked only when nothing on it is open", async () => {
+  const steps = fixtureSteps().map((s) => s.id === "tailor" ? { ...s, state: "next" as const, access: "locked" as const } : s);
+  const html = await renderBoard({ steps, currentStepId: "direction" });
+  assert.notEqual(toneOf(html, "tailor"), "locked", "the starting resume and its links are open");
+  assert.match(html, /Tailor your resume: Next · locked/, "the line names the locked step");
+  const allLocked = steps.map((s) => s.id === "foundation" ? { ...s, state: "next" as const, access: "locked" as const } : s);
+  assert.equal(toneOf(await renderBoard({ steps: allLocked, currentStepId: "direction" }), "tailor"), "locked");
+});
+
+test("rendered board: record check link only while its switch is on; partner and admin items stay hidden", async () => {
+  assert.doesNotMatch(await renderBoard(), /record-check/);
+  assert.match(await renderBoard({ switches: { recordStep: true } }), /href="\/dashboard\/record-check"/);
+  const html = await renderBoard();
+  assert.doesNotMatch(html, /\/dashboard\/admin|\/dashboard\/partner/);
+});
+
+test("deep link: category preselects only if offered; search runs with the saved place, never typed text", () => {
+  const offered = ["all", "education", "financial"];
+  assert.equal(deepLinkCategory("?category=education", offered), "education");
+  assert.equal(deepLinkCategory("?category=all", offered), null);
+  assert.equal(deepLinkCategory("?category=<script>", offered), null);
+  assert.equal(deepLinkCategory("", offered), null);
+  assert.equal(deepLinkSearchPlace(true, "Libby, MT"), "Libby, MT");
+  assert.equal(deepLinkSearchPlace(true, "  "), null, "no saved place: wait, do not search");
+  assert.equal(deepLinkSearchPlace(false, "Libby, MT"), null, "only once");
+  const src = readFileSync(join(ROOT, "components", "lanes", "SupportSearch.tsx"), "utf8");
+  const effect = src.slice(src.indexOf("deepLinkSearchPlace(deepLinked"), src.indexOf("}, [deepLinked, initialLocation]);") + 40);
+  assert.ok(effect.length > 40);
+  assert.doesNotMatch(effect, /location\.trim\(\)/, "typed location is not read by the deep-link search");
+  assert.match(src, /\}, \[deepLinked, initialLocation\]\);/, "typing (location) is not a dependency");
+  // What comes next names the same place Local help fills in: own Forge run first, then the account.
+  assert.equal(savedSearchPlace("Milwaukee, WI", { city: "Libby", state: "MT" }), "Milwaukee, WI");
+  assert.equal(savedSearchPlace("", { city: "Libby", state: "MT" }), "Libby, MT");
+  assert.equal(savedSearchPlace(null, null), "");
+});
+
+test("What comes next promises no local results it may not have", () => {
+  const page = readFileSync(join(ROOT, "app", "(dashboard)", "dashboard", "next", "page.tsx"), "utf8");
+  const data = readFileSync(join(ROOT, "lib", "next-steps.ts"), "utf8");
+  for (const src of [page, data]) assert.doesNotMatch(src, /near you|close to home|show you who helps/i);
+  assert.match(page, /search local help by place and need/i);
+  for (const src of [page, data, readFileSync(join(ROOT, "lib", "refinery-nav.ts"), "utf8")]) assert.doesNotMatch(src, /\u2013| -- /, "no en dash or double hyphen in copy");
+});
+
+test("t.ROY can point at every station and open What comes next", () => {
+  for (const id of BOARD_CONTRACT_IDS) assert.ok(id in TOUR_TARGETS, id);
+  assert.equal(REFINERY_PAGES.next, "/dashboard/next");
+  assert.match(readFileSync(join(ROOT, "components", "tour", "TourPageFrame.tsx"), "utf8"), /'\/dashboard\/next': \['next', 'What comes next'\]/);
+});
+
+test("mobile strip uses one-word station names", () => {
+  for (const s of STATIONS) assert.ok(s.short.length <= 8 && !s.short.includes(" "), s.short);
 });
