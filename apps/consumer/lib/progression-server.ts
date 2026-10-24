@@ -151,10 +151,13 @@ export async function grantBonus(userId:string,key:string,step:ProgressionStep,a
  return !!await getOneAsUser(actorId,'SELECT id FROM progression_grant WHERE user_id=$1 AND (request_key=$3 OR ($3::text IS NULL AND grant_key=$2)) AND expires_at>now()',[userId,key,requestKey]);
 }
 export async function listAccessRequests(adminId:string){const rows=await queryAsUser<RequestRow>(adminId,'SELECT * FROM progression_request ORDER BY (status IN (\'pending\',\'question\')) DESC,created_at DESC LIMIT 100');return rows.map(r=>({...requestView(r,true),userId:r.user_id}));}
-export async function decideAccessRequest(adminId:string,id:string,decision:string,note:string){
+export async function decideAccessRequest(adminId:string,id:string,decision:string,note:string,origin=process.env.APP_URL||''){
  if(!/^[0-9a-f-]{36}$/i.test(id)||!['approve','deny','question'].includes(decision)||note.length>1000||note.trim().length<3)throw new Error('invalid_decision');
  const r=await getOneAsUser<RequestRow>(adminId,'SELECT * FROM progression_request WHERE id=$1',[id]);
  if(!r)throw new Error('request_not_found');
+ // A seat request is decided by the seat path (createOrgInvite into Troy's own
+ // organization), never by inserting a progression grant below.
+ if(r.kind==='seat'){const {decideSeatRequest,defaultDecideSeatDeps}=await import('./refinery-access-server');return decideSeatRequest(adminId,r,decision,note,origin,defaultDecideSeatDeps());}
  if(r.status==='approved'||r.status==='denied')return {status:r.status};
  const p=await readProgressionPolicy(adminId);
  const status=decision==='approve'?'approved':decision==='deny'?'denied':'question';

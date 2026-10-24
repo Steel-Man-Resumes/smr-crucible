@@ -22,6 +22,8 @@ import {
   termsCurrent,
   revocationCheck,
 } from "@/lib/session-policy";
+import { parsePartnerPreAuth } from "@/lib/partner-pre-auth";
+import { SEAT_PAGE, SEAT_REQUIRED_MESSAGE, seatFrom, seatGateVerdict, seatNeedsReread } from "@/lib/refinery-access";
 import { CONSENT_LOOKUP_SQL, TERMS_PAGE, TERMS_VERSION, termsNeedsReread } from "@/lib/terms";
 import {
   FORGE_SIGN_IN_REQUIRED_MESSAGE,
@@ -94,18 +96,7 @@ const isDev = process.env.NODE_ENV === "development";
  * pre-authorized, which is the correct default -- pre-authorization is an
  * exception granted per engagement, not a standing state of the software.
  */
-const { PARTNER_PRE_AUTH, PARTNER_PRE_AUTH_CODE } = (() => {
-  const emails: string[] = [];
-  const codes: Record<string, string> = {};
-  for (const entry of (process.env.PARTNER_PRE_AUTH ?? "").split(",")) {
-    const [rawEmail, rawCode] = entry.split(":");
-    const email = rawEmail?.trim().toLowerCase();
-    if (!email) continue;
-    emails.push(email);
-    if (rawCode?.trim()) codes[email] = rawCode.trim();
-  }
-  return { PARTNER_PRE_AUTH: emails, PARTNER_PRE_AUTH_CODE: codes };
-})();
+const { emails: PARTNER_PRE_AUTH, codes: PARTNER_PRE_AUTH_CODE } = parsePartnerPreAuth(process.env.PARTNER_PRE_AUTH);
 
 const providers: any[] = [
   // Google OAuth -- env-gated, dark until AUTH_GOOGLE_ID/SECRET exist.
@@ -430,6 +421,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
+      // Refinery seat (migration 093, lib/refinery-access.ts): once a platform
+      // admin closes public sign-ups, an account without a seat keeps the
+      // Forge, its settings and its data, and reaches no other Refinery page
+      // or API. After the revocation check, the second-step hold and the terms
+      // gate, so a revoked or held session is never sent here. The claim is
+      // read from the database only (jwt callback below); AI admission reads
+      // the database again on every call.
+      if (session) {
+        const u = session.user as { seatOpen?: unknown; seat?: unknown } | undefined;
+        const seat = seatGateVerdict(path, u?.seatOpen, u?.seat);
+        if (seat === "api") {
+          return Response.json({ error: SEAT_REQUIRED_MESSAGE, seatRequired: true }, { status: 403 });
+        }
+        if (seat === "page") {
+          const page = new URL(SEAT_PAGE, request.url);
+          page.searchParams.set("callbackUrl", path + request.nextUrl.search);
+          return Response.redirect(page);
+        }
+      }
+
       // Admin powers (admin tools, impersonation) need a session that
       // presented a second factor. This replaces the client-only "admin needs
       // 2FA" redirect as the real gate; the banner in RefineryShell stays as
@@ -674,6 +685,36 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
       }
 
+      // Refinery seat (migration 093): read at sign-in, on update() (the seat
+      // page calls it after a code or an accepted offer), hourly while the
+      // answer is "closed, no seat", and at least daily. Only ever from the
+      // database, never from anything the client sent. On a database error the
+      // last answer is kept; a claim never read lets pages through and leaves
+      // AI admission (which reads the database itself) as the backstop.
+      if (
+        token.sub &&
+        seatNeedsReread({
+          trigger,
+          seatOpen: (token as any).seatOpen,
+          seat: (token as any).seat,
+          seatAt: (token as any).seatAt,
+          now: nowSeconds(),
+        })
+      ) {
+        try {
+          const rows = (await sqlEdge`
+            SELECT public.smr_refinery_signup_open() AS open,
+                   public.smr_has_refinery_seat(${token.sub}::uuid) AS seat`) as any[];
+          if (rows.length && typeof rows[0].open === "boolean" && typeof rows[0].seat === "boolean") {
+            (token as any).seatOpen = rows[0].open;
+            (token as any).seat = seatFrom(rows[0].seat, token.email);
+            (token as any).seatAt = nowSeconds();
+          }
+        } catch {
+          // Kept as it was (see above). Before migration 093 there is nothing to read.
+        }
+      }
+
       // Sessions signed in before F1 carry no `mfa` claim. One minted by an
       // email link into a two-step account never saw a code, so an older
       // session of a two-step account is asked for the code once. Edge-safe
@@ -704,6 +745,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         (session.user as any).terms = (token as any).terms === true;
         (session.user as any).termsVersion = (token as any).termsVersion ?? null;
         (session.user as any).via = (token as any).via ?? null;
+        // Refinery seat (lib/refinery-access.ts). seatOpen is null until read.
+        (session.user as any).seatOpen = typeof (token as any).seatOpen === "boolean" ? (token as any).seatOpen : null;
+        (session.user as any).seat = (token as any).seat === true;
       }
       return session;
     },
