@@ -164,9 +164,9 @@ function JobBoardPage() {
         let nextFilters = readJobSearchFilters(data.saved?.filters);
         let nextContext: UserContext = { targetRole: requestedRole || data.saved?.role || data.target || (focus.laneId === data.laneId ? focus.target : "") || "", location: requestedLocation || data.saved?.location || "", skills: [], hasRecord: false };
         try {
-          const raw = sessionStorage.getItem(`job_search:v2:${ownerUid}:${laneKey}`);
+          const raw = sessionStorage.getItem(`job_search:v3:${ownerUid}:${laneKey}`);
           const cached = raw ? JSON.parse(raw) : null;
-          if (!requestedRole && !requestedLocation && cached?.version === 2 && Date.now() - cached.ts < 6*60*60*1000 && Array.isArray(cached.jobs)) {
+          if (!requestedRole && !requestedLocation && cached?.version === 3 && Date.now() - cached.ts < 6*60*60*1000 && Array.isArray(cached.jobs)) {
             nextFilters = readJobSearchFilters(cached.filters);
             nextContext = { ...nextContext, ...cached.context };
             setJobs(cached.jobs); setSummary(cached.summary || null); setFairChanceInfo(cached.fairChanceInfo || ""); setSource(cached.source || ""); setSearched(true);
@@ -301,8 +301,13 @@ function JobBoardPage() {
           // The job-data provider failed (quota/outage) -- say so plainly
           // instead of showing a misleading "no jobs found".
           setJobs([]);
+          // Keep the counts: listings the person's own choices removed are
+          // shown next to the outage line, not hidden behind it.
+          setSummary(data.summary || null);
           setSearchError(
             data.error === "location_required" ? "Add a city or ZIP. For a nationwide remote search, choose Remote and Anywhere."
+              : data.error === "provider_partial"
+              ? "Part of the job listings did not load just now, and nothing from the rest fit this search. This is on our side, not yours. Try again in a few minutes."
               : data.error === "provider_rate_limited"
               ? "Our job-listing provider hit its limit for right now. This is on our side, not yours. Your search was fine. Try again in a little while."
               : "We couldn't reach the job listings just now. This is on our side, not yours. Try again in a few minutes."
@@ -313,7 +318,7 @@ function JobBoardPage() {
           setSource(data.source || "");
           setSummary(data.summary || null);
           submittedFilters.current = canonicalSearchFilters(chosenFilters);
-          try { if (chosenFilters.origin) sessionStorage.removeItem(`job_search:v2:${ownerUid}:${targetLane}`); else sessionStorage.setItem(`job_search:v2:${ownerUid}:${targetLane}`, JSON.stringify({ version: 2, ts: Date.now(), context, filters: { ...chosenFilters, origin: null }, jobs: data.jobs || [], summary: data.summary ? { ...data.summary, filters: { ...data.summary.filters, origin: null } } : null, fairChanceInfo: data.fair_chance_info || "", source: data.source || "" })); } catch {}
+          try { if (chosenFilters.origin) sessionStorage.removeItem(`job_search:v3:${ownerUid}:${targetLane}`); else sessionStorage.setItem(`job_search:v3:${ownerUid}:${targetLane}`, JSON.stringify({ version: 3, ts: Date.now(), context, filters: { ...chosenFilters, origin: null }, jobs: data.jobs || [], summary: data.summary ? { ...data.summary, filters: { ...data.summary.filters, origin: null } } : null, fairChanceInfo: data.fair_chance_info || "", source: data.source || "" })); } catch {}
 
         }
       } else {
@@ -747,6 +752,7 @@ function JobBoardPage() {
             Job search is having trouble right now
           </p>
           <p className="text-sm text-t-phos leading-relaxed">{searchError}</p>
+          {summary && (summary.removedByChoices || 0) > 0 && <p className="mt-2 text-sm text-t-phos" data-testid="jobs-removed-by-choices">{summary.removedByChoices} listing{summary.removedByChoices === 1 ? "" : "s"} that did load {summary.removedByChoices === 1 ? "was" : "were"} removed by your choices. See why above.</p>}
         </div>
       )}
 
@@ -802,7 +808,8 @@ function JobBoardPage() {
       {/* Results */}
       {!searching && visibleJobs.length > 0 && (
         <div className="space-y-3">
-          {visibleJobs.map((job, jobIndex) => {
+          {[visibleJobs.filter(j => j.relevance?.tier !== "description"), visibleJobs.filter(j => j.relevance?.tier === "description")].map((group, groupIndex) => {
+            const cards = group.map((job, jobIndex) => {
             const isSaved = savedJobs.has(job.id);
             const savedStatus = savedJobs.get(job.id)?.status;
             const isExpanded = expandedJob === job.id;
@@ -810,7 +817,7 @@ function JobBoardPage() {
             return (
               <div
                 key={job.id}
-                data-tour={jobIndex === 0 ? "jobs-first-result" : undefined}
+                data-tour={groupIndex === 0 && jobIndex === 0 ? "jobs-first-result" : undefined}
                 className="bg-t-panel border border-t-line overflow-hidden transition-colors hover:border-t-phos-dim"
               >
                 {job.filterAssessment && <div className="border-b border-t-line px-4 py-2 text-xs text-t-phos-dim">{job.filterAssessment.distanceMiles === null ? "Distance unverified" : `About ${job.filterAssessment.distanceMiles.toFixed(1)} miles in a straight line`}{job.filterAssessment.unknown.length>0?` · Check: ${job.filterAssessment.unknown.map(key=>FILTER_LABELS[key]||key).join(", ")}`:""}{job.filterAssessment.preferred.length>0?` · Preferences not matched: ${job.filterAssessment.preferred.map(key=>FILTER_LABELS[key]||key).join(", ")}`:""}</div>}
@@ -845,6 +852,11 @@ function JobBoardPage() {
                             Hires people with records
                           </span>
                         )}
+                        {!job.second_chance && job.marked_elsewhere && (
+                          <span data-testid="job-marked-elsewhere" className="text-[10px] font-medium border border-t-amber text-t-amber-bright px-2 py-0.5">
+                            Hires people with records in {job.marked_elsewhere.town}
+                          </span>
+                        )}
                         {job.remote && (
                           <span className="text-[10px] font-medium border border-t-steel text-t-steel px-2 py-0.5 whitespace-nowrap">
                             Remote
@@ -854,6 +866,7 @@ function JobBoardPage() {
                       <p className="text-sm text-t-phos-dim">{job.company}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-t-phos-dim flex-wrap">
                         {job.location && <span>{job.location}</span>}
+                        {job.other_locations && job.other_locations.length > 0 && <span data-testid="job-location-count">{job.other_locations.length + 1} locations</span>}
                         {job.salary && (
                           <span className="font-medium text-t-amber-bright">
                             {job.salary}
@@ -903,6 +916,20 @@ function JobBoardPage() {
                       {job.remote && <span className="text-t-steel font-medium">Remote</span>}
                     </div>
 
+                    {job.other_listings && job.other_listings.length > 0 && (
+                      <div className="text-xs text-t-phos-dim" data-testid="job-other-listings">
+                        <p>This posting is also listed here. Each copy keeps its own application page.</p>
+                        <ul className="mt-1 space-y-1">
+                          {job.other_listings.map((listing, i) => (
+                            <li key={`${listing.source}-${i}`}>
+                              {listing.place || "Place not supplied"} ({listing.source})
+                              {listing.apply_url && <>{" "}<a href={listing.apply_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-t-steel underline underline-offset-2 hover:opacity-80">Open this listing &#8599;</a></>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
                     {/* Full description */}
                     <div className="text-sm text-t-phos leading-relaxed space-y-2">
                       {(job.full_description || job.description)
@@ -919,6 +946,12 @@ function JobBoardPage() {
                         <p className="text-xs font-medium text-t-amber-bright">
                           {job.fair_chance_reason}
                         </p>
+                      </div>
+                    )}
+
+                    {!job.second_chance && job.marked_elsewhere && (
+                      <div className="bg-t-panel-2 px-3 py-2 border border-t-amber">
+                        <p className="text-xs font-medium text-t-amber-bright">{job.marked_elsewhere.reason}</p>
                       </div>
                     )}
 
@@ -1105,6 +1138,16 @@ function JobBoardPage() {
                   </div>
                 )}
               </div>
+            );
+            });
+            if (groupIndex === 0) return <div key="main" className="space-y-3">{cards}</div>;
+            if (!group.length) return null;
+            return (
+              <details key="also" className="border border-t-line p-3" data-testid="jobs-also-found">
+                <summary className="t-focus min-h-touch cursor-pointer text-sm text-t-white">Also found: {group.length} listing{group.length === 1 ? "" : "s"} that only mention your search words in the description</summary>
+                <p className="mt-2 text-xs text-t-phos-dim">The job title does not match your search, so these may be a different kind of work. Check each one before you save it.</p>
+                <div className="mt-3 space-y-3">{cards}</div>
+              </details>
             );
           })}
 
