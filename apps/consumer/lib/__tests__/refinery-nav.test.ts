@@ -5,7 +5,7 @@ import { join } from "node:path";
 import {
   STATIONS, STATION_IDS, BOARD_GROUPS, BOARD_CONTRACT_IDS, LEGACY_NAV_ALIASES, ASK_TROY_LINE,
   stationForPath, stationForStep, stationStatus, expandedStation, stripCurrentStation,
-  stationForJourneyStage, progressStepForJourneyStage, boardShowsItem, linkIsCurrent,
+  stationForJourneyStage, progressStepForJourneyStage, boardShowsItem, boardSwitchAllows, linkIsCurrent,
 } from "../refinery-nav";
 import { PROGRESSION_STEPS, stepForNav, type ProgressStep } from "../progression-ui";
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
@@ -157,6 +157,21 @@ test("copy on the board and the new page has no em dashes", () => {
   for (const rel of [["lib", "refinery-nav.ts"], ["lib", "next-steps.ts"], ["components", "nav", "RefineryBoard.tsx"], ["components", "nav", "StationStrip.tsx"], ["app", "(dashboard)", "dashboard", "next", "page.tsx"]]) {
     assert.ok(!readFileSync(join(ROOT, ...rel), "utf8").includes("—"), rel.join("/"));
   }
+});
+
+test("the record check is never linked while its switch is off", () => {
+  const toolbox = BOARD_GROUPS.find((g) => g.id === "toolbox")!;
+  const shown = (on: boolean) => toolbox.items.filter((i) => boardSwitchAllows(i, { recordStep: on })).map((i) => i.href);
+  assert.ok(!shown(false).includes("/dashboard/record-check"), "switch off: Toolbox omits Get your records");
+  assert.ok(shown(true).includes("/dashboard/record-check"), "switch on: Toolbox lists it");
+  assert.equal(boardSwitchAllows(toolbox.items.find((i) => i.href === "/dashboard/record-check")!, null), false, "no switch data means off");
+  for (const s of STATIONS) for (const c of [s, ...s.children]) assert.ok(!c.href.startsWith("/dashboard/record-check") || c.requiresSwitch === "recordStep", c.href);
+  const board = readFileSync(join(ROOT, "components", "nav", "RefineryBoard.tsx"), "utf8");
+  assert.equal((board.match(/boardSwitchAllows\(/g) ?? []).length, 2, "stations' children and groups both filter");
+  assert.match(readFileSync(join(ROOT, "app", "(dashboard)", "layout.tsx"), "utf8"), /recordStep: recordStepOn\(\)/);
+  const page = readFileSync(join(ROOT, "app", "(dashboard)", "dashboard", "resources", "page.tsx"), "utf8");
+  assert.match(page, /\{recordStep && <Link href="\/dashboard\/record-check"/);
+  assert.match(readFileSync(join(ROOT, "app", "(dashboard)", "dashboard", "resources", "layout.tsx"), "utf8"), /recordStep: recordStepOn\(\)/);
 });
 
 test("the meter stub answers 404 until the meter lane replaces it", async () => {

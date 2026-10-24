@@ -17,6 +17,7 @@ import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
+import { useServerSwitches } from "@/components/ServerSwitches";
 import { SupportSearch } from "@/components/lanes/SupportSearch";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -52,6 +53,8 @@ export default function SecondChanceBoardPageWrapper() {
 
 function SecondChanceBoardPage() {
   const [pathsOpen, setPathsOpen] = useState(false);
+  // The record check screen is a 404 while its server switch is off.
+  const { recordStep } = useServerSwitches();
   useEffect(() => {
     const reveal = () => { if (window.location.hash === "#paths") setPathsOpen(true); };
     reveal();
@@ -148,7 +151,7 @@ function SecondChanceBoardPage() {
 
       <nav aria-label="Support tools" className="grid gap-3 sm:grid-cols-2">
         <Link href="/dashboard/disclosure" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">Disclosure planner</strong><span className="text-sm text-t-phos-dim">Work through your situation, choose what to say and practice with t.ROY.</span></Link>
-        <Link href="/dashboard/record-check" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">Get your records</strong><span className="text-sm text-t-phos-dim">Find official information and steps for records you need.</span></Link>
+        {recordStep && <Link href="/dashboard/record-check" className="t-focus border border-t-line bg-t-panel p-4"><strong className="block text-t-white">Get your records</strong><span className="text-sm text-t-phos-dim">Find official information and steps for records you need.</span></Link>}
       </nav>
       <details open={pathsOpen} onToggle={(event) => setPathsOpen(event.currentTarget.open)} className="border border-t-line bg-t-panel p-4"><summary className="t-focus cursor-pointer font-semibold text-t-phos">Explore general job-path ideas</summary><p className="my-3 text-sm text-t-phos-dim">These are general starting points from our earlier guide, not current openings or an eligibility decision. Use Find work for live jobs and dated employer evidence.</p>
       <header id="paths" className="max-w-3xl scroll-mt-24">

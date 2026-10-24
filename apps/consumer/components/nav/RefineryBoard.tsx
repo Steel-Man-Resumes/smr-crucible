@@ -15,7 +15,7 @@ import { lockedToolLine } from "@crucible/core/src/journeyStages";
 import { previewIdForHref } from "@/lib/featurePreviews";
 import { navKeepsDirectAccess, progressStateLabel, stepForNav, type ProgressStep, type ProgressStepId } from "@/lib/progression-ui";
 import {
-  ASK_TROY_ACTION, ASK_TROY_HINT, BOARD_GROUPS, STATIONS, boardShowsItem, expandedStation, linkIsCurrent, stationForPath, stationStatus,
+  ASK_TROY_ACTION, ASK_TROY_HINT, BOARD_GROUPS, STATIONS, boardShowsItem, boardSwitchAllows, expandedStation, linkIsCurrent, stationForPath, stationStatus,
   type BoardLink, type Station, type StationId, type StationStatus,
 } from "@/lib/refinery-nav";
 import type { UserTier } from "@/lib/useUserTier";
@@ -35,6 +35,8 @@ export interface RefineryBoardProps {
   labelFor: (item: BoardLink) => string;
   ask: (step: ProgressStep) => void;
   hidePartner: boolean;
+  /** Server switches (components/ServerSwitches); switched-off steps are left out. */
+  switches: { recordStep: boolean };
   /** Ids go on the copy the person can see (desktop sidebar or open drawer). */
   carryIds: boolean;
   /** Mobile strip tap: open the drawer with this station expanded. */
@@ -142,7 +144,7 @@ export function RefineryBoard(props: RefineryBoardProps) {
       <ol className="board-path" aria-label="Your path, in order">
         {stations.map((station, index) => {
           const status = stationStatus(station, steps, currentStepId);
-          const children = station.children.filter((c) => boardShowsItem(c, userTier));
+          const children = station.children.filter((c) => boardShowsItem(c, userTier) && boardSwitchAllows(c, props.switches));
           const isOpen = opened[station.id] ?? (station.id === auto || station.id === props.focusStation);
           const childrenId = `${carryIds ? "" : "x-"}board-${station.id}-views`;
           return (
@@ -174,7 +176,7 @@ export function RefineryBoard(props: RefineryBoardProps) {
         <SteelManMeter compact />
       </div>
       {BOARD_GROUPS.map((group) => {
-        const items = group.items.filter((item) => boardShowsItem(item, userTier) && !(group.id === "program" && props.hidePartner));
+        const items = group.items.filter((item) => boardShowsItem(item, userTier) && boardSwitchAllows(item, props.switches) && !(group.id === "program" && props.hidePartner));
         if (!items.length) return null;
         return (
           <section key={group.id} id={carryIds ? group.navId : undefined} data-tour={group.navId} aria-label={group.label} className="board-group">

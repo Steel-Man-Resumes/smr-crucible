@@ -59,6 +59,7 @@ import { ProgressionProvider, useProgression } from "@/components/progression/Pr
 import type { BoardLink, StationId } from "@/lib/refinery-nav";
 import { RefineryBoard } from "@/components/nav/RefineryBoard";
 import { StationStrip } from "@/components/nav/StationStrip";
+import { useServerSwitches } from "@/components/ServerSwitches";
 
 /**
  * Dashboard Layout -- Authenticated area
@@ -294,6 +295,7 @@ export function RefineryShell({ children }: { children: ReactNode }) {
 
 function RefineryShellContent({ children }: { children: ReactNode }) {
   const progression = useProgression();
+  const serverSwitches = useServerSwitches();
   const userTier = useUserTier();
   const { data: sessionData, status: authStatus } = useSession();
   const pathname = usePathname();
@@ -692,6 +694,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         labelFor={navItemLabel}
         ask={(step) => progression?.ask(step)}
         hidePartner={isOrgPartner}
+        switches={serverSwitches}
         carryIds={mobile ? drawerOpen : !drawerOpen}
         focusStation={mobile ? drawerStation : null}
         onItemClick={onItemClick}

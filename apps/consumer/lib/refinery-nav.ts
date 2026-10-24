@@ -25,6 +25,8 @@ export interface BoardLink {
   requiresDisclosure?: boolean;
   /** Legacy guided-tour target kept on this link. */
   legacyId?: string;
+  /** Shown only while this server switch is on (lib/server-switch.ts via ServerSwitches). */
+  requiresSwitch?: "recordStep";
 }
 
 export interface Station extends BoardLink {
@@ -93,7 +95,7 @@ export const BOARD_GROUPS: readonly BoardGroup[] = [
   { id: "toolbox", label: "Toolbox", navId: "refinery-nav-toolbox", items: [
     { href: "/dashboard/help", label: "Help and tour", minTier: "observer", minState: "needs_profile" },
     { href: "/dashboard/help?mode=idea", label: "Share an idea", minTier: "observer", minState: "needs_profile" },
-    { href: "/dashboard/record-check", label: "Get your records", ...C },
+    { href: "/dashboard/record-check", label: "Get your records", ...C, requiresSwitch: "recordStep" },
     { href: "/dashboard/settings", label: "Settings", legacyId: "refinery-nav-settings", minTier: "observer", minState: "needs_profile" },
     { href: "/dashboard/admin", label: "Admin", minTier: "admin", minState: "needs_profile" },
     { href: "/dashboard/admin/access-requests", label: "Access requests", minTier: "admin", minState: "needs_profile" },
@@ -230,6 +232,11 @@ export function boardShowsItem(item: Pick<BoardLink, "minTier">, userTier: UserT
   if (item.minTier === "admin" && userTier !== "admin") return false;
   if (item.minTier === "partner" && userTier !== "partner" && userTier !== "admin") return false;
   return true;
+}
+
+/** A switched-off step is never linked: its screen is a 404 until the switch is on. Default OFF. */
+export function boardSwitchAllows(item: Pick<BoardLink, "requiresSwitch">, switches: { recordStep: boolean } | null | undefined): boolean {
+  return !item.requiresSwitch || !!switches?.[item.requiresSwitch];
 }
 
 /** aria-current: the exact page, ignoring any hash on the link. */
