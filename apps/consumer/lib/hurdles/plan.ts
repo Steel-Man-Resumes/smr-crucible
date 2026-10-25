@@ -249,6 +249,37 @@ export function recordAndSensitiveText(): string[] {
   return [...new Set(out)].filter((t) => t && !ordinary.has(t));
 }
 
+/**
+ * Which artifact a saved plan becomes (fix 2026-10-24). Only a plan that
+ * includes the record conversation is a disclosure_plan: that is what the
+ * progression gate, the journey, staff progress views and t.ROY's context
+ * call "the disclosure plan". A plan for other hurdles only is a hurdle_plan
+ * (migration 098), so saving one never replaces or hides the person's record
+ * conversation plan. Neither kind stores any record content (planForSave).
+ */
+export type SavedPlanType = "disclosure_plan" | "hurdle_plan";
+export const SAVED_PLAN_TYPES: readonly SavedPlanType[] = ["hurdle_plan", "disclosure_plan"];
+export function savedPlanType(plan: Pick<HurdlePlan, "record">): SavedPlanType {
+  return plan.record ? "disclosure_plan" : "hurdle_plan";
+}
+
+/**
+ * "Pick up where I left off": the newest saved plan of either kind. When the
+ * newest save has no restorable choices (a record-only plan saves an empty
+ * selected list), nothing is offered, as before the fix; an older plan's
+ * choices are never offered in its place. Rows are /api/artifacts items.
+ */
+export function newestRestorablePlan(rows: Array<{ created_at?: string; content?: any } | null | undefined>): { selected: unknown; choices: unknown } | null {
+  let newest: { at: number; content?: any } | null = null;
+  for (const row of rows) {
+    if (!row) continue;
+    const at = Date.parse(row.created_at ?? "") || 0;
+    if (!newest || at > newest.at) newest = { at, content: row.content };
+  }
+  const hp = newest?.content?.hurdlePlan;
+  return hp && Array.isArray(hp.selected) && hp.selected.length ? { selected: hp.selected, choices: hp.choices } : null;
+}
+
 /** The whole artifact body for POST /api/artifacts. Pure, so tests can prove what is in it. */
 export function buildSavePayload(plan: HurdlePlan, state: Pick<PlannerState, "selected" | "answers">, opts: { summaries: Partial<Record<HurdleId, string>>; strippedCount: number; wording: string; targetJob: string | null; applicationId?: string; now?: string }) {
   const saved = planForSave(plan, state);
@@ -257,8 +288,9 @@ export function buildSavePayload(plan: HurdlePlan, state: Pick<PlannerState, "se
   const summaries: Record<string, string> = {};
   void opts.summaries;
   const nonRecord = { hurdles: saved.hurdles, record: null };
+  const type = savedPlanType(plan);
   return {
-    type: "disclosure_plan",
+    type,
     targetContext: { targetJob: opts.targetJob, applicationId: opts.applicationId },
     content: {
       // Older readers (Library, application snapshot) read these four fields.
@@ -268,6 +300,10 @@ export function buildSavePayload(plan: HurdlePlan, state: Pick<PlannerState, "se
       tips: saved.hurdles.flatMap((s) => s.doNow).slice(0, 8),
       targetJob: opts.targetJob,
       completedAt: opts.now ?? new Date().toISOString(),
+      // True only on a disclosure_plan: the person planned the record
+      // conversation (its words are not saved). Lets a reader tell this
+      // apart from a hurdle-only row saved before the fix.
+      recordPlanned: type === "disclosure_plan",
       hurdlePlan: { ...saved, summaries, strippedCount: opts.strippedCount, wording: opts.wording },
       planText: hurdlePlanText(nonRecord, summaries as Record<string, string>),
     },

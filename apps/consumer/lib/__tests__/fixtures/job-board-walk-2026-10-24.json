@@ -1,0 +1,29 @@
+{
+  "_note": "Synthetic provider responses shaped like the 2026-10-24 production walk (Milwaukee, WI). Employer names are placeholders. No live provider is called.",
+  "jsearch": {
+    "warehouse lead": { "status": "OK", "data": { "cursor": null, "jobs": [
+      { "job_id": "js-wl-1", "job_title": "Warehouse Lead", "employer_name": "Example Logistics", "employer_logo": null, "job_city": "Milwaukee", "job_state": "WI", "job_country": "US", "job_description": "Lead a team of six on second shift. Forklift experience helps.", "job_min_salary": 22, "job_max_salary": 26, "job_salary_currency": "USD", "job_salary_period": "HOUR", "job_employment_type": "FULLTIME", "job_posted_at_datetime_utc": "2026-10-22T12:00:00Z", "job_is_remote": false, "employer_website": null, "job_apply_link": "https://jobs.example.com/logistics/wl-1" },
+      { "job_id": "js-wl-2", "job_title": "Amazon Connect Manager, Technical Transformation", "employer_name": "Example Consulting", "employer_logo": null, "job_city": "Milwaukee", "job_state": "WI", "job_country": "US", "job_description": "Lead contact center cloud programs for clients. Manage delivery teams.", "job_min_salary": null, "job_max_salary": null, "job_salary_currency": null, "job_salary_period": null, "job_employment_type": "FULLTIME", "job_posted_at_datetime_utc": "2026-10-20T12:00:00Z", "job_is_remote": false, "employer_website": null, "job_apply_link": "https://jobs.example.com/consulting/acm" },
+      { "job_id": "js-wl-3", "job_title": "Data Engineering, Management, & Governance Manager", "employer_name": "Example Advisory", "employer_logo": null, "job_city": "Milwaukee", "job_state": "WI", "job_country": "US", "job_description": "Lead data warehouse modernization for finance clients.", "job_min_salary": 70856.24, "job_max_salary": 70856.24, "job_salary_currency": null, "job_salary_period": null, "salary_is_predicted": true, "job_employment_type": "FULLTIME", "job_posted_at_datetime_utc": "2026-10-19T12:00:00Z", "job_is_remote": false, "employer_website": null, "job_apply_link": "https://jobs.example.com/advisory/degm" },
+      { "job_id": "js-wl-4a", "job_title": "Warehouse Lead - Day Shift", "employer_name": "Example Plastics", "employer_logo": null, "job_city": "Germantown", "job_state": "WI", "job_country": "US", "job_description": "Lead day shift warehouse crew.", "job_min_salary": 6240, "job_max_salary": null, "job_salary_currency": null, "job_salary_period": null, "job_employment_type": "FULLTIME", "job_posted_at_datetime_utc": "2026-10-21T12:00:00Z", "job_is_remote": false, "employer_website": null, "job_apply_link": "https://jobs.example.com/plastics/germantown" },
+      { "job_id": "js-wl-4b", "job_title": "Warehouse Lead - Day Shift", "employer_name": "Example Plastics, Inc.", "employer_logo": null, "job_city": "Milwaukee", "job_state": "WI", "job_country": "US", "job_description": "Lead day shift warehouse crew.", "job_min_salary": null, "job_max_salary": null, "job_salary_currency": null, "job_salary_period": null, "job_employment_type": "FULLTIME", "job_posted_at_datetime_utc": "2026-10-21T12:00:00Z", "job_is_remote": false, "employer_website": null, "job_apply_link": "https://jobs.example.com/plastics/milwaukee" },
+      { "job_id": "js-wl-4c", "job_title": "Warehouse Lead - Day Shift - Menomonee Falls", "employer_name": "Example Plastics", "employer_logo": null, "job_city": "Menomonee Falls", "job_state": "WI", "job_country": "US", "job_description": "Lead day shift warehouse crew.", "job_min_salary": null, "job_max_salary": null, "job_salary_currency": null, "job_salary_period": null, "job_employment_type": "FULLTIME", "job_posted_at_datetime_utc": "2026-10-21T12:00:00Z", "job_is_remote": false, "employer_website": null, "job_apply_link": "https://jobs.example.com/plastics/menomonee-falls" }
+    ] } },
+    "warehouse supervisor": { "status": "OK", "data": { "cursor": null, "jobs": [] } }
+  },
+  "adzuna": {
+    "warehouse lead": { "results": [
+      { "id": "az-1", "title": "Warehouse Lead", "company": { "display_name": "Example Logistics Inc" }, "location": { "area": ["US", "Wisconsin"], "display_name": "Milwaukee, Wisconsin" }, "description": "Lead a team of six on second shift.", "salary_min": 70856.24, "salary_max": 70856.24, "salary_is_predicted": "1", "created": "2026-10-22T12:00:00Z", "redirect_url": "https://www.adzuna.com/details/az-1" },
+      { "id": "az-2", "title": "Warehouse Supervisor", "company": { "display_name": "Example Foods" }, "location": { "area": ["US", "Wisconsin"], "display_name": "Milwaukee, Wisconsin" }, "description": "Supervise receiving and putaway.", "created": "2026-10-21T12:00:00Z", "redirect_url": "https://www.adzuna.com/details/az-2" }
+    ] },
+    "warehouse supervisor": { "results": [] }
+  },
+  "usajobs": {
+    "warehouse lead": { "SearchResult": { "SearchResultItems": [
+      { "MatchedObjectId": "va-1", "MatchedObjectDescriptor": { "PositionTitle": "Informatics Clinical Pharmacist Practitioner", "OrganizationName": "Veterans Health Administration", "PositionLocation": [ { "LocationName": "Anywhere in the U.S. (remote job)", "CityName": "Anywhere in the U.S. (remote job), United States", "CountrySubDivisionCode": "United States", "CountryCode": "United States" } ], "PositionRemuneration": [ { "MinimumRange": "120000", "MaximumRange": "160000", "RateIntervalCode": "PA" } ], "UserArea": { "Details": { "JobSummary": "Pharmacy informatics for clinical teams. Lead projects for medication safety." } }, "PublicationStartDate": "2026-10-18T00:00:00Z" } }
+    ] } }
+  },
+  "usajobs_location": {
+    "MatchedObjectId": "usa-loc-1", "MatchedObjectDescriptor": { "PositionTitle": "Materials Handler", "OrganizationName": "Example Agency", "PositionLocation": [ { "LocationName": "Milwaukee, Wisconsin", "CityName": "Milwaukee, Wisconsin", "CountrySubDivisionCode": "Wisconsin", "CountryCode": "United States" } ] }
+  }
+}

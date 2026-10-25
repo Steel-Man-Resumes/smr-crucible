@@ -55,8 +55,9 @@ export const COMPONENTS: Record<ComponentId, ComponentSpec> = {
     why: "A finished resume passed every check and is ready to send.",
     action: (n) => n === 0 ? "Finish your first resume" : "Finish another resume" },
   lanes: { label: "Lanes in use", minutes: 10, multiplier: 1, cap: 4, href: "/dashboard/vault", unit: ["lane", "lanes"],
-    why: "Each kind of work you aim at gets its own resume, built from the same true facts.",
-    action: (n) => n === 0 ? "Put a resume in a lane for the work you want" : "Start a resume for another kind of work" },
+    // By design: a lane counts only once it holds a finished resume (read.ts S5).
+    why: "Each kind of work you aim at gets its own resume, built from the same true facts. A lane counts once it holds a finished resume.",
+    action: (n) => n === 0 ? "Finish a resume in a lane for the work you want" : "Finish a resume for another kind of work" },
   tailored: { label: "Tailored to a real job", minutes: 20, multiplier: 1, cap: 12, href: "/dashboard/application-tailor", unit: ["job", "jobs"],
     why: "A resume shaped to one real job speaks to the person reading it.",
     action: () => "Shape a resume to one real job" },

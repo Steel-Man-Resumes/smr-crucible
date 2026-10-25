@@ -62,7 +62,7 @@ export function adzunaUrl(role:string,location:string,radiusMiles:number,filters
 }
 export function mapAdzunaJob(r:any,index=0):JSearchJob{
   const area=Array.isArray(r.location?.area)?r.location.area:[];
-  return{job_id:`adzuna-${r.id??index}`,job_title:r.title||"Job",employer_name:r.company?.display_name||"Employer",employer_logo:null,job_city:area.length>2?area.at(-1):r.location?.display_name||null,job_state:area[1]||null,job_country:"US",job_description:r.description||"",
+  return{job_id:`adzuna-${r.id??index}`,job_title:r.title||"Job",employer_name:r.company?.display_name||"Employer",employer_logo:null,job_city:area.length>2?area.at(-1):(typeof r.location?.display_name==="string"?r.location.display_name.split(",")[0].trim()||null:null),job_state:area[1]||null,job_country:"US",job_description:r.description||"",
     job_min_salary:finite(r.salary_min),job_max_salary:finite(r.salary_max),job_salary_currency:r.salary_currency||null,job_salary_period:r.salary_period||null,salary_is_predicted:r.salary_is_predicted===1||r.salary_is_predicted==="1",
     job_employment_type:r.contract_time==="part_time"?"Part-time":r.contract_time==="full_time"?"Full-time":r.contract_type==="contract"?"Contract":null,
     job_posted_at_datetime_utc:r.created||"",job_is_remote:null,employer_website:null,job_apply_link:r.redirect_url||null,job_latitude:finite(r.latitude),job_longitude:finite(r.longitude),source:"adzuna",fetched_at:new Date().toISOString(),
@@ -92,7 +92,7 @@ export function mapUsaJobsJob(item:any,index=0,location="",filters=defaultJobSea
   if(filters.origin){const withCoords=locations.filter((l:any)=>finite(l.Latitude)!==null&&finite(l.Longitude)!==null);withCoords.sort((a:any,b:any)=>distanceMiles(filters.origin!,{latitude:Number(a.Latitude),longitude:Number(a.Longitude)})-distanceMiles(filters.origin!,{latitude:Number(b.Latitude),longitude:Number(b.Longitude)}));if(withCoords.length)place=withCoords[0];}
   const parts=String(place.LocationName||"").split(",").map((s:string)=>s.trim());const pay=d.PositionRemuneration?.[0];const details=d.UserArea?.Details||{};
   return{job_id:`usajobs-${item.MatchedObjectId||d.PositionID||index}`,job_title:d.PositionTitle||"Job",employer_name:d.OrganizationName||"Federal agency",employer_logo:null,
-    job_city:place.CityName||parts[0]||null,job_state:place.CountrySubDivisionName||parts[1]||null,job_country:place.CountryCode||"US",job_description:[details.JobSummary,d.QualificationSummary,details.Requirements,details.MajorDuties].filter(Boolean).join("\n"),
+    job_city:String(place.CityName||parts[0]||"").split(",")[0].trim()||null,job_state:place.CountrySubDivisionName||place.CountrySubDivisionCode||parts[1]||null,job_country:place.CountryCode||"US",job_description:[details.JobSummary,d.QualificationSummary,details.Requirements,details.MajorDuties].filter(Boolean).join("\n"),
     job_min_salary:finite(pay?.MinimumRange),job_max_salary:finite(pay?.MaximumRange),job_salary_currency:"USD",job_salary_period:pay?.RateIntervalCode||pay?.Description?.replace(/^Per /i,"")||null,
     job_employment_type:d.PositionSchedule?.[0]?.Name||null,job_posted_at_datetime_utc:d.PublicationStartDate||"",job_is_remote:typeof details.RemoteIndicator==="boolean"?details.RemoteIndicator:null,
     job_latitude:finite(place.Latitude),job_longitude:finite(place.Longitude),employer_website:null,job_apply_link:d.ApplyURI?.[0]||d.PositionURI||null,job_apply_is_direct:true,employer_kind:"direct",source:"usajobs",fetched_at:new Date().toISOString(),
@@ -105,10 +105,76 @@ export async function fetchUsaJobs(role:string,location:string,timeoutMs:number,
     try{const r=await getJson(usaJobsUrl(role,location,filters,page).toString(),{headers:{Host:"data.usajobs.gov","User-Agent":ua,"Authorization-Key":key}},timeoutMs);if(!r.ok)return{jobs,failed:jobs.length===0,status:r.status,requests,partial:jobs.length>0};const values=Array.isArray(r.json?.SearchResult?.SearchResultItems)?r.json.SearchResult.SearchResultItems:[];jobs.push(...values.map((v:any,i:number)=>mapUsaJobsJob(v,i,location,filters)).filter(Boolean));if(values.length<PAGE_SIZE)break;if(page===maxPages(options.maxPages))partial=true;}catch{return{jobs,failed:jobs.length===0,requests,partial:jobs.length>0};}
   }return{jobs,failed:false,requests,partial};
 }
-function key(j:JSearchJob){const n=(s:string|null)=>String(s||"").toLowerCase().replace(/[^a-z0-9]/g,"");return `${n(j.job_title)}|${n(j.employer_name)}|${n(j.job_city)}|${n(j.job_state)}`;}
-/** Keep provenance from duplicates and prefer an explicitly direct apply option. */
-export function mergeJobs(lists:JSearchJob[][],_preferState?:string):JSearchJob[]{
-  const found=new Map<string,JSearchJob>();
-  for(const list of lists)for(const job of list){const k=key(job),previous=found.get(k);if(!previous){found.set(k,{...job});continue;}previous.source_variants=[...(previous.source_variants||[]),{source:job.source||"unknown",id:job.job_id,fields:job.source_fields||{}}];if(job.job_apply_is_direct===true&&previous.job_apply_is_direct!==true){previous.job_apply_link=job.job_apply_link;previous.job_apply_is_direct=true;}}
-  return [...found.values()];
+import { normalizeLocation, placeKey } from "./job-location";
+const CORP=/\b(?:inc|incorporated|llc|l l c|ltd|limited|corp|corporation|co|company|plc|lp|llp|usa|us|the)\b/g;
+const norm=(s:unknown)=>String(s??"").toLowerCase().replace(/&/g," and ").replace(/[^a-z0-9]+/g," ").trim();
+export function employerKey(name:unknown):string{return norm(name).replace(CORP," ").replace(/\s+/g," ").trim();}
+/** Title without the place it is posted in, so "Technician - Germantown, WI" and "Technician - Menomonee Falls" are one posting. */
+export function titleKey(j:Pick<JSearchJob,"job_title"|"job_city"|"job_state">):string{
+  let t=` ${norm(j.job_title)} `;
+  for(const part of [j.job_city,j.job_state])for(const seg of String(part||"").split(",")){const n=norm(seg);if(n.length>1)t=t.split(` ${n} `).join(" ");}
+  const state=placeKey(String(j.job_state||""));if(state.startsWith("state:")){const full=state.slice(6);t=t.split(` ${full} `).join(" ");}
+  return t.replace(/\s+/g," ").trim();
+}
+export const jobPlace=(j:JSearchJob)=>normalizeLocation(j.job_city,j.job_state);
+/** Place identity from parsed fields, never display text: "Milwaukee, WI" and "Milwaukee, Wisconsin" are one place. */
+export function placeId(city:unknown,state:unknown):string{
+  const c=norm(String(city||"").split(",")[0]);
+  const fromCity=String(city||"").split(",").slice(1).map(x=>x.trim()).find(Boolean);
+  const st=placeKey(String(state||fromCity||""));
+  return `${c}|${st}`;
+}
+const PLACEHOLDER_EMPLOYER=new Set(["","employer","confidential","confidential employer","federal agency","company","unknown","hiring","hiring company","not disclosed","private","anonymous"]);
+export const isPlaceholderEmployer=(name:unknown)=>PLACEHOLDER_EMPLOYER.has(employerKey(name));
+const linkOf=(j:JSearchJob)=>j.job_apply_link||j.job_google_link||null;
+/** Parse "City, ST" from the search box into a place id; state may be absent. */
+function wantedPlace(searchLocation?:string):{city:string;state:string|null}{
+  const [city,state]=String(searchLocation||"").split(",").map(x=>x.trim());
+  return {city:norm(city),state:state?placeKey(state):null};
+}
+/**
+ * One card per posting, built in two steps.
+ * Same opening: two listings are one opening when they share employer and
+ * title (place words removed) and either sit in different places (a posting
+ * listed once per town), come from different providers (JSearch and Adzuna
+ * copies), or carry the same apply link. Two listings from one provider in one
+ * place with different apply links are different openings and stay separate.
+ * A repeated provider id is always the same posting. Placeholder employers
+ * ("Employer", "Confidential") never merge.
+ * The card shown is the copy in the searched city and state (city alone when
+ * the search gave no state). Every other copy is kept in job_listings with its
+ * own place and apply link, and provenance stays in source_variants.
+ */
+export function mergeJobs(lists:JSearchJob[][],searchLocation?:string):JSearchJob[]{
+  type Card={members:JSearchJob[]};
+  const cards:Card[]=[],byKey=new Map<string,Card[]>(),byId=new Map<string,Card>();
+  for(const list of lists)for(const job of list){
+    const id=`${job.source||""}:${job.job_id}`;
+    const known=byId.get(id);if(known){known.members.push(job);continue;}
+    let card:Card|undefined;
+    if(!isPlaceholderEmployer(job.employer_name)){
+      const k=`${employerKey(job.employer_name)}|${titleKey(job)}`;
+      const here=placeId(job.job_city,job.job_state),link=linkOf(job);
+      const candidates=byKey.get(k)||[];
+      card=candidates.find(c=>!c.members.some(m=>(m.source||"")===(job.source||"")&&placeId(m.job_city,m.job_state)===here&&linkOf(m)!==link));
+      if(!card){card={members:[]};candidates.push(card);byKey.set(k,candidates);cards.push(card);}
+    }else{card={members:[]};cards.push(card);}
+    card.members.push(job);byId.set(id,card);
+  }
+  const wanted=wantedPlace(searchLocation);
+  return cards.map(({members})=>{
+    const exact=wanted.city?members.find(j=>{const [c,st]=placeId(j.job_city,j.job_state).split("|");return c===wanted.city&&(!wanted.state||st===wanted.state);}):undefined;
+    const pick=exact||members[0];
+    const merged:JSearchJob={...pick};
+    const pickPlace=placeId(pick.job_city,pick.job_state);
+    const listings:NonNullable<JSearchJob["job_listings"]>=[];
+    for(const j of members){
+      if(j===pick)continue;
+      merged.source_variants=[...(merged.source_variants||[]),{source:j.source||"unknown",id:j.job_id,fields:j.source_fields||{}}];
+      listings.push({place:jobPlace(j),placeId:placeId(j.job_city,j.job_state),city:j.job_city||null,state:j.job_state||null,title:j.job_title,apply_url:linkOf(j),source:j.source||"unknown",id:j.job_id});
+      if(j.job_apply_is_direct===true&&merged.job_apply_is_direct!==true&&placeId(j.job_city,j.job_state)===pickPlace){merged.job_apply_link=j.job_apply_link;merged.job_apply_is_direct=true;}
+    }
+    if(listings.length)merged.job_listings=listings;
+    return merged;
+  });
 }

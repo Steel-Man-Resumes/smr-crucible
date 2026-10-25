@@ -50,6 +50,8 @@ export type ArtifactType =
   | "cover_letter"
   | "follow_up"
   | "disclosure_plan"
+  /** A hurdle plan with no record section (migration 098). Never counts as the disclosure plan. */
+  | "hurdle_plan"
   | "interview_prep"
   | "resource_list"
   | "job_match"
@@ -217,6 +219,34 @@ export async function getArtifact(
  * query uses one.
  */
 export const ARTIFACT_NOT_DEMO_SQL = "is_demo = false";
+
+/**
+ * The resume that stands for one lane (walk 2026-10-24, bug 9): the one whose
+ * latest version is finished, then one with any version, then one with none;
+ * within a tier a pinned current resume first, then the newest edit. Examples
+ * are left out (the example rule). Returns the id only, so the pick stays one
+ * small query; the caller loads the one row it needs.
+ * $1 user, $2 lane id or NULL for work outside any named lane.
+ */
+export const LANE_RESUME_PICK_SQL = `SELECT a.id
+     FROM refinery_artifact a
+     LEFT JOIN LATERAL (
+       SELECT r.status FROM artifact_revision r
+        WHERE r.artifact_id = a.id AND r.user_id = a.user_id
+        ORDER BY r.revision_number DESC LIMIT 1
+     ) lr ON true
+     WHERE a.user_id = $1 AND a.artifact_type = 'resume' AND a.${ARTIFACT_NOT_DEMO_SQL}
+       AND (($2::uuid IS NULL AND a.lane_id IS NULL) OR a.lane_id = $2::uuid)
+     ORDER BY CASE WHEN lr.status = 'finished' THEN 0 WHEN lr.status IS NOT NULL THEN 1 ELSE 2 END,
+              a.is_current DESC, a.updated_at DESC, a.id ASC
+     LIMIT 1`;
+
+/** The lane's resume, by LANE_RESUME_PICK_SQL. */
+export async function getLaneResume(userId: string, laneId: string | null): Promise<RefineryArtifact | null> {
+  const pick = await getOneAsUser<{ id: string }>(userId, LANE_RESUME_PICK_SQL, [userId, laneId]);
+  return pick ? getArtifact(pick.id, userId) : null;
+}
+
 export function artifactNotDemoSql(alias?: string): string {
   return alias ? `${alias}.${ARTIFACT_NOT_DEMO_SQL}` : ARTIFACT_NOT_DEMO_SQL;
 }

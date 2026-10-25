@@ -58,7 +58,9 @@ test("document tasks open the actual CV, performer or creative lane", () => {
 test("global journey is reserved for no chosen task; unavailable work is not a new resume", () => {
   assert.equal(workspaceNextAction({ work: work({ task: null }) }), null);
   assert.equal(workspaceNextAction({ work: null, task: "resume" }), null);
-  assert.equal(workspaceNextAction({ work: work({ task: "resume", revision: null }) })?.href, "/resume");
+  // A known empty lane starts a resume; a saved resume with no version yet is reviewed (walk 10/24, bug 9).
+  assert.equal(workspaceNextAction({ work: work({ task: "resume", revision: null, selection: { laneId: LANE } }) })?.href, "/resume");
+  assert.deepEqual(workspaceNextAction({ work: work({ task: "resume", revision: null }) }), { label: "Review this resume", href: `/dashboard/application-tailor?id=${ARTIFACT}` });
   assert.equal(workspaceNextAction({ work: work({ task: "explore" }) })?.href, "/dashboard/paths");
 });
 

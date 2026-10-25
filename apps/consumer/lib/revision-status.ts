@@ -25,6 +25,7 @@
 
 import { isRecordChoice, recordChoiceFrom, type RecordChoice } from "./record-choice";
 import { readStoryDraft, type StoryDraft } from "./story-verification";
+import { readPersonEvidence, type FinishedBlock, type PersonEvidence } from "./person-evidence-shape";
 import {
   buildFinishView,
   openItemsInPlainWords,
@@ -111,6 +112,23 @@ export interface RevisionEvidence {
    * stored rows; never read from a request.
    */
   writerOrigin?: boolean;
+  /**
+   * Fix lane check, round 1 (review B5). Set by the SERVER only, rebuilt fresh
+   * from the person's rows on every check, check load and check save
+   * (lib/person-evidence.ts): their confirmed Master Draft details (these
+   * clear a flag), details not confirmed yet (a pointer on a card, never
+   * evidence) and their other finished resumes' lines ("checked once": card
+   * copy only). Never in ownWords, never read from a request, never carried
+   * by an edit or a fork.
+   */
+  personFacts?: string[];
+  unconfirmedFacts?: string[];
+  finishedLines?: FinishedBlock[];
+}
+
+/** The person's evidence on a revision input, fresh from their rows (never from a request). */
+export function withPersonEvidence(input: RevisionInput, pe: PersonEvidence): RevisionInput {
+  return { ...input, evidence: { ...input.evidence, personFacts: pe.facts, unconfirmedFacts: pe.unconfirmed, finishedLines: pe.finished } };
 }
 
 /** The mark a page saved as given carries (sha256 over its exact text). Server only. */
@@ -316,6 +334,13 @@ export function cleanRevisionInput(raw: unknown, opts: CleanOptions = {}): Clean
         // Only a stored row keeps the server's given-as-is mark; a request never sets it.
         ...(opts.trusted && typeof r.givenAsIs === "string" && /^[0-9a-f]{64}$/.test(r.givenAsIs) ? { givenAsIs: r.givenAsIs } : {}),
         ...(opts.trusted && r.writerOrigin === true ? { writerOrigin: true } : {}),
+        // Review B5: only a stored row keeps the server's person evidence; a request never sets it.
+        ...(opts.trusted && (Array.isArray(r.personFacts) || Array.isArray(r.finishedLines))
+          ? (() => {
+              const pe = readPersonEvidence(r);
+              return { personFacts: pe.facts, unconfirmedFacts: pe.unconfirmed, finishedLines: pe.finished };
+            })()
+          : {}),
       },
     },
   };
@@ -365,6 +390,9 @@ export function gateRevision(input: RevisionInput, pageCount: number): RevisionV
     credentialCutRemnants: e.credentialCutRemnants,
     credentialRows: completeCredentialRows(readCredentialRows(e.credentialRows)),
     ownResumeText: e.ownResumeText || undefined,
+    personFacts: e.personFacts,
+    unconfirmedFacts: e.unconfirmedFacts,
+    finishedLines: e.finishedLines,
   });
   const pageLimit = pageLimitFor(input.docKind, input.lengthChoice);
   const fits = lengthOk(pageCount, pageLimit);
@@ -442,17 +470,28 @@ export function editInput(base: RevisionInput | null, resumeText: string, letter
   const letter = letterText ?? base?.letterText ?? "";
   return cleanRevisionInput(
     {
-      ...(base ? (opts.fork ? forkEvidence(base.evidence) : base.evidence) : {}),
+      // Review B5: person evidence is never carried; a caller that holds the rows sets it fresh.
+      ...(base ? withoutPersonEvidence(opts.fork ? forkEvidence(base.evidence) : base.evidence) : {}),
       docKind: base?.docKind ?? "resume",
       lengthChoice: base?.lengthChoice ?? "auto",
       resumeText,
       coverLetterText: letter,
-      defendAnswers: remapAnswers(base?.defendAnswers ?? [], [resumeText, letter]),
+      // Fix lane check (Valjean defect 2): a fork (a Tailor result) is a new page. The parent's "cut" answers
+      // were choices about the parent's lines; carried here they read as "You chose to leave this line out"
+      // for lines the person never touched on this resume. They stay on the parent's own versions.
+      defendAnswers: remapAnswers((base?.defendAnswers ?? []).filter((a) => !(opts.fork && a.verdict === "cut")), [resumeText, letter]),
       keptTerms: base?.keptTerms ?? [],
       confirmedCredentials: base?.confirmedCredentials ?? [],
     },
     { trusted: true }
   );
+}
+
+/** Evidence without the person-evidence fields (review B5): they are rebuilt, never carried. */
+export function withoutPersonEvidence(ev: RevisionEvidence): RevisionEvidence {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { personFacts: _f, unconfirmedFacts: _u, finishedLines: _l, ...rest } = ev;
+  return rest;
 }
 
 /** A grounding stamped page_only (the same result as source-kind's withRewording(g, "page_only")). */

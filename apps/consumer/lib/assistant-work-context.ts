@@ -94,7 +94,9 @@ export async function loadSelectedWork(userId: string, raw: unknown, includeLane
     application: (uid, id) => c.getOneAsUser<Application>(uid,
       `SELECT id, job_title, company, location, description, status, source, source_id, apply_url, resume_artifact_id, follow_up_at, jd_full_text, jd_excerpt, jd_fetched_at, jd_truncated, jd_source_url, jd_source_provider, jd_hash FROM job_application WHERE user_id = $1 AND id = $2`, [uid, id]),
     documents: c.listApplicationDocuments,
-    laneResume: async (uid, laneId) => (await c.listArtifactsPaged(uid, { type: "resume", examples: "hide", laneId: laneId ?? "main", limit: 1 })).items[0] ?? null,
+    // One pick for the coach, the lane home, the next action and progression:
+    // an id-only query, then the one row (core LANE_RESUME_PICK_SQL).
+    laneResume: (uid, laneId) => c.getLaneResume(uid, laneId ?? null),
     artifact: (uid, id) => c.getArtifact(id, uid), revision: c.getRevision, latest: c.getLatestRevision,
   });
 }

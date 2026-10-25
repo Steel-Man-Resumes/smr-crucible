@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { resumeWorkspaceAction, workspaceNextAction } from "@/lib/workspace-next-action";
+import { resumeWorkspaceAction, savedResumeAction, workspaceNextAction } from "@/lib/workspace-next-action";
 import type { RefineryWorkspaceContext } from "@/lib/refinery-workspace";
 import { LANES_CHANGED_EVENT } from "@/lib/lanes";
 import { LANE_FOCUS_CHANGED_EVENT } from "./useLaneFocus";
@@ -136,6 +136,18 @@ export function LaneHome({ task, profileFirst = false, laneId = null, hidePrimar
                     {resumeNext!.label}
                   </Link>
                 )}
+                <Link href="/dashboard/vault" className="t-focus min-h-touch inline-flex items-center text-t-phos underline underline-offset-2">
+                  My resumes
+                </Link>
+              </div>
+            </>
+          ) : work?.selection?.artifactId ? (
+            <>
+              <p className="mt-1 text-sm text-t-phos" data-testid="lane-home-unversioned">You have a saved resume in this lane. It has no checked version yet.</p>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                <Link href={savedResumeAction(work.selection.artifactId).href} className="t-focus min-h-touch inline-flex items-center font-medium text-t-amber-bright underline underline-offset-2" data-testid="lane-home-review">
+                  {savedResumeAction(work.selection.artifactId).label}
+                </Link>
                 <Link href="/dashboard/vault" className="t-focus min-h-touch inline-flex items-center text-t-phos underline underline-offset-2">
                   My resumes
                 </Link>

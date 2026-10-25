@@ -49,6 +49,7 @@ const GROUPS: { type: string; label: string }[] = [
   { type: "cover_letter", label: "Cover Letters" },
   { type: "follow_up", label: "Follow-up Messages" },
   { type: "disclosure_plan", label: "Disclosure Plans" },
+  { type: "hurdle_plan", label: "Hurdle Plans" },
   { type: "interview_prep", label: "Interview Practice" },
 ];
 
@@ -74,6 +75,7 @@ function toText(a: Artifact): string {
       return c.text || "";
     case "follow_up":
       return `Subject: ${c.subject || ""}\n\n${c.body || ""}`;
+    case "hurdle_plan":
     case "disclosure_plan":
       // Hurdle planner plans carry their own plain text (lib/hurdles/plan.ts).
       if (typeof c.planText === "string" && c.planText) return `This is coaching, not legal advice.\n\n${c.planText}`;
@@ -436,6 +438,7 @@ export default function VaultPage() {
           (c.subject ? `<h2>Subject</h2><p>${esc(c.subject)}</p>` : "") +
           (c.body ? `<h2>Message</h2>${paras(c.body)}` : "");
         break;
+      case "hurdle_plan":
       case "disclosure_plan":
         if (typeof c.planText === "string" && c.planText) {
           body = `<p class="meta"><strong>This is coaching, not legal advice.</strong> For legal guidance, contact a reentry attorney or free legal aid in your area.</p>` + paras(c.planText);
