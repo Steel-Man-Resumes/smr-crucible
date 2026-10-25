@@ -38,6 +38,12 @@ export interface TodayItem {
   when: string | null;
   action: { label: string; href: string };
   taskId?: string;
+  /**
+   * The person's stored journey stage, for showing their station. Set ONLY for
+   * people in the viewer's progress-sharing cohort (the same people and value
+   * the People table shows this viewer); null for everyone else.
+   */
+  stage?: number | null;
 }
 
 export interface TodayTaskRow { id: string; title: string; due_on: string | null; client_user_id: string | null; client_name: string | null; owner_user_id: string | null; shared_with_participant: boolean; done_at: string | null }
@@ -45,7 +51,7 @@ export interface TodayOutcomeRow { id: string; client_user_id: string; client_na
 export interface TodayAppRow { id: string; user_id: string; name: string | null; job_title: string | null; company: string | null; status: string; follow_up_at: string | null; status_updated_at?: string | null; updated_at?: string | null }
 export interface TodayAnsweredRow { user_id: string; name: string | null; scope: string; status: string; answered_at: string }
 export interface TodayAckRow { user_id: string; name: string | null }
-export interface TodayCohortRow { userId: string; name: string | null; hired: boolean; lastActiveAt: string | null; joinedAt: string; assignedStaffId: string | null }
+export interface TodayCohortRow { userId: string; name: string | null; hired: boolean; lastActiveAt: string | null; joinedAt: string; assignedStaffId: string | null; currentStage?: number | null }
 export interface TodayInvitedRow { userId: string; name: string | null; joinedAt: string; assignedStaffId: string | null }
 
 export interface TodayInput {
@@ -174,5 +180,8 @@ export function buildTodayItems(input: TodayInput, nowMs: number): TodayItem[] {
         action: { label: "Assign them", href: "/dashboard/people#invited" } });
     }
   }
+  // Station: only from the progress-sharing cohort (never from applications or invites).
+  const stageOf = new Map(input.cohort.map((c) => [c.userId, c.currentStage ?? null] as const));
+  for (const i of items) i.stage = i.clientId && stageOf.has(i.clientId) ? stageOf.get(i.clientId)! : null;
   return items;
 }

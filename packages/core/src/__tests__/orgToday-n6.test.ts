@@ -128,3 +128,15 @@ test("the read side still decides what is read: SELECT and access-log predicates
   assert.equal(src.match(filter)?.length, 2);
   assert.match(src, /reach: seesAll \?/);
 });
+
+test("station rides only on people in the progress-sharing cohort", () => {
+  const input = base({
+    apps: [app({ id: "a1", user_id: "appsOnly", status: "interviewing", follow_up_at: daysAhead(2) }), app({ id: "a2", user_id: "both", status: "interviewing", follow_up_at: daysAhead(2) })],
+    cohort: [{ userId: "both", name: "Ana Ortiz", hired: false, lastActiveAt: daysAgo(1), joinedAt: daysAgo(30), assignedStaffId: ME, currentStage: 5 }],
+    invited: [{ userId: "inv", name: "Vic Moss", joinedAt: daysAgo(3), assignedStaffId: null }],
+  });
+  const items = buildTodayItems(input, NOW);
+  assert.equal(items.find((i) => i.clientId === "appsOnly")!.stage, null, "sharing applications alone does not reveal progress");
+  assert.equal(items.find((i) => i.clientId === "both")!.stage, 5);
+  assert.equal(items.find((i) => i.clientId === "inv")!.stage, null);
+});
