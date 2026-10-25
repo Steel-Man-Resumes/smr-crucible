@@ -10,6 +10,8 @@ import { coachSaveBody, coachSettingsPatch, COACH_SAVE_FIELDS } from '../coach-s
 import { SETTINGS_LESSONS } from '../orientation-lessons';
 import { settingsVerdict, SETTINGS_REFUSAL } from '../settings-guard';
 import { PROGRESSION_AI } from '../progression-policy';
+import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
+import { TOURS, readTourSlot, isTourId, slotSql } from '../tour/registry';
 import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed } from '../export-plan';
 import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
 
@@ -250,4 +252,43 @@ test('S8: the documents ZIP is wired, and the shared-computer warning gates both
   assert.match(page, /disabled=\{exportStatus !== "idle" \|\| !anyChecked \|\| !ownDevice\}/);
   assert.match(page, /disabled=\{docsStatus !== "idle" \|\| !ownDevice\}/);
   assert.match(read('app/(dashboard)/dashboard/documents/page.tsx'), /href="\/dashboard\/settings#settings-export"/);
+});
+
+/* T1: the tour store keyed by tour id (the SQL runs for real in tour-store-map-pglite.test.ts) */
+
+test('T1: the old single slot is read as the entrance tour; tours.<id> wins once written; settings never reads it', () => {
+  const old = { version: 5, runId: 'a', stop: 3 };
+  assert.deepEqual(readTourSlot({ guidedTour: old }, 'entrance'), old);
+  assert.equal(readTourSlot({ guidedTour: old }, 'settings'), null);
+  const moved = { version: 5, runId: 'b', stop: 4 };
+  assert.deepEqual(readTourSlot({ guidedTour: old, tours: { entrance: moved } }, 'entrance'), moved);
+  assert.deepEqual(readTourSlot({ tours: { settings: { version: 1, stop: 2 } } }, 'settings'), { version: 1, stop: 2 });
+  assert.equal(readTourSlot(null, 'entrance'), null);
+  assert.match(slotSql('$6'), /COALESCE\(preferences->'tours'->\$6::text, CASE WHEN \$6::text = 'entrance' THEN preferences->'guidedTour' END\)/);
+  assert.equal(isTourId('entrance') && isTourId('settings') && !isTourId('__proto__'), true);
+});
+
+test('T1: reward keys stay per tour; settings is reserved and never granted', async () => {
+  assert.equal(TOURS.entrance.rewardKey, 'tour:complete');
+  assert.equal(TOURS.settings.rewardKey, 'tour:settings');
+  assert.equal(TOURS.settings.grants, false);
+  const calls: string[] = [];
+  const store: TourWriteStore = {
+    async start(_u, _r, _p, _s, tourId) { calls.push(`start:${tourId}`); return 'started'; },
+    async advance(_u, _r, _q, _s, _c, tourId) { calls.push(`advance:${tourId}`); return 'saved'; },
+    async watchedMs() { calls.push('watched'); return 10 * 60_000; },
+    async grant() { calls.push('grant'); return { status: 'granted', calls: 1 }; },
+    async invalidate() {},
+  };
+  const run = '77777777-7777-4777-8777-777777777777';
+  const done = await handleTourWrite(store, 'u', { tourId: 'settings', version: TOURS.settings.version, runId: run, sequence: 1, stop: 3, action: 'complete' });
+  assert.equal(done.status, 200);
+  assert.equal(done.json.reward, null);
+  assert.deepEqual(calls, ['advance:settings'], 'no watch check and no grant for a reserved reward');
+  // A body without tourId is the entrance tour, so the entrance client is unchanged.
+  await handleTourWrite(store, 'u', { version: TOURS.entrance.version, runId: run, sequence: 0, stop: 0, action: 'start', previousRunId: null });
+  assert.equal(calls.at(-1), 'start:entrance');
+  for (const bad of [{ tourId: 'x' }, { tourId: 7 }, { tourId: 'settings', version: TOURS.entrance.version }]) {
+    assert.equal((await handleTourWrite(store, 'u', { version: TOURS.settings.version, runId: run, sequence: 1, stop: 0, action: 'progress', ...bad })).status, 400, JSON.stringify(bad));
+  }
 });

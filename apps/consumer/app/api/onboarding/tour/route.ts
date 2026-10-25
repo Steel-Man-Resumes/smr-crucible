@@ -12,31 +12,58 @@ import { TOUR_STOP_COUNT, TOUR_VERSION } from "@/lib/guidedTour";
 import { tourRewardClaimed } from "@/lib/progression-server";
 import { handleTourWrite } from "@/lib/tour/tour-write";
 import { tourStore } from "@/lib/tour/tour-store";
+import { TOURS, isTourId, readTourSlot } from "@/lib/tour/registry";
 
 export const maxDuration = 10;
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const asked = new URL(request.url).searchParams.get("tourId");
+  const tourId = asked ?? "entrance";
+  if (!isTourId(tourId)) return NextResponse.json({ error: "Unknown tour" }, { status: 400 });
+  // Under any impersonation the tours never open (T2); say so rather than hand back a place.
+  const impersonating = !!session.impersonation;
+
+  if (tourId !== "entrance") {
+    const def = TOURS[tourId];
+    const row = await getOneAsUser<{ tours: unknown; guided: unknown }>(userId,
+      `SELECT preferences->'tours' AS tours, preferences->'guidedTour' AS guided FROM consumer_profile WHERE user_id = $1`, [userId]);
+    const slot = readTourSlot({ tours: row?.tours, guidedTour: row?.guided }, tourId);
+    const current = slot?.version === def.version;
+    return NextResponse.json({ data: {
+      accountId: userId, tourId, impersonating,
+      version: current ? def.version : undefined,
+      inProgress: current && slot?.inProgress === true,
+      stop: current && Number.isInteger(slot?.stop) ? Math.max(0, Math.min(def.stopCount - 1, slot!.stop!)) : 0,
+      previousRunId: slot?.runId ?? null,
+      runId: current ? slot?.runId : undefined,
+      sequence: current ? slot?.sequence ?? 0 : 0,
+      completedAt: current ? slot?.completedAt ?? null : null,
+    } }, { headers: { "Cache-Control": "no-store" } });
+  }
 
   const [profile, row, work, rewardClaimedAt] = await Promise.all([
     getUserProfile(userId),
-    getOneAsUser<{ progress: { version?: number; stop?: number; inProgress?: boolean; runId?: string; sequence?: number } | null }>(userId,
-      `SELECT preferences->'guidedTour' AS progress FROM consumer_profile WHERE user_id = $1`, [userId]),
+    getOneAsUser<{ tours: unknown; guided: unknown }>(userId,
+      `SELECT preferences->'tours' AS tours, preferences->'guidedTour' AS guided FROM consumer_profile WHERE user_id = $1`, [userId]),
     loadSelectedWork(userId, {}, false),
     // Unknown (undefined) rather than a false "never claimed" when the read fails.
     tourRewardClaimed(userId).catch(() => undefined),
   ]);
   if (!profile) return NextResponse.json({ error: "Account not found" }, { status: 404 });
-  const progress = row?.progress;
+  // tours.entrance, or the old single slot guidedTour until the first write moves it.
+  const progress = readTourSlot({ tours: row?.tours, guidedTour: row?.guided }, "entrance");
   // Read the normal ladder with orientation satisfied only in memory. This does
   // not cache/write a stage, unlock a tool or create a career progress event.
   const nextStep = computeNextStep({ ...profile, onboardingComplete: true, onboardingDeferrals: 0 });
   const selectedNext = workspaceNextAction({ work, profileFirst: !profile.profileComplete });
   return NextResponse.json({ data: {
     accountId: userId,
+    tourId: "entrance",
+    impersonating,
     tourComplete: profile.onboardingComplete,
     tourDeferrals: profile.onboardingDeferrals,
     coachName: profile.coachName || "Guide",
