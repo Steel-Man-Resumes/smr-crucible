@@ -61,6 +61,21 @@ export interface UserFullContext {
     applicationCount: number;
     hasResumeTailoredToTarget: boolean;
   };
+  /**
+   * Server-built parts (lib/assistant-full-context.ts, for /api/assistant).
+   * Absent from the browser snapshot GET /api/user/context returns. null means
+   * that part could not be loaded this turn.
+   */
+  lanes?: { total: number; open: number; items: Array<{ id: string; name: string; target: string | null; kind: string }> } | null;
+  hurdlePlan?: {
+    exists: boolean;
+    targetJob?: string | null;
+    savedAt?: string;
+    hurdleCount?: number;
+    hurdles?: Array<{ label: string; known: string[]; open: string[]; doNow: string[]; tell: string | null }>;
+  };
+  progression?: { currentStep: string; currentLabel: string; nextAction: { label: string; href: string }; remaining: number | null; completed: string[] } | null;
+  meter?: { score: number; band: string; counts: Record<string, number> } | null;
 }
 
 export function useUserContext() {

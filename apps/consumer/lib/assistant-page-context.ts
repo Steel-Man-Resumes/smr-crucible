@@ -3,7 +3,7 @@ import { REFINERY_PAGES, TOUR_TARGETS } from "./tools/assistant-tool-defs";
 const LABELS: Record<string, string> = {
   dashboard: "Overview", vault: "My resumes", master: "Master Draft", jobs: "Find work",
   "application-tailor": "Application tailoring", applications: "Applications", interview: "Interview prep",
-  disclosure: "Disclosure planning", resources: "Support", employers: "Employer evidence", settings: "Settings",
+  disclosure: "Plan what to say", resources: "Support", employers: "Employer evidence", settings: "Settings",
   help: "Help", progress: "Progress", paths: "Career paths", documents: "Private documents",
   creative: "Creative work", cv: "CV", performer: "Performer work", start: "Forge start",
 };

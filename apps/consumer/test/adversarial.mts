@@ -535,7 +535,7 @@ section("t.ROY current-block");
   check("needs_resume unblock targets application-tailor", needsResume?.targetPage === "application-tailor", needsResume?.targetPage);
   check("needs_resume CTA is a real page", !!needsResume && validPage(needsResume.targetPage));
   check("needs_resume no longer locks the Application Tailor", !needsResume?.lockedTools.includes("Application Tailor"));
-  check("needs_resume still locks document-dependent Disclosure", !!needsResume?.lockedTools.includes("Disclosure Planner"));
+  check("needs_resume still locks document-dependent Plan what to say", !!needsResume?.lockedTools.includes("Plan what to say"));
   check("urgent interview and applications stay open with no resume", [preForge, needsResume].every((b) => !b?.lockedTools.includes("Interview Practice") && !b?.lockedTools.includes("Applications")));
 
   const full = computeCurrentBlock({ forgeComplete: true, hasResumeTailoredToTarget: true });

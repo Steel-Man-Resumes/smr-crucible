@@ -15,6 +15,7 @@ import { UiPrefsApplier } from "@/components/UiPrefsApplier";
 import { NavAvatar } from "@/components/NavAvatar";
 import { AdminTestModeBanner } from "@/components/AdminTestModeBanner";
 import { GuidedTour } from "@/components/GuidedTour";
+import { StaffTour } from "@/components/tour/StaffTour";
 import { TourPageFrame } from "@/components/tour/TourPageFrame";
 import { DevSwitcher } from "@/components/DevSwitcher";
 import { ImpersonationChrome } from "@/components/ImpersonationChrome";
@@ -857,6 +858,12 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       <Suspense fallback={null}>
         <GuidedTour key={JSON.stringify([shellUid, effectiveRole?.accountId ?? null])} held={tourHeld || !derivedReady || effectiveRole === null} onNavigationReveal={setDrawerOpen} />
       </Suspense>
+      {/* The staff tour (CRM-TOUR.md): organization staff in a workspace organization only; it gates itself again inside. */}
+      {isOrgPartner && effectiveRole?.crmV2 && !effectiveRole.impersonating && (
+        <Suspense fallback={null}>
+          <StaffTour onNavigationReveal={setDrawerOpen} />
+        </Suspense>
+      )}
 
       {/* Developer impersonation frame (blue view / red assist) */}
       <ImpersonationChrome />
@@ -941,7 +948,9 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
               skills: userFullContext?.forge?.skills?.map((s) => (typeof s === "string" ? s : (s as any).name)).filter(Boolean) ?? undefined,
               barriers: userFullContext?.forge?.barriers ?? undefined,
               hasCriminalRecord: userFullContext?.forge?.hasCriminalRecord ?? undefined,
-              userFullContext,
+              // Not sent since 2026-10-25: /api/assistant builds the full
+              // context on the server from the session (it deleted this
+              // field unread since 2026-10-15).
             }}
             // Org staff get t.ROY's caseload assistant (/api/assistant resolves
             // their org server-side). The Refinery coach is a job-seeker's coach

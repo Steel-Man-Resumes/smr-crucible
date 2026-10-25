@@ -16,7 +16,7 @@ const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, '@electric-sql/pglite')) ? 'set SMR_PGLITE_DIR to run the pglite tour-store test' : false;
 const MIG = new URL('../../../../packages/core/migrations/', import.meta.url).pathname;
 
-test('tour store map: old slot migrates to entrance on read, settings has its own place, run, CAS and no grant', { skip }, async () => {
+test('tour store map: old slot migrates to entrance on read, settings and crm have their own places, run, CAS and no grant', { skip }, async () => {
   const { PGlite } = await import(join(dir!, '@electric-sql/pglite/dist/index.js'));
   const { pgcrypto } = await import(join(dir!, '@electric-sql/pglite/dist/contrib/pgcrypto.js'));
   const pg = new PGlite({ extensions: { pgcrypto } });
@@ -132,4 +132,32 @@ test('tour store map: old slot migrates to entrance on read, settings has its ow
   assert.equal((await handleTourWrite(store, other, { tourId: 'settings', version: S.version, runId: S2, sequence: 9, stop: 1, action: 'progress' })).status, 409);
   assert.equal((await prefs())!.tours.settings.sequence, 1, 'the re-POST on a completed run moved nothing');
   assert.equal((await handleTourWrite(store, u, { tourId: 'nope', version: 1, runId: S2, sequence: 0, stop: 0, action: 'start', previousRunId: null })).status, 400);
+
+  // CRM-TOUR.md: the staff tour has its own slot, completes with no reward, and
+  // writes no grant row at all (tour:crm is reserved, never granted). The two
+  // grants above (settings, entrance) are the only rows before and after.
+  const C = TOURS.crm, C1 = '77777777-7777-4777-8777-777777777777';
+  const cw = (body: Record<string, unknown>) => handleTourWrite(store, u, { tourId: 'crm', version: C.version, stop: 0, ...body });
+  const grantsBefore = ((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n;
+  assert.equal((await cw({ action: 'start', runId: C1, sequence: 0, previousRunId: null })).status, 200);
+  assert.equal((await cw({ action: 'progress', runId: C1, sequence: 1, stop: 5 })).status, 200);
+  assert.equal((await cw({ action: 'progress', runId: C1, sequence: 2, stop: C.stopCount })).status, 400, 'crm stop range');
+  p = await prefs();
+  assert.equal(p!.tours.crm.stop, 5);
+  assert.equal(p!.tours.settings.stop, S.stopCount - 1, 'the settings place (its completed run) is unchanged');
+  assert.equal(p!.tours.settings.inProgress, false);
+  assert.equal(p!.tours.entrance.inProgress, false, 'the entrance place (its completed run) is unchanged');
+  await pg.query(`UPDATE consumer_profile SET preferences = jsonb_set(preferences, '{tours,crm,startedAt}', to_jsonb(now() - interval '5 minutes')) WHERE user_id=$1`, [u]);
+  const crmDone = await cw({ action: 'complete', runId: C1, sequence: 3, stop: C.stopCount - 1 });
+  assert.equal(crmDone.status, 200);
+  assert.equal(crmDone.json.reward, null, 'staff tours grant nothing');
+  p = await prefs();
+  assert.equal(p!.tours.crm.inProgress, false);
+  assert.ok(p!.tours.crm.completedAt);
+  const grantsAfter = (await pg.query(`SELECT grant_key AS k FROM progression_grant WHERE user_id=$1 ORDER BY created_at`, [u])).rows as { k: string }[];
+  assert.equal(grantsAfter.length, grantsBefore, 'completing the staff tour wrote no grant row');
+  assert.ok(!grantsAfter.some(r => r.k === 'tour:crm'), 'tour:crm is never written');
+  assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE grant_key='tour:crm'`)).rows[0] as { n: number }).n, 0);
+  assert.equal((await cw({ action: 'progress', runId: C1, sequence: 4, stop: 2 })).status, 409, 'a completed crm run never reopens');
+  assert.equal((await handleTourWrite(store, other, { tourId: 'crm', version: C.version, runId: C1, sequence: 9, stop: 1, action: 'progress' })).status, 409, 'account bound');
 });

@@ -36,6 +36,12 @@ export interface HurdleSection {
   tell: string | null;
   /** Words the person typed on this hurdle (kept with the plan on screen only). */
   ownWords: string[];
+  /**
+   * Lines above that came from a sensitive node or a sensitive choice (by
+   * origin, not by text): a skipped sensitive node's decision, its facts,
+   * actions and asks. planForSave drops them (fix 2026-10-25, review S2).
+   */
+  fromSensitive: { known: string[]; open: string[]; doNow: string[]; askEmployer: string[] };
   complete: boolean;
 }
 
@@ -72,12 +78,13 @@ function sectionFor(hurdle: HurdleId, answers: Record<string, Answer>, location?
   const def = HURDLES[hurdle];
   const w = walk(hurdle, answers);
   const known: string[] = [], open: string[] = [], doNow: string[] = [], ask: string[] = [], ownWords: string[] = [];
+  const sens = { known: [] as string[], open: [] as string[], doNow: [] as string[], askEmployer: [] as string[] };
   const support: SupportCategory[] = [...def.support];
   let tell: string | null = null;
   for (const id of w.path) {
     const node = getNode(id)!;
     const a = answers[id];
-    if (!a || a.skipped) { open.push(capital(node.decision)); continue; }
+    if (!a || a.skipped) { open.push(capital(node.decision)); if (node.sensitive) sens.open.push(capital(node.decision)); continue; }
     if (node.kind === "text") {
       if (a.text) {
         if (node.format === "state") known.push(`The job is in ${a.text}.`);
@@ -86,13 +93,14 @@ function sectionFor(hurdle: HurdleId, answers: Record<string, Answer>, location?
       continue;
     }
     const picked = (node.choices ?? []).filter((c) => a.choices?.includes(c.id));
-    if (isUnsure(id, a)) open.push(capital(node.decision));
+    if (isUnsure(id, a)) { open.push(capital(node.decision)); if (node.sensitive) sens.open.push(capital(node.decision)); }
     for (const c of picked) {
       if (id.endsWith(".tell")) { tell = c.fact ?? c.label; continue; }
-      if (!c.uncertain) known.push(c.fact ?? c.label);
-      else if (c.fact) known.push(c.fact);
-      if (c.action) doNow.push(c.action);
-      if (c.ask) ask.push(c.ask);
+      const sensitive = !!node.sensitive || !!c.sensitive;
+      const fact = !c.uncertain ? c.fact ?? c.label : c.fact;
+      if (fact) { known.push(fact); if (sensitive) sens.known.push(fact); }
+      if (c.action) { doNow.push(c.action); if (sensitive) sens.doNow.push(c.action); }
+      if (c.ask) { ask.push(c.ask); if (sensitive) sens.askEmployer.push(c.ask); }
       for (const s of c.support ?? []) support.push(s);
     }
   }
@@ -101,7 +109,7 @@ function sectionFor(hurdle: HurdleId, answers: Record<string, Answer>, location?
     hurdle, label: def.label, known: uniq(known), open: uniq(open),
     doNow: uniq([def.firstStep, ...doNow]),
     whoCanHelp: uniq(support).map((c) => ({ category: c as SupportCategory, label: SUPPORT_LABELS[c as SupportCategory], href: supportHref(c as SupportCategory, location) })),
-    askEmployer: uniq(ask), tell, ownWords, complete: w.complete,
+    askEmployer: uniq(ask), tell, ownWords, fromSensitive: sens, complete: w.complete,
   };
 }
 
@@ -177,7 +185,7 @@ export function buildHurdlePlan(state: Pick<PlannerState, "selected" | "answers"
 }
 
 /** Plain text of a saved plan, for the Library copy and download. */
-export function hurdlePlanText(plan: { hurdles: HurdleSection[]; record: RecordConversation | null }, phrased?: Record<string, string>): string {
+export function hurdlePlanText(plan: { hurdles: Omit<HurdleSection, "fromSensitive">[]; record: RecordConversation | null }, phrased?: Record<string, string>): string {
   const out: string[] = [];
   if (plan.record) {
     out.push("PLAN WHAT TO SAY ABOUT THE RECORD (not saved anywhere; this copy is yours)", ...plan.record.whenToBringItUp, plan.record.open, plan.record.next,
@@ -218,12 +226,18 @@ export function planForSave(plan: HurdlePlan, state: Pick<PlannerState, "selecte
     }
   }
   const sensitiveFacts = new Set(recordAndSensitiveText());
+  // Two filters, belt and braces: by origin (fromSensitive, the line came from
+  // a sensitive node or choice) and by text (the generated forbidden set).
+  const clean = (lines: string[], origin: string[]) => lines.filter((l) => !origin.includes(l) && !sensitiveFacts.has(l));
   return {
     version: 2 as const,
     selected: state.selected.filter((h) => h !== "record"),
     choices,
     recordPlanSaved: false as const,
-    hurdles: plan.hurdles.filter((s) => s.hurdle !== "record").map((s) => ({ ...s, ownWords: [], known: s.known.filter((k) => !sensitiveFacts.has(k)) })),
+    hurdles: plan.hurdles.filter((s) => s.hurdle !== "record").map(({ fromSensitive: fs, ...s }) => ({
+      ...s, ownWords: [],
+      known: clean(s.known, fs.known), open: clean(s.open, fs.open), doNow: clean(s.doNow, fs.doNow), askEmployer: clean(s.askEmployer, fs.askEmployer),
+    })),
     constraints: plan.constraints,
     coverage: { line: "Saved without the record part. " + plan.coverage.line },
   };
@@ -231,13 +245,16 @@ export function planForSave(plan: HurdlePlan, state: Pick<PlannerState, "selecte
 
 /**
  * Every fact and label that can reveal a record: all of the record hurdle,
- * every choice on a sensitive node, and every choice marked sensitive. A
- * saved plan must contain none of them (the test checks the whole payload).
+ * every choice on a sensitive node, every choice marked sensitive, and the
+ * decision line of every record or sensitive node (a skipped or unsure node
+ * prints its decision under "still open", review S2 2026-10-25). A saved
+ * plan must contain none of them (the test checks the whole payload).
  */
 export function recordAndSensitiveText(): string[] {
   const out: string[] = [];
   for (const n of Object.values(NODES)) {
     const all = n.hurdle === "record" || n.sensitive;
+    if (all) out.push(capital(n.decision));
     for (const c of n.choices ?? []) if (all || c.sensitive) out.push(c.fact ?? c.label, c.label, ...(c.action ? [c.action] : []), ...(c.ask ? [c.ask] : []));
   }
   // Text that is also an ordinary answer elsewhere ("1 to 3 years" for a gap) reveals nothing by itself.

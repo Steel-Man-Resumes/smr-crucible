@@ -87,15 +87,15 @@ export function InsightsReport({ d, orgName, orgId, hasLogo, canExport, onPrint,
       </header>
       {isDemo(orgName) && <p className="ins-demo hidden print:block text-xs">{DEMO_PRINT_LINE}</p>}
 
-      <div className="ins-screen-head flex flex-wrap items-center justify-between gap-3 mb-1 print:hidden">
+      <div className="ins-screen-head flex flex-wrap items-center justify-between gap-3 mb-1 print:hidden" data-tour="crm-insights-head">
         <span className="flex items-center gap-3">
-          <OrgMark orgId={orgId} name={orgName} hasLogo={hasLogo} size={40} />
+          <span data-tour="crm-insights-mark" className="inline-flex"><OrgMark orgId={orgId} name={orgName} hasLogo={hasLogo} size={40} /></span>
           <h1 className="text-2xl font-bold text-t-white">Insights</h1>
           <span className="text-xs border border-t-line rounded-[3px] px-2 py-0.5 text-t-phos-dim" title="A date range comes later. For now every figure covers everything on record.">{PERIOD_LABEL}</span>
         </span>
         <span className="flex gap-4">
           {canExport && <a href="/api/org/insights?format=csv" className="t-focus text-xs font-semibold text-t-amber-bright underline underline-offset-4 hover:text-t-amber">Download for a funder (CSV)</a>}
-          <button type="button" onClick={onPrint} className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">Print report</button>
+          <button type="button" onClick={onPrint} data-tour="crm-insights-print" className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">Print report</button>
         </span>
       </div>
       <p className="ins-intro text-sm text-t-phos-dim mb-6 max-w-2xl">
@@ -116,7 +116,7 @@ export function InsightsReport({ d, orgName, orgId, hasLogo, canExport, onPrint,
         </div>
       </section>
 
-      <section className="ins-section mb-8"><H>Where people are</H>
+      <section className="ins-section mb-8" data-tour="crm-insights-stations"><H>Where people are</H>
         <div className="bg-t-panel border border-t-line rounded-[4px] p-5 space-y-2">
           {stations.map((s) => <Bar key={s.id} label={s.label} count={s.count} max={stationMax} />)}
         </div>

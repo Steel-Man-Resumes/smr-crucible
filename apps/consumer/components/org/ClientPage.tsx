@@ -63,7 +63,13 @@ function readable(content: unknown, depth = 0): string[] {
   return [];
 }
 
-export function ClientPage({ clientId }: { clientId: string }) {
+/**
+ * `startTab` (from ?tab= on the route): open on that tab, fetch no shared item
+ * and save no preference. The staff tour uses it to show the Their screen board
+ * without pressing a control, and to land on Notes so the staff member's own
+ * start-tab setting cannot open a shared item (a logged access) on the tour's behalf.
+ */
+export function ClientPage({ clientId, startTab }: { clientId: string; startTab?: PersonTab }) {
   const [client, setClient] = useState<Client | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
   const [viewer, setViewer] = useState<{ userId?: string; canWriteNotes: boolean; canRequest: boolean; canSuggest?: boolean } | null>(null);
@@ -120,12 +126,18 @@ export function ClientPage({ clientId }: { clientId: string }) {
   useEffect(() => {
     if (!client || opened) return;
     setOpened(true);
+    if (startTab) { setTab(startTab); setItem(null); setShared(null); return; }
     let last: string | null = null;
     try { last = localStorage.getItem(LAST_TAB_KEY); } catch {}
     const start = initialOpen(prefs.clientTab, last, client.scopes);
     if (start.scope) go({ kind: "item", scope: start.scope });
     else if (start.tab !== "notes") go({ kind: "tab", tab: start.tab });
-  }, [client, opened, prefs.clientTab, go]);
+  }, [client, opened, prefs.clientTab, go, startTab]);
+  // A later ?tab= change (the tour moving between its stops) switches the tab the same way: no fetch, no saved preference.
+  useEffect(() => {
+    if (!client || !opened || !startTab) return;
+    setTab(startTab); setItem(null); setShared(null);
+  }, [startTab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error === "missing") return (
     <Shell>
@@ -158,7 +170,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
         <div className="min-w-0">
           <div role="tablist" aria-label="Participant sections" className="flex flex-wrap gap-1 border-b border-t-line mb-5">
             {PERSON_TABS.map(({ key, label }) => (
-              <button key={key} role="tab" aria-selected={tab === key} onClick={() => go({ kind: "tab", tab: key })}
+              <button key={key} role="tab" aria-selected={tab === key} onClick={() => go({ kind: "tab", tab: key })} data-tour={key === "shared" ? "crm-person-shared-tab" : undefined}
                 className={`t-focus px-4 py-2 text-sm border-b-2 -mb-px ${tab === key ? "border-t-amber text-t-white font-semibold" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>
                 {label}
               </button>

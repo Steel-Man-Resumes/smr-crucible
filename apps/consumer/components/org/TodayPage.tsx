@@ -20,8 +20,11 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffectiveRole } from "@/components/RoleProvider";
 import { ListChecks } from "lucide-react";
 import { openStaffTroy, STAFF_TROY_READY } from "@/lib/staff-troy";
+import { STAFF_TOUR_OPEN_EVENT } from "@/lib/tour/staff-tour";
+import { CRM_TOUR_COPY } from "@/lib/tour/crm-beats";
 import { stationLabelForStage } from "@/lib/staff-station";
 import {
   hiddenItemCount, hiddenSectionCount, nobodySharesLine, personInitials, reasonStrip, relativeWhen, thisWeek, todayDateLine, todayHeadline, visibleItems,
@@ -37,6 +40,7 @@ export type TodayState =
 const first = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "them";
 
 export function TodayPage() {
+  const role = useEffectiveRole();
   const [state, setState] = useState<TodayState>({ status: "loading" });
   const [now, setNow] = useState(() => Date.now());
   const load = useCallback(async () => {
@@ -63,17 +67,31 @@ export function TodayPage() {
     }
   }
 
-  return <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} />;
+  // The staff tour never opens under view-as or assist, so the control is not drawn there (review N-3).
+  return <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} tourReady={!role?.impersonating} />;
 }
 
-export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady = STAFF_TROY_READY }: {
+export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady = STAFF_TROY_READY, tourReady = true }: {
   state: TodayState; nowMs: number; onRetry?: () => void; onTask?: (body: Record<string, unknown>) => Promise<boolean>; timeZone?: string;
   /** Staff t.ROY buttons show only once C4's launcher is merged (STAFF_TROY_READY). */
   troyReady?: boolean;
+  /** The "Show me around" control for the staff tour (the shell mounts the tour for staff only). */
+  tourReady?: boolean;
 }) {
+  // data-tour ids are the staff tour's targets (lib/tour/crm-beats.ts); the
+  // "Show me around" control opens it (components/tour/StaffTour.tsx listens).
   const header = (sentence: React.ReactNode) => (
-    <header className="mb-5">
-      <h1 className="font-display text-3xl font-bold text-t-white">Today</h1>
+    <header className="mb-5" data-tour="crm-today-header">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h1 className="font-display text-3xl font-bold text-t-white">Today</h1>
+        {tourReady && (
+          <button type="button" data-tour="crm-tour-start" aria-label={CRM_TOUR_COPY.openLabel}
+            onClick={() => window.dispatchEvent(new Event(STAFF_TOUR_OPEN_EVENT))}
+            className="t-focus min-h-touch rounded-[4px] border border-t-line px-3 text-xs font-medium text-t-bone-dim hover:border-t-line-strong hover:text-t-white">
+            {CRM_TOUR_COPY.open}
+          </button>
+        )}
+      </div>
       <p className="mt-1 font-term text-xs uppercase tracking-wider text-t-bone-dim">{todayDateLine(nowMs, timeZone)}</p>
       {sentence ? <p className="mt-3 text-base text-t-white">{sentence}</p> : null}
     </header>
@@ -129,13 +147,15 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady =
   const hiddenItems = hiddenItemCount(d);
   const nobody = nobodySharesLine(d);
   const week = thisWeek(d, nowMs);
+  // The staff tour points at the first row about a person (never a task row) and reads its id from it.
+  const firstPersonKey = shown.flatMap((s) => items.filter((i) => i.section === s.key)).find((i) => i.clientId)?.key ?? null;
 
   return (
     <div className="mx-auto max-w-6xl">
       {header(empty ? (hiddenItems > 0 ? "Nothing in the sections you show." : "Nothing is waiting on you right now.") : todayHeadline(d))}
 
       {(strip.length > 0 || hiddenCount > 0) && (
-        <nav aria-label="Reasons on your list today" className="-mx-4 mb-6 flex flex-nowrap items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+        <nav aria-label="Reasons on your list today" data-tour="crm-today-reasons" className="-mx-4 mb-6 flex flex-nowrap items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
           {strip.map((s) => (
             <a key={s.key} href={`#today-${s.key}`} className="t-focus inline-flex min-h-touch flex-none items-center gap-2 whitespace-nowrap rounded-[4px] border border-t-line bg-t-panel px-3 text-sm text-t-white hover:border-t-line-strong">
               {s.label}
@@ -200,7 +220,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady =
                   <span className="font-term text-t-bone-dim">{rows.length}</span>
                 </h2>
                 <ul className="space-y-2">
-                  {rows.map((i) => <TodayRow key={i.key} item={i} nowMs={nowMs} onTask={onTask} troyReady={troyReady} />)}
+                  {rows.map((i) => <TodayRow key={i.key} item={i} nowMs={nowMs} onTask={onTask} troyReady={troyReady} tourFirst={i.key === firstPersonKey} />)}
                 </ul>
               </section>
             );
@@ -220,7 +240,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady =
               As a volunteer you see the people assigned to you. Placements and invites are handled by staff.
             </p>
           )}
-          {d.canAddTasks && <TaskAdd onTask={onTask} />}
+          {d.canAddTasks && <div data-tour="crm-today-tasks"><TaskAdd onTask={onTask} /></div>}
           <section aria-labelledby="today-week-h" className="hidden border border-t-line bg-t-panel px-4 py-4 lg:block">
             <h2 id="today-week-h" className="text-sm font-semibold text-t-white">This week</h2>
             {week.length === 0 ? <p className="mt-2 text-sm text-t-phos-dim">Nothing dated in the next seven days.</p> : <WeekList week={week} />}
@@ -252,12 +272,13 @@ function agendaWhat(i: TodayItemView): string {
   return i.reason.replace(/ \((was )?due [^)]*\)/, "").replace(/ · shared with .*$/, "");
 }
 
-function TodayRow({ item: i, nowMs, onTask, troyReady }: { item: TodayItemView; nowMs: number; onTask?: (body: Record<string, unknown>) => Promise<boolean>; troyReady: boolean }) {
+function TodayRow({ item: i, nowMs, onTask, troyReady, tourFirst = false }: { item: TodayItemView; nowMs: number; onTask?: (body: Record<string, unknown>) => Promise<boolean>; troyReady: boolean; tourFirst?: boolean }) {
   // A retention line is due now; its date is the start date, so no "N days ago".
   const when = i.section === "retention" ? null : relativeWhen(i.when, nowMs);
   const station = stationLabelForStage(i.stage ?? null);
   return (
-    <li className="flex flex-wrap items-center gap-3 border border-t-line bg-t-panel px-4 py-3">
+    <li className="flex flex-wrap items-center gap-3 border border-t-line bg-t-panel px-4 py-3"
+      data-tour={tourFirst ? "crm-today-first-row" : undefined} data-client-id={tourFirst && i.clientId ? i.clientId : undefined}>
       <span aria-hidden="true" className="grid h-9 w-9 flex-none place-items-center rounded-full bg-t-panel-3 font-term text-xs font-semibold text-t-white">
         {i.clientId ? personInitials(i.clientName) : <ListChecks size={16} />}
       </span>
