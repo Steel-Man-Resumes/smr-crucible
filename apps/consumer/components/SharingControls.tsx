@@ -51,9 +51,14 @@ export function SharingControls() {
 
   if (!data || (data.orgs.length === 0 && data.policies.length === 0)) return null;
   const label = (scope: string) => data.text.scopes.find((s) => s.scope === scope)?.label ?? scope;
+  // The first row marked "Required by" carries the Settings tour's id (settings-required-scope).
+  const firstRequired = (() => {
+    for (const org of data.orgs) for (const t of data.text.scopes) if (data.policies.find((p) => p.orgId === org.orgId)?.scopes.includes(t.scope)) return `${org.orgId}:${t.scope}`;
+    return null;
+  })();
 
   return (
-    <section className="mb-8" aria-labelledby="sharing-heading">
+    <section className="mb-8" aria-labelledby="sharing-heading" id="settings-who-can-see">
       <h2 id="sharing-heading" className="text-lg font-bold text-t-white mb-2">Who can see what</h2>
       <p className="text-sm text-t-phos-dim leading-relaxed mb-4">{data.text.always.control}</p>
       {error && <p role="alert" className="text-xs text-t-amber-bright border border-t-amber bg-t-panel px-4 py-3 mb-4">{error}</p>}
@@ -98,7 +103,7 @@ export function SharingControls() {
                 act(key, { action: on ? "revoke" : "grant", orgId: org.orgId, scope: t.scope });
               };
               return (
-                <li key={t.scope} className="py-4 flex items-start justify-between gap-4">
+                <li key={t.scope} id={key === firstRequired ? "settings-required-scope" : undefined} className="py-4 flex items-start justify-between gap-4">
                   <div>
                     <p className="font-medium text-t-white">
                       {t.label}
@@ -124,7 +129,7 @@ export function SharingControls() {
         </div>
       ))}
 
-      <div className="bg-t-panel border border-t-line p-5 mb-4">
+      <div className="bg-t-panel border border-t-line p-5 mb-4" id="settings-sharing-log">
         <h3 className="font-semibold text-t-white mb-1">Who has opened what</h3>
         <p className="text-sm text-t-phos-dim leading-relaxed mb-3">{data.text.always.log}</p>
         {data.log.length === 0 ? <p className="text-sm text-t-phos-dim">Nobody has opened anything you shared.</p> : (

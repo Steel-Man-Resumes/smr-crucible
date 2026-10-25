@@ -15,6 +15,7 @@ import { LeaveOrgButton } from "@/components/settings/LeaveOrgButton";
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
 import { SettingsLesson } from "@/components/tour/SettingsLesson";
+import { SettingsTour, openSettingsTour } from "@/components/tour/SettingsTour";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
@@ -422,7 +423,16 @@ export default function SettingsPage() {
 
   return (
     <div className="max-w-2xl">
-      <h1 className="text-2xl font-bold text-t-white mb-2">Settings</h1>
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <h1 className="text-2xl font-bold text-t-white">Settings</h1>
+        {/* The Settings tour (SETTINGS-TOUR.md): a quiet way in for people who skipped the chip. Never for staff or under view-as or assist. */}
+        {!isOrgStaff && !impersonating && (
+          <button type="button" onClick={openSettingsTour} data-tour-open="settings"
+            className="t-focus flex-shrink-0 text-xs text-t-phos-dim underline hover:text-t-amber-bright py-1">
+            Show me around
+          </button>
+        )}
+      </div>
       <p className="text-base text-t-phos-dim mb-4">
         {isOrgStaff
           ? "How you work here, and your account."
@@ -440,6 +450,7 @@ export default function SettingsPage() {
         </div>
       )}
 
+      {!isOrgStaff && !impersonating && <SettingsTour />}
       {!isOrgStaff && !impersonating && <SettingsLesson />}
 
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
@@ -1345,7 +1356,7 @@ function ActiveDevicesCard() {
   const hasOthers = (sessions || []).some((s) => !s.current);
 
   return (
-    <div className="bg-t-panel p-5 border border-t-line mt-3">
+    <div className="bg-t-panel p-5 border border-t-line mt-3" id="settings-devices">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h3 className="font-semibold text-t-white">Active devices</h3>

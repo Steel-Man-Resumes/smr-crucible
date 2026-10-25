@@ -93,7 +93,7 @@ export function CoachSettingsSection() {
         </div>
 
         {/* Style */}
-        <div>
+        <div id="settings-coach-style">
           <label className="text-sm font-medium text-t-white block mb-2">Coaching style</label>
           <div className="grid grid-cols-3 gap-2">
             {STYLE_OPTIONS.map((o) => (

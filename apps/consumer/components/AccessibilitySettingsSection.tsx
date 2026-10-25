@@ -121,7 +121,7 @@ export function AccessibilitySettingsSection() {
   return (
     <div className="bg-t-panel border border-t-line p-5 space-y-6">
       {/* Reading help */}
-      <div>
+      <div id="settings-reading-help">
         <h3 className="font-semibold text-t-white mb-1">Reading help</h3>
         <p className="text-sm text-t-phos-dim mb-3">
           These also work from the chat panel. Change them here and they stay changed.
@@ -151,7 +151,8 @@ export function AccessibilitySettingsSection() {
         <SaveError message={error?.part === "coach" ? error.message : null} />
       </div>
 
-      {/* Text size */}
+      {/* Text size and motion: one block for the Settings tour (settings-display) */}
+      <div id="settings-display" className="space-y-6">
       <div className="border-t border-t-line pt-5">
         <label className="text-sm font-medium text-t-white block mb-1">Text size</label>
         <p className="text-sm text-t-phos-dim mb-2">Make the words bigger across the whole app.</p>
@@ -185,6 +186,7 @@ export function AccessibilitySettingsSection() {
             />
           ))}
         </div>
+      </div>
       </div>
 
       {/* Density */}

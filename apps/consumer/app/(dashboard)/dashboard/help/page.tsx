@@ -180,9 +180,14 @@ function HelpContent() {
         note. Pick what fits.
       </p>
 
-      <Link href={TOUR_HREF} className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber mb-6">
-        Replay the Refinery tour
-      </Link>
+      <div className="mb-6 flex flex-wrap gap-3">
+        <Link href={TOUR_HREF} className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
+          Replay the Refinery tour
+        </Link>
+        <Link href="/dashboard/settings?tour=settings" className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
+          Replay the Settings tour
+        </Link>
+      </div>
 
       <div className="mb-6 flex flex-wrap gap-4 text-sm text-t-amber-bright underline"><Link href="/dashboard/settings?lesson=1">Learn your settings</Link><Link href="/dashboard/orientation">Take the orientation check</Link></div>
 
