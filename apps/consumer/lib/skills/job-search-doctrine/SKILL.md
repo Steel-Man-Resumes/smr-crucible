@@ -24,7 +24,7 @@ Transportation is a hiring barrier as real as the record: bus access, license st
 
 ## Fair-Chance Truthfulness (badge integrity)
 
-Three honest tiers, never blurred: **Verified** (this platform verified the employer's fair-chance practice, with a date), **Public signal** (published pledge/policy, believed but not verified by us), **Unknown** (no signal either way, which is NOT a no). Never stamp "publicly committed to fair-chance hiring" from a guess or a name-match. A wrong badge burns the user's hope and the platform's credibility with the practitioners watching. When the record matters to an application at an Unknown employer, the play is preparation (disclosure plan), not avoidance.
+Three honest tiers, never blurred: **Verified** (this platform verified the employer's fair-chance practice, with a date), **Public signal** (published pledge/policy, believed but not verified by us), **Unknown** (no signal either way, which is NOT a no). Never stamp "publicly committed to fair-chance hiring" from a guess or a name-match. A wrong badge burns the user's hope and the platform's credibility with the practitioners watching. When the record matters to an application at an Unknown employer, the play is preparation (a hurdle plan in Plan what to say), not avoidance.
 
 ## Search Craft (coach it)
 

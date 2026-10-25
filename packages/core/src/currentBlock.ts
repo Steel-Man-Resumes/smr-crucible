@@ -34,7 +34,7 @@ export function computeCurrentBlock(j: BlockJourney): CurrentBlock | null {
     return {
       lockedTools: [
         "Application Tailor",
-        "Disclosure Planner",
+        "Plan what to say",
         "Progress",
       ],
       reason:
@@ -48,7 +48,7 @@ export function computeCurrentBlock(j: BlockJourney): CurrentBlock | null {
   if (!j.hasResumeTailoredToTarget) {
     return {
       lockedTools: [
-        "Disclosure Planner",
+        "Plan what to say",
         "Progress",
       ],
       reason:

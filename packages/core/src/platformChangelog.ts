@@ -30,7 +30,7 @@ export const PLATFORM_CHANGELOG: ChangelogEntry[] = [
     title:
       "You can now paste a job link or description and get a resume tailored to that exact posting.",
     meaning:
-      "You no longer need live job search to move forward. Tailor a resume to one real job and it unlocks Disclosure planning, Interview Practice, Applications, and Progress.",
+      "You no longer need live job search to move forward. Tailor a resume to one real job and it unlocks Plan what to say, Interview Practice, Applications, and Progress.",
     page: "application-tailor",
   },
   {
