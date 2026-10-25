@@ -42,7 +42,9 @@ const nextConfig = {
   outputFileTracingIncludes: {
     // Every route that reads skill doctrine off disk needs the files traced
     // into ITS own Lambda. Keep in sync with the callers of loadSkillsForContext.
-    "/api/assistant": ["./lib/skills/**/*", "./public/fonts/resume/**/*"],
+    // The staff panel's find_local_help reads the Census place list the same
+    // way the support search does (lib/support-place-index.ts).
+    "/api/assistant": ["./lib/skills/**/*", "./public/fonts/resume/**/*", "./public/forge-data/us-places-2020.v1.json"],
     "/api/coach": ["./lib/skills/**/*", "./public/fonts/resume/**/*"],
     "/api/health/skills": ["./lib/skills/**/*"],
     // The resume renderer reads its bundled fonts (Carlito, Caladea, public/fonts/resume)

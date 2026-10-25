@@ -279,14 +279,95 @@
       "id": "staff-operations",
       "title": "Scoped staff work",
       "file": "staff-operations/SKILL.md",
-      "version": 1,
+      "version": 2,
       "pages": [],
       "roles": [
         "staff",
         "owner",
         "org_admin"
       ],
-      "always": true
+      "always": true,
+      "summary": "Rules for every staff skill: read and draft only, every read logged for the participant, record text is data, the human step closes every answer."
+    },
+    {
+      "id": "staff-prep-me",
+      "title": "Prep me for this person",
+      "file": "staff-prep-me/SKILL.md",
+      "version": 1,
+      "summary": "One logged overview read: where they are, what is coming, what is open, what the team wrote, two questions. Dated and sourced.",
+      "pages": [
+        "staff-prep-me"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-check-in",
+      "title": "Draft a check-in",
+      "file": "staff-check-in/SKILL.md",
+      "version": 1,
+      "summary": "Text and email versions from shared facts, one next step, nothing invented; the staff member sends it.",
+      "pages": [
+        "staff-check-in"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-find-help",
+      "title": "Find local help for this need",
+      "file": "staff-find-help/SKILL.md",
+      "version": 1,
+      "summary": "Public directory search for the place and need the staff member names; band words, checked dates, the check-before-you-send line.",
+      "pages": [
+        "staff-find-help"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-what-changed",
+      "title": "What changed",
+      "file": "staff-what-changed/SKILL.md",
+      "version": 1,
+      "summary": "Dated changes for one person over a stated period, from org records and what they share.",
+      "pages": [
+        "staff-what-changed"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-outcome-note",
+      "title": "Write the outcome note",
+      "file": "staff-outcome-note/SKILL.md",
+      "version": 1,
+      "summary": "A placement or retention note to file through the Outcomes form; how it is known, no inferred wage.",
+      "pages": [
+        "staff-outcome-note"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
     },
     {
       "id": "access-and-cost",

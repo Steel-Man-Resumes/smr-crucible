@@ -58,13 +58,16 @@ export function selectSkills(
   skills: SkillEntry[],
   page: string,
   hasCriminalRecord: boolean,
-  role = "participant"
+  role = "participant",
+  /** Skill pages chosen for this request on top of the page (the staff panel's skill). */
+  extraPages: readonly string[] = []
 ): SkillEntry[] {
   return skills.filter((s) => {
     if (s.roles && !s.roles.includes(role)) return false;
     if (!s.roles && role !== "participant" && s.id !== "agency-corrections") return false;
     if (s.always) return true;
     if (s.pages?.includes(page)) return true;
+    if (extraPages.length && s.pages?.some((p) => extraPages.includes(p))) return true;
     if (hasCriminalRecord && s.pagesIfCriminalRecord?.includes(page)) return true;
     return false;
   });
@@ -82,11 +85,11 @@ function stripFrontmatter(md: string): string {
   return md;
 }
 
-export function loadSkillsForContext(page: string, hasCriminalRecord: boolean, role = "participant"): string {
+export function loadSkillsForContext(page: string, hasCriminalRecord: boolean, role = "participant", extraPages: readonly string[] = []): string {
   const manifest = readManifest();
   if (!manifest) return "";
 
-  const active = selectSkills(manifest.skills, page, hasCriminalRecord, role);
+  const active = selectSkills(manifest.skills, page, hasCriminalRecord, role, extraPages);
   if (active.length === 0) return "";
 
   const sections: string[] = [];
