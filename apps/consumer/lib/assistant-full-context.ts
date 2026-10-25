@@ -94,6 +94,43 @@ const iso = (v: unknown): string => (v instanceof Date ? v.toISOString() : typeo
 const isoRow = <T extends { created_at: unknown } | null>(row: T): T => (row ? { ...row, created_at: iso(row.created_at) } : row);
 const strs = (v: unknown, n: number, max = 160): string[] => (Array.isArray(v) ? v.filter((x) => typeof x === "string" && x.trim()).slice(0, n).map((x) => (x as string).trim().slice(0, max)) : []);
 
+/**
+ * The saved hurdle plan as a capped summary: the job, the hurdle labels and
+ * their known, open, do-now and "tells an employer" lines. A saved plan holds
+ * no record content (lib/hurdles/plan.ts planForSave), so this never carries
+ * record words and needs no consent. Shared by t.ROY (/api/assistant) and the
+ * Refinery coach (/api/coach, lib/coach-server-context.ts).
+ */
+export function summarizeHurdlePlan(hp: HurdlePlanRow | null): NonNullable<UserFullContext["hurdlePlan"]> {
+  if (!hp) return { exists: false };
+  const hurdles = Array.isArray(hp.content?.hurdlePlan?.hurdles) ? (hp.content!.hurdlePlan.hurdles as any[]) : [];
+  return {
+    exists: true,
+    targetJob: str(hp.target_context?.targetJob ?? hp.content?.targetJob, 120),
+    savedAt: iso(hp.created_at),
+    hurdleCount: hurdles.length,
+    hurdles: hurdles.slice(0, FULL_CONTEXT_CAPS.hurdles).map((h) => ({
+      label: str(h?.label, 60) ?? "Hurdle",
+      known: strs(h?.known, FULL_CONTEXT_CAPS.hurdleLines),
+      open: strs(h?.open, FULL_CONTEXT_CAPS.hurdleLines),
+      doNow: strs(h?.doNow, FULL_CONTEXT_CAPS.hurdleLines),
+      tell: str(h?.tell, 160),
+    })),
+  };
+}
+
+/** The progression as the prompt reads it: the current step id and the label the path board shows for it. */
+export function summarizeProgression(p: ProgressionLike | null): UserFullContext["progression"] {
+  if (!p) return null;
+  return {
+    currentStep: p.currentStepId,
+    currentLabel: p.steps.find((s) => s.id === p.currentStepId)?.label ?? p.currentStepId,
+    nextAction: { label: p.nextAction.label, href: p.nextAction.href },
+    remaining: p.allowance.remaining,
+    completed: p.steps.filter((s) => s.state === "completed").map((s) => s.id),
+  };
+}
+
 /** Pure: the snapshot shape buildFullUserSection() reads, from the loaded parts. */
 export function assembleFullContext(p: FullContextParts): UserFullContext {
   const { profile, consumerProfile: cp } = p;
@@ -104,8 +141,6 @@ export function assembleFullContext(p: FullContextParts): UserFullContext {
   const onboardingState = !hasProfile ? "needs_profile" : !hasJobResume ? "needs_resume" : "full_access";
   const lanes = p.lanes ?? [];
   const openLanes = lanes.filter((l) => !l.archived_at);
-  const hp = p.hurdlePlan;
-  const hurdles = Array.isArray(hp?.content?.hurdlePlan?.hurdles) ? (hp!.content!.hurdlePlan.hurdles as any[]) : [];
 
   return {
     accountId: p.userId,
@@ -153,30 +188,8 @@ export function assembleFullContext(p: FullContextParts): UserFullContext {
           items: openLanes.slice(0, FULL_CONTEXT_CAPS.lanes).map((l) => ({ id: l.id, name: l.name, target: l.target_role, kind: l.kind ?? "resume" })),
         }
       : null,
-    hurdlePlan: hp
-      ? {
-          exists: true,
-          targetJob: str(hp.target_context?.targetJob ?? hp.content?.targetJob, 120),
-          savedAt: iso(hp.created_at),
-          hurdleCount: hurdles.length,
-          hurdles: hurdles.slice(0, FULL_CONTEXT_CAPS.hurdles).map((h) => ({
-            label: str(h?.label, 60) ?? "Hurdle",
-            known: strs(h?.known, FULL_CONTEXT_CAPS.hurdleLines),
-            open: strs(h?.open, FULL_CONTEXT_CAPS.hurdleLines),
-            doNow: strs(h?.doNow, FULL_CONTEXT_CAPS.hurdleLines),
-            tell: str(h?.tell, 160),
-          })),
-        }
-      : { exists: false },
-    progression: p.progression
-      ? {
-          currentStep: p.progression.currentStepId,
-          currentLabel: p.progression.steps.find((s) => s.id === p.progression!.currentStepId)?.label ?? p.progression.currentStepId,
-          nextAction: { label: p.progression.nextAction.label, href: p.progression.nextAction.href },
-          remaining: p.progression.allowance.remaining,
-          completed: p.progression.steps.filter((s) => s.state === "completed").map((s) => s.id),
-        }
-      : null,
+    hurdlePlan: summarizeHurdlePlan(p.hurdlePlan),
+    progression: summarizeProgression(p.progression),
     meter: p.meter ? { score: p.meter.score, band: p.meter.band, counts: p.meter.counts } : null,
   };
 }

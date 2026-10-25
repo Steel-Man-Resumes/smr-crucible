@@ -1,4 +1,5 @@
-import { getProgression, requestProgressionAccess } from '../progression-server';
+import { getProgression, progressionStepLabel, requestProgressionAccess } from '../progression-server';
+import { LATEST_HURDLE_PLAN_SQL, summarizeHurdlePlan, type HurdlePlanRow } from '../assistant-full-context';
 import { executionBudget } from "./tool-execution";
 /**
  * t.ROY's hands -- the assistant tool factory (10x wave, 2026-08-03).
@@ -21,7 +22,7 @@ import { executionBudget } from "./tool-execution";
 
 import { tool, jsonSchema, type ToolSet } from "ai";
 import { buildDataTools } from "./assistant-data-tools";
-import type { SelectedWork } from "../assistant-work-context";
+import type { SelectedWork, WorkSelection } from "../assistant-work-context";
 import { JOB_SEARCH_FILTER_SCHEMA } from "@crucible/core/src/jobSearchFilters";
 import { runJobSearch, findCachedJob } from "@/lib/job-search-core";
 import { coachJobView } from "@/lib/job-coach-view";
@@ -41,6 +42,19 @@ export interface AssistantToolOptions {
   /** Which surface the chat lives on -- restricts navigation targets. */
   surface: "forge" | "refinery";
   selectedWork?: SelectedWork | null;
+  /**
+   * The browser's validated work pick (readWorkSelection), the same selection
+   * the dashboard sends to /api/progression. Progression reads use this and
+   * never selectedWork.selection: the resolved selection names the lane
+   * resume, and an explicit document hides the priority interview, so the
+   * coach said "Choose a job" while the board said Interview (fix 2026-10-25).
+   */
+  workSelection?: WorkSelection;
+}
+
+/** The same read-only progression the Overview shows: the browser pick, no milestone writes in a chat turn. */
+function progressionForTools(opts: AssistantToolOptions) {
+  return getProgression(opts.userId!, opts.workSelection ?? {}, true);
 }
 
 /**
@@ -104,7 +118,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
 
   const tools: ToolSet = {
     take_me_there: tool({
-      description: `Navigate the user to a page in the app. Offer first ("Want me to take you there?") unless they already asked to go. Valid pages: ${pageNames}. To open the Application Tailor or Disclosure Planner with a specific saved job loaded, pass that job's applicationId (save_job returns it; get_my_live_status lists them).`,
+      description: `Navigate the user to a page in the app. Offer first ("Want me to take you there?") unless they already asked to go. Valid pages: ${pageNames}. To open the Application Tailor or Plan what to say (the hurdle planner) with a specific saved job loaded, pass that job's applicationId (save_job returns it; get_my_live_status lists them).`,
       parameters: jsonSchema<TakeMeThereArgs>({
         type: "object",
         properties: {
@@ -154,7 +168,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     tools.get_my_progress = tool({
       description:'Read actual guided steps, earned access, current AI allowance and your review-request status. Use before explaining locks or rewards. Early access never counts as completed preparation.',
       parameters:jsonSchema<Record<string,never>>({type:'object',properties:{},additionalProperties:false}),
-      execute:async()=>{try{return await getProgression(userId,opts.selectedWork?.selection);}catch{return {error:'Progress could not be loaded. Do not guess access or allowance.'};}},
+      execute:async()=>{try{return await progressionForTools(opts);}catch{return {error:'Progress could not be loaded. Do not guess access or allowance.'};}},
     });
     tools.request_tool_access = tool({
       description:'Only after the person asks, request early guided-tool access or a small AI bonus. The server decides eligibility and amount. This never changes premium access, account roles, security or pricing. If review_required, direct them to the progress bar to review and consent to the summary; do not claim it was sent to Troy.',
@@ -183,7 +197,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     }),
     execute: async () => {
       try {
-        const { getUserProfile, getNextStep, queryAsUser } = await import(
+        const { getUserProfile, getNextStep, queryAsUser, getOneAsUser } = await import(
           "@crucible/core"
         );
         const profile = await getUserProfile(userId);
@@ -191,7 +205,10 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
           return "No profile yet. This user has not finished the Forge, so there is no journey data to read.";
         }
         const next = opts.surface === 'refinery' ? null : await getNextStep(userId);
-        const progress = opts.surface === 'refinery' ? await getProgression(userId,opts.selectedWork?.selection) : null;
+        const progress = opts.surface === 'refinery' ? await progressionForTools(opts) : null;
+        // The newest saved hurdle plan, summarized without record words (same
+        // function as /api/assistant), so the coach can say what it covers.
+        const hurdlePlan = summarizeHurdlePlan(await getOneAsUser<HurdlePlanRow>(userId, LATEST_HURDLE_PLAN_SQL, [userId]));
         const jobs = await queryAsUser<{
           id: string;
           job_title: string;
@@ -213,6 +230,8 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
           readAt: new Date().toISOString(),
           freshness: "read live from the database just now",
           journeyStage: progress?.currentStepId ?? next?.stage ?? profile.currentStage,
+          // The step and label the Overview path board shows right now.
+          currentStep: progress ? { id: progress.currentStepId, label: progressionStepLabel(progress) } : null,
           nextStep: progress ? {action:progress.nextAction.label,href:progress.nextAction.href} : next
             ? { action: next.action, href: next.href }
             : null,
@@ -239,7 +258,10 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
             applicationsSubmitted: profile.applicationCount,
             interviewPracticeSessions: profile.interviewSessionCount,
           },
-          hasDisclosurePlan: profile.hasDisclosurePlan,
+          // Plan what to say: the record conversation planned (true only for a
+          // plan with the record part) and the hurdle plan summary by topic.
+          recordConversationPlanned: profile.hasDisclosurePlan,
+          hurdlePlan,
           hasResumeTailoredToTarget: profile.hasResumeTailoredToTarget,
         };
       } catch (err) {

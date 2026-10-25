@@ -458,7 +458,10 @@ export function disclosureWordLines(d: UserFullContext["disclosurePlan"]): strin
  * capped; this prints what is there and says how many more exist. A part that
  * is null did not load this turn, so nothing is said about it.
  */
-export function buildServerPartsSection(ctx: UserFullContext): string[] {
+export type ServerParts = Pick<UserFullContext, "lanes" | "hurdlePlan" | "progression" | "meter">;
+/** Where the model is told the record part lives; t.ROY's prompt has a DISCLOSURE PLAN section, the coach does not. */
+export const RECORD_PART_POINTER = "The record part of any plan is never saved here; if they planned it, that shows under DISCLOSURE PLAN.";
+export function buildServerPartsSection(ctx: ServerParts, opts: { recordPointer?: string } = {}): string[] {
   const out: string[] = [];
   if (ctx.lanes) {
     out.push(`\n### LANES (kinds of work they aim at)`);
@@ -481,7 +484,7 @@ export function buildServerPartsSection(ctx: UserFullContext): string[] {
       out.push(`  - ${sanitizeForPrompt(h.label, 60)}${bits.length ? `. ${bits.join(". ")}` : ""}`);
     }
     if ((ctx.hurdlePlan.hurdleCount ?? 0) > (ctx.hurdlePlan.hurdles?.length ?? 0)) out.push(`  - and ${ctx.hurdlePlan.hurdleCount! - ctx.hurdlePlan.hurdles!.length} more hurdle${ctx.hurdlePlan.hurdleCount! - ctx.hurdlePlan.hurdles!.length === 1 ? "" : "s"}`);
-    out.push(`The record part of any plan is never saved here; if they planned it, that shows under DISCLOSURE PLAN.`);
+    out.push(opts.recordPointer ?? RECORD_PART_POINTER);
   }
   if (ctx.progression) {
     out.push(`\n### WHERE THEY ARE IN THE PROCESS`);

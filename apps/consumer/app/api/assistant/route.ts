@@ -29,7 +29,7 @@ import { serverFullContext, loadUserFullContext, realFullContextLoaders } from "
  */
 
 import { effectiveAuth } from "@/lib/effective-auth";
-import { loadSelectedWork, selectedWorkPrompt } from "@/lib/assistant-work-context";
+import { loadSelectedWork, readWorkSelection, selectedWorkPrompt } from "@/lib/assistant-work-context";
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
 import { recordStepOn } from "@/lib/server-switch";
@@ -288,7 +288,8 @@ export async function POST(request: Request) {
   if (!staffActor) { delete context.staffSkill; delete context.staffClientId; }
   if (staffActor) skillsContext = loadSkillsForContext(context.currentPage, false, staffActor.role, staffSkill ? [staffSkill] : []);
   if (userId && seatScope === "account" && !platformOwner && !staffActor && !isDisclosureRehearsal) {
-    try { toolOptions.selectedWork = await loadSelectedWork(userId, context.selectedWork); }
+    // The browser pick itself goes to the progression tools (see AssistantToolOptions.workSelection).
+    try { toolOptions.workSelection = readWorkSelection(context.selectedWork); toolOptions.selectedWork = await loadSelectedWork(userId, toolOptions.workSelection); }
     catch { return NextResponse.json({ error: "The selected work could not be loaded. Reopen it and try again." }, { status: 409 }); }
   }
   const memorySection = userId && !platformOwner && !staffActor && !isDisclosureRehearsal && enhancedConsent ? await buildMemorySection(userId) : "";
