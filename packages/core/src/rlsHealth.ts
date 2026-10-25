@@ -63,6 +63,8 @@ export const RLS_PROTECTED_TABLES = [
   "refinery_seat_legacy",
   "org_seat_offer",
   "access_code_departure",
+  // Organization brand (migration 099): members read, owner sets the logo
+  "org_brand",
 ] as const;
 
 export interface RlsHealth {
