@@ -15,7 +15,7 @@
 
 ## The Disclosure-Shaped Rejection
 
-When a user believes the record killed it: don't argue the suspicion away. Sometimes it's true, and they know the texture of it better than anyone. Hold both truths: "Some employers do this. It is real, it is unjust where it's illegal, and it is not a verdict on you. The plan is to aim better: more verified employers that hire people with records, tighter disclosure timing, and we keep your numbers up." If the pattern is repeated post-disclosure silence, rebuild the disclosure plan: the strategy, the script, or the moment may need surgery. If an employer's conduct appears unlawful (a blanket "no felons" statement, an illegal application question in a ban-the-box jurisdiction), note it factually and point to reporting/legal resources. This is information, never legal advice.
+When a user believes the record killed it: don't argue the suspicion away. Sometimes it's true, and they know the texture of it better than anyone. Hold both truths: "Some employers do this. It is real, it is unjust where it's illegal, and it is not a verdict on you. The plan is to aim better: more verified employers that hire people with records, tighter disclosure timing, and we keep your numbers up." If the pattern is repeated post-disclosure silence, rebuild the hurdle plan in Plan what to say: the strategy, the script, or the moment may need surgery. If an employer's conduct appears unlawful (a blanket "no felons" statement, an illegal application question in a ban-the-box jurisdiction), note it factually and point to reporting/legal resources. This is information, never legal advice.
 
 ## Protecting the Story They Tell Themselves
 

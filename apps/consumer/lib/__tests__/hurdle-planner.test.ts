@@ -149,6 +149,25 @@ describe("coverage", () => {
 });
 
 describe("plan", () => {
+  it("a skipped sensitive node's decision stays on screen but never in the saved plan (review S2, 2026-10-25)", () => {
+    // gaps.inside is reached only after the "Time inside" pick, so its decision line says what the gap was.
+    const s = run([...pick("gaps"), { type: "start" }, ans("gaps.length", "1to3"), ans("gaps.filled", "inside", "family"), { type: "skip", nodeId: "gaps.inside" },
+      { type: "skip", nodeId: "gaps.proof" }, ans("gaps.asked", "no"), ans("gaps.tell", "nothing")]);
+    const plan = buildHurdlePlan(s);
+    const onScreen = plan.hurdles.find((h) => h.hurdle === "gaps")!;
+    const line = "Whether to plan the record conversation too.";
+    assert.ok(onScreen.open.includes(line), "the person sees their own skipped question");
+    assert.deepEqual(onScreen.fromSensitive.open, [line], "and the plan knows where that line came from");
+    assert.ok(recordAndSensitiveText().includes(line), "the forbidden set carries every sensitive node's decision");
+    const saved = planForSave(plan, s);
+    const gaps = saved.hurdles.find((h) => h.hurdle === "gaps")!;
+    assert.ok(!gaps.open.includes(line));
+    assert.ok(!("fromSensitive" in gaps));
+    assert.ok(gaps.known.includes("You were caring for family."), "ordinary lines stay");
+    const payload = JSON.stringify(buildSavePayload(plan, s, { summaries: {}, strippedCount: 0, wording: "off", targetJob: "Cook" })).toLowerCase();
+    assert.deepEqual(recordAndSensitiveText().filter((t) => payload.includes(t.toLowerCase())), []);
+    assert.ok(!payload.includes("record conversation") && !payload.includes("time inside"));
+  });
   it("unresolved stays unresolved: no backup ride is listed as a step, never as solved", () => {
     const s = run([...pick("transport"), { type: "start" }, ans("transport.what", "ride"), ans("transport.backup", "no"), ans("transport.distance", "not_sure")]);
     const p = buildHurdlePlan(s).hurdles[0];
