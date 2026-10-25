@@ -22,6 +22,7 @@ const actor = { userId: "00000000-0000-0000-0000-000000000001", orgId: "00000000
 const core = {
   resolveOrgActor: async () => actor,
   getOne: async () => ({ crm_v2: true }),
+  recordStaffAssistantOpen: async () => ({ ok: true, rows: [{ id: "l1" }] }),
   getClientHeader: async () => ({ ok: true, rows: [{ name: "Dana Ray", progress: { nextStepAction: "Follow up on an application", applications: 3, savedJobs: 2, practiceSessions: 1, hasTailoredResume: true, lastActiveAt: "2026-10-21" }, scopes: {} }] }),
   getClientOverview: async () => ({ ok: true, data: { firstName: "Dana", identitySource: "account", joinedAt: "2026-09-02", assignedToYou: true, caseManager: "Pat", stage: 6,
     progress: { nextStepAction: "Follow up on an application", applications: 3, savedJobs: 2, practiceSessions: 1, hasTailoredResume: true, lastActiveAt: "2026-10-21" },

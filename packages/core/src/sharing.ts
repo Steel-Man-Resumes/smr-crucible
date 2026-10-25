@@ -144,6 +144,8 @@ export interface AccessLogEntry {
   who: string | null;
   orgName: string | null;
   scope: string;
+  /** "t.ROY" when the open was a read t.ROY made for the staff member. */
+  via: string | null;
 }
 
 /**
@@ -151,8 +153,8 @@ export interface AccessLogEntry {
  * was fetched for that person, which is all software can honestly know.
  */
 export async function getMyAccessLog(userId: string, limit = 50): Promise<AccessLogEntry[]> {
-  const rows = await query<{ accessed_at: string; who: string | null; org_name: string | null; resource_type: string; access_reason: string }>(
-    `SELECT l.access_reason, l.accessed_at, u.name AS who, ac.partner_name AS org_name, l.resource_type
+  const rows = await query<{ accessed_at: string; who: string | null; org_name: string | null; resource_type: string; access_reason: string; via: string | null }>(
+    `SELECT l.access_reason, l.accessed_at, u.name AS who, ac.partner_name AS org_name, l.resource_type, l.fields_accessed->>'via' AS via
        FROM data_access_log l
        LEFT JOIN users u ON u.id::text = l.accessor_id
        LEFT JOIN access_code ac ON ac.id::text = l.fields_accessed->>'orgId'
@@ -160,7 +162,7 @@ export async function getMyAccessLog(userId: string, limit = 50): Promise<Access
       ORDER BY l.accessed_at DESC LIMIT $2`,
     [userId, limit]
   );
-  return rows.map((r) => ({ kind: r.access_reason === 'org_work_queue' ? 'queue' as const : 'opened' as const, at: r.accessed_at, who: r.who, orgName: r.org_name, scope: r.resource_type.replace(/^shared:/, "") }));
+  return rows.map((r) => ({ kind: r.access_reason === 'org_work_queue' ? 'queue' as const : 'opened' as const, at: r.accessed_at, who: r.who, orgName: r.org_name, scope: r.resource_type.replace(/^shared:/, ""), via: r.via ?? null }));
 }
 
 /* -------------------------------------------- what my case manager suggested -- */

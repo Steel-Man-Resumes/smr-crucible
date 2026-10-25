@@ -12,7 +12,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { STAFF_ASSISTANT_OPEN_SQL, CLIENT_HEADER_WHO_SQL } from '@crucible/core/src/orgClientView';
+import { STAFF_ASSISTANT_OPEN_SQL, SHARED_OPEN_LOG_SQL, CLIENT_HEADER_WHO_SQL } from '@crucible/core/src/orgClientView';
 
 const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, '@electric-sql/pglite')) ? 'set SMR_PGLITE_DIR to run the pglite staff t.ROY log test' : false;
@@ -74,4 +74,14 @@ test('a t.ROY staff read logs one open the participant can see, and nothing outs
   assert.equal((await open(org, otherStaff, dana, false)).length, 0, 'not our staff, not assigned: no row');
   assert.equal((await logFor(dana)).length, 2, 'refused reads left no trace on Dana');
   assert.equal((await logFor(sam)).length, 1);
+
+  // Fix round 1: the four header and task tools log as assistant:progress / assistant:tasks, same predicate.
+  assert.equal((await open(org, cm, dana, false, 'assistant:progress')).length, 1);
+  assert.equal((await open(org, volunteer, dana, false, 'assistant:tasks')).length, 0, 'volunteer outside caseload: no tasks row');
+  // A shared-applications open t.ROY made says "via t.ROY"; the tab's own open does not.
+  await q(`INSERT INTO sharing_grant (user_id, access_code_id, scope, text_version) VALUES ($1, $2, 'applications', 'pglite-test')`, [dana, org]);
+  const shared = (via: string | null, actor = cm) => scoped(org, actor, 'staff', SHARED_OPEN_LOG_SQL + ' RETURNING fields_accessed', [dana, org, false, actor, 'applications', via]);
+  assert.deepEqual((await shared('t.ROY'))[0]?.fields_accessed, { orgId: org, via: 't.ROY' });
+  assert.deepEqual((await shared(null))[0]?.fields_accessed, { orgId: org });
+  assert.equal((await shared('t.ROY', volunteer)).length, 0, 'not in reach: no applications open');
 });

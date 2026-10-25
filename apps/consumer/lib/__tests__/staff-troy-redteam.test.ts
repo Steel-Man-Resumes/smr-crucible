@@ -4,11 +4,11 @@
 // a volunteer reaching past their caseload, a platform admin, and any tool
 // that writes. The real reach SQL and log rows are proven in
 // staff-troy-log-pglite.test.ts.
-import { it } from "node:test";
+import { it, mock } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { buildStaffTools, DATA_NOTE, stationLabel, bandWords } from "../tools/assistant-staff-tools";
-import { createStaffEvidenceCollector } from "../staff-tool-evidence";
+import { createStaffEvidenceCollector, projectStaffToolEvidence } from "../staff-tool-evidence";
 import { checkOrgClaimsDeterministic, type OrgFacts } from "../org-output-verify";
 import { computeOrgCapabilities, STAFF_PRESETS } from "@crucible/core/src/authz/capabilities";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
@@ -30,6 +30,7 @@ function fakeCore(actor: OrgActor, calls: string[]) {
   return {
     resolveOrgActor: async () => actor,
     getOne: async () => ({ crm_v2: true }),
+    recordStaffAssistantOpen: async (_a: OrgActor, id: string, what: string) => { calls.push(`log:${what}:${id}`); return inReach(id) ? { ok: true, rows: [{ id: "l" }] } : { ok: false, reason: "not_in_reach_or_not_member" }; },
     listStaffTasks: async (_a: OrgActor, o: { clientId?: string }) => { calls.push(`tasks:${o.clientId}`); return [{ id: "t1", title: "Call about the forklift class", due_on: "2026-10-27", done_at: null, client_user_id: DANA, client_name: "Dana Ray", shared_with_participant: false }]; },
     getClientHeader: async (_a: OrgActor, id: string) => { calls.push(`header:${id}`); return inReach(id) ? { ok: true, rows: [{ name: "Dana Ray", progress: null, scopes: {} }] } : { ok: false, reason: "not_in_reach_or_not_member" }; },
     getClientOverview: async (_a: OrgActor, id: string) => {
@@ -120,7 +121,7 @@ it("each read tool writes the participant's access-log open once per read, and a
     const open = body.indexOf("await recordStaffAssistantOpen(actor, clientId,"), header = body.indexOf("await getClientHeader(");
     assert.ok(open > 0 && open < header, `${fn} logs before it reads`);
     assert.match(body.slice(open, header), /if \(!opened\.ok\) return \{ ok: false, reason: opened\.reason \};/);
-    assert.match(body, /getClientApplications\(actor, clientId\)/, `${fn} reads applications only through the logged readShared door`);
+    assert.match(body, /getClientApplications\(actor, clientId, \{ via: "t\.ROY" \}\)/, `${fn} reads applications only through the logged readShared door, marked via t.ROY`);
   }
 });
 
@@ -162,13 +163,18 @@ it("the turn budget stays five calls", async () => {
 });
 
 it("prep answers built from the overview pass the deterministic check; an outsider's name does not", async () => {
+  // Fixed clock (review C4 B1): the read time must never decide what passes.
+  mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-24T17:43:58.629Z") });
   const { run, evidence } = tools("staff", DANA);
   await run("read_participant_overview", { clientId: DANA });
   await run("find_local_help", { place: "Libby, MT", needs: ["food"] });
   const facts: OrgFacts = { caseload: 4, stalled: 1, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Dana"], staffNames: ["Pat"], staffToolEvidence: evidence.items, orgName: "Test org (Demo)" };
   const answer = "Where they are: Dana is at Apply and track, last active Oct 21. What is coming: a follow-up on Oct 28 with Northside Lumber, and your task is due Oct 27. From your note Oct 1, Pat talked with Dana about the warehouse opening. Lincoln County Food Share is listed, not yet checked by us, last checked Sep 30, phone (406) 293-0000.";
   assert.deepEqual(checkOrgClaimsDeterministic(answer, facts), []);
-  assert.ok(checkOrgClaimsDeterministic("You could also ask about Marcus and his 17 applications.", facts).length >= 2);
+  try {
+    assert.ok(checkOrgClaimsDeterministic("You could also ask about Marcus and his 17 applications.", facts).length >= 2);
+    assert.ok(checkOrgClaimsDeterministic("Dana has 58 applications.", facts).length >= 1);
+  } finally { mock.timers.reset(); }
 });
 
 it("station words come from the participant's own map; band words never say checked for B or C", () => {
@@ -176,4 +182,85 @@ it("station words come from the participant's own map; band words never say chec
   assert.equal(stationLabel(null), null);
   assert.equal(bandWords("A"), "checked from the organization's own page");
   assert.doesNotMatch(bandWords("B") + bandWords("C"), /^checked/);
+});
+
+// ---- Fix round 1 (C4-REVIEW B1, S1, S2, S3) ----
+
+const DIGIT_UUID = "8f3c2a91-4b7e-4d2a-9c11-5e6f7a8b9c0d";
+const base: OrgFacts = { caseload: 4, stalled: 1, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Dana"], staffNames: ["Pat"], orgName: "Test org (Demo)" };
+
+it("B1: the read time, ids, links, phones and ZIPs never become allowed numbers", () => {
+  const result = {
+    status: "ok", readAt: "2026-10-24T17:43:58.629Z", participantId: DIGIT_UUID, logged: true,
+    person: { firstName: "Dana", joinedOn: "2026-09-02", progress: { applications: 3, savedJobs: 2, practiceSessions: 1, lastActiveAt: "2026-10-21" } },
+    openTasks: [], asks: [], suggestions: [], recentNotes: [], notesTotal: 0, placements: [],
+    applications: [{ jobTitle: "Warehouse associate", company: "Northside Lumber", location: "Libby, MT 59923", status: "interviewing", statusUpdatedAt: "2026-10-22", followUpAt: "2026-10-28" }],
+    listings: [{ id: DIGIT_UUID, phone: "(406) 293-5517", website: "https://example.org/a/8812", source: "https://example.org/p?id=4471" }],
+  };
+  const ev = projectStaffToolEvidence("read_participant_overview", result)!;
+  for (const n of [17, 43, 58, 629, 91, 8, 4471, 8812, 5517, 293, 406, 5992]) assert.ok(!ev.numbers.includes(n), `${n} must not be allowed`);
+  for (const n of [3, 2, 1, 2026, 10, 22, 28, 21]) assert.ok(ev.numbers.includes(n), `${n} is a named count or date part`);
+  const facts = { ...base, staffToolEvidence: [ev] };
+  assert.ok(checkOrgClaimsDeterministic("Dana has 17 applications and 43 saved jobs.", facts).length >= 2);
+  assert.ok(checkOrgClaimsDeterministic("Your caseload is 91 people, 629 hired.", facts).length >= 2);
+  assert.deepEqual(checkOrgClaimsDeterministic("Dana has 3 applications and 2 saved jobs. Her follow-up is Oct 28. Call (406) 293-5517.", facts), []);
+});
+
+it("S1: a name inside participant-written text is not accepted on its own; the whole phrase is", () => {
+  const ev = projectStaffToolEvidence("read_participant_overview", {
+    status: "ok", person: { firstName: "Dana" },
+    applications: [{ jobTitle: "Forklift crew, Marcus Jones", company: "Northside Lumber", status: "applied" }],
+    recentNotes: [{ kind: "call", on: "2026-10-01", author: "Pat", body: "Tasha from the shelter called." }],
+    listings: [{ organization: "Lincoln County Food Share", eligibility: "Ask for Marcus at the desk" }],
+  })!;
+  const facts = { ...base, staffToolEvidence: [ev] };
+  const flagged = checkOrgClaimsDeterministic("You could also check on Marcus and Tasha.", facts);
+  assert.ok(flagged.some((p) => p.includes('"Marcus"')) && flagged.some((p) => p.includes('"Tasha"')), JSON.stringify(flagged));
+  assert.deepEqual(checkOrgClaimsDeterministic("Dana applied to Forklift crew, Marcus Jones at Northside Lumber, and Lincoln County Food Share can help.", facts), []);
+});
+
+it("S2: with no person preselected, the first person read holds the request; an injected id cannot pivot", async () => {
+  const { run, calls } = tools("staff");
+  const first = await run("read_recent_changes", { clientId: DANA });
+  assert.equal(first.status, "ok");
+  // The result carried INJECT, naming OTHER. Every tool now refuses OTHER before any read or log.
+  for (const [name, args] of [
+    ["read_recent_changes", { clientId: OTHER }], ["read_participant_overview", { clientId: OTHER }], ["read_participant_progress", { clientId: OTHER }],
+    ["read_staff_tasks", { clientId: OTHER }], ["draft_staff_check_in", { clientId: OTHER }], ["offer_staff_draft", { clientId: OTHER, purpose: "check_in", body: "x" }],
+  ] as const) assert.ok(["refused", "blocked"].includes(String((await run(name, args)).status)), name); // refused by the hold, or by the five-call budget; neither reads
+  assert.ok(!calls.some((c) => c.includes(OTHER)), "nothing read or logged for the other person");
+  // find_local_help names no person and still works after a person is held.
+  const fresh = tools("staff");
+  await fresh.run("read_recent_changes", { clientId: DANA });
+  assert.equal((await fresh.run("find_local_help", { place: "Libby, MT", needs: ["food"] })).status, "ok");
+});
+
+it("S3: every tool that reads a named person logs the open before reading", async () => {
+  const { run, calls } = tools("staff");
+  await run("read_participant_progress", { clientId: DANA });
+  await run("draft_staff_check_in", { clientId: DANA });
+  await run("offer_staff_draft", { clientId: DANA, purpose: "check_in", body: "Hi Dana" });
+  await run("read_staff_tasks", {});
+  assert.deepEqual(calls, [
+    `log:progress:${DANA}`, `header:${DANA}`,
+    `log:progress:${DANA}`, `header:${DANA}`,
+    `log:progress:${DANA}`, `header:${DANA}`,
+    `log:tasks:${DANA}`, `tasks:${DANA}`,
+  ], "log first, then read; the person's tasks default to the held person");
+  // Out of reach: the log refuses and nothing is read.
+  const v = tools("volunteer");
+  await v.run("read_participant_progress", { clientId: OTHER });
+  assert.deepEqual(v.calls, [`log:progress:${OTHER}`]);
+  // The skill text says exactly what the code does.
+  const ops = readFileSync(new URL("../skills/staff-operations/SKILL.md", import.meta.url), "utf8");
+  assert.match(ops, /Every read of a named person is logged/);
+});
+
+it("the core composed reads log before ANY other read", () => {
+  const core = readFileSync(new URL("../../../../packages/core/src/orgStaffAssistant.ts", import.meta.url), "utf8");
+  for (const fn of ["getClientOverview", "getClientChanges"]) {
+    const body = core.slice(core.indexOf(`export async function ${fn}`));
+    const firstAwait = body.indexOf("await ");
+    assert.equal(body.indexOf("await recordStaffAssistantOpen("), firstAwait, `${fn}: the first await is the log`);
+  }
 });

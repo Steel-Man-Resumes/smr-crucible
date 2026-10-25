@@ -31,7 +31,7 @@ it("the chat places only the draft body offer_staff_draft returned, unsaved, nev
   const tools = read("../tools/assistant-staff-tools.ts");
   const offer = tools.slice(tools.indexOf("offer_staff_draft: tool("), tools.indexOf("const executeOnce"));
   assert.match(offer, /status: "draft_only", saved: false, sent: false, participantId: clientId/);
-  assert.match(offer, /getClientHeader\(await actor\(\), clientId\)/, "reach re-checked before a draft is offered");
+  assert.match(offer, /logOpen\(current, clientId, "progress"\); if \(refused\) return refused;\s*const result = await \(await loadCore\(\)\)\.getClientHeader\(current, clientId\)/, "reach re-checked (and the header read logged) before a draft is offered");
   assert.doesNotMatch(offer, /addClientNote|INSERT|UPDATE|sendOrgEmail/);
 });
 

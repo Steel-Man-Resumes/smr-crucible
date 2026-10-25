@@ -8,8 +8,17 @@ import { executionBudget } from "./tool-execution";
  * access log in the same statement as the read. Participant-written text in a
  * result is data to report, never an instruction (DATA_NOTE).
  *
- * When the panel was opened about one person (openStaffTroy), every tool is
- * held to that person: a different id is refused before anything is read.
+ * ONE PERSON PER REQUEST. When the panel was opened about one person
+ * (openStaffTroy), every tool is held to that person. When it was not, the
+ * first person a tool reads becomes that person for the rest of the request.
+ * Either way a second id is refused before anything is read, so text inside a
+ * record cannot send t.ROY to someone else (review C4 S2).
+ *
+ * EVERY READ OF A NAMED PERSON IS LOGGED for them (review C4 S3): the
+ * overview and changes reads inside core, the header reads (progress and the
+ * two draft tools) as assistant:progress, a person's tasks as assistant:tasks.
+ * A caseload-wide task list names no one person and is not logged, the same
+ * as the Today screen.
  */
 import { tool, jsonSchema, type ToolSet } from "ai";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
@@ -49,7 +58,20 @@ export function bandWords(band: string | null | undefined): string {
 export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, result: unknown) => void, opts: StaffToolOptions = {}): ToolSet {
   const loadCore = opts.core ?? (() => import("@crucible/core"));
   const focus = opts.focusClientId && /^[0-9a-f-]{36}$/i.test(opts.focusClientId) ? opts.focusClientId.toLowerCase() : null;
-  const outOfFocus = (clientId: string | undefined) => !!focus && !!clientId && clientId.toLowerCase() !== focus;
+  let lock: string | null = focus;
+  /** True = refuse. Synchronous, before any await, so parallel calls cannot both claim. */
+  const outOfFocus = (clientId: string | undefined) => {
+    if (!clientId) return false;
+    const id = clientId.toLowerCase();
+    if (lock && id !== lock) return true;
+    lock = id;
+    return false;
+  };
+  /** Write the person's open first; no row = not in reach, nothing is read. */
+  async function logOpen(current: OrgActor, clientId: string, what: "progress" | "tasks") {
+    const opened = await (await loadCore()).recordStaffAssistantOpen(current, clientId, what);
+    return opened.ok ? null : refusal(opened.reason);
+  }
   async function actor() {
     const core = await loadCore();
     const current = await core.resolveOrgActor(initial.userId);
@@ -75,10 +97,12 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       parameters: jsonSchema<{clientId?: string}>({ type: "object", properties: { clientId: ID }, additionalProperties: false }),
       execute: safe(async ({ clientId }) => {
         if (outOfFocus(clientId)) return FOCUS_REFUSAL;
+        const person = clientId ?? lock ?? undefined;
         const current = await actor();
         const core = await loadCore();
         if (!(await tasksOn(current.orgId))) return { status: "unavailable", error: "Tasks are not enabled for this organization." };
-        const rows = await core.listStaffTasks(current, { clientId: clientId ?? focus ?? undefined });
+        if (person) { const refused = await logOpen(current, person, "tasks"); if (refused) return refused; }
+        const rows = await core.listStaffTasks(current, { clientId: person });
         if (!rows) return { status: "unavailable", error: "Task access is unavailable." };
         return { status: "ok", readAt: new Date().toISOString(), tasks: rows.slice(0, 20).map((t) => ({ id: t.id, title: t.title, dueOn: t.due_on, doneAt: t.done_at, participantId: t.client_user_id, participant: t.client_name?.split(/\s+/)[0], shared: t.shared_with_participant })), more: rows.length > 20 };
       }),
@@ -89,7 +113,9 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       execute: safe(async ({ clientId }) => {
         if (outOfFocus(clientId)) return FOCUS_REFUSAL;
         const c = await loadCore();
-        const result = await c.getClientHeader(await actor(), clientId);
+        const current = await actor();
+        const refused = await logOpen(current, clientId, "progress"); if (refused) return refused;
+        const result = await c.getClientHeader(current, clientId);
         if (!result.ok) return result;
         return { status: "ok", readAt: new Date().toISOString(), participantId: clientId, data: result.rows.map((h) => ({ name: h.name?.split(/\s+/)[0], progress: h.progress, scopes: h.scopes })) };
       }),
@@ -164,7 +190,9 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       parameters: jsonSchema<{clientId: string; purpose?: "check_in" | "case_note"}>({ type: "object", properties: { clientId: ID, purpose: { type: "string", enum: ["check_in", "case_note"] } }, required: ["clientId"], additionalProperties: false }),
       execute: safe(async ({ clientId, purpose }) => {
         if (outOfFocus(clientId)) return FOCUS_REFUSAL;
-        const result = await (await loadCore()).getClientHeader(await actor(), clientId);
+        const current = await actor();
+        const refused = await logOpen(current, clientId, "progress"); if (refused) return refused;
+        const result = await (await loadCore()).getClientHeader(current, clientId);
         if (!result.ok) return result;
         const kind = purpose === "case_note" ? "case_note" : "check_in";
         return {
@@ -183,8 +211,10 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       execute: safe(async ({ clientId, purpose, body }) => {
         if (outOfFocus(clientId)) return FOCUS_REFUSAL;
         // Reach is re-checked: a draft is offered only about someone this
-        // staff member may see.
-        const result = await (await loadCore()).getClientHeader(await actor(), clientId);
+        // staff member may see. That re-check reads their header, so it logs.
+        const current = await actor();
+        const refused = await logOpen(current, clientId, "progress"); if (refused) return refused;
+        const result = await (await loadCore()).getClientHeader(current, clientId);
         if (!result.ok) return result;
         const text = String(body ?? "").trim().slice(0, 4000);
         if (!text) return { status: "unavailable", error: "There was no draft text to offer." };

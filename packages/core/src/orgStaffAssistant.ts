@@ -72,13 +72,13 @@ export async function getClientOverview(actor: OrgActor, clientId: string, opts:
   const [notes, suggestions, asks, tasks, outcomes] = await Promise.all([
     getClientNotes(actor, clientId),
     listSuggestions(actor, clientId),
-    listSharingRequests(actor),
+    listSharingRequests(actor, { clientId }),
     opts.tasks ? listStaffTasks(actor, { clientId }) : Promise.resolve(null),
     listOutcomes(actor, clientId),
   ]);
   let applications: OverviewApplication[] | null = null;
   if (h.scopes.applications.shared) {
-    const apps = await getClientApplications(actor, clientId);
+    const apps = await getClientApplications(actor, clientId, { via: "t.ROY" });
     if (apps.ok) {
       applications = apps.rows.slice(0, 15).map((a) => ({
         jobTitle: clip(a.job_title, 120) || "(no title)", company: clip(a.company, 120) || "(no company)", location: clip(a.location, 80) || null,
@@ -120,7 +120,7 @@ export async function getClientOverview(actor: OrgActor, clientId: string, opts:
   };
 }
 
-export interface ClientChange { on: string; kind: string; what: string }
+export interface ClientChange { on: string; kind: string; what: string; /** Retention check day (30, 90, ...), as a number the answer may say. */ dayMark?: number }
 export interface ClientChanges {
   firstName: string | null;
   from: string;
@@ -148,7 +148,7 @@ export async function getClientChanges(actor: OrgActor, clientId: string, since:
   const [notes, suggestions, asks, tasks, outcomes] = await Promise.all([
     getClientNotes(actor, clientId),
     listSuggestions(actor, clientId),
-    listSharingRequests(actor),
+    listSharingRequests(actor, { clientId }),
     opts.tasks ? listStaffTasks(actor, { clientId, includeDone: true }) : Promise.resolve(null),
     listOutcomes(actor, clientId),
   ]);
@@ -171,11 +171,11 @@ export async function getClientChanges(actor: OrgActor, clientId: string, since:
   for (const o of outcomes ?? []) {
     if (o.client_user_id !== clientId || o.end_reason === "entered_in_error") continue;
     if (after(o.start_date)) changes.push({ on: o.start_date, kind: "placement", what: `Placement recorded by your team: ${clip(o.employer, 120)}, started ${o.start_date}` });
-    for (const k of o.checks) if (after(k.checked_at)) changes.push({ on: ymd(k.checked_at)!, kind: "retention_check", what: `Day ${k.day_mark} check recorded: ${k.status}` });
+    for (const k of o.checks) if (after(k.checked_at)) changes.push({ on: ymd(k.checked_at)!, kind: "retention_check", what: `Day ${k.day_mark} check recorded: ${k.status}`, dayMark: k.day_mark });
   }
   let applicationsRead = false;
   if (h.scopes.applications.shared) {
-    const apps = await getClientApplications(actor, clientId);
+    const apps = await getClientApplications(actor, clientId, { via: "t.ROY" });
     if (apps.ok) {
       applicationsRead = true;
       for (const a of apps.rows) {
