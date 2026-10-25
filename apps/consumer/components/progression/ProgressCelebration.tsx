@@ -12,17 +12,34 @@ export function ProgressCelebration({ accountId, celebration }: { accountId: str
     setVisible(false);
     const seenKey = `progress-celebration:${accountId}:${celebration.id}`;
     if (seenThisSession.has(seenKey)) return;
-    seenThisSession.add(seenKey);
-    try {
-      setQuiet(localStorage.getItem("progress-celebrations-quiet") === "1");
-      if (localStorage.getItem(seenKey)) return;
-      localStorage.setItem(seenKey, "1");
-    } catch { /* No storage: still allow this one mounted announcement. */ }
-    setVisible(true);
+    // A tour holding the page (lib/tour/page-lock.ts sets data-guided-learning) means
+    // this praise would sit under the tour card. It is marked seen only when it can
+    // really be seen; until then it waits for the flag to clear. A tour's finish reloads
+    // progression and remounts this, and the waiting copy still shows afterwards.
+    const html = document.documentElement;
+    let observer: MutationObserver | null = null;
+    let shown = false;
+    const show = () => {
+      if (shown || html.dataset.guidedLearning) return;
+      shown = true;
+      observer?.disconnect();
+      seenThisSession.add(seenKey);
+      try {
+        setQuiet(localStorage.getItem("progress-celebrations-quiet") === "1");
+        if (localStorage.getItem(seenKey)) return;
+        localStorage.setItem(seenKey, "1");
+      } catch { /* No storage: still allow this one mounted announcement. */ }
+      setVisible(true);
+    };
+    show();
+    if (!shown) {
+      observer = new MutationObserver(show);
+      observer.observe(html, { attributes: true, attributeFilter: ["data-guided-learning"] });
+    }
     const sync = () => setHidden(document.hidden);
     sync();
     document.addEventListener("visibilitychange", sync);
-    return () => document.removeEventListener("visibilitychange", sync);
+    return () => { observer?.disconnect(); document.removeEventListener("visibilitychange", sync); };
   }, [accountId, celebration.id]);
   if (!visible) return null;
   return <aside role="status" aria-live="polite" className={`progress-celebration ${quiet ? "progress-celebration-quiet" : ""}`} data-paused={hidden}>

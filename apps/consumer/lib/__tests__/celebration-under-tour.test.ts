@@ -14,3 +14,17 @@ test('the celebration toast waits while any tour holds the page', () => {
     assert.match(read(tour), /lockPageForTour/, `${tour} holds the page through the shared lock`);
   }
 });
+
+test('review B-1: the toast is marked seen only once it can be seen, never while a tour holds the page', () => {
+  const src = read('components/progression/ProgressCelebration.tsx');
+  const show = src.indexOf('const show = () => {');
+  const gate = src.indexOf('if (shown || html.dataset.guidedLearning) return;');
+  const seenAdd = src.indexOf('seenThisSession.add(seenKey);');
+  const stored = src.indexOf('localStorage.setItem(seenKey, "1");');
+  assert.ok(show > 0 && gate > show, 'the tour flag is checked first inside show()');
+  assert.ok(seenAdd > gate && stored > gate, 'both seen marks come after the flag check');
+  assert.equal(src.split('seenThisSession.add(').length - 1, 1, 'seen is marked in one place only');
+  assert.match(src, /new MutationObserver\(show\)/);
+  assert.match(src, /attributeFilter: \["data-guided-learning"\]/, 'it waits for the flag to clear');
+  assert.match(src, /observer\?\.disconnect\(\); document\.removeEventListener/, 'the wait ends on unmount');
+});
