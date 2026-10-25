@@ -190,7 +190,8 @@ describe("asking for access sends no email, and the admin side is admin only", (
   it("the request is same-origin JSON, signed in, rate limited", () => {
     const r = code(read("app/api/user/premium/route.ts"));
     assert.match(r, /isSameOriginJsonPost\(request\.headers\)/);
-    assert.match(r, /forgeSessionUser\(await auth\(\)\)/);
+    // fix-settings 2026-10-24: the session is read once (effectiveAuth), refused under impersonation, then checked.
+    assert.match(r, /const session = await auth\(\);\s*\{ const refused = settingsRefusal\(session, "consent", "write"\); if \(refused\) return refused; \}\s*const user = forgeSessionUser\(session\);/);
     assert.match(r, /withRateLimit\(handlePost, \{ mode: "user", endpoint: "premium-request" \}\)/);
   });
 

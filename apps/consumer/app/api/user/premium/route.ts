@@ -10,7 +10,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { withRateLimit } from "@/lib/withRateLimit";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { forgeSessionUser } from "@/lib/session-policy";
@@ -38,7 +39,9 @@ const UNAVAILABLE = (): PremiumStatus => ({
 });
 
 export async function GET() {
-  const user = forgeSessionUser(await auth());
+  const session = await auth();
+  { const refused = settingsRefusal(session, "consent", "read"); if (refused) return refused; }
+  const user = forgeSessionUser(session);
   if (!user?.id) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   if (!premiumGateOn()) return NextResponse.json({ data: ALL_OPEN() });
   const { getPremiumAccess } = await import("@crucible/core");
@@ -66,7 +69,9 @@ async function handlePost(request: Request) {
   if (!isSameOriginJsonPost(request.headers)) {
     return NextResponse.json({ error: "Invalid request" }, { status: 403 });
   }
-  const user = forgeSessionUser(await auth());
+  const session = await auth();
+  { const refused = settingsRefusal(session, "consent", "write"); if (refused) return refused; }
+  const user = forgeSessionUser(session);
   if (!user?.id) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const len = Number(request.headers.get("content-length") || 0);
   if (len > 4_000) return NextResponse.json({ error: "Request too large" }, { status: 413 });

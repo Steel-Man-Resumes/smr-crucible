@@ -6,13 +6,15 @@
  * Settings switch sets). Acts only as the signed-in person.
  */
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { getJoinSharingPrompt } from "@crucible/core";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const session = await auth();
+  // An operator viewing or assisting as the person is never asked the person's question.
+  if (session?.impersonation) return NextResponse.json({ show: false });
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   try {

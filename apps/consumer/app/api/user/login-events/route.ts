@@ -10,7 +10,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { Pool } from "@neondatabase/serverless";
 import { deviceLabel } from "@/lib/security-email";
 
@@ -18,6 +19,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export async function GET() {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "read"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

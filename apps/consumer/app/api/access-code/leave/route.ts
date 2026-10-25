@@ -4,13 +4,15 @@
  * handed back (durable seats, Troy 2026-06-10); your own work is untouched.
  */
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { leaveOrg } from "@crucible/core";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 
 export async function POST(request: Request) {
   if (!isSameOriginJsonPost(request.headers)) return NextResponse.json({ error: "Request not allowed." }, { status: 403 });
   const session = await auth();
+  { const refused = settingsRefusal(session, "consent", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   const body = await request.json().catch(() => null);

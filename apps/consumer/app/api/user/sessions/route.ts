@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { Pool } from "@neondatabase/serverless";
 import { deviceLabel } from "@/lib/security-email";
 import { revokeUserSessions } from "@/lib/session-registry";
@@ -9,6 +10,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 /** GET: the caller's active devices (this one marked current). */
 export async function GET() {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "read"); if (refused) return refused; }
   const userId = session?.user?.id;
   const currentJti = (session?.user as any)?.sid as string | undefined;
   if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -39,6 +41,7 @@ export async function GET() {
 /** POST { action: "revoke", jti } | { action: "revoke_others" }. */
 export async function POST(req: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
   const currentJti = (session?.user as any)?.sid as string | undefined;
   if (!userId) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

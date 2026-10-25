@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { matchTotpStep, generateBackupCodes, resolveTotpSecret } from "@/lib/two-factor";
@@ -13,6 +14,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
  *  return one-time backup codes (shown once; stored hashed). */
 export async function POST(req: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

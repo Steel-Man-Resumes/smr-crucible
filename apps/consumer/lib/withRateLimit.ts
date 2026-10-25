@@ -124,7 +124,7 @@ export function withRateLimit(
 
         if (userRank > requiredRank) {
           return NextResponse.json(
-            { error: "This tool requires a higher access tier. Enter a partner code in Settings to upgrade." },
+            { error: "This tool is not open on your account. If a program gave you a code, enter it in Settings." },
             { status: 403 }
           );
         }

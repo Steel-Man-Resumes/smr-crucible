@@ -311,7 +311,8 @@ test('the tour grant lasts 24 hours from now, through the shared bonus lock and 
   assert.match(fn, /bonus_daily_cap/); assert.match(fn, /bonus_monthly_cap/);
   const store = fn;
   assert.match(store, /jsonb_build_object\('startedAt', now\(\)\)/, 'startedAt is set by the database clock at start');
-  assert.match(store, /'startedAt', preferences->'guidedTour'->'startedAt'/, 'progress keeps startedAt');
+  // 2026-10-24: one slot per tour (lib/tour/registry.ts slotSql), read through the old guidedTour slot.
+  assert.match(store, /'startedAt', \$\{slot\}->'startedAt'/, 'progress keeps startedAt');
 });
 
 /* Controller helpers */

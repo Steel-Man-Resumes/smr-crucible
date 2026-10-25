@@ -553,8 +553,8 @@ export default function VaultDocumentsPage() {
       <p className="mt-10 text-xs text-t-phos-dim">
         Everything here is encrypted and private to your account. To download every file at once, or
         to remove all of your data, go to{" "}
-        <Link href="/dashboard/settings" className="text-t-amber-bright hover:text-t-amber">
-          Settings
+        <Link href="/dashboard/settings#settings-export" className="text-t-amber-bright hover:text-t-amber">
+          Settings, Data
         </Link>
         .
       </p>

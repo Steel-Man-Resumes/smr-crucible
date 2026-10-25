@@ -16,6 +16,7 @@ import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
 import { TierGate } from "@/components/TierGate";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { StatusBadges } from "@/components/apply/StatusBadges";
+import { oneActionCostLine, toolRemaining, draftFailureWords, type UsageView } from "@/lib/usage-view";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -169,6 +170,16 @@ function ApplicationsPage() {
     Record<string, { subject: string; body: string }>
   >({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // The cost line before a draft, from the allowance the tool spends from (/api/usage).
+  const [followUpUsage, setFollowUpUsage] = useState<UsageView | null>(null);
+  const [followUpErrors, setFollowUpErrors] = useState<Record<string, string>>({});
+  const loadFollowUpUsage = () =>
+    fetch("/api/usage", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((v) => setFollowUpUsage(v && typeof v.kind === "string" ? (v as UsageView) : null))
+      .catch(() => setFollowUpUsage(null));
+  useEffect(() => { loadFollowUpUsage(); }, []);
+  const followUpCost = oneActionCostLine(followUpUsage ? toolRemaining(followUpUsage, "follow-up") : null);
 
   function forgeStrengths(): string[] {
     try {
@@ -183,18 +194,26 @@ function ApplicationsPage() {
 
   async function draftFollowUp(id: string) {
     setFollowUpFor(id);
+    setFollowUpErrors((prev) => { const next = { ...prev }; delete next[id]; return next; });
+    let failure: string | null = null;
     try {
       const res = await fetch("/api/follow-up", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ applicationId: id, forgeContext: { strengths: forgeStrengths() } }),
       });
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && (data.subject || data.body)) {
         setFollowUps((prev) => ({ ...prev, [id]: { subject: data.subject || "", body: data.body || "" } }));
+      } else {
+        failure = draftFailureWords(res.ok ? 500 : res.status, data?.error);
       }
-    } catch {}
+    } catch {
+      failure = draftFailureWords(0);
+    }
+    if (failure) setFollowUpErrors((prev) => ({ ...prev, [id]: failure! }));
     setFollowUpFor(null);
+    loadFollowUpUsage();
   }
 
   async function copyFollowUp(id: string) {
@@ -429,10 +448,14 @@ function ApplicationsPage() {
                           app.status
                         ) && (
                           <div className="mt-3">
+                            <p className="text-[11px] text-t-phos-dim mb-1" data-testid="follow-up-cost-line">{followUpCost.line}</p>
+                            {followUpErrors[app.id] && (
+                              <p role="alert" className="text-xs text-t-amber-bright mb-2">{followUpErrors[app.id]}</p>
+                            )}
                             {!followUps[app.id] ? (
                               <button
                                 onClick={() => draftFollowUp(app.id)}
-                                disabled={followUpFor === app.id}
+                                disabled={followUpFor === app.id || !followUpCost.canRun}
                                 className="t-focus inline-flex items-center gap-2 px-3 py-2 bg-t-panel-2 border border-t-line text-xs font-medium text-t-amber-bright hover:text-t-amber transition-colors disabled:opacity-50"
                               >
                                 {followUpFor === app.id
@@ -456,7 +479,7 @@ function ApplicationsPage() {
                                   </button>
                                   <button
                                     onClick={() => draftFollowUp(app.id)}
-                                    disabled={followUpFor === app.id}
+                                    disabled={followUpFor === app.id || !followUpCost.canRun}
                                     className="text-xs text-t-phos-dim hover:text-t-white disabled:opacity-50"
                                   >
                                     {followUpFor === app.id ? "..." : "Redraft"}

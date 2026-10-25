@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useUserTier } from '@/lib/useUserTier';
+import { useEffectiveRole } from '@/components/RoleProvider';
 import { TOUR_VERSION, NEXT_STEP_CHANGED_EVENT, type TourState } from '@/lib/guidedTour';
 import { TOUR_BEATS, TOUR_COPY } from '@/lib/tour/beats';
 import { readTourReward, type TourReward } from '@/lib/tour/reward';
@@ -21,7 +22,9 @@ const PAUSE_KEY = 'guided-learning-paused:';
 /** The shell mounts this. The tour belongs to signed-in clients only. */
 export function GuidedTour(props: { held?: boolean; onNavigationReveal?: (open: boolean) => void }) {
   const tier = useUserTier();
-  return <GuidedTourController tier={tier} {...props} />;
+  // Never under view-as or assist (T2): the route refuses the writes too.
+  const impersonating = !!useEffectiveRole()?.impersonating;
+  return <GuidedTourController tier={tier} {...props} held={!!props.held || impersonating} />;
 }
 
 /**
