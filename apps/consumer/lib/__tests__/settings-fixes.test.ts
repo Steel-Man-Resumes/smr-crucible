@@ -14,6 +14,7 @@ import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
 import { TOURS, readTourSlot, isTourId, slotSql } from '../tour/registry';
 import { grantTourRewardWith } from '../tour/tour-sql';
 import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed } from '../export-plan';
+import { saveErrorWords, SAVE_ERROR_FALLBACK } from '../save-error';
 import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
 
 const ROOT = join(__dirname, '..', '..');
@@ -103,6 +104,34 @@ test('S10: every Settings route resolves the person with effectiveAuth and guard
     assert.equal(guards, handlers - exportedAlias, `${route}: ${guards} guards for ${handlers - exportedAlias} handlers`);
   }
   assert.match(read('app/api/sharing/join-prompt/route.ts'), /if \(session\?\.impersonation\) return NextResponse\.json\(\{ show: false \}\)/);
+});
+
+test('S10 (SF-5): ui-prefs treats the avatar as private: no impersonation sets or clears the photo choice, and GET hides the photo id', () => {
+  const src = read('app/api/user/ui-prefs/route.ts');
+  assert.match(src, /if \("avatar" in body\) \{\s*(?:\/\/[^\n]*\n\s*)*const refused = settingsRefusal\(session, "private", "write"\); if \(refused\) return refused;\s*patch\.avatar = body\.avatar;/,
+    'the avatar field is guarded as private before it reaches setUiPrefs');
+  assert.match(src, /session\?\.impersonation && prefs\.avatar\?\.photoAssetId/, 'GET strips the photo id while impersonating');
+  assert.equal(settingsVerdict({ mode: 'assist' }, 'private', 'write'), SETTINGS_REFUSAL.private, 'assist mode is refused too');
+});
+
+test('S10 (SF-6): a refused save shows the route\'s words beside the control and never shows an unsaved change', () => {
+  assert.equal(saveErrorWords({ error: SETTINGS_REFUSAL.consent }), SETTINGS_REFUSAL.consent);
+  assert.equal(saveErrorWords({ error: '' }), SAVE_ERROR_FALLBACK);
+  assert.equal(saveErrorWords(null), SAVE_ERROR_FALLBACK);
+  assert.equal(saveErrorWords({ error: 'x'.repeat(400) }), SAVE_ERROR_FALLBACK, 'a long body is not shown');
+  assert.equal(saveErrorWords({ error: 7 }, 'fallback'), 'fallback');
+  for (const c of ['components/ConsentPanel.tsx', 'components/SharingConsentSection.tsx', 'components/AccessibilitySettingsSection.tsx']) {
+    const src = read(c);
+    assert.match(src, /readSaveError\(res\)/, `${c} reads the route's words`);
+    assert.match(src, /<SaveError message=/, `${c} shows them`);
+    // Every write is awaited into res (reads may still fall back quietly).
+    assert.doesNotMatch(src, /method: "(?:POST|PATCH)",[^}]*\}\)\.catch\(\(\) => \{\}\);/, `${c} no longer swallows a failed save`);
+    assert.ok((src.match(/const res = await fetch\(/g) ?? []).length >= 1, `${c} awaits its save`);
+  }
+  assert.doesNotMatch(read('components/ConsentPanel.tsx'), /return res\.ok;/, 'ConsentPanel no longer reduces the answer to ok or not');
+  const a11y = read('components/AccessibilitySettingsSection.tsx');
+  assert.match(a11y, /if \(!res\.ok\) \{ showPrefs\(before\);/, 'a refused display change is rolled back on screen');
+  assert.match(a11y, /if \(!res\.ok\) \{ setCoach\(before\);/, 'a refused reading-help change is rolled back');
 });
 
 test('T2: the tour route refuses every write under any impersonation, and the tour never opens', () => {
