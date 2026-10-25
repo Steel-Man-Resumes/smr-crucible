@@ -73,7 +73,7 @@ export function insightsCsvRows(orgName: string, i: OrgInsights): CsvRow[] {
         // Exports made before 2026-10-23 counted ended-before-mark placements
         // under "Not asked yet"; exports before 2026-10-25 listed them as a
         // row of their own.
-        [sec, "No longer there", r.notEmployed, over, endedBeforeNote(r.endedBeforeMark ?? 0)],
+        [sec, "No longer there", r.notEmployed, over, (r.endedBeforeMark ?? 0) > 0 ? endedBeforeNote(r.endedBeforeMark ?? 0) : ""],
         [sec, "Could not reach", r.unknown, over, ""],
         [sec, "Not asked yet", r.notAskedYet, over, ""],
       ] as CsvRow[];
