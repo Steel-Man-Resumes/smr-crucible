@@ -5,19 +5,17 @@
  *           coachVoice, coachPlainLanguage, coachLanguage }
  * POST -> PARTIAL update: only the fields present in the body change (the
  *         chat gear panel posts single toggles; posting a full shape still
- *         works). Enums validated, creativity clamped to 0-100.
+ *         works). Enums validated, creativity clamped to 0-100. A key
+ *         that is absent or invalid changes nothing.
  */
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { query, getOne } from "@crucible/core";
+import { coachSettingsPatch } from "@/lib/coach-settings";
 
 export const maxDuration = 10;
 
-const STYLES = ["supportive", "balanced", "direct"];
-const LENGTHS = ["brief", "full"];
-const FOCI = ["guide", "answer"];
-const LANGUAGES = ["en", "es"];
 
 export async function GET() {
   const session = await auth();
@@ -63,30 +61,11 @@ export async function POST(request: Request) {
 
   const body = await request.json().catch(() => ({}));
 
-  // Partial update: collect only the fields the caller actually sent.
-  const sets: string[] = [];
-  const params: unknown[] = [userId];
-
-  function set(column: string, value: unknown) {
-    params.push(value);
-    sets.push(`${column} = $${params.length}`);
-  }
-
-  if (typeof body.coachName === "string" && body.coachName.trim()) {
-    set("coach_name", body.coachName.trim().slice(0, 40));
-  }
-  if (STYLES.includes(body.coachStyle)) set("coach_style", body.coachStyle);
-  if (LENGTHS.includes(body.coachLength)) set("coach_length", body.coachLength);
-  if (FOCI.includes(body.coachFocus)) set("coach_focus", body.coachFocus);
-  if (body.coachCreativity !== undefined) {
-    const raw = parseInt(String(body.coachCreativity), 10);
-    set("coach_creativity", Math.min(Math.max(Number.isFinite(raw) ? raw : 50, 0), 100));
-  }
-  if (typeof body.coachVoice === "boolean") set("coach_voice", body.coachVoice);
-  if (typeof body.coachPlainLanguage === "boolean") {
-    set("coach_plain_language", body.coachPlainLanguage);
-  }
-  if (LANGUAGES.includes(body.coachLanguage)) set("coach_language", body.coachLanguage);
+  // Partial update: only the fields the caller sent, and sent valid, change.
+  // An absent key is never given a default (lib/coach-settings.ts).
+  const patch = coachSettingsPatch(body);
+  const params: unknown[] = [userId, ...patch.map(([, v]) => v)];
+  const sets = patch.map(([column], i) => `${column} = $${i + 2}`);
 
   if (!sets.length) {
     return NextResponse.json({ ok: true, unchanged: true });
