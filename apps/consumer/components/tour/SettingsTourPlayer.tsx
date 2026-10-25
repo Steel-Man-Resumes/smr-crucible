@@ -24,7 +24,7 @@ import { CompletionConfetti } from '@/components/CompletionConfetti';
 import { findNavElement } from './TourPlayer';
 import { TOUR_COPY } from '@/lib/tour/beats';
 import { SETTINGS_ENDING, SETTINGS_REWARD_COPY, SETTINGS_TOUR_COPY, type SettingsBeat, type SettingsNudge } from '@/lib/tour/settings-beats';
-import { clipHeight, scrollTopFor, settingsRewardMessage } from '@/lib/tour/settings-tour';
+import { clipHeight, portraitCutHeight, scrollTopFor, settingsRewardMessage } from '@/lib/tour/settings-tour';
 import { holdMs } from '@/lib/tour/timing';
 import { captionPlacement, spotlightRect, type Box } from '@/lib/tour/geometry';
 import { rewardCelebrates, type TourReward } from '@/lib/tour/reward';
@@ -87,12 +87,15 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
   const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
   const dir = useRef(1);
   const clock = useRef(0);
+  /** The measured card height and the portrait flag, read inside the measuring loop. */
+  const fit = useRef({ cardH: 0, portrait: false });
 
   const beat = beats[i];
   const ending = i >= ENDING;
   const hold = beat ? holdMs(beat) : 0;
   const portrait = view.w < NARROW;
   const ready = ending || !!cut;
+  fit.current = { cardH, portrait };
 
   /* Environment */
   useEffect(() => {
@@ -160,7 +163,9 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
       lostSince = 0;
       if (first) { first = false; scrollToTarget(el); }
       const r = el.getBoundingClientRect();
-      const next = spotlightRect({ left: r.left, top: r.top, width: r.width, height: clipHeight(r.height, innerHeight, beat.clip) }, innerWidth, innerHeight, 6);
+      // Tall sections keep their top (clip); on a phone every cutout stops above the bottom-anchored card (SF-1).
+      const h = portraitCutHeight(clipHeight(r.height, innerHeight, beat.clip), r.top, innerHeight, fit.current.cardH, fit.current.portrait);
+      const next = spotlightRect({ left: r.left, top: r.top, width: r.width, height: h }, innerWidth, innerHeight, 6);
       setCut(prev => !next ? prev : prev && Math.abs(prev.x - next.x) < 0.5 && Math.abs(prev.y - next.y) < 0.5 && Math.abs(prev.w - next.w) < 0.5 && Math.abs(prev.h - next.h) < 0.5 ? prev : next);
       raf = requestAnimationFrame(measure);
     };

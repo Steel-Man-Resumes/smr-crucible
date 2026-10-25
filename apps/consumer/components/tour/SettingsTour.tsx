@@ -94,6 +94,9 @@ export function SettingsTour() {
     document.addEventListener('input', changed, true); document.addEventListener('change', changed, true);
     return () => {
       alive.current = false; requestController.current?.abort();
+      // Under React strict mode (next dev) this cleanup runs once and the effects run again:
+      // forget the request key so the load effect asks again instead of staying silent.
+      previousRequest.current = '';
       document.removeEventListener('input', changed, true); document.removeEventListener('change', changed, true);
     };
   }, []);
@@ -166,12 +169,10 @@ export function SettingsTour() {
       setSlot(data); slotRef.current = data;
       if (mode === 'chip' || data.impersonating) return;
       // Branches, resolved once before the first card. A failed read is the plain path.
-      const [sharing, coach] = await Promise.all([
-        fetch('/api/sharing', { cache: 'no-store', signal: controller.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/coach/settings', { cache: 'no-store', signal: controller.signal }).then(r => r.ok ? r.json() : null).catch(() => null),
-      ]);
+      const read = (url: string) => fetch(url, { cache: 'no-store', signal: controller.signal }).then(r => r.ok ? r.json() : null).catch(() => null);
+      const [sharing, coach, codes] = await Promise.all([read('/api/sharing'), read('/api/coach/settings'), read('/api/access-code/mine')]);
       if (!alive.current || requestController.current !== controller) return;
-      const branches = readBranches(sharing, coach);
+      const branches = readBranches(sharing, coach, codes);
       setNudge(pickNudge(branches));
       enter(data, applicableBeats(branches), mode === 'open' && !!data.inProgress);
     } catch (e) {
@@ -286,7 +287,7 @@ export function SettingsTour() {
 
   if (!mounted || !allowed) return null;
   if (!active) {
-    const open = !!slot && slot.version === DEF.version && slot.inProgress === true;
+    const open = !!slot && !slot.impersonating && slot.version === DEF.version && slot.inProgress === true;
     const fresh = !!slot && !slot.impersonating && !open && !slot.completedAt;
     return <>
       {open && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="resume"><p>{SETTINGS_TOUR_COPY.chipResume}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.pickUp}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{SETTINGS_TOUR_COPY.startOver}</button></div>}

@@ -50,12 +50,21 @@ export function settingsTourRequested(pathname: string | null | undefined, param
   return pathname === SETTINGS_PATH && params?.get('tour') === SETTINGS_TOUR_PARAM;
 }
 
-/** Branches from the two reads the page already makes. A failed or odd read is "not in a program, plain language off". */
-export function readBranches(sharing: unknown, coach: unknown): SettingsBranches {
+/**
+ * Branches from the reads the page already makes. Membership is what the page
+ * itself uses to show the progress switch: GET /api/access-code/mine `codes`
+ * (any redeemed code). GET /api/sharing filters its orgs to crm_v2 programs, so
+ * it is only the fallback when the codes read failed. "Required" is a sharing
+ * policy with at least one scope. A failed or odd read is "not in a program,
+ * plain language off".
+ */
+export function readBranches(sharing: unknown, coach: unknown, codes?: unknown): SettingsBranches {
   const s = sharing as { orgs?: unknown; policies?: unknown } | null;
   const orgs = Array.isArray(s?.orgs) ? s!.orgs : [];
   const policies = Array.isArray(s?.policies) ? (s!.policies as { scopes?: unknown }[]) : [];
-  const member = orgs.length > 0;
+  const c0 = codes as { codes?: unknown } | null | undefined;
+  const codeList = Array.isArray(c0?.codes) ? c0!.codes : null;
+  const member = codeList ? codeList.length > 0 : orgs.length > 0;
   const required = member && policies.some(p => Array.isArray(p?.scopes) && p.scopes.length > 0);
   const c = coach as { data?: { coachPlainLanguage?: unknown } } | null;
   return { member, required, plainLanguage: c?.data?.coachPlainLanguage === true };
@@ -113,6 +122,21 @@ export function scrollTopFor(targetTop: number, scrollY: number, mapHeight: numb
 export function clipHeight(height: number, viewportH: number, clip: number | undefined): number {
   if (!clip) return height;
   return Math.min(height, Math.round(viewportH * clip));
+}
+
+/** The least a portrait cutout keeps, so a stop is never a sliver. */
+export const PORTRAIT_CUT_MIN = 80;
+
+/**
+ * On a phone the card is bottom-anchored, so every cutout stops above it: its
+ * bottom never passes viewport height minus the measured card height minus 16.
+ * `top` is where the cutout starts (the target scrolled under the map), so the
+ * cap is that line minus the top. Wide screens pass through unchanged.
+ */
+export function portraitCutHeight(height: number, top: number, viewportH: number, cardH: number, portrait: boolean): number {
+  if (!portrait) return height;
+  const limit = viewportH - cardH - 16 - top;
+  return Math.min(height, Math.max(PORTRAIT_CUT_MIN, limit));
 }
 
 function formatDay(iso?: string) {

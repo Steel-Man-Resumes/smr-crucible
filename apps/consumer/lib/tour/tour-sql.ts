@@ -32,7 +32,9 @@ export const ENTRANCE_REWARD: TourRewardSpec = { key: TOUR_REWARD_KEY, label: TO
  * tour: 1), so a policy change can lower it and nothing can raise it past that.
  */
 export async function grantTourRewardWith(db: Pick<TourDb, 'batchAsUser'>, userId: string, runId: string, reward: TourRewardSpec = ENTRANCE_REWARD): Promise<TourReward> {
-  const cap = Number.isInteger(reward.calls) && (reward.calls as number) > 0 ? reward.calls : null;
+  // Absent = the policy amount. Present but not a positive integer (0, negative, NaN, a fraction) grants nothing: fail closed, no SQL.
+  if (reward.calls !== undefined && !(Number.isInteger(reward.calls) && (reward.calls as number) > 0)) throw new Error('tour reward: calls must be a positive integer');
+  const cap = reward.calls ?? null;
   const rows = await db.batchAsUser(userId, sql => [
     sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 874))`,
     sql`SELECT calls,created_at,expires_at,request_key FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${reward.key}`,

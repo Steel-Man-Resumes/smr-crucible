@@ -28,6 +28,7 @@ import {
 } from "@crucible/core/src/supportRequestShared";
 import { findHelpArticle } from "@/lib/helpArticles";
 import { TOUR_HREF } from "@crucible/core/src/journeyStages";
+import { useEffectiveRole } from "@/components/RoleProvider";
 
 interface MineRow {
   id: string;
@@ -56,6 +57,8 @@ function HelpContent() {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { data: session } = useSession();
+  // The Settings tour is for clients; staff Settings has no coach section or lesson (SETTINGS-TOUR.md).
+  const settingsTourFor = !useEffectiveRole()?.orgRole;
   const tier = ((session?.user as { tier?: string })?.tier) || "client";
 
   const [mode, setMode] = useState<SupportCategory>("help");
@@ -184,9 +187,9 @@ function HelpContent() {
         <Link href={TOUR_HREF} className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
           Replay the Refinery tour
         </Link>
-        <Link href="/dashboard/settings?tour=settings" className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
+        {settingsTourFor && <Link href="/dashboard/settings?tour=settings" className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
           Replay the Settings tour
-        </Link>
+        </Link>}
       </div>
 
       <div className="mb-6 flex flex-wrap gap-4 text-sm text-t-amber-bright underline"><Link href="/dashboard/settings?lesson=1">Learn your settings</Link><Link href="/dashboard/orientation">Take the orientation check</Link></div>

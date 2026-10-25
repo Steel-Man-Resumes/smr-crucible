@@ -9,7 +9,7 @@
  * AccessibilitySettingsSection (reading help changes only t.ROY's replies,
  * text size and motion change the whole app at once); S5 and S6
  * SHARING_ALWAYS_TEXT.control (off stops new looks, cannot take back what was
- * read); S7a-c SharingControls (They would see / Stays private, "Required by",
+ * read); S7a and S7b SharingControls (They would see / Stays private, "Required by",
  * "Who has opened what"); S7n the no-program line on the page; S8 Active
  * devices; S9 DataSection; S10 UsageCard; S11 SettingsLesson.
  */
@@ -49,22 +49,21 @@ export const SETTINGS_BEATS: readonly SettingsBeat[] = [
   { id: 's6', show: 'everyone', title: 'Shutting a door',
     body: "You can shut one any time. That stops new looks. It can't take back what someone already read, so open doors on purpose.",
     targets: ['settings-share-progress', 'privacy'] },
+  // S7a and S7c merged (the spec's own rule: the longest path measured over 120 s in a browser).
+  // The log line keeps S7c's claim only: a name and a time per look (SharingControls "Who has opened what").
   { id: 's7a', show: 'member', title: 'Your program, by name',
-    body: "Each switch says what they'd see and what stays private. If your program requires one, it's marked, and you see its reason first.",
+    body: "Each switch says what they'd see and what stays private. Required ones are marked, with the reason first. Below, every look at what you shared shows a name and time.",
     targets: ['settings-who-can-see', 'sharing-heading'] },
   { id: 's7b', show: 'required', title: "When it's required",
     body: 'Stopping a required one is still your button. Your program will see that you stopped, so ask them first what it means for you.',
     targets: ['settings-required-scope', 'sharing-heading'] },
-  { id: 's7c', show: 'member', title: 'Who looked, and when',
-    body: 'Every time someone at your program opens what you shared, it shows up here with their name and the time.',
-    targets: ['settings-sharing-log', 'sharing-heading'] },
   { id: 's7n', show: 'nonmember', title: 'No program yet',
     body: "No program is linked to your account, so none can see your progress. Join one with a code and you'll see what it asks first.",
     targets: ['settings-share-progress', 'privacy'] },
   { id: 's8', show: 'everyone', title: 'On a shared computer',
     body: "Sign out when you're done. Active devices shows where you're signed in, and you can sign the others out from here.",
     targets: ['settings-devices', 'security'] },
-  { id: 's9', show: 'everyone', title: 'Copy it, or delete it for good',
+  { id: 's9', show: 'everyone', title: 'Copy it, or delete it for good', clip: 0.42,
     body: 'Export downloads your saved work and history as a file. Delete my data clears your work and keeps your login. Delete my account removes everything.',
     targets: ['settings-export', 'data'] },
   { id: 's10', show: 'everyone', title: 'Your daily AI actions',
@@ -121,7 +120,7 @@ export const SETTINGS_ENDING = {
   notNow: 'Not now',
   previous: 'Back to the last stop',
   finishing: 'Saving',
-  rewardNote: "Watching the tour through adds one extra AI action for 24 hours, once the server confirms it. It's for the tour, not for any setting you choose.",
+  rewardNote: "Watching the tour through can add one extra AI action for 24 hours, once the server confirms it. It's for the tour, not for any setting you choose.",
 };
 
 /** Reward words. Amounts and dates come from the server response, never from here. */
