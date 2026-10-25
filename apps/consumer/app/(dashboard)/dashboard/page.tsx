@@ -35,6 +35,7 @@ import { PartnerToolsOverview } from "@/components/PartnerToolsOverview";
 import { OrgDashboard } from "@/components/org/OrgDashboard";
 import { AdminHome } from "@/components/admin/AdminHome";
 import { useEffectiveRole } from "@/components/RoleProvider";
+import { orgLanding } from "@/lib/org-nav";
 import { TBtn } from "@crucible/consumer-ui";
 
 // Shared fact-history snapshot for a compact progress recap.
@@ -57,6 +58,33 @@ const TYPE_LABELS: Record<string, string> = {
   hurdle_plan: "hurdle plans",
   interview_prep: "interview sessions",
 };
+
+// ─── Org workspace landing ──────────────────────────────────────────────────
+// /dashboard for a workspace staff member is a doorway, not a page: it reads
+// their "When I sign in, take me to" choice and replaces itself with Today (the
+// default) or People. A failed read still lands on Today.
+function OrgLanding() {
+  const effectiveRole = useEffectiveRole();
+  const router = useRouter();
+  useEffect(() => {
+    let live = true;
+    const go = (landing: string | null) => {
+      if (!live) return;
+      const to = orgLanding({ orgRole: effectiveRole?.orgRole, crmV2: effectiveRole?.crmV2, hash: window.location.hash, landing });
+      if (to) router.replace(to);
+    };
+    fetch("/api/org/prefs", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => go(d?.effective?.landing ?? null))
+      .catch(() => go(null));
+    return () => { live = false; };
+  }, [effectiveRole?.orgRole, effectiveRole?.crmV2, router]);
+  return (
+    <div className="flex items-center justify-center py-20" role="status" aria-label="Opening your day">
+      <TroyWork compact decorative />
+    </div>
+  );
+}
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
@@ -167,6 +195,9 @@ export default function DashboardPage() {
         </div>
       );
     }
+    // Workspace staff land on Today (Troy 2026-10-24); Caseload is People at
+    // /dashboard/people. Orgs without the workspace keep the overview here.
+    if (effectiveRole.orgRole && effectiveRole.crmV2) return <OrgLanding />;
     return effectiveRole.orgRole ? (
       <OrgDashboard />
     ) : (

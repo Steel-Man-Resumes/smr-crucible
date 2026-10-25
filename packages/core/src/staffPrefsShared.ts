@@ -13,7 +13,7 @@
 export const CASELOAD_COLUMNS = ["stage", "nextStep", "applications", "lastActive", "staff", "status"] as const;
 export type CaseloadColumn = (typeof CASELOAD_COLUMNS)[number];
 export const CASELOAD_COLUMN_LABELS: Record<CaseloadColumn, string> = {
-  stage: "Stage", nextStep: "Next step", applications: "Applications",
+  stage: "Station", nextStep: "Next step", applications: "Applications",
   lastActive: "Last active", staff: "Case manager", status: "Status",
 };
 
