@@ -2,7 +2,7 @@
  * POST /api/user/export-vault
  *
  * Returns the signed-in user's decrypted vault documents as a single STORE-only
- * ZIP (no compression, dependency-free -- see packages/core/src/zipStore.ts),
+ * ZIP (no compression, dependency-free; see packages/core/src/zipStore.ts),
  * built in memory and sent as one response. The JSON manifest of the same
  * inventory lives in /api/user/export-data under the "vault" category; this
  * route is the bytes.
