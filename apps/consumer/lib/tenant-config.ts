@@ -59,9 +59,14 @@ const DEFAULT_TENANT: TenantConfig = {
   // steelmanresumes.com has no MX -- inbound must go to a real inbox.
   contactEmail: "troyrichardcarr@gmail.com",
   website: "https://steelmanresumes.com",
+  // A true single-tenant deploy can still name its partner by env or by the
+  // TENANT_CONFIG_PATH file. Nothing renders this today: per-org marks come
+  // from org_brand (migration 099) through <OrgMark>, and there is no
+  // placeholder name or descriptor to show by accident (isPlaceholder is
+  // never rendered).
   partnerBrand: {
-    name: process.env.NEXT_PUBLIC_PARTNER_NAME || "Your Organization",
-    descriptor: process.env.NEXT_PUBLIC_PARTNER_DESCRIPTOR || "Example partner branding",
+    name: process.env.NEXT_PUBLIC_PARTNER_NAME || "",
+    descriptor: process.env.NEXT_PUBLIC_PARTNER_DESCRIPTOR || "",
     logoPath: process.env.NEXT_PUBLIC_PARTNER_LOGO_PATH || undefined,
     primaryColor: process.env.NEXT_PUBLIC_PARTNER_COLOR || "#3f5363",
     isPlaceholder: !process.env.NEXT_PUBLIC_PARTNER_NAME,

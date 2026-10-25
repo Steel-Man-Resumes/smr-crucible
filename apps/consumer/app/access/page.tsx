@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ArrowRight, Check, Clipboard, KeyRound, Mail, ShieldCheck } from "lucide-react";
 import { ProductBrand, SteelManBrand } from "@/components/brand/BrandMarks";
 import { WallText } from "@/components/forge/WallText";
+import { OrgMark } from "@/components/org/OrgMark";
 
 const SAMPLE_RESUME = `James "Jimmy" Wallace
 Milwaukee, WI | 414-555-0187 | jimmywallace82@email.com
@@ -87,7 +88,9 @@ function AccessPageInner() {
       cancelled = true;
     };
   }, [orgName, partnerCode]);
-  const displayName = orgName || partnerName || "Your Organization";
+  // No placeholder name: with no name from the link or the database, the page
+  // welcomes the reader without one and shows no organization mark.
+  const displayName = orgName || partnerName || "";
   // Pre-authorized sign-in is configured per engagement (PARTNER_PRE_AUTH), not
   // hardcoded to one partner. Without a code there is nothing to pre-authorize.
   const preAuthorized = false;
@@ -126,19 +129,22 @@ function AccessPageInner() {
           <div>
             <p className="mb-3 font-term text-[11px] font-semibold uppercase text-[#9fbea6]">Partner access is active</p>
             <h1 className="max-w-3xl text-3xl font-semibold leading-tight text-white sm:text-4xl">
-              Welcome, {displayName}.
+              {displayName ? `Welcome, ${displayName}.` : "Welcome."}
             </h1>
             <p className="mt-4 max-w-2xl text-base text-[#bfc4bc]">
               This page gives your team the access details, product orientation, and sample material needed to evaluate the full Steel Man Resumes experience.
             </p>
           </div>
-          <div className="flex items-center gap-3 rounded-[6px] border border-[#3c433b] bg-[#191b18] px-4 py-3">
-            <span className="grid h-10 w-10 place-items-center rounded-[5px] bg-[#3f5363] font-term text-[10px] font-bold text-white">ORG</span>
-            <div>
-              <strong className="block text-sm text-white">{displayName}</strong>
-              <span className="font-term text-[9px] text-[#9fbea6]">Co-branded partner workspace</span>
+          {displayName ? (
+            <div className="flex items-center gap-3 rounded-[6px] border border-[#3c433b] bg-[#191b18] px-4 py-3">
+              {/* Public page: no logo request (the logo route serves members only), so the monogram. */}
+              <OrgMark orgId={partnerCode || displayName} name={displayName} hasLogo={false} size={40} />
+              <div>
+                <strong className="block text-sm text-white">{displayName}</strong>
+                <span className="font-term text-[9px] text-[#9fbea6]">Partner workspace</span>
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </section>
 
@@ -231,7 +237,7 @@ function AccessPageInner() {
         <section className="mt-14 grid gap-6 border-t border-t-line pt-10 lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="max-w-3xl">
             <p className="text-base leading-relaxed text-t-bone-dim">
-              {closingLead}, this work is built for people whose ability is easy to miss in a conventional hiring process. Your partnership helps put practical tools in front of them at the right time.
+              {closingLead ? `${closingLead}, this` : "This"} work is built for people whose ability is easy to miss in a conventional hiring process. Your partnership helps put practical tools in front of them at the right time.
             </p>
             <p className="mt-3 text-sm font-semibold text-t-white">Troy Richard Carr, Steel Man Resumes</p>
           </div>

@@ -109,6 +109,7 @@ export const SEAT_GATED_FROM_FORGE: Readonly<Record<string, string>> = {
   "/api/resource-lists": "saving a resource list is a Refinery tool",
   "/api/sharing/join-prompt": "organization sharing prompt; a seatless account has no organization",
   "/api/dev/impersonate": "platform admins only, and an admin always has a seat",
+  "/api/org/brand/": "an organization's logo, for its own members (OrgMark); a seatless account has no organization, and the Forge and /access render the monogram without calling it",
 };
 
 function matchesList(list: Readonly<Record<string, string>>, path: string): boolean {

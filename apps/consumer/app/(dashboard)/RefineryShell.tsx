@@ -53,7 +53,7 @@ import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
 // client bundle -- see @crucible/core/src/gateRank).
 import { clientToolUnlocked } from "@crucible/core/src/journeyStages";
-import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
+import { MemberCoBrandChip, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
 import { ExternalLink, LogOut, Menu, X } from "lucide-react";
 import { ProgressionProvider, useProgression } from "@/components/progression/ProgressionProvider";
 import type { BoardLink, StationId } from "@/lib/refinery-nav";
@@ -805,7 +805,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2 sm:gap-4">
               <DevSwitcher />
               <ViewAsToggle />
-              <CoBrandLockup compact className="hidden xl:flex" />
+              {!isOrgPartner && effectiveRole?.coBrand ? <MemberCoBrandChip orgId={effectiveRole.coBrand.orgId} name={effectiveRole.coBrand.name} hasLogo={effectiveRole.coBrand.hasLogo} className="hidden lg:flex" /> : null}
               <a
                 href="https://forge.steelmanresumes.com"
                 target="_blank"
