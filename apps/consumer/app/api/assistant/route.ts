@@ -5,6 +5,7 @@ import { buildOwnerTools, OWNER_ASSISTANT_PROMPT } from "@/lib/tools/assistant-o
 import { createStaffEvidenceCollector } from "@/lib/staff-tool-evidence";
 import { assistantStepUsage } from "@/lib/ai/assistant-step-usage";
 import { assistantCapabilities } from "@/lib/assistant-capabilities";
+import { serverFullContext, loadUserFullContext, realFullContextLoaders } from "@/lib/assistant-full-context";
 /**
  * AI Assistant API Route — "The Ghost"
  *
@@ -18,6 +19,13 @@ import { assistantCapabilities } from "@/lib/assistant-capabilities";
  * Messages pass through UNSTRIPPED so tool invocations survive the client
  * round-trip (stripping them makes client tools loop forever).
  * Every response logged to decision_log for observability.
+ *
+ * WHO T.ROY IS TALKING TO (fix 2026-10-25): context.userFullContext is built
+ * on the server by lib/assistant-full-context.ts from the signed-in session's
+ * user id, as that person under RLS. The browser's copy is deleted below and
+ * never read (a browser-sent context can be forged; 9b513e4, 2026-10-15). It
+ * carries the resumes, saved jobs, lanes, hurdle plan, progression step and
+ * meter, and the saved record words only under the current record consent.
  */
 
 import { effectiveAuth } from "@/lib/effective-auth";
@@ -142,7 +150,9 @@ export async function POST(request: Request) {
   // browser's value is ignored (lib/server-switch.ts).
   context.recordStepOn = recordStepOn();
 
-  const hasCriminalRecord = !!(context as any).hasCriminalRecord || !!(context as any).userFullContext?.forge?.hasCriminalRecord;
+  // The browser flag loads record-aware coaching skills early; the server
+  // context below can only add to it, never remove it.
+  let hasCriminalRecord = !!(context as any).hasCriminalRecord;
   let skillsContext = loadSkillsForContext(context.currentPage, hasCriminalRecord);
   let platformOwner = false;
   if (userId && await (await import("@crucible/core")).isPlatformAdmin(userId)) {
@@ -255,6 +265,19 @@ export async function POST(request: Request) {
   const seatScope = seatSurface.scope;
   toolOptions = seatSurface.toolOptions;
   enhancedConsent = seatSurface.enhancedConsent;
+
+  // The person's own full context, server-built (header note). Only for a
+  // participant on their own Refinery seat: owner and staff have their own
+  // prompts, a Forge-scope chat is not tied to a person, and the rehearsal
+  // stays isolated.
+  context.userFullContext = await serverFullContext(
+    { userId, scope: seatScope, platformOwner, staff: !!staffActor, disclosureRehearsal: isDisclosureRehearsal },
+    async (id) => loadUserFullContext(id, await realFullContextLoaders())
+  );
+  if (context.userFullContext?.forge?.hasCriminalRecord && !hasCriminalRecord) {
+    hasCriminalRecord = true;
+    skillsContext = loadSkillsForContext(context.currentPage, true);
+  }
 
   if (platformOwner) skillsContext = loadSkillsForContext(context.currentPage, false, "owner");
   // The staff panel's skill (lib/staff-troy.ts): the button the staff member
