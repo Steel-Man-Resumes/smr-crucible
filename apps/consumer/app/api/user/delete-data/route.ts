@@ -64,7 +64,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import {
   query,
   queryAsUser,
@@ -81,6 +82,7 @@ import {
 
 export async function DELETE(req: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
 
   if (!userId) {

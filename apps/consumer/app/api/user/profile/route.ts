@@ -8,6 +8,7 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { query, queryAsUser, getOneAsUser, PROFILE_CONTACT_RESUME_SQL } from "@crucible/core";
 import { resumeTextToDocument } from "@/lib/revision-to-doc";
 import { formatPhoneUS } from "@/lib/phone";
@@ -23,6 +24,7 @@ export interface UserContact {
 /** GET — Load user contact info, merging from multiple sources */
 export async function GET() {
   const session = await auth();
+  { const refused = settingsRefusal(session, "preference", "read"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -99,6 +101,7 @@ export async function GET() {
 /** PATCH — Save/update user contact info */
 export async function PATCH(request: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "preference", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

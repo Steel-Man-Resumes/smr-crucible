@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from "react";
 import { TBtn } from "@crucible/consumer-ui";
+import { coachSaveBody } from "@/lib/coach-settings";
 
 type Style = "supportive" | "balanced" | "direct";
 type Length = "brief" | "full";
@@ -61,7 +62,9 @@ export function CoachSettingsSection() {
       const res = await fetch("/api/coach/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(s),
+        // Only the coach's own fields. The GET also carries the reading-help
+        // switches; posting them back would undo a change made since load.
+        body: JSON.stringify(coachSaveBody(s as unknown as Record<string, unknown>)),
       });
       setStatus(res.ok ? "saved" : "error");
     } catch {

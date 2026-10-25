@@ -13,11 +13,14 @@
 import { useState, useEffect } from "react";
 import { SETTINGS_SHARING_TEXT as TEXT } from "@crucible/core/src/joinSharingPromptShared";
 import { SHARING_CHANGED_EVENT } from "@/lib/join-sharing-prompt";
+import { readSaveError } from "@/lib/save-error";
+import { SaveError } from "./SaveError";
 
 export function SharingConsentSection() {
   const [sharing, setSharing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = () =>
@@ -40,6 +43,7 @@ export function SharingConsentSection() {
   async function toggle() {
     const next = !sharing;
     setSaving(true);
+    setError(null);
     try {
       const res = await fetch("/api/consent", {
         method: "POST",
@@ -50,16 +54,20 @@ export function SharingConsentSection() {
         setSharing(next);
         // They chose here, so the one-time prompt has nothing left to ask.
         window.dispatchEvent(new Event(SHARING_CHANGED_EVENT));
+      } else {
+        // The switch stays as saved; the route says why (for example, only the
+        // person can change this while an operator views or assists).
+        setError(await readSaveError(res));
       }
     } catch {
-      // leave state as-is on failure
+      setError("Could not save. Check your connection and try again.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <section className="mb-8">
+    <section className="mb-8" id="settings-share-progress">
       <h2 className="text-lg font-bold text-t-white mb-4">{TEXT.heading}</h2>
       <div className="bg-t-panel border border-t-line p-5">
         <div className="flex items-start justify-between gap-4">
@@ -94,6 +102,7 @@ export function SharingConsentSection() {
               ? TEXT.on
               : TEXT.off}
         </p>
+        <SaveError message={error} />
       </div>
     </section>
   );

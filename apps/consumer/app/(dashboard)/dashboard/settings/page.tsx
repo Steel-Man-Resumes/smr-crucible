@@ -37,11 +37,40 @@ import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
 import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
 import { PackageEmailSetting } from "@/components/PackageEmailSetting";
 import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
+import { usageWords, type UsageView } from "@/lib/usage-view";
+import { ALL_TICKED, DOCUMENTS_DOWNLOAD_FAILED, EXPORT_BOXES, OWN_DEVICE_LABEL, SHARED_COMPUTER_WARNING, documentsFileName, exportCategories, exportConfirmBody, exportFileName, exportLeavesOut, type ExportTicks } from "@/lib/export-plan";
 
-interface UsageData {
-  used: number;
-  limit: number | null;
-  remaining: number | null;
+type UsageData = UsageView | { error: string };
+
+/** Settings -> Usage. The same allowance the tools spend from (lib/usage-view.ts). */
+function UsageCard({ usage }: { usage: UsageData | null }) {
+  if (!usage) return <p className="text-sm text-t-phos-dim">Loading usage...</p>;
+  if ("error" in usage) return <p className="text-sm text-t-phos-dim">{usage.error}</p>;
+  const words = usageWords(usage);
+  const total = usage.kind === "allowance" ? (usage.base ?? 0) + usage.bonus : 0;
+  return (
+    <div>
+      <p className="text-sm font-medium text-t-white mb-2">{words.headline}</p>
+      {usage.kind === "allowance" && total > 0 && (
+        <div className="w-full bg-t-line h-2 mb-3" aria-hidden="true">
+          <div className="bg-t-amber h-2 transition-all" style={{ width: `${Math.min(100, (Math.min(usage.used, total) / total) * 100)}%` }} />
+        </div>
+      )}
+      <p className="text-sm text-t-phos-dim">{words.line}</p>
+      {words.bonusLine && <p className="text-sm text-t-phos-dim mt-1">{words.bonusLine}</p>}
+      {usage.blockedReason && <p className="text-sm text-t-amber-bright mt-2">{usage.blockedReason}</p>}
+      {usage.ceilings.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-t-white mb-1">{usage.kind === "per-tool" ? "Used today" : "Tools with a lower limit of their own"}</p>
+          <ul className="text-xs text-t-phos-dim space-y-0.5">
+            {usage.ceilings.map((c) => (
+              <li key={c.tool}>{c.label}: {c.paused ? "paused" : `${c.left} left today`}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface RedeemedCode {
@@ -62,21 +91,15 @@ export default function SettingsPage() {
   // "account" removes everything including the login. Track which one is armed.
   const [deleteMode, setDeleteMode] = useState<null | "data" | "account">(null);
   // Phase 7.4: per-category export. All on = the full dump (the default).
-  const [exportCats, setExportCats] = useState({
-    resumes: true,
-    applications: true,
-    chat: true,
-    consent: true,
-    usage: true,
-    progress: true,
-    record_check: true,
-    sharing: true,
-  });
+  const [exportCats, setExportCats] = useState<ExportTicks>(ALL_TICKED);
   // Phase 1C reauth gate: export and delete both require the current
-  // password (password accounts) or the literal string "DELETE" typed out
-  // (magic-link/OAuth-only accounts, which have no password to re-prove).
-  // Either field is accepted -- the server decides which one it needs based
-  // on whether the account has a password_hash.
+  // password (password accounts). Without a password, delete takes the word
+  // DELETE typed out and export takes the own-device tick under the
+  // shared-computer warning (S8: typing DELETE to export was the wrong word).
+  // The server decides which one it needs from the account's password_hash.
+  const [ownDevice, setOwnDevice] = useState(false);
+  const [docsStatus, setDocsStatus] = useState<"idle" | "working" | "done">("idle");
+  const [docsMessage, setDocsMessage] = useState("");
   const [reauthPassword, setReauthPassword] = useState("");
   const [reauthTyped, setReauthTyped] = useState("");
 
@@ -91,6 +114,7 @@ export default function SettingsPage() {
   >("idle");
   const [codeError, setCodeError] = useState("");
   const [redeemedCodes, setRedeemedCodes] = useState<RedeemedCode[]>([]);
+  const [codesLoaded, setCodesLoaded] = useState(false);
 
   // Usage state
   const [usage, setUsage] = useState<UsageData | null>(null);
@@ -147,11 +171,12 @@ export default function SettingsPage() {
     fetch("/api/usage")
       .then((r) => r.json())
       .then(setUsage)
-      .catch(() => {});
+      .catch(() => setUsage({ error: "Your allowance could not be read right now." }));
 
     fetch("/api/access-code/mine")
-      .then((r) => r.json())
-      .then((data) => setRedeemedCodes(data.codes || []))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("codes"))))
+      .then((data) => { setRedeemedCodes(data.codes || []); setCodesLoaded(true); })
+      // Unknown membership: show neither the switch nor "no program".
       .catch(() => {});
 
     loadHiddenEmployers();
@@ -198,6 +223,7 @@ export default function SettingsPage() {
         if (codesRes.ok) {
           const data = await codesRes.json();
           setRedeemedCodes(data.codes || []);
+          setCodesLoaded(true);
         }
         if (usageRes.ok) setUsage(await usageRes.json());
         setTimeout(() => setCodeStatus("idle"), 3000);
@@ -222,18 +248,13 @@ export default function SettingsPage() {
       // as delete, since a full data export is nearly as sensitive.
       // Only send the categories the user kept checked. If all are checked,
       // omit the field entirely so the server returns the full dump.
-      const chosen = (Object.keys(exportCats) as (keyof typeof exportCats)[]).filter(
-        (k) => exportCats[k]
-      );
-      const allChosen = chosen.length === Object.keys(exportCats).length;
+      const categories = exportCategories(exportCats);
       const res = await fetch("/api/user/export-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          confirm: true,
-          password: reauthPassword || undefined,
-          typedConfirmation: reauthTyped || undefined,
-          ...(allChosen ? {} : { categories: chosen }),
+          ...exportConfirmBody({ password: reauthPassword, ownDevice }),
+          ...(categories ? { categories } : {}),
         }),
       });
       if (!res.ok) {
@@ -266,7 +287,7 @@ export default function SettingsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `second-mile-data-${new Date().toISOString().split("T")[0]}.json`;
+      a.download = exportFileName(new Date());
       a.click();
       URL.revokeObjectURL(url);
 
@@ -275,6 +296,37 @@ export default function SettingsPage() {
     } catch {
       alert("Failed to export data. Please try again.");
       setExportStatus("idle");
+    }
+  }
+
+  // Every document file at once, as a ZIP (/api/user/export-vault). The JSON
+  // above lists the documents; this is the files themselves.
+  async function downloadDocuments() {
+    setDocsStatus("working");
+    setDocsMessage("");
+    try {
+      const res = await fetch("/api/user/export-vault", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(exportConfirmBody({ password: reauthPassword, ownDevice })),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setDocsMessage(data.error || DOCUMENTS_DOWNLOAD_FAILED);
+        setDocsStatus("idle");
+        return;
+      }
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = documentsFileName(new Date());
+      a.click();
+      URL.revokeObjectURL(url);
+      setDocsStatus("done");
+      setTimeout(() => setDocsStatus("idle"), 3000);
+    } catch {
+      setDocsMessage(DOCUMENTS_DOWNLOAD_FAILED);
+      setDocsStatus("idle");
     }
   }
 
@@ -338,6 +390,9 @@ export default function SettingsPage() {
   // they do not have, or offer to erase "your plans and history" when what the
   // account actually holds is other people's caseload assignments.
   const isOrgStaff = !!effectiveRole?.orgRole;
+  // View-as or assist (S10): every Settings route answers as the person, and
+  // the private sections (security, photo, export, delete) refuse outright.
+  const impersonating = effectiveRole?.impersonating ?? null;
 
   // STAFF GET THEIR OWN SETTINGS, not a job seeker's. A case manager was being
   // asked whether to "share your progress with your support partner", offered
@@ -374,7 +429,18 @@ export default function SettingsPage() {
           : "Your data, your control. Manage your information and privacy."}
       </p>
 
-      {!isOrgStaff && <SettingsLesson />}
+      {impersonating && (
+        <div id="settings-impersonating" role="status" className="mb-6 border border-t-amber bg-t-panel p-4 text-sm text-t-white">
+          <p className="font-semibold mb-1">
+            {impersonating.mode === "view" ? "You are viewing this person's Settings. Nothing here can be changed." : "You are assisting this person in Settings."}
+          </p>
+          <p className="text-t-phos-dim">
+            These are their settings, not yours. Sharing and consent switches, program codes and the tours stay theirs to change. Security, photo, export and delete are hidden.
+          </p>
+        </div>
+      )}
+
+      {!isOrgStaff && !impersonating && <SettingsLesson />}
 
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
       <nav
@@ -410,7 +476,7 @@ export default function SettingsPage() {
       <div id="account" className="scroll-mt-32 mb-10">
         <GroupHeading>Account</GroupHeading>
         <AccountSection />
-        <AvatarSettingsSection />
+        {!impersonating && <AvatarSettingsSection />}
         {pendingPolicy && (
           <div role="dialog" aria-label="What this program requires" className="mb-4">
             <RequirementCard policy={pendingPolicy.policy} text={pendingPolicy.text} items={pendingPolicy.policy.items} compact />
@@ -464,7 +530,10 @@ export default function SettingsPage() {
       {/* ── 4. Privacy & Consent ───────────────────────────────────── */}
       <div id="privacy" className="scroll-mt-32 mb-10">
         <GroupHeading>{isOrgStaff ? "AI transparency" : "Privacy & Consent"}</GroupHeading>
-        {!isOrgStaff && <SharingConsentSection />}
+        {/* The progress switch reaches a program, so it shows only to a member (S7). */}
+        {!isOrgStaff && codesLoaded && (redeemedCodes.length > 0
+          ? <SharingConsentSection />
+          : <p id="settings-share-progress" className="text-sm text-t-phos-dim mb-8">No program is linked to your account, so no program can see your progress.</p>)}
         {!isOrgStaff && <SharingControls />}
         {!isOrgStaff && <ConsentPanel />}
         {/* AI transparency: t.ROY's recorded reasoning */}
@@ -474,13 +543,13 @@ export default function SettingsPage() {
       {/* ── 5. Security ────────────────────────────────────────────── */}
       <div id="security" className="scroll-mt-32 mb-10">
         <GroupHeading>Security</GroupHeading>
-        <SecuritySection />
+        {impersonating ? <p className="text-sm text-t-phos-dim">Hidden while you view or assist as this person.</p> : <SecuritySection />}
       </div>
 
       {/* ── 6. Data ────────────────────────────────────────────────── */}
       <div id="data" className="scroll-mt-32 mb-10">
         <GroupHeading>Data</GroupHeading>
-        <DataSection
+        {impersonating ? <p className="text-sm text-t-phos-dim">Hidden while you view or assist as this person.</p> : <DataSection
           exportCats={exportCats}
           setExportCats={setExportCats}
           reauthPassword={reauthPassword}
@@ -489,54 +558,29 @@ export default function SettingsPage() {
           setReauthTyped={setReauthTyped}
           exportData={exportData}
           exportStatus={exportStatus}
+          ownDevice={ownDevice}
+          setOwnDevice={setOwnDevice}
+          downloadDocuments={downloadDocuments}
+          docsStatus={docsStatus}
+          docsMessage={docsMessage}
           deleteMode={deleteMode}
           setDeleteMode={setDeleteMode}
           deleteAllData={deleteAllData}
           deleting={deleting}
-        />
+        />}
       </div>
 
       {/* ── 7. Usage ───────────────────────────────────────────────── */}
       <div id="usage" className="scroll-mt-32 mb-10">
         <GroupHeading>Usage</GroupHeading>
 
-        {/* Daily Usage */}
-        <section className="mb-8">
+        {/* Daily Usage: the allowance the tools spend from (S5) */}
+        <section className="mb-8" id="settings-usage-today">
           <h2 className="text-lg font-bold text-t-white mb-4">
             Daily Usage
           </h2>
           <div className="bg-t-panel p-5 border border-t-line">
-            {usage ? (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-t-white">
-                    AI calls today
-                  </span>
-                  <span className="text-sm text-t-phos-dim">
-                    {usage.limit === null
-                      ? `${usage.used} used (unlimited)`
-                      : `${usage.used} / ${usage.limit}`}
-                  </span>
-                </div>
-                {usage.limit !== null && (
-                  <div className="w-full bg-t-line h-2">
-                    <div
-                      className="bg-t-amber h-2 transition-all"
-                      style={{
-                        width: `${Math.min(100, (usage.used / usage.limit) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                )}
-                {usage.remaining !== null && usage.remaining <= 5 && usage.remaining > 0 && (
-                  <p className="text-xs text-t-amber-bright mt-2">
-                    {usage.remaining} AI call{usage.remaining === 1 ? "" : "s"} left today. Resets at midnight.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-t-phos-dim">Loading usage...</p>
-            )}
+            <UsageCard usage={usage} />
           </div>
         </section>
 
@@ -604,16 +648,7 @@ function GroupHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-interface ExportCats {
-  resumes: boolean;
-  applications: boolean;
-  chat: boolean;
-  consent: boolean;
-  usage: boolean;
-  progress: boolean;
-  record_check: boolean;
-  sharing: boolean;
-}
+type ExportCats = ExportTicks;
 
 function DataSection({
   exportCats,
@@ -624,6 +659,11 @@ function DataSection({
   setReauthTyped,
   exportData,
   exportStatus,
+  ownDevice,
+  setOwnDevice,
+  downloadDocuments,
+  docsStatus,
+  docsMessage,
   deleteMode,
   setDeleteMode,
   deleteAllData,
@@ -637,6 +677,11 @@ function DataSection({
   setReauthTyped: (v: string) => void;
   exportData: () => void;
   exportStatus: "idle" | "exporting" | "done";
+  ownDevice: boolean;
+  setOwnDevice: (v: boolean) => void;
+  downloadDocuments: () => void;
+  docsStatus: "idle" | "working" | "done";
+  docsMessage: string;
   deleteMode: null | "data" | "account";
   setDeleteMode: (v: null | "data" | "account") => void;
   deleteAllData: (mode: "data" | "account") => void;
@@ -647,17 +692,9 @@ function DataSection({
   const isOrgStaff = !!dataSectionRole?.orgRole;
   // The record check line shows only while that step is on (settings/layout.tsx).
   const { recordStep } = useServerSwitches();
-  const EXPORT_CATS: { key: keyof ExportCats; label: string }[] = [
-    { key: "resumes", label: "Resumes and Forge results" },
-    { key: "applications", label: "Job applications" },
-    { key: "chat", label: "Chat history with t.ROY" },
-    { key: "consent", label: "Consent records" },
-    { key: "usage", label: "Usage totals" },
-    { key: "progress", label: "Your activity history" },
-    { key: "record_check", label: "Saved record checks" },
-    { key: "sharing", label: "What you share, who opened it, and what your organization has on file about you" },
-  ];
+  const EXPORT_CATS = EXPORT_BOXES;
   const anyChecked = Object.values(exportCats).some(Boolean);
+  const leftOut = exportLeavesOut(exportCats);
 
   return (
     <section className="mb-8">
@@ -702,14 +739,15 @@ function DataSection({
         </div>
 
         {/* Reauth for export/delete -- password accounts fill the password
-            field; magic-link/OAuth-only accounts (no password) type the
-            word DELETE instead. Either one satisfies the server's gate. */}
+            field. With no password, delete takes the typed word DELETE and
+            export takes the own-device tick under the warning below. */}
         <div className="bg-t-panel p-5 border border-t-line">
           <h3 className="font-semibold text-t-white">Confirm your identity</h3>
           <p className="text-sm text-t-phos-dim mt-1">
             Exporting or deleting your data is sensitive, so confirm it&apos;s
-            you before either action below. Enter your password, or if you
-            sign in with a magic link and have no password, type DELETE.
+            you first. Enter your password. If you sign in with an email link
+            and have no password, a download needs only the tick below, and
+            deleting asks you to type DELETE.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 mt-3">
             <input
@@ -724,20 +762,22 @@ function DataSection({
               type="text"
               value={reauthTyped}
               onChange={(e) => setReauthTyped(e.target.value)}
-              placeholder="Or type DELETE (no-password accounts)"
+              placeholder="To delete with no password, type DELETE"
+              aria-label="To delete with no password, type DELETE"
               className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
             />
           </div>
         </div>
 
-        {/* Export data -- per category */}
-        <div className="bg-t-panel p-5 border border-t-line">
+        {/* Export data -- per category, then the document files */}
+        <div className="bg-t-panel p-5 border border-t-line" id="settings-export">
           <h3 className="font-semibold text-t-white">
             Download your data
           </h3>
           <p className="text-sm text-t-phos-dim mt-1 mb-3">
-            Get a copy of what we have stored. Pick what to include, or keep
-            everything checked for a full copy.
+            Get a copy of what we have stored, as one file. Keep every box
+            ticked for a full copy. Your document files come separately, with
+            the button further down.
           </p>
           <div className="space-y-2 mb-4">
             {EXPORT_CATS.map((c) => (
@@ -754,9 +794,26 @@ function DataSection({
               </label>
             ))}
           </div>
+          {leftOut.length > 0 && (
+            <p className="text-sm text-t-amber-bright mb-4" data-testid="export-leaves-out">
+              This copy leaves out {leftOut.join(", ")}. Tick every box for a full copy.
+            </p>
+          )}
+          <div className="border border-t-amber bg-t-panel-2 p-3 mb-4" role="note">
+            <p className="text-sm text-t-white">{SHARED_COMPUTER_WARNING}</p>
+            <label className="mt-2 flex items-center gap-3 text-sm text-t-white cursor-pointer">
+              <input
+                type="checkbox"
+                checked={ownDevice}
+                onChange={(e) => setOwnDevice(e.target.checked)}
+                className="h-4 w-4 accent-t-amber"
+              />
+              {OWN_DEVICE_LABEL}
+            </label>
+          </div>
           <button
             onClick={exportData}
-            disabled={exportStatus !== "idle" || !anyChecked}
+            disabled={exportStatus !== "idle" || !anyChecked || !ownDevice}
             className="t-focus px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-50 transition-colors min-h-touch"
           >
             {exportStatus === "exporting"
@@ -765,6 +822,22 @@ function DataSection({
                 ? "Downloaded"
                 : "Export"}
           </button>
+          <div className="mt-5 border-t border-t-line pt-4">
+            <h4 className="text-sm font-semibold text-t-white">Your document files</h4>
+            <p className="text-sm text-t-phos-dim mt-1 mb-3">
+              Every file in Private records and documents, in one ZIP, up to about
+              4 MB at a time. If you have more than that, download them one at a
+              time from that page.
+            </p>
+            <button
+              onClick={downloadDocuments}
+              disabled={docsStatus !== "idle" || !ownDevice}
+              className="t-focus px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10 disabled:opacity-50 transition-colors min-h-touch"
+            >
+              {docsStatus === "working" ? "Preparing..." : docsStatus === "done" ? "Downloaded" : "Download my documents"}
+            </button>
+            {docsMessage && <p role="alert" className="text-sm text-t-amber-bright mt-2">{docsMessage}</p>}
+          </div>
         </div>
 
         {/* Delete my data -- keeps the login */}
@@ -884,10 +957,10 @@ function AccountExtras({
 }) {
   return (
     <>
-      {/* Partner Access Code */}
-      <section className="mb-8 mt-8">
+      {/* Program code: joins a program's seat (S6). It promises no extra AI calls and shares nothing on its own. */}
+      <section className="mb-8 mt-8" id="settings-program-code">
         <h2 className="text-lg font-bold text-t-white mb-4">
-          Partner Access Code
+          Join a program with a code
         </h2>
         <div className="space-y-4">
           <div className="bg-t-panel p-5 border border-t-line">
@@ -895,25 +968,29 @@ function AccountExtras({
               Enter a code
             </h3>
             <p className="text-sm text-t-phos-dim mb-3">
-              If you got a code from a partner organization (like a job center or
-              nonprofit), enter it here to unlock more AI calls per day.
+              If a program (like a job center or nonprofit) gave you a code, enter it
+              here. The code joins you to a program&apos;s seat. If the program has
+              rules about sharing, you see them before you join, and joining shares
+              nothing by itself. If the code changes your AI allowance, Usage below
+              shows the new number.
             </p>
             <form onSubmit={redeemCode} className="flex gap-2">
               <input
                 type="text"
                 value={codeInput}
                 onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                placeholder="PARTNER123"
+                placeholder="Your code"
+                aria-label="Program code"
                 className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch uppercase"
                 disabled={codeStatus === "redeeming"}
               />
               <TBtn type="submit" disabled={codeStatus === "redeeming" || !codeInput.trim()}>
-                {codeStatus === "redeeming" ? "..." : "redeem"}
+                {codeStatus === "redeeming" ? "..." : "join"}
               </TBtn>
             </form>
             {codeStatus === "success" && (
               <p className="text-sm text-t-amber-bright mt-2">
-                Code redeemed! Your daily limit has been increased.
+                You joined. Your program is listed below.
               </p>
             )}
             {codeStatus === "error" && (
@@ -925,7 +1002,7 @@ function AccountExtras({
           {redeemedCodes.length > 0 && (
             <div className="bg-t-panel p-5 border border-t-line">
               <h3 className="font-semibold text-t-white mb-3">
-                Your active codes
+                Your programs
               </h3>
               <div className="space-y-2">
                 {redeemedCodes.map((code, i) => (
@@ -937,11 +1014,7 @@ function AccountExtras({
                       <p className="text-sm font-medium text-t-white">
                         {code.partner_name}
                       </p>
-                      <p className="text-xs text-t-phos-dim">
-                        {code.tier === "unlimited" || code.tier === "admin"
-                          ? "Unlimited calls"
-                          : `${code.daily_limit ?? 200} calls/day`}
-                      </p>
+                      <p className="text-xs text-t-phos-dim">Joined with a code</p>
                     </div>
                     <div className="text-right">
                       <span className="block text-xs text-t-phos-dim">

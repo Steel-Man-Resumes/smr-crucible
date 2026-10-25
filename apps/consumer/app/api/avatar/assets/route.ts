@@ -6,17 +6,19 @@
  * Returns the signed-in user's avatar assets (ids + kind + created_at + a proxy
  * image URL), NEWEST first. NEVER returns object_key or bytes -- the image is
  * only reachable through the owner-exclusive proxy ([id]/image). Owner-scoped,
- * NON-impersonatable auth().
+ * effectiveAuth, refused under any impersonation (lib/settings-guard.ts "private").
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { listAvatarAssets, isAvatarAssetKind } from "@crucible/core";
 
 export const runtime = "nodejs";
 
 export async function GET(request: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "read"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

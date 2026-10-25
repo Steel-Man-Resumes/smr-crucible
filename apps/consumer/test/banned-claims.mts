@@ -104,6 +104,11 @@ const BANNED_PHRASES = [
   "we never store your words",
   // personal information goes to the AI processors and, by choice, a program
   "we never sell or share your personal information",
+  // 2026-10-24 fix-settings S6: a program code joins a program's seat. Whether
+  // it changes a limit depends on the code (progressionAccount), so the copy
+  // promises none; Settings Usage shows what applies
+  "unlock more ai calls",
+  "your daily limit has been increased",
 ];
 
 function* walk(dir: string, exts: string[] = EXTENSIONS): Generator<string> {

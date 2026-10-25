@@ -7,7 +7,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import {
   hideEmployer,
   unhideEmployer,
@@ -16,20 +17,25 @@ import {
 
 export const maxDuration = 10;
 
-async function userId(): Promise<string | null> {
+/** The person (effectiveAuth), or a refusal: writes are read only in view mode. */
+async function userId(access: "read" | "write"): Promise<string | null | Response> {
   const session = await auth();
+  const refused = settingsRefusal(session, "preference", access);
+  if (refused) return refused;
   return session?.user?.id ?? null;
 }
 
 export async function GET() {
-  const uid = await userId();
+  const uid = await userId("read");
+  if (uid instanceof Response) return uid;
   if (!uid) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const employers = await listHiddenEmployers(uid);
   return NextResponse.json({ employers });
 }
 
 export async function POST(request: Request) {
-  const uid = await userId();
+  const uid = await userId("write");
+  if (uid instanceof Response) return uid;
   if (!uid) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const body = await request.json().catch(() => ({}));
   const name = typeof body?.name === "string" ? body.name.trim() : "";
@@ -42,7 +48,8 @@ export async function POST(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const uid = await userId();
+  const uid = await userId("write");
+  if (uid instanceof Response) return uid;
   if (!uid) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const body = await request.json().catch(() => ({}));
   const id = typeof body?.id === "string" ? body.id : "";

@@ -44,6 +44,7 @@ const ALLOWED: Record<string, string> = {
   "apps/consumer/app/api/user/export-data/route.ts": "data rights: export to the owner",
   "apps/consumer/app/api/user/delete-data/route.ts": "data rights: delete my data",
   "apps/consumer/app/(dashboard)/dashboard/settings/page.tsx": "the export checkbox label",
+  "apps/consumer/lib/export-plan.ts": "the export checkbox label (moved from the settings page 2026-10-24)",
   "apps/consumer/app/(dashboard)/dashboard/disclosure/page.tsx": "the plain entry link (copy only)",
   "apps/consumer/lib/hurdles/legal-floor.ts": "reads the static, dated public source list (sources.ts) for the record plan's legal floor; never a person's record check, never a prompt",
   "packages/core/src/recordCheck.ts": "the only reader and writer of the table",

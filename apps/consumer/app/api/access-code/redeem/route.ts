@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { redeemAccessCode } from "@crucible/core";
 import { checkAuthRateLimits, getClientIp } from "@/lib/auth-rate-limit";
 import { CODE_REFUSAL, CODE_SHAPE, codeAttemptLimits } from "@/lib/access-code-guard";
@@ -16,6 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Request not allowed." }, { status: 403 });
   }
   const session = await auth();
+  { const refused = settingsRefusal(session, "consent", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
 
   if (!userId) {

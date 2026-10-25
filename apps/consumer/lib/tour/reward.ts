@@ -7,6 +7,8 @@
 import { TOUR_REWARD_COPY } from './beats';
 
 export const TOUR_REWARD_KEY = 'tour:complete';
+/** The label production rows carry for the entrance grant. */
+export const TOUR_REWARD_LABEL = 'Tour finished: extra AI actions';
 
 /** early: the run finished less than TOUR_MIN_WATCH_MS after it started, so nothing was granted. */
 export type TourRewardStatus = 'granted' | 'already' | 'capped' | 'early' | 'unavailable';

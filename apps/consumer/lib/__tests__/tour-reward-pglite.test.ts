@@ -51,25 +51,25 @@ test('tour completion and bonus on the real schema: 59 s early, 60 s granted for
   for (const id of [u, other]) await pg.query('INSERT INTO users(id,email) VALUES ($1,$2)', [id, id + '@x.test']);
   const RUN1 = '11111111-1111-4111-8111-111111111111', RUN2 = '22222222-2222-4222-8222-222222222222', RUN3 = '33333333-3333-4333-8333-333333333333';
   const write = (body: Record<string, unknown>) => handleTourWrite(store, u, { version: TOUR_VERSION, stop: 0, ...body });
-  const backdate = (seconds: number) => pg.query(`UPDATE consumer_profile SET preferences = jsonb_set(preferences, '{guidedTour,startedAt}', to_jsonb(now() - make_interval(secs => $2))) WHERE user_id=$1`, [u, seconds]);
+  const backdate = (seconds: number) => pg.query(`UPDATE consumer_profile SET preferences = jsonb_set(preferences, '{tours,entrance,startedAt}', to_jsonb(now() - make_interval(secs => $2))) WHERE user_id=$1`, [u, seconds]);
   const last = TOUR_STOP_COUNT - 1;
 
   // Run 1: completed 59 s after it started. Early, nothing granted.
   assert.equal((await write({ action: 'start', runId: RUN1, sequence: 0, previousRunId: null })).status, 200);
-  const saved = (await pg.query(`SELECT preferences->'guidedTour' AS g FROM consumer_profile WHERE user_id=$1`, [u])).rows[0] as { g: { startedAt?: string } };
+  const saved = (await pg.query(`SELECT preferences->'tours'->'entrance' AS g FROM consumer_profile WHERE user_id=$1`, [u])).rows[0] as { g: { startedAt?: string } };
   assert.ok(saved.g.startedAt, 'startedAt recorded by the database at start');
   await write({ action: 'progress', runId: RUN1, sequence: 1, stop: 5 });
-  const kept = (await pg.query(`SELECT preferences->'guidedTour'->>'startedAt' AS s FROM consumer_profile WHERE user_id=$1`, [u])).rows[0] as { s: string };
+  const kept = (await pg.query(`SELECT preferences->'tours'->'entrance'->>'startedAt' AS s FROM consumer_profile WHERE user_id=$1`, [u])).rows[0] as { s: string };
   assert.equal(kept.s, saved.g.startedAt, 'progress keeps startedAt');
   await backdate(59);
   const early = await write({ action: 'complete', runId: RUN1, sequence: 2, stop: last });
   assert.equal(early.status, 200);
   assert.equal((early.json.reward as TourReward).status, 'early');
   // Posting complete again later still reads the stamped completion time: early.
-  const stamped = (await pg.query(`SELECT preferences->'guidedTour'->>'completedAt' AS c FROM consumer_profile WHERE user_id=$1`, [u])).rows[0] as { c: string };
+  const stamped = (await pg.query(`SELECT preferences->'tours'->'entrance'->>'completedAt' AS c FROM consumer_profile WHERE user_id=$1`, [u])).rows[0] as { c: string };
   assert.ok(stamped.c, 'completedAt stamped on the completing write');
   assert.equal(((await write({ action: 'complete', runId: RUN1, sequence: 3, stop: last })).json.reward as TourReward).status, 'early');
-  const still = (await pg.query(`SELECT preferences->'guidedTour'->>'completedAt' AS c FROM consumer_profile WHERE user_id=$1`, [u])).rows[0] as { c: string };
+  const still = (await pg.query(`SELECT preferences->'tours'->'entrance'->>'completedAt' AS c FROM consumer_profile WHERE user_id=$1`, [u])).rows[0] as { c: string };
   assert.equal(still.c, stamped.c, 'a re-POST does not move completedAt');
   assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE grant_key='tour:complete'`)).rows[0] as { n: number }).n, 0);
 
