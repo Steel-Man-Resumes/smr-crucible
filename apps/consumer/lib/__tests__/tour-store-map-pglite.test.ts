@@ -112,6 +112,10 @@ test('tour store map: old slot migrates to entrance on read, settings has its ow
   assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n, 1, 'no second row');
   const S3 = '99999999-9999-4999-8999-999999999999';
   assert.equal((await store.grant(u, S3, 'settings')).status, 'already', 'one settings bonus per account, ever');
+  // SF-4: a cap of 0 grants nothing and writes nothing, for an account with no grant yet.
+  const { grantTourRewardWith } = await import('../tour/tour-sql');
+  await assert.rejects(grantTourRewardWith(db, other, S3, { key: 'tour:zero', label: 'zero', calls: 0 }), /positive integer/);
+  assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE grant_key='tour:zero'`)).rows[0] as { n: number }).n, 0, 'calls 0 inserted nothing');
   assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [other])).rows[0] as { n: number }).n, 0, 'another account cannot see or hold it');
 
   // The entrance tour still completes and grants from its own slot (90 s+ watched), under tour:complete,

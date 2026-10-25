@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SETTINGS_BEATS, SETTINGS_ENDING, SETTINGS_NUDGES, SETTINGS_REWARD_COPY, SETTINGS_STOP_COUNT, SETTINGS_TOUR_COPY } from '../tour/settings-beats';
-import { SETTINGS_ENDING_STOP, applicableBeats, clipHeight, pickNudge, readBranches, resumeIndex, scrollTopFor, settingsRewardMessage, settingsRuntimeMs, settingsTourAllowed, settingsTourRequested, stopOfBeat } from '../tour/settings-tour';
+import { PORTRAIT_CUT_MIN, SETTINGS_ENDING_STOP, applicableBeats, clipHeight, pickNudge, portraitCutHeight, readBranches, resumeIndex, scrollTopFor, settingsRewardMessage, settingsRuntimeMs, settingsTourAllowed, settingsTourRequested, stopOfBeat } from '../tour/settings-tour';
 import { TOURS } from '../tour/registry';
 import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
 import { grantTourRewardWith } from '../tour/tour-sql';
@@ -24,7 +24,7 @@ const REQ = { member: true, required: true, plainLanguage: true };
 
 test('registry: the settings tour is pinned to its beats, grants 1 call under its own key after 45 s, and never marks onboarding', () => {
   const s = TOURS.settings;
-  assert.equal(SETTINGS_BEATS.length, 14);
+  assert.equal(SETTINGS_BEATS.length, 13, 'S7c merged into S7a (fix round 1, SF-3)');
   assert.equal(s.stopCount, SETTINGS_STOP_COUNT);
   assert.equal(s.stopCount, SETTINGS_BEATS.length + 1, 'absolute beat indexes plus the ending');
   assert.equal(s.grants, true);
@@ -40,14 +40,14 @@ test('registry: the settings tour is pinned to its beats, grants 1 call under it
   assert.equal(TOURS.entrance.grants, true);
 });
 
-test('runtime: 11, 12 and 13 stops; each path within the spec table and under 120 s; bodies 12 to 30 words', () => {
-  const paths: [typeof NON, number, number][] = [[NON, 11, 101.5], [MEM, 12, 109.5], [REQ, 13, 118.7]];
+test('runtime: 11, 11 and 12 stops; the longest path under 116 s by holdMs (the browser adds about 0.3 s a stop); bodies 12 to 30 words', () => {
+  const paths: [typeof NON, number, number][] = [[NON, 11, 101.5], [MEM, 11, 103.0], [REQ, 12, 112.2]];
   for (const [branches, stops, expected] of paths) {
     const path = applicableBeats(branches);
     assert.equal(path.length, stops);
     const s = settingsRuntimeMs(path) / 1000;
     assert.ok(Math.abs(s - expected) <= 2, `${stops} stops: ${s.toFixed(1)} s vs ${expected}`);
-    assert.ok(s >= 100 && s < 120, `${s} s`);
+    assert.ok(s >= 100 && s < 116, `${s} s`);
   }
   for (const b of SETTINGS_BEATS) {
     const words = wordCount(b.body);
@@ -56,8 +56,10 @@ test('runtime: 11, 12 and 13 stops; each path within the spec table and under 12
   }
   // The non-member path never shows a program stop; members never see the no-program stop; the required stop needs both.
   assert.deepEqual(applicableBeats(NON).map(b => b.id).filter(id => id.startsWith('s7')), ['s7n']);
-  assert.deepEqual(applicableBeats(MEM).map(b => b.id).filter(id => id.startsWith('s7')), ['s7a', 's7c']);
-  assert.deepEqual(applicableBeats(REQ).map(b => b.id).filter(id => id.startsWith('s7')), ['s7a', 's7b', 's7c']);
+  assert.deepEqual(applicableBeats(MEM).map(b => b.id).filter(id => id.startsWith('s7')), ['s7a']);
+  assert.deepEqual(applicableBeats(REQ).map(b => b.id).filter(id => id.startsWith('s7')), ['s7a', 's7b']);
+  assert.ok(!SETTINGS_BEATS.some(b => b.id === 's7c'), 'the log is one sentence inside S7a now');
+  assert.match(SETTINGS_BEATS.find(b => b.id === 's7a')!.body, /shows a name and time/);
   assert.deepEqual(applicableBeats({ member: false, required: true, plainLanguage: false }).map(b => b.id).filter(id => id.startsWith('s7')), ['s7n'], 'a requirement without membership is not a branch');
 });
 
@@ -126,21 +128,21 @@ test('resume: the saved stop is the absolute beat index, so the same beat comes 
   assert.equal(non[resumeIndex(s7a, non)].id, 's7n');
   assert.equal(mem[resumeIndex(s7a, mem)].id, 's7a');
   const s7b = stopOfBeat(SETTINGS_BEATS.find(b => b.id === 's7b')!);
-  assert.equal(mem[resumeIndex(s7b, mem)].id, 's7c', 'the requirement went away: the next member stop');
-  // Past the branch the path position and the absolute index differ: S8 is beat 10 but path stop 7, 8 or 9.
+  assert.equal(mem[resumeIndex(s7b, mem)].id, 's8', 'the requirement went away: the next stop that applies');
+  // Past the branch the path position and the absolute index differ: S8 is beat 9 but path stop 7 or 8.
   const s8 = stopOfBeat(SETTINGS_BEATS.find(b => b.id === 's8')!);
-  assert.equal(s8, 10);
+  assert.equal(s8, 9);
   assert.equal(non[resumeIndex(s8, non)].id, 's8');
   assert.equal(mem[resumeIndex(s8, mem)].id, 's8');
   assert.equal(req[resumeIndex(s8, req)].id, 's8');
   assert.equal(resumeIndex(s8, non), 7);
-  assert.equal(resumeIndex(s8, req), 9);
+  assert.equal(resumeIndex(s8, req), 8);
   // The ending, odd values and the first stop.
   assert.equal(resumeIndex(SETTINGS_ENDING_STOP, non), non.length);
   assert.equal(resumeIndex(99, non), non.length);
   assert.equal(resumeIndex(undefined, non), 0);
   assert.equal(resumeIndex(-3, non), 0);
-  assert.equal(SETTINGS_ENDING_STOP, 14);
+  assert.equal(SETTINGS_ENDING_STOP, 13);
   // A shortened-path index is never what gets saved: the controller maps through stopOfBeat.
   const ctl = read('components/tour/SettingsTour.tsx');
   assert.match(ctl, /stopOfBeat\(beats\[index\]\) : SETTINGS_ENDING_STOP/);
@@ -154,14 +156,21 @@ test('nudge: picked once from the branches, members first, never flipped by the 
   assert.equal(pickNudge(NON).id, 'plain');
   assert.equal(pickNudge({ ...NON, plainLanguage: true }).id, 'coach');
   // Branches come from the two reads the page already makes; a failed read is the plain path.
-  assert.deepEqual(readBranches(null, null), NON);
-  assert.deepEqual(readBranches({ orgs: [{ orgId: 'o' }], policies: [{ scopes: ['progress'] }] }, { data: { coachPlainLanguage: true } }), REQ);
-  assert.deepEqual(readBranches({ orgs: [{ orgId: 'o' }], policies: [{ scopes: [] }] }, { data: { coachPlainLanguage: 'yes' } }), MEM);
-  assert.deepEqual(readBranches({ orgs: [], policies: [{ scopes: ['progress'] }] }, {}), NON);
+  assert.deepEqual(readBranches(null, null, null), NON);
+  assert.deepEqual(readBranches({ orgs: [{ orgId: 'o' }], policies: [{ scopes: ['progress'] }] }, { data: { coachPlainLanguage: true } }, { codes: [{ code: 'x' }] }), REQ);
+  assert.deepEqual(readBranches({ orgs: [{ orgId: 'o' }], policies: [{ scopes: [] }] }, { data: { coachPlainLanguage: 'yes' } }, { codes: [{ code: 'x' }] }), MEM);
+  // SF-2: membership is the page's own (any redeemed code), not /api/sharing's crm_v2-filtered orgs.
+  assert.deepEqual(readBranches({ orgs: [], policies: [] }, {}, { codes: [{ code: 'x' }] }), MEM, 'a program without crm_v2 is still a program: S7n never plays over its progress switch');
+  assert.deepEqual(readBranches({ orgs: [], policies: [{ scopes: ['progress'] }] }, {}, { codes: [{ code: 'x' }] }), { ...REQ, plainLanguage: false }, 'required comes from the sharing policies');
+  assert.deepEqual(readBranches({ orgs: [{ orgId: 'o' }], policies: [] }, {}, { codes: [] }), NON, 'no code means no program, whatever sharing lists');
+  assert.deepEqual(readBranches({ orgs: [{ orgId: 'o' }], policies: [] }, {}, null), MEM, 'the codes read failed: sharing orgs are the fallback');
+  assert.deepEqual(readBranches({ orgs: [], policies: [{ scopes: ['progress'] }] }, {}, undefined), NON);
+  assert.match(read('components/tour/SettingsTour.tsx'), /read\('\/api\/access-code\/mine'\)/);
+  assert.match(read('components/tour/SettingsTour.tsx'), /readBranches\(sharing, coach, codes\)/);
   // The controller resolves it once per open, before the first card; the player only shows it.
   const ctl = read('components/tour/SettingsTour.tsx');
   assert.equal((ctl.match(/pickNudge\(/g) ?? []).length, 1);
-  assert.match(ctl, /readBranches\(sharing, coach\)/);
+  assert.match(ctl, /readBranches\(sharing, coach, codes\)/);
   const player = read('components/tour/SettingsTourPlayer.tsx');
   assert.doesNotMatch(player, /fetch\(|\.click\(\)|dispatchEvent\(new (Mouse|Pointer)Event/, 'the player presses nothing and reads nothing');
   assert.doesNotMatch(player, /pickNudge\(|applicableBeats\(/);
@@ -205,6 +214,12 @@ test('reward: the settings write path checks 45 s and grants under tour:settings
   assert.equal((insert.match(/LEAST\(COALESCE\(\?::int,p\.bonus_calls\),p\.bonus_calls\)/g) ?? []).length, 3, 'the amount, the daily cap and the monthly cap all use the capped amount');
   assert.equal(bound[2].filter(v => v === 1).length, 3, 'the cap of 1 is bound into all three');
   assert.ok(!bound.flat().includes('tour:complete'));
+  // SF-4: a cap that is not a positive integer grants nothing and runs no SQL (fail closed).
+  for (const bad of [0, -1, 1.5, Number.NaN]) {
+    bound.length = 0; texts.length = 0;
+    await assert.rejects(grantTourRewardWith(db, 'u', run, { key: 'tour:settings', label: 'x', calls: bad }), /positive integer/, String(bad));
+    assert.equal(texts.length, 0, `calls ${bad} ran SQL`);
+  }
   bound.length = 0; texts.length = 0;
   await grantTourRewardWith(db, 'u', run);
   assert.equal(bound[2].filter(v => v === null).length, 3, 'the entrance default binds no cap: COALESCE falls through to the policy amount');
@@ -234,6 +249,9 @@ test('impersonation: never offered, never opened, never written for the person',
   assert.match(page, /\{!isOrgStaff && !impersonating && \(\s*<button type="button" onClick=\{openSettingsTour\}/);
   const ctl = read('components/tour/SettingsTour.tsx');
   assert.match(ctl, /if \(mode === 'chip' \|\| data\.impersonating\) return;/);
+  assert.match(ctl, /const open = !!slot && !slot\.impersonating &&/, 'N-2: no resume chip under view-as before the role loads');
+  assert.match(read('app/(dashboard)/dashboard/help/page.tsx'), /\{settingsTourFor && <Link href="\/dashboard\/settings\?tour=settings"/, 'N-5: Help offers the replay to non-staff only');
+  assert.match(read('app/(dashboard)/dashboard/help/page.tsx'), /const settingsTourFor = !useEffectiveRole\(\)\?\.orgRole;/);
   assert.match(ctl, /settingsTourAllowed\(\{ tier, orgRole: role\?\.orgRole, impersonating: role\?\.impersonating \}\)/);
   assert.match(ctl, /if \(!mounted \|\| !allowed\) return null;/);
   assert.match(ctl, /tourId: 'settings'/, 'every write names its tour, so the entrance slot is never touched');
@@ -246,6 +264,9 @@ test('entry and controls: ?tour=settings on the Settings page, the header contro
   assert.equal(settingsTourRequested('/dashboard/settings', null), false);
   assert.match(read('app/(dashboard)/dashboard/help/page.tsx'), /href="\/dashboard\/settings\?tour=settings"[^>]*>\s*Replay the Settings tour/);
   const ctl = read('components/tour/SettingsTour.tsx');
+  // N-3: under React strict mode the mount cleanup aborts the first load; forgetting the request key lets the load effect ask again.
+  assert.match(ctl, /requestController\.current\?\.abort\(\);[\s\S]{0,400}previousRequest\.current = '';\s*\n\s*document\.removeEventListener\('input'/, 'the mount cleanup forgets the request key');
+  assert.match(read('lib/tour/settings-beats.ts'), /can add one extra AI action/, 'N-4: the daily cap can absorb the bonus');
   assert.match(ctl, /event\.key === 'Escape'[^\n]*pause\(\)/);
   assert.match(ctl, /lockPageForTour\(document\.documentElement, document\.body, document\.querySelector<HTMLElement>\('\.refinery-app'\)\)/, 'the shell is inert and the page does not scroll under the person');
   assert.match(ctl, /addEventListener\('pagehide', hide\)/, 'closing the tab saves the exact stop');
@@ -261,4 +282,17 @@ test('entry and controls: ?tour=settings on the Settings page, the header contro
   assert.equal(clipHeight(2000, 844, 0.42), Math.round(844 * 0.42));
   assert.equal(clipHeight(200, 844, 0.42), 200);
   assert.equal(clipHeight(2000, 844, undefined), 2000);
+  // SF-1: on a 390x844 phone the card is bottom-anchored; every cutout stops 16 px above it. The three stops the review measured:
+  // map 229 px under the 72 px bar, so targets start about 313 px down; card 290 to 313 px tall.
+  const vh = 844;
+  for (const [id, top, height, cardH] of [['s4', 313, 366, 313], ['s5', 313, Math.round(vh * 0.42), 313], ['s9', 313, 593, 290]] as [string, number, number, number][]) {
+    const h = portraitCutHeight(height, top, vh, cardH, true);
+    assert.ok(top + h <= vh - cardH - 16, `${id}: cutout bottom ${top + h} under the card top ${vh - cardH - 16}`);
+    assert.ok(h >= PORTRAIT_CUT_MIN, id);
+  }
+  assert.equal(portraitCutHeight(366, 313, vh, 313, false), 366, 'wide screens are not capped');
+  assert.equal(portraitCutHeight(100, 313, vh, 313, true), 100, 'a short target is left alone');
+  assert.equal(portraitCutHeight(900, 700, vh, 313, true), PORTRAIT_CUT_MIN, 'never a sliver');
+  assert.ok(SETTINGS_BEATS.find(b => b.id === 's9')!.clip, 'S9 keeps its top like S5');
+  assert.match(read('components/tour/SettingsTourPlayer.tsx'), /portraitCutHeight\(clipHeight\(r\.height, innerHeight, beat\.clip\), r\.top, innerHeight, fit\.current\.cardH, fit\.current\.portrait\)/);
 });
