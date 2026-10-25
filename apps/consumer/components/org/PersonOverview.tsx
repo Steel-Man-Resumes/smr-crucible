@@ -28,7 +28,7 @@ export function PersonHeaderCard({ person, first, joined, caseManager, onCopyEma
 }) {
   const initials = personInitials(person.name);
   return (
-    <header className="person-card bg-t-panel border border-t-line rounded-[4px] p-5 mb-4" data-identity={person.identitySource ?? "none"}>
+    <header className="person-card bg-t-panel border border-t-line rounded-[4px] p-5 mb-4" data-identity={person.identitySource ?? "none"} data-tour="crm-person-header">
       <div className="flex flex-wrap items-start gap-4">
         <span aria-hidden className="person-avatar">{initials}</span>
         <div className="min-w-0 flex-1">
@@ -71,7 +71,7 @@ export function StationStrip({ person, first }: { person: PersonView; first: str
     ? person.progress?.nextStepAction ? `The next step ${first} is being shown: ${person.progress.nextStepAction}.` : "No next step is showing right now."
     : `Progress is private until ${first} turns on sharing.`;
   return (
-    <section aria-labelledby="person-where" className="forge-workshop refinery-board person-strip rounded-[4px] border border-t-line px-5 py-4 mb-4" data-lit={lit ?? ""}>
+    <section aria-labelledby="person-where" className="forge-workshop refinery-board person-strip rounded-[4px] border border-t-line px-5 py-4 mb-4" data-lit={lit ?? ""} data-tour="crm-person-strip">
       <h2 id="person-where" className="board-eyebrow" style={{ padding: 0 }}>Where they are</h2>
       <ol className="person-strip-path">
         {cells.map((c, i) => (
@@ -120,12 +120,13 @@ export function TheirScreenBoard({ person, first, onOpenItem }: { person: Person
       <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-4">
         This is the path {first} sees when they sign in, so you can point them to the right place. You are not signed in as {first}, and you see inside an area only if {first} shared it.
       </p>
-      <ol className="forge-workshop refinery-board person-board rounded-[4px] border border-t-line p-4">
+      <ol className="forge-workshop refinery-board person-board rounded-[4px] border border-t-line p-4" data-tour="crm-person-board">
         {THEIR_SCREEN.map((area, i) => {
           const st = STATIONS.find((s) => s.id === area.station)!;
           const here = area.station === lit;
           return (
-            <li key={area.station} className="person-board-station" data-station={area.station} data-tone={here ? "current" : "plain"} aria-current={here ? "step" : undefined}>
+            <li key={area.station} className="person-board-station" data-station={area.station} data-tone={here ? "current" : "plain"} aria-current={here ? "step" : undefined}
+              data-tour={area.station === "plan" ? "crm-person-never" : undefined}>
               <span className="board-dot" data-tone={here ? "current" : "plain"}><span className="board-dot-num">{i + 1}</span></span>
               <div className="min-w-0 flex-1">
                 <p className={`text-sm font-semibold ${here ? "text-t-amber-bright" : "text-t-white"}`}>
