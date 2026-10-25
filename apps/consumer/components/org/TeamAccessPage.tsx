@@ -12,6 +12,7 @@
  * can see at a glance who has been given more or less than their title implies.
  */
 import { useCallback, useEffect, useState } from "react";
+import { OrgBrandCard } from "@/components/org/OrgBrandCard";
 
 interface Access { capability: string; on: boolean; fromRole: boolean; override: "grant" | "deny" | null }
 interface Member {
@@ -174,6 +175,8 @@ export function TeamAccessPage() {
       )}
 
       <InviteStaff canAddAdmin={viewerRole === "owner"} onDone={load} />
+
+      <div className="mt-6"><OrgBrandCard /></div>
     </div>
   );
 }

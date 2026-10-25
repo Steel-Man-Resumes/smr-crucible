@@ -71,6 +71,7 @@ function OrgActions({ org, onDone }: { org: OrgRow; onDone: (msg: string) => voi
   const [limit, setLimit] = useState(String(org.daily_limit ?? 30));
   const [ownerEmail, setOwnerEmail] = useState("");
   const [staffCap, setStaffCap] = useState(String(org.max_staff ?? 10));
+  const [brandTier, setBrandTier] = useState("standard");
   const [team, setTeam] = useState<StaffRow[] | null>(null);
   const loadTeam = useCallback(() => {
     fetch(`/api/admin/orgs?orgId=${org.id}`, { cache: "no-store" })
@@ -124,6 +125,18 @@ function OrgActions({ org, onDone }: { org: OrgRow; onDone: (msg: string) => voi
           <input className={input} type="number" min={0} max={1000} value={staffCap} onChange={(e) => setStaffCap(e.target.value)} />
           <button className={btn} disabled={!!busy}
             onClick={() => act("staffcap", { action: "set_staff_cap", maxStaff: Number(staffCap) }, (d) => `${org.partner_name} can now have up to ${d.maxStaff} staff.`)}>Set</button>
+        </div>
+      </div>
+      <div>
+        <div className="text-t-phos-dim mb-1">Branding (logo is free for every org; co-brand shows the org to its own participants)</div>
+        <div className="flex gap-2">
+          <select className={input} value={brandTier} onChange={(e) => setBrandTier(e.target.value)} aria-label="Branding tier">
+            <option value="standard">Standard: logo on staff screens</option>
+            <option value="cobrand">Co-brand: participants see the org</option>
+            <option value="full">Full branding</option>
+          </select>
+          <button className={btn} disabled={!!busy}
+            onClick={() => act("brand", { action: "set_brand_tier", tier: brandTier }, (d) => `${org.partner_name} branding is now ${d.tier}.`)}>Set</button>
         </div>
       </div>
       <div>
