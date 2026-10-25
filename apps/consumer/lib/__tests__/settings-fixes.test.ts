@@ -10,7 +10,7 @@ import { coachSaveBody, coachSettingsPatch, COACH_SAVE_FIELDS } from '../coach-s
 import { SETTINGS_LESSONS } from '../orientation-lessons';
 import { settingsVerdict, SETTINGS_REFUSAL } from '../settings-guard';
 import { PROGRESSION_AI } from '../progression-policy';
-import { buildUsageView, usageWords, nextUtcMidnight } from '../usage-view';
+import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
 
 const ROOT = join(__dirname, '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
@@ -166,4 +166,38 @@ test('S5: the route and the page read the allowance, not getUserDailyLimit and t
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
   assert.match(page, /<UsageCard usage=\{usage\} \/>/);
   assert.doesNotMatch(page, /Resets at midnight\./);
+});
+
+/* S6, S7, A3: small truths */
+
+test('S6: the program code copy joins a seat and promises no AI calls', () => {
+  const page = read('app/(dashboard)/dashboard/settings/page.tsx');
+  assert.match(page, /Join a program with a code/);
+  assert.match(page, /joins you to a program&apos;s seat/);
+  // Phrases split so the banned-claims scan does not trip on this test.
+  for (const gone of ['unlock more ' + 'AI calls', 'daily limit has ' + 'been increased', 'PARTNER' + '123', 'calls' + '/day']) assert.ok(!page.includes(gone), gone);
+});
+
+test('S7: the progress-sharing switch shows only to a program member; otherwise one plain line', () => {
+  const page = read('app/(dashboard)/dashboard/settings/page.tsx');
+  assert.match(page, /codesLoaded && \(redeemedCodes\.length > 0\s*\? <SharingConsentSection \/>\s*: <p id="settings-share-progress"[^>]*>No program is linked to your account/);
+  assert.doesNotMatch(page, /\{!isOrgStaff && <SharingConsentSection \/>\}/);
+});
+
+test('A3: follow-up drafts show a cost line first and say why a draft failed', () => {
+  const allowance: UsageView = { kind: 'allowance', remaining: 3, base: 5, bonus: 0, used: 2, perTool: null, bonusExpiresAt: null, resetsAt: '', blockedReason: null, ceilings: [] };
+  assert.deepEqual(oneActionCostLine(toolRemaining({ ...allowance, ceilings: [] }, 'follow-up')), { line: 'Drafting uses 1 AI action. You have 3 left today.', canRun: true });
+  const capped = toolRemaining({ ...allowance, ceilings: [{ tool: 'follow-up', label: 'Follow-up draft', left: 1 }] }, 'follow-up');
+  assert.equal(capped.left, 1, 'the lower of the allowance and the tool ceiling');
+  const none = oneActionCostLine(toolRemaining({ ...allowance, remaining: 0 }, 'follow-up'));
+  assert.equal(none.canRun, false);
+  assert.match(none.line, /^Drafting uses 1 AI action\. You have none left today\./);
+  assert.equal(oneActionCostLine(toolRemaining({ ...allowance, ceilings: [{ tool: 'follow-up', label: 'x', left: 0, paused: true }] }, 'follow-up')).canRun, false);
+  assert.equal(oneActionCostLine(null).line, 'Drafting uses 1 AI action.');
+  assert.match(draftFailureWords(429, 'Your current AI allowance or spending limit is reached.'), /allowance/);
+  assert.match(draftFailureWords(500), /could not be drafted/);
+  const page = read('app/(dashboard)/dashboard/applications/page.tsx');
+  assert.match(page, /data-testid="follow-up-cost-line">\{followUpCost\.line\}/);
+  assert.match(page, /failure = draftFailureWords\(/);
+  assert.doesNotMatch(page, /\}\s*\} catch \{\}\s*setFollowUpFor\(null\);/, 'failures are no longer swallowed');
 });

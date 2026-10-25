@@ -59,7 +59,7 @@ export function SharingConsentSection() {
   }
 
   return (
-    <section className="mb-8">
+    <section className="mb-8" id="settings-share-progress">
       <h2 className="text-lg font-bold text-t-white mb-4">{TEXT.heading}</h2>
       <div className="bg-t-panel border border-t-line p-5">
         <div className="flex items-start justify-between gap-4">

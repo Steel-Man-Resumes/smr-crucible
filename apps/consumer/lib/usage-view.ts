@@ -127,3 +127,32 @@ export function usageWords(v: UsageView, fmt?: (d: Date) => string): { headline:
   }
   return { headline: 'No daily AI limit on this account', line: 'A tool can still be paused or capped on its own. Any that are show below.', bonusLine: null };
 }
+
+/** What one tool has left today, from the Usage view: the allowance and the tool's own ceiling, whichever is lower. */
+export function toolRemaining(v: UsageView, tool: string): { left: number | null; paused: boolean; blockedReason: string | null } {
+  const own = v.ceilings.find(c => c.tool === tool);
+  if (own?.paused) return { left: 0, paused: true, blockedReason: v.blockedReason };
+  const pool = v.kind === 'allowance' ? v.remaining : v.kind === 'per-tool' ? v.perTool : null;
+  const parts = [pool, own?.left].filter((n): n is number => typeof n === 'number');
+  return { left: parts.length ? Math.min(...parts) : null, paused: false, blockedReason: v.blockedReason };
+}
+
+/** The cost line shown before a one-action draft (the tailor's pattern: cost first, then what is left). */
+export function oneActionCostLine(r: { left: number | null; paused: boolean; blockedReason: string | null } | null): { line: string; canRun: boolean } {
+  const cost = 'Drafting uses 1 AI action.';
+  if (!r) return { line: cost, canRun: true };
+  if (r.paused) return { line: 'This tool is paused. Your saved work is still available.', canRun: false };
+  if (r.blockedReason) return { line: r.blockedReason, canRun: false };
+  if (r.left === null) return { line: cost, canRun: true };
+  if (r.left <= 0) return { line: `${cost} You have none left today. Ask t.ROY through the progress bar for more, or come back after midnight UTC.`, canRun: false };
+  return { line: `${cost} You have ${r.left} left today.`, canRun: true };
+}
+
+/** Plain words for a draft that did not come back. */
+export function draftFailureWords(status: number, error?: unknown): string {
+  const said = typeof error === 'string' && error.trim() && error.length < 300 ? error.trim() : '';
+  if (status === 401) return 'Sign in again, then try the draft again.';
+  if (status === 429 || status === 403) return said || 'Your AI allowance for today is used. Your saved work is still available.';
+  if (status === 404) return 'This application could not be found. Reload the page.';
+  return 'The follow-up could not be drafted. Your application is unchanged. Try again in a moment.';
+}

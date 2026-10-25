@@ -119,6 +119,7 @@ export default function SettingsPage() {
   >("idle");
   const [codeError, setCodeError] = useState("");
   const [redeemedCodes, setRedeemedCodes] = useState<RedeemedCode[]>([]);
+  const [codesLoaded, setCodesLoaded] = useState(false);
 
   // Usage state
   const [usage, setUsage] = useState<UsageData | null>(null);
@@ -178,8 +179,9 @@ export default function SettingsPage() {
       .catch(() => setUsage({ error: "Your allowance could not be read right now." }));
 
     fetch("/api/access-code/mine")
-      .then((r) => r.json())
-      .then((data) => setRedeemedCodes(data.codes || []))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("codes"))))
+      .then((data) => { setRedeemedCodes(data.codes || []); setCodesLoaded(true); })
+      // Unknown membership: show neither the switch nor "no program".
       .catch(() => {});
 
     loadHiddenEmployers();
@@ -226,6 +228,7 @@ export default function SettingsPage() {
         if (codesRes.ok) {
           const data = await codesRes.json();
           setRedeemedCodes(data.codes || []);
+          setCodesLoaded(true);
         }
         if (usageRes.ok) setUsage(await usageRes.json());
         setTimeout(() => setCodeStatus("idle"), 3000);
@@ -506,7 +509,10 @@ export default function SettingsPage() {
       {/* ── 4. Privacy & Consent ───────────────────────────────────── */}
       <div id="privacy" className="scroll-mt-32 mb-10">
         <GroupHeading>{isOrgStaff ? "AI transparency" : "Privacy & Consent"}</GroupHeading>
-        {!isOrgStaff && <SharingConsentSection />}
+        {/* The progress switch reaches a program, so it shows only to a member (S7). */}
+        {!isOrgStaff && codesLoaded && (redeemedCodes.length > 0
+          ? <SharingConsentSection />
+          : <p id="settings-share-progress" className="text-sm text-t-phos-dim mb-8">No program is linked to your account, so no program can see your progress.</p>)}
         {!isOrgStaff && <SharingControls />}
         {!isOrgStaff && <ConsentPanel />}
         {/* AI transparency: t.ROY's recorded reasoning */}
@@ -896,10 +902,10 @@ function AccountExtras({
 }) {
   return (
     <>
-      {/* Partner Access Code */}
-      <section className="mb-8 mt-8">
+      {/* Program code: joins a program's seat (S6). It promises no extra AI calls. */}
+      <section className="mb-8 mt-8" id="settings-program-code">
         <h2 className="text-lg font-bold text-t-white mb-4">
-          Partner Access Code
+          Join a program with a code
         </h2>
         <div className="space-y-4">
           <div className="bg-t-panel p-5 border border-t-line">
@@ -907,25 +913,28 @@ function AccountExtras({
               Enter a code
             </h3>
             <p className="text-sm text-t-phos-dim mb-3">
-              If you got a code from a partner organization (like a job center or
-              nonprofit), enter it here to unlock more AI calls per day.
+              If a program (like a job center or nonprofit) gave you a code, enter it
+              here. The code joins you to a program&apos;s seat. If the program has
+              rules about sharing, you see them before you join, and joining opens
+              nothing by itself.
             </p>
             <form onSubmit={redeemCode} className="flex gap-2">
               <input
                 type="text"
                 value={codeInput}
                 onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                placeholder="PARTNER123"
+                placeholder="Your code"
+                aria-label="Program code"
                 className="flex-1 px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch uppercase"
                 disabled={codeStatus === "redeeming"}
               />
               <TBtn type="submit" disabled={codeStatus === "redeeming" || !codeInput.trim()}>
-                {codeStatus === "redeeming" ? "..." : "redeem"}
+                {codeStatus === "redeeming" ? "..." : "join"}
               </TBtn>
             </form>
             {codeStatus === "success" && (
               <p className="text-sm text-t-amber-bright mt-2">
-                Code redeemed! Your daily limit has been increased.
+                You joined. Your program is listed below.
               </p>
             )}
             {codeStatus === "error" && (
@@ -937,7 +946,7 @@ function AccountExtras({
           {redeemedCodes.length > 0 && (
             <div className="bg-t-panel p-5 border border-t-line">
               <h3 className="font-semibold text-t-white mb-3">
-                Your active codes
+                Your programs
               </h3>
               <div className="space-y-2">
                 {redeemedCodes.map((code, i) => (
@@ -949,11 +958,7 @@ function AccountExtras({
                       <p className="text-sm font-medium text-t-white">
                         {code.partner_name}
                       </p>
-                      <p className="text-xs text-t-phos-dim">
-                        {code.tier === "unlimited" || code.tier === "admin"
-                          ? "Unlimited calls"
-                          : `${code.daily_limit ?? 200} calls/day`}
-                      </p>
+                      <p className="text-xs text-t-phos-dim">Joined with a code</p>
                     </div>
                     <div className="text-right">
                       <span className="block text-xs text-t-phos-dim">
