@@ -149,7 +149,7 @@ export function TheirScreenBoard({ person, first, onOpenItem }: { person: Person
                       return (
                         <button key={sc} type="button" onClick={() => onOpenItem(sc)}
                           className={`t-focus text-xs underline underline-offset-4 ${state.shared ? "font-semibold text-t-amber-bright" : "text-t-phos-dim"}`}>
-                          {state.shared ? `Open what ${first} shared: ${s.label}` : state.required ? `${s.label}: required by your program. See where it stands` : `${s.label}: not shared. Ask ${first}`}
+                          {state.shared ? `Open what ${first} shared: ${s.label}` : state.required ? `${s.label}: required by your program. See where it stands` : state.requestPending ? `${s.label}: you asked. Waiting on ${first}` : `${s.label}: not shared. Ask ${first}`}
                         </button>
                       );
                     })}
@@ -172,7 +172,7 @@ const RAIL: { skill: "staff-prep-me" | "staff-check-in" | "staff-find-help"; lab
 
 export function PersonRail({ clientId, first }: { clientId: string; first: string }) {
   return (
-    <aside aria-labelledby="person-rail-h" className="person-rail bg-t-panel border border-t-line rounded-[4px] p-4">
+    <aside aria-labelledby="person-rail-h" className="person-rail self-start bg-t-panel border border-t-line rounded-[4px] p-4">
       <h2 id="person-rail-h" className="text-xs font-semibold uppercase tracking-wide text-[#344b38] mb-1">t.ROY, for your work with {first}</h2>
       <ul className="space-y-2 mt-3">
         {RAIL.map((r) => (

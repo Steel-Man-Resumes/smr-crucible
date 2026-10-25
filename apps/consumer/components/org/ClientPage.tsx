@@ -130,7 +130,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
     <Shell>
       <section className="bg-t-panel border border-t-line rounded-[4px] p-5">
         <p className="text-sm text-t-white">This person is not on your list, or the link is old.</p>
-        <Link href="/dashboard" className="t-focus inline-block mt-3 text-sm font-semibold text-t-amber-bright underline underline-offset-4">Back to People</Link>
+        <Link href="/dashboard/people" className="t-focus inline-block mt-3 text-sm font-semibold text-t-amber-bright underline underline-offset-4">Back to People</Link>
       </section>
     </Shell>
   );
@@ -261,9 +261,9 @@ function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; firs
         <label htmlFor="task-title" className="block font-semibold text-t-white mb-2">Add a task</label>
         <div className="flex flex-wrap gap-2">
           <input id="task-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300} placeholder="Bring your ID and Social Security card Thursday"
-            className="t-focus flex-1 min-w-[14rem] bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2" />
+            className="plain-field t-focus flex-1 min-w-[14rem] bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2" />
           <label className="sr-only" htmlFor="task-due">Due date</label>
-          <input id="task-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="t-focus bg-t-panel-2 border border-t-line text-sm text-t-phos px-3 py-2" />
+          <input id="task-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="plain-field t-focus bg-t-panel-2 border border-t-line text-sm text-t-phos px-3 py-2" />
           <button disabled={title.trim().length < 2} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 disabled:opacity-50">Add</button>
         </div>
         <label className="text-xs text-t-phos-dim flex items-center gap-2 mt-3">
@@ -322,10 +322,10 @@ function CommentBox({ clientId, artifactId, first, canComment, existing, onChang
         <form onSubmit={async (e) => { e.preventDefault(); const err = await postClient(clientId, { action: "comment", artifactId, body, quote }); setMsg(err); if (!err) { setBody(""); setQuote(""); onChange(); } }}>
           <label htmlFor={`cq-${artifactId}`} className="sr-only">The words your comment is about (optional)</label>
           <input id={`cq-${artifactId}`} value={quote} onChange={(e) => setQuote(e.target.value)} maxLength={500} placeholder="The words it is about (optional)"
-            className="t-focus w-full bg-t-panel-2 border border-t-line text-xs text-t-white px-3 py-1.5 mb-2" />
+            className="plain-field t-focus w-full bg-t-panel-2 border border-t-line text-xs text-t-white px-3 py-1.5 mb-2" />
           <label htmlFor={`cb-${artifactId}`} className="sr-only">Your comment</label>
           <textarea id={`cb-${artifactId}`} value={body} onChange={(e) => setBody(e.target.value)} rows={2} maxLength={1500} placeholder={`A suggestion for ${first}. They will see it under your name and decide what to do with it.`}
-            className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-2" />
+            className="plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-2" />
           <button disabled={body.trim().length < 3} className="t-focus border border-t-line text-xs text-t-phos px-3 py-1.5 disabled:opacity-50">Send comment</button>
           {msg && <span role="alert" className="text-xs text-t-amber-bright ml-3">{msg}</span>}
         </form>
@@ -337,7 +337,7 @@ function CommentBox({ clientId, artifactId, first, canComment, existing, onChang
 function SuggestionsPanel({ clientId, first, items, canSuggest, onChange }: { clientId: string; first: string; items: Suggestion[]; canSuggest: boolean; onChange: () => void }) {
   const [f, setF] = useState({ jobTitle: "", company: "", location: "", applyUrl: "", why: "" });
   const [msg, setMsg] = useState<string | null>(null);
-  const field = "t-focus bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 w-full";
+  const field = "plain-field t-focus bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 w-full";
   return (
     <section>
       {canSuggest && (
@@ -351,7 +351,7 @@ function SuggestionsPanel({ clientId, first, items, canSuggest, onChange }: { cl
             <div><label htmlFor="sj-url" className="block text-xs text-t-phos-dim mb-1">Link to the posting (optional, https)</label><input id="sj-url" type="url" className={field} value={f.applyUrl} onChange={(e) => setF({ ...f, applyUrl: e.target.value })} placeholder="https://" /></div>
             <div className="sm:col-span-2"><label htmlFor="sj-why" className="block text-xs text-t-phos-dim mb-1">Why it might suit them</label><textarea id="sj-why" rows={2} maxLength={1500} className={field} value={f.why} onChange={(e) => setF({ ...f, why: e.target.value })} required /></div>
           </div>
-          <button className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 mt-3">Send suggestion</button>
+          <button className="plain-field t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 mt-3">Send suggestion</button>
           {msg && <p role="alert" className="text-xs text-t-amber-bright mt-2">{msg}</p>}
         </form>
       )}
@@ -378,8 +378,8 @@ function SuggestionsPanel({ clientId, first, items, canSuggest, onChange }: { cl
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6">
-      <Link href="/dashboard" className="t-focus text-xs text-t-phos-dim hover:text-t-white">&larr; Back to People</Link>
+    <div className="person-page max-w-6xl mx-auto px-4 py-6">
+      <Link href="/dashboard/people" className="t-focus text-xs text-t-phos-dim hover:text-t-white">&larr; Back to People</Link>
       <div className="mt-4">{children}</div>
     </div>
   );
@@ -528,7 +528,7 @@ function AskPanel({ clientId, first, scope, pending, canRequest, onAsked }: {
           </label>
           <textarea id="ask-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500}
             placeholder="So I can help you get ready for Thursday's interview."
-            className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-3" />
+            className="plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-3" />
           <button onClick={ask} disabled={busy || reason.trim().length < 3}
             className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 disabled:opacity-50">
             {busy ? "Sending..." : `Ask ${first} to share this`}
@@ -613,7 +613,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
             </div>
           )}
           <textarea id="note-body" value={body} onChange={(e) => setBody(e.target.value)} rows={3} maxLength={8000}
-            className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-3" />
+            className="plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-3" />
           <div className="flex flex-wrap items-center gap-4">
             <label className="text-xs text-t-phos-dim">Type{" "}
               <select value={kind} onChange={(e) => setKind(e.target.value)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5 ml-1">
@@ -645,7 +645,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
                   <div>
                     <label htmlFor={`fix-${n.id}`} className="sr-only">Corrected wording</label>
                     <textarea id={`fix-${n.id}`} value={editing.body} onChange={(e) => setEditing({ id: n.id, body: e.target.value })} rows={3} maxLength={8000}
-                      className="t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-2" />
+                      className="plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-2" />
                     <div className="flex gap-3">
                       <button onClick={saveCorrection} disabled={busy || !editing.body.trim() || editing.body.trim() === n.body}
                         className="t-focus bg-t-amber text-[#14100a] text-xs font-semibold px-3 py-1.5 disabled:opacity-50">{busy ? "Saving..." : "Save correction"}</button>

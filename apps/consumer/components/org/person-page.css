@@ -27,3 +27,24 @@
 .person-board .person-board-station { position: relative; display: flex; gap: 12px; padding: 8px 4px; }
 .person-board .board-dot { margin-top: 0; }
 .person-board .person-board-station[data-tone="current"] { background: var(--t-panel-3); border-left: 3px solid var(--t-amber-bright); border-radius: 4px; padding-left: 1px; }
+
+/* Records are written in plain type on the reading surface: no terminal
+   prompt in a case note, task, suggestion or ask (DESIGN section 0, rule 5).
+   The selectors match the global terminal field rule's weight
+   (app/globals.css) so this scope wins inside the page only. */
+.person-page input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+.person-page textarea:not([data-terminal]) {
+  color: var(--t-white) !important;
+  background-color: var(--t-panel) !important;
+  background-image: none !important;
+  border: 1px solid var(--t-line-strong) !important;
+  border-radius: 4px !important;
+  font-family: var(--t-body) !important;
+  font-size: 0.9375rem;
+  padding-left: 0.75rem !important;
+  box-shadow: none;
+}
+.person-page input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"])::placeholder,
+.person-page textarea:not([data-terminal])::placeholder { color: var(--t-bone-dim) !important; }
+.person-page input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):focus,
+.person-page textarea:not([data-terminal]):focus { border-color: var(--t-amber) !important; box-shadow: 0 0 0 1px var(--t-amber); }

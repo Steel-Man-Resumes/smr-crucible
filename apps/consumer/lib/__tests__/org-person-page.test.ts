@@ -140,7 +140,7 @@ test("Their screen is the board: seven stations, and plan what to say and practi
   for (const old of ["Job Board and Applications", "Application Tailor", "Interview Prep", "My stuff", "Stage "]) assert.ok(!html.includes(old), `no old name: ${old}`);
   for (const id of ["plan", "practice"]) assert.match(html, new RegExp(`data-station="${id}"[^]*?Never shared with staff, by design`));
   assert.match(html, /Open what Dana shared: Applications/);
-  assert.match(html, /Resumes: not shared\. Ask Dana/);
+  assert.match(html, /Cover letters: not shared\. Ask Dana/);
 });
 
 test("the note lines, word for word", () => {
@@ -149,8 +149,18 @@ test("the note lines, word for word", () => {
   const src = readFileSync(join(ROOT, "components/org/ClientPage.tsx"), "utf8");
   assert.match(src, /\{NOTE_CARE_LINE\}/); assert.match(src, /noteOwnershipLine\(first\)/);
   assert.doesNotMatch(src, /\$ |"\$"/, "no terminal prompt in the note box");
+  // The note box opts out of the global terminal field style (C1's plain-field class; person-page.css covers it too).
+  assert.match(src, /<textarea id="note-body"[^]*?className="plain-field /);
+  assert.match(readFileSync(join(ROOT, "components/org/person-page.css"), "utf8"), /\.person-page textarea/);
   // The shared-item honesty line stays word for word.
   assert.match(src, /can see that you opened it, and when\. You can read it\. You cannot change it\./);
+});
+
+test("the way back goes to People, where the caseload now lives", () => {
+  const src = readFileSync(join(ROOT, "components/org/ClientPage.tsx"), "utf8");
+  assert.doesNotMatch(src, /href="\/dashboard"/);
+  assert.equal((src.match(/href="\/dashboard\/people"/g) ?? []).length, 2);
+  assert.doesNotMatch(src, /JOURNEY_STAGES|Stage \$\{/, "station names only");
 });
 
 test("the rail opens staff t.ROY for this person and says it only drafts", async () => {
