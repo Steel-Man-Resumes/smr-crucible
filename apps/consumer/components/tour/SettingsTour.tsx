@@ -28,6 +28,8 @@ import { TOURS, type TourSlot } from '@/lib/tour/registry';
 import { readTourReward, type TourReward } from '@/lib/tour/reward';
 import { PROGRESSION_CHANGED_EVENT } from '@/lib/progression-ui';
 import { lockPageForTour, leaveAction } from '@/lib/tour/page-lock';
+import { isRetiredRun, retiredRun, runReplacedError, saveFailureAction, tourSaveFailure } from '@/lib/tour/run-conflict';
+import { RunConflictNotice } from './RunConflictNotice';
 import { SETTINGS_NUDGES, SETTINGS_TOUR_COPY, type SettingsBeat, type SettingsNudge } from '@/lib/tour/settings-beats';
 import { SETTINGS_ENDING_STOP, SETTINGS_TOUR_OPEN_EVENT, applicableBeats, pickNudge, readBranches, resumeIndex, settingsTourAllowed, settingsTourRequested, stopOfBeat } from '@/lib/tour/settings-tour';
 import { findNavElement } from './TourPlayer';
@@ -69,6 +71,8 @@ export function SettingsTour() {
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
   const [unsavedWarning, setUnsavedWarning] = useState(false);
+  /** The run is open in another tab or window: the tour stopped and says so (lib/tour/run-conflict.ts). */
+  const [conflict, setConflict] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const slotRef = useRef<Slot | null>(null);
   const pathRef = useRef<readonly SettingsBeat[]>([]);
@@ -108,14 +112,14 @@ export function SettingsTour() {
     lastWrite.current = body;
     if (action === 'start') pendingStart.current = body;
     const operation = queue.current.catch(() => {}).then(async () => {
-      if (!alive.current || run.current.id !== body.runId || run.current.account !== current.account) throw new Error('This tour was replaced by a newer run.');
+      if (!alive.current || run.current.id !== body.runId || run.current.account !== current.account) throw runReplacedError();
       const send = async (write: Write): Promise<Saved> => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
         try {
           const response = await fetch('/api/onboarding/tour', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Orientation-Account': current.account }, body: JSON.stringify(write), signal: controller.signal, keepalive: true });
           const result = await response.json().catch(() => null);
-          if (!response.ok || result?.ok !== true || result.runId !== write.runId || result.sequence !== write.sequence) throw new Error(result?.error || 'Your place could not be saved.');
+          if (!response.ok || result?.ok !== true || result.runId !== write.runId || result.sequence !== write.sequence) throw tourSaveFailure(result?.error || 'Your place could not be saved.', response.ok ? null : response.status);
           return result as Saved;
         } finally { clearTimeout(timeout); }
       };
@@ -131,10 +135,27 @@ export function SettingsTour() {
     return operation;
   }, []);
 
+  /**
+   * The run was replaced (another tab or window, or the account changed): close the player,
+   * which releases the page lock through the lock effect's cleanup (inert, scroll, focus), the
+   * same path pause takes, but write nothing. The retired identity fails every queued write for
+   * the old run before it is sent, and the pagehide save goes with the player.
+   */
+  const stopForConflict = useCallback(() => {
+    run.current = retiredRun(); pendingStart.current = null; lastWrite.current = null;
+    requestController.current?.abort(); setLoading(false);
+    setActive(false);
+    setNotice(''); setError(''); setSaveError(''); setConflict(true);
+  }, []);
+
   const save = useCallback((action: Write['action'], stop: number) => {
     const identity = run.current;
-    void persist(action, stop).catch(e => { if (alive.current && run.current === identity) setSaveError(e instanceof Error && e.name !== 'AbortError' ? e.message : TOUR_COPY.saveFailed); });
-  }, [persist]);
+    void persist(action, stop).catch(e => {
+      const next = saveFailureAction(e, alive.current && run.current === identity && !isRetiredRun(identity));
+      if (next === 'stop') stopForConflict();
+      else if (next === 'warn') setSaveError(e instanceof Error && e.name !== 'AbortError' ? e.message : TOUR_COPY.saveFailed);
+    });
+  }, [persist, stopForConflict]);
 
   const enter = useCallback((data: Slot, beats: readonly SettingsBeat[], resume: boolean) => {
     if (!allowedRef.current) return;
@@ -147,7 +168,7 @@ export function SettingsTour() {
     completed.current = false;
     const stop = index < beats.length ? stopOfBeat(beats[index]) : SETTINGS_ENDING_STOP;
     stopRef.current = stop; savedStop.current = stop;
-    setPath(beats); pathRef.current = beats; setStart(index); setError(''); setNotice(''); setActive(true);
+    setPath(beats); pathRef.current = beats; setStart(index); setError(''); setNotice(''); setConflict(false); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     try { sessionStorage.removeItem(PAUSE_KEY + data.accountId); } catch {}
     if (!resuming) save('start', stop);
@@ -260,10 +281,12 @@ export function SettingsTour() {
       if (reward.status === 'granted') window.dispatchEvent(new Event(PROGRESSION_CHANGED_EVENT));
       return reward;
     } catch (e) {
-      if (alive.current && run.current === identity) setSaveError(e instanceof Error ? e.message : 'Your finish could not be confirmed. Retry safely.');
+      const next = saveFailureAction(e, alive.current && run.current === identity && !isRetiredRun(identity));
+      if (next === 'stop') stopForConflict();
+      else if (next === 'warn') setSaveError(e instanceof Error ? e.message : 'Your finish could not be confirmed. Retry safely.');
       throw e instanceof Error ? e : new Error('Your finish could not be confirmed. Retry safely.');
     }
-  }, [persist]);
+  }, [persist, stopForConflict]);
 
   /** Close; with targets, land the page on the control the nudge named. The tour never presses it. */
   const done = useCallback((targets?: readonly string[]) => {
@@ -290,10 +313,11 @@ export function SettingsTour() {
     const open = !!slot && !slot.impersonating && slot.version === DEF.version && slot.inProgress === true;
     const fresh = !!slot && !slot.impersonating && !open && !slot.completedAt;
     return <>
-      {open && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="resume"><p>{SETTINGS_TOUR_COPY.chipResume}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.pickUp}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{SETTINGS_TOUR_COPY.startOver}</button></div>}
-      {fresh && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="new"><p>{SETTINGS_TOUR_COPY.chipNew}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.showMe}</button></div>}
+      {conflict && <RunConflictNotice onDismiss={() => setConflict(false)} />}
+      {open && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="resume"><p>{SETTINGS_TOUR_COPY.chipResume}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.pickUp}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{SETTINGS_TOUR_COPY.startOver}</button></div>}
+      {fresh && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="new"><p>{SETTINGS_TOUR_COPY.chipNew}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.showMe}</button></div>}
       {unsavedWarning && <div className="et-notice" role="status"><p>{TOUR_COPY.unsaved}</p><button type="button" onClick={() => { dirty.current = false; setUnsavedWarning(false); void load('open'); }}>{TOUR_COPY.unsavedConfirm}</button><button type="button" onClick={() => setUnsavedWarning(false)}>{TOUR_COPY.unsavedStay}</button></div>}
-      {(notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : TOUR_COPY.resume}</button><button type="button" onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>{TOUR_COPY.dismiss}</button></div>}
+      {!conflict && (notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : TOUR_COPY.resume}</button><button type="button" onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>{TOUR_COPY.dismiss}</button></div>}
     </>;
   }
   return createPortal(<div ref={root}>

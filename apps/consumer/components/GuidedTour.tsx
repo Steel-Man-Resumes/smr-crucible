@@ -12,6 +12,8 @@ import { PROGRESSION_CHANGED_EVENT } from '@/lib/progression-ui';
 import { TourPlayer, ENDING_INDEX } from './tour/TourPlayer';
 import type { OrientationDraft } from './tour/OrientationQuiz';
 import { lockPageForTour, leaveAction, safeTourDestination } from '@/lib/tour/page-lock';
+import { isRetiredRun, retiredRun, runReplacedError, saveFailureAction, tourSaveFailure } from '@/lib/tour/run-conflict';
+import { RunConflictNotice } from './tour/RunConflictNotice';
 import './tour/entrance-tour.css';
 
 type Write = { action: 'start' | 'progress' | 'complete'; version: number; runId: string; sequence: number; stop: number; previousRunId?: string | null };
@@ -49,6 +51,8 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
   const [quizDraft, setQuizDraft] = useState<OrientationDraft>({ question: 0, answers: {} });
   const [notice, setNotice] = useState('');
   const [unsavedWarning, setUnsavedWarning] = useState(false);
+  /** The run is open in another tab or window: the tour stopped and says so (lib/tour/run-conflict.ts). */
+  const [conflict, setConflict] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const stateRef = useRef<TourState | null>(null);
   const beatRef = useRef(0);
@@ -85,14 +89,14 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
     lastWrite.current = body;
     if (action === 'start') pendingStart.current = body;
     const operation = queue.current.catch(() => {}).then(async () => {
-      if (!alive.current || run.current.id !== body.runId || run.current.account !== current.account) throw new Error('This tour was replaced by a newer run.');
+      if (!alive.current || run.current.id !== body.runId || run.current.account !== current.account) throw runReplacedError();
       const send = async (write: Write): Promise<Saved> => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
         try {
           const response = await fetch('/api/onboarding/tour', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Orientation-Account': current.account }, body: JSON.stringify(write), signal: controller.signal, keepalive: true });
           const result = await response.json().catch(() => null);
-          if (!response.ok || result?.ok !== true || result.runId !== write.runId || result.sequence !== write.sequence) throw new Error(result?.error || 'Your place could not be saved.');
+          if (!response.ok || result?.ok !== true || result.runId !== write.runId || result.sequence !== write.sequence) throw tourSaveFailure(result?.error || 'Your place could not be saved.', response.ok ? null : response.status);
           return result as Saved;
         } finally { clearTimeout(timeout); }
       };
@@ -108,10 +112,27 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
     return operation;
   }, []);
 
+  /**
+   * The run was replaced (another tab or window, or the account changed): close the player,
+   * which releases the page lock through the lock effect's cleanup (inert, scroll, focus), the
+   * same path pause takes, but write nothing. The retired identity fails every queued write for
+   * the old run before it is sent.
+   */
+  const stopForConflict = useCallback(() => {
+    run.current = retiredRun(); pendingStart.current = null; lastWrite.current = null;
+    requestController.current?.abort(); setLoading(false);
+    expectedRoute.current = null; setActive(false); onNavigationReveal?.(false);
+    setNotice(''); setError(''); setSaveError(''); setConflict(true);
+  }, [onNavigationReveal]);
+
   const save = useCallback((action: Write['action'], stop: number) => {
     const identity = run.current;
-    void persist(action, stop).catch(e => { if (alive.current && run.current === identity) setSaveError(e instanceof Error && e.name !== 'AbortError' ? e.message : TOUR_COPY.saveFailed); });
-  }, [persist]);
+    void persist(action, stop).catch(e => {
+      const next = saveFailureAction(e, alive.current && run.current === identity && !isRetiredRun(identity));
+      if (next === 'stop') stopForConflict();
+      else if (next === 'warn') setSaveError(e instanceof Error && e.name !== 'AbortError' ? e.message : TOUR_COPY.saveFailed);
+    });
+  }, [persist, stopForConflict]);
 
   const enter = useCallback((data: TourState, resume: boolean) => {
     if (!allowed.current) return;
@@ -121,7 +142,7 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
     pendingStart.current = null;
     run.current = { id: resume && data.runId ? data.runId : crypto.randomUUID(), sequence: resume ? data.sequence ?? 0 : 0, account: data.accountId || '' };
     completed.current = false;
-    beatRef.current = stop; savedChapter.current = chapterOf(stop); setStart(stop); setError(''); setNotice(''); setActive(true);
+    beatRef.current = stop; savedChapter.current = chapterOf(stop); setStart(stop); setError(''); setNotice(''); setConflict(false); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (data.accountId) { try { sessionStorage.removeItem(PAUSE_KEY + data.accountId); } catch {} }
     if (!(resume && data.runId)) save('start', stop);
@@ -215,10 +236,12 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
       if (reward.status === 'granted') window.dispatchEvent(new Event(PROGRESSION_CHANGED_EVENT));
       return reward;
     } catch (e) {
-      if (alive.current && run.current === identity) setSaveError(e instanceof Error ? e.message : 'Your finish could not be confirmed. Retry safely.');
+      const next = saveFailureAction(e, alive.current && run.current === identity && !isRetiredRun(identity));
+      if (next === 'stop') stopForConflict();
+      else if (next === 'warn') setSaveError(e instanceof Error ? e.message : 'Your finish could not be confirmed. Retry safely.');
       throw e instanceof Error ? e : new Error('Your finish could not be confirmed. Retry safely.');
     }
-  }, [persist]);
+  }, [persist, stopForConflict]);
 
   const done = useCallback((destination?: string) => {
     setActive(false); onNavigationReveal?.(false); setNotice(''); setSaveError('');
@@ -234,8 +257,9 @@ export function GuidedTourController({ tier, held = false, onNavigationReveal }:
 
   if (!mounted || tier !== 'client' || held) return null;
   if (!active) return <>
+    {conflict && <RunConflictNotice onDismiss={() => setConflict(false)} />}
     {unsavedWarning && <div className="et-notice" role="status"><p>{TOUR_COPY.unsaved}</p><button onClick={() => { dirty.current = false; setUnsavedWarning(false); void load('replay'); }}>{TOUR_COPY.unsavedConfirm}</button><button onClick={() => setUnsavedWarning(false)}>{TOUR_COPY.unsavedStay}</button></div>}
-    {(notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p><button disabled={loading} onClick={() => void load(state?.inProgress || notice ? 'resume' : 'replay')}>{loading ? TOUR_COPY.loading : TOUR_COPY.resume}</button><button onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>{TOUR_COPY.dismiss}</button></div>}
+    {!conflict && (notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p><button disabled={loading} onClick={() => void load(state?.inProgress || notice ? 'resume' : 'replay')}>{loading ? TOUR_COPY.loading : TOUR_COPY.resume}</button><button onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>{TOUR_COPY.dismiss}</button></div>}
   </>;
   return createPortal(<div ref={root}>
     <TourPlayer key={run.current.id} start={start} accountId={state?.accountId ?? ''} forgeComplete={state?.forgeComplete} rewardClaimedAt={state?.rewardClaimedAt} nextStep={state?.nextStep}
