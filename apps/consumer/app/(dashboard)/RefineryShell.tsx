@@ -885,7 +885,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         ref={navPanel}
         id="refinery-mobile-navigation"
         role="dialog"
-        aria-label="Career workspace navigation"
+        aria-label={isOrgPartner ? "Organization workspace navigation" : "Career workspace navigation"}
         aria-modal={drawerOpen ? true : undefined}
         aria-hidden={!drawerOpen}
         inert={!drawerOpen}

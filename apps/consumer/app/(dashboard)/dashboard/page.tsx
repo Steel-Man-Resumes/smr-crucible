@@ -68,17 +68,21 @@ function OrgLanding() {
   const router = useRouter();
   useEffect(() => {
     let live = true;
+    let done = false;
     const go = (landing: string | null) => {
-      if (!live) return;
-      const to = orgLanding({ orgRole: effectiveRole?.orgRole, crmV2: effectiveRole?.crmV2, hash: window.location.hash, landing });
+      if (!live || done) return;
+      done = true;
+      const to = orgLanding({ orgRole: effectiveRole?.orgRole, crmV2: effectiveRole?.crmV2, hash: window.location.hash, landing, capabilities: effectiveRole?.capabilities ?? [] });
       if (to) router.replace(to);
     };
+    // A hung settings read must not leave a spinner: after 4 seconds, go with the default.
+    const timer = window.setTimeout(() => go(null), 4000);
     fetch("/api/org/prefs", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => go(d?.effective?.landing ?? null))
       .catch(() => go(null));
-    return () => { live = false; };
-  }, [effectiveRole?.orgRole, effectiveRole?.crmV2, router]);
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [effectiveRole?.orgRole, effectiveRole?.crmV2, effectiveRole?.capabilities, router]);
   return (
     <div className="flex items-center justify-center py-20" role="status" aria-label="Opening your day">
       <TroyWork compact decorative />

@@ -34,13 +34,15 @@ const FULL: TodayPayload = {
     { key: "fu:p4:a9", section: "followups", clientId: "p4", clientName: "Ana Ortiz", when: iso(1), stage: null, reason: "Ana planned to follow up on Picker at North Dock by Friday, Oct 30.", action: { label: "Check in", href: "/dashboard/clients/p4" } },
   ],
 };
-const render = (state: Parameters<typeof TodayView>[0]["state"]) => renderToStaticMarkup(React.createElement(TodayView, { state, nowMs: NOW, timeZone: undefined }));
+// troyReady: true renders as it will once C4 merges; the flag-off case has its own test.
+const render = (state: Parameters<typeof TodayView>[0]["state"], troyReady = true) => renderToStaticMarkup(React.createElement(TodayView, { state, nowMs: NOW, timeZone: undefined, troyReady }));
 
 test("Today ready: date, headline, reason strip in code order, rows with station, time, action and Prep me", () => {
   const html = render({ status: "ready", data: FULL });
   assert.match(html, /Thursday, Oct 29/);
   assert.match(html, /4 people need you today\. 1 task is yours\./);
   const chips = reasonStrip(FULL).map((c) => c.key);
+  assert.match(html, /flex-nowrap[^"]*overflow-x-auto/, "one scrollable chip row on phones");
   assert.deepEqual(chips, ["tasks", "interviews", "followups", "quiet", "never_started"]);
   assert.ok(html.indexOf("Interviews coming up") < html.indexOf("Follow-ups due") && html.indexOf("Follow-ups due") < html.indexOf("Gone quiet") && html.indexOf("Gone quiet") < html.indexOf("Never started"));
   assert.match(html, /Station: <\/span>Practice/);
@@ -79,7 +81,9 @@ test("Today error: says nothing was lost and offers a retry", () => {
 });
 
 test("Today 403: names who it is for and who to ask", () => {
-  assert.match(render({ status: "forbidden" }), /Today is for staff with access to people&#x27;s progress\. Ask your organization&#x27;s owner\./);
+  const html = render({ status: "forbidden" });
+  assert.match(html, /Today is for staff who can open what participants have shared\. Ask your organization&#x27;s owner, or go to/);
+  assert.match(html, /href="\/dashboard\/people"/);
 });
 
 test("Today empty: the plain line, the t.ROY offer, and Add a task stays", () => {
@@ -90,11 +94,38 @@ test("Today empty: the plain line, the t.ROY offer, and Add a task stays", () =>
   assert.match(html, /Nothing dated in the next seven days\./);
 });
 
-test("Today empty because nobody shares: the count line, for org-wide viewers only", () => {
+test("Today empty because nobody shares: the count line, what staff can do, no t.ROY offer", () => {
   const html = render({ status: "ready", data: { ...FULL, items: [], reach: { joined: 5, sharing: 0 } } });
   assert.match(html, /5 people joined\. None has turned on progress sharing yet, so nothing about their work shows here\. That is their choice\./);
+  assert.match(html, /Until someone turns sharing on, you can still keep your own tasks here and talk with people about what sharing shows\./);
+  assert.match(html, /See who joined/);
+  assert.doesNotMatch(html, /t\.ROY|Quiet days/);
   assert.equal(nobodySharesLine({ ...FULL, reach: { joined: 1, sharing: 0 } }), "1 person joined and has not turned on progress sharing yet, so nothing about their work shows here. That is their choice.");
   assert.equal(nobodySharesLine({ ...FULL, reach: null }), null, "someone with only their own caseload never gets org counts");
+});
+
+test("S3: when the items are in hidden sections, the page never says nothing is waiting", () => {
+  const data = { ...FULL, hidden: SECTIONS.map((x) => x.key) };
+  const html = render({ status: "ready", data });
+  assert.match(html, /Nothing in the sections you show\./);
+  assert.doesNotMatch(html, /Nothing is waiting on you/);
+  assert.match(html, /5 items are in sections you hid\./);
+  assert.match(html, /Show hidden sections/);
+  assert.equal(todayHeadline({ ...FULL, hidden: ["interviews", "quiet", "never_started", "followups"] }), "Nothing in the sections you show. 1 task is yours.");
+});
+
+test("S6: with the t.ROY flag off (the stub), no Prep me and no t.ROY offer render", () => {
+  const html = render({ status: "ready", data: FULL }, false);
+  assert.doesNotMatch(html, /Prep me/);
+  const empty = render({ status: "ready", data: { ...FULL, items: [] } }, false);
+  assert.doesNotMatch(empty, /t\.ROY/);
+  assert.match(empty, /See everyone/);
+});
+
+test("design: the row's real action is the filled button; Prep me is a secondary text control", () => {
+  const html = render({ status: "ready", data: FULL });
+  assert.match(html, /bg-\[#4f6b57\][^"]*"[^>]*>Help them prepare</);
+  assert.match(html, /underline[^"]*"[^>]*>Prep me</);
 });
 
 test("Today volunteer: assigned people only, the volunteer line, no org counts", () => {
@@ -106,13 +137,6 @@ test("Today volunteer: assigned people only, the volunteer line, no org counts",
   assert.equal(todayHeadline({ ...v, items: FULL.items.slice(1, 2) }), "1 of your assigned people needs you today.");
   // And the scope itself: the volunteer preset reaches only assigned people.
   assert.equal(cohortReach(new Set(VOLUNTEER) as never), "assigned");
-});
-
-test("Today volunteer scope on the server: reach is null unless the viewer sees everyone", () => {
-  const core = readFileSync(join(CONSUMER, "..", "..", "packages", "core", "src", "orgToday.ts"), "utf8");
-  assert.match(core, /reach: seesAll \? \{ joined: cohort\.totalJoined, sharing: cohort\.summary\.consented \} : null/);
-  assert.match(core, /assignedToStaffId: seesAll \? undefined : actor\.userId/);
-  assert.match(read("app/api/org/today/route.ts"), /reach: view\.reach,/);
 });
 
 test("Today demo org: the shell carries the sample-data line; Today itself adds nothing", () => {

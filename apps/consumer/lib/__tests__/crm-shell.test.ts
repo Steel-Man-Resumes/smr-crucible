@@ -80,23 +80,34 @@ test("staff get the workshop skin on the sidebar and the mobile drawer; the old 
 
 test("org name display strips (Demo) into a chip and never shows an empty name", () => {
   assert.deepEqual(orgDisplayName("Northside Center (Demo)"), { name: "Northside Center", demo: true });
-  assert.deepEqual(orgDisplayName(null), { name: "Your organization", demo: false });
+  assert.deepEqual(orgDisplayName(null), { name: "", demo: false });
+  const html = renderToStaticMarkup(React.createElement(OrgSidebar, { orgName: null, orgRole: "staff", capabilities: STAFF, workspace: true, legacyItems: [], pathname: "/dashboard/today" }));
+  assert.doesNotMatch(html, /Your organization/i);
+  assert.doesNotMatch(html, /org-identity-name/);
 });
 
 // ── Landing ─────────────────────────────────────────────────────────────────
-test("landing: workspace staff go to Today; Caseload choice and old anchors go to People; others stay", () => {
-  assert.equal(orgLanding({ orgRole: "staff", crmV2: true, hash: "" }), "/dashboard/today");
-  assert.equal(orgLanding({ orgRole: "owner", crmV2: true, hash: "", landing: "today" }), "/dashboard/today");
-  assert.equal(orgLanding({ orgRole: "staff", crmV2: true, hash: "", landing: "caseload" }), "/dashboard/people");
-  assert.equal(orgLanding({ orgRole: "owner", crmV2: true, hash: "#invited" }), "/dashboard/people#invited");
-  assert.equal(orgLanding({ orgRole: "owner", crmV2: false, hash: "" }), null);
-  assert.equal(orgLanding({ orgRole: null, crmV2: true, hash: "" }), null);
+test("landing: workspace staff go to Today; Caseload choice, old anchors and staff who cannot open shared work go to People; others stay", () => {
+  assert.equal(orgLanding({ orgRole: "staff", crmV2: true, hash: "", capabilities: STAFF }), "/dashboard/today");
+  assert.equal(orgLanding({ orgRole: "owner", crmV2: true, hash: "", landing: "today", capabilities: OWNER }), "/dashboard/today");
+  assert.equal(orgLanding({ orgRole: "staff", crmV2: true, hash: "", landing: "caseload", capabilities: STAFF }), "/dashboard/people");
+  assert.equal(orgLanding({ orgRole: "owner", crmV2: true, hash: "#invited", capabilities: OWNER }), "/dashboard/people#invited");
+  assert.equal(orgLanding({ orgRole: "owner", crmV2: false, hash: "", capabilities: OWNER }), null);
+  assert.equal(orgLanding({ orgRole: null, crmV2: true, hash: "", capabilities: STAFF }), null);
+  // S1: "to notes only" staff (view_content switched off) never land on Today's refusal.
+  const notesOnly = caps("staff", ["org.client.view_content"]);
+  assert.equal(orgLanding({ orgRole: "staff", crmV2: true, hash: "", landing: "today", capabilities: notesOnly }), "/dashboard/people");
+  assert.ok(!orgNavFor(notesOnly).flatMap((g) => g.items).some((i) => i.label === "Today"), "and Today is not in their nav");
+  // N10: Asks follows the ask-to-share switch.
+  assert.ok(!orgNavFor(caps("staff", ["org.client.request_sharing"])).flatMap((g) => g.items).some((i) => i.label === "Asks"));
 });
 
 test("landing is wired: /dashboard forwards workspace staff, People renders the caseload, the caseload no longer redirects itself", () => {
   const page = read("app/(dashboard)/dashboard/page.tsx");
   assert.match(page, /if \(effectiveRole\.orgRole && effectiveRole\.crmV2\) return <OrgLanding \/>;/);
   assert.match(page, /router\.replace\(to\)/);
+  assert.match(page, /window\.setTimeout\(\(\) => go\(null\), 4000\)/, "a hung settings read falls back to the default");
+  assert.match(page, /capabilities: effectiveRole\?\.capabilities \?\? \[\]/);
   assert.match(read("app/(dashboard)/dashboard/people/page.tsx"), /<OrgDashboard \/>/);
   assert.doesNotMatch(read("components/org/OrgDashboard.tsx"), /window\.location\.replace\("\/dashboard\/today"\)/);
   assert.doesNotMatch(read("components/org/OrgSetupGuide.tsx"), /href: "\/dashboard",/);

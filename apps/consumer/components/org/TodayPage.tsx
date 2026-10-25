@@ -21,10 +21,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { ListChecks } from "lucide-react";
-import { openStaffTroy } from "@/lib/staff-troy";
+import { openStaffTroy, STAFF_TROY_READY } from "@/lib/staff-troy";
 import { stationLabelForStage } from "@/lib/staff-station";
 import {
-  hiddenSectionCount, nobodySharesLine, personInitials, reasonStrip, relativeWhen, thisWeek, todayDateLine, todayHeadline, visibleItems,
+  hiddenItemCount, hiddenSectionCount, nobodySharesLine, personInitials, reasonStrip, relativeWhen, thisWeek, todayDateLine, todayHeadline, visibleItems,
   type TodayItemView, type TodayPayload,
 } from "@/lib/today-view";
 
@@ -66,8 +66,10 @@ export function TodayPage() {
   return <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} />;
 }
 
-export function TodayView({ state, nowMs, onRetry, onTask, timeZone }: {
+export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady = STAFF_TROY_READY }: {
   state: TodayState; nowMs: number; onRetry?: () => void; onTask?: (body: Record<string, unknown>) => Promise<boolean>; timeZone?: string;
+  /** Staff t.ROY buttons show only once C4's launcher is merged (STAFF_TROY_READY). */
+  troyReady?: boolean;
 }) {
   const header = (sentence: React.ReactNode) => (
     <header className="mb-5">
@@ -112,7 +114,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone }: {
       <div className="mx-auto max-w-6xl">
         {header(null)}
         <p role="note" className="border border-t-line bg-t-panel px-4 py-4 text-t-white">
-          Today is for staff with access to people&apos;s progress. Ask your organization&apos;s owner.
+          Today is for staff who can open what participants have shared. Ask your organization&apos;s owner, or go to <Link href="/dashboard/people" className="t-focus underline underline-offset-4">People</Link>.
         </p>
       </div>
     );
@@ -124,23 +126,24 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone }: {
   const hiddenCount = hiddenSectionCount(d);
   const shown = d.sections.filter((s) => !d.hidden.includes(s.key));
   const empty = items.length === 0;
+  const hiddenItems = hiddenItemCount(d);
   const nobody = nobodySharesLine(d);
   const week = thisWeek(d, nowMs);
 
   return (
     <div className="mx-auto max-w-6xl">
-      {header(empty ? "Nothing is waiting on you right now." : todayHeadline(d))}
+      {header(empty ? (hiddenItems > 0 ? "Nothing in the sections you show." : "Nothing is waiting on you right now.") : todayHeadline(d))}
 
       {(strip.length > 0 || hiddenCount > 0) && (
-        <nav aria-label="Reasons on your list today" className="mb-6 flex flex-wrap items-center gap-2">
+        <nav aria-label="Reasons on your list today" className="-mx-4 mb-6 flex flex-nowrap items-center gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
           {strip.map((s) => (
-            <a key={s.key} href={`#today-${s.key}`} className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[4px] border border-t-line bg-t-panel px-3 text-sm text-t-white hover:border-t-line-strong">
+            <a key={s.key} href={`#today-${s.key}`} className="t-focus inline-flex min-h-touch flex-none items-center gap-2 whitespace-nowrap rounded-[4px] border border-t-line bg-t-panel px-3 text-sm text-t-white hover:border-t-line-strong">
               {s.label}
               <span className="rounded-[3px] bg-t-panel-3 px-1.5 font-term text-xs text-t-white">{s.count}</span>
             </a>
           ))}
           {hiddenCount > 0 && (
-            <Link href="/dashboard/settings" className="t-focus inline-flex min-h-touch items-center px-2 text-xs text-t-bone-dim underline underline-offset-4 hover:text-t-white">
+            <Link href="/dashboard/settings" className="t-focus inline-flex min-h-touch flex-none items-center whitespace-nowrap px-2 text-xs text-t-bone-dim underline underline-offset-4 hover:text-t-white">
               {hiddenCount === 1 ? "1 section hidden in your settings" : `${hiddenCount} sections hidden in your settings`}
             </Link>
           )}
@@ -151,14 +154,40 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone }: {
         <div className="min-w-0 lg:col-span-2">
           {nobody && <p role="note" className="mb-6 border-l-[3px] border-t-amber bg-t-panel px-4 py-3 text-sm text-t-white">{nobody}</p>}
 
-          {empty && (
+          {empty && hiddenItems > 0 && (
+            <p className="mb-6 border border-t-line bg-t-panel px-5 py-4 text-sm text-t-white">
+              {hiddenItems === 1 ? "1 item is" : `${hiddenItems} items are`} in sections you hid.{" "}
+              <Link href="/dashboard/settings" className="t-focus underline underline-offset-4">Show hidden sections</Link>
+            </p>
+          )}
+
+          {empty && hiddenItems === 0 && nobody && (
             <section className="border border-t-line bg-t-panel px-5 py-6">
-              <p className="text-t-white">Quiet days are when first conversations happen. Want t.ROY to suggest who to call?</p>
-              <button type="button" onClick={() => openStaffTroy({ skill: "staff-what-changed" })}
-                className="t-focus mt-4 min-h-touch rounded-[4px] border border-purple-400 px-4 text-sm font-medium text-purple-800 hover:bg-purple-50">
-                Ask t.ROY who to call
-              </button>
+              <p className="text-t-white">Until someone turns sharing on, you can still keep your own tasks here and talk with people about what sharing shows. Each person decides for themselves.</p>
+              <Link href="/dashboard/people" className="t-focus mt-4 inline-flex min-h-touch items-center rounded-[4px] bg-[#4f6b57] px-4 text-sm font-semibold text-white hover:bg-[#3d5745]">See who joined</Link>
             </section>
+          )}
+
+          {empty && hiddenItems === 0 && !nobody && (
+            <section className="border border-t-line bg-t-panel px-5 py-6">
+              <p className="text-t-white">Quiet days are when first conversations happen.{troyReady ? " Want t.ROY to suggest who to call?" : ""}</p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link href="/dashboard/people" className="t-focus inline-flex min-h-touch items-center rounded-[4px] bg-[#4f6b57] px-4 text-sm font-semibold text-white hover:bg-[#3d5745]">See everyone</Link>
+                {troyReady && (
+                  <button type="button" onClick={() => openStaffTroy({ skill: "staff-what-changed" })}
+                    className="t-focus min-h-touch rounded-[4px] border border-purple-400 px-4 text-sm font-medium text-purple-800 hover:bg-purple-50">
+                    Ask t.ROY who to call
+                  </button>
+                )}
+              </div>
+            </section>
+          )}
+
+          {week.length > 0 && (
+            <details className="mb-6 border border-t-line bg-t-panel px-4 py-2 lg:hidden">
+              <summary className="t-focus flex min-h-touch cursor-pointer items-center text-sm font-semibold text-t-white">This week ({week.length})</summary>
+              <WeekList week={week} />
+            </details>
           )}
 
           {shown.map((s) => {
@@ -171,7 +200,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone }: {
                   <span className="font-term text-t-bone-dim">{rows.length}</span>
                 </h2>
                 <ul className="space-y-2">
-                  {rows.map((i) => <TodayRow key={i.key} item={i} nowMs={nowMs} onTask={onTask} />)}
+                  {rows.map((i) => <TodayRow key={i.key} item={i} nowMs={nowMs} onTask={onTask} troyReady={troyReady} />)}
                 </ul>
               </section>
             );
@@ -192,20 +221,9 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone }: {
             </p>
           )}
           {d.canAddTasks && <TaskAdd onTask={onTask} />}
-          <section aria-labelledby="today-week-h" className="border border-t-line bg-t-panel px-4 py-4">
+          <section aria-labelledby="today-week-h" className="hidden border border-t-line bg-t-panel px-4 py-4 lg:block">
             <h2 id="today-week-h" className="text-sm font-semibold text-t-white">This week</h2>
-            {week.length === 0 ? (
-              <p className="mt-2 text-sm text-t-phos-dim">Nothing dated in the next seven days.</p>
-            ) : (
-              <ul className="mt-2 space-y-2">
-                {week.map(({ item, label }) => (
-                  <li key={item.key} className="flex gap-3 text-sm">
-                    <span className="w-20 flex-none font-term text-xs leading-5 text-t-amber-bright">{label}</span>
-                    <span className="min-w-0 text-t-white">{item.clientName ? `${first(item.clientName)}: ` : ""}{agendaWhat(item)}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {week.length === 0 ? <p className="mt-2 text-sm text-t-phos-dim">Nothing dated in the next seven days.</p> : <WeekList week={week} />}
           </section>
         </aside>
       </div>
@@ -213,14 +231,28 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone }: {
   );
 }
 
+function WeekList({ week }: { week: { item: TodayItemView; label: string }[] }) {
+  return (
+    <ul className="mt-2 space-y-2 pb-2">
+      {week.map(({ item, label }) => (
+        <li key={item.key} className="flex gap-3 text-sm">
+          <span className="w-20 flex-none font-term text-xs leading-5 text-t-amber-bright">{label}</span>
+          <span className="min-w-0 text-t-white">{item.clientName ? `${first(item.clientName)}: ` : ""}{agendaWhat(item)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function agendaWhat(i: TodayItemView): string {
   if (i.section === "interviews") return "interview";
+  if (i.section === "interview_stalled") return "stalled interview";
   if (i.section === "followups") return "follow-up";
   if (i.section === "retention") return "retention check-in";
   return i.reason.replace(/ \((was )?due [^)]*\)/, "").replace(/ · shared with .*$/, "");
 }
 
-function TodayRow({ item: i, nowMs, onTask }: { item: TodayItemView; nowMs: number; onTask?: (body: Record<string, unknown>) => Promise<boolean> }) {
+function TodayRow({ item: i, nowMs, onTask, troyReady }: { item: TodayItemView; nowMs: number; onTask?: (body: Record<string, unknown>) => Promise<boolean>; troyReady: boolean }) {
   // A retention line is due now; its date is the start date, so no "N days ago".
   const when = i.section === "retention" ? null : relativeWhen(i.when, nowMs);
   const station = stationLabelForStage(i.stage ?? null);
@@ -244,12 +276,12 @@ function TodayRow({ item: i, nowMs, onTask }: { item: TodayItemView; nowMs: numb
             className="t-focus min-h-touch px-2 text-xs text-t-phos underline underline-offset-4 hover:text-t-white">Mark done</button>
         )}
         {i.action.href !== "#" && (
-          <Link href={i.action.href} className="t-focus inline-flex min-h-touch items-center whitespace-nowrap px-2 text-xs font-semibold text-t-amber-bright underline underline-offset-4 hover:text-t-amber">{i.action.label}</Link>
+          <Link href={i.action.href} className="t-focus inline-flex min-h-touch items-center whitespace-nowrap rounded-[4px] bg-[#4f6b57] px-3 text-xs font-semibold text-white hover:bg-[#3d5745]">{i.action.label}</Link>
         )}
-        {i.clientId && (
+        {troyReady && i.clientId && (
           <button type="button" onClick={() => openStaffTroy({ clientId: i.clientId!, skill: "staff-prep-me" })}
             aria-label={`Prep me for ${first(i.clientName)}`}
-            className="t-focus inline-flex min-h-touch items-center rounded-[4px] border border-purple-300 px-2.5 text-xs font-medium text-purple-800 hover:bg-purple-50">
+            className="t-focus inline-flex min-h-touch items-center px-2 text-xs font-medium text-purple-800 underline underline-offset-4 hover:text-purple-950">
             Prep me
           </button>
         )}

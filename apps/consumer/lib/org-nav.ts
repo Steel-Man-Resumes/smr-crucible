@@ -15,9 +15,9 @@ export const ORG_WORKSPACE_NAV: readonly OrgNavGroup[] = [
   {
     label: "Work",
     items: [
-      { href: "/dashboard/today", label: "Today", navId: "org-nav-today" },
+      { href: "/dashboard/today", label: "Today", needs: "org.client.view_content", navId: "org-nav-today" },
       { href: "/dashboard/people", label: "People", navId: "org-nav-people" },
-      { href: "/dashboard/requests", label: "Asks", navId: "org-nav-asks" },
+      { href: "/dashboard/requests", label: "Asks", needs: "org.client.request_sharing", navId: "org-nav-asks" },
     ],
   },
   { label: "Records", items: [{ href: "/dashboard/notes", label: "Case notes", navId: "org-nav-notes" }] },
@@ -59,11 +59,11 @@ export function orgRoleLine(orgRole: "owner" | "org_admin" | "staff" | null | un
   return "";
 }
 
-/** The organization's name as shown: "(Demo)" becomes the separate Demo chip. */
+/** The organization's name as shown: "(Demo)" becomes the separate Demo chip. Empty when unknown: no stand-in name. */
 export function orgDisplayName(name: string | null | undefined): { name: string; demo: boolean } {
   const raw = (name ?? "").trim();
   const demo = /\(Demo\)\s*$/.test(raw);
-  return { name: raw.replace(/\s*\(Demo\)\s*$/, "").trim() || "Your organization", demo };
+  return { name: raw.replace(/\s*\(Demo\)\s*$/, "").trim(), demo };
 }
 
 /**
@@ -73,9 +73,12 @@ export function orgDisplayName(name: string | null | undefined): { name: string;
  * anchor (#invited, #team, #add) keep working by going to People with the
  * anchor. Null means stay: not a workspace member.
  */
-export function orgLanding(opts: { orgRole: string | null | undefined; crmV2: boolean | undefined; hash: string; landing?: string | null }): string | null {
+export function orgLanding(opts: { orgRole: string | null | undefined; crmV2: boolean | undefined; hash: string; landing?: string | null; capabilities: readonly string[] }): string | null {
   if (!opts.orgRole || !opts.crmV2) return null;
   const hash = opts.hash.replace(/^#/, "");
   if (hash) return `/dashboard/people#${hash}`;
+  // Today is built from what people shared; without the switch to open it the
+  // page can only refuse, so those staff land on People (C1 review S1).
+  if (!opts.capabilities.includes("org.client.view_content")) return "/dashboard/people";
   return opts.landing === "caseload" ? "/dashboard/people" : "/dashboard/today";
 }

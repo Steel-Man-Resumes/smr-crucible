@@ -53,9 +53,10 @@ export function todayHeadline(d: TodayPayload): string {
   const items = visibleItems(d);
   const people = new Set(items.filter((i) => i.section !== "tasks" && i.clientId).map((i) => i.clientId)).size;
   const tasks = items.filter((i) => i.section === "tasks").length;
+  const noneShown = hiddenItemCount(d) > 0 ? "Nothing in the sections you show." : null;
   const who = d.volunteer
-    ? (people === 0 ? "None of your assigned people need you right now." : `${people} of your assigned people ${people === 1 ? "needs" : "need"} you today.`)
-    : (people === 0 ? "Nobody is waiting on you right now." : `${people} ${people === 1 ? "person needs" : "people need"} you today.`);
+    ? (people === 0 ? noneShown ?? "None of your assigned people need you right now." : `${people} of your assigned people ${people === 1 ? "needs" : "need"} you today.`)
+    : (people === 0 ? noneShown ?? "Nobody is waiting on you right now." : `${people} ${people === 1 ? "person needs" : "people need"} you today.`);
   const mine = tasks === 0 ? "" : ` ${tasks} ${tasks === 1 ? "task is" : "tasks are"} yours.`;
   return who + mine;
 }
@@ -66,6 +67,11 @@ export function reasonStrip(d: TodayPayload): { key: string; label: string; coun
     .filter((s) => !d.hidden.includes(s.key))
     .map((s) => ({ key: s.key, label: s.label, count: d.items.filter((i) => i.section === s.key).length }))
     .filter((s) => s.count > 0);
+}
+
+/** Items waiting in sections the viewer hid (so "nothing is waiting" would be untrue). */
+export function hiddenItemCount(d: TodayPayload): number {
+  return d.items.filter((i) => d.hidden.includes(i.section)).length;
 }
 
 export function hiddenSectionCount(d: TodayPayload): number {

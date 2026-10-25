@@ -46,12 +46,15 @@ export function OrgSidebar(p: OrgSidebarProps) {
   return (
     <nav aria-label="Organization workspace" className="org-nav">
       <div className="org-identity">
+        {/* C3 merge: drop the name fallback once the role payload carries orgId (review N9). */}
         <OrgMark orgId={p.orgId || p.orgName || ""} name={org.name} hasLogo={!!p.hasLogo} size={40} />
         <div className="min-w-0">
-          <p className="org-identity-name">
-            {org.name}
-            {org.demo && <span className="org-demo-chip">Demo</span>}
-          </p>
+          {(org.name || org.demo) && (
+            <p className="org-identity-name">
+              {org.name}
+              {org.demo && <span className="org-demo-chip">Demo</span>}
+            </p>
+          )}
           {roleLine && <p className="org-identity-role">{roleLine}</p>}
         </div>
       </div>
