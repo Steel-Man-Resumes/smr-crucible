@@ -24,18 +24,27 @@ test('org_brand: owner-only logo, admin-only tier, members-only read, audited wi
   const { pgcrypto } = await import(join(dir!, '@electric-sql/pglite/dist/contrib/pgcrypto.js'));
   const db = new PGlite({ extensions: { pgcrypto } });
   await db.exec('CREATE TABLE IF NOT EXISTS _migrations(filename text PRIMARY KEY, applied_at timestamptz DEFAULT now())');
+  // The app role exists BEFORE the migrations, with blanket default grants on
+  // every new table, so each migration's own "IF smr_app exists: REVOKE ALL,
+  // GRANT ..." block really runs. 099's block must leave smr_app with SELECT,
+  // INSERT, UPDATE on org_brand and no DELETE.
+  await db.exec(`CREATE ROLE smr_app NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO smr_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO smr_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO smr_app;`);
   const failed: string[] = [];
   for (const f of readdirSync(MIG).filter((x) => /^\d{3}_.*\.sql$/.test(x) && Number(x.slice(0, 3)) <= 99).sort()) {
     try { await db.exec(`BEGIN; INSERT INTO _migrations(filename) VALUES ('${f}') ON CONFLICT DO NOTHING;` + readFileSync(MIG + f, 'utf8') + ';COMMIT;'); }
     catch { await db.exec('ROLLBACK').catch(() => {}); failed.push(f); } // 088-091 resource chain refuses on its own guards; unrelated tables
   }
   assert.ok(readdirSync(MIG).includes('099_org_brand.sql') && !failed.includes('099_org_brand.sql'), `099 must apply; failed: ${failed.join(', ')}`);
-  await db.exec(`CREATE ROLE tester NOSUPERUSER; GRANT USAGE ON SCHEMA public TO tester; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO tester; GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO tester;`);
+  const priv = async (p: string) => ((await db.query(`SELECT has_table_privilege('smr_app', 'org_brand', $1) AS ok`, [p])).rows[0] as { ok: boolean }).ok;
+  assert.deepEqual([await priv('SELECT'), await priv('INSERT'), await priv('UPDATE'), await priv('DELETE')], [true, true, true, false],
+    "099's revoke-then-grant leaves smr_app SELECT, INSERT, UPDATE and no DELETE on org_brand");
   const q = (t: string, p: unknown[] = []) => db.query(t, p);
 
   /** As the app role: org scope when orgId is set (runScoped), else the user id only (runAsUser), else nothing. */
   const as = async (who: { orgId?: string; userId?: string; role?: string }, text: string, params: unknown[] = []) => {
-    await db.exec('BEGIN; SET LOCAL ROLE tester;');
+    await db.exec('BEGIN; SET LOCAL ROLE smr_app;');
     try {
       if (who.orgId) await db.query(`SELECT set_config('app.org_id', $1, true), set_config('app.org_role', $2, true)`, [who.orgId, who.role ?? 'staff']);
       if (who.userId) await db.query(`SELECT set_config('app.user_id', $1, true)`, [who.userId]);
@@ -107,7 +116,7 @@ test('org_brand: owner-only logo, admin-only tier, members-only read, audited wi
   // ---- removal keeps the tier; delete is not possible ------------------------
   assert.ok(await refused(as({ orgId: org, userId: staff, role: 'staff' }, ORG_BRAND_SQL.removeLogo, [org])), 'staff cannot remove the logo');
   assert.equal(await readAs({ userId: owner }), 1, 'still there');
-  assert.equal((await as({ orgId: org, userId: owner, role: 'owner' }, `DELETE FROM org_brand WHERE access_code_id = $1 RETURNING 1`, [org])).length, 0, 'no delete policy: the owner cannot delete the row');
+  assert.ok(await refused(as({ orgId: org, userId: owner, role: 'owner' }, `DELETE FROM org_brand WHERE access_code_id = $1 RETURNING 1`, [org])), 'no DELETE grant and no delete policy: the owner cannot delete the row');
   assert.equal((await as({ orgId: org, userId: owner, role: 'owner' }, ORG_BRAND_SQL.removeLogo, [org])).length, 1, 'the owner removes the logo');
   const after = (await q(`SELECT logo, tier FROM org_brand WHERE access_code_id = $1`, [org])).rows[0] as { logo: unknown; tier: string };
   assert.equal(after.logo, null); assert.equal(after.tier, 'cobrand', 'the tier survives a removal');

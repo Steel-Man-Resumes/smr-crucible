@@ -39,7 +39,11 @@ export const MONOGRAM_TONES = ["#7a5a1c", "#4f6b57", "#5f665f", "#8a5410"] as co
 const DEMO_SUFFIX = /\s*\(demo\)\s*$/i;
 const SMALL_WORDS = new Set(["of", "the", "and", "for", "a", "an", "in", "on", "at", "to", "&"]);
 
-/** Up to two initials. "Hope House (Demo)" -> "HH"; "Northside" -> "NO"; a name with no letters -> "". */
+/**
+ * Up to two initials. "Hope House (Demo)" -> "HH"; "Northside" -> "N" (one
+ * word gives one letter: two letters from one word read as a word, "NO");
+ * a name with no letters -> "".
+ */
 export function orgInitials(name: string | null | undefined): string {
   const clean = String(name ?? "").replace(DEMO_SUFFIX, "").trim();
   const words = clean.split(/[^\p{L}\p{N}&]+/u).filter(Boolean);
@@ -48,7 +52,7 @@ export function orgInitials(name: string | null | undefined): string {
   if (use.length === 0) return "";
   if (use.length === 1) {
     const letters = Array.from(use[0].replace(/[^\p{L}\p{N}]/gu, ""));
-    return letters.slice(0, 2).join("").toUpperCase();
+    return (letters[0] ?? "").toUpperCase();
   }
   return (Array.from(use[0])[0] + Array.from(use[1])[0]).toUpperCase();
 }

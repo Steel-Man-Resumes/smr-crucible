@@ -14,7 +14,18 @@
  */
 import { useState } from "react";
 import { Building2 } from "lucide-react";
-import { orgMonogram } from "@crucible/core/src/orgBrandShared";
+import { orgMonogram as monogramFor, orgInitials, MONOGRAM_TONES, MONOGRAM_TEXT } from "@crucible/core/src/orgBrandShared";
+
+/**
+ * Thin aliases kept from the C1 stub (crm-shell.test.ts imports them): the
+ * initials as a string ("?" only when the name has no letters at all; the
+ * component itself shows a building icon then), and the four tones with
+ * their text color.
+ */
+export function orgMonogram(name: string): string {
+  return orgInitials(name) || "?";
+}
+export const ORG_MARK_TONES = MONOGRAM_TONES.map((bg) => ({ bg, fg: MONOGRAM_TEXT }));
 
 export type OrgMarkSize = 24 | 28 | 40 | 120;
 
@@ -40,7 +51,7 @@ export function OrgMark(props: { orgId: string; name: string; hasLogo: boolean; 
     );
   }
 
-  const mono = orgMonogram(orgId, name);
+  const mono = monogramFor(orgId, name);
   return (
     <span
       role="img"

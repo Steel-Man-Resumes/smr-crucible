@@ -51,9 +51,9 @@ describe("monogram", () => {
   });
   it("initials: two words, one word, (Demo) stripped, small words skipped", () => {
     assert.equal(orgInitials("Hope House"), "HH");
-    assert.equal(orgInitials("Northside"), "NO");
+    assert.equal(orgInitials("Northside"), "N");
     assert.equal(orgInitials("Hope House (Demo)"), "HH");
-    assert.equal(orgInitials("Northside (demo)"), "NO");
+    assert.equal(orgInitials("Northside (demo)"), "N");
     assert.equal(orgInitials("The Center for Second Starts"), "CS");
     assert.equal(orgInitials("  "), "");
     for (const n of ["Hope House", "Northside", "Hope House (Demo)", "A", "Org"]) {
@@ -77,7 +77,7 @@ describe("OrgMark", () => {
     assert.doesNotMatch(out, /https?:\/\//);
   });
   it("renders the monogram for a two-word, one-word and (Demo) name, never ORG", () => {
-    for (const [name, initials] of [["Hope House", "HH"], ["Northside", "NO"], ["Hope House (Demo)", "HH"]] as const) {
+    for (const [name, initials] of [["Hope House", "HH"], ["Northside", "N"], ["Hope House (Demo)", "HH"]] as const) {
       const out = html({ orgId: "o1", name, hasLogo: false });
       assert.match(out, new RegExp(`>${initials}<`));
       assert.doesNotMatch(out, />ORG</);
@@ -93,6 +93,17 @@ describe("OrgMark", () => {
     assert.match(out, /With Hope House \(Demo\)/);
     assert.match(out, /href="\/dashboard\/settings"/);
     assert.doesNotMatch(out, /Powered by|>ORG<|Example partner/);
+  });
+});
+
+describe("C1 stub compatibility (crm-shell.test.ts:132-143, unchanged)", () => {
+  it("the aliases C1's test imports agree with this file", async () => {
+    const { orgMonogram: mono, ORG_MARK_TONES } = await import("../../components/org/OrgMark");
+    assert.equal(mono("Lakeshore Works (Demo)"), "LW");
+    assert.equal(mono("Northside"), "N");
+    assert.equal(mono(""), "?");
+    for (const t of ORG_MARK_TONES) assert.ok(contrastRatio(t.bg, t.fg) >= 4.5, `${t.fg} on ${t.bg}`);
+    assert.match(renderToStaticMarkup(React.createElement(OrgMark, { orgId: "x", name: "Lakeshore Works", hasLogo: false })), />LW</);
   });
 });
 
@@ -162,7 +173,7 @@ describe('the "ORG" placeholder is gone from every render path', () => {
     assert.match(slots[0], /!isOrgPartner && effectiveRole\?\.coBrand \?/);
     // The role payload sets coBrand only from getParticipantCoBrand, and only with no org role.
     const role = readFileSync(join(APP, "app/api/user/role/route.ts"), "utf8");
-    assert.match(role, /const coBrand = !org\s*\?\s*await core\.getParticipantCoBrand\(userId\)/);
+    assert.match(role, /roleBrandFields\(\s*\{ userId, orgId: [^}]+, hasOrgRole: !!org \}/);
   });
   it("the tenant config carries no placeholder partner name", () => {
     const s = readFileSync(join(APP, "lib/tenant-config.ts"), "utf8");
