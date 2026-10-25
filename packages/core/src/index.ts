@@ -17,6 +17,7 @@ export * from './sharingScopes';
 export * from './sharing';
 export * from './sharingPolicy';
 export * from './orgClientView';
+export * from './orgStaffAssistant';
 export * from './staffPrefs';
 export * from './orgAccess';
 export * from './orgInsights';

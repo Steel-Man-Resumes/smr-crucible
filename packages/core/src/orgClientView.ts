@@ -267,6 +267,36 @@ async function readShared<T>(actor: OrgActor, clientId: string, scope: SharingSc
   return { ok: true, rows };
 }
 
+/**
+ * The access-log row for a t.ROY read on a staff member's behalf (C4, staff
+ * skills). A skill that looks a person over is an open, the same as a tab:
+ * the participant sees it in "Who has opened what". Same reach predicate as
+ * every read here, so a refused read writes nothing. Exported so the pglite
+ * test runs this exact statement. $1 client, $2 org, $3 sees-all, $4 actor,
+ * $5 resource ("assistant:overview" | "assistant:changes").
+ */
+export const STAFF_ASSISTANT_OPEN_SQL = `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
+       SELECT $1::uuid, 'staff', ($4::uuid)::text, $5::text, 'org_client_view', jsonb_build_object('orgId', ($2::uuid)::text, 'via', 't.ROY')
+        WHERE ${IN_REACH}
+       RETURNING id`;
+
+export type StaffAssistantRead = "overview" | "changes";
+
+/**
+ * Write the open BEFORE anything is read for the assistant. If the row cannot
+ * be written this throws, and the caller returns nothing (the log is part of
+ * the read). No row means not in reach: the caller stops there.
+ */
+export async function recordStaffAssistantOpen(actor: OrgActor, clientId: string, what: StaffAssistantRead): Promise<ClientViewResult<{ id: string }>> {
+  const refused = refuseActor(actor);
+  if (refused) return { ok: false, reason: refused };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+    run(sql)(STAFF_ASSISTANT_OPEN_SQL, [...params(actor, clientId), `assistant:${what}`]),
+  ]);
+  return rows[0] ? { ok: true, rows } : { ok: false, reason: "not_in_reach_or_not_member" };
+}
+
 export interface SharedApplication {
   id: string;
   job_title: string | null;
