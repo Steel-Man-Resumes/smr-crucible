@@ -221,7 +221,8 @@ function agendaWhat(i: TodayItemView): string {
 }
 
 function TodayRow({ item: i, nowMs, onTask }: { item: TodayItemView; nowMs: number; onTask?: (body: Record<string, unknown>) => Promise<boolean> }) {
-  const when = relativeWhen(i.when, nowMs);
+  // A retention line is due now; its date is the start date, so no "N days ago".
+  const when = i.section === "retention" ? null : relativeWhen(i.when, nowMs);
   const station = stationLabelForStage(i.stage ?? null);
   return (
     <li className="flex flex-wrap items-center gap-3 border border-t-line bg-t-panel px-4 py-3">
@@ -275,11 +276,11 @@ function TaskAdd({ onTask }: { onTask?: (body: Record<string, unknown>) => Promi
       <h2 className="text-sm font-semibold text-t-white">Your tasks</h2>
       <label className="mt-3 block text-xs text-t-bone-dim" htmlFor="today-task">Add a task for yourself</label>
       <input id="today-task" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={300}
-        className="t-focus mt-1 w-full rounded-[4px] border border-t-line bg-t-panel px-3 py-2 text-sm text-t-white" />
+        className="plain-field t-focus mt-1 w-full rounded-[4px] border px-3 py-2 text-sm" />
       <div className="mt-2 flex gap-2">
         <label className="sr-only" htmlFor="today-due">Due date</label>
         <input id="today-due" type="date" value={due} onChange={(e) => setDue(e.target.value)}
-          className="t-focus min-w-0 flex-1 rounded-[4px] border border-t-line bg-t-panel px-3 py-2 text-sm text-t-white" />
+          className="plain-field t-focus min-w-0 flex-1 rounded-[4px] border px-3 py-2 text-sm" />
         <button className="t-focus min-h-touch rounded-[4px] bg-[#4f6b57] px-4 text-sm font-semibold text-white disabled:opacity-50" disabled={title.trim().length < 2}>Add</button>
       </div>
       {failed && <p role="alert" className="mt-2 text-xs text-t-red">That task did not save. Try again.</p>}

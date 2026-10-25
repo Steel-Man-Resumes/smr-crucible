@@ -133,3 +133,18 @@ test("this week: dated items in the next seven days, soonest first", () => {
   assert.equal(personInitials("Dana Whitfield"), "DW");
 });
 
+
+test("Today's task fields are plain fields, not terminal prompts, and the opt-out out-ranks the global rule", () => {
+  const html = renderToStaticMarkup(React.createElement(TodayView, { state: { status: "ready", data: FULL }, nowMs: NOW }));
+  assert.equal((html.match(/<input[^>]*class="plain-field/g) ?? []).length, 2);
+  const css = read("components/org/org-workspace.css");
+  // The global input rule is element + seven attribute :not()s; ours adds a class.
+  assert.match(css, /input\.plain-field:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="range"\]\):not\(\[type="file"\]\):not\(\[type="button"\]\):not\(\[type="submit"\]\):not\(\[type="reset"\]\),/);
+  assert.match(css, /background-image: none !important;/);
+});
+
+test("a retention line shows no 'days ago' from the start date", () => {
+  const data: TodayPayload = { ...FULL, items: [{ key: "ret:o1:90", section: "retention", clientId: "p5", clientName: "Marcus Lee", when: "2026-07-20", stage: 6, reason: "Marcus started at Riverside Fabrication 90+ days ago. Time for the 90-day check-in: still there?", action: { label: "Record the check-in", href: "/dashboard/clients/p5" } }] };
+  const html = renderToStaticMarkup(React.createElement(TodayView, { state: { status: "ready", data }, nowMs: NOW }));
+  assert.doesNotMatch(html, /\d+ days ago<\/span>/);
+});

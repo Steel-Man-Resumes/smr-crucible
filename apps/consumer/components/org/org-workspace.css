@@ -40,3 +40,23 @@
 .org-nav .org-troy .org-dot { border-color: #c084fc; }
 .org-nav .org-troy:hover { color: #f3e8ff; }
 @media (prefers-reduced-motion: reduce) { .org-nav * { transition: none !important; } }
+
+/* Plain fields for records (notes, tasks): no terminal "$" prompt, reading
+   surface colors, body type (CRM design principle 5; Troy 2026-10-24: the "$"
+   leaves notes and tasks). The selector matches the global terminal input rule
+   (app/globals.css) plus one class, so it wins on specificity, not on order. */
+input.plain-field:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+textarea.plain-field {
+  color: var(--t-white) !important;
+  background-color: var(--t-panel) !important;
+  background-image: none !important;
+  border-color: var(--t-line-strong) !important;
+  font-family: var(--t-body) !important;
+  padding-left: .75rem !important;
+  caret-color: auto;
+  box-shadow: none;
+}
+input.plain-field:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"])::placeholder,
+textarea.plain-field::placeholder { color: var(--t-bone-dim) !important; }
+input.plain-field:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):focus,
+textarea.plain-field:focus { border-color: #4f6b57 !important; box-shadow: 0 0 0 1px #4f6b57; }
