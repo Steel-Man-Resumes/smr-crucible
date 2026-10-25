@@ -948,7 +948,9 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
               skills: userFullContext?.forge?.skills?.map((s) => (typeof s === "string" ? s : (s as any).name)).filter(Boolean) ?? undefined,
               barriers: userFullContext?.forge?.barriers ?? undefined,
               hasCriminalRecord: userFullContext?.forge?.hasCriminalRecord ?? undefined,
-              userFullContext,
+              // Not sent since 2026-10-25: /api/assistant builds the full
+              // context on the server from the session (it deleted this
+              // field unread since 2026-10-15).
             }}
             // Org staff get t.ROY's caseload assistant (/api/assistant resolves
             // their org server-side). The Refinery coach is a job-seeker's coach
