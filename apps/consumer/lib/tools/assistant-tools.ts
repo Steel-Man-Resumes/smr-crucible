@@ -173,7 +173,7 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     tools.request_tool_access = tool({
       description:'Only after the person asks, request early guided-tool access or a small AI bonus. The server decides eligibility and amount. This never changes premium access, account roles, security or pricing. If review_required, direct them to the progress bar to review and consent to the summary; do not claim it was sent to Troy.',
       parameters:jsonSchema<{stepId:string;reason:string;requestKind:'unlock'|'ai_bonus'}>({type:'object',properties:{stepId:{type:'string',enum:['foundation','direction','tailor','apply','interview','offer']},reason:{type:'string',maxLength:1000},requestKind:{type:'string',enum:['unlock','ai_bonus']}},required:['stepId','reason','requestKind'],additionalProperties:false}),
-      execute:async(args)=>{try{return await requestProgressionAccess(userId,{...args,idempotencyKey:args.requestKind==='ai_bonus'?`coach-bonus-${new Date().toISOString().slice(0,10)}`:`coach-unlock-${args.stepId}`,selection:opts.selectedWork?.selection});}catch{return {error:'The access request did not finish. Try the progress bar.'};}},
+      execute:async(args)=>{try{return await requestProgressionAccess(userId,{...args,idempotencyKey:args.requestKind==='ai_bonus'?`coach-bonus-${new Date().toISOString().slice(0,10)}`:`coach-unlock-${args.stepId}`,selection:opts.workSelection ?? {}});}catch{return {error:'The access request did not finish. Try the progress bar.'};}},
     });
   }
 

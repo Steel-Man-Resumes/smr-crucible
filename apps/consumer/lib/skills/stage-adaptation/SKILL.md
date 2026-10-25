@@ -21,7 +21,7 @@ Depth of questioning scales with BOTH stage and material: a preparing user with 
 
 ## Identity, the Real Engine
 
-Lasting change rides on a person buying a new story about themselves (Giordano's cognitive transformation: openness -> a hook -> a replacement self -> the old life stops fitting). Every surface contributes: a mined bullet proves competence; a finished disclosure plan proves control; a practice session proves readiness. Name the identity evidence when it appears ("you just built a logistics professional's resume; that's who this is"), because the document expires, and the identity doesn't.
+Lasting change rides on a person buying a new story about themselves (Giordano's cognitive transformation: openness -> a hook -> a replacement self -> the old life stops fitting). Every surface contributes: a mined bullet proves competence; a finished hurdle plan proves control; a practice session proves readiness. Name the identity evidence when it appears ("you just built a logistics professional's resume; that's who this is"), because the document expires, and the identity doesn't.
 
 ## Stage Honesty
 

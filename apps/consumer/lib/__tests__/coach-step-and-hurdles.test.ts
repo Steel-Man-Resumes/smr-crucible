@@ -88,6 +88,11 @@ describe("1. the step the coach reports is the step the Overview shows", () => {
     assert.ok(/function progressionForTools\(opts: AssistantToolOptions\) \{\s*return getProgression\(opts\.userId!, opts\.workSelection \?\? \{\}, true\);/.test(tools), "one helper: the browser pick, readOnly");
     assert.equal((tools.match(/progressionForTools\(opts\)/g) ?? []).length, 2, "get_my_progress and get_my_live_status both use it");
     assert.ok(!/getProgression\([^)]*selectedWork\?\.selection/.test(tools), "no progression read from selectedWork.selection remains");
+    // Review S1: request_tool_access runs getProgression through requestProgressionAccess; it takes the browser pick too.
+    assert.ok(tools.includes("selection:opts.workSelection ?? {}});"), "request_tool_access passes the browser pick");
+    const selectionUses = tools.match(/selectedWork\?\.selection/g) ?? [];
+    assert.equal(selectionUses.length, 1, "the resolved selection is read once in the tools file");
+    assert.ok(tools.includes("const selected = opts.selectedWork?.selection;\n      const href = resolveAssistantPage(page, selected?.applicationId, selected);"), "and only by contextual_handoff, which builds a link to the resolved document");
     assert.ok(tools.includes("currentStep: progress ? { id: progress.currentStepId, label: progressionStepLabel(progress) } : null"), "the live status carries the board's label for the step");
     const coach = code(read("app/api/coach/route.ts"));
     assert.ok(coach.includes("workSelection = readWorkSelection(ctx.selectedWork); selectedWork = await loadSelectedWork(userId, workSelection);"));
@@ -136,6 +141,13 @@ function hurdleRow() {
   const p = buildSavePayload(buildHurdlePlan(st), st, { summaries: {}, strippedCount: 0, wording: "off", targetJob: "Production Supervisor", now: "2026-10-24T15:20:40.000Z" });
   return { target_context: p.targetContext, content: p.content, created_at: "2026-10-24T15:20:40.000Z" };
 }
+/** Review S2: the same plan with gaps.inside skipped instead of answered. Its decision line names the record conversation. */
+function skippedInsideRow() {
+  const st = runPlanner([...pick("gaps", "transport"), { type: "start" }, ans("gaps.length", "1to3"), ans("gaps.filled", "inside", "family"), { type: "skip", nodeId: "gaps.inside" },
+    { type: "skip", nodeId: "gaps.proof" }, ans("gaps.asked", "no"), ans("gaps.tell", "nothing"), ans("transport.what", "ride"), ans("transport.backup", "no")]);
+  const p = buildSavePayload(buildHurdlePlan(st), st, { summaries: {}, strippedCount: 0, wording: "off", targetJob: "Production Supervisor", now: "2026-10-24T15:20:40.000Z" });
+  return { payload: p, row: { target_context: p.targetContext, content: p.content, created_at: "2026-10-24T15:20:40.000Z" } };
+}
 const progressionRow = () => assembleProgression({ allow, work: dashboardWork(), grants: [], requests: [], anyOffer: false });
 const loaders = (over: Partial<CoachServerLoaders> = {}): CoachServerLoaders => ({ hurdlePlan: async () => hurdleRow(), progression: async () => progressionRow(), ...over });
 
@@ -161,6 +173,21 @@ describe("2. the coach gets the hurdle plan summary the assistant has, with no c
     assert.deepEqual(recordAndSensitiveText().filter((t) => lower.includes(t.toLowerCase())), []);
     assert.ok(!lower.includes("time inside"));
     assert.ok(!lower.includes("disclosure plan"), "the coach's own section never points at a DISCLOSURE PLAN heading it does not have");
+  });
+
+  it("review S2: a skipped gaps.inside leaves no decision line in the saved plan, the coach section or t.ROY's summary", async () => {
+    const { payload, row } = skippedInsideRow();
+    const forbidden = recordAndSensitiveText();
+    assert.ok(forbidden.includes("Whether to plan the record conversation too."));
+    const saved = JSON.stringify(payload).toLowerCase();
+    assert.deepEqual(forbidden.filter((t) => saved.includes(t.toLowerCase())), [], "whole saved payload");
+    const prompt = coachServerPartsPrompt(await loadCoachServerParts(U, {}, loaders({ hurdlePlan: async () => row }))).toLowerCase();
+    assert.deepEqual(forbidden.filter((t) => prompt.includes(t.toLowerCase())), [], "coach section");
+    const section = prompt.slice(prompt.indexOf("### hurdle plan"), prompt.indexOf(COACH_RECORD_POINTER.toLowerCase()));
+    assert.ok(section.length > 50 && !section.includes("record conversation") && !section.includes("time inside"), "the plan lines themselves (the pointer line below says the record words stay in Plan what to say)");
+    assert.ok(section.includes("gaps in my work history") && section.includes("getting to work"), "the hurdles themselves still show");
+    const summary = JSON.stringify(summarizeHurdlePlan(row)).toLowerCase();
+    assert.deepEqual(forbidden.filter((t) => summary.includes(t.toLowerCase())), [], "t.ROY's summary, same function");
   });
 
   it("no plan saved says so; a failed read says nothing about a plan and tells the coach the live check failed", async () => {
@@ -200,7 +227,7 @@ describe("3. the coach's copy says Plan what to say and hurdle plan, never 'disc
       coachServerPartsPrompt(await loadCoachServerParts(U, {}, loaders())),
       Object.values(TOUR_TARGETS).join("\n"), descriptions,
       buildBlockSection(computeCurrentBlock({ forgeComplete: false, hasResumeTailoredToTarget: false })), buildBlockSection(computeCurrentBlock({ forgeComplete: true, hasResumeTailoredToTarget: false })), buildWhatsNewSection(),
-      read("lib/skills/predictive-next-step/SKILL.md"),
+      read("lib/skills/predictive-next-step/SKILL.md"), read("lib/skills/job-search-doctrine/SKILL.md"), read("lib/skills/rejection-recovery/SKILL.md"), read("lib/skills/stage-adaptation/SKILL.md"),
     ].join("\n");
     assert.ok(copy.length > 5000);
     assert.doesNotMatch(copy, /disclosure plan(ner|ning)?\b/i);
