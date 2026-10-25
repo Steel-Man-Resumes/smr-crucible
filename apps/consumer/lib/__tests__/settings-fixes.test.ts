@@ -15,7 +15,7 @@ import { TOURS, readTourSlot, isTourId, slotSql } from '../tour/registry';
 import { grantTourRewardWith } from '../tour/tour-sql';
 import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed } from '../export-plan';
 import { saveErrorWords, SAVE_ERROR_FALLBACK } from '../save-error';
-import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
+import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, legacyToolLeft, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
 
 const ROOT = join(__dirname, '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
@@ -191,6 +191,35 @@ test('S5: an older account keeps its count per tool; an unlimited one says so; t
   for (const t of ['assistant', 'resume-full', 'interview', 'follow-up', 'fit-check']) assert.ok((PROGRESSION_AI as readonly string[]).includes(t), t);
 });
 
+test('S5 (SF-2): on an older account the bonus is one shared pool for progression tools, spent account-wide, never a count added to every tool', () => {
+  // The admission rule (lib/withRateLimit.ts, lib/ai-operation-server.ts) as numbers.
+  assert.equal(legacyToolLeft({ limit: 30, count: 0, bonus: 2, bonusUsed: 0, progression: true }), 32);
+  assert.equal(legacyToolLeft({ limit: 30, count: 30, bonus: 2, bonusUsed: 0, progression: true }), 2, 'over the count, the bonus admits');
+  assert.equal(legacyToolLeft({ limit: 30, count: 30, bonus: 2, bonusUsed: 2, progression: true }), 0, 'the bonus spent elsewhere is gone here too');
+  assert.equal(legacyToolLeft({ limit: 30, count: 10, bonus: 2, bonusUsed: 2, progression: true }), 20);
+  assert.equal(legacyToolLeft({ limit: 30, count: 0, bonus: 2, bonusUsed: 0, progression: false }), 30, 'a non-progression tool never sees the bonus');
+  assert.equal(legacyToolLeft({ limit: 30, count: 31, bonus: 2, bonusUsed: 0, progression: true }), 1, 'capped at limit + bonus - count');
+  assert.equal(legacyToolLeft({ limit: 30, count: 40, bonus: 2, bonusUsed: 0, progression: true }), 0);
+  // Both bonus calls spent in t.ROY chat after its 30; analyze is not a progression tool.
+  const v = buildUsageView({ ...base, allowance: { existing: true, base: 30, bonus: 2, used: 0, bonusUsed: 2 }, bonusExpiresAt: '2026-10-25T09:00:00Z', toolUsage: { coach: 32, analyze: 5, 'resume-full': 1 } }, NOW);
+  assert.equal(v.kind, 'per-tool');
+  assert.equal(v.perTool, 30, 'the headline count is the per-tool count, not 32');
+  assert.equal(v.bonus, 2); assert.equal(v.bonusLeft, 0);
+  assert.deepEqual(v.ceilings.map(c => [c.tool, c.left]), [['coach', 0], ['analyze', 25], ['resume-full', 29]]);
+  const w = usageWords(v, fmt);
+  assert.equal(w.headline, '30 AI actions a day in each tool');
+  assert.match(w.bonusLine!, /^Plus 2 bonus actions shared across .* 0 of them left today, good until 2026-10-25T09:00:00\.000Z\.$/);
+  assert.equal(toolRemaining(v, 'follow-up').left, 30, 'an unused progression tool has its count and no bonus left');
+  assert.equal(toolRemaining(v, 'coach').left, 0);
+  const fresh = buildUsageView({ ...base, allowance: { existing: true, base: 30, bonus: 2, used: 0, bonusUsed: 0 }, toolUsage: {} }, NOW);
+  assert.equal(toolRemaining(fresh, 'follow-up').left, 32);
+  assert.equal(toolRemaining(fresh, 'analyze').left, 30);
+  assert.match(read('app/api/usage/route.ts'), /bonusUsed: allow\.bonusUsed/);
+  const tailor = read('app/api/tailor-batch/route.ts');
+  assert.match(tailor, /legacyToolLeft\(\{ limit, count: used\?\.call_count \?\? 0, bonus, bonusUsed: allow\.bonusUsed, progression: true \}\)/, 'the tailor follows the same rule');
+  assert.doesNotMatch(tailor, /limit \+ bonus - \(used/);
+});
+
 test('S5: the route and the page read the allowance, not getUserDailyLimit and the summed counter', () => {
   const route = read('app/api/usage/route.ts');
   assert.match(route, /progressionAllowance\(userId\)/);
@@ -224,7 +253,7 @@ test('S7: the progress-sharing switch shows only to a program member; otherwise 
 });
 
 test('A3: follow-up drafts show a cost line first and say why a draft failed', () => {
-  const allowance: UsageView = { kind: 'allowance', remaining: 3, base: 5, bonus: 0, used: 2, perTool: null, bonusExpiresAt: null, resetsAt: '', blockedReason: null, ceilings: [] };
+  const allowance: UsageView = { kind: 'allowance', remaining: 3, base: 5, bonus: 0, used: 2, bonusLeft: 0, perTool: null, bonusExpiresAt: null, resetsAt: '', blockedReason: null, ceilings: [] };
   assert.deepEqual(oneActionCostLine(toolRemaining({ ...allowance, ceilings: [] }, 'follow-up')), { line: 'Drafting uses 1 AI action. You have 3 left today.', canRun: true });
   const capped = toolRemaining({ ...allowance, ceilings: [{ tool: 'follow-up', label: 'Follow-up draft', left: 1 }] }, 'follow-up');
   assert.equal(capped.left, 1, 'the lower of the allowance and the tool ceiling');

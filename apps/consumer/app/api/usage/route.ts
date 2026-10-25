@@ -33,7 +33,7 @@ export async function GET() {
     ]);
     const ran = new Map(runs.map((r) => [r.workflow, Number(r.n)]));
     const view = buildUsageView({
-      allowance: { existing: allow.account.existing, base: allow.base, bonus: allow.bonus, used: allow.used, blockedReason: allow.blockedReason ?? null },
+      allowance: { existing: allow.account.existing, base: allow.base, bonus: allow.bonus, used: allow.used, bonusUsed: allow.bonusUsed, blockedReason: allow.blockedReason ?? null },
       bonusExpiresAt: expiry?.at ?? null,
       legacyLimit: allow.account.legacyLimit,
       toolUsage: Object.fromEntries(usage.map((u) => [u.endpoint, Number(u.call_count)])),

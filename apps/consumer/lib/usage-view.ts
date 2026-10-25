@@ -14,14 +14,20 @@
  *   allowance has left, which is the only time they change anything.
  * - per-tool: an account from before the allowance keeps its access-code
  *   count, which applies to each tool on its own. Tools used today are listed.
+ *   A bonus on such an account is one shared pool, spent only by the tools
+ *   that count for progression (lib/withRateLimit.ts adds it only for those;
+ *   lib/ai-operation-server.ts lets a call past the tool's count only while
+ *   the account-wide bonusUsed is below the bonus). legacyToolLeft() is that
+ *   rule; the tailor's allowance() uses the same function.
  * - unlimited: no daily count on this account; only tool policies can bind.
  */
 import { isAiWorkflow } from './ai-operation-policy';
 import { labelForEndpoint } from './ai-usage-labels';
+import { countsForProgression } from './progression-policy';
 
 export interface UsageInputs {
-  /** progressionAllowance(): existing = pre-allowance account; base and bonus in actions. */
-  allowance: { existing: boolean; base: number; bonus: number; used: number; blockedReason?: string | null };
+  /** progressionAllowance(): existing = pre-allowance account; base and bonus in actions; bonusUsed = bonus actions already spent today across tools. */
+  allowance: { existing: boolean; base: number; bonus: number; used: number; bonusUsed?: number; blockedReason?: string | null };
   /** The earliest expiry among active bonus grants, if any. */
   bonusExpiresAt: string | Date | null;
   /** getUserDailyLimit(): the access-code count per tool; 0 means no count. */
@@ -40,8 +46,10 @@ export interface UsageView {
   base: number | null;
   bonus: number;
   used: number;
-  /** Per-tool count for the per-tool kind (limit plus bonus). */
+  /** Per-tool count for the per-tool kind: the access-code count itself, without the bonus. */
   perTool: number | null;
+  /** Bonus actions not yet spent today (per-tool kind: shared across the progression tools). */
+  bonusLeft: number;
   bonusExpiresAt: string | null;
   /** The next midnight UTC, when the daily counts start over. */
   resetsAt: string;
@@ -55,10 +63,23 @@ export function nextUtcMidnight(now: Date): string {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
 }
 
+/**
+ * What one tool has left on a per-tool (pre-allowance) account, the admission
+ * rule as a number: the tool's own count, plus, for a progression tool only,
+ * whatever of the shared bonus is unspent, never more than limit + bonus - count.
+ */
+export function legacyToolLeft(t: { limit: number; count: number; bonus: number; bonusUsed: number; progression: boolean }): number {
+  const bonus = Math.max(0, t.bonus | 0);
+  const share = t.progression ? Math.max(0, bonus - Math.max(0, t.bonusUsed | 0)) : 0;
+  const own = Math.max(0, t.limit - (t.count | 0));
+  return Math.max(0, Math.min(own + share, t.limit + (t.progression ? bonus : 0) - (t.count | 0)));
+}
+
 export function buildUsageView(input: UsageInputs, now: Date): UsageView {
   const a = input.allowance;
   const bonus = Math.max(0, a.bonus | 0);
-  const legacy = input.legacyLimit > 0 ? input.legacyLimit + bonus : null;
+  const bonusLeft = Math.max(0, bonus - Math.max(0, (a.bonusUsed ?? 0) | 0));
+  const legacy = input.legacyLimit > 0 ? input.legacyLimit : null;
   const kind: UsageView['kind'] = !a.existing ? 'allowance' : legacy === null ? 'unlimited' : 'per-tool';
   const remaining = kind === 'allowance' ? Math.max(0, a.base + bonus - a.used) : null;
 
@@ -69,7 +90,7 @@ export function buildUsageView(input: UsageInputs, now: Date): UsageView {
     const next = paused ? 0 : Math.max(0, n);
     left.set(tool, { left: prev ? Math.min(prev.left, next) : next, paused: paused || !!prev?.paused });
   };
-  if (legacy !== null) for (const [tool, count] of Object.entries(input.toolUsage)) if (isAiWorkflow(tool)) lower(tool, legacy - (count | 0));
+  if (legacy !== null) for (const [tool, count] of Object.entries(input.toolUsage)) if (isAiWorkflow(tool)) lower(tool, legacyToolLeft({ limit: legacy, count, bonus, bonusUsed: a.bonusUsed ?? 0, progression: countsForProgression(tool) }));
   for (const p of input.toolPolicies) {
     if (!isAiWorkflow(p.workflow)) continue;
     if (p.disabled) lower(p.workflow, 0, true);
@@ -91,6 +112,7 @@ export function buildUsageView(input: UsageInputs, now: Date): UsageView {
     kind, remaining,
     base: kind === 'allowance' ? a.base : null,
     bonus, used: a.used,
+    bonusLeft: kind === 'unlimited' ? 0 : bonusLeft,
     perTool: kind === 'per-tool' ? legacy : null,
     bonusExpiresAt: bonus > 0 ? iso(input.bonusExpiresAt) : null,
     resetsAt: nextUtcMidnight(now),
@@ -119,10 +141,13 @@ export function usageWords(v: UsageView, fmt?: (d: Date) => string): { headline:
     };
   }
   if (v.kind === 'per-tool') {
+    // The bonus is one shared pool, not an extra count in every tool.
     return {
       headline: `${plural(v.perTool ?? 0, 'AI action')} a day in each tool`,
       line: `Each AI tool keeps its own count on this account. They start over at ${resets}.`,
-      bonusLine,
+      bonusLine: v.bonus > 0
+        ? `Plus ${plural(v.bonus, 'bonus action')} shared across t.ROY chat, tailoring, interview practice, drafts and fit checks. ${v.bonusLeft} of them left today${v.bonusExpiresAt ? `, good until ${at(v.bonusExpiresAt, fmt)}` : ''}.`
+        : null,
     };
   }
   return { headline: 'No daily AI limit on this account', line: 'A tool can still be paused or capped on its own. Any that are show below.', bonusLine: null };
@@ -132,7 +157,8 @@ export function usageWords(v: UsageView, fmt?: (d: Date) => string): { headline:
 export function toolRemaining(v: UsageView, tool: string): { left: number | null; paused: boolean; blockedReason: string | null } {
   const own = v.ceilings.find(c => c.tool === tool);
   if (own?.paused) return { left: 0, paused: true, blockedReason: v.blockedReason };
-  const pool = v.kind === 'allowance' ? v.remaining : v.kind === 'per-tool' ? v.perTool : null;
+  // Per tool, a progression tool may also spend what is left of the shared bonus.
+  const pool = v.kind === 'allowance' ? v.remaining : v.kind === 'per-tool' ? (v.perTool ?? 0) + (countsForProgression(tool) ? v.bonusLeft : 0) : null;
   const parts = [pool, own?.left].filter((n): n is number => typeof n === 'number');
   return { left: parts.length ? Math.min(...parts) : null, paused: false, blockedReason: v.blockedReason };
 }

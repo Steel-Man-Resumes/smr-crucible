@@ -23,6 +23,7 @@ import { createTailorBatchRoute, type ClaimStore } from "@/lib/tailor-batch-rout
 import { remainingActions, type PendingResult } from "@/lib/tailor-batch-server";
 import { progressionAllowance, progressionLegacyBonus, checkProgressionTool } from "@/lib/progression-server";
 import { readToolPolicy } from "@/lib/ai-operation-server";
+import { legacyToolLeft } from "@/lib/usage-view";
 import { POST as generateCareerPackage } from "@/app/api/resume-generate-full/route";
 import { POST as saveApplicationRoute } from "@/app/api/applications/route";
 import { POST as saveArtifactRoute } from "@/app/api/artifacts/route";
@@ -129,7 +130,8 @@ const handlers = createTailorBatchRoute({
       policyLeft = policy.daily_calls - (ran?.n ?? 0);
     }
     const progression = allow.account.existing ? null : allow.base + allow.bonus - allow.used;
-    const legacy = limit === 0 ? null : limit + bonus - (used?.call_count ?? 0);
+    // The bonus is shared across progression tools and spent account-wide (SF-2), the same rule Settings Usage shows.
+    const legacy = limit === 0 ? null : legacyToolLeft({ limit, count: used?.call_count ?? 0, bonus, bonusUsed: allow.bonusUsed, progression: true });
     return { remaining: remainingActions([progression, legacy, policyLeft]), blockedReason: allow.blockedReason ?? null, locked: false };
   },
   now: () => Date.now(),
