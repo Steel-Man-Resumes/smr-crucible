@@ -28,6 +28,8 @@ const NARROW = 640;
 const NAV_BREAK = 768;
 /** How long a page may take to draw a beat's elements after the route lands (data loads first). */
 const WAIT_MS = 6000;
+/** How long a route push may take to land before the card offers Leave and Try again. */
+const NAV_WAIT_MS = 8000;
 /** A stop whose element vanishes for this long is passed over. */
 const LOST_MS = 1200;
 const MOTION_KEY = 'tour-motion-off:';
@@ -61,8 +63,14 @@ function osReduced() {
 function readQuiet(account: string) {
   try { return sessionStorage.getItem(MOTION_KEY + account) === '1'; } catch { return false; }
 }
-function findStop(beat: CrmBeat): HTMLElement[] {
-  return beat.targets.map(findNavElement).filter((el): el is HTMLElement => !!el);
+function findStop(beat: CrmBeat, portrait: boolean): HTMLElement[] {
+  const els = beat.targets.map(findNavElement).filter((el): el is HTMLElement => !!el);
+  // On a phone a tall target would sit under the card: light the row the caption is about instead.
+  if (portrait && beat.portraitWithin && els[0]) {
+    const within = els[0].querySelector<HTMLElement>(beat.portraitWithin);
+    if (within && within.getClientRects().length > 0) return [within];
+  }
+  return els;
 }
 
 export function StaffTourPlayer(props: StaffTourPlayerProps) {
@@ -79,6 +87,9 @@ export function StaffTourPlayer(props: StaffTourPlayerProps) {
   const [cut, setCut] = useState<Box | null>(null);
   const [cardH, setCardH] = useState(() => (typeof window !== 'undefined' && innerWidth < NARROW ? 300 : 220));
   const [announce, setAnnounce] = useState('');
+  /** The route push has not landed within NAV_WAIT_MS: offer Leave and Try again instead of waiting for good. */
+  const [stuck, setStuck] = useState(false);
+  const [retry, setRetry] = useState(0);
   const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
   const dir = useRef(1);
   const clock = useRef(0);
@@ -129,10 +140,13 @@ export function StaffTourPlayer(props: StaffTourPlayerProps) {
     if (lastBeat.current !== i) { lastBeat.current = i; setCut(null); }
     if (!beat) { onNavigationReveal?.(false); return; }
     if (!landed) {
-      if (asked.current !== `${i}:${href}`) { asked.current = `${i}:${href}`; onNavigate(href); }
-      return;
+      if (asked.current !== `${i}:${href}:${retry}`) { asked.current = `${i}:${href}:${retry}`; setStuck(false); onNavigate(href); }
+      const timer = setTimeout(() => setStuck(true), NAV_WAIT_MS);
+      return () => clearTimeout(timer);
     }
-    onNavigationReveal?.(!!beat.drawer && mobileNav);
+    setStuck(false);
+    const reveal = !!beat.drawer && mobileNav;
+    onNavigationReveal?.(reveal);
     let raf = 0;
     let alive = true;
     const began = performance.now();
@@ -140,8 +154,10 @@ export function StaffTourPlayer(props: StaffTourPlayerProps) {
     let lit = false;
     const measure = () => {
       if (!alive) return;
-      const els = findStop(beat);
+      const els = findStop(beat, portrait);
       if (els.length < beat.minFound) {
+        // The shell closes its drawer on every route change, after this effect ran: keep asking until the stop is drawn.
+        if (reveal && !lit) onNavigationReveal?.(true);
         // Not drawn yet (data loading), or gone. Wait, then pass over.
         if (!lit) { if (performance.now() - began > WAIT_MS) { if (DEV) console.warn(`[staff tour] left out ${beat.id}: ${beat.targets.map(t => t[0]).join(', ')} not on this page`); go(i + dir.current); return; } }
         else { lostSince ||= performance.now(); if (performance.now() - lostSince > LOST_MS) { if (DEV) console.warn(`[staff tour] ${beat.id} went away`); go(i + dir.current); return; } }
@@ -161,7 +177,7 @@ export function StaffTourPlayer(props: StaffTourPlayerProps) {
     };
     measure();
     return () => { alive = false; cancelAnimationFrame(raf); };
-  }, [i, landed, href]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [i, landed, href, retry]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onNavigationReveal?.(false), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Clock: runs while playing, visible and the stop is lit. */
@@ -233,7 +249,8 @@ export function StaffTourPlayer(props: StaffTourPlayerProps) {
       <div className="et-dim" style={{ background: cut ? 'transparent' : undefined }} aria-hidden="true" />
       {cut && <div className="et-cutout" data-still={reduced} aria-hidden="true" style={{ left: cut.x, top: cut.y, width: cut.w, height: cut.h }} />}
       {!cut && <div className="et-notice" role="status" style={{ pointerEvents: 'auto', top: 16, bottom: 'auto' }}>
-        <p>{CRM_TOUR_COPY.finding}</p>
+        <p>{stuck ? CRM_TOUR_COPY.stuck : CRM_TOUR_COPY.finding}</p>
+        {stuck && <button type="button" className="et-primary" onClick={() => setRetry(n => n + 1)}>{CRM_TOUR_COPY.retryPage}</button>}
         <button type="button" onClick={onLeave} aria-label={`${TOUR_COPY.leave}. Escape`}>{TOUR_COPY.leave}</button>
       </div>}
       {cut && copy && <div ref={setCardEl} key="staff-card" className="et-card" data-still={reduced} style={cardStyle}>
