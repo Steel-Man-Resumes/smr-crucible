@@ -32,6 +32,10 @@ export interface CrmBeat {
   href: string;
   /** Needs a real person from the staff member's own list. Dropped, never invented, when the list is empty. */
   needsPerson?: boolean;
+  /** Needs Today to have drawn a row about a person (the first-row target), not only a person somewhere on the list. */
+  needsTodayRow?: boolean;
+  /** On phones, light this element inside the target instead of the whole target (the lit row of a tall board). */
+  portraitWithin?: string;
   /** Shown only when the organization has nobody on its list (the honest stand-in for the person stops). */
   noPeopleOnly?: boolean;
   /** A capability the viewer must hold for the page to render (lib/org-nav.ts `needs`). */
@@ -64,7 +68,7 @@ export const CRM_TOUR_BEATS: readonly CrmBeat[] = [
     body: 'Who needs you and why, grouped by reason, in sentences already written. Pick a reason and the list jumps there.',
   },
   {
-    id: 'today-person', group: 'today', href: '/dashboard/today', minFound: 1, targets: [['crm-today-first-row']],
+    id: 'today-person', group: 'today', href: '/dashboard/today', needsPerson: true, needsTodayRow: true, minFound: 1, targets: [['crm-today-first-row']],
     title: 'One row, one move',
     body: 'Each row has one action and Prep me, a short brief from t.ROY before you talk. It drafts. You decide.',
   },
@@ -85,6 +89,7 @@ export const CRM_TOUR_BEATS: readonly CrmBeat[] = [
   },
   {
     id: 'person-board', group: 'person', href: `/dashboard/clients/${CRM_PERSON_TOKEN}?tab=screen`, needsPerson: true, minFound: 1, targets: [['crm-person-board']],
+    portraitWithin: '.person-board-station[aria-current="step"]',
     title: 'Their screen is the board',
     body: 'Their map, lit the way they see it, so you can point to the right station. You are not signed in as them.',
   },
@@ -132,14 +137,17 @@ export const CRM_TOUR_STOP_COUNT = CRM_TOUR_BEATS.length + 1;
 export interface CrmTourContext {
   /** A participant id from the staff member's own list, or null when the list is empty. */
   personId: string | null;
+  /** Today drew a row about a person (the person came from that row, not from the caseload read). */
+  todayRow?: boolean;
   capabilities: readonly string[];
   demo: boolean;
 }
 
 /** Which beats this run can show, in order, decided once at the start. */
-export function applicableBeats(ctx: Pick<CrmTourContext, 'personId' | 'capabilities'>): CrmBeat[] {
+export function applicableBeats(ctx: Pick<CrmTourContext, 'personId' | 'capabilities' | 'todayRow'>): CrmBeat[] {
   return CRM_TOUR_BEATS.filter(b => {
     if (b.needsPerson && !ctx.personId) return false;
+    if (b.needsTodayRow && !ctx.todayRow) return false;
     if (b.noPeopleOnly && ctx.personId) return false;
     if (b.needs && !ctx.capabilities.includes(b.needs)) return false;
     return true;
@@ -199,6 +207,8 @@ export const CRM_TOUR_COPY = {
   guide: 't.ROY',
   stepOf: (n: number, total: number) => `Stop ${n} of ${total}`,
   finding: 'Opening the page',
+  stuck: 'That page is taking a while to open.',
+  retryPage: 'Try again',
   paused: 'Staff tour paused. Pick it back up where you left off.',
   resume: 'Resume the tour',
   startOver: 'Start over',
