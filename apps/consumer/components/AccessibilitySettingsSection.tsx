@@ -9,11 +9,14 @@
  * the EXISTING /api/coach/settings storage (coach_plain_language / coach_voice
  * / coach_language) -- no new column, no duplicate source of truth. The display
  * prefs use /api/user/ui-prefs and apply to the live page the moment they
- * change.
+ * change. A refused save (for example read only while an operator views as the
+ * person) puts the page back as it was saved and shows the route's words.
  */
 
 import { useEffect, useState } from "react";
 import { applyUiPrefs, UI_PREFS_EVENT } from "@/lib/ui-prefs-apply";
+import { readSaveError } from "@/lib/save-error";
+import { SaveError } from "./SaveError";
 import type { UiPrefs, FontScale, Density } from "@crucible/core";
 
 interface CoachA11y {
@@ -41,6 +44,7 @@ const MOTION_OPTIONS: { value: "auto" | "on" | "off"; label: string }[] = [
 export function AccessibilitySettingsSection() {
   const [coach, setCoach] = useState<CoachA11y | null>(null);
   const [prefs, setPrefs] = useState<UiPrefs | null>(null);
+  const [error, setError] = useState<{ part: "coach" | "prefs"; message: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,29 +71,48 @@ export function AccessibilitySettingsSection() {
     };
   }, []);
 
-  // Reading-help toggles persist to the existing coach settings storage.
-  function saveCoach(patch: Partial<CoachA11y>) {
+  // Reading-help toggles persist to the existing coach settings storage. The
+  // switch moves at once and moves back if the save is refused.
+  async function saveCoach(patch: Partial<CoachA11y>) {
+    const before = coach;
+    setError(null);
     setCoach((prev) => (prev ? { ...prev, ...patch } : prev));
-    fetch("/api/coach/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }).catch(() => {});
+    try {
+      const res = await fetch("/api/coach/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) { setCoach(before); setError({ part: "coach", message: await readSaveError(res) }); }
+    } catch {
+      setCoach(before);
+      setError({ part: "coach", message: "Could not save. Check your connection and try again." });
+    }
   }
 
   // Display prefs persist to ui-prefs AND apply to the live page immediately.
-  function savePrefs(patch: Partial<UiPrefs>) {
-    setPrefs((prev) => {
-      const next = { ...(prev ?? { fontScale: "normal", density: "comfortable", reducedMotion: null, avatar: null }), ...patch } as UiPrefs;
-      applyUiPrefs(next);
-      window.dispatchEvent(new CustomEvent(UI_PREFS_EVENT, { detail: next }));
-      return next;
-    });
-    fetch("/api/user/ui-prefs", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(patch),
-    }).catch(() => {});
+  // If the save is refused, the page goes back to the saved look and says why.
+  function showPrefs(next: UiPrefs) {
+    applyUiPrefs(next);
+    window.dispatchEvent(new CustomEvent(UI_PREFS_EVENT, { detail: next }));
+    setPrefs(next);
+  }
+  async function savePrefs(patch: Partial<UiPrefs>) {
+    const before = { ...(prefs ?? { fontScale: "normal", density: "comfortable", reducedMotion: null, avatar: null }) } as UiPrefs;
+    const next = { ...before, ...patch } as UiPrefs;
+    setError(null);
+    showPrefs(next);
+    try {
+      const res = await fetch("/api/user/ui-prefs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      if (!res.ok) { showPrefs(before); setError({ part: "prefs", message: await readSaveError(res) }); }
+    } catch {
+      showPrefs(before);
+      setError({ part: "prefs", message: "Could not save. Check your connection and try again." });
+    }
   }
 
   const motionValue: "auto" | "on" | "off" =
@@ -125,6 +148,7 @@ export function AccessibilitySettingsSection() {
             }
           />
         </div>
+        <SaveError message={error?.part === "coach" ? error.message : null} />
       </div>
 
       {/* Text size */}
@@ -177,6 +201,7 @@ export function AccessibilitySettingsSection() {
             />
           ))}
         </div>
+        <SaveError message={error?.part === "prefs" ? error.message : null} />
       </div>
     </div>
   );

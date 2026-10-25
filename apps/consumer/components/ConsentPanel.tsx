@@ -14,9 +14,13 @@
  *     reflects whichever the server says is current.
  *
  * Self-contained: hydrates from GET /api/consent, writes via POST /api/consent.
+ * A refused save (for example while an operator views or assists as the
+ * person) shows the route's words under the control; the switch stays put.
  */
 
 import { useState, useEffect } from "react";
+import { readSaveError } from "@/lib/save-error";
+import { SaveError } from "./SaveError";
 
 type OutcomeChoice = "none" | "outcome_anonymous" | "outcome_named";
 
@@ -31,6 +35,7 @@ export function ConsentPanel() {
   const [research, setResearch] = useState(false); // absent row -> OFF (matches server default)
   const [outcome, setOutcome] = useState<OutcomeChoice>("none");
   const [savingLayer, setSavingLayer] = useState<string | null>(null);
+  const [error, setError] = useState<{ layer: string; message: string } | null>(null);
 
   useEffect(() => {
     fetch("/api/consent")
@@ -58,21 +63,27 @@ export function ConsentPanel() {
       .finally(() => setLoading(false));
   }, []);
 
-  async function postConsent(layer: string, action: "grant" | "revoke") {
-    const res = await fetch("/api/consent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ layer, action }),
-    });
-    return res.ok;
+  /** True when saved; otherwise the words to show under the control (shown as `error` for `shownAs`). */
+  async function postConsent(layer: string, action: "grant" | "revoke", shownAs: string): Promise<boolean> {
+    setError(null);
+    try {
+      const res = await fetch("/api/consent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layer, action }),
+      });
+      if (res.ok) return true;
+      setError({ layer: shownAs, message: await readSaveError(res) });
+    } catch {
+      setError({ layer: shownAs, message: "Could not save. Check your connection and try again." });
+    }
+    return false;
   }
 
   async function toggleEnhanced() {
     const next = !enhanced;
     setSavingLayer("enhanced");
-    const ok = await postConsent("enhanced", next ? "grant" : "revoke").catch(
-      () => false
-    );
+    const ok = await postConsent("enhanced", next ? "grant" : "revoke", "enhanced");
     if (ok) setEnhanced(next);
     setSavingLayer(null);
   }
@@ -80,9 +91,7 @@ export function ConsentPanel() {
   async function toggleResearch() {
     const next = !research;
     setSavingLayer("research");
-    const ok = await postConsent("research", next ? "grant" : "revoke").catch(
-      () => false
-    );
+    const ok = await postConsent("research", next ? "grant" : "revoke", "research");
     if (ok) setResearch(next);
     setSavingLayer(null);
   }
@@ -93,11 +102,11 @@ export function ConsentPanel() {
     let ok: boolean;
     if (next === "none") {
       // Revoke whichever is currently granted.
-      ok = await postConsent(outcome, "revoke").catch(() => false);
+      ok = await postConsent(outcome, "revoke", "outcome");
     } else {
       // Grant handles mutual exclusivity server-side (force-revokes the
       // other outcome layer).
-      ok = await postConsent(next, "grant").catch(() => false);
+      ok = await postConsent(next, "grant", "outcome");
     }
     if (ok) setOutcome(next);
     setSavingLayer(null);
@@ -140,6 +149,7 @@ export function ConsentPanel() {
         <p className="text-xs text-t-phos-dim mt-3">
           {loading ? "Loading..." : enhanced ? "On: t.ROY remembers your recent work." : "Off: t.ROY starts fresh every session."}
         </p>
+        <SaveError message={error?.layer === "enhanced" ? error.message : null} />
       </div>
 
       <div className="bg-t-panel border border-t-line p-5 mb-4">
@@ -174,6 +184,7 @@ export function ConsentPanel() {
         <p className="text-xs text-t-phos-dim mt-3">
           {loading ? "Loading..." : research ? "On: your de-identified data may be used in research." : "Off: your data is not used for research."}
         </p>
+        <SaveError message={error?.layer === "research" ? error.message : null} />
       </div>
 
       <div className="bg-t-panel border border-t-line p-5">
@@ -210,6 +221,7 @@ export function ConsentPanel() {
             onSelect={() => chooseOutcome("outcome_named")}
           />
         </div>
+        <SaveError message={error?.layer === "outcome" ? error.message : null} />
       </div>
     </section>
   );
