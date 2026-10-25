@@ -143,6 +143,10 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): stri
       "the this that these those your you they their them and but for with from who what when how why where which " +
       "today tomorrow yesterday week weeks month months year day days monday tuesday wednesday thursday friday saturday sunday " +
       "january february march april may june july august september october november december " +
+      // Short month and day names: the staff skills date every fact ("from your
+      // note Oct 1"). Same trade as the common-word names above: "Jan" the
+      // person is left to layer 2.
+      "jan feb mar apr jun jul aug sep sept oct nov dec mon tue tues wed thu thur thurs fri sat sun " +
       "forge refinery troy steel man resumes i it if no not yes one two three four five six seven eight nine ten none " +
       "someone nobody everyone anyone here there now right next first last then also just still only both each every all any some " +
       "most more less few many much other another same such own new old good great best better quick quickly " +

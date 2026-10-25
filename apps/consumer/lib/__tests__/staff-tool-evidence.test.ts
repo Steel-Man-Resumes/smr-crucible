@@ -45,5 +45,5 @@ it("staff accounting occurs per completed step before a later generation can fai
  const generation = source.slice(source.indexOf("const generated = await generateText"), source.indexOf("const answer = replyOrFallback"));
  assert(generation.includes("async onStepFinish")); assert(generation.includes("await recordTokenUsage"));
  assert(!source.includes("for (const step of generated.steps)"));
- assert(source.includes("buildStaffTools(staffActor, staffEvidence.record)")); assert(source.includes("staffToolEvidence: staffEvidence.items"));
+ assert(source.includes("buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus })")); assert(source.includes("staffToolEvidence: staffEvidence.items"));
 });
