@@ -268,7 +268,8 @@ export async function POST(request: Request) {
 
   // The person's own full context, server-built (header note). Only for a
   // participant on their own Refinery seat: owner and staff have their own
-  // prompts, the Forge chat has no account, and the rehearsal stays isolated.
+  // prompts, a Forge-scope chat is not tied to a person, and the rehearsal
+  // stays isolated.
   context.userFullContext = await serverFullContext(
     { userId, scope: seatScope, platformOwner, staff: !!staffActor, disclosureRehearsal: isDisclosureRehearsal },
     async (id) => loadUserFullContext(id, await realFullContextLoaders())
