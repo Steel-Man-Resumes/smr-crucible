@@ -6,11 +6,13 @@
  * The JSON manifest of the same inventory lives in /api/user/export-data under
  * the "vault" category; this route is the bytes.
  *
- * REAUTH CONTRACT: identical to /api/user/export-data and /api/user/delete-data
- * -- a valid session is not enough for a bulk download of every private document.
- * The POST body must carry:
- *   { confirm: true, password: "..." }              (password accounts)
- *   { confirm: true, typedConfirmation: "DELETE" }  (magic-link/OAuth-only)
+ * REAUTH CONTRACT: identical to /api/user/export-data -- a valid session is
+ * not enough for a bulk download of every private document. The POST body
+ * must carry:
+ *   { confirm: true, password: "..." }   (password accounts)
+ *   { confirm: true, ownDevice: true }   (magic-link/OAuth-only: the plain
+ *                                         confirm under the shared-computer
+ *                                         warning; DELETE is the delete word)
  *
  * Each file inside the ZIP is named safely from its label + type; duplicate
  * names are disambiguated with a numeric suffix. Owner-exclusive throughout:
@@ -22,6 +24,7 @@ import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { settingsRefusal } from "@/lib/settings-guard";
+import { noPasswordExportConfirmed } from "@/lib/export-plan";
 import {
   getOne,
   listVaultDocuments,
@@ -83,9 +86,12 @@ export async function POST(req: Request) {
       );
     }
   } else {
-    if (body?.typedConfirmation !== "DELETE") {
+    // No password to re-enter: a plain confirm, the own-device tick that sits
+    // under the shared-computer warning (lib/export-plan.ts). Typing DELETE is
+    // for deleting; it no longer exports anything (TOOL-REVISIONS S8).
+    if (!noPasswordExportConfirmed(body)) {
       return NextResponse.json(
-        { error: 'Type "DELETE" in typedConfirmation to confirm this download.' },
+        { error: 'Tick "This is my own phone or computer" to confirm this download.' },
         { status: 400, headers: NO_STORE_HEADERS }
       );
     }
@@ -131,7 +137,7 @@ export async function POST(req: Request) {
       headers: {
         "Content-Type": "application/zip",
         "Content-Length": String(zip.length),
-        "Content-Disposition": 'attachment; filename="steel-man-vault.zip"',
+        "Content-Disposition": 'attachment; filename="steel-man-documents.zip"',
         ...NO_STORE_HEADERS,
       },
     });

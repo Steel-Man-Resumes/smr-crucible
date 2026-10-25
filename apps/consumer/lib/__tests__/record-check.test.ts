@@ -569,7 +569,9 @@ test("storage: export and delete-my-data both cover saved record checks", () => 
   assert.match(exp, /const \{ checks, unreadable \} = await exportRecordChecks\(userId\)/);
   const del = readFileSync(join(APP, "app/api/user/delete-data/route.ts"), "utf8");
   assert.match(del, /await deleteAllRecordChecks\(userId\);/);
-  assert.match(readFileSync(join(APP, "app/(dashboard)/dashboard/settings/page.tsx"), "utf8"), /key: "record_check"/);
+  // The export boxes live in lib/export-plan.ts since 2026-10-24; the page renders them.
+  assert.match(readFileSync(join(APP, "lib/export-plan.ts"), "utf8"), /key: 'record_check'/);
+  assert.match(readFileSync(join(APP, "app/(dashboard)/dashboard/settings/page.tsx"), "utf8"), /EXPORT_BOXES/);
 });
 
 // ------------------------------------------------------------- races (F5) --

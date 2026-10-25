@@ -23,8 +23,10 @@
  * set, same user_id scoping) -- this is its read-only twin, including the
  * same Phase 1C reauth gate (a full data export is nearly as sensitive as
  * deletion): POST body must carry { confirm: true, password } for
- * password accounts or { confirm: true, typedConfirmation: "DELETE" } for
- * magic-link/OAuth-only accounts. Method changed from GET to POST for this
+ * password accounts or { confirm: true, ownDevice: true } for
+ * magic-link/OAuth-only accounts (2026-10-24: was typing DELETE, which is the
+ * delete word; an export now takes a plain confirm under the shared-computer
+ * warning). Method changed from GET to POST for this
  * pass specifically so the reauth fields can travel in the body rather than
  * a query string (which would leak a password into logs/history).
  *
@@ -71,6 +73,7 @@ import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { settingsRefusal } from "@/lib/settings-guard";
+import { noPasswordExportConfirmed } from "@/lib/export-plan";
 import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries, exportRecordChecks, exportRevisions, publicRevision, getLaneFocus } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
@@ -122,9 +125,12 @@ export async function POST(req: Request) {
       );
     }
   } else {
-    if (body?.typedConfirmation !== "DELETE") {
+    // No password to re-enter: a plain confirm, the own-device tick that sits
+    // under the shared-computer warning (lib/export-plan.ts). Typing DELETE is
+    // for deleting; it no longer exports anything (TOOL-REVISIONS S8).
+    if (!noPasswordExportConfirmed(body)) {
       return NextResponse.json(
-        { error: 'Type "DELETE" in typedConfirmation to confirm this export.' },
+        { error: 'Tick "This is my own phone or computer" to confirm this export.' },
         { status: 400, headers: NO_STORE_HEADERS }
       );
     }

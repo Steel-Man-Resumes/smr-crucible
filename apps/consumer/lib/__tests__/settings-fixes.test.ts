@@ -10,6 +10,7 @@ import { coachSaveBody, coachSettingsPatch, COACH_SAVE_FIELDS } from '../coach-s
 import { SETTINGS_LESSONS } from '../orientation-lessons';
 import { settingsVerdict, SETTINGS_REFUSAL } from '../settings-guard';
 import { PROGRESSION_AI } from '../progression-policy';
+import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed } from '../export-plan';
 import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
 
 const ROOT = join(__dirname, '..', '..');
@@ -200,4 +201,53 @@ test('A3: follow-up drafts show a cost line first and say why a draft failed', (
   assert.match(page, /data-testid="follow-up-cost-line">\{followUpCost\.line\}/);
   assert.match(page, /failure = draftFailureWords\(/);
   assert.doesNotMatch(page, /\}\s*\} catch \{\}\s*setFollowUpFor\(null\);/, 'failures are no longer swallowed');
+});
+
+/* S8: export */
+
+test('S8: every export-data category is either a box or named as full-copy-only', () => {
+  const route = read('app/api/user/export-data/route.ts');
+  const cats = new Set([...route.matchAll(/want\("([a-z_]+)"\)/g)].map(m => m[1]));
+  const known = new Set<string>([...EXPORT_BOXES.map(b => b.key), ...FULL_COPY_ONLY.map(c => c.key)]);
+  assert.deepEqual([...cats].filter(c => !known.has(c)), [], 'a new category must be listed so unticking says it is left out');
+});
+
+test('S8: unticking a box says what the copy leaves out, including the full-copy-only parts', () => {
+  assert.equal(exportCategories(ALL_TICKED), undefined, 'all ticked asks for everything');
+  assert.deepEqual(exportLeavesOut(ALL_TICKED), []);
+  const ticks = { ...ALL_TICKED, chat: false };
+  assert.ok(!exportCategories(ticks)!.includes('chat'));
+  const out = exportLeavesOut(ticks);
+  assert.ok(out.includes('chat history with t.ROY'));
+  for (const c of FULL_COPY_ONLY) assert.ok(out.includes(c.label), c.key);
+  const page = read('app/(dashboard)/dashboard/settings/page.tsx');
+  assert.match(page, /This copy leaves out \{leftOut\.join\(", "\)\}/);
+});
+
+test('S8: the files carry Steel Man names on the person\'s own date', () => {
+  const d = new Date(2026, 9, 24, 23, 30);
+  assert.equal(exportFileName(d), 'steel-man-data-2026-10-24.json');
+  assert.equal(documentsFileName(d), 'steel-man-documents-2026-10-24.zip');
+  assert.doesNotMatch(read('app/(dashboard)/dashboard/settings/page.tsx'), /second-mile-data/);
+});
+
+test('S8: a no-password account exports with a plain confirm, never by typing DELETE', () => {
+  assert.equal(noPasswordExportConfirmed({ confirm: true, typedConfirmation: 'DELETE' }), false);
+  assert.equal(noPasswordExportConfirmed({ confirm: true, ownDevice: true }), true);
+  assert.deepEqual(exportConfirmBody({ password: '', ownDevice: true }), { confirm: true, ownDevice: true });
+  for (const r of ['app/api/user/export-data/route.ts', 'app/api/user/export-vault/route.ts']) {
+    const src = read(r);
+    assert.match(src, /if \(!noPasswordExportConfirmed\(body\)\)/, r);
+    assert.doesNotMatch(src, /typedConfirmation !== "DELETE"/, r);
+  }
+  assert.match(read('app/api/user/delete-data/route.ts'), /"DELETE"/, 'delete keeps its word');
+});
+
+test('S8: the documents ZIP is wired, and the shared-computer warning gates both downloads', () => {
+  const page = read('app/(dashboard)/dashboard/settings/page.tsx');
+  assert.match(page, /fetch\("\/api\/user\/export-vault"/);
+  assert.match(page, /\{SHARED_COMPUTER_WARNING\}/);
+  assert.match(page, /disabled=\{exportStatus !== "idle" \|\| !anyChecked \|\| !ownDevice\}/);
+  assert.match(page, /disabled=\{docsStatus !== "idle" \|\| !ownDevice\}/);
+  assert.match(read('app/(dashboard)/dashboard/documents/page.tsx'), /href="\/dashboard\/settings#settings-export"/);
 });
