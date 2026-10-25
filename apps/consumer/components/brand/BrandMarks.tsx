@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { tenant } from "@/lib/tenant-config";
+import { OrgMark } from "@/components/org/OrgMark";
 
 export type ProductName = "forge" | "refinery";
 
@@ -70,26 +70,26 @@ export function ProductFamilyBrand({ product, productHref, className = "" }: { p
   );
 }
 
-export function CoBrandLockup({ compact = false, className = "" }: { compact?: boolean; className?: string }) {
-  const partner = tenant.config.partnerBrand;
+/**
+ * The participant's co-brand chip: the organization they joined, beside the
+ * Refinery lockup. Rendered only when the role payload carries a co-brand
+ * organization, which happens only for a member of an organization on the
+ * co-brand or full tier (getParticipantCoBrand). A solo participant, the
+ * public and the sign-in page get nothing: no placeholder box, no stand-in
+ * name. The old env-driven partner lockup is gone for that reason.
+ */
+export function MemberCoBrandChip({ orgId, name, hasLogo, className = "" }: { orgId: string; name: string; hasLogo: boolean; className?: string }) {
+  const tip = `Your seat comes through ${name}. What you share with them is your choice. See or change it in Settings.`;
   return (
-    <div className={`flex items-center gap-3 ${className}`} aria-label="Example partner co-branding">
-      {partner.logoPath ? (
-        <img src={partner.logoPath} alt="" className="h-10 w-10 flex-none rounded-[5px] object-contain" />
-      ) : (
-        <span className="grid h-10 w-10 flex-none place-items-center rounded-[5px] font-term text-[10px] font-bold text-white" style={{ backgroundColor: partner.primaryColor }}>ORG</span>
-      )}
-      {!compact && (
-        <span className="min-w-0 leading-tight">
-          <strong className="block text-xs text-t-white">{partner.name}</strong>
-          <span className="block font-term text-[9px] text-t-bone-dim">{partner.descriptor}</span>
-        </span>
-      )}
-      <span className="h-9 w-px bg-t-line" aria-hidden="true" />
-      <span className="leading-tight">
-        <span className="block font-term text-[8px] uppercase text-t-bone-dim">Powered by</span>
-        <strong className="block text-[11px] text-t-white">Steel Man Resumes</strong>
-      </span>
-    </div>
+    <Link
+      href="/dashboard/settings"
+      title={tip}
+      aria-label={`With ${name}. ${tip}`}
+      className={`t-focus min-h-touch items-center gap-2 rounded-[4px] px-2 text-xs text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white ${className}`}
+      data-cobrand-chip
+    >
+      <OrgMark orgId={orgId} name={name} hasLogo={hasLogo} size={28} />
+      <span className="max-w-[160px] truncate">With {name}</span>
+    </Link>
   );
 }

@@ -1,7 +1,7 @@
 /**
  * GET /api/user/role -- the effective identity, resolved server-side.
  *
- * Returns { tier, orgRole, orgName, impersonating } for the user the app
+ * Returns { tier, orgRole, orgName, orgId, orgBrand, coBrand, impersonating } for the user the app
  * should BEHAVE as: effectiveAuth resolves the impersonation cookie (admin
  * only, self-guarding), getOrgContext resolves org membership (code owner or
  * org_staff row). Feeds RoleProvider so landings and nav branch correctly
@@ -44,6 +44,20 @@ export async function GET() {
         .catch(() => null)
     : null;
 
+  // The organization's brand, for the staff identity block (C1 reads it).
+  // Read as this user: org_brand is row-level protected and a member reads
+  // their own organization's row only. A failure falls back to the monogram.
+  const orgId = actor?.orgId ?? org?.accessCodeId ?? null;
+  const core = await import("@crucible/core");
+  const orgBrand = orgId
+    ? await core.getOrgBrand(userId, orgId).catch(() => ({ ...core.DEFAULT_ORG_BRAND }))
+    : null;
+  // Participants only: the co-brand organization beside Steel Man, or null.
+  // Staff have the sidebar identity block instead; solo users get nothing.
+  const coBrand = !org
+    ? await core.getParticipantCoBrand(userId).catch(() => null)
+    : null;
+
   const impersonation = (session as { impersonation?: { mode: "view" | "assist"; adminId: string } })
     .impersonation;
 
@@ -54,6 +68,9 @@ export async function GET() {
       tier,
       orgRole: org?.role ?? null,
       orgName: org?.orgName ?? null,
+      orgId,
+      orgBrand,
+      coBrand,
       capabilities: actor ? Array.from(actor.capabilities) : [],
       cohortReach: actor?.reach ?? "none",
       crmV2: !!flag?.crm_v2,
