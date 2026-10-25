@@ -40,3 +40,14 @@ it("the participant sees a t.ROY read in Who has opened what", () => {
   assert.equal(accessLogAction("opened", "applications", label), "opened your job applications");
   assert.equal(accessLogAction("queue", "applications", label), "had your interview and follow-up dates on their daily work list");
 });
+
+it("fix round 1: header and task reads, and a t.ROY applications open, read plainly for the participant and in the export", () => {
+  const label = (s: string) => ({ applications: "Your job applications" } as Record<string, string>)[s] ?? s;
+  assert.equal(accessLogAction("opened", "assistant:progress", label), "asked t.ROY to look at the progress you share with them");
+  assert.equal(accessLogAction("opened", "assistant:tasks", label), "asked t.ROY to look at their tasks about you");
+  assert.equal(accessLogAction("opened", "applications", label, "t.ROY"), "asked t.ROY, which opened your job applications");
+  assert.equal(accessLogAction("opened", "applications", label, null), "opened your job applications");
+  const exp = read("../../app/api/user/export-data/route.ts");
+  assert.match(exp, /accessLogAction\(e\.kind, e\.scope, scopeLabel, e\.via\)/);
+  assert.match(read("../../components/SharingControls.tsx"), /accessLogAction\(e\.kind, e\.scope, label, e\.via\)/);
+});

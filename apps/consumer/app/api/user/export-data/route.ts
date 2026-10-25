@@ -381,7 +381,11 @@ export async function POST(req: Request) {
         core.getMySuggestions(userId),
         core.getMyOutcomes(userId),
       ]);
-      payload.sharing = { grants, requests, programRequirements: policies, whoOpenedWhat: accessLog, tasksFromStaff: tasks, suggestionsFromStaff: suggestions, placementsOnFile: outcomes };
+      // Plain words for each open, the same line Settings shows, next to the raw scope.
+      const { accessLogAction } = await import("@/lib/access-log-words");
+      const scopeLabel = (scope: string) => (core.SHARING_SCOPE_TEXT as Record<string, { label: string } | undefined>)[scope]?.label ?? scope;
+      const whoOpenedWhat = accessLog.map((e) => ({ ...e, what: `${e.who || "A staff member"}${e.orgName ? ` at ${e.orgName}` : ""} ${accessLogAction(e.kind, e.scope, scopeLabel, e.via)}` }));
+      payload.sharing = { grants, requests, programRequirements: policies, whoOpenedWhat, tasksFromStaff: tasks, suggestionsFromStaff: suggestions, placementsOnFile: outcomes };
     }
     if (want("support")) {
       payload.supportRequests = await query(

@@ -25,7 +25,7 @@ interface Payload {
   policies: (RequirementPolicy & { orgId: string; acknowledged: boolean })[];
   requiredText: RequirementText;
   orgs: OrgState[];
-  log: { kind?: string; at: string; who: string | null; orgName: string | null; scope: string }[];
+  log: { kind?: string; at: string; who: string | null; orgName: string | null; scope: string; via?: string | null }[];
   text: { scopes: ScopeText[]; always: { control: string; log: string; staffNotes: string; leaving: string } };
 }
 
@@ -132,7 +132,7 @@ export function SharingControls() {
             {data.log.map((e, i) => (
               <li key={i}>
                 {e.who || "A staff member"}{e.orgName ? ` at ${e.orgName}` : ""}{" "}
-                {accessLogAction(e.kind, e.scope, label)} on {when(e.at)}
+                {accessLogAction(e.kind, e.scope, label, e.via)} on {when(e.at)}
               </li>
             ))}
           </ul>
