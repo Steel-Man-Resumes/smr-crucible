@@ -36,7 +36,7 @@ export function OrgSidebar(p: OrgSidebarProps) {
   const roleLine = orgRoleLine(p.orgRole, p.capabilities);
   const link = (item: { href: string; label: string; navId?: string }, lit: boolean) => (
     <li key={item.href + item.label}>
-      <Link href={item.href} onClick={p.onItemClick} data-nav-id={item.navId || undefined}
+      <Link href={item.href} onClick={p.onItemClick} data-nav-id={item.navId || undefined} data-tour={item.navId || undefined}
         aria-current={lit ? "page" : undefined} className="t-focus org-link">
         <span className="org-dot" aria-hidden="true" />
         {item.label}
@@ -45,7 +45,7 @@ export function OrgSidebar(p: OrgSidebarProps) {
   );
   return (
     <nav aria-label="Organization workspace" className="org-nav">
-      <div className="org-identity">
+      <div className="org-identity" data-tour="crm-org-mark">
         {/* C3 merge: drop the name fallback once the role payload carries orgId (review N9). */}
         <OrgMark orgId={p.orgId || p.orgName || ""} name={org.name} hasLogo={!!p.hasLogo} size={40} />
         <div className="min-w-0">

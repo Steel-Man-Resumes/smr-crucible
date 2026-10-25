@@ -28,6 +28,7 @@ import { P_CHART_FIRST, PORTRAIT_MIN_SCALE, SCENE_SIZE, portraitSceneSize, portr
 import { captionPlacement, frameCamera, onStage, particlePath, spotlightRect, unionBox, type Box, type Camera } from '@/lib/tour/geometry';
 import { gapStart, serviceRows } from '@/lib/tour/services';
 import { rewardCelebrates, rewardMessage, type TourReward } from '@/lib/tour/reward';
+import { findNavElement } from '@/lib/tour/find-target';
 import './entrance-tour.css';
 
 export const ENDING_INDEX = TOUR_BEATS.length;
@@ -69,15 +70,8 @@ function readQuiet(account: string) {
   try { return sessionStorage.getItem(MOTION_KEY + account) === '1'; } catch { return false; }
 }
 
-/** The visible element for one of these ids, never one inside a closed drawer or hidden copy. */
-export function findNavElement(ids: readonly string[]): HTMLElement | null {
-  for (const id of ids) {
-    const found = Array.from(document.querySelectorAll<HTMLElement>(`[id="${id}"], [data-tour="${id}"]`))
-      .find(el => el.getClientRects().length > 0 && !el.closest('[aria-hidden="true"], [hidden]') && el.getBoundingClientRect().width > 0);
-    if (found) return found;
-  }
-  return null;
-}
+/** The visible element for one of these ids (lib/tour/find-target.ts, shared with the staff tour). */
+export { findNavElement };
 function findStop(beat: RoomBeat): HTMLElement[] {
   return beat.targets.map(findNavElement).filter((el): el is HTMLElement => !!el);
 }

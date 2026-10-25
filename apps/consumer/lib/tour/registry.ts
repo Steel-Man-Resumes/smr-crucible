@@ -11,8 +11,9 @@
  */
 import { TOUR_STOP_COUNT, TOUR_VERSION } from '../guidedTour';
 import { TOUR_MIN_WATCH_MS, TOUR_REWARD_KEY, TOUR_REWARD_LABEL } from './reward';
+import { CRM_TOUR_STOP_COUNT } from './crm-beats';
 
-export const TOUR_IDS = ['entrance', 'settings'] as const;
+export const TOUR_IDS = ['entrance', 'settings', 'crm'] as const;
 export type TourId = (typeof TOUR_IDS)[number];
 
 export interface TourDef {
@@ -37,6 +38,10 @@ export const TOURS: Record<TourId, TourDef> = {
   // S7n) plus the ending card. The build lane pins the real beats; until then
   // this is the upper bound. Reward key reserved, nothing granted yet.
   settings: { id: 'settings', version: 1, stopCount: 15, rewardKey: 'tour:settings', rewardLabel: 'Settings tour finished: extra AI actions', grants: false, minWatchMs: 45_000, completesOnboarding: false },
+  // CRM-TOUR.md: the staff tour. Stops are indexes into CRM_TOUR_BEATS plus the
+  // ending. Staff tours grant nothing: the key is reserved so no other tour can
+  // take it, and grants stays false for good (a bonus is a participant's thing).
+  crm: { id: 'crm', version: 1, stopCount: CRM_TOUR_STOP_COUNT, rewardKey: 'tour:crm', rewardLabel: 'Staff tour finished', grants: false, minWatchMs: 45_000, completesOnboarding: false },
 };
 
 export function isTourId(value: unknown): value is TourId {
