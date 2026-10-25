@@ -10,3 +10,5 @@
 @keyframes progress-praise-arrive{0%{transform:rotate(-8deg) scale(.8);opacity:0}70%{transform:rotate(-2deg) scale(1.03);opacity:1}100%{transform:rotate(-3deg) scale(1);opacity:1}}
 @media(prefers-reduced-motion:reduce){.progress-celebration *{animation:none!important;transition:none!important}}
 @media(max-width:640px){.progress-access-dialog{padding:18px}.progress-celebration{right:16px;bottom:88px;padding:18px}}
+/* A tour holds the page (lib/tour/page-lock.ts sets data-guided-learning): the toast waits, so the tour card never sits on its Close button. It has no timeout, so it shows again when the tour ends. */
+html[data-guided-learning] .progress-celebration{display:none}
