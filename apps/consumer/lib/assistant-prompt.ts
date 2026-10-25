@@ -452,6 +452,52 @@ export function disclosureWordLines(d: UserFullContext["disclosurePlan"]): strin
   return out;
 }
 
+/**
+ * The parts only the server loads (lib/assistant-full-context.ts): lanes, the
+ * saved hurdle plan, the progression step and the meter. Lists arrive already
+ * capped; this prints what is there and says how many more exist. A part that
+ * is null did not load this turn, so nothing is said about it.
+ */
+export function buildServerPartsSection(ctx: UserFullContext): string[] {
+  const out: string[] = [];
+  if (ctx.lanes) {
+    out.push(`\n### LANES (kinds of work they aim at)`);
+    if (ctx.lanes.open === 0) out.push(`Only the main lane so far.`);
+    else {
+      out.push(`${ctx.lanes.open} open lane${ctx.lanes.open === 1 ? "" : "s"}${ctx.lanes.total > ctx.lanes.open ? ` (${ctx.lanes.total - ctx.lanes.open} archived)` : ""}:`);
+      ctx.lanes.items.forEach((l) => out.push(`  - "${sanitizeForPrompt(l.name, 80)}"${l.target ? `, aiming at ${sanitizeForPrompt(l.target, 120)}` : ""}${l.kind !== "resume" ? ` (${l.kind})` : ""}`));
+      if (ctx.lanes.open > ctx.lanes.items.length) out.push(`  - and ${ctx.lanes.open - ctx.lanes.items.length} more`);
+    }
+  }
+  if (ctx.hurdlePlan?.exists) {
+    out.push(`\n### HURDLE PLAN (saved ${ctx.hurdlePlan.savedAt ? ctx.hurdlePlan.savedAt.slice(0, 10) : "earlier"}${ctx.hurdlePlan.targetJob ? `, for ${sanitizeForPrompt(ctx.hurdlePlan.targetJob, 120)}` : ""})`);
+    for (const h of ctx.hurdlePlan.hurdles ?? []) {
+      const bits = [
+        h.known.length ? `knows: ${h.known.map((k) => sanitizeForPrompt(k, 160)).join("; ")}` : "",
+        h.open.length ? `still open: ${h.open.map((k) => sanitizeForPrompt(k, 160)).join("; ")}` : "",
+        h.doNow.length ? `doing now: ${h.doNow.map((k) => sanitizeForPrompt(k, 160)).join("; ")}` : "",
+        h.tell ? `tells an employer: ${sanitizeForPrompt(h.tell, 160)}` : "",
+      ].filter(Boolean);
+      out.push(`  - ${sanitizeForPrompt(h.label, 60)}${bits.length ? `. ${bits.join(". ")}` : ""}`);
+    }
+    if ((ctx.hurdlePlan.hurdleCount ?? 0) > (ctx.hurdlePlan.hurdles?.length ?? 0)) out.push(`  - and ${ctx.hurdlePlan.hurdleCount! - ctx.hurdlePlan.hurdles!.length} more hurdle${ctx.hurdlePlan.hurdleCount! - ctx.hurdlePlan.hurdles!.length === 1 ? "" : "s"}`);
+    out.push(`The record part of any plan is never saved here; if they planned it, that shows under DISCLOSURE PLAN.`);
+  }
+  if (ctx.progression) {
+    out.push(`\n### WHERE THEY ARE IN THE PROCESS`);
+    out.push(`Current step: ${ctx.progression.currentLabel} (${ctx.progression.currentStep}). Completed: ${ctx.progression.completed.length ? ctx.progression.completed.join(", ") : "none yet"}.`);
+    out.push(`Next action the app shows: ${sanitizeForPrompt(ctx.progression.nextAction.label, 120)} (${ctx.progression.nextAction.href}).`);
+    if (ctx.progression.remaining !== null) out.push(`AI actions left today: ${ctx.progression.remaining}.`);
+  }
+  if (ctx.meter) {
+    const c = ctx.meter.counts;
+    const parts = ["facts", "lines", "resumes", "lanes", "tailored", "sent", "practice", "disclosure", "proof", "feedback"].filter((k) => typeof c[k] === "number").map((k) => `${k} ${c[k]}`);
+    out.push(`\n### STEEL MAN METER`);
+    out.push(`Score ${ctx.meter.score}, band "${ctx.meter.band}". Counts: ${parts.join(", ")}. Talk about the work behind a count, never the number as a judgment of the person.`);
+  }
+  return out;
+}
+
 function buildFullUserSection(ctx: UserFullContext): string {
   const lines: string[] = [];
 
@@ -558,6 +604,8 @@ function buildFullUserSection(ctx: UserFullContext): string {
     lines.push(`\n### WHAT THEY HAVEN'T DONE YET`);
     gaps.forEach((g) => lines.push(`  - ${g}`));
   }
+
+  lines.push(...buildServerPartsSection(ctx));
 
   // The explicit "what's locked + the one-click unblock" model, shared with the
   // in-Refinery coach so t.ROY's block behavior is identical on both surfaces.
