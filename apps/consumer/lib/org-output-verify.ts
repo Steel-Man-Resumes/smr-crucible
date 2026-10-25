@@ -147,6 +147,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): stri
       // note Oct 1"). Same trade as the common-word names above: "Jan" the
       // person is left to layer 2.
       "jan feb mar apr jun jul aug sep sept oct nov dec mon tue tues wed thu thur thurs fri sat sun " +
+      // Staff workspace screen names the skills point people to ("the Outcomes tab").
+      "outcomes outcome insights asks tasks suggestions settings sharing tab tabs " +
       "forge refinery troy steel man resumes i it if no not yes one two three four five six seven eight nine ten none " +
       "someone nobody everyone anyone here there now right next first last then also just still only both each every all any some " +
       "most more less few many much other another same such own new old good great best better quick quickly " +

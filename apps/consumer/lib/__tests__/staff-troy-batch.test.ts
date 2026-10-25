@@ -1,4 +1,4 @@
-// Batch run of the three 10/29 staff skills with a scripted model (no API key
+// Batch run of the five staff skills (three for 10/29, two if green by 10/27) with a scripted model (no API key
 // needed, the MOCK_AI stand-in for /api/assistant, which has no mock path of
 // its own). It proves the wiring, not the model: the chosen skill's doctrine
 // reaches the system prompt, the tool calls the skill prescribes run through
@@ -29,6 +29,7 @@ const core = {
     openTasks: [{ title: "Call about the forklift class", dueOn: "2026-10-27", sharedWithParticipant: false }], suggestions: [], asks: [],
     recentNotes: [{ kind: "call", on: "2026-10-01", author: "Pat", body: "Talked about the warehouse opening.", corrected: false, draftedWithTroy: false }], notesTotal: 1,
     applications: [{ jobTitle: "Warehouse associate", company: "Northside Lumber", location: "Libby, MT", status: "interviewing", statusUpdatedAt: "2026-10-22", appliedAt: "2026-10-15", followUpAt: "2026-10-28", hiredAt: null }], placements: [] } }),
+  getClientChanges: async (_a: unknown, _id: string, since: string) => ({ ok: true, data: { firstName: "Dana", from: since, to: "2026-10-24", changes: [{ on: "2026-10-22", kind: "application_status", what: "Warehouse associate at Northside Lumber moved to interviewing" }, { on: "2026-10-20", kind: "note", what: "Pat added a call note" }], applicationsRead: true, lastActiveAt: "2026-10-21" } }),
   searchVerifiedResources: async () => ({ status: "ok", asOf: "2026-10-24", data: [{ service_id: "s1", org_name: "Lincoln County Food Share", service_name: "Food pantry", area_label: "Food", band: "A", last_checked: "2026-09-30", phone: "(406) 293-0000", hours: "Tue 10-2", website: "https://example.org", city: "Libby", county: "Lincoln", eligibility: null, source_url: "https://example.org/src" }] }),
 };
 
@@ -51,6 +52,10 @@ const CASES = [
     answer: "Text message: Hi Dana, your follow-up with Northside Lumber is coming up on Oct 28. Want to go over it together this week? What would help most?\nThis is a draft. Nothing was saved or sent. Send it yourself from your own phone or email, then mark it sent on their page." },
   { skill: "staff-find-help", heading: /FIND LOCAL HELP FOR THIS NEED/, calls: [{ toolName: "find_local_help", args: { place: "Libby, MT", needs: ["food"] } }],
     answer: "Lincoln County Food Share, Food pantry: checked from the organization's own page, last checked Sep 30. Phone (406) 293-0000. Hours Tue 10-2.\nCheck before you send someone: hours and intake change.\nNothing was saved or sent. If one fits, share it with them yourself, by a suggestion on their page or in your own message. Saving it to their list is their choice." },
+  { skill: "staff-what-changed", heading: /WHAT CHANGED/, calls: [{ toolName: "read_recent_changes", args: { clientId: DANA, days: 7 } }],
+    answer: `${new Date(new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10) + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })} to Oct 24. Oct 22: Warehouse associate at Northside Lumber moved to interviewing, from their shared applications. Oct 20: Pat added a call note.\nNothing was saved or sent. If something here needs a reply, open Dana's page and reach out yourself.` },
+  { skill: "staff-outcome-note", heading: /WRITE THE OUTCOME NOTE/, calls: [{ toolName: "read_participant_overview", args: { clientId: DANA } }, { toolName: "offer_staff_draft", args: { clientId: DANA, purpose: "case_note", body: "Dana started as a warehouse associate at Northside Lumber. Known as told to staff by Dana." } }],
+    answer: "Draft note: Dana started as a warehouse associate at Northside Lumber. Known as told to staff by Dana.\nNothing was saved. Record the placement yourself in the Outcomes tab, which is the only place that counts it, then save the note." },
 ];
 
 for (const c of CASES) {
