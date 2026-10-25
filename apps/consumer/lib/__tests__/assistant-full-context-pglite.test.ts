@@ -46,7 +46,8 @@ test("server-built context against the real schema: lanes, resumes, hurdle plan,
     try { await db.exec(`BEGIN; INSERT INTO _migrations(filename) VALUES ('${f}') ON CONFLICT DO NOTHING;` + readFileSync(MIG + f, "utf8") + ";COMMIT;"); }
     catch { await db.exec("ROLLBACK").catch(() => {}); failed.push(f); }
   }
-  assert.ok(!failed.includes("098_hurdle_plan_artifact.sql") && !failed.includes("095_record_planner_consent.sql") || !failed.some((f) => f.startsWith("095")), `needed migrations failed: ${failed.join(", ")}`);
+  const needed = failed.filter((f) => f.startsWith("095_") || f.startsWith("098_"));
+  assert.deepEqual(needed, [], `needed migrations failed: ${failed.join(", ")}`);
   await db.exec("CREATE ROLE tester NOSUPERUSER; GRANT USAGE ON SCHEMA public TO tester; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO tester;");
 
   // One statement as the person: the same shape db.ts queryAsUser gives the loaders.
