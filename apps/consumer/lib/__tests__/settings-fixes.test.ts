@@ -9,6 +9,8 @@ import { join } from 'node:path';
 import { coachSaveBody, coachSettingsPatch, COACH_SAVE_FIELDS } from '../coach-settings';
 import { SETTINGS_LESSONS } from '../orientation-lessons';
 import { settingsVerdict, SETTINGS_REFUSAL } from '../settings-guard';
+import { PROGRESSION_AI } from '../progression-policy';
+import { buildUsageView, usageWords, nextUtcMidnight } from '../usage-view';
 
 const ROOT = join(__dirname, '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
@@ -107,4 +109,61 @@ test('T2: the tour route refuses every write under any impersonation, and the to
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
   assert.match(page, /impersonating \? <p[^>]*>Hidden while you view or assist as this person\.<\/p> : <SecuritySection \/>/);
   assert.match(page, /\{!impersonating && <AvatarSettingsSection \/>\}/);
+});
+
+/* S5: Usage shows the allowance the tools spend from */
+
+const NOW = new Date('2026-10-24T18:30:00Z');
+const fmt = (d: Date) => d.toISOString();
+const base = { bonusExpiresAt: null, legacyLimit: 30, toolUsage: {}, toolPolicies: [] };
+
+test('S5: a new account sees base + bonus - used, the number tailor-batch spends from, not the access-code limit', () => {
+  // The Valjean walk: tailor remaining went 34 to 31 while Settings showed the access-code count.
+  const v = buildUsageView({ ...base, allowance: { existing: false, base: 5, bonus: 2, used: 3 }, bonusExpiresAt: '2026-10-25T09:00:00Z', toolUsage: { 'resume-full': 3 } }, NOW);
+  assert.equal(v.kind, 'allowance');
+  assert.equal(v.remaining, 4);
+  assert.equal(v.base, 5); assert.equal(v.bonus, 2);
+  assert.equal(v.bonusExpiresAt, '2026-10-25T09:00:00.000Z');
+  assert.equal(v.resetsAt, '2026-10-25T00:00:00.000Z');
+  assert.deepEqual(v.ceilings, [], 'the access-code count (30 + 2 - 3) is not lower than 4, so it does not bind and is not shown');
+  const w = usageWords(v, fmt);
+  assert.equal(w.headline, '4 AI actions left today');
+  assert.match(w.line, /allowance is 5 plus 2 bonus/);
+  assert.match(w.line, /starts over at 2026-10-25T00:00:00\.000Z/);
+  assert.match(w.bonusLine!, /2 bonus actions, good until 2026-10-25T09:00:00\.000Z/);
+  assert.doesNotMatch(JSON.stringify(w), /midnight\./, 'no bare "resets at midnight"');
+});
+
+test('S5: per-tool ceilings show only where they bind', () => {
+  const v = buildUsageView({ ...base, allowance: { existing: false, base: 10, bonus: 0, used: 2 }, toolPolicies: [
+    { workflow: 'resume-full', disabled: false, daily_calls: 3, ran: 2 },
+    { workflow: 'interview', disabled: false, daily_calls: 50, ran: 0 },
+    { workflow: 'fit-check', disabled: true, daily_calls: null, ran: 0 },
+  ] }, NOW);
+  assert.equal(v.remaining, 8);
+  assert.deepEqual(v.ceilings.map(c => [c.tool, c.left, !!c.paused]), [['fit-check', 0, true], ['resume-full', 1, false]]);
+});
+
+test('S5: an older account keeps its count per tool; an unlimited one says so; the line never promises more than is checked', () => {
+  const old = buildUsageView({ ...base, allowance: { existing: true, base: 100, bonus: 0, used: 0 }, legacyLimit: 100, toolUsage: { coach: 7, headshot_upload: 2 } }, NOW);
+  assert.equal(old.kind, 'per-tool');
+  assert.equal(old.remaining, null);
+  assert.equal(old.perTool, 100);
+  assert.deepEqual(old.ceilings.map(c => [c.label, c.left]), [['t.ROY chat', 93]], 'non-AI counters are ignored');
+  const open = buildUsageView({ ...base, allowance: { existing: true, base: 0, bonus: 0, used: 0 }, legacyLimit: 0 }, NOW);
+  assert.equal(open.kind, 'unlimited');
+  assert.equal(usageWords(open).headline, 'No daily AI limit on this account');
+  assert.equal(nextUtcMidnight(new Date('2026-12-31T23:59:59Z')), '2027-01-01T00:00:00.000Z');
+  // Every tool the line names spends from the allowance.
+  for (const t of ['assistant', 'resume-full', 'interview', 'follow-up', 'fit-check']) assert.ok((PROGRESSION_AI as readonly string[]).includes(t), t);
+});
+
+test('S5: the route and the page read the allowance, not getUserDailyLimit and the summed counter', () => {
+  const route = read('app/api/usage/route.ts');
+  assert.match(route, /progressionAllowance\(userId\)/);
+  assert.match(route, /buildUsageView\(/);
+  assert.doesNotMatch(route, /getUserDailyUsage/);
+  const page = read('app/(dashboard)/dashboard/settings/page.tsx');
+  assert.match(page, /<UsageCard usage=\{usage\} \/>/);
+  assert.doesNotMatch(page, /Resets at midnight\./);
 });

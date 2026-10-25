@@ -37,11 +37,39 @@ import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
 import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
 import { PackageEmailSetting } from "@/components/PackageEmailSetting";
 import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
+import { usageWords, type UsageView } from "@/lib/usage-view";
 
-interface UsageData {
-  used: number;
-  limit: number | null;
-  remaining: number | null;
+type UsageData = UsageView | { error: string };
+
+/** Settings -> Usage. The same allowance the tools spend from (lib/usage-view.ts). */
+function UsageCard({ usage }: { usage: UsageData | null }) {
+  if (!usage) return <p className="text-sm text-t-phos-dim">Loading usage...</p>;
+  if ("error" in usage) return <p className="text-sm text-t-phos-dim">{usage.error}</p>;
+  const words = usageWords(usage);
+  const total = usage.kind === "allowance" ? (usage.base ?? 0) + usage.bonus : 0;
+  return (
+    <div>
+      <p className="text-sm font-medium text-t-white mb-2">{words.headline}</p>
+      {usage.kind === "allowance" && total > 0 && (
+        <div className="w-full bg-t-line h-2 mb-3" aria-hidden="true">
+          <div className="bg-t-amber h-2 transition-all" style={{ width: `${Math.min(100, (Math.min(usage.used, total) / total) * 100)}%` }} />
+        </div>
+      )}
+      <p className="text-sm text-t-phos-dim">{words.line}</p>
+      {words.bonusLine && <p className="text-sm text-t-phos-dim mt-1">{words.bonusLine}</p>}
+      {usage.blockedReason && <p className="text-sm text-t-amber-bright mt-2">{usage.blockedReason}</p>}
+      {usage.ceilings.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-t-white mb-1">{usage.kind === "per-tool" ? "Used today" : "Tools with a lower limit of their own"}</p>
+          <ul className="text-xs text-t-phos-dim space-y-0.5">
+            {usage.ceilings.map((c) => (
+              <li key={c.tool}>{c.label}: {c.paused ? "paused" : `${c.left} left today`}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 interface RedeemedCode {
@@ -147,7 +175,7 @@ export default function SettingsPage() {
     fetch("/api/usage")
       .then((r) => r.json())
       .then(setUsage)
-      .catch(() => {});
+      .catch(() => setUsage({ error: "Your allowance could not be read right now." }));
 
     fetch("/api/access-code/mine")
       .then((r) => r.json())
@@ -514,43 +542,13 @@ export default function SettingsPage() {
       <div id="usage" className="scroll-mt-32 mb-10">
         <GroupHeading>Usage</GroupHeading>
 
-        {/* Daily Usage */}
-        <section className="mb-8">
+        {/* Daily Usage: the allowance the tools spend from (S5) */}
+        <section className="mb-8" id="settings-usage-today">
           <h2 className="text-lg font-bold text-t-white mb-4">
             Daily Usage
           </h2>
           <div className="bg-t-panel p-5 border border-t-line">
-            {usage ? (
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-medium text-t-white">
-                    AI calls today
-                  </span>
-                  <span className="text-sm text-t-phos-dim">
-                    {usage.limit === null
-                      ? `${usage.used} used (unlimited)`
-                      : `${usage.used} / ${usage.limit}`}
-                  </span>
-                </div>
-                {usage.limit !== null && (
-                  <div className="w-full bg-t-line h-2">
-                    <div
-                      className="bg-t-amber h-2 transition-all"
-                      style={{
-                        width: `${Math.min(100, (usage.used / usage.limit) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                )}
-                {usage.remaining !== null && usage.remaining <= 5 && usage.remaining > 0 && (
-                  <p className="text-xs text-t-amber-bright mt-2">
-                    {usage.remaining} AI call{usage.remaining === 1 ? "" : "s"} left today. Resets at midnight.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-t-phos-dim">Loading usage...</p>
-            )}
+            <UsageCard usage={usage} />
           </div>
         </section>
 
