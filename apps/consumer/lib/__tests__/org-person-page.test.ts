@@ -13,6 +13,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+// Components compile with the classic JSX transform under tsx; give them React the way Next does.
+(globalThis as { React?: typeof React }).React = React;
 import {
   NOTE_CARE_LINE, PERSON_TABS, THEIR_SCREEN, initialOpen, noteOwnershipLine, personGlance, personStations, progressVisible, scopeToFetch,
   type PersonView, type ScopeView, type ShareScope,
