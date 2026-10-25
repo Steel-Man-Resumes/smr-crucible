@@ -8,8 +8,10 @@
  * touch R2; vault_document stores only metadata. Uploads NEVER return bytes.
  * Downloads go through the owner-exclusive proxy route ([id]/download).
  *
- * Auth: the NON-impersonatable auth() (same as export-data/export-vault), NOT
- * effectiveAuth. The vault holds a user's IDs and legal records, and the UI
+ * Auth: the NON-impersonatable auth(), NOT effectiveAuth. (export-data and
+ * export-vault now use effectiveAuth plus the "private" Settings refusal in
+ * lib/settings-guard.ts, which refuses any impersonation the same way and says
+ * why.) The vault holds a user's IDs and legal records, and the UI
  * promises "only you can open it" -- so an admin in an impersonation session must
  * NOT be able to list, read, download, edit, or delete another person's vault.
  * The user id comes only from the session; a client-supplied id is never trusted.
