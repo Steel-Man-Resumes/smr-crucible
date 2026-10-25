@@ -955,7 +955,7 @@ function AccountExtras({
 }) {
   return (
     <>
-      {/* Program code: joins a program's seat (S6). It promises no extra AI calls. */}
+      {/* Program code: joins a program's seat (S6). It promises no extra AI calls and shares nothing on its own. */}
       <section className="mb-8 mt-8" id="settings-program-code">
         <h2 className="text-lg font-bold text-t-white mb-4">
           Join a program with a code
@@ -968,8 +968,9 @@ function AccountExtras({
             <p className="text-sm text-t-phos-dim mb-3">
               If a program (like a job center or nonprofit) gave you a code, enter it
               here. The code joins you to a program&apos;s seat. If the program has
-              rules about sharing, you see them before you join, and joining opens
-              nothing by itself.
+              rules about sharing, you see them before you join, and joining shares
+              nothing by itself. If the code changes your AI allowance, Usage below
+              shows the new number.
             </p>
             <form onSubmit={redeemCode} className="flex gap-2">
               <input

@@ -178,6 +178,12 @@ test('S6: the program code copy joins a seat and promises no AI calls', () => {
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
   assert.match(page, /Join a program with a code/);
   assert.match(page, /joins you to a program&apos;s seat/);
+  // SF-4: a code can change tier and AI limit, so it does not "open nothing"; it shares nothing.
+  assert.match(page, /joining shares\s+nothing by itself/);
+  assert.doesNotMatch(page, /opens\s+nothing by itself/);
+  const gate = read('lib/withRateLimit.ts');
+  assert.doesNotMatch(gate, /partner code in Settings to upgrade/, 'the tier gate no longer promises an upgrade');
+  assert.match(gate, /If a program gave you a code, enter it in Settings\./);
   // Phrases split so the banned-claims scan does not trip on this test.
   for (const gone of ['unlock more ' + 'AI calls', 'daily limit has ' + 'been increased', 'PARTNER' + '123', 'calls' + '/day']) assert.ok(!page.includes(gone), gone);
 });
