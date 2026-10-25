@@ -59,7 +59,8 @@ export async function POST(request: Request) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Sign in again before saving your place." }, { status: 401, headers });
-  if (session.impersonation?.mode === "view") return NextResponse.json({ error: "This account view is read only." }, { status: 403, headers });
+  // Tours are the person's own. No write under ANY impersonation, assist included (T2).
+  if (session.impersonation) return NextResponse.json({ error: "The tour is the person's own. It does not open or save while you view or assist as them." }, { status: 403, headers });
   if (request.headers.get("X-Orientation-Account") !== userId) return NextResponse.json({ error: "Your account changed. Reload before continuing." }, { status: 409, headers });
   const raw = await request.text();
   if (raw.length > 1024) return NextResponse.json({ error: "Invalid request" }, { status: 400, headers });

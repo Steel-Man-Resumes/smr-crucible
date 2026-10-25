@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { Pool } from "@neondatabase/serverless";
 import { generateSecret, otpauthUrl, qrDataUrl, encryptTotpSecret } from "@/lib/two-factor";
 import { EMAIL_PROOF_NEEDED, isEmailProven } from "@/lib/email-proof";
@@ -10,6 +11,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
  *  Nothing is enabled until /enable verifies a code. */
 export async function POST() {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

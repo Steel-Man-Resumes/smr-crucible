@@ -9,11 +9,13 @@
  * MUST belong to the signed-in user (verified via getAvatarAsset) before the
  * pointer is written -- a client cannot point their nav at a stranger's asset,
  * and even if they somehow did, the image proxy re-checks ownership and returns
- * nothing. Owner-exclusive, NON-impersonatable auth(). Returns the new prefs.
+ * nothing. Owner-exclusive: effectiveAuth, refused under any impersonation
+ * (lib/settings-guard.ts "private"). Returns the new prefs.
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import {
   getUiPrefs,
   setUiPrefs,
@@ -25,6 +27,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

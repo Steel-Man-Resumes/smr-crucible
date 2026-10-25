@@ -69,7 +69,8 @@ import { exportProgression } from '@/lib/progression-server';
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { query, getOne, queryAsUser, getUserConsents, exportUserConversations, listLanes, listDismissedIntros, listPracticeEntries, exportRecordChecks, exportRevisions, publicRevision, getLaneFocus } from "@crucible/core";
 
 const NO_STORE_HEADERS = {
@@ -79,6 +80,7 @@ const NO_STORE_HEADERS = {
 
 export async function POST(req: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
 
   if (!userId) {

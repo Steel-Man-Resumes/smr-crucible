@@ -11,7 +11,8 @@
  * names whose sharing is being changed.
  */
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import {
   getSharingState,
   getMyAccessLog,
@@ -32,6 +33,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET() {
   const session = await auth();
+  { const refused = settingsRefusal(session, "consent", "read"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   const [orgs, log, policies] = await Promise.all([getSharingState(userId), getMyAccessLog(userId), getMyPolicies(userId)]);
@@ -47,6 +49,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "consent", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
   const body = await request.json().catch(() => ({}));

@@ -338,6 +338,9 @@ export default function SettingsPage() {
   // they do not have, or offer to erase "your plans and history" when what the
   // account actually holds is other people's caseload assignments.
   const isOrgStaff = !!effectiveRole?.orgRole;
+  // View-as or assist (S10): every Settings route answers as the person, and
+  // the private sections (security, photo, export, delete) refuse outright.
+  const impersonating = effectiveRole?.impersonating ?? null;
 
   // STAFF GET THEIR OWN SETTINGS, not a job seeker's. A case manager was being
   // asked whether to "share your progress with your support partner", offered
@@ -374,7 +377,18 @@ export default function SettingsPage() {
           : "Your data, your control. Manage your information and privacy."}
       </p>
 
-      {!isOrgStaff && <SettingsLesson />}
+      {impersonating && (
+        <div id="settings-impersonating" role="status" className="mb-6 border border-t-amber bg-t-panel p-4 text-sm text-t-white">
+          <p className="font-semibold mb-1">
+            {impersonating.mode === "view" ? "You are viewing this person's Settings. Nothing here can be changed." : "You are assisting this person in Settings."}
+          </p>
+          <p className="text-t-phos-dim">
+            These are their settings, not yours. Sharing and consent switches, program codes and the tours stay theirs to change. Security, photo, export and delete are hidden.
+          </p>
+        </div>
+      )}
+
+      {!isOrgStaff && !impersonating && <SettingsLesson />}
 
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
       <nav
@@ -410,7 +424,7 @@ export default function SettingsPage() {
       <div id="account" className="scroll-mt-32 mb-10">
         <GroupHeading>Account</GroupHeading>
         <AccountSection />
-        <AvatarSettingsSection />
+        {!impersonating && <AvatarSettingsSection />}
         {pendingPolicy && (
           <div role="dialog" aria-label="What this program requires" className="mb-4">
             <RequirementCard policy={pendingPolicy.policy} text={pendingPolicy.text} items={pendingPolicy.policy.items} compact />
@@ -474,13 +488,13 @@ export default function SettingsPage() {
       {/* ── 5. Security ────────────────────────────────────────────── */}
       <div id="security" className="scroll-mt-32 mb-10">
         <GroupHeading>Security</GroupHeading>
-        <SecuritySection />
+        {impersonating ? <p className="text-sm text-t-phos-dim">Hidden while you view or assist as this person.</p> : <SecuritySection />}
       </div>
 
       {/* ── 6. Data ────────────────────────────────────────────────── */}
       <div id="data" className="scroll-mt-32 mb-10">
         <GroupHeading>Data</GroupHeading>
-        <DataSection
+        {impersonating ? <p className="text-sm text-t-phos-dim">Hidden while you view or assist as this person.</p> : <DataSection
           exportCats={exportCats}
           setExportCats={setExportCats}
           reauthPassword={reauthPassword}
@@ -493,7 +507,7 @@ export default function SettingsPage() {
           setDeleteMode={setDeleteMode}
           deleteAllData={deleteAllData}
           deleting={deleting}
-        />
+        />}
       </div>
 
       {/* ── 7. Usage ───────────────────────────────────────────────── */}

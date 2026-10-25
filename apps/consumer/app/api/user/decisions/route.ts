@@ -12,10 +12,12 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { getUserDecisions } from "@crucible/core";
 
 export async function GET(request: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "preference", "read"); if (refused) return refused; }
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

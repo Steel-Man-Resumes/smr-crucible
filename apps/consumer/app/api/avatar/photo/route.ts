@@ -8,7 +8,9 @@
  * The photo is displayed only through the owner-exclusive proxy route
  * ([id]/image).
  *
- * Auth: the NON-impersonatable auth() (like the vault), NOT effectiveAuth. A
+ * Auth: effectiveAuth, then refused under ANY impersonation (lib/settings-guard.ts
+ * "private"; was the non-impersonatable auth(), which acted on the operator's
+ * own photo under the person's name). A
  * photo is a person's face; an admin in an impersonation session must NOT be
  * able to upload, list, view, or delete another person's photo. The user id
  * comes only from the session; a client-supplied id is never trusted. Every
@@ -24,7 +26,8 @@
 
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import {
   createAvatarAsset,
   makeSecureObjectKey,
@@ -45,6 +48,7 @@ const PHOTO_UPLOADS_PER_DAY = 50;
 
 export async function POST(request: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

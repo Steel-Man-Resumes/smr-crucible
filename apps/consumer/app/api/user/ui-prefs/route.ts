@@ -9,13 +9,15 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { getUiPrefs, setUiPrefs, type UiPrefs } from "@crucible/core";
 
 export const maxDuration = 10;
 
 export async function GET() {
   const session = await auth();
+  { const refused = settingsRefusal(session, "preference", "read"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -26,6 +28,7 @@ export async function GET() {
 
 export async function PATCH(req: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "preference", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

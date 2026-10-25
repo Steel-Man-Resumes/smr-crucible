@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { getUserDailyUsage, getUserDailyLimit } from "@crucible/core";
 
 export async function GET() {
   const session = await auth();
+  { const refused = settingsRefusal(session, "preference", "read"); if (refused) return refused; }
   const userId = session?.user?.id;
 
   if (!userId) {

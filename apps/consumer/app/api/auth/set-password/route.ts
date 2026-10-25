@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { revokeUserSessions, runAfterResponse } from "@/lib/session-registry";
@@ -12,6 +13,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 export async function POST(req: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }

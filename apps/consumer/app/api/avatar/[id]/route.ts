@@ -5,8 +5,9 @@
  *
  * Owner-exclusive: the user id is taken only from the session; the core call is
  * scoped to it. A foreign or missing id returns 404, never touching another
- * user's data. NON-impersonatable auth() so an admin impersonation session
- * cannot delete another person's photo.
+ * user's data. effectiveAuth, then refused under ANY impersonation
+ * (lib/settings-guard.ts "private"), so an admin impersonation session cannot
+ * delete another person's photo or, under their name, the admin's own.
  *
  * If the deleted asset was the user's currently SELECTED photo
  * (ui_avatar.photoAssetId), the selection is reset back to the illustrated
@@ -14,7 +15,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import {
   deleteAvatarAsset,
   getUiPrefs,
@@ -30,6 +32,7 @@ interface RouteContext {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   const userId = session?.user?.id;
   if (!userId) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { effectiveAuth as auth } from "@/lib/effective-auth";
+import { settingsRefusal } from "@/lib/settings-guard";
 import { Pool } from "@neondatabase/serverless";
 import bcrypt from "bcryptjs";
 import { verifySecondFactor } from "@/lib/second-factor";
@@ -12,6 +13,7 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
  *  account password), so a hijacked live session can't quietly remove it. */
 export async function POST(req: Request) {
   const session = await auth();
+  { const refused = settingsRefusal(session, "private", "write"); if (refused) return refused; }
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
