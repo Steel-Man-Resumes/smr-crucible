@@ -1,0 +1,62 @@
+/* Staff workspace sidebar (CRM wave 2026-10-25, lane C1).
+   Lives inside a .forge-workshop scope, like the participant board, so t-*
+   tokens are the workshop skin. Dots reuse the board's grammar: gold and
+   glowing for "here", hollow otherwise. No new colors. */
+.org-nav { font-family: var(--t-body); }
+.org-nav .org-identity {
+  display: flex; align-items: center; gap: 10px;
+  margin: 0 0 14px; padding: 4px 8px 14px; border-bottom: 1px solid var(--t-line);
+}
+.org-nav .org-identity-name { font-size: 14px; font-weight: 600; line-height: 1.25; color: var(--t-white); overflow-wrap: anywhere; }
+.org-nav .org-identity-role { margin-top: 2px; font: 600 10px/1.4 var(--t-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--t-amber-bright); }
+.org-nav .org-demo-chip {
+  display: inline-block; margin-left: 6px; padding: 1px 5px; border: 1px solid var(--t-amber); border-radius: 3px;
+  font: 600 9px/1.4 var(--t-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--t-amber-bright); vertical-align: 2px;
+}
+.org-nav .org-group + .org-group { margin-top: 14px; }
+.org-nav .org-eyebrow {
+  margin: 0 0 4px; padding: 0 8px;
+  font: 600 9px/1.4 var(--t-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--t-amber);
+}
+.org-nav ul { margin: 0; padding: 0; list-style: none; }
+.org-nav .org-link {
+  display: flex; width: 100%; align-items: center; gap: 10px; min-height: 40px;
+  padding: 8px 10px; border-radius: 4px; border-left: 3px solid transparent;
+  font-size: 14px; font-weight: 500; text-align: left; color: var(--t-bone-dim);
+  transition: background-color .15s, color .15s;
+}
+.org-nav .org-link:hover { background: var(--t-panel-2); color: var(--t-white); }
+.org-nav .org-link[aria-current="page"] { background: var(--t-panel-3); border-left-color: var(--t-amber-bright); color: var(--t-amber-bright); font-weight: 600; }
+.org-nav .org-dot {
+  flex: none; width: 10px; height: 10px; border-radius: 999px;
+  border: 2px solid var(--t-bone-dim); background: var(--t-panel);
+}
+.org-nav .org-link[aria-current="page"] .org-dot {
+  border-color: var(--t-amber-bright); background: var(--t-amber);
+  box-shadow: 0 0 0 3px rgba(219, 193, 115, .22), 0 0 10px rgba(219, 193, 115, .45);
+}
+.org-nav .org-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--t-line); }
+.org-nav .org-troy { color: #d8b4fe; }
+.org-nav .org-troy .org-dot { border-color: #c084fc; }
+.org-nav .org-troy:hover { color: #f3e8ff; }
+@media (prefers-reduced-motion: reduce) { .org-nav * { transition: none !important; } }
+
+/* Plain fields for records (notes, tasks): no terminal "$" prompt, reading
+   surface colors, body type (CRM design principle 5; Troy 2026-10-24: the "$"
+   leaves notes and tasks). The selector matches the global terminal input rule
+   (app/globals.css) plus one class, so it wins on specificity, not on order. */
+input.plain-field:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+textarea.plain-field {
+  color: var(--t-white) !important;
+  background-color: var(--t-panel) !important;
+  background-image: none !important;
+  border-color: var(--t-line-strong) !important;
+  font-family: var(--t-body) !important;
+  padding-left: .75rem !important;
+  caret-color: auto;
+  box-shadow: none;
+}
+input.plain-field:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"])::placeholder,
+textarea.plain-field::placeholder { color: var(--t-bone-dim) !important; }
+input.plain-field:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):focus,
+textarea.plain-field:focus { border-color: #4f6b57 !important; box-shadow: 0 0 0 1px #4f6b57; }
