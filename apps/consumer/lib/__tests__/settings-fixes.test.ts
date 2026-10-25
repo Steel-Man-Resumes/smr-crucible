@@ -12,6 +12,7 @@ import { settingsVerdict, SETTINGS_REFUSAL } from '../settings-guard';
 import { PROGRESSION_AI } from '../progression-policy';
 import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
 import { TOURS, readTourSlot, isTourId, slotSql } from '../tour/registry';
+import { grantTourRewardWith } from '../tour/tour-sql';
 import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed } from '../export-plan';
 import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
 
@@ -277,7 +278,7 @@ test('T1: reward keys stay per tour; settings is reserved and never granted', as
     async start(_u, _r, _p, _s, tourId) { calls.push(`start:${tourId}`); return 'started'; },
     async advance(_u, _r, _q, _s, _c, tourId) { calls.push(`advance:${tourId}`); return 'saved'; },
     async watchedMs() { calls.push('watched'); return 10 * 60_000; },
-    async grant() { calls.push('grant'); return { status: 'granted', calls: 1 }; },
+    async grant(_u, _r, tourId) { calls.push(`grant:${tourId}`); return { status: 'granted', calls: 1 }; },
     async invalidate() {},
   };
   const run = '77777777-7777-4777-8777-777777777777';
@@ -285,10 +286,41 @@ test('T1: reward keys stay per tour; settings is reserved and never granted', as
   assert.equal(done.status, 200);
   assert.equal(done.json.reward, null);
   assert.deepEqual(calls, ['advance:settings'], 'no watch check and no grant for a reserved reward');
+  // The entrance write path grants under the entrance tour, never a hard-coded one.
+  await handleTourWrite(store, 'u', { version: TOURS.entrance.version, runId: run, sequence: 1, stop: TOURS.entrance.stopCount - 1, action: 'complete' });
+  assert.equal(calls.at(-1), 'grant:entrance');
+  // If the settings reward is ever switched on, its grant is its own (SF-1): the
+  // write path hands the store the tour, not the entrance key.
+  const grants = TOURS.settings.grants;
+  try {
+    TOURS.settings.grants = true;
+    await handleTourWrite(store, 'u', { tourId: 'settings', version: TOURS.settings.version, runId: run, sequence: 2, stop: 3, action: 'complete' });
+  } finally { TOURS.settings.grants = grants; }
+  assert.equal(calls.at(-1), 'grant:settings');
   // A body without tourId is the entrance tour, so the entrance client is unchanged.
   await handleTourWrite(store, 'u', { version: TOURS.entrance.version, runId: run, sequence: 0, stop: 0, action: 'start', previousRunId: null });
   assert.equal(calls.at(-1), 'start:entrance');
   for (const bad of [{ tourId: 'x' }, { tourId: 7 }, { tourId: 'settings', version: TOURS.entrance.version }]) {
     assert.equal((await handleTourWrite(store, 'u', { version: TOURS.settings.version, runId: run, sequence: 1, stop: 0, action: 'progress', ...bad })).status, 400, JSON.stringify(bad));
   }
+});
+
+test('T1: the grant SQL binds the tour\'s own reward key and label; the entrance tour still writes exactly tour:complete', async () => {
+  const bound: unknown[][] = [];
+  const db = { async batchAsUser(_u: string, build: (sql: (s: TemplateStringsArray, ...v: unknown[]) => unknown) => unknown[]) {
+    build((_s, ...v) => { bound.push(v); return null; });
+    return [[], [], []];
+  } };
+  const run = '88888888-8888-4888-8888-888888888888';
+  await grantTourRewardWith(db, 'u', run);
+  let keys = bound.flat().filter(v => typeof v === 'string' && /^tour:/.test(v as string));
+  assert.deepEqual([...new Set(keys)], ['tour:complete'], 'default is the entrance key');
+  assert.ok(bound.flat().includes('Tour finished: extra AI actions'), 'the entrance label production rows carry');
+  bound.length = 0;
+  await grantTourRewardWith(db, 'u', run, { key: TOURS.settings.rewardKey, label: TOURS.settings.rewardLabel });
+  keys = bound.flat().filter(v => typeof v === 'string' && /^tour:/.test(v as string));
+  assert.deepEqual([...new Set(keys)], ['tour:settings'], 'the settings grant reads and writes only its own key');
+  assert.equal(keys.length, 3, 'the read, the insert and the not-exists check all use it');
+  assert.ok(!bound.flat().includes('tour:complete'));
+  assert.notEqual(TOURS.settings.rewardKey, TOURS.entrance.rewardKey);
 });

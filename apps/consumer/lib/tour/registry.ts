@@ -10,7 +10,7 @@
  * tours.entrance (guidedTour is left as it was, so a rollback still finds it).
  */
 import { TOUR_STOP_COUNT, TOUR_VERSION } from '../guidedTour';
-import { TOUR_MIN_WATCH_MS, TOUR_REWARD_KEY } from './reward';
+import { TOUR_MIN_WATCH_MS, TOUR_REWARD_KEY, TOUR_REWARD_LABEL } from './reward';
 
 export const TOUR_IDS = ['entrance', 'settings'] as const;
 export type TourId = (typeof TOUR_IDS)[number];
@@ -20,8 +20,10 @@ export interface TourDef {
   version: number;
   /** Saved stops are 0 .. stopCount - 1. */
   stopCount: number;
-  /** progression_grant.grant_key for this tour's one-time bonus. */
+  /** progression_grant.grant_key for this tour's one-time bonus. Each tour has its own; the entrance key is the one production rows carry. */
   rewardKey: string;
+  /** progression_grant.label written with the grant. */
+  rewardLabel: string;
   /** False while the bonus is reserved but not granted. */
   grants: boolean;
   minWatchMs: number;
@@ -30,11 +32,11 @@ export interface TourDef {
 }
 
 export const TOURS: Record<TourId, TourDef> = {
-  entrance: { id: 'entrance', version: TOUR_VERSION, stopCount: TOUR_STOP_COUNT, rewardKey: TOUR_REWARD_KEY, grants: true, minWatchMs: TOUR_MIN_WATCH_MS, completesOnboarding: true },
+  entrance: { id: 'entrance', version: TOUR_VERSION, stopCount: TOUR_STOP_COUNT, rewardKey: TOUR_REWARD_KEY, rewardLabel: TOUR_REWARD_LABEL, grants: true, minWatchMs: TOUR_MIN_WATCH_MS, completesOnboarding: true },
   // SETTINGS-TOUR.md: 14 beats across all paths (S1-S11 with S7a, S7b, S7c,
   // S7n) plus the ending card. The build lane pins the real beats; until then
   // this is the upper bound. Reward key reserved, nothing granted yet.
-  settings: { id: 'settings', version: 1, stopCount: 15, rewardKey: 'tour:settings', grants: false, minWatchMs: 45_000, completesOnboarding: false },
+  settings: { id: 'settings', version: 1, stopCount: 15, rewardKey: 'tour:settings', rewardLabel: 'Settings tour finished: extra AI actions', grants: false, minWatchMs: 45_000, completesOnboarding: false },
 };
 
 export function isTourId(value: unknown): value is TourId {

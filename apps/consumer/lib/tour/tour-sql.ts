@@ -3,7 +3,7 @@
  * in production (queryAsUser / runAsUser from @crucible/core, RLS as the user)
  * and in a pglite test against the real migrations. No @crucible/core import here.
  */
-import { TOUR_REWARD_KEY, tourRewardOutcome, type TourReward, type TourRewardRow } from './reward';
+import { TOUR_REWARD_KEY, TOUR_REWARD_LABEL, tourRewardOutcome, type TourReward, type TourRewardRow } from './reward';
 import type { TourWriteStore } from './tour-write';
 import { TOURS, slotSql } from './registry';
 
@@ -16,22 +16,27 @@ export interface TourDb {
   invalidate(userId: string): Promise<void>;
 }
 
+/** Which grant a tour writes: its own key (never another tour's) and label. */
+export interface TourRewardSpec { key: string; label: string }
+export const ENTRANCE_REWARD: TourRewardSpec = { key: TOUR_REWARD_KEY, label: TOUR_REWARD_LABEL };
+
 /**
- * One-time tour bonus (grant key 'tour:complete'), under the same advisory lock
+ * One-time tour bonus under the tour's own grant key (the entrance tour writes
+ * exactly 'tour:complete', which production rows already carry), under the same advisory lock
  * and daily and monthly caps as every other bonus, with the amount from
  * progression_policy. The earlier grant is read under the lock before the
  * conditional insert, so a second run grants nothing and is told so; a retry
  * of the same run reads as the same grant. The tour grant lasts 24 hours from
  * now (other bonuses end at the next UTC midnight).
  */
-export async function grantTourRewardWith(db: Pick<TourDb, 'batchAsUser'>, userId: string, runId: string): Promise<TourReward> {
+export async function grantTourRewardWith(db: Pick<TourDb, 'batchAsUser'>, userId: string, runId: string, reward: TourRewardSpec = ENTRANCE_REWARD): Promise<TourReward> {
   const rows = await db.batchAsUser(userId, sql => [
     sql`SELECT pg_advisory_xact_lock(hashtextextended(${userId}, 874))`,
-    sql`SELECT calls,created_at,expires_at,request_key FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${TOUR_REWARD_KEY}`,
+    sql`SELECT calls,created_at,expires_at,request_key FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${reward.key}`,
     sql`INSERT INTO progression_grant(user_id,grant_key,request_key,kind,step_id,calls,label,expires_at)
-     SELECT ${userId}::uuid,${TOUR_REWARD_KEY},${runId},'bonus','foundation',p.bonus_calls,'Tour finished: extra AI actions',now()+interval '24 hours'
+     SELECT ${userId}::uuid,${reward.key},${runId},'bonus','foundation',p.bonus_calls,${reward.label},now()+interval '24 hours'
      FROM progression_policy p WHERE p.id=true
-      AND NOT EXISTS(SELECT 1 FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${TOUR_REWARD_KEY})
+      AND NOT EXISTS(SELECT 1 FROM progression_grant WHERE user_id=${userId}::uuid AND grant_key=${reward.key})
       AND COALESCE((SELECT sum(calls) FROM progression_grant WHERE user_id=${userId}::uuid AND kind='bonus' AND created_at>=date_trunc('day',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)+p.bonus_calls<=p.bonus_daily_cap
       AND COALESCE((SELECT sum(calls) FROM progression_grant WHERE user_id=${userId}::uuid AND kind='bonus' AND created_at>=date_trunc('month',now() AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'),0)+p.bonus_calls<=p.bonus_monthly_cap
      ON CONFLICT DO NOTHING RETURNING calls,created_at,expires_at,request_key`,
@@ -101,7 +106,7 @@ export function createTourStore(db: TourDb): TourWriteStore {
          FROM (SELECT ${slotSql('$3')} AS g FROM consumer_profile WHERE user_id=$1) x WHERE g->>'runId'=$2`, [userId, runId, tourId]);
       return row?.ms == null ? null : Number(row.ms);
     },
-    grant: (userId, runId) => grantTourRewardWith(db, userId, runId),
+    grant: (userId, runId, tourId = 'entrance') => grantTourRewardWith(db, userId, runId, { key: TOURS[tourId].rewardKey, label: TOURS[tourId].rewardLabel }),
     invalidate: userId => db.invalidate(userId),
   };
 }

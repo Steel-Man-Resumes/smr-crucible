@@ -21,7 +21,8 @@ export interface TourWriteStore {
   advance(userId: string, runId: string, sequence: number, stop: number, complete: boolean, tourId?: TourId): Promise<'saved' | 'already-complete' | 'conflict'>;
   /** Milliseconds since this run started, by the server clock; null when unknown. */
   watchedMs(userId: string, runId: string, tourId?: TourId): Promise<number | null>;
-  grant(userId: string, runId: string): Promise<TourReward>;
+  /** The one-time bonus under this tour's own reward key (lib/tour/registry.ts rewardKey); absent = entrance. */
+  grant(userId: string, runId: string, tourId?: TourId): Promise<TourReward>;
   invalidate(userId: string): Promise<void>;
 }
 
@@ -62,7 +63,7 @@ export async function handleTourWrite(store: TourWriteStore, userId: string, bod
     let reward: TourReward;
     try {
       const watched = await store.watchedMs(userId, runId, tourId);
-      reward = watched === null || watched < def.minWatchMs ? { status: 'early', calls: 0 } : await store.grant(userId, runId);
+      reward = watched === null || watched < def.minWatchMs ? { status: 'early', calls: 0 } : await store.grant(userId, runId, tourId);
     } catch { reward = { status: 'unavailable', calls: 0 }; }
     return { status: 200, json: { ok: true, tourId, runId, sequence, reward } };
   } catch {

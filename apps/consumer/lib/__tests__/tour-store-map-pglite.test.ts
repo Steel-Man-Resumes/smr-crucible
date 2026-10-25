@@ -90,9 +90,22 @@ test('tour store map: old slot migrates to entrance on read, settings has its ow
   assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n, 0);
   assert.equal((await sw({ action: 'progress', runId: S1, sequence: 4, stop: 2 })).status, 409, 'a completed run never reopens');
 
-  // The entrance tour still completes and grants from its own slot (90 s+ watched).
+  // SF-1: were the settings reward switched on, its grant is written under its
+  // own key, and the entrance bonus stays claimable. The store's grant runs
+  // the real SQL with the settings tour.
+  const sg = await store.grant(u, S1, 'settings');
+  assert.equal(sg.status, 'granted');
+  const keys = (await pg.query(`SELECT grant_key AS k, label FROM progression_grant WHERE user_id=$1 ORDER BY created_at`, [u])).rows as { k: string; label: string }[];
+  assert.deepEqual(keys.map(r => r.k), ['tour:settings']);
+  assert.equal(keys[0].label, 'Settings tour finished: extra AI actions');
+  assert.equal((await store.grant(u, S2, 'settings')).status, 'already', 'one settings bonus per account');
+
+  // The entrance tour still completes and grants from its own slot (90 s+ watched), under tour:complete.
   const ent = await handleTourWrite(store, u, { version: E.version, runId: OLD, sequence: 7, stop: E.stopCount - 1, action: 'complete' });
-  assert.equal((ent.json.reward as TourReward).status, 'granted');
+  assert.equal((ent.json.reward as TourReward).status, 'granted', 'the settings grant did not take the entrance bonus');
+  const after = (await pg.query(`SELECT grant_key AS k, label FROM progression_grant WHERE user_id=$1 ORDER BY created_at`, [u])).rows as { k: string; label: string }[];
+  assert.deepEqual(after.map(r => r.k), ['tour:settings', 'tour:complete']);
+  assert.equal(after[1].label, 'Tour finished: extra AI actions');
   assert.equal(((await pg.query(`SELECT onboarding_tour_complete AS c FROM users WHERE id=$1`, [u])).rows[0] as { c: boolean }).c, true);
 
   // Account bound: another account's writes never reach this row.
