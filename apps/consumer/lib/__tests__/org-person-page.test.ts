@@ -16,7 +16,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 // Components compile with the classic JSX transform under tsx; give them React the way Next does.
 (globalThis as { React?: typeof React }).React = React;
 import {
-  NOTE_CARE_LINE, PERSON_TABS, THEIR_SCREEN, initialOpen, noteOwnershipLine, personGlance, personStations, progressVisible, scopeToFetch,
+  NOTE_CARE_LINE, PERSON_TABS, THEIR_SCREEN, capFirst, firstName, initialOpen, noteOwnershipLine, personGlance, personStations, progressVisible, scopeToFetch,
   type PersonView, type ScopeView, type ShareScope,
 } from "../org-person-view";
 import { STATION_IDS, stationForJourneyStage } from "../refinery-nav";
@@ -38,15 +38,15 @@ const LEAKY: PersonView = { ...INVITED, currentStage: 5, progress: SHARER.progre
 
 const tile = (html: string, key: string) => html.match(new RegExp(`<li data-tile="${key}">(.*?)</li>`))?.[1] ?? "";
 
-async function render(person: PersonView) {
+async function render(person: PersonView, troyReady = true) {
   const ui = await import("../../components/org/PersonOverview");
-  const first = (person.name || "This person").split(" ")[0];
+  const first = firstName(person);
   return renderToStaticMarkup(React.createElement(React.Fragment, null,
     React.createElement(ui.PersonHeaderCard, { person, first, joined: "Oct 1, 2026", caseManager: "Sam Case" }),
     React.createElement(ui.StationStrip, { person, first }),
     React.createElement(ui.GlanceRow, { person, openTasks: 2, fmtDay: () => "Oct 20, 2026" }),
     React.createElement(ui.TheirScreenBoard, { person, first, onOpenItem: () => {} }),
-    React.createElement(ui.PersonRail, { clientId: "c1", first }),
+    React.createElement(ui.PersonRail, { clientId: "c1", first, troyReady }),
   ));
 }
 
@@ -88,6 +88,11 @@ test("BL1: the invited non-sharer shows only the name and email the organization
   assert.match(html, /You see only the name and email your organization entered when it invited them\./);
   const none = await render(NONE);
   assert.match(none, /Name not shared/);
+  // Review S4: no "This" standing in for a name.
+  for (const bad of ["with This", "Ask This", "to This.", "what This", "path This", "This is here", "This person"]) assert.ok(!none.includes(bad), `no "${bad}"`);
+  assert.match(none, /t\.ROY, for your work with this person/);
+  assert.match(none, /Progress is private until this person turns on sharing\./);
+  assert.match(none, /Cover letters: not shared\. Ask this person/);
   assert.match(none, /their name and progress are not shown/);
   assert.doesNotMatch(none, /@/, "no email at all");
 });
@@ -167,4 +172,45 @@ test("the rail opens staff t.ROY for this person and says it only drafts", async
   const html = await render(SHARER);
   for (const k of ["staff-prep-me", "staff-check-in"]) assert.match(html, new RegExp(`data-skill="${k}"`));
   assert.match(html, /t\.ROY drafts\. You decide\. Nothing is saved or sent until you do it\./);
+});
+
+test("review S4: a person with no shown name reads naturally in every sentence the page builds", async () => {
+  assert.equal(firstName(NONE), "this person");
+  assert.equal(firstName(SHARER), "Dana");
+  assert.equal(capFirst("this person"), "This person");
+  assert.equal(noteOwnershipLine(firstName(NONE)), "Notes belong to your organization. They can be corrected, and earlier wording is kept. They cannot be deleted. Never visible to this person.");
+  const { SharedTab } = await import("../../components/org/ClientPage");
+  const html = renderToStaticMarkup(React.createElement(SharedTab, {
+    client: NONE as never, clientId: "c1", first: firstName(NONE), item: "applications", rows: null, loading: false,
+    viewer: { canRequest: true, canSuggest: false }, suggestions: [], onPick: () => {}, onChange: () => {},
+  }));
+  assert.match(html, /This person has not shared this with you/);
+  assert.match(html, /Ask this person to share this/);
+  assert.doesNotMatch(html, /Ask This\b|>This has/);
+});
+
+test("review S1: an item picked but not loaded never says Opening... unless it is loading", async () => {
+  const { SharedTab } = await import("../../components/org/ClientPage");
+  const props = (loading: boolean) => ({
+    client: SHARER as never, clientId: "c1", first: "Dana", item: "applications" as const, rows: null, loading,
+    viewer: { canRequest: true, canSuggest: false }, suggestions: [], onPick: () => {}, onChange: () => {},
+  });
+  const idle = renderToStaticMarkup(React.createElement(SharedTab, props(false)));
+  assert.doesNotMatch(idle, /Opening\.\.\./);
+  assert.match(idle, />\s*Open applications\s*</, "a button to open it again");
+  assert.match(renderToStaticMarkup(React.createElement(SharedTab, props(true))), /Opening\.\.\./);
+  // And a tab event clears the picked item, so the tab shows "Pick one" rather than a stale item.
+  const src = readFileSync(join(ROOT, "components/org/ClientPage.tsx"), "utf8");
+  assert.match(src, /if \(e\.kind === "tab"\) \{ setTab\(e\.tab\); setItem\(null\); setShared\(null\); \}/);
+});
+
+test("review S2: with STAFF_TROY_READY off the rail shows no buttons at all", async () => {
+  const { STAFF_TROY_READY } = await import("../staff-troy");
+  assert.equal(STAFF_TROY_READY, false, "the stub ships off, like C1's");
+  const off = await render(SHARER, STAFF_TROY_READY);
+  assert.doesNotMatch(off, /data-skill=/);
+  assert.doesNotMatch(off, /t\.ROY drafts/);
+  assert.doesNotMatch(off, /for your work with/);
+  const src = readFileSync(join(ROOT, "components/org/PersonOverview.tsx"), "utf8");
+  assert.match(src, /troyReady = STAFF_TROY_READY/);
 });

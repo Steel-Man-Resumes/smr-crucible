@@ -11,10 +11,10 @@
 import React from "react";
 import { STATIONS } from "@/lib/refinery-nav";
 import {
-  SHARE_SCOPES, THEIR_SCREEN, personGlance, personInitials, personStations, progressVisible,
+  SHARE_SCOPES, THEIR_SCREEN, capFirst, personGlance, personInitials, personStations, progressVisible,
   type GlanceTile, type PersonTab, type PersonView, type ShareScope,
 } from "@/lib/org-person-view";
-import { openStaffTroy } from "@/lib/staff-troy";
+import { openStaffTroy, STAFF_TROY_READY } from "@/lib/staff-troy";
 
 export function scopeStateText(st: PersonView["scopes"][ShareScope], awaitingAcknowledgement?: boolean): string {
   return st.shared ? (st.required ? "Shared (required)" : "Shared")
@@ -67,10 +67,9 @@ export function PersonHeaderCard({ person, first, joined, caseManager, onCopyEma
 /** The seven stations, the person's one lit. Hollow for everyone who has not shared progress. */
 export function StationStrip({ person, first }: { person: PersonView; first: string }) {
   const { lit, cells } = personStations(person);
-  const named = !!person.name;
   const line = lit
     ? person.progress?.nextStepAction ? `The next step ${first} is being shown: ${person.progress.nextStepAction}.` : "No next step is showing right now."
-    : named ? `Progress is private until ${first} turns on sharing.` : "Progress is private until they turn on sharing.";
+    : `Progress is private until ${first} turns on sharing.`;
   return (
     <section aria-labelledby="person-where" className="forge-workshop refinery-board person-strip rounded-[4px] border border-t-line px-5 py-4 mb-4" data-lit={lit ?? ""}>
       <h2 id="person-where" className="board-eyebrow" style={{ padding: 0 }}>Where they are</h2>
@@ -130,14 +129,14 @@ export function TheirScreenBoard({ person, first, onOpenItem }: { person: Person
               <span className="board-dot" data-tone={here ? "current" : "plain"}><span className="board-dot-num">{i + 1}</span></span>
               <div className="min-w-0 flex-1">
                 <p className={`text-sm font-semibold ${here ? "text-t-amber-bright" : "text-t-white"}`}>
-                  {st.label}{here ? <span className="ml-2 text-[11px] font-normal text-t-amber-bright">{first} is here</span> : null}
+                  {st.label}{here ? <span className="ml-2 text-[11px] font-normal text-t-amber-bright">{capFirst(first)} is here</span> : null}
                 </p>
                 <p className="text-xs text-t-phos-dim mt-0.5">{area.holds}</p>
                 {area.station === "overview" ? (
                   <p className="text-xs text-t-white mt-1">
                     {shows && p
                       ? `${p.nextStepAction ? `The next step ${first} is being shown: ${p.nextStepAction}. ` : "No next step is showing right now. "}${p.applications} ${p.applications === 1 ? "application" : "applications"}, ${p.savedJobs} saved, ${p.practiceSessions} practice ${p.practiceSessions === 1 ? "session" : "sessions"}.`
-                      : `Progress is private until ${person.name ? first : "they"} ${person.name ? "turns" : "turn"} on sharing.`}
+                      : `Progress is private until ${first} turns on sharing.`}
                   </p>
                 ) : area.never ? (
                   <p className="text-xs text-t-phos mt-1" data-never="">{area.never}</p>
@@ -170,7 +169,9 @@ const RAIL: { skill: "staff-prep-me" | "staff-check-in" | "staff-find-help"; lab
   { skill: "staff-find-help", label: "Find local help", what: "Listings from the public directory, with the date each was checked." },
 ];
 
-export function PersonRail({ clientId, first }: { clientId: string; first: string }) {
+/** Shown only once staff t.ROY is merged (STAFF_TROY_READY); until then no dead buttons. */
+export function PersonRail({ clientId, first, troyReady = STAFF_TROY_READY }: { clientId: string; first: string; troyReady?: boolean }) {
+  if (!troyReady) return null;
   return (
     <aside aria-labelledby="person-rail-h" className="person-rail self-start bg-t-panel border border-t-line rounded-[4px] p-4">
       <h2 id="person-rail-h" className="text-xs font-semibold uppercase tracking-wide text-[#344b38] mb-1">t.ROY, for your work with {first}</h2>

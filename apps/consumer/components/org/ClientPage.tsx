@@ -23,9 +23,10 @@ import { orgNoteDraftKey } from "@/lib/org-note-draft";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { OutcomesPanel } from "@/components/org/OutcomesPanel";
+import { STAFF_TROY_READY } from "@/lib/staff-troy";
 import { GlanceRow, PersonHeaderCard, PersonRail, Skeleton, StationStrip, TheirScreenBoard, scopeStateText } from "@/components/org/PersonOverview";
 import {
-  NOTE_CARE_LINE, PERSON_TABS, SHARE_SCOPES as SCOPES, firstName, initialOpen, noteOwnershipLine, scopeToFetch,
+  NOTE_CARE_LINE, PERSON_TABS, SHARE_SCOPES as SCOPES, capFirst, firstName, initialOpen, noteOwnershipLine, scopeToFetch,
   type OpenEvent, type PersonTab, type ShareScope as Scope,
 } from "@/lib/org-person-view";
 import { DEFAULT_STAFF_PREFS, NOTE_KINDS as KINDS, NOTE_KIND_LABELS, type StaffPrefs } from "@crucible/core/src/staffPrefsShared";
@@ -102,7 +103,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
    */
   const go = useCallback(async (e: OpenEvent & { kind: "tab" | "item" }) => {
     if (!client) return;
-    if (e.kind === "tab") { setTab(e.tab); if (e.tab !== "shared") setItem(null); setShared(null); }
+    if (e.kind === "tab") { setTab(e.tab); setItem(null); setShared(null); }
     else { setTab("shared"); setItem(e.scope); setShared(null); }
     try { localStorage.setItem(LAST_TAB_KEY, e.kind === "item" ? e.scope : e.tab); } catch {}
     const scope = scopeToFetch(e, client.scopes);
@@ -153,7 +154,7 @@ export function ClientPage({ clientId }: { clientId: string }) {
       <StationStrip person={client} first={first} />
       <GlanceRow person={client} openTasks={openTasks} fmtDay={(s) => day(s)} onPick={(t) => go({ kind: "tab", tab: t.tab })} />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_17rem]">
+      <div className={`grid gap-5 ${STAFF_TROY_READY ? "lg:grid-cols-[minmax(0,1fr)_17rem]" : ""}`}>
         <div className="min-w-0">
           <div role="tablist" aria-label="Participant sections" className="flex flex-wrap gap-1 border-b border-t-line mb-5">
             {PERSON_TABS.map(({ key, label }) => (
@@ -188,8 +189,8 @@ export function ClientPage({ clientId }: { clientId: string }) {
   );
 }
 
-/** What they shared: pick an item. Picking a shared one is the logged open. */
-function SharedTab({ client, clientId, first, item, rows, loading, viewer, suggestions, onPick, onChange }: {
+/** What they shared: pick an item. Picking a shared one is the logged open. Exported for tests. */
+export function SharedTab({ client, clientId, first, item, rows, loading, viewer, suggestions, onPick, onChange }: {
   client: Client; clientId: string; first: string; item: Scope | null; rows: Record<string, unknown>[] | null; loading: boolean;
   viewer: { canRequest: boolean; canSuggest?: boolean } | null; suggestions: Suggestion[]; onPick: (s: Scope) => void; onChange: () => void;
 }) {
@@ -209,16 +210,21 @@ function SharedTab({ client, clientId, first, item, rows, loading, viewer, sugge
       </div>
       {!item || !st ? (
         <p className="text-sm text-t-phos-dim bg-t-panel border border-t-line px-4 py-3">
-          Pick one to open it. {first} can see that you opened a shared item, and when.
+          Pick one to open it. {capFirst(first)} can see that you opened a shared item, and when.
         </p>
       ) : st.shared ? (
         <div aria-live="polite">
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-4">
-            {first} chose to share this with your organization on {day(st.sharedAt)} and can stop at any time.
-            {" "}{first} can see that you opened it, and when. You can read it. You cannot change it.
+            {capFirst(first)} chose to share this with your organization on {day(st.sharedAt)} and can stop at any time.
+            {" "}{capFirst(first)} can see that you opened it, and when. You can read it. You cannot change it.
             {st.fromDate ? ` Only what ${first} made on or after ${day(st.fromDate)} is included; earlier work is still private.` : ""}
           </p>
-          {loading || !rows ? <p className="text-sm text-t-phos-dim">Opening...</p>
+          {loading ? <p className="text-sm text-t-phos-dim">Opening...</p>
+            : !rows ? (
+              <button type="button" onClick={() => onPick(item)} className="t-focus text-sm font-semibold text-t-amber-bright underline underline-offset-4">
+                Open {SCOPES.find((s) => s.key === item)!.label.toLowerCase()}
+              </button>
+            )
             : rows.length === 0 ? <p className="text-sm text-t-phos-dim">Shared, and there is nothing here yet.</p>
             : item === "applications" ? <Applications rows={rows} />
             : <Documents rows={rows} clientId={clientId} first={first} canComment={!!viewer?.canSuggest} comments={suggestions.filter((x) => x.kind === "comment")} onChange={onChange} />}
@@ -226,7 +232,7 @@ function SharedTab({ client, clientId, first, item, rows, loading, viewer, sugge
       ) : st.required ? (
         <div className="bg-t-panel border border-t-line p-5">
           <h2 className="font-semibold text-t-white mb-2">
-            {st.stoppedByParticipant ? `${first} stopped sharing this` : `${first} has not acknowledged the program's requirement yet`}
+            {st.stoppedByParticipant ? `${capFirst(first)} stopped sharing this` : `${capFirst(first)} has not acknowledged the program's requirement yet`}
           </h2>
           <p className="text-sm text-t-phos-dim leading-relaxed">
             Your program requires this, and nothing opens until {first} has read the requirement and said so themselves. Nobody can acknowledge it for them, and {first} can still use everything in the meantime.
@@ -279,7 +285,7 @@ function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; firs
               <div>
                 <p className={`text-sm ${t.done_at ? "text-t-phos-dim line-through" : "text-t-white"}`}>{t.title}</p>
                 <p className="text-xs text-t-phos-dim">
-                  {t.due_on ? `Due ${day(t.due_on + "T12:00:00Z")} · ` : ""}{t.shared_with_participant ? `${first} can see this` : "Only staff can see this"}
+                  {t.due_on ? `Due ${day(t.due_on + "T12:00:00Z")} · ` : ""}{t.shared_with_participant ? `${capFirst(first)} can see this` : "Only staff can see this"}
                   {t.done_at ? ` · done${t.done_by_participant ? ` by ${first}` : ""}` : ""}
                 </p>
               </div>
@@ -515,16 +521,16 @@ function AskPanel({ clientId, first, scope, pending, canRequest, onAsked }: {
   }
   return (
     <section className="bg-t-panel border border-t-line p-5">
-      <h2 className="font-semibold text-t-white mb-2">{first} has not shared this with you</h2>
+      <h2 className="font-semibold text-t-white mb-2">{capFirst(first)} has not shared this with you</h2>
       <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
         If they do, you would see {scope.wouldShow} It is their choice, and nothing here changes unless they say yes.
       </p>
       {pending ? (
-        <p className="text-sm text-t-phos">You have asked. {first} will see your request the next time they sign in.</p>
+        <p className="text-sm text-t-phos">You have asked. {capFirst(first)} will see your request the next time they sign in.</p>
       ) : canRequest ? (
         <>
           <label htmlFor="ask-reason" className="block text-xs uppercase text-t-phos-dim mb-1">
-            Why would it help? {first} will read this, under your name.
+            Why would it help? {capFirst(first)} will read this, under your name.
           </label>
           <textarea id="ask-reason" value={reason} onChange={(e) => setReason(e.target.value)} rows={2} maxLength={500}
             placeholder="So I can help you get ready for Thursday's interview."

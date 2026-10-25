@@ -53,8 +53,17 @@ export function progressVisible(p: Pick<PersonView, "identitySource" | "progress
   return p.identitySource === "account" && p.progress != null;
 }
 
+/**
+ * How the page names the person mid-sentence: their first name, or "this
+ * person" when no name is shown (joined by code, not sharing). Use capFirst
+ * where it starts a sentence.
+ */
 export function firstName(p: Pick<PersonView, "name">): string {
-  return (p.name || "This person").trim().split(/\s+/)[0];
+  const n = (p.name ?? "").trim();
+  return n ? n.split(/\s+/)[0] : "this person";
+}
+export function capFirst(first: string): string {
+  return first ? first[0].toUpperCase() + first.slice(1) : first;
 }
 
 /** Initials for the person's avatar. Only from the name the header already shows; none when no name is shown. */
