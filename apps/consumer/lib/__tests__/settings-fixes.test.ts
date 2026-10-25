@@ -357,10 +357,10 @@ test('T1: the old single slot is read as the entrance tour; tours.<id> wins once
   assert.equal(isTourId('entrance') && isTourId('settings') && !isTourId('__proto__'), true);
 });
 
-test('T1: reward keys stay per tour; settings is reserved and never granted', async () => {
+test('T1: reward keys stay per tour; the settings tour grants under its own key, and a reserved tour grants nothing', async () => {
   assert.equal(TOURS.entrance.rewardKey, 'tour:complete');
   assert.equal(TOURS.settings.rewardKey, 'tour:settings');
-  assert.equal(TOURS.settings.grants, false);
+  assert.equal(TOURS.settings.grants, true, 'SETTINGS-TOUR.md: 1 call, once, after 45 s');
   const calls: string[] = [];
   const store: TourWriteStore = {
     async start(_u, _r, _p, _s, tourId) { calls.push(`start:${tourId}`); return 'started'; },
@@ -372,19 +372,20 @@ test('T1: reward keys stay per tour; settings is reserved and never granted', as
   const run = '77777777-7777-4777-8777-777777777777';
   const done = await handleTourWrite(store, 'u', { tourId: 'settings', version: TOURS.settings.version, runId: run, sequence: 1, stop: 3, action: 'complete' });
   assert.equal(done.status, 200);
-  assert.equal(done.json.reward, null);
-  assert.deepEqual(calls, ['advance:settings'], 'no watch check and no grant for a reserved reward');
+  assert.deepEqual(done.json.reward, { status: 'granted', calls: 1 });
+  assert.deepEqual(calls, ['advance:settings', 'watched', 'grant:settings'], 'the settings grant is its own (SF-1): the write path hands the store the tour, not the entrance key');
   // The entrance write path grants under the entrance tour, never a hard-coded one.
   await handleTourWrite(store, 'u', { version: TOURS.entrance.version, runId: run, sequence: 1, stop: TOURS.entrance.stopCount - 1, action: 'complete' });
   assert.equal(calls.at(-1), 'grant:entrance');
-  // If the settings reward is ever switched on, its grant is its own (SF-1): the
-  // write path hands the store the tour, not the entrance key.
+  // A tour whose reward is reserved but not granted completes with reward null and never reaches the watch check or the grant.
   const grants = TOURS.settings.grants;
+  calls.length = 0;
   try {
-    TOURS.settings.grants = true;
-    await handleTourWrite(store, 'u', { tourId: 'settings', version: TOURS.settings.version, runId: run, sequence: 2, stop: 3, action: 'complete' });
+    TOURS.settings.grants = false;
+    const held = await handleTourWrite(store, 'u', { tourId: 'settings', version: TOURS.settings.version, runId: run, sequence: 2, stop: 3, action: 'complete' });
+    assert.equal(held.json.reward, null);
+    assert.deepEqual(calls, ['advance:settings']);
   } finally { TOURS.settings.grants = grants; }
-  assert.equal(calls.at(-1), 'grant:settings');
   // A body without tourId is the entrance tour, so the entrance client is unchanged.
   await handleTourWrite(store, 'u', { version: TOURS.entrance.version, runId: run, sequence: 0, stop: 0, action: 'start', previousRunId: null });
   assert.equal(calls.at(-1), 'start:entrance');

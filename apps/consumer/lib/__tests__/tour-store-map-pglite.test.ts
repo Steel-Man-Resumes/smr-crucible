@@ -77,40 +77,60 @@ test('tour store map: old slot migrates to entrance on read, settings and crm ha
   // The entrance run's sequence is its own: settings writes did not move it.
   assert.equal((await handleTourWrite(store, u, { version: E.version, runId: OLD, sequence: 6, stop: 8, action: 'progress' })).status, 200);
 
-  // Completing settings: stamped, onboarding untouched, and no grant (tour:settings is reserved).
-  await pg.query(`UPDATE consumer_profile SET preferences = jsonb_set(preferences, '{tours,settings,startedAt}', to_jsonb(now() - interval '5 minutes')) WHERE user_id=$1`, [u]);
+  // Completing settings at 44 s: stamped, onboarding untouched, reward early, no grant row (SETTINGS-TOUR.md: 45 s by the database clock).
+  await pg.query(`UPDATE consumer_profile SET preferences = jsonb_set(preferences, '{tours,settings,startedAt}', to_jsonb(now() - interval '44 seconds')) WHERE user_id=$1`, [u]);
   const done = await sw({ action: 'complete', runId: S1, sequence: 3, stop: S.stopCount - 1 });
   assert.equal(done.status, 200);
-  assert.equal(done.json.reward, null);
+  assert.deepEqual(done.json.reward, { status: 'early', calls: 0 });
   p = await prefs();
   assert.equal(p!.tours.settings.inProgress, false);
   assert.ok(p!.tours.settings.completedAt);
   const flags = (await pg.query(`SELECT onboarding_tour_complete AS c FROM users WHERE id=$1`, [u])).rows[0] as { c: boolean };
   assert.equal(flags.c, false, 'only the entrance tour marks onboarding complete');
-  assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n, 0);
+  assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n, 0, '44 s grants nothing');
   assert.equal((await sw({ action: 'progress', runId: S1, sequence: 4, stop: 2 })).status, 409, 'a completed run never reopens');
 
-  // SF-1: were the settings reward switched on, its grant is written under its
-  // own key, and the entrance bonus stays claimable. The store's grant runs
-  // the real SQL with the settings tour.
-  const sg = await store.grant(u, S1, 'settings');
-  assert.equal(sg.status, 'granted');
-  const keys = (await pg.query(`SELECT grant_key AS k, label FROM progression_grant WHERE user_id=$1 ORDER BY created_at`, [u])).rows as { k: string; label: string }[];
+  // A replay (new run, previousRunId = the finished one) watched 45 s: granted 1 call
+  // under tour:settings (LEAST(1, bonus_calls 2)) for 24 h, with its own label.
+  assert.equal((await sw({ action: 'start', runId: S2, sequence: 0, previousRunId: S1 })).status, 200);
+  await pg.query(`UPDATE consumer_profile SET preferences = jsonb_set(preferences, '{tours,settings,startedAt}', to_jsonb(now() - interval '45 seconds')) WHERE user_id=$1`, [u]);
+  const again = await sw({ action: 'complete', runId: S2, sequence: 1, stop: S.stopCount - 1 });
+  assert.equal(again.status, 200);
+  const sr = again.json.reward as TourReward;
+  assert.equal(sr.status, 'granted');
+  assert.equal(sr.calls, 1);
+  const keys = (await pg.query(`SELECT grant_key AS k, label, calls, request_key AS r, (expires_at - now()) > interval '23 hours 59 minutes' AND (expires_at - now()) <= interval '24 hours' AS day FROM progression_grant WHERE user_id=$1 ORDER BY created_at`, [u])).rows as { k: string; label: string; calls: number; r: string; day: boolean }[];
   assert.deepEqual(keys.map(r => r.k), ['tour:settings']);
-  assert.equal(keys[0].label, 'Settings tour finished: extra AI actions');
-  assert.equal((await store.grant(u, S2, 'settings')).status, 'already', 'one settings bonus per account');
+  assert.equal(keys[0].label, 'Settings tour finished: extra AI action');
+  assert.equal(keys[0].calls, 1);
+  assert.equal(keys[0].r, S2);
+  assert.equal(keys[0].day, true, '24 hours from now');
+  // A re-POST of the same completing run reads as the same grant; a third run reads already.
+  const retry = await sw({ action: 'complete', runId: S2, sequence: 2, stop: S.stopCount - 1 });
+  assert.equal((retry.json.reward as TourReward).status, 'granted');
+  assert.equal((retry.json.reward as TourReward).calls, 1);
+  assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n, 1, 'no second row');
+  const S3 = '99999999-9999-4999-8999-999999999999';
+  assert.equal((await store.grant(u, S3, 'settings')).status, 'already', 'one settings bonus per account, ever');
+  // SF-4: a cap of 0 grants nothing and writes nothing, for an account with no grant yet.
+  const { grantTourRewardWith } = await import('../tour/tour-sql');
+  await assert.rejects(grantTourRewardWith(db, other, S3, { key: 'tour:zero', label: 'zero', calls: 0 }), /positive integer/);
+  assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE grant_key='tour:zero'`)).rows[0] as { n: number }).n, 0, 'calls 0 inserted nothing');
+  assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [other])).rows[0] as { n: number }).n, 0, 'another account cannot see or hold it');
 
-  // The entrance tour still completes and grants from its own slot (90 s+ watched), under tour:complete.
+  // The entrance tour still completes and grants from its own slot (90 s+ watched), under tour:complete,
+  // at the policy amount (2): 1 + 2 = 3 holds under the default daily cap of 4.
   const ent = await handleTourWrite(store, u, { version: E.version, runId: OLD, sequence: 7, stop: E.stopCount - 1, action: 'complete' });
   assert.equal((ent.json.reward as TourReward).status, 'granted', 'the settings grant did not take the entrance bonus');
-  const after = (await pg.query(`SELECT grant_key AS k, label FROM progression_grant WHERE user_id=$1 ORDER BY created_at`, [u])).rows as { k: string; label: string }[];
+  const after = (await pg.query(`SELECT grant_key AS k, label, calls FROM progression_grant WHERE user_id=$1 ORDER BY created_at`, [u])).rows as { k: string; label: string; calls: number }[];
   assert.deepEqual(after.map(r => r.k), ['tour:settings', 'tour:complete']);
   assert.equal(after[1].label, 'Tour finished: extra AI actions');
+  assert.deepEqual(after.map(r => r.calls), [1, 2], 'the cap applies to the settings tour only');
   assert.equal(((await pg.query(`SELECT onboarding_tour_complete AS c FROM users WHERE id=$1`, [u])).rows[0] as { c: boolean }).c, true);
 
   // Account bound: another account's writes never reach this row.
-  assert.equal((await handleTourWrite(store, other, { tourId: 'settings', version: S.version, runId: S1, sequence: 9, stop: 1, action: 'progress' })).status, 409);
-  assert.equal((await prefs())!.tours.settings.sequence, 3);
+  assert.equal((await handleTourWrite(store, other, { tourId: 'settings', version: S.version, runId: S2, sequence: 9, stop: 1, action: 'progress' })).status, 409);
+  assert.equal((await prefs())!.tours.settings.sequence, 1, 'the re-POST on a completed run moved nothing');
   assert.equal((await handleTourWrite(store, u, { tourId: 'nope', version: 1, runId: S2, sequence: 0, stop: 0, action: 'start', previousRunId: null })).status, 400);
 
   // CRM-TOUR.md: the staff tour has its own slot, completes with no reward, and
