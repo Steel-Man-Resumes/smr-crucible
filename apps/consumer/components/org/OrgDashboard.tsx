@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * OrgDashboard -- the partner organization's mission control.
+ * OrgDashboard -- the partner organization's caseload and team view.
  *
  * Redesigned (org-oversight wave, 2026-08-07) from a cohort table into an
  * organization-oversight surface. An org admin/staff is here to RUN the
@@ -623,7 +623,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   ? ownCaseloadOnly
                     ? "Staff view: the clients assigned to you who chose to share progress."
                     : "Staff view: everyone in your organization who chose to share progress."
-                  : `Your organization's mission control for team, client progress, and program reach.${data.org.code ? ` Code ${data.org.code}.` : ""}`
+                  : `Your organization's people, team and program reach.${data.org.code ? ` Code ${data.org.code}.` : ""}`
                 : "Progress for the people you support who chose to share it."}
             </p>
           </div>
@@ -635,7 +635,10 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           >
             How the tools work
           </Link>
-          {clients.length > 0 && (
+          {/* One export with one set of definitions: organizations with the
+              workspace (crm_v2) download from Insights. The older per-person
+              cohort file stays only for organizations without it. */}
+          {clients.length > 0 && !data?.crmV2 && (
             <a
               href="/api/partner/cohort?format=csv"
               className="t-focus inline-flex items-center px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10 min-h-touch"

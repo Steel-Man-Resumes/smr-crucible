@@ -9,6 +9,7 @@
  * confirmed. Wage and hours are optional. A check-in that could not reach the
  * person is recorded as exactly that.
  */
+import { capFirst } from "@/lib/org-person-view";
 import { useCallback, useEffect, useState } from "react";
 
 interface Check { day_mark: number; status: string; method: string; checked_at: string }
@@ -46,7 +47,7 @@ export function OutcomesPanel({ clientId, first }: { clientId: string; first: st
   return (
     <section>
       {msg && <p role="alert" className="text-xs text-t-amber-bright border border-t-amber bg-t-panel px-4 py-3 mb-4">{msg}</p>}
-      {rows.length === 0 && <p className="text-sm text-t-phos-dim mb-5">No placement on record for {first} yet. {first} marking a job as hired in their own tracker is theirs; this is your organization&apos;s record, and {first} can see it.</p>}
+      {rows.length === 0 && <p className="text-sm text-t-phos-dim mb-5">No placement on record for {first} yet. {capFirst(first)} marking a job as hired in their own tracker is theirs; this is your organization&apos;s record, and {first} can see it.</p>}
 
       <ul className="space-y-4 mb-6">
         {rows.map((o) => (
@@ -100,7 +101,7 @@ export function OutcomesPanel({ clientId, first }: { clientId: string; first: st
             </div>
           </div>
           <button className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 mt-4">Save placement</button>
-          <p className="text-xs text-t-phos-dim mt-3">{first} can see that this is on file. It cannot be deleted; a mistake is ended as &ldquo;entered by mistake&rdquo;, which keeps it out of every count.</p>
+          <p className="text-xs text-t-phos-dim mt-3">{capFirst(first)} can see that this is on file. It cannot be deleted; a mistake is ended as &ldquo;entered by mistake&rdquo;, which keeps it out of every count.</p>
         </form>
       )}
     </section>

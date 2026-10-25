@@ -1,4 +1,5 @@
 import { ClientPage } from "@/components/org/ClientPage";
+import "@/components/org/person-page.css";
 
 export const metadata = { title: "Participant" };
 
