@@ -6,6 +6,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+// Components compile with the classic JSX transform under tsx; give them React the way Next does.
+(globalThis as { React?: typeof React }).React = React;
 import type { OrgInsights } from "@crucible/core";
 import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
 import { LEGACY_STAGE_SECTION, PERIOD_LABEL, insightsCsv, insightsCsvRows, stationRows } from "../org-insights-report";
@@ -125,4 +129,40 @@ test("the old cohort CSV button is gone for organizations that have Insights", (
   assert.ok(at > 0, "kept for organizations without the workspace");
   assert.match(src.slice(Math.max(0, at - 300), at), /!data\?\.crmV2/);
   assert.doesNotMatch(src, /mission control/i);
+});
+
+async function renderReport(orgName: string) {
+  const { InsightsReport } = await import("../../components/org/InsightsReport");
+  return renderToStaticMarkup(React.createElement(InsightsReport, {
+    d: I, orgName, orgId: "00000000-0000-4000-8000-000000000001", hasLogo: false, canExport: true, generatedAt: "2026-10-24T18:00:00.000Z",
+  }));
+}
+
+test("print report renders: org mark and name, period, sections, counted-over notes, footer", async () => {
+  const html = await renderReport("Harbor Light Works (Demo)");
+  assert.match(html, /class="insights-report/);
+  assert.match(html, /ins-print-head[^]*data-org-mark[^]*Harbor Light Works<[^]*with Steel Man Resumes/);
+  assert.match(html, /All time, as of Oct 24, 2026/);
+  assert.match(html, /Sample data\. These participants are fictional\./, "a demo org's printed report says so");
+  for (const h of ["People", "Where people are", "Momentum", "Work toward a job", "Placements your team recorded", "Your team", "What people chose to share"]) {
+    assert.ok(html.includes(`>${h}</h2>`), `section ${h}`);
+  }
+  for (const st of ["Overview", "Find work", "Tailor and package", "Plan what to say", "Practice", "Apply and track", "What comes next"]) assert.ok(html.includes(st), st);
+  assert.doesNotMatch(html, /Getting oriented|Building foundation|Applying &amp; tracking/, "no legacy stage names on screen");
+  assert.match(html, /of those, 1 ended before this check-in/);
+  assert.match(html, /Counts are rows, never a claim about people outside this organization\. Generated Oct 24, 2026\./);
+  // Every tile carries what it was counted over.
+  const tiles = [...html.matchAll(/<div class="ins-tile[^"]*">(.*?)<\/div><\/div>/g)].map((m) => m[1]);
+  assert.ok(tiles.length >= 15);
+  for (const t of tiles) assert.match(t, /text-\[11px\] text-t-phos-dim mt-0\.5">[^<]{4,}/, `tile has a note: ${t.slice(0, 80)}`);
+});
+
+test("a non-demo org's report has no sample-data line; the print stylesheet hides the app around it", async () => {
+  const html = await renderReport("Harbor Light Works");
+  assert.doesNotMatch(html, /Sample data/);
+  const css = readFileSync(join(ROOT, "components/org/insights-print.css"), "utf8");
+  assert.match(css, /@media print/);
+  assert.match(css, /body:has\(\.insights-report\) \*:not\(:has\(\.insights-report\)\):not\(\.insights-report\):not\(\.insights-report \*\) \{ display: none !important; \}/);
+  const page = readFileSync(join(ROOT, "app/(dashboard)/dashboard/insights/page.tsx"), "utf8");
+  assert.match(page, /insights-print\.css/);
 });
