@@ -69,3 +69,29 @@ export function exportConfirmBody(input: { password: string; ownDevice: boolean 
 export function noPasswordExportConfirmed(body: unknown): boolean {
   return !!body && typeof body === 'object' && (body as Record<string, unknown>).ownDevice === true;
 }
+
+/**
+ * The documents ZIP (/api/user/export-vault) is built in memory and returned
+ * as one response; the platform caps a response body near 4.5 MB. Over this
+ * many bytes the route answers 413 with VAULT_ZIP_TOO_LARGE instead of a
+ * download that can never finish. Streaming or a stored ZIP is a later lane.
+ */
+export const VAULT_ZIP_MAX_BYTES = 4 * 1024 * 1024;
+export const VAULT_ZIP_TOO_LARGE = 'Too many files for one download. Download fewer documents at a time from Private records and documents.';
+/** The page's words when the download fails without the route saying why. */
+export const DOCUMENTS_DOWNLOAD_FAILED = 'Your documents could not be downloaded in one ZIP. Download fewer documents at a time from Private records and documents.';
+
+/** Sum the stored sizes before decrypting anything; over means the route refuses with 413. */
+export function vaultZipPlan(sizes: readonly number[], max = VAULT_ZIP_MAX_BYTES): { total: number; over: boolean } {
+  const total = sizes.reduce((a, n) => a + (Number.isFinite(n) && n > 0 ? n : 0), 0);
+  return { total, over: total > max };
+}
+
+export const SKIPPED_FILE_NAME = 'SKIPPED.txt';
+/** The note inside the ZIP when some files could not be included, so "every file" is never silently untrue. */
+export function skippedFilesNote(count: number, names: readonly string[]): string {
+  const n = Math.max(0, count | 0);
+  const head = `${n} ${n === 1 ? 'file was' : 'files were'} not included in this ZIP because ${n === 1 ? 'it' : 'they'} could not be read or unlocked.`;
+  const list = names.length ? `\n\nNot included:\n${names.map(x => `- ${x}`).join('\n')}` : '';
+  return `${head}${list}\n\nThe ${n === 1 ? 'file is' : 'files are'} still in Private records and documents. Open that page to download ${n === 1 ? 'it' : 'them'} one at a time, or ask for help if ${n === 1 ? 'it' : 'any'} will not open there either.\n`;
+}

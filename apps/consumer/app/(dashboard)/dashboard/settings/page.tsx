@@ -38,7 +38,7 @@ import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
 import { PackageEmailSetting } from "@/components/PackageEmailSetting";
 import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
 import { usageWords, type UsageView } from "@/lib/usage-view";
-import { ALL_TICKED, EXPORT_BOXES, OWN_DEVICE_LABEL, SHARED_COMPUTER_WARNING, documentsFileName, exportCategories, exportConfirmBody, exportFileName, exportLeavesOut, type ExportTicks } from "@/lib/export-plan";
+import { ALL_TICKED, DOCUMENTS_DOWNLOAD_FAILED, EXPORT_BOXES, OWN_DEVICE_LABEL, SHARED_COMPUTER_WARNING, documentsFileName, exportCategories, exportConfirmBody, exportFileName, exportLeavesOut, type ExportTicks } from "@/lib/export-plan";
 
 type UsageData = UsageView | { error: string };
 
@@ -312,7 +312,7 @@ export default function SettingsPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setDocsMessage(data.error || "Your documents could not be downloaded. Try again.");
+        setDocsMessage(data.error || DOCUMENTS_DOWNLOAD_FAILED);
         setDocsStatus("idle");
         return;
       }
@@ -325,7 +325,7 @@ export default function SettingsPage() {
       setDocsStatus("done");
       setTimeout(() => setDocsStatus("idle"), 3000);
     } catch {
-      setDocsMessage("Your documents could not be downloaded. Try again.");
+      setDocsMessage(DOCUMENTS_DOWNLOAD_FAILED);
       setDocsStatus("idle");
     }
   }
@@ -825,7 +825,9 @@ function DataSection({
           <div className="mt-5 border-t border-t-line pt-4">
             <h4 className="text-sm font-semibold text-t-white">Your document files</h4>
             <p className="text-sm text-t-phos-dim mt-1 mb-3">
-              Every file in Private records and documents, in one ZIP.
+              Every file in Private records and documents, in one ZIP, up to about
+              4 MB at a time. If you have more than that, download them a few at a
+              time from that page.
             </p>
             <button
               onClick={downloadDocuments}

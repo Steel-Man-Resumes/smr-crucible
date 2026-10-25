@@ -13,7 +13,7 @@ import { PROGRESSION_AI } from '../progression-policy';
 import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
 import { TOURS, readTourSlot, isTourId, slotSql } from '../tour/registry';
 import { grantTourRewardWith } from '../tour/tour-sql';
-import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed } from '../export-plan';
+import { ALL_TICKED, EXPORT_BOXES, FULL_COPY_ONLY, exportCategories, exportLeavesOut, exportFileName, documentsFileName, exportConfirmBody, noPasswordExportConfirmed, vaultZipPlan, VAULT_ZIP_MAX_BYTES, VAULT_ZIP_TOO_LARGE, DOCUMENTS_DOWNLOAD_FAILED, skippedFilesNote, SKIPPED_FILE_NAME } from '../export-plan';
 import { saveErrorWords, SAVE_ERROR_FALLBACK } from '../save-error';
 import { buildUsageView, usageWords, nextUtcMidnight, toolRemaining, legacyToolLeft, oneActionCostLine, draftFailureWords, type UsageView } from '../usage-view';
 
@@ -317,6 +317,30 @@ test('S8: the documents ZIP is wired, and the shared-computer warning gates both
   assert.match(page, /disabled=\{exportStatus !== "idle" \|\| !anyChecked \|\| !ownDevice\}/);
   assert.match(page, /disabled=\{docsStatus !== "idle" \|\| !ownDevice\}/);
   assert.match(read('app/(dashboard)/dashboard/documents/page.tsx'), /href="\/dashboard\/settings#settings-export"/);
+});
+
+test('S8 (SF-3): the documents ZIP refuses over about 4 MB with plain words, names skipped files, and the page stops saying "Try again"', () => {
+  assert.equal(VAULT_ZIP_MAX_BYTES, 4 * 1024 * 1024);
+  assert.deepEqual(vaultZipPlan([2_000_000, 1_500_000]), { total: 3_500_000, over: false });
+  assert.deepEqual(vaultZipPlan([2_000_000, 2_000_000, 2_000_000]), { total: 6_000_000, over: true }, 'three phone photos');
+  assert.deepEqual(vaultZipPlan([NaN, -5, 10]), { total: 10, over: false }, 'bad sizes never make it over');
+  assert.match(VAULT_ZIP_TOO_LARGE, /^Too many files for one download\. Download fewer documents at a time/);
+  const note = skippedFilesNote(2, ['id-card.jpg', 'letter.pdf']);
+  assert.match(note, /^2 files were not included/);
+  assert.match(note, /- id-card\.jpg\n- letter\.pdf/);
+  assert.match(skippedFilesNote(1, ['x.pdf']), /^1 file was not included/);
+  const route = read('app/api/user/export-vault/route.ts');
+  assert.match(route, /if \(vaultZipPlan\(docs\.map\(\(d\) => Number\(d\.byte_size\)\)\)\.over\) \{\s*return NextResponse\.json\(\{ error: VAULT_ZIP_TOO_LARGE \}, \{ status: 413/, 'sizes are summed before any decrypt');
+  assert.match(route, /if \(zip\.length > VAULT_ZIP_MAX_BYTES\) \{\s*return NextResponse\.json\(\{ error: VAULT_ZIP_TOO_LARGE \}, \{ status: 413/);
+  assert.match(route, /if \(!decrypted\) \{ skipped\.push\(name\); continue; \}/, 'a skipped file is counted, not dropped');
+  assert.match(route, /entries\.push\(\{ name: SKIPPED_FILE_NAME, data: new TextEncoder\(\)\.encode\(skippedFilesNote\(skipped\.length, skipped\)\) \}\)/);
+  assert.equal(SKIPPED_FILE_NAME, 'SKIPPED.txt');
+  assert.doesNotMatch(route, /NON-impersonatable|non-impersonatable auth\(\) \(/, 'the header says what the route does now');
+  const page = read('app/(dashboard)/dashboard/settings/page.tsx');
+  assert.doesNotMatch(page, /could not be downloaded\. Try again\./);
+  assert.match(page, /setDocsMessage\(data\.error \|\| DOCUMENTS_DOWNLOAD_FAILED\)/);
+  assert.match(DOCUMENTS_DOWNLOAD_FAILED, /fewer documents at a time/);
+  assert.match(page, /up to about\s+4 MB at a time/);
 });
 
 /* T1: the tour store keyed by tour id (the SQL runs for real in tour-store-map-pglite.test.ts) */
