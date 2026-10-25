@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SETTINGS_BEATS, SETTINGS_ENDING, SETTINGS_NUDGES, SETTINGS_REWARD_COPY, SETTINGS_STOP_COUNT, SETTINGS_TOUR_COPY } from '../tour/settings-beats';
-import { PORTRAIT_CUT_MIN, SETTINGS_ENDING_STOP, applicableBeats, clipHeight, pickNudge, portraitCutHeight, readBranches, resumeIndex, scrollTopFor, settingsRewardMessage, settingsRuntimeMs, settingsTourAllowed, settingsTourRequested, stopOfBeat } from '../tour/settings-tour';
+import { PORTRAIT_CUT_MIN, SPOTLIGHT_PAD, SETTINGS_ENDING_STOP, applicableBeats, clipHeight, pickNudge, portraitCutHeight, readBranches, resumeIndex, scrollTopFor, settingsRewardMessage, settingsRuntimeMs, settingsTourAllowed, settingsTourRequested, stopOfBeat } from '../tour/settings-tour';
 import { TOURS } from '../tour/registry';
 import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
 import { grantTourRewardWith } from '../tour/tour-sql';
@@ -287,7 +287,7 @@ test('entry and controls: ?tour=settings on the Settings page, the header contro
   const vh = 844;
   for (const [id, top, height, cardH] of [['s4', 313, 366, 313], ['s5', 313, Math.round(vh * 0.42), 313], ['s9', 313, 593, 290]] as [string, number, number, number][]) {
     const h = portraitCutHeight(height, top, vh, cardH, true);
-    assert.ok(top + h <= vh - cardH - 16, `${id}: cutout bottom ${top + h} under the card top ${vh - cardH - 16}`);
+    assert.ok(top + h + SPOTLIGHT_PAD <= vh - cardH - 16, `${id}: padded cutout bottom ${top + h + SPOTLIGHT_PAD} under the card top ${vh - cardH - 16}`);
     assert.ok(h >= PORTRAIT_CUT_MIN, id);
   }
   assert.equal(portraitCutHeight(366, 313, vh, 313, false), 366, 'wide screens are not capped');

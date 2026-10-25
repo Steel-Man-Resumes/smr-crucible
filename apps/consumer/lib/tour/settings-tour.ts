@@ -126,6 +126,8 @@ export function clipHeight(height: number, viewportH: number, clip: number | und
 
 /** The least a portrait cutout keeps, so a stop is never a sliver. */
 export const PORTRAIT_CUT_MIN = 80;
+/** spotlightRect's default pad (lib/tour/geometry.ts). */
+export const SPOTLIGHT_PAD = 6;
 
 /**
  * On a phone the card is bottom-anchored, so every cutout stops above it: its
@@ -135,7 +137,9 @@ export const PORTRAIT_CUT_MIN = 80;
  */
 export function portraitCutHeight(height: number, top: number, viewportH: number, cardH: number, portrait: boolean): number {
   if (!portrait) return height;
-  const limit = viewportH - cardH - 16 - top;
+  // spotlightRect pads the cutout by 6 px on every side; take that off so the
+  // 16 px breath above the card is real on screen (review R2-N1).
+  const limit = viewportH - cardH - 16 - SPOTLIGHT_PAD - top;
   return Math.min(height, Math.max(PORTRAIT_CUT_MIN, limit));
 }
 
