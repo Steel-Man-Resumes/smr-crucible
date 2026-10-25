@@ -408,3 +408,14 @@ test('review SF-1 and SF-5: the drawer reveal is re-asked until the stop is draw
   for (const b of CRM_TOUR_BEATS.filter(b => b.drawer)) assert.ok(b.targets.flat().every(t => /^org-nav-|^crm-org-mark$/.test(t)), `${b.id} opens the drawer for a sidebar target`);
   assert.match(read('components/org/TodayPage.tsx'), /tourReady=\{!role\?\.impersonating\}/, 'review N-3');
 });
+
+test('review SF-8: resuming the same run in this mount keeps its person and path; only a new run reads the person again', () => {
+  const src = read('components/tour/StaffTour.tsx');
+  assert.match(src, /const same = resume && !!slot\.runId && chosen\.current\?\.runId === slot\.runId \? chosen\.current : null;/);
+  assert.match(src, /let person: string \| null = same \? same\.person : await personFromToday\(signal\);/, 'a resume of the same run never re-reads Today');
+  assert.match(src, /if \(!same && !person && !signal\.aborted\)/, 'a resume of the same run never re-reads the caseload');
+  assert.match(src, /const list = same \? same\.list : applicableBeats\(/, 'the path, and so the stop count, stays the same on resume');
+  const remember = src.indexOf('chosen.current = { runId: run.current.id, person, list };');
+  const runSet = src.indexOf('run.current = { id: resume && slot.runId');
+  assert.ok(runSet > 0 && remember > runSet, 'the choice is remembered under the run id just set');
+});

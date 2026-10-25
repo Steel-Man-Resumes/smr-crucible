@@ -89,6 +89,8 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
   const dirty = useRef(false);
   const oldFocus = useRef<HTMLElement | null>(null);
   const completed = useRef(false);
+  /** The person and path chosen for the current run in this mount, so a resume keeps them (review SF-8). */
+  const chosen = useRef<{ runId: string; person: string | null; list: typeof beatsRef.current } | null>(null);
 
   useEffect(() => {
     alive.current = true; setMounted(true);
@@ -140,23 +142,26 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
 
   const enter = useCallback(async (slot: Slot, resume: boolean, signal: AbortSignal) => {
     if (dirty.current) { setUnsavedWarning(true); return; }
-    // The person and the path are decided once, before the first card.
-    let person: string | null = await personFromToday(signal);
+    // The person and the path are decided once per run, before the first card. Resuming the
+    // same run in this mount keeps them, so "pick it back up" never lands on someone else (review SF-8).
+    const same = resume && !!slot.runId && chosen.current?.runId === slot.runId ? chosen.current : null;
+    let person: string | null = same ? same.person : await personFromToday(signal);
     const todayRow = !!person;
-    if (!person && !signal.aborted) {
+    if (!same && !person && !signal.aborted) {
       try {
         const res = await fetch('/api/partner/org', { cache: 'no-store', signal });
         if (res.ok) person = firstPersonFromCohort(await res.json());
       } catch { person = null; }
     }
     if (signal.aborted || !alive.current) return;
-    const list = applicableBeats({ personId: person, todayRow, capabilities });
+    const list = same ? same.list : applicableBeats({ personId: person, todayRow, capabilities });
     beatsRef.current = list; setBeats(list); setPersonId(person);
     // Saved progress from an older version never resumes into this one. The
     // place is a beat id (through its index in the full list), never a position in the path.
     const at = resume && slot.version === DEF.version && slot.inProgress ? resumeStop(slot.stop, list) : 0;
     pendingStart.current = null;
     run.current = { id: resume && slot.runId ? slot.runId : crypto.randomUUID(), sequence: resume ? slot.sequence ?? 0 : 0, account: slot.accountId };
+    chosen.current = { runId: run.current.id, person, list };
     completed.current = false;
     beatRef.current = at; savedGroup.current = groupOf(list, at); setStart(at); setAccountId(slot.accountId); setError(''); setNotice(''); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
