@@ -11,6 +11,7 @@
  */
 import { TOUR_STOP_COUNT, TOUR_VERSION } from '../guidedTour';
 import { TOUR_MIN_WATCH_MS, TOUR_REWARD_KEY, TOUR_REWARD_LABEL } from './reward';
+import { SETTINGS_STOP_COUNT } from './settings-beats';
 
 export const TOUR_IDS = ['entrance', 'settings'] as const;
 export type TourId = (typeof TOUR_IDS)[number];
@@ -26,6 +27,8 @@ export interface TourDef {
   rewardLabel: string;
   /** False while the bonus is reserved but not granted. */
   grants: boolean;
+  /** Most calls one grant may add: LEAST(rewardCalls, policy bonus_calls). Absent = the policy amount (the entrance tour). */
+  rewardCalls?: number;
   minWatchMs: number;
   /** Completing it marks users.onboarding_tour_complete (the entrance tour only). */
   completesOnboarding: boolean;
@@ -33,10 +36,10 @@ export interface TourDef {
 
 export const TOURS: Record<TourId, TourDef> = {
   entrance: { id: 'entrance', version: TOUR_VERSION, stopCount: TOUR_STOP_COUNT, rewardKey: TOUR_REWARD_KEY, rewardLabel: TOUR_REWARD_LABEL, grants: true, minWatchMs: TOUR_MIN_WATCH_MS, completesOnboarding: true },
-  // SETTINGS-TOUR.md: 14 beats across all paths (S1-S11 with S7a, S7b, S7c,
-  // S7n) plus the ending card. The build lane pins the real beats; until then
-  // this is the upper bound. Reward key reserved, nothing granted yet.
-  settings: { id: 'settings', version: 1, stopCount: 15, rewardKey: 'tour:settings', rewardLabel: 'Settings tour finished: extra AI actions', grants: false, minWatchMs: 45_000, completesOnboarding: false },
+  // SETTINGS-TOUR.md: stops are absolute indexes into SETTINGS_BEATS (14 beats
+  // across all paths) plus the ending card. The reward is 1 call at most, once
+  // per account, after at least 45 s by the database clock (the shortest path is 101.5 s).
+  settings: { id: 'settings', version: 1, stopCount: SETTINGS_STOP_COUNT, rewardKey: 'tour:settings', rewardLabel: 'Settings tour finished: extra AI action', grants: true, rewardCalls: 1, minWatchMs: 45_000, completesOnboarding: false },
 };
 
 export function isTourId(value: unknown): value is TourId {
