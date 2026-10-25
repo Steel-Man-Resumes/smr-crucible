@@ -38,6 +38,21 @@ import { matchesPreset } from "./authz/capabilities";
 export interface TodayReach { joined: number; sharing: number }
 export interface TodayView { items: TodayItem[]; reach: TodayReach | null; volunteer: boolean }
 
+/**
+ * The org-wide counts for the empty state. `cohort.totalJoined` is counted
+ * BEFORE the assigned-staff filter, so it may only go to someone who sees the
+ * whole organization. Do not relax this gate: it is the only thing keeping a
+ * volunteer from learning the organization's size.
+ */
+export function todayReachFor(capabilities: ReadonlySet<string>, cohort: { totalJoined: number; summary: { consented: number } }): TodayReach | null {
+  return capabilities.has("org.client.view_all") ? { joined: cohort.totalJoined, sharing: cohort.summary.consented } : null;
+}
+
+/** The Volunteer preset, read from what this person may actually do. */
+export function todayIsVolunteer(role: string, capabilities: ReadonlySet<string>): boolean {
+  return role === "staff" && matchesPreset("volunteer", capabilities);
+}
+
 export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null> {
   return (await getTodayView(actor))?.items ?? null;
 }
@@ -97,16 +112,17 @@ export async function getTodayView(actor: OrgActor): Promise<TodayView | null> {
   const items = buildTodayItems({
     actorUserId: actor.userId,
     canAssignAll,
+    canRecordOutcomes: actor.capabilities.has("org.outcome.write"),
     quietDays: await getQuietAfterDays(actor.orgId),
     tasks: (await listStaffTasks(actor)) ?? [],
-    outcomes: (await listOutcomes(actor)) ?? [],
+    outcomes: actor.capabilities.has("org.outcome.write") ? (await listOutcomes(actor)) ?? [] : [],
     apps, answered, awaiting,
     cohort: cohort.clients,
     invited: canAssignAll ? await getInvitedNotSharing(actor.orgId, actor.userId).catch(() => []) : [],
   }, Date.now());
   return {
     items,
-    reach: seesAll ? { joined: cohort.totalJoined, sharing: cohort.summary.consented } : null,
-    volunteer: actor.role === "staff" && matchesPreset("volunteer", actor.capabilities),
+    reach: todayReachFor(actor.capabilities, cohort),
+    volunteer: todayIsVolunteer(actor.role, actor.capabilities),
   };
 }

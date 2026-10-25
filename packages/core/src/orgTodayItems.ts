@@ -9,17 +9,18 @@
  *   - an application's item key carries the application id, so two
  *     applications with the same title and company never collide;
  *   - an application left at "interviewing" with no movement for 30 days, and
- *     no future date, leaves "Interviews coming up" and is listed under
- *     "Gone quiet" instead of sitting on Today forever;
+ *     no future date, leaves "Interviews coming up" for its own section,
+ *     "Interviews stalled" (its own key, so hiding "Gone quiet" never hides
+ *     it), one line per person, instead of sitting on Today forever;
  *   - follow-ups more than 14 days past their date collapse to one
  *     "Follow-ups overdue" line per person.
  * Every other sentence is unchanged, word for word.
  */
 
-export const TODAY_SECTIONS = ["tasks", "retention", "interviews", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
+export const TODAY_SECTIONS = ["tasks", "retention", "interviews", "interview_stalled", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
 export type TodaySection = (typeof TODAY_SECTIONS)[number];
 export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
-  tasks: "Your tasks", retention: "Retention check-ins due", interviews: "Interviews coming up", followups: "Follow-ups due", answered: "They answered you",
+  tasks: "Your tasks", retention: "Retention check-ins due", interviews: "Interviews coming up", interview_stalled: "Interviews stalled", followups: "Follow-ups due", answered: "They answered you",
   acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
 };
 
@@ -56,6 +57,11 @@ export interface TodayInvitedRow { userId: string; name: string | null; joinedAt
 
 export interface TodayInput {
   actorUserId: string;
+  /**
+   * May record placements and retention checks (org.outcome.write). Without
+   * it there are no retention rows: "Record the check-in" is not theirs to do.
+   */
+  canRecordOutcomes: boolean;
   /** Sees the whole organization AND may assign (the "Not assigned" section). */
   canAssignAll: boolean;
   quietDays: number;
@@ -94,7 +100,7 @@ export function buildTodayItems(input: TodayInput, nowMs: number): TodayItem[] {
       action: t.client_user_id ? { label: `Open ${first(t.client_name)}`, href: href(t.client_user_id) } : { label: "Mark done", href: "#" },
     });
   }
-  for (const o of input.outcomes) {
+  for (const o of input.canRecordOutcomes ? input.outcomes : []) {
     if (o.due_marks.length === 0 || o.ended_on) continue;
     const mark = o.due_marks[0];
     items.push({ key: `ret:${o.id}:${mark}`, section: "retention", clientId: o.client_user_id, clientName: o.client_name, when: o.start_date,
@@ -104,15 +110,16 @@ export function buildTodayItems(input: TodayInput, nowMs: number): TodayItem[] {
 
   // Follow-ups long past their date, gathered per person (N6).
   const overdue = new Map<string, { name: string | null; rows: TodayAppRow[] }>();
+  const stalled = new Map<string, { name: string | null; rows: { a: TodayAppRow; moved: number }[] }>();
   for (const a of input.apps) {
     const job = [a.job_title, a.company].filter(Boolean).join(" at ") || "a job";
     if (a.status === "interviewing") {
       const moved = lastMoved(a);
       const upcoming = !!a.follow_up_at && ms(a.follow_up_at) >= nowMs;
       if (!upcoming && !Number.isNaN(moved) && nowMs - moved >= INTERVIEW_STALE_DAYS * DAY_MS) {
-        items.push({ key: `int-stale:${a.user_id}:${a.id}`, section: "quiet", clientId: a.user_id, clientName: a.name, when: a.status_updated_at ?? a.updated_at ?? null,
-          reason: `${first(a.name)} marked ${job} as interviewing ${Math.floor((nowMs - moved) / DAY_MS)} days ago, and nothing has moved since. Worth asking how it went.`,
-          action: { label: "Check in", href: href(a.user_id) } });
+        const b = stalled.get(a.user_id) ?? { name: a.name, rows: [] };
+        b.rows.push({ a, moved });
+        stalled.set(a.user_id, b);
         continue;
       }
       items.push({ key: `int:${a.user_id}:${a.id}`, section: "interviews", clientId: a.user_id, clientName: a.name, when: a.follow_up_at,
@@ -129,6 +136,16 @@ export function buildTodayItems(input: TodayInput, nowMs: number): TodayItem[] {
         reason: `${first(a.name)} planned to follow up on ${job} by ${day(a.follow_up_at!)}.`,
         action: { label: "Check in", href: href(a.user_id) } });
     }
+  }
+  for (const [userId, b] of Array.from(stalled.entries())) {
+    const oldest = [...b.rows].sort((x, y) => x.moved - y.moved)[0];
+    const job = [oldest.a.job_title, oldest.a.company].filter(Boolean).join(" at ") || "a job";
+    const days = Math.floor((nowMs - oldest.moved) / DAY_MS);
+    items.push({ key: `int-stalled:${userId}`, section: "interview_stalled", clientId: userId, clientName: b.name, when: new Date(oldest.moved).toISOString(),
+      reason: b.rows.length === 1
+        ? `${first(b.name)} marked ${job} as interviewing ${days} days ago, and nothing has moved since. Worth asking how it went.`
+        : `${first(b.name)} has ${b.rows.length} applications marked interviewing with nothing moving for over ${INTERVIEW_STALE_DAYS} days. The oldest is ${job}, ${days} days.`,
+      action: { label: "Check in", href: href(userId) } });
   }
   for (const [userId, b] of Array.from(overdue.entries())) {
     const oldest = [...b.rows].sort((x, y) => ms(x.follow_up_at) - ms(y.follow_up_at))[0];

@@ -7,6 +7,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { todayReachFor, todayIsVolunteer } from "../orgToday";
+import { computeOrgCapabilities, STAFF_PRESETS } from "../authz/capabilities";
 import { buildTodayItems, TODAY_SECTIONS, INTERVIEW_STALE_DAYS, FOLLOWUP_OVERDUE_DAYS, type TodayInput } from "../orgTodayItems";
 
 const NOW = Date.parse("2026-10-29T15:00:00Z");
@@ -15,7 +17,7 @@ const daysAhead = (n: number) => new Date(NOW + n * 86400000).toISOString();
 
 const ME = "staff-1";
 function base(over: Partial<TodayInput> = {}): TodayInput {
-  return { actorUserId: ME, canAssignAll: true, quietDays: 14, tasks: [], outcomes: [], apps: [], answered: [], awaiting: [], cohort: [], invited: [], ...over };
+  return { actorUserId: ME, canAssignAll: true, canRecordOutcomes: true, quietDays: 14, tasks: [], outcomes: [], apps: [], answered: [], awaiting: [], cohort: [], invited: [], ...over };
 }
 const app = (o: Partial<TodayInput["apps"][number]> & { id: string; user_id: string }) => ({
   name: "Dana Whitfield", job_title: "Line Cook", company: "Copperline Foods", status: "applied", follow_up_at: null,
@@ -86,9 +88,11 @@ test(`N6: interviewing with no movement for ${INTERVIEW_STALE_DAYS} days leaves 
     app({ id: "edited", user_id: "p5", name: "Lou Grant", status: "interviewing", follow_up_at: null, status_updated_at: daysAgo(40), updated_at: daysAgo(6) }),
   ] }), NOW);
   const by = (id: string) => items.find((i) => i.key.endsWith(`:${id}`))!;
-  assert.equal(by("old").section, "quiet");
-  assert.equal(by("old").reason, "Dana marked Line Cook at Copperline Foods as interviewing 31 days ago, and nothing has moved since. Worth asking how it went.");
-  assert.equal(by("oldPastDate").section, "quiet");
+  const stalled = (user: string) => items.find((i) => i.key === `int-stalled:${user}`)!;
+  assert.equal(stalled("p1").section, "interview_stalled");
+  assert.equal(stalled("p1").reason, "Dana marked Line Cook at Copperline Foods as interviewing 31 days ago, and nothing has moved since. Worth asking how it went.");
+  assert.equal(stalled("p2").section, "interview_stalled");
+  assert.equal(items.filter((i) => i.section === "quiet").length, 0, "stalled interviews never land in Gone quiet");
   assert.equal(by("edge").section, "interviews");
   assert.equal(by("future").section, "interviews");
   assert.equal(by("edited").section, "interviews");
@@ -120,13 +124,67 @@ test("every section the builder emits is a known Today section", () => {
   for (const i of buildTodayItems(DEMO, NOW)) assert.ok((TODAY_SECTIONS as readonly string[]).includes(i.section));
 });
 
-test("the read side still decides what is read: SELECT and access-log predicates match", () => {
+test("the read side still decides what is read: the SELECT and the access-log INSERT share one filter, verbatim", () => {
   const src = readFileSync(join(import.meta.dirname, "..", "orgToday.ts"), "utf8");
-  // The application rows and the access-log INSERT use the same filter, so the
-  // N6 moves (in the pure builder) cannot surface a row the log did not record.
-  const filter = /AND \(ja\.status = 'interviewing' OR \(ja\.follow_up_at IS NOT NULL AND ja\.follow_up_at < now\(\) \+ interval '3 days'/g;
-  assert.equal(src.match(filter)?.length, 2);
-  assert.match(src, /reach: seesAll \?/);
+  const norm = (t: string) => t.replace(/\s+/g, " ").trim();
+  const sel = src.slice(src.indexOf("FROM staff_shared_application ja JOIN users u"));
+  const selWhere = norm(sel.slice(sel.indexOf("WHERE "), sel.indexOf("ORDER BY ja.follow_up_at")));
+  const ins = src.slice(src.indexOf("INSERT INTO data_access_log"));
+  const insWhere = norm(ins.slice(ins.indexOf("WHERE "), ins.indexOf("AND NOT EXISTS (SELECT 1 FROM data_access_log")));
+  const FILTER = norm(`WHERE ${"${reach(\"ja.user_id\")}"} AND ${"${sharesApps(\"ja.user_id\")}"}
+          AND (ja.status = 'interviewing' OR (ja.follow_up_at IS NOT NULL AND ja.follow_up_at < now() + interval '3 days'
+               AND ja.status NOT IN ('hired', 'started_work', 'rejected', 'declined')))`);
+  assert.equal(selWhere, FILTER, "SELECT filter, reach and sharing clauses included");
+  assert.equal(insWhere, FILTER, "INSERT filter matches the SELECT");
+  // The clauses themselves, as at 964090c.
+  assert.ok(norm(src).includes(norm(`const reach = (who: string) => \`($2::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
+      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${"${who}"} AND a.staff_user_id = $3::uuid))\`;`)));
+  assert.ok(norm(src).includes(norm(`WHERE g.user_id = ${"${who}"} AND g.access_code_id = $1::uuid AND g.scope = 'applications' AND g.revoked_at IS NULL
+        AND g.text_version = ANY($4::text[])
+        AND ja.created_at >= COALESCE(g.covers_from, '-infinity'::timestamptz)`)));
+  assert.ok(norm(src).includes(norm(`AND NOT EXISTS (SELECT 1 FROM data_access_log l WHERE l.target_user_id = ja.user_id AND l.accessor_id = ($3::uuid)::text
+                           AND l.access_reason = 'org_work_queue' AND l.accessed_at > date_trunc('day', now()))`)));
+});
+
+test("reach: org-wide counts only for view_all; a volunteer gets null", () => {
+  const cohort = { totalJoined: 9, summary: { consented: 4 } };
+  const vol = computeOrgCapabilities("staff", [], STAFF_PRESETS.volunteer.denies);
+  assert.equal(todayReachFor(vol, cohort), null);
+  assert.equal(todayReachFor(computeOrgCapabilities("staff", [], ["org.client.view_all"]), cohort), null);
+  assert.deepEqual(todayReachFor(computeOrgCapabilities("owner"), cohort), { joined: 9, sharing: 4 });
+  assert.equal(todayIsVolunteer("staff", vol), true);
+  assert.equal(todayIsVolunteer("staff", computeOrgCapabilities("staff")), false);
+  assert.equal(todayIsVolunteer("owner", vol), false);
+});
+
+test("S2: hiding Gone quiet cannot hide a stalled interview (separate section keys)", () => {
+  const items = buildTodayItems(base({
+    apps: [app({ id: "s1", user_id: "p1", status: "interviewing", status_updated_at: daysAgo(35), updated_at: daysAgo(35) })],
+    cohort: [{ userId: "p1", name: "Dana Whitfield", hired: false, lastActiveAt: daysAgo(40), joinedAt: daysAgo(90), assignedStaffId: ME, currentStage: 5 }],
+  }), NOW);
+  const visibleWithQuietHidden = items.filter((i) => i.section !== "quiet");
+  assert.ok(visibleWithQuietHidden.some((i) => i.key === "int-stalled:p1"));
+  assert.equal(items.filter((i) => i.section === "quiet" && i.clientId === "p1").length, 1, "one Gone quiet row per person");
+});
+
+test("S2: several stalled interviews for one person are one line", () => {
+  const items = buildTodayItems(base({ apps: [
+    app({ id: "x1", user_id: "p1", status: "interviewing", job_title: "Line Cook", status_updated_at: daysAgo(50), updated_at: daysAgo(50) }),
+    app({ id: "x2", user_id: "p1", status: "interviewing", job_title: "Prep Cook", status_updated_at: daysAgo(40), updated_at: daysAgo(40) }),
+  ] }), NOW);
+  const s = items.filter((i) => i.section === "interview_stalled");
+  assert.equal(s.length, 1);
+  assert.equal(s[0].reason, "Dana has 2 applications marked interviewing with nothing moving for over 30 days. The oldest is Line Cook at Copperline Foods, 50 days.");
+});
+
+test("S5: no retention rows for someone who cannot record placements", () => {
+  assert.equal(buildTodayItems({ ...DEMO, canRecordOutcomes: false }, NOW).filter((i) => i.section === "retention").length, 0);
+  assert.equal(buildTodayItems(DEMO, NOW).filter((i) => i.section === "retention").length, 1);
+});
+
+test("settings and the queue know the same sections", () => {
+  const prefs = readFileSync(join(import.meta.dirname, "..", "staffPrefsShared.ts"), "utf8");
+  for (const k of TODAY_SECTIONS) assert.match(prefs, new RegExp(`"${k}"`));
 });
 
 test("station rides only on people in the progress-sharing cohort", () => {
