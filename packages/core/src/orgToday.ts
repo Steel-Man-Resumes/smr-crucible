@@ -24,28 +24,25 @@ import { listStaffTasks } from "./staffTasks";
 import { listOutcomes } from "./orgOutcomes";
 import { WORK_QUEUE_TEXT_VERSIONS } from "./sharingScopes";
 
-export const TODAY_SECTIONS = ["tasks", "retention", "interviews", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
-export type TodaySection = (typeof TODAY_SECTIONS)[number];
-export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
-  tasks: "Your tasks", retention: "Retention check-ins due", interviews: "Interviews coming up", followups: "Follow-ups due", answered: "They answered you",
-  acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
-};
+export { TODAY_SECTIONS, TODAY_SECTION_LABELS, INTERVIEW_STALE_DAYS, FOLLOWUP_OVERDUE_DAYS, buildTodayItems } from "./orgTodayItems";
+export type { TodaySection, TodayItem, TodayInput } from "./orgTodayItems";
+import { buildTodayItems, type TodayItem, type TodayAppRow } from "./orgTodayItems";
+import { matchesPreset } from "./authz/capabilities";
 
-export interface TodayItem {
-  key: string;
-  section: TodaySection;
-  clientId: string | null;
-  clientName: string | null;
-  /** One sentence, already written. */
-  reason: string;
-  when: string | null;
-  action: { label: string; href: string };
-  taskId?: string;
-}
-
-const day = (s: string) => new Date(s).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
+/**
+ * Who the viewer's Today is drawn over, for the empty state. Counts only:
+ * `joined` and `sharing` are given to people who see the whole organization;
+ * someone who sees only their own caseload gets null, so an empty Today never
+ * tells a volunteer how many people the organization has.
+ */
+export interface TodayReach { joined: number; sharing: number }
+export interface TodayView { items: TodayItem[]; reach: TodayReach | null; volunteer: boolean }
 
 export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null> {
+  return (await getTodayView(actor))?.items ?? null;
+}
+
+export async function getTodayView(actor: OrgActor): Promise<TodayView | null> {
   if (actor.viaPlatformAdmin || !actor.capabilities.has("org.client.view_content")) return null;
   const scope: OrgScope = { orgId: actor.orgId, userId: actor.userId, role: actor.role };
   const seesAll = actor.capabilities.has("org.client.view_all");
@@ -61,12 +58,12 @@ export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null
         AND (pv.id IS NULL OR pv.audience = 'assigned_staff_and_admins' OR EXISTS (SELECT 1 FROM client_staff_assignment a2
               WHERE a2.access_code_id = $1::uuid AND a2.client_user_id = ${who} AND a2.staff_user_id = $3::uuid)))`;
 
-  type AppRow = { user_id: string; name: string | null; job_title: string | null; company: string | null; status: string; follow_up_at: string | null };
+  type AppRow = TodayAppRow;
   type AnsRow = { user_id: string; name: string | null; scope: string; status: string; answered_at: string };
   type AckRow = { user_id: string; name: string | null };
   const [apps, answered, awaiting] = await runScoped<[AppRow[], AnsRow[], AckRow[], unknown[]]>(scope, (sql) => [
     run(sql)(
-      `SELECT ja.user_id, u.name, ja.job_title, ja.company, ja.status, ja.follow_up_at
+      `SELECT ja.id, ja.user_id, u.name, ja.job_title, ja.company, ja.status, ja.follow_up_at, ja.status_updated_at, ja.updated_at
          FROM staff_shared_application ja JOIN users u ON u.id = ja.user_id
          JOIN access_code_redemption r ON r.user_id = ja.user_id AND r.access_code_id = $1::uuid
         WHERE ${reach("ja.user_id")} AND ${sharesApps("ja.user_id")}
@@ -95,82 +92,21 @@ export async function getTodayQueue(actor: OrgActor): Promise<TodayItem[] | null
                            AND l.access_reason = 'org_work_queue' AND l.accessed_at > date_trunc('day', now()))`, p),
   ]);
 
-  const items: TodayItem[] = [];
-  const first = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "They";
-  const href = (id: string) => `/dashboard/clients/${id}`;
-
-  for (const t of (await listStaffTasks(actor)) ?? []) {
-    if (t.done_at) continue;
-    if (t.owner_user_id !== actor.userId) continue;
-    const overdue = t.due_on && t.due_on < new Date().toISOString().slice(0, 10);
-    items.push({
-      key: `task:${t.id}`, section: "tasks", clientId: t.client_user_id, clientName: t.client_name, taskId: t.id, when: t.due_on,
-      reason: `${t.title}${t.due_on ? (overdue ? ` (was due ${day(t.due_on)})` : ` (due ${day(t.due_on)})`) : ""}${t.shared_with_participant ? ` · shared with ${first(t.client_name)}` : ""}`,
-      action: t.client_user_id ? { label: `Open ${first(t.client_name)}`, href: href(t.client_user_id) } : { label: "Mark done", href: "#" },
-    });
-  }
-  for (const o of (await listOutcomes(actor)) ?? []) {
-    if (o.due_marks.length === 0 || o.ended_on) continue;
-    const mark = o.due_marks[0];
-    items.push({ key: `ret:${o.id}:${mark}`, section: "retention", clientId: o.client_user_id, clientName: o.client_name, when: o.start_date,
-      reason: `${first(o.client_name)} started at ${o.employer} ${mark}+ days ago. Time for the ${mark}-day check-in: still there?`,
-      action: { label: "Record the check-in", href: href(o.client_user_id) } });
-  }
-  for (const a of apps) {
-    const job = [a.job_title, a.company].filter(Boolean).join(" at ") || "a job";
-    if (a.status === "interviewing") {
-      items.push({ key: `int:${a.user_id}:${job}`, section: "interviews", clientId: a.user_id, clientName: a.name, when: a.follow_up_at,
-        reason: `${first(a.name)} is interviewing for ${job}${a.follow_up_at ? `, next date ${day(a.follow_up_at)}` : ""}.`,
-        action: { label: "Help them prepare", href: href(a.user_id) } });
-    } else {
-      items.push({ key: `fu:${a.user_id}:${job}`, section: "followups", clientId: a.user_id, clientName: a.name, when: a.follow_up_at,
-        reason: `${first(a.name)} planned to follow up on ${job} by ${day(a.follow_up_at!)}.`,
-        action: { label: "Check in", href: href(a.user_id) } });
-    }
-  }
-  for (const r of answered) {
-    items.push({ key: `ans:${r.user_id}:${r.scope}`, section: "answered", clientId: r.user_id, clientName: r.name, when: r.answered_at,
-      reason: r.status === "approved" ? `${first(r.name)} shared what you asked for (${r.scope}).` : `${first(r.name)} said not now to sharing their ${r.scope}. That is theirs to decide.`,
-      action: { label: r.status === "approved" ? "Open it" : `Open ${first(r.name)}`, href: href(r.user_id) } });
-  }
-  for (const k of awaiting) {
-    items.push({ key: `ack:${k.user_id}`, section: "acknowledgement", clientId: k.user_id, clientName: k.name, when: null,
-      reason: `${first(k.name)} has not acknowledged what your program requires. Nothing is open until they do, and only they can.`,
-      action: { label: "Talk it through", href: href(k.user_id) } });
-  }
-
   const cohort = await getPartnerCohort(actor.userId, { accessCodeId: actor.orgId, assignedToStaffId: seesAll ? undefined : actor.userId });
-  const now = Date.now();
-  const quietDays = await getQuietAfterDays(actor.orgId);
-  // Someone who has STARTED WORK and stopped using a job-search tool is not a
-  // concern, so they are left off this list -- though the rollup the assistant
-  // and Insights share still counts them as not active. Deliberate, and noted.
-  for (const c of cohort.clients) {
-    if (c.hired) continue;
-    const last = c.lastActiveAt ? new Date(c.lastActiveAt).getTime() : 0;
-    if (!last) {
-      items.push({ key: `ns:${c.userId}`, section: "never_started", clientId: c.userId, clientName: c.name, when: c.joinedAt,
-        reason: `${first(c.name)} joined and has not started. A first conversation usually does more than a reminder.`, action: { label: "Reach out", href: href(c.userId) } });
-    } else if (now - last >= quietDays * 86400000) {
-      items.push({ key: `q:${c.userId}`, section: "quiet", clientId: c.userId, clientName: c.name, when: c.lastActiveAt,
-        reason: `${first(c.name)} was last active ${Math.floor((now - last) / 86400000)} days ago. Worth asking what is in the way.`, action: { label: "Check in", href: href(c.userId) } });
-    }
-    if (seesAll && actor.capabilities.has("org.client.assign") && !c.assignedStaffId) {
-      items.push({ key: `un:${c.userId}`, section: "unassigned", clientId: c.userId, clientName: c.name, when: c.joinedAt,
-        reason: `${first(c.name)} is not assigned to anyone, so they are on nobody's list.`, action: { label: "Assign them", href: "/dashboard" } });
-    }
-  }
-  // People the organization invited who have not turned on sharing: they are
-  // on nobody's list until someone is assigned, and assigning them needs no
-  // shared content. Only the name and email the organization typed are used.
-  if (seesAll && actor.capabilities.has("org.client.assign")) {
-    const invited = await getInvitedNotSharing(actor.orgId, actor.userId).catch(() => []);
-    for (const p of invited) {
-      if (p.assignedStaffId) continue;
-      items.push({ key: `un:${p.userId}`, section: "unassigned", clientId: p.userId, clientName: p.name, when: p.joinedAt,
-        reason: `${first(p.name)} was invited by your organization and is not assigned to anyone. They have not turned on progress sharing, so you see only the name you entered.`,
-        action: { label: "Assign them", href: "/dashboard#invited" } });
-    }
-  }
-  return items;
+  const canAssignAll = seesAll && actor.capabilities.has("org.client.assign");
+  const items = buildTodayItems({
+    actorUserId: actor.userId,
+    canAssignAll,
+    quietDays: await getQuietAfterDays(actor.orgId),
+    tasks: (await listStaffTasks(actor)) ?? [],
+    outcomes: (await listOutcomes(actor)) ?? [],
+    apps, answered, awaiting,
+    cohort: cohort.clients,
+    invited: canAssignAll ? await getInvitedNotSharing(actor.orgId, actor.userId).catch(() => []) : [],
+  }, Date.now());
+  return {
+    items,
+    reach: seesAll ? { joined: cohort.totalJoined, sharing: cohort.summary.consented } : null,
+    volunteer: actor.role === "staff" && matchesPreset("volunteer", actor.capabilities),
+  };
 }
