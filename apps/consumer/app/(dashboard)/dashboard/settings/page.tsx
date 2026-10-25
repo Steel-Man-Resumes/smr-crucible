@@ -826,7 +826,7 @@ function DataSection({
             <h4 className="text-sm font-semibold text-t-white">Your document files</h4>
             <p className="text-sm text-t-phos-dim mt-1 mb-3">
               Every file in Private records and documents, in one ZIP, up to about
-              4 MB at a time. If you have more than that, download them a few at a
+              4 MB at a time. If you have more than that, download them one at a
               time from that page.
             </p>
             <button

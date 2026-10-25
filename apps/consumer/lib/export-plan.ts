@@ -77,9 +77,9 @@ export function noPasswordExportConfirmed(body: unknown): boolean {
  * download that can never finish. Streaming or a stored ZIP is a later lane.
  */
 export const VAULT_ZIP_MAX_BYTES = 4 * 1024 * 1024;
-export const VAULT_ZIP_TOO_LARGE = 'Too many files for one download. Download fewer documents at a time from Private records and documents.';
+export const VAULT_ZIP_TOO_LARGE = 'Too many files for one download. Download them one at a time from Private records and documents.';
 /** The page's words when the download fails without the route saying why. */
-export const DOCUMENTS_DOWNLOAD_FAILED = 'Your documents could not be downloaded in one ZIP. Download fewer documents at a time from Private records and documents.';
+export const DOCUMENTS_DOWNLOAD_FAILED = 'Your documents could not be downloaded in one ZIP. Download them one at a time from Private records and documents.';
 
 /** Sum the stored sizes before decrypting anything; over means the route refuses with 413. */
 export function vaultZipPlan(sizes: readonly number[], max = VAULT_ZIP_MAX_BYTES): { total: number; over: boolean } {

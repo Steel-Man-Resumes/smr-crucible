@@ -324,7 +324,7 @@ test('S8 (SF-3): the documents ZIP refuses over about 4 MB with plain words, nam
   assert.deepEqual(vaultZipPlan([2_000_000, 1_500_000]), { total: 3_500_000, over: false });
   assert.deepEqual(vaultZipPlan([2_000_000, 2_000_000, 2_000_000]), { total: 6_000_000, over: true }, 'three phone photos');
   assert.deepEqual(vaultZipPlan([NaN, -5, 10]), { total: 10, over: false }, 'bad sizes never make it over');
-  assert.match(VAULT_ZIP_TOO_LARGE, /^Too many files for one download\. Download fewer documents at a time/);
+  assert.match(VAULT_ZIP_TOO_LARGE, /^Too many files for one download\. Download them one at a time/);
   const note = skippedFilesNote(2, ['id-card.jpg', 'letter.pdf']);
   assert.match(note, /^2 files were not included/);
   assert.match(note, /- id-card\.jpg\n- letter\.pdf/);
@@ -339,7 +339,7 @@ test('S8 (SF-3): the documents ZIP refuses over about 4 MB with plain words, nam
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
   assert.doesNotMatch(page, /could not be downloaded\. Try again\./);
   assert.match(page, /setDocsMessage\(data\.error \|\| DOCUMENTS_DOWNLOAD_FAILED\)/);
-  assert.match(DOCUMENTS_DOWNLOAD_FAILED, /fewer documents at a time/);
+  assert.match(DOCUMENTS_DOWNLOAD_FAILED, /one at a time/);
   assert.match(page, /up to about\s+4 MB at a time/);
 });
 
