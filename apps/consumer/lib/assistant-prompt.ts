@@ -446,8 +446,8 @@ export function disclosureWordLines(d: UserFullContext["disclosurePlan"]): strin
   const out: string[] = [];
   const older = !!d.scriptSavedAt && !!d.completedAt && d.scriptSavedAt !== d.completedAt;
   const from = older ? ` (from your earlier plan, ${d.scriptSavedAt!.slice(0, 10)})` : "";
-  if (d.timingAdvice) out.push(`Timing advice${from}: ${d.timingAdvice}`);
-  if (d.scriptExcerpt) out.push(`Script opening${from}: "${d.scriptExcerpt.slice(0, 200)}..."`);
+  if (d.timingAdvice) out.push(`Timing advice${from}: ${sanitizeForPrompt(d.timingAdvice, 300)}`);
+  if (d.scriptExcerpt) out.push(`Script opening${from}: "${sanitizeForPrompt(d.scriptExcerpt, 200)}..."`);
   if (older && (d.timingAdvice || d.scriptExcerpt)) out.push("The newest plan's record words were not saved.");
   return out;
 }
@@ -502,8 +502,13 @@ function buildFullUserSection(ctx: UserFullContext): string {
   const lines: string[] = [];
 
   // Identity
-  const name = ctx.profile.name || "this user";
-  const loc = [ctx.profile.city, ctx.profile.state].filter(Boolean).join(", ");
+  // Fix round 1 (2026-10-25 review S1): every typed field below goes through
+  // sanitizeForPrompt or sanitizeOrEmpty, so a stored newline can never open a
+  // fake heading inside this prompt. Saved-job title and company are stored as
+  // the browser sent them (app/api/applications/route.ts), so the read is
+  // where they are collapsed.
+  const name = sanitizeOrEmpty(ctx.profile.name, 80) || "this user";
+  const loc = [sanitizeOrEmpty(ctx.profile.city, 80), sanitizeOrEmpty(ctx.profile.state, 40)].filter(Boolean).join(", ");
   lines.push(`## WHO YOU ARE TALKING TO RIGHT NOW`);
   lines.push(`Name: ${name}${loc ? `\nLocation: ${loc}` : ""}`);
   lines.push(`Journey stage: ${ctx.journey.onboardingState}${ctx.journey.disclosureComplete ? " + disclosure complete" : ""}`);
@@ -522,9 +527,9 @@ function buildFullUserSection(ctx: UserFullContext): string {
   // Forge output
   if (ctx.forge) {
     lines.push(`\n### THEIR FORGE STORY`);
-    if (ctx.forge.headline) lines.push(`Headline: ${ctx.forge.headline}`);
-    if (ctx.forge.summary) lines.push(`Narrative: ${ctx.forge.summary.slice(0, 600)}`);
-    if (ctx.forge.readinessStage) lines.push(`Readiness: ${ctx.forge.readinessStage}`);
+    if (ctx.forge.headline) lines.push(`Headline: ${sanitizeForPrompt(ctx.forge.headline, 160)}`);
+    if (ctx.forge.summary) lines.push(`Narrative: ${sanitizeForPrompt(ctx.forge.summary, 600)}`);
+    if (ctx.forge.readinessStage) lines.push(`Readiness: ${sanitizeForPrompt(ctx.forge.readinessStage, 60)}`);
 
     const strengths = ctx.forge.strengths.slice(0, 4);
     if (strengths.length) {
@@ -532,20 +537,20 @@ function buildFullUserSection(ctx: UserFullContext): string {
       strengths.forEach((s) => {
         if (typeof s === "object" && s !== null) {
           const so = s as { title: string; evidence: string };
-          lines.push(`  - ${so.title}: ${so.evidence}`);
+          lines.push(`  - ${sanitizeForPrompt(so.title, 80)}: ${sanitizeForPrompt(so.evidence, 240)}`);
         }
       });
     }
 
     const skills = ctx.forge.skills.slice(0, 8).map(labelOf).filter(Boolean);
-    if (skills.length) lines.push(`Skills: ${skills.join(", ")}`);
+    if (skills.length) lines.push(`Skills: ${sanitizeArray(skills)}`);
 
     const paths = ctx.forge.careerPaths.slice(0, 4).map(labelOf).filter(Boolean);
-    if (paths.length) lines.push(`Career paths identified: ${paths.join(", ")}`);
+    if (paths.length) lines.push(`Career paths identified: ${sanitizeArray(paths)}`);
 
-    if (ctx.forge.goals?.length) lines.push(`Goals: ${ctx.forge.goals.join(", ")}`);
-    if (ctx.forge.goalNarrative) lines.push(`In their own words: "${ctx.forge.goalNarrative.slice(0, 300)}"`);
-    if (ctx.forge.barriers?.length) lines.push(`Other barriers: ${ctx.forge.barriers.map((b) => b.replace(/_/g, " ")).join(", ")}`);
+    if (ctx.forge.goals?.length) lines.push(`Goals: ${sanitizeArray(ctx.forge.goals)}`);
+    if (ctx.forge.goalNarrative) lines.push(`In their own words: "${sanitizeForPrompt(ctx.forge.goalNarrative, 300)}"`);
+    if (ctx.forge.barriers?.length) lines.push(`Other barriers: ${sanitizeArray(ctx.forge.barriers.map((b) => b.replace(/_/g, " ")))}`);
     if (ctx.forge.hasCriminalRecord) lines.push(`Has a criminal record (do NOT name specifics in responses. Say "the situation you described" instead.)`);
   }
 
@@ -557,19 +562,19 @@ function buildFullUserSection(ctx: UserFullContext): string {
     lines.push(`\n### WHAT THEY'VE BUILT`);
     lines.push(`Resumes: ${ctx.resumes.length} total, ${jobResumes.length} job-targeted`);
     ctx.resumes.slice(0, 3).forEach((r) => {
-      const job = r.targetJob || "untitled";
-      const co = r.targetCompany || "unknown company";
+      const job = sanitizeOrEmpty(r.targetJob, 120) || "untitled";
+      const co = sanitizeOrEmpty(r.targetCompany, 120) || "unknown company";
       const age = r.createdAt ? Math.floor((Date.now() - new Date(r.createdAt).getTime()) / 86400000) : null;
       lines.push(`  - "${job}" at "${co}"${age !== null ? ` (${age === 0 ? "today" : `${age}d ago`})` : ""}`);
     });
     const latest = ctx.resumes[0];
-    if (latest?.targetJob) lines.push(`Most recent target: ${latest.targetJob}${latest.targetCompany ? ` at ${latest.targetCompany}` : ""}`);
+    if (latest?.targetJob) lines.push(`Most recent target: ${sanitizeForPrompt(latest.targetJob, 120)}${latest.targetCompany ? ` at ${sanitizeForPrompt(latest.targetCompany, 120)}` : ""}`);
   }
 
   // Disclosure plan
   if (ctx.disclosurePlan.exists) {
     lines.push(`\n### DISCLOSURE PLAN`);
-    if (ctx.disclosurePlan.targetJob) lines.push(`Plan built for: ${ctx.disclosurePlan.targetJob}`);
+    if (ctx.disclosurePlan.targetJob) lines.push(`Plan built for: ${sanitizeForPrompt(ctx.disclosurePlan.targetJob, 120)}`);
     lines.push(...disclosureWordLines(ctx.disclosurePlan));
     lines.push(`Status: plan exists. Has the user practiced out loud? That's the next question.`);
   } else if (ctx.journey.onboardingState === "full_access") {
@@ -580,7 +585,7 @@ function buildFullUserSection(ctx: UserFullContext): string {
   if (ctx.applications.length > 0) {
     lines.push(`\n### APPLICATIONS IN PIPELINE`);
     ctx.applications.forEach((a) => {
-      lines.push(`  - ${a.company} (${a.role}): ${a.status}${a.resumeTailored ? ", resume tailored" : ", no tailored resume yet"}`);
+      lines.push(`  - ${sanitizeForPrompt(a.company, 120)} (${sanitizeForPrompt(a.role, 120)}): ${sanitizeForPrompt(a.status, 40)}${a.resumeTailored ? ", resume tailored" : ", no tailored resume yet"}`);
     });
   }
 
