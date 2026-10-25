@@ -20,6 +20,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffectiveRole } from "@/components/RoleProvider";
 import { ListChecks } from "lucide-react";
 import { openStaffTroy, STAFF_TROY_READY } from "@/lib/staff-troy";
 import { STAFF_TOUR_OPEN_EVENT } from "@/lib/tour/staff-tour";
@@ -39,6 +40,7 @@ export type TodayState =
 const first = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "them";
 
 export function TodayPage() {
+  const role = useEffectiveRole();
   const [state, setState] = useState<TodayState>({ status: "loading" });
   const [now, setNow] = useState(() => Date.now());
   const load = useCallback(async () => {
@@ -65,7 +67,8 @@ export function TodayPage() {
     }
   }
 
-  return <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} />;
+  // The staff tour never opens under view-as or assist, so the control is not drawn there (review N-3).
+  return <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} tourReady={!role?.impersonating} />;
 }
 
 export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady = STAFF_TROY_READY, tourReady = true }: {

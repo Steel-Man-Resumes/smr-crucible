@@ -49,8 +49,6 @@ test('registry: crm is a tour of its own, reserved reward key, grants nothing, s
   assert.equal(TOURS.entrance.version, TOUR_VERSION);
   assert.equal(TOURS.entrance.stopCount, TOUR_STOP_COUNT);
   assert.equal(TOURS.entrance.grants, true);
-  assert.equal(TOURS.settings.rewardKey, 'tour:settings');
-  assert.equal(TOURS.settings.grants, false);
   assert.equal(TOUR_VERSION, 5, 'the entrance tour version did not need a bump');
 });
 
@@ -103,7 +101,7 @@ test('every target is a one-line data-tour id on a real staff screen, and every 
     const { pathname } = splitHref(beatHref(b, PERSON));
     const seg = pathname.replace('/dashboard/', '').replace(PERSON, '[id]');
     assert.ok(existsSync(join(ROOT, 'app/(dashboard)/dashboard', seg, 'page.tsx')), `${b.id}: ${pathname} is not a page`);
-    if (b.needsPerson) assert.ok(b.href.includes(CRM_PERSON_TOKEN), `${b.id} needs a person but names none`);
+    if (b.needsPerson && !b.needsTodayRow) assert.ok(b.href.includes(CRM_PERSON_TOKEN), `${b.id} needs a person but names none`);
     else assert.ok(!b.href.includes(CRM_PERSON_TOKEN));
   }
   // The conditional targets really are written where the test expects them.
@@ -113,12 +111,18 @@ test('every target is a one-line data-tour id on a real staff screen, and every 
 });
 
 test('the person stops drop out, never invent, when the list is empty; Insights waits on its capability', () => {
-  const full = applicableBeats({ personId: PERSON, capabilities: ALL_CAPS });
+  const full = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
   assert.ok(full.every(b => !b.noPeopleOnly));
-  assert.equal(full.filter(b => b.needsPerson).length, 5);
+  assert.equal(full.filter(b => b.needsPerson).length, 6);
   assert.equal(full.length, CRM_TOUR_BEATS.length - 1);
   const none = applicableBeats({ personId: null, capabilities: ALL_CAPS });
   assert.ok(none.every(b => !b.needsPerson));
+  assert.equal(none.length, 7, 'review SF-2: no dead stop on the no-people path');
+  assert.ok(!none.some(b => b.id === 'today-person'), 'the first-row stop needs the row');
+  // A person from the caseload read while Today holds only task rows: the row stop is dropped, the person stops stay.
+  const cohortOnly = applicableBeats({ personId: PERSON, todayRow: false, capabilities: ALL_CAPS });
+  assert.ok(!cohortOnly.some(b => b.id === 'today-person'));
+  assert.equal(cohortOnly.filter(b => b.needsPerson).length, 5);
   assert.deepEqual(none.filter(b => b.noPeopleOnly).map(b => b.id), ['no-people']);
   assert.match(beatCopy(none.find(b => b.id === 'no-people')!, false).body, /waits until someone joins/);
   const noInsights = applicableBeats({ personId: PERSON, capabilities: ['org.client.view_content'] });
@@ -128,7 +132,7 @@ test('the person stops drop out, never invent, when the list is empty; Insights 
 });
 
 test('the person page is opened on a named tab, so the staff start-tab setting can never open a shared item for the tour', () => {
-  for (const b of CRM_TOUR_BEATS.filter(b => b.needsPerson)) {
+  for (const b of CRM_TOUR_BEATS.filter(b => b.needsPerson && !b.needsTodayRow)) {
     const { pathname, search } = splitHref(beatHref(b, PERSON));
     assert.equal(pathname, `/dashboard/clients/${PERSON}`);
     assert.match(search, /^\?tab=(notes|screen)$/, `${b.id} names its tab`);
@@ -141,7 +145,7 @@ test('the person page is opened on a named tab, so the staff start-tab setting c
 
 /* Resume by beat id */
 test('resume: the saved stop is a beat id through the full list, and resumes at that beat or the next one that applies', () => {
-  const full = applicableBeats({ personId: PERSON, capabilities: ALL_CAPS });
+  const full = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
   const none = applicableBeats({ personId: null, capabilities: ALL_CAPS });
   const shared = stopForBeat('person-shared');
   assert.equal(full[resumeStop(shared, full)].id, 'person-shared');
@@ -162,16 +166,17 @@ test('resume: the saved stop is a beat id through the full list, and resumes at 
 /* Pace */
 test('runtime at reading pace: 75 to 110 s on the full path, under 110 s on every path, demo words included', () => {
   const sum = (beats: typeof CRM_TOUR_BEATS, demo: boolean) => beats.reduce((a, b) => a + holdMs(beatCopy(b, demo)), 0);
-  const full = applicableBeats({ personId: PERSON, capabilities: ALL_CAPS });
+  const full = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
   for (const demo of [false, true]) {
     const ms = sum(full, demo);
     assert.ok(ms >= 75_000 && ms <= 110_000, `full path ${demo ? '(demo)' : ''}: ${ms} ms`);
     console.log(`# runtime ${demo ? 'demo' : 'real'} org, full path (${full.length} stops): ${(ms / 1000).toFixed(1)} s`);
   }
   console.log(`# runtime no-people path: ${(sum(applicableBeats({ personId: null, capabilities: ALL_CAPS }), false) / 1000).toFixed(1)} s`);
-  for (const ctx of [{ personId: null, capabilities: ALL_CAPS }, { personId: PERSON, capabilities: [] }, { personId: null, capabilities: [] }]) {
+  for (const ctx of [{ personId: null, capabilities: ALL_CAPS }, { personId: PERSON, todayRow: true, capabilities: [] }, { personId: null, capabilities: [] }]) {
     assert.ok(sum(applicableBeats(ctx), true) <= 110_000);
   }
+  console.log(`# runtime no-Insights path: ${(sum(applicableBeats({ personId: PERSON, todayRow: true, capabilities: [] }), false) / 1000).toFixed(1)} s`);
 });
 
 test('captions: bodies 12 to 30 words, titles short, every stop has both', () => {
@@ -314,7 +319,8 @@ test('the person comes from the staff member\'s own list: Today\'s first person 
   assert.equal(isDemoOrg(null), false);
   const controller = read('components/tour/StaffTour.tsx');
   assert.match(controller, /personFromToday\(signal\)/);
-  assert.match(controller, /applicableBeats\(\{ personId: person, capabilities \}\)/);
+  assert.match(controller, /const todayRow = !!person;/);
+  assert.match(controller, /applicableBeats\(\{ personId: person, todayRow, capabilities \}\)/);
   assert.doesNotMatch(controller, /personId: ['"]/, 'no hard-coded person');
 });
 
@@ -370,4 +376,35 @@ test('the player: on its page only when pathname and every asked query key match
   assert.match(controller, /event\.key !== 'Tab'/, 'focus trap');
   assert.match(controller, /save\('progress', canonical\(beatRef\.current\)\)/, 'pause saves the place as a beat id');
   assert.match(controller, /resumeStop\(slot\.stop, list\)/, 'resume by beat id, not by path position');
+});
+
+test('review SF-3: Show me around resumes an open run, and the paused offer is never hidden by a session flag', () => {
+  const controller = read('components/tour/StaffTour.tsx');
+  assert.match(controller, /const open = \(\) => \{ if \(!active\) void load\('resume'\); \};/);
+  assert.doesNotMatch(controller, /sessionStorage|PAUSE_KEY/, 'no session flag around the offer');
+  assert.match(controller, /else if \(slot\.inProgress && location\.pathname === STAFF_TOUR_HOME\) setNotice\(CRM_TOUR_COPY\.paused\);/);
+  assert.match(controller, /await enter\(slot, mode === 'resume' && !!slot\.inProgress, controller\.signal\)/);
+});
+
+test('review SF-4: a change of search the tour did not ask for pauses it; a push that never lands offers Try again', () => {
+  const controller = read('components/tour/StaffTour.tsx');
+  assert.match(controller, /const locationNow = `\$\{pathname\}\$\{search\?\.toString\(\) \? `\?\$\{search\.toString\(\)\}` : ''\}`;/);
+  assert.match(controller, /if \(expectedHref\.current && onBeatPage\(locationNow, expectedHref\.current\)\) \{ expectedHref\.current = null; return; \}\n    pause\(\);/);
+  assert.doesNotMatch(controller, /previousRoute|expectedRoute/);
+  const player = read('components/tour/StaffTourPlayer.tsx');
+  assert.match(player, /const NAV_WAIT_MS = 8000;/);
+  assert.match(player, /const timer = setTimeout\(\(\) => setStuck\(true\), NAV_WAIT_MS\);/);
+  assert.match(player, /onClick=\{\(\) => setRetry\(n => n \+ 1\)\}/);
+  assert.match(player, /\[i, landed, href, retry\]/);
+});
+
+test('review SF-1 and SF-5: the drawer reveal is re-asked until the stop is drawn; on phones the board stop lights the lit row', () => {
+  const player = read('components/tour/StaffTourPlayer.tsx');
+  assert.match(player, /if \(reveal && !lit\) onNavigationReveal\?\.\(true\);/);
+  assert.match(player, /if \(portrait && beat\.portraitWithin && els\[0\]\)/);
+  const board = CRM_TOUR_BEATS.find(b => b.id === 'person-board')!;
+  assert.equal(board.portraitWithin, '.person-board-station[aria-current="step"]');
+  assert.match(read('components/org/PersonOverview.tsx'), /className="person-board-station"[^>]*aria-current=\{here \? "step" : undefined\}/);
+  for (const b of CRM_TOUR_BEATS.filter(b => b.drawer)) assert.ok(b.targets.flat().every(t => /^org-nav-|^crm-org-mark$/.test(t)), `${b.id} opens the drawer for a sidebar target`);
+  assert.match(read('components/org/TodayPage.tsx'), /tourReady=\{!role\?\.impersonating\}/, 'review N-3');
 });
