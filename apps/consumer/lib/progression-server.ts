@@ -3,7 +3,7 @@ import { workspaceNextAction } from './workspace-next-action';
 import { randomUUID } from 'node:crypto';
 import { buildJourneySnapshot, getOneAsUser, queryAsUser, runAsUser, getUserDailyLimit, getUserTier } from '@crucible/core';
 import { encryptString, decryptString, type EncryptedPayload } from '@crucible/core/src/crypto';
-import { loadSelectedWork, readWorkSelection, type WorkSelection } from './assistant-work-context';
+import { loadSelectedWork, readWorkSelection, type WorkSelection, type SelectedWork } from './assistant-work-context';
 import { PROGRESSION_STEPS, STEP_COPY, baseAllowance, isProgressionStep, type ProgressionPolicy, type ProgressionStep } from './progression-policy';
 import { TOUR_REWARD_KEY, type TourReward } from './tour/reward';
 import { grantTourRewardWith } from './tour/tour-sql';
@@ -38,8 +38,8 @@ export async function progressionLegacyBonus(userId:string):Promise<number> {
  const row=await getOneAsUser<{calls:number}>(userId,'SELECT COALESCE(sum(calls),0)::int AS calls FROM progression_grant WHERE user_id=$1 AND kind=\'bonus\' AND expires_at>now()',[userId]);
  return row?.calls??0;
 }
-interface Grant {id:string;grant_key:string;step_id:ProgressionStep;kind:string;label:string;created_at:string}
-interface RequestRow {id:string;user_id:string;kind:string;step_id:ProgressionStep;status:string;decision_note:string|null;created_at:string;summary_encrypted:EncryptedPayload;idempotency_key:string;decision_history?:unknown[]}
+export interface Grant {id:string;grant_key:string;step_id:ProgressionStep;kind:string;label:string;created_at:string}
+export interface RequestRow {id:string;user_id:string;kind:string;step_id:ProgressionStep;status:string;decision_note:string|null;created_at:string;summary_encrypted:EncryptedPayload;idempotency_key:string;decision_history?:unknown[]}
 function requestView(r:RequestRow,includeSummary=false){return {id:r.id,idempotencyKey:r.idempotency_key,stepId:r.step_id,kind:r.kind,status:r.status,decisionNote:r.decision_note,createdAt:r.created_at,decisionHistory:r.decision_history??[],...(includeSummary?{summary:decryptString(r.summary_encrypted,`${r.user_id}:access-request:${r.id}`)}:{})};}
 async function syncMilestones(userId:string,metrics:{resumeTailored:boolean;applicationsSent:number;forgeComplete?:boolean;savedJobs?:number}) {
  if(metrics.forgeComplete&&(metrics.savedJobs??0)>0)await queryAsUser(userId,"INSERT INTO progression_grant(user_id,grant_key,kind,step_id,label) VALUES($1,'earned:tailor','unlock','tailor','Tailoring tools earned') ON CONFLICT(user_id,grant_key) DO NOTHING",[userId]);
@@ -48,15 +48,22 @@ async function syncMilestones(userId:string,metrics:{resumeTailored:boolean;appl
   [metrics.applicationsSent>0,'first-applied','apply','You recorded your first application. Keep that packet ready.'],
  ] as const) if(earned)await queryAsUser(userId,`INSERT INTO progression_grant(user_id,grant_key,kind,step_id,label) VALUES($1,$2,'milestone',$3,$4) ON CONFLICT(user_id,grant_key) DO NOTHING`,[userId,key,step,label]);
 }
-export async function getProgression(userId:string,selection:WorkSelection={},readOnly=false) {
- const [allow,work]=await Promise.all([progressionAllowance(userId),loadSelectedWork(userId,selection,true)]);
- if(!readOnly)await syncMilestones(userId,allow.snapshot.metrics);
- const [grants,requests]=await Promise.all([
-  queryAsUser<Grant>(userId,'SELECT id,grant_key,step_id,kind,label,created_at FROM progression_grant WHERE user_id=$1 AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC',[userId]),
-  queryAsUser<RequestRow>(userId,'SELECT * FROM progression_request WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20',[userId]),
- ]);
- const anyOffer=await getOneAsUser(userId,"SELECT id FROM job_application WHERE user_id=$1 AND status IN ('offered','hired') LIMIT 1",[userId]);
- if(anyOffer&&!readOnly)await queryAsUser(userId,"INSERT INTO progression_grant(user_id,grant_key,kind,step_id,label) VALUES($1,'earned:offer','unlock','offer','Offer tools earned') ON CONFLICT(user_id,grant_key) DO NOTHING",[userId]);
+/** The fields of progressionAllowance() that the assembled view reads; a fixture can supply them without the pool. */
+export interface ProgressionAllowanceLike {
+ account:{existing:boolean};
+ snapshot:{metrics:{forgeComplete:boolean;savedJobs:number;resumeTailored:boolean;applicationsSent:number}};
+ base:number;bonus:number;used:number;bonusUsed:number;blockedReason?:string;
+}
+export type ProgressionWork = Pick<SelectedWork,'selection'|'revision'|'laneDocument'|'application'|'priorityApplication'|'applicationResumeSnapshot'|'task'|'lane'>;
+export interface ProgressionInputs {allow:ProgressionAllowanceLike;work:ProgressionWork;grants:Grant[];requests:RequestRow[];anyOffer:boolean}
+/**
+ * Pure: the progression view from one set of reads. The current step is the
+ * offer when one exists, otherwise the interview when the selected application
+ * is interviewing or an interviewing application is the priority (no explicit
+ * document selected), otherwise the first incomplete step. Shared by
+ * getProgression (real reads) and the fixture tests (lib/__tests__).
+ */
+export function assembleProgression({allow,work,grants,requests,anyOffer}:ProgressionInputs) {
  const hasResume=!!work.revision || !!work.selection.artifactId || !!work.laneDocument?.text;
  const app=work.application;
  const applied=!!app && ['applied','interviewing','offered','hired','rejected'].includes(app.status);
@@ -83,6 +90,28 @@ export async function getProgression(userId:string,selection:WorkSelection={},re
  nextReward:{label:allow.account.existing?'Earn progress celebrations and request a small AI bonus':allow.snapshot.metrics.applicationsSent>0?'Ask t.ROY for a small extra allowance':allow.snapshot.metrics.resumeTailored?'12 daily AI actions for new accounts':'10 daily AI actions for new accounts',requirement:allow.snapshot.metrics.resumeTailored?'Record your application when you send it.':'Save a resume tailored to a real job.'},
  allowance:{enabled:true,blockedReason:allow.blockedReason,remaining:allow.account.existing?null:Math.max(0,allow.base+allow.bonus-allow.used),unit:'AI actions',expiresAt:expiresAt.toISOString(),description:allow.account.existing?`Your existing per-tool allowance continues. ${bonusRemaining} extra AI actions are available across tools until midnight UTC.`:`${allow.base} daily Refinery AI actions${allow.bonus?` + ${allow.bonus} bonus`:''}. Resets at midnight UTC. Other tool and spending limits still apply.`,base:allow.base,bonus:allow.bonus},
  celebration:latest?{id:latest.id,title:'Work worth building on',detail:latest.label}:undefined,requests:requests.map(r=>requestView(r))};
+}
+export type Progression = ReturnType<typeof assembleProgression>;
+/** The label the path board shows for the current step (the same STEP_COPY the dashboard renders). */
+export function progressionStepLabel(p:Pick<Progression,'steps'|'currentStepId'>):string {
+ return p.steps.find(s=>s.id===p.currentStepId)?.label ?? STEP_COPY[p.currentStepId as ProgressionStep]?.label ?? p.currentStepId;
+}
+/**
+ * `selection` is the browser's validated pick (readWorkSelection), the same
+ * one the dashboard sends to /api/progression. Never pass a resolved
+ * SelectedWork.selection back in: that one names the lane resume, and an
+ * explicit document hides the priority interview (assistant-work-context).
+ */
+export async function getProgression(userId:string,selection:WorkSelection={},readOnly=false) {
+ const [allow,work]=await Promise.all([progressionAllowance(userId),loadSelectedWork(userId,selection,true)]);
+ if(!readOnly)await syncMilestones(userId,allow.snapshot.metrics);
+ const [grants,requests]=await Promise.all([
+  queryAsUser<Grant>(userId,'SELECT id,grant_key,step_id,kind,label,created_at FROM progression_grant WHERE user_id=$1 AND (expires_at IS NULL OR expires_at>now()) ORDER BY created_at DESC',[userId]),
+  queryAsUser<RequestRow>(userId,'SELECT * FROM progression_request WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20',[userId]),
+ ]);
+ const anyOffer=await getOneAsUser(userId,"SELECT id FROM job_application WHERE user_id=$1 AND status IN ('offered','hired') LIMIT 1",[userId]);
+ if(anyOffer&&!readOnly)await queryAsUser(userId,"INSERT INTO progression_grant(user_id,grant_key,kind,step_id,label) VALUES($1,'earned:offer','unlock','offer','Offer tools earned') ON CONFLICT(user_id,grant_key) DO NOTHING",[userId]);
+ return assembleProgression({allow,work,grants,requests,anyOffer:!!anyOffer});
 }
 export interface UnlockInput {stepId:unknown;reason:unknown;idempotencyKey:unknown;selection?:unknown;escalate?:boolean;consentToShare?:boolean;requestKind?:unknown;summary?:unknown}
 export async function requestProgressionAccess(userId:string,input:UnlockInput){
