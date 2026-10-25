@@ -99,6 +99,7 @@ export function useAssistant({ context, sessionId, coach, onToolCall }: UseAssis
     messages: chat.messages,
     input: chat.input,
     setInput: chat.setInput,
+    setMessages: chat.setMessages,
     handleSubmit: chat.handleSubmit,
     isLoading: chat.isLoading,
     error: chat.error,

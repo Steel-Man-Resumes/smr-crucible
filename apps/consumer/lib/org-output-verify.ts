@@ -106,6 +106,15 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): stri
   // A template's blanks are not claims. "[Your Name]" names nobody and "[X] min"
   // counts nothing; both were being reported to the reader as unsupported.
   text = text.replace(/\[[^\]\n]{0,80}\]/g, " ");
+  // A phone number is contact detail, not a count (review C4 B1): skip it
+  // rather than letting its digit groups into the allowed numbers.
+  text = text.replace(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}\b/g, " ");
+  // Whole phrases a tool returned (a job title, a listing, a note) are
+  // repeating the record, not new claims. Only the whole phrase: a name
+  // inside one is still checked when it appears on its own (review C4 S1).
+  for (const phrase of (facts.staffToolEvidence ?? []).flatMap((e) => e.phrases ?? []).sort((a, b) => b.length - a.length)) {
+    if (phrase.length >= 3) text = text.split(phrase).join(" ");
+  }
 
   // Every standalone integer must be one we can account for. Money, dates and
   // percentages are skipped -- they are reported elsewhere and are not the
@@ -143,6 +152,12 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): stri
       "the this that these those your you they their them and but for with from who what when how why where which " +
       "today tomorrow yesterday week weeks month months year day days monday tuesday wednesday thursday friday saturday sunday " +
       "january february march april may june july august september october november december " +
+      // Short month and day names: the staff skills date every fact ("from your
+      // note Oct 1"). Same trade as the common-word names above: "Jan" the
+      // person is left to layer 2.
+      "jan feb mar apr jun jul aug sep sept oct nov dec mon tue tues wed thu thur thurs fri sat sun " +
+      // Staff workspace screen names the skills point people to ("the Outcomes tab").
+      "outcomes outcome insights asks tasks suggestions settings sharing tab tabs " +
       "forge refinery troy steel man resumes i it if no not yes one two three four five six seven eight nine ten none " +
       "someone nobody everyone anyone here there now right next first last then also just still only both each every all any some " +
       "most more less few many much other another same such own new old good great best better quick quickly " +

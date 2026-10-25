@@ -53,13 +53,15 @@ import { useUserContext } from "@/lib/use-user-context";
 // Deep, runtime-pure import: the one shared gate-state ordering (no db/pg in the
 // client bundle -- see @crucible/core/src/gateRank).
 import { clientToolUnlocked } from "@crucible/core/src/journeyStages";
-import { CoBrandLockup, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
+import { MemberCoBrandChip, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
 import { ExternalLink, LogOut, Menu, X } from "lucide-react";
 import { ProgressionProvider, useProgression } from "@/components/progression/ProgressionProvider";
 import type { BoardLink, StationId } from "@/lib/refinery-nav";
 import { RefineryBoard } from "@/components/nav/RefineryBoard";
 import { StationStrip } from "@/components/nav/StationStrip";
 import "@/components/nav/refinery-board.css";
+import "@/components/org/org-workspace.css";
+import { OrgSidebar } from "@/components/org/OrgSidebar";
 import { useServerSwitches } from "@/components/ServerSwitches";
 
 /**
@@ -101,37 +103,8 @@ const ORG_ADMIN_NAV: OrgNavItem[] = [
   // us for it, or find it in a PDF attached to an email six months ago.
   { href: "/dashboard/org-security", label: "Security & privacy" },
 ];
-// The staff workspace (crm_v2 orgs). Grouped by the job, and every item is a
-// real page: the earlier list was three entries, two of them jump-links into
-// one long screen, which is why it read as thin. `admin` items need the
-// organization-wide view.
-interface OrgNavGroup {
-  label: string;
-  /** `needs`: shown only to people who hold that capability -- the nav mirrors
-   *  the authorization model rather than guessing from a role name. */
-  items: (OrgNavItem & { needs?: string })[];
-}
-const ORG_WORKSPACE_NAV: OrgNavGroup[] = [
-  {
-    label: "Work",
-    items: [
-      { href: "/dashboard/today", label: "Today" },
-      { href: "/dashboard", label: "Caseload" },
-      { href: "/dashboard/requests", label: "Sharing requests" },
-    ],
-  },
-  { label: "Records", items: [{ href: "/dashboard/notes", label: "Case notes" }] },
-  {
-    label: "Organization",
-    items: [
-      { href: "/dashboard/insights", label: "Insights", needs: "org.insights.view" },
-      { href: "/dashboard/team", label: "Team & access", needs: "org.staff.manage" },
-      { href: "/dashboard/participants", label: "Add participants", needs: "org.participant.invite" },
-      { href: "/dashboard/sharing-policy", label: "Sharing policy", needs: "org.staff.manage" },
-      { href: "/dashboard/org-security", label: "Security & privacy" },
-    ],
-  },
-];
+// The staff workspace (crm_v2 orgs) nav lives in lib/org-nav.ts: grouped by
+// the job (Work, Records, Organization), capability-gated, testable per role.
 
 const ORG_STAFF_NAV: OrgNavItem[] = [
   { href: "/dashboard", label: "My clients" },
@@ -710,63 +683,23 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   }
 
   function renderOrgNav(onItemClick?: () => void) {
-    const linkClass = (active: boolean) =>
-      `t-focus flex min-h-[40px] items-center rounded-[4px] border-l-[3px] px-3 py-2 text-sm font-medium transition-colors ${
-        active
-          ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]"
-          : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"
-      }`;
-    // A participant's page belongs to Caseload, so Caseload stays lit there.
-    const isActive = (href: string) =>
-      href === pathname || (href === "/dashboard" && pathname.startsWith("/dashboard/clients/"));
-
-    const workspace = !!effectiveRole?.crmV2;
-    const flat = isOrgAdmin ? ORG_ADMIN_NAV : ORG_STAFF_NAV;
+    // Staff sidebar in the workshop skin (CRM wave 2026-10-25): identity block,
+    // the work grouped by the job, dots in the board's grammar, Ask t.ROY.
+    // C3 adds orgId and the brand read to the role payload; until then the
+    // mark is a monogram.
+    const brand = effectiveRole as (typeof effectiveRole & { orgId?: string; orgBrand?: { hasLogo?: boolean } }) | null;
     return (
-      <>
-        {workspace ? (
-          ORG_WORKSPACE_NAV.map((group, gi) => {
-            const caps = effectiveRole?.capabilities ?? [];
-            const items = group.items.filter((i) => !i.needs || caps.includes(i.needs));
-            if (items.length === 0) return null;
-            return (
-              <div key={group.label} className={gi > 0 ? "mt-3" : ""}>
-                <p className="px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-t-bone-dim">
-                  {group.label}
-                </p>
-                {items.map((item) => (
-                  <Link key={item.href} href={item.href} onClick={onItemClick}
-                    aria-current={isActive(item.href) ? "page" : undefined} className={linkClass(isActive(item.href))}>
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
-            );
-          })
-        ) : (
-          <div>
-            {flat.map((item) => (
-              <Link key={item.label} href={item.href} onClick={onItemClick} className={linkClass(item.href === pathname)}>
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-2 border-t border-t-line pt-3">
-          <Link
-            href="/dashboard/settings"
-            onClick={onItemClick}
-            className={`t-focus flex min-h-[40px] items-center rounded-[4px] border-l-[3px] px-3 py-2 text-sm font-medium transition-colors ${
-              pathname === "/dashboard/settings"
-                ? "border-[#4f6b57] bg-[#e3ede5] text-[#344b38]"
-                : "border-transparent text-t-bone-dim hover:bg-t-panel-2 hover:text-t-white"
-            }`}
-          >
-            Settings
-          </Link>
-        </div>
-      </>
+      <OrgSidebar
+        orgName={effectiveRole?.orgName ?? null}
+        orgRole={orgRole}
+        capabilities={effectiveRole?.capabilities ?? []}
+        workspace={!!effectiveRole?.crmV2}
+        legacyItems={isOrgAdmin ? ORG_ADMIN_NAV : ORG_STAFF_NAV}
+        pathname={pathname}
+        orgId={brand?.orgId ?? null}
+        hasLogo={!!brand?.orgBrand?.hasLogo}
+        onItemClick={onItemClick}
+      />
     );
   }
 
@@ -805,7 +738,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
             <div className="flex items-center gap-2 sm:gap-4">
               <DevSwitcher />
               <ViewAsToggle />
-              <CoBrandLockup compact className="hidden xl:flex" />
+              {!isOrgPartner && effectiveRole?.coBrand ? <MemberCoBrandChip orgId={effectiveRole.coBrand.orgId} name={effectiveRole.coBrand.name} hasLogo={effectiveRole.coBrand.hasLogo} className="hidden lg:flex" /> : null}
               <a
                 href="https://forge.steelmanresumes.com"
                 target="_blank"
@@ -842,9 +775,8 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       <div className="flex min-h-[calc(100vh-72px)]">
 
         {/* Left sidebar -- desktop only */}
-        <aside className={`hidden w-60 flex-shrink-0 border-r border-t-line bg-t-panel md:block${isOrgPartner ? "" : " forge-workshop"}`}>
+        <aside className="forge-workshop hidden w-60 flex-shrink-0 border-r border-t-line bg-t-panel md:block">
           <div id="refinery-desktop-navigation" className="sticky top-[72px] h-[calc(100vh-72px)] space-y-1 overflow-y-auto px-3 py-5">
-            {isOrgPartner ? <p className="mb-4 px-3 font-term text-[10px] font-semibold uppercase text-[#4f6b57]">Organization</p> : null}
             {isOrgPartner ? renderOrgNav() : <nav aria-label="Career workspace">{renderNavItems()}</nav>}
           </div>
         </aside>
@@ -953,14 +885,14 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         ref={navPanel}
         id="refinery-mobile-navigation"
         role="dialog"
-        aria-label="Career workspace navigation"
+        aria-label={isOrgPartner ? "Organization workspace navigation" : "Career workspace navigation"}
         aria-modal={drawerOpen ? true : undefined}
         aria-hidden={!drawerOpen}
         inert={!drawerOpen}
         tabIndex={-1}
         className={`fixed bottom-0 left-0 top-0 z-50 w-[min(19rem,88vw)] overflow-y-auto border-r border-t-line bg-t-panel shadow-xl transition-transform duration-200 motion-reduce:transition-none md:hidden ${
           drawerOpen ? "translate-x-0" : "-translate-x-full"
-        }${isOrgPartner ? "" : " forge-workshop"}`}
+        } forge-workshop`}
       >
         <div className="flex h-[72px] items-center justify-between border-b border-t-line px-4">
           <ProductBrand product="refinery" href="/dashboard" />
@@ -996,7 +928,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       </div>
 
       {/* AI Assistant */}
-      <AssistantDrawer>
+      <AssistantDrawer title={isOrgPartner ? "t.ROY, for your work with people" : undefined}>
         {!shellUid || authStatus !== "authenticated" || effectiveRole === null ? (
           <p role="status" className="p-5 text-sm text-t-bone-dim">Checking your account...</p>
         ) : (

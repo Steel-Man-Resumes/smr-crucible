@@ -9,6 +9,7 @@
  *      { action: "set_staff_cap", orgId, maxStaff }
  *      { action: "set_staff_role", orgId, userId, role }   (support path: owner-only rule widened to platform admins)
  *      { action: "remove_staff", orgId, userId }
+ *      { action: "set_brand_tier", orgId, tier }          (standard | cobrand | full; tier is what is sold, so admin only)
  * GET  ?orgId=  -> { staff } for the support panel (names, roles, titles)
  *
  * Platform admins only, with a second-factor session (requirePlatformAdmin).
@@ -31,6 +32,8 @@ import {
   setOrgStaffRole,
   removeOrgStaff,
   getOrgStaff,
+  setOrgBrandTier,
+  isOrgBrandTier,
 } from "@crucible/core";
 import { mintInviteMagicLink, buildStaffInviteEmail, sendOrgEmail } from "@/lib/org-invite-email";
 
@@ -126,6 +129,15 @@ export async function POST(request: Request) {
       ? await setOrgStaffRole({ orgId, userId, role: body.role === "org_admin" ? "org_admin" : "staff", actorUserId: guard.userId, authority: "owner_or_platform_admin" })
       : await removeOrgStaff({ orgId, userId, actorUserId: guard.userId, authority: "owner_or_platform_admin" });
     return res.ok ? NextResponse.json({ ...res, ok: true }) : NextResponse.json({ error: res.reason }, { status: 403 });
+  }
+  // Branding tier (migration 099). The org_brand guard trigger also checks the
+  // platform_admin table, so the database refuses this for anyone else.
+  if (action === "set_brand_tier") {
+    if (!isOrgBrandTier(body.tier)) return NextResponse.json({ error: "Pick standard, cobrand or full." }, { status: 400 });
+    const res = await setOrgBrandTier(guard.userId, orgId, body.tier);
+    if (res.ok) return NextResponse.json({ ok: true, tier: body.tier });
+    const error = res.reason === "not_migrated" ? "Branding is not switched on yet (migration 099)." : "The branding tier did not save.";
+    return NextResponse.json({ error }, { status: res.reason === "not_migrated" ? 503 : 403 });
   }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });
 }

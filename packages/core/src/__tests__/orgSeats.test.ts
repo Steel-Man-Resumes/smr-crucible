@@ -89,8 +89,8 @@ describe("open offers are counted beside the invited number, never inside it", (
       assert.match(src(f), /oi\.offer_status IN \('offered', 'declined'\)/, f);
     }
     assert.match(src("../orgInsights.ts"), /oi\.offer_status IS NULL AND u\."emailVerified" IS NULL/, "the invited number excludes offers");
-    const page = src("../../../../apps/consumer/components/org/InsightsPage.tsx");
+    const page = src("../../../../apps/consumer/components/org/InsightsReport.tsx");
     assert.match(page, /New invites only, and \$\{d\.people\.offersOpen\}/);
-    assert.match(src("../../../../apps/consumer/app/api/org/insights/route.ts"), /"Offers open", i\.people\.offersOpen/);
+    assert.match(src("../../../../apps/consumer/lib/org-insights-report.ts"), /"Offers open", i\.people\.offersOpen/);
   });
 });

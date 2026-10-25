@@ -17,6 +17,7 @@ export * from './sharingScopes';
 export * from './sharing';
 export * from './sharingPolicy';
 export * from './orgClientView';
+export * from './orgStaffAssistant';
 export * from './staffPrefs';
 export * from './orgAccess';
 export * from './orgInsights';
@@ -93,6 +94,8 @@ export * from './orgVisibilityShared';
 export * from './orgSeatsShared';
 export * from './orgSeats';
 export * from './orgAdmin';
+// Organization brand (migration 099): logo bytes and the branding tier.
+export * from './orgBrand';
 
 // The second check (2026-10-07): a different model family reads the page
 // against the person's own words. Off by default (SECOND_CHECK_ENABLED).

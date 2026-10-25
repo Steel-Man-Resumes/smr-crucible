@@ -1,0 +1,46 @@
+/* Insights print report (CRM lane C2, 2026-10-25). One readable report:
+   white page, the organization's mark and name top left, "with Steel Man
+   Resumes" top right, the period line, every section with its counted-over
+   notes, and the footer. Nothing of the app around it prints: every element
+   that is neither the report, inside it, nor one of its ancestors is hidden,
+   so this does not depend on how the shell is built. */
+@media print {
+  @page { size: letter portrait; margin: 0.4in; }
+  html, body { background: #fff !important; }
+  body:has(.insights-report) *:not(:has(.insights-report)):not(.insights-report):not(.insights-report *) { display: none !important; }
+  body:has(.insights-report) *:has(.insights-report) {
+    position: static !important; display: block !important; margin: 0 !important; padding: 0 !important; border: 0 !important;
+    min-height: 0 !important; height: auto !important; width: auto !important; max-width: none !important; overflow: visible !important;
+    background: #fff !important; box-shadow: none !important; backdrop-filter: none !important;
+  }
+  .insights-report {
+    --t-bg: #fff; --t-panel: #fff; --t-panel-2: #f3f3f1; --t-panel-3: #ecebe7; --t-line: #c9ccc6; --t-line-strong: #9aa097;
+    --t-amber: #6e5420; --t-amber-bright: #4a3812; --t-phos: #2b2d2a; --t-phos-dim: #4a4d48; --t-white: #111210;
+    max-width: none !important; margin: 0 !important; padding: 0 !important; zoom: 0.84; color: #111210; font-size: 8.5pt; line-height: 1.25;
+    print-color-adjust: exact; -webkit-print-color-adjust: exact;
+  }
+  .insights-report .ins-print-head {
+    display: flex !important; justify-content: space-between; align-items: center; gap: 12px;
+    padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1.5px solid #111210;
+  }
+  .insights-report .ins-demo { display: block !important; margin: 0 0 8px; padding: 4px 8px; border: 1px solid #9aa097; }
+  .insights-report .ins-print-foot { display: block !important; margin-top: 10px; padding-top: 6px; border-top: 1px solid #9aa097; color: #4a4d48; }
+  /* The screen intro repeats the print header; its consent line moves to the footer. */
+  .insights-report > p.ins-intro { display: none !important; }
+  .insights-report .ins-section { margin-bottom: 6px !important; break-inside: avoid; }
+  .insights-report .ins-section > p { margin-top: 3px !important; font-size: 7.5pt; }
+  .insights-report .ins-section h2 { margin-bottom: 5px !important; padding-bottom: 3px !important; font-size: 8pt; }
+  .insights-report .grid { gap: 6px !important; }
+  .insights-report .ins-tile { padding: 3px 7px !important; }
+  .insights-report .ins-tile > div { font-size: 7.5pt !important; margin-top: 0 !important; }
+  .insights-report .ins-tile > div:first-child { font-size: 12pt !important; line-height: 1.15; }
+  .insights-report .ins-bar { font-size: 8pt; }
+  .insights-report .ins-bar-track { height: 8px !important; }
+  .insights-report .space-y-2 > * + * { margin-top: 1px !important; }
+  .insights-report .p-5 { padding: 8px !important; }
+  .insights-report table { font-size: 7.5pt; }
+  .insights-report th, .insights-report td { padding: 2px 6px !important; }
+  .insights-report .ins-bar-fill { background: #6e5420 !important; }
+  .insights-report a, .insights-report button { display: none !important; }
+  .insights-report .ins-weeks { display: none !important; }
+}

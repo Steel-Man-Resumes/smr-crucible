@@ -13,6 +13,7 @@
 "use client";
 
 import { orgNoteDraftKey } from "@/lib/org-note-draft";
+import { STAFF_SKILLS, STAFF_TROY_EVENT, takePendingStaffTroy, skillRequest, type StaffTroyRequest } from "@/lib/staff-troy";
 import { TroyWork } from "@crucible/consumer-ui";
 import { assistantErrorMessage } from "@/lib/assistant-error-message";
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
@@ -49,6 +50,9 @@ const TOOL_ACTIVITY: Record<string, string> = {
   read_owner_directory_coverage: "Reading coverage suggestions",
   read_staff_tasks: "Reading your scoped tasks",
   read_participant_progress: "Reading shared progress",
+  read_participant_overview: "Reading what you can see about them (logged for them)",
+  read_recent_changes: "Reading what changed (logged for them)",
+  find_local_help: "Searching the help directory",
   draft_staff_check_in: "Preparing a draft",
   offer_staff_draft: "Preparing the draft for their page",
   search_verified_employers: "Checking employer evidence",
@@ -256,12 +260,41 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
     [router, pathname]
   );
 
-  const { messages, input, setInput, handleSubmit, isLoading, error } = useAssistant({
-    context,
+  // STAFF PANEL (lib/staff-troy.ts). openStaffTroy puts one skill and,
+  // optionally, one person in front of the staff member. It never sends: the
+  // request lands in the message box and they press Send. A new person
+  // starts a new conversation, so nothing said about one person carries into
+  // a conversation about another.
+  const [focus, setFocus] = useState<StaffTroyRequest | null>(null);
+  const { messages, input, setInput, setMessages, handleSubmit, isLoading, error } = useAssistant({
+    context: staff && focus ? { ...context, staffSkill: focus.skill, staffClientId: focus.clientId } : context,
     sessionId,
     coach,
     onToolCall,
   });
+  const focusRef = useRef<StaffTroyRequest | null>(null);
+  useEffect(() => {
+    if (!staff) return;
+    const take = (req: StaffTroyRequest | null) => {
+      if (!req) return;
+      const previous = focusRef.current;
+      if ((previous?.clientId ?? null) !== (req.clientId ?? null)) setMessages([]);
+      const next = { ...req, firstName: req.firstName ?? (previous?.clientId === req.clientId ? previous?.firstName : undefined) };
+      focusRef.current = next;
+      setFocus(next);
+      setInput(skillRequest(req.skill, next.firstName));
+    };
+    take(takePendingStaffTroy());
+    const onOpen = (event: Event) => { take((event as CustomEvent<StaffTroyRequest>).detail ?? null); takePendingStaffTroy(); };
+    window.addEventListener(STAFF_TROY_EVENT, onOpen);
+    return () => window.removeEventListener(STAFF_TROY_EVENT, onOpen);
+  }, [staff, setInput, setMessages]);
+  const clearFocus = useCallback(() => {
+    focusRef.current = null;
+    setFocus(null);
+    setMessages([]);
+    setInput("");
+  }, [setInput, setMessages]);
   const [pendingLineHelp, setPendingLineHelp] = useState<string[]>([]);
   useEffect(() => {
     const help = (event: Event) => {
@@ -444,6 +477,35 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
 
   return (
     <div className="flex flex-col h-full">
+      {staff && (
+        <div className="mb-3 flex-shrink-0 space-y-2" data-staff-troy-panel="">
+          <p className="text-sm font-semibold text-[#4c1d95]">t.ROY, for your work with people</p>
+          {focus?.clientId && (
+            <p className="flex items-center gap-2 text-xs">
+              <span className="rounded-full border border-[#d8ccff] bg-[#f6f2ff] px-2 py-1 font-medium text-[#4c1d95]">About: {focus.firstName ?? "this person"}</span>
+              <button type="button" onClick={clearFocus} className="t-focus min-h-touch underline text-muted">Ask about someone else</button>
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2" role="group" aria-label="What t.ROY can do for you">
+            {STAFF_SKILLS.filter((k) => k.ready).map((k) => (
+              <button
+                key={k.id}
+                type="button"
+                aria-pressed={focus?.skill === k.id}
+                onClick={() => {
+                  const next = { ...(focus ?? {}), skill: k.id };
+                  focusRef.current = next;
+                  setFocus(next);
+                  setInput(skillRequest(k.id, next.firstName));
+                }}
+                className={`t-focus min-h-touch rounded-[5px] border px-3 py-2 text-xs font-medium transition-colors ${focus?.skill === k.id ? "border-[#7c5cd6] bg-[#efe9ff] text-[#4c1d95]" : "border-[#d8ccff] bg-white text-[#4c1d95] hover:bg-[#f6f2ff]"}`}
+              >
+                {k.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {/* Chat settings (coach only): quiet gear, opens an inline panel */}
       {coach && (
         <div className="flex items-center justify-end pb-2 flex-shrink-0">
@@ -830,6 +892,9 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
         <p role="status" className="pb-2 text-xs text-foreground">
           Your line review is queued. Send or clear your current draft to load it here.
         </p>
+      )}
+      {staff && (
+        <p className="pb-2 text-xs text-muted" data-staff-troy-footer="">t.ROY drafts. You decide. Nothing is saved or sent until you do it.</p>
       )}
       {/* Input — shrink-0 keeps it pinned at bottom always */}
       <form ref={formRef} onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t border-border flex-shrink-0">

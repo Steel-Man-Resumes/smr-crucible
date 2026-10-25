@@ -1,0 +1,50 @@
+/* The participant page for staff (CRM lane C2). The strip and the board sit in
+   a .forge-workshop .refinery-board scope so their dots are the participant's
+   board dots (components/nav/refinery-board.css); the rest is the light
+   reading surface. */
+.person-avatar {
+  display: inline-grid; place-items: center; flex: none; width: 48px; height: 48px; border-radius: 4px;
+  background: #28231c; color: #ece7d9; font: 600 17px/1 var(--t-mono); letter-spacing: .02em;
+}
+.person-strip .person-strip-path { position: relative; display: flex; justify-content: space-between; gap: 4px; margin: 10px 0 0; padding: 0; list-style: none; }
+.person-strip .person-strip-path::before {
+  content: ""; position: absolute; left: 12px; right: 12px; top: 12px; height: 2px; background: var(--t-line-strong); pointer-events: none;
+}
+.person-strip .person-strip-path li { position: relative; z-index: 1; display: flex; flex: 1 1 0; min-width: 0; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.person-strip .board-dot { margin-top: 0; }
+.person-strip .person-strip-label { font-size: 12px; line-height: 1.25; color: var(--t-bone-dim); }
+.person-strip li[data-tone="current"] .person-strip-label { color: var(--t-amber-bright); font-weight: 600; }
+@media (max-width: 639px) {
+  .person-strip .person-strip-label { display: none; }
+  .person-strip li[data-tone="current"] .person-strip-label { display: block; position: absolute; top: 30px; white-space: nowrap; }
+  .person-strip .person-strip-path { padding-bottom: 18px; }
+}
+.person-board { position: relative; margin: 0; list-style: none; }
+.person-board::before {
+  content: ""; position: absolute; left: 27px; top: 28px; bottom: 28px; width: 2px;
+  background: linear-gradient(var(--t-line-strong), var(--t-line)); pointer-events: none;
+}
+.person-board .person-board-station { position: relative; display: flex; gap: 12px; padding: 8px 4px; }
+.person-board .board-dot { margin-top: 0; }
+.person-board .person-board-station[data-tone="current"] { background: var(--t-panel-3); border-left: 3px solid var(--t-amber-bright); border-radius: 4px; padding-left: 1px; }
+
+/* Records are written in plain type on the reading surface: no terminal
+   prompt in a case note, task, suggestion or ask (DESIGN section 0, rule 5).
+   The selectors match the global terminal field rule's weight
+   (app/globals.css) so this scope wins inside the page only. */
+.person-page input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]),
+.person-page textarea:not([data-terminal]) {
+  color: var(--t-white) !important;
+  background-color: var(--t-panel) !important;
+  background-image: none !important;
+  border: 1px solid var(--t-line-strong) !important;
+  border-radius: 4px !important;
+  font-family: var(--t-body) !important;
+  font-size: 0.9375rem;
+  padding-left: 0.75rem !important;
+  box-shadow: none;
+}
+.person-page input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"])::placeholder,
+.person-page textarea:not([data-terminal])::placeholder { color: var(--t-bone-dim) !important; }
+.person-page input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):focus,
+.person-page textarea:not([data-terminal]):focus { border-color: var(--t-amber) !important; box-shadow: 0 0 0 1px var(--t-amber); }

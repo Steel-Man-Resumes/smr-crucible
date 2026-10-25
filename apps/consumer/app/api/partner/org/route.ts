@@ -45,6 +45,8 @@ import {
   getOrgInviteSender,
   getInvitedNotSharing,
   inviteActionAllowed,
+  getOrgBrand,
+  DEFAULT_ORG_BRAND,
 } from "@crucible/core";
 import { isValidEmail } from "@/lib/auth-rate-limit";
 import { adminSecondFactorOk } from "@/lib/session-policy";
@@ -160,7 +162,13 @@ export async function GET(request: Request) {
       crmV2: !!flag?.crm_v2,
       quietAfterDays: await (await import("@crucible/core")).getQuietAfterDays(org.accessCodeId),
       org: {
+        // The organization id (not the code): what <OrgMark> and the logo
+        // route take. Safe for every member; it is not a seat key.
+        orgId: org.accessCodeId,
         name: org.orgName,
+        // Logo present and branding tier, read as this user (org_brand is
+        // row-level protected). Never bytes, never a URL.
+        brand: await getOrgBrand(userId, org.accessCodeId).catch(() => ({ ...DEFAULT_ORG_BRAND })),
         // The code IS the seat key (anyone signed in can redeem it), so only
         // people who may see seats get it (R3 B2 item 4).
         code: seesSeats ? org.code : null,

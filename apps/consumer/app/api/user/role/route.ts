@@ -1,7 +1,7 @@
 /**
  * GET /api/user/role -- the effective identity, resolved server-side.
  *
- * Returns { tier, orgRole, orgName, impersonating } for the user the app
+ * Returns { tier, orgRole, orgName, orgId, orgBrand, coBrand, impersonating } for the user the app
  * should BEHAVE as: effectiveAuth resolves the impersonation cookie (admin
  * only, self-guarding), getOrgContext resolves org membership (code owner or
  * org_staff row). Feeds RoleProvider so landings and nav branch correctly
@@ -10,6 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { effectiveAuth } from "@/lib/effective-auth";
+import { roleBrandFields } from "@/lib/org-brand-http";
 
 export const maxDuration = 10;
 
@@ -44,6 +45,15 @@ export async function GET() {
         .catch(() => null)
     : null;
 
+  // Brand fields (lib/org-brand-http.ts roleBrandFields, tested there):
+  // staff get orgId and orgBrand for the identity block and never coBrand;
+  // participants get coBrand (no tier) or null; solo users get nothing.
+  const core = await import("@crucible/core");
+  const { orgId, orgBrand, coBrand } = await roleBrandFields(
+    { userId, orgId: actor?.orgId ?? org?.accessCodeId ?? null, hasOrgRole: !!org },
+    { getOrgBrand: core.getOrgBrand, getParticipantCoBrand: core.getParticipantCoBrand }
+  );
+
   const impersonation = (session as { impersonation?: { mode: "view" | "assist"; adminId: string } })
     .impersonation;
 
@@ -54,6 +64,9 @@ export async function GET() {
       tier,
       orgRole: org?.role ?? null,
       orgName: org?.orgName ?? null,
+      orgId,
+      orgBrand,
+      coBrand,
       capabilities: actor ? Array.from(actor.capabilities) : [],
       cohortReach: actor?.reach ?? "none",
       crmV2: !!flag?.crm_v2,

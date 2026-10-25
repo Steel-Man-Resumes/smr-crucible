@@ -30,6 +30,8 @@ interface AssistantDrawerProps {
    * has something timely to say. Independent of the one-time first-visit nudge.
    */
   attention?: boolean;
+  /** Drawer heading and dialog name. Staff get "t.ROY, for your work with people". */
+  title?: string;
 }
 
 export function AssistantDrawer({
@@ -37,6 +39,7 @@ export function AssistantDrawer({
   enabled = true,
   triggerLabel = "Ask t.ROY",
   attention = false,
+  title = "t.ROY, your AI career coach",
 }: AssistantDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   // First-visit nudge: t.ROY glows for a few seconds to say "I'm here and alive."
@@ -68,11 +71,14 @@ export function AssistantDrawer({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
-  // Explicit user request from the guided line review, never an automatic popup.
+  // Explicit user requests, never an automatic popup: the guided line review,
+  // and a staff member pressing a t.ROY skill button ("staff-troy-open",
+  // apps/consumer/lib/staff-troy.ts openStaffTroy).
   useEffect(() => {
     const open = () => { if (enabled) setIsOpen(true); };
     window.addEventListener("troy-line-help", open);
-    return () => window.removeEventListener("troy-line-help", open);
+    window.addEventListener("staff-troy-open", open);
+    return () => { window.removeEventListener("troy-line-help", open); window.removeEventListener("staff-troy-open", open); };
   }, [enabled]);
 
   // Close on Escape
@@ -162,7 +168,7 @@ export function AssistantDrawer({
         ref={drawerRef}
         tabIndex={-1}
         role="dialog"
-        aria-label="t.ROY, your AI career coach"
+        aria-label={title}
         aria-modal={isOpen ? true : undefined}
         aria-hidden={!isOpen}
         inert={!isOpen}
@@ -173,7 +179,7 @@ export function AssistantDrawer({
         {/* Drawer header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-t-line bg-t-panel">
           <h2 className="text-base font-semibold text-t-white">
-            t.ROY, your AI career coach
+            {title}
           </h2>
           <button
             onClick={() => setIsOpen(false)}

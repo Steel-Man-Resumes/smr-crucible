@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * OrgDashboard -- the partner organization's mission control.
+ * OrgDashboard -- the partner organization's caseload and team view.
  *
  * Redesigned (org-oversight wave, 2026-08-07) from a cohort table into an
  * organization-oversight surface. An org admin/staff is here to RUN the
@@ -33,9 +33,8 @@ import { useUserTier } from "@/lib/useUserTier";
 // node:crypto, which webpack cannot bundle for the browser. Same pattern the
 // ATS lenses use for pageFit.
 import { summarizeStaffPerformance } from "@crucible/core/src/orgStaffPerformance";
-// Deep import: canonical stage vocabulary without dragging the core barrel
-// (db/pg) into the client bundle.
-import { JOURNEY_STAGES } from "@crucible/core/src/journeyStages";
+// Stored stage shown as the participant's station (lib/staff-station.ts).
+import { stationLabelForStage, stationOrderForStage } from "@/lib/staff-station";
 // Pure wording for an empty staff list (tested in packages/core).
 import { staffEmptyState } from "@crucible/core/src/orgVisibilityShared";
 import { seatLedgerLine, staffLedgerLine, SEAT_LEDGER_HELP, type SeatLedger } from "@crucible/core/src/orgSeatsShared";
@@ -54,7 +53,6 @@ import {
   type StaffPrefs,
 } from "@crucible/core/src/staffPrefsShared";
 
-const STAGE_LABELS = JOURNEY_STAGES.map((s) => s.long);
 
 // "Behind" = mid-journey (started, not hired) with no activity in this many
 // days. Starting point for the redesign; Troy can tune this one number.
@@ -228,16 +226,9 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
   useEffect(() => {
     fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
   }, []);
-  // "Where signing in lands" (Settings -> My workflow). Only the FIRST arrival of
-  // a browser session is redirected; after that, clicking Caseload means Caseload.
-  useEffect(() => {
-    if (requestedView !== "all" || !data?.crmV2 || prefs.landing !== "today") return;
-    try {
-      if (sessionStorage.getItem("smr.staff.landed")) return;
-      sessionStorage.setItem("smr.staff.landed", "1");
-    } catch { return; }
-    window.location.replace("/dashboard/today");
-  }, [requestedView, data?.crmV2, prefs.landing]);
+  // "Where signing in lands" (Settings -> My workflow) is decided at /dashboard
+  // now (OrgLanding in app/(dashboard)/dashboard/page.tsx); this screen is
+  // People at /dashboard/people and never redirects away from itself.
   // The organization's own "quiet after N days" (Settings -> My workflow, owner).
   // The same number Insights, Today and the assistant read.
   const behindMs = (data?.quietAfterDays ?? BEHIND_DAYS) * 24 * 60 * 60 * 1000;
@@ -250,7 +241,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
     const out = [...rows];
     if (activeSort === "name") out.sort(byName);
     else if (activeSort === "last_active") out.sort((a, b) => t(b.lastActiveAt) - t(a.lastActiveAt) || byName(a, b));
-    else if (activeSort === "stage") out.sort((a, b) => b.currentStage - a.currentStage || byName(a, b));
+    else if (activeSort === "stage") out.sort((a, b) => stationOrderForStage(b.currentStage) - stationOrderForStage(a.currentStage) || byName(a, b));
     // "Who needs me first": quiet people, then steady, then active, then hired;
     // inside each, whoever has been quiet longest comes first.
     else out.sort((a, b) => STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)] || t(a.lastActiveAt) - t(b.lastActiveAt) || byName(a, b));
@@ -533,7 +524,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 </th>
               )}
               <th className="px-4 py-3 font-semibold">Client</th>
-              {!hidden("stage") && <th className="px-4 py-3 font-semibold">Stage</th>}
+              {!hidden("stage") && <th className="px-4 py-3 font-semibold">Station</th>}
               {!hidden("nextStep") && <th className="px-4 py-3 font-semibold">Next step</th>}
               {!hidden("applications") && <th className="px-4 py-3 font-semibold text-center">Apps</th>}
               {!hidden("lastActive") && <th className="px-4 py-3 font-semibold">Last active</th>}
@@ -563,8 +554,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 </td>
                 {!hidden("stage") && (
                   <td className="px-4 py-3">
-                    <div className="font-medium text-t-white">{c.currentStage} / 6</div>
-                    <div className="text-xs text-t-phos-dim">{STAGE_LABELS[c.currentStage] ?? ""}</div>
+                    {/* The participant's own map: station name, never "N / 6" (display only). */}
+                    <div className="font-medium text-t-white">{stationLabelForStage(c.currentStage) ?? "--"}</div>
                   </td>
                 )}
                 {!hidden("nextStep") && <td className="px-4 py-3 text-t-phos-dim max-w-[200px]">{c.nextStepAction || "--"}</td>}
@@ -632,7 +623,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   ? ownCaseloadOnly
                     ? "Staff view: the clients assigned to you who chose to share progress."
                     : "Staff view: everyone in your organization who chose to share progress."
-                  : `Your organization's mission control for team, client progress, and program reach.${data.org.code ? ` Code ${data.org.code}.` : ""}`
+                  : `Your organization's people, team and program reach.${data.org.code ? ` Code ${data.org.code}.` : ""}`
                 : "Progress for the people you support who chose to share it."}
             </p>
           </div>
@@ -644,7 +635,10 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           >
             How the tools work
           </Link>
-          {clients.length > 0 && (
+          {/* One export with one set of definitions: organizations with the
+              workspace (crm_v2) download from Insights. The older per-person
+              cohort file stays only for organizations without it. */}
+          {clients.length > 0 && !data?.crmV2 && (
             <a
               href="/api/partner/cohort?format=csv"
               className="t-focus inline-flex items-center px-4 py-2 bg-transparent border border-t-amber text-t-amber-bright text-sm font-bold hover:bg-t-amber/10 min-h-touch"

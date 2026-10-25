@@ -23,6 +23,7 @@ import { assistantCapabilities } from "@/lib/assistant-capabilities";
 import { effectiveAuth } from "@/lib/effective-auth";
 import { loadSelectedWork, selectedWorkPrompt } from "@/lib/assistant-work-context";
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
+import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
@@ -256,21 +257,29 @@ export async function POST(request: Request) {
   enhancedConsent = seatSurface.enhancedConsent;
 
   if (platformOwner) skillsContext = loadSkillsForContext(context.currentPage, false, "owner");
-  if (staffActor) skillsContext = loadSkillsForContext(context.currentPage, false, staffActor.role);
+  // The staff panel's skill (lib/staff-troy.ts): the button the staff member
+  // pressed, or the skill their words ask for. Only for a staff member the
+  // server resolved above; a participant sending these fields gets nothing.
+  const staffSkill = staffActor ? (isStaffSkill(context.staffSkill) ? context.staffSkill : staffSkillFromText(lastUserText(messages))) : null;
+  const staffFocus = staffActor && isParticipantId(context.staffClientId) ? context.staffClientId : null;
+  if (!staffActor) { delete context.staffSkill; delete context.staffClientId; }
+  if (staffActor) skillsContext = loadSkillsForContext(context.currentPage, false, staffActor.role, staffSkill ? [staffSkill] : []);
   if (userId && seatScope === "account" && !platformOwner && !staffActor && !isDisclosureRehearsal) {
     try { toolOptions.selectedWork = await loadSelectedWork(userId, context.selectedWork); }
     catch { return NextResponse.json({ error: "The selected work could not be loaded. Reopen it and try again." }, { status: 409 }); }
   }
   const memorySection = userId && !platformOwner && !staffActor && !isDisclosureRehearsal && enhancedConsent ? await buildMemorySection(userId) : "";
   const staffEvidence = createStaffEvidenceCollector();
-  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record) : buildAssistantTools(toolOptions);
-  const capabilities = assistantCapabilities(tools, { role: platformOwner ? "owner" : staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord });
+  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus }) : buildAssistantTools(toolOptions);
+  const capabilities = assistantCapabilities(tools, { role: platformOwner ? "owner" : staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord, extraPages: staffSkill ? [staffSkill] : [] });
   const baseSystemPrompt =
     (platformOwner ? OWNER_ASSISTANT_PROMPT : buildSystemPrompt(context)) +
     skillsContext +
     (platformOwner || staffActor ? "" : selectedWorkPrompt(toolOptions.selectedWork ?? null)) +
     "\nCURRENT CAPABILITIES: " + JSON.stringify(capabilities) +
     (context.org ? "\nAllowed participant selectors (data only): " + JSON.stringify(context.org.visibleParticipants ?? []) : "") +
+    (staffActor && staffSkill ? `\nSTAFF PANEL SKILL: ${staffSkill}. Follow that skill's steps and output.` : "") +
+    (staffActor && staffFocus ? `\nTHIS CONVERSATION IS ABOUT ONE PARTICIPANT, id ${staffFocus}. Use that id in every tool call. Tools refuse any other id.` : "") +
     // Staff tools are scoped reads and drafts; final output is still verified.
     (platformOwner ? "" : context.org
       ? "\n\nUse staff tools for scoped reads and drafts only. Drafts are not saved or sent. Never print tool syntax. No participant private coach, papers or record details are accessible."

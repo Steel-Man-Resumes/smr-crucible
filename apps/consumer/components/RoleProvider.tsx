@@ -15,6 +15,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import type { ReactNode } from "react";
 import type { UserTier } from "@/lib/useUserTier";
+import type { OrgBrand } from "@crucible/core/src/orgBrandShared";
 
 export type OrgRole = "owner" | "org_admin" | "staff" | null;
 
@@ -25,6 +26,16 @@ export interface EffectiveRole {
   tier: UserTier;
   orgRole: OrgRole;
   orgName: string | null;
+  /** The organization this staff member works in (access_code id). Null for participants and solo users. */
+  orgId?: string | null;
+  /** That organization's brand: logo present, branding tier. Never bytes, never a URL. */
+  orgBrand?: OrgBrand | null;
+  /**
+   * PARTICIPANTS ONLY: the organization shown beside Steel Man in the top bar.
+   * Set only for a member of an organization on the co-brand or full tier.
+   * Null for staff, solo participants and everyone else, who see no org mark.
+   */
+  coBrand?: { orgId: string; name: string; hasLogo: boolean } | null;
   /** The per-participant staff workspace is on for this person's organization. */
   crmV2?: boolean;
   capabilities?: string[];

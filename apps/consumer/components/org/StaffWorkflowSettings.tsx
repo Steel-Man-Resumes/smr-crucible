@@ -18,7 +18,7 @@ import {
 } from "@crucible/core/src/staffPrefsShared";
 
 const TODAY_LABELS: Record<string, string> = {
-  tasks: "My tasks", interviews: "Interviews coming up", followups: "Follow-ups due", answered: "They answered me",
+  tasks: "My tasks", retention: "Retention check-ins due", interviews: "Interviews coming up", interview_stalled: "Interviews stalled", followups: "Follow-ups due", answered: "They answered me",
   acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
 };
 

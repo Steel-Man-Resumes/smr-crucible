@@ -79,6 +79,10 @@ export interface AssistantContext {
   audience?: "client" | "partner" | "observer" | "org_staff";
   /** For org_staff: their role and live caseload, so t.ROY can do the job. */
   org?: OrgAssistantContext;
+  /** Staff panel only (lib/staff-troy.ts): the skill the staff member chose. Ignored for anyone the server does not resolve as staff. */
+  staffSkill?: string;
+  /** Staff panel only: the participant the panel was opened about. Tools are held to it; reach is still re-checked. */
+  staffClientId?: string;
   /** Interaction mode */
   mode?: "intro" | "guide" | "chat";
   /** Whether the user is in demo mode (partner/observer walkthrough) */
