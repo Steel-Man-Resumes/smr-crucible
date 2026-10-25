@@ -22,7 +22,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffectiveRole } from '@/components/RoleProvider';
 import { StaffTourPlayer } from './StaffTourPlayer';
 import { TOURS } from '@/lib/tour/registry';
-import { CRM_ENDING_INDEX, CRM_TOUR_COPY, applicableBeats, resumeStop, splitHref, stopForBeat, type CrmBeat } from '@/lib/tour/crm-beats';
+import { CRM_ENDING_INDEX, CRM_TOUR_COPY, applicableBeats, onBeatPage, resumeStop, stopForBeat, type CrmBeat } from '@/lib/tour/crm-beats';
 import { STAFF_TOUR_HOME, STAFF_TOUR_OPEN_EVENT, firstPersonFromCohort, isDemoOrg, personIdFromRow, staffTourAllowed, staffTourRequested } from '@/lib/tour/staff-tour';
 import { lockPageForTour, leaveAction } from '@/lib/tour/page-lock';
 import './entrance-tour.css';
@@ -32,7 +32,6 @@ type Write = { tourId: 'crm'; action: 'start' | 'progress' | 'complete'; version
 type Saved = { ok: true; runId: string; sequence: number };
 interface Slot { accountId: string; impersonating?: boolean; version?: number; inProgress?: boolean; stop?: number; runId?: string; previousRunId?: string | null; sequence?: number }
 const FOCUSABLE = 'button:not(:disabled),a[href],input:not(:disabled),summary,[tabindex="0"]';
-const PAUSE_KEY = 'staff-tour-paused:';
 /** How long to wait for Today to draw its first person row before reading the caseload instead. */
 const ROW_WAIT_MS = 2500;
 
@@ -84,8 +83,9 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
   const lastWrite = useRef<Write | null>(null);
   const pendingStart = useRef<Write | null>(null);
   const previousRequest = useRef('');
-  const expectedRoute = useRef<string | null>(null);
-  const previousRoute = useRef(pathname);
+  /** The href the tour itself asked for; any other change of pathname or search pauses the tour. */
+  const expectedHref = useRef<string | null>(null);
+  const previousLocation = useRef('');
   const dirty = useRef(false);
   const oldFocus = useRef<HTMLElement | null>(null);
   const completed = useRef(false);
@@ -142,6 +142,7 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
     if (dirty.current) { setUnsavedWarning(true); return; }
     // The person and the path are decided once, before the first card.
     let person: string | null = await personFromToday(signal);
+    const todayRow = !!person;
     if (!person && !signal.aborted) {
       try {
         const res = await fetch('/api/partner/org', { cache: 'no-store', signal });
@@ -149,7 +150,7 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
       } catch { person = null; }
     }
     if (signal.aborted || !alive.current) return;
-    const list = applicableBeats({ personId: person, capabilities });
+    const list = applicableBeats({ personId: person, todayRow, capabilities });
     beatsRef.current = list; setBeats(list); setPersonId(person);
     // Saved progress from an older version never resumes into this one. The
     // place is a beat id (through its index in the full list), never a position in the path.
@@ -159,7 +160,6 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
     completed.current = false;
     beatRef.current = at; savedGroup.current = groupOf(list, at); setStart(at); setAccountId(slot.accountId); setError(''); setNotice(''); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    try { sessionStorage.removeItem(PAUSE_KEY + slot.accountId); } catch {}
     if (!(resume && slot.runId)) save('start', canonical(at));
   }, [capabilities, save]);
 
@@ -178,9 +178,9 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
       if (!alive.current || requestController.current !== controller) return;
       if (slot.impersonating) { setError(CRM_TOUR_COPY.impersonating); return; }
       slotRef.current = slot;
-      let paused = false; try { paused = sessionStorage.getItem(PAUSE_KEY + slot.accountId) === '1'; } catch {}
       if (mode === 'replay' || mode === 'resume') await enter(slot, mode === 'resume' && !!slot.inProgress, controller.signal);
-      else if (slot.inProgress && !paused && location.pathname === STAFF_TOUR_HOME) setNotice(CRM_TOUR_COPY.paused);
+      // An open run is offered whenever Today loads (the entrance tour's rule: no session flag hides it).
+      else if (slot.inProgress && location.pathname === STAFF_TOUR_HOME) setNotice(CRM_TOUR_COPY.paused);
     } catch (e) {
       if (alive.current && requestController.current === controller) setError(e instanceof Error && e.name !== 'AbortError' ? e.message : 'The tour is taking too long to load. Try again.');
     } finally { clearTimeout(timeout); if (alive.current && requestController.current === controller) setLoading(false); }
@@ -195,7 +195,8 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
     void load(requested ? 'replay' : 'auto');
   }, [requested, pathname, active, load]);
   useEffect(() => {
-    const open = () => { if (!active) void load('replay'); };
+    // Show me around picks an open run back up at its saved beat; a finished or absent run starts fresh.
+    const open = () => { if (!active) void load('resume'); };
     window.addEventListener(STAFF_TOUR_OPEN_EVENT, open);
     return () => window.removeEventListener(STAFF_TOUR_OPEN_EVENT, open);
   }, [active, load]);
@@ -203,25 +204,25 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
   const pause = useCallback(() => {
     if (leaveAction(completed.current) === 'close') { setActive(false); onNavigationReveal?.(false); setNotice(''); setSaveError(''); return; }
     requestController.current?.abort(); setLoading(false);
-    expectedRoute.current = null; setActive(false); onNavigationReveal?.(false);
-    if (run.current.account) { try { sessionStorage.setItem(PAUSE_KEY + run.current.account, '1'); } catch {} }
+    expectedHref.current = null; setActive(false); onNavigationReveal?.(false);
     setNotice(CRM_TOUR_COPY.paused);
     save('progress', canonical(beatRef.current));
   }, [save, onNavigationReveal]);
 
-  /* Routes: the tour moves between pages on purpose; any other route change pauses it. */
+  /* Routes: the tour moves between pages on purpose; any other change of pathname or search (Browser Back inside the person page) pauses it. */
+  const locationNow = `${pathname}${search?.toString() ? `?${search.toString()}` : ''}`;
   const navigate = useCallback((href: string) => {
-    const { pathname: p } = splitHref(href);
-    if (p !== location.pathname) expectedRoute.current = p;
+    expectedHref.current = href;
     router.push(href);
   }, [router]);
   useEffect(() => {
-    if (previousRoute.current === pathname) return;
-    previousRoute.current = pathname;
-    if (!active) return;
-    if (expectedRoute.current === pathname) { expectedRoute.current = null; return; }
+    if (previousLocation.current === locationNow) return;
+    const first = previousLocation.current === '';
+    previousLocation.current = locationNow;
+    if (!active || first) return;
+    if (expectedHref.current && onBeatPage(locationNow, expectedHref.current)) { expectedHref.current = null; return; }
     pause();
-  }, [pathname, active, pause]);
+  }, [locationNow, active, pause]);
 
   /* While open: the shell is inert, focus stays in the tour, Escape leaves and keeps the place. */
   useEffect(() => {
@@ -263,7 +264,7 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
 
   const done = useCallback(() => {
     setActive(false); onNavigationReveal?.(false); setNotice(''); setSaveError('');
-    if (location.pathname !== STAFF_TOUR_HOME) { expectedRoute.current = STAFF_TOUR_HOME; router.push(STAFF_TOUR_HOME); }
+    if (location.pathname !== STAFF_TOUR_HOME) { expectedHref.current = STAFF_TOUR_HOME; router.push(STAFF_TOUR_HOME); }
   }, [router, onNavigationReveal]);
 
   const retrySave = useCallback(() => {
@@ -282,7 +283,7 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
   </>;
   return createPortal(<div ref={root}>
     <StaffTourPlayer key={run.current.id} beats={beats} start={start} accountId={accountId} personId={personId} demo={demo}
-      location={`${pathname}${search?.toString() ? `?${search.toString()}` : ''}`} onNavigate={navigate}
+      location={locationNow} onNavigate={navigate}
       onBeat={onBeat} onLeave={pause} onFinish={finish} onDone={done} onNavigationReveal={onNavigationReveal}
       saveError={saveError} onRetrySave={lastWrite.current?.action === 'complete' ? undefined : retrySave} />
   </div>, document.body);
