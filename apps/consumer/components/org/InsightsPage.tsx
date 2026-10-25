@@ -9,10 +9,12 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { InsightsReport, type InsightsData } from "@/components/org/InsightsReport";
+import { useEffectiveRole } from "@/components/RoleProvider";
 
 export function InsightsPage() {
   const [d, setD] = useState<InsightsData | null>(null);
   const [org, setOrg] = useState<{ name: string; id: string }>({ name: "", id: "" });
+  const role = useEffectiveRole();
   const [error, setError] = useState<"forbidden" | "failed" | null>(null);
   const [canExport, setCanExport] = useState(false);
   const load = useCallback(() => {
@@ -49,6 +51,6 @@ export function InsightsPage() {
       <div className="h-40 bg-t-panel border border-t-line rounded-[4px] animate-pulse" />
     </div>
   );
-  // hasLogo: the brand lane (C3) adds org.brand to the role payload; until then the mark is the monogram.
-  return <InsightsReport d={d} orgName={org.name} orgId={org.id || org.name} hasLogo={false} canExport={canExport} onPrint={() => window.print()} />;
+  // The brand lane (C3) carries orgId and the brand read on the role payload; the print header draws the logo from it.
+  return <InsightsReport d={d} orgName={org.name} orgId={role?.orgId || org.id || org.name} hasLogo={!!role?.orgBrand?.hasLogo} canExport={canExport} onPrint={() => window.print()} />;
 }

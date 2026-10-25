@@ -928,7 +928,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       </div>
 
       {/* AI Assistant */}
-      <AssistantDrawer>
+      <AssistantDrawer title={isOrgPartner ? "t.ROY, for your work with people" : undefined}>
         {!shellUid || authStatus !== "authenticated" || effectiveRole === null ? (
           <p role="status" className="p-5 text-sm text-t-bone-dim">Checking your account...</p>
         ) : (

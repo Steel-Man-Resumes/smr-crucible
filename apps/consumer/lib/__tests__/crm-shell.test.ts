@@ -124,7 +124,7 @@ test("every stored stage shows as a station name", () => {
 
 // ClientPage and InsightsPage are lane C2's files in this wave; C2 rebuilds both
 // on STATIONS. The boss removes them from this list at merge.
-const C2_PENDING = new Set(["ClientPage.tsx", "InsightsPage.tsx"]);
+const C2_PENDING = new Set<string>();
 test("no staff surface outside C2's pending files says \"Stage N of 6\" or \"N / 6\"", () => {
   const dir = join(CONSUMER, "components", "org");
   for (const f of readdirSync(dir).filter((x) => x.endsWith(".tsx") && !C2_PENDING.has(x))) {

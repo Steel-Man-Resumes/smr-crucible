@@ -204,13 +204,16 @@ test("review S1: an item picked but not loaded never says Opening... unless it i
   assert.match(src, /if \(e\.kind === "tab"\) \{ setTab\(e\.tab\); setItem\(null\); setShared\(null\); \}/);
 });
 
-test("review S2: with STAFF_TROY_READY off the rail shows no buttons at all", async () => {
+test("review S2: the rail follows STAFF_TROY_READY: off shows no buttons at all, on shows the skills", async () => {
   const { STAFF_TROY_READY } = await import("../staff-troy");
-  assert.equal(STAFF_TROY_READY, false, "the stub ships off, like C1's");
-  const off = await render(SHARER, STAFF_TROY_READY);
+  assert.equal(typeof STAFF_TROY_READY, "boolean");
+  const off = await render(SHARER, false);
   assert.doesNotMatch(off, /data-skill=/);
   assert.doesNotMatch(off, /t\.ROY drafts/);
   assert.doesNotMatch(off, /for your work with/);
+  const on = await render(SHARER, true);
+  assert.match(on, /data-skill=/);
+  assert.match(on, /for your work with/);
   const src = readFileSync(join(ROOT, "components/org/PersonOverview.tsx"), "utf8");
   assert.match(src, /troyReady = STAFF_TROY_READY/);
 });

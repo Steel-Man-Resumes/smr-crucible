@@ -242,11 +242,21 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
 }
 
 /**
+ * The access-log row for one shared-scope open. Same predicate as the read,
+ * so a refused read writes no "opened" entry. Exported for the pglite test.
+ * $1 client, $2 org, $3 sees-all, $4 actor, $5 scope, $6 via (null, or "t.ROY").
+ */
+export const SHARED_OPEN_LOG_SQL = `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
+       SELECT $1::uuid, 'staff', ($4::uuid)::text, 'shared:' || $5::text, 'org_client_view',
+              jsonb_build_object('orgId', ($2::uuid)::text) || CASE WHEN $6::text IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('via', $6::text) END
+        WHERE ${IN_REACH} AND ${SHARED}`;
+
+/**
  * One scoped, logged read. `select` is the projection; it may use $1 (client)
  * and must name its columns. The access-log INSERT carries the SAME predicate,
  * so a refused read writes no "opened" entry and an allowed one always does.
  */
-async function readShared<T>(actor: OrgActor, clientId: string, scope: SharingScope, select: string): Promise<ClientViewResult<T>> {
+async function readShared<T>(actor: OrgActor, clientId: string, scope: SharingScope, select: string, via?: "t.ROY"): Promise<ClientViewResult<T>> {
   const refused = refuseActor(actor);
   if (refused) return { ok: false, reason: refused };
   const p = params(actor, clientId, scope);
@@ -254,17 +264,44 @@ async function readShared<T>(actor: OrgActor, clientId: string, scope: SharingSc
   const [allowed, rows] = await runScoped<[{ in_reach: boolean; shared: boolean }[], T[], unknown[]]>(scopeOf(actor), (sql) => [
     run(sql)(`SELECT (${IN_REACH}) AS in_reach, (${SHARED}) AS shared`, p),
     run(sql)(`${select} AND ${IN_REACH} AND ${SHARED}`, p),
-    run(sql)(
-      `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
-       SELECT $1::uuid, 'staff', ($4::uuid)::text, 'shared:' || $5::text, 'org_client_view', jsonb_build_object('orgId', ($2::uuid)::text)
-        WHERE ${IN_REACH} AND ${SHARED}`,
-      p
-    ),
+    // A read t.ROY made for a staff member says so in the participant's log.
+    run(sql)(SHARED_OPEN_LOG_SQL, [...p, via ?? null]),
   ]);
   const gate = allowed[0];
   if (!gate?.in_reach) return { ok: false, reason: "not_in_reach_or_not_member" };
   if (!gate.shared) return { ok: false, reason: "not_shared" };
   return { ok: true, rows };
+}
+
+/**
+ * The access-log row for a t.ROY read on a staff member's behalf (C4, staff
+ * skills). A skill that looks a person over is an open, the same as a tab:
+ * the participant sees it in "Who has opened what". Same reach predicate as
+ * every read here, so a refused read writes nothing. Exported so the pglite
+ * test runs this exact statement. $1 client, $2 org, $3 sees-all, $4 actor,
+ * $5 resource ("assistant:overview" | "assistant:changes" | "assistant:progress" | "assistant:tasks").
+ */
+export const STAFF_ASSISTANT_OPEN_SQL = `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
+       SELECT $1::uuid, 'staff', ($4::uuid)::text, $5::text, 'org_client_view', jsonb_build_object('orgId', ($2::uuid)::text, 'via', 't.ROY')
+        WHERE ${IN_REACH}
+       RETURNING id`;
+
+/** overview and changes: the composed reads. progress: a header read of a named person (progress and draft tools). tasks: that person's tasks. */
+export type StaffAssistantRead = "overview" | "changes" | "progress" | "tasks";
+
+/**
+ * Write the open BEFORE anything is read for the assistant. If the row cannot
+ * be written this throws, and the caller returns nothing (the log is part of
+ * the read). No row means not in reach: the caller stops there.
+ */
+export async function recordStaffAssistantOpen(actor: OrgActor, clientId: string, what: StaffAssistantRead): Promise<ClientViewResult<{ id: string }>> {
+  const refused = refuseActor(actor);
+  if (refused) return { ok: false, reason: refused };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+    run(sql)(STAFF_ASSISTANT_OPEN_SQL, [...params(actor, clientId), `assistant:${what}`]),
+  ]);
+  return rows[0] ? { ok: true, rows } : { ok: false, reason: "not_in_reach_or_not_member" };
 }
 
 export interface SharedApplication {
@@ -286,7 +323,7 @@ export interface SharedApplication {
 }
 
 /** NOT returned, on purpose: notes, salary, description, every jd_* column. */
-export function getClientApplications(actor: OrgActor, clientId: string) {
+export function getClientApplications(actor: OrgActor, clientId: string, opts: { via?: "t.ROY" } = {}) {
   return readShared<SharedApplication>(
     actor, clientId, "applications",
     // staff_shared_application is a VIEW (migration 060). The base table is
@@ -296,7 +333,8 @@ export function getClientApplications(actor: OrgActor, clientId: string) {
             ja.status_updated_at, ja.applied_at, ja.follow_up_at, ja.hired_at, ja.apply_url,
             ja.has_tailored_resume, ja.has_cover_letter, ja.created_at, ja.updated_at
        FROM staff_shared_application ja
-      WHERE ja.user_id = $1::uuid AND ${covered("ja.created_at")}`
+      WHERE ja.user_id = $1::uuid AND ${covered("ja.created_at")}`,
+    opts.via
   );
 }
 
@@ -473,7 +511,7 @@ export interface OrgSharingRequest {
  * shown as a decline and nothing more: the participant is promised that staff
  * are not told why, and there is no "why" stored to tell.
  */
-export async function listSharingRequests(actor: OrgActor): Promise<ClientViewResult<OrgSharingRequest>> {
+export async function listSharingRequests(actor: OrgActor, opts: { clientId?: string } = {}): Promise<ClientViewResult<OrgSharingRequest>> {
   const refused = refuseActor(actor);
   if (refused) return { ok: false, reason: refused };
   const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
@@ -484,9 +522,9 @@ export async function listSharingRequests(actor: OrgActor): Promise<ClientViewRe
          FROM sharing_request sr
          JOIN users u ON u.id = sr.user_id
          LEFT JOIN users rb ON rb.id = sr.requested_by
-        WHERE sr.access_code_id = $1::uuid AND ${reachOf("sr.user_id")}
+        WHERE sr.access_code_id = $1::uuid AND ${reachOf("sr.user_id")} AND ($4::uuid IS NULL OR sr.user_id = $4::uuid)
         ORDER BY (sr.status = 'pending') DESC, sr.created_at DESC LIMIT 200`,
-      listParams(actor)
+      [...listParams(actor), opts.clientId ?? null]
     ),
   ]);
   return { ok: true, rows: rows.filter((r) => isSharingScope(r.scope)) };
