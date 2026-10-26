@@ -63,6 +63,9 @@ import { StationStrip } from "@/components/nav/StationStrip";
 import "@/components/nav/refinery-board.css";
 import "@/components/org/org-workspace.css";
 import { OrgSidebar } from "@/components/org/OrgSidebar";
+import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { adminSidebarShown } from "@/lib/refinery-nav";
+import { DEMO_SAMPLE_LINE, isDemoOrgName } from "@/lib/demo-line";
 import { useServerSwitches } from "@/components/ServerSwitches";
 
 /**
@@ -425,10 +428,19 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
     }
   }, [authStatus, userTier, effectiveRole, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
 
-  // Post-auth: redeem access codes + sync Forge data + sync audience tier
+  // Post-auth: redeem access codes + sync Forge data + sync audience tier.
+  // A stored code waits until the role is known, and a platform admin's
+  // session DROPS it unredeemed (house build L1; L2 also refuses it in the
+  // database): an admin who opened a join link must never become a
+  // participant of that organization by signing in.
+  const roleKnown = effectiveRole !== null;
+  const adminSession = adminSidebarShown(effectiveRole);
   useEffect(() => {
+    if (authStatus !== "authenticated" || !roleKnown) return;
     const pendingCode = localStorage.getItem("pending_access_code");
-    if (pendingCode) {
+    if (pendingCode && (adminSession || effectiveRole?.impersonating)) {
+      localStorage.removeItem("pending_access_code");
+    } else if (pendingCode) {
       localStorage.removeItem("pending_access_code");
       fetch("/api/access-code/redeem", {
         method: "POST",
@@ -452,7 +464,24 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
     } catch {
       // Silent
     }
-  }, [authStatus, sessionData?.user?.id]);
+  }, [authStatus, sessionData?.user?.id, roleKnown, adminSession]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // An open invitation to join an organization's staff (migration 100): one
+  // line on every screen until it is answered on /dashboard/invites. Never
+  // while viewing as someone else.
+  const [staffInvite, setStaffInvite] = useState<{ count: number; orgName: string } | null>(null);
+  useEffect(() => {
+    if (authStatus !== "authenticated" || !roleKnown || effectiveRole?.impersonating) { setStaffInvite(null); return; }
+    let live = true;
+    fetch("/api/staff-invites", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        const open = (d?.invites ?? []).filter((i: { expired?: boolean }) => !i.expired);
+        if (live) setStaffInvite(open.length ? { count: open.length, orgName: String(open[0].orgName ?? "") } : null);
+      })
+      .catch(() => {});
+    return () => { live = false; };
+  }, [authStatus, sessionData?.user?.id, roleKnown, effectiveRole?.impersonating, pathname === "/dashboard/invites"]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Forge session sync -- with hard cross-user isolation. A Forge blob in
   // localStorage belongs to exactly one account; on a shared browser it must
@@ -642,6 +671,13 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   const resolvedTier = effectiveRole?.tier ?? userTier;
   const isOrgPartner = resolvedTier === "partner" && !!orgRole;
   const isOrgAdmin = orgRole === "owner" || orgRole === "org_admin";
+  // ADMIN MODE (house build L1, A1 defect B1). The real account is a platform
+  // admin and nothing is being viewed as someone else: the admin sidebar,
+  // never the participant career board. While viewing as someone, the shell
+  // is that person's, as before.
+  const adminMode = adminSession;
+  // Staff or admin chrome: no career board strip, no participant prompts.
+  const workChrome = isOrgPartner || adminMode;
 
   // Org leaders drop into the client experience through this one control
   // (mirrors the top-bar ViewAsToggle, but reachable from the nav on mobile).
@@ -683,6 +719,20 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
     );
   }
 
+  function renderAdminNav(onItemClick?: () => void) {
+    return (
+      <AdminSidebar
+        pathname={pathname}
+        orgRole={orgRole}
+        orgName={effectiveRole?.orgName ?? null}
+        capabilities={effectiveRole?.capabilities ?? []}
+        workspace={!!effectiveRole?.crmV2}
+        legacyItems={isOrgAdmin ? ORG_ADMIN_NAV : ORG_STAFF_NAV}
+        onItemClick={onItemClick}
+      />
+    );
+  }
+
   function renderOrgNav(onItemClick?: () => void) {
     // Staff sidebar in the workshop skin (CRM wave 2026-10-25): identity block,
     // the work grouped by the job, dots in the board's grammar, Ask t.ROY.
@@ -705,7 +755,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="refinery-app min-h-screen bg-t-bg font-body" data-board-strip={!isOrgPartner ? "" : undefined}>
+    <div className="refinery-app min-h-screen bg-t-bg font-body" data-board-strip={!workChrome ? "" : undefined}>
       {/* Applies the user's saved accessibility prefs app-wide (Phase 7.2). */}
       <UiPrefsApplier />
       <a
@@ -778,14 +828,22 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         {/* Left sidebar -- desktop only */}
         <aside className="forge-workshop hidden w-60 flex-shrink-0 border-r border-t-line bg-t-panel md:block">
           <div id="refinery-desktop-navigation" className="sticky top-[72px] h-[calc(100vh-72px)] space-y-1 overflow-y-auto px-3 py-5">
-            {isOrgPartner ? renderOrgNav() : <nav aria-label="Career workspace">{renderNavItems()}</nav>}
+            {adminMode ? renderAdminNav() : isOrgPartner ? renderOrgNav() : <nav aria-label="Career workspace">{renderNavItems()}</nav>}
           </div>
         </aside>
 
         {/* Main content */}
         <div className="min-w-0 flex-1">
         {!isOrgPartner && userTier === "client" && <Suspense fallback={null}><RefineryLaneHeader state={onboarding.state} /></Suspense>}
-        <main id="main" className={`px-4 py-6 pb-32 sm:px-7 ${isOrgPartner ? "sm:pb-8" : "sm:pb-24 md:pb-8"} lg:px-10`}>
+        <main id="main" className={`px-4 py-6 pb-32 sm:px-7 ${workChrome ? "sm:pb-8" : "sm:pb-24 md:pb-8"} lg:px-10`}>
+          {staffInvite && pathname !== "/dashboard/invites" && (
+            <p role="status" className="mb-6 border border-t-amber/40 bg-t-panel px-4 py-3 text-sm text-t-white">
+              {staffInvite.count === 1 && staffInvite.orgName
+                ? `${staffInvite.orgName} invited you to join their team.`
+                : `You have ${staffInvite.count} invitations to join a team.`}{" "}
+              <Link href="/dashboard/invites" className="t-focus underline">Review the invitation</Link>
+            </p>
+          )}
           {forgeNotice && (
             <p role="status" className="mb-6 border border-t-line bg-t-panel px-4 py-3 text-sm text-t-white">
               {forgeNotice}
@@ -840,15 +898,19 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
               invented, and some are paired with real local employers so the
               demonstration looks like the real world. Without this line a made-up
               placement at a named employer could be read as a claim that it happened. */}
-          {isOrgPartner && /\(Demo\)\s*$/.test(effectiveRole?.orgName ?? "") && (
-            <p role="note" className="border-b border-t-amber/40 bg-t-panel px-4 py-1.5 text-center text-xs text-t-amber-bright">
-              Sample data. These participants are fictional. The employers and local services named are real; no application or hire shown here took place.
+          {/* The words live in lib/demo-line.ts (one copy, also printed on
+              Insights): participants and employers marked fictional are
+              fictional; real employers are named only as places. An admin sees
+              it on their own demo organization's workspace pages. */}
+          {(isOrgPartner || (adminMode && !!orgRole && !pathname.startsWith("/dashboard/admin") && pathname !== "/dashboard")) && isDemoOrgName(effectiveRole?.orgName) && (
+            <p role="note" data-demo-line="" className="border-b border-t-amber/40 bg-t-panel px-4 py-1.5 text-center text-xs text-t-amber-bright">
+              {DEMO_SAMPLE_LINE}
             </p>
           )}
-          {!isOrgPartner && <PolicyAckBanner />}
+          {!workChrome && <PolicyAckBanner />}
           {/* Asked once after joining an organization. Not while an admin is
               viewing as someone else: the answer would be recorded for the admin. */}
-          {!isOrgPartner && !effectiveRole?.impersonating && <JoinSharingPrompt />}
+          {!workChrome && !effectiveRole?.impersonating && <JoinSharingPrompt />}
           {derivedReady && effectiveRole !== null ? <TourPageFrame key={JSON.stringify([pathname, shellUid, effectiveRole?.accountId ?? null, effectiveRole?.tier ?? null, effectiveRole?.orgRole ?? null, effectiveRole?.impersonating?.mode ?? null])} pathname={pathname}>{children}</TourPageFrame> : null}
         </main>
         </div>
@@ -868,8 +930,8 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       {/* Developer impersonation frame (blue view / red assist) */}
       <ImpersonationChrome />
 
-      {/* Mobile: the path as a slim strip along the bottom edge */}
-      {!isOrgPartner && (
+      {/* Mobile: the path as a slim strip along the bottom edge (participants only) */}
+      {!workChrome && (
         <StationStrip
           pathname={pathname}
           steps={progression?.data?.steps ?? null}
@@ -892,7 +954,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         ref={navPanel}
         id="refinery-mobile-navigation"
         role="dialog"
-        aria-label={isOrgPartner ? "Organization workspace navigation" : "Career workspace navigation"}
+        aria-label={adminMode ? "Platform admin navigation" : isOrgPartner ? "Organization workspace navigation" : "Career workspace navigation"}
         aria-modal={drawerOpen ? true : undefined}
         aria-hidden={!drawerOpen}
         inert={!drawerOpen}
@@ -912,7 +974,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
           </button>
         </div>
         <div className="px-2 py-4 space-y-1">
-          {isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : <nav aria-label="Career workspace">{renderNavItems(() => setDrawerOpen(false), true)}</nav>}
+          {adminMode ? renderAdminNav(() => setDrawerOpen(false)) : isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : <nav aria-label="Career workspace">{renderNavItems(() => setDrawerOpen(false), true)}</nav>}
           <div className="mt-3 pt-3 border-t border-t-line space-y-1">
             {signOutError && <p role="alert" className="px-3 text-sm text-t-red">{signOutError}</p>}
             <a

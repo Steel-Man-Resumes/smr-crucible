@@ -12,6 +12,7 @@
 import React from "react";
 import { OrgMark } from "@/components/org/OrgMark";
 import { PERIOD_LABEL, endedBeforeNote, stationRows } from "@/lib/org-insights-report";
+import { DEMO_SAMPLE_LINE } from "@/lib/demo-line";
 
 export interface InsightsData {
   asOf: string; quietAfterDays: number;
@@ -34,8 +35,8 @@ const SCOPE: Record<string, string> = { applications: "Applications", resume: "R
 const day = (s: string | null) => (s ? new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "--");
 const longDay = (s: string) => new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 const isDemo = (name: string) => /\(Demo\)\s*$/.test(name);
-/** The shell's sample-data line, word for word (RefineryShell). Printed, because the shell is not. */
-export const DEMO_PRINT_LINE = "Sample data. These participants are fictional. The employers and local services named are real; no application or hire shown here took place.";
+/** The shell's sample-data line, word for word (lib/demo-line.ts). Printed, because the shell is not. */
+export const DEMO_PRINT_LINE = DEMO_SAMPLE_LINE;
 export const PRINT_FOOTER = "Counts are rows, never a claim about people outside this organization.";
 
 function Tile({ value, label, note }: { value: string | number; label: string; note: string }) {
