@@ -154,6 +154,9 @@ export const APP_FUNCTIONS = [
   "smr_staff_unit_reach(uuid, uuid, uuid)",
   "smr_staff_reach(uuid, uuid, uuid)",
   "smr_correct_retention_check(uuid, text, text, text, text)",
+  // House L3a (103): the structure and enrollment write policies call these.
+  "smr_org_structure_manager(uuid, uuid)",
+  "smr_enrollment_writer(uuid, uuid)",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -162,6 +165,10 @@ export const APP_FUNCTIONS = [
 export const APP_FORBIDDEN_FUNCTIONS = [
   "org_activity_write(uuid, uuid, uuid, text, text, text, text)",
   "smr_org_role(uuid, uuid)",
+  // House L3a (103): the unit reach hook (called only inside smr_staff_reach)
+  // and the structure tables' activity writer.
+  "smr_staff_unit_reach(uuid, uuid, uuid)",
+  "smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)",
 ];
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */

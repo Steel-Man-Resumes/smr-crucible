@@ -16,7 +16,7 @@ import {
   applyProfilePatch, cleanEnrollmentInput, cleanProgramId, cleanUnitInput, enrollableUnits, explainStructureError, unitPath,
   canManageStructure, canWriteEnrollments, canReadStructure, ORG_STRUCTURE_SQL,
 } from "../orgStructure";
-import { unitReachSql } from "../orgUnitReach";
+import { dbReachSql } from "../orgUnitReach";
 import { capabilitiesForRole, computeOrgCapabilities, DELEGABLE_CAPABILITIES, STAFF_PRESETS, presetOverrideWrites } from "../authz/capabilities";
 
 const SQL = readFileSync(join(__dirname, "..", "..", "migrations", "103_org_structure.sql"), "utf8");
@@ -286,18 +286,18 @@ describe("the SQL the module runs", () => {
 
 describe("unit reach in the application's own checks (the second wall)", () => {
   const src = (f: string) => readFileSync(join(__dirname, "..", f), "utf8");
-  it("calls the 102 hook with org, actor, person", () => {
-    assert.equal(unitReachSql("$1::uuid", "$3::uuid", "t.client_user_id"), "public.smr_staff_unit_reach($1::uuid, $3::uuid, t.client_user_id)");
+  it("asks the database rule (102 reach, 103 units) with org, actor, person", () => {
+    assert.equal(dbReachSql("$1::uuid", "$3::uuid", "t.client_user_id"), "public.smr_staff_reach($1::uuid, $3::uuid, t.client_user_id)");
   });
-  it("every assignment-based reach check also admits unit reach", () => {
+  it("every assignment-based reach check also admits the database rule", () => {
     const view = src("orgClientView.ts");
     const inReach = view.slice(view.indexOf("const IN_REACH"), view.indexOf("const SHARED"));
-    assert.match(inReach, /unitReachSql\("\$2::uuid", "\$4::uuid", "\$1::uuid"\)/, "IN_REACH: org $2, actor $4, person $1");
-    assert.match(view.slice(view.indexOf("const reachOf")), /unitReachSql\("\$1::uuid", "\$3::uuid", who\)/);
-    assert.match(src("staffTasks.ts"), /unitReachSql\("\$1::uuid", "\$3::uuid", "t.client_user_id"\)/);
-    assert.match(src("staffTasks.ts"), /unitReachSql\("\$1::uuid", "\$3::uuid", "\$4::uuid"\)/, "adding a task about someone");
-    assert.match(src("orgToday.ts"), /unitReachSql\("\$1::uuid", "\$3::uuid", who\)/);
-    assert.match(src("orgOutcomes.ts"), /unitReachSql\("\$1::uuid", "\$3::uuid", who\)/);
+    assert.match(inReach, /dbReachSql\("\$2::uuid", "\$4::uuid", "\$1::uuid"\)/, "IN_REACH: org $2, actor $4, person $1");
+    assert.match(view.slice(view.indexOf("const reachOf")), /dbReachSql\("\$1::uuid", "\$3::uuid", who\)/);
+    assert.match(src("staffTasks.ts"), /dbReachSql\("\$1::uuid", "\$3::uuid", "t.client_user_id"\)/);
+    assert.match(src("staffTasks.ts"), /dbReachSql\("\$1::uuid", "\$3::uuid", "\$4::uuid"\)/, "adding a task about someone");
+    assert.match(src("orgToday.ts"), /dbReachSql\("\$1::uuid", "\$3::uuid", who\)/);
+    assert.match(src("orgOutcomes.ts"), /dbReachSql\("\$1::uuid", "\$3::uuid", who\)/);
     assert.match(src("partnerDashboard.ts"), /participantsReachedThroughUnits\(opts\.accessCodeId, opts\.assignedToStaffId\)/);
   });
   it("never widens a 'case manager only' sharing requirement", () => {

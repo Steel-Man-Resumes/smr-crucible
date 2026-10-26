@@ -5,7 +5,7 @@
  */
 import { queryAsUser, runAsUser, runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
-import { unitReachSql } from "./orgUnitReach";
+import { dbReachSql } from "./orgUnitReach";
 
 const scopeOf = (a: OrgActor): OrgScope => ({ orgId: a.orgId, userId: a.userId, role: a.role });
 const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
@@ -17,7 +17,7 @@ const TASK_REACH = `
    OR (t.client_user_id IS NOT NULL AND EXISTS (
          SELECT 1 FROM client_staff_assignment a
           WHERE a.access_code_id = $1::uuid AND a.client_user_id = t.client_user_id AND a.staff_user_id = $3::uuid))
-   OR (t.client_user_id IS NOT NULL AND ${unitReachSql("$1::uuid", "$3::uuid", "t.client_user_id")}))`;
+   OR (t.client_user_id IS NOT NULL AND ${dbReachSql("$1::uuid", "$3::uuid", "t.client_user_id")}))`;
 
 export interface StaffTask {
   id: string; title: string; due_on: string | null; client_user_id: string | null; client_name: string | null;
@@ -57,7 +57,7 @@ export async function addStaffTask(actor: OrgActor, input: { title: string; dueO
         WHERE $4::uuid IS NULL OR $2::boolean OR EXISTS (
                 SELECT 1 FROM client_staff_assignment a
                  WHERE a.access_code_id = $1::uuid AND a.client_user_id = $4::uuid AND a.staff_user_id = $3::uuid)
-           OR ${unitReachSql("$1::uuid", "$3::uuid", "$4::uuid")}
+           OR ${dbReachSql("$1::uuid", "$3::uuid", "$4::uuid")}
        RETURNING id`,
       [actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId, clientId, title, due, !!input.shared]
     ),

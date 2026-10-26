@@ -25,8 +25,7 @@
 -- in an ACTIVE unit where the staff member is a lead or a member. A LEAD also
 -- reaches enrollments in the units below theirs (a site lead sees the programs
 -- at that site). A VIEWER sees the unit and who works in it, never its people.
--- Applied without 102 (a database at 099), 103 also creates smr_staff_reach
--- with 102's rule, so enrollment never goes without its reach policy.
+-- 103 refuses to apply without 102, and never defines smr_staff_reach.
 --
 -- WHO MAY WRITE (database facts; the routes check capabilities first):
 --   org_profile, org_unit, unit_member: the organization's owner or an org
@@ -36,7 +35,7 @@
 --   enrollment: the owner, or any staff member of the organization without a
 --     deny on org.enrollment.write (a new delegable capability; the volunteer
 --     preset denies it), and only for a participant the writer already
---     reaches (RESTRICTIVE policy below, FOR ALL). So nobody can widen their
+--     reaches (RESTRICTIVE policy below, FOR ALL, in 102's shape). So nobody can widen their
 --     own reach by enrolling a stranger into their own unit, and adding staff
 --     to a unit (which widens reach) is an owner or admin act.
 --   Nobody deletes a unit, a profile or an enrollment through the app (no
@@ -52,8 +51,8 @@
 -- ACTIVITY LOG. Every write to these four tables writes one org_activity row
 -- through 102's org_activity_write: a short phrase built from FIXED words
 -- (never a unit name, a person's name, a typed reason or the program id), with
--- the unit, enrollment, participant and staff member carried as ids. GUARDED:
--- without 102 the triggers exist and write nothing; nothing fails for it.
+-- the unit, enrollment, participant and staff member carried as ids. Guarded
+-- by an existence check on the writer, so a missing writer never blocks a write.
 --
 -- Additive. Rollback (data loss for these four tables only):
 --   DROP TABLE enrollment, unit_member, org_unit, org_profile CASCADE;
@@ -77,8 +76,14 @@ BEGIN
      OR to_regclass('public.access_code_redemption') IS NULL OR to_regclass('public.org_staff') IS NULL THEN
     RAISE EXCEPTION '103 preflight: 023/049/051 objects are missing; stop';
   END IF;
-  IF to_regclass('public.org_activity') IS NULL THEN
-    RAISE NOTICE '103: org_activity (102) is not here; structure changes will not be logged until it is';
+  -- 103 fills in 102's unit hook and never defines smr_staff_reach itself.
+  IF to_regprocedure('public.smr_staff_unit_reach(uuid, uuid, uuid)') IS NULL
+     OR to_regprocedure('public.smr_staff_reach(uuid, uuid, uuid)') IS NULL
+     OR position('smr_staff_unit_reach' IN pg_get_functiondef(to_regprocedure('public.smr_staff_reach(uuid, uuid, uuid)'))) = 0 THEN
+    RAISE EXCEPTION '103 needs migration 102 (smr_staff_reach calling smr_staff_unit_reach) applied first';
+  END IF;
+  IF to_regprocedure('public.org_activity_write(uuid, uuid, uuid, text, text, text, text)') IS NULL THEN
+    RAISE NOTICE '103: org_activity_write (102) is not here; structure changes will not be logged until it is';
   END IF;
 END $$;
 
@@ -174,22 +179,26 @@ CREATE INDEX IF NOT EXISTS enrollment_participant ON enrollment (access_code_id,
 CREATE INDEX IF NOT EXISTS enrollment_unit ON enrollment (org_unit_id, status);
 
 -- ------------------------------------------------------ who may do what -----
--- Owner or org admin of p_org. SECURITY DEFINER so a policy can ask it without
--- the caller being able to read every org_staff row.
+-- Owner or org admin of p_org. SECURITY DEFINER so a policy can ask it; it
+-- answers only for the caller's own org scope (like 102's reach), so it is
+-- never an oracle about another organization's staff.
 CREATE OR REPLACE FUNCTION public.smr_org_structure_manager(p_org uuid, p_user uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-  SELECT p_org IS NOT NULL AND p_user IS NOT NULL AND (
-    EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_user)
-    OR EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user AND s.role = 'org_admin'))
+  SELECT p_org IS NOT NULL AND p_user IS NOT NULL
+    AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid
+    AND (EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_user)
+         OR EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user AND s.role = 'org_admin'))
 $$;
 REVOKE ALL ON FUNCTION public.smr_org_structure_manager(uuid, uuid) FROM PUBLIC;
 
 -- The owner, or a staff member of p_org who has not been denied
 -- org.enrollment.write (every role carries it; the volunteer preset denies it).
+-- Own org scope only, like the function above.
 CREATE OR REPLACE FUNCTION public.smr_enrollment_writer(p_org uuid, p_user uuid) RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
-  SELECT p_org IS NOT NULL AND p_user IS NOT NULL AND (
-    EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_user)
+  SELECT p_org IS NOT NULL AND p_user IS NOT NULL
+    AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid
+    AND (EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_user)
     OR (EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user)
         AND NOT EXISTS (SELECT 1 FROM public.org_capability_override o
                          WHERE o.org_id = p_org AND o.user_id = p_user
@@ -216,19 +225,17 @@ BEGIN
 END $do$;
 
 -- ------------------------------------------------------------------ reach --
--- 102 (lane L3b) defines smr_staff_reach(p_org, p_staff, p_participant) and
--- routes the unit condition through ONE hook, smr_staff_unit_reach (false in
--- 102). 103 replaces only the hook, so no 102 policy or function changes:
+-- 102 (lane L3b) owns smr_staff_reach(p_org, p_staff, p_participant) and ORs
+-- in ONE hook for units, smr_staff_unit_reach, which returns false there. 103
+-- replaces ONLY the hook, with 102's exact properties (LANGUAGE sql, STABLE,
+-- SECURITY DEFINER, search_path pinned, no EXECUTE for PUBLIC or smr_app: it
+-- is called only from inside smr_staff_reach). Every 102 reach policy, and
+-- the one on enrollment below, picks it up with no policy change and no grant:
 --   a staff member reaches a participant who has an OPEN enrollment
 --   (referred, enrolled, active, paused) in an ACTIVE unit where the staff
 --   member is a lead or a member; a lead also reaches the units below theirs
 --   (depth is at most 4, so three parents cover every ancestor). A viewer
 --   reaches nobody through a unit. Still on staff, or nothing.
--- If 102 is NOT applied (a database at 099), 103 also creates a standalone
--- smr_staff_reach with 102's rule (owner; org_admin; org.client.view_all by
--- role or exception, deny wins; assigned; the hook; only inside the caller's
--- own org scope), so 103 never leaves enrollment without its reach policy.
--- If a smr_staff_reach exists WITHOUT the hook, the two lanes disagree: stop.
 CREATE OR REPLACE FUNCTION public.smr_staff_unit_reach(p_org uuid, p_staff uuid, p_participant uuid)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -250,47 +257,16 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
     false)
 $$;
 REVOKE ALL ON FUNCTION public.smr_staff_unit_reach(uuid, uuid, uuid) FROM PUBLIC;
-
-DO $do$
-DECLARE
-  v_hook_called boolean;
+DO $$
 BEGIN
-  IF to_regprocedure('public.smr_staff_reach(uuid, uuid, uuid)') IS NULL THEN
-    -- No 102: the same rule as 102, standing alone.
-    EXECUTE $f$
-      CREATE FUNCTION public.smr_staff_reach(p_org uuid, p_staff uuid, p_participant uuid)
-      RETURNS boolean
-      LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $b$
-        SELECT COALESCE(
-          p_org IS NOT NULL AND p_staff IS NOT NULL AND p_participant IS NOT NULL
-          AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid
-          AND (EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_staff)
-               OR EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_staff))
-          AND (
-            ((EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_staff)
-              OR EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_staff AND s.role = 'org_admin')
-              OR EXISTS (SELECT 1 FROM public.org_capability_override o
-                          WHERE o.org_id = p_org AND o.user_id = p_staff AND o.capability = 'org.client.view_all' AND o.effect = 'grant'))
-             AND NOT EXISTS (SELECT 1 FROM public.org_capability_override o
-                              WHERE o.org_id = p_org AND o.user_id = p_staff AND o.capability = 'org.client.view_all' AND o.effect = 'deny'))
-            OR EXISTS (SELECT 1 FROM public.client_staff_assignment a
-                        WHERE a.access_code_id = p_org AND a.client_user_id = p_participant AND a.staff_user_id = p_staff)
-            OR public.smr_staff_unit_reach(p_org, p_staff, p_participant)),
-          false)
-      $b$ $f$;
-    EXECUTE 'REVOKE ALL ON FUNCTION public.smr_staff_reach(uuid, uuid, uuid) FROM PUBLIC';
-  ELSE
-    SELECT position('smr_staff_unit_reach' IN pg_get_functiondef(to_regprocedure('public.smr_staff_reach(uuid, uuid, uuid)'))) > 0
-      INTO v_hook_called;
-    IF NOT v_hook_called THEN
-      RAISE EXCEPTION '103: smr_staff_reach exists but does not call smr_staff_unit_reach; reconcile with 102 before applying';
-    END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+    REVOKE ALL ON FUNCTION public.smr_staff_unit_reach(uuid, uuid, uuid) FROM smr_app;
   END IF;
-END $do$;
+END $$;
 
 -- --------------------------------------------------------- activity writer --
 -- One row in org_activity through 102's writer, org_activity_write. Guarded
--- and dynamic, so this file applies without 102 (then nothing is logged).
+-- by an existence check on the writer (then nothing is logged).
 -- Summaries are built from FIXED words and allowlisted values only, never
 -- from a name someone typed (a unit name, a person's name, an id): 102's rule.
 -- The unit, enrollment and staff member are carried as ids for the audit
@@ -820,9 +796,17 @@ CREATE POLICY enrollment_update ON enrollment FOR UPDATE
          AND public.smr_enrollment_writer(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid))
   WITH CHECK (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 DROP POLICY IF EXISTS enrollment_reach ON enrollment;
+-- 102's shape: no org scope (a definer path) passes; a row of another org
+-- passes this clause (the permissive policies already refuse it); a row of
+-- the scoped org passes only when the acting user reaches its participant.
+-- FOR ALL, so nobody writes an enrollment for someone they do not reach.
 CREATE POLICY enrollment_reach ON enrollment AS RESTRICTIVE FOR ALL
-  USING (public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, participant_user_id))
-  WITH CHECK (public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, participant_user_id));
+  USING (NULLIF(current_setting('app.org_id', true), '') IS NULL
+         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
+         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, participant_user_id))
+  WITH CHECK (NULLIF(current_setting('app.org_id', true), '') IS NULL
+         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
+         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, participant_user_id));
 
 -- ----------------------------------------------------------------- grants --
 DO $$
@@ -836,9 +820,7 @@ BEGIN
     GRANT SELECT, INSERT, UPDATE ON org_unit TO smr_app;
     GRANT SELECT, INSERT, UPDATE, DELETE ON unit_member TO smr_app;
     GRANT SELECT, INSERT, UPDATE ON enrollment TO smr_app;
-    -- Policies call these as the app role.
-    GRANT EXECUTE ON FUNCTION public.smr_staff_reach(uuid, uuid, uuid) TO smr_app;
-    GRANT EXECUTE ON FUNCTION public.smr_staff_unit_reach(uuid, uuid, uuid) TO smr_app;
+    -- 103's policies call these as the app role (smr_staff_reach is 102's grant).
     GRANT EXECUTE ON FUNCTION public.smr_org_structure_manager(uuid, uuid) TO smr_app;
     GRANT EXECUTE ON FUNCTION public.smr_enrollment_writer(uuid, uuid) TO smr_app;
   END IF;
@@ -907,6 +889,9 @@ BEGIN
     END IF;
     IF NOT has_table_privilege('smr_app', 'enrollment', 'SELECT') OR NOT has_table_privilege('smr_app', 'unit_member', 'DELETE') THEN
       RAISE EXCEPTION '103 after: smr_app lacks a grant it needs';
+    END IF;
+    IF has_function_privilege('smr_app', 'public.smr_staff_unit_reach(uuid, uuid, uuid)', 'EXECUTE') THEN
+      RAISE EXCEPTION '103 after: smr_app can call the unit reach hook directly';
     END IF;
     IF has_function_privilege('smr_app', 'public.smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)', 'EXECUTE') THEN
       RAISE EXCEPTION '103 after: smr_app can write the activity log directly';

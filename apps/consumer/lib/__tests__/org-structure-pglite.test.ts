@@ -16,6 +16,10 @@
  * keeps a 102-style function's argument names; existing volunteers gain the
  * new deny.
  *
+ * Runs on 001-102 then 103 (103 refuses without 102). Also proves the app
+ * cannot call the unit hook directly, and that 102's activity writer records
+ * fixed words only.
+ *
  * Run it alone (pglite files in one process are flaky). Skipped unless
  * SMR_PGLITE_DIR points at a node_modules folder holding @electric-sql/pglite.
  */
@@ -39,8 +43,7 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO smr_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE ON SEQUENCES TO smr_app;`);
   const apply = async (f: string) => db.exec(`BEGIN; INSERT INTO _migrations(filename) VALUES ('${f}') ON CONFLICT DO NOTHING;` + readFileSync(MIG + f, 'utf8') + ';COMMIT;');
-  // Everything before 103 that is in the tree: 001-099 today, plus 100-102 once the
-  // house lanes are merged (then 103 takes its 102 path: replace the hook only).
+  // Everything before 103 that is in the tree, 102 (reach, activity) included: 103 fills in 102's unit hook.
   for (const f of readdirSync(MIG).filter((x) => /^\d{3}_.*\.sql$/.test(x) && Number(x.slice(0, 3)) < 103).sort()) {
     try { await apply(f); } catch { await db.exec('ROLLBACK').catch(() => {}); } // 088-091 refuse on their own guards; unrelated
   }
@@ -71,7 +74,7 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.equal(defs.length, 2, 'one reach function and one unit hook');
   assert.ok(defs.find((x) => x.proname === 'smr_staff_reach')!.d.includes('smr_staff_unit_reach'), 'reach goes through the hook');
   assert.ok(defs.find((x) => x.proname === 'smr_staff_unit_reach')!.d.includes('unit_member'), "the hook is 103's, not 102's placeholder");
-  console.log(`  (103 applied on ${had102 ? 'top of 102: hook path' : '099: standalone reach'})`);
+  assert.ok(had102, '102 is in the tree and applied first');
   const delegable = ((await q(`SELECT public.smr_delegable_capabilities() AS l`)).rows[0] as { l: string[] }).l;
   assert.equal(delegable.filter((c) => c === 'org.enrollment.write').length, 1, 'appended once, however often 103 runs');
   assert.ok(delegable.includes('org.suggest.write'), 'the earlier list is kept');
@@ -83,16 +86,6 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   const priv = async (t: string, p: string) => ((await q(`SELECT has_table_privilege('smr_app', $1, $2) AS ok`, [t, p])).rows[0] as { ok: boolean }).ok;
   assert.deepEqual([await priv('org_unit', 'DELETE'), await priv('enrollment', 'DELETE'), await priv('org_profile', 'DELETE'), await priv('unit_member', 'DELETE')], [false, false, false, true]);
 
-  // Without 102: an activity table and writer shaped like 102's, so the logging path runs.
-  if (!had102) {
-    await q(`CREATE TABLE org_activity (id bigserial PRIMARY KEY, access_code_id uuid NOT NULL, actor_user_id uuid, participant_user_id uuid, staff_user_id uuid,
-      entity text NOT NULL, entity_id text, action text NOT NULL, summary text NOT NULL CHECK (length(summary) BETWEEN 3 AND 200), at timestamptz NOT NULL DEFAULT now())`);
-    await q(`REVOKE ALL ON org_activity FROM smr_app`);
-    await q(`CREATE FUNCTION public.org_activity_write(p_org uuid, p_participant uuid, p_staff uuid, p_entity text, p_entity_id text, p_action text, p_summary text)
-      RETURNS void LANGUAGE sql SECURITY DEFINER AS $$ INSERT INTO public.org_activity (access_code_id, actor_user_id, participant_user_id, staff_user_id, entity, entity_id, action, summary)
-      VALUES (p_org, NULLIF(current_setting('app.user_id', true), '')::uuid, p_participant, p_staff, p_entity, p_entity_id, p_action, p_summary) $$`);
-    await q(`REVOKE ALL ON FUNCTION public.org_activity_write(uuid, uuid, uuid, text, text, text, text) FROM PUBLIC`);
-  }
 
   type Who = { orgId?: string; userId?: string; role?: string };
   const as = async (who: Who, text: string, params: unknown[] = []) => {
@@ -211,6 +204,9 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.equal(await reach(cmB, p1), false);
   assert.equal(await reach(viewer, p2), false);
   assert.equal(await reach(cmA, p1), true, '102 conditions kept: assigned');
+  assert.ok(await refused(as(at(cmB), `SELECT smr_staff_unit_reach($1, $2, $3) AS r`, [org, cmB, p2])), 'the app cannot call the unit hook directly');
+  assert.equal((await as({ orgId: org2, userId: otherOwner, role: 'owner' }, `SELECT smr_org_structure_manager($1, $2) AS m`, [org, owner]))[0].m, false,
+    'the structure manager check is no oracle about another org');
   // The app's own second wall agrees (orgClientView IN_REACH, the person page header).
   const header = async (s: string, p: string) => (await as(at(s), CLIENT_HEADER_WHO_SQL, [p, org, false, s])).length;
   assert.equal(await header(cmB, p2), 1, 'a unit member opens the person page of someone enrolled in their unit');
