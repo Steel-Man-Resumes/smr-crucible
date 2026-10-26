@@ -25,6 +25,7 @@ import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 import { oncePerInput } from "./assistant-data-tools";
 import { RESOURCE_AREAS } from "@crucible/core/src/resourceDirectoryShared";
 import { stationForJourneyStage, STATIONS } from "../refinery-nav";
+import { staffTextGate, WITHHELD_NOTE } from "../staff-ai-safety";
 
 type Core = typeof import("@crucible/core");
 
@@ -104,7 +105,9 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         if (person) { const refused = await logOpen(current, person, "tasks"); if (refused) return refused; }
         const rows = await core.listStaffTasks(current, { clientId: person });
         if (!rows) return { status: "unavailable", error: "Task access is unavailable." };
-        return { status: "ok", readAt: new Date().toISOString(), tasks: rows.slice(0, 20).map((t) => ({ id: t.id, title: t.title, dueOn: t.due_on, doneAt: t.done_at, participantId: t.client_user_id, participant: t.client_name?.split(/\s+/)[0], shared: t.shared_with_participant })), more: rows.length > 20 };
+        const gate = staffTextGate();
+        const tasks = rows.slice(0, 20).map((t) => ({ id: t.id, title: gate.pass(t.title), dueOn: t.due_on, doneAt: t.done_at, participantId: t.client_user_id, participant: t.client_name?.split(/\s+/)[0], shared: t.shared_with_participant }));
+        return { status: "ok", readAt: new Date().toISOString(), tasks, more: rows.length > 20, ...(gate.withheld ? { recordWithheld: gate.withheld, withheldNote: WITHHELD_NOTE } : {}) };
       }),
     }),
     read_participant_progress: tool({
@@ -129,9 +132,17 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         const core = await loadCore();
         const result = await core.getClientOverview(current, clientId, { tasks: await tasksOn(current.orgId) });
         if (!result.ok) return refusal(result.reason);
-        const d = result.data;
+        // The record gate (H1): staff-written text passes it before the model sees it.
+        const gate = staffTextGate();
+        const d = {
+          ...result.data,
+          openTasks: result.data.openTasks?.map((t) => ({ ...t, title: gate.pass(t.title) })) ?? null,
+          asks: result.data.asks.map((a) => ({ ...a, reason: gate.pass(a.reason) })),
+          recentNotes: result.data.recentNotes.map((n) => ({ ...n, body: gate.pass(n.body) })),
+        };
         return {
           status: "ok", readAt: new Date().toISOString(), participantId: clientId, logged: true, dataNote: DATA_NOTE,
+          ...(gate.withheld ? { recordWithheld: gate.withheld, withheldNote: WITHHELD_NOTE } : {}),
           person: {
             firstName: d.firstName, joinedOn: d.joinedAt, assignedToYou: d.assignedToYou, caseManager: d.caseManager,
             station: stationLabel(d.stage), nextStepTheySee: d.progress?.nextStepAction ?? null,
@@ -156,7 +167,11 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         const core = await loadCore();
         const result = await core.getClientChanges(current, clientId, since, { tasks: await tasksOn(current.orgId) });
         if (!result.ok) return refusal(result.reason);
-        return { status: "ok", readAt: new Date().toISOString(), participantId: clientId, logged: true, dataNote: DATA_NOTE, period: { from: result.data.from, to: result.data.to, days: span }, ...result.data,
+        // The record gate (H1): a change line can carry a task title.
+        const gate = staffTextGate();
+        const changes = result.data.changes.map((c) => ({ ...c, what: gate.pass(c.what) }));
+        return { status: "ok", readAt: new Date().toISOString(), participantId: clientId, logged: true, dataNote: DATA_NOTE, period: { from: result.data.from, to: result.data.to, days: span }, ...result.data, changes,
+          ...(gate.withheld ? { recordWithheld: gate.withheld, withheldNote: WITHHELD_NOTE } : {}),
           meaning: "Only these records. No entry means nothing was recorded here, not that nothing happened in their life." };
       }),
     }),
