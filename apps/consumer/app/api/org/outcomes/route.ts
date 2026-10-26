@@ -4,10 +4,15 @@
  *   POST { action: "record", clientId, employer, jobTitle?, startDate, hourlyWage?, hoursPerWeek?, source, verificationMethod? }
  *        { action: "check", outcomeId, dayMark, status, method, note? }
  *        { action: "end", outcomeId, endedOn, reason }
+ *        { action: "correct", outcomeId, employer, jobTitle?, startDate, hourlyWage?, hoursPerWeek?, source?, verificationMethod?, reason }
+ *        { action: "correct_check", checkId, status, method, note?, reason }
+ * A correction never overwrites history: the earlier placement values and the
+ * earlier check-in answer stay on file with who changed them, when and why
+ * (migration 102).
  */
 import { NextResponse } from "next/server";
 import {
-  getOne, listOutcomes, recordOutcome, recordRetentionCheck, endOutcome,
+  getOne, listOutcomes, recordOutcome, recordRetentionCheck, endOutcome, correctOutcome, correctRetentionCheck,
   OUTCOME_SOURCES, OUTCOME_SOURCE_LABELS, VERIFICATION_METHODS, VERIFICATION_METHOD_LABELS, END_REASONS, END_REASON_LABELS,
 } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
@@ -56,6 +61,17 @@ export async function POST(request: Request) {
   } else if (b.action === "end") {
     if (!UUID.test(String(b.outcomeId ?? ""))) return bad();
     res = await endOutcome(g.actor, String(b.outcomeId), String(b.endedOn ?? ""), String(b.reason ?? ""));
+  } else if (b.action === "correct") {
+    if (!UUID.test(String(b.outcomeId ?? ""))) return bad();
+    res = await correctOutcome(g.actor, String(b.outcomeId), {
+      employer: String(b.employer ?? ""), jobTitle: b.jobTitle ? String(b.jobTitle) : null, startDate: String(b.startDate ?? ""),
+      hourlyWage: num(b.hourlyWage), hoursPerWeek: num(b.hoursPerWeek),
+      source: b.source ? String(b.source) : null, verificationMethod: b.verificationMethod ? String(b.verificationMethod) : null,
+    }, String(b.reason ?? ""));
+  } else if (b.action === "correct_check") {
+    if (!UUID.test(String(b.checkId ?? ""))) return bad();
+    res = await correctRetentionCheck(g.actor, { checkId: String(b.checkId), status: String(b.status ?? ""), method: String(b.method ?? ""),
+      note: b.note ? String(b.note) : null, reason: String(b.reason ?? "") });
   } else return NextResponse.json({ error: "Unknown action." }, { status: 400 });
   return res.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: res.error }, { status: 400 });
 }

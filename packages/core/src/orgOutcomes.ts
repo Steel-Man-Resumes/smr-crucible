@@ -37,16 +37,83 @@ export interface Outcome {
   id: string; client_user_id: string; client_name: string | null; employer: string; job_title: string | null; start_date: string;
   hourly_wage: string | null; hours_per_week: string | null; source: string; verification_method: string | null;
   verified_by_name: string | null; verified_at: string | null; ended_on: string | null; end_reason: string | null; created_by_name: string | null;
-  checks: { day_mark: number; status: string; method: string; checked_at: string }[];
+  /** The CURRENT answer per mark. A corrected answer is in `history`, never here. */
+  checks: { id?: string; day_mark: number; status: string; method: string; checked_at: string }[];
   /** Marks whose date has arrived and have no answer yet. */
   due_marks: number[];
+  /**
+   * The audit trail (migration 102), newest first: every corrected check-in
+   * (kind "check", with the earlier and the new answer) and every change to
+   * the placement (kind "placement" for a correction, "ended" for an end
+   * recorded the first time), with who, when and the reason they gave.
+   */
+  history?: OutcomeHistoryItem[];
+}
+
+export interface OutcomeHistoryItem {
+  kind: "check" | "placement" | "ended";
+  at: string;
+  by_name: string | null;
+  reason: string | null;
+  /** check: { day_mark, from, to }. placement / ended: { field: { from, to } }. */
+  detail: Record<string, unknown>;
 }
 
 const COLS = `o.id, o.client_user_id, c.name AS client_name, o.employer, o.job_title, to_char(o.start_date, 'YYYY-MM-DD') AS start_date,
   o.hourly_wage::text, o.hours_per_week::text, o.source, o.verification_method, vb.name AS verified_by_name, o.verified_at,
   to_char(o.ended_on, 'YYYY-MM-DD') AS ended_on, o.end_reason, cb.name AS created_by_name,
-  COALESCE((SELECT json_agg(json_build_object('day_mark', k.day_mark, 'status', k.status, 'method', k.method, 'checked_at', k.checked_at) ORDER BY k.day_mark)
-              FROM retention_check k WHERE k.outcome_id = o.id), '[]'::json) AS checks`;
+  COALESCE((SELECT json_agg(json_build_object('id', k.id, 'day_mark', k.day_mark, 'status', k.status, 'method', k.method, 'checked_at', k.checked_at) ORDER BY k.day_mark)
+              FROM retention_check k WHERE k.outcome_id = o.id AND k.superseded_by IS NULL), '[]'::json) AS checks,
+  COALESCE((SELECT json_agg(json_build_object('kind', h.kind, 'at', h.at, 'by_name', h.by_name, 'reason', h.reason, 'detail', h.detail) ORDER BY h.at DESC)
+              FROM (SELECT 'check'::text AS kind, k.checked_at AS at, kb.name AS by_name, k.correction_reason AS reason,
+                           json_build_object('day_mark', k.day_mark, 'from', ok.status, 'to', k.status) AS detail
+                      FROM retention_check k JOIN retention_check ok ON ok.superseded_by = k.id LEFT JOIN users kb ON kb.id = k.checked_by
+                     WHERE k.outcome_id = o.id AND k.correction_reason IS NOT NULL
+                    UNION ALL
+                    SELECT CASE WHEN x.kind = 'ended' THEN 'ended' ELSE 'placement' END, x.corrected_at, xb.name, x.reason, x.changed::json
+                      FROM outcome_correction x LEFT JOIN users xb ON xb.id = x.corrected_by
+                     WHERE x.outcome_id = o.id) h), '[]'::json) AS history`;
+
+/**
+ * The statements this module sends, exported so the pglite test (migration
+ * 102) runs exactly these. Params are listed on each.
+ */
+export const OUTCOME_SQL = {
+  /** The projection listOutcomes uses (aliases o, c, vb, cb). */
+  cols: COLS,
+  /** $1 org, $2 sees-all, $3 actor, $4 outcome, $5 mark, $6 status, $7 method, $8 note. One CURRENT answer per mark (102). */
+  addCheck: `INSERT INTO retention_check (outcome_id, access_code_id, day_mark, status, method, note, checked_by)
+         SELECT o.id, o.access_code_id, $5::int, $6, $7, $8, $3::uuid FROM outcome_record o
+          WHERE o.id = $4::uuid AND o.access_code_id = $1::uuid AND ${REACH("o.client_user_id")}
+            AND o.start_date + ($5::int || ' days')::interval <= now()
+         ON CONFLICT (outcome_id, day_mark) WHERE superseded_by IS NULL DO NOTHING RETURNING id`,
+  /** $1 check, $2 status, $3 method, $4 note, $5 reason. A new row; the old one is kept and marked superseded. */
+  correctCheck: `SELECT smr_correct_retention_check($1::uuid, $2::text, $3::text, $4::text, $5::text) AS r`,
+  /**
+   * $1 org, $2 sees-all, $3 actor, $4 outcome, $5 employer (null keeps), $6 job title, $7 start date (null keeps),
+   * $8 wage, $9 hours, $10 source (null keeps), $11 verification method. Run after app.correction_reason is set
+   * in the same transaction: the database refuses a changed fact without one (102), and keeps every earlier value.
+   */
+  correct: `UPDATE outcome_record o SET
+            employer = COALESCE($5::text, o.employer),
+            job_title = $6::text,
+            start_date = COALESCE($7::date, o.start_date),
+            hourly_wage = $8::numeric,
+            hours_per_week = $9::numeric,
+            source = COALESCE($10::text, o.source),
+            verification_method = CASE WHEN COALESCE($10::text, o.source) = 'staff_verified' THEN COALESCE($11::text, o.verification_method) END,
+            verified_by = CASE WHEN COALESCE($10::text, o.source) <> 'staff_verified' THEN NULL
+                               WHEN o.source = 'staff_verified' AND COALESCE($11::text, o.verification_method) IS NOT DISTINCT FROM o.verification_method THEN o.verified_by
+                               ELSE $3::uuid END,
+            verified_at = CASE WHEN COALESCE($10::text, o.source) <> 'staff_verified' THEN NULL
+                               WHEN o.source = 'staff_verified' AND COALESCE($11::text, o.verification_method) IS NOT DISTINCT FROM o.verification_method THEN o.verified_at
+                               ELSE now() END
+          WHERE o.id = $4::uuid AND o.access_code_id = $1::uuid AND ${REACH("o.client_user_id")}
+          RETURNING o.id`,
+  /** $1 org, $2 sees-all, $3 actor, $4 outcome, $5 ended on, $6 reason. */
+  end: `UPDATE outcome_record o SET ended_on = $5::date, end_reason = $6
+                 WHERE o.id = $4::uuid AND o.access_code_id = $1::uuid AND o.ended_on IS NULL AND ${REACH("o.client_user_id")} RETURNING o.id`,
+} as const;
 
 function withDue(rows: Omit<Outcome, "due_marks">[]): Outcome[] {
   const today = Date.now();
@@ -112,11 +179,7 @@ export async function recordRetentionCheck(actor: OrgActor, input: { outcomeId: 
   try {
     const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
       run(sql)(
-        `INSERT INTO retention_check (outcome_id, access_code_id, day_mark, status, method, note, checked_by)
-         SELECT o.id, o.access_code_id, $5::int, $6, $7, $8, $3::uuid FROM outcome_record o
-          WHERE o.id = $4::uuid AND o.access_code_id = $1::uuid AND ${REACH("o.client_user_id")}
-            AND o.start_date + ($5::int || ' days')::interval <= now()
-         ON CONFLICT (outcome_id, day_mark) DO NOTHING RETURNING id`,
+        OUTCOME_SQL.addCheck,
         [actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId, input.outcomeId, input.dayMark, input.status, input.method, input.note?.trim() || null]
       ),
     ]);
@@ -129,12 +192,78 @@ export async function endOutcome(actor: OrgActor, outcomeId: string, endedOn: st
   if (!(END_REASONS as readonly string[]).includes(reason) || !/^\d{4}-\d{2}-\d{2}$/.test(endedOn)) return { ok: false, error: "A date and a reason are needed." };
   try {
     const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
-      run(sql)(`UPDATE outcome_record o SET ended_on = $5::date, end_reason = $6
-                 WHERE o.id = $4::uuid AND o.access_code_id = $1::uuid AND o.ended_on IS NULL AND ${REACH("o.client_user_id")} RETURNING o.id`,
+      run(sql)(OUTCOME_SQL.end,
         [actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId, outcomeId, endedOn, reason]),
     ]);
     return rows[0] ? { ok: true } : { ok: false, error: "Already ended, or not someone on your caseload." };
   } catch { return { ok: false, error: "The end date cannot be before the start date." }; }
+}
+
+/** A reason a person typed for a correction: 3 to 500 characters, trimmed. Pure, for the route and the tests. */
+export function correctionReason(raw: unknown): string | null {
+  const t = typeof raw === "string" ? raw.trim().replace(/\s+/g, " ") : "";
+  return t.length >= 3 && t.length <= 500 ? t : null;
+}
+
+const CORRECT_CHECK_ERRORS: Record<string, string> = {
+  refused: "You do not have access to that.",
+  not_found: "That check-in was already corrected, or is not someone on your caseload.",
+  invalid: "Say what changed in a few words, and pick an answer that fits. 'Could not reach them' goes only with 'do not know'.",
+  unchanged: "That is the answer already on file.",
+};
+
+/**
+ * Correct a retention check-in. The earlier answer stays on file, marked as
+ * replaced; the new answer is a new row with the reason (migration 102). The
+ * database function re-checks everything: the actor, outcome.write, reach.
+ */
+export async function correctRetentionCheck(actor: OrgActor, input: { checkId: string; status: string; method: string; note?: string | null; reason: string }): Promise<Result> {
+  if (!canWrite(actor)) return { ok: false, error: "You do not have access to that." };
+  const reason = correctionReason(input.reason);
+  if (!reason) return { ok: false, error: "Say why you are correcting it, in a few words." };
+  if ((input.status === "unknown") !== (input.method === "could_not_reach")) return { ok: false, error: CORRECT_CHECK_ERRORS.invalid };
+  try {
+    const [rows] = await runScoped<[{ r: string }[]]>(scopeOf(actor), (sql) => [
+      run(sql)(OUTCOME_SQL.correctCheck, [input.checkId, input.status, input.method, input.note?.trim() || null, reason]),
+    ]);
+    const r = rows[0]?.r ?? "refused";
+    return r === "ok" ? { ok: true } : { ok: false, error: CORRECT_CHECK_ERRORS[r] ?? "That did not save." };
+  } catch { return { ok: false, error: "That did not save." }; }
+}
+
+export interface OutcomeCorrection {
+  employer: string; jobTitle?: string | null; startDate: string; hourlyWage?: number | null; hoursPerWeek?: number | null;
+  source?: string | null; verificationMethod?: string | null;
+}
+
+/**
+ * Correct a placement's facts. The row keeps its id (its check-ins hang off
+ * it); every earlier value is kept in outcome_correction by a database
+ * trigger, with the reason, which the database requires (migration 102).
+ */
+export async function correctOutcome(actor: OrgActor, outcomeId: string, input: OutcomeCorrection, rawReason: string): Promise<Result> {
+  if (!canWrite(actor)) return { ok: false, error: "You do not have access to that." };
+  const reason = correctionReason(rawReason);
+  if (!reason) return { ok: false, error: "Say why you are correcting it, in a few words." };
+  if ((input.employer ?? "").trim().length < 2) return { ok: false, error: "Which employer?" };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate ?? "")) return { ok: false, error: "A start date is needed." };
+  const source = input.source ?? null;
+  if (source !== null && !(OUTCOME_SOURCES as readonly string[]).includes(source)) return { ok: false, error: "Say how you know." };
+  if (source === "staff_verified" && !(VERIFICATION_METHODS as readonly string[]).includes(input.verificationMethod ?? "")) {
+    return { ok: false, error: "A confirmed placement has to say how it was confirmed." };
+  }
+  try {
+    const [, rows] = await runScoped<[unknown, { id: string }[]]>(scopeOf(actor), (sql) => [
+      // Transaction-local: read by the history trigger, gone when this request ends.
+      sql`SELECT set_config('app.correction_reason', ${reason}, true)`,
+      run(sql)(OUTCOME_SQL.correct, [
+        actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId, outcomeId,
+        input.employer.trim(), input.jobTitle?.trim() || null, input.startDate, input.hourlyWage ?? null, input.hoursPerWeek ?? null,
+        source, source === "staff_verified" ? input.verificationMethod ?? null : null,
+      ]),
+    ]);
+    return rows[0] ? { ok: true } : { ok: false, error: "Not someone on your caseload." };
+  } catch { return { ok: false, error: "Check the wage, hours and dates. An end date cannot be before the start date." }; }
 }
 
 /** What the organization has on file about ME. A participant may always read this. */
