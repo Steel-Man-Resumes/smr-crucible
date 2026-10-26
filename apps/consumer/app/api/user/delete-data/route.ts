@@ -66,6 +66,7 @@ import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { settingsRefusal } from "@/lib/settings-guard";
+import { deletionProofError } from "@/lib/deletion-confirmation";
 import {
   query,
   queryAsUser,
@@ -90,6 +91,9 @@ export async function DELETE(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
+  if (body?.expectedUserId !== undefined && body.expectedUserId !== userId) {
+    return NextResponse.json({ error: "The signed-in account changed. Reload Settings before deleting anything." }, { status: 409 });
+  }
   if (body?.confirm !== true) {
     return NextResponse.json(
       { error: "Set confirm: true to acknowledge this permanently deletes your data." },
@@ -111,22 +115,13 @@ export async function DELETE(req: Request) {
     "SELECT password_hash FROM users WHERE id = $1",
     [userId]
   );
-  if (account?.password_hash) {
-    const password = typeof body?.password === "string" ? body.password : "";
-    const valid = password && (await bcrypt.compare(password, account.password_hash));
-    if (!valid) {
-      return NextResponse.json(
-        { error: "Enter your password to confirm account deletion." },
-        { status: 400 }
-      );
-    }
-  } else {
-    if (body?.typedConfirmation !== "DELETE") {
-      return NextResponse.json(
-        { error: 'Type "DELETE" in typedConfirmation to confirm account deletion.' },
-        { status: 400 }
-      );
-    }
+  if (!account) {
+    return NextResponse.json({ error: "Sign in again before deleting data." }, { status: 401 });
+  }
+  // Password accounts prove the password; no-password accounts type "DELETE".
+  const proofError = await deletionProofError(account.password_hash, body, (password, hash) => bcrypt.compare(password, hash));
+  if (proofError) {
+    return NextResponse.json(proofError, { status: 400 });
   }
 
   try {
@@ -241,7 +236,7 @@ export async function DELETE(req: Request) {
   } catch (err: any) {
     console.error("Data deletion error:", err?.message || err);
     return NextResponse.json(
-      { error: "Failed to delete data. Please try again." },
+      { error: "Deletion did not finish. Some data may already have been removed. Please try again." },
       { status: 500 }
     );
   }

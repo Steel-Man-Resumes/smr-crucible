@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { useSearchParams } from "next/navigation";
 import { TBtn } from "@crucible/consumer-ui";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
@@ -109,19 +109,13 @@ function ResetPasswordForm() {
       } catch {
         // ignore
       }
+      setPassword("");
+      setConfirmPassword("");
       setStatus("done");
     } catch {
       setError("Something went wrong. Please try again.");
       setStatus("idle");
     }
-  }
-
-  async function signInNow() {
-    await signIn("password-login", {
-      email,
-      password,
-      callbackUrl: "/dashboard",
-    });
   }
 
   if (link === undefined) {
@@ -158,11 +152,11 @@ function ResetPasswordForm() {
             Password reset
           </h1>
           <p className="text-base text-t-phos-dim mb-6">
-            Your password has been updated. You can sign in now.
+            Your password has been updated. Sign in with your new password. If you use two-step verification, we&apos;ll ask for your code too.
           </p>
-          <TBtn onClick={signInNow} className="w-full">
-            Sign in
-          </TBtn>
+          <Link href={`/login?email=${encodeURIComponent(email)}`} className="t-focus inline-block px-4 py-3 text-t-amber-bright underline">
+            Go to sign in
+          </Link>
         </div>
       </main>
     );
@@ -185,9 +179,8 @@ function ResetPasswordForm() {
             <label htmlFor="password" className="block text-sm font-medium text-t-white mb-1">
               New password
             </label>
-            <input
+            <PasswordInput
               id="password"
-              type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder={`New password (${PASSWORD_HINT})`}
@@ -202,9 +195,8 @@ function ResetPasswordForm() {
             <label htmlFor="confirm" className="block text-sm font-medium text-t-white mb-1">
               Confirm password
             </label>
-            <input
+            <PasswordInput
               id="confirm"
-              type="password"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               placeholder="Confirm password"
@@ -215,7 +207,7 @@ function ResetPasswordForm() {
             />
           </div>
 
-          {error && <p className="text-sm text-t-red">{error}</p>}
+          {error && <p role="alert" className="text-sm text-t-red">{error}</p>}
 
           <TBtn
             type="submit"
