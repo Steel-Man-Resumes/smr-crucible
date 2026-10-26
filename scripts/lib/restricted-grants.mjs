@@ -38,6 +38,10 @@ export const RESTRICTED_GRANTS = {
   outcome_record: ["SELECT", "INSERT", "UPDATE"],
   retention_check: ["SELECT", "INSERT"],
   staff_suggestion: ["SELECT", "INSERT", "UPDATE"],
+  // Customization (104): a field definition is retired, never deleted.
+  custom_field_def: ["SELECT", "INSERT", "UPDATE"],
+  // Value history (104): append-only, written only by its trigger.
+  custom_field_value_version: ["SELECT"],
   // Employer directory (061). Platform-admin tables: RLS decides who, and
   // nothing is ever deleted. The internal views run as the owner and see
   // through every policy, so the app holds nothing on them at all.
@@ -164,6 +168,9 @@ export const APP_FUNCTIONS = [
   "smr_org_structure_manager(uuid, uuid)",
   "smr_enrollment_writer(uuid, uuid)",
   "smr_enrollment_assigner(uuid, uuid)",
+  // 104: the manager check inside the custom field, view and layout policies.
+  "smr_org_manager(uuid)",
+  "smr_org_staff_session(uuid)",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -176,6 +183,10 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   "smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)",
   // Answers "is this person a volunteer" for any org: definer-only.
   "smr_is_volunteer(uuid, uuid)",
+  // 104: activity trigger functions (definer); fired by triggers, never called.
+  "custom_field_activity()",
+  "org_customization_activity()",
+  "custom_field_value_keep_version()",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */

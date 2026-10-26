@@ -38,7 +38,15 @@ export async function getStaffPrefs(actor: OrgActor): Promise<StaffPrefsState> {
 
 /** Replace this person's own choices. Pass {} to go back to the org's defaults. */
 export async function setOwnStaffPrefs(actor: OrgActor, prefs: unknown): Promise<void> {
-  await query(`UPDATE users SET staff_prefs = $2::jsonb WHERE id = $1`, [actor.userId, JSON.stringify(normalizeStaffPrefs(prefs))]);
+  // viewsMovedTo is server-owned (savedViews.ts, migrateLegacySavedViews): it
+  // records which organizations already got this person's old saved sorts as
+  // saved views. The normalizer never lets a client set it, and this write
+  // keeps it, so "Back to defaults" cannot bring deleted views back.
+  await query(
+    `UPDATE users SET staff_prefs = $2::jsonb || CASE WHEN jsonb_typeof(staff_prefs->'viewsMovedTo') = 'array'
+       THEN jsonb_build_object('viewsMovedTo', staff_prefs->'viewsMovedTo') ELSE '{}'::jsonb END WHERE id = $1`,
+    [actor.userId, JSON.stringify(normalizeStaffPrefs(prefs))]
+  );
 }
 
 /** Replace the organization's defaults. Owner only (`org.settings.manage`). */

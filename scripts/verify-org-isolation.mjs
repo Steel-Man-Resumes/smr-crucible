@@ -392,6 +392,7 @@ async function main() {
   await reachChecks();
   await aiSkillRunChecks();
   await structureChecks();
+  await customizationChecks();
 }
 
 /**
@@ -744,6 +745,91 @@ async function aiSkillRunChecks() {
   check("a volunteer (no outcome or insight rights) gets no period numbers", (await core.getOutcomesForPeriod(await A(vol), {})) === null);
   const period = await core.getOutcomesForPeriod(aCm, { from: "2020-01-01", to: "2030-12-31" });
   check("a case manager's period numbers are labelled as their caseload", period?.scope === "people on your caseload", JSON.stringify(period?.scope));
+}
+
+/**
+ * Customization (104, house build L4): custom fields, values, saved views and
+ * role layouts. The claims: another organization reads none of it; a staff
+ * member who does not reach a participant can neither read nor write that
+ * participant's values, through core OR through SQL written by hand; only a
+ * manager defines fields, shares views or sets layouts; the old saved sorts
+ * move over once.
+ */
+async function customizationChecks() {
+  console.log("\n  -- custom fields, views and layouts --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ t }] = await sql`SELECT to_regclass('public.custom_field_value') AS t`;
+  if (!t) { console.log("  note  104 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("cf-owner"), cm = await mkUser("cf-cm"), other = await mkUser("cf-other"), spy = await mkUser("cf-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOCF" + uniq}, ${P + " fields"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOCF2" + uniq}, ${P + " fields2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("cf-pat");
+  await core.redeemAccessCode(pat, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner})`;
+  // An old saved sort on the case manager's account, to be moved over once.
+  await sql`UPDATE users SET staff_prefs = ${JSON.stringify({ savedViews: [{ name: "My quiet", sort: "last_active", status: "behind", staffId: "" }] })}::jsonb WHERE id = ${cm}`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aOwner = await A(owner), aCm = await A(cm), aOther = await A(other), aSpy = await A(spy);
+
+  check("staff cannot define a field", (await core.createFieldDef(aCm, { label: "Shoe size", entity: "participant", type: "text" })).ok === false);
+  const f1 = await core.createFieldDef(aOwner, { label: "Housing", entity: "participant", type: "single_select", options: ["Stable", "Shelter"] });
+  const f2 = await core.createFieldDef(aOwner, { label: "Parole end", entity: "participant", type: "date" });
+  check("the owner defines fields", f1.ok && f2.ok, JSON.stringify([f1, f2]).slice(0, 200));
+  check("a field named for a record is sensitive whatever was asked", f2.ok && f2.def.sensitive === true);
+  check("another organization sees none of the definitions", (await core.listFieldDefs(aSpy)).length === 0);
+
+  const set = await core.setFieldValues(aCm, "participant", pat, { housing: "shelter", parole_end: "2027-01-15" });
+  check("the assigned case manager fills in values", set.ok === true, JSON.stringify(set).slice(0, 200));
+  check("a colleague who is not assigned cannot", (await core.setFieldValues(aOther, "participant", pat, { housing: "stable" })).ok === false);
+  check("and reads none of them", Object.keys(await core.getFieldValues(aOther, "participant")).length === 0);
+  check("another organization reads none of them", Object.keys(await core.getFieldValues(aSpy, "participant")).length === 0);
+  check("the owner reads them", (await core.getFieldValues(aOwner, "participant"))[pat]?.housing === "shelter");
+  check("a bad value is refused with a plain reason", (await core.setFieldValues(aCm, "participant", pat, { housing: "mansion" })).ok === false);
+
+  // The reach POLICY, with the app-level check out of the way: SQL by hand as the colleague.
+  const raw = async (u, orgId, stmt) => { try { const r = await app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${u}, true)`, stmt(app)]); return r[2]; } catch (e) { return String(e.message); } };
+  const seen = await raw(other, org.id, (a) => a`SELECT value FROM custom_field_value`);
+  check("the reach policy: a colleague's own SQL reads no value about someone they do not reach", Array.isArray(seen) && seen.length === 0, JSON.stringify(seen));
+  const wrote = await raw(other, org.id, (a) => a`UPDATE custom_field_value SET value = '"stable"'::jsonb RETURNING 1`);
+  check("and changes none", Array.isArray(wrote) && wrote.length === 0, JSON.stringify(wrote));
+  const ins = await raw(other, org.id, (a) => a`INSERT INTO custom_field_value (def_id, entity_id, access_code_id, participant_user_id, value) VALUES (${f1.def.id}, ${pat}, ${org.id}, ${pat}, '"stable"'::jsonb) ON CONFLICT DO NOTHING RETURNING 1`);
+  check("and writes none", !Array.isArray(ins) || ins.length === 0, JSON.stringify(ins));
+  const foreign = await raw(spy, org2.id, (a) => a`SELECT value FROM custom_field_value WHERE access_code_id = ${org.id}`);
+  check("another organization's SQL reads none", Array.isArray(foreign) && foreign.length === 0);
+  const changed = await core.setFieldValues(aCm, "participant", pat, { housing: "stable" });
+  const hist = await core.getFieldValueHistory(aOwner, "participant", pat);
+  check("changing a value keeps the earlier one, for managers", changed.ok && hist.some((h) => h.key === "housing" && h.value === "shelter" && h.change === "changed"), JSON.stringify(hist).slice(0, 200));
+  check("staff who do not manage settings get no history", (await core.getFieldValueHistory(aCm, "participant", pat)).length === 0);
+  const seenHist = await raw(other, org.id, (a) => a`SELECT value FROM custom_field_value_version`);
+  check("the reach policy: a colleague's own SQL reads no earlier value about someone they do not reach", Array.isArray(seenHist) && seenHist.length === 0, JSON.stringify(seenHist));
+  const forged = await raw(owner, org.id, (a) => a`DELETE FROM custom_field_value_version`);
+  check("history cannot be erased by the app", typeof forged === "string" && /permission denied/i.test(forged), JSON.stringify(forged));
+  const lowered = await core.updateFieldDef(aOwner, f2.def.id, { sensitive: false });
+  check("a sensitive field cannot be made ordinary", lowered.ok === false);
+  const delDef = await raw(owner, org.id, (a) => a`DELETE FROM custom_field_def WHERE id = ${f1.def.id}`);
+  check("a field cannot be deleted, even by the owner", typeof delDef === "string" && /permission denied/i.test(delDef), JSON.stringify(delDef));
+
+  const moved = await core.migrateLegacySavedViews(aCm);
+  const again = await core.migrateLegacySavedViews(aCm);
+  const views = await core.listSavedViews(aCm, "caseload");
+  check("the old saved sort moves over once, as a personal view", moved === 1 && again === 0 && views.filter((v) => v.name === "My quiet").length === 1, `${moved}/${again}/${views.length}`);
+  const [{ prefs }] = await sql`SELECT staff_prefs AS prefs FROM users WHERE id = ${cm}`;
+  check("and the old list is still there", Array.isArray(prefs.savedViews) && prefs.savedViews.length === 1);
+  check("a colleague does not see that personal view", (await core.listSavedViews(aOther, "caseload")).every((v) => v.name !== "My quiet"));
+  check("staff cannot share a view with everyone", (await core.createSavedView(aCm, { surface: "caseload", name: "Everyone's", shared: true })).ok === false);
+  const sv = await core.createSavedView(aOwner, { surface: "caseload", name: "Interviewing", shared: true, roleDefault: "staff", definition: { filters: [{ field: "status", op: "any_of", value: ["active"] }] } });
+  check("the owner shares one, the first view for staff", sv.ok && (await core.listSavedViews(aOther, "caseload")).some((v) => v.name === "Interviewing" && v.roleDefault === "staff"));
+  check("another organization sees no views", (await core.listSavedViews(aSpy, "caseload")).length === 0);
+
+  check("staff cannot set a role layout", (await core.setRoleLayout(aCm, "staff", "today", { order: ["quiet"], hidden: [] })).ok === false);
+  check("the owner can", (await core.setRoleLayout(aOwner, "staff", "today", { order: ["quiet"], hidden: ["unassigned"] })).ok === true);
+  check("staff get it", (await core.getMyRoleLayout(aOther)).today?.hidden?.includes("unassigned") === true);
+  check("another organization does not", (await core.getRoleLayouts(aSpy)).today.staff === undefined);
 }
 
 /**

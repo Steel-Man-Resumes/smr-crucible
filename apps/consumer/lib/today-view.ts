@@ -11,6 +11,8 @@ export interface TodayPayload {
   items: TodayItemView[];
   sections: { key: string; label: string }[];
   hidden: string[];
+  /** Sections this person folded (heading and count only). Optional: older payloads have none. */
+  collapsed?: string[];
   canAddTasks: boolean;
   reach?: { joined: number; sharing: number } | null;
   volunteer?: boolean;
@@ -110,4 +112,10 @@ export function nobodySharesLine(d: TodayPayload): string | null {
   return r.joined === 1
     ? "1 person joined and has not turned on progress sharing yet, so nothing about their work shows here. That is their choice."
     : `${r.joined} people joined. None has turned on progress sharing yet, so nothing about their work shows here. That is their choice.`;
+}
+
+/** Fold or unfold one section: the new list of folded keys (pure, for the page and its test). */
+export function toggleCollapsed(collapsed: readonly string[] | undefined, key: string): string[] {
+  const now = collapsed ?? [];
+  return now.includes(key) ? now.filter((k) => k !== key) : [...now, key];
 }

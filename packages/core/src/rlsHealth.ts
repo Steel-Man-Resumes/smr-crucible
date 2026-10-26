@@ -79,6 +79,12 @@ export const RLS_PROTECTED_TABLES = [
   "org_unit",
   "unit_member",
   "enrollment",
+  // Customization (migration 104): org-scoped; values also reach-restricted
+  "custom_field_def",
+  "custom_field_value",
+  "custom_field_value_version",
+  "saved_view",
+  "org_role_layout",
 ] as const;
 
 export interface RlsHealth {
