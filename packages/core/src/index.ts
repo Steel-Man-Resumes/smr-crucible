@@ -32,6 +32,12 @@ export * from './orgToday';
 export * from './orgOutcomes';
 export * from './orgActivity';
 export * from './orgActivityShared';
+// Staff workflow (migration 105, house lane L5): referrals, drafts, search, the person timeline.
+export * from './orgWorkflowShared';
+export * from './orgReferrals';
+export * from './orgDrafts';
+export * from './orgSearch';
+export * from './orgTimeline';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './artifactRevision';

@@ -85,6 +85,12 @@ export const RLS_PROTECTED_TABLES = [
   "custom_field_value_version",
   "saved_view",
   "org_role_layout",
+  // Staff workflow (migration 105): owner-only drafts, the org's contact
+  // record, closed-loop referrals and their trigger-written history
+  "staff_draft",
+  "participant_contact",
+  "referral",
+  "referral_event",
 ] as const;
 
 export interface RlsHealth {

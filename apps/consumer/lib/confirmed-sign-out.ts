@@ -1,6 +1,7 @@
 import { signOut } from "next-auth/react";
 import { clearTailorBatchStorage } from "./tailor-batch";
 import { clearOrgNoteDrafts } from "./org-note-draft";
+import { clearStaffDraftCache } from "./staff-draft-cache";
 import { clearRunSessionStorage } from "./refinery-guards";
 
 /** Keep browser work until the server confirms the account is signed out. */
@@ -19,6 +20,7 @@ export async function confirmedSignOut(): Promise<void> {
         // tab's run-derived sessionStorage never outlive the account that wrote them.
         clearTailorBatchStorage();
         clearOrgNoteDrafts();
+        clearStaffDraftCache();
         clearRunSessionStorage();
         return;
       }

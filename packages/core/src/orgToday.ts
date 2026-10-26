@@ -22,6 +22,7 @@ import { getPartnerCohort, getInvitedNotSharing } from "./partnerDashboard";
 import { getQuietAfterDays } from "./orgStaffPerformance";
 import { listStaffTasks } from "./staffTasks";
 import { listOutcomes } from "./orgOutcomes";
+import { listOverdueReferralsForToday } from "./orgReferrals";
 import { WORK_QUEUE_TEXT_VERSIONS } from "./sharingScopes";
 
 export { TODAY_SECTIONS, TODAY_SECTION_LABELS, INTERVIEW_STALE_DAYS, FOLLOWUP_OVERDUE_DAYS, buildTodayItems } from "./orgTodayItems";
@@ -139,6 +140,8 @@ export async function getTodayView(actor: OrgActor): Promise<TodayView | null> {
     apps, answered, awaiting,
     cohort: cohort.clients,
     invited: canAssignAll ? await getInvitedNotSharing(actor.orgId, actor.userId).catch(() => []) : [],
+    // Referrals (migration 105). A database without the table yet gives none, never an error page.
+    referrals: await listOverdueReferralsForToday(actor).catch(() => []),
   }, Date.now());
   return {
     items,

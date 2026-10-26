@@ -1,6 +1,7 @@
 import { clearForgeBrowserKeys } from "./refinery-guards";
 import { clearTailorBatchStorage } from "./tailor-batch";
 import { clearOrgNoteDrafts } from "./org-note-draft";
+import { clearStaffDraftCache } from "./staff-draft-cache";
 
 type LocalStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type SessionStore = Pick<Storage, "length" | "key" | "removeItem" | "getItem">;
@@ -27,7 +28,8 @@ function browserSession(): SessionStore | null {
 /**
  * Everything this browser holds for the account that just left: the Forge run,
  * Refinery-derived keys, account extras, this tab's run sessionStorage, the
- * multi-job tailoring queue and staff note drafts (other people's data).
+ * multi-job tailoring queue, staff note drafts and autosaved staff drafts
+ * (other people's data).
  * Used after an account switch and after deletion, so the next person on a
  * shared computer inherits nothing. One list, so the call sites cannot drift.
  */
@@ -38,6 +40,8 @@ export function clearAccountBrowserState(
   clearForgeBrowserKeys(local, session);
   clearTailorBatchStorage(session);
   clearOrgNoteDrafts(session);
+  // Unsent autosaved staff drafts (house lane L5, sessionStorage): words about other people.
+  clearStaffDraftCache(session);
   if (!local) return;
   for (const key of ACCOUNT_SWITCH_EXTRA_KEYS) {
     try {
