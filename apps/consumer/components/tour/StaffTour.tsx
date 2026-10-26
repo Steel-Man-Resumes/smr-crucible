@@ -25,6 +25,8 @@ import { TOURS } from '@/lib/tour/registry';
 import { CRM_ENDING_INDEX, CRM_TOUR_COPY, applicableBeats, onBeatPage, resumeStop, stopForBeat, type CrmBeat } from '@/lib/tour/crm-beats';
 import { STAFF_TOUR_HOME, STAFF_TOUR_OPEN_EVENT, firstPersonFromCohort, isDemoOrg, personIdFromRow, staffTourAllowed, staffTourRequested } from '@/lib/tour/staff-tour';
 import { lockPageForTour, leaveAction } from '@/lib/tour/page-lock';
+import { isRetiredRun, retiredRun, runReplacedError, saveFailureAction, tourSaveFailure } from '@/lib/tour/run-conflict';
+import { RunConflictNotice } from './RunConflictNotice';
 import './entrance-tour.css';
 
 const DEF = TOURS.crm;
@@ -71,6 +73,8 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState('');
   const [unsavedWarning, setUnsavedWarning] = useState(false);
+  /** The run is open in another tab or window: the tour stopped and says so (lib/tour/run-conflict.ts). */
+  const [conflict, setConflict] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const slotRef = useRef<Slot | null>(null);
   const beatsRef = useRef<CrmBeat[]>([]);
@@ -114,14 +118,14 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
     lastWrite.current = body;
     if (action === 'start') pendingStart.current = body;
     const operation = queue.current.catch(() => {}).then(async () => {
-      if (!alive.current || run.current.id !== body.runId || run.current.account !== current.account) throw new Error('This tour was replaced by a newer run.');
+      if (!alive.current || run.current.id !== body.runId || run.current.account !== current.account) throw runReplacedError();
       const send = async (write: Write): Promise<Saved> => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
         try {
           const response = await fetch('/api/onboarding/tour', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Orientation-Account': current.account }, body: JSON.stringify(write), signal: controller.signal, keepalive: true });
           const result = await response.json().catch(() => null);
-          if (!response.ok || result?.ok !== true || result.runId !== write.runId || result.sequence !== write.sequence) throw new Error(result?.error || 'Your place could not be saved.');
+          if (!response.ok || result?.ok !== true || result.runId !== write.runId || result.sequence !== write.sequence) throw tourSaveFailure(result?.error || 'Your place could not be saved.', response.ok ? null : response.status);
           return result as Saved;
         } finally { clearTimeout(timeout); }
       };
@@ -135,10 +139,27 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
     return operation;
   }, []);
 
+  /**
+   * The run was replaced (another tab or window, or the account changed): close the player,
+   * which releases the page lock through the lock effect's cleanup (inert, scroll, focus), the
+   * same path pause takes, but write nothing. The retired identity fails every queued write for
+   * the old run before it is sent.
+   */
+  const stopForConflict = useCallback(() => {
+    run.current = retiredRun(); pendingStart.current = null; lastWrite.current = null;
+    requestController.current?.abort(); setLoading(false);
+    expectedHref.current = null; setActive(false); onNavigationReveal?.(false);
+    setNotice(''); setError(''); setSaveError(''); setConflict(true);
+  }, [onNavigationReveal]);
+
   const save = useCallback((action: Write['action'], stop: number) => {
     const identity = run.current;
-    void persist(action, stop).catch(e => { if (alive.current && run.current === identity) setSaveError(e instanceof Error && e.name !== 'AbortError' ? e.message : CRM_TOUR_COPY.saveFailed); });
-  }, [persist]);
+    void persist(action, stop).catch(e => {
+      const next = saveFailureAction(e, alive.current && run.current === identity && !isRetiredRun(identity));
+      if (next === 'stop') stopForConflict();
+      else if (next === 'warn') setSaveError(e instanceof Error && e.name !== 'AbortError' ? e.message : CRM_TOUR_COPY.saveFailed);
+    });
+  }, [persist, stopForConflict]);
 
   const enter = useCallback(async (slot: Slot, resume: boolean, signal: AbortSignal) => {
     if (dirty.current) { setUnsavedWarning(true); return; }
@@ -163,7 +184,7 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
     run.current = { id: resume && slot.runId ? slot.runId : crypto.randomUUID(), sequence: resume ? slot.sequence ?? 0 : 0, account: slot.accountId };
     chosen.current = { runId: run.current.id, person, list };
     completed.current = false;
-    beatRef.current = at; savedGroup.current = groupOf(list, at); setStart(at); setAccountId(slot.accountId); setError(''); setNotice(''); setActive(true);
+    beatRef.current = at; savedGroup.current = groupOf(list, at); setStart(at); setAccountId(slot.accountId); setError(''); setNotice(''); setConflict(false); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!(resume && slot.runId)) save('start', canonical(at));
   }, [capabilities, save]);
@@ -262,10 +283,12 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
       completed.current = true;
       if (slotRef.current) slotRef.current = { ...slotRef.current, inProgress: false };
     } catch (e) {
-      if (alive.current && run.current === identity) setSaveError(e instanceof Error ? e.message : 'Your finish could not be confirmed. Retry safely.');
+      const next = saveFailureAction(e, alive.current && run.current === identity && !isRetiredRun(identity));
+      if (next === 'stop') stopForConflict();
+      else if (next === 'warn') setSaveError(e instanceof Error ? e.message : 'Your finish could not be confirmed. Retry safely.');
       throw e instanceof Error ? e : new Error('Your finish could not be confirmed. Retry safely.');
     }
-  }, [persist]);
+  }, [persist, stopForConflict]);
 
   const done = useCallback(() => {
     setActive(false); onNavigationReveal?.(false); setNotice(''); setSaveError('');
@@ -280,8 +303,9 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
 
   if (!mounted) return null;
   if (!active) return <>
+    {conflict && <RunConflictNotice onDismiss={() => setConflict(false)} />}
     {unsavedWarning && <div className="et-notice" role="status"><p>{CRM_TOUR_COPY.unsaved}</p><button onClick={() => { dirty.current = false; setUnsavedWarning(false); void load('replay'); }}>{CRM_TOUR_COPY.unsavedConfirm}</button><button onClick={() => setUnsavedWarning(false)}>{CRM_TOUR_COPY.unsavedStay}</button></div>}
-    {(notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p>
+    {!conflict && (notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p>
       <button disabled={loading} onClick={() => void load(slotRef.current?.inProgress || notice ? 'resume' : 'replay')}>{loading ? CRM_TOUR_COPY.loading : CRM_TOUR_COPY.resume}</button>
       {notice && <button disabled={loading} onClick={() => void load('replay')}>{CRM_TOUR_COPY.startOver}</button>}
       <button onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>{CRM_TOUR_COPY.dismiss}</button></div>}
