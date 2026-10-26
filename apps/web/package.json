@@ -15,7 +15,7 @@
     "bullmq": "^5.69.3",
     "framer-motion": "^11.0.0",
     "ioredis": "^5.9.3",
-    "next": "^15.5.27",
+    "next": "^15.5.28",
     "next-auth": "^5.0.0-beta.32",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
