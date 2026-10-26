@@ -28,7 +28,7 @@ import { useOrgTerms, type OrgWords } from "@/lib/use-org-terms";
 
 interface Unit extends UnitLite { short_code: string | null; description: string | null; starts_on: string | null; ends_on: string | null; closed_at: string | null }
 interface Member { org_unit_id: string; user_id: string; role_in_unit: UnitRole; name: string | null }
-interface StaffOption { user_id: string; name: string | null; role: string }
+interface StaffOption { user_id: string; name: string | null; role: string; volunteer?: boolean }
 interface Data { units: Unit[]; members: Member[]; staff: StaffOption[]; countsArePartial: boolean; ready: boolean; canManage: boolean; canEnroll: boolean }
 
 const btn = "t-focus min-h-[44px] px-3 py-2 text-sm border rounded-[4px]";
@@ -267,6 +267,8 @@ function StaffPanel({ unit, members, staff, t, act }: { unit: Unit; members: Mem
   const options = staff.filter((s) => !here.has(s.user_id));
   const [who, setWho] = useState("");
   const [role, setRole] = useState<UnitRole>("member");
+  const isVolunteer = (id: string) => !!staff.find((s) => s.user_id === id)?.volunteer;
+  const pickedVolunteer = isVolunteer(who);
   const id = `staff-${unit.id}`;
   return (
     <div className="px-4 pb-4">
@@ -279,7 +281,7 @@ function StaffPanel({ unit, members, staff, t, act }: { unit: Unit; members: Mem
               <label className="sr-only" htmlFor={`${id}-${m.user_id}`}>Role of {m.name || "this person"} in {unit.name}</label>
               <select id={`${id}-${m.user_id}`} value={m.role_in_unit} className={field}
                 onChange={(e) => act({ action: "set_member", unitId: unit.id, userId: m.user_id, role: e.target.value }, `${m.name || "They"} is now ${UNIT_ROLE_INFO[e.target.value as UnitRole].label.toLowerCase()} here.`)}>
-                {UNIT_ROLES.map((r) => <option key={r} value={r}>{UNIT_ROLE_INFO[r].label}</option>)}
+                {UNIT_ROLES.filter((r) => !isVolunteer(m.user_id) || r === "viewer" || r === m.role_in_unit).map((r) => <option key={r} value={r}>{UNIT_ROLE_INFO[r].label}</option>)}
               </select>
               <button type="button" className={quiet} onClick={() => act({ action: "remove_member", unitId: unit.id, userId: m.user_id }, `${m.name || "They"} left ${unit.name}.`)}>Remove</button>
             </span>
@@ -289,22 +291,27 @@ function StaffPanel({ unit, members, staff, t, act }: { unit: Unit; members: Mem
       {options.length > 0 ? (
         <form className="flex flex-wrap gap-2 items-end" onSubmit={async (e) => {
           e.preventDefault(); if (!who) return;
-          if (await act({ action: "set_member", unitId: unit.id, userId: who, role }, "Added.")) setWho("");
+          if (await act({ action: "set_member", unitId: unit.id, userId: who, role: pickedVolunteer ? "viewer" : role }, "Added.")) setWho("");
         }}>
           <div className="flex-1 min-w-[12rem]">
             <label htmlFor={`${id}-who`} className="block text-xs text-t-phos-dim mb-1">Add a {t.staff_member}</label>
-            <select id={`${id}-who`} value={who} onChange={(e) => setWho(e.target.value)} className={`${field} w-full`}>
+            <select id={`${id}-who`} value={who} onChange={(e) => { setWho(e.target.value); if (isVolunteer(e.target.value)) setRole("viewer"); }} className={`${field} w-full`}>
               <option value="">Choose...</option>
-              {options.map((s) => <option key={s.user_id} value={s.user_id}>{s.name || "Unnamed"}</option>)}
+              {options.map((s) => <option key={s.user_id} value={s.user_id}>{s.name || "Unnamed"}{s.volunteer ? " (volunteer)" : ""}</option>)}
             </select>
           </div>
           <div>
             <label htmlFor={`${id}-role`} className="block text-xs text-t-phos-dim mb-1">As</label>
-            <select id={`${id}-role`} value={role} onChange={(e) => setRole(e.target.value as UnitRole)} className={field}>
-              {UNIT_ROLES.map((r) => <option key={r} value={r}>{UNIT_ROLE_INFO[r].label}</option>)}
+            <select id={`${id}-role`} value={pickedVolunteer ? "viewer" : role} onChange={(e) => setRole(e.target.value as UnitRole)} className={field} aria-describedby={pickedVolunteer ? `${id}-vol` : undefined}>
+              {UNIT_ROLES.filter((r) => !pickedVolunteer || r === "viewer").map((r) => <option key={r} value={r}>{UNIT_ROLE_INFO[r].label}</option>)}
             </select>
           </div>
           <button className={primary} disabled={!who}>Add</button>
+          {pickedVolunteer && (
+            <p id={`${id}-vol`} className="w-full text-xs text-t-phos-dim">
+              Volunteers can be viewers of a group, not leads or members. A volunteer works only with the people assigned to them, so being in a group never shows them anyone else.
+            </p>
+          )}
         </form>
       ) : <p className="text-xs text-t-phos-dim">Everyone on your team is already here.</p>}
       <ul className="text-xs text-t-phos-dim mt-3 space-y-1">

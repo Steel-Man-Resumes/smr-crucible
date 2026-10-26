@@ -206,6 +206,41 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 $$;
 REVOKE ALL ON FUNCTION public.smr_enrollment_writer(uuid, uuid) FROM PUBLIC;
 
+-- Enrolling someone shows them to the staff of that unit, so it is the same
+-- power as assigning them (review B1): creating an enrollment, reopening a
+-- finished one and setting its primary staff member need org.client.assign.
+-- Same rule as 102's smr_staff_sees_all: the owner or an org admin by role,
+-- or a 'grant' exception, and a 'deny' exception always wins. Own org scope only.
+CREATE OR REPLACE FUNCTION public.smr_enrollment_assigner(p_org uuid, p_user uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+  SELECT COALESCE(
+    p_org IS NOT NULL AND p_user IS NOT NULL
+    AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid
+    AND (EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_user)
+         OR ((EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user AND s.role = 'org_admin')
+              OR EXISTS (SELECT 1 FROM public.org_staff s
+                          JOIN public.org_capability_override o ON o.org_id = s.access_code_id AND o.user_id = s.user_id
+                         WHERE s.access_code_id = p_org AND s.user_id = p_user
+                           AND o.capability = 'org.client.assign' AND o.effect = 'grant'))
+             AND NOT EXISTS (SELECT 1 FROM public.org_capability_override o
+                              WHERE o.org_id = p_org AND o.user_id = p_user
+                                AND o.capability = 'org.client.assign' AND o.effect = 'deny'))),
+    false)
+$$;
+REVOKE ALL ON FUNCTION public.smr_enrollment_assigner(uuid, uuid) FROM PUBLIC;
+
+-- A volunteer: a staff member carrying the volunteer preset's two staff-role
+-- denies (participant invites and placements; the preset always writes both).
+-- Volunteers may only be unit VIEWERS and never reach anyone through a unit.
+CREATE OR REPLACE FUNCTION public.smr_is_volunteer(p_org uuid, p_user uuid) RETURNS boolean
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+  SELECT EXISTS (SELECT 1 FROM public.org_capability_override o WHERE o.org_id = p_org AND o.user_id = p_user
+                    AND o.capability = 'org.participant.invite' AND o.effect = 'deny')
+     AND EXISTS (SELECT 1 FROM public.org_capability_override o WHERE o.org_id = p_org AND o.user_id = p_user
+                    AND o.capability = 'org.outcome.write' AND o.effect = 'deny')
+$$;
+REVOKE ALL ON FUNCTION public.smr_is_volunteer(uuid, uuid) FROM PUBLIC;
+
 -- org.enrollment.write becomes delegable (so the volunteer preset can deny it).
 -- APPENDED to whatever list is live, never retyped: 101 (L2) may have changed
 -- the list, and this must not undo that.
@@ -242,6 +277,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
   SELECT COALESCE(
     p_org IS NOT NULL AND p_staff IS NOT NULL AND p_participant IS NOT NULL
     AND EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_staff)
+    AND NOT public.smr_is_volunteer(p_org, p_staff)
     AND EXISTS (
       SELECT 1
         FROM public.enrollment e
@@ -311,9 +347,19 @@ LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
 $$;
 REVOKE ALL ON FUNCTION public.smr_reason_words(text) FROM PUBLIC;
 
+-- ------------------------------------------------------------ label rule --
+-- Words that label a person by their record (house words rule). Whole words,
+-- any case, singular or plural: "Conviction review clinic" passes, "Offender
+-- group" does not. Must match LABEL_WORDS in orgStructureShared.ts.
+CREATE OR REPLACE FUNCTION public.smr_has_label_word(p_text text) RETURNS boolean
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
+  SELECT COALESCE(lower(p_text) ~ '\m(felons?|offenders?|inmates?|convicts?|ex-cons?|prisoners?|parolees?|probationers?|detainees?|supervisees?|criminals|delinquents)\M', false)
+$$;
+REVOKE ALL ON FUNCTION public.smr_has_label_word(text) FROM PUBLIC;
+
 -- ---------------------------------------------------------- profile guard --
 CREATE OR REPLACE FUNCTION public.org_profile_guard() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   k text;
   v jsonb;
@@ -330,9 +376,9 @@ BEGIN
     IF jsonb_typeof(v) <> 'string' OR length(btrim(v #>> '{}')) NOT BETWEEN 1 AND 40 OR (v #>> '{}') ~ '[<>{}\[\]\\]' THEN
       RAISE EXCEPTION 'each word is 1 to 40 plain characters' USING ERRCODE = 'check_violation';
     END IF;
-    -- Never a label on a person (house words rule).
-    IF k IN ('participant', 'participants') AND lower(v #>> '{}') ~ '(felon|offender|inmate|convict|ex-con|criminal|prisoner|delinquent)' THEN
-      RAISE EXCEPTION 'pick a word that names the person, not their record' USING ERRCODE = 'check_violation';
+    -- Never a label on a person (house words rule), in any of the words.
+    IF public.smr_has_label_word(v #>> '{}') THEN
+      RAISE EXCEPTION 'pick words that name people, not their record' USING ERRCODE = 'check_violation';
     END IF;
   END LOOP;
   FOR k, v IN SELECT * FROM jsonb_each(NEW.modules) LOOP
@@ -340,7 +386,9 @@ BEGIN
       RAISE EXCEPTION 'modules are on or off switches from the known list' USING ERRCODE = 'check_violation';
     END IF;
   END LOOP;
-  NEW.updated_by := NULLIF(current_setting('app.user_id', true), '')::uuid;
+  -- The actor, if their account still exists: an account being deleted nulls
+  -- this column through its foreign key, and that must not be refused (B2).
+  NEW.updated_by := (SELECT u.id FROM public.users u WHERE u.id = NULLIF(current_setting('app.user_id', true), '')::uuid);
   NEW.updated_at := now();
   RETURN NEW;
 END;
@@ -396,17 +444,24 @@ DECLARE
   v_guard int := 0;
 BEGIN
   NEW.name := btrim(NEW.name);
+  IF (TG_OP = 'INSERT' OR NEW.name IS DISTINCT FROM OLD.name OR NEW.description IS DISTINCT FROM OLD.description)
+     AND (public.smr_has_label_word(NEW.name) OR public.smr_has_label_word(NEW.description)) THEN
+    RAISE EXCEPTION 'name groups for the work, not for people''s records' USING ERRCODE = 'check_violation';
+  END IF;
   IF TG_OP = 'INSERT' THEN
     IF NEW.status <> 'active' THEN
       RAISE EXCEPTION 'a new unit starts open' USING ERRCODE = 'check_violation';
     END IF;
-    NEW.created_by := v_actor;
+    NEW.created_by := (SELECT u.id FROM public.users u WHERE u.id = v_actor);
     NEW.created_at := now();
     NEW.closed_at := NULL;
     NEW.closed_by := NULL;
   ELSE
+    -- created_by may only go to NULL (its account was deleted: the foreign
+    -- key's ON DELETE SET NULL arrives here as an UPDATE, review B2).
     IF NEW.id IS DISTINCT FROM OLD.id OR NEW.access_code_id IS DISTINCT FROM OLD.access_code_id
-       OR NEW.created_by IS DISTINCT FROM OLD.created_by OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+       OR (NEW.created_by IS NOT NULL AND NEW.created_by IS DISTINCT FROM OLD.created_by)
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
       RAISE EXCEPTION 'a unit cannot move to another organization' USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.kind IS DISTINCT FROM OLD.kind AND EXISTS (SELECT 1 FROM public.enrollment e WHERE e.org_unit_id = OLD.id) THEN
@@ -420,13 +475,13 @@ BEGIN
         RAISE EXCEPTION 'people are still enrolled here; exit or move them first' USING ERRCODE = 'check_violation';
       END IF;
       NEW.closed_at := now();
-      NEW.closed_by := v_actor;
+      NEW.closed_by := (SELECT u.id FROM public.users u WHERE u.id = v_actor);
     ELSIF NEW.status = 'active' AND OLD.status = 'closed' THEN
       NEW.closed_at := NULL;
       NEW.closed_by := NULL;
     ELSE
       NEW.closed_at := OLD.closed_at;
-      NEW.closed_by := OLD.closed_by;
+      IF NEW.closed_by IS NOT NULL THEN NEW.closed_by := OLD.closed_by; END IF;
     END IF;
   END IF;
 
@@ -511,8 +566,11 @@ BEGIN
        OR NEW.access_code_id IS DISTINCT FROM OLD.access_code_id THEN
       RAISE EXCEPTION 'a unit membership cannot move; remove it and add another' USING ERRCODE = 'check_violation';
     END IF;
-    NEW.added_by := OLD.added_by;
+    IF NEW.added_by IS NOT NULL THEN NEW.added_by := OLD.added_by; END IF; -- NULL: the adder's account was deleted (B2)
     NEW.added_at := OLD.added_at;
+    IF NEW.role_in_unit IN ('lead', 'member') AND public.smr_is_volunteer(NEW.access_code_id, NEW.user_id) THEN
+      RAISE EXCEPTION 'a volunteer can be a viewer of a group, not a lead or member' USING ERRCODE = 'check_violation';
+    END IF;
     RETURN NEW;
   END IF;
   SELECT * INTO v_unit FROM public.org_unit WHERE id = NEW.org_unit_id;
@@ -526,7 +584,10 @@ BEGIN
      AND NOT EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = NEW.access_code_id AND a.partner_user_id = NEW.user_id) THEN
     RAISE EXCEPTION 'only staff of this organization can be added to a unit' USING ERRCODE = 'check_violation';
   END IF;
-  NEW.added_by := NULLIF(current_setting('app.user_id', true), '')::uuid;
+  IF NEW.role_in_unit IN ('lead', 'member') AND public.smr_is_volunteer(NEW.access_code_id, NEW.user_id) THEN
+    RAISE EXCEPTION 'a volunteer can be a viewer of a group, not a lead or member' USING ERRCODE = 'check_violation';
+  END IF;
+  NEW.added_by := (SELECT u.id FROM public.users u WHERE u.id = NULLIF(current_setting('app.user_id', true), '')::uuid);
   NEW.added_at := now();
   RETURN NEW;
 END;
@@ -585,6 +646,9 @@ DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_unit public.org_unit%ROWTYPE;
   v_terminal boolean := NEW.status IN ('completed', 'exited', 'withdrawn');
+  -- An app write: a user is set and this is not a nested system change (a
+  -- foreign key action, the leave or staff-removal triggers).
+  v_app boolean := NULLIF(current_setting('app.user_id', true), '') IS NOT NULL AND pg_trigger_depth() = 1;
 BEGIN
   IF TG_OP = 'INSERT' THEN
     SELECT * INTO v_unit FROM public.org_unit WHERE id = NEW.org_unit_id;
@@ -603,13 +667,28 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.access_code_redemption r WHERE r.access_code_id = NEW.access_code_id AND r.user_id = NEW.participant_user_id) THEN
       RAISE EXCEPTION 'that person has not joined this organization' USING ERRCODE = 'check_violation';
     END IF;
-    NEW.created_by := v_actor;
+    -- Creating one is the assign power (B1); the insert policy says so too.
+    IF v_app AND NOT public.smr_enrollment_assigner(NEW.access_code_id, v_actor) THEN
+      RAISE EXCEPTION 'only someone who assigns people can enroll them' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    NEW.created_by := (SELECT u.id FROM public.users u WHERE u.id = v_actor);
     NEW.created_at := now();
   ELSE
+    -- The person, program and organization never change after insert.
+    -- created_by may only go to NULL (its account was deleted, B2).
     IF NEW.id IS DISTINCT FROM OLD.id OR NEW.access_code_id IS DISTINCT FROM OLD.access_code_id
        OR NEW.participant_user_id IS DISTINCT FROM OLD.participant_user_id OR NEW.org_unit_id IS DISTINCT FROM OLD.org_unit_id
-       OR NEW.created_by IS DISTINCT FROM OLD.created_by OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+       OR (NEW.created_by IS NOT NULL AND NEW.created_by IS DISTINCT FROM OLD.created_by)
+       OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
       RAISE EXCEPTION 'an enrollment cannot move to another person, program or organization' USING ERRCODE = 'check_violation';
+    END IF;
+    -- Widening moves are the assign power (B1): reopening a finished
+    -- enrollment, or setting its primary staff member. Narrowing moves
+    -- (paused, finished, left, withdrew) stay with any writer who reaches.
+    IF v_app AND NOT public.smr_enrollment_assigner(NEW.access_code_id, v_actor)
+       AND ((OLD.status IN ('completed', 'exited', 'withdrawn') AND NEW.status NOT IN ('completed', 'exited', 'withdrawn'))
+            OR (NEW.primary_staff_id IS NOT NULL AND NEW.primary_staff_id IS DISTINCT FROM OLD.primary_staff_id)) THEN
+      RAISE EXCEPTION 'only someone who assigns people can reopen an enrollment or choose its staff member' USING ERRCODE = 'insufficient_privilege';
     END IF;
     IF NOT public.smr_enrollment_move_ok(OLD.status, NEW.status) THEN
       RAISE EXCEPTION 'an enrollment cannot go from % to %', OLD.status, NEW.status USING ERRCODE = 'check_violation';
@@ -638,7 +717,7 @@ BEGIN
     NEW.exited_on := NULL;
     NEW.exit_reason := NULL;
   END IF;
-  NEW.updated_by := v_actor;
+  NEW.updated_by := (SELECT u.id FROM public.users u WHERE u.id = v_actor); -- NULL when that account is gone (B2)
   NEW.updated_at := now();
   RETURN NEW;
 END;
@@ -789,7 +868,7 @@ CREATE POLICY enrollment_select ON enrollment FOR SELECT USING (
 DROP POLICY IF EXISTS enrollment_insert ON enrollment;
 CREATE POLICY enrollment_insert ON enrollment FOR INSERT WITH CHECK (
   access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
-  AND public.smr_enrollment_writer(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid));
+  AND public.smr_enrollment_assigner(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid));
 DROP POLICY IF EXISTS enrollment_update ON enrollment;
 CREATE POLICY enrollment_update ON enrollment FOR UPDATE
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
@@ -823,6 +902,7 @@ BEGIN
     -- 103's policies call these as the app role (smr_staff_reach is 102's grant).
     GRANT EXECUTE ON FUNCTION public.smr_org_structure_manager(uuid, uuid) TO smr_app;
     GRANT EXECUTE ON FUNCTION public.smr_enrollment_writer(uuid, uuid) TO smr_app;
+    GRANT EXECUTE ON FUNCTION public.smr_enrollment_assigner(uuid, uuid) TO smr_app;
   END IF;
 END $$;
 

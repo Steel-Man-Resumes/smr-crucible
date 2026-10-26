@@ -16,10 +16,11 @@
  */
 import { randomUUID } from "node:crypto";
 import { runAsUser, runScoped, type OrgScope } from "./db";
+import { unitReachSql } from "./orgUnitReach";
 import type { OrgActor } from "./authz/resolveOrgActor";
 import {
   DEFAULT_TIMEZONE, ENROLLABLE_KINDS, ENROLLMENT_STATUS_LABELS, PROGRAM_ID_PATTERN, START_STATUSES, UNIT_NAME_MAX,
-  canMoveEnrollment, checkUnitTree, defaultOrgProfile, flattenUnitTree, isEnrollmentStatus, isOrgType,
+  canMoveEnrollment, checkUnitTree, labelProblem, LABEL_PROBLEM, DONE_ENROLLMENT_STATUSES, defaultOrgProfile, flattenUnitTree, isEnrollmentStatus, isOrgType,
   isStatusReason, isTimezoneLike, isUnitKind, isUnitRole, normalizeTerms, reasonsFor, resolveOrgModules, resolveOrgTerms,
   ORG_MODULES,
   type EnrollmentStatus, type OrgModules, type OrgProfile, type OrgTerms, type OrgType, type StatusReason,
@@ -50,6 +51,13 @@ export const canManageStructure = (a: Pick<OrgActor, "viaPlatformAdmin" | "capab
 /** Enrollment writes: org.enrollment.write, never a platform admin acting for the org. */
 export const canWriteEnrollments = (a: Pick<OrgActor, "viaPlatformAdmin" | "capabilities">) =>
   !a.viaPlatformAdmin && a.capabilities.has("org.enrollment.write");
+/**
+ * Creating an enrollment, reopening a finished one, or choosing its primary
+ * staff member shows a person to more staff: the assign power (review B1).
+ * The database refuses the same (smr_enrollment_assigner, deny wins).
+ */
+export const canAssignEnrollments = (a: Pick<OrgActor, "viaPlatformAdmin" | "capabilities">) =>
+  !a.viaPlatformAdmin && a.capabilities.has("org.client.assign");
 /** Reading the structure (units, words): anyone on staff. */
 export const canReadStructure = (a: Pick<OrgActor, "capabilities">) => a.capabilities.has("org.cohort.view");
 
@@ -138,12 +146,17 @@ export const ORG_STRUCTURE_SQL = {
   /** $1 org, $2 unit, $3 user */
   removeMember: `DELETE FROM unit_member WHERE access_code_id = $1::uuid AND org_unit_id = $2::uuid AND user_id = $3::uuid RETURNING org_unit_id`,
   /** $1 org. The owner and every staff row: who can be put in a unit. */
-  listStaff: `SELECT ac.partner_user_id AS user_id, u.name, 'owner' AS role
+  listStaff: `SELECT ac.partner_user_id AS user_id, u.name, 'owner' AS role, false AS volunteer
        FROM access_code ac JOIN users u ON u.id = ac.partner_user_id WHERE ac.id = $1::uuid
      UNION ALL
-     SELECT s.user_id, u.name, s.role FROM org_staff s JOIN users u ON u.id = s.user_id
+     SELECT s.user_id, u.name, s.role,
+            (EXISTS (SELECT 1 FROM org_capability_override o WHERE o.org_id = $1::uuid AND o.user_id = s.user_id
+                       AND o.capability = 'org.participant.invite' AND o.effect = 'deny')
+             AND EXISTS (SELECT 1 FROM org_capability_override o WHERE o.org_id = $1::uuid AND o.user_id = s.user_id
+                       AND o.capability = 'org.outcome.write' AND o.effect = 'deny')) AS volunteer
+       FROM org_staff s JOIN users u ON u.id = s.user_id
       WHERE s.access_code_id = $1::uuid AND s.user_id IS DISTINCT FROM (SELECT partner_user_id FROM access_code WHERE id = $1::uuid)`,
-  /** $1 org, $2 participant or NULL, $3 unit or NULL, $4 include finished */
+  /** $1 org, $2 participant or NULL, $3 unit or NULL, $4 include finished, $5 actor sees everyone, $6 actor. App-side reach as every other read (the policy is the first wall). */
   listEnrollments: `SELECT e.id, e.org_unit_id, u.name AS unit_name, u.kind AS unit_kind, u.status AS unit_status,
             e.participant_user_id, e.status, to_char(e.enrolled_on, 'YYYY-MM-DD') AS enrolled_on,
             to_char(e.exited_on, 'YYYY-MM-DD') AS exited_on, e.exit_reason, e.status_reason,
@@ -155,6 +168,9 @@ export const ORG_STRUCTURE_SQL = {
         AND ($2::uuid IS NULL OR e.participant_user_id = $2::uuid)
         AND ($3::uuid IS NULL OR e.org_unit_id = $3::uuid)
         AND ($4::boolean OR e.status IN ${OPEN})
+        AND ($5::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
+                                     WHERE a.access_code_id = $1::uuid AND a.client_user_id = e.participant_user_id AND a.staff_user_id = $6::uuid)
+             OR ${unitReachSql("$1::uuid", "$6::uuid", "e.participant_user_id")})
       ORDER BY (e.status IN ${OPEN}) DESC, e.updated_at DESC
       LIMIT 500`,
   /** $1 org, $2 unit, $3 participant, $4 status, $5 primary staff, $6 program id, $7 enrolled on */
@@ -337,7 +353,7 @@ export interface OrgUnitRow {
   created_at: string; closed_at: string | null; staff_count: number; open_enrollments: number;
 }
 export interface UnitMemberRow { org_unit_id: string; user_id: string; role_in_unit: UnitRole; added_at: string; name: string | null }
-export interface OrgStaffOption { user_id: string; name: string | null; role: "owner" | "org_admin" | "staff" }
+export interface OrgStaffOption { user_id: string; name: string | null; role: "owner" | "org_admin" | "staff"; volunteer?: boolean }
 
 /**
  * The tree, every member of every unit, and who can be added. Counts of
@@ -375,6 +391,7 @@ export function cleanUnitInput(input: UnitInput, base?: Partial<CleanUnit>): { o
   const name = typeof nameRaw === "string" ? nameRaw.trim().replace(/\s+/g, " ") : "";
   if (!name) return { ok: false, error: "Give it a name." };
   if (name.length > UNIT_NAME_MAX) return { ok: false, error: `Keep the name to ${UNIT_NAME_MAX} characters.` };
+  if (labelProblem(name)) return { ok: false, error: LABEL_PROBLEM };
   const parentRaw = input.parentId === undefined ? base?.parentId ?? null : input.parentId;
   if (parentRaw !== null && parentRaw !== "" && (typeof parentRaw !== "string" || !UUID.test(parentRaw))) return { ok: false, error: "Pick where it sits." };
   const parentId = parentRaw ? String(parentRaw) : null;
@@ -383,6 +400,7 @@ export function cleanUnitInput(input: UnitInput, base?: Partial<CleanUnit>): { o
   if (shortCode !== null && (typeof shortCode !== "string" || !/^[A-Za-z0-9][A-Za-z0-9-]{0,15}$/.test(shortCode))) return { ok: false, error: "A short code is up to 16 letters, numbers or dashes." };
   const description = opt(input.description, base?.description);
   if (description !== null && (typeof description !== "string" || description.length > 500)) return { ok: false, error: "Keep the description to 500 characters." };
+  if (labelProblem(description as string | null)) return { ok: false, error: LABEL_PROBLEM };
   const startsOn = opt(input.startsOn, base?.startsOn);
   const endsOn = opt(input.endsOn, base?.endsOn);
   for (const d of [startsOn, endsOn]) if (d !== null && (typeof d !== "string" || !DAY.test(d) || Number.isNaN(Date.parse(d)))) return { ok: false, error: "Dates look like 2026-11-02." };
@@ -514,7 +532,8 @@ export async function listEnrollments(actor: OrgActor, opts: { participantId?: s
   if ((opts.participantId && !participant) || (opts.unitId && !unit)) return [];
   try {
     const [rows] = await runScoped<[EnrollmentRow[]]>(scopeOf(actor), (sql) => [
-      run(sql)(ORG_STRUCTURE_SQL.listEnrollments, [actor.orgId, participant, unit, opts.includeDone !== false]),
+      run(sql)(ORG_STRUCTURE_SQL.listEnrollments, [actor.orgId, participant, unit, opts.includeDone !== false,
+        actor.capabilities.has("org.client.view_all"), actor.userId]),
     ]);
     return rows;
   } catch (err) {
@@ -554,7 +573,7 @@ export function cleanProgramId(v: unknown): string | null | false {
 }
 
 export async function createEnrollment(actor: OrgActor, input: EnrollmentInput): Promise<StructureResult<{ id: string }>> {
-  if (!canWriteEnrollments(actor)) return REFUSED;
+  if (!canWriteEnrollments(actor) || !canAssignEnrollments(actor)) return REFUSED;
   const c = cleanEnrollmentInput(input);
   if (!c.ok) return bad(c.error);
   const v = c.v;
@@ -589,6 +608,9 @@ export async function changeEnrollmentStatus(actor: OrgActor, enrollmentId: stri
     const from = cur[0]?.status;
     if (!from) return missing();
     if (from === to) return { ok: true, status: to };
+    if (DONE_ENROLLMENT_STATUSES.includes(from) && !DONE_ENROLLMENT_STATUSES.includes(to) && !canAssignEnrollments(actor)) {
+      return { ok: false, error: "Only someone who assigns people can reopen an enrollment.", status: 403 };
+    }
     if (!canMoveEnrollment(from, to)) return bad(`It cannot go straight from ${ENROLLMENT_STATUS_LABELS[from].toLowerCase()} to ${ENROLLMENT_STATUS_LABELS[to].toLowerCase()}.`);
     const [rows] = await runScoped<[{ id: string; status: EnrollmentStatus }[]]>(scopeOf(actor), (sql) => [
       run(sql)(ORG_STRUCTURE_SQL.moveEnrollment, [actor.orgId, enrollmentId, to, why]),
@@ -616,6 +638,9 @@ export async function updateEnrollmentDetails(actor: OrgActor, enrollmentId: str
   if (!cur) return missing();
   const staff = input.primaryStaffId === undefined ? cur.primary_staff_id : input.primaryStaffId === null || input.primaryStaffId === "" ? null : input.primaryStaffId;
   if (staff !== null && (typeof staff !== "string" || !UUID.test(staff))) return bad("Pick a staff member from the list.");
+  if (staff !== null && staff !== cur.primary_staff_id && !canAssignEnrollments(actor)) {
+    return { ok: false, error: "Only someone who assigns people can choose the staff member on an enrollment.", status: 403 };
+  }
   const pid = input.programParticipantId === undefined ? cur.program_participant_id : cleanProgramId(input.programParticipantId);
   if (pid === false) return bad("Your own id uses letters, numbers, spaces and . _ / - (up to 40).");
   const day = input.enrolledOn === undefined || input.enrolledOn === null || input.enrolledOn === "" ? null : input.enrolledOn;

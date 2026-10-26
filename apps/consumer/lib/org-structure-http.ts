@@ -31,6 +31,10 @@ export function canManage(actor: Actor): boolean {
 export function canEnroll(actor: Actor): boolean {
   return !actor.viaPlatformAdmin && actor.capabilities.has("org.enrollment.write");
 }
+/** Creating, reopening, or choosing an enrollment's staff member: the assign power too (review B1). */
+export function canAssign(actor: Actor): boolean {
+  return canEnroll(actor) && actor.capabilities.has("org.client.assign");
+}
 
 function result(r: StructureResult<Record<string, unknown>>, okBody?: Record<string, unknown>): NextResponse {
   if (r.ok) {
@@ -107,7 +111,7 @@ export async function handleStructureGet(actor: Actor, deps: Pick<StructureDeps,
   const s = await deps.getOrgStructure(actor);
   if (!s) return json({ error: REFUSED }, 403);
   // Who works where is staff information; the list of staff to pick from is for those who can change it.
-  return json({ ...s, staff: canManage(actor) ? s.staff : [], canManage: canManage(actor), canEnroll: canEnroll(actor) });
+  return json({ ...s, staff: canManage(actor) ? s.staff : [], canManage: canManage(actor), canEnroll: canEnroll(actor), canAssign: canAssign(actor) });
 }
 
 const STRUCTURE_ACTIONS = ["create_unit", "update_unit", "move_unit", "close_unit", "reopen_unit", "set_member", "remove_member"] as const;
@@ -160,7 +164,7 @@ export async function handleEnrollmentsGet(url: URL, actor: Actor, deps: Pick<En
     includeDone: url.searchParams.get("open") !== "1",
   });
   if (rows === null) return json({ error: REFUSED }, 403);
-  return json({ enrollments: rows, canEnroll: canEnroll(actor) });
+  return json({ enrollments: rows, canEnroll: canEnroll(actor), canAssign: canAssign(actor) });
 }
 
 /** POST /api/org/enrollments { action: "create" | "status" | "details", ... } */
@@ -170,6 +174,7 @@ export async function handleEnrollmentsPost(request: Request, actor: Actor, deps
   if (!body) return json({ error: "That did not come through. Try again." }, 400);
   switch (body.action) {
     case "create":
+      if (!canAssign(actor)) return json({ error: "Only someone who assigns people can enroll them." }, 403);
       return result(await deps.createEnrollment(actor, {
         participantId: body.participantId, unitId: body.unitId, status: body.status, primaryStaffId: body.primaryStaffId,
         programParticipantId: body.programParticipantId, enrolledOn: body.enrolledOn,

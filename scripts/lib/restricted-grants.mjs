@@ -157,6 +157,7 @@ export const APP_FUNCTIONS = [
   // House L3a (103): the structure and enrollment write policies call these.
   "smr_org_structure_manager(uuid, uuid)",
   "smr_enrollment_writer(uuid, uuid)",
+  "smr_enrollment_assigner(uuid, uuid)",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -169,6 +170,8 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   // and the structure tables' activity writer.
   "smr_staff_unit_reach(uuid, uuid, uuid)",
   "smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)",
+  // Answers "is this person a volunteer" for any org: definer-only.
+  "smr_is_volunteer(uuid, uuid)",
 ];
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */

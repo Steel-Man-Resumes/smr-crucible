@@ -54,6 +54,7 @@ export function EnrollmentsPanel({ clientId, first }: { clientId: string; first:
   const [rows, setRows] = useState<Row[] | null>(null);
   const [units, setUnits] = useState<UnitOpt[]>([]);
   const [canEnroll, setCanEnroll] = useState(false);
+  const [canAssign, setCanAssign] = useState(false);
   const [canManage, setCanManage] = useState(false);
   const [hidden, setHidden] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -66,7 +67,7 @@ export function EnrollmentsPanel({ clientId, first }: { clientId: string; first:
         fetch("/api/org/structure").then((r) => (r.ok ? r.json() : null)),
       ]);
       if (!e || !s || s.ready === false) { setHidden(true); return; }
-      setRows(e.enrollments ?? []); setCanEnroll(!!e.canEnroll); setUnits(s.units ?? []); setCanManage(!!s.canManage);
+      setRows(e.enrollments ?? []); setCanEnroll(!!e.canEnroll); setCanAssign(!!e.canAssign); setUnits(s.units ?? []); setCanManage(!!s.canManage);
     } catch { setHidden(true); }
   }, [clientId]);
   useEffect(() => { load(); }, [load]);
@@ -90,7 +91,7 @@ export function EnrollmentsPanel({ clientId, first }: { clientId: string; first:
     <section aria-labelledby="enroll-heading" className="bg-t-panel border border-t-line rounded-[4px] p-4 mb-5">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <h2 id="enroll-heading" className="text-sm font-semibold text-t-white">{capFirst(t.plural("program"))}</h2>
-        {canEnroll && choices.length > 0 && !adding && <button type="button" className={quiet} onClick={() => setAdding(true)}>Enroll {first}</button>}
+        {canAssign && choices.length > 0 && !adding && <button type="button" className={quiet} onClick={() => setAdding(true)}>Enroll {first}</button>}
       </div>
       {msg && <p role={msg.good ? "status" : "alert"} className={`text-xs mb-2 ${msg.good ? "text-t-phos" : "text-t-amber-bright"}`}>{msg.text}</p>}
       {rows.length === 0 ? (
@@ -100,7 +101,7 @@ export function EnrollmentsPanel({ clientId, first }: { clientId: string; first:
         </p>
       ) : (
         <ul className="divide-y divide-t-line">
-          {rows.map((r) => <EnrollmentItem key={r.id} r={r} path={pathOf(units, r.org_unit_id) || r.unit_name} canEnroll={canEnroll} first={first} act={done} />)}
+          {rows.map((r) => <EnrollmentItem key={r.id} r={r} path={pathOf(units, r.org_unit_id) || r.unit_name} canEnroll={canEnroll} canAssign={canAssign} first={first} act={done} />)}
         </ul>
       )}
       {adding && <EnrollForm first={first} clientId={clientId} choices={choices} units={units} programWord={t.program} act={done} onDone={() => setAdding(false)} />}
@@ -110,10 +111,12 @@ export function EnrollmentsPanel({ clientId, first }: { clientId: string; first:
 
 function capFirst(s: string) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
-function EnrollmentItem({ r, path, canEnroll, first, act }: { r: Row; path: string; canEnroll: boolean; first: string; act: (b: Record<string, unknown>, ok: string) => Promise<boolean> }) {
+function EnrollmentItem({ r, path, canEnroll, canAssign, first, act }: { r: Row; path: string; canEnroll: boolean; canAssign: boolean; first: string; act: (b: Record<string, unknown>, ok: string) => Promise<boolean> }) {
   const [to, setTo] = useState<EnrollmentStatus | "">("");
   const [reason, setReason] = useState<StatusReason | "">("");
   const isOpen = OPEN_ENROLLMENT_STATUSES.includes(r.status);
+  // Reopening shows the person to that program's staff again: only for those who assign people.
+  const moves = isOpen || canAssign ? ENROLLMENT_MOVES[r.status] : [];
   const reasons = to ? reasonsFor(to) : [];
   const id = `enr-${r.id}`;
   const since = isOpen ? (r.enrolled_on ? `since ${day(r.enrolled_on)}` : "") : `${day(r.exited_on)}${r.exit_reason ? `, ${STATUS_REASON_LABELS[r.exit_reason].toLowerCase()}` : ""}`;
@@ -128,7 +131,7 @@ function EnrollmentItem({ r, path, canEnroll, first, act }: { r: Row; path: stri
       {(r.primary_staff_name || r.program_participant_id) && (
         <p className="text-xs text-t-phos-dim">{[r.primary_staff_name ? `With ${r.primary_staff_name}` : "", r.program_participant_id ? `Your id: ${r.program_participant_id}` : ""].filter(Boolean).join(" · ")}</p>
       )}
-      {canEnroll && (
+      {canEnroll && moves.length > 0 && (
         <form className="flex flex-wrap gap-2 items-end mt-2" onSubmit={async (e) => {
           e.preventDefault(); if (!to) return;
           if (await act({ action: "status", enrollmentId: r.id, status: to, reason: reason || null }, `${capFirst(first)} is now ${ENROLLMENT_STATUS_LABELS[to].toLowerCase()} in ${path}.`)) { setTo(""); setReason(""); }
@@ -137,7 +140,7 @@ function EnrollmentItem({ r, path, canEnroll, first, act }: { r: Row; path: stri
             <label htmlFor={`${id}-to`} className="sr-only">Change status for {path}</label>
             <select id={`${id}-to`} value={to} onChange={(e) => { setTo(e.target.value as EnrollmentStatus); setReason(""); }} className={field}>
               <option value="">{isOpen ? "Change status..." : "Reopen..."}</option>
-              {ENROLLMENT_MOVES[r.status].map((s) => <option key={s} value={s}>{ENROLLMENT_STATUS_LABELS[s]}</option>)}
+              {moves.map((s) => <option key={s} value={s}>{ENROLLMENT_STATUS_LABELS[s]}</option>)}
             </select>
           </div>
           {reasons.length > 0 && (

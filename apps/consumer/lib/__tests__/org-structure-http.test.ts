@@ -9,7 +9,7 @@ import { computeOrgCapabilities, cohortReach } from "@crucible/core/src/authz/ca
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 import { defaultOrgProfile } from "@crucible/core/src/orgStructureShared";
 import {
-  BODY_MAX, canEnroll, canManage, handleEnrollmentsGet, handleEnrollmentsPost, handleProfileGet, handleProfilePatch,
+  BODY_MAX, canAssign, canEnroll, canManage, handleEnrollmentsGet, handleEnrollmentsPost, handleProfileGet, handleProfilePatch,
   handleSetupPost, handleStructureGet, handleStructurePost, readJsonBody,
 } from "../org-structure-http";
 
@@ -146,9 +146,20 @@ describe("enrollments", () => {
     for (const who of [volunteer, platform]) assert.equal((await handleEnrollmentsPost(req({ action: "create", participantId: "p", unitId: "u" }), who, d)).status, 403);
     assert.equal(createEnrollment.calls.length, 0);
   });
+  it("creating an enrollment is the assign power: plain staff are refused before the database (B1)", async () => {
+    const createEnrollment = spy({ ok: true as const, id: "e" });
+    const d = { createEnrollment, changeEnrollmentStatus: spy({ ok: true as const, status: "paused" }), updateEnrollmentDetails: spy({ ok: true as const }) };
+    const r = await handleEnrollmentsPost(req({ action: "create", participantId: "p", unitId: "u" }), staff, d);
+    assert.equal(r.status, 403);
+    assert.equal(createEnrollment.calls.length, 0);
+    assert.deepEqual([canAssign(owner), canAssign(admin), canAssign(staff), canAssign(volunteer), canAssign(platform)], [true, true, false, false, false]);
+    assert.equal(canAssign(actor("staff", { denies: [] }) as never), false);
+    const granted = { ...staff, capabilities: computeOrgCapabilities("staff", ["org.client.assign"]) } as unknown as OrgActor;
+    assert.equal(canAssign(granted), true, "a grant of org.client.assign lets plain staff enroll");
+  });
   it("POST routes create, status and details", async () => {
     const d = { createEnrollment: spy({ ok: true as const, id: "e" }), changeEnrollmentStatus: spy({ ok: true as const, status: "paused" }), updateEnrollmentDetails: spy({ ok: true as const }) };
-    assert.equal((await (await handleEnrollmentsPost(req({ action: "create", participantId: "p", unitId: "u", programParticipantId: "A1" }), staff, d)).json()).id, "e");
+    assert.equal((await (await handleEnrollmentsPost(req({ action: "create", participantId: "p", unitId: "u", programParticipantId: "A1" }), admin, d)).json()).id, "e");
     await handleEnrollmentsPost(req({ action: "status", enrollmentId: "e", status: "paused", reason: "needs_a_pause" }), staff, d);
     await handleEnrollmentsPost(req({ action: "details", enrollmentId: "e", programParticipantId: "A2" }), staff, d);
     assert.deepEqual(d.changeEnrollmentStatus.calls[0].slice(1), ["e", "paused", "needs_a_pause"]);

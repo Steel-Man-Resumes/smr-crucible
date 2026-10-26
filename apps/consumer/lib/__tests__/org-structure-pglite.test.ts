@@ -29,6 +29,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ORG_STRUCTURE_SQL as Q } from '@crucible/core/src/orgStructure';
 import { CLIENT_HEADER_WHO_SQL } from '@crucible/core/src/orgClientView';
+import { unitReachSql } from '@crucible/core/src/orgUnitReach';
 
 const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, '@electric-sql/pglite')) ? 'set SMR_PGLITE_DIR to run the pglite structure test' : false;
@@ -108,7 +109,10 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.ok(await refused(as(at(cmA), Q.upsertProfile, prof({}))), 'staff cannot write the profile');
   assert.ok(await refused(as({ orgId: org, userId: platform, role: 'owner' }, Q.upsertProfile, prof({}))), 'a platform admin acting as owner cannot');
   assert.ok(await refused(as({ orgId: org, userId: otherOwner, role: 'owner' }, Q.upsertProfile, prof({}))), 'another org owner with this org in scope cannot');
-  assert.match(await err(as(O, Q.upsertProfile, prof({ participants: 'Offenders' }))), /names the person, not their record/, 'the label rule holds in the database');
+  assert.match(await err(as(O, Q.upsertProfile, prof({ participants: 'Offenders' }))), /name people, not their record/, 'the label rule holds in the database');
+  for (const w of [{ case_manager: 'parolee officer' }, { site: 'Detainees' }, { team: 'probationers' }, { caseload: 'Supervisees' }]) {
+    assert.match(await err(as(O, Q.upsertProfile, prof(w))), /not their record/, `every word: ${JSON.stringify(w)}`);
+  }
   assert.match(await err(as(O, Q.upsertProfile, prof({ nickname: 'x' }))), /unknown word key/);
   assert.match(await err(as(O, Q.upsertProfile, [org, 'reentry_nonprofit', null, 'Mars/Base', '{}', '{}', false])), /time zone/i);
   assert.match(await err(as(O, Q.upsertProfile, [org, 'bank', null, 'America/Chicago', '{}', '{}', false])), /check constraint/);
@@ -155,6 +159,12 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.equal(await seen({ orgId: org2, userId: otherOwner, role: 'owner' }), 0, 'another org sees none of it');
   assert.equal(await seen({ userId: p1 }), 0, 'a participant sees none of it');
 
+  // The label rule on unit names and descriptions (whole words, any case, plurals).
+  assert.match(await err(as(O, Q.insertUnit, unit(id(109), null, 'program', 'Offender group'))), /records/, 'a unit name cannot label people');
+  assert.match(await err(as(O, Q.insertUnit, [org, id(109), null, 'program', 'Group A', null, 'For parolees only', null, null, null])), /records/, 'nor a description');
+  assert.match(await err(as(O, Q.updateUnit, [org, U.Y, 'Inmate services', 'program', null, null, null, null, null])), /records/, 'nor a rename');
+  assert.match(await err(as(O, Q.insertUnit, unit(id(109), null, 'program', 'Conviction review clinic'))), /OK/, '"conviction" is not a label');
+
   // ---- unit staff ------------------------------------------------------------
   await as(O, Q.upsertMember, [org, U.X, cmB, 'member']);
   await as(O, Q.upsertMember, [org, U.S, lead, 'lead']);
@@ -164,27 +174,42 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.match(await err(as(O, Q.upsertMember, [org, U.X, otherOwner, 'member'])), /only staff/, "another org's people cannot be added");
   assert.match(await err(as(O, Q.upsertMember, [org, U.D, cmA, 'member'])), /closed/, 'not into a closed unit');
   assert.match(await err(as(O, Q.upsertMember, [org, U.X, cmA, 'boss'])), /check constraint/);
-  assert.equal((await as(at(cmC), Q.listMembers, [org])).length, 3, 'staff see who works where');
+  assert.match(await err(as(O, Q.upsertMember, [org, U.Y, vol, 'member'])), /volunteer can be a viewer/, 'a volunteer is never a member (it would widen their reach)');
+  assert.match(await err(as(O, Q.upsertMember, [org, U.S, vol, 'lead'])), /volunteer can be a viewer/, 'nor a lead');
+  await as(O, Q.upsertMember, [org, U.Y, vol, 'viewer']);
+  assert.match(await err(as(O, Q.upsertMember, [org, U.Y, vol, 'member'])), /volunteer can be a viewer/, 'nor promoted from viewer');
+  assert.equal((await as(at(cmC), Q.listMembers, [org])).length, 4, 'staff see who works where');
 
   // ---- enrollments -----------------------------------------------------------
   const enr = (unitId: string, p: string, status = 'enrolled', pid: string | null = null) => [org, unitId, p, status, null, pid, null];
-  assert.match(await err(as(at(cmC), Q.insertEnrollment, enr(U.X, p2))), /row-level security/, 'staff who do not reach someone cannot enroll them');
-  assert.match(await err(as(at(cmC), Q.insertEnrollment, enr(U.X, p1))), /row-level security/, 'nor anyone assigned to a colleague');
-  assert.match(await err(as(at(vol), Q.insertEnrollment, enr(U.Y, p4))), /row-level security/, 'a volunteer cannot enroll even their own person');
-  assert.match(await err(as({ orgId: org, userId: platform, role: 'owner' }, Q.insertEnrollment, enr(U.X, p2))), /row-level security/, 'a platform admin acting for the org cannot');
+  assert.match(await err(as(at(cmC), Q.insertEnrollment, enr(U.X, p2))), /row-level security|assigns people/, 'staff who do not reach someone cannot enroll them');
+  assert.match(await err(as(at(cmC), Q.insertEnrollment, enr(U.X, p1))), /row-level security|assigns people/, 'nor anyone assigned to a colleague');
+  assert.match(await err(as(at(vol), Q.insertEnrollment, enr(U.Y, p4))), /row-level security|assigns people/, 'a volunteer cannot enroll even their own person');
+  assert.match(await err(as({ orgId: org, userId: platform, role: 'owner' }, Q.insertEnrollment, enr(U.X, p2))), /row-level security|assigns people/, 'a platform admin acting for the org cannot');
   assert.match(await err(as(O, Q.insertEnrollment, enr(U.S, p2))), /program, cohort or caseload/, 'not into a site');
   assert.match(await err(as(O, Q.insertEnrollment, enr(U.X, p3))), /row-level security|not joined/, 'not someone from another org');
   assert.match(await err(as(O, Q.insertEnrollment, enr(U.X, p2, 'completed'))), /starts as/);
   assert.match(await err(as(O, Q.insertEnrollment, enr(U.X, p2, 'enrolled', 'DOC#12'))), /check constraint/, 'the own-id field takes plain characters only');
   const e2 = (await as(O, Q.insertEnrollment, enr(U.X, p2, 'active', 'HH-0042')))[0].id as string;
-  const e1 = (await as(at(cmA), Q.insertEnrollment, enr(U.Y, p1)))[0].id as string;
+  // B1: enrolling shows a person to a unit's staff, so it is the assign power.
+  assert.match(await err(as(at(cmA), Q.insertEnrollment, enr(U.Y, p1))), /row-level security|assigns people/, 'a plain staff member cannot enroll even their own person');
+  assert.match(await err(as(at(cmB), Q.insertEnrollment, enr(U.X, p1))), /row-level security|assigns people/, 'nor into their own unit');
+  await q(`INSERT INTO org_capability_override (org_id, user_id, capability, effect) VALUES ($1, $2, 'org.client.assign', 'deny')`, [org, admin]);
+  assert.match(await err(as(at(admin, 'org_admin'), Q.insertEnrollment, enr(U.Y, p1))), /row-level security|assigns people/, 'an admin denied assigning cannot');
+  await q(`DELETE FROM org_capability_override WHERE org_id = $1 AND user_id = $2 AND capability = 'org.client.assign'`, [org, admin]);
+  await q(`INSERT INTO org_capability_override (org_id, user_id, capability, effect) VALUES ($1, $2, 'org.client.assign', 'grant')`, [org, cmC]);
+  assert.match(await err(as(at(cmC), Q.insertEnrollment, enr(U.Y, p1))), /row-level security/, 'granted assigning, still only for someone they reach');
+  await q(`DELETE FROM org_capability_override WHERE org_id = $1 AND user_id = $2`, [org, cmC]);
+  const e1 = (await as(at(admin, 'org_admin'), Q.insertEnrollment, enr(U.Y, p1)))[0].id as string;
   assert.match(await err(as(O, Q.insertEnrollment, enr(U.X, p2))), /duplicate key/, 'one open enrollment per person per unit');
   const created = (await q(`SELECT created_by, enrolled_on FROM enrollment WHERE id = $1`, [e1])).rows[0] as { created_by: string; enrolled_on: string };
-  assert.equal(created.created_by, cmA, 'created_by is the actor');
+  assert.equal(created.created_by, admin, 'created_by is the actor');
   assert.ok(created.enrolled_on, 'enrolled_on is filled');
 
+  // $5 sees-everyone is what the app passes for that actor; the policy decides first either way.
+  const seesAll = (who: Who) => [owner, admin, platform].includes(who.userId ?? '');
   const list = async (who: Who, participant: string | null = null) =>
-    (await as(who, Q.listEnrollments, [org, participant, null, true])).map((r) => r.participant_user_id as string).sort();
+    (await as(who, Q.listEnrollments, [org, participant, null, true, seesAll(who), who.userId ?? null])).map((r) => r.participant_user_id as string).sort();
   assert.deepEqual(await list(O), [p1, p2].sort(), 'the owner reaches everyone');
   assert.deepEqual(await list(at(admin, 'org_admin')), [p1, p2].sort(), 'an org admin reaches everyone');
   assert.deepEqual(await list(at(cmA)), [p1], 'assigned staff reach their own person only');
@@ -214,6 +239,15 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.equal(await header(viewer, p2), 0, 'a viewer does not');
   assert.equal(await header(cmC, p2), 0, 'nor an outsider');
   assert.equal(await header(cmB, p1), 0, 'nor a unit member, for someone not enrolled there');
+  // The two walls agree: the database hook and the app's own unit SQL, on every staff x person pair.
+  const hook = async (s: string, p: string) => ((await q(`SELECT smr_staff_unit_reach($1, $2, $3) AS r`, [org, s, p])).rows[0] as { r: boolean }).r;
+  const appUnit = async (s: string, p: string) => (await as(at(s), `SELECT ${unitReachSql('$1::uuid', '$2::uuid', '$3::uuid')} AS r`, [org, s, p]))[0].r as boolean;
+  let pairs = 0;
+  for (const s of [cmA, cmB, lead, viewer, cmC, vol, admin]) for (const p of [p1, p2, p4]) {
+    assert.equal(await appUnit(s, p), await hook(s, p), `walls agree on ${s.slice(-2)} x ${p.slice(-2)}`); pairs++;
+  }
+  assert.equal(pairs, 21);
+  assert.equal(await hook(cmB, p2), true, 'and the agreement is not all false');
   assert.equal(await reach(owner, p4), true, '102 conditions kept: owner');
   assert.equal(await reach(admin, p4), true, '102 conditions kept: org admin');
 
@@ -228,6 +262,9 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.ok(ex.exited_on && ex.exit_reason === 'moved_away', 'exit date and reason are kept');
   assert.equal(await reach(cmB, p2), false, 'an ended enrollment reaches nobody');
   assert.deepEqual(await list(at(cmB)), [], 'and its row is gone from their view');
+  // Narrowing moves were the unit member's; reopening is the assign power (B1).
+  assert.ok(await refused(as(at(cmB), Q.moveEnrollment, [org, e2, 'active', null])), 'a plain staff member cannot reopen an enrollment');
+  assert.ok(await refused(as(at(lead), Q.moveEnrollment, [org, e2, 'enrolled', null])), 'nor can a lead');
   assert.equal((await as(O, Q.moveEnrollment, [org, e2, 'active', null])).length, 1, 'the owner reopens a mistake');
   assert.equal(await reach(cmB, p2), true);
   const reopened = (await q(`SELECT exited_on, exit_reason FROM enrollment WHERE id = $1`, [e2])).rows[0] as { exited_on: string | null };
@@ -236,8 +273,18 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.match(await err(as(O, Q.setUnitStatus, [org, U.Y, 'closed'])), /still enrolled/, 'a unit with people in it cannot close');
 
   // ---- details ---------------------------------------------------------------
+  assert.ok(await refused(as(at(cmB), Q.updateEnrollment, [org, e2, cmB, null, null])), 'a plain staff member cannot choose the staff member (B1)');
+  assert.equal((await as(at(cmB), Q.updateEnrollment, [org, e2, null, 'HH-0042b', null])).length, 1, 'but can correct the details');
   assert.equal((await as(O, Q.updateEnrollment, [org, e2, cmB, 'HH-0043', null])).length, 1);
   assert.match(await err(as(O, Q.updateEnrollment, [org, e2, p1, null, null])), /primary staff member/, 'the primary staff member is on staff');
+
+  // Unassigned, nothing a staff member did keeps them in reach; only an admin's unit placement does.
+  assert.equal(await reach(cmA, p1), true);
+  await q(`DELETE FROM client_staff_assignment WHERE access_code_id = $1 AND client_user_id = $2`, [org, p1]);
+  assert.equal(await reach(cmA, p1), false, 'removing the assignment removes the reach');
+  assert.equal(await header(cmA, p1), 0, 'in the app too');
+  await as(at(admin, 'org_admin'), Q.upsertMember, [org, U.Y, cmA, 'member']);
+  assert.equal(await reach(cmA, p1), true, 'an admin putting them in the unit is what gives it back');
 
   // ---- leaving and removal ---------------------------------------------------
   await q(`DELETE FROM org_staff WHERE access_code_id = $1 AND user_id = $2`, [org, cmB]);
@@ -266,6 +313,22 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.ok(await refused(as(O, `INSERT INTO org_activity (access_code_id, entity, action, summary) VALUES ($1, 'unit', 'created', 'forged') RETURNING id`, [org])), 'the app cannot forge a log row');
   assert.ok(await refused(as(O, `SELECT public.smr_structure_activity($1, NULL, NULL, 'unit', NULL, 'created', 'forged')`, [org])), 'nor through the 103 writer');
   assert.ok(await refused(as(O, `SELECT public.org_activity_write($1, NULL, NULL, 'unit', NULL, 'created', 'forged')`, [org])), 'nor through the 102 writer');
+
+  // ---- B2: a staff account that created, added and closed things can be deleted
+  const g = id(110);
+  await as(at(admin, 'org_admin'), Q.insertUnit, unit(g, null, 'program', 'Admin made'));
+  await as(at(admin, 'org_admin'), Q.setUnitStatus, [org, g, 'closed']);
+  await as(at(admin, 'org_admin'), Q.upsertMember, [org, U.X, cmC, 'viewer']);
+  await as(at(admin, 'org_admin'), Q.updateEnrollment, [org, e1, admin, null, null]);
+  const before = (await q(`SELECT (SELECT count(*)::int FROM org_unit WHERE created_by = $1) AS made, (SELECT count(*)::int FROM org_unit WHERE closed_by = $1) AS closed,
+     (SELECT count(*)::int FROM unit_member WHERE added_by = $1) AS added, (SELECT count(*)::int FROM enrollment WHERE created_by = $1 OR updated_by = $1 OR primary_staff_id = $1) AS enr,
+     (SELECT count(*)::int FROM org_profile WHERE updated_by = $1) AS prof`, [admin])).rows[0] as Record<string, number>;
+  assert.ok(before.made >= 2 && before.closed >= 1 && before.added >= 2 && before.enr >= 1 && before.prof >= 1, JSON.stringify(before));
+  await db.exec(`BEGIN; SELECT set_config('app.user_id', '${admin}', true); DELETE FROM users WHERE id = '${admin}'; COMMIT;`);
+  assert.equal((await q(`SELECT count(*)::int AS n FROM users WHERE id = $1`, [admin])).rows[0]!.n, 0, 'the account is gone');
+  const after = (await q(`SELECT (SELECT count(*)::int FROM org_unit WHERE id = $1 AND created_by IS NULL AND closed_by IS NULL AND status = 'closed') AS unit,
+     (SELECT count(*)::int FROM enrollment WHERE id = $2 AND created_by IS NULL AND updated_by IS NULL AND primary_staff_id IS NULL) AS enr`, [g, e1])).rows[0] as Record<string, number>;
+  assert.deepEqual(after, { unit: 1, enr: 1 }, 'what they made stays, with their name cleared');
 
   // ---- an organization deleted with all of this still goes cleanly ----------
   await q(`DELETE FROM access_code_redemption WHERE access_code_id = $1`, [org]); // redemptions do not cascade (006); the org delete path removes them first

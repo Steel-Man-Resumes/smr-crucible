@@ -9,14 +9,14 @@
  */
 import { queryAsUser, runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
-import { dbReachSql } from "./orgUnitReach";
+import { unitReachSql } from "./orgUnitReach";
 
 const scopeOf = (a: OrgActor): OrgScope => ({ orgId: a.orgId, userId: a.userId, role: a.role });
 const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
 const canWrite = (a: OrgActor) => !a.viaPlatformAdmin && a.capabilities.has("org.outcome.write");
 const REACH = (who: string) => `($2::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
    WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid)
-   OR ${dbReachSql("$1::uuid", "$3::uuid", who)})`;
+   OR ${unitReachSql("$1::uuid", "$3::uuid", who)})`;
 
 export const RETENTION_MARKS = [30, 60, 90, 180] as const;
 export const OUTCOME_SOURCES = ["participant_reported", "staff_reported", "staff_verified"] as const;

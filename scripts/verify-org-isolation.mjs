@@ -582,6 +582,7 @@ async function structureChecks() {
   await core.redeemAccessCode(p1, org.code); await core.redeemAccessCode(p2, org.code); await core.redeemAccessCode(pOther, org2.code);
   await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${p1}, ${cm}, ${owner})`;
   const A = (u) => core.resolveOrgActor(u);
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
   const aOwner = await A(owner), aCm = await A(cm), aUnit = await A(unitStaff), aOut = await A(outsider), aSpy = await A(spy);
 
   check("staff cannot add a unit", (await core.createOrgUnit(aCm, { kind: "program", name: "Sneaky" })).ok === false);
@@ -594,7 +595,15 @@ async function structureChecks() {
   check("another org's owner cannot put staff in this org's unit", (await core.setUnitMember(aSpy, prog.id, spy, "lead")).ok === false);
   check("the owner puts a staff member in the program", (await core.setUnitMember(aOwner, prog.id, unitStaff, "member")).ok === true);
   check("an outsider on staff cannot enroll someone they do not reach", (await core.createEnrollment(aOut, { participantId: p2, unitId: prog.id })).ok === false);
-  check("assigned staff enroll their own person", (await core.createEnrollment(aCm, { participantId: p1, unitId: prog.id, status: "active" })).ok === true);
+  check("a plain staff member cannot enroll anyone, not even their own person (enrolling is assigning)", (await core.createEnrollment(aCm, { participantId: p1, unitId: prog.id, status: "active" })).ok === false);
+  const rawEnroll = await raised(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO enrollment (access_code_id, org_unit_id, participant_user_id, status) VALUES (${org.id}, ${prog.id}, ${p1}, 'active') RETURNING id`]));
+  check("and the database refuses it written directly", !!rawEnroll, rawEnroll ?? "inserted");
+  const admin = await mkUser("st-admin");
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin')`;
+  const aAdmin = await A(admin);
+  const e1 = await core.createEnrollment(aAdmin, { participantId: p1, unitId: prog.id, status: "active" });
+  check("an admin enrolls their person", e1.ok === true, JSON.stringify(e1));
   check("the owner enrolls another", (await core.createEnrollment(aOwner, { participantId: p2, unitId: prog.id })).ok === true);
   check("nobody enrolls someone from another organization", (await core.createEnrollment(aOwner, { participantId: pOther, unitId: prog.id })).ok === false);
   if (theirs.ok) check("nobody enrolls into another organization's program", (await core.createEnrollment(aOwner, { participantId: p2, unitId: theirs.id })).ok === false);
@@ -617,6 +626,14 @@ async function structureChecks() {
   check("staff cannot close a unit", (await core.setOrgUnitOpen(aCm, prog.id, false)).ok === false);
   check("a unit with people in it does not close", (await core.setOrgUnitOpen(aOwner, prog.id, false)).ok === false);
 
+  if (e1.ok) {
+    check("a unit member can pause it", (await core.changeEnrollmentStatus(aUnit, e1.id, "exited", "moved_away")).ok === true);
+    check("but a plain staff member cannot reopen it", (await core.changeEnrollmentStatus(aUnit, e1.id, "active")).ok === false);
+    check("an admin can", (await core.changeEnrollmentStatus(aAdmin, e1.id, "active")).ok === true);
+  }
+  await sql`DELETE FROM client_staff_assignment WHERE access_code_id = ${org.id} AND client_user_id = ${p1}`;
+  check("unassigned, the case manager reaches the person no more (nothing they did keeps them in reach)",
+    (await ids(aCm)).length === 0 && (await raw(org.id, cm)) === 0);
   check("taking a staff member out of the unit", (await core.removeUnitMember(aOwner, prog.id, unitStaff)).ok === true);
   check("ends their reach through it", (await ids(aUnit)).length === 0 && (await raw(org.id, unitStaff)) === 0);
   await core.setUnitMember(aOwner, prog.id, unitStaff, "member");

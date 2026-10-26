@@ -76,11 +76,19 @@ export const TERM_LABELS: Record<TermKey, { label: string; help: string }> = {
 };
 
 /**
- * Words that label a person by their record. Never allowed as the word for
- * the people an organization serves (house words rule: never a label on a
- * person). The database refuses the same pattern (103 org_profile_guard).
+ * Words that label a person by their record (house words rule: never a label
+ * on a person). Whole words, singular or plural, any case: refused in every
+ * terminology word, unit name and unit description. "Conviction review
+ * clinic" passes; "Offender group" does not. The database refuses the same
+ * pattern (103 smr_has_label_word).
  */
-export const LABEL_WORDS = /(felon|offender|inmate|convict|ex-con|criminal|prisoner|delinquent)/i;
+export const LABEL_WORDS = /\b(felons?|offenders?|inmates?|convicts?|ex-cons?|prisoners?|parolees?|probationers?|detainees?|supervisees?|criminals|delinquents)\b/i;
+export const LABEL_PROBLEM = "Use words that name people and the work, never a label from someone's record.";
+
+/** Null when the text is fine; a plain message when it carries a label word. */
+export function labelProblem(text: string | null | undefined): string | null {
+  return text && LABEL_WORDS.test(text) ? LABEL_PROBLEM : null;
+}
 export const TERM_MAX = 40;
 
 export type TermProblem = { key: TermKey; message: string };
@@ -91,10 +99,7 @@ export function termProblem(key: TermKey, value: string): string | null {
   if (v.length < 1) return "Type a word, or leave the default.";
   if (v.length > TERM_MAX) return `Keep it to ${TERM_MAX} characters.`;
   if (/[<>{}[\]\\]/.test(v)) return "Use plain letters and spaces.";
-  if ((key === "participant" || key === "participants") && LABEL_WORDS.test(v)) {
-    return "Pick a word that names the person, not their record.";
-  }
-  return null;
+  return labelProblem(v);
 }
 
 /**
@@ -231,6 +236,7 @@ export function checkUnitTree(tree: readonly UnitDraft[], maxUnits = 60): TreePr
       if (!name) problems.push({ path: here, message: "Give it a name." });
       else if (name.length > UNIT_NAME_MAX) problems.push({ path: here, message: `Keep names to ${UNIT_NAME_MAX} characters.` });
       else if (seen.has(name.toLowerCase())) problems.push({ path: here, message: `"${name}" is here twice. Give each its own name.` });
+      else if (labelProblem(name)) problems.push({ path: here, message: LABEL_PROBLEM });
       seen.add(name.toLowerCase());
       if (depth > UNIT_MAX_DEPTH) problems.push({ path: here, message: `Groups go at most ${UNIT_MAX_DEPTH} levels deep.` });
       if (n?.children?.length) walk(n.children, depth + 1, `${here}.`);

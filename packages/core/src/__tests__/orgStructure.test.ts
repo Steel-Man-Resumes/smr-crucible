@@ -9,14 +9,14 @@ import { join } from "node:path";
 import {
   DEFAULT_ORG_TERMS, DEFAULT_ORG_MODULES, ENROLLMENT_MOVES, ENROLLMENT_STATUSES, ORG_MODULES, ORG_TEMPLATES, ORG_TYPES,
   STATUS_REASONS, TERM_KEYS, UNIT_KINDS, ENROLLABLE_KINDS, PROGRAM_ID_PATTERN,
-  canMoveEnrollment, checkUnitTree, flattenUnitTree, normalizeTerms, pluralTerm, reasonsFor, resolveOrgModules,
+  canMoveEnrollment, checkUnitTree, flattenUnitTree, labelProblem, LABEL_WORDS, normalizeTerms, pluralTerm, reasonsFor, resolveOrgModules,
   resolveOrgTerms, templateFor, termProblem, unitKindWord, isTimezoneLike, defaultOrgProfile,
 } from "../orgStructureShared";
 import {
-  applyProfilePatch, cleanEnrollmentInput, cleanProgramId, cleanUnitInput, enrollableUnits, explainStructureError, unitPath,
+  applyProfilePatch, canAssignEnrollments, cleanEnrollmentInput, cleanProgramId, cleanUnitInput, enrollableUnits, explainStructureError, unitPath,
   canManageStructure, canWriteEnrollments, canReadStructure, ORG_STRUCTURE_SQL,
 } from "../orgStructure";
-import { dbReachSql } from "../orgUnitReach";
+import { unitReachSql } from "../orgUnitReach";
 import { capabilitiesForRole, computeOrgCapabilities, DELEGABLE_CAPABILITIES, STAFF_PRESETS, presetOverrideWrites } from "../authz/capabilities";
 
 const SQL = readFileSync(join(__dirname, "..", "..", "migrations", "103_org_structure.sql"), "utf8");
@@ -53,7 +53,8 @@ describe("the TypeScript lists match 103", () => {
   });
   it("the program id pattern and the label words", () => {
     assert.ok(SQL.includes(PROGRAM_ID_PATTERN.source), "same program id pattern");
-    assert.ok(SQL.includes("(felon|offender|inmate|convict|ex-con|criminal|prisoner|delinquent)"));
+    const inner = LABEL_WORDS.source.replace(/^\\b\(|\)\\b$/g, "");
+    assert.ok(SQL.includes(`\\m(${inner})\\M`), "the same label words, whole words, in 103");
   });
 });
 
@@ -71,10 +72,14 @@ describe("words", () => {
     }
     assert.equal(resolveOrgTerms({ participant: "  job   seeker " }).participant, "job seeker");
   });
-  it("never a label on a person, in any case", () => {
-    for (const w of ["felon", "Offender", "ex-offender", "INMATE", "convicts", "ex-con", "criminals", "prisoner", "Juvenile delinquent"]) {
-      assert.ok(termProblem("participant", w), w);
-      assert.ok(termProblem("participants", w), w);
+  it("never a label on a person, in any word, any case, singular or plural", () => {
+    for (const w of ["felon", "Offenders", "ex-offender", "INMATE", "convicts", "ex-con", "criminals", "prisoner", "delinquents",
+                     "parolee", "Probationers", "detainee", "supervisees", "ex-felons"]) {
+      for (const k of TERM_KEYS) assert.ok(termProblem(k, w), `${k}: ${w}`);
+      assert.ok(labelProblem(`Group for ${w}`), w);
+    }
+    for (const ok of ["Conviction review clinic", "Criminal record clearing", "Parole office", "Probation team", "supervisor", "client"]) {
+      assert.equal(labelProblem(ok), null, ok);
     }
     assert.equal(termProblem("participant", "resident"), null);
     assert.equal(termProblem("case_manager", "officer"), null);
@@ -116,6 +121,7 @@ describe("modules and profile", () => {
     assert.equal(applyProfilePatch(cur, { orgType: "bank" }).ok, false);
     assert.equal(applyProfilePatch(cur, { timezone: "Not/A Zone!" }).ok, false);
     assert.equal(applyProfilePatch(cur, { terms: { participants: "inmates" } }).ok, false);
+    assert.equal(applyProfilePatch(cur, { terms: { case_manager: "supervisee coach" } }).ok, false, "every word, not only the participant words");
     assert.equal(applyProfilePatch(cur, { modules: { sites: "on" } }).ok, false);
     assert.equal(applyProfilePatch(cur, { displayName: "x".repeat(121) }).ok, false);
     const r = applyProfilePatch(cur, { orgType: "housing", terms: { participant: "resident" }, modules: { sites: true }, timezone: "America/Denver", displayName: "  " });
@@ -218,6 +224,9 @@ describe("units", () => {
     assert.equal(cleanUnitInput({ kind: "program", name: "x", startsOn: "2026-12-01", endsOn: "2026-11-01" }).ok, false);
     assert.equal(cleanUnitInput({ kind: "program", name: "x", capacity: 0 }).ok, false);
     assert.equal(cleanUnitInput({ kind: "program", name: "x", shortCode: "has space" }).ok, false);
+    assert.equal(cleanUnitInput({ kind: "program", name: "Offender group" }).ok, false, "label rule on names");
+    assert.equal(cleanUnitInput({ kind: "program", name: "Group A", description: "for parolees" }).ok, false, "and descriptions");
+    assert.ok(checkUnitTree([{ kind: "program", name: "Inmate services" }]).length, "and in the setup tree");
     const r = cleanUnitInput({ kind: "cohort", name: "  Fall   cohort ", capacity: "12" });
     assert.ok(r.ok && r.unit.name === "Fall cohort" && r.unit.capacity === 12);
     const keep = cleanUnitInput({ name: "Renamed" }, { kind: "site", name: "Old", parentId: null, capacity: 5 });
@@ -258,6 +267,16 @@ describe("capabilities", () => {
     assert.ok(!canWriteEnrollments({ viaPlatformAdmin: true, capabilities: owner }));
     assert.ok(canReadStructure({ capabilities: staff }));
   });
+  it("creating, reopening and choosing staff on an enrollment is the assign power (B1)", () => {
+    assert.ok(canAssignEnrollments({ viaPlatformAdmin: false, capabilities: owner }));
+    assert.ok(canAssignEnrollments({ viaPlatformAdmin: false, capabilities: admin }));
+    assert.ok(!canAssignEnrollments({ viaPlatformAdmin: false, capabilities: staff }), "plain staff cannot");
+    assert.ok(canAssignEnrollments({ viaPlatformAdmin: false, capabilities: computeOrgCapabilities("staff", ["org.client.assign"]) }), "granted, they can");
+    assert.ok(!canAssignEnrollments({ viaPlatformAdmin: false, capabilities: computeOrgCapabilities("org_admin", [], ["org.client.assign"]) }), "deny wins");
+    assert.ok(!canAssignEnrollments({ viaPlatformAdmin: true, capabilities: owner }));
+    assert.ok(SQL.includes("AND public.smr_enrollment_assigner(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid));"), "the insert policy asks the database's assign rule");
+    assert.match(SQL, /OLD\.status IN \('completed', 'exited', 'withdrawn'\) AND NEW\.status NOT IN/, "reopening is checked in the guard");
+  });
   it("enrollment.write is delegable, the volunteer preset denies it, and 103 appends it to the SQL list", () => {
     assert.ok(DELEGABLE_CAPABILITIES.some((d) => d.capability === "org.enrollment.write"));
     assert.ok(STAFF_PRESETS.volunteer.denies.includes("org.enrollment.write"));
@@ -286,18 +305,23 @@ describe("the SQL the module runs", () => {
 
 describe("unit reach in the application's own checks (the second wall)", () => {
   const src = (f: string) => readFileSync(join(__dirname, "..", f), "utf8");
-  it("asks the database rule (102 reach, 103 units) with org, actor, person", () => {
-    assert.equal(dbReachSql("$1::uuid", "$3::uuid", "t.client_user_id"), "public.smr_staff_reach($1::uuid, $3::uuid, t.client_user_id)");
+  it("is the database's unit rule written out in app SQL, independent of the database functions", () => {
+    const q = unitReachSql("$1::uuid", "$3::uuid", "t.client_user_id");
+    assert.ok(!/smr_staff_reach|smr_staff_unit_reach|smr_is_volunteer/.test(q), "the second wall does not call the first");
+    for (const part of ["ur_u.status = 'active'", "role_in_unit IN ('lead', 'member')", "ur_m.role_in_unit = 'lead' AND ur_m.org_unit_id IN (ur_p1.id, ur_p2.id, ur_p3.id)",
+      "('referred', 'enrolled', 'active', 'paused')", "FROM org_staff ur_s", "'org.participant.invite' AND ur_o.effect = 'deny'", "ur_e.participant_user_id = t.client_user_id"]) {
+      assert.ok(q.includes(part), part);
+    }
   });
-  it("every assignment-based reach check also admits the database rule", () => {
+  it("every assignment-based reach check also admits unit reach", () => {
     const view = src("orgClientView.ts");
     const inReach = view.slice(view.indexOf("const IN_REACH"), view.indexOf("const SHARED"));
-    assert.match(inReach, /dbReachSql\("\$2::uuid", "\$4::uuid", "\$1::uuid"\)/, "IN_REACH: org $2, actor $4, person $1");
-    assert.match(view.slice(view.indexOf("const reachOf")), /dbReachSql\("\$1::uuid", "\$3::uuid", who\)/);
-    assert.match(src("staffTasks.ts"), /dbReachSql\("\$1::uuid", "\$3::uuid", "t.client_user_id"\)/);
-    assert.match(src("staffTasks.ts"), /dbReachSql\("\$1::uuid", "\$3::uuid", "\$4::uuid"\)/, "adding a task about someone");
-    assert.match(src("orgToday.ts"), /dbReachSql\("\$1::uuid", "\$3::uuid", who\)/);
-    assert.match(src("orgOutcomes.ts"), /dbReachSql\("\$1::uuid", "\$3::uuid", who\)/);
+    assert.match(inReach, /unitReachSql\("\$2::uuid", "\$4::uuid", "\$1::uuid"\)/, "IN_REACH: org $2, actor $4, person $1");
+    assert.match(view.slice(view.indexOf("const reachOf")), /unitReachSql\("\$1::uuid", "\$3::uuid", who\)/);
+    assert.match(src("staffTasks.ts"), /unitReachSql\("\$1::uuid", "\$3::uuid", "t.client_user_id"\)/);
+    assert.match(src("staffTasks.ts"), /unitReachSql\("\$1::uuid", "\$3::uuid", "\$4::uuid"\)/, "adding a task about someone");
+    assert.match(src("orgToday.ts"), /unitReachSql\("\$1::uuid", "\$3::uuid", who\)/);
+    assert.match(src("orgOutcomes.ts"), /unitReachSql\("\$1::uuid", "\$3::uuid", who\)/);
     assert.match(src("partnerDashboard.ts"), /participantsReachedThroughUnits\(opts\.accessCodeId, opts\.assignedToStaffId\)/);
   });
   it("never widens a 'case manager only' sharing requirement", () => {
