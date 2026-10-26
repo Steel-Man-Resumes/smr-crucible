@@ -350,6 +350,9 @@ export interface NavExtension {
 export const NAV_EXTENSIONS: readonly NavExtension[] = [
   // House L3b (102): the organization's activity log.
   { surface: "org", group: "Organization", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
+  // House L3a (103): the organization's programs, sites, teams and caseloads, and first-run setup.
+  { surface: "org", group: "Organization", href: "/dashboard/structure", label: "Structure", navId: "org-nav-structure", needs: "org.cohort.view", after: "Team & access" },
+  { surface: "org", group: "Organization", href: "/dashboard/setup", label: "Set up", navId: "org-nav-setup", needs: "org.settings.manage" },
 ];
 
 /**

@@ -18,14 +18,14 @@ import { handleStructureGet, handleStructurePost } from "@/lib/org-structure-htt
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const guard = await requireOrgCapability("org.cohort.view");
+export async function GET(request: Request) {
+  const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   return handleStructureGet(guard.actor, { getOrgStructure });
 }
 
 export async function POST(request: Request) {
-  const guard = await requireOrgCapability("org.settings.manage");
+  const guard = await requireOrgCapability("org.settings.manage", { request });
   if (!guard.ok) return guard.response;
   return handleStructurePost(request, guard.actor, { createOrgUnit, updateOrgUnit, moveOrgUnit, setOrgUnitOpen, setUnitMember, removeUnitMember });
 }

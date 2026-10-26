@@ -17,13 +17,13 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const guard = await requireOrgCapability("org.cohort.view");
+  const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   return handleEnrollmentsGet(new URL(request.url), guard.actor, { listEnrollments });
 }
 
 export async function POST(request: Request) {
-  const guard = await requireOrgCapability("org.enrollment.write");
+  const guard = await requireOrgCapability("org.enrollment.write", { request });
   if (!guard.ok) return guard.response;
   return handleEnrollmentsPost(request, guard.actor, { createEnrollment, changeEnrollmentStatus, updateEnrollmentDetails });
 }

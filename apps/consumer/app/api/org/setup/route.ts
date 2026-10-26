@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const guard = await requireOrgCapability("org.settings.manage");
+  const guard = await requireOrgCapability("org.settings.manage", { request });
   if (!guard.ok) return guard.response;
   return handleSetupPost(request, guard.actor, { completeOrgSetup });
 }

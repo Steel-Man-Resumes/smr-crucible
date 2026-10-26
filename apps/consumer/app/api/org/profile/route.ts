@@ -16,14 +16,14 @@ import { handleProfileGet, handleProfilePatch } from "@/lib/org-structure-http";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const guard = await requireOrgCapability("org.cohort.view");
+export async function GET(request: Request) {
+  const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   return handleProfileGet(guard.actor, { getOrgProfile });
 }
 
 export async function PATCH(request: Request) {
-  const guard = await requireOrgCapability("org.settings.manage");
+  const guard = await requireOrgCapability("org.settings.manage", { request });
   if (!guard.ok) return guard.response;
   return handleProfilePatch(request, guard.actor, { updateOrgProfile });
 }
