@@ -12,6 +12,8 @@
 
 import { Suspense, useState, useEffect, useRef } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
+import { confirmedSignOut } from "@/lib/confirmed-sign-out";
+import { clearAccountBrowserState } from "@/lib/account-browser-state";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
@@ -189,9 +191,10 @@ function LoginForm() {
     setSending(true);
     setError("");
     try {
-      await signOut({ redirect: false });
-      clearPriorAccountState();
-      eraseLocalForgeRun();
+      // Confirmed server-side first; then nothing of the previous person
+      // (Forge run, queues, staff note drafts, codes) stays in this browser.
+      await confirmedSignOut();
+      clearAccountBrowserState();
       window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
     } catch {
       setError("We couldn't sign you out. Try again.");

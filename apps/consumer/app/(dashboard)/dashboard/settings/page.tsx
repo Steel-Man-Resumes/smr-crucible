@@ -31,6 +31,8 @@ import { LoginHistoryCard } from "@/components/LoginHistoryCard";
 import { AccessibilitySettingsSection } from "@/components/AccessibilitySettingsSection";
 import { AvatarSettingsSection } from "@/components/AvatarSettingsSection";
 import { signIn, signOut, useSession } from "next-auth/react";
+import { confirmedSignOut } from "@/lib/confirmed-sign-out";
+import { clearAccountBrowserState } from "@/lib/account-browser-state";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
@@ -351,9 +353,18 @@ export default function SettingsPage() {
         // Restricted browser storage must not prevent signing out.
       }
     }
-    // Force fresh JWT by signing out -- the account is gone (account mode) or
-    // the tier was reset server-side (data mode); either way, back to login.
-    await signOut({ callbackUrl: "/login" });
+    // Sign out (confirmed by the server when possible) and clear everything
+    // this browser held for the account: on a shared computer the next person
+    // must inherit nothing, including queues and staff note drafts.
+    let confirmed = true;
+    try {
+      await confirmedSignOut();
+    } catch {
+      confirmed = false;
+    }
+    clearAccountBrowserState();
+    if (confirmed) window.location.assign("/login");
+    else await signOut({ callbackUrl: "/login" });
   }
 
   // Org staff are not job seekers. Their settings should not describe resumes
