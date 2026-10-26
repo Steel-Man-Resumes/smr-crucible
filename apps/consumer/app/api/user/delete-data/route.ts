@@ -141,6 +141,11 @@ export async function DELETE(req: Request) {
     await deleteAllRevisions(userId);
     // The newest writer's receipt per run (081): nonces only, owner only.
     await deleteAllWriterReceipts(userId);
+    // Applications first: job_application points at resumes, cover letters and
+    // disclosure plans in refinery_artifact with no ON DELETE action (migrations
+    // 011 and 031), so deleting the artifacts first fails on the foreign key and
+    // leaves a half-finished delete (production, 2026-10-26).
+    await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     // refinery_artifact has CASCADE on user_id, but be explicit
     await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
     // Career lanes (074): after the artifacts that point at them. Owner-only
@@ -154,7 +159,6 @@ export async function DELETE(req: Request) {
     await queryAsUser(userId, "DELETE FROM lane_tool_intro WHERE user_id = $1", [userId]);
     // The practice record (076): owner only, deleted as the person.
     await queryAsUser(userId, "DELETE FROM practice_entry WHERE user_id = $1", [userId]);
-    await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
     // ai_token_usage is the newer per-call token ledger (migration 022) that the
