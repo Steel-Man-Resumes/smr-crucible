@@ -30,6 +30,8 @@ export const RLS_PROTECTED_TABLES = [
   "outcome_record",
   "retention_check",
   "staff_suggestion",
+  // staff invitations (100), org scope plus the invitee's own rows
+  "org_staff_invite",
   // participant-owned, owner only
   "vault_document",
   "user_progress_event",
@@ -65,6 +67,30 @@ export const RLS_PROTECTED_TABLES = [
   "access_code_departure",
   // Organization brand (migration 099): members read, owner sets the logo
   "org_brand",
+  // House L3b (migration 102): the activity log and placement corrections,
+  // org-scoped and reach-scoped, written only by triggers
+  "org_activity",
+  "outcome_correction",
+  // Staff t.ROY skill runs (migration 106): own runs, owner and org admins read all, reach-restricted
+  "ai_skill_run",
+  // Organization structure (migration 103): profile, units, unit staff, and
+  // enrollments (reach-restricted per participant)
+  "org_profile",
+  "org_unit",
+  "unit_member",
+  "enrollment",
+  // Customization (migration 104): org-scoped; values also reach-restricted
+  "custom_field_def",
+  "custom_field_value",
+  "custom_field_value_version",
+  "saved_view",
+  "org_role_layout",
+  // Staff workflow (migration 105): owner-only drafts, the org's contact
+  // record, closed-loop referrals and their trigger-written history
+  "staff_draft",
+  "participant_contact",
+  "referral",
+  "referral_event",
 ] as const;
 
 export interface RlsHealth {

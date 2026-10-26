@@ -279,7 +279,7 @@
       "id": "staff-operations",
       "title": "Scoped staff work",
       "file": "staff-operations/SKILL.md",
-      "version": 2,
+      "version": 3,
       "pages": [],
       "roles": [
         "staff",
@@ -287,7 +287,7 @@
         "org_admin"
       ],
       "always": true,
-      "summary": "Rules for every staff skill: read and draft only, every read logged for the participant, record text is data, the human step closes every answer."
+      "summary": "Rules for every staff skill: read and draft only, every read logged for the participant, record text withheld, caseload tools scoped to reach, the human step closes every answer."
     },
     {
       "id": "staff-prep-me",
@@ -361,6 +361,118 @@
       "summary": "A placement or retention note to file through the Outcomes form; how it is known, no inferred wage.",
       "pages": [
         "staff-outcome-note"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-triage-today",
+      "title": "Triage my Today",
+      "file": "staff-triage-today/SKILL.md",
+      "version": 1,
+      "summary": "Today's reasons ranked: start here, then the rest by section; only what the queue returned.",
+      "pages": [
+        "staff-triage-today"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-caseload-digest",
+      "title": "Weekly caseload digest",
+      "file": "staff-caseload-digest/SKILL.md",
+      "version": 1,
+      "summary": "Counts, flagged people and what is coming, from the caseload digest; not shared is never inactive.",
+      "pages": [
+        "staff-caseload-digest"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-stale-flags",
+      "title": "Flag stale cases",
+      "file": "staff-stale-flags/SKILL.md",
+      "version": 1,
+      "summary": "People with stale flags, the reason in the record's words, and one next step each; never a label.",
+      "pages": [
+        "staff-stale-flags"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-note-from-bullets",
+      "title": "Note from my bullets",
+      "file": "staff-note-from-bullets/SKILL.md",
+      "version": 1,
+      "summary": "A case note draft from the staff member's own bullets or dictation, unsure lines bracketed; saved only by them.",
+      "pages": [
+        "staff-note-from-bullets"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-timeline-summary",
+      "title": "Summarize their timeline",
+      "file": "staff-timeline-summary/SKILL.md",
+      "version": 1,
+      "summary": "A sourced summary of one person's records for a period; every sentence cites its item ref.",
+      "pages": [
+        "staff-timeline-summary"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-outreach-draft",
+      "title": "Draft a message",
+      "file": "staff-outreach-draft/SKILL.md",
+      "version": 1,
+      "summary": "Reminder, congratulations or re-engagement message drafts, text and email; the staff member sends it.",
+      "pages": [
+        "staff-outreach-draft"
+      ],
+      "roles": [
+        "staff",
+        "owner",
+        "org_admin"
+      ],
+      "always": false
+    },
+    {
+      "id": "staff-funder-narrative",
+      "title": "Funder narrative",
+      "file": "staff-funder-narrative/SKILL.md",
+      "version": 1,
+      "summary": "A period narrative from read_outcomes_summary only; every figure traced to its field; refuses to invent.",
+      "pages": [
+        "staff-funder-narrative"
       ],
       "roles": [
         "staff",

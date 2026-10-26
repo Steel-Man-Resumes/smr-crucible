@@ -32,6 +32,8 @@ import { effectiveAuth } from "@/lib/effective-auth";
 import { loadSelectedWork, readWorkSelection, selectedWorkPrompt } from "@/lib/assistant-work-context";
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
+import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds } from "@/lib/staff-skill-run";
+import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
@@ -196,6 +198,10 @@ export async function POST(request: Request) {
       const { resolveOrgActor, getPartnerCohort, summarizeStaffPerformance, getQuietAfterDays } =
         await import("@crucible/core");
       const actor = await resolveOrgActor(userId);
+      // The organization's AI switch (org_profile.modules.ai_assist, lane L3a). Off means off for staff.
+      if (actor && actor.reach !== "none" && !(await (await import("@crucible/core")).orgAiAssistEnabled(actor))) {
+        return NextResponse.json({ error: "t.ROY is turned off for your organization. An admin can turn it on in Settings." }, { status: 403 });
+      }
       if (actor && actor.reach !== "none") {
         const cohort = await getPartnerCohort(userId, {
           accessCodeId: actor.orgId,
@@ -234,6 +240,8 @@ export async function POST(request: Request) {
           visibleNames: cohort.clients.map((c) => firstName(c.name)),
           visibleParticipants: cohort.clients.slice(0, 25).map((c) => ({ id: c.userId, firstName: firstName(c.name) })),
           staffNames: staff.map((m) => firstName(m.name)),
+          // The skills' volunteer branches need this (A2 report H6); server-resolved, never from the browser.
+          volunteer: (await import("@crucible/core")).todayIsVolunteer(actor.role, actor.capabilities),
         };
       }
     } catch (err) {
@@ -294,7 +302,13 @@ export async function POST(request: Request) {
   }
   const memorySection = userId && !platformOwner && !staffActor && !isDisclosureRehearsal && enhancedConsent ? await buildMemorySection(userId) : "";
   const staffEvidence = createStaffEvidenceCollector();
-  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus }) : buildAssistantTools(toolOptions);
+  // The staff member's own words, record sentences withheld, before any model
+  // sees them (fix round 1; CC default until Troy rules). The skill was chosen
+  // above from their words on this server; nothing raw goes further.
+  const staffInput = staffActor ? gateStaffMessages(messages) : null;
+  const staffSaid = staffInput ? lastUserText(staffInput.messages) : "";
+  const staffNamed = staffActor ? namedParticipantIds(staffSaid, context.org?.visibleParticipants ?? []) : [];
+  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus, namedClientIds: staffNamed }) : buildAssistantTools(toolOptions);
   const capabilities = assistantCapabilities(tools, { role: platformOwner ? "owner" : staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord, extraPages: staffSkill ? [staffSkill] : [] });
   const baseSystemPrompt =
     (platformOwner ? OWNER_ASSISTANT_PROMPT : buildSystemPrompt(context)) +
@@ -401,7 +415,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     const generated = await generateText({
       model: troyChatModel(),
       system: localizedSystemPrompt,
-      messages: messages as never,
+      messages: (staffInput?.messages ?? messages) as never,
       maxTokens: responseMaxTokens,
       tools,
       maxSteps: TROY_SERVER_MAX_STEPS,
@@ -430,7 +444,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       orgName: context.org.orgName,
       quietDays: context.org.quietDays,
     };
-    const verdict = await verifyOrgOutput(answer, facts, lastUserText(messages) ?? undefined);
+    const userSaid = staffInput ? staffSaid : lastUserText(messages);
+    const verdict = await verifyOrgOutput(answer, facts, userSaid || undefined);
 
     // Dash sweep on the model-written answer only, before any notice is added.
     let out = plainPunctuation(answer, logDashSwaps("assistant-org"));
@@ -462,7 +477,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
           contextPage: context.currentPage,
           modelProvider: "anthropic",
           modelId: MODEL_TROY,
-          input: lastUserText(messages),
+          input: userSaid,
           explanation: `Org staff assistant (${context.org.role}, reach ${context.org.reach}) on ${context.currentPage}. Verified before send: ${
             verdict.ok ? "clean" : `${verdict.problems.length} unsupported claim(s) flagged to the reader`
           }; second pass ${verdict.modelChecked ? "ran" : "did NOT run"}.`,
@@ -482,16 +497,31 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       }
     }
 
-    // Re-emit as the data-stream protocol the chat client expects.
+    // A draft for the participant's page passes the same layer-1 check as the
+    // answer (fix round 1, B3). One that fails is held back, and the reason is
+    // shown where the staff member reads it.
+    const { checkOrgClaimsDeterministic } = await import("@/lib/org-output-verify");
+    const draftCheck = checkStaffDrafts(
+      offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])),
+      (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
+    );
+    if (draftCheck.notice) out += draftCheck.notice;
+    if (staffInput?.withheld) out += `\n\n_${STAFF_INPUT_NOTICE}_`;
+
+    // The skill-run log (migration 106): who, which skill, about whom, a
+    // gated summary of what they asked, which tools ran, a hash of the answer.
+    const skillRunId = staffActor
+      ? await recordStaffSkillRun(staffActor, { skill: staffSkill, focus: staffFocus, calls: staffEvidence.calls, userText: staffSaid, answer: out })
+      : null;
+
+    // Re-emit as the data-stream protocol the chat client expects: any draft
+    // that passed the check, as a finished tool call, the checked text, and
+    // the run id for an acceptance (lib/staff-skill-run.ts).
+    const lines = staffAnswerStreamLines(out, draftCheck.kept, skillRunId, `staff-${Date.now().toString(36)}`);
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
-        controller.enqueue(encoder.encode(`0:${JSON.stringify(out)}\n`));
-        controller.enqueue(
-          encoder.encode(
-            `d:${JSON.stringify({ finishReason: "stop", usage: { promptTokens: 0, completionTokens: 0 } })}\n`
-          )
-        );
+        for (const line of lines) controller.enqueue(encoder.encode(line));
         controller.close();
       },
     });

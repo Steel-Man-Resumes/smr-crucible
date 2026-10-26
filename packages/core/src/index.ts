@@ -18,12 +18,26 @@ export * from './sharing';
 export * from './sharingPolicy';
 export * from './orgClientView';
 export * from './orgStaffAssistant';
+export * from './orgStaffCaseload';
+export * from './aiSkillRun';
 export * from './staffPrefs';
+export * from './customFields';
+export * from './savedViews';
+export * from './caseloadExportShared';
 export * from './orgAccess';
+export * from './staffInvites';
 export * from './orgInsights';
 export * from './staffTasks';
 export * from './orgToday';
 export * from './orgOutcomes';
+export * from './orgActivity';
+export * from './orgActivityShared';
+// Staff workflow (migration 105, house lane L5): referrals, drafts, search, the person timeline.
+export * from './orgWorkflowShared';
+export * from './orgReferrals';
+export * from './orgDrafts';
+export * from './orgSearch';
+export * from './orgTimeline';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './artifactRevision';
@@ -96,6 +110,8 @@ export * from './orgSeats';
 export * from './orgAdmin';
 // Organization brand (migration 099): logo bytes and the branding tier.
 export * from './orgBrand';
+export * from './orgStructure';
+export * from './orgUnitReach';
 
 // The second check (2026-10-07): a different model family reads the page
 // against the person's own words. Off by default (SECOND_CHECK_ENABLED).

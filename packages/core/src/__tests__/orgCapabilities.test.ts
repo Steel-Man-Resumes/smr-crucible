@@ -150,7 +150,7 @@ describe("volunteer preset", () => {
   it("is staff with no invites, no placements, own caseload only", () => {
     const writes = presetOverrideWrites("volunteer");
     const denies = writes.filter((w) => w.effect === "deny").map((w) => w.capability).sort();
-    assert.deepEqual(denies, ["org.outcome.write", "org.participant.invite"]);
+    assert.deepEqual(denies, ["org.enrollment.write", "org.outcome.write", "org.participant.invite"]);
     const caps = computeOrgCapabilities("staff", [], denies);
     assert.equal(caps.has("org.participant.invite"), false);
     assert.equal(caps.has("org.outcome.write"), false);

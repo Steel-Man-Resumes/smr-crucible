@@ -38,6 +38,10 @@ export const RESTRICTED_GRANTS = {
   outcome_record: ["SELECT", "INSERT", "UPDATE"],
   retention_check: ["SELECT", "INSERT"],
   staff_suggestion: ["SELECT", "INSERT", "UPDATE"],
+  // Customization (104): a field definition is retired, never deleted.
+  custom_field_def: ["SELECT", "INSERT", "UPDATE"],
+  // Value history (104): append-only, written only by its trigger.
+  custom_field_value_version: ["SELECT"],
   // Employer directory (061). Platform-admin tables: RLS decides who, and
   // nothing is ever deleted. The internal views run as the owner and see
   // through every policy, so the app holds nothing on them at all.
@@ -128,7 +132,85 @@ export const RESTRICTED_GRANTS = {
   refinery_seat_legacy: ["SELECT", "INSERT", "DELETE"],
   org_seat_offer: ["SELECT", "INSERT"],
   access_code_departure: ["SELECT"],
+  // Staff invitations (100). Never deleted; the guard trigger limits UPDATE to
+  // resend and revoke, and only the definer function accepts or declines.
+  org_staff_invite: ["SELECT", "INSERT", "UPDATE"],
+  // House L3b (102). The activity log and every earlier value of a placement
+  // are written only by SECURITY DEFINER triggers: the app reads, never writes.
+  org_activity: ["SELECT"],
+  outcome_correction: ["SELECT"],
+  // Staff t.ROY skill runs (106): append-only; the only change is the
+  // acceptance, by the person who ran it (a column grant, checked below).
+  ai_skill_run: ["SELECT", "INSERT", "UPDATE (accepted_by, accepted_at)"],
+  // House L3a (103). Units and enrollments are closed or ended, never
+  // deleted; a profile is changed, never removed. Taking a staff member out
+  // of a unit is a real delete (the activity log keeps it).
+  org_profile: ["SELECT", "INSERT", "UPDATE"],
+  org_unit: ["SELECT", "INSERT", "UPDATE"],
+  unit_member: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  enrollment: ["SELECT", "INSERT", "UPDATE"],
+  // House L5 (105). The org's contact record and referrals are kept, never
+  // deleted; referral history is written only by its trigger. (staff_draft
+  // is the author's own scratch: SELECT, INSERT, UPDATE, DELETE, owner-only RLS.)
+  participant_contact: ["SELECT", "INSERT", "UPDATE"],
+  referral: ["SELECT", "INSERT", "UPDATE"],
+  referral_event: ["SELECT"],
 };
+
+/**
+ * Functions the app role MUST be able to execute (102 onward). Row policies on
+ * notes, tasks, placements, check-ins, suggestions, asks and the activity log
+ * call smr_staff_reach as the querying role: without EXECUTE every scoped read
+ * of those tables fails with "permission denied for function". Migrations grant
+ * these only when the role already exists, so a fresh database (where this
+ * role is created afterwards) needs them granted here, like the table list.
+ */
+export const APP_FUNCTIONS = [
+  "smr_staff_sees_all(uuid, uuid)",
+  "smr_staff_unit_reach(uuid, uuid, uuid)",
+  "smr_staff_reach(uuid, uuid, uuid)",
+  "smr_correct_retention_check(uuid, text, text, text, text)",
+  // House L3a (103): the structure and enrollment write policies call these.
+  "smr_org_structure_manager(uuid, uuid)",
+  "smr_enrollment_writer(uuid, uuid)",
+  "smr_enrollment_assigner(uuid, uuid)",
+  // 104: the manager check inside the custom field, view and layout policies.
+  "smr_org_manager(uuid)",
+  "smr_org_staff_session(uuid)",
+  // 105: called as the app role by the referral guard, the contact guard and
+  // its generated column, the referral path check and the draft save.
+  "smr_phone_digits(text)",
+  "smr_referral_next(text)",
+  "smr_referral_consent(uuid, uuid)",
+  "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
+  "smr_purge_stale_staff_drafts()",
+  "smr_retention_task_marks()",
+];
+/**
+ * Functions the app role must NEVER execute: the activity log's only writer,
+ * and the org-role lookup that answers for any organization (definer-only).
+ */
+export const APP_FORBIDDEN_FUNCTIONS = [
+  "org_activity_write(uuid, uuid, uuid, text, text, text, text)",
+  "smr_org_role(uuid, uuid)",
+  // House L3a (103): the structure tables' activity writer.
+  "smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)",
+  // Answers "is this person a volunteer" for any org: definer-only.
+  "smr_is_volunteer(uuid, uuid)",
+  // 104: activity trigger functions (definer); fired by triggers, never called.
+  "custom_field_activity()",
+  "org_customization_activity()",
+  "custom_field_value_keep_version()",
+  // 105: the retention task maker and its owner rule run only from definer triggers.
+  "smr_make_retention_tasks(uuid)",
+  "smr_retention_task_owner(uuid, uuid, uuid)",
+];
+
+/** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */
+export function columnGrant(entry) {
+  const m = /^([A-Z]+)\s*\(([^)]*)\)$/.exec(entry);
+  return m ? { privilege: m[1], columns: m[2].split(",").map((c) => c.trim()).filter(Boolean) } : null;
+}
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
 export const DIRECTORY_OBJECTS = [
@@ -179,6 +261,14 @@ export async function applyRestrictedGrants(run, role = APP_ROLE) {
     // An empty list means the app holds nothing on it at all.
     if (allowed.length) await run(`GRANT ${allowed.join(", ")} ON public.${table} TO ${role}`);
   }
+  for (const fn of APP_FUNCTIONS) {
+    const exists = await run(`SELECT to_regprocedure('public.${fn}') IS NOT NULL AS ok`);
+    if (exists?.[0]?.ok) await run(`GRANT EXECUTE ON FUNCTION public.${fn} TO ${role}`);
+  }
+  for (const fn of APP_FORBIDDEN_FUNCTIONS) {
+    const exists = await run(`SELECT to_regprocedure('public.${fn}') IS NOT NULL AS ok`);
+    if (exists?.[0]?.ok) await run(`REVOKE ALL ON FUNCTION public.${fn} FROM PUBLIC, ${role}`);
+  }
 }
 
 /** Returns a list of human-readable violations; empty means the grants are right. */
@@ -190,10 +280,36 @@ export async function checkRestrictedGrants(run, role = APP_ROLE) {
         WHERE grantee = '${role}' AND table_schema = 'public' AND table_name = '${table}'`
     );
     const held = rows.map((r) => r.privilege_type).sort();
-    const extra = held.filter((p) => !allowed.includes(p));
-    const missing = allowed.filter((p) => !held.includes(p));
+    const tableAllowed = allowed.filter((p) => !columnGrant(p));
+    const extra = held.filter((p) => !tableAllowed.includes(p));
+    const missing = tableAllowed.filter((p) => !held.includes(p));
     if (extra.length) problems.push(`${role} holds ${extra.join(", ")} on ${table}; allowed: ${allowed.join(", ")}`);
     if (missing.length) problems.push(`${role} lacks ${missing.join(", ")} on ${table}`);
+    // Column grants (for example the acceptance columns of ai_skill_run): exactly these columns.
+    const columnRows = await run(
+      `SELECT privilege_type, column_name FROM information_schema.role_column_grants
+        WHERE grantee = '${role}' AND table_schema = 'public' AND table_name = '${table}'`
+    );
+    const tablePrivs = new Set(held);
+    const wantColumns = new Set(allowed.map(columnGrant).filter(Boolean).flatMap((g) => g.columns.map((c) => `${g.privilege}:${c}`)));
+    // A table-level privilege shows up per column too; only column grants beyond the table's count.
+    const heldColumns = new Set(columnRows.filter((r) => !tablePrivs.has(r.privilege_type)).map((r) => `${r.privilege_type}:${r.column_name}`));
+    const extraCols = [...heldColumns].filter((c) => !wantColumns.has(c));
+    const missingCols = [...wantColumns].filter((c) => !heldColumns.has(c));
+    if (extraCols.length) problems.push(`${role} holds column privileges ${extraCols.join(", ")} on ${table}; allowed: ${allowed.join(", ")}`);
+    if (missingCols.length) problems.push(`${role} lacks column privileges ${missingCols.join(", ")} on ${table}`);
+  }
+  for (const fn of APP_FUNCTIONS) {
+    const [row] = await run(`SELECT to_regprocedure('public.${fn}') IS NOT NULL AS ok,
+                                    CASE WHEN to_regprocedure('public.${fn}') IS NULL THEN NULL
+                                         ELSE has_function_privilege('${role}', 'public.${fn}', 'EXECUTE') END AS can`);
+    if (row?.ok && !row.can) problems.push(`${role} cannot execute ${fn}; every scoped read of a reach-protected table would fail`);
+  }
+  for (const fn of APP_FORBIDDEN_FUNCTIONS) {
+    const [row] = await run(`SELECT to_regprocedure('public.${fn}') IS NOT NULL AS ok,
+                                    CASE WHEN to_regprocedure('public.${fn}') IS NULL THEN NULL
+                                         ELSE has_function_privilege('${role}', 'public.${fn}', 'EXECUTE') END AS can`);
+    if (row?.ok && row.can) problems.push(`${role} can execute ${fn}, so it could forge the activity log`);
   }
   return problems;
 }

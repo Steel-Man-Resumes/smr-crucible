@@ -19,7 +19,15 @@ export type StaffSkillId =
   | "staff-check-in"
   | "staff-what-changed"
   | "staff-find-help"
-  | "staff-outcome-note";
+  | "staff-outcome-note"
+  // House build L6 (2026-10-26): caseload breadth, all drafts or reads.
+  | "staff-triage-today"
+  | "staff-caseload-digest"
+  | "staff-stale-flags"
+  | "staff-note-from-bullets"
+  | "staff-timeline-summary"
+  | "staff-outreach-draft"
+  | "staff-funder-narrative";
 
 export interface StaffTroyRequest {
   clientId?: string;
@@ -28,12 +36,17 @@ export interface StaffTroyRequest {
   firstName?: string;
 }
 
+/** Where a skill's button shows: about one person, across the caseload, or both. */
+export type StaffSkillScope = "person" | "caseload" | "both";
+
 export interface StaffSkill {
   id: StaffSkillId;
   /** The button. */
   label: string;
   /** Needs a person selected to make sense. */
   needsPerson: boolean;
+  /** Which panel shows it: with a person chosen ("person"), without ("caseload"), or either. */
+  scope: StaffSkillScope;
   /** Built and on. A skill that is not ready is never offered. */
   ready: boolean;
   /** What is put in the message box. {first} becomes the first name or "this person". */
@@ -41,17 +54,36 @@ export interface StaffSkill {
 }
 
 export const STAFF_SKILLS: readonly StaffSkill[] = [
-  { id: "staff-prep-me", label: "Prep me", needsPerson: true, ready: true,
+  { id: "staff-prep-me", label: "Prep me", needsPerson: true, scope: "person", ready: true,
     request: "Prep me for my next conversation with {first}." },
-  { id: "staff-check-in", label: "Draft a check-in", needsPerson: true, ready: true,
+  { id: "staff-check-in", label: "Draft a check-in", needsPerson: true, scope: "person", ready: true,
     request: "Draft a check-in to {first} that I will send myself." },
-  { id: "staff-find-help", label: "Find local help", needsPerson: false, ready: true,
+  { id: "staff-find-help", label: "Find local help", needsPerson: false, scope: "both", ready: true,
     request: "Find local help for {first}. The need is: " },
-  { id: "staff-what-changed", label: "What changed", needsPerson: false, ready: true,
+  { id: "staff-what-changed", label: "What changed", needsPerson: false, scope: "person", ready: true,
     request: "What changed for {first} in the last 7 days?" },
-  { id: "staff-outcome-note", label: "Write the outcome note", needsPerson: true, ready: true,
+  { id: "staff-outcome-note", label: "Write the outcome note", needsPerson: true, scope: "person", ready: true,
     request: "Help me write the outcome note for {first}. Here is what I know: " },
+  { id: "staff-note-from-bullets", label: "Note from my bullets", needsPerson: true, scope: "person", ready: true,
+    request: "Turn my bullets into a case note for {first}. My bullets: " },
+  { id: "staff-timeline-summary", label: "Summarize their timeline", needsPerson: true, scope: "person", ready: true,
+    request: "Summarize {first}'s timeline for the last 90 days, with sources." },
+  { id: "staff-outreach-draft", label: "Draft a message", needsPerson: true, scope: "person", ready: true,
+    request: "Draft a message to {first} that I will send myself. It is a: " },
+  { id: "staff-triage-today", label: "Triage my Today", needsPerson: false, scope: "caseload", ready: true,
+    request: "Triage my Today: who needs me first, and why?" },
+  { id: "staff-caseload-digest", label: "Weekly caseload digest", needsPerson: false, scope: "caseload", ready: true,
+    request: "Give me my weekly caseload digest." },
+  { id: "staff-stale-flags", label: "Flag stale cases", needsPerson: false, scope: "caseload", ready: true,
+    request: "Flag the stale cases on my caseload, with reasons." },
+  { id: "staff-funder-narrative", label: "Funder narrative", needsPerson: false, scope: "caseload", ready: true,
+    request: "Draft a funder narrative from our real numbers for last quarter." },
 ];
+
+/** The buttons the panel shows: about a person, or across the caseload. */
+export function staffSkillsFor(hasPerson: boolean): StaffSkill[] {
+  return STAFF_SKILLS.filter((s) => s.ready && (s.scope === "both" || s.scope === (hasPerson ? "person" : "caseload")));
+}
 
 const IDS: ReadonlySet<string> = new Set(STAFF_SKILLS.map((s) => s.id));
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -82,13 +114,30 @@ export function staffSkillFromText(text: string | null | undefined): StaffSkillI
   const t = (text ?? "").toLowerCase();
   if (!t.trim()) return null;
   const rules: [StaffSkillId, RegExp][] = [
-    ["staff-prep-me", /\bprep(?:are)? me\b|\bi(?:'m| am) meeting\b|\bbefore (?:i|my) (?:meet|call|see)\b|\bget me ready for\b/],
+    ["staff-prep-me", /\bprep(?:are)? me\b|\bi(?:'m| am) meeting\b|\bbefore (?:i|my) (?:meet|call|see)\b|\bget me ready for\b|\bmeeting prep\b/],
     ["staff-outcome-note", /\boutcome note\b|\bplacement note\b|\b(?:got|was) hired\b|\bstarted (?:work|the job)\b/],
     ["staff-check-in", /\bcheck[- ]?in\b/],
+    ["staff-note-from-bullets", /\b(?:case )?note from (?:my )?(?:bullets|notes|dictation)\b|\bturn (?:this|these|my (?:bullets|notes)) into a (?:case )?note\b|\bdraft a case note\b|\bwrite (?:up )?a case note\b/],
+    ["staff-funder-narrative", /\bfunder\b|\bgrant report\b|\bnarrative\b|\breport to (?:the |our )?(?:board|funder)\b|\bnumbers for (?:a|my|the|our) report\b/],
+    ["staff-outreach-draft", /\b(?:outreach|reminder|congratulat\w*|re-?engage\w*)\b|\bdraft (?:a |an )?(?:text|email|message) to\b/],
     ["staff-find-help", /\b(?:find|local) (?:local )?help\b|\bresources? (?:for|near)\b|\bhelp with (?:housing|food|id|transportation|rent)\b/],
+    ["staff-timeline-summary", /\b(?:summari[sz]e|summary of) (?:\w+'s |their |his |her )?(?:timeline|history|file)\b|\btimeline\b/],
     ["staff-what-changed", /\bwhat(?:'s| has)? changed\b|\bwhat'?s new with\b|\bsince last week\b/],
+    ["staff-triage-today", /\btriage\b|\bwho needs me (?:today|first|most)\b|\bmy today\b|\bwhat should i (?:do|start with) (?:first|today)\b/],
+    ["staff-stale-flags", /\bstale\b|\bfalling through\b|\bslipping\b|\bgone quiet\b|\bhaven'?t (?:heard from|seen|talked to)\b/],
+    ["staff-caseload-digest", /\b(?:weekly |caseload )digest\b|\bsummar(?:y|ize) (?:of )?my caseload\b|\bcaseload (?:summary|this week)\b|\bmy week\b/],
   ];
   for (const [id, re] of rules) if (re.test(t) && isStaffSkill(id)) return id;
+  return null;
+}
+
+/** The skill run id (migration 106) a staff answer carries, from the chat message's annotations. */
+export function skillRunIdOf(annotations: unknown): string | null {
+  if (!Array.isArray(annotations)) return null;
+  for (const a of annotations) {
+    const id = (a as { skillRunId?: unknown } | null)?.skillRunId;
+    if (typeof id === "string" && UUID.test(id)) return id;
+  }
   return null;
 }
 

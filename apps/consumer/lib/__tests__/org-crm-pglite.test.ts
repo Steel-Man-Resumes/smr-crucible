@@ -29,7 +29,10 @@ test('owner-only staff writes and the consent-gated client header, in real SQL',
     catch { await db.exec('ROLLBACK').catch(() => {}); failed.push(f); } // 088-091 resource chain refuses on its own guards; unrelated tables
   }
   assert.ok(!failed.includes('097_org_seats.sql') && readdirSync(MIG).includes('097_org_seats.sql'), `097 must apply; failed: ${failed.join(', ')}`);
-  await db.exec(`CREATE ROLE tester NOSUPERUSER; GRANT USAGE ON SCHEMA public TO tester; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO tester; GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO tester;`);
+  // The staff reach checks ask the database's rule (smr_staff_reach, 102; units, 103): apply both.
+  for (const f of ['102_reach_activity_audit.sql', '103_org_structure.sql']) await db.exec('BEGIN;' + readFileSync(MIG + f, 'utf8') + ';COMMIT;');
+  await db.exec(`CREATE ROLE tester NOSUPERUSER; GRANT USAGE ON SCHEMA public TO tester; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO tester; GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO tester;
+    GRANT EXECUTE ON FUNCTION public.smr_staff_reach(uuid, uuid, uuid), public.smr_staff_sees_all(uuid, uuid), public.smr_staff_unit_reach(uuid, uuid, uuid) TO tester;`);
   const q = (t: string, p: unknown[] = []) => db.query(t, p);
   /** One statement as the app role, scoped to an org and an actor (what runScoped does). */
   const scoped = async (orgId: string, actor: string, text: string, params: unknown[]) => {
@@ -96,7 +99,10 @@ test('owner-only staff writes and the consent-gated client header, in real SQL',
   const self = await scoped(org, owner, CLIENT_HEADER_WHO_SQL, [selfJoin, org, true, owner]);
   assert.deepEqual({ name: self[0]?.name, email: self[0]?.email, stage: self[0]?.current_stage, src: self[0]?.identity_source },
     { name: null, email: null, stage: null, src: 'none' }, 'self-joined non-sharer: nothing from their account, even for the owner');
-  assert.equal((await scoped(org, admin, CLIENT_HEADER_WHO_SQL, [invited, org, false, admin])).length, 0, 'not in reach: no row');
+  // Not in reach: a plain staff member with no assignment. (Since 103 the app check also asks the
+  // database's rule, under which an org admin reaches everyone, so an admin is no longer the example.)
+  await q(`INSERT INTO org_staff (access_code_id, user_id, role) VALUES ($1, $2, 'staff')`, [org, admin2]);
+  assert.equal((await scoped(org, admin2, CLIENT_HEADER_WHO_SQL, [invited, org, false, admin2])).length, 0, 'not in reach: no row');
 
   // ---- SF2: a saved check-in draft is kind 'draft' (097 widened the check) --
   const draftNote = await scoped(org, cm, `INSERT INTO case_note (access_code_id, client_user_id, author_user_id, kind, body) VALUES ($1, $2, $3, 'draft', 'Hi, checking in.') RETURNING id`, [org, invited, cm]);

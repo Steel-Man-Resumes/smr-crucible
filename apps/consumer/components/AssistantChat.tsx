@@ -13,7 +13,7 @@
 "use client";
 
 import { orgNoteDraftKey } from "@/lib/org-note-draft";
-import { STAFF_SKILLS, STAFF_TROY_EVENT, takePendingStaffTroy, skillRequest, type StaffTroyRequest } from "@/lib/staff-troy";
+import { staffSkillsFor, skillRunIdOf, STAFF_TROY_EVENT, takePendingStaffTroy, skillRequest, type StaffTroyRequest } from "@/lib/staff-troy";
 import { TroyWork } from "@crucible/consumer-ui";
 import { assistantErrorMessage } from "@/lib/assistant-error-message";
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
@@ -55,6 +55,11 @@ const TOOL_ACTIVITY: Record<string, string> = {
   find_local_help: "Searching the help directory",
   draft_staff_check_in: "Preparing a draft",
   offer_staff_draft: "Preparing the draft for their page",
+  read_today_queue: "Reading your Today",
+  read_caseload_digest: "Reading your caseload",
+  read_outcomes_summary: "Counting placements and retention",
+  read_referrals_open: "Reading open referrals",
+  read_person_timeline: "Reading their timeline (logged for them)",
   search_verified_employers: "Checking employer evidence",
   get_verified_employer: "Reading employer details",
   search_verified_resources: "Finding checked support",
@@ -81,7 +86,7 @@ function getQuickPrompts(context: AssistantContext, coach?: boolean, staff?: boo
 
   if (staff) {
     return [
-      "Who needs attention this week?",
+      "Triage my Today",
       "Draft a check-in for you to send",
       "Draft a case note for your review",
       "Summarize my caseload",
@@ -289,6 +294,8 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
     window.addEventListener(STAFF_TROY_EVENT, onOpen);
     return () => window.removeEventListener(STAFF_TROY_EVENT, onOpen);
   }, [staff, setInput, setMessages]);
+  // Which staff answer was just copied (its "Copied" label).
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const clearFocus = useCallback(() => {
     focusRef.current = null;
     setFocus(null);
@@ -487,7 +494,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             </p>
           )}
           <div className="flex flex-wrap gap-2" role="group" aria-label="What t.ROY can do for you">
-            {STAFF_SKILLS.filter((k) => k.ready).map((k) => (
+            {staffSkillsFor(!!focus?.clientId).map((k) => (
               <button
                 key={k.id}
                 type="button"
@@ -769,6 +776,10 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
               ? [{ id: r.participantId, purpose: r.purpose === "case_note" ? "case_note" : "check_in", body: r.body.trim() }] : [];
           })[0] : undefined;
           const draftText = draftFor?.body ?? "";
+          // The skill run this answer was logged as (migration 106). Saving the
+          // draft or copying the answer marks it used, by this staff member.
+          const skillRunId = staff ? skillRunIdOf((message as { annotations?: unknown }).annotations) : null;
+          const answerText = staff ? parts.filter((p) => p.type === "text" && typeof p.text === "string").map((p) => String(p.text)).join("\n\n").trim() : "";
 
           // Assistant message with parts: text bubbles + tool activity lines
           return (
@@ -828,7 +839,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     type="button"
                     onClick={() => {
                       try {
-                        if (accountId) sessionStorage.setItem(orgNoteDraftKey(accountId, draftFor.id), JSON.stringify({ body: draftText.slice(0, 8000), purpose: draftFor.purpose, at: new Date().toISOString() }));
+                        if (accountId) sessionStorage.setItem(orgNoteDraftKey(accountId, draftFor.id), JSON.stringify({ body: draftText.slice(0, 8000), purpose: draftFor.purpose, skillRunId: skillRunId ?? undefined, at: new Date().toISOString() }));
                       } catch { /* storage blocked: the words are still in this reply */ }
                       router.push(`/dashboard/clients/${draftFor.id}`);
                     }}
@@ -837,6 +848,23 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     Put this draft on their page to review
                   </button>
                   <span className="text-[11px] text-muted">Nothing is saved or sent until you do it.</span>
+                </div>
+              )}
+              {staff && !replyStillComing && answerText && (
+                <div className="flex flex-wrap items-center gap-2 pl-1">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try { await navigator.clipboard.writeText(answerText); setCopiedId(message.id); } catch { /* the words are still on screen */ }
+                      if (skillRunId) {
+                        fetch("/api/org/ai-skill-run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "accept", id: skillRunId }) }).catch(() => {});
+                      }
+                    }}
+                    className="t-focus min-h-touch rounded-[5px] border border-[#d8ccff] bg-white px-3 py-2 text-xs font-medium text-[#4c1d95] transition-colors hover:bg-[#f6f2ff]"
+                  >
+                    {copiedId === message.id ? "Copied" : "Copy to use"}
+                  </button>
+                  <span className="text-[11px] text-muted">t.ROY sends nothing. Copying is noted as you using this draft.</span>
                 </div>
               )}
               {!replyStillComing &&

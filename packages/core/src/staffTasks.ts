@@ -5,6 +5,7 @@
  */
 import { queryAsUser, runAsUser, runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
+import { unitReachSql } from "./orgUnitReach";
 
 const scopeOf = (a: OrgActor): OrgScope => ({ orgId: a.orgId, userId: a.userId, role: a.role });
 const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
@@ -15,15 +16,19 @@ const TASK_REACH = `
   (t.owner_user_id = $3::uuid OR $2::boolean
    OR (t.client_user_id IS NOT NULL AND EXISTS (
          SELECT 1 FROM client_staff_assignment a
-          WHERE a.access_code_id = $1::uuid AND a.client_user_id = t.client_user_id AND a.staff_user_id = $3::uuid)))`;
+          WHERE a.access_code_id = $1::uuid AND a.client_user_id = t.client_user_id AND a.staff_user_id = $3::uuid))
+   OR (t.client_user_id IS NOT NULL AND ${unitReachSql("$1::uuid", "$3::uuid", "t.client_user_id")}))`;
 
 export interface StaffTask {
   id: string; title: string; due_on: string | null; client_user_id: string | null; client_name: string | null;
   owner_user_id: string | null; owner_name: string | null; shared_with_participant: boolean;
   done_at: string | null; done_by_participant: boolean; created_at: string;
+  /** "retention" for a check-in task the system made (migration 105), with its placement and day mark. */
+  source_kind: string | null; source_id: string | null; source_mark: number | null;
 }
 const COLS = `t.id, t.title, to_char(t.due_on, 'YYYY-MM-DD') AS due_on, t.client_user_id, c.name AS client_name, t.owner_user_id, o.name AS owner_name,
-  t.shared_with_participant, t.done_at, (t.done_by IS NOT NULL AND t.done_by = t.client_user_id) AS done_by_participant, t.created_at`;
+  t.shared_with_participant, t.done_at, (t.done_by IS NOT NULL AND t.done_by = t.client_user_id) AS done_by_participant, t.created_at,
+  t.source_kind, t.source_id, t.source_mark`;
 
 export async function listStaffTasks(actor: OrgActor, opts: { clientId?: string; includeDone?: boolean } = {}): Promise<StaffTask[] | null> {
   if (actor.viaPlatformAdmin || !actor.capabilities.has("org.client.view_content")) return null;
@@ -55,6 +60,7 @@ export async function addStaffTask(actor: OrgActor, input: { title: string; dueO
         WHERE $4::uuid IS NULL OR $2::boolean OR EXISTS (
                 SELECT 1 FROM client_staff_assignment a
                  WHERE a.access_code_id = $1::uuid AND a.client_user_id = $4::uuid AND a.staff_user_id = $3::uuid)
+           OR ${unitReachSql("$1::uuid", "$3::uuid", "$4::uuid")}
        RETURNING id`,
       [actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId, clientId, title, due, !!input.shared]
     ),

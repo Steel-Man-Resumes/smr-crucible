@@ -4,6 +4,7 @@ import { jwtVerify } from "jose";
 import { forgeAnonymousRequestHeaders, headersWithoutSessionCookie, revocationCheck } from "@/lib/session-policy";
 import { forgeWallState } from "@/lib/forge-access";
 import { emailCallbackNeedsButton, interstitialUrlFor } from "@/lib/sign-in-link";
+import { VIEW_AS_REFUSAL, viewModeBlocks } from "@/lib/view-as";
 
 /**
  * Middleware = next-auth gate + developer-impersonation write blocking.
@@ -21,26 +22,17 @@ export default auth(async (req) => {
   }
 
   const token = req.cookies.get("smr_impersonate")?.value;
-  if (
-    token &&
-    !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
-    req.nextUrl.pathname.startsWith("/api/") &&
-    !req.nextUrl.pathname.startsWith("/api/auth") &&
-    req.nextUrl.pathname !== "/api/dev/impersonate"
-  ) {
+  // Which requests a blue view refuses: lib/view-as.ts viewModeBlocks (every
+  // non-read /api call except sign-in plumbing and ending the view itself;
+  // the read-only POST allow-list is empty on purpose and pinned by a test).
+  if (token && viewModeBlocks(req.method, req.nextUrl.pathname)) {
     try {
       const { payload } = await jwtVerify(
         token,
         new TextEncoder().encode(process.env.AUTH_SECRET || "")
       );
       if (payload.mode === "view") {
-        return NextResponse.json(
-          {
-            error:
-              "Read-only view session -- changes are blocked. Switch to assist mode to make changes.",
-          },
-          { status: 403 }
-        );
+        return NextResponse.json({ error: VIEW_AS_REFUSAL, reason: "view_only" }, { status: 403 });
       }
     } catch {
       /* invalid cookie: ignore, downstream auth decides */

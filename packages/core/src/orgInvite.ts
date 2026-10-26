@@ -127,6 +127,18 @@ export async function getOrgPendingInvites(
 }
 
 /**
+ * The words staff see when claiming a seat for an invitee is refused. The
+ * redeem messages speak to the person joining ("You are on..."); here they
+ * are read by the inviter, so the two refusals from migration 101 are said
+ * about the invitee instead.
+ */
+export function inviteRedeemError(outcome: string, fallback?: string): string {
+  if (outcome === "org_staff") return "That person is on your organization's staff, so they cannot also join it as a participant.";
+  if (outcome === "platform_admin") return "That address cannot be added as a participant.";
+  return fallback || "Could not claim a seat.";
+}
+
+/**
  * Create an invite: pre-provision (or attach) the account and claim a seat.
  * The caller sends the email afterwards -- an email failure must not leave a
  * half-made account invisible, so state first, email second, and the pending
@@ -208,7 +220,7 @@ export async function createOrgInvite(opts: {
     // A shell nobody has signed in to yet (made by an earlier invite): no one
     // to ask, so the seat is claimed now, as for a new invitee.
     const res = await redeemAccessCode(existing.id, opts.code, { actorUserId: opts.invitedBy });
-    if (!res.success) return { ok: false, error: res.error || "Could not claim a seat." };
+    if (!res.success) return { ok: false, error: inviteRedeemError(res.outcome, res.error) };
   } else {
     // Fail fast on a full code before creating anything.
     const v = await validateAccessCode(opts.code);

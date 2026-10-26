@@ -12,7 +12,7 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { query, getOne } from "@crucible/core";
+import { query, getOne, getOrgContext } from "@crucible/core";
 import {
   IMPERSONATE_COOKIE,
   IMPERSONATION_MINUTES,
@@ -63,6 +63,16 @@ export async function POST(request: Request) {
   );
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
+  // Starting a new view replaces the cookie, so the session it replaces is
+  // closed in the audit record now rather than left open forever (A1 M2).
+  const previous = await readImpersonation();
+  if (previous && previous.adminId === admin.id) {
+    await query(
+      `UPDATE impersonation_session SET ended_at = NOW() WHERE id = $1 AND admin_user_id = $2 AND ended_at IS NULL`,
+      [previous.sid, admin.id]
+    ).catch(() => {});
+  }
+
   const minutes = IMPERSONATION_MINUTES[mode as "view" | "assist"];
   const rows = await query<{ id: string }>(
     `INSERT INTO impersonation_session (admin_user_id, target_user_id, mode, reason, expires_at)
@@ -108,14 +118,28 @@ export async function GET() {
   if (!imp || imp.adminId !== session.user.id) {
     return NextResponse.json({ active: false });
   }
+  // The cookie alone is not enough to be told who is being viewed (fix round
+  // 1): the same checks as starting a view, against the database, now. A
+  // revoked admin or a sign-in without two-step learns nothing, and
+  // effectiveAuth already serves them as themselves.
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok || guard.userId !== imp.adminId) {
+    return NextResponse.json({ active: false });
+  }
   const target = await getOne<{ id: string; name: string | null; email: string | null }>(
     `SELECT id, name, email FROM users WHERE id = $1`,
     [imp.targetId]
   );
+  // Where the viewed person works, for the banner ("staff at X"): their own
+  // org role, resolved the way their session would resolve it. Null for a
+  // participant. Never a list of their memberships.
+  const org = target ? await getOrgContext(target.id).catch(() => null) : null;
   return NextResponse.json({
     active: true,
     mode: imp.mode,
     target,
+    orgName: org?.orgName ?? null,
+    orgRole: org?.role ?? null,
     expiresAt: imp.exp ? new Date(imp.exp * 1000).toISOString() : null,
   });
 }

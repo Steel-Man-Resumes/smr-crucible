@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { settingsRefusal } from "@/lib/settings-guard";
-import { redeemAccessCode } from "@crucible/core";
+import { redeemAccessCode, REDEEM_SHOWN_REFUSALS } from "@crucible/core";
 import { checkAuthRateLimits, getClientIp } from "@/lib/auth-rate-limit";
 import { CODE_REFUSAL, CODE_SHAPE, codeAttemptLimits } from "@/lib/access-code-guard";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
@@ -10,7 +10,9 @@ import { isSameOriginJsonPost } from "@/lib/same-origin";
  * Join an organization with its code. A code is a seat key, so tries are
  * limited per account and per connection, and every refusal is the same
  * message (lib/access-code-guard.ts): this route never says whether a code
- * exists, is full, expired or closed.
+ * exists, is full, expired or closed. Two refusals are said plainly (101):
+ * platform admins never join with a code, and an organization's own staff
+ * never join it as a participant.
  */
 export async function POST(request: Request) {
   if (!isSameOriginJsonPost(request.headers)) {
@@ -40,6 +42,11 @@ export async function POST(request: Request) {
   const result = await redeemAccessCode(userId, code);
 
   if (!result.success) {
+    // Admins and an organization's own staff are told plainly why (migration
+    // 101); every other refusal stays the one answer that confirms nothing.
+    if (REDEEM_SHOWN_REFUSALS.has(result.outcome)) {
+      return NextResponse.json({ error: result.error, reason: result.outcome }, { status: 409 });
+    }
     return NextResponse.json({ error: CODE_REFUSAL }, { status: 400 });
   }
 

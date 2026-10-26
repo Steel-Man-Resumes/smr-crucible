@@ -162,8 +162,11 @@ async function cleanup() {
     await sql`DELETE FROM access_code_redemption WHERE access_code_id = ANY(${codes}::uuid[])`;
     await sql`DELETE FROM org_staff WHERE access_code_id = ANY(${codes}::uuid[])`;
     await sql`DELETE FROM org_invite WHERE access_code_id = ANY(${codes}::uuid[])`;
+    await sql`DELETE FROM org_staff_invite WHERE access_code_id = ANY(${codes}::uuid[])`.catch(() => {});
     await sql`DELETE FROM org_capability_override WHERE org_id = ANY(${codes}::uuid[])`.catch(() => {});
     await sql`DELETE FROM org_audit WHERE org_id = ANY(${codes}::uuid[])`;
+    // 102: the activity log has no foreign keys (by design), so its rows are removed by org id, here and again below.
+    await sql`DELETE FROM org_activity WHERE access_code_id = ANY(${codes}::uuid[])`.catch(() => {});
   }
   if (users.length) {
     await sql`DELETE FROM consumer_consent WHERE user_id = ANY(${users}::uuid[])`;
@@ -171,6 +174,8 @@ async function cleanup() {
   }
   if (codes.length) await sql`DELETE FROM access_code WHERE id = ANY(${codes}::uuid[])`;
   if (users.length) await sql`DELETE FROM users WHERE id = ANY(${users}::uuid[])`;
+  // Cascades above write activity rows (an assignment ending, a team member removed); take those too.
+  if (codes.length) await sql`DELETE FROM org_activity WHERE access_code_id = ANY(${codes}::uuid[])`.catch(() => {});
   created.users = [];
   created.codes = [];
 }
@@ -381,9 +386,451 @@ async function main() {
   await requiredSharingChecks();
   await todayAndTaskChecks();
   await outcomeChecks();
+  await workflowChecks();
   await ownerOnlyChecks();
   await participantTableChecks();
   await seatChecks();
+  await reachChecks();
+  await aiSkillRunChecks();
+  await structureChecks();
+  await customizationChecks();
+}
+
+/**
+ * Reach in the database (migration 102, house lane L3b). Until 102 the row
+ * policies on notes, tasks, placements, check-ins, suggestions and asks let
+ * ANY staff session read the whole organization; "assigned only" lived in the
+ * application. The claim now: a volunteer cannot read or write anything about
+ * a person not assigned to them, by a raw scoped query or through a route that
+ * forgot the app-level check; the assigned case manager, an admin, the owner
+ * and someone granted "see everyone" can; an admin denied it cannot; another
+ * organization cannot, even forging the org scope; the participant still reads
+ * what is theirs. Plus: the activity log is written by the database, holds no
+ * typed text, and the app cannot write, edit or erase it; corrections keep the
+ * earlier answer.
+ */
+async function reachChecks() {
+  console.log("\n  -- reach in the database, activity log, outcome audit (102) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ has }] = await sql`SELECT to_regclass('public.org_activity') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  102 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+  const asOrg = (orgId, actor, q) => app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${actor}, true)`, q]);
+
+  const owner = await mkUser("r-owner"), admin = await mkUser("r-admin"), vol = await mkUser("r-vol"), cm = await mkUser("r-cm");
+  const seer = await mkUser("r-seer"), deniedAdmin = await mkUser("r-denied"), spy = await mkUser("r-spy"), spyStaff = await mkUser("r-spystaff");
+  const mk = async (l, o) => { const [r] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOR" + l + uniq}, ${P + " reach" + l}, 'client', ${o}, true, true) RETURNING id, code`; created.codes.push(r.id); return r; };
+  const org = await mk("A", owner), org2 = await mk("B", spy);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${vol}, 'staff'), (${org.id}, ${cm}, 'staff'),
+            (${org.id}, ${seer}, 'staff'), (${org.id}, ${deniedAdmin}, 'org_admin'), (${org2.id}, ${spyStaff}, 'staff')`;
+  // The volunteer preset as the app writes it (STAFF_PRESETS.volunteer), a "see everyone" grant, and an admin denied it.
+  await sql`INSERT INTO org_capability_override (org_id, user_id, capability, effect) VALUES
+            (${org.id}, ${vol}, 'org.client.view_all', 'deny'), (${org.id}, ${vol}, 'org.outcome.write', 'deny'), (${org.id}, ${vol}, 'org.participant.invite', 'deny'),
+            (${org.id}, ${seer}, 'org.client.view_all', 'grant'), (${org.id}, ${deniedAdmin}, 'org.client.view_all', 'deny')`;
+  const p1 = await mkUser("r-p1"), p2 = await mkUser("r-p2");
+  for (const u of [p1, p2]) await core.redeemAccessCode(u, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${p1}, ${vol}, ${owner}), (${org.id}, ${p2}, ${cm}, ${owner})`;
+  const A = (u, o) => core.resolveOrgActor(u, o ? { orgId: o } : undefined);
+  const aOwner = await A(owner), aAdmin = await A(admin), aVol = await A(vol), aCm = await A(cm), aSeer = await A(seer), aDenied = await A(deniedAdmin), aSpy = await A(spy);
+  check("fixture: the volunteer resolves with assigned reach and no outcome writes; the seer sees all; the denied admin does not",
+    aVol?.reach === "assigned" && !aVol.capabilities.has("org.outcome.write") && aSeer?.reach === "all" && aDenied?.reach === "assigned");
+
+  // -- the assigned case manager builds a full record about p2 through the app's own paths
+  const note = await core.addClientNote(aCm, p2, { body: "RSECRET-BODY met at the parole office", kind: "call" });
+  const fixed = note.ok ? await core.editClientNote(aCm, p2, note.id, { body: "RSECRET-BODY corrected wording" }) : { ok: false };
+  const task = await core.addStaffTask(aCm, { title: "RSECRET-TASK bring papers", clientId: p2, shared: true });
+  const ago = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+  const outc = await core.recordOutcome(aCm, { clientId: p2, employer: "RSECRET-EMPLOYER", startDate: ago(100), source: "staff_reported" });
+  const chk = outc.ok ? await core.recordRetentionCheck(aCm, { outcomeId: outc.id, dayMark: 30, status: "employed", method: "participant_told_me" }) : { ok: false };
+  const sug = await core.suggestJob(aCm, p2, { jobTitle: "Prep Cook", company: "River Cafe", why: "RSECRET-WHY day shift" });
+  const ask = await core.requestSharing(aCm, p2, "resume", "RSECRET-ASK so I can help before Thursday");
+  check("the assigned case manager still writes every kind of record through the app, under the new policies",
+    note.ok && fixed.ok && task.ok && outc.ok && chk.ok && sug.ok && ask.ok, JSON.stringify({ note, fixed, task, outc, chk, sug, ask }));
+  const [{ id: checkId } = {}] = await sql`SELECT id FROM retention_check WHERE outcome_id = ${outc.id}`;
+
+  // -- 1. raw scoped reads, table by table, actor by actor
+  const tables = [
+    ["note", () => app`SELECT count(*)::int AS n FROM case_note WHERE client_user_id = ${p2}`],
+    ["note version", () => app`SELECT count(*)::int AS n FROM case_note_version WHERE note_id = ${note.id}`],
+    ["task", () => app`SELECT count(*)::int AS n FROM staff_task WHERE client_user_id = ${p2}`],
+    ["placement", () => app`SELECT count(*)::int AS n FROM outcome_record WHERE client_user_id = ${p2}`],
+    ["retention check", () => app`SELECT count(*)::int AS n FROM retention_check WHERE outcome_id = ${outc.id}`],
+    ["suggestion", () => app`SELECT count(*)::int AS n FROM staff_suggestion WHERE client_user_id = ${p2}`],
+    ["ask", () => app`SELECT count(*)::int AS n FROM sharing_request WHERE user_id = ${p2}`],
+    ["activity", () => app`SELECT count(*)::int AS n FROM org_activity WHERE participant_user_id = ${p2}`],
+  ];
+  // A fresh statement per read: a query object is not reused across transactions.
+  const count = async (orgId, actor, q) => (await asOrg(orgId, actor, typeof q === "function" ? q() : q))[2][0].n;
+  for (const [label, q] of tables) {
+    check(`a volunteer reads no ${label} about someone not assigned to them, by a raw scoped query`, (await count(org.id, vol, q)) === 0);
+    check(`the assigned case manager, an admin, the owner and staff granted "see everyone" read the ${label}`,
+      (await count(org.id, cm, q)) > 0 && (await count(org.id, admin, q)) > 0 && (await count(org.id, owner, q)) > 0 && (await count(org.id, seer, q)) > 0);
+    check(`an admin DENIED "see everyone" reads no ${label}`, (await count(org.id, deniedAdmin, q)) === 0);
+    check(`another organization reads no ${label}, scoped to itself or FORGING this org's scope`,
+      (await count(org2.id, spy, q)) === 0 && (await count(org.id, spyStaff, q)) === 0 && (await count(org.id, spy, q)) === 0);
+  }
+
+  // -- 2. through a route that FORGOT the app-level check: the actor claims "sees all"; the database still refuses
+  const forged = { ...aVol, reach: "all", capabilities: new Set([...aVol.capabilities, "org.client.view_all", "org.audit.view"]) };
+  const fNotes = await core.listRecentNotes(forged);
+  const fTasks = (await core.listStaffTasks(forged)) ?? [];
+  const fOut = (await core.listOutcomes(forged)) ?? [];
+  const fReq = await core.listSharingRequests(forged);
+  const fAct = await core.listOrgActivity(forged);
+  check("a volunteer's session that the app wrongly treats as 'sees all' still gets nothing about p2: notes, tasks, placements, asks, activity",
+    fNotes.ok && !fNotes.rows.some((r) => r.client_user_id === p2) && !fTasks.some((t) => t.client_user_id === p2) && !fOut.some((o) => o.client_user_id === p2)
+      && fReq.ok && !fReq.rows.some((r) => r.client_user_id === p2) && fAct.ok && !fAct.rows.some((r) => r.participant_user_id === p2),
+    JSON.stringify({ notes: fNotes.rows?.length, tasks: fTasks.length, outcomes: fOut.length, act: fAct.rows?.length }));
+  check("the forged read of the client's own note page is refused too", (await core.getClientNotes(forged, p2)).ok === false || (await core.getClientNotes(forged, p2)).rows.length === 0);
+
+  // -- 3. nor write about p2, by any raw route
+  const w = (q) => raised(() => asOrg(org.id, vol, q));
+  check("a volunteer cannot write a note about an unassigned person, even raw", /row-level security/i.test(String(await w(app`INSERT INTO case_note (access_code_id, client_user_id, author_user_id, body) VALUES (${org.id}, ${p2}, ${vol}, 'x')`))));
+  check("nor a task, even one they would own", /row-level security/i.test(String(await w(app`INSERT INTO staff_task (access_code_id, client_user_id, owner_user_id, created_by, title, shared_with_participant) VALUES (${org.id}, ${p2}, ${vol}, ${vol}, 'x task', true)`))));
+  check("nor a placement", /row-level security/i.test(String(await w(app`INSERT INTO outcome_record (access_code_id, client_user_id, employer, start_date, source, created_by) VALUES (${org.id}, ${p2}, 'X Co', ${ago(1)}, 'staff_reported', ${vol})`))));
+  check("nor an ask", /row-level security/i.test(String(await w(app`INSERT INTO sharing_request (access_code_id, user_id, scope, requested_by, reason) VALUES (${org.id}, ${p2}, 'applications', ${vol}, 'Let me see it')`))));
+  check("nor cancel their task", (await asOrg(org.id, vol, app`UPDATE staff_task SET cancelled_at = now() WHERE id = ${task.id} RETURNING id`))[2].length === 0);
+  check("the volunteer still works their own caseload", (await core.addClientNote(aVol, p1, { body: "Met today." })).ok === true && (await core.getClientNotes(aVol, p1)).ok === true);
+
+  // -- 4. the participant still reads what is theirs
+  const asP = (q) => app.transaction([app`SELECT set_config('app.user_id', ${p2}, true)`, q]);
+  check("the participant still sees the task shared with them", (await core.getMySharedTasks(p2)).some((t) => t.id === task.id));
+  check("and the placement on file about them", (await core.getMyOutcomes(p2)).length === 1);
+  check("and the suggestion made to them", (await core.getMySuggestions(p2)).length === 1);
+  check("and the ask made of them", (await core.getSharingState(p2)).some((s) => s.requests?.length > 0));
+  check("and still not a staff note, nor the organization's activity log",
+    (await asP(app`SELECT count(*)::int AS n FROM case_note`))[1][0].n === 0 && (await asP(app`SELECT count(*)::int AS n FROM org_activity`))[1][0].n === 0);
+
+  // -- 5. the activity log
+  const log = await core.listOrgActivity(aOwner);
+  const flat = JSON.stringify(log.rows ?? []);
+  check("the owner's activity log has the note, task, placement, check-in, ask and assignment rows",
+    log.ok && ["note", "task", "outcome", "retention", "sharing", "assignment"].every((e) => log.rows.some((r) => r.entity === e && r.participant_user_id === p2)), flat.slice(0, 300));
+  check("and never the words anyone typed, nor a record word", !/RSECRET|parole/i.test(flat));
+  check("the sentences read plainly", log.ok && log.rows.some((r) => /added a call note for /.test(core.activitySentence(r))));
+  check("a volunteer's own activity read holds nobody outside their reach", (await core.listOrgActivity({ ...aVol, capabilities: new Set([...aVol.capabilities, "org.audit.view"]) })).rows.every((r) => r.participant_user_id !== p2));
+  check("staff without the audit capability get no org-wide log", (await core.listOrgActivity(aCm)).ok === false);
+  check("another organization's log is empty of all of it", ((await core.listOrgActivity(aSpy)).rows ?? []).every((r) => r.participant_user_id !== p2));
+  const forge = await raised(() => asOrg(org.id, owner, app`INSERT INTO org_activity (access_code_id, entity, action, summary) VALUES (${org.id}, 'org', 'created', 'forged entry')`));
+  const edit = await raised(() => asOrg(org.id, owner, app`UPDATE org_activity SET summary = 'rewritten' WHERE access_code_id = ${org.id}`));
+  const wipe = await raised(() => asOrg(org.id, owner, app`DELETE FROM org_activity WHERE access_code_id = ${org.id}`));
+  const call = await raised(() => asOrg(org.id, owner, app`SELECT org_activity_write(${org.id}::uuid, NULL, NULL, 'org', NULL, 'created', 'forged')`));
+  check("the app cannot write, rewrite, erase or forge an activity row", [forge, edit, wipe, call].every((e) => /permission denied/i.test(String(e))), JSON.stringify([forge, edit, wipe, call]));
+
+  // -- 6. corrections keep the earlier answer
+  check("a volunteer cannot correct a check-in", (await core.correctRetentionCheck(aVol, { checkId, status: "not_employed", method: "participant_told_me", reason: "They left in week two" })).ok === false);
+  const rawVol = (await asOrg(org.id, vol, app`SELECT smr_correct_retention_check(${checkId}::uuid, 'not_employed', 'participant_told_me', NULL, 'They left in week two') AS r`))[2][0].r;
+  check("not even by calling the database function directly", rawVol === "refused", rawVol);
+  check("a correction needs a reason", (await core.correctRetentionCheck(aCm, { checkId, status: "not_employed", method: "participant_told_me", reason: "x" })).ok === false);
+  check("the case manager corrects it", (await core.correctRetentionCheck(aCm, { checkId, status: "not_employed", method: "participant_told_me", reason: "They told me they left in week two" })).ok === true);
+  const rows = await sql`SELECT id, status, superseded_by, correction_reason FROM retention_check WHERE outcome_id = ${outc.id}`;
+  const oldRow = rows.find((r) => r.id === checkId), newRow = rows.find((r) => r.id !== checkId);
+  check("both answers are kept: the old one marked replaced, the new one current with its reason",
+    rows.length === 2 && oldRow?.status === "employed" && oldRow?.superseded_by === newRow?.id && newRow?.superseded_by === null && /week two/.test(newRow?.correction_reason ?? ""), JSON.stringify(rows));
+  const listed = (await core.listOutcomes(aCm, p2))[0];
+  check("the panel shows only the current answer, and the correction in its history",
+    listed.checks.length === 1 && listed.checks[0].status === "not_employed" && listed.history.some((h) => h.kind === "check" && /week two/.test(h.reason ?? "")), JSON.stringify(listed.history));
+  check("the app cannot edit a check-in in place", /permission denied/i.test(String(await raised(() => asOrg(org.id, cm, app`UPDATE retention_check SET status = 'employed' WHERE id = ${newRow.id}`)))));
+  const noReason = await raised(() => asOrg(org.id, cm, app`UPDATE outcome_record SET employer = 'Right Co' WHERE id = ${outc.id}`));
+  check("the database refuses a placement correction without a reason", /needs a reason/i.test(String(noReason)), noReason ?? "updated");
+  check("with one, through the app, it saves", (await core.correctOutcome(aCm, outc.id, { employer: "Right Co", startDate: ago(100) }, "Typed the wrong employer")).ok === true);
+  const [kept] = await sql`SELECT changed, reason, corrected_by FROM outcome_correction WHERE outcome_id = ${outc.id}`;
+  check("and the earlier value is kept, with who and why", kept?.changed?.employer?.from === "RSECRET-EMPLOYER" && kept?.reason === "Typed the wrong employer" && kept?.corrected_by === cm, JSON.stringify(kept));
+  check("a volunteer reads none of that history", (await count(org.id, vol, app`SELECT count(*)::int AS n FROM outcome_correction WHERE outcome_id = ${outc.id}`)) === 0);
+  const after = JSON.stringify((await core.listOrgActivity(aOwner, { entity: "outcome" })).rows ?? []);
+  check("the activity log says a placement was corrected, and not the reason or the employer", /corrected a placement \(employer\)/.test(after) && !/wrong employer|Right Co/.test(after), after.slice(0, 300));
+
+  // -- fix round 1 (security review): forged history, forged scope, deleting a staff account
+  const forgedCheck = await raised(() => asOrg(org.id, cm, app`INSERT INTO retention_check (outcome_id, access_code_id, day_mark, status, method, checked_by, correction_reason) VALUES (${outc.id}, ${org.id}, 60, 'employed', 'participant_told_me', ${cm}, 'forged')`));
+  check("the app cannot insert a check-in that claims to be a correction", /row-level security/i.test(String(forgedCheck)), forgedCheck ?? "inserted");
+  check("a forged org scope sees no activity at all, not even team rows", (await count(org.id, spyStaff, app`SELECT count(*)::int AS n FROM org_activity`)) === 0);
+  // The case manager also confirmed the placement (a correction, so it carries a reason).
+  await sql.transaction([sql`SELECT set_config('app.correction_reason', 'fixture: confirmed with the employer', true)`,
+    sql`UPDATE outcome_record SET source = 'staff_verified', verification_method = 'employer_confirmed', verified_by = ${cm}, verified_at = now() WHERE id = ${outc.id}`]);
+  await core.leaveAllOrgs(cm);
+  const gone = await raised(() => app`DELETE FROM users WHERE id = ${cm}`);
+  check("deleting the account of a case manager who wrote notes, tasks, asks, suggestions, check-ins, a correction and a confirmed placement succeeds",
+    gone === null, gone ?? "");
+  const [left] = await sql`SELECT (SELECT count(*)::int FROM case_note WHERE id = ${note.id} AND author_user_id IS NULL) AS notes,
+                                  (SELECT count(*)::int FROM retention_check WHERE outcome_id = ${outc.id} AND checked_by IS NULL) AS checks`;
+  const [{ src }] = await sql`SELECT source AS src FROM outcome_record WHERE id = ${outc.id}`;
+  check("and the records stay, without the deleted account's id; the placement stays confirmed", left.notes === 1 && left.checks === 2 && src === "staff_verified", JSON.stringify({ ...left, src }));
+}
+
+/**
+ * Organization structure (103, house lane L3a): units, unit staff and
+ * enrollments. The claims: another organization sees none of it; enrollment
+ * rows are REACH-restricted in the database, so a staff member outside a unit
+ * cannot read an enrollment even through a query that forgets every check;
+ * being put in a unit is what gives a staff member reach, and taking them out
+ * removes it; nobody widens their own reach by enrolling a stranger; only the
+ * owner shapes the structure.
+ */
+async function structureChecks() {
+  console.log("\n  -- organization structure (103) --");
+  const [{ has }] = await sql`SELECT to_regclass('public.enrollment') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  103 not applied; skipped"); return; }
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("st-owner"), cm = await mkUser("st-cm"), unitStaff = await mkUser("st-unit"), outsider = await mkUser("st-out");
+  const spy = await mkUser("st-spy"), p1 = await mkUser("st-p1"), p2 = await mkUser("st-p2"), pOther = await mkUser("st-p3");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOST" + uniq}, ${P + " structure"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOST2" + uniq}, ${P + " structure2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${unitStaff}, 'staff'), (${org.id}, ${outsider}, 'staff')`;
+  await core.redeemAccessCode(p1, org.code); await core.redeemAccessCode(p2, org.code); await core.redeemAccessCode(pOther, org2.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${p1}, ${cm}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const raised = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+  const aOwner = await A(owner), aCm = await A(cm), aUnit = await A(unitStaff), aOut = await A(outsider), aSpy = await A(spy);
+
+  check("staff cannot add a unit", (await core.createOrgUnit(aCm, { kind: "program", name: "Sneaky" })).ok === false);
+  const prog = await core.createOrgUnit(aOwner, { kind: "program", name: "Job readiness" });
+  check("the owner adds a program", prog.ok === true, JSON.stringify(prog));
+  if (!prog.ok) return;
+  const theirs = await core.createOrgUnit(aSpy, { kind: "program", name: "Their program" });
+  check("another organization's owner adds to THEIR org only", theirs.ok === true);
+  check("staff cannot put themselves in a unit", (await core.setUnitMember(aOut, prog.id, outsider, "member")).ok === false);
+  check("another org's owner cannot put staff in this org's unit", (await core.setUnitMember(aSpy, prog.id, spy, "lead")).ok === false);
+  check("the owner puts a staff member in the program", (await core.setUnitMember(aOwner, prog.id, unitStaff, "member")).ok === true);
+  check("an outsider on staff cannot enroll someone they do not reach", (await core.createEnrollment(aOut, { participantId: p2, unitId: prog.id })).ok === false);
+  check("a plain staff member cannot enroll anyone, not even their own person (enrolling is assigning)", (await core.createEnrollment(aCm, { participantId: p1, unitId: prog.id, status: "active" })).ok === false);
+  const rawEnroll = await raised(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO enrollment (access_code_id, org_unit_id, participant_user_id, status) VALUES (${org.id}, ${prog.id}, ${p1}, 'active') RETURNING id`]));
+  check("and the database refuses it written directly", !!rawEnroll, rawEnroll ?? "inserted");
+  const admin = await mkUser("st-admin");
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin')`;
+  const aAdmin = await A(admin);
+  const e1 = await core.createEnrollment(aAdmin, { participantId: p1, unitId: prog.id, status: "active" });
+  check("an admin enrolls their person", e1.ok === true, JSON.stringify(e1));
+  check("the owner enrolls another", (await core.createEnrollment(aOwner, { participantId: p2, unitId: prog.id })).ok === true);
+  check("nobody enrolls someone from another organization", (await core.createEnrollment(aOwner, { participantId: pOther, unitId: prog.id })).ok === false);
+  if (theirs.ok) check("nobody enrolls into another organization's program", (await core.createEnrollment(aOwner, { participantId: p2, unitId: theirs.id })).ok === false);
+
+  const ids = async (actor) => ((await core.listEnrollments(actor)) ?? []).map((e) => e.participant_user_id).sort();
+  check("a unit member reaches everyone enrolled in that unit", JSON.stringify(await ids(aUnit)) === JSON.stringify([p1, p2].sort()));
+  check("assigned staff outside the unit reach only their own person", JSON.stringify(await ids(aCm)) === JSON.stringify([p1]));
+  check("a staff member outside the unit reads no enrollment", (await ids(aOut)).length === 0);
+  check("another organization reads none", (await ids(aSpy)).length === 0);
+  const raw = async (orgId, actor) => (await app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${actor}, true)`,
+    app`SELECT count(*)::int AS n FROM enrollment`]))[2][0].n;
+  check("a query that forgets every check still returns no enrollment to the outsider", (await raw(org.id, outsider)) === 0);
+  check("or to another organization's owner holding this org's id", (await raw(org.id, spy)) === 0);
+  check("and the unit member's own count is exactly the two", (await raw(org.id, unitStaff)) === 2);
+  const reachOf = async (staffId, who) => (await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${staffId}, true)`,
+    app`SELECT smr_staff_reach(${org.id}::uuid, ${staffId}::uuid, ${who}::uuid) AS r`]))[2][0].r;
+  check("the reach function says so too, and not for the outsider", (await reachOf(unitStaff, p2)) === true && (await reachOf(outsider, p2)) === false);
+  const tree2 = await core.getOrgStructure(aSpy);
+  check("another organization's structure shows none of these units", !(tree2?.units ?? []).some((u) => u.id === prog.id));
+  check("staff cannot close a unit", (await core.setOrgUnitOpen(aCm, prog.id, false)).ok === false);
+  check("a unit with people in it does not close", (await core.setOrgUnitOpen(aOwner, prog.id, false)).ok === false);
+
+  if (e1.ok) {
+    check("a unit member can pause it", (await core.changeEnrollmentStatus(aUnit, e1.id, "exited", "moved_away")).ok === true);
+    check("but a plain staff member cannot reopen it", (await core.changeEnrollmentStatus(aUnit, e1.id, "active")).ok === false);
+    check("an admin can", (await core.changeEnrollmentStatus(aAdmin, e1.id, "active")).ok === true);
+  }
+  await sql`DELETE FROM client_staff_assignment WHERE access_code_id = ${org.id} AND client_user_id = ${p1}`;
+  check("unassigned, the case manager reaches the person no more (nothing they did keeps them in reach)",
+    (await ids(aCm)).length === 0 && (await raw(org.id, cm)) === 0);
+  check("taking a staff member out of the unit", (await core.removeUnitMember(aOwner, prog.id, unitStaff)).ok === true);
+  check("ends their reach through it", (await ids(aUnit)).length === 0 && (await raw(org.id, unitStaff)) === 0);
+  await core.setUnitMember(aOwner, prog.id, unitStaff, "member");
+  await sql`DELETE FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${unitStaff}`;
+  check("removing someone from staff takes them out of every unit", (await sql`SELECT count(*)::int AS n FROM unit_member WHERE user_id = ${unitStaff}`)[0].n === 0 && (await raw(org.id, unitStaff)) === 0);
+
+  const terms = await core.updateOrgProfile(aOwner, { terms: { participant: "resident", participants: "residents" } });
+  check("the owner sets the organization's words", terms.ok === true, JSON.stringify(terms));
+  check("staff cannot", (await core.updateOrgProfile(aCm, { terms: { participant: "x" } })).ok === false);
+  check("a label on a person is refused", (await core.updateOrgProfile(aOwner, { terms: { participants: "offenders" } })).ok === false);
+  check("a member reads the words", (await core.getOrgTerms(org.id, p1)).participant === "resident");
+  check("a member of another organization gets only the defaults", (await core.getOrgTerms(org.id, pOther)).participant === "participant");
+  await sql`DELETE FROM enrollment WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+  await sql`DELETE FROM unit_member WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+  await sql`DELETE FROM org_unit WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+  await sql`DELETE FROM org_profile WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+}
+
+
+/**
+ * Staff t.ROY (106, house build L6): the skill-run log and the caseload reads.
+ * The claim: a run is written only by the staff member, in their own
+ * organization, about someone they reach; read by them and the organization's
+ * owner or admins only, and only while the reader reaches the person;
+ * accepted once, by the person who ran it; never edited or deleted by the app.
+ * The caseload digest and period numbers never cross an organization or a
+ * caseload.
+ */
+async function aiSkillRunChecks() {
+  console.log("\n  -- staff t.ROY skill runs and caseload reads --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("ai-owner"), cm = await mkUser("ai-cm"), cm2 = await mkUser("ai-cm2"), admin = await mkUser("ai-admin"), spy = await mkUser("ai-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOAIR" + uniq}, ${P + " ai runs"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOAIR2" + uniq}, ${P + " ai runs2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${cm2}, 'staff'), (${org.id}, ${admin}, 'org_admin')`;
+  const pat = await mkUser("ai-pat"), notMine = await mkUser("ai-notmine"), theirs = await mkUser("ai-theirs");
+  for (const u of [pat, notMine]) { await core.redeemAccessCode(u, org.code); await joinCohortConsent(u); }
+  await core.redeemAccessCode(theirs, org2.code); await joinCohortConsent(theirs);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${notMine}, ${cm2}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aCm2 = await A(cm2), aOwner = await A(owner), aAdmin = await A(admin), aSpy = await A(spy);
+  const run = (participantId) => ({ skill: "staff-prep-me", participantId, inputSummary: "Prep me", tools: ["read_participant_overview"], output: "draft" });
+  const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e.message) }; } };
+
+  const mine = await core.logSkillRun(aCm, run(pat));
+  check("a case manager logs a skill run about their own participant", !!mine);
+  const caseload = await core.logSkillRun(aCm, run(null));
+  check("and a caseload run about nobody in particular", !!caseload);
+  const off = await attempt(() => core.logSkillRun(aCm, run(notMine)));
+  check("not about a colleague's participant they do not reach", !off.ok || !off.v, JSON.stringify(off));
+  const foreign = await attempt(() => core.logSkillRun(aCm, run(theirs)));
+  check("not about another organization's participant", !foreign.ok || !foreign.v, JSON.stringify(foreign));
+  const forged = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO ai_skill_run (access_code_id, actor_user_id, skill, input_summary, output_hash) VALUES (${org.id}, ${owner}, 'staff-prep-me', 'x', ${"a".repeat(64)})`]));
+  check("not in somebody else's name, even written directly", !forged.ok, JSON.stringify(forged));
+  const preAccepted = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO ai_skill_run (access_code_id, actor_user_id, skill, input_summary, output_hash, accepted_by, accepted_at) VALUES (${org.id}, ${cm}, 'staff-prep-me', 'x', ${"a".repeat(64)}, ${cm}, now())`]));
+  check("and never already accepted", !preAccepted.ok, JSON.stringify(preAccepted));
+  const crossOrg = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org2.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO ai_skill_run (access_code_id, actor_user_id, skill, input_summary, output_hash) VALUES (${org2.id}, ${cm}, 'staff-prep-me', 'x', ${"a".repeat(64)})`]));
+  check("a staff member cannot log a run into an organization they do not belong to", !crossOrg.ok, JSON.stringify(crossOrg));
+
+  const ids = async (actor) => (await core.listSkillRuns(actor)).map((r) => r.id);
+  check("the case manager reads their own runs", (await ids(aCm)).includes(mine) && (await ids(aCm)).includes(caseload));
+  check("a colleague does not", !(await ids(aCm2)).includes(mine) && !(await ids(aCm2)).includes(caseload));
+  check("the owner and an org admin read every run in their organization (the AI audit)", (await ids(aOwner)).includes(mine) && (await ids(aAdmin)).includes(mine));
+  check("another organization reads none", (await ids(aSpy)).length === 0);
+  const [{ n: unscoped }] = await core.query("SELECT count(*)::int AS n FROM ai_skill_run");
+  check("an unscoped read by the app sees no runs", unscoped === 0, String(unscoped));
+
+  check("a colleague cannot accept someone else's run", (await core.acceptSkillRun(aCm2, mine)) === false);
+  check("the owner cannot accept it for them either", (await core.acceptSkillRun(aOwner, mine)) === false);
+  check("the person who ran it accepts it", (await core.acceptSkillRun(aCm, mine)) === true);
+  check("once", (await core.acceptSkillRun(aCm, mine)) === false);
+  const [acc] = await sql`SELECT accepted_by, accepted_at FROM ai_skill_run WHERE id = ${mine}`;
+  check("the acceptance names them and a time", acc?.accepted_by === cm && !!acc?.accepted_at, JSON.stringify(acc));
+  const rewrite = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`UPDATE ai_skill_run SET input_summary = 'rewritten' WHERE id = ${caseload}`]));
+  check("a run's summary cannot be rewritten by the app", !rewrite.ok && /permission denied/i.test(rewrite.e), JSON.stringify(rewrite));
+  const del = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`DELETE FROM ai_skill_run WHERE id = ${caseload}`]));
+  check("or deleted", !del.ok && /permission denied/i.test(del.e), JSON.stringify(del));
+
+  // Reach is a RESTRICTIVE policy: move pat to a colleague and the run leaves the old reader's view.
+  const ownTask = await core.addStaffTask(aCm, { title: "Call about the class", clientId: pat });
+  await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm2} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
+  check("once the person is reassigned, the old case manager no longer reads the run about them", !(await ids(aCm)).includes(mine) && (await ids(aCm)).includes(caseload));
+  check("and their digest drops them, even though they still own a task about them (fix round 1)",
+    ownTask.ok && !(await core.getCaseloadDigest(aCm)).people.some((p) => p.participantId === pat));
+  await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
+
+  // Caseload reads: the digest and the period numbers stay inside the caseload and the organization.
+  const digest = await core.getCaseloadDigest(aCm);
+  const people = (digest?.people ?? []).map((p) => p.participantId);
+  check("the caseload digest names the case manager's own participant", people.includes(pat), JSON.stringify(people));
+  check("and nobody from a colleague's caseload or another organization", !people.includes(notMine) && !people.includes(theirs));
+  check("the owner's digest covers the organization and not the other one", (await core.getCaseloadDigest(aOwner)).people.some((p) => p.participantId === notMine)
+    && !(await core.getCaseloadDigest(aOwner)).people.some((p) => p.participantId === theirs));
+  const vol = await mkUser("ai-vol");
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${vol}, 'staff')`;
+  await sql`INSERT INTO org_capability_override (org_id, user_id, capability, effect) VALUES (${org.id}, ${vol}, 'org.outcome.write', 'deny')`;
+  check("a volunteer (no outcome or insight rights) gets no period numbers", (await core.getOutcomesForPeriod(await A(vol), {})) === null);
+  const period = await core.getOutcomesForPeriod(aCm, { from: "2020-01-01", to: "2030-12-31" });
+  check("a case manager's period numbers are labelled as their caseload", period?.scope === "people on your caseload", JSON.stringify(period?.scope));
+}
+
+/**
+ * Customization (104, house build L4): custom fields, values, saved views and
+ * role layouts. The claims: another organization reads none of it; a staff
+ * member who does not reach a participant can neither read nor write that
+ * participant's values, through core OR through SQL written by hand; only a
+ * manager defines fields, shares views or sets layouts; the old saved sorts
+ * move over once.
+ */
+async function customizationChecks() {
+  console.log("\n  -- custom fields, views and layouts --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ t }] = await sql`SELECT to_regclass('public.custom_field_value') AS t`;
+  if (!t) { console.log("  note  104 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("cf-owner"), cm = await mkUser("cf-cm"), other = await mkUser("cf-other"), spy = await mkUser("cf-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOCF" + uniq}, ${P + " fields"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOCF2" + uniq}, ${P + " fields2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("cf-pat");
+  await core.redeemAccessCode(pat, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner})`;
+  // An old saved sort on the case manager's account, to be moved over once.
+  await sql`UPDATE users SET staff_prefs = ${JSON.stringify({ savedViews: [{ name: "My quiet", sort: "last_active", status: "behind", staffId: "" }] })}::jsonb WHERE id = ${cm}`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aOwner = await A(owner), aCm = await A(cm), aOther = await A(other), aSpy = await A(spy);
+
+  check("staff cannot define a field", (await core.createFieldDef(aCm, { label: "Shoe size", entity: "participant", type: "text" })).ok === false);
+  const f1 = await core.createFieldDef(aOwner, { label: "Housing", entity: "participant", type: "single_select", options: ["Stable", "Shelter"] });
+  const f2 = await core.createFieldDef(aOwner, { label: "Parole end", entity: "participant", type: "date" });
+  check("the owner defines fields", f1.ok && f2.ok, JSON.stringify([f1, f2]).slice(0, 200));
+  check("a field named for a record is sensitive whatever was asked", f2.ok && f2.def.sensitive === true);
+  check("another organization sees none of the definitions", (await core.listFieldDefs(aSpy)).length === 0);
+
+  const set = await core.setFieldValues(aCm, "participant", pat, { housing: "shelter", parole_end: "2027-01-15" });
+  check("the assigned case manager fills in values", set.ok === true, JSON.stringify(set).slice(0, 200));
+  check("a colleague who is not assigned cannot", (await core.setFieldValues(aOther, "participant", pat, { housing: "stable" })).ok === false);
+  check("and reads none of them", Object.keys(await core.getFieldValues(aOther, "participant")).length === 0);
+  check("another organization reads none of them", Object.keys(await core.getFieldValues(aSpy, "participant")).length === 0);
+  check("the owner reads them", (await core.getFieldValues(aOwner, "participant"))[pat]?.housing === "shelter");
+  check("a bad value is refused with a plain reason", (await core.setFieldValues(aCm, "participant", pat, { housing: "mansion" })).ok === false);
+
+  // The reach POLICY, with the app-level check out of the way: SQL by hand as the colleague.
+  const raw = async (u, orgId, stmt) => { try { const r = await app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${u}, true)`, stmt(app)]); return r[2]; } catch (e) { return String(e.message); } };
+  const seen = await raw(other, org.id, (a) => a`SELECT value FROM custom_field_value`);
+  check("the reach policy: a colleague's own SQL reads no value about someone they do not reach", Array.isArray(seen) && seen.length === 0, JSON.stringify(seen));
+  const wrote = await raw(other, org.id, (a) => a`UPDATE custom_field_value SET value = '"stable"'::jsonb RETURNING 1`);
+  check("and changes none", Array.isArray(wrote) && wrote.length === 0, JSON.stringify(wrote));
+  const ins = await raw(other, org.id, (a) => a`INSERT INTO custom_field_value (def_id, entity_id, access_code_id, participant_user_id, value) VALUES (${f1.def.id}, ${pat}, ${org.id}, ${pat}, '"stable"'::jsonb) ON CONFLICT DO NOTHING RETURNING 1`);
+  check("and writes none", !Array.isArray(ins) || ins.length === 0, JSON.stringify(ins));
+  const foreign = await raw(spy, org2.id, (a) => a`SELECT value FROM custom_field_value WHERE access_code_id = ${org.id}`);
+  check("another organization's SQL reads none", Array.isArray(foreign) && foreign.length === 0);
+  const changed = await core.setFieldValues(aCm, "participant", pat, { housing: "stable" });
+  const hist = await core.getFieldValueHistory(aOwner, "participant", pat);
+  check("changing a value keeps the earlier one, for managers", changed.ok && hist.some((h) => h.key === "housing" && h.value === "shelter" && h.change === "changed"), JSON.stringify(hist).slice(0, 200));
+  check("staff who do not manage settings get no history", (await core.getFieldValueHistory(aCm, "participant", pat)).length === 0);
+  const seenHist = await raw(other, org.id, (a) => a`SELECT value FROM custom_field_value_version`);
+  check("the reach policy: a colleague's own SQL reads no earlier value about someone they do not reach", Array.isArray(seenHist) && seenHist.length === 0, JSON.stringify(seenHist));
+  const forged = await raw(owner, org.id, (a) => a`DELETE FROM custom_field_value_version`);
+  check("history cannot be erased by the app", typeof forged === "string" && /permission denied/i.test(forged), JSON.stringify(forged));
+  const lowered = await core.updateFieldDef(aOwner, f2.def.id, { sensitive: false });
+  check("a sensitive field cannot be made ordinary", lowered.ok === false);
+  const delDef = await raw(owner, org.id, (a) => a`DELETE FROM custom_field_def WHERE id = ${f1.def.id}`);
+  check("a field cannot be deleted, even by the owner", typeof delDef === "string" && /permission denied/i.test(delDef), JSON.stringify(delDef));
+
+  const moved = await core.migrateLegacySavedViews(aCm);
+  const again = await core.migrateLegacySavedViews(aCm);
+  const views = await core.listSavedViews(aCm, "caseload");
+  check("the old saved sort moves over once, as a personal view", moved === 1 && again === 0 && views.filter((v) => v.name === "My quiet").length === 1, `${moved}/${again}/${views.length}`);
+  const [{ prefs }] = await sql`SELECT staff_prefs AS prefs FROM users WHERE id = ${cm}`;
+  check("and the old list is still there", Array.isArray(prefs.savedViews) && prefs.savedViews.length === 1);
+  check("a colleague does not see that personal view", (await core.listSavedViews(aOther, "caseload")).every((v) => v.name !== "My quiet"));
+  check("staff cannot share a view with everyone", (await core.createSavedView(aCm, { surface: "caseload", name: "Everyone's", shared: true })).ok === false);
+  const sv = await core.createSavedView(aOwner, { surface: "caseload", name: "Interviewing", shared: true, roleDefault: "staff", definition: { filters: [{ field: "status", op: "any_of", value: ["active"] }] } });
+  check("the owner shares one, the first view for staff", sv.ok && (await core.listSavedViews(aOther, "caseload")).some((v) => v.name === "Interviewing" && v.roleDefault === "staff"));
+  check("another organization sees no views", (await core.listSavedViews(aSpy, "caseload")).length === 0);
+
+  check("staff cannot set a role layout", (await core.setRoleLayout(aCm, "staff", "today", { order: ["quiet"], hidden: [] })).ok === false);
+  check("the owner can", (await core.setRoleLayout(aOwner, "staff", "today", { order: ["quiet"], hidden: ["unassigned"] })).ok === true);
+  check("staff get it", (await core.getMyRoleLayout(aOther)).today?.hidden?.includes("unassigned") === true);
+  check("another organization does not", (await core.getRoleLayouts(aSpy)).today.staff === undefined);
 }
 
 /**
@@ -567,6 +1014,109 @@ async function outcomeChecks() {
     && core.summarizeOutcomes(await core.listOutcomes(aOwner)).leftForBetter === 1);
   const del = await (async () => { try { await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`DELETE FROM outcome_record WHERE id = ${o1.id}`]); return null; } catch (e) { return String(e.message); } })();
   check("an outcome cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "deleted");
+}
+
+/**
+ * Staff workflow (105, house lane L5): drafts are their author's alone;
+ * referrals, their history, retention tasks, search and the timeline are
+ * reach-scoped and sealed between organizations, IN THE DATABASE as well as in
+ * core: raw reads as the app role, with the app's own checks skipped, see nothing.
+ */
+async function workflowChecks() {
+  console.log("\n  -- workflow: drafts, referrals, retention tasks, search, timeline --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("wf-owner"), cm = await mkUser("wf-cm"), other = await mkUser("wf-other"), spy = await mkUser("wf-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOWF" + uniq}, ${P + " workflow"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOWG" + uniq}, ${P + " workflow2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("wf-pat"), hers = await mkUser("wf-hers"), quiet = await mkUser("wf-quiet");
+  for (const u of [pat, hers, quiet]) await core.redeemAccessCode(u, org.code);
+  await joinCohortConsent(pat);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES
+            (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${hers}, ${other}, ${owner}), (${org.id}, ${quiet}, ${cm}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aOther = await A(other), aOwner = await A(owner), aSpy = await A(spy);
+  const rawAs = async (orgId, userId, query) => (await app.transaction([
+    app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${userId}, true)`, query(app),
+  ]))[2];
+
+  // drafts: owner only
+  const d1 = await core.saveStaffDraft(aCm, pat, "note", "Talked through the bus pass");
+  check("a case manager's note autosaves as a draft", d1.ok === true, JSON.stringify(d1));
+  check("they get it back after a refresh", (await core.getStaffDraft(aCm, pat, "note"))?.body === "Talked through the bus pass");
+  check("the owner cannot read it, even from the table", (await core.getStaffDraft(aOwner, pat, "note")) === null
+    && (await rawAs(org.id, owner, (a) => a`SELECT id FROM staff_draft`)).length === 0);
+  check("a colleague cannot", (await rawAs(org.id, other, (a) => a`SELECT id FROM staff_draft`)).length === 0);
+  check("another organization cannot", (await rawAs(org2.id, spy, (a) => a`SELECT id FROM staff_draft`)).length === 0);
+  check("no draft about someone out of reach", (await core.saveStaffDraft(aCm, hers, "note", "x")).ok === false);
+  check("clearing it after the real save leaves nothing", (await core.clearStaffDraft(aCm, pat, "note")) && (await core.getStaffDraft(aCm, pat, "note")) === null);
+
+  // referrals: reach and orgs, in the database
+  const r1 = await core.createReferral(aCm, { clientId: pat, toKind: "other", toName: "Isotest Boot Fund", reason: "Boots for the first shift", send: true });
+  check("a case manager refers their person", r1.ok === true, JSON.stringify(r1));
+  check("a colleague cannot refer someone not theirs", (await core.createReferral(aOther, { clientId: pat, toKind: "other", toName: "X Place" })).ok === false);
+  check("the colleague lists none of it", (await core.listReferrals(aOther, { filter: "all" })).length === 0);
+  check("and the DATABASE shows the colleague none of it, reading the tables directly",
+    (await rawAs(org.id, other, (a) => a`SELECT id FROM referral`)).length === 0 && (await rawAs(org.id, other, (a) => a`SELECT id FROM referral_event`)).length === 0);
+  check("another organization sees none of it, in core or in the table",
+    (await core.listReferrals(aSpy, { filter: "all" })).length === 0 && (await rawAs(org2.id, spy, (a) => a`SELECT id FROM referral`)).length === 0);
+  check("the owner sees it", (await core.listReferrals(aOwner, { filter: "all" })).some((r) => r.id === r1.id));
+  check("a colleague cannot move it", (await core.moveReferral(aOther, r1.id, { to: "accepted" })).ok === false);
+  check("a case manager cannot hand it to a colleague (that is assigning work)", (await core.updateReferral(aCm, r1.id, { ownerId: other })).ok === false);
+  check("an owner cannot hand it to someone who does not reach the person", (await core.updateReferral(aOwner, r1.id, { ownerId: other })).ok === false);
+  check("the case manager can, along the path", (await core.moveReferral(aCm, r1.id, { to: "accepted" })).ok === true
+    && (await core.moveReferral(aCm, r1.id, { to: "closed" })).ok === false);
+  const hist = await core.getReferralHistory(aCm, r1.id);
+  check("every move is in its history", hist?.map((e) => e.to_status).join() === "sent,accepted", JSON.stringify(hist));
+  const forged = await (async () => { try { await rawAs(org.id, cm, (a) => a`INSERT INTO referral_event (referral_id, access_code_id, participant_user_id, to_status) VALUES (${r1.id}, ${org.id}, ${pat}, 'closed')`); return null; } catch (e) { return String(e.message); } })();
+  check("the app cannot write referral history", !!forged && /permission denied/i.test(forged), forged ?? "inserted");
+  const rawOther = await (async () => { try { await rawAs(org.id, cm, (a) => a`INSERT INTO referral (access_code_id, participant_user_id, to_kind, to_name, created_by) VALUES (${org.id}, ${hers}, 'other', 'Raw', ${cm})`); return null; } catch (e) { return String(e.message); } })();
+  check("nor insert one for someone out of reach, skipping core", !!rawOther, rawOther ?? "inserted");
+  const rp = await core.createReferral(aCm, { clientId: pat, toKind: "partner_org", toName: "Isotest Partner Center", send: true });
+  const rpRow = (await core.listReferrals(aCm, { filter: "draft" })).find((r) => r.id === rp.id);
+  check("a partner referral stays a draft without the person's consent", rp.ok === true && rpRow?.status === "draft" && rpRow?.consent_ok === false && !!rp.note);
+  check("and cannot be sent", (await core.moveReferral(aCm, rp.id, { to: "sent" })).ok === false);
+
+  // retention tasks
+  const ago = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+  const o = await core.recordOutcome(aCm, { clientId: pat, employer: "Isotest Fabrication", startDate: ago(40), source: "staff_reported" });
+  const auto = ((await core.listStaffTasks(aCm, { clientId: pat })) ?? []).filter((t) => t.source_kind === "retention");
+  check("a placement makes its 30, 90 and 180-day tasks for the case manager", o.ok && auto.map((t) => t.source_mark).sort((x, y) => x - y).join() === "30,90,180"
+    && auto.every((t) => t.owner_user_id === cm), JSON.stringify(auto.map((t) => [t.source_mark, t.owner_user_id === cm])));
+  const [{ n: again }] = await sql`SELECT public.smr_make_retention_tasks(${o.id}::uuid) AS n`;
+  check("making them again makes none", again === 0);
+  await core.recordRetentionCheck(aCm, { outcomeId: o.id, dayMark: 30, status: "employed", method: "participant_told_me" });
+  const after = ((await core.listStaffTasks(aCm, { clientId: pat, includeDone: true })) ?? []).find((t) => t.source_kind === "retention" && t.source_mark === 30);
+  check("answering the 30-day check-in finishes its task", !!after?.done_at);
+  check("a colleague's task list does not get them", !((await core.listStaffTasks(aOther)) ?? []).some((t) => t.source_id === o.id));
+
+  // search
+  const hit = await core.searchParticipants(aCm, P + " wf-pat");
+  check("search finds my person by name (sharing on), any case", (hit ?? []).some((h) => h.user_id === pat), JSON.stringify(hit));
+  check("a colleague's search does not find them", !((await core.searchParticipants(aOther, P + " wf-pat")) ?? []).some((h) => h.user_id === pat));
+  check("another organization's search does not", !((await core.searchParticipants(aSpy, P + " wf-pat")) ?? []).some((h) => h.user_id === pat));
+  check("someone who shares nothing is not found by their account email", !((await core.searchParticipants(aOwner, `${P}-wf-quiet`)) ?? []).some((h) => h.user_id === quiet));
+  await core.setParticipantContact(aCm, quiet, { phone: "555-010-0177", aliases: ["Quiet Q"] });
+  check("but is found by the phone the organization keeps", ((await core.searchParticipants(aCm, "5550100177")) ?? []).some((h) => h.user_id === quiet && h.matched_on === "phone"));
+  const dupMine = await core.findPossibleDuplicates(aCm, { phone: "(555) 010-0177" });
+  check("adding someone with that phone warns, naming the person I work with", dupMine.matches.some((m) => m.userId === quiet && m.reasons.includes("phone")), JSON.stringify(dupMine));
+  const dupOther = await core.findPossibleDuplicates(aOther, { email: `${P}-wf-pat-${RUN}@example.invalid` });
+  check("a duplicate outside your reach is counted by exact email, never named", dupOther.matches.length === 0 && dupOther.othersByReason.email === 1, JSON.stringify(dupOther));
+  const dupName = await core.findPossibleDuplicates(aOther, { name: P + " wf-pat" });
+  check("and never counted by name, so the warning cannot test whether a name is here", dupName.matches.length === 0 && !dupName.othersByReason.name, JSON.stringify(dupName));
+  const dupPhoneOther = await core.findPossibleDuplicates(aOther, { phone: "(555) 010-0177" });
+  check("and a phone the organization keeps for someone out of reach is not even counted (the database hides it)", dupPhoneOther.matches.length === 0 && !dupPhoneOther.othersByReason.phone, JSON.stringify(dupPhoneOther));
+
+  // timeline
+  const tl = await core.getPersonTimeline(aCm, pat);
+  check("the timeline merges referrals, tasks and the placement, newest first",
+    tl.ok && ["referral", "task", "outcome", "retention"].every((t) => tl.items.some((i) => i.type === t)), JSON.stringify(tl.ok ? tl.items.map((i) => i.type) : tl));
+  check("a colleague gets no timeline for them", (await core.getPersonTimeline(aOther, pat)).ok === false);
+  check("another organization gets none", (await core.getPersonTimeline(aSpy, pat)).ok === false);
 }
 
 /** Tasks (055) and the Today queue: a reason on a work list is information about a person. */
@@ -835,19 +1385,117 @@ async function accessChecks() {
   const inv = await core.inviteOrgStaff(aOwner, { name: "New Hire", email, role: "staff", title: "Employment Specialist" });
   if (inv.ok) created.users.push(inv.userId);
   const overview = await core.getOrgAccessOverview(aOwner);
-  const hire = overview?.find((m) => m.userId === inv.userId);
-  check("the owner can invite someone to staff by email, and they show as invited", inv.ok && !!hire && hire.pending && hire.role === "staff" && hire.title === "Employment Specialist", JSON.stringify(inv));
+  const ownerScope = { orgId: org.id, userId: owner, role: "owner" };
+  const listed = inv.ok ? (await core.listStaffInvites(ownerScope)).find((i) => i.id === inv.inviteId) : null;
+  // Migration 100 + review B2: a new address is an invitation, nothing more,
+  // until the person signs in and says yes.
+  check("the owner can invite someone to staff by email: on the invitation list, not on the chart, no staff row yet",
+    inv.ok && !!listed && listed.status === "pending" && listed.title === "Employment Specialist" && !overview?.some((m) => m.userId === inv.userId)
+      && (await sql`SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${inv.userId}`)[0].n === 0,
+    JSON.stringify({ inv, listed }));
+  check("the organization-facing invitation carries no path and no account id", !!listed && !("path" in listed) && !("userId" in listed), JSON.stringify(listed));
+  check("a new address cannot reach the workspace before saying yes", (await core.resolveOrgActor(inv.userId)) === null);
+  const hireYes = await core.answerStaffInvite(inv.userId, inv.inviteId, true);
+  const aHireNow = await core.resolveOrgActor(inv.userId);
+  check("after yes, the new address is staff in this organization", hireYes.ok && aHireNow?.orgId === org.id && aHireNow?.role === "staff", JSON.stringify(hireYes));
+
   const vol = await core.inviteOrgStaff(aOwner, { name: "Volunteer", email: `${P}-a-vol-${uniq.toLowerCase()}@example.invalid`, role: "volunteer" });
   if (vol.ok) created.users.push(vol.userId);
+  if (vol.ok) await core.answerStaffInvite(vol.userId, vol.inviteId, true);
   const aVol = vol.ok ? await core.resolveOrgActor(vol.userId) : null;
-  check("a volunteer invite lands as staff who cannot invite participants or record placements, and sees only their caseload",
+  check("a volunteer invite, once accepted, is staff who cannot invite participants or record placements, and sees only their caseload",
     !!aVol && aVol.role === "staff" && !aVol.capabilities.has("org.participant.invite") && !aVol.capabilities.has("org.outcome.write") && aVol.reach === "assigned",
     JSON.stringify(vol));
   check("an admin cannot create another admin", (await core.inviteOrgStaff(aAdmin, { name: "X", email: `${P}-a-x-${uniq.toLowerCase()}@example.invalid`, role: "org_admin" })).ok === false);
+
+  // Review B2: an expired new-address invitation plus a later sign-in grants nothing.
+  const late = await core.inviteOrgStaff(aOwner, { name: "Late", email: `${P}-a-late-${uniq.toLowerCase()}@example.invalid`, role: "staff" });
+  if (late.ok) {
+    created.users.push(late.userId);
+    await sql`ALTER TABLE org_staff_invite DISABLE TRIGGER org_staff_invite_guard`;
+    await sql`UPDATE org_staff_invite SET expires_at = now() - interval '1 day' WHERE id = ${late.inviteId}`;
+    await sql`ALTER TABLE org_staff_invite ENABLE TRIGGER org_staff_invite_guard`;
+    await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${late.userId}`; // they sign in after expiry
+    const lateYes = await core.answerStaffInvite(late.userId, late.inviteId, true);
+    check("an expired new-address invitation plus a sign-in gives no workspace and no data",
+      lateYes.result === "expired" && (await core.resolveOrgActor(late.userId)) === null && (await core.getOrgContext(late.userId)) === null
+        && (await sql`SELECT count(*)::int AS n FROM org_staff WHERE user_id = ${late.userId}`)[0].n === 0,
+      JSON.stringify(lateYes));
+  }
+
+  // Review B1: a new address and an existing account look the same to the owner.
+  const placesBefore = await core.staffPlaces(ownerScope);
   const [{ email: outsiderEmail }] = await sql`SELECT email FROM users WHERE id = ${outsider}`;
-  check("an address that already has an account elsewhere is not attached to this roster", (await core.inviteOrgStaff(aOwner, { name: "X", email: outsiderEmail, role: "staff" })).ok === false);
+  const asked = await core.inviteOrgStaff(aOwner, { name: "Same Shape", email: outsiderEmail, role: "staff" });
+  const placesMid = await core.staffPlaces(ownerScope);
+  const twinEmail = `${P}-a-twin-${uniq.toLowerCase()}@example.invalid`;
+  const twin = await core.inviteOrgStaff(aOwner, { name: "Same Shape", email: twinEmail, role: "staff" });
+  if (twin.ok) created.users.push(twin.userId);
+  const placesAfter = await core.staffPlaces(ownerScope);
+  const shape = (i) => { if (!i) return null; const { id, email: _e, invitedAt, lastSentAt, expiresAt, ...rest } = i; void id; void _e; void invitedAt; void lastSentAt; void expiresAt; return JSON.stringify(rest); };
+  const ownerList = await core.listStaffInvites(ownerScope);
+  const askedView = ownerList.find((i) => i.id === asked.inviteId), twinView = ownerList.find((i) => i.id === twin.inviteId);
+  check("the owner sees byte-identical invitations for an existing account and a new address (apart from ids, address and times)",
+    asked.ok && twin.ok && !!askedView && shape(askedView) === shape(twinView), `${shape(askedView)} vs ${shape(twinView)}`);
+  check("and the staff places move by one for each", placesMid.n === placesBefore.n + 1 && placesAfter.n === placesMid.n + 1, JSON.stringify([placesBefore, placesMid, placesAfter]));
+  const staffList = await core.getOrgStaff(org.id);
+  check("and neither appears on the team list before saying yes", !staffList.some((m) => m.userId === outsider || (twin.ok && m.userId === twin.userId)));
+  const again = await core.inviteOrgStaff(aOwner, { name: "Same Shape", email: outsiderEmail, role: "staff" });
+  const againTwin = twin.ok ? await core.inviteOrgStaff(aOwner, { name: "Same Shape", email: twinEmail, role: "staff" }) : null;
+  check("inviting again renews the one open invitation, the same way for both",
+    again.ok && again.renewed && again.inviteId === asked.inviteId && againTwin?.ok && againTwin.renewed && againTwin.inviteId === twin.inviteId, JSON.stringify({ again, againTwin }));
+  const afterAsk = await core.getOrgAccessOverview(aOwner);
+  check("an existing account is invited, never attached: nothing on the roster until they say yes",
+    !afterAsk.some((m) => m.userId === outsider) && (await sql`SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${outsider}`)[0].n === 0);
+
+  // The invitee's side: their own invitation, answered through the definer function.
+  const theirs = await core.myStaffInvites(outsider);
+  check("the invitee sees their own open invitation", theirs.length === 1 && theirs[0].id === asked.inviteId, JSON.stringify(theirs));
+  check("a staff member of the org does not see someone else's invitation as theirs", (await core.myStaffInvites(cm)).length === 0);
+  const hijack = await core.answerStaffInvite(cm, asked.inviteId, true);
+  check("nobody answers another person's invitation", hijack.ok === false && hijack.result === "not_found", JSON.stringify(hijack));
+  const yes = await core.answerStaffInvite(outsider, asked.inviteId, true);
+  const aOutsider = await core.resolveOrgActor(outsider);
+  check("saying yes puts them on staff, in this organization, as the role they were invited to",
+    yes.ok && yes.result === "ok" && aOutsider?.orgId === org.id && aOutsider?.role === "staff", JSON.stringify({ yes, role: aOutsider?.role }));
+  check("an answered invitation stays answered", (await core.answerStaffInvite(outsider, asked.inviteId, false)).result === "answered");
+
+  // Revoke and cross-org, on the open twin invitation.
+  if (twin.ok) {
+    const [{ id: otherOrg }] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active)
+                                         VALUES (${"ISOINV" + uniq}, ${P + " invite other"}, 'client', ${outsider}, true) RETURNING id`;
+    created.codes.push(otherOrg);
+    const cross = await core.revokeStaffInvite({ orgId: otherOrg, userId: outsider, role: "owner" }, twin.inviteId, { platformAdmin: false });
+    check("another organization cannot revoke this organization's invitation", cross.ok === false, JSON.stringify(cross));
+    check("another organization reads none of this organization's invitations", (await core.listStaffInvites({ orgId: otherOrg, userId: outsider, role: "owner" })).length === 0);
+    // The cross-org read runs as someone with no invitation anywhere: the invitee
+    // may always read their OWN invitation rows (by design), so using the invitee
+    // here would count those and prove nothing about another organization.
+    const stranger = await mkUser("inv-stranger");
+    await sql`UPDATE access_code SET partner_user_id = ${stranger} WHERE id = ${otherOrg}`;
+    const crossRead = await app.transaction([
+      app`SELECT set_config('app.org_id', ${otherOrg}, true)`, app`SELECT set_config('app.user_id', ${stranger}, true)`,
+      app`SELECT count(*)::int AS n FROM org_staff_invite WHERE access_code_id = ${org.id}`]);
+    check("naming this organization's id while scoped to another returns nothing (RLS)", crossRead[2][0].n === 0, JSON.stringify(crossRead[2]));
+    const ownOnly = await app.transaction([
+      app`SELECT set_config('app.org_id', ${otherOrg}, true)`, app`SELECT set_config('app.user_id', ${outsider}, true)`,
+      app`SELECT count(*)::int AS n FROM org_staff_invite WHERE access_code_id = ${org.id} AND user_id <> ${outsider}`]);
+    check("an invitee scoped elsewhere reads only their own invitation rows, never anyone else's", ownOnly[2][0].n === 0, JSON.stringify(ownOnly[2]));
+    const forgedAccept = await app.transaction([
+      app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${owner}, true)`,
+      app`UPDATE org_staff_invite SET accepted_at = now() WHERE id = ${twin.inviteId} RETURNING id`]).then(() => "updated", (e) => String(e?.message ?? e));
+    check("the app role cannot mark an invitation accepted, even in the org's own scope", forgedAccept !== "updated", forgedAccept);
+    const rev = await core.revokeStaffInvite(ownerScope, twin.inviteId, { platformAdmin: false });
+    const after = await core.answerStaffInvite(twin.userId, twin.inviteId, true);
+    check("a revoked invitation can no longer be accepted, and grants nothing", rev.ok && after.result === "revoked" && (await core.resolveOrgActor(twin.userId)) === null, JSON.stringify({ rev, after }));
+    check("a revoked invitation cannot be revoked again", (await core.revokeStaffInvite(ownerScope, twin.inviteId, { platformAdmin: false })).ok === false);
+  }
+  const [{ n: inviteAudit }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_staff_invite'`;
+  const [{ n: leakedAddress }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_staff_invite' AND row_summary::text LIKE '%example.invalid%'`;
+  check("every invitation write is audited, never with the address", inviteAudit >= 4 && leakedAddress === 0, `rows=${inviteAudit} leaked=${leakedAddress}`);
   check("the overview shows the owner once, and marks who may be edited",
     overview.filter((m) => m.role === "owner").length === 1 && overview.find((m) => m.userId === cm).editable && !overview.find((m) => m.userId === owner).editable);
+  await sql`DELETE FROM org_staff WHERE user_id = ${outsider}`; // the accepted invitee, so later counts are unchanged
 
   await core.removeOrgStaff({ orgId: org.id, userId: cm, actorUserId: owner });
   const [{ n: leftover }] = await sql`SELECT count(*)::int AS n FROM org_capability_override WHERE org_id = ${org.id} AND user_id = ${cm}`;
@@ -1180,10 +1828,13 @@ async function membershipChecks() {
     winners === 1 && seated === 1 && (await seats(oneSeat.id)) === 1 && race.some((r) => r.outcome === "full"),
     `winners=${winners} rows=${seated} counter=${await seats(oneSeat.id)} outcomes=${race.map((r) => r.outcome)}`);
 
-  // -- site 3: a tier re-sync must not demote
+  // -- site 3, changed by house lane L2: a code never makes a partner. The
+  //    tier comes from owning or working in an organization; a participant
+  //    of a partner-tier code is a client (their rate limit still comes from
+  //    the code itself, checked next).
   await core.syncUserTierFromCodes(pat);
   const [{ tier: patTier }] = await sql`SELECT tier FROM users WHERE id = ${pat}`;
-  check("a tier re-sync keeps a partner-coded person at partner", patTier === "partner", `tier is ${patTier}`);
+  check("L2: a tier re-sync makes a participant of a partner-tier code a client, not a partner", patTier === "client", `tier is ${patTier}`);
 
   // -- site 4: the rate limiter, on the path of every AI call
   const limit = await core.getUserDailyLimit(pat);
@@ -1260,6 +1911,33 @@ async function membershipChecks() {
   const [{ n: audited }] = await sql`SELECT count(*)::int AS n FROM org_audit
      WHERE table_name = 'access_code_redemption' AND org_id = ${orgM.id} AND subject_user_id = ${a} AND action = 'INSERT' AND actor = ${a}`;
   check("joining an organization is written to the audit trail with who did it", audited === 1, `rows=${audited}`);
+
+  // -- migration 101 (house lane L2): who may join with a code
+  const [{ has101 }] = await sql`SELECT position('platform_admin' IN pg_get_functiondef('public.smr_redeem_code(uuid, text)'::regprocedure)) > 0 AS has101`;
+  if (!has101) {
+    console.log("  note  101 not applied: code refusals for admins and staff skipped");
+  } else {
+    const admin101 = await mkUser("m-admin101");
+    await sql`INSERT INTO platform_admin (user_id, note) VALUES (${admin101}, 'isolation fixture')`;
+    const seatsM = await seats(orgM.id);
+    const ra = await core.redeemAccessCode(admin101, orgM.code);
+    const rx = await core.redeemAccessCode(admin101, "NOSUCHCODE" + uniq);
+    check("101: a platform admin cannot join an organization with its code, and is told why",
+      ra.outcome === "platform_admin" && !ra.success && /Admin accounts/.test(ra.error ?? "") && (await memberships(admin101)) === 0,
+      JSON.stringify(ra));
+    check("101: the admin answer is the same for a code that does not exist", rx.outcome === "platform_admin", JSON.stringify(rx));
+    const rs = await core.redeemAccessCode(staffM, orgM.code);
+    const ro = await core.redeemAccessCode(ownerM, orgM.code);
+    check("101: the organization's own staff and owner cannot join it as participants",
+      rs.outcome === "org_staff" && ro.outcome === "org_staff" && (await memberships(staffM)) === 0 && (await memberships(ownerM)) === 0,
+      `staff=${rs.outcome} owner=${ro.outcome}`);
+    check("101: those refusals spend no seat", (await seats(orgM.id)) === seatsM, `seats ${await seats(orgM.id)} (was ${seatsM})`);
+    const elsewhere = await core.redeemAccessCode(staffM, orgN.code);
+    check("101: staff of org M may still join org N as a participant", elsewhere.success && (await memberships(staffM)) === 1, JSON.stringify(elsewhere));
+    const [{ tier: staffTier }] = await sql`SELECT tier FROM users WHERE id = ${staffM}`;
+    check("L2: a staff member's tier comes from their staff role (partner), not from the code they joined with", staffTier === "partner", `tier is ${staffTier}`);
+    await sql`DELETE FROM platform_admin WHERE user_id = ${admin101}`;
+  }
 
   // ------------------------------------------------- only once 049 is applied
   const [{ on: rlsOn }] = await sql`SELECT (relrowsecurity AND relforcerowsecurity) AS on FROM pg_class WHERE oid = 'public.access_code_redemption'::regclass`;
@@ -1349,6 +2027,57 @@ async function platformAdminChecks() {
 
   const adminCode = await raised(() => sql`INSERT INTO access_code (code, partner_name, tier) VALUES (${"ISOADMIN" + Date.now().toString(36).toUpperCase().slice(-6)}, 'isolation fixture', 'admin')`);
   check("an access code cannot be created with tier admin, even by the owner", !!adminCode && /access_code_tier_check/.test(adminCode), adminCode ?? "insert succeeded");
+
+  // -- organization lifecycle (migration 100), as the app role
+  const lc = Date.now().toString(36).toUpperCase().slice(-6);
+  const [{ id: lifeOrg }] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active)
+                                      VALUES (${"ISOLIFE" + lc}, ${P + " lifecycle"}, 'client', ${nobody}, true) RETURNING id`;
+  created.codes.push(lifeOrg);
+  check("closing needs a reason", (await core.closeOrganization(lifeOrg, "", boss)).ok === false);
+  const closed = await core.closeOrganization(lifeOrg, "Fixture closed for the check", boss);
+  const [lifeRow] = await sql`SELECT is_active, closed_by, close_reason, closed_at IS NOT NULL AS stamped FROM access_code WHERE id = ${lifeOrg}`;
+  check("a platform admin closes an organization with a reason; the database stamps who and when",
+    closed.ok && !lifeRow.is_active && lifeRow.closed_by === boss && lifeRow.stamped && lifeRow.close_reason === "Fixture closed for the check", JSON.stringify(lifeRow));
+  check("closing an already closed organization says so", (await core.closeOrganization(lifeOrg, "again please", boss)).ok === false);
+  const reopened = await core.reopenOrganization(lifeOrg, boss);
+  const [reRow] = await sql`SELECT is_active, closed_at, close_reason FROM access_code WHERE id = ${lifeOrg}`;
+  check("reopening clears the close stamps", reopened.ok && reRow.is_active && reRow.closed_at === null && reRow.close_reason === null, JSON.stringify(reRow));
+  const renamed = await core.renameOrganization(lifeOrg, `${P} lifecycle renamed`, boss);
+  check("rename changes the name only", renamed.ok && renamed.name === `${P} lifecycle renamed`);
+  const [{ n: reasonLeak }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${lifeOrg} AND row_summary::text LIKE '%Fixture closed%'`;
+  check("the close reason text stays out of the organization's readable audit", reasonLeak === 0, `rows=${reasonLeak}`);
+  check("history is for platform admins only", (await core.getOrgHistory(lifeOrg, nobody)) === null);
+  check("an empty organization has no history", JSON.stringify(await core.getOrgHistory(lifeOrg, boss)) === "{}");
+  const member = await mkUser("life-member");
+  await core.redeemAccessCode(member, "ISOLIFE" + lc);
+  // Review B3: a closed organization's owner no longer reads or exports its cohort.
+  check("the owner of an open organization is a partner with its cohort", (await core.isPartnerUser(nobody, "client")) === true
+    && (await core.getPartnerCohort(nobody)).totalJoined === 1);
+  await core.closeOrganization(lifeOrg, "Closed to check the cohort gate", boss);
+  check("after Close, its owner is not a partner (the cohort JSON and CSV routes refuse on this)", (await core.isPartnerUser(nobody, "client")) === false);
+  check("after Close, the owner's cohort read is empty", (await core.getPartnerCohort(nobody)).totalJoined === 0);
+  await core.reopenOrganization(lifeOrg, boss);
+  const busy = await core.deleteEmptyOrganization(lifeOrg, `${P} lifecycle renamed`, boss);
+  check("an organization with one member is never deleted, and the refusal says why", busy.ok === false && /1 member/.test(busy.error), JSON.stringify(busy));
+  const [{ id: emptyOrg }] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active)
+                                       VALUES (${"ISOEMPTY" + lc}, ${P + " empty"}, 'client', true) RETURNING id`;
+  created.codes.push(emptyOrg);
+  check("a non-admin cannot delete even an empty organization", (await core.deleteEmptyOrganization(emptyOrg, `${P} empty`, nobody)).ok === false);
+  check("delete needs the exact name", (await core.deleteEmptyOrganization(emptyOrg, "wrong name", boss)).ok === false);
+  const gone = await core.deleteEmptyOrganization(emptyOrg, `${P} empty`, boss);
+  const [{ n: stillThere }] = await sql`SELECT count(*)::int AS n FROM access_code WHERE id = ${emptyOrg}`;
+  const [{ n: deleteAudit }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${emptyOrg} AND action = 'DELETE' AND actor = ${boss}`;
+  check("an organization with no history is deleted, and the delete is recorded", gone.ok && stillThere === 0 && deleteAudit === 1, JSON.stringify({ gone, stillThere, deleteAudit }));
+
+  // -- platform admin adds an existing account to staff directly (support path)
+  const supportStaff = await mkUser("life-support-staff");
+  const [{ email: supportEmail }] = await sql`SELECT email FROM users WHERE id = ${supportStaff}`;
+  const addedByAdmin = await core.adminAddStaff(lifeOrg, boss, { name: "Support Added", email: supportEmail, role: "staff" });
+  const aSupport = await core.resolveOrgActor(supportStaff);
+  check("a platform admin adds an existing account to staff directly", addedByAdmin.ok && addedByAdmin.path === "admin_added" && aSupport?.orgId === lifeOrg, JSON.stringify(addedByAdmin));
+  check("a non-admin cannot use the direct-add path",
+    (await core.adminAddStaff(lifeOrg, nobody, { name: "X", email: (await sql`SELECT email FROM users WHERE id = ${member}`)[0].email, role: "staff" })).ok === false);
+  await sql`DELETE FROM org_staff WHERE access_code_id = ${lifeOrg}`;
 
   await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
   const [revoked] = await sql`SELECT tier FROM users WHERE id = ${boss}`;

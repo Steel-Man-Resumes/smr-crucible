@@ -1,5 +1,6 @@
 "use client";
 
+import { useOrgTerms } from "@/lib/use-org-terms";
 /**
  * <StaffWorkflowSettings> -- Settings -> "My workflow".
  *
@@ -18,7 +19,7 @@ import {
 } from "@crucible/core/src/staffPrefsShared";
 
 const TODAY_LABELS: Record<string, string> = {
-  tasks: "My tasks", retention: "Retention check-ins due", interviews: "Interviews coming up", interview_stalled: "Interviews stalled", followups: "Follow-ups due", answered: "They answered me",
+  tasks: "My tasks", retention: "Retention check-ins due", referrals: "Referrals past due", interviews: "Interviews coming up", interview_stalled: "Interviews stalled", followups: "Follow-ups due", answered: "They answered me",
   acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
 };
 
@@ -26,6 +27,7 @@ interface State { effective: StaffPrefs; own: Partial<StaffPrefs>; orgDefaults: 
 
 /** `workspace`: the participant pages exist for this org, so their options mean something. */
 export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
+  const terms = useOrgTerms();
   const [state, setState] = useState<State | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -93,7 +95,7 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
           </div>
         </fieldset>
         <div>
-          <label htmlFor="wf-tab" className="block font-medium text-t-white mb-1">When I open a participant, start on</label>
+          <label htmlFor="wf-tab" className="block font-medium text-t-white mb-1">When I open a {terms.participant}, start on</label>
           <select id="wf-tab" className={select} value={p.clientTab} onChange={(e) => change({ clientTab: e.target.value as StaffPrefs["clientTab"] })}>
             {CLIENT_TABS.map((k) => <option key={k} value={k}>{CLIENT_TAB_LABELS[k]}</option>)}
           </select>

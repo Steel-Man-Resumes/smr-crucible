@@ -15,6 +15,7 @@ import { STATIONS } from "../refinery-nav";
 import { OrgSidebar } from "../../components/org/OrgSidebar";
 import { OrgMark, orgMonogram, ORG_MARK_TONES } from "../../components/org/OrgMark";
 import { openStaffTroy } from "../staff-troy";
+import { DEMO_SAMPLE_LINE } from "../demo-line";
 
 (globalThis as { React?: unknown }).React = React;
 const CONSUMER = join(import.meta.dirname, "..", "..");
@@ -30,12 +31,12 @@ const labels = (c: string[]) => orgNavFor(c).map((g) => `${g.label}: ${g.items.m
 // ── Nav, by role ────────────────────────────────────────────────────────────
 test("nav groups by the job, and each role sees only what it holds", () => {
   assert.deepEqual(labels(OWNER), [
-    "Work: Today, People, Asks",
+    "Work: Today, People, Find a person, Asks, Referrals",
     "Records: Case notes",
-    "Organization: Insights, Team & access, Add people, Sharing policy, Security & privacy",
+    "Organization: Insights, Team & access, Structure, Fields, Layouts, Add people, Sharing policy, Security & privacy, Activity log, Set up",
   ]);
-  assert.deepEqual(labels(STAFF), ["Work: Today, People, Asks", "Records: Case notes", "Organization: Add people, Security & privacy"]);
-  assert.deepEqual(labels(VOLUNTEER), ["Work: Today, People, Asks", "Records: Case notes", "Organization: Security & privacy"]);
+  assert.deepEqual(labels(STAFF), ["Work: Today, People, Find a person, Asks, Referrals", "Records: Case notes", "Organization: Add people, Security & privacy, Structure, Fields, Layouts"]);
+  assert.deepEqual(labels(VOLUNTEER), ["Work: Today, People, Find a person, Asks, Referrals", "Records: Case notes", "Organization: Security & privacy, Structure, Fields, Layouts"]);
   assert.ok(labels(ADMIN)[2].includes("Insights"));
 });
 
@@ -74,8 +75,11 @@ test("staff get the workshop skin on the sidebar and the mobile drawer; the old 
   assert.doesNotMatch(shell, /isOrgPartner \? "" : " forge-workshop"/);
   assert.doesNotMatch(shell, />Organization<\/p>/);
   assert.match(shell, /function renderOrgNav[\s\S]*?<OrgSidebar/);
-  // The demo honesty line stays word for word.
-  assert.match(shell, /Sample data\. These participants are fictional\. The employers and local services named are real; no application or hire shown here took place\./);
+  // The demo honesty line comes from one place (lib/demo-line.ts) and tells
+  // the truth when fictional employers appear (house build L1).
+  assert.match(shell, /\{DEMO_SAMPLE_LINE\}/);
+  assert.match(DEMO_SAMPLE_LINE, /^Sample data\. The participants are fictional, and so is any employer marked fictional\. Real employers and local services are named only as places; no application or hire shown here took place\.$/);
+  assert.doesNotMatch(DEMO_SAMPLE_LINE, /named are real/);
 });
 
 test("org name display strips (Demo) into a chip and never shows an empty name", () => {
@@ -104,7 +108,8 @@ test("landing: workspace staff go to Today; Caseload choice, old anchors and sta
 
 test("landing is wired: /dashboard forwards workspace staff, People renders the caseload, the caseload no longer redirects itself", () => {
   const page = read("app/(dashboard)/dashboard/page.tsx");
-  assert.match(page, /if \(effectiveRole\.orgRole && effectiveRole\.crmV2\) return <OrgLanding \/>;/);
+  // House lane L2: staff are chosen by the org role (lib/workspace.ts), not the tier.
+  assert.match(page, /if \(workspace === "staff"\) \{[\s\S]*?if \(effectiveRole\.crmV2\) return <OrgLanding \/>;\s+return <OrgDashboard \/>;/);
   assert.match(page, /router\.replace\(to\)/);
   assert.match(page, /window\.setTimeout\(\(\) => go\(null\), 4000\)/, "a hung settings read falls back to the default");
   assert.match(page, /capabilities: effectiveRole\?\.capabilities \?\? \[\]/);

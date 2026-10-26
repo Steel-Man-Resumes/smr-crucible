@@ -25,8 +25,10 @@
  * Clients who have not opted into sharing are counted but never named.
  */
 
+import { DevModeBanner } from "@/components/DevModeBanner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useOrgTerms } from "@/lib/use-org-terms";
 import { useUserTier } from "@/lib/useUserTier";
 // Direct module import, NOT the "@crucible/core" barrel: this is a client
 // component, and the barrel re-exports server-only modules that pull in
@@ -39,17 +41,17 @@ import { stationLabelForStage, stationOrderForStage } from "@/lib/staff-station"
 import { staffEmptyState } from "@crucible/core/src/orgVisibilityShared";
 import { seatLedgerLine, staffLedgerLine, SEAT_LEDGER_HELP, type SeatLedger } from "@crucible/core/src/orgSeatsShared";
 import { SeeEveryonePanel } from "@/components/org/SeeEveryonePanel";
+import { CaseloadWorkbench } from "@/components/org/CaseloadWorkbench";
+import { STATIONS, stationForJourneyStage } from "@/lib/refinery-nav";
+import { DuplicateWarning } from "@/components/org/DuplicateWarning";
 import {
   DEFAULT_STAFF_PREFS,
   CASELOAD_SORTS,
   CASELOAD_SORT_LABELS,
   type CaseloadColumn,
-  CASELOAD_STATUSES,
   CASELOAD_STATUS_LABELS,
-  MAX_SAVED_VIEWS,
   type CaseloadSort,
   type CaseloadStatusFilter,
-  type SavedView,
   type StaffPrefs,
 } from "@crucible/core/src/staffPrefsShared";
 
@@ -127,6 +129,8 @@ interface OrgPayload {
   /** People assigned to the viewer, sharing or not; null = unknown. */
   assignedToViewer?: number | null;
   canAssign?: boolean;
+  /** Read-only view (house lane L2): "view_as" while an admin views as staff, "admin_org_view" for the admin's ?codeId console. */
+  readOnly?: "view_as" | "admin_org_view" | null;
   /** Invited by this organization, not sharing progress: name and email it typed, nothing else. */
   invitedNotSharing?: { userId: string; name: string | null; email: string | null; joinedAt: string; assignedStaffId: string | null; pending: boolean }[];
 }
@@ -174,6 +178,10 @@ function StatusBadge({ status }: { status: ClientStatus }) {
 export type OrgDashboardView = "all" | "caseload" | "team" | "add";
 
 const STATUS_RANK: Record<ClientStatus, number> = { behind: 0, steady: 1, active: 2, hired: 3 };
+// Choice lists for the caseload views (CaseloadWorkbench): the statuses the
+// table computes, and the participant's stations.
+const STATUS_OPTIONS = (["behind", "active", "steady", "hired"] as const).map((k) => ({ id: k, label: CASELOAD_STATUS_LABELS[k] }));
+const STATION_OPTIONS = STATIONS.map((s) => ({ id: s.id, label: s.label }));
 
 export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { codeId?: string; view?: OrgDashboardView }) {
   // WRITES MUST TARGET THE ORGANIZATION ON SCREEN.
@@ -185,6 +193,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
     ? `/api/partner/org?codeId=${encodeURIComponent(codeId)}`
     : "/api/partner/org";
   const tier = useUserTier();
+  // The organization's own words (house lane L3a); defaults until they load.
+  const terms = useOrgTerms();
   const canView = tier === "partner" || tier === "admin";
   const [data, setData] = useState<OrgPayload | null>(null);
   const [legacyCohort, setLegacyCohort] = useState<Cohort | null>(null);
@@ -204,12 +214,6 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
   const [bulkTo, setBulkTo] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
 
-  async function saveViews(views: SavedView[]) {
-    const own = await fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.own ?? {}).catch(() => ({}));
-    const res = await fetch("/api/org/prefs", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ own: { ...own, savedViews: views } }) });
-    if (res.ok) { const d = await res.json(); if (d?.effective) setPrefs(d.effective); }
-  }
-  function applyView(v: SavedView) { setSort(v.sort); setStatusFilter(v.status); setStaffFilter(v.staffId); setFind(""); }
   async function bulkAssign() {
     if (picked.size === 0) return;
     setBulkBusy(true); setAssignError(null);
@@ -246,6 +250,14 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
     // inside each, whoever has been quiet longest comes first.
     else out.sort((a, b) => STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)] || t(a.lastActiveAt) - t(b.lastActiveAt) || byName(a, b));
     return out;
+  };
+  // The same four orders as comparators, for the caseload views.
+  const tOf = (v: string | null) => (v ? new Date(v).getTime() || 0 : 0);
+  const presetSorts: Record<CaseloadSort, (a: CohortClient, b: CohortClient) => number> = {
+    needs_attention: (a, b) => STATUS_RANK[statusOf(a)] - STATUS_RANK[statusOf(b)] || tOf(a.lastActiveAt) - tOf(b.lastActiveAt),
+    name: (a, b) => (a.name || "").localeCompare(b.name || ""),
+    last_active: (a, b) => tOf(b.lastActiveAt) - tOf(a.lastActiveAt),
+    stage: (a, b) => stationOrderForStage(b.currentStage) - stationOrderForStage(a.currentStage),
   };
   const [status, setStatus] = useState<"loading" | "ready" | "forbidden" | "error">("loading");
   const [saving, setSaving] = useState<string | null>(null);
@@ -545,7 +557,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 <td className="px-4 py-3">
                   {data?.crmV2 ? (
                     <Link href={`/dashboard/clients/${c.userId}`} className="t-focus font-medium text-t-white underline decoration-t-line underline-offset-4 hover:decoration-t-amber">
-                      {c.name || "Client"}
+                      {c.name || terms.cap("participant")}
                     </Link>
                   ) : (
                     <div className="font-medium text-t-white">{c.name || "Client"}</div>
@@ -600,8 +612,48 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
     );
   }
 
+  // One cell of a built-in column, for the caseload views. Same markup as the table above.
+  function builtinCell(col: string, c: CohortClient): React.ReactNode {
+    switch (col) {
+      case "name":
+        return (
+          <>
+            <Link href={`/dashboard/clients/${c.userId}`} className="t-focus font-medium text-t-white underline decoration-t-line underline-offset-4 hover:decoration-t-amber">
+              {c.name || terms.cap("participant")}
+            </Link>
+            {c.email && <div className="text-xs text-t-phos-dim">{c.email}</div>}
+          </>
+        );
+      case "stage": return <span className="font-medium text-t-white">{stationLabelForStage(c.currentStage) ?? "--"}</span>;
+      case "nextStep": return <span className="text-t-phos-dim">{c.nextStepAction || "--"}</span>;
+      case "applications": return <span className="text-t-white">{c.applications}</span>;
+      case "lastActive": return <span className="text-t-phos-dim">{fmtDate(c.lastActiveAt)}</span>;
+      case "joined": return <span className="text-t-phos-dim">{fmtDate(c.joinedAt)}</span>;
+      case "status": return <StatusBadge status={statusOf(c)} />;
+      case "staff":
+        return canManage ? (
+          <select aria-label={`${terms.cap("case_manager")} for ${c.name || "this person"}`} value={c.assignedStaffId || ""} onChange={(e) => assign(c.userId, e.target.value)} disabled={saving === c.userId}
+            className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5 disabled:opacity-50">
+            <option value="">Unassigned</option>
+            {staff.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
+          </select>
+        ) : <span className="text-xs text-t-phos-dim">{c.assignedStaffName || "--"}</span>;
+      default: return null;
+    }
+  }
+  const emptyCaseload = ownCaseloadOnly
+    ? staffEmptyState({
+        ownCaseloadOnly,
+        assignedToViewer: data?.assignedToViewer ?? null,
+        unassignedJoined: data?.unassignedJoined ?? null,
+        adminNames: staff.filter((m) => m.role === "org_admin").map((m) => m.name || ""),
+      }).message
+    : `No one is sharing progress here yet.${joinedNotSharing > 0 ? ` ${joinedNotSharing} ${joinedNotSharing === 1 ? "person has" : "people have"} joined with the code; they can turn on sharing from their own Settings.` : ""}`;
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
+      {/* The admin's console for another organization is read-only, and says so (L2, H1). */}
+      {(codeId || data?.readOnly === "admin_org_view") && <DevModeBanner orgView={{ orgName: data?.org.name ?? null }} />}
       {/* Org header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
         <div className="flex items-center gap-4">
@@ -621,7 +673,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               {data
                 ? isStaffView
                   ? ownCaseloadOnly
-                    ? "Staff view: the clients assigned to you who chose to share progress."
+                    ? `Staff view: the ${terms.participants} assigned to you who chose to share progress.`
                     : "Staff view: everyone in your organization who chose to share progress."
                   : `Your organization's people, team and program reach.${data.org.code ? ` Code ${data.org.code}.` : ""}`
                 : "Progress for the people you support who chose to share it."}
@@ -688,7 +740,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
             <h2 className="text-lg font-bold text-t-white">{drillStaffName}</h2>
             <span className="text-xs text-t-phos-dim">
-              {drillClients.length} sharing {drillClients.length === 1 ? "client" : "clients"}
+              {drillClients.length} sharing {drillClients.length === 1 ? terms.participant : terms.participants}
             </span>
           </div>
           <ClientTable rows={drillClients} showAssign />
@@ -788,7 +840,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                         <div className="mt-2 text-2xl font-bold text-t-white">
                           {m.clientCount}
                           <span className="text-xs font-normal text-t-phos-dim ml-1">
-                            {m.clientCount === 1 ? "client" : "clients"}
+                            {m.clientCount === 1 ? terms.participant : terms.participants}
                           </span>
                         </div>
                         <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
@@ -823,7 +875,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                       <div className="mt-2 text-2xl font-bold text-t-white">
                         {unassignedCount}
                         <span className="text-xs font-normal text-t-phos-dim ml-1">
-                          {unassignedCount === 1 ? "client" : "clients"}
+                          {unassignedCount === 1 ? terms.participant : terms.participants}
                         </span>
                       </div>
                       <div className="text-[11px] text-t-phos-dim mt-1.5">
@@ -846,7 +898,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           {/* Add participant + pending invites */}
           {data && canInvite && (view === "all" || view === "add") && (
             <div id="add" className="bg-t-panel border border-t-line px-4 py-4 mb-6 scroll-mt-24">
-              <h2 className="text-sm font-semibold text-t-white mb-1">Add a participant</h2>
+              <h2 className="text-sm font-semibold text-t-white mb-1">Add a {terms.participant}</h2>
               <p className="text-xs text-t-phos-dim mb-3">
                 {isStaffView
                   ? "They get an email that signs them straight in. No code, no password, and they're assigned to you automatically."
@@ -877,6 +929,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   {inviteBusy ? "Sending..." : "Send invite"}
                 </button>
               </form>
+              {/* House lane L5: "this may be someone you already have" (never names anyone outside the caller's reach). */}
+              {!codeId && <DuplicateWarning name={inviteName} email={inviteEmail} />}
               {inviteMsg && (
                 <p
                   className={`text-xs mt-3 ${
@@ -940,8 +994,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           {/* Privacy note */}
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-6">
             {data?.crmV2
-              ? "You only see clients who chose to share their progress with you. You see a resume, an application list or a cover letter only if that person chose to share it, one item at a time, and they can see every time you open it. You never see disclosure plans or interview answers."
-              : "You only see clients who chose to share their progress with you. You never see their resume text, disclosure plans, or interview answers. You see only how far along they are."}
+              ? `You only see ${terms.participants} who chose to share their progress with you. You see a resume, an application list or a cover letter only if that person chose to share it, one item at a time, and they can see every time you open it. You never see disclosure plans or interview answers.`
+              : `You only see ${terms.participants} who chose to share their progress with you. You never see their resume text, disclosure plans, or interview answers. You see only how far along they are.`}
           </p>
 
           {assignError && (
@@ -953,14 +1007,14 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           {/* Full roster */}
           <div className="flex items-baseline justify-between gap-2 mb-3">
             <h2 className="text-lg font-bold text-t-white">
-              {isStaffView ? "Your clients" : "All clients"}
+              {isStaffView ? `Your ${terms.participants}` : `All ${terms.participants}`}
             </h2>
             {showTeam && clients.length > 0 && view === "all" && (
               <span className="text-xs text-t-phos-dim">
                 Tap a team member above to focus on their clients.
               </span>
             )}
-            {clients.length > 1 && (
+            {clients.length > 1 && !data?.crmV2 && (
               <div className="flex flex-wrap items-center gap-2 ml-auto">
                 <label className="sr-only" htmlFor="caseload-find">Find a client by name</label>
                 <input id="caseload-find" type="search" value={find} onChange={(e) => setFind(e.target.value)}
@@ -974,36 +1028,6 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               </div>
             )}
           </div>
-          {data?.crmV2 && clients.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <label className="sr-only" htmlFor="caseload-status">Show</label>
-              <select id="caseload-status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as CaseloadStatusFilter)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5">
-                {CASELOAD_STATUSES.map((k) => <option key={k || "all"} value={k}>{CASELOAD_STATUS_LABELS[k]}</option>)}
-              </select>
-              {!isStaffView && staff.length > 0 && (
-                <>
-                  <label className="sr-only" htmlFor="caseload-staff">Case manager</label>
-                  <select id="caseload-staff" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5">
-                    <option value="">Any case manager</option>
-                    {staff.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
-                    <option value={UNASSIGNED}>Not assigned</option>
-                  </select>
-                </>
-              )}
-              {prefs.savedViews.map((v, i) => (
-                <span key={`${v.name}-${i}`} className="inline-flex items-center border border-t-line text-xs">
-                  <button onClick={() => applyView(v)} className="t-focus px-2 py-1.5 text-t-phos hover:text-t-white">{v.name}</button>
-                  <button onClick={() => saveViews(prefs.savedViews.filter((_, j) => j !== i))} aria-label={`Remove the saved view ${v.name}`} className="t-focus px-1.5 py-1.5 text-t-phos-dim hover:text-t-white border-l border-t-line">&times;</button>
-                </span>
-              ))}
-              {prefs.savedViews.length < MAX_SAVED_VIEWS && (statusFilter || staffFilter || sort) && (
-                <button className="t-focus text-xs text-t-phos-dim underline underline-offset-4 hover:text-t-white"
-                  onClick={() => { const name = window.prompt("Name this view (for example: My quiet people)"); if (name?.trim()) saveViews([...prefs.savedViews, { name: name.trim(), sort: activeSort, status: statusFilter, staffId: staffFilter }]); }}>
-                  Save this view
-                </button>
-              )}
-            </div>
-          )}
           {picked.size > 0 && canManage && (
             <div role="region" aria-label="Assign selected people" className="flex flex-wrap items-center gap-2 mb-3 border border-t-amber bg-t-panel px-3 py-2">
               <span className="text-xs text-t-white">{picked.size} selected</span>
@@ -1016,6 +1040,27 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               <button onClick={() => setPicked(new Set())} className="t-focus text-xs text-t-phos-dim underline">Clear</button>
             </div>
           )}
+          {data?.crmV2 ? (
+            <CaseloadWorkbench
+              clients={clients}
+              statusOf={statusOf}
+              statusOptions={STATUS_OPTIONS}
+              stationOptions={STATION_OPTIONS}
+              stationIdOf={(c) => (Number.isFinite(c.currentStage) ? stationForJourneyStage(c.currentStage) : null)}
+              presetSorts={presetSorts}
+              renderBuiltin={builtinCell}
+              showStaffColumn={!!data}
+              pickable={canManage}
+              picked={picked}
+              onPick={setPicked}
+              trailing={showCosts ? { label: "AI cost", render: (c) => usd(c.aiCostUsd || 0) } : null}
+              empty={emptyCaseload}
+              // The org's own words for the role nouns in column names (L3a).
+              labels={{ staff: terms.cap("case_manager") }}
+              // View-as and the admin's org view are read-only (L2): nothing to save or export.
+              readOnly={!!data?.readOnly}
+            />
+          ) : (
           <ClientTable
             rows={clients.filter((c) =>
               (!find.trim() || (c.name || "").toLowerCase().includes(find.trim().toLowerCase()))
@@ -1023,6 +1068,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               && (!staffFilter || (staffFilter === UNASSIGNED ? !c.assignedStaffId : c.assignedStaffId === staffFilter)))}
             showAssign={!!data}
           />
+          )}
 
           {(data?.invitedNotSharing?.length ?? 0) > 0 && (
             <div id="invited" className="mt-6 scroll-mt-24 bg-t-panel border border-t-line">

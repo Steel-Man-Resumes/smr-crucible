@@ -7,6 +7,7 @@
  * name. Pure, so the grouping can be tested per role without rendering.
  */
 import { matchesPreset } from "@crucible/core/src/authz/capabilities";
+import { mergeNavExtensions, orgNavExtensionsFor, NAV_EXTENSIONS, type NavExtension } from "./refinery-nav";
 
 export interface OrgNavItem { href: string; label: string; needs?: string; navId: string }
 export interface OrgNavGroup { label: string; items: OrgNavItem[] }
@@ -33,10 +34,18 @@ export const ORG_WORKSPACE_NAV: readonly OrgNavGroup[] = [
   },
 ];
 
-/** The groups this person sees: items they lack the capability for are gone, and so is a group left empty. */
-export function orgNavFor(capabilities: readonly string[]): OrgNavGroup[] {
-  return ORG_WORKSPACE_NAV
-    .map((g) => ({ label: g.label, items: g.items.filter((i) => !i.needs || capabilities.includes(i.needs)) }))
+/**
+ * The groups this person sees: items they lack the capability for are gone,
+ * and so is a group left empty. Screens wired through the nav registry
+ * (NAV_EXTENSIONS in lib/refinery-nav.ts, surface "org") join their group
+ * under the same capability rule, plus the org's module switches.
+ */
+export function orgNavFor(capabilities: readonly string[], modules?: Readonly<Record<string, boolean>> | null,
+  extensions: readonly NavExtension[] = NAV_EXTENSIONS): OrgNavGroup[] {
+  const base = ORG_WORKSPACE_NAV
+    .map((g) => ({ label: g.label, items: g.items.filter((i) => !i.needs || capabilities.includes(i.needs)) }));
+  return mergeNavExtensions(base, orgNavExtensionsFor(capabilities, modules, extensions),
+    (e) => ({ href: e.href, label: e.label, needs: e.needs, navId: e.navId }))
     .filter((g) => g.items.length > 0);
 }
 

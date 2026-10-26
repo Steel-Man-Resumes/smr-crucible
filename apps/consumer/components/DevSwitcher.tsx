@@ -1,54 +1,71 @@
 "use client";
 
 /**
- * Developer Switcher (Troy-only: rendered for admin tier).
+ * Developer mode (platform admins only): four labeled modes (house lane L2).
  *
- * One control, every capacity, all of it audited server-side impersonation.
- * The soft "Me: Job Seeker / Observer / Admin" preview is gone (B7,
+ *   Admin                                 yourself, with your admin tools
+ *   View as staff of an org (read-only)   pick a demo org, then a person
+ *   View as a participant (read-only)     pick a demo participant, or find
+ *                                         any account in Admin > Users
+ *   Exit                                  end the view, back where you started
+ *
+ * Viewing is the audited impersonation it always was: a signed 60-minute
+ * cookie, a row in impersonation_session for every start and end, the admin's
+ * second factor required, writes refused at the edge AND at every org route
+ * (lib/view-as.ts). DevModeBanner names who you are viewing and how to exit.
+ *
+ * ONLY FICTIONAL ACCOUNTS BY DEFAULT (A1 defect H8, fix round 1): accounts
+ * whose email ends in .example.invalid. Real staff come only after "Show
+ * real organizations" is pressed, as name and role, never an email; the
+ * personas API does not even send them until asked. Real participants are
+ * never listed here.
+ *
+ * The soft "Me: Job Seeker / Observer / Admin" preview stays gone (B7,
  * 2026-10-23): it drew a job seeker's screens while every save landed in the
- * admin's own account. See a job seeker by viewing one (below) or by signing
- * in to a separate job-seeker account.
- *   Personas         -> one-click blue-view impersonation of seeded org roles
- *                       (org leader, staff) -- their REAL landing + data
- *   View as org...   -> org directory (blue, read-only dashboards)
- *   View / assist user... -> user directory (blue view / red assist)
+ * admin's own account.
  */
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { clearForgeBrowserKeysEverywhere } from "@/lib/refinery-guards";
 import { useRealTier, setViewAs } from "@/lib/useUserTier";
+import { useEffectiveRole } from "@/components/RoleProvider";
+import { DEV_MODE_LABELS, currentDevMode, groupByOrg, personaLabel } from "@/lib/dev-mode";
+import { endViewAs, startViewAs } from "@/lib/dev-view-client";
 
 interface Persona {
   userId: string;
   name: string | null;
   email: string | null;
-  role: "org_admin" | "staff";
-  title: string | null;
+  role?: "owner" | "org_admin" | "staff";
+  title?: string | null;
   orgName: string;
+  demo?: boolean;
 }
 
-/** Personas bucketed by org, orgs in the order the API returned them. */
-function groupByOrg(personas: Persona[]): Array<[string, Persona[]]> {
-  const groups = new Map<string, Persona[]>();
-  for (const p of personas) {
-    const key = p.orgName || "Unassigned";
-    const existing = groups.get(key);
-    if (existing) existing.push(p);
-    else groups.set(key, [p]);
-  }
-  return Array.from(groups.entries());
+interface PersonaPayload {
+  data?: Persona[];
+  participants?: Persona[];
+  /** How many real staff accounts sit behind "Show real organizations" (a count, no names). */
+  realCount?: number;
 }
+
+const ROLE_LABEL: Record<string, string> = { owner: "Owner", org_admin: "Org leader", staff: "Staff" };
 
 export function DevSwitcher() {
   const { data: clearAuth } = useSession();
-  const clearAdminId = (clearAuth?.user as { id?: string } | undefined)?.id ?? null;
+  const adminId = (clearAuth?.user as { id?: string } | undefined)?.id ?? null;
   const realTier = useRealTier();
+  const role = useEffectiveRole();
+  const mode = currentDevMode(role);
   const [open, setOpen] = useState(false);
-  const [personas, setPersonas] = useState<Persona[] | null>(null);
+  const [section, setSection] = useState<"staff" | "participant" | null>(null);
+  const [payload, setPayload] = useState<PersonaPayload | null>(null);
+  const [real, setReal] = useState<Persona[] | null>(null);
+  const [showReal, setShowReal] = useState(false);
   const [openOrg, setOpenOrg] = useState<string | null>(null);
   const [starting, setStarting] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   // An admin browser may still hold the retired soft-preview keys (view_as,
@@ -65,123 +82,183 @@ export function DevSwitcher() {
     return () => document.removeEventListener("mousedown", onClick);
   }, []);
 
-  // Load personas the first time the menu opens
+  // Demo people load the first time the menu opens.
   useEffect(() => {
-    if (!open || personas !== null) return;
-    fetch("/api/dev/personas")
+    if (!open || payload !== null) return;
+    fetch("/api/dev/personas", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setPersonas((j?.data as Persona[]) ?? []))
-      .catch(() => setPersonas([]));
-  }, [open, personas]);
+      .then((j) => setPayload((j as PersonaPayload) ?? {}))
+      .catch(() => setPayload({}));
+  }, [open, payload]);
+
+  // Real organizations' staff load only when asked for, on purpose.
+  useEffect(() => {
+    if (!showReal || real !== null) return;
+    fetch("/api/dev/personas?real=1", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setReal(((j as PersonaPayload)?.data ?? []) as Persona[]))
+      .catch(() => setReal([]));
+  }, [showReal, real]);
 
   if (realTier !== "admin") return null;
 
-  async function startViewImpersonation(targetUserId: string) {
+  async function view(targetUserId: string) {
     setStarting(targetUserId);
-    try {
-      const res = await fetch("/api/dev/impersonate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId, mode: "view" }),
-      });
-      if (res.ok) {
-        // Clear this browser's Forge and Refinery keys first (M3).
-        clearForgeBrowserKeysEverywhere(clearAdminId);
-        // Their real landing, inside the blue read-only frame
-        window.location.assign("/dashboard");
-        return;
-      }
-    } catch {}
-    setStarting(null);
+    setError(null);
+    const ok = await startViewAs(targetUserId, adminId);
+    if (!ok) {
+      setStarting(null);
+      setError("That view did not start. Check that two-step is on for this sign-in.");
+    }
   }
 
   const item =
-    "t-focus block w-full text-left px-3 py-2 text-sm text-t-phos hover:bg-t-panel-2 hover:text-t-white";
+    "t-focus block w-full min-h-touch text-left px-3 py-2 text-sm text-t-phos hover:bg-t-panel-2 hover:text-t-white";
+  const heading = "px-3 pt-2 pb-1 text-[10px] font-bold uppercase text-t-phos-dim border-t border-t-line mt-1";
+  const current = (m: string) => (mode === m ? " (now)" : "");
+
+  const staff = groupByOrg(payload?.data ?? []);
+  const participants = groupByOrg(payload?.participants ?? []);
+
+  function personRow(p: Persona, sub: string) {
+    return (
+      <button
+        key={`${p.orgName}:${p.userId}`}
+        className={`${item} pl-6`}
+        disabled={starting !== null}
+        onClick={() => view(p.userId)}
+      >
+        {personaLabel(p)}
+        {starting === p.userId && <span className="ml-2 text-[10px] text-t-phos-dim">starting...</span>}
+        <span className="block text-[11px] text-[#7da4c4]">{sub}</span>
+      </button>
+    );
+  }
+
+  function orgGroup(orgName: string, people: Persona[], kind: "staff" | "participant") {
+    const key = `${kind}:${orgName}`;
+    const isOpen = openOrg === key;
+    return (
+      <div key={key}>
+        <button className={item} onClick={() => setOpenOrg(isOpen ? null : key)} aria-expanded={isOpen}>
+          <span className="flex items-center justify-between">
+            <span className="truncate">{orgName}</span>
+            <span aria-hidden="true" className="ml-2 text-[9px] text-t-phos-dim">{isOpen ? "▲" : "▼"}</span>
+          </span>
+          <span className="block text-[11px] text-t-phos-dim">
+            {people.length} {people.length === 1 ? "person" : "people"}
+          </span>
+        </button>
+        {isOpen &&
+          people.map((p) =>
+            personRow(p, kind === "staff" ? `${ROLE_LABEL[p.role ?? "staff"] ?? "Staff"}${p.title ? `, ${p.title}` : ""}` : "Participant")
+          )}
+      </div>
+    );
+  }
 
   return (
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(!open)}
         className="t-focus inline-flex min-h-touch items-center gap-1.5 rounded-[4px] border border-t-amber px-2.5 text-xs font-bold text-t-amber-bright transition-colors hover:bg-t-amber/10"
-        title="Developer Switcher: operate in any capacity"
+        title="Developer mode"
+        aria-expanded={open}
       >
         DEV
-        <span aria-hidden="true" className="text-[9px]">
-          {open ? "▲" : "▼"}
-        </span>
+        <span aria-hidden="true" className="text-[9px]">{open ? "▲" : "▼"}</span>
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1 w-64 border border-t-line bg-t-panel shadow-lg z-[60] max-h-[80vh] overflow-y-auto">
-          {personas !== null && personas.length > 0 && (
-            <>
-              <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase text-t-phos-dim border-t border-t-line mt-1">
-                Personas (blue view, read-only)
-              </p>
-              {/* Grouped by org, one org open at a time. A flat list of every
-                  staff member across every partner is unreadable on a screen
-                  someone else is watching -- pick the org, then the person. */}
-              {groupByOrg(personas).map(([orgName, people]) => {
-                const isOpen = openOrg === orgName;
-                return (
-                  <div key={orgName}>
-                    <button
-                      className={item}
-                      onClick={() => setOpenOrg(isOpen ? null : orgName)}
-                      aria-expanded={isOpen}
-                    >
-                      <span className="flex items-center justify-between">
-                        <span className="truncate">{orgName}</span>
-                        <span aria-hidden="true" className="ml-2 text-[9px] text-t-phos-dim">
-                          {isOpen ? "▲" : "▼"}
-                        </span>
-                      </span>
-                      <span className="block text-[11px] text-t-phos-dim">
-                        {people.length} {people.length === 1 ? "person" : "people"}
-                      </span>
-                    </button>
-                    {isOpen &&
-                      people.map((p) => (
-                        <button
-                          key={p.userId}
-                          className={`${item} pl-6`}
-                          disabled={starting !== null}
-                          onClick={() => startViewImpersonation(p.userId)}
-                        >
-                          {p.name || p.email}
-                          {starting === p.userId && (
-                            <span className="ml-2 text-[10px] text-t-phos-dim">
-                              starting...
-                            </span>
-                          )}
-                          <span className="block text-[11px] text-[#7da4c4]">
-                            {p.role === "org_admin" ? "Org leader" : "Staff"}
-                            {p.title ? `, ${p.title}` : ""}
-                          </span>
-                        </button>
-                      ))}
-                  </div>
-                );
-              })}
-            </>
+        <div className="absolute right-0 top-full mt-1 w-72 max-w-[calc(100vw-2rem)] border border-t-line bg-t-panel shadow-lg z-[60] max-h-[80vh] overflow-y-auto">
+          <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase text-t-phos-dim">Developer mode</p>
+
+          {/* 1. Admin */}
+          {mode === "admin" ? (
+            <p className={`${item} cursor-default`}>
+              {DEV_MODE_LABELS.admin}{current("admin")}
+              <span className="block text-[11px] text-t-phos-dim">You, with your admin tools.</span>
+            </p>
+          ) : (
+            <button className={item} onClick={() => void endViewAs(adminId, { to: "admin" })}>
+              {DEV_MODE_LABELS.admin}
+              <span className="block text-[11px] text-t-phos-dim">End the view and go to your admin home.</span>
+            </button>
           )}
 
-          <p className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase text-t-phos-dim border-t border-t-line mt-1">
-            Other accounts
-          </p>
+          {/* 2. View as staff of an org */}
+          <button
+            className={`${item} border-t border-t-line`}
+            onClick={() => setSection(section === "staff" ? null : "staff")}
+            aria-expanded={section === "staff"}
+          >
+            {DEV_MODE_LABELS.staff}{current("staff")}
+            <span className="block text-[11px] text-[#7da4c4]">Their organization, their screens. Changes are off.</span>
+          </button>
+          {section === "staff" && (
+            <div>
+              {payload === null && <p className="px-3 py-2 text-xs text-t-phos-dim">Loading...</p>}
+              {payload !== null && staff.length === 0 && (
+                <p className="px-3 py-2 text-xs text-t-phos-dim">No sample staff accounts yet.</p>
+              )}
+              {staff.map(([orgName, people]) => orgGroup(orgName, people, "staff"))}
+              {(payload?.realCount ?? 0) > 0 && !showReal && (
+                <button className={`${item} text-t-phos-dim`} onClick={() => setShowReal(true)}>
+                  Show real organizations ({payload?.realCount} staff)
+                  <span className="block text-[11px]">Hidden so names stay off shared screens. Every view is recorded.</span>
+                </button>
+              )}
+              {showReal && (
+                <>
+                  <p className={heading}>Real organizations</p>
+                  {real === null && <p className="px-3 py-2 text-xs text-t-phos-dim">Loading...</p>}
+                  {real !== null && groupByOrg(real).map(([orgName, people]) => orgGroup(orgName, people, "staff"))}
+                  <button className={`${item} text-t-phos-dim`} onClick={() => { setShowReal(false); setOpenOrg(null); }}>
+                    Hide real organizations
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 3. View as a participant */}
+          <button
+            className={`${item} border-t border-t-line`}
+            onClick={() => setSection(section === "participant" ? null : "participant")}
+            aria-expanded={section === "participant"}
+          >
+            {DEV_MODE_LABELS.participant}{current("participant")}
+            <span className="block text-[11px] text-[#7da4c4]">A job seeker&apos;s own screens. Changes are off.</span>
+          </button>
+          {section === "participant" && (
+            <div>
+              {payload === null && <p className="px-3 py-2 text-xs text-t-phos-dim">Loading...</p>}
+              {participants.map(([orgName, people]) => orgGroup(orgName, people, "participant"))}
+              <Link href="/dashboard/admin/users" className={`${item} pl-6`} onClick={() => setOpen(false)}>
+                Find any account...
+                <span className="block text-[11px] text-t-phos-dim">Search in Admin, Users. View or assist from there.</span>
+              </Link>
+            </div>
+          )}
+
+          {/* 4. Exit */}
+          {mode === "admin" ? (
+            <p className={`${item} border-t border-t-line cursor-default text-t-phos-dim`}>
+              {DEV_MODE_LABELS.exit}
+              <span className="block text-[11px]">You are not viewing as anyone.</span>
+            </p>
+          ) : (
+            <button className={`${item} border-t border-t-line`} onClick={() => void endViewAs(adminId, { to: "start" })}>
+              {DEV_MODE_LABELS.exit}
+              <span className="block text-[11px] text-t-phos-dim">End the view and go back where you started.</span>
+            </button>
+          )}
+
+          <p className={heading}>Admin tools</p>
           <Link href="/dashboard/admin/orgs" className={item} onClick={() => setOpen(false)}>
-            View as org...
-            <span className="block text-[11px] text-[#7da4c4]">
-              Any org&apos;s dashboard, read-only
-            </span>
+            Organizations
+            <span className="block text-[11px] text-[#7da4c4]">Open an organization&apos;s console, read-only.</span>
           </Link>
-          <Link href="/dashboard/admin/users" className={item} onClick={() => setOpen(false)}>
-            View / assist a user...
-            <span className="block text-[11px]">
-              <span className="text-[#7da4c4]">view (blue)</span>
-              {" / "}
-              <span className="text-t-red">assist (red)</span>
-            </span>
-          </Link>
+          {error && <p role="alert" className="px-3 py-2 text-xs text-t-red">{error}</p>}
         </div>
       )}
     </div>

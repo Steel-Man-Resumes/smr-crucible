@@ -17,10 +17,10 @@
  * Every other sentence is unchanged, word for word.
  */
 
-export const TODAY_SECTIONS = ["tasks", "retention", "interviews", "interview_stalled", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
+export const TODAY_SECTIONS = ["tasks", "retention", "referrals", "interviews", "interview_stalled", "followups", "answered", "acknowledgement", "quiet", "never_started", "unassigned"] as const;
 export type TodaySection = (typeof TODAY_SECTIONS)[number];
 export const TODAY_SECTION_LABELS: Record<TodaySection, string> = {
-  tasks: "Your tasks", retention: "Retention check-ins due", interviews: "Interviews coming up", interview_stalled: "Interviews stalled", followups: "Follow-ups due", answered: "They answered you",
+  tasks: "Your tasks", retention: "Retention check-ins due", referrals: "Referrals past due", interviews: "Interviews coming up", interview_stalled: "Interviews stalled", followups: "Follow-ups due", answered: "They answered you",
   acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
 };
 
@@ -47,7 +47,13 @@ export interface TodayItem {
   stage?: number | null;
 }
 
-export interface TodayTaskRow { id: string; title: string; due_on: string | null; client_user_id: string | null; client_name: string | null; owner_user_id: string | null; shared_with_participant: boolean; done_at: string | null }
+export interface TodayTaskRow {
+  id: string; title: string; due_on: string | null; client_user_id: string | null; client_name: string | null; owner_user_id: string | null; shared_with_participant: boolean; done_at: string | null;
+  /** Set on tasks the system made (migration 105): "retention" with the placement id and day mark. */
+  source_kind?: string | null; source_id?: string | null; source_mark?: number | null;
+}
+/** An open referral past its date, owned by the viewer (orgReferrals.listOverdueReferralsForToday). */
+export interface TodayReferralRow { id: string; participant_user_id: string; participant_name: string | null; to_name: string; status: string; due_on: string | null }
 export interface TodayOutcomeRow { id: string; client_user_id: string; client_name: string | null; employer: string; start_date: string; ended_on: string | null; due_marks: number[] }
 export interface TodayAppRow { id: string; user_id: string; name: string | null; job_title: string | null; company: string | null; status: string; follow_up_at: string | null; status_updated_at?: string | null; updated_at?: string | null }
 export interface TodayAnsweredRow { user_id: string; name: string | null; scope: string; status: string; answered_at: string }
@@ -72,7 +78,14 @@ export interface TodayInput {
   awaiting: TodayAckRow[];
   cohort: TodayCohortRow[];
   invited: TodayInvitedRow[];
+  /** Overdue referrals this viewer owns. Optional: absent before migration 105. */
+  referrals?: TodayReferralRow[];
 }
+
+const REFERRAL_WORDS: Record<string, string> = {
+  draft: "still a draft", sent: "sent, no answer recorded", accepted: "accepted, no contact recorded", declined: "turned down, not closed",
+  contacted: "in touch, help not recorded yet", service_delivered: "help given, not closed", unable_to_contact: "could not reach them",
+};
 
 const DAY_MS = 86400000;
 const day = (s: string) => new Date(s).toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" });
@@ -100,12 +113,26 @@ export function buildTodayItems(input: TodayInput, nowMs: number): TodayItem[] {
       action: t.client_user_id ? { label: `Open ${first(t.client_name)}`, href: href(t.client_user_id) } : { label: "Mark done", href: "#" },
     });
   }
+  // A check-in that already has its own task on this list (migration 105 makes
+  // them at 30, 90 and 180 days) is shown once, as the task.
+  const myRetentionTask = new Set(input.tasks
+    .filter((t) => !t.done_at && t.owner_user_id === input.actorUserId && t.source_kind === "retention" && t.source_id)
+    .map((t) => `${t.source_id}:${t.source_mark}`));
   for (const o of input.canRecordOutcomes ? input.outcomes : []) {
     if (o.due_marks.length === 0 || o.ended_on) continue;
     const mark = o.due_marks[0];
+    if (myRetentionTask.has(`${o.id}:${mark}`)) continue;
     items.push({ key: `ret:${o.id}:${mark}`, section: "retention", clientId: o.client_user_id, clientName: o.client_name, when: o.start_date,
       reason: `${first(o.client_name)} started at ${o.employer} ${mark}+ days ago. Time for the ${mark}-day check-in: still there?`,
       action: { label: "Record the check-in", href: href(o.client_user_id) } });
+  }
+
+  for (const r of input.referrals ?? []) {
+    if (r.status === "closed" || !r.due_on || r.due_on >= today) continue;
+    const who = r.participant_name ? `${first(r.participant_name)}'s referral` : "A referral";
+    items.push({ key: `ref:${r.id}`, section: "referrals", clientId: r.participant_user_id, clientName: r.participant_name, when: r.due_on,
+      reason: `${who} to ${r.to_name} is past its date (was due ${day(r.due_on)}): ${REFERRAL_WORDS[r.status] ?? r.status}. Check where it stands.`,
+      action: { label: "Update it", href: `${href(r.participant_user_id)}?tab=referrals#referral-${r.id}` } });
   }
 
   // Follow-ups long past their date, gathered per person (N6).

@@ -101,7 +101,7 @@ test("print report renders: org mark and name, period, sections, counted-over no
   assert.match(html, /class="insights-report/);
   assert.match(html, /ins-print-head[^]*data-org-mark[^]*Harbor Light Works<[^]*with Steel Man Resumes/);
   assert.match(html, /All time, as of Oct 24, 2026/);
-  assert.match(html, /Sample data\. These participants are fictional\./, "a demo org's printed report says so");
+  assert.match(html, /Sample data\. The participants are fictional, and so is any employer marked fictional\./, "a demo org's printed report says so");
   for (const h of ["People", "Where people are", "Momentum", "Work toward a job", "Placements your team recorded", "Your team", "What people chose to share"]) {
     assert.ok(html.includes(`>${h}</h2>`), `section ${h}`);
   }
@@ -117,8 +117,11 @@ test("print report renders: org mark and name, period, sections, counted-over no
 
 test("the printed sample-data line is the shell's sentence, word for word", async () => {
   const { DEMO_PRINT_LINE } = await import("../../components/org/InsightsReport");
+  const { DEMO_SAMPLE_LINE } = await import("../demo-line");
   const shell = readFileSync(join(ROOT, "app/(dashboard)/RefineryShell.tsx"), "utf8").replace(/\s+/g, " ");
-  assert.ok(shell.includes(DEMO_PRINT_LINE), "RefineryShell carries the same sentence");
+  // One sentence, one place (lib/demo-line.ts): the shell renders the same constant.
+  assert.equal(DEMO_PRINT_LINE, DEMO_SAMPLE_LINE);
+  assert.ok(shell.includes("{DEMO_SAMPLE_LINE}") && shell.includes('import { DEMO_SAMPLE_LINE, isDemoOrgName } from "@/lib/demo-line"'), "RefineryShell carries the same sentence");
 });
 
 test("a non-demo org's report has no sample-data line; the print stylesheet hides the app around it", async () => {

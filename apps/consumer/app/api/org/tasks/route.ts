@@ -10,8 +10,8 @@ import { requireOrgCapability } from "@/lib/org-guard";
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-async function gate() {
-  const guard = await requireOrgCapability("org.client.view_content");
+async function gate(request: Request) {
+  const guard = await requireOrgCapability("org.client.view_content", { request });
   if (!guard.ok) return guard;
   const flag = await getOne<{ crm_v2: boolean }>(`SELECT crm_v2 FROM access_code WHERE id = $1`, [guard.actor.orgId]);
   if (!flag?.crm_v2) return { ok: false as const, response: NextResponse.json({ error: "Not found." }, { status: 404 }) };
@@ -19,7 +19,7 @@ async function gate() {
 }
 
 export async function GET(request: Request) {
-  const g = await gate();
+  const g = await gate(request);
   if (!g.ok) return g.response;
   const clientId = new URL(request.url).searchParams.get("clientId");
   if (clientId && !UUID.test(clientId)) return NextResponse.json({ tasks: [] });
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const g = await gate();
+  const g = await gate(request);
   if (!g.ok) return g.response;
   const body = await request.json().catch(() => ({}));
   if (body.action === "add") {

@@ -136,14 +136,20 @@ test("the read side still decides what is read: the SELECT and the access-log IN
                AND ja.status NOT IN ('hired', 'started_work', 'rejected', 'declined')))`);
   assert.equal(selWhere, FILTER, "SELECT filter, reach and sharing clauses included");
   assert.equal(insWhere, FILTER, "INSERT filter matches the SELECT");
-  // The clauses themselves, as at 964090c.
+  // The clauses themselves, as at 964090c, plus reach through a unit (house L3a, 103).
   assert.ok(norm(src).includes(norm(`const reach = (who: string) => \`($2::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
-      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${"${who}"} AND a.staff_user_id = $3::uuid))\`;`)));
+      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${"${who}"} AND a.staff_user_id = $3::uuid)
+      OR ${"${unitReachSql(\"$1::uuid\", \"$3::uuid\", who)}"})\`;`)));
   assert.ok(norm(src).includes(norm(`WHERE g.user_id = ${"${who}"} AND g.access_code_id = $1::uuid AND g.scope = 'applications' AND g.revoked_at IS NULL
         AND g.text_version = ANY($4::text[])
         AND ja.created_at >= COALESCE(g.covers_from, '-infinity'::timestamptz)`)));
-  assert.ok(norm(src).includes(norm(`AND NOT EXISTS (SELECT 1 FROM data_access_log l WHERE l.target_user_id = ja.user_id AND l.accessor_id = ($3::uuid)::text
+  // House lane L2: the once-a-day check keys on whoever is recorded as the
+  // opener, the admin during view-as ($5), else the staff member ($3).
+  // and, for an admin, per staff member viewed (fix round 1).
+  assert.ok(norm(src).includes(norm(`AND NOT EXISTS (SELECT 1 FROM data_access_log l WHERE l.target_user_id = ja.user_id AND l.accessor_id = (COALESCE($5::uuid, $3::uuid))::text
+                           AND ($5::uuid IS NULL OR l.fields_accessed->>'viewedAs' = ($3::uuid)::text)
                            AND l.access_reason = 'org_work_queue' AND l.accessed_at > date_trunc('day', now()))`)));
+  assert.ok(norm(src).includes(norm(`run(sql)(WORK_QUEUE_LOG_SQL, [...p, actor.viewedBy ?? null]),`)), "the viewer is passed only to the INSERT");
 });
 
 test("reach: org-wide counts only for view_all; a volunteer gets null", () => {

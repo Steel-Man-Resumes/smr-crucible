@@ -1,7 +1,7 @@
 /**
  * GET /api/user/role -- the effective identity, resolved server-side.
  *
- * Returns { tier, orgRole, orgName, orgId, orgBrand, coBrand, impersonating } for the user the app
+ * Returns { tier, workspace, orgRole, orgName, orgId, orgBrand, coBrand, impersonating } for the user the app
  * should BEHAVE as: effectiveAuth resolves the impersonation cookie (admin
  * only, self-guarding), getOrgContext resolves org membership (code owner or
  * org_staff row). Feeds RoleProvider so landings and nav branch correctly
@@ -11,6 +11,7 @@
 import { NextResponse } from "next/server";
 import { effectiveAuth } from "@/lib/effective-auth";
 import { roleBrandFields } from "@/lib/org-brand-http";
+import { resolveWorkspace } from "@/lib/workspace";
 
 export const maxDuration = 10;
 
@@ -26,11 +27,10 @@ export async function GET() {
   );
   const tier = await getUserTier(userId);
 
-  // Org context only matters for partner/admin tiers; skip the lookups otherwise.
-  const org =
-    tier === "partner" || tier === "admin"
-      ? await getOrgContext(userId).catch(() => null)
-      : null;
+  // Org context for EVERY tier (house lane L2, defect H4): the staff
+  // workspace comes from the org role, not from users.tier, so an owner whose
+  // cached tier is "client" is still found and still gets the staff view.
+  const org = await getOrgContext(userId).catch(() => null);
 
   // The real capability set, so the UI can mirror the authorization model
   // instead of inferring permissions from a tier rank. Three separate rank
@@ -57,11 +57,19 @@ export async function GET() {
   const impersonation = (session as { impersonation?: { mode: "view" | "assist"; adminId: string } })
     .impersonation;
 
+  // The one workspace decision (lib/workspace.ts). The effective session is
+  // the person being viewed during view-as, so the admin's powers never apply.
+  const workspace = resolveWorkspace(
+    { userId, tier, impersonating: impersonation ? { mode: impersonation.mode } : null },
+    { orgRole: org?.role ?? null }
+  );
+
   return NextResponse.json({
     data: {
       accountId: userId,
       sessionAccountId: impersonation?.adminId ?? userId,
       tier,
+      workspace,
       orgRole: org?.role ?? null,
       orgName: org?.orgName ?? null,
       orgId,

@@ -31,6 +31,7 @@
  */
 import { runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
+import { unitReachSql } from "./orgUnitReach";
 import { SHARING_SCOPES, isSharingScope, type SharingScope } from "./sharingScopes";
 import { staffStepLabel } from "./journeyStages";
 
@@ -61,7 +62,8 @@ const IN_REACH = `
   EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.user_id = $1::uuid AND r.access_code_id = $2::uuid)
   AND ($3::boolean OR EXISTS (
         SELECT 1 FROM client_staff_assignment a
-         WHERE a.access_code_id = $2::uuid AND a.client_user_id = $1::uuid AND a.staff_user_id = $4::uuid))`;
+         WHERE a.access_code_id = $2::uuid AND a.client_user_id = $1::uuid AND a.staff_user_id = $4::uuid)
+       OR ${unitReachSql("$2::uuid", "$4::uuid", "$1::uuid")})`;
 
 /**
  * Step 5 for one scope ($5). A grant made under a PROGRAM REQUIREMENT carries
@@ -244,11 +246,15 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
 /**
  * The access-log row for one shared-scope open. Same predicate as the read,
  * so a refused read writes no "opened" entry. Exported for the pglite test.
- * $1 client, $2 org, $3 sees-all, $4 actor, $5 scope, $6 via (null, or "t.ROY").
+ * $1 client, $2 org, $3 sees-all, $4 actor, $5 scope, $6 via (null, or "t.ROY"),
+ * $7 the platform admin viewing as the actor (null unless view-as, house lane
+ * L2): the row then names the ADMIN as the one who opened it, says "admin
+ * view", and keeps whose screen it was (viewedAs). Reach is still the actor's.
  */
 export const SHARED_OPEN_LOG_SQL = `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
-       SELECT $1::uuid, 'staff', ($4::uuid)::text, 'shared:' || $5::text, 'org_client_view',
+       SELECT $1::uuid, 'staff', (COALESCE($7::uuid, $4::uuid))::text, 'shared:' || $5::text, 'org_client_view',
               jsonb_build_object('orgId', ($2::uuid)::text) || CASE WHEN $6::text IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('via', $6::text) END
+              || CASE WHEN $7::uuid IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('via', 'admin view', 'viewedAs', ($4::uuid)::text) END
         WHERE ${IN_REACH} AND ${SHARED}`;
 
 /**
@@ -265,7 +271,7 @@ async function readShared<T>(actor: OrgActor, clientId: string, scope: SharingSc
     run(sql)(`SELECT (${IN_REACH}) AS in_reach, (${SHARED}) AS shared`, p),
     run(sql)(`${select} AND ${IN_REACH} AND ${SHARED}`, p),
     // A read t.ROY made for a staff member says so in the participant's log.
-    run(sql)(SHARED_OPEN_LOG_SQL, [...p, via ?? null]),
+    run(sql)(SHARED_OPEN_LOG_SQL, [...p, via ?? null, actor.viewedBy ?? null]),
   ]);
   const gate = allowed[0];
   if (!gate?.in_reach) return { ok: false, reason: "not_in_reach_or_not_member" };
@@ -279,15 +285,15 @@ async function readShared<T>(actor: OrgActor, clientId: string, scope: SharingSc
  * the participant sees it in "Who has opened what". Same reach predicate as
  * every read here, so a refused read writes nothing. Exported so the pglite
  * test runs this exact statement. $1 client, $2 org, $3 sees-all, $4 actor,
- * $5 resource ("assistant:overview" | "assistant:changes" | "assistant:progress" | "assistant:tasks").
+ * $5 resource ("assistant:overview" | "assistant:changes" | "assistant:progress" | "assistant:tasks" | "assistant:timeline").
  */
 export const STAFF_ASSISTANT_OPEN_SQL = `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
        SELECT $1::uuid, 'staff', ($4::uuid)::text, $5::text, 'org_client_view', jsonb_build_object('orgId', ($2::uuid)::text, 'via', 't.ROY')
         WHERE ${IN_REACH}
        RETURNING id`;
 
-/** overview and changes: the composed reads. progress: a header read of a named person (progress and draft tools). tasks: that person's tasks. */
-export type StaffAssistantRead = "overview" | "changes" | "progress" | "tasks";
+/** overview, changes and timeline: the composed reads. progress: a header read of a named person (progress and draft tools). tasks: that person's tasks. */
+export type StaffAssistantRead = "overview" | "changes" | "progress" | "tasks" | "timeline";
 
 /**
  * Write the open BEFORE anything is read for the assistant. If the row cannot
@@ -487,7 +493,8 @@ export async function editClientNote(actor: OrgActor, clientId: string, noteId: 
 const reachOf = (who: string) => `
   ($2::boolean OR EXISTS (
      SELECT 1 FROM client_staff_assignment a
-      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid))`;
+      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid)
+   OR ${unitReachSql("$1::uuid", "$3::uuid", who)})`;
 
 function listParams(actor: OrgActor) {
   return [actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId];

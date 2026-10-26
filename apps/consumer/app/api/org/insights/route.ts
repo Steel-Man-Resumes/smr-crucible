@@ -10,17 +10,21 @@
 import { NextResponse } from "next/server";
 import { getOrgInsights, recordDataAccess } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
+import { viewAsExportRefusal } from "@/lib/view-as";
 import { insightsCsv } from "@/lib/org-insights-report";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const guard = await requireOrgCapability("org.insights.view");
+  const guard = await requireOrgCapability("org.insights.view", { request });
   if (!guard.ok) return guard.response;
   const insights = await getOrgInsights(guard.actor);
   if (!insights) return NextResponse.json({ error: "You do not have access to that." }, { status: 403 });
 
-  if (new URL(request.url).searchParams.get("format") === "csv") {
+  const format = new URL(request.url).searchParams.get("format");
+  const exportRefused = viewAsExportRefusal(!!guard.viewing, format);
+  if (exportRefused) return NextResponse.json({ error: exportRefused }, { status: 403 });
+  if (format === "csv") {
     if (!guard.actor.capabilities.has("org.export")) return NextResponse.json({ error: "You do not have access to that." }, { status: 403 });
     await recordDataAccess({ accessorUserId: guard.actor.userId, resource: "org_insights", action: "export", context: { orgId: guard.actor.orgId } });
     return new NextResponse(insightsCsv(guard.actor.orgName, insights), {
@@ -28,5 +32,5 @@ export async function GET(request: Request) {
     });
   }
   // orgId is the caller's own organization (for its mark on the report), nothing more.
-  return NextResponse.json({ insights, orgName: guard.actor.orgName, orgId: guard.actor.orgId, canExport: guard.actor.capabilities.has("org.export") });
+  return NextResponse.json({ insights, orgName: guard.actor.orgName, orgId: guard.actor.orgId, canExport: !guard.viewing && guard.actor.capabilities.has("org.export") });
 }

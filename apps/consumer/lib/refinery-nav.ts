@@ -252,3 +252,154 @@ export function linkIsCurrent(href: string, pathname: string): boolean {
   if (href.includes("#") || href.includes("?")) return false;
   return pathOnly(href) === pathOnly(pathname);
 }
+
+/* Admin mode */
+/*
+ * The platform admin's sidebar (house build 2026-10-26, L1). Shown when the
+ * REAL signed-in account is a platform admin and no view-as is active
+ * (adminSidebarShown). An admin never gets the participant career board as
+ * their nav or their home: /dashboard is Operator home.
+ */
+
+export interface AdminNavItem {
+  href: string;
+  label: string;
+  /** Contract id: data-nav-id and data-tour on the link. */
+  navId: string;
+  /** Lit for this exact path only (Evidence is /dashboard/admin, the parent of the others). */
+  exact?: boolean;
+}
+export interface AdminNavGroup { label: string; items: AdminNavItem[] }
+
+export const ADMIN_NAV: readonly AdminNavGroup[] = [
+  {
+    label: "Platform",
+    items: [
+      { href: "/dashboard", label: "Operator home", navId: "admin-nav-home", exact: true },
+      { href: "/dashboard/admin/orgs", label: "Organizations", navId: "admin-nav-orgs" },
+      { href: "/dashboard/admin/users", label: "People", navId: "admin-nav-people" },
+      { href: "/dashboard/admin/access-requests", label: "Access requests", navId: "admin-nav-access" },
+    ],
+  },
+  {
+    label: "Products",
+    items: [
+      { href: "/dashboard/admin/premium", label: "Premium", navId: "admin-nav-premium" },
+      { href: "/dashboard/admin/mini-forge", label: "Mini Forge", navId: "admin-nav-mini-forge" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { href: "/dashboard/admin/health", label: "Health", navId: "admin-nav-health" },
+      { href: "/dashboard/admin/directory-coverage", label: "Coverage", navId: "admin-nav-coverage" },
+      { href: "/dashboard/admin", label: "Evidence", navId: "admin-nav-evidence", exact: true },
+    ],
+  },
+];
+
+/**
+ * Admin mode: the real account is a platform admin and nothing is being
+ * viewed as someone else. Pure, so the rule is tested without rendering.
+ * `role` is the RoleProvider payload (null while it loads: no admin nav yet).
+ */
+export function adminSidebarShown(role: { tier: string; impersonating: unknown } | null | undefined): boolean {
+  return !!role && role.tier === "admin" && !role.impersonating;
+}
+
+/** Which admin item is lit. */
+export function adminNavActive(item: Pick<AdminNavItem, "href" | "exact">, pathname: string): boolean {
+  const path = pathOnly(pathname);
+  if (item.exact) return path === item.href;
+  return path === item.href || path.startsWith(item.href + "/");
+}
+
+/* Nav extension points */
+/*
+ * ONE LINE PER NEW SCREEN. Other lanes build screens (org structure, fields and
+ * views, audit, referrals, timeline, AI); the boss wires each into the nav by
+ * adding one entry here. Nothing else changes: the admin sidebar reads the
+ * "admin" entries (adminNavWith), the staff sidebar reads the "org" entries
+ * (orgNavWithExtensions in lib/org-nav.ts, via OrgSidebar).
+ *
+ *   surface  "admin": platform admin sidebar; "org": staff workspace sidebar
+ *   group    an existing group label (admin: Platform, Products, System;
+ *            org: Work, Records, Organization) or a new one, added at the end
+ *   needs    org only: the capability the item needs (same as lib/org-nav.ts)
+ *   module   org only: an org_profile.modules key (L3a); hidden when that
+ *            module is switched off for the organization
+ *   after    optional: the label of the item to place it after; else last
+ *
+ * Examples (commented until each screen merges):
+ *   { surface: "org", group: "Organization", href: "/dashboard/structure", label: "Programs and sites", navId: "org-nav-structure", needs: "org.settings.manage" },
+ *   { surface: "org", group: "Records", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
+ *   { surface: "org", group: "Work", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", module: "referrals", after: "Asks" },
+ *   { surface: "admin", group: "System", href: "/dashboard/admin/ai-runs", label: "AI runs", navId: "admin-nav-ai-runs" },
+ */
+export interface NavExtension {
+  surface: "admin" | "org";
+  group: string;
+  href: string;
+  label: string;
+  navId: string;
+  needs?: string;
+  module?: string;
+  after?: string;
+}
+
+export const NAV_EXTENSIONS: readonly NavExtension[] = [
+  // House L3b (102): the organization's activity log.
+  { surface: "org", group: "Organization", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
+  // House L3a (103): the organization's programs, sites, teams and caseloads, and first-run setup.
+  { surface: "org", group: "Organization", href: "/dashboard/structure", label: "Structure", navId: "org-nav-structure", needs: "org.cohort.view", after: "Team & access" },
+  { surface: "org", group: "Organization", href: "/dashboard/setup", label: "Set up", navId: "org-nav-setup", needs: "org.settings.manage" },
+  // House L4 (104): the org's own fields and per-role layouts. Anyone who sees
+  // the caseload may open them read-only (so they know what a field means);
+  // changes need org.settings.manage, checked by the routes and the database.
+  { surface: "org", group: "Organization", href: "/dashboard/fields", label: "Fields", navId: "org-nav-fields", needs: "org.cohort.view", module: "custom_fields", after: "Structure" },
+  { surface: "org", group: "Organization", href: "/dashboard/layouts", label: "Layouts", navId: "org-nav-layouts", needs: "org.cohort.view", after: "Fields" },
+  // House L5 (105): find anyone you work with, and closed-loop referrals (off with the org's referrals module).
+  { surface: "org", group: "Work", href: "/dashboard/search", label: "Find a person", navId: "org-nav-search", needs: "org.client.view_content", after: "People" },
+  { surface: "org", group: "Work", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", needs: "org.client.view_content", module: "referrals", after: "Asks" },
+];
+
+/**
+ * Merge extension entries into a list of groups. Pure. An entry whose `after`
+ * names an item in its group goes right after it; otherwise last in the
+ * group; a new group label becomes a new group at the end. A duplicate href
+ * is ignored, so wiring the same screen twice cannot show it twice.
+ */
+export function mergeNavExtensions<I extends { href: string; label: string; navId?: string }>(
+  groups: readonly { label: string; items: readonly I[] }[],
+  extensions: readonly NavExtension[],
+  toItem: (e: NavExtension) => I
+): { label: string; items: I[] }[] {
+  const out = groups.map((g) => ({ label: g.label, items: [...g.items] }));
+  const seen = new Set(out.flatMap((g) => g.items.map((i) => i.href)));
+  for (const e of extensions) {
+    if (seen.has(e.href)) continue;
+    seen.add(e.href);
+    let group = out.find((g) => g.label === e.group);
+    if (!group) { group = { label: e.group, items: [] }; out.push(group); }
+    const at = e.after ? group.items.findIndex((i) => i.label === e.after) : -1;
+    if (at >= 0) group.items.splice(at + 1, 0, toItem(e));
+    else group.items.push(toItem(e));
+  }
+  return out;
+}
+
+/** The admin sidebar with its extension entries. */
+export function adminNavWith(extensions: readonly NavExtension[] = NAV_EXTENSIONS): AdminNavGroup[] {
+  return mergeNavExtensions(ADMIN_NAV, extensions.filter((e) => e.surface === "admin"), (e) => ({ href: e.href, label: e.label, navId: e.navId }));
+}
+
+/**
+ * The staff sidebar's extension entries for one person: capability and module
+ * gates applied. `modules` is the org's module switches (absent: all on).
+ */
+export function orgNavExtensionsFor(capabilities: readonly string[], modules?: Readonly<Record<string, boolean>> | null,
+  extensions: readonly NavExtension[] = NAV_EXTENSIONS): NavExtension[] {
+  return extensions.filter((e) => e.surface === "org"
+    && (!e.needs || capabilities.includes(e.needs))
+    && (!e.module || !modules || modules[e.module] !== false));
+}

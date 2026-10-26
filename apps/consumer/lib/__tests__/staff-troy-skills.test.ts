@@ -9,10 +9,12 @@ import { selectSkills, loadSkillsForContext, type SkillEntry } from "../skills-l
 import { STAFF_SKILLS, isStaffSkill, staffSkillFromText, skillRequest, openStaffTroy, takePendingStaffTroy, STAFF_TROY_EVENT } from "../staff-troy";
 
 const SKILLS = manifest.skills as SkillEntry[];
-const STAFF_IDS = ["staff-prep-me", "staff-check-in", "staff-find-help", "staff-what-changed", "staff-outcome-note"];
+const STAFF_IDS = ["staff-prep-me", "staff-check-in", "staff-find-help", "staff-what-changed", "staff-outcome-note",
+  // House build L6 (2026-10-26).
+  "staff-triage-today", "staff-caseload-digest", "staff-stale-flags", "staff-note-from-bullets", "staff-timeline-summary", "staff-outreach-draft", "staff-funder-narrative"];
 const read = (p: string) => readFileSync(new URL(p, import.meta.url), "utf8");
 
-it("the five staff skills are in the manifest, staff roles only, each file present", () => {
+it("every staff skill is in the manifest, staff roles only, each file present", () => {
   for (const id of STAFF_IDS) {
     const s = SKILLS.find((x) => x.id === id);
     assert.ok(s, id);
