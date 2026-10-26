@@ -98,6 +98,8 @@ export * from './orgSeats';
 export * from './orgAdmin';
 // Organization brand (migration 099): logo bytes and the branding tier.
 export * from './orgBrand';
+export * from './orgStructure';
+export * from './orgUnitReach';
 
 // The second check (2026-10-07): a different model family reads the page
 // against the person's own words. Off by default (SECOND_CHECK_ENABLED).

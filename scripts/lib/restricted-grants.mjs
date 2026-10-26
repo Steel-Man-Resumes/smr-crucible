@@ -132,6 +132,13 @@ export const RESTRICTED_GRANTS = {
   // are written only by SECURITY DEFINER triggers: the app reads, never writes.
   org_activity: ["SELECT"],
   outcome_correction: ["SELECT"],
+  // House L3a (103). Units and enrollments are closed or ended, never
+  // deleted; a profile is changed, never removed. Taking a staff member out
+  // of a unit is a real delete (the activity log keeps it).
+  org_profile: ["SELECT", "INSERT", "UPDATE"],
+  org_unit: ["SELECT", "INSERT", "UPDATE"],
+  unit_member: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  enrollment: ["SELECT", "INSERT", "UPDATE"],
 };
 
 /**

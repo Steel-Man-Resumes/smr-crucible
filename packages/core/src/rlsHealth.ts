@@ -69,6 +69,12 @@ export const RLS_PROTECTED_TABLES = [
   // org-scoped and reach-scoped, written only by triggers
   "org_activity",
   "outcome_correction",
+  // Organization structure (migration 103): profile, units, unit staff, and
+  // enrollments (reach-restricted per participant)
+  "org_profile",
+  "org_unit",
+  "unit_member",
+  "enrollment",
 ] as const;
 
 export interface RlsHealth {
