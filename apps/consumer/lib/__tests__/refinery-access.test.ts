@@ -359,10 +359,17 @@ test("door access code: tries are rate limited per account and per connection", 
 test("door access code: one neutral refusal, whatever the reason", () => {
   const src = read("app", "api", "access-code", "redeem", "route.ts");
   assert.ok(src.indexOf("checkAuthRateLimits(codeAttemptLimits(") < src.indexOf("redeemAccessCode(userId"), "limit before the try");
-  const refusals = [...src.matchAll(/error: ([^}]+)\}/g)].map((m) => m[1].trim()).filter((e) => !/Not authenticated|Request not allowed/.test(e));
+  // House lane L2 (migration 101): exactly two refusals are said plainly, an
+  // admin account and the organization's own staff. Neither confirms anything
+  // about a code (the admin answer is the same for every code; the staff one
+  // only for the person's own organization). Every other refusal is still the
+  // one neutral answer.
+  const shown = "error: result.error, reason: result.outcome }";
+  assert.equal(src.split("result.error").length - 1, 1, "result.error appears once");
+  assert.ok(src.indexOf("if (REDEEM_SHOWN_REFUSALS.has(result.outcome)) {") > 0 && src.indexOf("if (REDEEM_SHOWN_REFUSALS.has(result.outcome)) {") < src.indexOf(shown), "only inside the two-refusal branch");
+  const refusals = [...src.matchAll(/error: ([^}]+)\}/g)].map((m) => m[1].trim()).filter((e) => !/Not authenticated|Request not allowed|^result\.error, reason: result\.outcome$/.test(e));
   assert.ok(refusals.length >= 3);
   for (const r of refusals) assert.equal(r, "CODE_REFUSAL");
-  assert.doesNotMatch(src, /result\.error|outcome/);
   assert.doesNotMatch(CODE_REFUSAL, /expired|full|exist|taken|active/i);
   // The "what does it require" check shares the budget.
   assert.match(read("app", "api", "access-code", "policy", "route.ts"), /checkAuthRateLimits\(codeAttemptLimits\(/);
@@ -490,7 +497,7 @@ test("admin soft preview is gone; partners keep their client view", () => {
   assert.equal(canSwitchView("client"), false);
   const dev = code(read("components", "DevSwitcher.tsx"));
   assert.doesNotMatch(dev, /Me: Job Seeker|setSelfView|getViewAs/);
-  assert.match(dev, /clearForgeBrowserKeysEverywhere\(clearAdminId\)/);
+  assert.match(dev, /startViewAs\(targetUserId, adminId\)/);
   assert.doesNotMatch(read("components", "admin", "AdminHome.tsx"), /enterView|setViewAs/);
   assert.doesNotMatch(read("app", "(dashboard)", "dashboard", "settings", "page.tsx"), /admin_test_mode|Test as Client/);
 });

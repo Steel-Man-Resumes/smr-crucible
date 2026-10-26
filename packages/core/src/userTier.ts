@@ -56,47 +56,56 @@ export async function setUserTier(
 }
 
 /**
- * Recalculate tier from access_code_redemption and update user record.
- * Returns the new effective tier.
+ * Recalculate the cached tier and write it to the user record. Returns it.
+ *
+ * The name is kept for its callers (redeem, accept an offer, leave), but since
+ * migration 101 / house lane L2 (2026-10-26) the answer no longer comes from
+ * codes at all:
+ *
+ *   partner  the person OWNS an active organization (access_code.partner_user_id)
+ *            or holds an org_staff row in an active one;
+ *   client   everyone else, whatever codes they redeemed.
+ *
+ * WHY. A 'partner' or 'unlimited' code used to make whoever redeemed it a
+ * "partner", so the participants of three organizations got a partner landing
+ * and a "Partner Dashboard" link instead of the job-seeker journey. Joining with
+ * a code makes you a participant, never staff. Rate limits still come from the
+ * code's own tier (rateLimit.ts reads access_code.tier directly), so a
+ * participant of an unlimited code keeps their allowance.
+ *
+ * Tier is only a cached label now. The staff workspace is chosen from the org
+ * role (apps/consumer lib/workspace.ts resolveWorkspace), never from this.
+ * A CODE CAN NEVER MAKE AN ADMIN: admin is a platform_admin row (047), and the
+ * database pins those people to 'admin' whatever this writes.
  */
 export async function syncUserTierFromCodes(
   userId: string
 ): Promise<UserTier> {
-  // Read AS the person. Unscoped, row-level security returns no rows, and "no
-  // codes" is a legitimate answer here -- so this would not fail, it would
-  // quietly write 'client' over a partner's tier.
-  const row = await getOneAsUser<{ tier: string }>(
+  // Read AS the person: org_staff is row-level protected and lets someone
+  // read their OWN rows, which is exactly the question.
+  const row = await getOneAsUser<{ staff: boolean }>(
     userId,
-    `SELECT ac.tier
-     FROM access_code_redemption acr
-     JOIN access_code ac ON ac.id = acr.access_code_id
-     WHERE acr.user_id = $1
-       AND ac.is_active = true
-       AND (ac.expires_at IS NULL OR ac.expires_at > now())
-     ORDER BY
-       CASE ac.tier
-         WHEN 'unlimited' THEN 1
-         WHEN 'partner' THEN 2
-         WHEN 'client' THEN 3
-       END
-     LIMIT 1`,
+    `SELECT (
+        EXISTS (SELECT 1 FROM access_code ac
+                 WHERE ac.partner_user_id = $1 AND ac.is_active = true)
+     OR EXISTS (SELECT 1 FROM org_staff os
+                  JOIN access_code ac ON ac.id = os.access_code_id
+                 WHERE os.user_id = $1 AND ac.is_active = true)
+     ) AS staff`,
     [userId]
   );
 
-  // Map 'unlimited' to 'partner' for display tier (unlimited is a rate-limit concept).
-  // 'client'-tier codes (cohort seats) deliberately do NOT elevate role -- the
-  // seat-holder keeps the client journey; only their rate limit changes.
-  const codeTier = row?.tier;
-  // A CODE CAN NEVER MAKE AN ADMIN. It once could: an 'admin'-tier code was
-  // copied straight into users.tier here, and users.tier is what the platform
-  // admin gate read. Admin is now a row in platform_admin (migration 047); the
-  // database pins those people to 'admin' whatever this writes, and refuses
-  // 'admin' for anyone else.
-  let effectiveTier: UserTier = "client";
-  if (codeTier === "unlimited" || codeTier === "partner") effectiveTier = "partner";
-
+  const effectiveTier: UserTier = tierFromRoles({ holdsStaffRole: !!row?.staff });
   await setUserTier(userId, effectiveTier);
   return effectiveTier;
+}
+
+/**
+ * The tier rule, pure (tested): partner only for someone who owns or works in
+ * an active organization. Codes are not an input, on purpose.
+ */
+export function tierFromRoles(input: { holdsStaffRole: boolean }): UserTier {
+  return input.holdsStaffRole ? "partner" : "client";
 }
 
 /**

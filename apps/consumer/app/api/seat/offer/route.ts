@@ -17,6 +17,8 @@ const ACCEPT_MESSAGES: Record<string, { status: number; message: string }> = {
   inactive: { status: 409, message: "That offer is no longer open." },
   expired: { status: 409, message: "That offer is no longer open." },
   not_found: { status: 404, message: "That offer is no longer open." },
+  platform_admin: { status: 409, message: "Admin accounts cannot join an organization. To try the participant side, use a separate job-seeker account." },
+  org_staff: { status: 409, message: "You are on this organization's staff, so you cannot also join it as a participant." },
 };
 
 export async function POST(request: Request) {

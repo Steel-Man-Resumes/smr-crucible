@@ -34,7 +34,7 @@ import { SavedJobsPanel } from "@/components/apply/SavedJobsPanel";
 import { PartnerToolsOverview } from "@/components/PartnerToolsOverview";
 import { OrgDashboard } from "@/components/org/OrgDashboard";
 import { AdminHome } from "@/components/admin/AdminHome";
-import { useEffectiveRole } from "@/components/RoleProvider";
+import { useEffectiveRole, useWorkspace } from "@/components/RoleProvider";
 import { orgLanding } from "@/lib/org-nav";
 import { TBtn } from "@crucible/consumer-ui";
 
@@ -100,6 +100,7 @@ export default function DashboardPage() {
   // view-as previews, which is why it is kept rather than replaced.
   const tier = effectiveRole?.impersonating ? sessionTier : (effectiveRole?.tier ?? sessionTier);
   const isAdmin = tier === "admin";
+  const workspace = useWorkspace();
   const onboarding = useOnboarding();
   // Shared-computer rule: only a local run marked as this user's is read.
   const ownerUid = useSession().data?.user?.id;
@@ -187,26 +188,20 @@ export default function DashboardPage() {
     );
   }
 
-  // ─── Audience: Partner ────────────────────────────────────────────────
-  // Org leaders and staff land on their organization's mission control.
-  // Partner accounts with no org link get the tools overview + callout.
-  if (tier === "partner") {
-    if (effectiveRole === null) {
-      // Role still resolving -- avoid flashing the wrong landing
-      return (
-        <div className="flex items-center justify-center py-20">
-          <TroyWork compact decorative />
-        </div>
-      );
-    }
+  // ─── Audience: Staff ──────────────────────────────────────────────────
+  // Org leaders and staff land on their organization's mission control. The
+  // decision is the org ROLE (lib/workspace.ts), never users.tier: an owner
+  // whose cached tier is "client" is staff, and a participant whose code once
+  // made them "partner" is not (house lane L2, defects H3/H4).
+  if (workspace === "staff") {
     // Workspace staff land on Today (Troy 2026-10-24); Caseload is People at
     // /dashboard/people. Orgs without the workspace keep the overview here.
-    if (effectiveRole.orgRole && effectiveRole.crmV2) return <OrgLanding />;
-    return effectiveRole.orgRole ? (
-      <OrgDashboard />
-    ) : (
-      <PartnerToolsOverview noOrgCallout />
-    );
+    if (effectiveRole.crmV2) return <OrgLanding />;
+    return <OrgDashboard />;
+  }
+  // Partner accounts with no org role get the tools overview + callout.
+  if (tier === "partner") {
+    return <PartnerToolsOverview noOrgCallout />;
   }
 
   // ─── Audience: Observer ───────────────────────────────────────────────
@@ -215,8 +210,8 @@ export default function DashboardPage() {
   }
 
   // ─── Audience: Admin (no view-as active) ──────────────────────────────
-  // The operator lands on Operator Home. His own job-seeker journey is one
-  // click away ("My job search" -> view-as client).
+  // The operator lands on Operator Home. His own job search is a separate
+  // job-seeker account (the soft "My job search" switch was removed 10/23).
   if (isAdmin) {
     return <AdminHome />;
   }

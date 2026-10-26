@@ -104,7 +104,8 @@ test("landing: workspace staff go to Today; Caseload choice, old anchors and sta
 
 test("landing is wired: /dashboard forwards workspace staff, People renders the caseload, the caseload no longer redirects itself", () => {
   const page = read("app/(dashboard)/dashboard/page.tsx");
-  assert.match(page, /if \(effectiveRole\.orgRole && effectiveRole\.crmV2\) return <OrgLanding \/>;/);
+  // House lane L2: staff are chosen by the org role (lib/workspace.ts), not the tier.
+  assert.match(page, /if \(workspace === "staff"\) \{[\s\S]*?if \(effectiveRole\.crmV2\) return <OrgLanding \/>;\s+return <OrgDashboard \/>;/);
   assert.match(page, /router\.replace\(to\)/);
   assert.match(page, /window\.setTimeout\(\(\) => go\(null\), 4000\)/, "a hung settings read falls back to the default");
   assert.match(page, /capabilities: effectiveRole\?\.capabilities \?\? \[\]/);
