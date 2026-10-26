@@ -279,15 +279,15 @@ async function readShared<T>(actor: OrgActor, clientId: string, scope: SharingSc
  * the participant sees it in "Who has opened what". Same reach predicate as
  * every read here, so a refused read writes nothing. Exported so the pglite
  * test runs this exact statement. $1 client, $2 org, $3 sees-all, $4 actor,
- * $5 resource ("assistant:overview" | "assistant:changes" | "assistant:progress" | "assistant:tasks").
+ * $5 resource ("assistant:overview" | "assistant:changes" | "assistant:progress" | "assistant:tasks" | "assistant:timeline").
  */
 export const STAFF_ASSISTANT_OPEN_SQL = `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
        SELECT $1::uuid, 'staff', ($4::uuid)::text, $5::text, 'org_client_view', jsonb_build_object('orgId', ($2::uuid)::text, 'via', 't.ROY')
         WHERE ${IN_REACH}
        RETURNING id`;
 
-/** overview and changes: the composed reads. progress: a header read of a named person (progress and draft tools). tasks: that person's tasks. */
-export type StaffAssistantRead = "overview" | "changes" | "progress" | "tasks";
+/** overview, changes and timeline: the composed reads. progress: a header read of a named person (progress and draft tools). tasks: that person's tasks. */
+export type StaffAssistantRead = "overview" | "changes" | "progress" | "tasks" | "timeline";
 
 /**
  * Write the open BEFORE anything is read for the assistant. If the row cannot

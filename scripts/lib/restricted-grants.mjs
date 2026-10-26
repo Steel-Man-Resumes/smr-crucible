@@ -128,7 +128,16 @@ export const RESTRICTED_GRANTS = {
   refinery_seat_legacy: ["SELECT", "INSERT", "DELETE"],
   org_seat_offer: ["SELECT", "INSERT"],
   access_code_departure: ["SELECT"],
+  // Staff t.ROY skill runs (106): append-only; the only change is the
+  // acceptance, by the person who ran it (a column grant, checked below).
+  ai_skill_run: ["SELECT", "INSERT", "UPDATE (accepted_by, accepted_at)"],
 };
+
+/** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */
+export function columnGrant(entry) {
+  const m = /^([A-Z]+)\s*\(([^)]*)\)$/.exec(entry);
+  return m ? { privilege: m[1], columns: m[2].split(",").map((c) => c.trim()).filter(Boolean) } : null;
+}
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
 export const DIRECTORY_OBJECTS = [
@@ -190,10 +199,24 @@ export async function checkRestrictedGrants(run, role = APP_ROLE) {
         WHERE grantee = '${role}' AND table_schema = 'public' AND table_name = '${table}'`
     );
     const held = rows.map((r) => r.privilege_type).sort();
-    const extra = held.filter((p) => !allowed.includes(p));
-    const missing = allowed.filter((p) => !held.includes(p));
+    const tableAllowed = allowed.filter((p) => !columnGrant(p));
+    const extra = held.filter((p) => !tableAllowed.includes(p));
+    const missing = tableAllowed.filter((p) => !held.includes(p));
     if (extra.length) problems.push(`${role} holds ${extra.join(", ")} on ${table}; allowed: ${allowed.join(", ")}`);
     if (missing.length) problems.push(`${role} lacks ${missing.join(", ")} on ${table}`);
+    // Column grants (for example the acceptance columns of ai_skill_run): exactly these columns.
+    const columnRows = await run(
+      `SELECT privilege_type, column_name FROM information_schema.role_column_grants
+        WHERE grantee = '${role}' AND table_schema = 'public' AND table_name = '${table}'`
+    );
+    const tablePrivs = new Set(held);
+    const wantColumns = new Set(allowed.map(columnGrant).filter(Boolean).flatMap((g) => g.columns.map((c) => `${g.privilege}:${c}`)));
+    // A table-level privilege shows up per column too; only column grants beyond the table's count.
+    const heldColumns = new Set(columnRows.filter((r) => !tablePrivs.has(r.privilege_type)).map((r) => `${r.privilege_type}:${r.column_name}`));
+    const extraCols = [...heldColumns].filter((c) => !wantColumns.has(c));
+    const missingCols = [...wantColumns].filter((c) => !heldColumns.has(c));
+    if (extraCols.length) problems.push(`${role} holds column privileges ${extraCols.join(", ")} on ${table}; allowed: ${allowed.join(", ")}`);
+    if (missingCols.length) problems.push(`${role} lacks column privileges ${missingCols.join(", ")} on ${table}`);
   }
   return problems;
 }

@@ -191,3 +191,124 @@ export async function getClientChanges(actor: OrgActor, clientId: string, since:
     data: { firstName: first(h.name), from: since, to: new Date().toISOString().slice(0, 10), changes: changes.slice(0, 40), applicationsRead, lastActiveAt: ymd(h.progress?.lastActiveAt) },
   };
 }
+
+/* ------------------------------------------------------------ timeline -- */
+
+/** Where a timeline item came from. The ref ("N1", "T2") is what an answer cites. */
+export type TimelineSource = "note" | "task" | "ask" | "suggestion" | "placement" | "retention_check" | "application";
+const REF_PREFIX: Record<TimelineSource, string> = { note: "N", task: "T", ask: "A", suggestion: "S", placement: "P", retention_check: "C", application: "J" };
+
+export interface TimelineItem {
+  /** Cite this in the answer, in square brackets: [N1]. */
+  ref: string;
+  source: TimelineSource;
+  /** The record's own id, so the page can link to it. */
+  sourceId: string;
+  on: string;
+  what: string;
+  /** A note's latest wording, clipped. Staff-written: the app gates it before the model sees it. */
+  body?: string;
+  /** The parts an answer may repeat on their own (a task title, an employer, a job). */
+  title?: string;
+  employer?: string;
+  jobTitle?: string;
+  company?: string;
+}
+export interface ClientTimeline {
+  firstName: string | null;
+  from: string;
+  to: string;
+  items: TimelineItem[];
+  more: boolean;
+  applicationsRead: boolean;
+}
+
+export interface TimelineRows {
+  notes: { id: string; kind: string; body: string; occurred_at: string; author_name: string | null }[];
+  tasks: { id: string; title: string; due_on: string | null; done_at: string | null; created_at: string; done_by_participant: boolean }[] | null;
+  asks: { id: string; client_user_id: string; scope: string; status: string; reason: string; created_at: string; answered_at: string | null }[];
+  suggestions: { id: string; kind: string; job_title: string | null; status: string; created_at: string; responded_at: string | null }[];
+  outcomes: { id: string; client_user_id: string; employer: string; start_date: string; end_reason: string | null; ended_on: string | null; checks: { day_mark: number; status: string; checked_at: string }[] }[];
+  /** null = not shared, so not read. */
+  applications: { id: string; job_title: string | null; company: string | null; status: string; created_at: string; status_updated_at: string | null }[] | null;
+}
+
+/**
+ * Pure: one person's records in a date range, newest first, each with a ref
+ * to cite. Applications appear ONLY when they were shared and read
+ * (rows.applications not null). Never a wage.
+ */
+export function buildClientTimeline(clientId: string, firstName: string | null, rows: TimelineRows, from: string, to: string, cap = 40): ClientTimeline {
+  const inRange = (d: string | null | undefined) => !!d && String(d).slice(0, 10) >= from && String(d).slice(0, 10) <= to;
+  const raw: Omit<TimelineItem, "ref">[] = [];
+  for (const n of rows.notes) if (inRange(n.occurred_at)) raw.push({ source: "note", sourceId: n.id, on: ymd(n.occurred_at)!, what: `${first(n.author_name) ?? "Someone"} wrote a ${n.kind} note`, body: clip(n.body, 300) });
+  for (const t of rows.tasks ?? []) {
+    if (t.done_at && inRange(t.done_at)) raw.push({ source: "task", sourceId: t.id, on: ymd(t.done_at)!, what: `Task marked done${t.done_by_participant ? " by them" : ""}: ${clip(t.title, 160)}`, title: clip(t.title, 160) });
+    else if (inRange(t.created_at)) raw.push({ source: "task", sourceId: t.id, on: ymd(t.created_at)!, what: `Task added: ${clip(t.title, 160)}${t.due_on ? `, due ${t.due_on}` : ""}`, title: clip(t.title, 160) });
+  }
+  for (const a of rows.asks) {
+    if (a.client_user_id !== clientId) continue;
+    if (a.answered_at && inRange(a.answered_at)) raw.push({ source: "ask", sourceId: a.id, on: ymd(a.answered_at)!, what: `They ${a.status === "approved" ? "said yes" : a.status === "declined" ? "said no" : a.status} to the ask to share ${a.scope}` });
+    else if (inRange(a.created_at)) raw.push({ source: "ask", sourceId: a.id, on: ymd(a.created_at)!, what: `Asked them to share ${a.scope}: ${clip(a.reason, 200)}` });
+  }
+  for (const s of rows.suggestions) {
+    const label = s.kind === "job" ? `the job suggestion${s.job_title ? ` (${clip(s.job_title, 80)})` : ""}` : "a comment on their document";
+    if (s.responded_at && inRange(s.responded_at)) raw.push({ source: "suggestion", sourceId: s.id, on: ymd(s.responded_at)!, what: `They ${s.status === "saved" ? "saved" : s.status === "dismissed" ? "set aside" : s.status} ${label}` });
+    else if (inRange(s.created_at)) raw.push({ source: "suggestion", sourceId: s.id, on: ymd(s.created_at)!, what: `Staff suggested ${label}` });
+  }
+  for (const o of rows.outcomes) {
+    if (o.client_user_id !== clientId || o.end_reason === "entered_in_error") continue;
+    if (inRange(o.start_date)) raw.push({ source: "placement", sourceId: o.id, on: o.start_date, what: `Placement recorded by your team: ${clip(o.employer, 120)}, started ${o.start_date}`, employer: clip(o.employer, 120) });
+    if (o.ended_on && inRange(o.ended_on)) raw.push({ source: "placement", sourceId: o.id, on: o.ended_on, what: `Placement at ${clip(o.employer, 120)} ended ${o.ended_on}`, employer: clip(o.employer, 120) });
+    for (const k of o.checks) if (inRange(k.checked_at)) raw.push({ source: "retention_check", sourceId: o.id, on: ymd(k.checked_at)!, what: `Day ${k.day_mark} check recorded: ${k.status}` });
+  }
+  for (const a of rows.applications ?? []) {
+    const job = `${clip(a.job_title, 100) || "a job"} at ${clip(a.company, 100) || "an employer"}`;
+    const parts = { ...(clip(a.job_title, 100) ? { jobTitle: clip(a.job_title, 100) } : {}), ...(clip(a.company, 100) ? { company: clip(a.company, 100) } : {}) };
+    if (inRange(a.created_at)) raw.push({ source: "application", sourceId: a.id, on: ymd(a.created_at)!, what: `They added ${job}`, ...parts });
+    else if (inRange(a.status_updated_at)) raw.push({ source: "application", sourceId: a.id, on: ymd(a.status_updated_at)!, what: `${job} moved to ${a.status}`, ...parts });
+  }
+  raw.sort((x, y) => (x.on < y.on ? 1 : x.on > y.on ? -1 : 0));
+  const counters: Partial<Record<TimelineSource, number>> = {};
+  const items = raw.slice(0, cap).map((it) => {
+    counters[it.source] = (counters[it.source] ?? 0) + 1;
+    return { ref: `${REF_PREFIX[it.source]}${counters[it.source]}`, ...it };
+  });
+  return { firstName, from, to, items, more: raw.length > cap, applicationsRead: rows.applications !== null };
+}
+
+/**
+ * One person's timeline for t.ROY's "summarize with sources" skill. Logged
+ * first (assistant:timeline), exactly like the overview: no row, no read.
+ * Applications only for someone who shares them, through the logged door.
+ */
+export async function getClientTimeline(actor: OrgActor, clientId: string, range: { from: string; to: string }, opts: { tasks: boolean }): Promise<StaffAssistantResult<ClientTimeline>> {
+  const opened = await recordStaffAssistantOpen(actor, clientId, "timeline");
+  if (!opened.ok) return { ok: false, reason: opened.reason };
+  const header = await getClientHeader(actor, clientId);
+  if (!header.ok) return { ok: false, reason: header.reason };
+  const h = header.rows[0];
+  const [notes, suggestions, asks, tasks, outcomes] = await Promise.all([
+    getClientNotes(actor, clientId),
+    listSuggestions(actor, clientId),
+    listSharingRequests(actor, { clientId }),
+    opts.tasks ? listStaffTasks(actor, { clientId, includeDone: true }) : Promise.resolve(null),
+    listOutcomes(actor, clientId),
+  ]);
+  let applications: TimelineRows["applications"] = null;
+  if (h.scopes.applications.shared) {
+    const apps = await getClientApplications(actor, clientId, { via: "t.ROY" });
+    if (apps.ok) applications = apps.rows.map((a) => ({ id: a.id, job_title: a.job_title, company: a.company, status: a.status, created_at: a.created_at, status_updated_at: a.status_updated_at }));
+  }
+  return {
+    ok: true,
+    data: buildClientTimeline(clientId, first(h.name), {
+      notes: notes.ok ? notes.rows : [],
+      tasks: tasks ?? null,
+      asks: asks.ok ? asks.rows : [],
+      suggestions: suggestions.ok ? suggestions.rows : [],
+      outcomes: outcomes ?? [],
+      applications,
+    }, range.from, range.to),
+  };
+}

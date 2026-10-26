@@ -65,6 +65,8 @@ export const RLS_PROTECTED_TABLES = [
   "access_code_departure",
   // Organization brand (migration 099): members read, owner sets the logo
   "org_brand",
+  // Staff t.ROY skill runs (migration 106): own runs, owner and org admins read all, reach-restricted
+  "ai_skill_run",
 ] as const;
 
 export interface RlsHealth {
