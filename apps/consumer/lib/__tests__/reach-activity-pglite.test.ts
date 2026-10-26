@@ -51,6 +51,8 @@ test('102: reach in policy, append-only activity, outcome corrections', { skip }
   }
   // Idempotent: a second apply of 102 changes nothing and does not fail.
   await db.exec('BEGIN;' + readFileSync(MIG + '102_reach_activity_audit.sql', 'utf8') + ';COMMIT;');
+  // The app's reach checks read 103's tables (unit reach, house L3a): apply 103 when it is in the tree.
+  if (readdirSync(MIG).includes('103_org_structure.sql')) await db.exec('BEGIN;' + readFileSync(MIG + '103_org_structure.sql', 'utf8') + ';COMMIT;');
 
   const q = async (t: string, p: unknown[] = []) => (await db.query(t, p)).rows as Row[];
 

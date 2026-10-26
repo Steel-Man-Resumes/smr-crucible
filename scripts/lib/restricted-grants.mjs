@@ -166,9 +166,7 @@ export const APP_FUNCTIONS = [
 export const APP_FORBIDDEN_FUNCTIONS = [
   "org_activity_write(uuid, uuid, uuid, text, text, text, text)",
   "smr_org_role(uuid, uuid)",
-  // House L3a (103): the unit reach hook (called only inside smr_staff_reach)
-  // and the structure tables' activity writer.
-  "smr_staff_unit_reach(uuid, uuid, uuid)",
+  // House L3a (103): the structure tables' activity writer.
   "smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)",
   // Answers "is this person a volunteer" for any org: definer-only.
   "smr_is_volunteer(uuid, uuid)",

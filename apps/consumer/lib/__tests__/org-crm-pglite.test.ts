@@ -32,7 +32,7 @@ test('owner-only staff writes and the consent-gated client header, in real SQL',
   // The staff reach checks ask the database's rule (smr_staff_reach, 102; units, 103): apply both.
   for (const f of ['102_reach_activity_audit.sql', '103_org_structure.sql']) await db.exec('BEGIN;' + readFileSync(MIG + f, 'utf8') + ';COMMIT;');
   await db.exec(`CREATE ROLE tester NOSUPERUSER; GRANT USAGE ON SCHEMA public TO tester; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO tester; GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO tester;
-    GRANT EXECUTE ON FUNCTION public.smr_staff_reach(uuid, uuid, uuid), public.smr_staff_sees_all(uuid, uuid) TO tester;`);
+    GRANT EXECUTE ON FUNCTION public.smr_staff_reach(uuid, uuid, uuid), public.smr_staff_sees_all(uuid, uuid), public.smr_staff_unit_reach(uuid, uuid, uuid) TO tester;`);
   const q = (t: string, p: unknown[] = []) => db.query(t, p);
   /** One statement as the app role, scoped to an org and an actor (what runScoped does). */
   const scoped = async (orgId: string, actor: string, text: string, params: unknown[]) => {

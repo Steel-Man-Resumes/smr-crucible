@@ -229,7 +229,11 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.equal(await reach(cmB, p1), false);
   assert.equal(await reach(viewer, p2), false);
   assert.equal(await reach(cmA, p1), true, '102 conditions kept: assigned');
-  assert.ok(await refused(as(at(cmB), `SELECT smr_staff_unit_reach($1, $2, $3) AS r`, [org, cmB, p2])), 'the app cannot call the unit hook directly');
+  // The hook answers only inside the caller's own org scope (102's contract), never as an oracle.
+  assert.equal((await as(at(cmB), `SELECT smr_staff_unit_reach($1, $2, $3) AS r`, [org, cmB, p2]))[0].r, true, 'in scope, the hook answers');
+  assert.equal((await as({ orgId: org2, userId: cmB }, `SELECT smr_staff_unit_reach($1, $2, $3) AS r`, [org, cmB, p2]))[0].r, false, 'from another org scope, false');
+  assert.equal(((await q(`SELECT smr_staff_unit_reach($1, $2, $3) AS r`, [org, cmB, p2])).rows[0] as { r: boolean }).r, false, 'unscoped, false');
+  assert.ok(!defs.find((x) => x.proname === 'smr_staff_unit_reach')!.d.includes('smr_staff_reach('), 'the hook never calls smr_staff_reach');
   assert.equal((await as({ orgId: org2, userId: otherOwner, role: 'owner' }, `SELECT smr_org_structure_manager($1, $2) AS m`, [org, owner]))[0].m, false,
     'the structure manager check is no oracle about another org');
   // The app's own second wall agrees (orgClientView IN_REACH, the person page header).
@@ -240,13 +244,30 @@ test('org structure: profile, units, unit staff, enrollments, reach', { skip, ti
   assert.equal(await header(cmC, p2), 0, 'nor an outsider');
   assert.equal(await header(cmB, p1), 0, 'nor a unit member, for someone not enrolled there');
   // The two walls agree: the database hook and the app's own unit SQL, on every staff x person pair.
-  const hook = async (s: string, p: string) => ((await q(`SELECT smr_staff_unit_reach($1, $2, $3) AS r`, [org, s, p])).rows[0] as { r: boolean }).r;
+  const hook = async (s: string, p: string) => (await as(at(s), `SELECT smr_staff_unit_reach($1, $2, $3) AS r`, [org, s, p]))[0].r as boolean;
   const appUnit = async (s: string, p: string) => (await as(at(s), `SELECT ${unitReachSql('$1::uuid', '$2::uuid', '$3::uuid')} AS r`, [org, s, p]))[0].r as boolean;
   let pairs = 0;
   for (const s of [cmA, cmB, lead, viewer, cmC, vol, admin]) for (const p of [p1, p2, p4]) {
     assert.equal(await appUnit(s, p), await hook(s, p), `walls agree on ${s.slice(-2)} x ${p.slice(-2)}`); pairs++;
   }
   assert.equal(pairs, 21);
+  // 102's per-statement reach policies (written out, calling this hook per row) give the same
+  // answers as the scalar smr_staff_reach, for every actor and person here: one note per person.
+  for (const p of [p1, p2, p4]) await q(`INSERT INTO case_note (access_code_id, client_user_id, author_user_id, body) VALUES ($1, $2, $3, 'fixture note')`, [org, p, owner]);
+  let agree = 0;
+  for (const s of [owner, admin, cmA, cmB, lead, viewer, cmC, vol]) {
+    const role = s === owner ? 'owner' : s === admin ? 'org_admin' : 'staff';
+    const seen = new Set((await as(at(s, role), `SELECT client_user_id FROM case_note WHERE access_code_id = $1`, [org])).map((r) => r.client_user_id as string));
+    const seenEnr = new Set((await as(at(s, role), `SELECT participant_user_id FROM enrollment WHERE access_code_id = $1`, [org])).map((r) => r.participant_user_id as string));
+    for (const p of [p1, p2, p4]) {
+      const scalar = (await as(at(s, role), `SELECT smr_staff_reach($1, $2, $3) AS r`, [org, s, p]))[0].r as boolean;
+      assert.equal(seen.has(p), scalar, `case_note policy and smr_staff_reach agree: ${s.slice(-2)} x ${p.slice(-2)}`);
+      const enrolled = ((await q(`SELECT count(*)::int AS n FROM enrollment WHERE access_code_id = $1 AND participant_user_id = $2`, [org, p])).rows[0] as { n: number }).n > 0;
+      if (enrolled) assert.equal(seenEnr.has(p), scalar, `enrollment policy agrees too: ${s.slice(-2)} x ${p.slice(-2)}`);
+      agree++;
+    }
+  }
+  assert.equal(agree, 24);
   assert.equal(await hook(cmB, p2), true, 'and the agreement is not all false');
   assert.equal(await reach(owner, p4), true, '102 conditions kept: owner');
   assert.equal(await reach(admin, p4), true, '102 conditions kept: org admin');

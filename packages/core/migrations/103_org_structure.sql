@@ -19,8 +19,9 @@
 --                 many (one OPEN enrollment per person per unit).
 --
 -- REACH (who on staff can see which participant). 102 (lane L3b) owns
--- smr_staff_reach and calls one hook for units, smr_staff_unit_reach, which
--- returns false there. 103 replaces ONLY that hook: a staff member reaches a
+-- smr_staff_reach and the reach policies, which call one hook for units,
+-- smr_staff_unit_reach (false there; called per row as the app role). 103
+-- replaces ONLY that hook, scope-bound like 102's functions: a staff member reaches a
 -- participant who has an OPEN enrollment (referred, enrolled, active, paused)
 -- in an ACTIVE unit where the staff member is a lead or a member. A LEAD also
 -- reaches enrollments in the units below theirs (a site lead sees the programs
@@ -260,22 +261,25 @@ BEGIN
 END $do$;
 
 -- ------------------------------------------------------------------ reach --
--- 102 (lane L3b) owns smr_staff_reach(p_org, p_staff, p_participant) and ORs
--- in ONE hook for units, smr_staff_unit_reach, which returns false there. 103
--- replaces ONLY the hook, with 102's exact properties (LANGUAGE sql, STABLE,
--- SECURITY DEFINER, search_path pinned, no EXECUTE for PUBLIC or smr_app: it
--- is called only from inside smr_staff_reach). Every 102 reach policy, and
--- the one on enrollment below, picks it up with no policy change and no grant:
---   a staff member reaches a participant who has an OPEN enrollment
---   (referred, enrolled, active, paused) in an ACTIVE unit where the staff
---   member is a lead or a member; a lead also reaches the units below theirs
---   (depth is at most 4, so three parents cover every ancestor). A viewer
---   reaches nobody through a unit. Still on staff, or nothing.
+-- 102 (lane L3b) owns smr_staff_reach and the reach policies, and calls ONE
+-- hook for units, smr_staff_unit_reach (false in 102). The policies call the
+-- hook per row AS THE APP ROLE (102 grants smr_app EXECUTE), so 103 replaces
+-- ONLY the hook, keeping its signature, LANGUAGE sql, STABLE, SECURITY DEFINER,
+-- pinned search_path and 102's grants (CREATE OR REPLACE keeps them), and:
+--   * answers only inside the caller's own org scope (p_org = app.org_id),
+--     like smr_staff_reach and smr_staff_sees_all: never an oracle about
+--     another organization's units;
+--   * true when the staff member, still on this org's staff and not a
+--     volunteer, is a lead or member of an ACTIVE unit where the participant
+--     has an OPEN enrollment (referred, enrolled, active, paused); a lead also
+--     reaches the three levels of units below theirs. Viewers reach nobody;
+--   * never calls smr_staff_reach (that would recurse).
 CREATE OR REPLACE FUNCTION public.smr_staff_unit_reach(p_org uuid, p_staff uuid, p_participant uuid)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
   SELECT COALESCE(
     p_org IS NOT NULL AND p_staff IS NOT NULL AND p_participant IS NOT NULL
+    AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_staff)
     AND NOT public.smr_is_volunteer(p_org, p_staff)
     AND EXISTS (
@@ -293,12 +297,6 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
     false)
 $$;
 REVOKE ALL ON FUNCTION public.smr_staff_unit_reach(uuid, uuid, uuid) FROM PUBLIC;
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
-    REVOKE ALL ON FUNCTION public.smr_staff_unit_reach(uuid, uuid, uuid) FROM smr_app;
-  END IF;
-END $$;
 
 -- --------------------------------------------------------- activity writer --
 -- One row in org_activity through 102's writer, org_activity_write. Guarded
@@ -953,7 +951,9 @@ BEGIN
     RAISE EXCEPTION '103 after: smr_staff_reach is missing, or not STABLE SECURITY DEFINER';
   END IF;
   IF to_regprocedure('public.smr_staff_unit_reach(uuid, uuid, uuid)') IS NULL
-     OR position('unit_member' IN pg_get_functiondef(to_regprocedure('public.smr_staff_unit_reach(uuid, uuid, uuid)'))) = 0 THEN
+     OR position('unit_member' IN pg_get_functiondef(to_regprocedure('public.smr_staff_unit_reach(uuid, uuid, uuid)'))) = 0
+     OR position('app.org_id' IN pg_get_functiondef(to_regprocedure('public.smr_staff_unit_reach(uuid, uuid, uuid)'))) = 0
+     OR position('smr_staff_reach' IN pg_get_functiondef(to_regprocedure('public.smr_staff_unit_reach(uuid, uuid, uuid)'))) > 0 THEN
     RAISE EXCEPTION '103 after: the unit reach hook is missing or still the 102 placeholder';
   END IF;
   IF NOT ('org.enrollment.write' = ANY (public.smr_delegable_capabilities())) THEN
@@ -969,9 +969,6 @@ BEGIN
     END IF;
     IF NOT has_table_privilege('smr_app', 'enrollment', 'SELECT') OR NOT has_table_privilege('smr_app', 'unit_member', 'DELETE') THEN
       RAISE EXCEPTION '103 after: smr_app lacks a grant it needs';
-    END IF;
-    IF has_function_privilege('smr_app', 'public.smr_staff_unit_reach(uuid, uuid, uuid)', 'EXECUTE') THEN
-      RAISE EXCEPTION '103 after: smr_app can call the unit reach hook directly';
     END IF;
     IF has_function_privilege('smr_app', 'public.smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)', 'EXECUTE') THEN
       RAISE EXCEPTION '103 after: smr_app can write the activity log directly';
