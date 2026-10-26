@@ -48,6 +48,40 @@ export function todayReachFor(capabilities: ReadonlySet<string>, cohort: { total
   return capabilities.has("org.client.view_all") ? { joined: cohort.totalJoined, sharing: cohort.summary.consented } : null;
 }
 
+// Reach and application sharing, as SQL fragments over $1 org, $2 sees-all,
+// $3 the staff member, $4 the accepted sharing text versions.
+const reach = (who: string) => `($2::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
+      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid))`;
+// Sharing applications, to THIS actor (a required grant may be "case manager only").
+const sharesApps = (who: string) => `EXISTS (SELECT 1 FROM sharing_grant g LEFT JOIN org_sharing_policy_version pv ON pv.id = g.policy_version_id
+      WHERE g.user_id = ${who} AND g.access_code_id = $1::uuid AND g.scope = 'applications' AND g.revoked_at IS NULL
+        AND g.text_version = ANY($4::text[])
+        AND ja.created_at >= COALESCE(g.covers_from, '-infinity'::timestamptz)
+        AND (pv.id IS NULL OR pv.audience = 'assigned_staff_and_admins' OR EXISTS (SELECT 1 FROM client_staff_assignment a2
+              WHERE a2.access_code_id = $1::uuid AND a2.client_user_id = ${who} AND a2.staff_user_id = $3::uuid)))`;
+
+/**
+ * The Today work-queue access-log entry ("had your interview and follow-up
+ * dates on their daily work list"). Exported for the pglite test.
+ * $1 org, $2 sees-all, $3 staff member, $4 sharing text versions, $5 the
+ * platform admin viewing as $3 (house lane L2), or null.
+ * With $5 set the row names the admin as the opener ("admin view") and keeps
+ * whose list it was (viewedAs). Once a day per opener, person AND, for an
+ * admin, per staff member viewed: an admin who views as staff A and then
+ * staff B the same day gets a row for each.
+ */
+export const WORK_QUEUE_LOG_SQL = `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
+       SELECT DISTINCT ja.user_id, 'staff', (COALESCE($5::uuid, $3::uuid))::text, 'shared:applications', 'org_work_queue',
+              jsonb_build_object('orgId', ($1::uuid)::text)
+              || CASE WHEN $5::uuid IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('via', 'admin view', 'viewedAs', ($3::uuid)::text) END
+         FROM staff_shared_application ja JOIN access_code_redemption r ON r.user_id = ja.user_id AND r.access_code_id = $1::uuid
+        WHERE ${reach("ja.user_id")} AND ${sharesApps("ja.user_id")}
+          AND (ja.status = 'interviewing' OR (ja.follow_up_at IS NOT NULL AND ja.follow_up_at < now() + interval '3 days'
+               AND ja.status NOT IN ('hired', 'started_work', 'rejected', 'declined')))
+          AND NOT EXISTS (SELECT 1 FROM data_access_log l WHERE l.target_user_id = ja.user_id AND l.accessor_id = (COALESCE($5::uuid, $3::uuid))::text
+                           AND ($5::uuid IS NULL OR l.fields_accessed->>'viewedAs' = ($3::uuid)::text)
+                           AND l.access_reason = 'org_work_queue' AND l.accessed_at > date_trunc('day', now()))`;
+
 /** The Volunteer preset, read from what this person may actually do. */
 export function todayIsVolunteer(role: string, capabilities: ReadonlySet<string>): boolean {
   return role === "staff" && matchesPreset("volunteer", capabilities);
@@ -63,15 +97,6 @@ export async function getTodayView(actor: OrgActor): Promise<TodayView | null> {
   const seesAll = actor.capabilities.has("org.client.view_all");
   const p = [actor.orgId, seesAll, actor.userId, [...WORK_QUEUE_TEXT_VERSIONS]];
   const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
-  const reach = (who: string) => `($2::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
-      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid))`;
-  // Sharing applications, to THIS actor (a required grant may be "case manager only").
-  const sharesApps = (who: string) => `EXISTS (SELECT 1 FROM sharing_grant g LEFT JOIN org_sharing_policy_version pv ON pv.id = g.policy_version_id
-      WHERE g.user_id = ${who} AND g.access_code_id = $1::uuid AND g.scope = 'applications' AND g.revoked_at IS NULL
-        AND g.text_version = ANY($4::text[])
-        AND ja.created_at >= COALESCE(g.covers_from, '-infinity'::timestamptz)
-        AND (pv.id IS NULL OR pv.audience = 'assigned_staff_and_admins' OR EXISTS (SELECT 1 FROM client_staff_assignment a2
-              WHERE a2.access_code_id = $1::uuid AND a2.client_user_id = ${who} AND a2.staff_user_id = $3::uuid)))`;
 
   type AppRow = TodayAppRow;
   type AnsRow = { user_id: string; name: string | null; scope: string; status: string; answered_at: string };
@@ -94,17 +119,10 @@ export async function getTodayView(actor: OrgActor): Promise<TodayView | null> {
          JOIN org_sharing_policy_version v ON v.access_code_id = r.access_code_id AND v.retired_at IS NULL
         WHERE r.access_code_id = $1::uuid AND ${reach("r.user_id")}
           AND NOT EXISTS (SELECT 1 FROM sharing_ack k WHERE k.user_id = r.user_id AND k.policy_version_id = v.id AND k.ended_at IS NULL)`, p.slice(0, 3)),
-    // The access-log entry for the application-derived reasons above: same
-    // predicate, same transaction, at most one row per staff member, person and day.
-    run(sql)(
-      `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
-       SELECT DISTINCT ja.user_id, 'staff', ($3::uuid)::text, 'shared:applications', 'org_work_queue', jsonb_build_object('orgId', ($1::uuid)::text)
-         FROM staff_shared_application ja JOIN access_code_redemption r ON r.user_id = ja.user_id AND r.access_code_id = $1::uuid
-        WHERE ${reach("ja.user_id")} AND ${sharesApps("ja.user_id")}
-          AND (ja.status = 'interviewing' OR (ja.follow_up_at IS NOT NULL AND ja.follow_up_at < now() + interval '3 days'
-               AND ja.status NOT IN ('hired', 'started_work', 'rejected', 'declined')))
-          AND NOT EXISTS (SELECT 1 FROM data_access_log l WHERE l.target_user_id = ja.user_id AND l.accessor_id = ($3::uuid)::text
-                           AND l.access_reason = 'org_work_queue' AND l.accessed_at > date_trunc('day', now()))`, p),
+    // The access-log entry for the application-derived reasons above
+    // (WORK_QUEUE_LOG_SQL): same predicate, same transaction, at most one row
+    // per opener, person and day. $5: the admin viewing as this staff member.
+    run(sql)(WORK_QUEUE_LOG_SQL, [...p, actor.viewedBy ?? null]),
   ]);
 
   const cohort = await getPartnerCohort(actor.userId, { accessCodeId: actor.orgId, assignedToStaffId: seesAll ? undefined : actor.userId });

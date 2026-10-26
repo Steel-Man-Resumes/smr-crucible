@@ -5,8 +5,8 @@ import { requireOrgCapability } from "@/lib/org-guard";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const guard = await requireOrgCapability("org.client.view_content");
+export async function GET(request: Request) {
+  const guard = await requireOrgCapability("org.client.view_content", { request });
   if (!guard.ok) return guard.response;
   const flag = await getOne<{ crm_v2: boolean }>(`SELECT crm_v2 FROM access_code WHERE id = $1`, [guard.actor.orgId]);
   if (!flag?.crm_v2) return NextResponse.json({ error: "Not found." }, { status: 404 });

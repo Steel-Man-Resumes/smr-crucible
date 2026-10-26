@@ -1270,10 +1270,13 @@ async function membershipChecks() {
     winners === 1 && seated === 1 && (await seats(oneSeat.id)) === 1 && race.some((r) => r.outcome === "full"),
     `winners=${winners} rows=${seated} counter=${await seats(oneSeat.id)} outcomes=${race.map((r) => r.outcome)}`);
 
-  // -- site 3: a tier re-sync must not demote
+  // -- site 3, changed by house lane L2: a code never makes a partner. The
+  //    tier comes from owning or working in an organization; a participant
+  //    of a partner-tier code is a client (their rate limit still comes from
+  //    the code itself, checked next).
   await core.syncUserTierFromCodes(pat);
   const [{ tier: patTier }] = await sql`SELECT tier FROM users WHERE id = ${pat}`;
-  check("a tier re-sync keeps a partner-coded person at partner", patTier === "partner", `tier is ${patTier}`);
+  check("L2: a tier re-sync makes a participant of a partner-tier code a client, not a partner", patTier === "client", `tier is ${patTier}`);
 
   // -- site 4: the rate limiter, on the path of every AI call
   const limit = await core.getUserDailyLimit(pat);
@@ -1350,6 +1353,33 @@ async function membershipChecks() {
   const [{ n: audited }] = await sql`SELECT count(*)::int AS n FROM org_audit
      WHERE table_name = 'access_code_redemption' AND org_id = ${orgM.id} AND subject_user_id = ${a} AND action = 'INSERT' AND actor = ${a}`;
   check("joining an organization is written to the audit trail with who did it", audited === 1, `rows=${audited}`);
+
+  // -- migration 101 (house lane L2): who may join with a code
+  const [{ has101 }] = await sql`SELECT position('platform_admin' IN pg_get_functiondef('public.smr_redeem_code(uuid, text)'::regprocedure)) > 0 AS has101`;
+  if (!has101) {
+    console.log("  note  101 not applied: code refusals for admins and staff skipped");
+  } else {
+    const admin101 = await mkUser("m-admin101");
+    await sql`INSERT INTO platform_admin (user_id, note) VALUES (${admin101}, 'isolation fixture')`;
+    const seatsM = await seats(orgM.id);
+    const ra = await core.redeemAccessCode(admin101, orgM.code);
+    const rx = await core.redeemAccessCode(admin101, "NOSUCHCODE" + uniq);
+    check("101: a platform admin cannot join an organization with its code, and is told why",
+      ra.outcome === "platform_admin" && !ra.success && /Admin accounts/.test(ra.error ?? "") && (await memberships(admin101)) === 0,
+      JSON.stringify(ra));
+    check("101: the admin answer is the same for a code that does not exist", rx.outcome === "platform_admin", JSON.stringify(rx));
+    const rs = await core.redeemAccessCode(staffM, orgM.code);
+    const ro = await core.redeemAccessCode(ownerM, orgM.code);
+    check("101: the organization's own staff and owner cannot join it as participants",
+      rs.outcome === "org_staff" && ro.outcome === "org_staff" && (await memberships(staffM)) === 0 && (await memberships(ownerM)) === 0,
+      `staff=${rs.outcome} owner=${ro.outcome}`);
+    check("101: those refusals spend no seat", (await seats(orgM.id)) === seatsM, `seats ${await seats(orgM.id)} (was ${seatsM})`);
+    const elsewhere = await core.redeemAccessCode(staffM, orgN.code);
+    check("101: staff of org M may still join org N as a participant", elsewhere.success && (await memberships(staffM)) === 1, JSON.stringify(elsewhere));
+    const [{ tier: staffTier }] = await sql`SELECT tier FROM users WHERE id = ${staffM}`;
+    check("L2: a staff member's tier comes from their staff role (partner), not from the code they joined with", staffTier === "partner", `tier is ${staffTier}`);
+    await sql`DELETE FROM platform_admin WHERE user_id = ${admin101}`;
+  }
 
   // ------------------------------------------------- only once 049 is applied
   const [{ on: rlsOn }] = await sql`SELECT (relrowsecurity AND relforcerowsecurity) AS on FROM pg_class WHERE oid = 'public.access_code_redemption'::regclass`;

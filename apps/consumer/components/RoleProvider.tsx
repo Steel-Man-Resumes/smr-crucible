@@ -16,6 +16,7 @@ import { useSession } from "next-auth/react";
 import type { ReactNode } from "react";
 import type { UserTier } from "@/lib/useUserTier";
 import type { OrgBrand } from "@crucible/core/src/orgBrandShared";
+import { resolveWorkspace, type Workspace } from "@/lib/workspace";
 
 export type OrgRole = "owner" | "org_admin" | "staff" | null;
 
@@ -24,6 +25,12 @@ export interface EffectiveRole {
   accountId: string;
   sessionAccountId: string;
   tier: UserTier;
+  /**
+   * The workspace to show (lib/workspace.ts resolveWorkspace): admin, staff,
+   * participant. From the org role, never from tier. Optional only so an old
+   * response shape still type-checks; the route always sends it.
+   */
+  workspace?: Workspace;
   orgRole: OrgRole;
   orgName: string | null;
   /** The organization this staff member works in (access_code id). Null for participants and solo users. */
@@ -85,4 +92,18 @@ export function useEffectiveRole(): EffectiveRole | null {
 export function useOrgRole(): { orgRole: OrgRole; orgName: string | null } {
   const role = useContext(RoleContext);
   return { orgRole: role?.orgRole ?? null, orgName: role?.orgName ?? null };
+}
+
+/**
+ * The workspace for the effective account: the route's answer, or the same
+ * rule computed here from the role when an older response has none. "none"
+ * while loading.
+ */
+export function useWorkspace(): Workspace {
+  const role = useContext(RoleContext);
+  if (!role) return "none";
+  return role.workspace ?? resolveWorkspace(
+    { userId: role.accountId, tier: role.tier, impersonating: role.impersonating },
+    { orgRole: role.orgRole }
+  );
 }

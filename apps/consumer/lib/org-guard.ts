@@ -24,6 +24,8 @@
 
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { effectiveAuth } from "@/lib/effective-auth";
+import { orgRouteIdentity } from "@/lib/view-as";
 import {
   resolveOrgActor,
   getUserTier,
@@ -34,7 +36,14 @@ import {
 import { adminSecondFactorOk } from "@/lib/session-policy";
 
 export type OrgGuardResult =
-  | { ok: true; actor: OrgActor }
+  | {
+      ok: true;
+      actor: OrgActor;
+      /** True while a platform admin views as this staff member (reads only). */
+      viewing?: boolean;
+      /** The admin doing the viewing, for audit context. Null otherwise. */
+      viewedBy?: string | null;
+    }
   | { ok: false; response: NextResponse };
 
 function fail(status: number, error: string): OrgGuardResult {
@@ -47,27 +56,37 @@ function fail(status: number, error: string): OrgGuardResult {
  * `orgId` is honored ONLY for a platform admin acting deliberately on another
  * organization. For everyone else the org comes from membership, never from the
  * request -- a caller does not get to nominate whose data they are looking at.
+ *
+ * VIEW-AS (house lane L2, lib/view-as.ts). The member is resolved through
+ * effectiveAuth, so while an admin views as a staff member every org route
+ * answers as THAT person, in THAT organization (before, org routes used the
+ * real session and one screen mixed two organizations). Under view-as only
+ * reads pass: pass `request` and a GET or HEAD is served; anything else, or a
+ * route that did not pass its request, is refused. The admin's platform
+ * powers (orgId override) never apply while viewing.
  */
 export async function requireOrgCapability(
   capability: OrgCapability,
-  opts: { orgId?: string } = {}
+  opts: { orgId?: string; request?: Request } = {}
 ): Promise<OrgGuardResult> {
-  const session = await auth();
-  const userId = session?.user?.id;
-  if (!userId) return fail(401, "Not signed in.");
+  const session = await effectiveAuth();
+  const who = orgRouteIdentity(session, opts.request?.method ?? null);
+  if (!who.ok) return fail(who.status, who.error);
+  const userId = who.userId;
 
   const tier = await getUserTier(userId);
   // Acting on ANOTHER org (staff, roles, assignments, invites) is an admin
   // power, so it needs a session that entered a two-step code, like every
   // other admin tool (F1). Without one, an admin is treated as a member of
-  // their own orgs only.
-  const isPlatformAdmin = tier === "admin" && adminSecondFactorOk(session?.user as any);
+  // their own orgs only. Never while viewing as someone.
+  const isPlatformAdmin = who.mayUsePlatformPowers && tier === "admin" && adminSecondFactorOk(session?.user as any);
 
   const actor = await resolveOrgActor(userId, {
     isPlatformAdmin,
     // A non-admin passing an orgId is ignored rather than rejected: they may
     // legitimately be a member of the org they named, and membership decides.
-    orgId: opts.orgId,
+    // While viewing, the viewed person's own membership decides alone.
+    orgId: who.viewing ? undefined : opts.orgId,
   });
 
   if (!actor) return fail(403, "You are not a member of an organization.");
@@ -78,7 +97,15 @@ export async function requireOrgCapability(
     return fail(403, "You do not have access to that.");
   }
 
-  return { ok: true, actor };
+  const viewedBy = who.viewing ? (session?.impersonation?.adminId ?? null) : null;
+  return {
+    ok: true,
+    // While viewing, the participant-facing access logs name the admin, not
+    // this staff member (OrgActor.viewedBy; core orgClientView, orgToday).
+    actor: viewedBy ? { ...actor, viewedBy } : actor,
+    viewing: who.viewing,
+    viewedBy,
+  };
 }
 
 /**

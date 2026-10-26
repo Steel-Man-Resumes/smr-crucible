@@ -119,15 +119,32 @@ export type RedeemOutcome =
   | "full"
   | "expired"
   | "inactive"
-  | "not_found";
+  | "not_found"
+  /** 101: platform admins never join an organization with a code. */
+  | "platform_admin"
+  /** 101: the organization's owner and staff never join it as a participant. */
+  | "org_staff";
 
-const REDEEM_ERRORS: Record<Exclude<RedeemOutcome, "ok">, string> = {
+export const REDEEM_ERRORS: Record<Exclude<RedeemOutcome, "ok">, string> = {
   already_member: "You've already used this code",
   full: "This code's seats are all taken. Ask your organization for another code.",
   expired: "Code has expired",
   inactive: "Code is no longer active",
   not_found: "Code not found",
+  platform_admin:
+    "Admin accounts cannot join an organization with a code. To try the participant side, use a separate job-seeker account.",
+  org_staff:
+    "You are on this organization's staff, so you cannot also join it as a participant. To try the participant side, use a separate job-seeker account.",
 };
+
+/**
+ * The refusals a person is told in plain words (migration 101). Every other
+ * refusal gets the one generic answer at the route, so a code's existence,
+ * seats or state are never confirmed. These two are safe to say: the admin
+ * answer is the same for every code, and the staff answer only comes back for
+ * a code of an organization the person already works in.
+ */
+export const REDEEM_SHOWN_REFUSALS: ReadonlySet<RedeemOutcome> = new Set<RedeemOutcome>(["platform_admin", "org_staff"]);
 
 /**
  * Redeem an access code for a user. THE ONLY WAY a membership row is created.

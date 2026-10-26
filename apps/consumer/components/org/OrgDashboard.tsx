@@ -25,6 +25,7 @@
  * Clients who have not opted into sharing are counted but never named.
  */
 
+import { DevModeBanner } from "@/components/DevModeBanner";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useUserTier } from "@/lib/useUserTier";
@@ -127,6 +128,8 @@ interface OrgPayload {
   /** People assigned to the viewer, sharing or not; null = unknown. */
   assignedToViewer?: number | null;
   canAssign?: boolean;
+  /** Read-only view (house lane L2): "view_as" while an admin views as staff, "admin_org_view" for the admin's ?codeId console. */
+  readOnly?: "view_as" | "admin_org_view" | null;
   /** Invited by this organization, not sharing progress: name and email it typed, nothing else. */
   invitedNotSharing?: { userId: string; name: string | null; email: string | null; joinedAt: string; assignedStaffId: string | null; pending: boolean }[];
 }
@@ -602,6 +605,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
+      {/* The admin's console for another organization is read-only, and says so (L2, H1). */}
+      {(codeId || data?.readOnly === "admin_org_view") && <DevModeBanner orgView={{ orgName: data?.org.name ?? null }} />}
       {/* Org header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-2">
         <div className="flex items-center gap-4">

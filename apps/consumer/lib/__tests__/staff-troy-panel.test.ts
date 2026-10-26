@@ -47,7 +47,10 @@ it("fix round 1: header and task reads, and a t.ROY applications open, read plai
   assert.equal(accessLogAction("opened", "assistant:tasks", label), "asked t.ROY to look at their tasks about you");
   assert.equal(accessLogAction("opened", "applications", label, "t.ROY"), "asked t.ROY, which opened your job applications");
   assert.equal(accessLogAction("opened", "applications", label, null), "opened your job applications");
+  // House lane L2 fix round 1: both places now build the whole line with
+  // accessLogLine, which uses accessLogAction for every staff line.
   const exp = read("../../app/api/user/export-data/route.ts");
-  assert.match(exp, /accessLogAction\(e\.kind, e\.scope, scopeLabel, e\.via\)/);
-  assert.match(read("../../components/SharingControls.tsx"), /accessLogAction\(e\.kind, e\.scope, label, e\.via\)/);
+  assert.match(exp, /accessLogLine\(e, scopeLabel\)/);
+  assert.match(read("../../components/SharingControls.tsx"), /accessLogLine\(e, label\)/);
+  assert.match(read("../access-log-words.ts"), /accessLogAction\(e\.kind, e\.scope, label, e\.via\)/);
 });

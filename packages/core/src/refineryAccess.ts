@@ -62,8 +62,8 @@ export async function listMySeatOffers(userId: string): Promise<SeatOffer[]> {
   return rows.map((r) => ({ id: r.id, orgName: r.partner_name, createdAt: r.created_at }));
 }
 
-export type OfferOutcome = "ok" | "already_member" | "other_org" | "not_found" | "inactive" | "expired" | "full";
-const OFFER_OUTCOMES: readonly OfferOutcome[] = ["ok", "already_member", "other_org", "not_found", "inactive", "expired", "full"];
+export type OfferOutcome = "ok" | "already_member" | "other_org" | "not_found" | "inactive" | "expired" | "full" | "platform_admin" | "org_staff";
+const OFFER_OUTCOMES: readonly OfferOutcome[] = ["ok", "already_member", "other_org", "not_found", "inactive", "expired", "full", "platform_admin", "org_staff"];
 
 function offerOutcome(raw: unknown): OfferOutcome {
   return (OFFER_OUTCOMES as readonly string[]).includes(String(raw)) ? (raw as OfferOutcome) : "not_found";

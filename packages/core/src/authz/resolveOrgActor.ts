@@ -34,6 +34,14 @@ export interface OrgActor {
   reach: CohortReach;
   /** True when a platform admin is acting on an org they are not a member of. */
   viaPlatformAdmin: boolean;
+  /**
+   * Set ONLY by the app's org guard while a platform admin views as this staff
+   * member (house lane L2): the admin's id. Reach and capabilities stay the
+   * staff member's; the access logs a participant sees name the admin instead
+   * ("admin view"), so an admin's look is never recorded as the staff
+   * member's. Never set by resolveOrgActor itself.
+   */
+  viewedBy?: string | null;
 }
 
 /**

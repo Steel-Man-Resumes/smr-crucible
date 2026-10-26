@@ -35,9 +35,19 @@ describe("M3: impersonation never moves a Forge run between accounts", () => {
   });
 
   it("clearing runs when an impersonation starts (both start points) and when it ends", () => {
-    for (const f of [["app", "(dashboard)", "dashboard", "admin", "users", "page.tsx"], ["components", "DevSwitcher.tsx"], ["components", "ImpersonationChrome.tsx"]]) {
+    for (const f of [["app", "(dashboard)", "dashboard", "admin", "users", "page.tsx"], ["components", "ImpersonationChrome.tsx"]]) {
       assert.match(code(read(...f)), /clearForgeBrowserKeysEverywhere\((adminId|clearAdminId)\);/, f.join("/"));
     }
+    // The DEV menu, the banner and the frame start and end views through one
+    // helper (house lane L2), which clears on both start and end.
+    const helper = code(read("lib", "dev-view-client.ts"));
+    const start = helper.slice(helper.indexOf("export async function startViewAs"), helper.indexOf("export async function endViewAs"));
+    const end = helper.slice(helper.indexOf("export async function endViewAs"));
+    assert.match(start, /clearForgeBrowserKeysEverywhere\(adminId\);/, "start");
+    assert.match(end, /clearForgeBrowserKeysEverywhere\(adminId\);/, "end");
+    assert.match(code(read("components", "DevSwitcher.tsx")), /startViewAs\(targetUserId, adminId\)/);
+    assert.match(code(read("components", "DevSwitcher.tsx")), /endViewAs\(adminId,/);
+    assert.match(code(read("components", "ImpersonationChrome.tsx")), /endViewAs\(adminId,/);
   });
 
   it("ForgeImport does nothing until it knows no one is being impersonated", () => {
@@ -182,6 +192,6 @@ describe("r2 N3: impersonation ending any way clears the keys, on both hosts as 
     const shell = code(read("app", "(dashboard)", "RefineryShell.tsx"));
     assert.ok(shell.indexOf("applyForgeClearMark(uid);") > 0 && shell.indexOf("applyForgeClearMark(uid);") < shell.indexOf("settleDerivedKeys(uid);"));
     assert.match(code(read("app", "(dashboard)", "dashboard", "admin", "users", "page.tsx")), /clearForgeBrowserKeysEverywhere\(adminId\);/);
-    assert.match(code(read("components", "DevSwitcher.tsx")), /clearForgeBrowserKeysEverywhere\(clearAdminId\);/);
+    assert.match(code(read("components", "DevSwitcher.tsx")), /startViewAs\(targetUserId, adminId\)/);
   });
 });

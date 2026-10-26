@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { query, getOne, redeemAccessCode } from "@crucible/core";
+import { hubRedeemReason } from "@/lib/access-code-guard";
 
 /**
  * Server-to-server endpoint for the Waukesha Hub to unlock Forge/Refinery access.
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
       const res = await redeemAccessCode(crucibleUser.id, codeValue);
       if (!res.success && res.outcome !== "already_member") {
         return NextResponse.json(
-          { success: false, status: "not_redeemed", reason: res.outcome },
+          { success: false, status: "not_redeemed", reason: hubRedeemReason(res.outcome) },
           { status: 409 }
         );
       }

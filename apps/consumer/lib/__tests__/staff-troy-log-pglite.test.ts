@@ -13,6 +13,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { STAFF_ASSISTANT_OPEN_SQL, SHARED_OPEN_LOG_SQL, CLIENT_HEADER_WHO_SQL } from '@crucible/core/src/orgClientView';
+import { WORK_QUEUE_LOG_SQL } from '@crucible/core/src/orgToday';
 
 const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, '@electric-sql/pglite')) ? 'set SMR_PGLITE_DIR to run the pglite staff t.ROY log test' : false;
@@ -80,8 +81,33 @@ test('a t.ROY staff read logs one open the participant can see, and nothing outs
   assert.equal((await open(org, volunteer, dana, false, 'assistant:tasks')).length, 0, 'volunteer outside caseload: no tasks row');
   // A shared-applications open t.ROY made says "via t.ROY"; the tab's own open does not.
   await q(`INSERT INTO sharing_grant (user_id, access_code_id, scope, text_version) VALUES ($1, $2, 'applications', 'pglite-test')`, [dana, org]);
-  const shared = (via: string | null, actor = cm) => scoped(org, actor, 'staff', SHARED_OPEN_LOG_SQL + ' RETURNING fields_accessed', [dana, org, false, actor, 'applications', via]);
+  const shared = (via: string | null, actor = cm, viewer: string | null = null) => scoped(org, actor, 'staff', SHARED_OPEN_LOG_SQL + ' RETURNING fields_accessed, accessor_id', [dana, org, false, actor, 'applications', via, viewer]);
   assert.deepEqual((await shared('t.ROY'))[0]?.fields_accessed, { orgId: org, via: 't.ROY' });
   assert.deepEqual((await shared(null))[0]?.fields_accessed, { orgId: org });
   assert.equal((await shared('t.ROY', volunteer)).length, 0, 'not in reach: no applications open');
+  // House lane L2: an admin viewing as the case manager is logged as the admin, with whose view it was.
+  const adminViewer = '00000000-0000-4000-8000-0000000000ad';
+  const viewed = (await shared(null, cm, adminViewer))[0];
+  assert.equal(viewed?.accessor_id, adminViewer, 'the admin, not the case manager, is recorded as the opener');
+  assert.deepEqual(viewed?.fields_accessed, { orgId: org, via: 'admin view', viewedAs: cm });
+  assert.equal((await shared(null, volunteer, adminViewer)).length, 0, 'reach is still the viewed staff member\'s');
+
+  // House lane L2 fix round 1: the Today work-queue entry is once a day per
+  // opener, and for an admin once per staff member viewed, so viewing as one
+  // staff member never hides the entry for viewing as another.
+  await q(`INSERT INTO job_application (user_id, job_title, company, status) VALUES ($1, 'Line cook', 'Sample Diner', 'interviewing')`, [dana]);
+  const queue = (actor: string, seesAll: boolean, viewer: string | null) =>
+    scoped(org, actor, 'staff', WORK_QUEUE_LOG_SQL + ' RETURNING accessor_id, fields_accessed', [org, seesAll, actor, ['pglite-test'], viewer]);
+  const cmOwn = await queue(cm, false, null);
+  assert.deepEqual(cmOwn.map((r) => r.accessor_id), [cm], 'the case manager\'s own list: one row, as them');
+  assert.equal((await queue(cm, false, null)).length, 0, 'once a day');
+  const viaCm = await queue(cm, false, adminViewer);
+  assert.equal(viaCm.length, 1, 'the admin viewing as the case manager: their own row');
+  assert.equal(viaCm[0].accessor_id, adminViewer);
+  assert.deepEqual(viaCm[0].fields_accessed, { orgId: org, via: 'admin view', viewedAs: cm });
+  assert.equal((await queue(cm, false, adminViewer)).length, 0, 'once a day for that view');
+  const viaVol = await queue(volunteer, true, adminViewer);
+  assert.equal(viaVol.length, 1, 'the same admin viewing as another staff member the same day still gets a row');
+  assert.deepEqual(viaVol[0].fields_accessed, { orgId: org, via: 'admin view', viewedAs: volunteer });
+  assert.equal((await queue(volunteer, true, null)).length, 1, 'and the admin\'s rows never stand in for the staff member\'s own');
 });
