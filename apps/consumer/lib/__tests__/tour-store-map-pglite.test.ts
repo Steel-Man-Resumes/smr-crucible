@@ -77,9 +77,11 @@ test('tour store map: old slot migrates to entrance on read, settings and crm ha
   // The entrance run's sequence is its own: settings writes did not move it.
   assert.equal((await handleTourWrite(store, u, { version: E.version, runId: OLD, sequence: 6, stop: 8, action: 'progress' })).status, 200);
 
-  // Completing settings at 44 s: stamped, onboarding untouched, reward early, no grant row (SETTINGS-TOUR.md: 45 s by the database clock).
+  // Completing settings at 44 s with a passed quiz: stamped, onboarding untouched, reward early, no grant row (45 s by the database clock).
+  const PASS = { version: 1, answers: { reading: 1, doors: 0, devices: 1, memory: 1, delete: 0 } };
+  const FAIL = { version: 1, answers: { ...PASS.answers, doors: 2 } };
   await pg.query(`UPDATE consumer_profile SET preferences = jsonb_set(preferences, '{tours,settings,startedAt}', to_jsonb(now() - interval '44 seconds')) WHERE user_id=$1`, [u]);
-  const done = await sw({ action: 'complete', runId: S1, sequence: 3, stop: S.stopCount - 1 });
+  const done = await sw({ action: 'complete', runId: S1, sequence: 3, stop: S.stopCount - 1, quiz: PASS });
   assert.equal(done.status, 200);
   assert.deepEqual(done.json.reward, { status: 'early', calls: 0 });
   p = await prefs();
@@ -87,14 +89,34 @@ test('tour store map: old slot migrates to entrance on read, settings and crm ha
   assert.ok(p!.tours.settings.completedAt);
   const flags = (await pg.query(`SELECT onboarding_tour_complete AS c FROM users WHERE id=$1`, [u])).rows[0] as { c: boolean };
   assert.equal(flags.c, false, 'only the entrance tour marks onboarding complete');
+  // B3 (fix round 1): the GET's metMinWatch reads this run as under 45 s, so the chip offers Start over, never the questions for the bonus.
+  const { metMinWatch } = await import('../tour/settings-tour');
+  assert.equal(metMinWatch(p!.tours.settings, S.minWatchMs), false, 'a 44 s finish did not meet the minimum');
   assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n, 0, '44 s grants nothing');
   assert.equal((await sw({ action: 'progress', runId: S1, sequence: 4, stop: 2 })).status, 409, 'a completed run never reopens');
 
-  // A replay (new run, previousRunId = the finished one) watched 45 s: granted 1 call
-  // under tour:settings (LEAST(1, bonus_calls 2)) for 24 h, with its own label.
+  // A replay (new run, previousRunId = the finished one) watched 45 s.
   assert.equal((await sw({ action: 'start', runId: S2, sequence: 0, previousRunId: S1 })).status, 200);
   await pg.query(`UPDATE consumer_profile SET preferences = jsonb_set(preferences, '{tours,settings,startedAt}', to_jsonb(now() - interval '45 seconds')) WHERE user_id=$1`, [u]);
-  const again = await sw({ action: 'complete', runId: S2, sequence: 1, stop: S.stopCount - 1 });
+  const count = async () => ((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n;
+  // v2: skipped (no answers) completes the run and grants nothing.
+  const skipped = await sw({ action: 'complete', runId: S2, sequence: 1, stop: S.stopCount - 1 });
+  assert.deepEqual([skipped.status, skipped.json.reward, skipped.json.quiz], [200, null, null]);
+  assert.equal(await count(), 0, 'a skipped quiz grants nothing');
+  const stamped = (await prefs())!.tours.settings.completedAt;
+  assert.ok(stamped);
+  assert.equal(metMinWatch((await prefs())!.tours.settings, S.minWatchMs), true, 'a 45 s finish met it: the questions-alone chip may show');
+  // A failed quiz on the same run (a retry, the next sequence) is graded and grants nothing.
+  const failed = await sw({ action: 'complete', runId: S2, sequence: 2, stop: S.stopCount - 1, quiz: FAIL });
+  assert.equal(failed.status, 200);
+  assert.equal(failed.json.reward, null);
+  assert.equal((failed.json.quiz as { passed: boolean }).passed, false);
+  assert.equal(await count(), 0, 'a failed quiz grants nothing');
+  assert.equal((await sw({ action: 'complete', runId: S2, sequence: 3, stop: S.stopCount - 1, quiz: { ...PASS, answers: { reading: 9 } } })).status, 400, 'a bad shape writes nothing');
+  assert.equal((await prefs())!.tours.settings.completedAt, stamped, 'completedAt is stamped once; the watch time is the first finish');
+  // The pass on the same run: granted 1 call under tour:settings (LEAST(1, bonus_calls 2)) for 24 h, with its own label.
+  const again = await sw({ action: 'complete', runId: S2, sequence: 3, stop: S.stopCount - 1, quiz: PASS });
+  assert.equal((again.json.quiz as { passed: boolean }).passed, true);
   assert.equal(again.status, 200);
   const sr = again.json.reward as TourReward;
   assert.equal(sr.status, 'granted');
@@ -106,7 +128,7 @@ test('tour store map: old slot migrates to entrance on read, settings and crm ha
   assert.equal(keys[0].r, S2);
   assert.equal(keys[0].day, true, '24 hours from now');
   // A re-POST of the same completing run reads as the same grant; a third run reads already.
-  const retry = await sw({ action: 'complete', runId: S2, sequence: 2, stop: S.stopCount - 1 });
+  const retry = await sw({ action: 'complete', runId: S2, sequence: 4, stop: S.stopCount - 1, quiz: PASS });
   assert.equal((retry.json.reward as TourReward).status, 'granted');
   assert.equal((retry.json.reward as TourReward).calls, 1);
   assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n, 1, 'no second row');

@@ -8,7 +8,8 @@
  * Self-contained: hydrates from GET /api/coach/settings, saves via POST.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import { SETTINGS_TOUR_REVEAL_EVENT } from "@/lib/tour/settings-reveal";
 import { TBtn } from "@crucible/consumer-ui";
 import { coachSaveBody } from "@/lib/coach-settings";
 
@@ -33,6 +34,19 @@ const STYLE_OPTIONS: { value: Style; label: string; hint: string }[] = [
 export function CoachSettingsSection() {
   const [s, setS] = useState<Settings | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // The Settings tour opens Advanced settings to show the creativity slider, and
+  // puts it back the way it was when the tour closes. It never changes a value.
+  const beforeTour = useRef<boolean | null>(null);
+  useEffect(() => {
+    const onReveal = (event: Event) => {
+      const d = (event as CustomEvent<{ part?: string; open?: boolean }>).detail;
+      if (d?.part !== "coach-advanced") return;
+      if (d.open) { setShowAdvanced(v => { if (beforeTour.current === null) beforeTour.current = v; return true; }); }
+      else if (beforeTour.current !== null) { const was = beforeTour.current; beforeTour.current = null; setShowAdvanced(was); }
+    };
+    window.addEventListener(SETTINGS_TOUR_REVEAL_EVENT, onReveal);
+    return () => window.removeEventListener(SETTINGS_TOUR_REVEAL_EVENT, onReveal);
+  }, []);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
@@ -93,7 +107,7 @@ export function CoachSettingsSection() {
         </div>
 
         {/* Style */}
-        <div id="settings-coach-style">
+        <div id="settings-coach-style" data-tour="settings-coach-choices">
           <label className="text-sm font-medium text-t-white block mb-2">Coaching style</label>
           <div className="grid grid-cols-3 gap-2">
             {STYLE_OPTIONS.map((o) => (
@@ -115,7 +129,7 @@ export function CoachSettingsSection() {
         </div>
 
         {/* Length + Focus toggles */}
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4" data-tour="settings-coach-choices">
           <div>
             <label className="text-sm font-medium text-t-white block mb-2">Response length</label>
             <div className="flex gap-2">
@@ -169,7 +183,7 @@ export function CoachSettingsSection() {
             {showAdvanced ? "Hide advanced" : "Advanced settings"}
           </button>
           {showAdvanced && (
-            <div className="mt-3">
+            <div className="mt-3" id="settings-creativity">
               <label className="text-sm font-medium text-t-white block mb-1">
                 How creative should your coach be?{" "}
                 <span className="text-t-phos-dim font-normal">({s.coachCreativity})</span>
@@ -191,7 +205,7 @@ export function CoachSettingsSection() {
         </div>
 
         {/* Save */}
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex items-center gap-3 pt-1" data-tour="settings-coach-choices">
           <TBtn onClick={save} disabled={status === "saving"} size="sm">
             {status === "saving" ? "saving..." : "save"}
           </TBtn>

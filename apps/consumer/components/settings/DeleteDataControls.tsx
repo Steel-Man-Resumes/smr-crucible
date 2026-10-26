@@ -111,7 +111,7 @@ export function DeleteDataControls({ isOrgStaff, onDeleted }: {
     {(["data", "account"] as const).map((action) => {
       const active = mode === action;
       const id = `delete-${action}`;
-      return <div key={action} className="border border-t-red bg-t-panel p-5" id={id}>
+      return <div key={action} className="border border-t-red bg-t-panel p-5" id={id} data-tour={action === "data" ? "settings-delete-data" : "settings-delete-account"}>
         <h3 className="font-semibold text-t-white">{action === "data" ? "Delete my data" : "Delete my account"}</h3>
         <p className="mt-1 text-sm text-t-phos-dim">
           {action === "account"

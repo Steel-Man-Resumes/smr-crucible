@@ -1050,7 +1050,7 @@ function SecuritySection() {
         Manage your password, two-step verification and signed-in devices.
       </p>
 
-      <div className="bg-t-panel p-5 border border-t-line">
+      <div className="bg-t-panel p-5 border border-t-line" id="settings-password">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <h3 className="font-semibold text-t-white">
@@ -1366,7 +1366,7 @@ function TwoFactorCard({
   }
 
   return (
-    <div className="bg-t-panel p-5 border border-t-line mt-3">
+    <div className="bg-t-panel p-5 border border-t-line mt-3" id="settings-two-step">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold text-t-white">Two-step verification</h3>

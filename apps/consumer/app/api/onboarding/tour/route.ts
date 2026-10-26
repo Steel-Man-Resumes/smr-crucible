@@ -13,6 +13,7 @@ import { tourRewardClaimed } from "@/lib/progression-server";
 import { handleTourWrite } from "@/lib/tour/tour-write";
 import { tourStore } from "@/lib/tour/tour-store";
 import { TOURS, isTourId, readTourSlot } from "@/lib/tour/registry";
+import { metMinWatch } from "@/lib/tour/settings-tour";
 
 export const maxDuration = 10;
 export const revalidate = 0;
@@ -33,6 +34,9 @@ export async function GET(request: Request) {
       `SELECT preferences->'tours' AS tours, preferences->'guidedTour' AS guided FROM consumer_profile WHERE user_id = $1`, [userId]);
     const slot = readTourSlot({ tours: row?.tours, guidedTour: row?.guided }, tourId);
     const current = slot?.version === def.version;
+    // A quiz tour's chip offers the questions alone on a finished run until the bonus exists.
+    // Unknown (undefined) rather than a false "never claimed" when the read fails.
+    const rewardClaimedAt = def.quiz && def.grants ? await tourRewardClaimed(userId, def.rewardKey).catch(() => undefined) : undefined;
     return NextResponse.json({ data: {
       accountId: userId, tourId, impersonating,
       version: current ? def.version : undefined,
@@ -42,6 +46,9 @@ export async function GET(request: Request) {
       runId: current ? slot?.runId : undefined,
       sequence: current ? slot?.sequence ?? 0 : 0,
       completedAt: current ? slot?.completedAt ?? null : null,
+      // Quiz tours: whether the finished run met the minimum watch (the questions-alone chip shows only then),
+      // and whether an older version was finished (not "New here?"). Watch time is measured as before.
+      ...(def.quiz ? { rewardClaimedAt, metMinWatch: current && !!slot?.completedAt ? metMinWatch(slot, def.minWatchMs) : undefined, earlierDone: !current && !!slot?.completedAt } : {}),
     } }, { headers: { "Cache-Control": "no-store" } });
   }
 

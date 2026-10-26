@@ -1,6 +1,6 @@
 "use client";
 /**
- * The Settings tour's controller (SETTINGS-TOUR.md). The Settings page mounts
+ * The Settings tour's controller (version 2: SETTINGS-TOUR-V2-STORYBOARD.md). The Settings page mounts
  * it for signed-in clients who are not organization staff; it renders the chip
  * at the top of Settings ("New here?" or "Pick up where you left off") and,
  * while the tour plays, the player in a portal over the page.
@@ -17,6 +17,12 @@
  *
  * Never under view-as or assist: the chip does not show, ?tour=settings does
  * nothing, and the route refuses the writes (lib/settings-guard.ts rule).
+ *
+ * v2: the completion write carries the quiz answers (or none, skipped). The
+ * server grades them, and only a pass can earn the one-time bonus. A failed or
+ * skipped finish completes the run; a retry posts complete again on the same
+ * run with the next sequence. When a finished run has no bonus yet, the chip
+ * offers the questions alone on that saved run.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -25,20 +31,21 @@ import { useUserTier } from '@/lib/useUserTier';
 import { useEffectiveRole } from '@/components/RoleProvider';
 import { TOUR_COPY } from '@/lib/tour/beats';
 import { TOURS, type TourSlot } from '@/lib/tour/registry';
-import { readTourReward, type TourReward } from '@/lib/tour/reward';
+import { readTourReward } from '@/lib/tour/reward';
+import { readSettingsQuizResult, type SettingsQuizAnswers } from '@/lib/tour/settings-quiz';
 import { PROGRESSION_CHANGED_EVENT } from '@/lib/progression-ui';
 import { lockPageForTour, leaveAction } from '@/lib/tour/page-lock';
 import { isRetiredRun, retiredRun, runReplacedError, saveFailureAction, tourSaveFailure } from '@/lib/tour/run-conflict';
 import { RunConflictNotice } from './RunConflictNotice';
 import { SETTINGS_NUDGES, SETTINGS_TOUR_COPY, type SettingsBeat, type SettingsNudge } from '@/lib/tour/settings-beats';
-import { SETTINGS_ENDING_STOP, SETTINGS_TOUR_OPEN_EVENT, applicableBeats, pickNudge, readBranches, resumeIndex, settingsTourAllowed, settingsTourRequested, stopOfBeat } from '@/lib/tour/settings-tour';
+import { SETTINGS_ENDING_STOP, SETTINGS_TOUR_OPEN_EVENT, applicableBeats, pickNudge, readBranches, resumeIndex, settingsChipFor, settingsTourAllowed, settingsTourRequested, stopOfBeat } from '@/lib/tour/settings-tour';
 import { findNavElement } from './TourPlayer';
-import { SettingsTourPlayer, scrollToTarget } from './SettingsTourPlayer';
+import { SettingsTourPlayer, scrollToTarget, type SettingsFinish } from './SettingsTourPlayer';
 import './entrance-tour.css';
 
-type Write = { tourId: 'settings'; action: 'start' | 'progress' | 'complete'; version: number; runId: string; sequence: number; stop: number; previousRunId?: string | null };
-type Saved = { ok: true; runId: string; sequence: number; reward?: unknown };
-type Slot = TourSlot & { accountId: string; impersonating?: boolean; previousRunId?: string | null };
+type Write = { tourId: 'settings'; action: 'start' | 'progress' | 'complete'; version: number; runId: string; sequence: number; stop: number; previousRunId?: string | null; quiz?: SettingsQuizAnswers };
+type Saved = { ok: true; runId: string; sequence: number; reward?: unknown; quiz?: unknown };
+type Slot = TourSlot & { accountId: string; impersonating?: boolean; previousRunId?: string | null; rewardClaimedAt?: string | null; metMinWatch?: boolean; earlierDone?: boolean };
 const FOCUSABLE = 'button:not(:disabled),a[href],input:not(:disabled),summary,[tabindex="0"]';
 const PAUSE_KEY = 'settings-tour-paused:';
 const DEF = TOURS.settings;
@@ -66,6 +73,8 @@ export function SettingsTour() {
   const [path, setPath] = useState<readonly SettingsBeat[]>([]);
   const [nudge, setNudge] = useState<SettingsNudge>(SETTINGS_NUDGES.plain);
   const [start, setStart] = useState(0);
+  /** The chip's "Take the questions": the player opens on the questions of the saved, finished run. */
+  const [quizOnly, setQuizOnly] = useState(false);
   const [error, setError] = useState('');
   const [saveError, setSaveError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -105,10 +114,10 @@ export function SettingsTour() {
     };
   }, []);
 
-  const persist = useCallback((action: Write['action'], stop: number): Promise<Saved> => {
+  const persist = useCallback((action: Write['action'], stop: number, quiz?: SettingsQuizAnswers | null): Promise<Saved> => {
     const current = run.current;
     if (!current.account || !current.id) return Promise.reject(new Error('Your saved place is unavailable. Reload to reconnect.'));
-    const body: Write = { tourId: 'settings', action, version: DEF.version, runId: current.id, sequence: action === 'start' ? 0 : ++current.sequence, stop, ...(action === 'start' ? { previousRunId: slotRef.current?.previousRunId ?? slotRef.current?.runId ?? null } : {}) };
+    const body: Write = { tourId: 'settings', action, version: DEF.version, runId: current.id, sequence: action === 'start' ? 0 : ++current.sequence, stop, ...(action === 'start' ? { previousRunId: slotRef.current?.previousRunId ?? slotRef.current?.runId ?? null } : {}), ...(action === 'complete' && quiz ? { quiz } : {}) };
     lastWrite.current = body;
     if (action === 'start') pendingStart.current = body;
     const operation = queue.current.catch(() => {}).then(async () => {
@@ -168,14 +177,25 @@ export function SettingsTour() {
     completed.current = false;
     const stop = index < beats.length ? stopOfBeat(beats[index]) : SETTINGS_ENDING_STOP;
     stopRef.current = stop; savedStop.current = stop;
-    setPath(beats); pathRef.current = beats; setStart(index); setError(''); setNotice(''); setConflict(false); setActive(true);
+    setPath(beats); pathRef.current = beats; setStart(index); setQuizOnly(false); setError(''); setNotice(''); setConflict(false); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     try { sessionStorage.removeItem(PAUSE_KEY + data.accountId); } catch {}
     if (!resuming) save('start', stop);
   }, [save]);
 
+  /** The questions alone, on the saved finished run: no start write, the next sequence, the same run. */
+  const enterQuiz = useCallback((data: Slot, beats: readonly SettingsBeat[]) => {
+    if (!allowedRef.current || !data.runId) return;
+    pendingStart.current = null;
+    run.current = { id: data.runId, sequence: data.sequence ?? 0, account: data.accountId };
+    completed.current = true;
+    stopRef.current = SETTINGS_ENDING_STOP; savedStop.current = SETTINGS_ENDING_STOP;
+    setPath(beats); pathRef.current = beats; setStart(beats.length); setQuizOnly(true); setError(''); setNotice(''); setConflict(false); setActive(true);
+    oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  }, []);
+
   /** The saved place, and (when opening) the branches, read once. */
-  const load = useCallback(async (mode: 'chip' | 'open' | 'replay') => {
+  const load = useCallback(async (mode: 'chip' | 'open' | 'replay' | 'quiz') => {
     requestController.current?.abort(); const controller = new AbortController(); requestController.current = controller;
     setLoading(true); setError('');
     const timeout = setTimeout(() => controller.abort(), 10000);
@@ -195,11 +215,12 @@ export function SettingsTour() {
       if (!alive.current || requestController.current !== controller) return;
       const branches = readBranches(sharing, coach, codes);
       setNudge(pickNudge(branches));
+      if (mode === 'quiz') { if (data.version === DEF.version && data.completedAt && !data.inProgress) enterQuiz(data, applicableBeats(branches)); return; }
       enter(data, applicableBeats(branches), mode === 'open' && !!data.inProgress);
     } catch (e) {
       if (alive.current && requestController.current === controller) setError(e instanceof Error && e.name !== 'AbortError' ? e.message : 'The tour is taking too long to load. Try again.');
     } finally { clearTimeout(timeout); if (alive.current && requestController.current === controller) setLoading(false); }
-  }, [enter]);
+  }, [enter, enterQuiz]);
 
   /* The chip's state on arrival; ?tour=settings opens the tour (resume if one is open). */
   useEffect(() => {
@@ -261,6 +282,13 @@ export function SettingsTour() {
     return () => { unlock(); document.removeEventListener('keydown', onKey); if (oldFocus.current?.isConnected) oldFocus.current.focus({ preventScroll: true }); };
   }, [active, allowed, pause]);
 
+  /* The Settings tour's own flag while it holds the page: the section map stops sticking and the top bar is solid (settings-tour.css). */
+  useEffect(() => {
+    if (!active || !allowed) return;
+    document.documentElement.dataset.settingsTour = 'true';
+    return () => { delete document.documentElement.dataset.settingsTour; };
+  }, [active, allowed]);
+
   /* The place is saved as the beat's absolute index, at every stop the person reaches. */
   const onBeat = useCallback((index: number) => {
     const beats = pathRef.current;
@@ -271,15 +299,19 @@ export function SettingsTour() {
     save('progress', stop);
   }, [save]);
 
-  const finish = useCallback(async (): Promise<TourReward> => {
+  /** Complete with the answers (or none: skipped). The server grades; only a pass can earn the bonus. A retry is the same run. */
+  const finish = useCallback(async (quiz: SettingsQuizAnswers | null): Promise<SettingsFinish> => {
     const identity = run.current;
     try {
-      const result = await persist('complete', SETTINGS_ENDING_STOP);
+      const result = await persist('complete', SETTINGS_ENDING_STOP, quiz);
       completed.current = true;
-      if (slotRef.current) { slotRef.current = { ...slotRef.current, inProgress: false, completedAt: new Date().toISOString() }; setSlot(slotRef.current); }
-      const reward = readTourReward(result.reward);
-      if (reward.status === 'granted') window.dispatchEvent(new Event(PROGRESSION_CHANGED_EVENT));
-      return reward;
+      const graded = quiz ? readSettingsQuizResult(result.quiz) : null;
+      if (quiz && !graded) throw new Error('Your answers could not be checked. Try again.');
+      const reward = result.reward == null ? null : readTourReward(result.reward);
+      const claimed = reward && (reward.status === 'granted' || reward.status === 'already') ? reward.grantedAt ?? new Date().toISOString() : slotRef.current?.rewardClaimedAt;
+      if (slotRef.current) { slotRef.current = { ...slotRef.current, inProgress: false, version: DEF.version, runId: run.current.id, sequence: run.current.sequence, completedAt: slotRef.current.completedAt ?? new Date().toISOString(), rewardClaimedAt: claimed ?? null, metMinWatch: reward?.status === 'early' ? false : slotRef.current.metMinWatch }; setSlot(slotRef.current); }
+      if (reward?.status === 'granted') window.dispatchEvent(new Event(PROGRESSION_CHANGED_EVENT));
+      return { reward, quiz: graded };
     } catch (e) {
       const next = saveFailureAction(e, alive.current && run.current === identity && !isRetiredRun(identity));
       if (next === 'stop') stopForConflict();
@@ -311,17 +343,23 @@ export function SettingsTour() {
   if (!mounted || !allowed) return null;
   if (!active) {
     const open = !!slot && !slot.impersonating && slot.version === DEF.version && slot.inProgress === true;
-    const fresh = !!slot && !slot.impersonating && !open && !slot.completedAt;
+    // One chip at most, from the saved place (lib/tour/settings-tour.ts settingsChipFor): never "New here?" for
+    // someone who finished the old walk or holds the bonus, and the questions alone only after a walk that met 45 s.
+    const chip = settingsChipFor(slot, DEF.version);
+    const fresh = !open && chip === 'new';
     return <>
       {conflict && <RunConflictNotice onDismiss={() => setConflict(false)} />}
       {open && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="resume"><p>{SETTINGS_TOUR_COPY.chipResume}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.pickUp}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{SETTINGS_TOUR_COPY.startOver}</button></div>}
+      {chip === 'quiz' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="quiz"><p>{SETTINGS_TOUR_COPY.chipQuiz}</p><button type="button" disabled={loading} onClick={() => void load('quiz')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.takeQuiz}</button><button type="button" disabled={loading} onClick={() => void load('replay')}>{SETTINGS_TOUR_COPY.startOver}</button></div>}
+      {chip === 'early' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="early"><p>{SETTINGS_TOUR_COPY.chipEarly}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.startOver}</button></div>}
       {fresh && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="new"><p>{SETTINGS_TOUR_COPY.chipNew}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.showMe}</button></div>}
+      {chip === 'returning' && !conflict && !notice && !error && <div className="et-notice" style={CHIP} role="status" data-tour-chip="returning"><p>{SETTINGS_TOUR_COPY.chipReturning}</p><button type="button" disabled={loading} onClick={() => void load('replay')}>{loading ? TOUR_COPY.loading : SETTINGS_TOUR_COPY.showMe}</button></div>}
       {unsavedWarning && <div className="et-notice" role="status"><p>{TOUR_COPY.unsaved}</p><button type="button" onClick={() => { dirty.current = false; setUnsavedWarning(false); void load('open'); }}>{TOUR_COPY.unsavedConfirm}</button><button type="button" onClick={() => setUnsavedWarning(false)}>{TOUR_COPY.unsavedStay}</button></div>}
       {!conflict && (notice || error || saveError) && <div className="et-notice" role="status"><p>{saveError || error || notice}</p><button type="button" disabled={loading} onClick={() => void load('open')}>{loading ? TOUR_COPY.loading : TOUR_COPY.resume}</button><button type="button" onClick={() => { setNotice(''); setError(''); setSaveError(''); }}>{TOUR_COPY.dismiss}</button></div>}
     </>;
   }
   return createPortal(<div ref={root}>
-    <SettingsTourPlayer key={run.current.id} beats={path} start={start} accountId={slot?.accountId ?? ''} nudge={nudge}
+    <SettingsTourPlayer key={`${run.current.id}:${quizOnly}`} beats={path} start={start} quizOnly={quizOnly} bonusClaimedAt={slot?.rewardClaimedAt} accountId={slot?.accountId ?? ''} nudge={nudge}
       onBeat={onBeat} onLeave={pause} onFinish={finish} onDone={done} saveError={saveError} onRetrySave={lastWrite.current?.action === 'complete' ? undefined : retrySave} />
   </div>, document.body);
 }

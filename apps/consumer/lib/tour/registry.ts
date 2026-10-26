@@ -33,14 +33,22 @@ export interface TourDef {
   minWatchMs: number;
   /** Completing it marks users.onboarding_tour_complete (the entrance tour only). */
   completesOnboarding: boolean;
+  /**
+   * The bonus waits for a passed quiz carried on the completion write (the Settings
+   * tour, v2). Without a quiz the run completes and nothing is granted; a failed
+   * quiz completes and grants nothing; a retry on the same run is graded again.
+   */
+  quiz?: boolean;
 }
 
 export const TOURS: Record<TourId, TourDef> = {
   entrance: { id: 'entrance', version: TOUR_VERSION, stopCount: TOUR_STOP_COUNT, rewardKey: TOUR_REWARD_KEY, rewardLabel: TOUR_REWARD_LABEL, grants: true, minWatchMs: TOUR_MIN_WATCH_MS, completesOnboarding: true },
-  // SETTINGS-TOUR.md: stops are absolute indexes into SETTINGS_BEATS (13 beats
-  // across all paths) plus the ending card. The reward is 1 call at most, once
-  // per account, after at least 45 s by the database clock (the shortest path is 101.5 s).
-  settings: { id: 'settings', version: 1, stopCount: SETTINGS_STOP_COUNT, rewardKey: 'tour:settings', rewardLabel: 'Settings tour finished: extra AI action', grants: true, rewardCalls: 1, minWatchMs: 45_000, completesOnboarding: false },
+  // SETTINGS-TOUR-V2-STORYBOARD.md: stops are absolute indexes into SETTINGS_BEATS
+  // (12 beats across all paths) plus the ending card. Version 2, so a v1 saved
+  // place never resumes into v2. The reward is unchanged: 1 call at most, once per
+  // account, under tour:settings, after at least 45 s by the database clock, and
+  // now only after a passed quiz on the completion write.
+  settings: { id: 'settings', version: 2, stopCount: SETTINGS_STOP_COUNT, rewardKey: 'tour:settings', rewardLabel: 'Settings tour finished: extra AI action', grants: true, rewardCalls: 1, minWatchMs: 45_000, completesOnboarding: false, quiz: true },
   // CRM-TOUR.md: the staff tour. Stops are indexes into CRM_TOUR_BEATS plus the
   // ending. Staff tours grant nothing: the key is reserved so no other tour can
   // take it, and grants stays false for good (a bonus is a participant's thing).

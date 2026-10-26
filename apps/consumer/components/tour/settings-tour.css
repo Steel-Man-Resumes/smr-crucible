@@ -1,0 +1,96 @@
+/* Settings tour v2 (components/tour/SettingsTourPlayer.tsx, SettingsScenes.tsx).
+   Everything is scoped: .st-* classes and html[data-settings-tour], which only
+   the Settings tour sets, so the entrance and staff tours look the same. */
+
+/* While the tour holds the page the section map stops sticking, so the page
+   camera has the whole screen under the top bar (storyboard section 7). */
+html[data-settings-tour] #refinery-tool-settings-map{position:static}
+
+/* The top bar is see-through with a blur; under a 1.3 zoom the page showed through it. Solid while the tour holds the page. */
+html[data-settings-tour] .refinery-app > nav{background-color:var(--t-panel)}
+
+/* The page camera moves the cutout every frame, so it has no tween of its own. */
+.st-root .st-cutout{transition:opacity 300ms ease}
+/* One darkness on the page: the same before the cutout lands as around it, and fading in under the shrinking stage. */
+.st-root .st-dim{background:#080706a6;animation:etCut 600ms ease both}
+/* C1: a thin ring on the part the words have reached, inside the one cutout. */
+.st-ring{position:fixed;pointer-events:none;border-radius:8px;border:2px solid #dbc173cc;box-shadow:0 0 14px #dbc17355;animation:etCut 300ms ease both}
+
+/* Chip labels: the page's own words. The lit one bright, the ones shown before stay as dim labels. */
+.st-chip{position:fixed;z-index:1;pointer-events:none;white-space:nowrap;padding:5px 11px;border-radius:99px;font:700 14px/1.1 var(--t-body,system-ui,sans-serif);background:#2b261c;color:var(--et-gold);border:1px solid #dbc17366;opacity:.6;transform:translateY(-50%);transition:opacity 260ms ease,background 260ms ease,color 260ms ease,box-shadow 260ms ease}
+.st-chip[data-side=top]{transform:translate(-100%,-50%)}
+.st-chip[data-lit=true]{opacity:1;background:var(--et-gold);color:#17140e;border-color:var(--et-gold);box-shadow:0 0 18px #dbc17366}
+@media (max-width:639px){.st-chip{font-size:15px}}
+
+.st-paused{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.st-paused span{border-radius:999px;background:#000a;padding:20px}
+
+/* M1, wide: eight tiles, the page's sections in its order, each listing its real controls. */
+.st-map__k{position:absolute;margin:0;font:600 17px/1.2 var(--t-mono,ui-monospace,monospace);letter-spacing:.16em;text-transform:uppercase;color:var(--et-gold)}
+.st-tile{position:absolute;display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid #ffffff1c;border-radius:14px;background:#17150f;opacity:.62;transition:opacity 450ms ease,border-color 450ms ease,box-shadow 450ms ease,background 450ms ease}
+.st-tile[data-lit=true]{opacity:.9}
+.st-tile[data-active=true]{opacity:1;background:#1f1b12;border-color:var(--et-gold);box-shadow:0 0 0 2px #dbc17388,0 0 30px 4px #dbc17333}
+.st-tile__head{display:flex;align-items:center;gap:10px}
+.st-tile[data-lit=true] .sc-num{background:var(--et-gold);color:#17140e}
+.st-tile__label{margin:0;font-size:24px;font-weight:750;line-height:1.15;color:var(--et-ink)}
+.st-tile__list{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+.st-tile__list li{font-size:17px;line-height:1.25;color:var(--et-muted)}
+.st-tile__list li::before{content:"";display:inline-block;width:6px;height:6px;margin:0 9px 2px 0;border-radius:2px;background:#dbc17388;vertical-align:middle}
+
+/* M1, phone: one column of rows; the lit row opens to list its controls (15 px or more). */
+.st-prow{position:absolute;left:0;overflow:hidden;border:1px solid #ffffff14;border-radius:10px;background:#17150f;opacity:.7;transition:top 420ms cubic-bezier(.65,0,.3,1),height 420ms cubic-bezier(.65,0,.3,1),opacity 400ms ease,border-color 400ms ease,background 400ms ease}
+.st-prow[data-lit=true]{opacity:1;border-color:#dbc17355}
+.st-prow[data-active=true]{background:#2a2416;border-color:var(--et-gold)}
+.st-prow[data-lit=true] .ps-num{background:var(--et-gold);color:#17140e}
+.st-prow__head{display:flex;align-items:center;gap:12px;height:42px;padding:0 12px}
+.st-prow__list{margin:0;padding:0 12px 10px 54px;list-style:none;opacity:0;transition:opacity 300ms ease}
+.st-prow[data-active=true] .st-prow__list{opacity:1;transition-delay:140ms}
+.st-prow__list li{font-size:15px;line-height:24px;color:var(--et-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+@media (prefers-reduced-motion:reduce){.st-root .st-cutout,.st-chip,.st-tile,.st-prow{transition:none}.st-ring,.st-root .st-dim,.st-check{animation:none!important}}
+html.reduce-motion .st-root .st-cutout,html.reduce-motion .st-chip,html.reduce-motion .st-tile,html.reduce-motion .st-prow{transition:none}
+html.reduce-motion .st-ring,html.reduce-motion .st-root .st-dim,html.reduce-motion .st-check{animation:none!important}
+
+/* The card: why it matters, the chips on a phone, the five objectives. */
+.st-why{margin:6px 0 0;font-size:.92rem;line-height:1.45;color:var(--et-ink)}
+.st-why b{color:var(--et-gold);font-weight:700;margin-right:2px}
+.st-cardchips{display:flex;flex-wrap:nowrap;justify-content:flex-end;gap:6px;margin:8px 0 0;overflow:hidden;white-space:nowrap;mask-image:linear-gradient(90deg,transparent,#000 24px)}
+.st-cardchips span{flex:0 0 auto}
+.st-cardchips span{padding:3px 9px;border-radius:99px;font:700 13px/1.2 var(--t-body,system-ui,sans-serif);background:#2b261c;color:var(--et-gold);border:1px solid #dbc17355;opacity:.6}
+.st-cardchips span[data-lit=true]{opacity:1;background:var(--et-gold);color:#17140e}
+.st-strip{display:flex;gap:4px;justify-content:space-between;padding:8px 0 2px;border-top:1px solid #ffffff14}
+.st-strip__item{display:flex;flex:1 1 0;min-width:0;flex-direction:column;align-items:center;gap:3px;font:600 11.5px/1.15 var(--t-body,system-ui,sans-serif);color:var(--et-dim);text-align:center}
+.st-strip__item[data-done=true]{color:var(--et-ink)}
+.st-strip[data-confirmed=true]{justify-content:center;gap:14px;border-top:0}
+.st-strip[data-confirmed=true] .st-strip__item{flex:0 0 auto}
+@media (max-width:639px){.st-strip__item{font-size:12px}}
+.st-check circle{fill:none;stroke:#5a5446;stroke-width:1.6;transition:fill 300ms ease,stroke 300ms ease}
+.st-check path{fill:none;stroke:#17140e;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:18;stroke-dashoffset:18;transition:stroke-dashoffset 420ms ease 120ms}
+.st-check[data-done=true] circle{fill:var(--et-gold);stroke:var(--et-gold)}
+.st-check[data-done=true] path{stroke-dashoffset:0}
+.st-check[data-done=true][data-pop=true]{animation:stPop 420ms cubic-bezier(.16,1,.3,1) both}
+.st-strip[data-confirmed=true] .st-check circle{fill:#f0dda0;stroke:#f0dda0;filter:drop-shadow(0 0 6px #dbc17399)}
+@keyframes stPop{0%{transform:scale(.6)}60%{transform:scale(1.18)}100%{transform:scale(1)}}
+
+/* Goal and recap scenes. */
+.st-goal{display:flex;align-items:center;gap:52px;padding:0 100px;height:100%}
+.st-goal__h{margin:16px 0 0;font-size:62px;font-weight:800;line-height:1.05;color:var(--et-ink)}
+.st-goal__b{margin:20px 0 0;max-width:820px;font-size:25px;line-height:1.4;color:var(--et-muted)}
+.st-goal__s{margin:18px 0 0;font-size:19px;color:var(--et-dim);opacity:0;transition:opacity 500ms ease}
+.st-goal__s[data-on=true]{opacity:1}
+.st-agenda{margin:22px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:10px 28px}
+.st-agenda li{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:650;color:var(--et-ink);opacity:0;transform:translateY(8px);transition:opacity 450ms ease,transform 450ms cubic-bezier(.16,1,.3,1)}
+.st-agenda li[data-on=true]{opacity:1;transform:none}
+.st-agenda--p{grid-template-columns:1fr;gap:9px;margin-top:14px}
+.st-agenda--p li{font-size:17px}
+.st-pgoal{display:flex;flex-direction:column;gap:10px;padding:16px 14px}
+.st-recap{display:flex;flex-direction:column;justify-content:center;height:100%;padding:0 140px}
+.st-precap{display:flex;flex-direction:column;gap:10px;padding:16px 14px}
+.st-recap__list{margin:26px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:18px}
+.st-precap .st-recap__list{margin-top:10px;gap:12px}
+.st-recap__list li{display:flex;align-items:center;gap:16px;font-size:27px;line-height:1.3;color:var(--et-ink);opacity:0;transform:translateX(-10px);transition:opacity 450ms ease,transform 450ms cubic-bezier(.16,1,.3,1)}
+.st-precap .st-recap__list li{font-size:17px;gap:10px;align-items:flex-start}
+.st-recap__list li[data-on=true]{opacity:1;transform:none}
+.st-recap__list .st-check{flex:0 0 auto}
+.st-quiz{width:min(620px,100%);padding:0;border:0;background:transparent;box-shadow:none}
+.st-quiz .orientation-review[data-right=true]{border-left-color:#9fbf8f}

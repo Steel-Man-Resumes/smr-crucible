@@ -128,18 +128,21 @@ export function AccessibilitySettingsSection() {
         </p>
         <div className="space-y-3">
           <ToggleRow
+            id="settings-plain-language"
             label="Plain language"
             hint="Shorter words and simpler sentences from your coach."
             on={!!coach?.coachPlainLanguage}
             onToggle={() => saveCoach({ coachPlainLanguage: !coach?.coachPlainLanguage })}
           />
           <ToggleRow
+            id="settings-read-aloud"
             label="Read aloud"
             hint="Your coach can read its answers out loud."
             on={!!coach?.coachVoice}
             onToggle={() => saveCoach({ coachVoice: !coach?.coachVoice })}
           />
           <ToggleRow
+            id="settings-spanish"
             label="Spanish (Espanol)"
             hint="Your coach replies in Spanish."
             on={coach?.coachLanguage === "es"}
@@ -153,7 +156,7 @@ export function AccessibilitySettingsSection() {
 
       {/* Text size and motion: one block for the Settings tour (settings-display) */}
       <div id="settings-display" className="space-y-6">
-      <div className="border-t border-t-line pt-5">
+      <div id="settings-text-size" className="border-t border-t-line pt-5">
         <label className="text-sm font-medium text-t-white block mb-1">Text size</label>
         <p className="text-sm text-t-phos-dim mb-2">Make the words bigger across the whole app.</p>
         <div className="flex flex-wrap gap-2">
@@ -169,7 +172,7 @@ export function AccessibilitySettingsSection() {
       </div>
 
       {/* Motion */}
-      <div className="border-t border-t-line pt-5">
+      <div id="settings-motion" className="border-t border-t-line pt-5">
         <label className="text-sm font-medium text-t-white block mb-1">Motion</label>
         <p className="text-sm text-t-phos-dim mb-2">
           Cut down on animations. &quot;Match my device&quot; follows your phone or computer setting.
@@ -190,7 +193,7 @@ export function AccessibilitySettingsSection() {
       </div>
 
       {/* Density */}
-      <div className="border-t border-t-line pt-5">
+      <div id="settings-spacing" className="border-t border-t-line pt-5">
         <label className="text-sm font-medium text-t-white block mb-1">Spacing</label>
         <p className="text-sm text-t-phos-dim mb-2">Comfortable is roomier. Compact fits more on screen.</p>
         <div className="flex flex-wrap gap-2">
@@ -210,18 +213,21 @@ export function AccessibilitySettingsSection() {
 }
 
 function ToggleRow({
+  id,
   label,
   hint,
   on,
   onToggle,
 }: {
+  /** A one-line target id for the Settings tour. */
+  id?: string;
   label: string;
   hint: string;
   on: boolean;
   onToggle: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4">
+    <div id={id} className="flex items-center justify-between gap-4">
       <div className="min-w-0">
         <p className="text-sm font-medium text-t-white">{label}</p>
         <p className="text-xs text-t-phos-dim">{hint}</p>

@@ -116,7 +116,7 @@ export function ConsentPanel() {
     <section className="mb-8">
       <h2 className="text-lg font-bold text-t-white mb-4">Privacy choices</h2>
 
-      <div className="bg-t-panel border border-t-line p-5 mb-4">
+      <div className="bg-t-panel border border-t-line p-5 mb-4" id="settings-ai-memory">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 className="font-semibold text-t-white mb-1">

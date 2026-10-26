@@ -370,7 +370,9 @@ test('T1: reward keys stay per tour; the settings tour grants under its own key,
     async invalidate() {},
   };
   const run = '77777777-7777-4777-8777-777777777777';
-  const done = await handleTourWrite(store, 'u', { tourId: 'settings', version: TOURS.settings.version, runId: run, sequence: 1, stop: 3, action: 'complete' });
+  // v2: the settings bonus needs a passed quiz on the completion write (settings-tour.test.ts covers skip and fail).
+  const passed = { version: 1, answers: { reading: 1, doors: 0, devices: 1, memory: 1, delete: 0 } };
+  const done = await handleTourWrite(store, 'u', { tourId: 'settings', version: TOURS.settings.version, runId: run, sequence: 1, stop: 3, action: 'complete', quiz: passed });
   assert.equal(done.status, 200);
   assert.deepEqual(done.json.reward, { status: 'granted', calls: 1 });
   assert.deepEqual(calls, ['advance:settings', 'watched', 'grant:settings'], 'the settings grant is its own (SF-1): the write path hands the store the tour, not the entrance key');

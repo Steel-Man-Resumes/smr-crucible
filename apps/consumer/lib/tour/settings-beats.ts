@@ -1,77 +1,168 @@
 /**
- * Every word the Settings tour puts on screen (SETTINGS-TOUR.md), in one file
- * so it can be linted and edited in one place: no AI tells, no long dashes,
- * nothing the page does not show. The tour plays on the real Settings page:
- * one spotlight per stop, the card beside it, nothing pressed, nothing saved.
+ * Every word the Settings tour (v2) puts on screen, in one file so it can be
+ * linted and edited in one place: no AI tells, no long dashes, nothing the page
+ * does not show. Source: SETTINGS-TOUR-V2-STORYBOARD.md, section "v2 teaching
+ * plan, Troy 2026-10-26".
  *
- * Where each line comes from is in the spec. Short form: S1 the tour changes
- * nothing; S2 CoachSettingsSection (style, length, Save); S3 and S4
- * AccessibilitySettingsSection (reading help changes only t.ROY's replies,
- * text size and motion change the whole app at once); S5 and S6
- * SHARING_ALWAYS_TEXT.control (off stops new looks, cannot take back what was
- * read); S7a and S7b SharingControls (They would see / Stays private, "Required by",
- * "Who has opened what"); S7n the no-program line on the page; S8 Active
- * devices; S9 DataSection; S10 UsageCard; S11 SettingsLesson.
+ * The tour teaches as it guides: familiar first (how t.ROY talks, reading help
+ * and display), then sharing, then sign-in, then t.ROY's AI, then your data.
+ * One new idea per slow beat and one short line on why it matters. Fast sweeps
+ * point at things the caption already explains. Five objectives tick on the
+ * card as their chapters finish; the recap lists them; the quiz confirms them.
  */
 
 /** Which branch a stop belongs to. Branches are resolved once, before the first card. */
-export type SettingsShow = 'everyone' | 'member' | 'required' | 'nonmember';
+export type SettingsShow = 'everyone' | 'member' | 'nonmember';
+export type ObjectiveId = 'help' | 'sharing' | 'signin' | 'ai' | 'data';
+
+export interface SettingsChip {
+  /** The page's own label for the control. */
+  label: string;
+  /** Element ids or data-tour ids; every visible match is part of the chip. A chip whose target is missing is passed over. */
+  targets: readonly string[];
+}
 
 export interface SettingsBeat {
   id: string;
   show: SettingsShow;
+  /** SLOW lights one thing and holds; SWEEP hops chip to chip under one caption. */
+  kind: 'slow' | 'sweep';
+  /** The composed stage (goal, map, recap) or the real page. */
+  where: 'stage' | 'page';
+  /** Stage beats: which scene. */
+  scene?: 'goal' | 'map' | 'recap';
   title: string;
   body: string;
-  /** Element ids, the first that exists wins. New (T4) ids first, then the section id. */
-  targets: readonly string[];
-  /** Cutout height capped to this share of the viewport: the section is taller than a screen. */
+  /** One short line on why it matters to you. */
+  why?: string;
+  /** A slow page beat's target: every visible match is unioned into one cutout. */
+  targets?: readonly string[];
+  chips?: readonly SettingsChip[];
+  /** Page zoom cap on wide screens. Phones and motion-off never zoom. */
+  zoom?: number;
+  /** Per-chip dwell in ms, wide and phone. */
+  dwell?: { wide: number; phone: number };
+  /** One chip held longer, for a visible pause (X1: after Spanish). */
+  split?: { index: number; ms: number };
+  /**
+   * A slow beat whose target has parts: the word (in body then why) where each
+   * part's sentence starts. A thin ring moves to that part as the reader gets there.
+   */
+  follow?: readonly number[];
+  /** The objective this beat finishes: it ticks when the beat ends. */
+  ticks?: ObjectiveId;
+  /** Extra hold in ms (the goal card's agenda). */
+  extra?: number;
+  /**
+   * Slows the whole beat by this factor: its hold and the scene's own reveal
+   * times (Troy 2026-10-26: the first screen was too fast by about 1.75 times).
+   */
+  pace?: number;
+  /** Cutout height capped to this share of the viewport (tall cards keep their top). */
   clip?: number;
-  /** The two-door glyph sits left of the title on the teaching moment. */
+  /** The two-door glyph sits left of the title on the sharing beat. */
   glyph?: 'doors';
+  /** The tour opens Advanced settings for this beat (and puts it back when the tour closes). */
+  reveal?: 'coach-advanced';
 }
 
+/** The five things the tour teaches, in order. Short labels ride the card's strip; recap lines close the tour. */
+export const OBJECTIVES: readonly { id: ObjectiveId; short: string; agenda: string; recap: string }[] = [
+  { id: 'help', short: 'Reading help', agenda: 'Two kinds of help', recap: "Reading help changes t.ROY. Display changes the whole app." },
+  { id: 'sharing', short: 'Sharing', agenda: 'Who can see your work', recap: 'Every share is a switch you hold.' },
+  { id: 'signin', short: 'Sign-in', agenda: 'Signing in safely', recap: 'Two-step and Active devices guard your sign-in.' },
+  { id: 'ai', short: 'AI', agenda: "How t.ROY's AI works for you", recap: 'You set how t.ROY answers and what he remembers.' },
+  { id: 'data', short: 'Your data', agenda: 'Copy it, or delete it for good', recap: 'Copy on your own device. Delete is for good.' },
+];
+
+/** The stage map: the Settings page's eight sections (page.tsx SECTIONS) and the real control names in each. */
+export const MAP_TILES: readonly { id: string; label: string; controls: readonly string[] }[] = [
+  { id: 'account', label: 'Account', controls: ['Resume Contact Info', 'Your picture', 'Join a program with a code', 'Hidden Employers', 'Your finished resume by email'] },
+  { id: 'coach', label: 'Coach & AI', controls: ['Coaching style', 'Response length', 'Focus', 'Advanced settings'] },
+  { id: 'accessibility', label: 'Accessibility', controls: ['Plain language', 'Read aloud', 'Spanish (Espanol)', 'Text size', 'Motion', 'Spacing'] },
+  { id: 'privacy', label: 'Privacy & Consent', controls: ['Who can see what', 'AI memory and personalization', 'De-identified research', 'Share your success story'] },
+  { id: 'security', label: 'Security', controls: ['Password', 'Two-step verification', 'Active devices'] },
+  { id: 'data', label: 'Data', controls: ['Download your data', 'Delete my data', 'Delete my account'] },
+  { id: 'usage', label: 'Usage', controls: ['Daily Usage', 'Your AI usage'] },
+  { id: 'help', label: 'Help & About', controls: ['Help & Feedback', 'About'] },
+];
+
+const SHARING_WHY = 'Shutting one stops new looks, not what was already read.';
+/** On the required path this line replaces the sharing beat's why (the old separate "required" stop, folded in). */
+export const SHARING_REQUIRED_WHY = 'Required means your program asks for it. Stopping one is still your button, and your program will see it, so ask them first.';
+/** The goal card's pace (Troy 2026-10-26): its hold and its reveal times, slowed by 1.75. */
+export const GOAL_PACE = 1.75;
+
 export const SETTINGS_BEATS: readonly SettingsBeat[] = [
-  { id: 's1', show: 'everyone', title: 'Settings, the short way',
-    body: "This page is long, so here's the quick walk. Every switch here is your call, and nothing changes unless you change it.",
-    targets: ['refinery-tool-settings-map'] },
-  { id: 's2', show: 'everyone', title: 'How t.ROY talks to you',
-    body: 'Warm, balanced or straight to it. Short answers or full ones. Pick what fits, then press save so it sticks.',
-    targets: ['settings-coach-style', 'coach'] },
-  { id: 's3', show: 'everyone', title: 'Reading help',
-    body: "Plain language makes t.ROY use simpler words. Read aloud speaks its answers. Neither one changes the rest of the page.",
-    targets: ['settings-reading-help', 'accessibility'] },
-  { id: 's4', show: 'everyone', title: 'Bigger text, less motion',
-    body: 'Text size and motion change the whole app, right away. On a small phone, try Large text first. You can always switch back.',
-    targets: ['settings-display', 'accessibility'] },
-  { id: 's5', show: 'everyone', title: 'You decide who sees your work', glyph: 'doors', clip: 0.42,
-    body: "Each switch is a door. Off means shut. Your program knows you joined, and it sees only what's behind the doors you open.",
-    targets: ['privacy'] },
-  { id: 's6', show: 'everyone', title: 'Shutting a door',
-    body: "You can shut one any time. That stops new looks. It can't take back what someone already read, so open doors on purpose.",
-    targets: ['settings-share-progress', 'privacy'] },
-  // S7a and S7c merged (the spec's own rule: the longest path measured over 120 s in a browser).
-  // The log line keeps S7c's claim only: a name and a time per look (SharingControls "Who has opened what").
-  { id: 's7a', show: 'member', title: 'Your program, by name',
-    body: "Each switch says what they'd see and what stays private. Required ones are marked, with the reason first. Below, every look at what you shared shows a name and time.",
-    targets: ['settings-who-can-see', 'sharing-heading'] },
-  { id: 's7b', show: 'required', title: "When it's required",
-    body: 'Stopping a required one is still your button. Your program will see that you stopped, so ask them first what it means for you.',
-    targets: ['settings-required-scope', 'sharing-heading'] },
-  { id: 's7n', show: 'nonmember', title: 'No program yet',
-    body: "No program is linked to your account, so none can see your progress. Join one with a code and you'll see what it asks first.",
-    targets: ['settings-share-progress', 'privacy'] },
-  { id: 's8', show: 'everyone', title: 'On a shared computer',
-    body: "Sign out when you're done. Active devices shows where you're signed in, and you can sign the others out from here.",
-    targets: ['settings-devices', 'security'] },
-  { id: 's9', show: 'everyone', title: 'Copy it, or delete it for good', clip: 0.42,
-    body: 'Export downloads your saved work and history as a file. Delete my data clears your work and keeps your login. Delete my account removes everything.',
-    targets: ['settings-export', 'data'] },
-  { id: 's10', show: 'everyone', title: 'Your daily AI actions',
-    body: "This shows today's AI actions. Run out, and your saved work still opens. Need more? Ask t.ROY. Earned ones get added. The rest go to Troy to review.",
-    targets: ['settings-usage-today', 'usage'] },
-  { id: 's11', show: 'everyone', title: 'Come back any time',
-    body: 'The eight settings lessons sit up top for a slower read. This tour remembers where you stopped, and Help can replay it.',
-    targets: ['settings-lesson'] },
+  { id: 'g0', show: 'everyone', kind: 'slow', where: 'stage', scene: 'goal', title: 'Settings, step by step',
+    body: "By the end, you'll know what each part of this page does, and that you decide who sees your work.", extra: 900, pace: GOAL_PACE },
+  { id: 'm1', show: 'everyone', kind: 'sweep', where: 'stage', scene: 'map', title: 'The whole page',
+    body: "Eight parts, top to bottom. We'll start with the easy ones.",
+    chips: MAP_TILES.map(t => ({ label: t.label, targets: [t.id] })),
+    // Troy 2026-10-26: the tiles went by twice too fast. 2.2 s a tile (was 1.1), 2.4 s a row on a phone (was 1.2).
+    dwell: { wide: 2200, phone: 2400 } },
+  { id: 'c1', show: 'everyone', kind: 'slow', where: 'page', title: 'How t.ROY talks to you',
+    body: 'Supportive, balanced or direct. Brief or full answers. Guide me, or just answer.',
+    why: "Press save when you're done, or it won't stick.",
+    targets: ['settings-coach-choices'], zoom: 1.3, follow: [0, 4, 13] },
+  { id: 'x1', show: 'everyone', kind: 'sweep', where: 'page', title: 'Two kinds of help',
+    body: "Plain language and Spanish change only t.ROY's answers, and read aloud reads them out loud. Text size, motion and spacing change the whole app, right away.",
+    chips: [
+      { label: 'Plain language', targets: ['settings-plain-language'] },
+      { label: 'Read aloud', targets: ['settings-read-aloud'] },
+      { label: 'Spanish (Espanol)', targets: ['settings-spanish'] },
+      { label: 'Text size', targets: ['settings-text-size'] },
+      { label: 'Motion', targets: ['settings-motion'] },
+      { label: 'Spacing', targets: ['settings-spacing'] },
+    ],
+    dwell: { wide: 1700, phone: 1800 }, split: { index: 2, ms: 2200 }, ticks: 'help' },
+  { id: 'p1n', show: 'nonmember', kind: 'slow', where: 'page', title: 'You decide who sees your work', glyph: 'doors',
+    body: 'No program is linked to you, so none can see your progress. Join one and each share is a switch.',
+    why: SHARING_WHY, targets: ['settings-share-progress'], zoom: 1.3, ticks: 'sharing' },
+  { id: 'p1m', show: 'member', kind: 'sweep', where: 'page', title: 'You decide who sees your work', glyph: 'doors',
+    body: "Each switch is a door. Off means shut. Your program sees only what's behind the doors you open.",
+    why: SHARING_WHY,
+    chips: [
+      { label: 'Share your progress', targets: ['settings-share-progress'] },
+      { label: 'Who can see what', targets: ['settings-who-can-see'] },
+      { label: 'Required', targets: ['settings-required-scope'] },
+      { label: 'Who has opened what', targets: ['settings-sharing-log'] },
+    ],
+    dwell: { wide: 2200, phone: 2300 }, clip: 0.5, ticks: 'sharing' },
+  { id: 's1', show: 'everyone', kind: 'sweep', where: 'page', title: 'Your way back in',
+    body: "A password is the first lock. Two-step adds a code from an app on your phone. Active devices shows where you're signed in.",
+    why: 'Used a library computer? Press Revoke next to it in Active devices.',
+    chips: [
+      { label: 'Password', targets: ['settings-password'] },
+      { label: 'Two-step verification', targets: ['settings-two-step'] },
+      { label: 'Active devices', targets: ['settings-devices'] },
+    ],
+    dwell: { wide: 2900, phone: 2900 }, clip: 0.5, ticks: 'signin' },
+  { id: 'u1', show: 'everyone', kind: 'slow', where: 'page', title: 'Your daily AI actions',
+    // True for all three usage kinds (lib/usage-view.ts): one shared daily allowance, a count per tool on older accounts, or no daily limit.
+    body: "This card shows your daily AI limit, if your account has one.",
+    why: 'If you run out, your saved work still opens.',
+    targets: ['settings-usage-today'], zoom: 1.3 },
+  { id: 'k1', show: 'everyone', kind: 'slow', where: 'page', title: 'How creative t.ROY gets',
+    body: 'This slider changes how t.ROY answers in the chat. Focused sticks to proven steps. Exploratory adds one less obvious idea and says which is which.',
+    why: 'It only changes the chat. Press save to keep it.',
+    targets: ['settings-creativity'], zoom: 1.3, reveal: 'coach-advanced' },
+  { id: 'm2', show: 'everyone', kind: 'slow', where: 'page', title: 'What t.ROY remembers',
+    body: 'AI memory lets t.ROY pick up where you left off. Turn it off and he starts fresh each session.',
+    why: 'Your saved documents stay either way.',
+    targets: ['settings-ai-memory'], zoom: 1.2, ticks: 'ai' },
+  { id: 'd1', show: 'everyone', kind: 'sweep', where: 'page', title: 'Copy it, or delete it for good',
+    body: 'Download your data saves a copy once you tick the box that says the device is your own. Delete my data clears your work and keeps your login. Delete my account removes everything.',
+    why: 'Neither delete can be undone.',
+    chips: [
+      { label: 'Download your data', targets: ['settings-export'] },
+      { label: 'Delete my data', targets: ['settings-delete-data'] },
+      { label: 'Delete my account', targets: ['settings-delete-account'] },
+    ],
+    dwell: { wide: 3000, phone: 3000 }, clip: 0.5, ticks: 'data' },
+  { id: 'r1', show: 'everyone', kind: 'slow', where: 'stage', scene: 'recap', title: 'What you just learned',
+    // Five short lines that appear one by one with their ticks: a little longer than one card's cap.
+    body: OBJECTIVES.map(o => o.recap).join(' '), extra: 2500 },
 ];
 
 /** Saved stops are absolute indexes into SETTINGS_BEATS, never into a shortened path; the ending is one past the last beat. */
@@ -81,13 +172,27 @@ export const SETTINGS_TOUR_COPY = {
   dialogLabel: 'Settings tour with t.ROY',
   guide: 't.ROY',
   stopOf: (n: number, total: number) => `Stop ${n} of ${total}`,
-  finding: 'Finding the page',
+  whyLabel: 'Why it matters.',
+  goalKicker: 'Settings, with t.ROY',
+  goalSmall: 'Then five quick questions. Pass them and you can earn one extra AI action, one time.',
+  /** When this account already holds the Settings bonus: never promise it twice. */
+  goalSmallClaimed: 'Then five quick questions, just for practice. You already got the Settings bonus.',
+  mapKicker: 'Settings, top to bottom',
+  objectivesLabel: 'What you have learned so far',
+  ticked: (label: string) => `${label}: learned.`,
+  chipsSr: (labels: readonly string[]) => `Shown: ${labels.join(', ')}.`,
   /** The chip at the top of Settings and the control in its header. */
-  chipNew: 'New here? Take a two-minute walk through Settings.',
+  chipNew: 'New here? Take a short walk through Settings.',
+  /** Someone who finished the old walk, or already holds the bonus: not new here. */
+  chipReturning: 'Settings has a new walk, with five short questions.',
+  /** A walk finished too fast for the bonus: the way back is Start over. */
+  chipEarly: 'The bonus needs the walk watched through. Press Start over to watch it again.',
   chipResume: 'Pick up the Settings tour where you left off.',
+  chipQuiz: 'You finished the walk. Five questions and a one-time bonus are waiting.',
   showMe: 'Show me around',
   pickUp: 'Pick it up',
   startOver: 'Start over',
+  takeQuiz: 'Take the questions',
   replay: 'Replay the Settings tour',
   paused: 'Settings tour paused. Pick it back up where you left off.',
   doorsSr: 'Two doors, one open and one shut.',
@@ -115,26 +220,46 @@ export const SETTINGS_NUDGES: Record<SettingsNudge['id'], SettingsNudge> = {
     button: 'Take me to my coach settings', targets: ['settings-coach-style', 'coach'] },
 };
 
+/** The ending: the quiz intro, the questions, then the result. */
 export const SETTINGS_ENDING = {
   eyebrow: 'That was the walk',
-  notNow: 'Not now',
-  previous: 'Back to the last stop',
+  quizTitle: 'Five quick questions',
+  quizBody: 'Get all five right and you can earn one extra AI action for 24 hours, one time. No timer. Try again as often as you like.',
+  quizBodyClaimed: (date: string) => `These are for practice. You already got the Settings bonus on ${date}, so nothing more is added. No timer. Try again as often as you like.`,
+  take: 'Take the questions',
+  skip: 'Skip the questions',
+  previous: 'Back to the recap',
   finishing: 'Saving',
-  rewardNote: "Watching the tour through can add one extra AI action for 24 hours, once the server confirms it. It's for the tour, not for any setting you choose.",
+  questionOf: (n: number, total: number) => `Question ${n} of ${total}`,
+  back: 'Back',
+  nextQuestion: 'Next question',
+  check: 'Check my answers',
+  checkAgain: 'Check my answers again',
+  checking: 'Checking',
+  right: 'Right.',
+  notQuite: 'Not quite.',
+  missed: (correct: number, total: number) => `${correct} of ${total} right. The ones you missed show why. Try again as often as you like.`,
+  confirmed: 'All five confirmed.',
 };
 
 /** Reward words. Amounts and dates come from the server response, never from here. */
 export const SETTINGS_REWARD_COPY = {
   grantedTitle: 'Settings tour done. Bonus added.',
-  granted: (calls: number) => `${calls} extra AI action${calls === 1 ? '' : 's'} added for the next 24 hours. It's for the tour, not for any setting you chose.`,
+  granted: (calls: number) => `${calls} extra AI action${calls === 1 ? '' : 's'} added for the next 24 hours. It's for passing the check, not for any setting you chose.`,
   alreadyTitle: 'Settings tour done.',
-  already: (date: string) => `The Settings tour bonus is one time, and you got it on ${date}. Nothing new was added.`,
+  already: (date: string) => `The Settings bonus is one time, and you got it on ${date}. Nothing new was added.`,
   cappedTitle: 'Settings tour done.',
-  capped: "Today's bonus limit is already used, so nothing was added. Your place in the tour is saved.",
+  capped: "Today's bonus limit is already used, so nothing was added. Try the questions again another day from the top of Settings.",
+  /** Early finish by someone who already holds the bonus: practice words only. */
+  earlyClaimed: 'You already got the Settings bonus, so nothing more is added. The questions were for practice.',
   earlyTitle: 'Settings tour done.',
-  early: 'The bonus is for watching the tour through, so nothing was added this time. Replay it any time from Help.',
+  early: 'The bonus is for watching the tour through, so nothing was added this time. Press Start over at the top of Settings and watch it through.',
   unavailableTitle: 'Settings tour saved.',
   unavailable: "The bonus couldn't be confirmed yet. Try again and it won't be added twice.",
+  skippedTitle: 'Tour done.',
+  skipped: 'The bonus is for passing the five questions. To try them later, press Show me around at the top of Settings.',
+  skippedClaimedTitle: 'Tour done.',
+  skippedClaimed: 'You already got the Settings bonus. To practice the questions later, press Show me around at the top of Settings.',
   retry: 'Try the bonus again',
   close: 'Close',
 };
