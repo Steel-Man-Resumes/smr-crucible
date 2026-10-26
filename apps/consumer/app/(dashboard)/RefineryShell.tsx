@@ -31,7 +31,7 @@ import {
   setViewAs,
   type UserTier,
 } from "@/lib/useUserTier";
-import { useEffectiveRole } from "@/components/RoleProvider";
+import { useEffectiveRole, useWorkspace } from "@/components/RoleProvider";
 import {
   FORGE_LAST_SYNCED_RUN_KEY,
   eraseLocalForgeRun,
@@ -64,6 +64,8 @@ import "@/components/nav/refinery-board.css";
 import "@/components/org/org-workspace.css";
 import { OrgSidebar } from "@/components/org/OrgSidebar";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { DevModeBanner } from "@/components/DevModeBanner";
+import { usePendingAccessCode } from "@/lib/use-pending-access-code";
 import { adminSidebarShown } from "@/lib/refinery-nav";
 import { DEMO_SAMPLE_LINE, isDemoOrgName } from "@/lib/demo-line";
 import { useServerSwitches } from "@/components/ServerSwitches";
@@ -395,6 +397,8 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   // They see the in-app "Start with The Forge" state instead; every other
   // gate stays real.
   const effectiveRole = useEffectiveRole();
+  const workspace = useWorkspace();
+  const codeNotice = usePendingAccessCode();
   const laneFocus = useLaneFocus();
   useEffect(() => {
     // While the "Is it yours?" card is open (or its "Yes" is still landing),
@@ -411,6 +415,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       authStatus === "authenticated" &&
       effectiveRole !== null &&
       userTier === "client" &&
+      workspace === "participant" &&
       getViewAs() === null &&
       !effectiveRole?.impersonating &&
       onboarding.state !== "loading" &&
@@ -426,7 +431,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       // with a task picked, that page shows where the run is (no bounce back).
       window.location.href = forgeStartUrl(window.location.hostname);
     }
-  }, [authStatus, userTier, effectiveRole, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
+  }, [authStatus, userTier, workspace, effectiveRole, onboarding.state, onboarding.forgeComplete, onboarding.loads, savedAtLoads, pathname, forgePrompt, sessionData?.user?.id, laneFocus.loaded, laneFocus.task]);
 
   // Post-auth: redeem access codes + sync Forge data + sync audience tier.
   // A stored code waits until the role is known, and a platform admin's
@@ -437,19 +442,8 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   const adminSession = adminSidebarShown(effectiveRole);
   useEffect(() => {
     if (authStatus !== "authenticated" || !roleKnown) return;
-    const pendingCode = localStorage.getItem("pending_access_code");
-    if (pendingCode && (adminSession || effectiveRole?.impersonating)) {
-      localStorage.removeItem("pending_access_code");
-    } else if (pendingCode) {
-      localStorage.removeItem("pending_access_code");
-      fetch("/api/access-code/redeem", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: pendingCode }),
-      })
-        .then((r) => { if (r.ok) window.dispatchEvent(new Event(ORG_JOINED_EVENT)); })
-        .catch(() => {});
-    }
+    // The stored join code is handled by usePendingAccessCode() (house L2): it
+    // drops the code for admins and view-as, and the database refuses staff.
 
     try {
       const audience = localStorage.getItem("forge_audience");
@@ -669,7 +663,9 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   // caseload; the client toolset lives behind the explicit "client view"
   // toggle and nowhere else.
   const resolvedTier = effectiveRole?.tier ?? userTier;
-  const isOrgPartner = resolvedTier === "partner" && !!orgRole;
+  // Staff workspace from the org ROLE (house L2), never the tier.
+  void resolvedTier;
+  const isOrgPartner = workspace === "staff";
   const isOrgAdmin = orgRole === "owner" || orgRole === "org_admin";
   // ADMIN MODE (house build L1, A1 defect B1). The real account is a platform
   // admin and nothing is being viewed as someone else: the admin sidebar,
@@ -836,6 +832,8 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         <div className="min-w-0 flex-1">
         {!isOrgPartner && userTier === "client" && <Suspense fallback={null}><RefineryLaneHeader state={onboarding.state} /></Suspense>}
         <main id="main" className={`px-4 py-6 pb-32 sm:px-7 ${workChrome ? "sm:pb-8" : "sm:pb-24 md:pb-8"} lg:px-10`}>
+          <DevModeBanner />
+          {codeNotice && <p role="status" className="mb-4 border border-t-amber px-3 py-2 text-sm text-t-white">{codeNotice}</p>}
           {staffInvite && pathname !== "/dashboard/invites" && (
             <p role="status" className="mb-6 border border-t-amber/40 bg-t-panel px-4 py-3 text-sm text-t-white">
               {staffInvite.count === 1 && staffInvite.orgName

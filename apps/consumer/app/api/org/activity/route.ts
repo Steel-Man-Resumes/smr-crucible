@@ -33,12 +33,12 @@ function shape(r: ActivityRow) {
 
 export async function GET(request: Request) {
   const params = Object.fromEntries(new URL(request.url).searchParams.entries());
-  const audit = await requireOrgCapability("org.audit.view");
+  const audit = await requireOrgCapability("org.audit.view", { request });
 
   if (!audit.ok) {
     // Without the audit capability: one person's history only, for someone who may open people.
     if (!params.participantId || params.format === "csv") return audit.response;
-    const staff = await requireOrgCapability("org.client.view_content");
+    const staff = await requireOrgCapability("org.client.view_content", { request });
     if (!staff.ok) return staff.response;
     const res = await listParticipantActivity(staff.actor, params.participantId, params);
     if (!res.ok) return NextResponse.json({ error: "You do not have access to that." }, { status: 403 });

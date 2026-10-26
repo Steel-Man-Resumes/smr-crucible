@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(request: Request) {
-  const guard = await requireOrgCapability("org.client.view_content");
+  const guard = await requireOrgCapability("org.client.view_content", { request });
   if (!guard.ok) return guard.response;
   const { actor } = guard;
   if (actor.viaPlatformAdmin || (await effectiveAuth())?.user?.id !== actor.userId) {

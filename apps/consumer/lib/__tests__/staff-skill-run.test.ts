@@ -77,7 +77,7 @@ it("acceptance is the staff member's own click: a saved draft or a copy; never u
   const clients = read("../../app/api/org/clients/[id]/route.ts");
   assert.match(clients, /if \(res\.ok && body\.draftedByAssistant === true && UUID\.test\(String\(body\.skillRunId \?\? ""\)\)\) \{\s*await acceptSkillRun\(actor, String\(body\.skillRunId\)\)/);
   const accept = read("../../app/api/org/ai-skill-run/route.ts");
-  assert.match(accept, /requireOrgCapability\("org\.client\.view_content"\)/);
+  assert.match(accept, /requireOrgCapability\("org\.client\.view_content", \{ request \}\)/);
   assert.match(accept, /\(await effectiveAuth\(\)\)\?\.user\?\.id !== actor\.userId/);
   assert.doesNotMatch(accept, /INSERT|UPDATE|query\(/, "the route runs no SQL of its own");
   const page = read("../../components/org/ClientPage.tsx");

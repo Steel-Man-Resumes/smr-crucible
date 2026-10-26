@@ -94,11 +94,15 @@ test("the shell: admin mode renders the admin sidebar (desktop and phone), no ca
   assert.match(shell, /data-board-strip=\{!workChrome \? "" : undefined\}/);
 });
 
-test("the shell drops a stored join code for an admin session instead of redeeming it, and waits for the role first", () => {
+test("the shell hands a stored join code to usePendingAccessCode, which waits for the role and drops it for admins and view-as", () => {
   const shell = read("app/(dashboard)/RefineryShell.tsx");
+  assert.match(shell, /const codeNotice = usePendingAccessCode\(\);/);
   const effect = shell.slice(shell.indexOf("const roleKnown = effectiveRole !== null;"), shell.indexOf("// An open invitation to join"));
-  assert.match(effect, /if \(authStatus !== "authenticated" \|\| !roleKnown\) return;/);
-  assert.match(effect, /if \(pendingCode && \(adminSession \|\| effectiveRole\?\.impersonating\)\) \{\s*localStorage\.removeItem\("pending_access_code"\);\s*\} else if \(pendingCode\)/);
+  assert.doesNotMatch(effect, /api\/access-code\/redeem/, "the shell itself never redeems a stored code");
+  const rule = read("lib/pending-access-code.ts");
+  assert.match(rule, /if \(!role\) return "wait";/);
+  assert.match(rule, /if \(role\.impersonating\) return "drop";/);
+  assert.match(rule, /realTier === "admin"[^\n]*return "drop";/);
 });
 
 test("the shell shows one line for an open staff invitation, never while viewing as someone", () => {
@@ -135,7 +139,7 @@ test("registry: org entries follow capability and module switches; admin entries
   assert.deepEqual(work.items.map((i) => i.label), ["Today", "People", "Asks", "Referrals"]);
   const sys = adminNavWith(ext).find((g) => g.label === "System")!;
   assert.deepEqual(sys.items.map((i) => i.label), ["Health", "Coverage", "Evidence", "AI runs"]);
-  assert.deepEqual(NAV_EXTENSIONS, [], "the shipped registry is empty until the boss wires a screen");
+  for (const e of NAV_EXTENSIONS) assert.ok(e.href.startsWith("/dashboard/") && e.navId && (e.surface === "admin" || e.needs), `wired entry ${e.href} names a dashboard route, an id and (for org entries) the capability it needs`);
   // Without extensions, every role's nav is exactly what it was.
   assert.deepEqual(orgNavFor(caps("staff", STAFF_PRESETS.volunteer.denies)).map((g) => g.label), ["Work", "Records", "Organization"]);
 });
