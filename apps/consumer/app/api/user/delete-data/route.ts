@@ -66,6 +66,7 @@ import bcrypt from "bcryptjs";
 import { checkAuthRateLimits, getClientIp, reauthRateLimits } from "@/lib/auth-rate-limit";
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { settingsRefusal } from "@/lib/settings-guard";
+import { deletionProofError } from "@/lib/deletion-confirmation";
 import {
   query,
   queryAsUser,
@@ -90,6 +91,9 @@ export async function DELETE(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
+  if (body?.expectedUserId !== undefined && body.expectedUserId !== userId) {
+    return NextResponse.json({ error: "The signed-in account changed. Reload Settings before deleting anything." }, { status: 409 });
+  }
   if (body?.confirm !== true) {
     return NextResponse.json(
       { error: "Set confirm: true to acknowledge this permanently deletes your data." },
@@ -111,22 +115,13 @@ export async function DELETE(req: Request) {
     "SELECT password_hash FROM users WHERE id = $1",
     [userId]
   );
-  if (account?.password_hash) {
-    const password = typeof body?.password === "string" ? body.password : "";
-    const valid = password && (await bcrypt.compare(password, account.password_hash));
-    if (!valid) {
-      return NextResponse.json(
-        { error: "Enter your password to confirm account deletion." },
-        { status: 400 }
-      );
-    }
-  } else {
-    if (body?.typedConfirmation !== "DELETE") {
-      return NextResponse.json(
-        { error: 'Type "DELETE" in typedConfirmation to confirm account deletion.' },
-        { status: 400 }
-      );
-    }
+  if (!account) {
+    return NextResponse.json({ error: "Sign in again before deleting data." }, { status: 401 });
+  }
+  // Password accounts prove the password; no-password accounts type "DELETE".
+  const proofError = await deletionProofError(account.password_hash, body, (password, hash) => bcrypt.compare(password, hash));
+  if (proofError) {
+    return NextResponse.json(proofError, { status: 400 });
   }
 
   try {
@@ -146,6 +141,11 @@ export async function DELETE(req: Request) {
     await deleteAllRevisions(userId);
     // The newest writer's receipt per run (081): nonces only, owner only.
     await deleteAllWriterReceipts(userId);
+    // Applications first: job_application points at resumes, cover letters and
+    // disclosure plans in refinery_artifact with no ON DELETE action (migrations
+    // 011 and 031), so deleting the artifacts first fails on the foreign key and
+    // leaves a half-finished delete (production, 2026-10-26).
+    await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     // refinery_artifact has CASCADE on user_id, but be explicit
     await queryAsUser(userId, "DELETE FROM refinery_artifact WHERE user_id = $1", [userId]);
     // Career lanes (074): after the artifacts that point at them. Owner-only
@@ -159,7 +159,6 @@ export async function DELETE(req: Request) {
     await queryAsUser(userId, "DELETE FROM lane_tool_intro WHERE user_id = $1", [userId]);
     // The practice record (076): owner only, deleted as the person.
     await queryAsUser(userId, "DELETE FROM practice_entry WHERE user_id = $1", [userId]);
-    await queryAsUser(userId, "DELETE FROM job_application WHERE user_id = $1", [userId]);
     await query("DELETE FROM decision_log WHERE user_id = $1", [userId]);
     await query("DELETE FROM ai_usage WHERE user_id = $1", [userId]);
     // ai_token_usage is the newer per-call token ledger (migration 022) that the
@@ -241,7 +240,7 @@ export async function DELETE(req: Request) {
   } catch (err: any) {
     console.error("Data deletion error:", err?.message || err);
     return NextResponse.json(
-      { error: "Failed to delete data. Please try again." },
+      { error: "Deletion did not finish. Some data may already have been removed. Please try again." },
       { status: 500 }
     );
   }

@@ -31,6 +31,7 @@ const PAGE_SOURCES = [
   'app/(dashboard)/dashboard/settings/page.tsx', 'components/CoachSettingsSection.tsx', 'components/AccessibilitySettingsSection.tsx',
   'components/AvatarSettingsSection.tsx', 'components/PackageEmailSetting.tsx', 'components/SharingControls.tsx', 'components/SharingConsentSection.tsx',
   'components/ConsentPanel.tsx', 'components/DecisionLogViewer.tsx', 'components/AiCostsSection.tsx', 'components/SupportRequestsSection.tsx',
+  'components/settings/DeleteDataControls.tsx',
 ];
 
 test('pace: the map walks its eight tiles at 2.2 s (Troy: half the speed), 2.4 s a row on a phone; the open and the shrink are unchanged', () => {

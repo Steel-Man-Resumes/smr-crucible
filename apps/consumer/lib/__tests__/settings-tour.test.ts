@@ -79,8 +79,11 @@ test('targets: every id the beats, chips and nudges point at exists on the Setti
   const sources = [
     'app/(dashboard)/dashboard/settings/page.tsx', 'components/CoachSettingsSection.tsx', 'components/AccessibilitySettingsSection.tsx',
     'components/SharingConsentSection.tsx', 'components/SharingControls.tsx', 'components/tour/SettingsLesson.tsx', 'components/ConsentPanel.tsx',
+    'components/settings/DeleteDataControls.tsx',
   ].map(read).join('\n');
   const ids = new Set<string>();
+  // The delete cards (components/settings/DeleteDataControls.tsx) carry their tour ids in one ternary.
+  for (const m of read('components/settings/DeleteDataControls.tsx').matchAll(/"(settings-delete-(?:data|account))"/g)) ids.add(m[1]);
   for (const m of sources.matchAll(/\b(?:id|data-tour)=(?:"([^"]+)"|\{[^}]*?"([^"]+)"[^}]*\})/g)) ids.add(m[1] ?? m[2]);
   for (const m of sources.matchAll(/\bid="(settings-[a-z-]+)"/g)) ids.add(m[1]);
   const wanted = new Set<string>();

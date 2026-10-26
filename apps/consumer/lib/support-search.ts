@@ -306,7 +306,8 @@ export function directoryScope(r: ResourceAppRow): ServiceScope {
   if (level === "city") {
     return { level, state: st, cities: r.city ? [foldName(r.city)] : [], zips, label: [r.city ? titleCase(r.city) : null, st].filter(Boolean).join(", ") };
   }
-  const named = [...(r.counties ?? []), ...(r.county ? [r.county] : [])].filter((c) => typeof c === "string" && c.trim());
+  // county may hold a list ("Kent, Ottawa" or "KENT; OTTAWA") on older multi-county rows: split it, as the SQL place match does
+  const named = [...new Set([...(r.counties ?? []), ...(r.county ? r.county.split(/\s*[,;]\s*/) : [])].filter((c) => typeof c === "string" && c.trim()))];
   const counties = [...new Set(named.map(countyKeyOf))];
   const label = named.length === 1
     ? `${titleCase(countyWord(named[0]))}, ${st}`

@@ -129,11 +129,12 @@ export function resourcePlaceWhere(opts: ResourcePlaceQuery): { where: string; p
     params.push(state, countyKeys, cityKey, zip);
     const city = `${sqlFold("city")} = $4::text`;
     const zipHit = "left(zip, 5) = $5::text";
+    // county may hold a list ("Kent, Ottawa" or "KENT; OTTAWA") on older multi-county rows, so it is split before matching.
     {
       where += `(geo_scope = 'national' OR (state = $2 AND (
            geo_scope = 'statewide'
         OR (geo_scope IN ('county', 'multi_county') AND (
-             ${sqlFoldCounty("county")} = ANY($3::text[])
+             EXISTS (SELECT 1 FROM unnest(regexp_split_to_array(county, '\\s*[,;]\\s*')) AS k(n) WHERE ${sqlFoldCounty("k.n")} = ANY($3::text[]))
           OR EXISTS (SELECT 1 FROM unnest(counties) AS c(n) WHERE ${sqlFoldCounty("c.n")} = ANY($3::text[]))
           OR ${city}
           OR ${zipHit}))

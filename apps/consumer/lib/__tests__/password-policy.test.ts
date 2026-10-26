@@ -21,6 +21,12 @@ describe("passwordProblem", () => {
   it("accepts a plain, long-enough password", () => {
     assert.equal(passwordProblem("river stone 42"), null);
   });
+  it("does not silently truncate new passwords at bcrypt's 72-byte boundary", () => {
+    assert.equal(passwordProblem("A1" + "x".repeat(70)), null);
+    assert.match(passwordProblem("A1" + "x".repeat(71)) || "", /too long/);
+    assert.equal(passwordProblem("A1" + "é".repeat(35)), null);
+    assert.match(passwordProblem("A1" + "é".repeat(36)) || "", /too long/);
+  });
   it("refuses non-strings and absurd lengths", () => {
     assert.notEqual(passwordProblem(undefined), null);
     assert.notEqual(passwordProblem(12345678901), null);

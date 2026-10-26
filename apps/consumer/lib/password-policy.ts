@@ -24,7 +24,10 @@ export const PASSWORD_HINT = `${PASSWORD_MIN_LENGTH}+ characters, with a letter 
 export function passwordProblem(pw: unknown): string | null {
   if (typeof pw !== "string" || pw.length < PASSWORD_MIN_LENGTH)
     return `Use at least ${PASSWORD_MIN_LENGTH} characters.`;
-  if (pw.length > 200) return "Use 200 characters or fewer.";
+  // The current bcrypt storage ignores bytes after 72. Reject new passwords
+  // that would silently lose their ending; existing sign-in remains unchanged.
+  if (pw.length > 72 || new TextEncoder().encode(pw).length > 72)
+    return "That password is too long. Use fewer characters; some letters and symbols take more space.";
   if (!/[a-zA-Z]/.test(pw) || !/[0-9]/.test(pw))
     return "Include at least one letter and one number.";
   if (COMMON.has(pw.toLowerCase()))
