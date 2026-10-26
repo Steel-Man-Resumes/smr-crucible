@@ -257,7 +257,7 @@ test('B1: the daily AI caption holds for all three usage kinds and claims nothin
   const u1 = beat('u1');
   const caption = `${u1.title} ${u1.body} ${u1.why}`;
   assert.doesNotMatch(caption, /spend from|same count|count of|shared|each tool|allowance/i, 'no claim that only one kind of card makes');
-  assert.match(u1.body, /today's AI use and any daily limit/);
+  assert.match(u1.body, /your daily AI limit, if your account has one/);
   const base = { used: 2, bonus: 0, bonusLeft: 0, bonusExpiresAt: null, resetsAt: new Date().toISOString(), blockedReason: null, ceilings: [] };
   const kinds: UsageView[] = [
     { ...base, kind: 'allowance', remaining: 18, base: 20, perTool: null } as UsageView,
@@ -403,4 +403,12 @@ test('SF5: neither the quiz key nor the tour write path is reachable from any cl
   }
   assert.match(read('app/api/coach/route.ts'), /coachCreativityNote\(profile\.coachCreativity\)/);
   assert.ok(graph('app/api/coach/route.ts').has('lib/ai/troy-chat.ts'), 'the Refinery chat is where the slider applies');
+});
+
+test('review R2-B1: an early finish by someone who already holds the bonus never sends them to Start over', () => {
+  const [, claimedEarly] = settingsRewardMessage({ status: 'early' } as never, true);
+  assert.doesNotMatch(claimedEarly, /Start over|watch it through/i, 'no Start over for a bonus they already hold');
+  assert.match(claimedEarly, /already got the Settings bonus/);
+  const [, freshEarly] = settingsRewardMessage({ status: 'early' } as never, false);
+  assert.match(freshEarly, /Start over/, 'someone without the bonus is still pointed at Start over');
 });

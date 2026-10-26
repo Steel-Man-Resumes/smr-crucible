@@ -140,7 +140,7 @@ export const SETTINGS_BEATS: readonly SettingsBeat[] = [
     dwell: { wide: 2900, phone: 2900 }, clip: 0.5, ticks: 'signin' },
   { id: 'u1', show: 'everyone', kind: 'slow', where: 'page', title: 'Your daily AI actions',
     // True for all three usage kinds (lib/usage-view.ts): one shared daily allowance, a count per tool on older accounts, or no daily limit.
-    body: "This card shows today's AI use and any daily limit on your account.",
+    body: "This card shows your daily AI limit, if your account has one.",
     why: 'If you run out, your saved work still opens.',
     targets: ['settings-usage-today'], zoom: 1.3 },
   { id: 'k1', show: 'everyone', kind: 'slow', where: 'page', title: 'How creative t.ROY gets',
@@ -250,6 +250,8 @@ export const SETTINGS_REWARD_COPY = {
   already: (date: string) => `The Settings bonus is one time, and you got it on ${date}. Nothing new was added.`,
   cappedTitle: 'Settings tour done.',
   capped: "Today's bonus limit is already used, so nothing was added. Try the questions again another day from the top of Settings.",
+  /** Early finish by someone who already holds the bonus: practice words only. */
+  earlyClaimed: 'You already got the Settings bonus, so nothing more is added. The questions were for practice.',
   earlyTitle: 'Settings tour done.',
   early: 'The bonus is for watching the tour through, so nothing was added this time. Press Start over at the top of Settings and watch it through.',
   unavailableTitle: 'Settings tour saved.',

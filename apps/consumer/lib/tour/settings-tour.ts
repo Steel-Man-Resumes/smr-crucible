@@ -212,7 +212,8 @@ export function settingsRewardMessage(reward: TourReward | null, claimed = false
     case 'granted': return [SETTINGS_REWARD_COPY.grantedTitle, SETTINGS_REWARD_COPY.granted(reward.calls)];
     case 'already': return [SETTINGS_REWARD_COPY.alreadyTitle, SETTINGS_REWARD_COPY.already(formatDay(reward.grantedAt))];
     case 'capped': return [SETTINGS_REWARD_COPY.cappedTitle, SETTINGS_REWARD_COPY.capped];
-    case 'early': return [SETTINGS_REWARD_COPY.earlyTitle, SETTINGS_REWARD_COPY.early];
+    // A bonus holder who stepped through fast gets the practice words, never a Start over for a bonus they hold (review R2-B1).
+    case 'early': return claimed ? [SETTINGS_REWARD_COPY.alreadyTitle, SETTINGS_REWARD_COPY.earlyClaimed] : [SETTINGS_REWARD_COPY.earlyTitle, SETTINGS_REWARD_COPY.early];
     default: return [SETTINGS_REWARD_COPY.unavailableTitle, SETTINGS_REWARD_COPY.unavailable];
   }
 }
