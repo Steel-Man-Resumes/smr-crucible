@@ -18,6 +18,11 @@
  * Layout (CRM lane C2, 2026-10-25): header card, the seven-station strip, an
  * at-a-glance row, five tabs, and a t.ROY rail. Same data doors as before:
  * /api/org/clients/[id], /api/org/prefs, /api/org/tasks. Nothing new is read.
+ *
+ * House lane L5 (2026-10-26) adds a Timeline tab and a Referrals tab (the
+ * organization's own records only: /api/org/clients/[id]/timeline,
+ * /api/org/referrals), the phone-and-other-names record, an autosaved note
+ * box, and anchors (#note-, #task-, #referral-) the timeline links land on.
  */
 import { orgNoteDraftKey } from "@/lib/org-note-draft";
 import { useCallback, useEffect, useState } from "react";
@@ -26,6 +31,11 @@ import { OutcomesPanel } from "@/components/org/OutcomesPanel";
 import { EnrollmentsPanel } from "@/components/org/EnrollmentsPanel";
 import { useOrgTerms } from "@/lib/use-org-terms";
 import { CustomFieldsPanel } from "@/components/org/CustomFieldsPanel";
+import { PersonTimeline } from "@/components/org/PersonTimeline";
+import { ReferralsPanel } from "@/components/org/Referrals";
+import { ParticipantContactPanel } from "@/components/org/ParticipantContactPanel";
+import { DraftStatus } from "@/components/org/DraftStatus";
+import { useAutosaveDraft } from "@/lib/use-autosave-draft";
 import { STAFF_TROY_READY } from "@/lib/staff-troy";
 import { GlanceRow, PersonHeaderCard, PersonRail, Skeleton, StationStrip, TheirScreenBoard, scopeStateText } from "@/components/org/PersonOverview";
 import {
@@ -142,6 +152,26 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
     if (!client || !opened || !startTab) return;
     setTab(startTab); setItem(null); setShared(null);
   }, [startTab]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A timeline link lands on its source: once the tab's rows are drawn, scroll to #note-..., #task-..., #referral-...
+  useEffect(() => {
+    if (!client || typeof window === "undefined" || !window.location.hash) return;
+    const target = window.location.hash.slice(1);
+    if (!/^[a-z]+-[0-9a-z-]{1,60}$/.test(target)) return;
+    let tries = 0;
+    const t = setInterval(() => {
+      const el = document.getElementById(target);
+      if (el || ++tries > 12) {
+        clearInterval(t);
+        el?.scrollIntoView({ block: "center" });
+        if (el) {
+          el.classList.add("ring-2", "ring-t-amber"); setTimeout(() => el.classList.remove("ring-2", "ring-t-amber"), 2500);
+          // Landed: drop the hash so a later tab switch does not jump again.
+          try { window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search); } catch { /* ignore */ }
+        }
+      }
+    }, 250);
+    return () => clearInterval(t);
+  }, [client, tab, startTab]);
 
   if (error === "missing") return (
     <Shell>
@@ -172,6 +202,7 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
       <EnrollmentsPanel clientId={clientId} first={first} />
       {/* The organization's own fields (104). Renders nothing until an organization defines some. */}
       <CustomFieldsPanel clientId={clientId} first={first} />
+      <ParticipantContactPanel clientId={clientId} first={first} />
 
       <div className={`grid gap-5 ${STAFF_TROY_READY ? "lg:grid-cols-[minmax(0,1fr)_17rem]" : ""}`}>
         <div className="min-w-0">
@@ -184,7 +215,11 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
             ))}
           </div>
 
-          {tab === "tasks" ? (
+          {tab === "timeline" ? (
+            <PersonTimeline clientId={clientId} first={first} />
+          ) : tab === "referrals" ? (
+            <ReferralsPanel clientId={clientId} first={first} userId={viewer?.userId ?? null} />
+          ) : tab === "tasks" ? (
             <>
               <TasksPanel clientId={clientId} first={first} tasks={tasks} reload={loadTasks} />
               <h2 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mt-8 mb-3">Suggestions</h2>
@@ -300,7 +335,7 @@ function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; firs
       {!tasks ? <p className="text-sm text-t-phos-dim">Getting tasks...</p> : tasks.length === 0 ? <p className="text-sm text-t-phos-dim">No tasks yet. A task you add here can show on {first}&apos;s dashboard, or stay yours.</p> : (
         <ul className="space-y-2">
           {tasks.map((t) => (
-            <li key={t.id} className="bg-t-panel border border-t-line px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+            <li key={t.id} id={`task-${t.id}`} className="bg-t-panel border border-t-line px-4 py-3 flex flex-wrap items-center justify-between gap-3 scroll-mt-24">
               <div>
                 <p className={`text-sm ${t.done_at ? "text-t-phos-dim line-through" : "text-t-white"}`}>{t.title}</p>
                 <p className="text-xs text-t-phos-dim">
@@ -580,6 +615,11 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
   // it sits in this box, marked, until the staff member saves or discards it.
   const draftKey = viewerId ? orgNoteDraftKey(viewerId, clientId) : null;
   const [draft, setDraft] = useState<{ purpose: "case_note" | "check_in"; skillRunId?: string } | null>(null);
+  // Autosave (house lane L5): every 10 s while typing and on blur, back after a
+  // refresh, only ever visible to the person typing. Cleared when the note saves.
+  // Off while a t.ROY draft is in the box: restored later it would lose its
+  // "drafted with t.ROY" mark, and a person would become the author of words they did not write.
+  const autosave = useAutosaveDraft({ userId: viewerId, clientId, kind: "note", value: body, setValue: setBody, enabled: canWrite && !draft });
   useEffect(() => {
     if (!draftKey) return;
     try {
@@ -604,7 +644,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "add_note", body, kind, draftedByAssistant: !!draft, skillRunId: draft?.skillRunId }) });
     setBusy(false);
-    if (res.ok) { setBody(""); setKind(defaultKind); clearDraft(); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+    if (res.ok) { setBody(""); setKind(defaultKind); clearDraft(); autosave.clear(); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
   }
   // A draft check-in becomes an "Email" only when the person who saved it
   // says they sent it. The kind change is kept as an earlier version.
@@ -634,11 +674,14 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
                 ? "Draft check-in from t.ROY. Nothing was sent. If you save it, it is filed as a draft until you mark it sent."
                 : "Draft case note from t.ROY. It is not saved. Read it, fix anything that is wrong, then save it or throw it away."}
               {" "}If you save it, the note says it was drafted with t.ROY.
-              <button type="button" onClick={() => { setBody(""); setKind(defaultKind); clearDraft(); }} className="t-focus ml-2 underline">Throw it away</button>
+              <button type="button" onClick={() => { setBody(""); setKind(defaultKind); clearDraft(); autosave.clear(); }} className="t-focus ml-2 underline">Throw it away</button>
             </div>
           )}
-          <textarea id="note-body" value={body} onChange={(e) => setBody(e.target.value)} rows={3} maxLength={8000}
-            className="plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 mb-3" />
+          <textarea id="note-body" value={body} onChange={(e) => setBody(e.target.value)} onBlur={autosave.onBlur} rows={3} maxLength={8000}
+            className="plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2" />
+          <DraftStatus restoredAt={autosave.restoredAt} statusText={autosave.statusText}
+            onStartOver={() => { setBody(""); autosave.clear(); }} onDismiss={autosave.dismissRestored} />
+          <div className="mb-3" />
           <div className="flex flex-wrap items-center gap-4">
             <label className="text-xs text-t-phos-dim">Type{" "}
               <select value={kind} onChange={(e) => setKind(e.target.value)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5 ml-1">
@@ -661,7 +704,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
             const mine = canWrite && !!viewerId && n.author_user_id === viewerId;
             const isEditing = editing?.id === n.id;
             return (
-              <li key={n.id} className="bg-t-panel border border-t-line p-4">
+              <li key={n.id} id={`note-${n.id}`} className="bg-t-panel border border-t-line p-4 scroll-mt-24">
                 <p className="text-xs text-t-phos-dim mb-1">
                   {n.kind === "draft" ? "Check-in draft, not sent" : NOTE_KINDS.find(([k]) => k === n.kind)?.[1] ?? "Note"} · {day(n.occurred_at)} · {n.author_name || "Staff"}
                   {n.drafted_by_assistant ? " · drafted with t.ROY" : ""}{n.edited_at ? ` · corrected ${day(n.edited_at)}` : ""}

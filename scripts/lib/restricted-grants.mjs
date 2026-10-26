@@ -149,6 +149,12 @@ export const RESTRICTED_GRANTS = {
   org_unit: ["SELECT", "INSERT", "UPDATE"],
   unit_member: ["SELECT", "INSERT", "UPDATE", "DELETE"],
   enrollment: ["SELECT", "INSERT", "UPDATE"],
+  // House L5 (105). The org's contact record and referrals are kept, never
+  // deleted; referral history is written only by its trigger. (staff_draft
+  // is the author's own scratch: SELECT, INSERT, UPDATE, DELETE, owner-only RLS.)
+  participant_contact: ["SELECT", "INSERT", "UPDATE"],
+  referral: ["SELECT", "INSERT", "UPDATE"],
+  referral_event: ["SELECT"],
 };
 
 /**
@@ -171,6 +177,14 @@ export const APP_FUNCTIONS = [
   // 104: the manager check inside the custom field, view and layout policies.
   "smr_org_manager(uuid)",
   "smr_org_staff_session(uuid)",
+  // 105: called as the app role by the referral guard, the contact guard and
+  // its generated column, the referral path check and the draft save.
+  "smr_phone_digits(text)",
+  "smr_referral_next(text)",
+  "smr_referral_consent(uuid, uuid)",
+  "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
+  "smr_purge_stale_staff_drafts()",
+  "smr_retention_task_marks()",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -187,6 +201,9 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   "custom_field_activity()",
   "org_customization_activity()",
   "custom_field_value_keep_version()",
+  // 105: the retention task maker and its owner rule run only from definer triggers.
+  "smr_make_retention_tasks(uuid)",
+  "smr_retention_task_owner(uuid, uuid, uuid)",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */

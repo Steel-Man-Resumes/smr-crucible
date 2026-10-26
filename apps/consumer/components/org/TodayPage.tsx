@@ -303,6 +303,7 @@ function agendaWhat(i: TodayItemView): string {
   if (i.section === "interview_stalled") return "stalled interview";
   if (i.section === "followups") return "follow-up";
   if (i.section === "retention") return "retention check-in";
+  if (i.section === "referrals") return "referral past due";
   return i.reason.replace(/ \((was )?due [^)]*\)/, "").replace(/ · shared with .*$/, "");
 }
 

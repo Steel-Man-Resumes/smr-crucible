@@ -29,6 +29,7 @@ it("clears the previous person's local and session state, including staff drafts
   const session = memStore({
     [`${BATCH_STORAGE_PREFIX}abc`]: "{}", [BATCH_HANDOFF_KEY]: "{}", resume_target_job: "{}",
     [`${ORG_NOTE_DRAFT_PREFIX}staff:participant`]: "note about someone else",
+    "staff-draft:staff:org:participant:note": '{"body":"unsent note about someone else","at":1}',
     rush_result: "{}", rush_target: "{}", "forge-record-choice:run1": "x",
     unrelated_tab_pref: "1",
   });

@@ -386,6 +386,7 @@ async function main() {
   await requiredSharingChecks();
   await todayAndTaskChecks();
   await outcomeChecks();
+  await workflowChecks();
   await ownerOnlyChecks();
   await participantTableChecks();
   await seatChecks();
@@ -1013,6 +1014,109 @@ async function outcomeChecks() {
     && core.summarizeOutcomes(await core.listOutcomes(aOwner)).leftForBetter === 1);
   const del = await (async () => { try { await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`DELETE FROM outcome_record WHERE id = ${o1.id}`]); return null; } catch (e) { return String(e.message); } })();
   check("an outcome cannot be deleted by the app", !!del && /permission denied/i.test(del), del ?? "deleted");
+}
+
+/**
+ * Staff workflow (105, house lane L5): drafts are their author's alone;
+ * referrals, their history, retention tasks, search and the timeline are
+ * reach-scoped and sealed between organizations, IN THE DATABASE as well as in
+ * core: raw reads as the app role, with the app's own checks skipped, see nothing.
+ */
+async function workflowChecks() {
+  console.log("\n  -- workflow: drafts, referrals, retention tasks, search, timeline --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("wf-owner"), cm = await mkUser("wf-cm"), other = await mkUser("wf-other"), spy = await mkUser("wf-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOWF" + uniq}, ${P + " workflow"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOWG" + uniq}, ${P + " workflow2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("wf-pat"), hers = await mkUser("wf-hers"), quiet = await mkUser("wf-quiet");
+  for (const u of [pat, hers, quiet]) await core.redeemAccessCode(u, org.code);
+  await joinCohortConsent(pat);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES
+            (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${hers}, ${other}, ${owner}), (${org.id}, ${quiet}, ${cm}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aOther = await A(other), aOwner = await A(owner), aSpy = await A(spy);
+  const rawAs = async (orgId, userId, query) => (await app.transaction([
+    app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${userId}, true)`, query(app),
+  ]))[2];
+
+  // drafts: owner only
+  const d1 = await core.saveStaffDraft(aCm, pat, "note", "Talked through the bus pass");
+  check("a case manager's note autosaves as a draft", d1.ok === true, JSON.stringify(d1));
+  check("they get it back after a refresh", (await core.getStaffDraft(aCm, pat, "note"))?.body === "Talked through the bus pass");
+  check("the owner cannot read it, even from the table", (await core.getStaffDraft(aOwner, pat, "note")) === null
+    && (await rawAs(org.id, owner, (a) => a`SELECT id FROM staff_draft`)).length === 0);
+  check("a colleague cannot", (await rawAs(org.id, other, (a) => a`SELECT id FROM staff_draft`)).length === 0);
+  check("another organization cannot", (await rawAs(org2.id, spy, (a) => a`SELECT id FROM staff_draft`)).length === 0);
+  check("no draft about someone out of reach", (await core.saveStaffDraft(aCm, hers, "note", "x")).ok === false);
+  check("clearing it after the real save leaves nothing", (await core.clearStaffDraft(aCm, pat, "note")) && (await core.getStaffDraft(aCm, pat, "note")) === null);
+
+  // referrals: reach and orgs, in the database
+  const r1 = await core.createReferral(aCm, { clientId: pat, toKind: "other", toName: "Isotest Boot Fund", reason: "Boots for the first shift", send: true });
+  check("a case manager refers their person", r1.ok === true, JSON.stringify(r1));
+  check("a colleague cannot refer someone not theirs", (await core.createReferral(aOther, { clientId: pat, toKind: "other", toName: "X Place" })).ok === false);
+  check("the colleague lists none of it", (await core.listReferrals(aOther, { filter: "all" })).length === 0);
+  check("and the DATABASE shows the colleague none of it, reading the tables directly",
+    (await rawAs(org.id, other, (a) => a`SELECT id FROM referral`)).length === 0 && (await rawAs(org.id, other, (a) => a`SELECT id FROM referral_event`)).length === 0);
+  check("another organization sees none of it, in core or in the table",
+    (await core.listReferrals(aSpy, { filter: "all" })).length === 0 && (await rawAs(org2.id, spy, (a) => a`SELECT id FROM referral`)).length === 0);
+  check("the owner sees it", (await core.listReferrals(aOwner, { filter: "all" })).some((r) => r.id === r1.id));
+  check("a colleague cannot move it", (await core.moveReferral(aOther, r1.id, { to: "accepted" })).ok === false);
+  check("a case manager cannot hand it to a colleague (that is assigning work)", (await core.updateReferral(aCm, r1.id, { ownerId: other })).ok === false);
+  check("an owner cannot hand it to someone who does not reach the person", (await core.updateReferral(aOwner, r1.id, { ownerId: other })).ok === false);
+  check("the case manager can, along the path", (await core.moveReferral(aCm, r1.id, { to: "accepted" })).ok === true
+    && (await core.moveReferral(aCm, r1.id, { to: "closed" })).ok === false);
+  const hist = await core.getReferralHistory(aCm, r1.id);
+  check("every move is in its history", hist?.map((e) => e.to_status).join() === "sent,accepted", JSON.stringify(hist));
+  const forged = await (async () => { try { await rawAs(org.id, cm, (a) => a`INSERT INTO referral_event (referral_id, access_code_id, participant_user_id, to_status) VALUES (${r1.id}, ${org.id}, ${pat}, 'closed')`); return null; } catch (e) { return String(e.message); } })();
+  check("the app cannot write referral history", !!forged && /permission denied/i.test(forged), forged ?? "inserted");
+  const rawOther = await (async () => { try { await rawAs(org.id, cm, (a) => a`INSERT INTO referral (access_code_id, participant_user_id, to_kind, to_name, created_by) VALUES (${org.id}, ${hers}, 'other', 'Raw', ${cm})`); return null; } catch (e) { return String(e.message); } })();
+  check("nor insert one for someone out of reach, skipping core", !!rawOther, rawOther ?? "inserted");
+  const rp = await core.createReferral(aCm, { clientId: pat, toKind: "partner_org", toName: "Isotest Partner Center", send: true });
+  const rpRow = (await core.listReferrals(aCm, { filter: "draft" })).find((r) => r.id === rp.id);
+  check("a partner referral stays a draft without the person's consent", rp.ok === true && rpRow?.status === "draft" && rpRow?.consent_ok === false && !!rp.note);
+  check("and cannot be sent", (await core.moveReferral(aCm, rp.id, { to: "sent" })).ok === false);
+
+  // retention tasks
+  const ago = (d) => new Date(Date.now() - d * 86400000).toISOString().slice(0, 10);
+  const o = await core.recordOutcome(aCm, { clientId: pat, employer: "Isotest Fabrication", startDate: ago(40), source: "staff_reported" });
+  const auto = ((await core.listStaffTasks(aCm, { clientId: pat })) ?? []).filter((t) => t.source_kind === "retention");
+  check("a placement makes its 30, 90 and 180-day tasks for the case manager", o.ok && auto.map((t) => t.source_mark).sort((x, y) => x - y).join() === "30,90,180"
+    && auto.every((t) => t.owner_user_id === cm), JSON.stringify(auto.map((t) => [t.source_mark, t.owner_user_id === cm])));
+  const [{ n: again }] = await sql`SELECT public.smr_make_retention_tasks(${o.id}::uuid) AS n`;
+  check("making them again makes none", again === 0);
+  await core.recordRetentionCheck(aCm, { outcomeId: o.id, dayMark: 30, status: "employed", method: "participant_told_me" });
+  const after = ((await core.listStaffTasks(aCm, { clientId: pat, includeDone: true })) ?? []).find((t) => t.source_kind === "retention" && t.source_mark === 30);
+  check("answering the 30-day check-in finishes its task", !!after?.done_at);
+  check("a colleague's task list does not get them", !((await core.listStaffTasks(aOther)) ?? []).some((t) => t.source_id === o.id));
+
+  // search
+  const hit = await core.searchParticipants(aCm, P + " wf-pat");
+  check("search finds my person by name (sharing on), any case", (hit ?? []).some((h) => h.user_id === pat), JSON.stringify(hit));
+  check("a colleague's search does not find them", !((await core.searchParticipants(aOther, P + " wf-pat")) ?? []).some((h) => h.user_id === pat));
+  check("another organization's search does not", !((await core.searchParticipants(aSpy, P + " wf-pat")) ?? []).some((h) => h.user_id === pat));
+  check("someone who shares nothing is not found by their account email", !((await core.searchParticipants(aOwner, `${P}-wf-quiet`)) ?? []).some((h) => h.user_id === quiet));
+  await core.setParticipantContact(aCm, quiet, { phone: "555-010-0177", aliases: ["Quiet Q"] });
+  check("but is found by the phone the organization keeps", ((await core.searchParticipants(aCm, "5550100177")) ?? []).some((h) => h.user_id === quiet && h.matched_on === "phone"));
+  const dupMine = await core.findPossibleDuplicates(aCm, { phone: "(555) 010-0177" });
+  check("adding someone with that phone warns, naming the person I work with", dupMine.matches.some((m) => m.userId === quiet && m.reasons.includes("phone")), JSON.stringify(dupMine));
+  const dupOther = await core.findPossibleDuplicates(aOther, { email: `${P}-wf-pat-${RUN}@example.invalid` });
+  check("a duplicate outside your reach is counted by exact email, never named", dupOther.matches.length === 0 && dupOther.othersByReason.email === 1, JSON.stringify(dupOther));
+  const dupName = await core.findPossibleDuplicates(aOther, { name: P + " wf-pat" });
+  check("and never counted by name, so the warning cannot test whether a name is here", dupName.matches.length === 0 && !dupName.othersByReason.name, JSON.stringify(dupName));
+  const dupPhoneOther = await core.findPossibleDuplicates(aOther, { phone: "(555) 010-0177" });
+  check("and a phone the organization keeps for someone out of reach is not even counted (the database hides it)", dupPhoneOther.matches.length === 0 && !dupPhoneOther.othersByReason.phone, JSON.stringify(dupPhoneOther));
+
+  // timeline
+  const tl = await core.getPersonTimeline(aCm, pat);
+  check("the timeline merges referrals, tasks and the placement, newest first",
+    tl.ok && ["referral", "task", "outcome", "retention"].every((t) => tl.items.some((i) => i.type === t)), JSON.stringify(tl.ok ? tl.items.map((i) => i.type) : tl));
+  check("a colleague gets no timeline for them", (await core.getPersonTimeline(aOther, pat)).ok === false);
+  check("another organization gets none", (await core.getPersonTimeline(aSpy, pat)).ok === false);
 }
 
 /** Tasks (055) and the Today queue: a reason on a work list is information about a person. */

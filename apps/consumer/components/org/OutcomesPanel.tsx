@@ -56,7 +56,7 @@ export function OutcomesPanel({ clientId, first }: { clientId: string; first: st
 
       <ul className="space-y-4 mb-6">
         {rows.map((o) => (
-          <li key={o.id} className="bg-t-panel border border-t-line p-5">
+          <li key={o.id} id={`outcome-${o.id}`} className="bg-t-panel border border-t-line p-5 scroll-mt-24">
             <p className="font-semibold text-t-white">{o.job_title ? `${o.job_title}, ` : ""}{o.employer}</p>
             <p className="text-xs text-t-phos-dim mb-3">
               Started {day(o.start_date)}{o.hourly_wage ? ` · $${Number(o.hourly_wage).toFixed(2)} an hour` : ""}{o.hours_per_week ? ` · ${Number(o.hours_per_week)} hours a week` : ""}

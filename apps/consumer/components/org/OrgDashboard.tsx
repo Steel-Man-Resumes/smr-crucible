@@ -43,6 +43,7 @@ import { seatLedgerLine, staffLedgerLine, SEAT_LEDGER_HELP, type SeatLedger } fr
 import { SeeEveryonePanel } from "@/components/org/SeeEveryonePanel";
 import { CaseloadWorkbench } from "@/components/org/CaseloadWorkbench";
 import { STATIONS, stationForJourneyStage } from "@/lib/refinery-nav";
+import { DuplicateWarning } from "@/components/org/DuplicateWarning";
 import {
   DEFAULT_STAFF_PREFS,
   CASELOAD_SORTS,
@@ -928,6 +929,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   {inviteBusy ? "Sending..." : "Send invite"}
                 </button>
               </form>
+              {/* House lane L5: "this may be someone you already have" (never names anyone outside the caller's reach). */}
+              {!codeId && <DuplicateWarning name={inviteName} email={inviteEmail} />}
               {inviteMsg && (
                 <p
                   className={`text-xs mt-3 ${
