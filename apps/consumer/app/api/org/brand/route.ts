@@ -25,8 +25,8 @@ import { handleLogoRemove, handleLogoUpload } from "@/lib/org-brand-http";
 export const runtime = "nodejs";
 export const maxDuration = 15;
 
-export async function GET() {
-  const guard = await requireOrgCapability("org.staff.view");
+export async function GET(request: Request) {
+  const guard = await requireOrgCapability("org.staff.view", { request });
   if (!guard.ok) return guard.response;
   const { actor } = guard;
   const brand = await getOrgBrand(actor.userId, actor.orgId).catch(() => ({ ...DEFAULT_ORG_BRAND }));
@@ -42,13 +42,13 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const guard = await requireOrgCapability("org.settings.manage");
+  const guard = await requireOrgCapability("org.settings.manage", { request });
   if (!guard.ok) return guard.response;
   return handleLogoUpload(request, guard.actor, { setOrgLogo, getOrgBrand });
 }
 
-export async function DELETE() {
-  const guard = await requireOrgCapability("org.settings.manage");
+export async function DELETE(request: Request) {
+  const guard = await requireOrgCapability("org.settings.manage", { request });
   if (!guard.ok) return guard.response;
   return handleLogoRemove(guard.actor, { removeOrgLogo, getOrgBrand });
 }

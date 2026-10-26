@@ -80,8 +80,14 @@ test('a t.ROY staff read logs one open the participant can see, and nothing outs
   assert.equal((await open(org, volunteer, dana, false, 'assistant:tasks')).length, 0, 'volunteer outside caseload: no tasks row');
   // A shared-applications open t.ROY made says "via t.ROY"; the tab's own open does not.
   await q(`INSERT INTO sharing_grant (user_id, access_code_id, scope, text_version) VALUES ($1, $2, 'applications', 'pglite-test')`, [dana, org]);
-  const shared = (via: string | null, actor = cm) => scoped(org, actor, 'staff', SHARED_OPEN_LOG_SQL + ' RETURNING fields_accessed', [dana, org, false, actor, 'applications', via]);
+  const shared = (via: string | null, actor = cm, viewer: string | null = null) => scoped(org, actor, 'staff', SHARED_OPEN_LOG_SQL + ' RETURNING fields_accessed, accessor_id', [dana, org, false, actor, 'applications', via, viewer]);
   assert.deepEqual((await shared('t.ROY'))[0]?.fields_accessed, { orgId: org, via: 't.ROY' });
   assert.deepEqual((await shared(null))[0]?.fields_accessed, { orgId: org });
   assert.equal((await shared('t.ROY', volunteer)).length, 0, 'not in reach: no applications open');
+  // House lane L2: an admin viewing as the case manager is logged as the admin, with whose view it was.
+  const adminViewer = '00000000-0000-4000-8000-0000000000ad';
+  const viewed = (await shared(null, cm, adminViewer))[0];
+  assert.equal(viewed?.accessor_id, adminViewer, 'the admin, not the case manager, is recorded as the opener');
+  assert.deepEqual(viewed?.fields_accessed, { orgId: org, via: 'admin view', viewedAs: cm });
+  assert.equal((await shared(null, volunteer, adminViewer)).length, 0, 'reach is still the viewed staff member\'s');
 });

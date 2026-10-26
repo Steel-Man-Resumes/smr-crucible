@@ -13,8 +13,8 @@ import { requireOrgCapability } from "@/lib/org-guard";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const guard = await requireOrgCapability("org.staff.manage");
+export async function GET(request: Request) {
+  const guard = await requireOrgCapability("org.staff.manage", { request });
   if (!guard.ok) return guard.response;
   const state = await getOrgPolicyState(guard.actor);
   if (!state) return NextResponse.json({ error: "You do not have access to that." }, { status: 403 });
@@ -31,7 +31,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const guard = await requireOrgCapability("org.staff.manage");
+  const guard = await requireOrgCapability("org.staff.manage", { request });
   if (!guard.ok) return guard.response;
   const body = await request.json().catch(() => ({}));
   const res = await setOrgSharingPolicy(guard.actor, {

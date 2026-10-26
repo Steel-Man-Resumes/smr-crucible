@@ -14,8 +14,8 @@ import { mintInviteMagicLink, buildStaffInviteEmail, sendOrgEmail } from "@/lib/
 export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function GET() {
-  const guard = await requireOrgCapability("org.staff.manage");
+export async function GET(request: Request) {
+  const guard = await requireOrgCapability("org.staff.manage", { request });
   if (!guard.ok) return guard.response;
   const members = await getOrgAccessOverview(guard.actor);
   if (!members) return NextResponse.json({ error: "You do not have access to that." }, { status: 403 });
@@ -28,7 +28,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const guard = await requireOrgCapability("org.staff.manage");
+  const guard = await requireOrgCapability("org.staff.manage", { request });
   if (!guard.ok) return guard.response;
   const body = await request.json().catch(() => ({}));
 

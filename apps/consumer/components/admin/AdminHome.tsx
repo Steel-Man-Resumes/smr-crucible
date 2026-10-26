@@ -92,8 +92,8 @@ export function AdminHome() {
           >
             <h3 className="font-semibold text-t-white mb-1">View an organization</h3>
             <p className="text-sm text-t-phos-dim">
-              Open any org&apos;s mission control, or impersonate its people (blue
-              view = read-only) to see their exact experience.
+              Open any organization&apos;s console, read-only. To see exactly what
+              its staff see, use DEV, then View as staff of an org.
             </p>
           </Link>
           <Link

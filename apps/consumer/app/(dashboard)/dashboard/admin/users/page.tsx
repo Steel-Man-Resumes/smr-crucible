@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRealTier } from "@/lib/useUserTier";
 import { useSession } from "next-auth/react";
 import { clearForgeBrowserKeysEverywhere } from "@/lib/refinery-guards";
+import { DEV_VIEW_RETURN_KEY } from "@/lib/dev-mode";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -99,6 +100,8 @@ export default function AdminUsersPage() {
       // Nothing of the admin's own in this browser is read as the person's,
       // and nothing of the person's stays behind (security review 3a Part 2 r1, M3).
       clearForgeBrowserKeysEverywhere(adminId);
+      // Exit comes back here, to the search (house lane L2, A1 M8).
+      try { sessionStorage.setItem(DEV_VIEW_RETURN_KEY, "/dashboard/admin/users"); } catch { /* Exit goes to /dashboard */ }
       window.location.href = "/dashboard";
     } finally {
       setStarting(false);

@@ -60,7 +60,7 @@ function refusal(reason: ClientViewDenied) {
 
 export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const guard = await requireOrgCapability("org.client.view_content");
+  const guard = await requireOrgCapability("org.client.view_content", { request });
   if (!guard.ok) return guard.response;
   const { actor } = guard;
   if (!UUID.test(params.id) || !(await enabledFor(actor.orgId))) {
@@ -91,7 +91,7 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
 
 export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
-  const guard = await requireOrgCapability("org.client.view_content");
+  const guard = await requireOrgCapability("org.client.view_content", { request });
   if (!guard.ok) return guard.response;
   const { actor } = guard;
   if (!UUID.test(params.id) || !(await enabledFor(actor.orgId))) {

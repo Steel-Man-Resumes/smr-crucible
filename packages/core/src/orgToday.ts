@@ -96,15 +96,19 @@ export async function getTodayView(actor: OrgActor): Promise<TodayView | null> {
           AND NOT EXISTS (SELECT 1 FROM sharing_ack k WHERE k.user_id = r.user_id AND k.policy_version_id = v.id AND k.ended_at IS NULL)`, p.slice(0, 3)),
     // The access-log entry for the application-derived reasons above: same
     // predicate, same transaction, at most one row per staff member, person and day.
+    // $5: the platform admin viewing as this staff member (house lane L2), so
+    // the entry names the admin, not the staff member; null otherwise.
     run(sql)(
       `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
-       SELECT DISTINCT ja.user_id, 'staff', ($3::uuid)::text, 'shared:applications', 'org_work_queue', jsonb_build_object('orgId', ($1::uuid)::text)
+       SELECT DISTINCT ja.user_id, 'staff', (COALESCE($5::uuid, $3::uuid))::text, 'shared:applications', 'org_work_queue',
+              jsonb_build_object('orgId', ($1::uuid)::text)
+              || CASE WHEN $5::uuid IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('via', 'admin view', 'viewedAs', ($3::uuid)::text) END
          FROM staff_shared_application ja JOIN access_code_redemption r ON r.user_id = ja.user_id AND r.access_code_id = $1::uuid
         WHERE ${reach("ja.user_id")} AND ${sharesApps("ja.user_id")}
           AND (ja.status = 'interviewing' OR (ja.follow_up_at IS NOT NULL AND ja.follow_up_at < now() + interval '3 days'
                AND ja.status NOT IN ('hired', 'started_work', 'rejected', 'declined')))
-          AND NOT EXISTS (SELECT 1 FROM data_access_log l WHERE l.target_user_id = ja.user_id AND l.accessor_id = ($3::uuid)::text
-                           AND l.access_reason = 'org_work_queue' AND l.accessed_at > date_trunc('day', now()))`, p),
+          AND NOT EXISTS (SELECT 1 FROM data_access_log l WHERE l.target_user_id = ja.user_id AND l.accessor_id = (COALESCE($5::uuid, $3::uuid))::text
+                           AND l.access_reason = 'org_work_queue' AND l.accessed_at > date_trunc('day', now()))`, [...p, actor.viewedBy ?? null]),
   ]);
 
   const cohort = await getPartnerCohort(actor.userId, { accessCodeId: actor.orgId, assignedToStaffId: seesAll ? undefined : actor.userId });

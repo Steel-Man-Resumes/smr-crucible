@@ -11,14 +11,14 @@ import { requireOrgCapability } from "@/lib/org-guard";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const guard = await requireOrgCapability("org.cohort.view");
+export async function GET(request: Request) {
+  const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   return NextResponse.json(await getStaffPrefs(guard.actor));
 }
 
 export async function PUT(request: Request) {
-  const guard = await requireOrgCapability("org.cohort.view");
+  const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   const body = await request.json().catch(() => ({}));
   if (body.orgDefaults !== undefined) {

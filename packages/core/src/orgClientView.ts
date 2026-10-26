@@ -244,11 +244,15 @@ export async function getClientHeader(actor: OrgActor, clientId: string): Promis
 /**
  * The access-log row for one shared-scope open. Same predicate as the read,
  * so a refused read writes no "opened" entry. Exported for the pglite test.
- * $1 client, $2 org, $3 sees-all, $4 actor, $5 scope, $6 via (null, or "t.ROY").
+ * $1 client, $2 org, $3 sees-all, $4 actor, $5 scope, $6 via (null, or "t.ROY"),
+ * $7 the platform admin viewing as the actor (null unless view-as, house lane
+ * L2): the row then names the ADMIN as the one who opened it, says "admin
+ * view", and keeps whose screen it was (viewedAs). Reach is still the actor's.
  */
 export const SHARED_OPEN_LOG_SQL = `INSERT INTO data_access_log (target_user_id, accessor_type, accessor_id, resource_type, access_reason, fields_accessed)
-       SELECT $1::uuid, 'staff', ($4::uuid)::text, 'shared:' || $5::text, 'org_client_view',
+       SELECT $1::uuid, 'staff', (COALESCE($7::uuid, $4::uuid))::text, 'shared:' || $5::text, 'org_client_view',
               jsonb_build_object('orgId', ($2::uuid)::text) || CASE WHEN $6::text IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('via', $6::text) END
+              || CASE WHEN $7::uuid IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('via', 'admin view', 'viewedAs', ($4::uuid)::text) END
         WHERE ${IN_REACH} AND ${SHARED}`;
 
 /**
@@ -265,7 +269,7 @@ async function readShared<T>(actor: OrgActor, clientId: string, scope: SharingSc
     run(sql)(`SELECT (${IN_REACH}) AS in_reach, (${SHARED}) AS shared`, p),
     run(sql)(`${select} AND ${IN_REACH} AND ${SHARED}`, p),
     // A read t.ROY made for a staff member says so in the participant's log.
-    run(sql)(SHARED_OPEN_LOG_SQL, [...p, via ?? null]),
+    run(sql)(SHARED_OPEN_LOG_SQL, [...p, via ?? null, actor.viewedBy ?? null]),
   ]);
   const gate = allowed[0];
   if (!gate?.in_reach) return { ok: false, reason: "not_in_reach_or_not_member" };

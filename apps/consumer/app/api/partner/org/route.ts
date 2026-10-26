@@ -24,6 +24,7 @@ import { NextResponse } from "next/server";
 // the admin's. Blue-view writes are still blocked at the middleware edge.
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { requireOrgCapability } from "@/lib/org-guard";
+import { partnerOrgWriteRefusal } from "@/lib/view-as";
 import {
   getOne,
   resolveOrgActor,
@@ -63,8 +64,11 @@ async function resolveContext(request: Request) {
   const session = await auth();
   if (!session?.user?.id) return { error: 401 as const };
   const tier = await getUserTier(session.user.id);
+  // While an admin views as someone, the admin's powers never apply (L2).
+  const viewing = !!(session as { impersonation?: unknown }).impersonation;
+  const viewedBy = viewing ? ((session as { impersonation?: { adminId?: string } }).impersonation?.adminId ?? null) : null;
   // The cross-org admin view needs a session that entered a two-step code (F1).
-  const adminPowers = tier === "admin" && adminSecondFactorOk(session.user as any);
+  const adminPowers = !viewing && tier === "admin" && adminSecondFactorOk(session.user as any);
   const { searchParams } = new URL(request.url);
   const overrideCodeId =
     adminPowers ? searchParams.get("codeId") || undefined : undefined;
@@ -73,7 +77,11 @@ async function resolveContext(request: Request) {
     overrideCodeId,
   });
   if (!org) return { error: 403 as const };
-  return { org, userId: session.user.id, tier, adminPowers };
+  // Read-only, said by the server so the console hides every change control:
+  // "view_as" while an admin views as this person, "admin_org_view" when an
+  // admin opened another organization through ?codeId (A1 defect H1).
+  const readOnly: "view_as" | "admin_org_view" | null = viewing ? "view_as" : overrideCodeId ? "admin_org_view" : null;
+  return { org, userId: session.user.id, tier, adminPowers, viewing, viewedBy, readOnly };
 }
 
 /** The one reply to "Add participant", whatever the address turned out to be. */
@@ -88,7 +96,7 @@ export async function GET(request: Request) {
       { status: ctx.error }
     );
   }
-  const { org, userId, adminPowers } = ctx;
+  const { org, userId, adminPowers, readOnly, viewedBy } = ctx;
   // WHAT THIS PERSON SEES IS DECIDED BY THEIR CAPABILITIES, not their role name.
   // It used to be `owner or org_admin` inline, so switching one case manager to
   // "see everyone", or an admin's AI-cost view off, changed nothing on screen.
@@ -118,11 +126,12 @@ export async function GET(request: Request) {
       : cohort.clients.map((c) => ({ ...c, aiCostUsd: 0 }));
 
     // Audit trail (data_access_log, Phase 1B) -- non-fatal, never blocks the read.
+    // While an admin views as this person, the read is the admin's (L2).
     await recordDataAccess({
-      accessorUserId: userId,
+      accessorUserId: viewedBy ?? userId,
       resource: "partner_org",
       action: "read",
-      context: { clientCount: clients.length },
+      context: viewedBy ? { clientCount: clients.length, viewedAs: userId } : { clientCount: clients.length },
     });
 
     // Counts only, so an empty staff list can say why and who to ask. Never
@@ -184,13 +193,15 @@ export async function GET(request: Request) {
       staff: managesStaff ? staff : staff.map((m) => ({ ...m, email: null })),
       cohort: { ...cohort, clients },
       invites: isOrgAdmin ? invites : invites.filter((i) => i.invitedById === userId),
-      canManage: managesStaff,
-      canAssign,
+      // Read-only views show no change controls; the POST refuses anyway.
+      canManage: managesStaff && !readOnly,
+      canAssign: canAssign && !readOnly,
       invitedNotSharing,
       seesEveryone: isOrgAdmin,
       unassignedJoined: counts?.unassignedJoined ?? null,
       assignedToViewer: counts?.assignedToViewer ?? null,
-      canInvite: can("org.participant.invite", true),
+      canInvite: can("org.participant.invite", true) && !readOnly,
+      readOnly,
       showCosts: seesCosts,
       capabilities: actor ? Array.from(actor.capabilities) : [],
     });
@@ -222,6 +233,13 @@ export async function POST(request: Request) {
       { status: ctx.error }
     );
   }
+  // READ-ONLY VIEWS REFUSE EVERY WRITE (house lane L2, A1 defect H1). The
+  // admin's "view an organization" console (?codeId) was labeled read-only and
+  // accepted invites, assignments, revokes and staff changes for a real
+  // organization. It is read-only now, and so is any view-as session (the
+  // edge already blocks blue view; this also covers assist).
+  const refused = partnerOrgWriteRefusal({ viewing: ctx.viewing, codeId: selectedOrgId });
+  if (refused) return NextResponse.json({ error: refused }, { status: 403 });
   const { org, userId } = ctx;
   const isOrgAdmin = org.role === "owner" || org.role === "org_admin";
   const origin = new URL(request.url).origin;
@@ -237,7 +255,7 @@ export async function POST(request: Request) {
       body.action === "set_staff_role" ||
       body.action === "remove_staff"
     ) {
-      const guard = await requireOrgCapability("org.staff.manage", { orgId: selectedOrgId });
+      const guard = await requireOrgCapability("org.staff.manage", { orgId: selectedOrgId, request });
       if (!guard.ok) return guard.response;
 
       const targetUserId = String(body.userId || "");
@@ -280,7 +298,7 @@ export async function POST(request: Request) {
       // replaces was correct, but it was one of a dozen hand-rolled checks with
       // no single place to audit; this one asks the resolver, which reads
       // membership from the database on every request.
-      const guard = await requireOrgCapability("org.client.assign", { orgId: selectedOrgId });
+      const guard = await requireOrgCapability("org.client.assign", { orgId: selectedOrgId, request });
       if (!guard.ok) return guard.response;
       if (!body.clientUserId) {
         return NextResponse.json({ error: "clientUserId required" }, { status: 400 });
@@ -308,7 +326,7 @@ export async function POST(request: Request) {
     if (body.action === "invite") {
       // Inviting a participant spends a seat. An owner can switch it off for
       // one person; until now nothing checked, so the switch would have lied.
-      const inviteGuard = await requireOrgCapability("org.participant.invite", { orgId: selectedOrgId });
+      const inviteGuard = await requireOrgCapability("org.participant.invite", { orgId: selectedOrgId, request });
       if (!inviteGuard.ok) return inviteGuard.response;
       const name = String(body.name || "").trim();
       const email = String(body.email || "").toLowerCase().trim();
@@ -376,7 +394,7 @@ export async function POST(request: Request) {
     // with "Invite participants" switched off. Someone who does not see the
     // whole organization may act only on invites they sent themselves.
     if (body.action === "resend_invite" || body.action === "revoke_invite") {
-      const inviteGuard = await requireOrgCapability("org.participant.invite", { orgId: selectedOrgId });
+      const inviteGuard = await requireOrgCapability("org.participant.invite", { orgId: selectedOrgId, request });
       if (!inviteGuard.ok) return inviteGuard.response;
       if (!body.userId) {
         return NextResponse.json({ error: "userId required" }, { status: 400 });

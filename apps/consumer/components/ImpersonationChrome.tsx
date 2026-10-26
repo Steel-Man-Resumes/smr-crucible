@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { clearForgeBrowserKeysEverywhere, impersonationSeenFor, IMPERSONATION_SEEN_KEY } from "@/lib/refinery-guards";
+import { endViewAs } from "@/lib/dev-view-client";
 
 interface Status {
   active: boolean;
@@ -105,17 +106,10 @@ export function ImpersonationChrome() {
 
   async function end(notify: boolean) {
     setEnding(true);
-    try {
-      await fetch("/api/dev/impersonate", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notify }),
-      });
-    } finally {
-      // Whatever the person's session left in this browser goes with it (M3).
-      clearForgeBrowserKeysEverywhere(adminId);
-      window.location.href = "/dashboard/admin/users";
-    }
+    // Ends the audited session, clears this browser's keys for the person
+    // (M3), and returns to the page the view started from (A1 M8; it always
+    // went to Admin > Users before). lib/dev-view-client.ts.
+    await endViewAs(adminId, { notify, to: "start" });
   }
 
   const frame = isAssist ? "#ad2318" : "#2d5a85";
@@ -146,7 +140,7 @@ export function ImpersonationChrome() {
             </>
           ) : (
             <>
-              Viewing as <strong>{who}</strong> in read-only mode. Changes are blocked.
+              Viewing as <strong>{who}</strong>, read-only. Changes are off.
             </>
           )}
         </span>

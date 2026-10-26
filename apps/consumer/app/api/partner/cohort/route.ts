@@ -13,6 +13,7 @@ import { NextResponse } from "next/server";
 // cohort, not the admin's. Read-only enforcement stays at the middleware edge.
 import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { adminSecondFactorOk } from "@/lib/session-policy";
+import { viewAsExportRefusal } from "@/lib/view-as";
 import {
   getUserTier,
   isPartnerUser,
@@ -45,13 +46,17 @@ export async function GET(request: Request) {
   //
   // Now it takes ?scope=all. Same power, deliberately reached for.
   // Cross-org view also needs a session that entered a two-step code (F1).
+  // Never while viewing as someone: the admin's powers do not carry into a view.
   const wantsAllOrgs =
+    !(session as { impersonation?: unknown }).impersonation &&
     tier === "admin" &&
     adminSecondFactorOk(session.user as any) &&
     new URL(request.url).searchParams.get("scope") === "all";
   const cohort = await getPartnerCohort(session.user.id, { isAdmin: wantsAllOrgs });
 
   const { searchParams } = new URL(request.url);
+  const exportRefused = viewAsExportRefusal(!!(session as { impersonation?: unknown }).impersonation, searchParams.get("format"));
+  if (exportRefused) return NextResponse.json({ error: exportRefused }, { status: 403 });
   if (searchParams.get("format") === "csv") {
     const csv = cohortToCsv(cohort);
     const date = new Date().toISOString().slice(0, 10);
@@ -72,11 +77,13 @@ export async function GET(request: Request) {
   }
 
   // Audit trail (data_access_log, Phase 1B) -- non-fatal, never blocks the read.
+  // While an admin views as this person, the read is recorded as the admin's (L2).
+  const viewer = (session as { impersonation?: { adminId?: string } }).impersonation?.adminId ?? null;
   await recordDataAccess({
-    accessorUserId: session.user.id,
+    accessorUserId: viewer ?? session.user.id,
     resource: "partner_cohort",
     action: "read",
-    context: { clientCount: cohort.clients.length },
+    context: viewer ? { clientCount: cohort.clients.length, viewedAs: session.user.id } : { clientCount: cohort.clients.length },
   });
 
   return NextResponse.json(cohort);
