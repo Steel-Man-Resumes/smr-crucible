@@ -24,6 +24,7 @@ import { PRIVACY_URL, TERMS_URL, TERMS_VERSION } from "@/lib/terms";
 import { safeLoginReturn, sessionPending, termsCurrent } from "@/lib/session-policy";
 import { TERMS_TICKED_KEY, tickedFor } from "@/lib/terms-ticked";
 import { signOutOfForge } from "@/components/forge/ForgeAccountBar";
+import { refreshConsentSession } from "@/lib/verified-session";
 
 export default function TermsPage() {
   return (
@@ -68,7 +69,12 @@ function AcceptTerms() {
       } catch {
         // ignore
       }
-      await update();
+      const ready = await refreshConsentSession(update);
+      if (!ready) {
+        setError("Your agreement was saved, but sign-in did not finish. Try again. If this keeps happening, sign out and sign in again.");
+        setSaving(false);
+        return;
+      }
       go();
     } catch {
       setError("We couldn't save that. Try again.");
