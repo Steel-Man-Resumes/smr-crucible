@@ -162,6 +162,7 @@ async function cleanup() {
     await sql`DELETE FROM access_code_redemption WHERE access_code_id = ANY(${codes}::uuid[])`;
     await sql`DELETE FROM org_staff WHERE access_code_id = ANY(${codes}::uuid[])`;
     await sql`DELETE FROM org_invite WHERE access_code_id = ANY(${codes}::uuid[])`;
+    await sql`DELETE FROM org_staff_invite WHERE access_code_id = ANY(${codes}::uuid[])`.catch(() => {});
     await sql`DELETE FROM org_capability_override WHERE org_id = ANY(${codes}::uuid[])`.catch(() => {});
     await sql`DELETE FROM org_audit WHERE org_id = ANY(${codes}::uuid[])`;
   }
@@ -835,8 +836,14 @@ async function accessChecks() {
   const inv = await core.inviteOrgStaff(aOwner, { name: "New Hire", email, role: "staff", title: "Employment Specialist" });
   if (inv.ok) created.users.push(inv.userId);
   const overview = await core.getOrgAccessOverview(aOwner);
-  const hire = overview?.find((m) => m.userId === inv.userId);
-  check("the owner can invite someone to staff by email, and they show as invited", inv.ok && !!hire && hire.pending && hire.role === "staff" && hire.title === "Employment Specialist", JSON.stringify(inv));
+  const ownerScope = { orgId: org.id, userId: owner, role: "owner" };
+  const listed = inv.ok ? (await core.listStaffInvites(ownerScope)).find((i) => i.id === inv.inviteId) : null;
+  // Migration 100: an invitee at a new address waits on the Invitations list
+  // (status, resend, revoke) and joins the chart when they first sign in, so
+  // the chart never shows which invitee already had an account.
+  check("the owner can invite someone to staff by email, and they show on the invitation list, not yet on the chart",
+    inv.ok && inv.path === "new_account" && !!listed && listed.status === "pending" && listed.title === "Employment Specialist"
+      && !overview?.some((m) => m.userId === inv.userId), JSON.stringify({ inv, listed }));
   const vol = await core.inviteOrgStaff(aOwner, { name: "Volunteer", email: `${P}-a-vol-${uniq.toLowerCase()}@example.invalid`, role: "volunteer" });
   if (vol.ok) created.users.push(vol.userId);
   const aVol = vol.ok ? await core.resolveOrgActor(vol.userId) : null;
@@ -845,9 +852,58 @@ async function accessChecks() {
     JSON.stringify(vol));
   check("an admin cannot create another admin", (await core.inviteOrgStaff(aAdmin, { name: "X", email: `${P}-a-x-${uniq.toLowerCase()}@example.invalid`, role: "org_admin" })).ok === false);
   const [{ email: outsiderEmail }] = await sql`SELECT email FROM users WHERE id = ${outsider}`;
-  check("an address that already has an account elsewhere is not attached to this roster", (await core.inviteOrgStaff(aOwner, { name: "X", email: outsiderEmail, role: "staff" })).ok === false);
+  const asked = await core.inviteOrgStaff(aOwner, { name: "Outside Person", email: outsiderEmail, role: "staff" });
+  const afterAsk = await core.getOrgAccessOverview(aOwner);
+  check("an address that already has an account is invited, never attached: nothing on the roster until they say yes",
+    asked.ok === true && asked.path === "existing_account" && !afterAsk.some((m) => m.userId === outsider), JSON.stringify(asked));
+  const [{ n: outsiderStaff }] = await sql`SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${outsider}`;
+  check("and no staff row exists for them yet", outsiderStaff === 0, `rows=${outsiderStaff}`);
+  const again = await core.inviteOrgStaff(aOwner, { name: "Outside Person", email: outsiderEmail, role: "staff" });
+  check("inviting the same account again renews the one open invitation", again.ok && again.renewed && again.inviteId === asked.inviteId, JSON.stringify(again));
+
+  // The invitee's side: their own invitation, answered through the definer function.
+  const theirs = await core.myStaffInvites(outsider);
+  check("the invitee sees their own open invitation", theirs.length === 1 && theirs[0].id === asked.inviteId, JSON.stringify(theirs));
+  check("a staff member of the org does not see someone else's invitation as theirs", (await core.myStaffInvites(cm)).length === 0);
+  const hijack = await core.answerStaffInvite(cm, asked.inviteId, true);
+  check("nobody answers another person's invitation", hijack.ok === false && hijack.result === "not_found", JSON.stringify(hijack));
+  const yes = await core.answerStaffInvite(outsider, asked.inviteId, true);
+  const aOutsider = await core.resolveOrgActor(outsider);
+  check("saying yes puts them on staff, in this organization, as the role they were invited to",
+    yes.ok && yes.result === "ok" && aOutsider?.orgId === org.id && aOutsider?.role === "staff", JSON.stringify({ yes, role: aOutsider?.role }));
+  check("an answered invitation stays answered", (await core.answerStaffInvite(outsider, asked.inviteId, false)).result === "answered");
+
+  // Revoke: a never-signed-in new account loses the staff row with the invitation.
+  if (vol.ok) {
+    const foreign = await core.revokeStaffInvite({ orgId: org.id, userId: cm, role: "staff" }, vol.inviteId).catch(() => ({ ok: false }));
+    // A case manager has no org.staff.manage; the route refuses them first. At
+    // the data layer the org scope is the only door, so prove the cross-org one:
+    const [{ id: otherOrg }] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active)
+                                         VALUES (${"ISOINV" + uniq}, ${P + " invite other"}, 'client', ${outsider}, true) RETURNING id`;
+    created.codes.push(otherOrg);
+    const cross = await core.revokeStaffInvite({ orgId: otherOrg, userId: outsider, role: "owner" }, vol.inviteId);
+    check("another organization cannot revoke this organization's invitation", cross.ok === false, JSON.stringify(cross));
+    check("another organization reads none of this organization's invitations", (await core.listStaffInvites({ orgId: otherOrg, userId: outsider, role: "owner" })).length === 0);
+    const crossRead = await app.transaction([
+      app`SELECT set_config('app.org_id', ${otherOrg}, true)`, app`SELECT set_config('app.user_id', ${outsider}, true)`,
+      app`SELECT count(*)::int AS n FROM org_staff_invite WHERE access_code_id = ${org.id}`]);
+    check("naming this organization's id while scoped to another returns nothing (RLS)", crossRead[2][0].n === 0, JSON.stringify(crossRead[2]));
+    const forgedAccept = await app.transaction([
+      app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${owner}, true)`,
+      app`UPDATE org_staff_invite SET accepted_at = now() WHERE id = ${vol.inviteId} RETURNING id`]).then(() => "updated", (e) => String(e?.message ?? e));
+    check("the app role cannot mark an invitation accepted, even in the org's own scope", forgedAccept !== "updated", forgedAccept);
+    void foreign;
+    const rev = await core.revokeStaffInvite(ownerScope, vol.inviteId);
+    const [{ n: volStaff }] = await sql`SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${vol.userId}`;
+    check("revoking a new account's invitation removes the staff row its link would have opened", rev.ok && volStaff === 0 && (await core.resolveOrgActor(vol.userId)) === null, JSON.stringify(rev));
+    check("a revoked invitation cannot be revoked again", (await core.revokeStaffInvite(ownerScope, vol.inviteId)).ok === false);
+  }
+  const [{ n: inviteAudit }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_staff_invite'`;
+  const [{ n: leakedAddress }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_staff_invite' AND row_summary::text LIKE '%example.invalid%'`;
+  check("every invitation write is audited, never with the address", inviteAudit >= 4 && leakedAddress === 0, `rows=${inviteAudit} leaked=${leakedAddress}`);
   check("the overview shows the owner once, and marks who may be edited",
     overview.filter((m) => m.role === "owner").length === 1 && overview.find((m) => m.userId === cm).editable && !overview.find((m) => m.userId === owner).editable);
+  await sql`DELETE FROM org_staff WHERE user_id = ${outsider}`; // the accepted invitee, so later counts are unchanged
 
   await core.removeOrgStaff({ orgId: org.id, userId: cm, actorUserId: owner });
   const [{ n: leftover }] = await sql`SELECT count(*)::int AS n FROM org_capability_override WHERE org_id = ${org.id} AND user_id = ${cm}`;
@@ -1349,6 +1405,50 @@ async function platformAdminChecks() {
 
   const adminCode = await raised(() => sql`INSERT INTO access_code (code, partner_name, tier) VALUES (${"ISOADMIN" + Date.now().toString(36).toUpperCase().slice(-6)}, 'isolation fixture', 'admin')`);
   check("an access code cannot be created with tier admin, even by the owner", !!adminCode && /access_code_tier_check/.test(adminCode), adminCode ?? "insert succeeded");
+
+  // -- organization lifecycle (migration 100), as the app role
+  const lc = Date.now().toString(36).toUpperCase().slice(-6);
+  const [{ id: lifeOrg }] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active)
+                                      VALUES (${"ISOLIFE" + lc}, ${P + " lifecycle"}, 'client', ${nobody}, true) RETURNING id`;
+  created.codes.push(lifeOrg);
+  check("closing needs a reason", (await core.closeOrganization(lifeOrg, "", boss)).ok === false);
+  const closed = await core.closeOrganization(lifeOrg, "Fixture closed for the check", boss);
+  const [lifeRow] = await sql`SELECT is_active, closed_by, close_reason, closed_at IS NOT NULL AS stamped FROM access_code WHERE id = ${lifeOrg}`;
+  check("a platform admin closes an organization with a reason; the database stamps who and when",
+    closed.ok && !lifeRow.is_active && lifeRow.closed_by === boss && lifeRow.stamped && lifeRow.close_reason === "Fixture closed for the check", JSON.stringify(lifeRow));
+  check("closing an already closed organization says so", (await core.closeOrganization(lifeOrg, "again please", boss)).ok === false);
+  const reopened = await core.reopenOrganization(lifeOrg, boss);
+  const [reRow] = await sql`SELECT is_active, closed_at, close_reason FROM access_code WHERE id = ${lifeOrg}`;
+  check("reopening clears the close stamps", reopened.ok && reRow.is_active && reRow.closed_at === null && reRow.close_reason === null, JSON.stringify(reRow));
+  const renamed = await core.renameOrganization(lifeOrg, `${P} lifecycle renamed`, boss);
+  check("rename changes the name only", renamed.ok && renamed.name === `${P} lifecycle renamed`);
+  const [{ n: reasonLeak }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${lifeOrg} AND row_summary::text LIKE '%Fixture closed%'`;
+  check("the close reason text stays out of the organization's readable audit", reasonLeak === 0, `rows=${reasonLeak}`);
+  check("history is for platform admins only", (await core.getOrgHistory(lifeOrg, nobody)) === null);
+  check("an empty organization has no history", JSON.stringify(await core.getOrgHistory(lifeOrg, boss)) === "{}");
+  const member = await mkUser("life-member");
+  await core.redeemAccessCode(member, "ISOLIFE" + lc);
+  const busy = await core.deleteEmptyOrganization(lifeOrg, `${P} lifecycle renamed`, boss);
+  check("an organization with one member is never deleted, and the refusal says why", busy.ok === false && /1 member/.test(busy.error), JSON.stringify(busy));
+  const [{ id: emptyOrg }] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active)
+                                       VALUES (${"ISOEMPTY" + lc}, ${P + " empty"}, 'client', true) RETURNING id`;
+  created.codes.push(emptyOrg);
+  check("a non-admin cannot delete even an empty organization", (await core.deleteEmptyOrganization(emptyOrg, `${P} empty`, nobody)).ok === false);
+  check("delete needs the exact name", (await core.deleteEmptyOrganization(emptyOrg, "wrong name", boss)).ok === false);
+  const gone = await core.deleteEmptyOrganization(emptyOrg, `${P} empty`, boss);
+  const [{ n: stillThere }] = await sql`SELECT count(*)::int AS n FROM access_code WHERE id = ${emptyOrg}`;
+  const [{ n: deleteAudit }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${emptyOrg} AND action = 'DELETE' AND actor = ${boss}`;
+  check("an organization with no history is deleted, and the delete is recorded", gone.ok && stillThere === 0 && deleteAudit === 1, JSON.stringify({ gone, stillThere, deleteAudit }));
+
+  // -- platform admin adds an existing account to staff directly (support path)
+  const supportStaff = await mkUser("life-support-staff");
+  const [{ email: supportEmail }] = await sql`SELECT email FROM users WHERE id = ${supportStaff}`;
+  const addedByAdmin = await core.adminAddStaff(lifeOrg, boss, { name: "Support Added", email: supportEmail, role: "staff" });
+  const aSupport = await core.resolveOrgActor(supportStaff);
+  check("a platform admin adds an existing account to staff directly", addedByAdmin.ok && addedByAdmin.path === "admin_added" && aSupport?.orgId === lifeOrg, JSON.stringify(addedByAdmin));
+  check("a non-admin cannot use the direct-add path",
+    (await core.adminAddStaff(lifeOrg, nobody, { name: "X", email: (await sql`SELECT email FROM users WHERE id = ${member}`)[0].email, role: "staff" })).ok === false);
+  await sql`DELETE FROM org_staff WHERE access_code_id = ${lifeOrg}`;
 
   await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
   const [revoked] = await sql`SELECT tier FROM users WHERE id = ${boss}`;

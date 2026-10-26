@@ -286,3 +286,151 @@ export async function setOrgOwner(
   const warning = (await ownsOtherActiveOrg(row.owner_id, orgId)) ? PINNED_WARNING : undefined;
   return { ok: true, ownerUserId: row.owner_id, ownerCreated: row.owner_created, previousOwnerUserId: before.partner_user_id, warning };
 }
+
+/* ------------------------------------------------------------ lifecycle -- */
+/*
+ * Close, reopen, rename and (for an organization with no history) delete
+ * (migration 100). Closed is is_active = false; the database stamps when and
+ * who (access_code_lifecycle_sync) and records it in org_audit. Platform
+ * admins only, checked at the route by requirePlatformAdmin, as everything in
+ * this file.
+ */
+
+/** What closing means, in the words the screen shows before anyone confirms. */
+export const CLOSED_MEANS =
+  "Closing keeps everything. Members keep their accounts and their own work. Staff lose the workspace for this organization. " +
+  "Notes, tasks, outcomes and history stay. Nobody new can join with its code, and a Refinery seat that came through it stops counting while it is closed. " +
+  "You can reopen it at any time.";
+
+/** Why delete is refused, in the same plain words. */
+export const DELETE_MEANS =
+  "Delete is only for an organization made by mistake: nobody ever joined, no staff, no invitations, no notes, tasks, outcomes or other history. " +
+  "Anything else is closed, never deleted, so its record stays.";
+
+/** Pure: an organization's name. */
+export function validateOrgName(raw: unknown): { ok: true; value: string } | { ok: false; error: string } {
+  const name = String(raw ?? "").trim().replace(/\s+/g, " ");
+  if (name.length < 2 || name.length > 120) return { ok: false, error: "Give the organization a name (2 to 120 characters)." };
+  return { ok: true, value: name };
+}
+
+/** Pure: why it is being closed. Required, short. */
+export function validateCloseReason(raw: unknown): { ok: true; value: string } | { ok: false; error: string } {
+  const reason = String(raw ?? "").trim().replace(/\s+/g, " ");
+  if (reason.length < 3) return { ok: false, error: "Say in a few words why it is closing. Only platform admins see this." };
+  if (reason.length > 500) return { ok: false, error: "Keep the reason under 500 characters." };
+  return { ok: true, value: reason };
+}
+
+/** Close an open organization, with the reason. */
+export async function closeOrganization(orgId: string, reasonRaw: unknown, actorUserId: string): Promise<OrgAdminResult<{ closedAt: string }>> {
+  const v = validateCloseReason(reasonRaw);
+  if (!v.ok) return v;
+  const [rows] = await runAsUser<[{ closed_at: string }[]]>(actorUserId, (sql) => [
+    run(sql)(
+      `UPDATE access_code SET is_active = false, close_reason = $2, closed_by = $3::uuid, closed_at = now(), updated_at = now()
+        WHERE id = $1::uuid AND is_active = true
+        RETURNING closed_at`,
+      [orgId, v.value, actorUserId]
+    ),
+  ]);
+  if (!rows?.[0]) return { ok: false, error: "No change. That organization is already closed, or it was not found." };
+  logAdminEvent(actorUserId, "close", { orgId });
+  return { ok: true, closedAt: rows[0].closed_at };
+}
+
+/** Reopen a closed organization. Its staff get their workspace back. */
+export async function reopenOrganization(orgId: string, actorUserId: string): Promise<OrgAdminResult<{ warning?: string }>> {
+  const [rows] = await runAsUser<[{ partner_user_id: string | null }[]]>(actorUserId, (sql) => [
+    run(sql)(
+      `UPDATE access_code SET is_active = true, updated_at = now()
+        WHERE id = $1::uuid AND is_active = false
+        RETURNING partner_user_id`,
+      [orgId]
+    ),
+  ]);
+  if (!rows?.[0]) return { ok: false, error: "No change. That organization is already open, or it was not found." };
+  logAdminEvent(actorUserId, "reopen", { orgId });
+  const owner = rows[0].partner_user_id;
+  const warning = owner && (await ownsOtherActiveOrg(owner, orgId)) ? PINNED_WARNING : undefined;
+  return { ok: true, warning };
+}
+
+/** Rename an organization. The code, members and history stay. */
+export async function renameOrganization(orgId: string, nameRaw: unknown, actorUserId: string): Promise<OrgAdminResult<{ name: string }>> {
+  const v = validateOrgName(nameRaw);
+  if (!v.ok) return v;
+  const [rows] = await runAsUser<[{ partner_name: string }[]]>(actorUserId, (sql) => [
+    run(sql)(`UPDATE access_code SET partner_name = $2, updated_at = now() WHERE id = $1::uuid RETURNING partner_name`, [orgId, v.value]),
+  ]);
+  if (!rows?.[0]) return { ok: false, error: "That organization was not found." };
+  logAdminEvent(actorUserId, "rename", { orgId });
+  return { ok: true, name: rows[0].partner_name };
+}
+
+/** Every row that would make a delete erase history, counted per table (smr_admin_org_history). Null when not allowed or not found. */
+export async function getOrgHistory(orgId: string, actorUserId: string): Promise<Record<string, number> | null> {
+  const [rows] = await runAsUser<[{ h: Record<string, number> | null }[]]>(actorUserId, (sql) => [
+    run(sql)(`SELECT smr_admin_org_history($1::uuid) AS h`, [orgId]),
+  ]);
+  const h = rows?.[0]?.h;
+  if (!h) return null;
+  return Object.fromEntries(Object.entries(h).map(([k, n]) => [k, Number(n)]));
+}
+
+const HISTORY_WORDS: Record<string, [string, string]> = {
+  access_code_redemption: ["member", "members"],
+  access_code_departure: ["person who left", "people who left"],
+  org_staff: ["staff member", "staff members"],
+  org_staff_invite: ["staff invitation", "staff invitations"],
+  org_invite: ["participant invitation", "participant invitations"],
+  client_staff_assignment: ["caseload assignment", "caseload assignments"],
+  case_note: ["case note", "case notes"],
+  staff_task: ["task", "tasks"],
+  outcome_record: ["outcome", "outcomes"],
+  retention_check: ["retention check", "retention checks"],
+  staff_suggestion: ["suggestion", "suggestions"],
+  sharing_grant: ["sharing choice", "sharing choices"],
+  sharing_request: ["ask to share", "asks to share"],
+  org_capability_override: ["access setting", "access settings"],
+  refinery_access_policy: ["Refinery house setting", "Refinery house settings"],
+  audited_changes: ["recorded change", "recorded changes"],
+};
+
+/** Pure: the history as one plain sentence ("3 members, 1 staff member and 12 recorded changes"). Empty when there is none. */
+export function describeOrgHistory(h: Record<string, number> | null | undefined): string {
+  const parts = Object.entries(h ?? {})
+    .filter(([, n]) => Number(n) > 0)
+    .map(([k, n]) => {
+      const words = HISTORY_WORDS[k] ?? [k.replace(/_/g, " ") + " row", k.replace(/_/g, " ") + " rows"];
+      return `${n} ${Number(n) === 1 ? words[0] : words[1]}`;
+    });
+  if (parts.length <= 1) return parts.join("");
+  return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+}
+
+const DELETE_REFUSALS: Record<string, string> = {
+  refused: "Only a platform admin can delete an organization.",
+  not_found: "That organization was not found.",
+  name_mismatch: "Type the organization's name exactly to delete it.",
+  has_history: "This organization has history, so it can only be closed.",
+};
+
+/**
+ * Delete an organization with no history at all. The database checks again
+ * (smr_admin_delete_org): the admin, the typed name, and every table that
+ * points at the organization, with the row locked.
+ */
+export async function deleteEmptyOrganization(orgId: string, confirmName: unknown, actorUserId: string): Promise<OrgAdminResult<{ deleted: true }>> {
+  const history = await getOrgHistory(orgId, actorUserId);
+  if (history && Object.keys(history).length > 0) {
+    return { ok: false, error: `${DELETE_REFUSALS.has_history} It has ${describeOrgHistory(history)}.` };
+  }
+  const [rows] = await runAsUser<[{ r: string }[]]>(actorUserId, (sql) => [
+    run(sql)(`SELECT smr_admin_delete_org($1::uuid, $2) AS r`, [orgId, String(confirmName ?? "")]),
+  ]);
+  const r = rows?.[0]?.r ?? "refused";
+  if (r !== "ok") return { ok: false, error: DELETE_REFUSALS[r] ?? DELETE_REFUSALS.refused };
+  logAdminEvent(actorUserId, "delete_empty", { orgId });
+  return { ok: true, deleted: true };
+}

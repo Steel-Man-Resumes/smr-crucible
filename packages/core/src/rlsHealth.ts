@@ -30,6 +30,8 @@ export const RLS_PROTECTED_TABLES = [
   "outcome_record",
   "retention_check",
   "staff_suggestion",
+  // staff invitations (100), org scope plus the invitee's own rows
+  "org_staff_invite",
   // participant-owned, owner only
   "vault_document",
   "user_progress_event",

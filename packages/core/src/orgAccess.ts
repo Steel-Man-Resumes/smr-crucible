@@ -11,6 +11,15 @@
 import { query, runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
 import {
+  alreadyOnStaff,
+  createNewAccountInvite,
+  inviteDeniesFor,
+  inviteExistingAccount,
+  staffPlaces,
+  validateStaffInviteInput,
+  type StaffInvitePath,
+} from "./staffInvites";
+import {
   computeOrgCapabilities,
   capabilitiesForRole,
   DELEGABLE_CAPABILITIES,
@@ -61,6 +70,15 @@ export async function getOrgAccessOverview(actor: OrgActor): Promise<OrgAccessMe
               (SELECT COUNT(*)::int FROM case_note n WHERE n.access_code_id = $1::uuid AND n.author_user_id = os.user_id AND n.created_at > now() - interval '30 days') AS notes30
          FROM org_staff os JOIN users u ON u.id = os.user_id
         WHERE os.access_code_id = $1::uuid
+          -- Someone invited at a new address joins the chart when they first
+          -- sign in. Until then they are on the Invitations list (with status,
+          -- resend and revoke), exactly like an invited existing account, so
+          -- the chart never shows which invitee already had an account.
+          AND NOT (u."emailVerified" IS NULL AND u.password_hash IS NULL
+                   AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)
+                   AND EXISTS (SELECT 1 FROM org_staff_invite i
+                                WHERE i.access_code_id = os.access_code_id AND i.user_id = os.user_id
+                                  AND i.path = 'new_account' AND i.revoked_at IS NULL))
         ORDER BY (os.role = 'org_admin') DESC, u.name`,
       [actor.orgId]
     ),
@@ -133,84 +151,55 @@ export async function setStaffCapability(actor: OrgActor, targetUserId: string, 
   return r === "ok" ? { ok: true } : { ok: false, error: REFUSALS[r] ?? REFUSALS.refused };
 }
 
-/**
- * Invite someone to the STAFF by email, at a role. Before this the only way
- * onto staff was to be invited as a participant and then promoted.
- *
- * An email that already has an account elsewhere on the platform is refused
- * rather than attached: adding them would put their name on this roster, and
- * whether an address has an account is not this organization's to learn more
- * about than "we could not add that address".
- */
 /** The plain refusal when an organization's staff places are all in use. */
 export function staffCapReason(inUse: number, max: number): string {
   return `Your organization has ${inUse} of ${max} staff places in use. Remove someone from the team, or ask Steel Man Resumes for more places.`;
 }
 
+/**
+ * Invite someone to the STAFF by email, at a role (owner and admins).
+ *
+ * WHY AN ADDRESS WITH AN ACCOUNT IS NO LONGER REFUSED, AND WHY IT IS NOT
+ * ATTACHED EITHER. The refusal ("contact us") existed for two reasons: adding
+ * an existing account would put that person's name on this roster without
+ * their say, and the answer would tell the organization whether the address
+ * has an account. Both still hold, so (migration 100) an existing account now
+ * gets an INVITATION it accepts or declines after signing in, and nothing is
+ * attached until it does. The inviter sees the same answer for a new address
+ * and an existing one, and the same status words, so the screen still says
+ * nothing about who has an account.
+ *
+ * A new address works as before (a shell account and the staff row now, a
+ * sign-in link by email), plus an invitation row so it can be resent,
+ * revoked, and shows when it expires.
+ */
 export async function inviteOrgStaff(actor: OrgActor, input: { name: string; email: string; role: string; title?: string | null }):
-  Promise<{ ok: true; userId: string; email: string; name: string } | { ok: false; error: string }> {
+  Promise<{ ok: true; userId: string; email: string; name: string; inviteId: string; path: StaffInvitePath; undeliverable: boolean; renewed: boolean } | { ok: false; error: string }> {
   if (!canManage(actor)) return { ok: false, error: REFUSALS.refused };
-  const email = input.email.toLowerCase().trim();
-  const name = input.name.trim();
-  const preset: StaffPreset | null = isStaffPreset(input.role) ? input.role : null;
-  const role = input.role === "org_admin" ? "org_admin" : "staff";
+  const v = validateStaffInviteInput(input);
+  if (!v.ok) return v;
+  const { name, email, role, preset, title } = v.value;
   if (role === "org_admin" && actor.role !== "owner") return { ok: false, error: "Only the owner can add an admin." };
-  if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { ok: false, error: "A name and a valid email are needed." };
+  const scope = scopeOf(actor);
 
-  const existing = await query<{ id: string; pending: boolean }>(
-    `SELECT u.id, (u."emailVerified" IS NULL AND u.password_hash IS NULL
-                   AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)) AS pending
-       FROM users u WHERE u.email = $1`,
-    [email]
-  );
-  let userId: string;
-  if (existing[0]) {
-    const [mine] = await runScoped<[{ n: number }[]]>(scopeOf(actor), (sql) => [
-      sql`SELECT (SELECT COUNT(*) FROM org_staff WHERE access_code_id = ${actor.orgId}::uuid AND user_id = ${existing[0].id}::uuid)::int AS n`,
-    ]);
-    if ((mine[0]?.n ?? 0) > 0) return { ok: false, error: "That person is already on your staff." };
-    return { ok: false, error: "We could not add that address. If they already use Steel Man Resumes, contact us and we will help." };
+  const existing = await query<{ id: string }>(`SELECT u.id FROM users u WHERE u.email = $1`, [email]);
+  if (existing[0] && (await alreadyOnStaff(scope, existing[0].id))) {
+    return { ok: false, error: "That person is already on your staff." };
   }
   // STAFF CAP (migration 097, access_code.max_staff). Staff hold a Refinery
-  // seat of their own, outside the participant seat count, so the number of
-  // staff places is capped per organization. Checked here for a plain answer
-  // and again inside the INSERT below, so a race cannot pass it.
-  const [cap] = await runScoped<[{ n: number; max: number }[]]>(scopeOf(actor), (sql) => [
-    sql`SELECT (SELECT COUNT(*)::int FROM org_staff WHERE access_code_id = ${actor.orgId}::uuid) AS n,
-               (SELECT max_staff FROM access_code WHERE id = ${actor.orgId}::uuid) AS max`,
-  ]);
-  if (cap[0] && cap[0].n >= cap[0].max) {
-    return { ok: false, error: staffCapReason(cap[0].n, cap[0].max) };
+  // seat of their own, outside the participant seat count. Open invitations
+  // to existing accounts hold a place too, so both paths fill up the same
+  // way. Checked here for a plain answer and again inside each INSERT.
+  const places = await staffPlaces(scope);
+  if (!places.active) return { ok: false, error: "Your organization is closed right now, so nobody can be added." };
+  if (existing[0]) {
+    return inviteExistingAccount(scope, {
+      userId: existing[0].id, email, name, role, title, denies: inviteDeniesFor(preset),
+      fullReason: places.n >= places.max ? staffCapReason(places.n, places.max) : null,
+    });
   }
-  const made = await query<{ id: string }>(`INSERT INTO users (name, email, tier) VALUES ($1, $2, 'partner') RETURNING id`, [name, email]);
-  userId = made[0].id;
-  const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
-  // A preset is written in the SAME transaction as the staff row, so a
-  // volunteer never exists for a moment with the full staff bundle.
-  const writes = preset ? presetOverrideWrites(preset) : [];
-  const out = await runScoped<[{ id: string }[], ...{ r: string }[][]]>(scopeOf(actor), (sql) => [
-    run(sql)(
-      `INSERT INTO org_staff (access_code_id, user_id, role, title, created_by, invited_at, invited_email)
-       SELECT $1::uuid, $2::uuid, $3, $4, $5::uuid, now(), $6
-        WHERE (SELECT COUNT(*) FROM org_staff os_c WHERE os_c.access_code_id = $1::uuid) < (SELECT ac_c.max_staff FROM access_code ac_c WHERE ac_c.id = $1::uuid)
-       RETURNING id`,
-      [actor.orgId, userId, role, input.title?.trim() || (preset ? STAFF_PRESETS[preset].label : null), actor.userId, email]
-    ),
-    ...writes.map((w) => sql`SELECT smr_set_capability_override(${userId}::uuid, ${w.capability}, ${w.effect}) AS r`),
-  ]);
-  const rows = out[0];
-  const presetFailed = writes.length > 0 && out.slice(1).some((r) => (r as { r: string }[])?.[0]?.r !== "ok");
-  if (rows[0] && presetFailed) {
-    // Never leave a volunteer with staff powers: take the row back out.
-    await runScoped(scopeOf(actor), (sql) => [sql`DELETE FROM org_staff WHERE access_code_id = ${actor.orgId}::uuid AND user_id = ${userId}::uuid`]).catch(() => {});
-    await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {});
-    return { ok: false, error: "Could not add them with volunteer settings. Nothing was saved." };
-  }
-  if (!rows[0]) {
-    await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {}); // just created here, safe to remove
-    return { ok: false, error: "Could not add them to your staff." };
-  }
-  return { ok: true, userId, email, name };
+  if (places.n >= places.max) return { ok: false, error: staffCapReason(places.n, places.max) };
+  return createNewAccountInvite(scope, { name, email, role, title, preset });
 }
 
 /**

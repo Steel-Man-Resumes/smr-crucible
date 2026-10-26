@@ -20,6 +20,7 @@ export * from './orgClientView';
 export * from './orgStaffAssistant';
 export * from './staffPrefs';
 export * from './orgAccess';
+export * from './staffInvites';
 export * from './orgInsights';
 export * from './staffTasks';
 export * from './orgToday';

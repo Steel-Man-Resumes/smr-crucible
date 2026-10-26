@@ -128,6 +128,9 @@ export const RESTRICTED_GRANTS = {
   refinery_seat_legacy: ["SELECT", "INSERT", "DELETE"],
   org_seat_offer: ["SELECT", "INSERT"],
   access_code_departure: ["SELECT"],
+  // Staff invitations (100). Never deleted; the guard trigger limits UPDATE to
+  // resend and revoke, and only the definer function accepts or declines.
+  org_staff_invite: ["SELECT", "INSERT", "UPDATE"],
 };
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
