@@ -12,6 +12,7 @@
  * never sent to t.ROY or any AI tool.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useOrgTerms } from "@/lib/use-org-terms";
 import { CUSTOM_FIELD_TYPE_LABELS, formatCustomFieldValue, isSensitiveField, type CustomFieldDef } from "@crucible/core/src/customFieldsShared";
 
 type Values = Record<string, unknown>;
@@ -31,6 +32,7 @@ export function fieldsToShow(defs: CustomFieldDef[], values: Values): CustomFiel
 
 export function CustomFieldsPanel({ clientId, first }: { clientId: string; first: string }) {
   const [state, setState] = useState<{ defs: CustomFieldDef[]; values: Values; staff: Staff[]; canEdit: boolean; history: EarlierAnswer[] } | null>(null);
+  const terms = useOrgTerms();
   const [enr, setEnr] = useState<{ defs: CustomFieldDef[]; values: Record<string, Values>; enrollments: Enrollment[] | null; history: History } | null>(null);
   const load = useCallback(async () => {
     const [p, e] = await Promise.all([
@@ -61,7 +63,7 @@ export function CustomFieldsPanel({ clientId, first }: { clientId: string; first
         return (
           <div key={e.id} className="mt-4 border-t border-t-line pt-3">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-t-amber-bright">
-              {e.programName ?? "Enrollment"} <span className="font-normal normal-case text-t-bone-dim">{e.status}{e.enrolledOn ? `, since ${e.enrolledOn}` : ""}</span>
+              {e.programName ?? terms.cap("enrollment")} <span className="font-normal normal-case text-t-bone-dim">{e.status}{e.enrolledOn ? `, since ${e.enrolledOn}` : ""}</span>
             </h3>
             <RecordFields entity="enrollment" entityId={e.id} defs={defs} values={vals} staff={state.staff} canEdit={state.canEdit} onSaved={load} earlier={enr!.history[e.id] ?? []} allDefs={enr!.defs} />
           </div>

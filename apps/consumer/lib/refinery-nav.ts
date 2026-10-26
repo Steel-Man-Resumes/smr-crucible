@@ -353,6 +353,11 @@ export const NAV_EXTENSIONS: readonly NavExtension[] = [
   // House L3a (103): the organization's programs, sites, teams and caseloads, and first-run setup.
   { surface: "org", group: "Organization", href: "/dashboard/structure", label: "Structure", navId: "org-nav-structure", needs: "org.cohort.view", after: "Team & access" },
   { surface: "org", group: "Organization", href: "/dashboard/setup", label: "Set up", navId: "org-nav-setup", needs: "org.settings.manage" },
+  // House L4 (104): the org's own fields and per-role layouts. Anyone who sees
+  // the caseload may open them read-only (so they know what a field means);
+  // changes need org.settings.manage, checked by the routes and the database.
+  { surface: "org", group: "Organization", href: "/dashboard/fields", label: "Fields", navId: "org-nav-fields", needs: "org.cohort.view", module: "custom_fields", after: "Structure" },
+  { surface: "org", group: "Organization", href: "/dashboard/layouts", label: "Layouts", navId: "org-nav-layouts", needs: "org.cohort.view", after: "Fields" },
 ];
 
 /**

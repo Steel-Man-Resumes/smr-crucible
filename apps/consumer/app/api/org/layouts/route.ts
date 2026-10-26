@@ -14,8 +14,8 @@ import { requireOrgCapability } from "@/lib/org-guard";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  const guard = await requireOrgCapability("org.cohort.view");
+export async function GET(request: Request) {
+  const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   const [layouts, defs] = await Promise.all([getRoleLayouts(guard.actor), listFieldDefs(guard.actor, { entity: "participant" })]);
   return NextResponse.json({
@@ -32,7 +32,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const guard = await requireOrgCapability("org.settings.manage");
+  const guard = await requireOrgCapability("org.settings.manage", { request });
   if (!guard.ok) return guard.response;
   const body = await request.json().catch(() => ({}));
   const res = await setRoleLayout(guard.actor, body.role, body.surface, body.layout ?? null);

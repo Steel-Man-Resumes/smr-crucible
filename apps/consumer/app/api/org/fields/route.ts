@@ -17,7 +17,7 @@ import { requireOrgCapability } from "@/lib/org-guard";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  const guard = await requireOrgCapability("org.cohort.view");
+  const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   const sp = new URL(request.url).searchParams;
   const entity = sp.get("entity");
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const guard = await requireOrgCapability("org.settings.manage");
+  const guard = await requireOrgCapability("org.settings.manage", { request });
   if (!guard.ok) return guard.response;
   const body = await request.json().catch(() => ({}));
   const id = typeof body.id === "string" ? body.id : "";

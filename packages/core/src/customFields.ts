@@ -11,6 +11,9 @@
  * triggers), never by this file, so a route that forgets cannot skip it.
  */
 import { runScoped, type OrgScope } from "./db";
+// Reach through an organization unit, in APP SQL (L3a, 103): the second wall
+// uses the same rule as the database's unit hook without leaning on it.
+import { unitReachSql } from "./orgUnitReach";
 import type { OrgActor } from "./authz/resolveOrgActor";
 import {
   MAX_LIVE_FIELDS_PER_ENTITY, defFromRow, isChoiceType, isCustomFieldEntity, normalizeHelp, normalizeNewFieldDef, normalizeOptions,
@@ -205,34 +208,6 @@ export async function setFieldRetired(actor: OrgActor, id: string, retired: bool
 }
 
 /* ------------------------------------------------------------------ values -- */
-
-/**
- * Reach through an organization unit, in APP SQL (the second wall must not
- * lean on the first). The same rule as 103's smr_staff_unit_reach and,
- * character for character, L3a's orgUnitReach.unitReachSql (review fix
- * round 1): a lead or member of an ACTIVE unit where the person has an OPEN
- * enrollment (referred, enrolled, active, paused); a lead also covers the
- * three levels of units below; still on staff; never a volunteer (the
- * preset's two staff-role denies). After both lanes merge, import theirs.
- */
-function unitReachSql(org: string, actor: string, who: string): string {
-  return `EXISTS (
-    SELECT 1 FROM enrollment ur_e
-      JOIN org_unit ur_u ON ur_u.id = ur_e.org_unit_id AND ur_u.access_code_id = ${org} AND ur_u.status = 'active'
-      LEFT JOIN org_unit ur_p1 ON ur_p1.id = ur_u.parent_id
-      LEFT JOIN org_unit ur_p2 ON ur_p2.id = ur_p1.parent_id
-      LEFT JOIN org_unit ur_p3 ON ur_p3.id = ur_p2.parent_id
-      JOIN unit_member ur_m ON ur_m.access_code_id = ${org} AND ur_m.user_id = ${actor}
-       AND ((ur_m.org_unit_id = ur_u.id AND ur_m.role_in_unit IN ('lead', 'member'))
-            OR (ur_m.role_in_unit = 'lead' AND ur_m.org_unit_id IN (ur_p1.id, ur_p2.id, ur_p3.id)))
-     WHERE ur_e.access_code_id = ${org} AND ur_e.participant_user_id = ${who}
-       AND ur_e.status IN ('referred', 'enrolled', 'active', 'paused')
-       AND EXISTS (SELECT 1 FROM org_staff ur_s WHERE ur_s.access_code_id = ${org} AND ur_s.user_id = ${actor})
-       AND NOT (EXISTS (SELECT 1 FROM org_capability_override ur_o WHERE ur_o.org_id = ${org} AND ur_o.user_id = ${actor}
-                          AND ur_o.capability = 'org.participant.invite' AND ur_o.effect = 'deny')
-            AND EXISTS (SELECT 1 FROM org_capability_override ur_o WHERE ur_o.org_id = ${org} AND ur_o.user_id = ${actor}
-                          AND ur_o.capability = 'org.outcome.write' AND ur_o.effect = 'deny')))`;
-}
 
 /**
  * Whether 103's tables are here. Asked once per process until they are (a

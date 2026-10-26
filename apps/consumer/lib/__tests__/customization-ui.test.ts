@@ -96,7 +96,7 @@ test("routes check the right capability before anything else", () => {
   for (const [file, method, cap] of routes) {
     const src = read(file);
     const body = src.slice(src.indexOf(`export async function ${method}`));
-    assert.match(body.split("\n").slice(0, 3).join("\n"), new RegExp(`requireOrgCapability\\("${cap.replace(/\./g, "\\.")}"\\)`), `${method} ${file}`);
+    assert.match(body.split("\n").slice(0, 3).join("\n"), new RegExp(`requireOrgCapability\\("${cap.replace(/\./g, "\\.")}", \\{ request \\}\\)`), `${method} ${file}`);
     assert.match(body.split("\n").slice(0, 4).join("\n"), /if \(!guard\.ok\) return guard\.response;/, `${method} ${file}`);
   }
 });
@@ -147,8 +147,9 @@ test("GET /api/org/views never writes; the one-time move is a POST the screen ca
   const post = src.slice(src.indexOf("export async function POST"));
   assert.match(post, /case "move_legacy": \{\n      if \(guard\.actor\.viaPlatformAdmin\) return NextResponse\.json\(\{ moved: 0 \}\);/);
   assert.match(read("components/org/CaseloadWorkbench.tsx"), /JSON\.stringify\(\{ action: "move_legacy" \}\)/);
-  // Read-only view-as refuses every non-GET API call at the edge (middleware), so the move cannot run under it.
-  assert.match(read("middleware.ts"), /!\["GET", "HEAD", "OPTIONS"\]\.includes\(req\.method\)/);
+  // Read-only view-as: the org guard serves only GET/HEAD while viewing, so the move cannot run under it (L2).
+  assert.match(post, /^export async function POST\(request: Request\) \{\n  const guard = await requireOrgCapability\("org\.cohort\.view", \{ request \}\);/);
+  assert.match(read("lib/org-guard.ts"), /orgRouteIdentity\(session, opts\.request\?\.method \?\? null\)/);
 });
 
 test("Fields page: a sensitive field's box is locked on, with the way out explained", () => {
@@ -168,4 +169,15 @@ test("earlier answers read as sentences, newest first as sent; nothing when ther
   assert.match(html, /Housing<\/span> was <span class="text-t-white">Stable<\/span>, set by Alma Reyes on Oct 1, 2026\. Changed by Rafa Ortiz on Oct 20, 2026\./);
   assert.equal(renderToStaticMarkup(React.createElement(EarlierAnswers, { defs, staffNames: names, earlier: [] })), "");
   assert.match(read("app/api/org/fields/values/route.ts"), /const wantsHistory = sp\.get\("history"\) === "1" && canSeeFieldHistory\(actor\);/);
+});
+
+test("nav: Fields and Layouts are wired for anyone who sees the caseload (read-only), Fields behind the custom_fields module", async () => {
+  const { NAV_EXTENSIONS, orgNavExtensionsFor } = await import("../refinery-nav");
+  const fields = NAV_EXTENSIONS.find((e) => e.href === "/dashboard/fields");
+  const layouts = NAV_EXTENSIONS.find((e) => e.href === "/dashboard/layouts");
+  assert.deepEqual([fields?.group, fields?.needs, fields?.module, layouts?.group, layouts?.needs], ["Organization", "org.cohort.view", "custom_fields", "Organization", "org.cohort.view"]);
+  const shown = (caps: string[], modules?: Record<string, boolean>) => orgNavExtensionsFor(caps, modules).map((e) => e.href);
+  assert.ok(shown(["org.cohort.view"]).includes("/dashboard/fields"));
+  assert.ok(!shown(["org.cohort.view"], { custom_fields: false }).includes("/dashboard/fields"), "an org that turned custom fields off does not see the page");
+  assert.ok(!shown([]).includes("/dashboard/layouts"));
 });

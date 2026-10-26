@@ -34,7 +34,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const guard = await requireOrgCapability("org.export");
+  const guard = await requireOrgCapability("org.export", { request });
   if (!guard.ok) return guard.response;
   if (!isSameOriginRequest(request.headers)) return NextResponse.json({ error: "Exports start from the People page." }, { status: 403 });
   const actor = guard.actor;

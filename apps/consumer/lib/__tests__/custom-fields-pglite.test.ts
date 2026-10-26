@@ -1,8 +1,8 @@
 /**
  * Real SQL for customization (migration 104, house build L4): migrations
- * 001-099 in pglite, then the REAL 102 (smr_staff_reach, org_activity,
- * org_activity_write), a stand-in for 103 (enrollment, until L3a lands),
- * then 104 itself, all as a
+ * 001-099 in pglite, then the REAL 100-103 (smr_staff_reach, org_activity,
+ * org_activity_write; org units, unit staff, enrollments), then 104 itself,
+ * all as a
  * NOSUPERUSER app role with RLS on. Proves: fields are org-scoped and written
  * only by managers; values obey reach for reads AND writes (a staff member
  * who is not assigned sees and writes nothing, even writing SQL directly);
@@ -10,8 +10,8 @@
  * retired, never removed; a retired field takes no new values but keeps its
  * old ones; personal views are private, shared ones are managers' only;
  * layouts are managers' only; every change lands in the activity log without
- * a value or a typed name; 104 runs twice without harm. The real 103
- * replaces the enrollment stand-in once L3a lands.
+ * a value or a typed name; 104 runs twice without harm; the app's
+ * unit-reach predicate (L3a's, imported) agrees with the real 103 tables.
  * Skipped unless SMR_PGLITE_DIR points at a node_modules folder holding
  * @electric-sql/pglite (SMR_PGLITE_DIR=/tmp/smr-idea-sql/node_modules).
  * Run it alone (several pglite files in one process are flaky).
@@ -26,22 +26,6 @@ const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, "@electric-sql/pglite")) ? "set SMR_PGLITE_DIR to run the pglite customization test" : false;
 const MIG = new URL("../../../../packages/core/migrations/", import.meta.url).pathname;
 
-// Stand-in for 103's enrollment, shaped as the SPEC describes it (until L3a lands).
-const STANDINS = `
-CREATE TABLE enrollment (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), access_code_id uuid NOT NULL REFERENCES access_code(id) ON DELETE CASCADE,
-  org_unit_id uuid, participant_user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, status text NOT NULL DEFAULT 'enrolled',
-  enrolled_on date, exited_on date);
-ALTER TABLE enrollment ENABLE ROW LEVEL SECURITY; ALTER TABLE enrollment FORCE ROW LEVEL SECURITY;
-CREATE POLICY enrollment_select ON enrollment FOR SELECT USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
-CREATE POLICY enrollment_reach ON enrollment AS RESTRICTIVE FOR SELECT
-  USING (public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, participant_user_id));
-REVOKE ALL ON enrollment FROM smr_app; GRANT SELECT ON enrollment TO smr_app;
-CREATE TABLE org_unit (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), access_code_id uuid NOT NULL REFERENCES access_code(id) ON DELETE CASCADE,
-  parent_id uuid REFERENCES org_unit(id), name text NOT NULL, status text NOT NULL DEFAULT 'active');
-CREATE TABLE unit_member (org_unit_id uuid NOT NULL REFERENCES org_unit(id) ON DELETE CASCADE, user_id uuid NOT NULL,
-  access_code_id uuid NOT NULL REFERENCES access_code(id) ON DELETE CASCADE, role_in_unit text NOT NULL, PRIMARY KEY (org_unit_id, user_id));
-`;
 
 test("104: fields, values under reach, views and layouts, as database facts", { skip }, async () => {
   const { PGlite } = await import(join(dir!, "@electric-sql/pglite/dist/index.js"));
@@ -63,8 +47,10 @@ test("104: fields, values under reach, views and layouts, as database facts", { 
   await db.exec("ROLLBACK").catch(() => {});
   assert.equal(((await db.query(`SELECT to_regclass('public.custom_field_value') AS t`)).rows[0] as { t: string | null }).t, null);
 
-  await db.exec("BEGIN;" + readFileSync(MIG + "102_reach_activity_audit.sql", "utf8") + ";COMMIT;"); // the real 102
-  await db.exec(STANDINS);
+  // The real 100-103 (house/integration), in order; each must apply.
+  for (const f of readdirSync(MIG).filter((x) => /^\d{3}_.*\.sql$/.test(x) && Number(x.slice(0, 3)) >= 100 && Number(x.slice(0, 3)) <= 103).sort()) {
+    await db.exec(`BEGIN; INSERT INTO _migrations(filename) VALUES ('${f}') ON CONFLICT DO NOTHING;` + readFileSync(MIG + f, "utf8") + ";COMMIT;");
+  }
   await db.exec("BEGIN;" + m104 + ";COMMIT;");
   await db.exec("BEGIN;" + m104 + ";COMMIT;"); // idempotent: a second run changes nothing and does not fail
 
@@ -113,6 +99,9 @@ test("104: fields, values under reach, views and layouts, as database facts", { 
   await q(`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES ($1, $2, $3, $4)`, [org, p1, s1, owner]);
   await q(`INSERT INTO platform_admin (user_id) VALUES ($1)`, [platform]).catch(async () => q(`INSERT INTO platform_admin (user_id, note) VALUES ($1, 'test')`, [platform]));
 
+  // 103: a site with a program under it (people enroll in programs).
+  const site = ((await q(`INSERT INTO org_unit (access_code_id, kind, name) VALUES ($1, 'site', 'North site') RETURNING id`, [org])).rows[0] as { id: string }).id;
+  const prog = ((await q(`INSERT INTO org_unit (access_code_id, parent_id, kind, name) VALUES ($1, $2, 'program', 'Job readiness') RETURNING id`, [org, site])).rows[0] as { id: string }).id;
   const A = (u: string) => ({ orgId: org, userId: u });
   const mkDef = (who: { orgId: string; userId: string }, key: string, type: string, extra: { options?: unknown; sensitive?: boolean; entity?: string; label?: string } = {}) =>
     as(who, `INSERT INTO custom_field_def (access_code_id, entity, key, label, type, options, sensitive) VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7) RETURNING id, created_by`,
@@ -217,7 +206,7 @@ test("104: fields, values under reach, views and layouts, as database facts", { 
   assert.match(await err(as(A(owner), `UPDATE custom_field_value_version SET value = '"x"'`)), /permission denied/, "or edited");
 
   // ---- enrollment values: the person behind the enrollment decides reach ------
-  const enr = ((await q(`INSERT INTO enrollment (access_code_id, participant_user_id) VALUES ($1, $2) RETURNING id`, [org, p1])).rows[0] as { id: string }).id;
+  const enr = ((await q(`INSERT INTO enrollment (access_code_id, org_unit_id, participant_user_id) VALUES ($1, $2, $3) RETURNING id`, [org, prog, p1])).rows[0] as { id: string }).id;
   const [ev] = await setVal(A(s1), cohortNote.id as string, enr, "spring cohort", s2);
   assert.equal(ev.participant_user_id, p1, "an enrollment value is about the enrolled person");
   assert.ok(await refused(setVal(A(s2), cohortNote.id as string, enr, "x")), "a colleague who cannot reach them cannot write it");
@@ -227,8 +216,6 @@ test("104: fields, values under reach, views and layouts, as database facts", { 
   // ---- the app's second wall: reach through a unit, in app SQL (103 shape) -----
   // Site > Program; Cy (p2) enrolled in the program. Run as the table owner, so
   // this is the app predicate alone, not the policies.
-  const site = ((await q(`INSERT INTO org_unit (access_code_id, name) VALUES ($1, 'Site') RETURNING id`, [org])).rows[0] as { id: string }).id;
-  const prog = ((await q(`INSERT INTO org_unit (access_code_id, parent_id, name) VALUES ($1, $2, 'Program') RETURNING id`, [org, site])).rows[0] as { id: string }).id;
   const enr2 = ((await q(`INSERT INTO enrollment (access_code_id, org_unit_id, participant_user_id, status) VALUES ($1, $2, $3, 'enrolled') RETURNING id`, [org, prog, p2])).rows[0] as { id: string }).id;
   const reaches = async (actor: string, units = true) => ((await q(`SELECT (${reachSql("$4::uuid", units)}) AS ok`, [org, false, actor, p2])).rows[0] as { ok: boolean }).ok;
   assert.equal(await reaches(s2), false, "nobody reaches through a unit they are not in");
@@ -245,13 +232,10 @@ test("104: fields, values under reach, views and layouts, as database facts", { 
   await q(`INSERT INTO org_capability_override (org_id, user_id, capability, effect, set_by) VALUES ($1, $2, 'org.participant.invite', 'deny', 'test'), ($1, $2, 'org.outcome.write', 'deny', 'test')`, [org, s2]);
   assert.equal(await reaches(s2), false, "a volunteer never reaches through a unit");
   await q(`DELETE FROM org_capability_override WHERE org_id = $1 AND user_id = $2`, [org, s2]);
-  await q(`UPDATE enrollment SET status = 'exited' WHERE id = $1`, [enr2]);
-  assert.equal(await reaches(s2), false, "an exited enrollment gives no reach");
   await q(`UPDATE enrollment SET status = 'paused' WHERE id = $1`, [enr2]);
-  await q(`UPDATE org_unit SET status = 'closed' WHERE id = $1`, [prog]);
-  assert.equal(await reaches(s2), false, "a closed unit gives no reach");
-  await q(`UPDATE org_unit SET status = 'active' WHERE id = $1`, [prog]);
   assert.equal(await reaches(s2), true, "a paused enrollment in an active unit still does");
+  await q(`UPDATE enrollment SET status = 'exited', exited_on = CURRENT_DATE, exit_reason = 'found_work' WHERE id = $1`, [enr2]);
+  assert.equal(await reaches(s2), false, "an exited enrollment gives no reach");
   await q(`DELETE FROM unit_member WHERE access_code_id = $1`, [org]);
 
   // ---- activity: every change, never a value ----------------------------------

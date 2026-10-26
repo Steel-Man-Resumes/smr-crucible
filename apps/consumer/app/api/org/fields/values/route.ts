@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(request: Request) {
-  const guard = await requireOrgCapability("org.cohort.view");
+  const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   const sp = new URL(request.url).searchParams;
   const entity = sp.get("entity") ?? "participant";
@@ -52,7 +52,7 @@ export async function GET(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const guard = await requireOrgCapability("org.note.write");
+  const guard = await requireOrgCapability("org.note.write", { request });
   if (!guard.ok) return guard.response;
   const body = await request.json().catch(() => ({}));
   if (!isCustomFieldEntity(body.entity) || typeof body.entityId !== "string") return NextResponse.json({ error: "No such record." }, { status: 400 });

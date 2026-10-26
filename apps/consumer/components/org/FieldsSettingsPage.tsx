@@ -14,17 +14,25 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useOrgTerms } from "@/lib/use-org-terms";
 import {
   CUSTOM_FIELD_TYPES, CUSTOM_FIELD_TYPE_HELP, CUSTOM_FIELD_TYPE_LABELS, SENSITIVE_EXPLANATION, SENSITIVE_FORCED_EXPLANATION, SENSITIVE_LOCKED_EXPLANATION, isChoiceType, sensitiveWordIn,
   type CustomFieldDef, type CustomFieldEntity, type CustomFieldOption, type CustomFieldType,
 } from "@crucible/core/src/customFieldsShared";
 
 const input = "plain-field t-focus w-full rounded-[4px] border px-3 py-2 text-sm";
-const ENTITY_LABEL: Record<CustomFieldEntity, string> = { participant: "About a participant", enrollment: "About an enrollment" };
-const ENTITY_HELP: Record<CustomFieldEntity, string> = {
-  participant: "These show on each person's page, as columns and filters on People, and in the caseload spreadsheet.",
-  enrollment: "These show on each enrollment in a program, on the person's page, once your organization uses programs.",
-};
+/** "a" or "an" before an org's own word. */
+const article = (w: string) => (/^[aeiou]/i.test(w) ? "an" : "a");
+/** Tab labels and help in the organization's own words (L3a, useOrgTerms). Exported for tests. */
+export function entityWords(terms: { participant: string; enrollment: string; program: string; caseload: string }) {
+  return {
+    label: { participant: `About ${article(terms.participant)} ${terms.participant}`, enrollment: `About ${article(terms.enrollment)} ${terms.enrollment}` } as Record<CustomFieldEntity, string>,
+    help: {
+      participant: `These show on each ${terms.participant}'s page, as columns and filters on People, and in the ${terms.caseload} spreadsheet.`,
+      enrollment: `These show on each ${terms.enrollment} in a ${terms.program}, on the ${terms.participant}'s page.`,
+    } as Record<CustomFieldEntity, string>,
+  };
+}
 
 async function post(body: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
   try {
@@ -41,6 +49,8 @@ export function FieldsSettingsPage() {
   const [canManage, setCanManage] = useState(false);
   const [failed, setFailed] = useState(false);
   const [entity, setEntity] = useState<CustomFieldEntity>("participant");
+  const terms = useOrgTerms();
+  const words = entityWords(terms);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -85,11 +95,11 @@ export function FieldsSettingsPage() {
         {(["participant", "enrollment"] as const).map((e) => (
           <button key={e} role="tab" aria-selected={entity === e} onClick={() => { setEntity(e); setEditing(null); setAdding(false); setMsg(null); }}
             className={`t-focus -mb-px min-h-touch border-b-2 px-4 text-sm ${entity === e ? "border-t-amber font-semibold text-t-white" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>
-            {ENTITY_LABEL[e]}
+            {words.label[e]}
           </button>
         ))}
       </div>
-      <p className="mt-3 text-xs text-t-phos-dim">{ENTITY_HELP[entity]}</p>
+      <p className="mt-3 text-xs text-t-phos-dim">{words.help[entity]}</p>
 
       {failed && (
         <div role="alert" className="mt-4 border border-t-amber bg-t-panel px-4 py-4">
@@ -137,7 +147,7 @@ export function FieldsSettingsPage() {
 
       {defs && canManage && (adding ? (
         <div className="mt-4 border border-t-amber bg-t-panel px-4 py-4">
-          <h2 className="text-sm font-semibold text-t-white">Add a field {entity === "participant" ? "about a participant" : "about an enrollment"}</h2>
+          <h2 className="text-sm font-semibold text-t-white">Add a field {words.label[entity].replace(/^About/, "about")}</h2>
           <FieldForm onCancel={() => setAdding(false)} onSubmit={async (v) => { if (await act({ action: "create", entity, ...v }, `Added "${v.label}".`)) setAdding(false); }} />
         </div>
       ) : (
