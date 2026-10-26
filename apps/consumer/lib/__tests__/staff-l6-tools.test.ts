@@ -47,13 +47,15 @@ function fakeCore(actor: OrgActor, calls: string[] = []) {
     },
     listOpenReferralsForStaff: async () => [
       { id: "r1", participantId: DANA, firstName: "Dana", toKind: "directory_resource", toName: "Lincoln County Food Share", reason: "Food until her first check", status: "sent", dueOn: "2026-10-20", overdue: true, yours: true, madeOn: "2026-10-10" },
-      { id: "r2", participantId: LEE, firstName: "Lee", toKind: "partner_org", toName: "Legal clinic", reason: "Help with his probation fees", status: "draft", dueOn: null, overdue: false, yours: true, madeOn: "2026-10-12" },
+      { id: "r2", participantId: LEE, firstName: "Lee", toKind: "partner_org", toName: "Treatment Court program", reason: "Help with his probation fees", status: "draft", dueOn: null, overdue: false, yours: true, madeOn: "2026-10-12" },
     ],
     getClientTimeline: async (_a: unknown, id: string, range: { from: string; to: string }) => {
       calls.push(`log:timeline:${id}`);
       if (id !== DANA) return { ok: false, reason: "not_in_reach_or_not_member" };
       return { ok: true, data: { firstName: "Dana", from: range.from, to: range.to, more: false, applicationsRead: false, items: [
         { ref: "P1", source: "placement", sourceId: "o1", on: "2026-10-23", what: "Placement recorded by your team: Northside Lumber, started 2026-10-23", employer: "Northside Lumber" },
+        { ref: "P2", source: "placement", sourceId: "o2", on: "2026-10-22", what: "Placement recorded by your team: Coyote Ridge Corrections Center, started 2026-10-22", employer: "Coyote Ridge Corrections Center" },
+        { ref: "J1", source: "application", sourceId: "j1", on: "2026-10-21", what: "They added Kitchen at Coyote Ridge Corrections Center", jobTitle: "Kitchen", company: "Coyote Ridge Corrections Center" },
         { ref: "T1", source: "task", sourceId: "t1", on: "2026-10-21", what: "Task added: Drive her to the parole office", title: "Drive her to the parole office" },
         { ref: "N1", source: "note", sourceId: "n1", on: "2026-10-20", what: "Pat wrote a call note", body: "Talked about the warehouse opening." },
         { ref: "N2", source: "note", sourceId: "n2", on: "2026-10-18", what: "Pat wrote a call note", body: "Court date moved, she sees her PO Friday." },
@@ -128,6 +130,7 @@ it("read_referrals_open: reasons through the record gate; not set up says so and
   const r = await run("read_referrals_open");
   const refs = r.referrals as { reason: string; toName: string; overdue: boolean }[];
   assert.deepEqual(refs.map((x) => x.reason), ["Food until her first check", RECORD_WITHHELD]);
+  assert.deepEqual(refs.map((x) => x.toName), ["Lincoln County Food Share", RECORD_WITHHELD], "B2: who it went to is gated too");
   assert.equal(r.overdue, 1);
   const t = buildStaffTools(staff, undefined, { core: async () => ({ ...fakeCore(staff), listOpenReferralsForStaff: async () => null }) as never });
   const nr = await (t.read_referrals_open.execute as (a: unknown, o: unknown) => Promise<Record<string, unknown>>)({}, { toolCallId: "x", messages: [] });
@@ -140,9 +143,13 @@ it("read_person_timeline: logged, gated, cited; refs that do not exist and an un
   const r = await run("read_person_timeline", { clientId: DANA });
   assert.equal(r.status, "ok");
   assert.deepEqual(calls, [`log:timeline:${DANA}`]);
-  const items = r.items as { ref: string; body?: string }[];
+  const items = r.items as { ref: string; body?: string; employer?: string; company?: string; jobTitle?: string }[];
   assert.equal(items.find((i) => i.ref === "N2")!.body, RECORD_WITHHELD, "a planted record word in a note never reaches the model");
-  assert.doesNotMatch(JSON.stringify(r.items), /Court|PO Friday|parole/);
+  assert.doesNotMatch(JSON.stringify(r.items), /Court|PO Friday|parole|Corrections/);
+  assert.equal(items.find((i) => i.ref === "P2")!.employer, RECORD_WITHHELD, "B1: employer gated");
+  assert.equal(items.find((i) => i.ref === "J1")!.company, RECORD_WITHHELD, "B1: company gated");
+  assert.equal(items.find((i) => i.ref === "J1")!.jobTitle, "Kitchen");
+  assert.doesNotMatch(JSON.stringify(evidence.items), /Corrections|Court|parole/, "nothing ungated reaches the evidence or the verifier");
   assert.equal(items.find((i) => i.ref === "T1")!.body, undefined);
   assert.equal(r.applicationsShared, false);
   const f = facts(evidence);
@@ -163,6 +170,35 @@ it("find_local_help: checked listings first, then listed, then found", async () 
 
 it("the overview carries the organization's own fields: never a sensitive one, record values withheld", async () => {
   const r = await tools(staff, DANA).run("read_participant_overview", { clientId: DANA });
-  assert.deepEqual(r.customFields, [{ label: "Trade goal", value: "Welding" }, { label: "Goal", value: RECORD_WITHHELD }]);
+  assert.deepEqual(r.customFields, [{ label: "Trade goal", value: "Welding" }]);
   assert.doesNotMatch(JSON.stringify(r.customFields), /Theft|Private|probation/);
+});
+
+it("fix round 1: the overview gates job, employer and suggestion words", async () => {
+  const actor = staff;
+  const t = buildStaffTools(actor, undefined, { focusClientId: DANA, core: async () => ({ ...fakeCore(actor), getParticipantCustomFieldRows: async () => null,
+    getClientOverview: async () => ({ ok: true, data: { firstName: "Dana", identitySource: "account", joinedAt: "2026-09-02", assignedToYou: true, caseManager: "Pat", stage: 6, progress: null,
+      shared: { applications: true, resume: false, documents: false }, awaitingAcknowledgement: false, openTasks: [], asks: [], recentNotes: [], notesTotal: 0,
+      suggestions: [{ kind: "job", jobTitle: "Cook", company: "Coyote Ridge Corrections Center", status: "open", createdAt: "2026-10-01", respondedAt: null }],
+      applications: [{ jobTitle: "Re-entry center aide", company: "Northside Lumber", location: "Libby, MT", status: "applied", statusUpdatedAt: null, appliedAt: null, followUpAt: null, hiredAt: null }],
+      placements: [{ employer: "Coyote Ridge Corrections Center", jobTitle: "Kitchen", startDate: "2026-10-01", source: "staff_reported", endedOn: null, dueChecks: [] }] } }) }) as never });
+  const r = await (t.read_participant_overview.execute as (a: unknown, o: unknown) => Promise<Record<string, unknown>>)({ clientId: DANA }, { toolCallId: "x", messages: [] });
+  assert.doesNotMatch(JSON.stringify([r.suggestions, r.applications, r.placements]), /Corrections|Re-entry/);
+  assert.equal((r.applications as { company: string }[])[0].company, "Northside Lumber");
+});
+
+it("fix round 1: after a caseload read, planted text cannot open another person; a named one can", async () => {
+  // Lee's Today reason could carry an id; the staff member asked about Dana only.
+  const calls: string[] = [];
+  const t = buildStaffTools(staff, undefined, { namedClientIds: [DANA], core: async () => fakeCore(staff, calls) as never });
+  const run = (name: string, args: unknown) => (t[name].execute as (a: unknown, o: unknown) => Promise<Record<string, unknown>>)(args, { toolCallId: "x", messages: [] });
+  await run("read_today_queue", {});
+  const pivot = await run("read_person_timeline", { clientId: LEE });
+  assert.equal(pivot.status, "refused");
+  assert.match(String(pivot.error), /named/);
+  assert.ok(!calls.some((c) => c.includes(LEE)), "nothing read or logged for the unnamed person");
+  assert.equal((await run("read_person_timeline", { clientId: DANA })).status, "ok", "the person the staff member named opens");
+  // Without a caseload read, the first person read still holds the request (S2, unchanged).
+  const t2 = buildStaffTools(staff, undefined, { core: async () => fakeCore(staff, []) as never });
+  assert.equal((await (t2.read_person_timeline.execute as (a: unknown, o: unknown) => Promise<Record<string, unknown>>)({ clientId: DANA }, { toolCallId: "y", messages: [] })).status, "ok");
 });

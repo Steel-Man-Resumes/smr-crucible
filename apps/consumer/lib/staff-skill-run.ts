@@ -66,6 +66,41 @@ export function offeredDrafts(toolResults: readonly { toolCallId: string; toolNa
 }
 
 /**
+ * Run the answer check on every offered draft (fix round 1, B3). A draft
+ * with any problem is held back; the notice says why, in the answer.
+ */
+export function checkStaffDrafts(drafts: readonly OfferedDraft[], check: (body: string) => string[]): { kept: OfferedDraft[]; held: string[]; notice: string } {
+  const kept: OfferedDraft[] = [];
+  const held: string[] = [];
+  for (const d of drafts) {
+    const problems = check(String(d.result.body ?? ""));
+    if (problems.length) held.push(...problems); else kept.push(d);
+  }
+  const notice = held.length
+    ? `\n\n---\n**A draft for their page was held back.** It did not pass the check: ${[...new Set(held)].join("; ")}. Ask for it again, or write it yourself.`
+    : "";
+  return { kept, held, notice };
+}
+
+/**
+ * Participants the staff member named in their own (already gated) words: a
+ * first name of an allowed selector, as a whole word, or a typed id. Used to
+ * let a person tool open someone after a caseload read (fix round 1).
+ */
+export function namedParticipantIds(said: string, selectors: readonly { id: string; firstName: string }[]): string[] {
+  const text = String(said ?? "");
+  const ids = new Set<string>();
+  for (const m of text.matchAll(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi)) ids.add(m[0].toLowerCase());
+  for (const s of selectors) {
+    const name = String(s.firstName ?? "").trim();
+    if (name.length < 2 || !/^[0-9a-f-]{36}$/i.test(s.id)) continue;
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (new RegExp(`(?<![\\p{L}])${esc}(?![\\p{L}])`, "iu").test(text)) ids.add(s.id.toLowerCase());
+  }
+  return [...ids];
+}
+
+/**
  * The AI SDK data-stream lines for a checked staff answer (protocol v1):
  * f start step, 9 tool call, a tool result, e finish step, then f, 0 text,
  * 8 annotation, e, d. Without drafts it is the text, the annotation and the

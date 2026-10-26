@@ -110,7 +110,7 @@ it("a record word planted in a note and in a custom field never reaches the mode
   const r = results[0].result;
   assert.equal((r.recentNotes as { body: string }[])[0].body, RECORD_WITHHELD);
   assert.equal((r.recentNotes as { body: string }[])[1].body, "Wants warehouse work near home.");
-  assert.deepEqual(r.customFields, [{ label: "Goal", value: RECORD_WITHHELD }], "a case number field is sensitive by subject; the record value is withheld");
+  assert.deepEqual(r.customFields, [], "a case number field is sensitive by subject; a field with a record value is dropped");
 });
 
 it('"send the email": there is no tool to send, a call to one fails, and a claim of sending is flagged', async () => {

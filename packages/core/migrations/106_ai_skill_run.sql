@@ -81,7 +81,7 @@ CREATE INDEX IF NOT EXISTS ai_skill_run_participant ON ai_skill_run (access_code
 
 -- Owner or org admin of the organization: they read every run (the audit).
 CREATE OR REPLACE FUNCTION public.ai_skill_run_org_admin(p_org uuid, p_user uuid) RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
   SELECT p_user IS NOT NULL AND (
     EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_user)
     OR EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user AND s.role = 'org_admin'));
@@ -91,7 +91,7 @@ REVOKE ALL ON FUNCTION public.ai_skill_run_org_admin(uuid, uuid) FROM PUBLIC;
 -- Does this staff member reach this participant? 102's rule when it exists;
 -- a narrower one before (header, REACH).
 CREATE OR REPLACE FUNCTION public.ai_skill_run_reach(p_org uuid, p_staff uuid, p_participant uuid) RETURNS boolean
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   v boolean;
 BEGIN
@@ -121,7 +121,7 @@ REVOKE ALL ON FUNCTION public.ai_skill_run_reach(uuid, uuid, uuid) FROM PUBLIC;
 -- BEFORE guard: who may write what. SECURITY DEFINER because it reads the
 -- RLS-forced membership tables.
 CREATE OR REPLACE FUNCTION public.ai_skill_run_guard() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_org   uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
@@ -130,15 +130,15 @@ BEGIN
     IF v_actor IS NULL OR v_org IS NULL OR NEW.actor_user_id IS DISTINCT FROM v_actor OR NEW.access_code_id IS DISTINCT FROM v_org THEN
       RAISE EXCEPTION 'a skill run is written by the staff member, in their own organization' USING ERRCODE = 'insufficient_privilege';
     END IF;
-    IF NOT (EXISTS (SELECT 1 FROM access_code a WHERE a.id = v_org AND a.partner_user_id = v_actor)
-            OR EXISTS (SELECT 1 FROM org_staff s WHERE s.access_code_id = v_org AND s.user_id = v_actor)) THEN
+    IF NOT (EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = v_org AND a.partner_user_id = v_actor)
+            OR EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = v_org AND s.user_id = v_actor)) THEN
       RAISE EXCEPTION 'only staff of this organization log a skill run' USING ERRCODE = 'insufficient_privilege';
     END IF;
     IF NEW.accepted_by IS NOT NULL OR NEW.accepted_at IS NOT NULL THEN
       RAISE EXCEPTION 'a skill run starts unaccepted' USING ERRCODE = 'check_violation';
     END IF;
     IF NEW.participant_user_id IS NOT NULL AND (
-         NOT EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.user_id = NEW.participant_user_id AND r.access_code_id = v_org)
+         NOT EXISTS (SELECT 1 FROM public.access_code_redemption r WHERE r.user_id = NEW.participant_user_id AND r.access_code_id = v_org)
          OR NOT public.ai_skill_run_reach(v_org, v_actor, NEW.participant_user_id)) THEN
       RAISE EXCEPTION 'that participant is not in your reach here' USING ERRCODE = 'insufficient_privilege';
     END IF;

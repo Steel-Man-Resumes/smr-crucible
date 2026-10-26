@@ -59,7 +59,12 @@ const RECORD_WORDS = new RegExp(
     "prisons?", "jails?", "jailed", "incarcerat\\w*", "imprison\\w*", "correctional", "penitentiar(?:y|ies)",
     "inmates?", "detained", "detention", "lock-?ups?", "locked up", "behind bars", "did time", "doing time", "served time", "time inside",
     "probation\\w*", "parole\\w*", "supervised release", "house arrest", "ankle (?:monitor|bracelet)", "electronic monitoring",
-    "halfway house", "work release", "on supervision", "under supervision",
+    "halfway house", "work release", "on supervision", "under supervision", "curfew",
+    "re-?entry center", "residential reentry", "community corrections", "department of corrections", "corrections? (?:center|facility|institution|complex|camp|unit|officer|department|dept)",
+    "(?:his|her|their|my) agent", "agent visits?", "court", "courts", "sentence (?:ends?|ended|expires?|is up|up)", "max(?:imum)? discharge", "discharge date",
+    "release (?:next|this|date)", "(?:was|were|been) inside (?:for |since )?\\d", "while inside", "on the inside",
+    "drug (?:test|tests|testing|screens?)", "urine (?:test|screen)", "(?:no[- ]contact|restraining|protective) orders?",
+    "deferred (?:prosecution|adjudication|sentence)", "diversion program", "public defender", "pre-?sentence", "sheriff", "booked into", "mug ?shot",
     "release date", "released (?:from|in|on|last)", "(?:his|her|their) release", "got out (?:of|in|on|last)", "since (?:he|she|they) got out",
     "supervision (?:officer|agent|terms|conditions|visits?|meetings?|appointments?|check-?ins?)",
     "conditions of (?:release|supervision|probation|parole|bond)",
@@ -72,7 +77,7 @@ const RECORD_WORDS = new RegExp(
   "i"
 );
 // Case-sensitive on purpose: "doc" is a document and "po" is not a word.
-const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.)(?=\W|$)|\b(?:my|his|her|their|the|a|with|to|see|saw|call|called)\s+PO\b(?!\s*[Bb]ox)/;
+const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.|BOP|RRC|UA|UAs|PSI|DOJ|ICE)(?=\W|$)|\bCorrections?\b|\b(?:[Mm]y|[Hh]is|[Hh]er|[Tt]heir|[Tt]he|[Aa]|[Ww]ith|[Tt]o|[Ss]ee|[Ss]aw|[Cc]all|[Cc]alled|[Mm]eets?|[Mm]et)\s+PO\b(?!\s*[Bb]ox)/;
 const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no\.?|num(?:ber)?)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
 
 let plannerLines: string[] | null = null;
@@ -129,7 +134,7 @@ export interface CustomFieldDefLike { key: string; label: string; type?: string 
 
 // Subjects that make a field sensitive whatever its flag says: record, court,
 // supervision, health, substance use, immigration, identity numbers.
-const SENSITIVE_FIELD_SUBJECT = /\b(?:offen[cs]e|charge|conviction|record|criminal|felony|misdemeanou?r|court|case|docket|doc|inmate|parole|probation|supervision|po|release|custody|warrant|registry|diagnos\w*|medical|health|mental|medication|disabilit\w*|substance|recovery|treatment|drug|alcohol|immigration|ssn|social security|dob|birth)\b/i;
+const SENSITIVE_FIELD_SUBJECT = /\b(?:offen[cs]e|charge|conviction|record|criminal|felony|misdemeanou?r|court|case|docket|doc|inmate|parole|probation|supervision|po|release|custody|warrant|registry|sentence|agent|officer|discharge|corrections?|facility|diagnos\w*|medical|health|mental|medication|disabilit\w*|substance|recovery|treatment|drug|alcohol|immigration|ssn|social security|dob|birth)\b/i;
 
 /**
  * Lane L4 owns `isSensitiveField`. Until its module is on main this is the
@@ -140,7 +145,7 @@ const SENSITIVE_FIELD_SUBJECT = /\b(?:offen[cs]e|charge|conviction|record|crimin
 export function isSensitiveFieldDef(def: CustomFieldDefLike): boolean {
   if (def.sensitive !== false) return true;
   const words = `${def.key} ${def.label}`.replace(/[_-]+/g, " ");
-  return SENSITIVE_FIELD_SUBJECT.test(words);
+  return SENSITIVE_FIELD_SUBJECT.test(words) || hasStaffRecordWords(words);
 }
 
 /** Render a stored custom field value as short plain text. Null when there is nothing to show. */
@@ -155,8 +160,9 @@ function fieldText(value: unknown): string | null {
 
 /**
  * What t.ROY may see of a person's custom fields: never a retired or
- * sensitive field, never a staff-member id (it names a colleague by id), and
- * every value through the record gate.
+ * sensitive field, never a staff-member id (it names a colleague by id). A
+ * field whose label or value carries a record word is dropped whole (fix
+ * round 1): even a marker beside a label says too much.
  */
 export function safeCustomFields(rows: { def: CustomFieldDefLike; value: unknown }[], gate = staffTextGate()): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = [];
@@ -164,10 +170,68 @@ export function safeCustomFields(rows: { def: CustomFieldDefLike; value: unknown
     if (def.retired_at || isSensitiveFieldDef(def) || def.type === "staff_member") continue;
     const text = fieldText(value);
     if (text === null) continue;
-    out.push({ label: String(def.label).slice(0, 80), value: gate.pass(text) });
+    const label = String(def.label).slice(0, 80);
+    if (gate.pass(label) !== label || gate.pass(text) !== text) continue;
+    out.push({ label, value: text });
   }
   return out.slice(0, 20);
 }
+
+/* -------------------------------------------- the staff member's own words -- */
+
+/** Shown to the staff member when their own message had record words taken out. */
+export const STAFF_INPUT_NOTICE = "Record details were left out of what t.ROY saw. Add them yourself after.";
+
+/**
+ * The staff member's own message, before it goes to a model (fix round 1,
+ * CC default until Troy rules otherwise): every line or sentence that carries
+ * a record word becomes the marker; the rest goes through, so a note from
+ * bullets still works on everything else.
+ */
+export function withholdRecordSentences(text: string): { text: string; withheld: boolean } {
+  let withheld = false;
+  const lines = String(text ?? "").split("\n").map((line) => {
+    if (!hasStaffRecordWords(line)) return line;
+    const sentences = line.split(/(?<=[.!?;])\s+/).map((s) => {
+      if (!hasStaffRecordWords(s)) return s;
+      withheld = true;
+      return RECORD_WITHHELD;
+    });
+    return sentences.join(" ");
+  });
+  return { text: lines.join("\n"), withheld };
+}
+
+/**
+ * Every user message in a staff conversation, record sentences withheld
+ * (content and text parts alike). `withheld` is about the NEWEST user message,
+ * which is the one the notice speaks to.
+ */
+export function gateStaffMessages<M extends Record<string, unknown>>(messages: readonly M[]): { messages: M[]; withheld: boolean } {
+  let lastUser = -1;
+  messages.forEach((m, i) => { if (m.role === "user") lastUser = i; });
+  let withheld = false;
+  const out = messages.map((m, i) => {
+    if (m.role !== "user") return m;
+    let hit = false;
+    const next: Record<string, unknown> = { ...m };
+    if (typeof m.content === "string") { const g = withholdRecordSentences(m.content); next.content = g.text; hit = hit || g.withheld; }
+    if (Array.isArray(m.parts)) {
+      next.parts = (m.parts as Record<string, unknown>[]).map((p) => {
+        if (p?.type !== "text" || typeof p.text !== "string") return p;
+        const g = withholdRecordSentences(p.text);
+        hit = hit || g.withheld;
+        return { ...p, text: g.text };
+      });
+    }
+    if (i === lastUser && hit) withheld = true;
+    return next as M;
+  });
+  return { messages: out, withheld };
+}
+
+/** Draft skills: the log keeps only the label, never what was typed for the draft (fix round 1). */
+const LABEL_ONLY_SKILLS = new Set(["Note from my bullets", "Draft a message", "Funder narrative", "Draft a check-in", "Write the outcome note"]);
 
 /**
  * The input summary a skill run is logged with (ai_skill_run.input_summary):
@@ -175,6 +239,7 @@ export function safeCustomFields(rows: { def: CustomFieldDefLike; value: unknown
  * characters at most. Never a note body.
  */
 export function skillRunInputSummary(skillLabel: string, userText: string | null | undefined): string {
+  if (LABEL_ONLY_SKILLS.has(skillLabel)) return skillLabel.slice(0, 200);
   const said = String(userText ?? "").replace(/\s+/g, " ").trim();
   const safe = said ? withholdRecordText(said, { recordConsent: false }) : "";
   return `${skillLabel}${safe ? `: ${safe}` : ""}`.slice(0, 200);

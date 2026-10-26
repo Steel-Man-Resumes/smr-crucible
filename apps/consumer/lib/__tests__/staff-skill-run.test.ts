@@ -4,9 +4,9 @@ import { it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseDataStreamPart, callChatApi, shouldResubmitMessages } from "@ai-sdk/ui-utils";
-import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, skillRunParticipant, staffSkillLabel } from "../staff-skill-run";
+import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, skillRunParticipant, staffSkillLabel, checkStaffDrafts, namedParticipantIds } from "../staff-skill-run";
+import { checkOrgClaimsDeterministic, type OrgFacts } from "../org-output-verify";
 import { skillRunIdOf, staffSkillsFor, staffSkillFromText, STAFF_SKILLS } from "../staff-troy";
-import { RECORD_WITHHELD } from "../staff-ai-safety";
 import { computeOrgCapabilities } from "@crucible/core/src/authz/capabilities";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 
@@ -22,7 +22,7 @@ it("the run is logged with a gated summary, the person, the tools and only a has
     calls: [{ tool: "draft_staff_check_in", participantId: DANA }, { tool: "offer_staff_draft", participantId: DANA }], answer: "Draft: Met Dana today.",
   }, async () => ({ logSkillRun: async (_a: unknown, input: unknown) => { seen.push(input); return RUN; } }) as never);
   assert.equal(id, RUN);
-  assert.deepEqual(seen[0], { skill: "staff-note-from-bullets", participantId: DANA, inputSummary: `Note from my bullets: ${RECORD_WITHHELD}`, tools: ["draft_staff_check_in", "offer_staff_draft"], output: "Draft: Met Dana today." });
+  assert.deepEqual(seen[0], { skill: "staff-note-from-bullets", participantId: DANA, inputSummary: "Note from my bullets", tools: ["draft_staff_check_in", "offer_staff_draft"], output: "Draft: Met Dana today." });
   // A failed log never fails the answer.
   assert.equal(await recordStaffSkillRun(actor, { skill: null, focus: null, userText: "hi", calls: [], answer: "x" }, async () => ({ logSkillRun: async () => { throw new Error("relation does not exist"); } }) as never), null);
   assert.equal(skillRunParticipant(DANA, []), DANA);
@@ -68,8 +68,7 @@ it("the stream is valid protocol; the browser gets the draft as a finished tool 
 
 it("the route logs every staff answer and streams through the helpers; the AI switch can turn it off", () => {
   const route = read("../../app/api/assistant/route.ts");
-  assert.match(route, /recordStaffSkillRun\(staffActor, \{ skill: staffSkill, focus: staffFocus, calls: staffEvidence\.calls, userText: lastUserText\(messages\), answer: out \}\)/);
-  assert.match(route, /staffAnswerStreamLines\(out, drafts, skillRunId,/);
+  assert.match(route, /recordStaffSkillRun\(staffActor, \{ skill: staffSkill, focus: staffFocus, calls: staffEvidence\.calls, userText: staffSaid, answer: out \}\)/);
   assert.match(route, /orgAiAssistEnabled\(actor\)/);
   assert.doesNotMatch(route.slice(route.indexOf("const skillRunId")), /content\[0\]/);
 });
@@ -120,4 +119,35 @@ it("t.ROY is told when the staff member is a volunteer (server-resolved), and ne
   assert.doesNotMatch(cm, /sends as written/);
   assert.match(cm, /You never send anything\./);
   assert.match(read("../../app/api/assistant/route.ts"), /volunteer: \(await import\("@crucible\/core"\)\)\.todayIsVolunteer\(actor\.role, actor\.capabilities\)/);
+});
+
+it("B3: a draft that claims it was sent, or names a wage nobody gave, is held back with the reason shown", () => {
+  const facts: OrgFacts = { caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Dana"], staffNames: ["Pat"], orgName: "Test org (Demo)" };
+  const mk = (id: string, body: string) => ({ toolCallId: id, args: {}, result: { status: "draft_only", saved: false, sent: false, participantId: DANA, purpose: "case_note", body } });
+  const check = (body: string) => checkOrgClaimsDeterministic(body, facts, "she starts Monday at the mill");
+  const r = checkStaffDrafts([mk("a", "I've sent this to Dana already."), mk("b", "Dana starts Monday at $18.50 an hour."), mk("c", "Dana starts Monday at the mill.")], check);
+  assert.deepEqual(r.kept.map((d) => d.toolCallId), ["c"]);
+  assert.match(r.notice, /A draft for their page was held back/);
+  assert.match(r.notice, /cannot send, save or book/);
+  assert.match(r.notice, /\$18\.50/);
+  // The same wage the staff member typed passes.
+  assert.equal(checkStaffDrafts([mk("d", "Dana starts at $18.50 an hour.")], (b) => checkOrgClaimsDeterministic(b, facts, "hired at $18.50 an hour")).kept.length, 1);
+  const route = read("../../app/api/assistant/route.ts");
+  assert.match(route, /checkStaffDrafts\(\s*offeredDrafts\(/);
+  assert.match(route, /staffAnswerStreamLines\(out, draftCheck\.kept, skillRunId,/);
+});
+
+it("fix round 1: the route sends gated staff words to the models and tells the staff member", () => {
+  const route = read("../../app/api/assistant/route.ts");
+  assert.match(route, /const staffInput = staffActor \? gateStaffMessages\(messages\) : null;/);
+  assert.match(route, /messages: \(staffInput\?\.messages \?\? messages\) as never,/);
+  assert.match(route, /verifyOrgOutput\(answer, facts, userSaid \|\| undefined\)/);
+  assert.match(route, /if \(staffInput\?\.withheld\) out \+= `\\n\\n_\$\{STAFF_INPUT_NOTICE\}_`;/);
+});
+
+it("fix round 1: named participants come only from the staff member's own words", () => {
+  const sel = [{ id: DANA, firstName: "Dana" }, { id: "00000000-0000-0000-0000-000000000008", firstName: "Lee" }];
+  assert.deepEqual(namedParticipantIds("prep me for dana please", sel), [DANA]);
+  assert.deepEqual(namedParticipantIds("Danae and Leeland", sel), [], "whole words only");
+  assert.deepEqual(namedParticipantIds("look at 00000000-0000-0000-0000-000000000009", sel), ["00000000-0000-0000-0000-000000000009"]);
 });

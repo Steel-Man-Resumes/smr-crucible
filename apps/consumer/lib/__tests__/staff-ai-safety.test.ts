@@ -6,6 +6,7 @@ import { it } from "node:test";
 import assert from "node:assert/strict";
 import { buildStaffTools } from "../tools/assistant-staff-tools";
 import {
+  withholdRecordSentences, gateStaffMessages, STAFF_INPUT_NOTICE,
   hasStaffRecordWords, withholdRecordText, staffRecordConsent, staffTextGate, RECORD_WITHHELD,
   isSensitiveFieldDef, safeCustomFields, skillRunInputSummary,
 } from "../staff-ai-safety";
@@ -124,14 +125,43 @@ it("custom fields: sensitive or unmarked fields are never sent, a record subject
   ]);
   assert.deepEqual(out, [
     { label: "Shoe size", value: "11" },
-    { label: "Trade goal", value: RECORD_WITHHELD },
     { label: "Languages", value: "English, Spanish" },
-  ]);
+  ], "fix round 1: a field whose value carries a record word is dropped whole");
   assert.doesNotMatch(JSON.stringify(out), /Theft|parole|Anything|Private/);
 });
 
-it("the skill-run input summary keeps no record words", () => {
-  assert.equal(skillRunInputSummary("Note from my bullets", "met dana, talked about her PO visit and court date"), `Note from my bullets: ${RECORD_WITHHELD}`);
+it("the skill-run input summary keeps no record words, and draft skills keep only their label", () => {
+  assert.equal(skillRunInputSummary("Triage my Today", "anyone with a court date this week?"), `Triage my Today: ${RECORD_WITHHELD}`);
+  for (const label of ["Note from my bullets", "Draft a message", "Funder narrative"]) assert.equal(skillRunInputSummary(label, "met dana, talked about the warehouse job"), label);
   assert.equal(skillRunInputSummary("Triage my Today", "who needs me today?"), "Triage my Today: who needs me today?");
   assert.ok(skillRunInputSummary("X", "a".repeat(500)).length <= 200);
+});
+
+it("fix round 1: the reviewer's probes are all withheld", () => {
+  for (const s of [
+    "Went to court Tuesday", "Drug court graduation", "Treatment court", "His agent visit Monday", "Sentence ends in March",
+    "Coyote Ridge Corrections Center", "Moved into the RRC", "Federal BOP release next month", "UA Tuesday", "Was inside 6 years",
+    "Max discharge date", "Placed at the reentry center", "Curfew is 9pm", "No-contact order with her ex", "Deferred adjudication",
+    "Treatment Court program", "Met with the public defender", "Drug test Friday",
+  ]) assert.ok(hasStaffRecordWords(s), s);
+  for (const s of ["Made corrections to her resume", "Ordered UAW union info", "Was inside the store when it opened", "Her travel agent called"]) {
+    assert.ok(!hasStaffRecordWords(s), s);
+  }
+});
+
+it("fix round 1: the staff member's own message loses only its record sentences, and they are told", () => {
+  const bullets = "- met Dana Tuesday\n- court date moved to Nov 3. she wants forklift work\n- follow up Friday";
+  const g = withholdRecordSentences(bullets);
+  assert.equal(g.withheld, true);
+  assert.equal(g.text, `- met Dana Tuesday\n${RECORD_WITHHELD} she wants forklift work\n- follow up Friday`);
+  const msgs = gateStaffMessages([
+    { role: "user", content: "Her PO called.", parts: [{ type: "text", text: "Her PO called." }] },
+    { role: "assistant", content: "ok" },
+    { role: "user", content: "Draft a note: she starts Monday.", parts: [{ type: "text", text: "Draft a note: she starts Monday." }] },
+  ]);
+  assert.equal(msgs.messages[0].content, RECORD_WITHHELD);
+  assert.equal((msgs.messages[0].parts as { text: string }[])[0].text, RECORD_WITHHELD);
+  assert.equal(msgs.withheld, false, "the notice speaks to the newest message only");
+  assert.equal(gateStaffMessages([{ role: "user", content: "UA Tuesday, then the interview." }]).withheld, true);
+  assert.match(STAFF_INPUT_NOTICE, /Add them yourself after\./);
 });

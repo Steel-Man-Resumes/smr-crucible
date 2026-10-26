@@ -149,3 +149,9 @@ it("the composed timeline read logs before anything else and reads applications 
   assert.equal(body.indexOf("await "), body.indexOf("await recordStaffAssistantOpen(actor, clientId, \"timeline\")"), "the first await is the log");
   assert.match(body, /if \(h\.scopes\.applications\.shared\) \{\s*const apps = await getClientApplications\(actor, clientId, \{ via: "t\.ROY" \}\)/);
 });
+
+it("fix round 1: the digest names only people in reach now, whatever row mentions someone else", () => {
+  const d = buildCaseloadDigest(digestInput({ reachable: new Set([DANA, LEE]) }), NOW);
+  assert.ok(!d.people.some((p) => p.participantId === RAY), "Ray's task and placement do not bring him in once he is out of reach");
+  assert.equal(d.counts.retentionDue, 0);
+});

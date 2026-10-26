@@ -456,8 +456,11 @@ async function aiSkillRunChecks() {
   check("or deleted", !del.ok && /permission denied/i.test(del.e), JSON.stringify(del));
 
   // Reach is a RESTRICTIVE policy: move pat to a colleague and the run leaves the old reader's view.
+  const ownTask = await core.addStaffTask(aCm, { title: "Call about the class", clientId: pat });
   await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm2} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
   check("once the person is reassigned, the old case manager no longer reads the run about them", !(await ids(aCm)).includes(mine) && (await ids(aCm)).includes(caseload));
+  check("and their digest drops them, even though they still own a task about them (fix round 1)",
+    ownTask.ok && !(await core.getCaseloadDigest(aCm)).people.some((p) => p.participantId === pat));
   await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
 
   // Caseload reads: the digest and the period numbers stay inside the caseload and the organization.

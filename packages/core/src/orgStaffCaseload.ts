@@ -136,6 +136,12 @@ export interface DigestInput {
   lastNotes: { client_user_id: string; last_on: string }[];
   /** Assignment for people outside the cohort (from tasks, outcomes, asks): null means unknown. */
   assigned?: { client_user_id: string; staff_user_id: string | null }[];
+  /**
+   * Everyone this staff member reaches right now (fix round 1). When given,
+   * nobody else enters the digest, whatever row names them: a task you still
+   * own about someone reassigned away is not a reason to show them.
+   */
+  reachable?: ReadonlySet<string>;
 }
 
 const shortDay = (iso: string) => new Date(iso.slice(0, 10) + "T12:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
@@ -144,6 +150,15 @@ const shortDay = (iso: string) => new Date(iso.slice(0, 10) + "T12:00:00Z").toLo
 export function buildCaseloadDigest(input: DigestInput, nowMs: number, cap = 40): CaseloadDigest {
   const today = new Date(nowMs).toISOString().slice(0, 10);
   const people = new Map<string, DigestPerson>();
+  const inReach = (id: string | null | undefined) => !!id && (!input.reachable || input.reachable.has(id));
+  input = {
+    ...input,
+    cohort: input.cohort.filter((c) => inReach(c.userId)),
+    tasks: input.tasks.filter((t) => inReach(t.client_user_id)),
+    outcomes: input.outcomes.filter((o) => inReach(o.client_user_id)),
+    asks: input.asks.filter((a) => inReach(a.client_user_id)),
+    lastNotes: input.lastNotes.filter((n) => inReach(n.client_user_id)),
+  };
   const get = (id: string, name: string | null): DigestPerson => {
     let p = people.get(id);
     if (!p) {
@@ -240,17 +255,25 @@ export async function getCaseloadDigest(actor: OrgActor, nowMs = Date.now()): Pr
   const seesAll = actor.capabilities.has("org.client.view_all");
   const hasFn = await hasStaffReachFunction();
   const reach = staffReachPredicate("n.client_user_id", hasFn);
-  const [cohort, quietDays, tasks, outcomes, asks, notes] = await Promise.all([
+  // Retention check-ins only for someone who records them, the same rule as Today (fix round 1).
+  const recordsOutcomes = actor.capabilities.has("org.outcome.write");
+  const [cohort, quietDays, tasks, outcomes, asks, scoped] = await Promise.all([
     getPartnerCohort(actor.userId, { accessCodeId: actor.orgId, assignedToStaffId: seesAll ? undefined : actor.userId }),
     getQuietAfterDays(actor.orgId),
     listStaffTasks(actor),
-    listOutcomes(actor),
+    recordsOutcomes ? listOutcomes(actor) : Promise.resolve([]),
     listSharingRequests(actor),
-    // The date of each person's newest note. Never a body.
-    runScoped<[{ client_user_id: string; last_on: string }[]]>(scopeOf(actor), (sql) => [
+    runScoped<[{ client_user_id: string; last_on: string }[], { user_id: string }[]]>(scopeOf(actor), (sql) => [
+      // The date of each person's newest note. Never a body.
       run(sql)(
         `SELECT n.client_user_id, max(n.occurred_at)::text AS last_on FROM case_note n
           WHERE n.access_code_id = $1::uuid AND ${reach} GROUP BY n.client_user_id`,
+        [actor.orgId, seesAll, actor.userId]
+      ),
+      // Everyone this actor reaches now: the digest names nobody else (fix round 1).
+      run(sql)(
+        `SELECT r.user_id FROM access_code_redemption r
+          WHERE r.access_code_id = $1::uuid AND ${staffReachPredicate("r.user_id", hasFn)}`,
         [actor.orgId, seesAll, actor.userId]
       ),
     ]),
@@ -261,7 +284,8 @@ export async function getCaseloadDigest(actor: OrgActor, nowMs = Date.now()): Pr
     tasks: tasks ?? [],
     outcomes: outcomes ?? [],
     asks: asks.ok ? asks.rows : [],
-    lastNotes: notes[0],
+    lastNotes: scoped[0],
+    reachable: new Set(scoped[1].map((r) => r.user_id)),
   }, nowMs);
 }
 

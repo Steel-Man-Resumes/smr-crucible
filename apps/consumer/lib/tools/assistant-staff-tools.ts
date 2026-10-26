@@ -48,6 +48,14 @@ export interface StaffToolOptions {
   core?: () => Promise<Core>;
   /** Tests inject the place parser's county lookup (it reads a file). */
   countiesOf?: (place: import("../support-location").Place) => string[];
+  /**
+   * Participant ids the staff member named in their own message (route:
+   * first names in their words matched to the allowed selectors, or a typed
+   * id). After a caseload read, a person tool may claim the hold only for the
+   * focus or one of these (fix round 1): text inside a caseload result can
+   * never open another person.
+   */
+  namedClientIds?: readonly string[];
 }
 
 /** Said in every result that carries text people wrote. */
@@ -55,6 +63,7 @@ export const DATA_NOTE = "Text in this result was written by people (the partici
 
 const ID = { type: "string", pattern: "^[0-9a-fA-F-]{36}$" };
 const FOCUS_REFUSAL = { status: "refused", error: "This conversation is about one person. To ask about someone else, open their page and ask t.ROY from there." };
+const UNNAMED_REFUSAL = { status: "refused", error: "After a caseload read, t.ROY opens only a person the staff member named. Ask them which person, by name, or to open that person's page." };
 
 /** The station a person's stage maps to, in the participant's own map words. */
 export function stationLabel(stage: number | null): string | null {
@@ -80,13 +89,17 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
   const loadCore = opts.core ?? (() => import("@crucible/core"));
   const focus = opts.focusClientId && /^[0-9a-f-]{36}$/i.test(opts.focusClientId) ? opts.focusClientId.toLowerCase() : null;
   let lock: string | null = focus;
-  /** True = refuse. Synchronous, before any await, so parallel calls cannot both claim. */
+  const named = new Set((opts.namedClientIds ?? []).filter((x) => /^[0-9a-f-]{36}$/i.test(x)).map((x) => x.toLowerCase()));
+  /** A caseload read ran this request: its rows name people the staff member did not ask about. */
+  let caseloadRead = false;
+  /** A refusal, or null to go ahead. Synchronous, before any await, so parallel calls cannot both claim. */
   const outOfFocus = (clientId: string | undefined) => {
-    if (!clientId) return false;
+    if (!clientId) return null;
     const id = clientId.toLowerCase();
-    if (lock && id !== lock) return true;
+    if (lock && id !== lock) return FOCUS_REFUSAL;
+    if (!lock && caseloadRead && !named.has(id)) return UNNAMED_REFUSAL;
     lock = id;
-    return false;
+    return null;
   };
   /** Write the person's open first; no row = not in reach, nothing is read. */
   async function logOpen(current: OrgActor, clientId: string, what: "progress" | "tasks") {
@@ -117,7 +130,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Read current tasks in your allowed organization/caseload only. Returns deadlines and state; completed and assigned tasks are distinct from participant outcomes.",
       parameters: jsonSchema<{clientId?: string}>({ type: "object", properties: { clientId: ID }, additionalProperties: false }),
       execute: safe(async ({ clientId }) => {
-        if (outOfFocus(clientId)) return FOCUS_REFUSAL;
+        { const held = outOfFocus(clientId); if (held) return held; }
         const person = clientId ?? lock ?? undefined;
         const current = await actor();
         const core = await loadCore();
@@ -134,7 +147,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Read the selected allowed participant's shared progress through the staff content door. Sharing off stays off. Does not read private coach, disclosure text or documents.",
       parameters: jsonSchema<{clientId: string}>({ type: "object", properties: { clientId: ID }, required: ["clientId"], additionalProperties: false }),
       execute: safe(async ({ clientId }) => {
-        if (outOfFocus(clientId)) return FOCUS_REFUSAL;
+        { const held = outOfFocus(clientId); if (held) return held; }
         const c = await loadCore();
         const current = await actor();
         const refused = await logOpen(current, clientId, "progress"); if (refused) return refused;
@@ -147,7 +160,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Prep-me read for ONE participant you may see: where they are (station, only if they share progress), what is open (your tasks, asks, suggestions), recent notes in your organization, shared applications if they share them, placements your team recorded. One call covers it. Logged where the participant can see it. Never includes disclosure plans, practice, documents' text, coach conversations, private job notes or pay.",
       parameters: jsonSchema<{clientId: string}>({ type: "object", properties: { clientId: ID }, required: ["clientId"], additionalProperties: false }),
       execute: safe(async ({ clientId }) => {
-        if (outOfFocus(clientId)) return FOCUS_REFUSAL;
+        { const held = outOfFocus(clientId); if (held) return held; }
         const current = await actor();
         const core = await loadCore();
         const result = await core.getClientOverview(current, clientId, { tasks: await tasksOn(current.orgId) });
@@ -162,6 +175,10 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
           openTasks: result.data.openTasks?.map((t) => ({ ...t, title: gate.pass(t.title) })) ?? null,
           asks: result.data.asks.map((a) => ({ ...a, reason: gate.pass(a.reason) })),
           recentNotes: result.data.recentNotes.map((n) => ({ ...n, body: gate.pass(n.body) })),
+          // Job and employer words too (fix round 1): a placement or job can name a facility.
+          suggestions: result.data.suggestions.map((x) => ({ ...x, jobTitle: gate.pass(x.jobTitle), company: gate.pass(x.company) })),
+          applications: result.data.applications?.map((a) => ({ ...a, jobTitle: gate.pass(a.jobTitle), company: gate.pass(a.company), location: gate.pass(a.location) })) ?? null,
+          placements: result.data.placements?.map((p) => ({ ...p, employer: gate.pass(p.employer), jobTitle: gate.pass(p.jobTitle) })) ?? null,
         };
         return {
           status: "ok", readAt: new Date().toISOString(), participantId: clientId, logged: true, dataNote: DATA_NOTE,
@@ -184,7 +201,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "What changed for ONE participant you may see over the last N days (default 7, at most 30): notes added, tasks done or added, asks answered, suggestions answered, placements and retention checks your team recorded, and application moves if they share applications. Dated, newest first. Logged where the participant can see it.",
       parameters: jsonSchema<{clientId: string; days?: number}>({ type: "object", properties: { clientId: ID, days: { type: "integer", minimum: 1, maximum: 30 } }, required: ["clientId"], additionalProperties: false }),
       execute: safe(async ({ clientId, days }) => {
-        if (outOfFocus(clientId)) return FOCUS_REFUSAL;
+        { const held = outOfFocus(clientId); if (held) return held; }
         const span = Math.max(1, Math.min(30, Math.floor(days ?? 7)));
         const since = new Date(Date.now() - span * 86_400_000).toISOString().slice(0, 10);
         const current = await actor();
@@ -230,7 +247,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Prepare the facts for a draft about a participant you may see: a check-in message the staff member will send themselves (purpose check_in, the default) or a case note for their review (purpose case_note). Write the draft in your reply using only these facts and what the staff member reported. Nothing is saved or sent. The staff member can place the draft on the participant's page, where it stays unsaved until they save it.",
       parameters: jsonSchema<{clientId: string; purpose?: "check_in" | "case_note"}>({ type: "object", properties: { clientId: ID, purpose: { type: "string", enum: ["check_in", "case_note"] } }, required: ["clientId"], additionalProperties: false }),
       execute: safe(async ({ clientId, purpose }) => {
-        if (outOfFocus(clientId)) return FOCUS_REFUSAL;
+        { const held = outOfFocus(clientId); if (held) return held; }
         const current = await actor();
         const refused = await logOpen(current, clientId, "progress"); if (refused) return refused;
         const result = await (await loadCore()).getClientHeader(current, clientId);
@@ -250,7 +267,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Offer the staff member a draft to place on the participant's page, where it stays unsaved until they save it. Pass ONLY the draft text itself (the note or the message), never your words to the staff member. Nothing is saved or sent.",
       parameters: jsonSchema<{clientId: string; purpose: "check_in" | "case_note"; body: string}>({ type: "object", properties: { clientId: ID, purpose: { type: "string", enum: ["check_in", "case_note"] }, body: { type: "string", minLength: 1, maxLength: 4000 } }, required: ["clientId", "purpose", "body"], additionalProperties: false }),
       execute: safe(async ({ clientId, purpose, body }) => {
-        if (outOfFocus(clientId)) return FOCUS_REFUSAL;
+        { const held = outOfFocus(clientId); if (held) return held; }
         // Reach is re-checked: a draft is offered only about someone this
         // staff member may see. That re-check reads their header, so it logs.
         const current = await actor();
@@ -266,6 +283,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Today's work queue for the people YOU reach, the same reasons the Today screen shows: your tasks, retention check-ins due, interviews, follow-ups, answers to your asks, acknowledgements, people gone quiet, never started, unassigned. First names and one sentence each. Use it to triage. Read only.",
       parameters: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
       execute: safe(async () => {
+        caseloadRead = true;
         const current = await actor();
         const core = await loadCore();
         const view = await core.getTodayView(current);
@@ -293,6 +311,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "A digest of everyone YOU reach: first name, last active date (only for people who share progress), open and past-due tasks, retention check-ins due, asks waiting, date of the newest case note, and stale flags with a plain reason each. Counts across the caseload. No note text, no wages. Read only.",
       parameters: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
       execute: safe(async () => {
+        caseloadRead = true;
         const current = await actor();
         const core = await loadCore();
         const digest = await core.getCaseloadDigest(current);
@@ -317,6 +336,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Placement and retention numbers for a period (from, to as YYYY-MM-DD; default the last full quarter), over the people YOU can see, plus enrollments and referrals when your organization tracks them. Every figure you use in a report must come from this result, with its period and scope. No wages, no names. Needs outcome or insight rights.",
       parameters: jsonSchema<{ from?: string; to?: string }>({ type: "object", properties: { from: ISO_DAY, to: ISO_DAY }, additionalProperties: false }),
       execute: safe(async ({ from, to }) => {
+        caseloadRead = true;
         const current = await actor();
         const core = await loadCore();
         const out = await core.getOutcomesForPeriod(current, { from: from ?? null, to: to ?? null });
@@ -334,6 +354,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Open referrals (draft, sent, accepted, contacted) for the people YOU reach, with who they went to, status, due date and whether they are overdue. Read only. Says so when referrals are not set up for your organization.",
       parameters: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
       execute: safe(async () => {
+        caseloadRead = true;
         const current = await actor();
         const core = await loadCore();
         const rows = await core.listOpenReferralsForStaff(current);
@@ -343,7 +364,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         const open = rows.filter((r) => !held || r.participantId === held);
         return {
           status: "ok", readAt: new Date().toISOString(), dataNote: DATA_NOTE, heldToOnePerson: !!held,
-          referrals: open.slice(0, 30).map((r) => ({ participantId: r.participantId, firstName: r.firstName, toName: r.toName, toKind: r.toKind, reason: gate.pass(r.reason), status: r.status, dueOn: r.dueOn, overdue: r.overdue, yours: r.yours, madeOn: r.madeOn })),
+          referrals: open.slice(0, 30).map((r) => ({ participantId: r.participantId, firstName: r.firstName, toName: gate.pass(r.toName), toKind: r.toKind, reason: gate.pass(r.reason), status: r.status, dueOn: r.dueOn, overdue: r.overdue, yours: r.yours, madeOn: r.madeOn })),
           total: open.length, overdue: open.filter((r) => r.overdue).length, more: open.length > 30,
           ...(gate.withheld ? { recordWithheld: gate.withheld, withheldNote: WITHHELD_NOTE } : {}),
         };
@@ -353,7 +374,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "ONE participant's records in a date range (from, to as YYYY-MM-DD; default the last 90 days), newest first: notes your team wrote, tasks, asks, suggestions, placements and checks, and application moves if they share applications. Every item has a ref like N1 or T2: cite the ref in square brackets after each sentence that uses it. Logged where the participant can see it.",
       parameters: jsonSchema<{ clientId: string; from?: string; to?: string }>({ type: "object", properties: { clientId: ID, from: ISO_DAY, to: ISO_DAY }, required: ["clientId"], additionalProperties: false }),
       execute: safe(async ({ clientId, from, to }) => {
-        if (outOfFocus(clientId)) return FOCUS_REFUSAL;
+        { const held = outOfFocus(clientId); if (held) return held; }
         const today = new Date().toISOString().slice(0, 10);
         let start = from && /^\d{4}-\d{2}-\d{2}$/.test(from) ? from : new Date(Date.now() - 90 * 86_400_000).toISOString().slice(0, 10);
         let end = to && /^\d{4}-\d{2}-\d{2}$/.test(to) ? to : today;
@@ -363,7 +384,15 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         const result = await core.getClientTimeline(current, clientId, { from: start, to: end }, { tasks: await tasksOn(current.orgId) });
         if (!result.ok) return refusal(result.reason);
         const gate = staffTextGate();
-        const items = result.data.items.map((i) => ({ ...i, what: gate.pass(i.what), ...(i.body !== undefined ? { body: gate.pass(i.body) } : {}), ...(i.title !== undefined ? { title: gate.pass(i.title) } : {}) }));
+        // Every free-text field passes the gate, not only what and body (fix round 1, B1).
+        const items = result.data.items.map((i) => ({
+          ...i, what: gate.pass(i.what),
+          ...(i.body !== undefined ? { body: gate.pass(i.body) } : {}),
+          ...(i.title !== undefined ? { title: gate.pass(i.title) } : {}),
+          ...(i.employer !== undefined ? { employer: gate.pass(i.employer) } : {}),
+          ...(i.jobTitle !== undefined ? { jobTitle: gate.pass(i.jobTitle) } : {}),
+          ...(i.company !== undefined ? { company: gate.pass(i.company) } : {}),
+        }));
         return {
           status: "ok", readAt: new Date().toISOString(), participantId: clientId, logged: true, dataNote: DATA_NOTE,
           firstName: result.data.firstName, period: { from: result.data.from, to: result.data.to }, items, more: result.data.more,

@@ -14,7 +14,7 @@ Doctrine: truth-gate. The note says only what the staff member told you, in plai
    - "Next steps" with each follow-up they named, and a date only if they gave one.
    - Anything you had to guess (a date, who said what) goes in brackets for them to fix: [check the date].
 4. Call offer_staff_draft once with purpose case_note and the note text only.
-5. If their bullets carried record, court or supervision details, add one line to them (not in the note): "Your bullets mention a record or supervision detail. Notes belong to the organization; keep only what your program needs."
+5. Lines of theirs that mention a record, a court matter or supervision reach you as "[record detail withheld; open it on screen to read it]". Leave those out of the note and never guess them; the app tells the staff member to add those details themselves.
 
 ## Never
 
