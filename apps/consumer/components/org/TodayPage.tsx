@@ -21,6 +21,8 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useEffectiveRole } from "@/components/RoleProvider";
+import { OrgSetupPrompt } from "@/components/org/OrgSetupPrompt";
+import { useOrgTerms } from "@/lib/use-org-terms";
 import { ListChecks } from "lucide-react";
 import { openStaffTroy, STAFF_TROY_READY } from "@/lib/staff-troy";
 import { STAFF_TOUR_OPEN_EVENT } from "@/lib/tour/staff-tour";
@@ -68,7 +70,13 @@ export function TodayPage() {
   }
 
   // The staff tour never opens under view-as or assist, so the control is not drawn there (review N-3).
-  return <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} tourReady={!role?.impersonating} />;
+  // First run: the owner sees a nudge to set the organization up (house lane L3a); never under view-as.
+  return (
+    <>
+      {!role?.impersonating && <div className="mx-auto max-w-6xl"><OrgSetupPrompt placement="today" /></div>}
+      <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} tourReady={!role?.impersonating} />
+    </>
+  );
 }
 
 export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady = STAFF_TROY_READY, tourReady = true }: {
@@ -78,6 +86,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady =
   /** The "Show me around" control for the staff tour (the shell mounts the tour for staff only). */
   tourReady?: boolean;
 }) {
+  const terms = useOrgTerms();
   // data-tour ids are the staff tour's targets (lib/tour/crm-beats.ts); the
   // "Show me around" control opens it (components/tour/StaffTour.tsx listens).
   const header = (sentence: React.ReactNode) => (
@@ -132,7 +141,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady =
       <div className="mx-auto max-w-6xl">
         {header(null)}
         <p role="note" className="border border-t-line bg-t-panel px-4 py-4 text-t-white">
-          Today is for staff who can open what participants have shared. Ask your organization&apos;s owner, or go to <Link href="/dashboard/people" className="t-focus underline underline-offset-4">People</Link>.
+          Today is for staff who can open what {terms.participants} have shared. Ask your organization&apos;s owner, or go to <Link href="/dashboard/people" className="t-focus underline underline-offset-4">People</Link>.
         </p>
       </div>
     );

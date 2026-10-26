@@ -23,6 +23,8 @@ import { orgNoteDraftKey } from "@/lib/org-note-draft";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { OutcomesPanel } from "@/components/org/OutcomesPanel";
+import { EnrollmentsPanel } from "@/components/org/EnrollmentsPanel";
+import { useOrgTerms } from "@/lib/use-org-terms";
 import { STAFF_TROY_READY } from "@/lib/staff-troy";
 import { GlanceRow, PersonHeaderCard, PersonRail, Skeleton, StationStrip, TheirScreenBoard, scopeStateText } from "@/components/org/PersonOverview";
 import {
@@ -83,6 +85,7 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
   const [opened, setOpened] = useState(false);
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [copied, setCopied] = useState(false);
+  const terms = useOrgTerms();
 
   const load = useCallback(async () => {
     setError(null);
@@ -165,10 +168,11 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
         onCopyEmail={() => { if (!client.email) return; navigator.clipboard?.writeText(client.email).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {}); }} />
       <StationStrip person={client} first={first} />
       <GlanceRow person={client} openTasks={openTasks} fmtDay={(s) => day(s)} onPick={(t) => go({ kind: "tab", tab: t.tab })} />
+      <EnrollmentsPanel clientId={clientId} first={first} />
 
       <div className={`grid gap-5 ${STAFF_TROY_READY ? "lg:grid-cols-[minmax(0,1fr)_17rem]" : ""}`}>
         <div className="min-w-0">
-          <div role="tablist" aria-label="Participant sections" className="flex flex-wrap gap-1 border-b border-t-line mb-5">
+          <div role="tablist" aria-label={`${terms.cap("participant")} sections`} className="flex flex-wrap gap-1 border-b border-t-line mb-5">
             {PERSON_TABS.map(({ key, label }) => (
               <button key={key} role="tab" aria-selected={tab === key} onClick={() => go({ kind: "tab", tab: key })} data-tour={key === "shared" ? "crm-person-shared-tab" : undefined}
                 className={`t-focus px-4 py-2 text-sm border-b-2 -mb-px ${tab === key ? "border-t-amber text-t-white font-semibold" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>

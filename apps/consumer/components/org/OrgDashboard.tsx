@@ -27,6 +27,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useOrgTerms } from "@/lib/use-org-terms";
 import { useUserTier } from "@/lib/useUserTier";
 // Direct module import, NOT the "@crucible/core" barrel: this is a client
 // component, and the barrel re-exports server-only modules that pull in
@@ -185,6 +186,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
     ? `/api/partner/org?codeId=${encodeURIComponent(codeId)}`
     : "/api/partner/org";
   const tier = useUserTier();
+  // The organization's own words (house lane L3a); defaults until they load.
+  const terms = useOrgTerms();
   const canView = tier === "partner" || tier === "admin";
   const [data, setData] = useState<OrgPayload | null>(null);
   const [legacyCohort, setLegacyCohort] = useState<Cohort | null>(null);
@@ -545,7 +548,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 <td className="px-4 py-3">
                   {data?.crmV2 ? (
                     <Link href={`/dashboard/clients/${c.userId}`} className="t-focus font-medium text-t-white underline decoration-t-line underline-offset-4 hover:decoration-t-amber">
-                      {c.name || "Client"}
+                      {c.name || terms.cap("participant")}
                     </Link>
                   ) : (
                     <div className="font-medium text-t-white">{c.name || "Client"}</div>
@@ -621,7 +624,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               {data
                 ? isStaffView
                   ? ownCaseloadOnly
-                    ? "Staff view: the clients assigned to you who chose to share progress."
+                    ? `Staff view: the ${terms.participants} assigned to you who chose to share progress.`
                     : "Staff view: everyone in your organization who chose to share progress."
                   : `Your organization's people, team and program reach.${data.org.code ? ` Code ${data.org.code}.` : ""}`
                 : "Progress for the people you support who chose to share it."}
@@ -688,7 +691,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
             <h2 className="text-lg font-bold text-t-white">{drillStaffName}</h2>
             <span className="text-xs text-t-phos-dim">
-              {drillClients.length} sharing {drillClients.length === 1 ? "client" : "clients"}
+              {drillClients.length} sharing {drillClients.length === 1 ? terms.participant : terms.participants}
             </span>
           </div>
           <ClientTable rows={drillClients} showAssign />
@@ -788,7 +791,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                         <div className="mt-2 text-2xl font-bold text-t-white">
                           {m.clientCount}
                           <span className="text-xs font-normal text-t-phos-dim ml-1">
-                            {m.clientCount === 1 ? "client" : "clients"}
+                            {m.clientCount === 1 ? terms.participant : terms.participants}
                           </span>
                         </div>
                         <div className="mt-1.5 flex flex-wrap gap-1.5 text-[11px]">
@@ -823,7 +826,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                       <div className="mt-2 text-2xl font-bold text-t-white">
                         {unassignedCount}
                         <span className="text-xs font-normal text-t-phos-dim ml-1">
-                          {unassignedCount === 1 ? "client" : "clients"}
+                          {unassignedCount === 1 ? terms.participant : terms.participants}
                         </span>
                       </div>
                       <div className="text-[11px] text-t-phos-dim mt-1.5">
@@ -846,7 +849,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           {/* Add participant + pending invites */}
           {data && canInvite && (view === "all" || view === "add") && (
             <div id="add" className="bg-t-panel border border-t-line px-4 py-4 mb-6 scroll-mt-24">
-              <h2 className="text-sm font-semibold text-t-white mb-1">Add a participant</h2>
+              <h2 className="text-sm font-semibold text-t-white mb-1">Add a {terms.participant}</h2>
               <p className="text-xs text-t-phos-dim mb-3">
                 {isStaffView
                   ? "They get an email that signs them straight in. No code, no password, and they're assigned to you automatically."
@@ -940,8 +943,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           {/* Privacy note */}
           <p className="text-xs text-t-phos-dim bg-t-panel border border-t-line px-4 py-3 mb-6">
             {data?.crmV2
-              ? "You only see clients who chose to share their progress with you. You see a resume, an application list or a cover letter only if that person chose to share it, one item at a time, and they can see every time you open it. You never see disclosure plans or interview answers."
-              : "You only see clients who chose to share their progress with you. You never see their resume text, disclosure plans, or interview answers. You see only how far along they are."}
+              ? `You only see ${terms.participants} who chose to share their progress with you. You see a resume, an application list or a cover letter only if that person chose to share it, one item at a time, and they can see every time you open it. You never see disclosure plans or interview answers.`
+              : `You only see ${terms.participants} who chose to share their progress with you. You never see their resume text, disclosure plans, or interview answers. You see only how far along they are.`}
           </p>
 
           {assignError && (
@@ -953,7 +956,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           {/* Full roster */}
           <div className="flex items-baseline justify-between gap-2 mb-3">
             <h2 className="text-lg font-bold text-t-white">
-              {isStaffView ? "Your clients" : "All clients"}
+              {isStaffView ? `Your ${terms.participants}` : `All ${terms.participants}`}
             </h2>
             {showTeam && clients.length > 0 && view === "all" && (
               <span className="text-xs text-t-phos-dim">
@@ -982,9 +985,9 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
               </select>
               {!isStaffView && staff.length > 0 && (
                 <>
-                  <label className="sr-only" htmlFor="caseload-staff">Case manager</label>
+                  <label className="sr-only" htmlFor="caseload-staff">{terms.cap("case_manager")}</label>
                   <select id="caseload-staff" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} className="t-focus bg-t-panel border border-t-line text-xs text-t-phos px-2 py-1.5">
-                    <option value="">Any case manager</option>
+                    <option value="">Any {terms.case_manager}</option>
                     {staff.map((m) => <option key={m.userId} value={m.userId}>{m.name || m.email}</option>)}
                     <option value={UNASSIGNED}>Not assigned</option>
                   </select>

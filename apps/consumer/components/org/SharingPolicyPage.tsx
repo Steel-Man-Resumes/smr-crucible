@@ -13,6 +13,7 @@
  * for anybody until that person has seen it and acknowledged it.
  */
 import { useCallback, useEffect, useState } from "react";
+import { useOrgTerms } from "@/lib/use-org-terms";
 
 interface Policy { id: string; versionNo: number; scopes: string[]; audience: string; purpose: string; coversExisting: boolean; effectiveAt: string }
 interface State {
@@ -28,6 +29,7 @@ interface State {
 const STATUS = { acknowledged: "Acknowledged", awaiting: "Has not acknowledged yet", stopped: "Acknowledged, then stopped sharing" } as const;
 
 export function SharingPolicyPage() {
+  const terms = useOrgTerms();
   const [st, setSt] = useState<State | null>(null);
   const [scopes, setScopes] = useState<string[]>([]);
   const [audience, setAudience] = useState("assigned_staff");
@@ -63,13 +65,13 @@ export function SharingPolicyPage() {
     <div className="max-w-3xl mx-auto px-4 py-10">
       <h1 className="text-2xl font-bold text-t-white mb-1">Sharing policy</h1>
       <p className="text-sm text-t-phos-dim mb-6">
-        By default every participant decides what {st.orgName} can see, one item at a time. If your contract, your funder or a court makes some of that a condition of the program, set it here. Require as little as you truly need.
+        By default every {terms.participant} decides what {st.orgName} can see, one item at a time. If your contract, your funder or a court makes some of that a condition of the program, set it here. Require as little as you truly need.
       </p>
       {msg && <p role="status" className="text-sm text-t-amber-bright border border-t-amber bg-t-panel px-4 py-3 mb-4">{msg}</p>}
 
       {!st.available ? (
         <p className="text-sm text-t-phos bg-t-panel border border-t-line px-5 py-4">
-          Required sharing is not switched on for your organization. Because it is a condition placed on people rather than a choice they make, we set it up together: contact us and we will walk through what your program needs and the wording participants will see.
+          Required sharing is not switched on for your organization. Because it is a condition placed on people rather than a choice they make, we set it up together: contact us and we will walk through what your {terms.program} needs and the wording {terms.participants} will see.
         </p>
       ) : (
         <>
@@ -96,11 +98,11 @@ export function SharingPolicyPage() {
             </div>
             <div>
               <p className="font-medium text-t-white mb-2">Does it reach back?</p>
-              <label className="flex items-center gap-3 py-1 text-sm text-t-phos"><input type="radio" name="covers" className="t-focus" checked={!coversExisting} onChange={() => setCoversExisting(false)} />Only what a participant makes after they acknowledge this.</label>
+              <label className="flex items-center gap-3 py-1 text-sm text-t-phos"><input type="radio" name="covers" className="t-focus" checked={!coversExisting} onChange={() => setCoversExisting(false)} />Only what a {terms.participant} makes after they acknowledge this.</label>
               <label className="flex items-center gap-3 py-1 text-sm text-t-phos"><input type="radio" name="covers" className="t-focus" checked={coversExisting} onChange={() => setCoversExisting(true)} />Everything they have made here, including before.</label>
             </div>
             <div>
-              <label htmlFor="pol-purpose" className="block font-medium text-t-white mb-1">Your reason, as participants will read it</label>
+              <label htmlFor="pol-purpose" className="block font-medium text-t-white mb-1">Your reason, as {terms.participants} will read it</label>
               <p className="text-xs text-t-phos-dim mb-2">Shown word for word under {st.orgName}&apos;s name. Start from one of these and make it true for your program:</p>
               <div className="flex flex-wrap gap-2 mb-2">
                 {st.options.presets.map((p) => (
@@ -130,12 +132,12 @@ export function SharingPolicyPage() {
               <ul className="bg-t-panel border border-t-line divide-y divide-t-line">
                 {st.members.map((m) => (
                   <li key={m.userId} className="px-4 py-2.5 flex items-center justify-between gap-3 text-sm">
-                    <span className="text-t-white">{m.name || "Participant"}</span>
+                    <span className="text-t-white">{m.name || terms.cap("participant")}</span>
                     <span className={m.status === "acknowledged" ? "text-t-phos-dim" : "text-t-amber-bright"}>{STATUS[m.status]}</span>
                   </li>
                 ))}
               </ul>
-              <p className="text-xs text-t-phos-dim mt-2">Someone who has not acknowledged can still use everything. Their case manager sees only that they have not. That conversation is yours to have; the system will not have it for you.</p>
+              <p className="text-xs text-t-phos-dim mt-2">Someone who has not acknowledged can still use everything. Their {terms.case_manager} sees only that they have not. That conversation is yours to have; the system will not have it for you.</p>
             </section>
           )}
         </>
