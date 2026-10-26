@@ -179,3 +179,21 @@ test('the route and the SQL keep their 409s (this fix is client only)', () => {
   assert.match(write, /fail\(409, 'Your tour changed in another tab\. Reload to pick up its saved place\.'\)/);
   assert.match(read('app/api/onboarding/tour/route.ts'), /request\.headers\.get\("X-Orientation-Account"\) !== userId\) return NextResponse\.json\(\{ error: "Your account changed\. Reload before continuing\." \}, \{ status: 409/);
 });
+
+test('review SF-1: a stop releases the lock (the lock effect re-runs on active) and the notice renders outside the player', () => {
+  const pins: Array<[string, RegExp]> = [
+    ['components/GuidedTour.tsx', /\}, \[active, held, tier, pause\]\);/],
+    ['components/tour/SettingsTour.tsx', /\}, \[active, allowed, pause\]\);/],
+    ['components/tour/StaffTour.tsx', /\}, \[active, pause\]\);/],
+  ];
+  for (const [file, deps] of pins) {
+    const src = readFileSync(join(import.meta.dirname, '..', '..', file), 'utf8');
+    const lock = src.indexOf('lockPageForTour(document.documentElement');
+    const depAt = src.search(deps);
+    assert.ok(lock > 0 && depAt > lock, `${file}: the lock effect lists active in its deps`);
+    const notice = src.indexOf('{conflict && <RunConflictNotice');
+    assert.ok(notice > 0, `${file}: the conflict notice is rendered`);
+    const before = src.slice(0, notice);
+    assert.ok(!/\{active && \([^]*$/.test(before.slice(before.lastIndexOf('return'))), `${file}: the notice is not inside an active-only branch`);
+  }
+});
