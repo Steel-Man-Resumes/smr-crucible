@@ -60,6 +60,7 @@ const RECORD_WORDS = new RegExp(
     "inmates?", "detained", "detention", "lock-?ups?", "locked up", "behind bars", "did time", "doing time", "served time", "time inside",
     "probation\\w*", "parole\\w*", "supervised release", "house arrest", "ankle (?:monitor|bracelet)", "electronic monitoring",
     "halfway house", "work release", "on supervision", "under supervision",
+    "release date", "released (?:from|in|on|last)", "(?:his|her|their) release", "got out (?:of|in|on|last)", "since (?:he|she|they) got out",
     "supervision (?:officer|agent|terms|conditions|visits?|meetings?|appointments?|check-?ins?)",
     "conditions of (?:release|supervision|probation|parole|bond)",
     "convict\\w*", "felon\\w*", "felonies", "misdemeanou?rs?", "offen[cs]es?", "offenders?", "arrest\\w*", "warrants?",

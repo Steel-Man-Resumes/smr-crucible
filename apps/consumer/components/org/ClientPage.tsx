@@ -572,20 +572,20 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
   // A draft t.ROY wrote, placed here from the assistant. It is NOT saved:
   // it sits in this box, marked, until the staff member saves or discards it.
   const draftKey = viewerId ? orgNoteDraftKey(viewerId, clientId) : null;
-  const [draft, setDraft] = useState<{ purpose: "case_note" | "check_in" } | null>(null);
+  const [draft, setDraft] = useState<{ purpose: "case_note" | "check_in"; skillRunId?: string } | null>(null);
   useEffect(() => {
     if (!draftKey) return;
     try {
       const raw = sessionStorage.getItem(draftKey);
       if (!raw) return;
-      const d = JSON.parse(raw) as { body?: unknown; purpose?: unknown };
+      const d = JSON.parse(raw) as { body?: unknown; purpose?: unknown; skillRunId?: unknown };
       if (typeof d.body !== "string" || !d.body.trim()) return;
       setBody(d.body.slice(0, 8000));
       const purpose = d.purpose === "case_note" ? "case_note" : "check_in";
       // A check-in nobody has sent is a 'draft' until a person marks it sent.
       // A case note draft keeps the staff member's own default kind.
       if (purpose === "check_in") setKind("draft");
-      setDraft({ purpose });
+      setDraft({ purpose, skillRunId: typeof d.skillRunId === "string" && /^[0-9a-f-]{36}$/i.test(d.skillRunId) ? d.skillRunId : undefined });
     } catch { /* no draft */ }
   }, [draftKey]);
   function clearDraft() {
@@ -595,7 +595,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
   async function save() {
     setBusy(true); setMsg(null);
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "add_note", body, kind, draftedByAssistant: !!draft }) });
+      body: JSON.stringify({ action: "add_note", body, kind, draftedByAssistant: !!draft, skillRunId: draft?.skillRunId }) });
     setBusy(false);
     if (res.ok) { setBody(""); setKind(defaultKind); clearDraft(); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
   }

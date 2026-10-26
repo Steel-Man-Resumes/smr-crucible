@@ -39,8 +39,18 @@ describe("numbers must be ours", () => {
     assert.ok(problems("9 people started work this quarter.").length > 0);
   });
 
-  it("ignores money and percentages, which are reported elsewhere", () => {
-    assert.deepEqual(problems("Spend to date is $0.89 and engagement is 62%."), []);
+  // House build L6 (2026-10-26): money and rates are no longer skipped. A
+  // wage nobody gave is the red-team case; a rate in a funder narrative must
+  // be one the outcomes read computed.
+  it("catches money nobody gave and a rate nobody computed", () => {
+    const found = problems("Spend to date is $0.89 and engagement is 62%.");
+    assert.equal(found.length, 2, JSON.stringify(found));
+    assert.match(found[0], /\$0\.89/);
+    assert.match(found[1], /62%/);
+  });
+
+  it("allows 0% and 100%", () => {
+    assert.deepEqual(problems("None of them are 0% done and one is 100% ready."), []);
   });
 });
 

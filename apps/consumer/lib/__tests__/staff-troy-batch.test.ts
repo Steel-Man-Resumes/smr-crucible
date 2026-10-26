@@ -79,7 +79,8 @@ for (const c of CASES) {
 
 it("every tool a staff skill names is a real staff tool", () => {
   const names = new Set(Object.keys(buildStaffTools(actor, undefined, { core: async () => core as never })));
-  for (const id of ["staff-operations", "staff-prep-me", "staff-check-in", "staff-find-help", "staff-what-changed", "staff-outcome-note"]) {
+  for (const id of ["staff-operations", "staff-prep-me", "staff-check-in", "staff-find-help", "staff-what-changed", "staff-outcome-note",
+    "staff-triage-today", "staff-caseload-digest", "staff-stale-flags", "staff-note-from-bullets", "staff-timeline-summary", "staff-outreach-draft", "staff-funder-narrative"]) {
     const md = readFileSync(join(process.cwd(), "lib", "skills", id, "SKILL.md"), "utf8");
     for (const t of md.match(/\b(?:read|find|draft|offer|search|get|save)_[a-z_]+\b/g) ?? []) assert.ok(names.has(t), `${id} names ${t}, which staff do not have`);
   }

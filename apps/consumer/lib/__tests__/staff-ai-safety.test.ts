@@ -91,7 +91,7 @@ it("detects record, court, custody and supervision words and identifiers; leaves
     "Released from county jail last month", "Her probation officer called", "Court-ordered classes on Mondays", "He was convicted in 2019",
     "Two misdemeanors on file", "Pending case in district court", "Case # 24-CF-1182", "DOC number 448812", "Meets his PO on Fridays",
     "On supervision until March", "Some of the gap was time inside", "Warrant cleared", "Lives at a halfway house", "Whether you are on supervision",
-    "Your conditions touch work", "Arrested in June", "Got her record expunged", "DUI in 2021", "custody hearing next week",
+    "Your conditions touch work", "Arrested in June", "Keep the job after his release date", "Since she got out in May", "Got her record expunged", "DUI in 2021", "custody hearing next week",
   ]) assert.ok(hasStaffRecordWords(s), s);
   for (const s of [
     "Talked about the warehouse opening.", "Wants a forklift certificate", "Needs a ride to the interview Thursday", "Updated her resume summary",

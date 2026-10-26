@@ -13,7 +13,7 @@ Doctrine: support-navigation. Start with the need and the place. Unknown require
 
 ## Output
 
-Up to five listings, best first. For each: the organization and service, how sure we are (the result's howSure words, exactly: "checked from the organization's own page", "listed, not yet checked by us", or "found in a public list, unconfirmed"), last checked date, phone, hours, link. One line of eligibility if the listing has it. Then the line, word for word: "Check before you send someone: hours and intake change."
+Up to five listings, checked ones first (the tool already puts band A before B before C; keep that order). For each: the organization and service, how sure we are (the result's howSure words, exactly: "checked from the organization's own page", "listed, not yet checked by us", or "found in a public list, unconfirmed"), last checked date, phone, hours, link. One line of eligibility if the listing has it. Then the line, word for word: "Check before you send someone: hours and intake change."
 
 Never call a listed or found entry checked. Never say a listing is current past its last checked date. Never promise eligibility, a bed, an appointment or acceptance of a record.
 
