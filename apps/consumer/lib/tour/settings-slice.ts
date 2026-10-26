@@ -12,7 +12,7 @@
  * scale and origin for a zoom on the real page) and the stage map's camera.
  */
 import { settingsTourRequested, TOP_BAR_PX } from './settings-tour';
-import { ACT_CHANGE_MS, ORIENT_MS, holdMs } from './timing';
+import { ACT_CHANGE_MS, MS_PER_WORD, ORIENT_MS, holdMs, wordCount } from './timing';
 import type { Box, Camera, Size } from './geometry';
 
 export const SLICE_PARAM = 'slice';
@@ -45,6 +45,12 @@ export interface SliceBeat {
   dwell?: { wide: number; phone: number };
   /** One chip held longer, for a visible pause (X1: after Spanish). */
   split?: { index: number; ms: number };
+  /**
+   * A slow beat whose target has parts: the word in the body where each part's
+   * sentence starts. A thin inner ring moves to that part as the reader gets
+   * there, so a long hold still follows the words (C1: style, length and focus, save).
+   */
+  follow?: readonly number[];
 }
 
 /** The stage map: the Settings page's eight sections (page.tsx SECTIONS) and the real control names in each. */
@@ -66,7 +72,7 @@ export const SLICE_BEATS: readonly SliceBeat[] = [
     dwell: { wide: 1100, phone: 1200 } },
   { id: 'c1', kind: 'slow', where: 'page', title: 'How t.ROY talks to you',
     body: "Supportive, balanced or direct. Brief or full answers. Guide me, or just answer. Press save when you're done, or it won't stick.",
-    targets: ['settings-coach-choices'], zoom: 1.3 },
+    targets: ['settings-coach-choices'], zoom: 1.3, follow: [0, 4, 13] },
   { id: 'x1', kind: 'sweep', where: 'page', title: 'Two kinds of help',
     body: "Plain language, read aloud and Spanish change only t.ROY's answers. Text size, motion and spacing change the whole app, right away.",
     chips: [
@@ -142,6 +148,20 @@ export function chipAt(beat: SliceBeat, phone: boolean, t: number): number {
   let k = 0;
   for (let n = 0; n < starts.length; n++) if (t >= starts[n]) k = n;
   return k;
+}
+
+/**
+ * When the reading ring moves to each part, ms into the beat: the camera lands,
+ * the title is read, then each part when its sentence starts, at the tour's
+ * reading pace. The first never comes before the zoom has landed.
+ */
+export function followTimes(beat: SliceBeat): number[] {
+  if (!beat.follow) return [];
+  const title = wordCount(beat.title);
+  return beat.follow.map((w, k) => {
+    const at = ORIENT_MS + (title + w) * MS_PER_WORD;
+    return k === 0 ? Math.max(ZOOM_AT_MS + ZOOM_MS, at) : at;
+  });
 }
 
 /** The slice's wall time at default pace: the three beats plus the stage shrinking into the card. */

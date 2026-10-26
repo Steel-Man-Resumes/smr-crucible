@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  MAP_TILES, SLICE_BEATS, SLICE_COPY, beatMs, chipAt, chipDwells, chipStarts, cubicBezier, cameraEase, focusScroll, mapTileBox,
+  MAP_TILES, SLICE_BEATS, SLICE_COPY, beatMs, chipAt, chipDwells, chipStarts, cubicBezier, cameraEase, focusScroll, followTimes, mapTileBox,
   pageShot, portraitMapHeight, portraitMapRows, settingsSliceRequested, sliceRuntimeMs, stageCamera, MAP_SCENE,
 } from '../tour/settings-slice';
 import { settingsTourRequested } from '../tour/settings-tour';
@@ -98,6 +98,13 @@ test('timing: M1 9.9 / 10.7 s, C1 9.2 s, X1 11.3 / 11.9 s, about 31 s wall with 
   // M1 walks all eight tiles at 1.1 s (1.2 s a row on a phone).
   assert.deepEqual(chipDwells(m1, false), Array(8).fill(1100));
   assert.deepEqual(chipDwells(m1, true), Array(8).fill(1200));
+  // C1's reading ring follows the words: style, then length and focus, then save, each when its sentence starts.
+  const words = c1.body.split(/\s+/);
+  assert.deepEqual(c1.follow!.map(w => words[w]), ['Supportive,', 'Brief', 'Press']);
+  const f = followTimes(c1);
+  assert.deepEqual(f, [1100 + 5 * 300, 1100 + (5 + 4) * 300, 1100 + (5 + 13) * 300], "after the title is read, then each sentence");
+  assert.ok(f.every((ms, k) => ms < 9200 && (k === 0 || ms > f[k - 1])), 'every part is reached inside the hold, in order');
+  assert.deepEqual(followTimes(x1), []);
   // Slow and fast alternate: sweep, slow, sweep.
   assert.deepEqual(SLICE_BEATS.map(b => b.kind), ['sweep', 'slow', 'sweep']);
 });

@@ -37,7 +37,7 @@ import { lockPageForTour } from '@/lib/tour/page-lock';
 import { SETTINGS_PATH, settingsTourAllowed } from '@/lib/tour/settings-tour';
 import {
   HOP_MS, MAP_SCENE, MAP_TILES, NARROW, P_MAP, SCROLL_MS, SLICE_BEATS, SLICE_COPY, TILE_PAN_MS, TILE_ZOOM, ZOOM_AT_MS, ZOOM_MS,
-  beatMs, chipAt, chipStarts, focusScroll, lerp, lerpBox, mapTileBox, mapWideScale, pageShot, portraitMapHeight, portraitMapRows,
+  beatMs, chipAt, chipStarts, focusScroll, followTimes, lerp, lerpBox, mapTileBox, mapWideScale, pageShot, portraitMapHeight, portraitMapRows,
   settingsSliceRequested, stageCamera, tween, type SliceBeat,
 } from '@/lib/tour/settings-slice';
 import { SettingsTour } from './SettingsTour';
@@ -182,6 +182,8 @@ function SlicePlayer({ accountId, onLeave, onAgain }: { accountId: string; onLea
   const [shrink, setShrink] = useState<Box | null>(null);
   const [cut, setCut] = useState<Box | null>(null);
   const [pills, setPills] = useState<Pill[]>([]);
+  /** C1: the inner ring on the part of the target the words have reached. */
+  const [ring, setRing] = useState<Box | null>(null);
   const [cardH, setCardH] = useState(() => (typeof window !== 'undefined' && innerWidth < NARROW ? 300 : 220));
   const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
   const [particles, setParticles] = useState<{ key: number; d: string } | null>(null);
@@ -281,7 +283,7 @@ function SlicePlayer({ accountId, onLeave, onAgain }: { accountId: string; onLea
   useEffect(() => { if (running && elapsed >= hold) advance(); }, [elapsed, hold, running, advance]);
 
   /* The ending takes the zoom off at once. */
-  useEffect(() => { if (ending) { resetPageCamera(); setCut(null); setPills([]); endRef.current?.focus({ preventScroll: true }); } }, [ending]);
+  useEffect(() => { if (ending) { resetPageCamera(); setCut(null); setPills([]); setRing(null); endRef.current?.focus({ preventScroll: true }); } }, [ending]);
 
   /* Screen reader: one announcement per beat, chips listed once. */
   useEffect(() => {
@@ -304,7 +306,7 @@ function SlicePlayer({ accountId, onLeave, onAgain }: { accountId: string; onLea
     if (!beat || ending) return;
     if (onStageBeat) {
       // Behind the stage: the real page waits at the top, unscaled.
-      setPageCamera(0, 1, camState.origin); setCut(null); setPills([]);
+      setPageCamera(0, 1, camState.origin); setCut(null); setPills([]); setRing(null);
       return;
     }
     let raf = 0;
@@ -324,6 +326,7 @@ function SlicePlayer({ accountId, onLeave, onAgain }: { accountId: string; onLea
       });
       if (!plan) { const skip = setTimeout(() => go(i + 1), 1200); return () => clearTimeout(skip); }
       const shot = pageShot({ target: plan.target, frame: plan.frame, view, card: cardRect, maxScale: portrait || reduced ? 1 : beat.zoom ?? 1, maxScroll: plan.max });
+      const marks = followTimes(beat);
       const frame = () => {
         if (!alive) return;
         const now = nowT();
@@ -337,6 +340,19 @@ function SlicePlayer({ accountId, onLeave, onAgain }: { accountId: string; onLea
         const next = box && spotlightRect({ left: box.x, top: box.y, width: box.w, height: box.h }, innerWidth, innerHeight, 6);
         setCut(c => (same(c, next ?? null) ? c : next ?? null));
         setPills(p => (p.length ? [] : p));
+        // The reading ring: on the part whose sentence the reader has reached, a short eased move between parts.
+        let ringBox: Box | null = null;
+        if (marks.length && now >= marks[0]) {
+          const parts = findAll(beat.targets ?? []);
+          let k = 0;
+          for (let n = 0; n < marks.length; n++) if (now >= marks[n]) k = n;
+          const boxOf = (n: number) => { const el = parts[Math.min(n, parts.length - 1)]; if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left - 4, y: r.top - 4, w: r.width + 8, h: r.height + 8 }; };
+          const here = boxOf(k);
+          const pk = instant || k === 0 ? 1 : tween(now, marks[k], HOP_MS);
+          const there = k > 0 && pk < 1 ? boxOf(k - 1) : null;
+          ringBox = here && there ? lerpBox(there, here, pk) : here;
+        }
+        setRing(r => (same(r, ringBox) ? r : ringBox));
         raf = requestAnimationFrame(frame);
       };
       frame();
@@ -376,10 +392,12 @@ function SlicePlayer({ accountId, onLeave, onAgain }: { accountId: string; onLea
       const box = lit && before && p < 1 ? lerpBox(before, lit, p) : lit;
       const next = box && spotlightRect({ left: box.x, top: box.y, width: box.w, height: box.h }, innerWidth, innerHeight, 6);
       setCut(c => (same(c, next ?? null) ? c : next ?? null));
+      setRing(r => (r ? null : r));
       // The chip labels: the lit one bright, the ones already shown stay as dim labels on their rows.
       const shown: Pill[] = [];
       beat.chips!.forEach((chip, n) => {
-        if (n > k || !present[n]) return;
+        // The lit label shows once the spotlight has landed on its row, never while it travels.
+        if (n > k || !present[n] || (n === k && p < 0.85)) return;
         const r = n === k && next ? next : (() => { const b = liveBox(findAll(chip.targets)); return b && spotlightRect({ left: b.x, top: b.y, width: b.w, height: b.h }, innerWidth, innerHeight + 4000, 6); })();
         if (!r || r.y + r.h / 2 < 72 || r.y > innerHeight) return;
         const right = !portrait && r.x + r.w + 200 < innerWidth;
@@ -502,6 +520,7 @@ function SlicePlayer({ accountId, onLeave, onAgain }: { accountId: string; onLea
     <p id="ss-keys" className="et-sr">{TOUR_COPY.keys}</p>
     <p className="et-sr" aria-live="polite">{announce}</p>
 
+    {shrink && <div className="et-dim ss-dim-in" aria-hidden="true" />}
     {beat && onStageBeat && <div className="et-wrap" data-shrink={!!shrink} style={shrinkStyle}>
       <div ref={stageRef} className="et-stage" aria-hidden="true" onClick={e => { if (e.isTrusted) toggle(); }}>
         {stage.w > 0 && <div className="et-cam" style={{ width: portrait ? P_MAP.w : MAP_SCENE.w, height: portrait ? pMapH : MAP_SCENE.h, transform: `translate3d(${cam.tx}px, ${cam.ty}px, 0) scale(${cam.s})`, transition: reduced ? 'none' : `transform ${tile <= 0 ? 1100 : TILE_PAN_MS}ms ${CAMERA_EASE}` }}>
@@ -521,6 +540,7 @@ function SlicePlayer({ accountId, onLeave, onAgain }: { accountId: string; onLea
     {beat && !onStageBeat && <>
       <div className="et-dim" style={{ background: cut ? 'transparent' : undefined }} aria-hidden="true" />
       {cut && <div className="et-cutout ss-cutout" aria-hidden="true" style={{ left: cut.x, top: cut.y, width: cut.w, height: cut.h }} />}
+      {ring && <div className="ss-ring" aria-hidden="true" style={{ left: ring.x, top: ring.y, width: ring.w, height: ring.h }} />}
       {pills.map(p => <span key={p.label} className="ss-chip" data-lit={p.lit} data-side={p.side} aria-hidden="true" style={{ left: p.x, top: p.y }}>{p.label}</span>)}
       <div ref={setCardEl} key="slice-card" className="et-card" data-still={reduced} style={cardStyle}>
         <div className="et-card__head">
