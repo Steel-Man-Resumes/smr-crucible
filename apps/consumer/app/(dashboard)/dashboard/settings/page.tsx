@@ -15,7 +15,8 @@ import { LeaveOrgButton } from "@/components/settings/LeaveOrgButton";
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
 import { SettingsLesson } from "@/components/tour/SettingsLesson";
-import { SettingsTour, openSettingsTour } from "@/components/tour/SettingsTour";
+import { openSettingsTour } from "@/components/tour/SettingsTour";
+import { SettingsTourGate } from "@/components/tour/SettingsSlice";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
@@ -450,7 +451,8 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {!isOrgStaff && !impersonating && <SettingsTour />}
+      {/* SettingsTourGate renders the v1 SettingsTour; only ?tour=settings&slice=1 plays the v2 slice (saves nothing). */}
+      {!isOrgStaff && !impersonating && <SettingsTourGate />}
       {!isOrgStaff && !impersonating && <SettingsLesson />}
 
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}

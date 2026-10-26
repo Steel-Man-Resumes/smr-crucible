@@ -93,7 +93,7 @@ export function CoachSettingsSection() {
         </div>
 
         {/* Style */}
-        <div id="settings-coach-style">
+        <div id="settings-coach-style" data-tour="settings-coach-choices">
           <label className="text-sm font-medium text-t-white block mb-2">Coaching style</label>
           <div className="grid grid-cols-3 gap-2">
             {STYLE_OPTIONS.map((o) => (
@@ -115,7 +115,7 @@ export function CoachSettingsSection() {
         </div>
 
         {/* Length + Focus toggles */}
-        <div className="grid sm:grid-cols-2 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4" data-tour="settings-coach-choices">
           <div>
             <label className="text-sm font-medium text-t-white block mb-2">Response length</label>
             <div className="flex gap-2">
@@ -191,7 +191,7 @@ export function CoachSettingsSection() {
         </div>
 
         {/* Save */}
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex items-center gap-3 pt-1" data-tour="settings-coach-choices">
           <TBtn onClick={save} disabled={status === "saving"} size="sm">
             {status === "saving" ? "saving..." : "save"}
           </TBtn>

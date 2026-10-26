@@ -245,7 +245,7 @@ test('impersonation: never offered, never opened, never written for the person',
   assert.match(route, /if \(session\.impersonation\) return NextResponse\.json\(\{ error: [^}]*\}, \{ status: 403/);
   // The page mounts the tour and its control only for a client in their own session; the controller stops at the GET's impersonating flag too.
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
-  assert.match(page, /\{!isOrgStaff && !impersonating && <SettingsTour \/>\}/);
+  assert.match(page, /\{!isOrgStaff && !impersonating && <SettingsTourGate \/>\}/, 'the gate renders the v1 SettingsTour unless ?tour=settings&slice=1 (settings-slice.test.ts)');
   assert.match(page, /\{!isOrgStaff && !impersonating && \(\s*<button type="button" onClick=\{openSettingsTour\}/);
   const ctl = read('components/tour/SettingsTour.tsx');
   assert.match(ctl, /if \(mode === 'chip' \|\| data\.impersonating\) return;/);
