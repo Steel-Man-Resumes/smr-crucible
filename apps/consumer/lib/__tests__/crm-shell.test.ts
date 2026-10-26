@@ -15,6 +15,7 @@ import { STATIONS } from "../refinery-nav";
 import { OrgSidebar } from "../../components/org/OrgSidebar";
 import { OrgMark, orgMonogram, ORG_MARK_TONES } from "../../components/org/OrgMark";
 import { openStaffTroy } from "../staff-troy";
+import { DEMO_SAMPLE_LINE } from "../demo-line";
 
 (globalThis as { React?: unknown }).React = React;
 const CONSUMER = join(import.meta.dirname, "..", "..");
@@ -74,8 +75,11 @@ test("staff get the workshop skin on the sidebar and the mobile drawer; the old 
   assert.doesNotMatch(shell, /isOrgPartner \? "" : " forge-workshop"/);
   assert.doesNotMatch(shell, />Organization<\/p>/);
   assert.match(shell, /function renderOrgNav[\s\S]*?<OrgSidebar/);
-  // The demo honesty line stays word for word.
-  assert.match(shell, /Sample data\. These participants are fictional\. The employers and local services named are real; no application or hire shown here took place\./);
+  // The demo honesty line comes from one place (lib/demo-line.ts) and tells
+  // the truth when fictional employers appear (house build L1).
+  assert.match(shell, /\{DEMO_SAMPLE_LINE\}/);
+  assert.match(DEMO_SAMPLE_LINE, /^Sample data\. The participants are fictional, and so is any employer marked fictional\. Real employers and local services are named only as places; no application or hire shown here took place\.$/);
+  assert.doesNotMatch(DEMO_SAMPLE_LINE, /named are real/);
 });
 
 test("org name display strips (Demo) into a chip and never shows an empty name", () => {

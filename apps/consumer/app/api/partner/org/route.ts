@@ -47,6 +47,8 @@ import {
   inviteActionAllowed,
   getOrgBrand,
   DEFAULT_ORG_BRAND,
+  isUndeliverableEmail,
+  UNDELIVERABLE_LINE,
 } from "@crucible/core";
 import { isValidEmail } from "@/lib/auth-rate-limit";
 import { adminSecondFactorOk } from "@/lib/session-policy";
@@ -367,6 +369,11 @@ export async function POST(request: Request) {
         }
       }
 
+      // The typed address alone decides this (a reserved test domain such as
+      // .invalid), so saying so tells staff nothing about any account.
+      if (isUndeliverableEmail(email)) {
+        return NextResponse.json({ ok: true, message: `Saved. ${UNDELIVERABLE_LINE}` });
+      }
       return NextResponse.json({ ok: true, message: INVITE_NEUTRAL_MESSAGE });
     }
 
@@ -404,6 +411,9 @@ export async function POST(request: Request) {
       const touched = await touchOrgInviteResend(org.accessCodeId, body.userId, { actorUserId: userId });
       if (!touched.ok) {
         return NextResponse.json({ error: touched.error }, { status: 400 });
+      }
+      if (isUndeliverableEmail(touched.email)) {
+        return NextResponse.json({ error: UNDELIVERABLE_LINE }, { status: 400 });
       }
       try {
         const inviterName = (await auth())?.user?.name || null;
