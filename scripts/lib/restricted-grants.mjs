@@ -128,7 +128,33 @@ export const RESTRICTED_GRANTS = {
   refinery_seat_legacy: ["SELECT", "INSERT", "DELETE"],
   org_seat_offer: ["SELECT", "INSERT"],
   access_code_departure: ["SELECT"],
+  // House L3b (102). The activity log and every earlier value of a placement
+  // are written only by SECURITY DEFINER triggers: the app reads, never writes.
+  org_activity: ["SELECT"],
+  outcome_correction: ["SELECT"],
 };
+
+/**
+ * Functions the app role MUST be able to execute (102 onward). Row policies on
+ * notes, tasks, placements, check-ins, suggestions, asks and the activity log
+ * call smr_staff_reach as the querying role: without EXECUTE every scoped read
+ * of those tables fails with "permission denied for function". Migrations grant
+ * these only when the role already exists, so a fresh database (where this
+ * role is created afterwards) needs them granted here, like the table list.
+ */
+export const APP_FUNCTIONS = [
+  "smr_staff_sees_all(uuid, uuid)",
+  "smr_staff_reach(uuid, uuid, uuid)",
+  "smr_correct_retention_check(uuid, text, text, text, text)",
+];
+/**
+ * Functions the app role must NEVER execute: the activity log's only writer,
+ * and the org-role lookup that answers for any organization (definer-only).
+ */
+export const APP_FORBIDDEN_FUNCTIONS = [
+  "org_activity_write(uuid, uuid, uuid, text, text, text, text)",
+  "smr_org_role(uuid, uuid)",
+];
 
 /** The directory objects (061). Checked by EFFECTIVE privilege, not only direct grants. */
 export const DIRECTORY_OBJECTS = [
@@ -179,6 +205,14 @@ export async function applyRestrictedGrants(run, role = APP_ROLE) {
     // An empty list means the app holds nothing on it at all.
     if (allowed.length) await run(`GRANT ${allowed.join(", ")} ON public.${table} TO ${role}`);
   }
+  for (const fn of APP_FUNCTIONS) {
+    const exists = await run(`SELECT to_regprocedure('public.${fn}') IS NOT NULL AS ok`);
+    if (exists?.[0]?.ok) await run(`GRANT EXECUTE ON FUNCTION public.${fn} TO ${role}`);
+  }
+  for (const fn of APP_FORBIDDEN_FUNCTIONS) {
+    const exists = await run(`SELECT to_regprocedure('public.${fn}') IS NOT NULL AS ok`);
+    if (exists?.[0]?.ok) await run(`REVOKE ALL ON FUNCTION public.${fn} FROM PUBLIC, ${role}`);
+  }
 }
 
 /** Returns a list of human-readable violations; empty means the grants are right. */
@@ -194,6 +228,18 @@ export async function checkRestrictedGrants(run, role = APP_ROLE) {
     const missing = allowed.filter((p) => !held.includes(p));
     if (extra.length) problems.push(`${role} holds ${extra.join(", ")} on ${table}; allowed: ${allowed.join(", ")}`);
     if (missing.length) problems.push(`${role} lacks ${missing.join(", ")} on ${table}`);
+  }
+  for (const fn of APP_FUNCTIONS) {
+    const [row] = await run(`SELECT to_regprocedure('public.${fn}') IS NOT NULL AS ok,
+                                    CASE WHEN to_regprocedure('public.${fn}') IS NULL THEN NULL
+                                         ELSE has_function_privilege('${role}', 'public.${fn}', 'EXECUTE') END AS can`);
+    if (row?.ok && !row.can) problems.push(`${role} cannot execute ${fn}; every scoped read of a reach-protected table would fail`);
+  }
+  for (const fn of APP_FORBIDDEN_FUNCTIONS) {
+    const [row] = await run(`SELECT to_regprocedure('public.${fn}') IS NOT NULL AS ok,
+                                    CASE WHEN to_regprocedure('public.${fn}') IS NULL THEN NULL
+                                         ELSE has_function_privilege('${role}', 'public.${fn}', 'EXECUTE') END AS can`);
+    if (row?.ok && row.can) problems.push(`${role} can execute ${fn}, so it could forge the activity log`);
   }
   return problems;
 }

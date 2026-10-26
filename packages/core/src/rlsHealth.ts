@@ -65,6 +65,10 @@ export const RLS_PROTECTED_TABLES = [
   "access_code_departure",
   // Organization brand (migration 099): members read, owner sets the logo
   "org_brand",
+  // House L3b (migration 102): the activity log and placement corrections,
+  // org-scoped and reach-scoped, written only by triggers
+  "org_activity",
+  "outcome_correction",
 ] as const;
 
 export interface RlsHealth {

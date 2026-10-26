@@ -24,6 +24,8 @@ export * from './orgInsights';
 export * from './staffTasks';
 export * from './orgToday';
 export * from './orgOutcomes';
+export * from './orgActivity';
+export * from './orgActivityShared';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './artifactRevision';
