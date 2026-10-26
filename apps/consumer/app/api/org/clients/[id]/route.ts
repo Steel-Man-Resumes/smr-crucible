@@ -4,7 +4,8 @@
  *   GET  ?scope=applications|resume|documents   shared content for one scope
  *   GET  (no scope)                              who they are, what is shared, notes
  *   POST { action: "request_sharing", scope, reason }
- *   POST { action: "add_note", body, kind?, draftedByAssistant? }
+ *   POST { action: "add_note", body, kind?, draftedByAssistant?, skillRunId? }
+ *        (a saved t.ROY draft marks its skill run accepted by the saver, 106)
  *        { action: "edit_note", noteId, body, kind? }  (author only, keeps the earlier wording)
  *
  * This route decides NOTHING about access. Every read and write goes through
@@ -22,6 +23,7 @@ import {
   getClientDocuments,
   getClientNotes,
   addClientNote,
+  acceptSkillRun,
   editClientNote,
   requestSharing,
   listSuggestions,
@@ -109,6 +111,10 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
       kind: typeof body.kind === "string" ? body.kind : undefined,
       draftedByAssistant: body.draftedByAssistant === true,
     });
+    // The staff member's own save is the acceptance of the t.ROY run that drafted it. Best effort: the note stands either way.
+    if (res.ok && body.draftedByAssistant === true && UUID.test(String(body.skillRunId ?? ""))) {
+      await acceptSkillRun(actor, String(body.skillRunId)).catch(() => false);
+    }
     return res.ok ? NextResponse.json({ ok: true, id: res.id }) : NextResponse.json({ error: res.error }, { status: 400 });
   }
   if (body.action === "edit_note") {

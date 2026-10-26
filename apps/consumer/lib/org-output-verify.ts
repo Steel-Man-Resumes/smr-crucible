@@ -1,4 +1,4 @@
-import type { StaffToolEvidence } from "./staff-tool-evidence";
+import { evidenceRefs, type StaffToolEvidence } from "./staff-tool-evidence";
 import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
 /**
  * Nothing unverified reaches a staff member or an admin. Two layers, in order.
@@ -100,9 +100,24 @@ function allowedNumbers(facts: OrgFacts): Set<string> {
 /**
  * LAYER 1. Arithmetic and identity. No model, no network, no excuses.
  */
-export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): string[] {
+export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userSaid?: string): string[] {
   const problems: string[] = [];
   const allowed = allowedNumbers(facts);
+
+  // t.ROY reads and drafts; it cannot send, save, file or book (house build
+  // L6 red team: "send the email"). An answer that says it did is wrong
+  // whatever else is true in it.
+  const acted = text.match(/\bI(?:'ve| have)?\s+(?:already\s+|just\s+)?(?:sent|emailed|texted|messaged|saved|filed|booked|scheduled|submitted|assigned|recorded|logged)\b(?!\s+(?:nothing|no\b))|\b(?:your|the|this|that) (?:message|email|text|note|draft|check-in|referral|reminder) (?:has been|was|is now|got) (?:sent|saved|filed|delivered|scheduled)\b/i);
+  if (acted) problems.push(`"${acted[0]}": t.ROY cannot send, save or book anything; you do that yourself`);
+
+  // Citations (summarize-with-sources): every [N1]-style ref must be an item
+  // the timeline read returned, and a timeline summary must cite at least one.
+  const refs = evidenceRefs(facts.staffToolEvidence ?? []);
+  const cited = [...text.matchAll(/\[([A-Z]\d{1,3})\]/g)].map((m) => m[1]);
+  for (const ref of new Set(cited)) if (!refs.has(ref)) problems.push(`the source "[${ref}]" is not one of the items read`);
+  if ((facts.staffToolEvidence ?? []).some((e) => e.tool === "read_person_timeline") && refs.size > 0 && cited.length === 0) {
+    problems.push("the summary cites none of the items it was built from");
+  }
   // A template's blanks are not claims. "[Your Name]" names nobody and "[X] min"
   // counts nothing; both were being reported to the reader as unsupported.
   text = text.replace(/\[[^\]\n]{0,80}\]/g, " ");
@@ -114,6 +129,19 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts): stri
   // inside one is still checked when it appears on its own (review C4 S1).
   for (const phrase of (facts.staffToolEvidence ?? []).flatMap((e) => e.phrases ?? []).sort((a, b) => b.length - a.length)) {
     if (phrase.length >= 3) text = text.split(phrase).join(" ");
+  }
+
+  // Pay is never inferred (staff-operations: no wage unless the staff member
+  // typed it). Any amount of money must be one the staff member said.
+  const saidAmounts = new Set([...(userSaid ?? "").matchAll(/\d+(?:[.,]\d{1,2})?/g)].map((m) => Number(m[0].replace(",", "."))));
+  const money = text.match(/\$\s?\d[\d,]*(?:\.\d{1,2})?|\b\d+(?:\.\d{1,2})?\s?(?:dollars|bucks)\b|\b\d+(?:\.\d{1,2})?\s?(?:\/\s?|an\s|a\s|per\s)(?:hr|hour)\b/gi) ?? [];
+  for (const m of money) {
+    const value = Number((m.match(/\d[\d,]*(?:\.\d{1,2})?/)?.[0] ?? "").replace(/,/g, ""));
+    if (!saidAmounts.has(value)) problems.push(`the amount "${m.trim()}" is not one you gave me; pay and wages come only from you`);
+  }
+  // Rates must be ones a read computed (read_outcomes_summary employedPercent), or 0 and 100.
+  for (const m of text.matchAll(/(?<![\d.])(\d{1,3})(?:\.\d+)?\s?(?:%|percent\b)/gi)) {
+    if (m[1] !== "0" && m[1] !== "100" && !allowed.has(m[1])) problems.push(`the rate "${m[0].trim()}" is not one the query computed`);
   }
 
   // Every standalone integer must be one we can account for. Money, dates and
@@ -268,7 +296,7 @@ export async function verifyOrgOutput(
   facts: OrgFacts,
   userSaid?: string
 ): Promise<OrgVerdict> {
-  const deterministic = checkOrgClaimsDeterministic(text, facts);
+  const deterministic = checkOrgClaimsDeterministic(text, facts, userSaid);
   const model = await checkOrgClaimsWithModel(text, facts, userSaid);
   return {
     ok: deterministic.length === 0 && (model?.length ?? 0) === 0,

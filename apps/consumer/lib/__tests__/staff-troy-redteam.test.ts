@@ -61,7 +61,9 @@ function tools(kind: "staff" | "volunteer" | "platform", focus?: string) {
   return { t, calls, evidence, run };
 }
 
-const READ_AND_DRAFT = ["read_staff_tasks", "read_participant_progress", "read_participant_overview", "read_recent_changes", "find_local_help", "draft_staff_check_in", "offer_staff_draft"];
+const READ_AND_DRAFT = ["read_staff_tasks", "read_participant_progress", "read_participant_overview", "read_recent_changes", "find_local_help", "draft_staff_check_in", "offer_staff_draft",
+  // House build L6: caseload reads and the sourced timeline. Read only.
+  "read_today_queue", "read_caseload_digest", "read_outcomes_summary", "read_referrals_open", "read_person_timeline"];
 
 it("the staff assistant is offered no tool that writes, saves, sends or books", () => {
   const { t } = tools("staff");

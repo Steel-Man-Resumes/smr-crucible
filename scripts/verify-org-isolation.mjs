@@ -390,6 +390,7 @@ async function main() {
   await participantTableChecks();
   await seatChecks();
   await reachChecks();
+  await aiSkillRunChecks();
 }
 
 /**
@@ -554,6 +555,97 @@ async function reachChecks() {
                                   (SELECT count(*)::int FROM retention_check WHERE outcome_id = ${outc.id} AND checked_by IS NULL) AS checks`;
   const [{ src }] = await sql`SELECT source AS src FROM outcome_record WHERE id = ${outc.id}`;
   check("and the records stay, without the deleted account's id; the placement stays confirmed", left.notes === 1 && left.checks === 2 && src === "staff_verified", JSON.stringify({ ...left, src }));
+}
+
+/**
+ * Staff t.ROY (106, house build L6): the skill-run log and the caseload reads.
+ * The claim: a run is written only by the staff member, in their own
+ * organization, about someone they reach; read by them and the organization's
+ * owner or admins only, and only while the reader reaches the person;
+ * accepted once, by the person who ran it; never edited or deleted by the app.
+ * The caseload digest and period numbers never cross an organization or a
+ * caseload.
+ */
+async function aiSkillRunChecks() {
+  console.log("\n  -- staff t.ROY skill runs and caseload reads --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("ai-owner"), cm = await mkUser("ai-cm"), cm2 = await mkUser("ai-cm2"), admin = await mkUser("ai-admin"), spy = await mkUser("ai-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOAIR" + uniq}, ${P + " ai runs"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOAIR2" + uniq}, ${P + " ai runs2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${cm2}, 'staff'), (${org.id}, ${admin}, 'org_admin')`;
+  const pat = await mkUser("ai-pat"), notMine = await mkUser("ai-notmine"), theirs = await mkUser("ai-theirs");
+  for (const u of [pat, notMine]) { await core.redeemAccessCode(u, org.code); await joinCohortConsent(u); }
+  await core.redeemAccessCode(theirs, org2.code); await joinCohortConsent(theirs);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${notMine}, ${cm2}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aCm2 = await A(cm2), aOwner = await A(owner), aAdmin = await A(admin), aSpy = await A(spy);
+  const run = (participantId) => ({ skill: "staff-prep-me", participantId, inputSummary: "Prep me", tools: ["read_participant_overview"], output: "draft" });
+  const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e.message) }; } };
+
+  const mine = await core.logSkillRun(aCm, run(pat));
+  check("a case manager logs a skill run about their own participant", !!mine);
+  const caseload = await core.logSkillRun(aCm, run(null));
+  check("and a caseload run about nobody in particular", !!caseload);
+  const off = await attempt(() => core.logSkillRun(aCm, run(notMine)));
+  check("not about a colleague's participant they do not reach", !off.ok || !off.v, JSON.stringify(off));
+  const foreign = await attempt(() => core.logSkillRun(aCm, run(theirs)));
+  check("not about another organization's participant", !foreign.ok || !foreign.v, JSON.stringify(foreign));
+  const forged = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO ai_skill_run (access_code_id, actor_user_id, skill, input_summary, output_hash) VALUES (${org.id}, ${owner}, 'staff-prep-me', 'x', ${"a".repeat(64)})`]));
+  check("not in somebody else's name, even written directly", !forged.ok, JSON.stringify(forged));
+  const preAccepted = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO ai_skill_run (access_code_id, actor_user_id, skill, input_summary, output_hash, accepted_by, accepted_at) VALUES (${org.id}, ${cm}, 'staff-prep-me', 'x', ${"a".repeat(64)}, ${cm}, now())`]));
+  check("and never already accepted", !preAccepted.ok, JSON.stringify(preAccepted));
+  const crossOrg = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org2.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`INSERT INTO ai_skill_run (access_code_id, actor_user_id, skill, input_summary, output_hash) VALUES (${org2.id}, ${cm}, 'staff-prep-me', 'x', ${"a".repeat(64)})`]));
+  check("a staff member cannot log a run into an organization they do not belong to", !crossOrg.ok, JSON.stringify(crossOrg));
+
+  const ids = async (actor) => (await core.listSkillRuns(actor)).map((r) => r.id);
+  check("the case manager reads their own runs", (await ids(aCm)).includes(mine) && (await ids(aCm)).includes(caseload));
+  check("a colleague does not", !(await ids(aCm2)).includes(mine) && !(await ids(aCm2)).includes(caseload));
+  check("the owner and an org admin read every run in their organization (the AI audit)", (await ids(aOwner)).includes(mine) && (await ids(aAdmin)).includes(mine));
+  check("another organization reads none", (await ids(aSpy)).length === 0);
+  const [{ n: unscoped }] = await core.query("SELECT count(*)::int AS n FROM ai_skill_run");
+  check("an unscoped read by the app sees no runs", unscoped === 0, String(unscoped));
+
+  check("a colleague cannot accept someone else's run", (await core.acceptSkillRun(aCm2, mine)) === false);
+  check("the owner cannot accept it for them either", (await core.acceptSkillRun(aOwner, mine)) === false);
+  check("the person who ran it accepts it", (await core.acceptSkillRun(aCm, mine)) === true);
+  check("once", (await core.acceptSkillRun(aCm, mine)) === false);
+  const [acc] = await sql`SELECT accepted_by, accepted_at FROM ai_skill_run WHERE id = ${mine}`;
+  check("the acceptance names them and a time", acc?.accepted_by === cm && !!acc?.accepted_at, JSON.stringify(acc));
+  const rewrite = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`UPDATE ai_skill_run SET input_summary = 'rewritten' WHERE id = ${caseload}`]));
+  check("a run's summary cannot be rewritten by the app", !rewrite.ok && /permission denied/i.test(rewrite.e), JSON.stringify(rewrite));
+  const del = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+    app`DELETE FROM ai_skill_run WHERE id = ${caseload}`]));
+  check("or deleted", !del.ok && /permission denied/i.test(del.e), JSON.stringify(del));
+
+  // Reach is a RESTRICTIVE policy: move pat to a colleague and the run leaves the old reader's view.
+  const ownTask = await core.addStaffTask(aCm, { title: "Call about the class", clientId: pat });
+  await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm2} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
+  check("once the person is reassigned, the old case manager no longer reads the run about them", !(await ids(aCm)).includes(mine) && (await ids(aCm)).includes(caseload));
+  check("and their digest drops them, even though they still own a task about them (fix round 1)",
+    ownTask.ok && !(await core.getCaseloadDigest(aCm)).people.some((p) => p.participantId === pat));
+  await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
+
+  // Caseload reads: the digest and the period numbers stay inside the caseload and the organization.
+  const digest = await core.getCaseloadDigest(aCm);
+  const people = (digest?.people ?? []).map((p) => p.participantId);
+  check("the caseload digest names the case manager's own participant", people.includes(pat), JSON.stringify(people));
+  check("and nobody from a colleague's caseload or another organization", !people.includes(notMine) && !people.includes(theirs));
+  check("the owner's digest covers the organization and not the other one", (await core.getCaseloadDigest(aOwner)).people.some((p) => p.participantId === notMine)
+    && !(await core.getCaseloadDigest(aOwner)).people.some((p) => p.participantId === theirs));
+  const vol = await mkUser("ai-vol");
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${vol}, 'staff')`;
+  await sql`INSERT INTO org_capability_override (org_id, user_id, capability, effect) VALUES (${org.id}, ${vol}, 'org.outcome.write', 'deny')`;
+  check("a volunteer (no outcome or insight rights) gets no period numbers", (await core.getOutcomesForPeriod(await A(vol), {})) === null);
+  const period = await core.getOutcomesForPeriod(aCm, { from: "2020-01-01", to: "2030-12-31" });
+  check("a case manager's period numbers are labelled as their caseload", period?.scope === "people on your caseload", JSON.stringify(period?.scope));
 }
 
 /**

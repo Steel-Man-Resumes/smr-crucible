@@ -71,6 +71,8 @@ export const RLS_PROTECTED_TABLES = [
   // org-scoped and reach-scoped, written only by triggers
   "org_activity",
   "outcome_correction",
+  // Staff t.ROY skill runs (migration 106): own runs, owner and org admins read all, reach-restricted
+  "ai_skill_run",
 ] as const;
 
 export interface RlsHealth {
