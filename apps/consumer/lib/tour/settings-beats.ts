@@ -53,6 +53,11 @@ export interface SettingsBeat {
   ticks?: ObjectiveId;
   /** Extra hold in ms (the goal card's agenda). */
   extra?: number;
+  /**
+   * Slows the whole beat by this factor: its hold and the scene's own reveal
+   * times (Troy 2026-10-26: the first screen was too fast by about 1.75 times).
+   */
+  pace?: number;
   /** Cutout height capped to this share of the viewport (tall cards keep their top). */
   clip?: number;
   /** The two-door glyph sits left of the title on the sharing beat. */
@@ -84,11 +89,13 @@ export const MAP_TILES: readonly { id: string; label: string; controls: readonly
 
 const SHARING_WHY = 'Shutting one stops new looks, not what was already read.';
 /** On the required path this line replaces the sharing beat's why (the old separate "required" stop, folded in). */
-export const SHARING_REQUIRED_WHY = 'Stopping a required one is still your button. Your program will see it, so ask them first.';
+export const SHARING_REQUIRED_WHY = 'Required means your program asks for it. Stopping one is still your button, and your program will see it, so ask them first.';
+/** The goal card's pace (Troy 2026-10-26): its hold and its reveal times, slowed by 1.75. */
+export const GOAL_PACE = 1.75;
 
 export const SETTINGS_BEATS: readonly SettingsBeat[] = [
   { id: 'g0', show: 'everyone', kind: 'slow', where: 'stage', scene: 'goal', title: 'Settings, step by step',
-    body: "By the end, you'll know what each part of this page does, and that you decide who sees your work.", extra: 900 },
+    body: "By the end, you'll know what each part of this page does, and that you decide who sees your work.", extra: 900, pace: GOAL_PACE },
   { id: 'm1', show: 'everyone', kind: 'sweep', where: 'stage', scene: 'map', title: 'The whole page',
     body: "Eight parts, top to bottom. We'll start with the easy ones.",
     chips: MAP_TILES.map(t => ({ label: t.label, targets: [t.id] })),
@@ -99,7 +106,7 @@ export const SETTINGS_BEATS: readonly SettingsBeat[] = [
     why: "Press save when you're done, or it won't stick.",
     targets: ['settings-coach-choices'], zoom: 1.3, follow: [0, 4, 13] },
   { id: 'x1', show: 'everyone', kind: 'sweep', where: 'page', title: 'Two kinds of help',
-    body: "Plain language, read aloud and Spanish change only t.ROY's answers. Text size, motion and spacing change the whole app, right away.",
+    body: "Plain language and Spanish change only t.ROY's answers, and read aloud reads them out loud. Text size, motion and spacing change the whole app, right away.",
     chips: [
       { label: 'Plain language', targets: ['settings-plain-language'] },
       { label: 'Read aloud', targets: ['settings-read-aloud'] },
@@ -123,8 +130,8 @@ export const SETTINGS_BEATS: readonly SettingsBeat[] = [
     ],
     dwell: { wide: 2200, phone: 2300 }, clip: 0.5, ticks: 'sharing' },
   { id: 's1', show: 'everyone', kind: 'sweep', where: 'page', title: 'Your way back in',
-    body: "Your password is the first lock. Two-step adds a code from an app on your phone. Active devices shows where you're signed in.",
-    why: 'Used a library computer? Sign it out from Active devices.',
+    body: "A password is the first lock. Two-step adds a code from an app on your phone. Active devices shows where you're signed in.",
+    why: 'Used a library computer? Press Revoke next to it in Active devices.',
     chips: [
       { label: 'Password', targets: ['settings-password'] },
       { label: 'Two-step verification', targets: ['settings-two-step'] },
@@ -132,7 +139,8 @@ export const SETTINGS_BEATS: readonly SettingsBeat[] = [
     ],
     dwell: { wide: 2900, phone: 2900 }, clip: 0.5, ticks: 'signin' },
   { id: 'u1', show: 'everyone', kind: 'slow', where: 'page', title: 'Your daily AI actions',
-    body: "This is today's count of AI actions. t.ROY chat, tailoring and interview practice all spend from it.",
+    // True for all three usage kinds (lib/usage-view.ts): one shared daily allowance, a count per tool on older accounts, or no daily limit.
+    body: "This card shows today's AI use and any daily limit on your account.",
     why: 'If you run out, your saved work still opens.',
     targets: ['settings-usage-today'], zoom: 1.3 },
   { id: 'k1', show: 'everyone', kind: 'slow', where: 'page', title: 'How creative t.ROY gets',
@@ -144,7 +152,7 @@ export const SETTINGS_BEATS: readonly SettingsBeat[] = [
     why: 'Your saved documents stay either way.',
     targets: ['settings-ai-memory'], zoom: 1.2, ticks: 'ai' },
   { id: 'd1', show: 'everyone', kind: 'sweep', where: 'page', title: 'Copy it, or delete it for good',
-    body: 'Export saves a copy on your own device. Delete my data clears your work and keeps your login. Delete my account removes everything.',
+    body: 'Download your data saves a copy once you tick the box that says the device is your own. Delete my data clears your work and keeps your login. Delete my account removes everything.',
     why: 'Neither delete can be undone.',
     chips: [
       { label: 'Download your data', targets: ['settings-export'] },
@@ -167,12 +175,18 @@ export const SETTINGS_TOUR_COPY = {
   whyLabel: 'Why it matters.',
   goalKicker: 'Settings, with t.ROY',
   goalSmall: 'Then five quick questions. Pass them and you can earn one extra AI action, one time.',
+  /** When this account already holds the Settings bonus: never promise it twice. */
+  goalSmallClaimed: 'Then five quick questions, just for practice. You already got the Settings bonus.',
   mapKicker: 'Settings, top to bottom',
   objectivesLabel: 'What you have learned so far',
   ticked: (label: string) => `${label}: learned.`,
   chipsSr: (labels: readonly string[]) => `Shown: ${labels.join(', ')}.`,
   /** The chip at the top of Settings and the control in its header. */
   chipNew: 'New here? Take a short walk through Settings.',
+  /** Someone who finished the old walk, or already holds the bonus: not new here. */
+  chipReturning: 'Settings has a new walk, with five short questions.',
+  /** A walk finished too fast for the bonus: the way back is Start over. */
+  chipEarly: 'The bonus needs the walk watched through. Press Start over to watch it again.',
   chipResume: 'Pick up the Settings tour where you left off.',
   chipQuiz: 'You finished the walk. Five questions and a one-time bonus are waiting.',
   showMe: 'Show me around',
@@ -211,6 +225,7 @@ export const SETTINGS_ENDING = {
   eyebrow: 'That was the walk',
   quizTitle: 'Five quick questions',
   quizBody: 'Get all five right and you can earn one extra AI action for 24 hours, one time. No timer. Try again as often as you like.',
+  quizBodyClaimed: (date: string) => `These are for practice. You already got the Settings bonus on ${date}, so nothing more is added. No timer. Try again as often as you like.`,
   take: 'Take the questions',
   skip: 'Skip the questions',
   previous: 'Back to the recap',
@@ -236,11 +251,13 @@ export const SETTINGS_REWARD_COPY = {
   cappedTitle: 'Settings tour done.',
   capped: "Today's bonus limit is already used, so nothing was added. Try the questions again another day from the top of Settings.",
   earlyTitle: 'Settings tour done.',
-  early: 'The bonus is for watching the tour through, so nothing was added this time. Replay it any time from Help.',
+  early: 'The bonus is for watching the tour through, so nothing was added this time. Press Start over at the top of Settings and watch it through.',
   unavailableTitle: 'Settings tour saved.',
   unavailable: "The bonus couldn't be confirmed yet. Try again and it won't be added twice.",
   skippedTitle: 'Tour done.',
-  skipped: 'The bonus is for passing the five questions. They wait for you at the top of Settings.',
+  skipped: 'The bonus is for passing the five questions. To try them later, press Show me around at the top of Settings.',
+  skippedClaimedTitle: 'Tour done.',
+  skippedClaimed: 'You already got the Settings bonus. To practice the questions later, press Show me around at the top of Settings.',
   retry: 'Try the bonus again',
   close: 'Close',
 };

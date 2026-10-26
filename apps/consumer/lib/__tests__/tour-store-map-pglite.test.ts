@@ -89,6 +89,9 @@ test('tour store map: old slot migrates to entrance on read, settings and crm ha
   assert.ok(p!.tours.settings.completedAt);
   const flags = (await pg.query(`SELECT onboarding_tour_complete AS c FROM users WHERE id=$1`, [u])).rows[0] as { c: boolean };
   assert.equal(flags.c, false, 'only the entrance tour marks onboarding complete');
+  // B3 (fix round 1): the GET's metMinWatch reads this run as under 45 s, so the chip offers Start over, never the questions for the bonus.
+  const { metMinWatch } = await import('../tour/settings-tour');
+  assert.equal(metMinWatch(p!.tours.settings, S.minWatchMs), false, 'a 44 s finish did not meet the minimum');
   assert.equal(((await pg.query(`SELECT count(*)::int AS n FROM progression_grant WHERE user_id=$1`, [u])).rows[0] as { n: number }).n, 0, '44 s grants nothing');
   assert.equal((await sw({ action: 'progress', runId: S1, sequence: 4, stop: 2 })).status, 409, 'a completed run never reopens');
 
@@ -102,6 +105,7 @@ test('tour store map: old slot migrates to entrance on read, settings and crm ha
   assert.equal(await count(), 0, 'a skipped quiz grants nothing');
   const stamped = (await prefs())!.tours.settings.completedAt;
   assert.ok(stamped);
+  assert.equal(metMinWatch((await prefs())!.tours.settings, S.minWatchMs), true, 'a 45 s finish met it: the questions-alone chip may show');
   // A failed quiz on the same run (a retry, the next sequence) is graded and grants nothing.
   const failed = await sw({ action: 'complete', runId: S2, sequence: 2, stop: S.stopCount - 1, quiz: FAIL });
   assert.equal(failed.status, 200);

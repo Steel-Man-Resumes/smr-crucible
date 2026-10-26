@@ -9,9 +9,9 @@
 import { SETTINGS_QUESTIONS, SETTINGS_QUIZ_VERSION, type SettingsQuizResult } from './settings-quiz';
 
 const KEY: Record<string, { answer: number; explanation: string }> = {
-  reading: { answer: 1, explanation: "Plain language, read aloud and Spanish change only t.ROY's answers. Text size, motion and spacing change the whole app." },
+  reading: { answer: 1, explanation: "Plain language and Spanish change only t.ROY's answers, and read aloud reads them out loud. Text size, motion and spacing change the whole app." },
   doors: { answer: 0, explanation: "Shutting a switch stops new looks from that moment. It can't take back what someone already read." },
-  devices: { answer: 1, explanation: "Active devices, under Security, lists where you're signed in. Sign out that one, or all the others at once." },
+  devices: { answer: 1, explanation: "Active devices, under Security, lists where you're signed in. Press Revoke next to one, or Sign out others for all of them." },
   memory: { answer: 1, explanation: 't.ROY starts fresh each session. Your saved documents are not affected.' },
   delete: { answer: 0, explanation: 'Delete my data clears your work and keeps your login. Delete my account removes everything. Neither can be undone.' },
 };

@@ -13,6 +13,7 @@ import { tourRewardClaimed } from "@/lib/progression-server";
 import { handleTourWrite } from "@/lib/tour/tour-write";
 import { tourStore } from "@/lib/tour/tour-store";
 import { TOURS, isTourId, readTourSlot } from "@/lib/tour/registry";
+import { metMinWatch } from "@/lib/tour/settings-tour";
 
 export const maxDuration = 10;
 export const revalidate = 0;
@@ -45,7 +46,9 @@ export async function GET(request: Request) {
       runId: current ? slot?.runId : undefined,
       sequence: current ? slot?.sequence ?? 0 : 0,
       completedAt: current ? slot?.completedAt ?? null : null,
-      ...(def.quiz ? { rewardClaimedAt } : {}),
+      // Quiz tours: whether the finished run met the minimum watch (the questions-alone chip shows only then),
+      // and whether an older version was finished (not "New here?"). Watch time is measured as before.
+      ...(def.quiz ? { rewardClaimedAt, metMinWatch: current && !!slot?.completedAt ? metMinWatch(slot, def.minWatchMs) : undefined, earlierDone: !current && !!slot?.completedAt } : {}),
     } }, { headers: { "Cache-Control": "no-store" } });
   }
 

@@ -26,34 +26,47 @@ export function Check({ size = 22, done, pop }: { size?: number; done: boolean; 
   </svg>;
 }
 
-export function GoalScene({ title, body, t, still }: { title: string; body: string; t: number; still: boolean }) {
+/**
+ * When each part of the goal card appears, ms into the beat, slowed by the goal's
+ * pace (Troy 2026-10-26: 1.75 times slower than the first cut): the rise delays,
+ * the five agenda lines, then the small print.
+ */
+export function goalTimes(pace = 1) {
+  const p = (ms: number) => Math.round(ms * pace);
+  return { rise: [80, 220, 400, 900].map(p), agenda: OBJECTIVES.map((_, k) => p(2600 + k * 650)), small: p(6000) };
+}
+interface GoalProps { title: string; body: string; t: number; still: boolean; pace?: number; claimed?: boolean }
+
+export function GoalScene({ title, body, t, still, pace, claimed }: GoalProps) {
+  const g = goalTimes(pace);
   return <div className="sc" style={{ width: GOAL_SCENE.w, height: GOAL_SCENE.h }}>
     <div className="sc-grid" />
     <div className="st-goal">
-      <div className="sc-rise" style={{ animationDelay: '80ms' }}><TroyLivingIcon size={150} attention /></div>
+      <div className="sc-rise" style={{ animationDelay: `${g.rise[0]}ms` }}><TroyLivingIcon size={150} attention /></div>
       <div className="st-goal__text">
-        <p className="sc-title__k sc-rise" style={{ animationDelay: '220ms' }}>{SETTINGS_TOUR_COPY.goalKicker}</p>
-        <p className="st-goal__h sc-rise" style={{ animationDelay: '400ms' }}>{title}</p>
-        <p className="st-goal__b sc-rise" style={{ animationDelay: '900ms' }}>{body}</p>
+        <p className="sc-title__k sc-rise" style={{ animationDelay: `${g.rise[1]}ms` }}>{SETTINGS_TOUR_COPY.goalKicker}</p>
+        <p className="st-goal__h sc-rise" style={{ animationDelay: `${g.rise[2]}ms` }}>{title}</p>
+        <p className="st-goal__b sc-rise" style={{ animationDelay: `${g.rise[3]}ms` }}>{body}</p>
         <ol className="st-agenda">
-          {OBJECTIVES.map((o, k) => <li key={o.id} data-on={on(t, 2600 + k * 650, still)}><span className="sc-num">{k + 1}</span>{o.agenda}</li>)}
+          {OBJECTIVES.map((o, k) => <li key={o.id} data-on={on(t, g.agenda[k], still)}><span className="sc-num">{k + 1}</span>{o.agenda}</li>)}
         </ol>
-        <p className="st-goal__s" data-on={on(t, 6000, still)}>{SETTINGS_TOUR_COPY.goalSmall}</p>
+        <p className="st-goal__s" data-on={on(t, g.small, still)}>{claimed ? SETTINGS_TOUR_COPY.goalSmallClaimed : SETTINGS_TOUR_COPY.goalSmall}</p>
       </div>
     </div>
   </div>;
 }
 
-export function PortraitGoal({ title, body, t, still }: { title: string; body: string; t: number; still: boolean }) {
+export function PortraitGoal({ title, body, t, still, pace, claimed }: GoalProps) {
+  const g = goalTimes(pace);
   return <div className="sc ps" style={{ width: P_GOAL_SCENE.w, height: P_GOAL_SCENE.h }}>
     <div className="st-pgoal">
       <p className="ps-k">{SETTINGS_TOUR_COPY.goalKicker}</p>
       <p className="ps-title__h">{title}</p>
       <p className="ps-title__b">{body}</p>
       <ol className="st-agenda st-agenda--p">
-        {OBJECTIVES.map((o, k) => <li key={o.id} data-on={on(t, 2600 + k * 650, still)}><span className="ps-num">{k + 1}</span>{o.agenda}</li>)}
+        {OBJECTIVES.map((o, k) => <li key={o.id} data-on={on(t, g.agenda[k], still)}><span className="ps-num">{k + 1}</span>{o.agenda}</li>)}
       </ol>
-      <p className="st-goal__s" data-on={on(t, 6000, still)}>{SETTINGS_TOUR_COPY.goalSmall}</p>
+      <p className="st-goal__s" data-on={on(t, g.small, still)}>{claimed ? SETTINGS_TOUR_COPY.goalSmallClaimed : SETTINGS_TOUR_COPY.goalSmall}</p>
     </div>
   </div>;
 }

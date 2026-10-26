@@ -39,9 +39,13 @@ export function sweepMs(beat: SettingsBeat, phone: boolean): number {
   return Math.max(readMs(beat), ORIENT_MS + dwell);
 }
 
-/** Reading time for a beat's words: title, body and the why line, at the tour's pace, within its floor and cap. */
-export function readMs(beat: Pick<SettingsBeat, 'title' | 'body' | 'why' | 'extra'>): number {
-  return holdMs({ title: beat.title, body: beat.why ? `${beat.body} ${beat.why}` : beat.body, extra: beat.extra });
+/**
+ * Reading time for a beat's words: title, body and the why line, at the tour's
+ * pace, within its floor and cap, plus any extra. `pace` slows the whole hold
+ * after the cap (the goal card, Troy 2026-10-26), so the cap never swallows it.
+ */
+export function readMs(beat: Pick<SettingsBeat, 'title' | 'body' | 'why' | 'extra' | 'pace'>): number {
+  return Math.round(holdMs({ title: beat.title, body: beat.why ? `${beat.body} ${beat.why}` : beat.body, extra: beat.extra }) * (beat.pace ?? 1));
 }
 
 export function beatMs(beat: SettingsBeat, phone: boolean): number {

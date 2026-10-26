@@ -161,15 +161,53 @@ export function portraitCutHeight(height: number, top: number, viewportH: number
   return Math.min(height, Math.max(PORTRAIT_CUT_MIN, limit));
 }
 
-function formatDay(iso?: string) {
+/**
+ * The chip at the top of Settings, from the saved place (GET /api/onboarding/tour?tourId=settings):
+ * - resume: a v2 run is open;
+ * - quiz: a finished v2 run that met the 45 s minimum and has no bonus yet (the questions alone);
+ * - early: a finished v2 run that did not meet it: the bonus can only come from Start over;
+ * - returning: no v2 place, but they finished the old walk or already hold the bonus (never "New here?");
+ * - new: nothing yet.
+ * A claimed bonus (or an unknown claim read) never offers the questions for the bonus.
+ */
+export type SettingsChipKind = 'resume' | 'quiz' | 'early' | 'returning' | 'new' | null;
+export interface SettingsSlotView {
+  version?: number; inProgress?: boolean; completedAt?: string | null; runId?: string; impersonating?: boolean;
+  rewardClaimedAt?: string | null; metMinWatch?: boolean; earlierDone?: boolean;
+}
+export function settingsChipFor(slot: SettingsSlotView | null | undefined, version: number): SettingsChipKind {
+  if (!slot || slot.impersonating) return null;
+  const current = slot.version === version;
+  if (current && slot.inProgress === true) return 'resume';
+  if (current && slot.completedAt) {
+    if (slot.rewardClaimedAt !== null) return null;
+    if (slot.metMinWatch === true && slot.runId) return 'quiz';
+    if (slot.metMinWatch === false) return 'early';
+    return null;
+  }
+  if (slot.earlierDone || slot.rewardClaimedAt) return 'returning';
+  return 'new';
+}
+
+/** Whether a finished run met the minimum watch time: completedAt minus startedAt, both stamped by the database. Unknown is false. */
+export function metMinWatch(slot: { startedAt?: string | null; completedAt?: string | null } | null | undefined, minMs: number): boolean {
+  const a = Date.parse(String(slot?.startedAt ?? '')), b = Date.parse(String(slot?.completedAt ?? ''));
+  return Number.isFinite(a) && Number.isFinite(b) && b - a >= minMs;
+}
+
+export function formatDay(iso?: string | null) {
   if (!iso) return 'an earlier day';
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? 'an earlier day' : d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-/** Title and words for the Settings tour's result, every status. `null` is a finish without the questions. */
-export function settingsRewardMessage(reward: TourReward | null): [string, string] {
-  if (!reward) return [SETTINGS_REWARD_COPY.skippedTitle, SETTINGS_REWARD_COPY.skipped];
+/**
+ * Title and words for the Settings tour's result, every status. `null` is a finish
+ * without the questions; `claimed` (the account already holds the bonus) changes
+ * those words so the bonus is never promised twice.
+ */
+export function settingsRewardMessage(reward: TourReward | null, claimed = false): [string, string] {
+  if (!reward) return claimed ? [SETTINGS_REWARD_COPY.skippedClaimedTitle, SETTINGS_REWARD_COPY.skippedClaimed] : [SETTINGS_REWARD_COPY.skippedTitle, SETTINGS_REWARD_COPY.skipped];
   switch (reward.status) {
     case 'granted': return [SETTINGS_REWARD_COPY.grantedTitle, SETTINGS_REWARD_COPY.granted(reward.calls)];
     case 'already': return [SETTINGS_REWARD_COPY.alreadyTitle, SETTINGS_REWARD_COPY.already(formatDay(reward.grantedAt))];

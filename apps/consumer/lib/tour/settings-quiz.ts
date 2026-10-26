@@ -16,7 +16,7 @@ export interface SettingsQuestion { id: string; objective: ObjectiveId; prompt: 
 export const SETTINGS_QUESTIONS: readonly SettingsQuestion[] = [
   { id: 'reading', objective: 'help', prompt: 'Plain language changes what?', choices: ['Every page in the app', "t.ROY's answers", 'Your resume'] },
   { id: 'doors', objective: 'sharing', prompt: 'You shut a sharing switch. What happens?', choices: ["They can't open it from now on", 'What they read is erased', 'Nothing changes'] },
-  { id: 'devices', objective: 'signin', prompt: 'Still signed in on a library computer?', choices: ['Delete my account', 'Active devices, then sign it out', 'Plain language'] },
+  { id: 'devices', objective: 'signin', prompt: 'Still signed in on a library computer?', choices: ['Delete my account', 'Active devices, then Revoke', 'Plain language'] },
   { id: 'memory', objective: 'ai', prompt: 'You turn off AI memory. What happens?', choices: ['Your documents are deleted', 't.ROY starts fresh each session', 't.ROY stops answering'] },
   { id: 'delete', objective: 'data', prompt: 'Which one keeps your login?', choices: ['Delete my data', 'Delete my account', 'Both of them'] },
 ];

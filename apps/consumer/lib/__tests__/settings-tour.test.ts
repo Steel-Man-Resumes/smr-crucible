@@ -49,13 +49,13 @@ test('registry: version 2 pinned to its beats, grants 1 call under its own key a
   assert.equal(TOURS.crm.quiz, undefined);
 });
 
-test('runtime: 11 stops on every path; about 125 s wide and 127 s on a phone; with the quiz and reward still under 3 minutes', () => {
+test('runtime: 11 stops on every path; about 132 s wide and 134 s on a phone (the goal card slowed 1.75 times); with the quiz and reward still under 3 minutes', () => {
   for (const branches of [NON, MEM, REQ]) {
     const path = applicableBeats(branches);
     assert.equal(path.length, 11);
     const wide = settingsRuntimeMs(path) / 1000, phone = settingsRuntimeMs(path, true) / 1000;
-    assert.ok(wide >= 115 && wide <= 132, `wide ${wide}`);
-    assert.ok(phone >= 117 && phone <= 135, `phone ${phone}`);
+    assert.ok(wide >= 120 && wide <= 140, `wide ${wide}`);
+    assert.ok(phone >= 122 && phone <= 142, `phone ${phone}`);
     // Five short questions at reading pace plus the reward card leave the whole thing under 180 s.
     assert.ok(phone + 40 < 180, `phone with quiz ${phone + 40}`);
   }
@@ -92,7 +92,7 @@ test('targets: every id the beats, chips and nudges point at exists on the Setti
 });
 
 test('copy: no long dashes or "--", no emoji, t.ROY exact, never a label on the reader, nothing the storyboard says never to claim', () => {
-  const files = ['lib/tour/settings-beats.ts', 'lib/tour/settings-tour.ts', 'lib/tour/settings-quiz.ts', 'lib/tour/settings-quiz-grade.ts', 'components/tour/SettingsTour.tsx', 'components/tour/SettingsTourPlayer.tsx', 'components/tour/SettingsScenes.tsx'];
+  const files = ['lib/tour/settings-beats.ts', 'lib/tour/settings-tour.ts', 'lib/tour/settings-quiz.ts', 'lib/tour/settings-quiz-grade.ts', 'components/tour/SettingsTour.tsx', 'components/tour/SettingsTourPlayer.tsx', 'components/tour/SettingsScenes.tsx', 'components/tour/SettingsEnding.tsx'];
   for (const f of files) {
     const src = read(f);
     assert.doesNotMatch(src, /—|–/, `${f} has a long dash`);
@@ -178,7 +178,7 @@ test('nudge: picked once from the branches, members first, never flipped by the 
   const ctl = read('components/tour/SettingsTour.tsx');
   assert.equal((ctl.match(/pickNudge\(/g) ?? []).length, 1);
   assert.match(ctl, /readBranches\(sharing, coach, codes\)/);
-  const player = read('components/tour/SettingsTourPlayer.tsx');
+  const player = read('components/tour/SettingsTourPlayer.tsx') + read('components/tour/SettingsEnding.tsx');
   assert.doesNotMatch(player, /fetch\(|\.click\(\)|dispatchEvent\(new (Mouse|Pointer)Event/, 'the player presses nothing and reads nothing');
   assert.doesNotMatch(player, /pickNudge\(|applicableBeats\(/);
   // The nudge button closes the tour and lands on the control; the controller scrolls, never clicks.
