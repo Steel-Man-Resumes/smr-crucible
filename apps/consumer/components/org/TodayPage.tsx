@@ -29,7 +29,7 @@ import { STAFF_TOUR_OPEN_EVENT } from "@/lib/tour/staff-tour";
 import { CRM_TOUR_COPY } from "@/lib/tour/crm-beats";
 import { stationLabelForStage } from "@/lib/staff-station";
 import {
-  hiddenItemCount, hiddenSectionCount, nobodySharesLine, personInitials, reasonStrip, relativeWhen, thisWeek, todayDateLine, todayHeadline, visibleItems,
+  hiddenItemCount, hiddenSectionCount, nobodySharesLine, personInitials, reasonStrip, relativeWhen, thisWeek, todayDateLine, todayHeadline, toggleCollapsed, visibleItems,
   type TodayItemView, type TodayPayload,
 } from "@/lib/today-view";
 
@@ -69,18 +69,33 @@ export function TodayPage() {
     }
   }
 
+  // Folding a section is this person's own choice (staff prefs, todayCollapsed).
+  // The screen folds at once; the choice is saved behind it, and a failed
+  // save only means it unfolds next time.
+  async function toggle(key: string) {
+    if (state.status !== "ready") return;
+    const collapsed = toggleCollapsed(state.data.collapsed, key);
+    setState({ status: "ready", data: { ...state.data, collapsed } });
+    try {
+      const own = await fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.own ?? {});
+      await fetch("/api/org/prefs", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ own: { ...own, todayCollapsed: collapsed } }) });
+    } catch { /* kept on screen; not saved */ }
+  }
+
   // The staff tour never opens under view-as or assist, so the control is not drawn there (review N-3).
   // First run: the owner sees a nudge to set the organization up (house lane L3a); never under view-as.
   return (
     <>
       {!role?.impersonating && <div className="mx-auto max-w-6xl"><OrgSetupPrompt placement="today" /></div>}
-      <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} tourReady={!role?.impersonating} />
+      <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} onToggleSection={role?.impersonating ? undefined : toggle} tourReady={!role?.impersonating} />
     </>
   );
 }
 
-export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady = STAFF_TROY_READY, tourReady = true }: {
+export function TodayView({ state, nowMs, onRetry, onTask, onToggleSection, timeZone, troyReady = STAFF_TROY_READY, tourReady = true }: {
   state: TodayState; nowMs: number; onRetry?: () => void; onTask?: (body: Record<string, unknown>) => Promise<boolean>; timeZone?: string;
+  /** Fold or unfold a section for this person. Absent: no fold control (view-as, tests). */
+  onToggleSection?: (key: string) => void;
   /** Staff t.ROY buttons show only once C4's launcher is merged (STAFF_TROY_READY). */
   troyReady?: boolean;
   /** The "Show me around" control for the staff tour (the shell mounts the tour for staff only). */
@@ -157,7 +172,8 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady =
   const nobody = nobodySharesLine(d);
   const week = thisWeek(d, nowMs);
   // The staff tour points at the first row about a person (never a task row) and reads its id from it.
-  const firstPersonKey = shown.flatMap((s) => items.filter((i) => i.section === s.key)).find((i) => i.clientId)?.key ?? null;
+  const firstPersonKey = shown.filter((s) => !onToggleSection || !(d.collapsed ?? []).includes(s.key))
+    .flatMap((s) => items.filter((i) => i.section === s.key)).find((i) => i.clientId)?.key ?? null;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -222,15 +238,24 @@ export function TodayView({ state, nowMs, onRetry, onTask, timeZone, troyReady =
           {shown.map((s) => {
             const rows = items.filter((i) => i.section === s.key);
             if (rows.length === 0) return null;
+            const folded = !!onToggleSection && (d.collapsed ?? []).includes(s.key);
             return (
               <section key={s.key} aria-labelledby={`today-${s.key}-h`} className="mb-7">
                 <h2 id={`today-${s.key}`} tabIndex={-1} className="mb-2 flex items-baseline gap-2 border-b border-t-line pb-2 text-xs font-semibold uppercase tracking-wide text-t-amber-bright scroll-mt-24 focus:outline-none">
                   <span id={`today-${s.key}-h`}>{s.label}</span>
                   <span className="font-term text-t-bone-dim">{rows.length}</span>
+                  {onToggleSection && (
+                    <button type="button" aria-expanded={!folded} aria-controls={`today-${s.key}-rows`} onClick={() => onToggleSection(s.key)}
+                      className="t-focus ml-auto min-h-touch px-2 text-[11px] font-medium normal-case tracking-normal text-t-bone-dim underline underline-offset-4 hover:text-t-white">
+                      {folded ? "Show" : "Fold"}<span className="sr-only"> {s.label}</span>
+                    </button>
+                  )}
                 </h2>
-                <ul className="space-y-2">
-                  {rows.map((i) => <TodayRow key={i.key} item={i} nowMs={nowMs} onTask={onTask} troyReady={troyReady} tourFirst={i.key === firstPersonKey} />)}
-                </ul>
+                {!folded && (
+                  <ul id={`today-${s.key}-rows`} className="space-y-2">
+                    {rows.map((i) => <TodayRow key={i.key} item={i} nowMs={nowMs} onTask={onTask} troyReady={troyReady} tourFirst={i.key === firstPersonKey} />)}
+                  </ul>
+                )}
               </section>
             );
           })}

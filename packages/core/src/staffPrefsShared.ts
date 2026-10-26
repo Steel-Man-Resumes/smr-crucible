@@ -61,6 +61,8 @@ export interface StaffPrefs {
   landing: Landing;
   /** Today sections to HIDE (stored as hidden, so a new section shows by default). */
   todayHidden: TodaySectionKey[];
+  /** Today sections shown folded: the heading and its count, the rows one tap away. */
+  todayCollapsed: TodaySectionKey[];
   caseloadSort: CaseloadSort;
   /** Columns to HIDE. Stored as hidden, so a column added later shows by default. */
   caseloadHidden: CaseloadColumn[];
@@ -74,6 +76,7 @@ export const DEFAULT_STAFF_PREFS: StaffPrefs = {
   savedViews: [],
   landing: "today",
   todayHidden: [],
+  todayCollapsed: [],
   caseloadSort: "needs_attention",
   caseloadHidden: [],
   noteKind: "note",
@@ -107,6 +110,7 @@ export function normalizeStaffPrefs(raw: unknown): Partial<StaffPrefs> {
   const landing = oneOf(LANDINGS, r.landing);
   if (landing) out.landing = landing;
   if (Array.isArray(r.todayHidden)) out.todayHidden = Array.from(new Set(r.todayHidden.map((c) => oneOf(TODAY_SECTION_KEYS, c)).filter(Boolean))) as TodaySectionKey[];
+  if (Array.isArray(r.todayCollapsed)) out.todayCollapsed = Array.from(new Set(r.todayCollapsed.map((c) => oneOf(TODAY_SECTION_KEYS, c)).filter(Boolean))) as TodaySectionKey[];
   const sort = oneOf(CASELOAD_SORTS, r.caseloadSort);
   if (sort) out.caseloadSort = sort;
   if (Array.isArray(r.caseloadHidden)) {

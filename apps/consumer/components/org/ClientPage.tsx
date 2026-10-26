@@ -25,6 +25,7 @@ import Link from "next/link";
 import { OutcomesPanel } from "@/components/org/OutcomesPanel";
 import { EnrollmentsPanel } from "@/components/org/EnrollmentsPanel";
 import { useOrgTerms } from "@/lib/use-org-terms";
+import { CustomFieldsPanel } from "@/components/org/CustomFieldsPanel";
 import { STAFF_TROY_READY } from "@/lib/staff-troy";
 import { GlanceRow, PersonHeaderCard, PersonRail, Skeleton, StationStrip, TheirScreenBoard, scopeStateText } from "@/components/org/PersonOverview";
 import {
@@ -169,6 +170,8 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
       <StationStrip person={client} first={first} />
       <GlanceRow person={client} openTasks={openTasks} fmtDay={(s) => day(s)} onPick={(t) => go({ kind: "tab", tab: t.tab })} />
       <EnrollmentsPanel clientId={clientId} first={first} />
+      {/* The organization's own fields (104). Renders nothing until an organization defines some. */}
+      <CustomFieldsPanel clientId={clientId} first={first} />
 
       <div className={`grid gap-5 ${STAFF_TROY_READY ? "lg:grid-cols-[minmax(0,1fr)_17rem]" : ""}`}>
         <div className="min-w-0">
