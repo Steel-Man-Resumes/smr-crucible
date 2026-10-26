@@ -389,6 +389,7 @@ async function main() {
   await participantTableChecks();
   await seatChecks();
   await reachChecks();
+  await structureChecks();
 }
 
 /**
@@ -553,6 +554,85 @@ async function reachChecks() {
                                   (SELECT count(*)::int FROM retention_check WHERE outcome_id = ${outc.id} AND checked_by IS NULL) AS checks`;
   const [{ src }] = await sql`SELECT source AS src FROM outcome_record WHERE id = ${outc.id}`;
   check("and the records stay, without the deleted account's id; the placement stays confirmed", left.notes === 1 && left.checks === 2 && src === "staff_verified", JSON.stringify({ ...left, src }));
+}
+
+/**
+ * Organization structure (103, house lane L3a): units, unit staff and
+ * enrollments. The claims: another organization sees none of it; enrollment
+ * rows are REACH-restricted in the database, so a staff member outside a unit
+ * cannot read an enrollment even through a query that forgets every check;
+ * being put in a unit is what gives a staff member reach, and taking them out
+ * removes it; nobody widens their own reach by enrolling a stranger; only the
+ * owner shapes the structure.
+ */
+async function structureChecks() {
+  console.log("\n  -- organization structure (103) --");
+  const [{ has }] = await sql`SELECT to_regclass('public.enrollment') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  103 not applied; skipped"); return; }
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("st-owner"), cm = await mkUser("st-cm"), unitStaff = await mkUser("st-unit"), outsider = await mkUser("st-out");
+  const spy = await mkUser("st-spy"), p1 = await mkUser("st-p1"), p2 = await mkUser("st-p2"), pOther = await mkUser("st-p3");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOST" + uniq}, ${P + " structure"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOST2" + uniq}, ${P + " structure2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${unitStaff}, 'staff'), (${org.id}, ${outsider}, 'staff')`;
+  await core.redeemAccessCode(p1, org.code); await core.redeemAccessCode(p2, org.code); await core.redeemAccessCode(pOther, org2.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${p1}, ${cm}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aOwner = await A(owner), aCm = await A(cm), aUnit = await A(unitStaff), aOut = await A(outsider), aSpy = await A(spy);
+
+  check("staff cannot add a unit", (await core.createOrgUnit(aCm, { kind: "program", name: "Sneaky" })).ok === false);
+  const prog = await core.createOrgUnit(aOwner, { kind: "program", name: "Job readiness" });
+  check("the owner adds a program", prog.ok === true, JSON.stringify(prog));
+  if (!prog.ok) return;
+  const theirs = await core.createOrgUnit(aSpy, { kind: "program", name: "Their program" });
+  check("another organization's owner adds to THEIR org only", theirs.ok === true);
+  check("staff cannot put themselves in a unit", (await core.setUnitMember(aOut, prog.id, outsider, "member")).ok === false);
+  check("another org's owner cannot put staff in this org's unit", (await core.setUnitMember(aSpy, prog.id, spy, "lead")).ok === false);
+  check("the owner puts a staff member in the program", (await core.setUnitMember(aOwner, prog.id, unitStaff, "member")).ok === true);
+  check("an outsider on staff cannot enroll someone they do not reach", (await core.createEnrollment(aOut, { participantId: p2, unitId: prog.id })).ok === false);
+  check("assigned staff enroll their own person", (await core.createEnrollment(aCm, { participantId: p1, unitId: prog.id, status: "active" })).ok === true);
+  check("the owner enrolls another", (await core.createEnrollment(aOwner, { participantId: p2, unitId: prog.id })).ok === true);
+  check("nobody enrolls someone from another organization", (await core.createEnrollment(aOwner, { participantId: pOther, unitId: prog.id })).ok === false);
+  if (theirs.ok) check("nobody enrolls into another organization's program", (await core.createEnrollment(aOwner, { participantId: p2, unitId: theirs.id })).ok === false);
+
+  const ids = async (actor) => ((await core.listEnrollments(actor)) ?? []).map((e) => e.participant_user_id).sort();
+  check("a unit member reaches everyone enrolled in that unit", JSON.stringify(await ids(aUnit)) === JSON.stringify([p1, p2].sort()));
+  check("assigned staff outside the unit reach only their own person", JSON.stringify(await ids(aCm)) === JSON.stringify([p1]));
+  check("a staff member outside the unit reads no enrollment", (await ids(aOut)).length === 0);
+  check("another organization reads none", (await ids(aSpy)).length === 0);
+  const raw = async (orgId, actor) => (await app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${actor}, true)`,
+    app`SELECT count(*)::int AS n FROM enrollment`]))[2][0].n;
+  check("a query that forgets every check still returns no enrollment to the outsider", (await raw(org.id, outsider)) === 0);
+  check("or to another organization's owner holding this org's id", (await raw(org.id, spy)) === 0);
+  check("and the unit member's own count is exactly the two", (await raw(org.id, unitStaff)) === 2);
+  const reachOf = async (staffId, who) => (await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${staffId}, true)`,
+    app`SELECT smr_staff_reach(${org.id}::uuid, ${staffId}::uuid, ${who}::uuid) AS r`]))[2][0].r;
+  check("the reach function says so too, and not for the outsider", (await reachOf(unitStaff, p2)) === true && (await reachOf(outsider, p2)) === false);
+  const tree2 = await core.getOrgStructure(aSpy);
+  check("another organization's structure shows none of these units", !(tree2?.units ?? []).some((u) => u.id === prog.id));
+  check("staff cannot close a unit", (await core.setOrgUnitOpen(aCm, prog.id, false)).ok === false);
+  check("a unit with people in it does not close", (await core.setOrgUnitOpen(aOwner, prog.id, false)).ok === false);
+
+  check("taking a staff member out of the unit", (await core.removeUnitMember(aOwner, prog.id, unitStaff)).ok === true);
+  check("ends their reach through it", (await ids(aUnit)).length === 0 && (await raw(org.id, unitStaff)) === 0);
+  await core.setUnitMember(aOwner, prog.id, unitStaff, "member");
+  await sql`DELETE FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${unitStaff}`;
+  check("removing someone from staff takes them out of every unit", (await sql`SELECT count(*)::int AS n FROM unit_member WHERE user_id = ${unitStaff}`)[0].n === 0 && (await raw(org.id, unitStaff)) === 0);
+
+  const terms = await core.updateOrgProfile(aOwner, { terms: { participant: "resident", participants: "residents" } });
+  check("the owner sets the organization's words", terms.ok === true, JSON.stringify(terms));
+  check("staff cannot", (await core.updateOrgProfile(aCm, { terms: { participant: "x" } })).ok === false);
+  check("a label on a person is refused", (await core.updateOrgProfile(aOwner, { terms: { participants: "offenders" } })).ok === false);
+  check("a member reads the words", (await core.getOrgTerms(org.id, p1)).participant === "resident");
+  check("a member of another organization gets only the defaults", (await core.getOrgTerms(org.id, pOther)).participant === "participant");
+  await sql`DELETE FROM enrollment WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+  await sql`DELETE FROM unit_member WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+  await sql`DELETE FROM org_unit WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+  await sql`DELETE FROM org_profile WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
 }
 
 /**

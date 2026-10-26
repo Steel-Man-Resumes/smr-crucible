@@ -28,6 +28,7 @@ export { TODAY_SECTIONS, TODAY_SECTION_LABELS, INTERVIEW_STALE_DAYS, FOLLOWUP_OV
 export type { TodaySection, TodayItem, TodayInput } from "./orgTodayItems";
 import { buildTodayItems, type TodayItem, type TodayAppRow } from "./orgTodayItems";
 import { matchesPreset } from "./authz/capabilities";
+import { unitReachSql } from "./orgUnitReach";
 
 /**
  * Who the viewer's Today is drawn over, for the empty state. Counts only:
@@ -64,7 +65,8 @@ export async function getTodayView(actor: OrgActor): Promise<TodayView | null> {
   const p = [actor.orgId, seesAll, actor.userId, [...WORK_QUEUE_TEXT_VERSIONS]];
   const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
   const reach = (who: string) => `($2::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
-      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid))`;
+      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid)
+      OR ${unitReachSql("$1::uuid", "$3::uuid", who)})`;
   // Sharing applications, to THIS actor (a required grant may be "case manager only").
   const sharesApps = (who: string) => `EXISTS (SELECT 1 FROM sharing_grant g LEFT JOIN org_sharing_policy_version pv ON pv.id = g.policy_version_id
       WHERE g.user_id = ${who} AND g.access_code_id = $1::uuid AND g.scope = 'applications' AND g.revoked_at IS NULL

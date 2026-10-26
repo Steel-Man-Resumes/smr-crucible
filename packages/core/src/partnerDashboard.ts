@@ -12,6 +12,7 @@
  * consumer_consent (the 'sharing' / 'outcome_named' layers). No parallel tables.
  */
 
+import { participantsReachedThroughUnits } from "./orgUnitReach";
 import { query, getOne, getOneAsUser, runScoped, runPerOrg, type OrgScope } from "./db";
 import { staffStepLabel } from "./journeyStages";
 
@@ -319,8 +320,13 @@ export async function getPartnerCohort(
     };
   });
 
+  // A staff member's own caseload: assigned to them, or enrolled in a unit they
+  // lead or work in (migration 103; the same rule the database applies).
+  const viaUnits = opts.assignedToStaffId && opts.accessCodeId
+    ? await participantsReachedThroughUnits(opts.accessCodeId, opts.assignedToStaffId)
+    : new Set<string>();
   const scopedClients = opts.assignedToStaffId
-    ? clients.filter((c) => c.assignedStaffId === opts.assignedToStaffId)
+    ? clients.filter((c) => c.assignedStaffId === opts.assignedToStaffId || viaUnits.has(c.userId))
     : clients;
 
   scopedClients.sort(
