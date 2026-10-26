@@ -16,7 +16,7 @@
  */
 
 import crypto from "crypto";
-import { query } from "@crucible/core";
+import { query, isUndeliverableEmail } from "@crucible/core";
 import { EMAIL_LINK_PAGE } from "@/lib/sign-in-link";
 
 const INVITE_TTL_DAYS = 7;
@@ -25,18 +25,24 @@ function sha256Hex(message: string): string {
   return crypto.createHash("sha256").update(message).digest("hex");
 }
 
-/** Mint a 7-day magic link for `email` that signs them straight in. */
+/**
+ * Mint a magic link for `email` that signs them straight in. 7 days by
+ * default; staff invitations pass 14 so the link lives as long as the
+ * invitation does (migration 100, STAFF_INVITE_TTL_DAYS).
+ */
 export async function mintInviteMagicLink(
   email: string,
-  origin: string
+  origin: string,
+  ttlDays: number = INVITE_TTL_DAYS
 ): Promise<string> {
+  const days = Number.isInteger(ttlDays) && ttlDays >= 1 && ttlDays <= 14 ? ttlDays : INVITE_TTL_DAYS;
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET missing -- cannot mint invite link");
   const raw = crypto.randomBytes(32).toString("hex");
   await query(
     `INSERT INTO verification_token (identifier, token, expires)
      VALUES ($1, $2, NOW() + ($3::text || ' days')::interval)`,
-    [email, sha256Hex(`${raw}${secret}`), String(INVITE_TTL_DAYS)]
+    [email, sha256Hex(`${raw}${secret}`), String(days)]
   );
   const params = new URLSearchParams({
     callbackUrl: `${origin}/dashboard`,
@@ -127,9 +133,12 @@ export function buildStaffInviteEmail(opts: {
   roleLabel: string;
   url: string;
   origin: string;
+  /** How long the link works. Default 7 (the participant invite's length). */
+  linkDays?: number;
 }): EmailContent {
   const hello = firstName(opts.inviteeName);
   const inviter = opts.inviterName || opts.orgName;
+  const linkDays = opts.linkDays ?? INVITE_TTL_DAYS;
   const loginUrl = `${opts.origin}/login`;
   const subject = `${opts.orgName} added you to their team on Steel Man Resumes`;
   const body =
@@ -142,7 +151,7 @@ export function buildStaffInviteEmail(opts: {
   const text =
     `Hi ${hello},\n\n${body}\n\n${privacy}\n\n` +
     `Open your account (no password needed):\n${opts.url}\n\n` +
-    `This link works for ${INVITE_TTL_DAYS} days. If it stops working, go to ${loginUrl}, ` +
+    `This link works for ${linkDays} days. If it stops working, go to ${loginUrl}, ` +
     `enter this email address, and choose "Email me a sign-in link."\n\n` +
     `Steel Man Resumes\nTruth. Told Strong.`;
   const html = `
@@ -156,8 +165,79 @@ export function buildStaffInviteEmail(opts: {
       </p>
       <p style="font-size:13px;color:#666">No password needed. If the button does not work, copy and paste this link:</p>
       <p style="font-size:13px;word-break:break-all;color:#4a6741">${esc(opts.url)}</p>
-      <p style="font-size:13px;color:#666">This link works for ${esc(INVITE_TTL_DAYS)} days. After that, go to
+      <p style="font-size:13px;color:#666">This link works for ${esc(linkDays)} days. After that, go to
       <a href="${esc(loginUrl)}" style="color:#4a6741">${esc(loginUrl)}</a>, enter this email address, and choose "Email me a sign-in link."</p>
+      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
+    </div>
+  `;
+  return { subject, html, text };
+}
+
+/**
+ * Someone who ALREADY has an account, invited to an organization's staff
+ * (migration 100). Nothing changes until they sign in and accept, so the email
+ * says exactly that. It names the organization and the inviter, nothing else.
+ */
+export function buildStaffInvitationEmail(opts: {
+  inviteeName: string | null;
+  inviterName: string | null;
+  orgName: string;
+  roleLabel: string;
+  origin: string;
+  days: number;
+}): EmailContent {
+  const hello = firstName(opts.inviteeName);
+  const inviter = opts.inviterName ? `${opts.inviterName} at ${opts.orgName}` : opts.orgName;
+  const answerUrl = `${opts.origin}/dashboard/invites`;
+  const subject = `${opts.orgName} invited you to their team on Steel Man Resumes`;
+  const body =
+    `${inviter} invited you to join the ${opts.orgName} team as ${opts.roleLabel}. ` +
+    `Nothing changes unless you say yes. If you join, you work with the people ${opts.orgName} serves: ` +
+    `your caseload, your case notes, and anything a participant chooses to share with you.`;
+  const text =
+    `Hi ${hello},\n\n${body}\n\n` +
+    `Sign in to say yes or no: ${answerUrl}\n\n` +
+    `This invitation is open for ${opts.days} days.\n\n` +
+    `Steel Man Resumes\nTruth. Told Strong.`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
+      <h1 style="font-size:22px;margin:0 0 12px">${esc(opts.orgName)} invited you to their team</h1>
+      <p>Hi ${esc(hello)},</p>
+      <p>${esc(body)}</p>
+      <p style="margin:24px 0">
+        <a href="${esc(answerUrl)}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Sign in to answer</a>
+      </p>
+      <p style="font-size:13px;word-break:break-all;color:#4a6741">${esc(answerUrl)}</p>
+      <p style="font-size:13px;color:#666">This invitation is open for ${esc(opts.days)} days.</p>
+      <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
+    </div>
+  `;
+  return { subject, html, text };
+}
+
+/** A platform admin added an existing account to an organization's staff (support path). */
+export function buildStaffAddedEmail(opts: {
+  inviteeName: string | null;
+  orgName: string;
+  roleLabel: string;
+  origin: string;
+}): EmailContent {
+  const hello = firstName(opts.inviteeName);
+  const loginUrl = `${opts.origin}/login`;
+  const subject = `You are on the ${opts.orgName} team on Steel Man Resumes`;
+  const body =
+    `Steel Man Resumes support added your account to the ${opts.orgName} team as ${opts.roleLabel}. ` +
+    `Your own account and your own work are unchanged. Sign in and the organization's workspace is in your menu. ` +
+    `If you did not expect this, reply to this email and we will take it off.`;
+  const text = `Hi ${hello},\n\n${body}\n\nSign in: ${loginUrl}\n\nSteel Man Resumes\nTruth. Told Strong.`;
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1c1c1a;max-width:520px">
+      <h1 style="font-size:22px;margin:0 0 12px">You are on the ${esc(opts.orgName)} team</h1>
+      <p>Hi ${esc(hello)},</p>
+      <p>${esc(body)}</p>
+      <p style="margin:24px 0">
+        <a href="${esc(loginUrl)}" style="background:#4a6741;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700">Sign in</a>
+      </p>
       <p style="font-size:12px;color:#6d736d;margin-top:32px">Steel Man Resumes<br>Truth. Told Strong.</p>
     </div>
   `;
@@ -245,7 +325,18 @@ export function buildOfferEmail(opts: {
  * the caller must surface it, never report success on an unsent invite.
  * Returns the Resend email id so delivery can be verified.
  */
+/** Thrown instead of sending to an address that can never receive mail. */
+export class UndeliverableAddressError extends Error {
+  constructor() {
+    super("undeliverable address: nothing sent");
+    this.name = "UndeliverableAddressError";
+  }
+}
+
 export async function sendOrgEmail(to: string, content: EmailContent): Promise<string> {
+  // Never to a reserved test domain (.invalid, .test, .example, example.com):
+  // demo and fixture accounts use them, and a send there only bounces.
+  if (isUndeliverableEmail(to)) throw new UndeliverableAddressError();
   const resendKey = process.env.AUTH_RESEND_KEY || process.env.RESEND_API_KEY;
   if (!resendKey) throw new Error("Resend API key missing -- invite email not sent");
   const res = await fetch("https://api.resend.com/emails", {

@@ -23,6 +23,15 @@ interface Member {
   access: Access[]; editable: boolean;
 }
 interface Switch { capability: string; label: string; help: string }
+/** A staff invitation (migration 100): status derived on the server. */
+export interface StaffInviteView {
+  id: string; email: string; name: string | null; role: "org_admin" | "staff"; title: string | null; volunteer: boolean;
+  /** new_account, existing_account, or admin_added (a platform admin attached an existing account directly). */
+  path?: "new_account" | "existing_account" | "admin_added";
+  status: "pending" | "sent" | "accepted" | "expired" | "revoked" | "declined"; statusWords: string;
+  sendCount: number; lastSentAt: string | null; expiresAt: string; invitedAt: string; invitedByName: string | null;
+  undeliverable: boolean; canResend: boolean; canRevoke: boolean;
+}
 const ROLE: Record<Member["role"], string> = { owner: "Owner", org_admin: "Admin", staff: "Staff" };
 const ago = (s: string | null) => {
   if (!s) return "never signed in";
@@ -38,20 +47,23 @@ export function TeamAccessPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [invites, setInvites] = useState<StaffInviteView[] | null>(null);
 
   const load = useCallback(async () => {
-    const res = await fetch("/api/org/access");
-    if (!res.ok) { setMsg("This page is for the organization's owner and admins."); setMembers([]); return; }
+    const res = await fetch("/api/org/access", { cache: "no-store" }).catch(() => null);
+    if (!res?.ok) { setMsg(res ? "This page is for the organization's owner and admins." : "The team could not be loaded. Check your connection and reload."); setMembers([]); return; }
     const d = await res.json();
     setMembers(d.members); setSwitches(d.switches); setViewerRole(d.viewer.role); setOrgName(d.viewer.orgName);
+    setInvites(d.invites ?? null);
   }, []);
   useEffect(() => { load(); }, [load]);
 
   async function flip(m: Member, a: Access) {
     setBusy(`${m.userId}:${a.capability}`); setMsg(null);
     const res = await fetch("/api/org/access", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "set_capability", userId: m.userId, capability: a.capability, on: !a.on }) });
-    if (!res.ok) setMsg((await res.json().catch(() => ({}))).error || "That did not save.");
+      body: JSON.stringify({ action: "set_capability", userId: m.userId, capability: a.capability, on: !a.on }) }).catch(() => null);
+    if (!res) setMsg("That did not save. Check your connection and try again.");
+    else if (!res.ok) setMsg((await res.json().catch(() => ({}))).error || "That did not save.");
     await load(); setBusy(null);
   }
 
@@ -60,17 +72,19 @@ export function TeamAccessPage() {
   async function staffAction(action: string, m: Member, extra: Record<string, unknown>) {
     setMsg(null);
     const res = await fetch("/api/partner/org", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action, userId: m.userId, ...extra }) });
-    if (!res.ok) setMsg((await res.json().catch(() => ({}))).error || "That did not save.");
-    if (action === "remove_staff" && res.ok) setOpenId(null);
+      body: JSON.stringify({ action, userId: m.userId, ...extra }) }).catch(() => null);
+    if (!res) setMsg("That did not save. Check your connection and try again.");
+    else if (!res.ok) setMsg((await res.json().catch(() => ({}))).error || "That did not save.");
+    if (action === "remove_staff" && res?.ok) setOpenId(null);
     await load();
   }
 
   async function applyPreset(m: Member) {
     setMsg(null);
     const res = await fetch("/api/org/access", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "apply_preset", userId: m.userId, preset: "volunteer" }) });
-    if (!res.ok) setMsg((await res.json().catch(() => ({}))).error || "That did not save.");
+      body: JSON.stringify({ action: "apply_preset", userId: m.userId, preset: "volunteer" }) }).catch(() => null);
+    if (!res) setMsg("That did not save. Check your connection and try again.");
+    else if (!res.ok) setMsg((await res.json().catch(() => ({}))).error || "That did not save.");
     await load();
   }
 
@@ -176,6 +190,10 @@ export function TeamAccessPage() {
 
       <InviteStaff canAddAdmin={viewerRole === "owner"} onDone={load} />
 
+      <div className="mt-6">
+        <StaffInviteList invites={invites} endpoint="/api/org/access" canRevokeAdmin={viewerRole === "owner"} onChanged={load} />
+      </div>
+
       <div className="mt-6"><OrgBrandCard /></div>
     </div>
   );
@@ -187,18 +205,19 @@ function InviteStaff({ canAddAdmin, onDone }: { canAddAdmin: boolean; onDone: ()
   async function send() {
     setBusy(true); setMsg(null);
     const res = await fetch("/api/org/access", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "invite_staff", name, email, role, title }) });
+      body: JSON.stringify({ action: "invite_staff", name, email, role, title }) }).catch(() => null);
+    if (!res) { setBusy(false); setMsg("Nothing was saved. Check your connection and try again."); return; }
     const d = await res.json().catch(() => ({}));
     setBusy(false);
-    if (!res.ok) { setMsg(d.error || "Could not add them."); return; }
-    setMsg(d.emailed ? `Invitation sent to ${email}.` : `Added, but the email did not send. Ask them to sign in at the login page with ${email}.`);
+    if (!res.ok) { setMsg(d.error || "Nothing was saved. Try again."); return; }
+    setMsg(d.message || (d.emailed ? `Invitation sent to ${email}.` : "Saved, but the email did not send. Use Resend on the invitation list."));
     setName(""); setEmail(""); setTitle(""); setRole("staff"); onDone();
   }
   const input = "t-focus bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 w-full";
   return (
     <section className="bg-t-panel border border-t-line p-5">
       <h2 className="font-semibold text-t-white mb-1">Add someone to your team</h2>
-      <p className="text-xs text-t-phos-dim mb-4">They get an email that signs them straight in. Staff start with their own caseload only; you can widen that for one person above.</p>
+      <p className="text-xs text-t-phos-dim mb-4">They get an email from us. Someone new signs straight in; someone who already uses Steel Man Resumes signs in and says yes first. Invitations are open for 14 days. Staff start with their own caseload only; you can widen that for one person above.</p>
       <div className="grid sm:grid-cols-2 gap-3">
         <div><label htmlFor="st-name" className="block text-xs text-t-phos-dim mb-1">Name</label><input id="st-name" className={input} value={name} onChange={(e) => setName(e.target.value)} /></div>
         <div><label htmlFor="st-email" className="block text-xs text-t-phos-dim mb-1">Work email</label><input id="st-email" type="email" className={input} value={email} onChange={(e) => setEmail(e.target.value)} /></div>
@@ -216,6 +235,93 @@ function InviteStaff({ canAddAdmin, onDone }: { canAddAdmin: boolean; onDone: ()
         <button onClick={send} disabled={busy || !name.trim() || !email.trim()} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 disabled:opacity-50">{busy ? "Sending..." : "Send invitation"}</button>
         <p role="status" aria-live="polite" className="text-xs text-t-phos">{msg}</p>
       </div>
+    </section>
+  );
+}
+
+const shortDay = (s: string | null) => (s ? new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "never");
+
+/**
+ * The staff invitation list, shared by Team & access and Admin > Organizations:
+ * status, send count, last sent, expiry, Resend and Revoke. Every action shows
+ * what happened, including when nothing changed.
+ */
+export function StaffInviteList({ invites, endpoint, extra, canRevokeAdmin, onChanged }: {
+  invites: StaffInviteView[] | null;
+  /** The POST endpoint: /api/org/access (the organization) or /api/admin/orgs (platform admin). */
+  endpoint: string;
+  /** Sent with every action (the admin route needs orgId). */
+  extra?: Record<string, unknown>;
+  canRevokeAdmin: boolean;
+  onChanged: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [showClosed, setShowClosed] = useState(false);
+  async function act(action: "resend_invite" | "revoke_invite", inv: StaffInviteView) {
+    if (action === "revoke_invite" && !window.confirm(`Revoke the invitation for ${inv.name || inv.email}? The link stops working.`)) return;
+    setBusy(inv.id + action); setNote(null);
+    const res = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...(extra ?? {}), action, inviteId: inv.id }) }).catch(() => null);
+    const d = res ? await res.json().catch(() => ({})) : {};
+    setBusy(null);
+    if (!res?.ok) setNote({ ok: false, text: d?.error || "That did not save. Nothing changed." });
+    else setNote({ ok: true, text: d?.message || "Done." });
+    onChanged();
+  }
+  if (invites === null) return <p className="text-xs text-t-phos-dim">Invitations could not be loaded. Reload to try again.</p>;
+  const open = invites.filter((i) => i.canRevoke);
+  const closed = invites.filter((i) => !i.canRevoke);
+  const rows = showClosed ? invites : open;
+  return (
+    <section aria-label="Staff invitations" className="bg-t-panel border border-t-line p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+        <h2 className="font-semibold text-t-white">Invitations</h2>
+        {closed.length > 0 && (
+          <button type="button" onClick={() => setShowClosed(!showClosed)} className="t-focus text-xs text-t-phos underline">
+            {showClosed ? "Hide answered and revoked" : `Show answered and revoked (${closed.length})`}
+          </button>
+        )}
+      </div>
+      {note && <p role={note.ok ? "status" : "alert"} className={`text-xs mb-3 ${note.ok ? "text-t-phos" : "text-t-amber-bright"}`}>{note.text}</p>}
+      {rows.length === 0 ? <p className="text-xs text-t-phos-dim">{invites.length === 0 ? "No staff invitations yet." : "No open invitations."}</p> : (
+        <ul className="divide-y divide-t-line border border-t-line">
+          {rows.map((inv) => (
+            <li key={inv.id} className="px-3 py-3 flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-t-white">{inv.name || inv.email} <span className="text-xs text-t-phos-dim">{inv.email}</span></p>
+                <p className="text-xs text-t-phos-dim">
+                  {inv.role === "org_admin" ? "Admin" : inv.volunteer ? "Volunteer" : "Staff"}{inv.title && !inv.volunteer ? `, ${inv.title}` : ""}
+                  {inv.invitedByName ? ` · invited by ${inv.invitedByName}` : ""}
+                </p>
+                <p className="text-xs mt-1">
+                  <span className={`px-1.5 py-0.5 border ${inv.status === "sent" || inv.status === "accepted" ? "border-t-line text-t-phos" : "border-t-amber text-t-amber-bright"}`}>{inv.statusWords}</span>
+                  {inv.path === "admin_added"
+                    ? <span className="text-t-phos-dim"> · added directly by Steel Man support on {shortDay(inv.invitedAt)}</span>
+                    : <span className="text-t-phos-dim"> · sent {inv.sendCount} {inv.sendCount === 1 ? "time" : "times"} · last sent {shortDay(inv.lastSentAt)}{inv.canRevoke ? ` · ${inv.status === "expired" ? "expired" : "open until"} ${shortDay(inv.expiresAt)}` : ""}</span>}
+                </p>
+                {inv.undeliverable && inv.canRevoke && <p className="text-xs text-t-amber-bright mt-1">This address cannot receive email; share the sign-up link instead.</p>}
+              </div>
+              {inv.canRevoke && (
+                <span className="flex gap-2">
+                  {inv.canResend && (
+                    <button type="button" disabled={!!busy || inv.undeliverable} onClick={() => act("resend_invite", inv)}
+                      className="t-focus min-h-touch border border-t-amber px-3 text-xs font-semibold text-t-amber-bright disabled:opacity-40">
+                      {busy === inv.id + "resend_invite" ? "Sending..." : "Resend"}
+                    </button>
+                  )}
+                  {(inv.role !== "org_admin" || canRevokeAdmin) && (
+                    <button type="button" disabled={!!busy} onClick={() => act("revoke_invite", inv)}
+                      className="t-focus min-h-touch border border-t-line px-3 text-xs text-t-white disabled:opacity-40">
+                      {busy === inv.id + "revoke_invite" ? "Revoking..." : "Revoke"}
+                    </button>
+                  )}
+                </span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

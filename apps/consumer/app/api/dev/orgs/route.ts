@@ -35,14 +35,19 @@ export async function GET() {
     crm_v2: boolean;
     partner_user_id: string | null;
     max_staff: number | null;
+    closed_at: string | null;
+    close_reason: string | null;
   }>(
+    // Open organizations first, then closed, each by name (migration 100).
+    // The screen hides closed ones behind "Show closed".
     `SELECT ac.id, ac.code, ac.partner_name, ac.tier, ac.is_active, ac.org_logo_url,
             ac.max_redemptions, ac.times_redeemed, ac.daily_limit, ac.crm_v2, ac.partner_user_id, ac.max_staff,
+            ac.closed_at, ac.close_reason,
             u.email AS owner_email,
             0 AS joined
        FROM access_code ac
        LEFT JOIN users u ON u.id = ac.partner_user_id
-      ORDER BY ac.partner_name, ac.code`
+      ORDER BY ac.is_active DESC, lower(ac.partner_name), ac.code`
   );
 
   // Staff AND members, counted per org while scoped to that org, in one
