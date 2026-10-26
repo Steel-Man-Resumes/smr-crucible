@@ -164,10 +164,13 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
   const [shrink, setShrink] = useState<Box | null>(null);
   /** The stage growing back out of the card for the recap: its start box, cleared on the next frame. */
   const [grow, setGrow] = useState<Box | null>(null);
+  /** The page stays dimmed for the whole grow (the stage's 900 ms transition), not only its first frames. */
+  const [veil, setVeil] = useState(false);
   const [cut, setCut] = useState<Box | null>(null);
   const [pills, setPills] = useState<Pill[]>([]);
   const [ring, setRing] = useState<Box | null>(null);
-  const [cardH, setCardH] = useState(() => (typeof window !== 'undefined' && innerWidth < NARROW ? 380 : 300));
+  // A first guess close to the real card (the strip and the why line make it about 400 px), so the first plan is right.
+  const [cardH, setCardH] = useState(() => (typeof window !== 'undefined' && innerWidth < NARROW ? 420 : 400));
   const [cardEl, setCardEl] = useState<HTMLDivElement | null>(null);
   const [particles, setParticles] = useState<{ key: number; d: string } | null>(null);
   const [announce, setAnnounce] = useState('');
@@ -267,9 +270,15 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
   }, [shrink, go, i]);
   useLayoutEffect(() => {
     if (!grow) return;
+    setVeil(true);
     const raf = requestAnimationFrame(() => requestAnimationFrame(() => setGrow(null)));
     return () => cancelAnimationFrame(raf);
   }, [grow]);
+  useEffect(() => {
+    if (!veil || grow) return;
+    const timer = setTimeout(() => setVeil(false), ACT_CHANGE_MS);
+    return () => clearTimeout(timer);
+  }, [veil, grow]);
 
   /* Clock: runs while playing, visible, not between acts and not on the ending. */
   const running = playing && !hidden && !ending && !shrink && !grow;
@@ -311,8 +320,8 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
   useEffect(() => {
     if (!beat || ending) return;
     if (onStageBeat) {
-      // Behind the stage: the real page waits at the top, unscaled.
-      setPageCamera(0, 1, camState.origin); setCut(null); setPills([]); setRing(null);
+      // Behind the stage: before the page, it waits at the top; under the recap, it stays where it is (no jump while the stage grows over it). Never scaled.
+      setPageCamera(beat.scene === 'recap' ? window.scrollY : 0, 1, camState.origin); setCut(null); setPills([]); setRing(null);
       return;
     }
     if (beat.reveal) reveal(true);
@@ -323,7 +332,8 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
     const from = { scroll: window.scrollY, scale: camState.scale, origin: { ...camState.origin } };
     const prevBeat = beats[i - 1];
     const prevTargets = prevBeat?.where === 'page' ? (prevBeat.targets ?? prevBeat.chips?.at(-1)?.targets ?? []) : [];
-    const cardRect = (): Box => { const c = cardEl?.getBoundingClientRect(); return c && c.width ? { x: c.left, y: c.top, w: c.width, h: c.height } : cardBox; };
+    // The card's resting place from its layout height: its entrance animation moves the live rect 10 px, which once let a zoom touch it.
+    const cardRect = (): Box => { const h = Math.max(cardEl?.offsetHeight ?? 0, cardHRef.current); return { x: cardBox.x, y: innerHeight - 16 - h, w: cardBox.w, h }; };
     /** On a phone every cutout stops above the bottom card; one squeezed under it is hidden until it rises (SF-1 rule). */
     const fitCut = (box: Box | null, clip?: number): Box | null => {
       if (!box) return null;
@@ -526,6 +536,7 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
     <button type="button" onClick={next} aria-label={TOUR_COPY.next}><ChevronRight size={18} aria-hidden="true" /></button>
     {!compact && !portrait ? segs : <span className="et-bar__grow" />}
     {!compact && !portrait && motionButton()}
+    {compact && portrait && motionButton()}
     <button type="button" onClick={onLeave} aria-label={`${TOUR_COPY.leave}. Escape`}><X size={16} aria-hidden="true" />{!compact && !portrait && <span aria-hidden="true">{TOUR_COPY.leave}</span>}</button>
   </div>;
 
@@ -556,7 +567,7 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
     <p id="st-keys" className="et-sr">{TOUR_COPY.keys}</p>
     <p className="et-sr" aria-live="polite">{announce}</p>
 
-    {(shrink || (beat && !onStageBeat)) && <div className="et-dim st-dim" style={{ background: cut && !shrink ? 'transparent' : undefined }} aria-hidden="true" />}
+    {(shrink || grow || veil || (beat && !onStageBeat)) && <div className="et-dim st-dim" style={{ background: cut && !shrink && !grow && !veil ? 'transparent' : undefined }} aria-hidden="true" />}
     {beat && onStageBeat && <div className="et-wrap" data-shrink={!!wrapBox} style={shrinkStyle}>
       <div ref={stageRef} className="et-stage" aria-hidden="true" onClick={e => { if (e.isTrusted) toggle(); }}>
         {stage.w > 0 && <div className="et-cam" style={{ width: sceneSize.w, height: sceneSize.h, transform: `translate3d(${cam.tx}px, ${cam.ty}px, 0) scale(${cam.s})`, transition: reduced || beat.scene !== 'map' ? 'none' : `transform ${tile <= 0 ? 1100 : TILE_PAN_MS}ms ${CAMERA_EASE}` }}>
@@ -595,10 +606,11 @@ export function SettingsTourPlayer(props: SettingsTourPlayerProps) {
         {!portrait && <div className="et-bar__row">{segs}</div>}
         {portrait && <div className="et-mini" aria-hidden="true"><i style={{ width: `${progress * 100}%` }} /></div>}
         {buttons(true)}
-        <div className="et-bar__row">
-          {motionButton()}
+        {/* Phones keep the card short: the motion switch rides in the controls row. */}
+        {(!portrait || reduced) && <div className="et-bar__row">
+          {!portrait && motionButton()}
           {reduced && <p className="et-note">{TOUR_COPY.motionOff}</p>}
-        </div>
+        </div>}
       </div>
     </>}
 

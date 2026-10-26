@@ -149,10 +149,11 @@ export function pageShot(input: PageShotInput): PageShot {
   const margin = 16;
   let s = Math.max(1, input.maxScale);
   s = Math.min(s, (view.h - margin - y) / Math.max(1, target.h), (view.w - margin - target.x) / Math.max(1, target.w));
-  // Clear of the card: either the scaled box ends left of it, or it ends above it.
-  const leftOf = (card.x - 8 - target.x) / Math.max(1, target.w);
-  const above = (card.y - 12 - y) / Math.max(1, target.h);
-  if (overlaps({ x: target.x, y, w: target.w * s, h: target.h * s }, card)) s = Math.min(s, Math.max(leftOf, above));
+  // Clear of the card, counting the cutout's 6 px pad and a gap: either the scaled box ends left of it, or above it.
+  const leftOf = (card.x - 14 - target.x) / Math.max(1, target.w);
+  const above = (card.y - 14 - y) / Math.max(1, target.h);
+  const near = { x: card.x - 14, y: card.y - 14, w: card.w + 28, h: card.h + 28 };
+  if (overlaps({ x: target.x, y, w: target.w * s, h: target.h * s }, near)) s = Math.min(s, Math.max(leftOf, above));
   s = Math.max(1, Math.min(Math.max(1, input.maxScale), s));
   s = Math.round(s * 1000) / 1000;
   return { scrollTop, scale: s, origin: { x: target.x - frame.x, y: target.y - frame.y }, box: { x: target.x, y, w: target.w * s, h: target.h * s } };

@@ -54,7 +54,8 @@ html.reduce-motion .st-ring,html.reduce-motion .st-root .st-dim,html.reduce-moti
 /* The card: why it matters, the chips on a phone, the five objectives. */
 .st-why{margin:6px 0 0;font-size:.92rem;line-height:1.45;color:var(--et-ink)}
 .st-why b{color:var(--et-gold);font-weight:700;margin-right:2px}
-.st-cardchips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 0}
+.st-cardchips{display:flex;flex-wrap:nowrap;justify-content:flex-end;gap:6px;margin:8px 0 0;overflow:hidden;white-space:nowrap;mask-image:linear-gradient(90deg,transparent,#000 24px)}
+.st-cardchips span{flex:0 0 auto}
 .st-cardchips span{padding:3px 9px;border-radius:99px;font:700 13px/1.2 var(--t-body,system-ui,sans-serif);background:#2b261c;color:var(--et-gold);border:1px solid #dbc17355;opacity:.6}
 .st-cardchips span[data-lit=true]{opacity:1;background:var(--et-gold);color:#17140e}
 .st-strip{display:flex;gap:4px;justify-content:space-between;padding:8px 0 2px;border-top:1px solid #ffffff14}

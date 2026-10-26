@@ -166,6 +166,10 @@ test('page camera: zoom capped at 1.3, never under the card or off screen, never
   assert.deepEqual(shot.origin, { x: 24, y: 2300 });
   const overlap = (a: typeof card, b: typeof card) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
   assert.ok(!overlap(shot.box, card));
+  // The padded cutout (6 px) keeps a gap above the card: the take of 2026-10-26 found a 3 px overlap at rest.
+  const near = pageShot({ target: { x: 301, y: 2400, w: 616, h: 305 }, frame, view, card: { x: 1064, y: 485, w: 360, h: 399 }, maxScale: 1.3, maxScroll: 9000 });
+  assert.ok(near.box.y + near.box.h + 6 <= 485 - 6, `bottom ${near.box.y + near.box.h}`);
+  assert.ok(near.scale > 1.2 && near.scale < 1.3, String(near.scale));
   const tall = pageShot({ target: { ...coach, x: 700, w: 640, h: 520 }, frame, view, card, maxScale: 1.3, maxScroll: 9000 });
   assert.ok(tall.scale === 1 || !overlap(tall.box, card));
   assert.equal(pageShot({ target: coach, frame, view: { w: 390, h: 844 }, card: { x: 16, y: 450, w: 358, h: 380 }, maxScale: 1, maxScroll: 9000 }).scale, 1);
