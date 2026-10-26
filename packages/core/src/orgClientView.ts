@@ -31,6 +31,7 @@
  */
 import { runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
+import { unitReachSql } from "./orgUnitReach";
 import { SHARING_SCOPES, isSharingScope, type SharingScope } from "./sharingScopes";
 import { staffStepLabel } from "./journeyStages";
 
@@ -61,7 +62,8 @@ const IN_REACH = `
   EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.user_id = $1::uuid AND r.access_code_id = $2::uuid)
   AND ($3::boolean OR EXISTS (
         SELECT 1 FROM client_staff_assignment a
-         WHERE a.access_code_id = $2::uuid AND a.client_user_id = $1::uuid AND a.staff_user_id = $4::uuid))`;
+         WHERE a.access_code_id = $2::uuid AND a.client_user_id = $1::uuid AND a.staff_user_id = $4::uuid)
+       OR ${unitReachSql("$2::uuid", "$4::uuid", "$1::uuid")})`;
 
 /**
  * Step 5 for one scope ($5). A grant made under a PROGRAM REQUIREMENT carries
@@ -491,7 +493,8 @@ export async function editClientNote(actor: OrgActor, clientId: string, noteId: 
 const reachOf = (who: string) => `
   ($2::boolean OR EXISTS (
      SELECT 1 FROM client_staff_assignment a
-      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid))`;
+      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${who} AND a.staff_user_id = $3::uuid)
+   OR ${unitReachSql("$1::uuid", "$3::uuid", who)})`;
 
 function listParams(actor: OrgActor) {
   return [actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId];

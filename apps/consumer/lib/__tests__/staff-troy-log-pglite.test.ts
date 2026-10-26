@@ -30,7 +30,10 @@ test('a t.ROY staff read logs one open the participant can see, and nothing outs
     catch { await db.exec('ROLLBACK').catch(() => {}); failed.push(f); }
   }
   assert.ok(!failed.includes('097_org_seats.sql'), `097 must apply; failed: ${failed.join(', ')}`);
-  await db.exec(`CREATE ROLE tester NOSUPERUSER; GRANT USAGE ON SCHEMA public TO tester; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO tester; GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO tester;`);
+  // The staff reach checks ask the database's rule (smr_staff_reach, 102; units, 103): apply both.
+  for (const f of ['102_reach_activity_audit.sql', '103_org_structure.sql']) await db.exec('BEGIN;' + readFileSync(MIG + f, 'utf8') + ';COMMIT;');
+  await db.exec(`CREATE ROLE tester NOSUPERUSER; GRANT USAGE ON SCHEMA public TO tester; GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO tester; GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO tester;
+    GRANT EXECUTE ON FUNCTION public.smr_staff_reach(uuid, uuid, uuid), public.smr_staff_sees_all(uuid, uuid), public.smr_staff_unit_reach(uuid, uuid, uuid) TO tester;`);
   const q = (t: string, p: unknown[] = []) => db.query(t, p);
   const scoped = async (orgId: string, actor: string, role: string, text: string, params: unknown[]) => {
     await db.exec('BEGIN; SET LOCAL ROLE tester;');

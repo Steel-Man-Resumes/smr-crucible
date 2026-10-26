@@ -39,6 +39,12 @@ export const ORG_CAPABILITIES = [
   "org.task.write",
   "org.outcome.write",
   "org.suggest.write",
+  // Enrolling a participant in a program, cohort or caseload, and moving that
+  // enrollment along (paused, finished, left). Casework, so every role has it;
+  // the volunteer preset denies it. Enrolling someone shows them to the staff
+  // of that unit, so the database also requires that the writer already
+  // reaches the person (migration 103).
+  "org.enrollment.write",
   // Bringing people in. Inviting a PARTICIPANT is ordinary casework; inviting
   // STAFF decides who can read case data and stays with admins (org.staff.invite).
   "org.participant.invite",
@@ -94,6 +100,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.task.write",
     "org.outcome.write",
     "org.suggest.write",
+    "org.enrollment.write",
     "org.participant.invite",
   ],
   org_admin: [
@@ -107,6 +114,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.task.write",
     "org.outcome.write",
     "org.suggest.write",
+    "org.enrollment.write",
     "org.participant.invite",
     "org.insights.view",
     "org.staff.view",
@@ -127,6 +135,7 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.task.write",
     "org.outcome.write",
     "org.suggest.write",
+    "org.enrollment.write",
     "org.participant.invite",
     "org.insights.view",
     "org.staff.view",
@@ -203,6 +212,7 @@ export const DELEGABLE_CAPABILITIES: { capability: OrgCapability; label: string;
   { capability: "org.outcome.write", label: "Record placements and retention checks", help: "What happened after hire, and how you know." },
   { capability: "org.suggest.write", label: "Suggest jobs and comment on shared documents", help: "The participant decides what to do with each one. Staff never edit their work." },
   { capability: "org.client.assign", label: "Assign participants to staff", help: "Move people between caseloads." },
+  { capability: "org.enrollment.write", label: "Enroll people in programs", help: "Add people they work with to a program, cohort or caseload, and mark them paused, finished or left." },
   { capability: "org.participant.invite", label: "Invite participants", help: "Each invite uses one of your seats." },
   { capability: "org.insights.view", label: "See the organization's numbers", help: "Funnel, outcomes and workload by staff member." },
   { capability: "org.export", label: "Export the caseload", help: "Download a spreadsheet of who they can see." },
@@ -227,11 +237,12 @@ export const DELEGABLE_CAPABILITIES: { capability: OrgCapability; label: string;
 export const STAFF_PRESETS = {
   volunteer: {
     label: "Volunteer",
-    help: "Works only the people assigned to them. Cannot invite participants, which uses seats, or record placements and retention checks.",
+    help: "Works only the people assigned to them. Cannot invite participants, which uses seats, enroll people in programs, or record placements and retention checks.",
     role: "staff" as const,
     denies: [
       "org.participant.invite",
       "org.outcome.write",
+      "org.enrollment.write",
       "org.client.view_all",
       "org.client.assign",
       "org.seats.view",

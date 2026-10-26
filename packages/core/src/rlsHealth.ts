@@ -73,6 +73,12 @@ export const RLS_PROTECTED_TABLES = [
   "outcome_correction",
   // Staff t.ROY skill runs (migration 106): own runs, owner and org admins read all, reach-restricted
   "ai_skill_run",
+  // Organization structure (migration 103): profile, units, unit staff, and
+  // enrollments (reach-restricted per participant)
+  "org_profile",
+  "org_unit",
+  "unit_member",
+  "enrollment",
 ] as const;
 
 export interface RlsHealth {

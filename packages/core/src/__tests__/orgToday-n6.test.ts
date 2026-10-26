@@ -136,9 +136,10 @@ test("the read side still decides what is read: the SELECT and the access-log IN
                AND ja.status NOT IN ('hired', 'started_work', 'rejected', 'declined')))`);
   assert.equal(selWhere, FILTER, "SELECT filter, reach and sharing clauses included");
   assert.equal(insWhere, FILTER, "INSERT filter matches the SELECT");
-  // The clauses themselves, as at 964090c.
+  // The clauses themselves, as at 964090c, plus reach through a unit (house L3a, 103).
   assert.ok(norm(src).includes(norm(`const reach = (who: string) => \`($2::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
-      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${"${who}"} AND a.staff_user_id = $3::uuid))\`;`)));
+      WHERE a.access_code_id = $1::uuid AND a.client_user_id = ${"${who}"} AND a.staff_user_id = $3::uuid)
+      OR ${"${unitReachSql(\"$1::uuid\", \"$3::uuid\", who)}"})\`;`)));
   assert.ok(norm(src).includes(norm(`WHERE g.user_id = ${"${who}"} AND g.access_code_id = $1::uuid AND g.scope = 'applications' AND g.revoked_at IS NULL
         AND g.text_version = ANY($4::text[])
         AND ja.created_at >= COALESCE(g.covers_from, '-infinity'::timestamptz)`)));

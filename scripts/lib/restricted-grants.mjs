@@ -138,6 +138,13 @@ export const RESTRICTED_GRANTS = {
   // Staff t.ROY skill runs (106): append-only; the only change is the
   // acceptance, by the person who ran it (a column grant, checked below).
   ai_skill_run: ["SELECT", "INSERT", "UPDATE (accepted_by, accepted_at)"],
+  // House L3a (103). Units and enrollments are closed or ended, never
+  // deleted; a profile is changed, never removed. Taking a staff member out
+  // of a unit is a real delete (the activity log keeps it).
+  org_profile: ["SELECT", "INSERT", "UPDATE"],
+  org_unit: ["SELECT", "INSERT", "UPDATE"],
+  unit_member: ["SELECT", "INSERT", "UPDATE", "DELETE"],
+  enrollment: ["SELECT", "INSERT", "UPDATE"],
 };
 
 /**
@@ -153,6 +160,10 @@ export const APP_FUNCTIONS = [
   "smr_staff_unit_reach(uuid, uuid, uuid)",
   "smr_staff_reach(uuid, uuid, uuid)",
   "smr_correct_retention_check(uuid, text, text, text, text)",
+  // House L3a (103): the structure and enrollment write policies call these.
+  "smr_org_structure_manager(uuid, uuid)",
+  "smr_enrollment_writer(uuid, uuid)",
+  "smr_enrollment_assigner(uuid, uuid)",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -161,6 +172,10 @@ export const APP_FUNCTIONS = [
 export const APP_FORBIDDEN_FUNCTIONS = [
   "org_activity_write(uuid, uuid, uuid, text, text, text, text)",
   "smr_org_role(uuid, uuid)",
+  // House L3a (103): the structure tables' activity writer.
+  "smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)",
+  // Answers "is this person a volunteer" for any org: definer-only.
+  "smr_is_volunteer(uuid, uuid)",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */
