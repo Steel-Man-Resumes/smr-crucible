@@ -33,7 +33,8 @@ import { signIn, useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
-import { passwordProblem } from "@/lib/password-policy";
+import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
 import { PremiumToolsSection } from "@/components/premium/PremiumToolsSection";
 import { PackageEmailSetting } from "@/components/PackageEmailSetting";
@@ -1102,19 +1103,6 @@ function AccountExtras({
   );
 }
 
-function scorePassword(pw: string): { score: number; label: string } {
-  if (!pw) return { score: 0, label: "" };
-  let s = 0;
-  if (pw.length >= 10) s++;
-  if (pw.length >= 14) s++;
-  if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) s++;
-  if (/[0-9]/.test(pw)) s++;
-  if (/[^a-zA-Z0-9]/.test(pw)) s++;
-  const labels = ["keep going", "getting there", "solid", "strong", "fabulous", "unbreakable"];
-  const score = Math.min(s, 5);
-  return { score, label: labels[score] };
-}
-
 function fmtWhen(s: string | null): string {
   if (!s) return "";
   const d = new Date(s);
@@ -1148,8 +1136,6 @@ function SecuritySection() {
   useEffect(() => {
     refresh();
   }, []);
-
-  const strength = scorePassword(pw);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -1195,13 +1181,11 @@ function SecuritySection() {
   }
 
   const creating = hasPassword === false;
-  const strengthColors = ["bg-t-line", "bg-t-red", "bg-t-amber", "bg-t-amber-bright", "bg-t-phos", "bg-t-phos"];
-
   return (
     <section className="mb-8">
       <h2 className="text-lg font-bold text-t-white mb-1">Security</h2>
       <p className="text-sm text-t-phos-dim mb-4">
-        Your account, locked down the way it should be.
+        Manage your password, two-step verification and signed-in devices.
       </p>
 
       <div className="bg-t-panel p-5 border border-t-line">
@@ -1227,8 +1211,9 @@ function SecuritySection() {
 
         <form onSubmit={handleSubmit} className="space-y-3 mt-3">
           {hasPassword && (
-            <input
-              type="password"
+            <PasswordInput
+              id="settings-current-password"
+              aria-label="Current password"
               value={current}
               onChange={(e) => setCurrent(e.target.value)}
               placeholder="Current password"
@@ -1238,8 +1223,9 @@ function SecuritySection() {
               }`}
             />
           )}
-          <input
-            type="password"
+          <PasswordInput
+            id="settings-new-password"
+            aria-label="New password"
             value={pw}
             onChange={(e) => setPw(e.target.value)}
             placeholder={creating ? "New password (10+ characters)" : "New password"}
@@ -1247,26 +1233,13 @@ function SecuritySection() {
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
 
-          {pw && (
-            <div className="flex items-center gap-3">
-              <div className="flex gap-1 flex-1">
-                {[0, 1, 2, 3, 4].map((i) => (
-                  <div
-                    key={i}
-                    className={`h-1.5 flex-1 rounded-full transition-colors ${
-                      i < strength.score ? strengthColors[strength.score] : "bg-t-line"
-                    }`}
-                  />
-                ))}
-              </div>
-              <span className="text-xs text-t-phos-dim w-20 text-right capitalize">
-                {strength.label}
-              </span>
-            </div>
-          )}
+          <p className="text-xs text-t-phos-dim">
+            {PASSWORD_HINT}. Use a password you don&apos;t use on another site. A password manager can make and remember one for you.
+          </p>
 
-          <input
-            type="password"
+          <PasswordInput
+            id="settings-confirm-password"
+            aria-label="Confirm new password"
             value={confirm}
             onChange={(e) => setConfirm(e.target.value)}
             placeholder="Confirm new password"
@@ -1277,7 +1250,7 @@ function SecuritySection() {
           {status === "error" && <p className="text-sm text-t-red">{errorMsg}</p>}
           {status === "done" && (
             <p className="text-sm text-t-phos">
-              {creating ? "Password created. You're all set." : "Password updated. Nice and secure."}
+              {creating ? "Password created." : "Password updated."}
             </p>
           )}
 

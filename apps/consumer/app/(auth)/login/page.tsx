@@ -11,7 +11,8 @@
  */
 
 import { Suspense, useState, useEffect, useRef } from "react";
-import { signIn, signOut } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
+import { PasswordInput } from "@/components/auth/PasswordInput";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -63,6 +64,7 @@ const FORGE_CHOICE_HINT =
 
 function LoginForm() {
   const searchParams = useSearchParams();
+  const { data: currentSession } = useSession();
   const isDev = process.env.NODE_ENV === "development";
   const fromForge = searchParams.get("from") === "forge";
   const forPartner = (searchParams.get("callbackUrl") || "").includes(
@@ -87,7 +89,7 @@ function LoginForm() {
         ? "org"
         : "seeker";
   });
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   // Create-account only: explicit Terms/Privacy/AI-processing acceptance,
   // required before any account or Forge data is persisted server-side.
@@ -110,6 +112,21 @@ function LoginForm() {
   // Two-step sign-in: after password, show a 2FA code field when required.
   const [twoFactorStep, setTwoFactorStep] = useState(false);
   const [totp, setTotp] = useState("");
+
+  function changeMode(nextMode: Mode) {
+    setMode(nextMode);
+    setError("");
+    setPassword("");
+    setConfirmPassword("");
+    setTwoFactorStep(false);
+    setTotp("");
+  }
+
+  function resetSecondStep() {
+    setTwoFactorStep(false);
+    setTotp("");
+    setError("");
+  }
 
   // Pre-fill partner code from URL
   useEffect(() => {
@@ -151,17 +168,48 @@ function LoginForm() {
         SessionNotUsable:
           "This browser is still holding an old or unfinished sign-in. Sign out below, then try Google again.",
       };
-      setError(msgs[urlError] || `Login error: ${urlError}`);
+      setError(msgs[urlError] || "Sign-in did not finish. Try again, or use an email sign-in link.");
     }
   }, [searchParams]);
 
   function storeCode() {
-    if (code.trim()) localStorage.setItem("pending_access_code", code.trim());
+    try {
+      if (code.trim()) localStorage.setItem("pending_access_code", code.trim());
+    } catch {
+      // A blocked browser store must not prevent sign-in. Codes can be added
+      // from Settings after signing in.
+    }
   }
 
   // Checked here as well as by Auth.js: a same-site path only, never another
   // site, never the login pages or an API route (lib/session-policy.ts).
   const callbackUrl = safeLoginReturn(searchParams.get("callbackUrl"));
+
+  async function switchAccount() {
+    setSending(true);
+    setError("");
+    try {
+      await signOut({ redirect: false });
+      clearPriorAccountState();
+      eraseLocalForgeRun();
+      window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+    } catch {
+      setError("We couldn't sign you out. Try again.");
+      setSending(false);
+    }
+  }
+
+  async function signInWithGoogle() {
+    setSending(true);
+    setError("");
+    storeCode();
+    try {
+      await signIn("google", { callbackUrl }, { prompt: "select_account" });
+    } catch {
+      setError("Google sign-in did not open. Try again, or use your password or an email sign-in link.");
+      setSending(false);
+    }
+  }
   // Mini Forge sends people here with callbackUrl=/mini-forge/import-complete,
   // the step that loads their tablet plan into the new account. Account
   // creation must honor it (see createCallback below) or the import never runs.
@@ -286,6 +334,9 @@ function LoginForm() {
         setSending(false);
       } else if (result?.url) {
         window.location.href = result.url;
+      } else {
+        setError("Sign-in did not finish. Try again, or use an email sign-in link.");
+        setSending(false);
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -369,11 +420,15 @@ function LoginForm() {
         email: email.trim(), password, callbackUrl: createCallback, redirect: false,
       });
       if (result?.error) {
+        changeMode("sign-in");
         setError("Account created. Try signing in.");
-        setMode("sign-in");
         setSending(false);
       } else if (result?.url) {
         window.location.href = result.url;
+      } else {
+        changeMode("sign-in");
+        setError("Account created. Sign in to continue.");
+        setSending(false);
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -405,6 +460,9 @@ function LoginForm() {
       } else if (result?.url) {
         setMagicLinkSent(true);
         setSending(false);
+      } else {
+        setError("We couldn't confirm the request. Try again.");
+        setSending(false);
       }
     } catch {
       setError("Something went wrong. Please try again.");
@@ -429,7 +487,7 @@ function LoginForm() {
             Click the link in the email to sign in. It expires in 24 hours.
           </p>
           <button
-            onClick={() => { setMagicLinkSent(false); setMode("sign-in"); }}
+            onClick={() => { setMagicLinkSent(false); changeMode("sign-in"); }}
             className="text-sm text-t-amber-bright hover:text-t-amber"
           >
             Back to sign in
@@ -446,7 +504,7 @@ function LoginForm() {
 
   const submitDisabled = sending || !email.trim()
     || (mode !== "magic-link" && !password)
-    || (twoFactorStep && !totp.trim())
+    || (mode === "sign-in" && twoFactorStep && !totp.trim())
     || (mode === "create" && (!confirmPassword || !name.trim() || !phone.trim() || !acceptedTerms))
     || (mode === "magic-link" && !acceptedTerms)
     || (mode === "create" && !forgeChoiceComplete(forgeRunOffered, forgeChoice));
@@ -478,6 +536,16 @@ function LoginForm() {
                   : "Continue your career work where you left off."}
           </p>
         </div>
+
+        {currentSession?.user?.email && (
+          <div className="mb-4 border border-t-line p-3 text-sm text-t-white">
+            <p className="break-words">Signed in as {currentSession.user.email}.</p>
+            <Link href={callbackUrl} className="t-focus mr-4 inline-block py-2 text-t-amber-bright underline">Continue</Link>
+            <button type="button" onClick={() => void switchAccount()} disabled={sending} className="t-focus py-2 text-t-amber-bright underline disabled:opacity-50">
+              Sign out to switch accounts
+            </button>
+          </div>
+        )}
 
         {/* Someone coming from a Forge screen is here to build their own
             resume: the "who are you here as" choice would only slow them down. */}
@@ -523,7 +591,8 @@ function LoginForm() {
           <div className="mb-4">
             <button
               type="button"
-              onClick={() => signIn("google", { callbackUrl })}
+              onClick={() => void signInWithGoogle()}
+              disabled={sending}
               className="t-focus w-full flex items-center justify-center gap-2 px-4 py-3 border border-t-line bg-t-panel text-sm font-medium text-t-white hover:border-t-phos-dim transition-colors min-h-touch"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
@@ -552,7 +621,7 @@ function LoginForm() {
               id="email"
               type="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => { setEmail(e.target.value); resetSecondStep(); }}
               placeholder="you@example.com"
               required
               autoComplete="email"
@@ -568,11 +637,11 @@ function LoginForm() {
               <label htmlFor="password" className="block text-sm font-medium text-t-white mb-1">
                 Password
               </label>
-              <input
+              <PasswordInput
+                key={mode}
                 id="password"
-                type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => { setPassword(e.target.value); resetSecondStep(); }}
                 placeholder={mode === "create" ? `Create a password (${PASSWORD_HINT})` : "Your password"}
                 required
                 autoComplete={mode === "create" ? "new-password" : "current-password"}
@@ -583,7 +652,7 @@ function LoginForm() {
           )}
 
           {/* Two-factor code — sign-in, second step */}
-          {mode !== "magic-link" && twoFactorStep && (
+          {mode === "sign-in" && twoFactorStep && (
             <div>
               <label htmlFor="totp" className="block text-sm font-medium text-t-white mb-1">
                 Authentication code
@@ -612,9 +681,8 @@ function LoginForm() {
               <label htmlFor="confirm" className="block text-sm font-medium text-t-white mb-1">
                 Confirm Password
               </label>
-              <input
+              <PasswordInput
                 id="confirm"
-                type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 placeholder="Confirm your password"
@@ -750,14 +818,15 @@ function LoginForm() {
           )}
 
           {error && (
-            <p className="text-sm text-t-red">
+            <p role="alert" className="text-sm text-t-red">
               {error}
               {["OAuthAccountNotLinked", "SessionNotUsable"].includes(searchParams.get("error") || "") && (
                 <>
                   {" "}
                   <button
                     type="button"
-                    onClick={() => signOut({ callbackUrl: "/login" })}
+                    onClick={() => void switchAccount()}
+                    disabled={sending}
                     className="underline hover:no-underline"
                   >
                     Sign out
@@ -787,7 +856,8 @@ function LoginForm() {
             <>
               <button
                 type="button"
-                onClick={() => { setMode("create"); setError(""); setPassword(""); setConfirmPassword(""); }}
+                onClick={() => changeMode("create")}
+                disabled={sending}
                 className="text-sm text-t-amber-bright hover:text-t-amber transition-colors block mx-auto"
               >
                 New here? Create a free account
@@ -796,6 +866,7 @@ function LoginForm() {
                 <button
                   type="button"
                   onClick={() => { window.location.href = `/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ""}`; }}
+                  disabled={sending}
                   className="hover:text-t-amber-bright transition-colors"
                 >
                   Forgot password?
@@ -803,7 +874,8 @@ function LoginForm() {
                 <span>·</span>
                 <button
                   type="button"
-                  onClick={() => { setMode("magic-link"); setError(""); setPassword(""); }}
+                  onClick={() => changeMode("magic-link")}
+                  disabled={sending}
                   className="hover:text-t-amber-bright transition-colors"
                 >
                   Email me a sign-in link
@@ -815,7 +887,8 @@ function LoginForm() {
           {mode === "create" && (
             <button
               type="button"
-              onClick={() => { setMode("sign-in"); setError(""); setPassword(""); setConfirmPassword(""); }}
+              onClick={() => changeMode("sign-in")}
+              disabled={sending}
               className="text-sm text-t-amber-bright hover:text-t-amber transition-colors"
             >
               Already have an account? Sign in
@@ -829,7 +902,8 @@ function LoginForm() {
               </p>
               <button
                 type="button"
-                onClick={() => { setMode("sign-in"); setError(""); }}
+                onClick={() => changeMode("sign-in")}
+                disabled={sending}
                 className="text-sm text-t-amber-bright hover:text-t-amber transition-colors"
               >
                 Back to password sign-in
