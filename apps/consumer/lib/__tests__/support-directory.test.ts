@@ -69,7 +69,7 @@ function fakeReader(rows = ROWS) {
         r.geo_scope === "statewide"
         || (r.geo_scope === "city" && cityHit(r))
         || ((r.geo_scope === "county" || r.geo_scope === "multi_county")
-            && ([r.county, ...(r.counties ?? [])].some((c) => !!c && keys.includes(countyKeyOf(c))) || cityHit(r)))))))
+            && ([...(r.county ? r.county.split(/\s*[,;]\s*/) : []), ...(r.counties ?? [])].some((c) => !!c && keys.includes(countyKeyOf(c))) || cityHit(r)))))))
       .sort((a, b) => rank[a.geo_scope] - rank[b.geo_scope] || b.last_checked.localeCompare(a.last_checked))
       .filter((r, _i, all) => all.filter((x) => rank[x.geo_scope] === rank[r.geo_scope]).indexOf(r) < RESOURCE_APP_LEVEL_CAP);
   };
@@ -265,6 +265,15 @@ describe("pieces", () => {
     assert.equal(directoryScope(ROWS[3]).label, "Wisconsin");
     assert.equal(directoryScope(ROWS[6]).label, "Anywhere in the US");
     assert.equal(directoryScope(ROWS[6]).state, null);
+  });
+
+  test("a county list kept in the county field reaches each county (older multi-county rows)", () => {
+    const comma = directoryScope(row({ service_id: "mi-works", area_id: "jobs", geo_scope: "multi_county", state: "MI", county: "Kent, Ottawa, Muskegon", org_name: "Sample West Works" }));
+    assert.deepEqual(comma.counties, ["kent", "ottawa", "muskegon"]);
+    const semi = directoryScope(row({ service_id: "wi-bank", area_id: "food", geo_scope: "multi_county", state: "WI", county: "DANE; GRANT", org_name: "Sample Food Bank" }));
+    assert.deepEqual(semi.counties, ["dane", "grant"]);
+    const single = directoryScope(row({ service_id: "mi-one", area_id: "jobs", geo_scope: "multi_county", state: "MI", county: "Kent", org_name: "Sample One" }));
+    assert.deepEqual(single.counties, ["kent"]);
   });
 
   test("a row never shows a non-web link", () => {
