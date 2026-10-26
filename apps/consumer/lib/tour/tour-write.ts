@@ -13,6 +13,7 @@
  */
 import type { TourReward } from './reward';
 import { TOURS, isTourId, type TourId } from './registry';
+import { gradeSettingsQuiz } from './settings-quiz-grade';
 
 export interface TourWriteStore {
   /** Start a run (the server records startedAt). 'conflict' when another run owns the place. */
@@ -43,6 +44,15 @@ export async function handleTourWrite(store: TourWriteStore, userId: string, bod
     return fail(400, 'This tour changed. Reload to continue.');
   }
   const runId = b.runId, sequence = b.sequence as number, stop = b.stop as number;
+  // A quiz tour's answers ride on the completion write. They are checked before
+  // anything is written: a bad shape is a 400 and nothing is saved. Answers on any
+  // other write are refused the same way. Absent means the person skipped them.
+  let quiz: ReturnType<typeof gradeSettingsQuiz> = null;
+  if (def.quiz && b.quiz !== undefined) {
+    if (b.action !== 'complete') return fail(400, 'This tour changed. Reload to continue.');
+    quiz = gradeSettingsQuiz(b.quiz);
+    if (!quiz) return fail(400, 'Your answers could not be read. Try again.');
+  }
   try {
     if (b.action === 'start') {
       if (sequence !== 0) return fail(400, 'Invalid starting place.');
@@ -58,6 +68,9 @@ export async function handleTourWrite(store: TourWriteStore, userId: string, bod
     await store.invalidate(userId);
     // A tour whose bonus is reserved but not granted yet completes with no reward.
     if (!def.grants) return { status: 200, json: { ok: true, tourId, runId, sequence, reward: null } };
+    // A quiz tour: skipped or not passed completes the run and grants nothing.
+    // A retry on the same run arrives as 'already-complete' and is graded again.
+    if (def.quiz && (!quiz || !quiz.passed)) return { status: 200, json: { ok: true, tourId, runId, sequence, quiz, reward: null } };
     // Completion is committed above. The bonus is its own idempotent step, so a
     // failure here never undoes the completion and a retry is safe.
     let reward: TourReward;
@@ -65,7 +78,7 @@ export async function handleTourWrite(store: TourWriteStore, userId: string, bod
       const watched = await store.watchedMs(userId, runId, tourId);
       reward = watched === null || watched < def.minWatchMs ? { status: 'early', calls: 0 } : await store.grant(userId, runId, tourId);
     } catch { reward = { status: 'unavailable', calls: 0 }; }
-    return { status: 200, json: { ok: true, tourId, runId, sequence, reward } };
+    return { status: 200, json: { ok: true, tourId, runId, sequence, ...(def.quiz ? { quiz } : {}), reward } };
   } catch {
     return fail(503, 'Your place could not be saved. Keep reading or try again.');
   }

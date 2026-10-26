@@ -15,8 +15,7 @@ import { LeaveOrgButton } from "@/components/settings/LeaveOrgButton";
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
 import { SettingsLesson } from "@/components/tour/SettingsLesson";
-import { openSettingsTour } from "@/components/tour/SettingsTour";
-import { SettingsTourGate } from "@/components/tour/SettingsSlice";
+import { SettingsTour, openSettingsTour } from "@/components/tour/SettingsTour";
 import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
@@ -451,8 +450,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* SettingsTourGate renders the v1 SettingsTour; only ?tour=settings&slice=1 plays the v2 slice (saves nothing). */}
-      {!isOrgStaff && !impersonating && <SettingsTourGate />}
+      {!isOrgStaff && !impersonating && <SettingsTour />}
       {!isOrgStaff && !impersonating && <SettingsLesson />}
 
       {/* Jump nav -- keeps this long page navigable. Sticks under the top bar. */}
@@ -854,7 +852,7 @@ function DataSection({
         </div>
 
         {/* Delete my data -- keeps the login */}
-        <div className="bg-t-panel p-5 border border-t-red">
+        <div className="bg-t-panel p-5 border border-t-red" id="settings-delete-data">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="font-semibold text-t-white">
@@ -894,7 +892,7 @@ function DataSection({
         </div>
 
         {/* Delete my account -- removes everything including the login */}
-        <div className="bg-t-panel p-5 border border-t-red">
+        <div className="bg-t-panel p-5 border border-t-red" id="settings-delete-account">
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="font-semibold text-t-white">
@@ -1206,7 +1204,7 @@ function SecuritySection() {
         Your account, locked down the way it should be.
       </p>
 
-      <div className="bg-t-panel p-5 border border-t-line">
+      <div className="bg-t-panel p-5 border border-t-line" id="settings-password">
         <div className="flex items-start justify-between gap-3 mb-2">
           <div>
             <h3 className="font-semibold text-t-white">
@@ -1533,7 +1531,7 @@ function TwoFactorCard({
   }
 
   return (
-    <div className="bg-t-panel p-5 border border-t-line mt-3">
+    <div className="bg-t-panel p-5 border border-t-line mt-3" id="settings-two-step">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="font-semibold text-t-white">Two-step verification</h3>

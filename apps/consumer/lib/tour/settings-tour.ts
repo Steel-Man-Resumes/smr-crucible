@@ -1,6 +1,7 @@
 /**
  * Pure rules for the Settings tour controller (components/tour/SettingsTour.tsx),
- * kept here so they are unit tested without React.
+ * kept here so they are unit tested without React. Version 2
+ * (SETTINGS-TOUR-V2-STORYBOARD.md, "v2 teaching plan").
  *
  * Who gets it: signed-in clients who are not organization staff, never under
  * view-as or assist (the route refuses the writes too, app/api/onboarding/tour).
@@ -14,15 +15,15 @@
  * REVIEW N-1), never its position in the shortened path, so joining a program
  * between leaving and coming back lands on the same beat, not a different one.
  */
-import { SETTINGS_BEATS, SETTINGS_NUDGES, SETTINGS_REWARD_COPY, type SettingsBeat, type SettingsNudge } from './settings-beats';
+import { OBJECTIVES, SETTINGS_BEATS, SETTINGS_NUDGES, SETTINGS_REWARD_COPY, SHARING_REQUIRED_WHY, type ObjectiveId, type SettingsBeat, type SettingsNudge } from './settings-beats';
 import type { TourReward } from './reward';
-import { holdMs } from './timing';
+import { ACT_CHANGE_MS } from './timing';
+import { TOP_BAR_PX, beatMs } from './settings-camera';
 
 export const SETTINGS_TOUR_PARAM = 'settings';
 export const SETTINGS_TOUR_OPEN_EVENT = 'settings-tour-open';
 export const SETTINGS_PATH = '/dashboard/settings';
-/** The top bar the Settings section map sticks under (RefineryShell, top-[72px]). */
-export const TOP_BAR_PX = 72;
+export { TOP_BAR_PX };
 
 export interface SettingsBranches {
   /** In a program: GET /api/sharing returned at least one organization. */
@@ -70,13 +71,15 @@ export function readBranches(sharing: unknown, coach: unknown, codes?: unknown):
   return { member, required, plainLanguage: c?.data?.coachPlainLanguage === true };
 }
 
-/** The stops this person sees, in order, decided once. */
+/**
+ * The stops this person sees, in order, decided once. A program that requires
+ * sharing keeps the same stops: its "Required" chip shows inside the sharing
+ * sweep, and the required line takes the place of that beat's why line.
+ */
 export function applicableBeats(b: SettingsBranches): SettingsBeat[] {
-  return SETTINGS_BEATS.filter(beat =>
-    beat.show === 'everyone' ||
-    (beat.show === 'member' && b.member) ||
-    (beat.show === 'required' && b.member && b.required) ||
-    (beat.show === 'nonmember' && !b.member));
+  return SETTINGS_BEATS
+    .filter(beat => beat.show === 'everyone' || (beat.show === 'member' && b.member) || (beat.show === 'nonmember' && !b.member))
+    .map(beat => (beat.id === 'p1m' && b.required ? { ...beat, why: SHARING_REQUIRED_WHY } : beat));
 }
 
 /** One nudge per person, from the spec's rule. Members always get the program check. */
@@ -105,10 +108,25 @@ export function resumeIndex(savedStop: number | null | undefined, path: readonly
   return at < 0 ? path.length : at;
 }
 
-/** Runtime at default pace for a path; the ending, nudge and reward are the person's own time. */
-export function settingsRuntimeMs(path: readonly SettingsBeat[]): number {
-  return path.reduce((sum, b) => sum + holdMs(b), 0);
+/**
+ * Runtime at default pace for a path, with the stage shrinking into the card and
+ * growing back out for the recap. The quiz and the reward are the person's own time.
+ */
+export function settingsRuntimeMs(path: readonly SettingsBeat[], phone = false): number {
+  return path.reduce((sum, b) => sum + beatMs(b, phone), 0) + 2 * ACT_CHANGE_MS;
 }
+
+/**
+ * The objectives already covered when the person has reached `index` on this
+ * path (or has ever reached `furthest`): a beat's objective ticks once the beat
+ * is behind them. Small achievements on the card; nothing is saved or sent.
+ */
+export function objectivesDone(path: readonly SettingsBeat[], furthest: number): Set<ObjectiveId> {
+  const done = new Set<ObjectiveId>();
+  path.forEach((b, n) => { if (b.ticks && n < furthest) done.add(b.ticks); });
+  return done;
+}
+export const OBJECTIVE_IDS = OBJECTIVES.map(o => o.id);
 
 /**
  * Where the page scrolls so a target sits at block start under the sticky
@@ -149,8 +167,9 @@ function formatDay(iso?: string) {
   return Number.isNaN(d.getTime()) ? 'an earlier day' : d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-/** Title and words for the Settings tour's confirmed reward, every status (the words are SETTINGS-TOUR.md's). */
-export function settingsRewardMessage(reward: TourReward): [string, string] {
+/** Title and words for the Settings tour's result, every status. `null` is a finish without the questions. */
+export function settingsRewardMessage(reward: TourReward | null): [string, string] {
+  if (!reward) return [SETTINGS_REWARD_COPY.skippedTitle, SETTINGS_REWARD_COPY.skipped];
   switch (reward.status) {
     case 'granted': return [SETTINGS_REWARD_COPY.grantedTitle, SETTINGS_REWARD_COPY.granted(reward.calls)];
     case 'already': return [SETTINGS_REWARD_COPY.alreadyTitle, SETTINGS_REWARD_COPY.already(formatDay(reward.grantedAt))];

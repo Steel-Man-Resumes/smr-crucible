@@ -1,106 +1,16 @@
 /**
- * The Settings tour v2 playable slice (SETTINGS-TOUR-V2-STORYBOARD.md section 9):
- * three beats, M1 Map, C1 Coach and X1 Two kinds of help, about 30 s, so the
- * pace and the camera can be judged before the full rebuild.
- *
- * It opens only on /dashboard/settings?tour=settings&slice=1. Without slice=1
- * the v1 tour runs exactly as before. The slice saves nothing: it has no store,
- * no run, no reward, and its component makes no request at all.
- *
- * Pure rules, kept here so they are unit tested without React: the beats and
- * their chips, sweep timing, the eased camera curve, the page shot (scroll,
- * scale and origin for a zoom on the real page) and the stage map's camera.
+ * Pure camera and timing rules for the Settings tour (v2), kept here so they
+ * are unit tested without React: sweep timing, the reading ring's marks, the
+ * eased camera curve, the page shot (scroll, scale and origin for a zoom on the
+ * real page), the sweep focus line and the stage map's camera.
  */
-import { settingsTourRequested, TOP_BAR_PX } from './settings-tour';
-import { ACT_CHANGE_MS, MS_PER_WORD, ORIENT_MS, holdMs, wordCount } from './timing';
+import { MS_PER_WORD, ORIENT_MS, holdMs, wordCount } from './timing';
 import type { Box, Camera, Size } from './geometry';
-
-export const SLICE_PARAM = 'slice';
-
-/** True only for the Settings page with ?tour=settings and slice=1. Anything else is the v1 tour or nothing. */
-export function settingsSliceRequested(pathname: string | null | undefined, params: { get(name: string): string | null } | null | undefined): boolean {
-  return settingsTourRequested(pathname, params) && params?.get(SLICE_PARAM) === '1';
-}
-
-export interface SliceChip {
-  /** The page's own label for the control. */
-  label: string;
-  /** Element ids or data-tour ids; every visible match is part of the chip. */
-  targets: readonly string[];
-}
-
-export interface SliceBeat {
-  id: 'm1' | 'c1' | 'x1';
-  /** SLOW lights one thing and holds; SWEEP hops chip to chip under one caption. */
-  kind: 'slow' | 'sweep';
-  where: 'stage' | 'page';
-  title: string;
-  body: string;
-  /** A slow page beat's one target: every visible match is unioned into one cutout. */
-  targets?: readonly string[];
-  chips?: readonly SliceChip[];
-  /** Page zoom cap on wide screens. Phones and motion-off never zoom. */
-  zoom?: number;
-  /** Per-chip dwell in ms, wide and phone. */
-  dwell?: { wide: number; phone: number };
-  /** One chip held longer, for a visible pause (X1: after Spanish). */
-  split?: { index: number; ms: number };
-  /**
-   * A slow beat whose target has parts: the word in the body where each part's
-   * sentence starts. A thin inner ring moves to that part as the reader gets
-   * there, so a long hold still follows the words (C1: style, length and focus, save).
-   */
-  follow?: readonly number[];
-}
-
-/** The stage map: the Settings page's eight sections (page.tsx SECTIONS) and the real control names in each. */
-export const MAP_TILES: readonly { id: string; label: string; controls: readonly string[] }[] = [
-  { id: 'account', label: 'Account', controls: ['Resume Contact Info', 'Your picture', 'Join a program with a code', 'Hidden Employers', 'Your finished resume by email'] },
-  { id: 'coach', label: 'Coach & AI', controls: ['Coaching style', 'Response length', 'Focus'] },
-  { id: 'accessibility', label: 'Accessibility', controls: ['Plain language', 'Read aloud', 'Spanish (Espanol)', 'Text size', 'Motion', 'Spacing'] },
-  { id: 'privacy', label: 'Privacy & Consent', controls: ['Who can see what', 'AI memory and personalization', 'De-identified research', 'Share your success story'] },
-  { id: 'security', label: 'Security', controls: ['Password', 'Two-step verification', 'Active devices'] },
-  { id: 'data', label: 'Data', controls: ['Download your data', 'Delete my data', 'Delete my account'] },
-  { id: 'usage', label: 'Usage', controls: ['Daily Usage', 'Your AI usage'] },
-  { id: 'help', label: 'Help & About', controls: ['Help & Feedback', 'About'] },
-];
-
-export const SLICE_BEATS: readonly SliceBeat[] = [
-  { id: 'm1', kind: 'sweep', where: 'stage', title: 'The whole page',
-    body: "Eight parts, top to bottom. We'll walk them in order.",
-    chips: MAP_TILES.map(t => ({ label: t.label, targets: [t.id] })),
-    dwell: { wide: 1100, phone: 1200 } },
-  { id: 'c1', kind: 'slow', where: 'page', title: 'How t.ROY talks to you',
-    body: "Supportive, balanced or direct. Brief or full answers. Guide me, or just answer. Press save when you're done, or it won't stick.",
-    targets: ['settings-coach-choices'], zoom: 1.3, follow: [0, 4, 13] },
-  { id: 'x1', kind: 'sweep', where: 'page', title: 'Two kinds of help',
-    body: "Plain language, read aloud and Spanish change only t.ROY's answers. Text size, motion and spacing change the whole app, right away.",
-    chips: [
-      { label: 'Plain language', targets: ['settings-plain-language'] },
-      { label: 'Read aloud', targets: ['settings-read-aloud'] },
-      { label: 'Spanish (Espanol)', targets: ['settings-spanish'] },
-      { label: 'Text size', targets: ['settings-text-size'] },
-      { label: 'Motion', targets: ['settings-motion'] },
-      { label: 'Spacing', targets: ['settings-spacing'] },
-    ],
-    dwell: { wide: 1700, phone: 1800 }, split: { index: 2, ms: 2200 } },
-];
-
-/** Every word the slice puts on screen besides the beats. */
-export const SLICE_COPY = {
-  dialogLabel: 'Settings tour preview with t.ROY',
-  guide: 't.ROY',
-  stopOf: (n: number, total: number) => `Stop ${n} of ${total}`,
-  mapKicker: 'Settings, top to bottom',
-  endEyebrow: 'Settings tour preview',
-  endTitle: 'Those were the first three stops',
-  endBody: 'The preview ends here. Nothing was saved, and no setting changed.',
-  again: 'Play it again',
-  close: 'Close',
-  chipsSr: (labels: readonly string[]) => `Shown: ${labels.join(', ')}.`,
-};
+import { MAP_TILES, type SettingsBeat } from './settings-beats';
 
 /** A spotlight hop between chips on the real page, and a pan between tiles on the stage. */
+/** The top bar the page sits under (RefineryShell, h-[72px]). */
+export const TOP_BAR_PX = 72;
 export const HOP_MS = 550;
 export const TILE_PAN_MS = 600;
 /** C1: the scroll lands first, the zoom follows and overlaps it. */
@@ -114,7 +24,7 @@ export const TOP_GAP = 12;
 export const NARROW = 640;
 
 /** Dwell per chip, with the split chip's longer hold taken from the others. */
-export function chipDwells(beat: SliceBeat, phone: boolean): number[] {
+export function chipDwells(beat: SettingsBeat, phone: boolean): number[] {
   const n = beat.chips?.length ?? 0;
   if (!n || !beat.dwell) return [];
   const per = phone ? beat.dwell.phone : beat.dwell.wide;
@@ -124,17 +34,22 @@ export function chipDwells(beat: SliceBeat, phone: boolean): number[] {
 }
 
 /** A sweep holds for the longer of its reading time and the landing plus every chip's dwell. */
-export function sweepMs(beat: SliceBeat, phone: boolean): number {
+export function sweepMs(beat: SettingsBeat, phone: boolean): number {
   const dwell = chipDwells(beat, phone).reduce((a, b) => a + b, 0);
-  return Math.max(holdMs(beat), ORIENT_MS + dwell);
+  return Math.max(readMs(beat), ORIENT_MS + dwell);
 }
 
-export function beatMs(beat: SliceBeat, phone: boolean): number {
-  return beat.kind === 'sweep' ? sweepMs(beat, phone) : holdMs(beat);
+/** Reading time for a beat's words: title, body and the why line, at the tour's pace, within its floor and cap. */
+export function readMs(beat: Pick<SettingsBeat, 'title' | 'body' | 'why' | 'extra'>): number {
+  return holdMs({ title: beat.title, body: beat.why ? `${beat.body} ${beat.why}` : beat.body, extra: beat.extra });
+}
+
+export function beatMs(beat: SettingsBeat, phone: boolean): number {
+  return beat.kind === 'sweep' ? sweepMs(beat, phone) : readMs(beat);
 }
 
 /** When each chip lights, ms into the beat: the first at once (the camera lands on it), the next after the landing plus its dwell. */
-export function chipStarts(beat: SliceBeat, phone: boolean): number[] {
+export function chipStarts(beat: SettingsBeat, phone: boolean): number[] {
   const d = chipDwells(beat, phone);
   const out: number[] = [];
   let at = ORIENT_MS;
@@ -143,7 +58,7 @@ export function chipStarts(beat: SliceBeat, phone: boolean): number[] {
 }
 
 /** The lit chip at a moment in the beat. */
-export function chipAt(beat: SliceBeat, phone: boolean, t: number): number {
+export function chipAt(beat: SettingsBeat, phone: boolean, t: number): number {
   const starts = chipStarts(beat, phone);
   let k = 0;
   for (let n = 0; n < starts.length; n++) if (t >= starts[n]) k = n;
@@ -152,21 +67,17 @@ export function chipAt(beat: SliceBeat, phone: boolean, t: number): number {
 
 /**
  * When the reading ring moves to each part, ms into the beat: the camera lands,
- * the title is read, then each part when its sentence starts, at the tour's
- * reading pace. The first never comes before the zoom has landed.
+ * the title is read, then each part when its sentence starts (counting the body,
+ * then the why line), at the tour's reading pace. The first never comes before
+ * the zoom has landed.
  */
-export function followTimes(beat: SliceBeat): number[] {
+export function followTimes(beat: SettingsBeat): number[] {
   if (!beat.follow) return [];
   const title = wordCount(beat.title);
   return beat.follow.map((w, k) => {
     const at = ORIENT_MS + (title + w) * MS_PER_WORD;
     return k === 0 ? Math.max(ZOOM_AT_MS + ZOOM_MS, at) : at;
   });
-}
-
-/** The slice's wall time at default pace: the three beats plus the stage shrinking into the card. */
-export function sliceRuntimeMs(phone: boolean): number {
-  return SLICE_BEATS.reduce((sum, b) => sum + beatMs(b, phone), 0) + ACT_CHANGE_MS;
 }
 
 /** A CSS cubic-bezier as a function of time (0..1), for the page camera's rAF tween. */

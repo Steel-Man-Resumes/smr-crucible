@@ -33,6 +33,9 @@ export async function GET(request: Request) {
       `SELECT preferences->'tours' AS tours, preferences->'guidedTour' AS guided FROM consumer_profile WHERE user_id = $1`, [userId]);
     const slot = readTourSlot({ tours: row?.tours, guidedTour: row?.guided }, tourId);
     const current = slot?.version === def.version;
+    // A quiz tour's chip offers the questions alone on a finished run until the bonus exists.
+    // Unknown (undefined) rather than a false "never claimed" when the read fails.
+    const rewardClaimedAt = def.quiz && def.grants ? await tourRewardClaimed(userId, def.rewardKey).catch(() => undefined) : undefined;
     return NextResponse.json({ data: {
       accountId: userId, tourId, impersonating,
       version: current ? def.version : undefined,
@@ -42,6 +45,7 @@ export async function GET(request: Request) {
       runId: current ? slot?.runId : undefined,
       sequence: current ? slot?.sequence ?? 0 : 0,
       completedAt: current ? slot?.completedAt ?? null : null,
+      ...(def.quiz ? { rewardClaimedAt } : {}),
     } }, { headers: { "Cache-Control": "no-store" } });
   }
 

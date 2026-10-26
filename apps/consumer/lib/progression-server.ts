@@ -187,8 +187,8 @@ export async function grantTourReward(userId:string,runId:string):Promise<TourRe
  return grantTourRewardWith({batchAsUser:(u,build)=>runAsUser<unknown[][]>(u,build as never)},userId,runId);
 }
 /** Read only: whether this account already has the tour bonus, so the ending never promises one twice. */
-export async function tourRewardClaimed(userId:string):Promise<string|null>{
- const row=await getOneAsUser<{created_at:string|Date}>(userId,'SELECT created_at FROM progression_grant WHERE user_id=$1 AND grant_key=$2',[userId,TOUR_REWARD_KEY]);
+export async function tourRewardClaimed(userId:string,key:string=TOUR_REWARD_KEY):Promise<string|null>{
+ const row=await getOneAsUser<{created_at:string|Date}>(userId,'SELECT created_at FROM progression_grant WHERE user_id=$1 AND grant_key=$2',[userId,key]);
  return row?(row.created_at instanceof Date?row.created_at.toISOString():String(row.created_at)):null;
 }
 /** One page of Troy's queue, open requests first. `openTotal` lets the page say how many open requests are not on screen (review 1, N-6). */
