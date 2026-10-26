@@ -537,6 +537,22 @@ async function reachChecks() {
   check("a volunteer reads none of that history", (await count(org.id, vol, app`SELECT count(*)::int AS n FROM outcome_correction WHERE outcome_id = ${outc.id}`)) === 0);
   const after = JSON.stringify((await core.listOrgActivity(aOwner, { entity: "outcome" })).rows ?? []);
   check("the activity log says a placement was corrected, and not the reason or the employer", /corrected a placement \(employer\)/.test(after) && !/wrong employer|Right Co/.test(after), after.slice(0, 300));
+
+  // -- fix round 1 (security review): forged history, forged scope, deleting a staff account
+  const forgedCheck = await raised(() => asOrg(org.id, cm, app`INSERT INTO retention_check (outcome_id, access_code_id, day_mark, status, method, checked_by, correction_reason) VALUES (${outc.id}, ${org.id}, 60, 'employed', 'participant_told_me', ${cm}, 'forged')`));
+  check("the app cannot insert a check-in that claims to be a correction", /row-level security/i.test(String(forgedCheck)), forgedCheck ?? "inserted");
+  check("a forged org scope sees no activity at all, not even team rows", (await count(org.id, spyStaff, app`SELECT count(*)::int AS n FROM org_activity`)) === 0);
+  // The case manager also confirmed the placement (a correction, so it carries a reason).
+  await sql.transaction([sql`SELECT set_config('app.correction_reason', 'fixture: confirmed with the employer', true)`,
+    sql`UPDATE outcome_record SET source = 'staff_verified', verification_method = 'employer_confirmed', verified_by = ${cm}, verified_at = now() WHERE id = ${outc.id}`]);
+  await core.leaveAllOrgs(cm);
+  const gone = await raised(() => app`DELETE FROM users WHERE id = ${cm}`);
+  check("deleting the account of a case manager who wrote notes, tasks, asks, suggestions, check-ins, a correction and a confirmed placement succeeds",
+    gone === null, gone ?? "");
+  const [left] = await sql`SELECT (SELECT count(*)::int FROM case_note WHERE id = ${note.id} AND author_user_id IS NULL) AS notes,
+                                  (SELECT count(*)::int FROM retention_check WHERE outcome_id = ${outc.id} AND checked_by IS NULL) AS checks`;
+  const [{ src }] = await sql`SELECT source AS src FROM outcome_record WHERE id = ${outc.id}`;
+  check("and the records stay, without the deleted account's id; the placement stays confirmed", left.notes === 1 && left.checks === 2 && src === "staff_verified", JSON.stringify({ ...left, src }));
 }
 
 /**

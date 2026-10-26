@@ -167,8 +167,10 @@ function History({ items, opts }: { items: HistoryItem[]; opts: { sources: Opt[]
       const d = h.detail as { day_mark?: number; from?: string; to?: string };
       return `${who} corrected the ${d.day_mark}-day check-in from "${STATUS[d.from ?? ""] ?? d.from}" to "${STATUS[d.to ?? ""] ?? d.to}".`;
     }
-    const parts = Object.entries(h.detail as Record<string, { from: unknown; to: unknown }>)
-      .map(([f, c]) => `${FIELD[f] ?? f} from ${label(f, c?.from)} to ${label(f, c?.to)}`);
+    // verified_by is an account id, kept on file for the record; the sentence says it in words.
+    const entries = Object.entries(h.detail as Record<string, { from: unknown; to: unknown }>);
+    const parts = entries.filter(([f]) => f !== "verified_by").map(([f, c]) => `${FIELD[f] ?? f} from ${label(f, c?.from)} to ${label(f, c?.to)}`);
+    if (entries.some(([f]) => f === "verified_by")) parts.push("who confirmed it");
     return h.kind === "ended" ? `${who} recorded that the job ended.` : `${who} corrected the ${parts.join("; ")}.`;
   };
   return (

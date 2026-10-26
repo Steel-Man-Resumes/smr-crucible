@@ -144,9 +144,21 @@ describe("migration 102 agrees with the TypeScript it copies", () => {
   it("the new tables are on the protected list the RLS lint and health check read", () => {
     for (const t of ["org_activity", "outcome_correction"]) assert.ok((RLS_PROTECTED_TABLES as readonly string[]).includes(t), t);
   });
-  it("every per-participant table gets a restrictive reach policy", () => {
+  it("every per-participant table gets a restrictive reach policy, and the after-guard insists on it", () => {
     for (const t of ["case_note", "case_note_version", "staff_task", "outcome_record", "retention_check", "staff_suggestion", "sharing_request", "org_activity", "outcome_correction"]) {
-      assert.match(MIGRATION, new RegExp(`CREATE POLICY ${t}_reach ON ${t} AS RESTRICTIVE`), t);
+      assert.ok(MIGRATION.includes(`'${t}.${t}_reach'`), `after-guard lists ${t}_reach`);
     }
+    assert.match(MIGRATION, /permissive = 'RESTRICTIVE'/);
+  });
+  it("the per-row reach parts that depend only on the actor are uncorrelated subqueries (review S2)", () => {
+    assert.match(MIGRATION, /\(SELECT public\.smr_staff_sees_all\(NULLIF\(current_setting\('app\.org_id', true\), ''\)::uuid, NULLIF\(current_setting\('app\.user_id', true\), ''\)::uuid\)\)/);
+    assert.match(MIGRATION, /%1\$s IN \(SELECT a\.client_user_id FROM public\.client_staff_assignment a/);
+  });
+  it("deleting a staff account is allowed for every guarded author column (review B1)", () => {
+    for (const fn of ["retention_check_guard", "outcome_record_guard", "case_note_keep_version", "staff_task_guard", "staff_suggestion_guard", "sharing_request_guard"]) {
+      const body = MIGRATION.slice(MIGRATION.lastIndexOf(`CREATE OR REPLACE FUNCTION public.${fn}()`));
+      assert.match(body.slice(0, 1500), /NOT EXISTS \(SELECT 1 FROM public\.users u WHERE u\.id = OLD\./, fn);
+    }
+    assert.ok(!/CHECK \(source <> 'staff_verified' OR \(verification_method IS NOT NULL AND verified_by IS NOT NULL/.test(MIGRATION));
   });
 });

@@ -169,6 +169,25 @@ test('102: reach in policy, append-only activity, outcome corrections', { skip }
   assert.equal((await as({ orgId: orgB, userId: spy }, `SELECT smr_staff_reach($1, $2, $3) AS r`, [orgA, cm, p2]))[0].r, false, 'asked from another org scope it says no');
   assert.equal((await as(A(cm), `SELECT smr_staff_reach($1, $2, $3) AS r`, [orgA, cm, p2]))[0].r, true, 'asked inside the scope it answers');
 
+  // ---- 4b. the written-out policy rule (review S2) and smr_staff_reach agree, actor by actor
+  const exStaff = id(11);
+  await q(`INSERT INTO users(id, email, name) VALUES ($1, $2, 'Former staff')`, [exStaff, `${exStaff}@x.test`]);
+  await q(`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES ($1, $2, $3, $4)
+           ON CONFLICT (access_code_id, client_user_id) DO NOTHING`, [orgA, p1, exStaff, owner]); // p1 already assigned: no-op guard
+  const exOrg = (await q(`INSERT INTO access_code (code, partner_name, tier, partner_user_id, crm_v2) VALUES ('PGREACH3', 'Ex org', 'client', $1, true) RETURNING id`, [spy]))[0].id as string;
+  await q(`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES ($1, $2)`, [p1, exOrg]);
+  await q(`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES ($1, $2, $3, $4)`, [exOrg, p1, exStaff, spy]);
+  await q(`INSERT INTO case_note (access_code_id, client_user_id, author_user_id, body) VALUES ($1, $2, $3, 'ex org note')`, [exOrg, p1, spy]);
+  for (const [org, actors] of [[orgA, [owner, admin, vol, cm, seer, deniedAdmin, spyStaff, spy, p1]], [exOrg, [spy, exStaff, p1]]] as const) {
+    for (const actor of actors) for (const person of [p1, p2]) {
+      const fn = (await as({ orgId: org, userId: actor }, `SELECT smr_staff_reach($1, $2, $3) AS r`, [org, actor, person]))[0].r;
+      const seen = (await n({ orgId: org, userId: actor }, `SELECT count(*)::int AS n FROM case_note WHERE client_user_id = '${person}' AND access_code_id = '${org}'`)) > 0;
+      const hasNote = Number((await q(`SELECT count(*)::int AS n FROM case_note WHERE client_user_id = $1 AND access_code_id = $2`, [person, org]))[0].n) > 0;
+      if (hasNote) assert.equal(seen, fn, `policy and smr_staff_reach agree for actor ${actor.slice(-2)}, person ${person.slice(-2)}, org ${org.slice(-4)}`);
+    }
+  }
+  assert.equal(await n({ orgId: exOrg, userId: exStaff }, `SELECT count(*)::int AS n FROM case_note`), 0, 'an assignment left behind for someone no longer on staff opens nothing');
+
   // ---- 5. reassignment moves reach with the person
   await as(A(owner), `UPDATE client_staff_assignment SET staff_user_id = $1 WHERE access_code_id = $2 AND client_user_id = $3`, [vol, orgA, p2]);
   assert.ok(await n(V, `SELECT count(*)::int AS n FROM case_note WHERE client_user_id = '${p2}'`) > 0, 'once assigned, the volunteer reads the notes');
@@ -252,6 +271,47 @@ test('102: reach in policy, append-only activity, outcome corrections', { skip }
   assert.ok(byPerson.length >= 2 && byPerson.every((r) => r.participant_user_id === p2 && r.entity === 'retention'), 'filters by person and kind');
   const named = await as(A(owner), ACTIVITY_SQL.list, [orgA, p2, null, null, null, null, null, 50, true, owner, 'America/Chicago']);
   assert.ok(named.every((r) => r.participant_name === null), 'a person who has not shared progress and was not invited by name is not named');
+
+  // ---- 9b. review S1: the app cannot forge correction history or the stamps
+  assert.match(String(await err(as(A(cm), `INSERT INTO retention_check (outcome_id, access_code_id, day_mark, status, method, checked_by, correction_reason) VALUES ($1, $2, 60, 'employed', 'participant_told_me', $3, 'forged reason')`, [outcome, orgA, cm]))), /row-level security/i, 'the app cannot insert a check-in that claims to be a correction');
+  assert.match(String(await err(as(A(cm), `INSERT INTO retention_check (outcome_id, access_code_id, day_mark, status, method, checked_by, superseded_by) VALUES ($1, $2, 60, 'employed', 'participant_told_me', $3, $4)`, [outcome, orgA, cm, check]))), /row-level security/i, 'nor one that claims to replace another');
+  const stamped = await as(A(cm), `INSERT INTO outcome_record (access_code_id, client_user_id, employer, start_date, source, created_by, updated_by, updated_at) VALUES ($1, $2, 'Stamp Co', current_date - 5, 'staff_reported', $3, $4, now() - interval '9 days') RETURNING id, updated_by, updated_at`, [orgA, p2, cm, owner]);
+  assert.deepEqual([stamped[0].updated_by, stamped[0].updated_at], [null, null], 'a new placement cannot carry a forged "updated by"');
+  const restamp = await as(A(cm), `UPDATE outcome_record SET updated_by = $1, updated_at = now() - interval '9 days' WHERE id = $2 RETURNING updated_by, updated_at`, [owner, stamped[0].id]);
+  assert.deepEqual([restamp[0].updated_by, restamp[0].updated_at], [null, null], 'nor can an old one be re-stamped');
+
+  // ---- 9c. review S5: rows about nobody need a member, not just a scope
+  assert.ok(await n(V, `SELECT count(*)::int AS n FROM org_activity WHERE participant_user_id IS NULL`) > 0, 'a member sees the team rows');
+  assert.equal(await n({ orgId: orgA, userId: spyStaff }, `SELECT count(*)::int AS n FROM org_activity`), 0, 'a forged org scope sees no activity at all, not even team rows');
+  assert.equal(await n({ orgId: orgA, userId: p1 }, `SELECT count(*)::int AS n FROM org_activity`), 0, 'nor does a participant who sets an org scope');
+
+  // ---- 9d. review S4 + B1: who confirmed a placement is kept; deleting a staff account works
+  const v1 = (await as(A(cm), `INSERT INTO outcome_record (access_code_id, client_user_id, employer, start_date, source, verification_method, verified_by, verified_at, created_by) VALUES ($1, $2, 'Verified Co', current_date - 40, 'staff_verified', 'employer_confirmed', $3, now(), $3) RETURNING id`, [orgA, p2, cm]))[0].id as string;
+  const v2 = (await as(A(cm), `INSERT INTO outcome_record (access_code_id, client_user_id, employer, start_date, source, verification_method, verified_by, verified_at, created_by) VALUES ($1, $2, 'Second Co', current_date - 40, 'staff_verified', 'employer_confirmed', $3, now(), $3) RETURNING id`, [orgA, p2, cm]))[0].id as string;
+  assert.match(String(await err(as(A(cm), `INSERT INTO outcome_record (access_code_id, client_user_id, employer, start_date, source, verification_method, verified_at, created_by) VALUES ($1, $2, 'No One Co', current_date, 'staff_verified', 'employer_confirmed', now(), $3)`, [orgA, p2, cm]))), /check constraint/i, '"confirmed" must still say who confirmed it');
+  await as(A(admin), [[`SELECT set_config('app.correction_reason', $1, true)`, ['Saw the pay stub myself']], [OUTCOME_SQL.correct, [orgA, true, admin, v2, 'Second Co', null, null, null, null, 'staff_verified', 'pay_stub_seen']]]);
+  const s4 = (await q(`SELECT changed FROM outcome_correction WHERE outcome_id = $1`, [v2]))[0]?.changed as Record<string, { from: unknown; to: unknown }>;
+  assert.deepEqual(s4?.verified_by, { from: cm, to: admin }, 'the earlier "confirmed by" is kept');
+  assert.match(String(await err(as(A(cm), `UPDATE case_note SET author_user_id = NULL WHERE id = $1`, [note]))), /cannot be moved/i, 'the app cannot strip the author off a note');
+  assert.match(String(await err(as(A(cm), `UPDATE outcome_record SET verified_by = NULL WHERE id = $1`, [v1]))), /needs a reason|check constraint/i, 'nor the confirmer off a placement');
+  assert.match(String(await err(as(A(cm), [[`SELECT set_config('app.correction_reason', 'trying to hide who confirmed it', true)`], [`UPDATE outcome_record SET verified_by = NULL WHERE id = $1`, [v1]]]))), /check constraint/i, 'not even with a reason');
+  assert.match(String(await err(as(A(cm), `UPDATE staff_task SET created_by = NULL WHERE id = $1`, [task]))), /cannot be moved/i, 'nor the creator off a task');
+  // The case manager recorded and corrected a check-in, verified a placement, wrote a note, a task, a suggestion and an ask.
+  const correctionsBefore = Number((await q(`SELECT count(*)::int AS n FROM outcome_correction`))[0].n);
+  // delete-my-data, account mode, as the route runs it: leave every org, then drop the account (smr_app, no scope).
+  assert.equal(await err(as({ userId: cm }, `SELECT smr_leave_all_orgs($1)`, [cm])), null);
+  assert.equal(await err(as({}, `DELETE FROM users WHERE id = $1`, [cm])), null, 'deleting the case manager\'s account succeeds');
+  const after = (await q(`SELECT
+      (SELECT count(*)::int FROM retention_check WHERE outcome_id = $1 AND checked_by IS NULL) AS checks,
+      (SELECT author_user_id FROM case_note WHERE id = $2) AS author,
+      (SELECT verified_by FROM outcome_record WHERE id = $3) AS verifier,
+      (SELECT source FROM outcome_record WHERE id = $3) AS source,
+      (SELECT count(*)::int FROM outcome_correction) AS corrections,
+      (SELECT count(*)::int FROM case_note_version WHERE note_id = $2) AS versions`, [outcome, note, v1]))[0];
+  assert.deepEqual(after, { checks: 2, author: null, verifier: null, source: 'staff_verified', corrections: correctionsBefore, versions: 1 },
+    'every record stays, anonymous where the account was; the confirmed placement stays confirmed; no correction or version is invented');
+  const editable = await as(A(admin), [[`SELECT set_config('app.correction_reason', $1, true)`, ['Wage was missing']], [OUTCOME_SQL.correct, [orgA, true, admin, v1, 'Verified Co', null, null, 19, null, null, null]]]);
+  assert.equal(editable.length, 1, 'a placement confirmed by a deleted account can still be corrected');
 
   // ---- 10. the participant's own paths and the definer paths keep working, and are logged
   const askId = (await q(`SELECT id FROM sharing_request WHERE user_id = $1 AND status = 'pending'`, [p2]))[0].id as string;

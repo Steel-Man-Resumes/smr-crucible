@@ -144,6 +144,7 @@ export const RESTRICTED_GRANTS = {
  */
 export const APP_FUNCTIONS = [
   "smr_staff_sees_all(uuid, uuid)",
+  "smr_staff_unit_reach(uuid, uuid, uuid)",
   "smr_staff_reach(uuid, uuid, uuid)",
   "smr_correct_retention_check(uuid, text, text, text, text)",
 ];

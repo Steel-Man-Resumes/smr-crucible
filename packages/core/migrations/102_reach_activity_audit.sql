@@ -128,7 +128,9 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 $$;
 
 -- THE HOOK FOR 103. Org units do not exist yet, so nobody reaches anyone
--- through one. 103 replaces this body; the signature must stay.
+-- through one. 103 replaces this body; the signature must stay, and so must
+-- the rule that it answers only inside the caller's own org scope (policies
+-- call it per row as the app role).
 CREATE OR REPLACE FUNCTION public.smr_staff_unit_reach(p_org uuid, p_staff uuid, p_participant uuid)
 RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -157,18 +159,19 @@ REVOKE ALL ON FUNCTION public.smr_org_role(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.smr_staff_sees_all(uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.smr_staff_unit_reach(uuid, uuid, uuid) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.smr_staff_reach(uuid, uuid, uuid) FROM PUBLIC;
--- Policies call smr_staff_reach and smr_staff_sees_all AS THE QUERYING ROLE,
--- so the app role needs EXECUTE on those two, or every scoped read of a
+-- Policies call smr_staff_sees_all and smr_staff_unit_reach AS THE QUERYING
+-- ROLE (and smr_staff_reach is the scalar rule for functions in 103-106), so
+-- the app role needs EXECUTE on those three, or every scoped read of a
 -- protected table would fail with "permission denied for function" (also
 -- granted by scripts/lib/restricted-grants.mjs for a fresh database).
--- smr_org_role and smr_staff_unit_reach are called only from inside definer
--- functions, so the app gets neither: smr_org_role answers for ANY org and
--- would tell the app who works where.
+-- smr_org_role is called only from inside definer functions and answers for
+-- ANY org, so the app does not get it. 103's smr_staff_unit_reach MUST keep
+-- answering only when p_org = app.org_id, like the other two.
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     REVOKE ALL ON FUNCTION public.smr_org_role(uuid, uuid) FROM smr_app;
-    REVOKE ALL ON FUNCTION public.smr_staff_unit_reach(uuid, uuid, uuid) FROM smr_app;
+    GRANT EXECUTE ON FUNCTION public.smr_staff_unit_reach(uuid, uuid, uuid) TO smr_app;
     GRANT EXECUTE ON FUNCTION public.smr_staff_sees_all(uuid, uuid) TO smr_app;
     GRANT EXECUTE ON FUNCTION public.smr_staff_reach(uuid, uuid, uuid) TO smr_app;
   END IF;
@@ -182,90 +185,78 @@ END $$;
 -- FOR ALL: USING narrows SELECT, UPDATE and DELETE; WITH CHECK narrows the
 -- row an INSERT or UPDATE writes, so nobody can write a note, task, outcome,
 -- check, suggestion or ask about a person they do not reach.
+--
+-- COST (review S2). The rule is smr_staff_reach, written out so the parts that
+-- depend only on the acting user run ONCE per statement, not once per row:
+-- "sees all" is an uncorrelated scalar subquery (an InitPlan), and "assigned"
+-- is an uncorrelated IN list over the actor's own assignments (a hashed
+-- SubPlan), counted only while the actor is still on this org's staff or owns
+-- it, exactly as smr_staff_reach requires. Only the unit hook is per row (it
+-- returns false until 103). The pglite test proves the written-out rule and
+-- smr_staff_reach agree on every actor and person it builds.
+CREATE OR REPLACE FUNCTION pg_temp.smr_reach_sql(col text) RETURNS text
+LANGUAGE sql IMMUTABLE AS $f$
+  SELECT format($r$(
+    (SELECT public.smr_staff_sees_all(NULLIF(current_setting('app.org_id', true), '')::uuid, NULLIF(current_setting('app.user_id', true), '')::uuid))
+    OR %1$s IN (SELECT a.client_user_id FROM public.client_staff_assignment a
+                 WHERE a.access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
+                   AND a.staff_user_id = NULLIF(current_setting('app.user_id', true), '')::uuid
+                   AND (EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = a.access_code_id AND s.user_id = a.staff_user_id)
+                        OR EXISTS (SELECT 1 FROM public.access_code ac WHERE ac.id = a.access_code_id AND ac.partner_user_id = a.staff_user_id)))
+    OR public.smr_staff_unit_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, %1$s))$r$, col)
+$f$;
+-- "Not my business": no org scope, or a row of another organization.
+CREATE OR REPLACE FUNCTION pg_temp.smr_outside_sql() RETURNS text
+LANGUAGE sql IMMUTABLE AS $f$
+  SELECT $r$NULLIF(current_setting('app.org_id', true), '') IS NULL
+    OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid$r$
+$f$;
 
-DROP POLICY IF EXISTS case_note_reach ON case_note;
-CREATE POLICY case_note_reach ON case_note AS RESTRICTIVE FOR ALL
-  USING (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id))
-  WITH CHECK (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id));
+-- Notes, placements, suggestions and asks: the person is a column on the row.
+DO $$
+DECLARE
+  t record;
+  e text;
+BEGIN
+  FOR t IN SELECT * FROM (VALUES ('case_note', 'client_user_id'), ('outcome_record', 'client_user_id'),
+                                 ('staff_suggestion', 'client_user_id'), ('sharing_request', 'user_id')) v(tbl, col) LOOP
+    e := '(' || pg_temp.smr_outside_sql() || ' OR ' || pg_temp.smr_reach_sql(t.col) || ')';
+    EXECUTE format('DROP POLICY IF EXISTS %I ON %I', t.tbl || '_reach', t.tbl);
+    EXECUTE format('CREATE POLICY %I ON %I AS RESTRICTIVE FOR ALL USING %s WITH CHECK %s', t.tbl || '_reach', t.tbl, e, e);
+  END LOOP;
+END $$;
 
--- Earlier wordings follow their note. The subquery runs under case_note's own
--- policies (including the one above), so a version is visible exactly when
--- its note is.
+-- Earlier wordings follow their note, and check-ins their placement: the
+-- subquery reads the parent under the parent's own policies (including the
+-- reach policy above), so a child is visible exactly when its parent is.
 DROP POLICY IF EXISTS case_note_version_reach ON case_note_version;
-CREATE POLICY case_note_version_reach ON case_note_version AS RESTRICTIVE FOR ALL
-  USING (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR EXISTS (SELECT 1 FROM case_note n
-                     WHERE n.id = case_note_version.note_id
-                       AND public.smr_staff_reach(n.access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, n.client_user_id)));
+DO $$
+BEGIN
+  EXECUTE format('CREATE POLICY case_note_version_reach ON case_note_version AS RESTRICTIVE FOR ALL USING (%s OR EXISTS (SELECT 1 FROM public.case_note n WHERE n.id = case_note_version.note_id))',
+                 pg_temp.smr_outside_sql());
+END $$;
+DROP POLICY IF EXISTS retention_check_reach ON retention_check;
+DO $$
+DECLARE
+  e text := '(' || pg_temp.smr_outside_sql() || ' OR EXISTS (SELECT 1 FROM public.outcome_record o WHERE o.id = retention_check.outcome_id))';
+BEGIN
+  EXECUTE format('CREATE POLICY retention_check_reach ON retention_check AS RESTRICTIVE FOR ALL USING %s WITH CHECK %s', e, e);
+END $$;
 
 -- A task about a person follows the person. A task about nobody ("call Job
 -- Service back") is its owner's, or visible to someone who sees everything:
 -- the same rule as TASK_REACH in staffTasks.ts. Owning a task about a person
 -- you no longer reach does NOT keep it visible: it goes with the person.
 DROP POLICY IF EXISTS staff_task_reach ON staff_task;
-CREATE POLICY staff_task_reach ON staff_task AS RESTRICTIVE FOR ALL
-  USING (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR (client_user_id IS NULL
-             AND (owner_user_id = NULLIF(current_setting('app.user_id', true), '')::uuid
-                  OR public.smr_staff_sees_all(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid)))
-         OR (client_user_id IS NOT NULL
-             AND public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id)))
-  WITH CHECK (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR (client_user_id IS NULL
-             AND (owner_user_id = NULLIF(current_setting('app.user_id', true), '')::uuid
-                  OR public.smr_staff_sees_all(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid)))
-         OR (client_user_id IS NOT NULL
-             AND public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id)));
-
-DROP POLICY IF EXISTS outcome_record_reach ON outcome_record;
-CREATE POLICY outcome_record_reach ON outcome_record AS RESTRICTIVE FOR ALL
-  USING (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id))
-  WITH CHECK (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id));
-
--- A check follows its placement's person.
-DROP POLICY IF EXISTS retention_check_reach ON retention_check;
-CREATE POLICY retention_check_reach ON retention_check AS RESTRICTIVE FOR ALL
-  USING (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR EXISTS (SELECT 1 FROM outcome_record o
-                     WHERE o.id = retention_check.outcome_id
-                       AND public.smr_staff_reach(o.access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, o.client_user_id)))
-  WITH CHECK (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR EXISTS (SELECT 1 FROM outcome_record o
-                     WHERE o.id = retention_check.outcome_id
-                       AND public.smr_staff_reach(o.access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, o.client_user_id)));
-
-DROP POLICY IF EXISTS staff_suggestion_reach ON staff_suggestion;
-CREATE POLICY staff_suggestion_reach ON staff_suggestion AS RESTRICTIVE FOR ALL
-  USING (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id))
-  WITH CHECK (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id));
-
--- Asks: staff read and write them inside the org scope; the participant
--- answers with no org scope and passes.
-DROP POLICY IF EXISTS sharing_request_reach ON sharing_request;
-CREATE POLICY sharing_request_reach ON sharing_request AS RESTRICTIVE FOR ALL
-  USING (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, user_id))
-  WITH CHECK (NULLIF(current_setting('app.org_id', true), '') IS NULL
-         OR access_code_id IS DISTINCT FROM NULLIF(current_setting('app.org_id', true), '')::uuid
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, user_id));
+DO $$
+DECLARE
+  e text := '(' || pg_temp.smr_outside_sql()
+    || $r$ OR (client_user_id IS NULL AND (owner_user_id = NULLIF(current_setting('app.user_id', true), '')::uuid
+              OR (SELECT public.smr_staff_sees_all(NULLIF(current_setting('app.org_id', true), '')::uuid, NULLIF(current_setting('app.user_id', true), '')::uuid))))$r$
+    || ' OR (client_user_id IS NOT NULL AND ' || pg_temp.smr_reach_sql('client_user_id') || '))';
+BEGIN
+  EXECUTE format('CREATE POLICY staff_task_reach ON staff_task AS RESTRICTIVE FOR ALL USING %s WITH CHECK %s', e, e);
+END $$;
 
 -- =============================================================== activity ==
 
@@ -298,6 +289,8 @@ CREATE TABLE IF NOT EXISTS org_activity (
 CREATE INDEX IF NOT EXISTS org_activity_org_at ON org_activity (access_code_id, at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS org_activity_participant ON org_activity (access_code_id, participant_user_id, at DESC) WHERE participant_user_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS org_activity_actor ON org_activity (access_code_id, actor_user_id, at DESC);
+-- The Audit screen pages by id, newest first (review S2).
+CREATE INDEX IF NOT EXISTS org_activity_org_id ON org_activity (access_code_id, id DESC);
 
 ALTER TABLE org_activity ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org_activity FORCE ROW LEVEL SECURITY;
@@ -305,10 +298,20 @@ DROP POLICY IF EXISTS org_activity_select ON org_activity;
 CREATE POLICY org_activity_select ON org_activity FOR SELECT
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 -- Rows about a person follow the person, like the records they describe.
+-- A row about nobody (the team, an invite, the org) shows only to someone who
+-- is on this org's staff or owns it (review S5): a stale or forged org scope
+-- sees nothing at all.
 DROP POLICY IF EXISTS org_activity_reach ON org_activity;
-CREATE POLICY org_activity_reach ON org_activity AS RESTRICTIVE FOR SELECT
-  USING (participant_user_id IS NULL
-         OR public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, participant_user_id));
+DO $$
+BEGIN
+  EXECUTE format($p$CREATE POLICY org_activity_reach ON org_activity AS RESTRICTIVE FOR SELECT USING (
+      (participant_user_id IS NULL AND (
+         EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
+                                                   AND s.user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)
+         OR EXISTS (SELECT 1 FROM public.access_code ac WHERE ac.id = NULLIF(current_setting('app.org_id', true), '')::uuid
+                                                         AND ac.partner_user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)))
+      OR (participant_user_id IS NOT NULL AND %s))$p$, pg_temp.smr_reach_sql('participant_user_id'));
+END $$;
 -- No INSERT, UPDATE or DELETE policy, and (below) no such grant: the app reads.
 
 -- The one writer. Not executable by the app: only the definer triggers (which
@@ -398,8 +401,9 @@ BEGIN
       CASE WHEN NEW.done_by IS NOT NULL AND NEW.done_by = NEW.client_user_id THEN 'ticked off a task shared with them' ELSE 'marked a task done' END);
   ELSIF NEW.done_at IS NULL AND OLD.done_at IS NOT NULL THEN
     PERFORM public.org_activity_write(NEW.access_code_id, NEW.client_user_id, NULL, 'task', NEW.id::text, 'reopened', 'reopened a task');
-  ELSIF ROW(NEW.title, NEW.due_on, NEW.owner_user_id, NEW.shared_with_participant)
-        IS DISTINCT FROM ROW(OLD.title, OLD.due_on, OLD.owner_user_id, OLD.shared_with_participant) THEN
+  -- An owner going to NULL is their account being deleted, not a change to the task.
+  ELSIF ROW(NEW.title, NEW.due_on, NEW.shared_with_participant) IS DISTINCT FROM ROW(OLD.title, OLD.due_on, OLD.shared_with_participant)
+        OR (NEW.owner_user_id IS DISTINCT FROM OLD.owner_user_id AND NEW.owner_user_id IS NOT NULL) THEN
     PERFORM public.org_activity_write(NEW.access_code_id, NEW.client_user_id, NEW.owner_user_id, 'task', NEW.id::text, 'updated', 'changed a task');
   END IF;
   RETURN NULL;
@@ -587,6 +591,17 @@ BEGIN
   END LOOP;
 END $$;
 CREATE UNIQUE INDEX IF NOT EXISTS retention_check_current ON retention_check (outcome_id, day_mark) WHERE superseded_by IS NULL;
+-- Review S3: the history read joins on these.
+CREATE INDEX IF NOT EXISTS retention_check_outcome ON retention_check (outcome_id);
+CREATE INDEX IF NOT EXISTS retention_check_superseded ON retention_check (superseded_by) WHERE superseded_by IS NOT NULL;
+
+-- The app may record a check-in, never write correction history: a row that
+-- says it replaced another, or carries a correction reason, is made only by
+-- smr_correct_retention_check (definer, so this does not apply to it).
+DROP POLICY IF EXISTS retention_check_no_forged_history ON retention_check;
+CREATE POLICY retention_check_no_forged_history ON retention_check AS RESTRICTIVE FOR INSERT
+  WITH CHECK (superseded_by IS NULL AND correction_reason IS NULL);
+
 
 -- An answer is never edited. The one change ever made to a row is marking it
 -- superseded, once, by smr_correct_retention_check. This holds for every
@@ -594,6 +609,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS retention_check_current ON retention_check (ou
 CREATE OR REPLACE FUNCTION public.retention_check_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
+  -- The one other change ever allowed (review B1): checked_by -> NULL because
+  -- that team member's account was deleted (the foreign key's ON DELETE SET
+  -- NULL is an UPDATE). Only when the account is really gone, so nobody can
+  -- use this to strip a name off an answer, and with every other column equal.
+  IF OLD.checked_by IS NOT NULL AND NEW.checked_by IS NULL
+     AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.checked_by)
+     AND ROW(NEW.id, NEW.outcome_id, NEW.access_code_id, NEW.day_mark, NEW.status, NEW.method, NEW.note, NEW.checked_at, NEW.correction_reason, NEW.superseded_by)
+         IS NOT DISTINCT FROM ROW(OLD.id, OLD.outcome_id, OLD.access_code_id, OLD.day_mark, OLD.status, OLD.method, OLD.note, OLD.checked_at, OLD.correction_reason, OLD.superseded_by) THEN
+    RETURN NEW;
+  END IF;
   IF ROW(NEW.id, NEW.outcome_id, NEW.access_code_id, NEW.day_mark, NEW.status, NEW.method, NEW.note, NEW.checked_by, NEW.checked_at, NEW.correction_reason)
      IS DISTINCT FROM ROW(OLD.id, OLD.outcome_id, OLD.access_code_id, OLD.day_mark, OLD.status, OLD.method, OLD.note, OLD.checked_by, OLD.checked_at, OLD.correction_reason) THEN
     RAISE EXCEPTION 'a retention check is never edited; a correction is a new answer' USING ERRCODE = 'check_violation';
@@ -709,8 +734,10 @@ DROP POLICY IF EXISTS outcome_correction_select ON outcome_correction;
 CREATE POLICY outcome_correction_select ON outcome_correction FOR SELECT
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 DROP POLICY IF EXISTS outcome_correction_reach ON outcome_correction;
-CREATE POLICY outcome_correction_reach ON outcome_correction AS RESTRICTIVE FOR SELECT
-  USING (public.smr_staff_reach(access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid, client_user_id));
+DO $$
+BEGIN
+  EXECUTE format('CREATE POLICY outcome_correction_reach ON outcome_correction AS RESTRICTIVE FOR SELECT USING %s', pg_temp.smr_reach_sql('client_user_id'));
+END $$;
 
 CREATE OR REPLACE FUNCTION public.outcome_record_keep_history() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -720,7 +747,22 @@ DECLARE
   v_kind text;
   v_reason text := NULLIF(btrim(COALESCE(current_setting('app.correction_reason', true), '')), '');
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
+  v_gone boolean;
 BEGIN
+  -- updated_at / updated_by are stamped here and only here (review S1): the
+  -- app can neither set them on a new row nor forge them on an old one.
+  IF TG_OP = 'INSERT' THEN
+    NEW.updated_at := NULL; NEW.updated_by := NULL;
+    RETURN NEW;
+  END IF;
+  NEW.updated_at := OLD.updated_at; NEW.updated_by := OLD.updated_by;
+
+  -- A team member's account was deleted: ON DELETE SET NULL clears verified_by
+  -- (and created_by, which this trigger does not track). That is not a
+  -- correction and needs no reason (review B1). Only when the account is gone.
+  v_gone := OLD.verified_by IS NOT NULL AND NEW.verified_by IS NULL
+            AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.verified_by);
+
   IF NEW.employer IS DISTINCT FROM OLD.employer THEN v_changed := v_changed || jsonb_build_object('employer', jsonb_build_object('from', OLD.employer, 'to', NEW.employer)); v_facts := true; END IF;
   IF NEW.job_title IS DISTINCT FROM OLD.job_title THEN v_changed := v_changed || jsonb_build_object('job_title', jsonb_build_object('from', OLD.job_title, 'to', NEW.job_title)); v_facts := true; END IF;
   IF NEW.start_date IS DISTINCT FROM OLD.start_date THEN v_changed := v_changed || jsonb_build_object('start_date', jsonb_build_object('from', OLD.start_date, 'to', NEW.start_date)); v_facts := true; END IF;
@@ -728,8 +770,13 @@ BEGIN
   IF NEW.hours_per_week IS DISTINCT FROM OLD.hours_per_week THEN v_changed := v_changed || jsonb_build_object('hours_per_week', jsonb_build_object('from', OLD.hours_per_week, 'to', NEW.hours_per_week)); v_facts := true; END IF;
   IF NEW.source IS DISTINCT FROM OLD.source THEN v_changed := v_changed || jsonb_build_object('source', jsonb_build_object('from', OLD.source, 'to', NEW.source)); v_facts := true; END IF;
   IF NEW.verification_method IS DISTINCT FROM OLD.verification_method THEN v_changed := v_changed || jsonb_build_object('verification_method', jsonb_build_object('from', OLD.verification_method, 'to', NEW.verification_method)); v_facts := true; END IF;
-  IF NEW.verified_by IS DISTINCT FROM OLD.verified_by OR NEW.verified_at IS DISTINCT FROM OLD.verified_at THEN
+  IF NEW.verified_at IS DISTINCT FROM OLD.verified_at THEN
     v_changed := v_changed || jsonb_build_object('verified', jsonb_build_object('from', OLD.verified_at, 'to', NEW.verified_at)); v_facts := true;
+  END IF;
+  -- Who confirmed it is kept too (review S4), unless the change is only the
+  -- deleted account being cleared.
+  IF NEW.verified_by IS DISTINCT FROM OLD.verified_by AND NOT v_gone THEN
+    v_changed := v_changed || jsonb_build_object('verified_by', jsonb_build_object('from', OLD.verified_by, 'to', NEW.verified_by)); v_facts := true;
   END IF;
   IF NEW.ended_on IS DISTINCT FROM OLD.ended_on THEN v_changed := v_changed || jsonb_build_object('ended_on', jsonb_build_object('from', OLD.ended_on, 'to', NEW.ended_on)); END IF;
   IF NEW.end_reason IS DISTINCT FROM OLD.end_reason THEN v_changed := v_changed || jsonb_build_object('end_reason', jsonb_build_object('from', OLD.end_reason, 'to', NEW.end_reason)); END IF;
@@ -754,8 +801,162 @@ $$;
 REVOKE ALL ON FUNCTION public.outcome_record_keep_history() FROM PUBLIC;
 DROP TRIGGER IF EXISTS outcome_record_keep_history ON outcome_record;
 -- Fires after outcome_record_guard (alphabetical), which already refused a move.
-CREATE TRIGGER outcome_record_keep_history BEFORE UPDATE ON outcome_record
+CREATE TRIGGER outcome_record_keep_history BEFORE INSERT OR UPDATE ON outcome_record
   FOR EACH ROW EXECUTE FUNCTION public.outcome_record_keep_history();
+
+-- ----------------------------------------------- deleting a staff account --
+-- Review B1. Every staff-written record points at its author with ON DELETE
+-- SET NULL, and that SET NULL is an UPDATE. The guards from 051, 055, 056 and
+-- 057 refused it, so deleting a staff member who had written a note, a task,
+-- a suggestion, an ask or a placement failed (on main before this file too).
+-- Each guard below is its LIVE body with one carve-out at the top: the author
+-- column going to NULL, everything else equal, and ONLY when that account no
+-- longer exists, so the app can never use it to strip a name off a record.
+
+-- 056: "verified" no longer needs a living verifier in a CHECK (a CHECK cannot
+-- tell a deleted account from a missing one). The rule moves to a trigger: a
+-- confirmed placement names who confirmed it when it is written, and keeps
+-- standing if that person's account is later deleted.
+DO $$
+DECLARE
+  c text;
+BEGIN
+  FOR c IN SELECT conname FROM pg_constraint
+            WHERE conrelid = 'public.outcome_record'::regclass AND contype = 'c'
+              AND pg_get_constraintdef(oid) ~ 'verified_by IS NOT NULL' LOOP
+    EXECUTE format('ALTER TABLE public.outcome_record DROP CONSTRAINT %I', c);
+  END LOOP;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.outcome_record'::regclass AND conname = 'outcome_record_verified_check') THEN
+    ALTER TABLE outcome_record ADD CONSTRAINT outcome_record_verified_check
+      CHECK (source <> 'staff_verified' OR (verification_method IS NOT NULL AND verified_at IS NOT NULL));
+  END IF;
+END $$;
+
+CREATE OR REPLACE FUNCTION public.outcome_record_verified_rule() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.source = 'staff_verified' AND NEW.verified_by IS NULL
+     AND NOT (TG_OP = 'UPDATE' AND OLD.source = 'staff_verified'
+              AND NEW.verified_at IS NOT DISTINCT FROM OLD.verified_at
+              AND NEW.verification_method IS NOT DISTINCT FROM OLD.verification_method
+              AND (OLD.verified_by IS NULL OR NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.verified_by))) THEN
+    RAISE EXCEPTION 'new row for relation "outcome_record" violates check constraint "outcome_record_verified_check": a confirmed placement says who confirmed it'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.outcome_record_verified_rule() FROM PUBLIC;
+DROP TRIGGER IF EXISTS outcome_record_verified_rule ON outcome_record;
+CREATE TRIGGER outcome_record_verified_rule BEFORE INSERT OR UPDATE ON outcome_record
+  FOR EACH ROW EXECUTE FUNCTION public.outcome_record_verified_rule();
+
+-- 056 outcome_record_guard + created_by -> NULL for a deleted account.
+CREATE OR REPLACE FUNCTION public.outcome_record_guard() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.access_code_id IS DISTINCT FROM OLD.access_code_id OR NEW.client_user_id IS DISTINCT FROM OLD.client_user_id
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at
+     OR (NEW.created_by IS DISTINCT FROM OLD.created_by
+         AND NOT (OLD.created_by IS NOT NULL AND NEW.created_by IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.created_by))) THEN
+    RAISE EXCEPTION 'an outcome cannot be moved to another person or organization' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- 051 case_note_keep_version + author -> NULL for a deleted account.
+CREATE OR REPLACE FUNCTION public.case_note_keep_version() RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF OLD.author_user_id IS NOT NULL AND NEW.author_user_id IS NULL
+     AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.author_user_id)
+     AND ROW(NEW.access_code_id, NEW.client_user_id, NEW.kind, NEW.body, NEW.occurred_at, NEW.visible_to_participant, NEW.drafted_by_assistant, NEW.created_at, NEW.edited_at)
+         IS NOT DISTINCT FROM ROW(OLD.access_code_id, OLD.client_user_id, OLD.kind, OLD.body, OLD.occurred_at, OLD.visible_to_participant, OLD.drafted_by_assistant, OLD.created_at, OLD.edited_at) THEN
+    RETURN NEW;
+  END IF;
+  IF NEW.access_code_id IS DISTINCT FROM OLD.access_code_id
+     OR NEW.client_user_id IS DISTINCT FROM OLD.client_user_id
+     OR NEW.author_user_id IS DISTINCT FROM OLD.author_user_id THEN
+    RAISE EXCEPTION 'a case note cannot be moved to another person, author or organization' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.body IS DISTINCT FROM OLD.body OR NEW.kind IS DISTINCT FROM OLD.kind THEN
+    INSERT INTO public.case_note_version (note_id, access_code_id, body, kind, replaced_by)
+    VALUES (OLD.id, OLD.access_code_id, OLD.body, OLD.kind, NULLIF(current_setting('app.user_id', true), ''));
+    NEW.edited_at := now();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- 055 staff_task_guard + created_by -> NULL for a deleted account.
+CREATE OR REPLACE FUNCTION public.staff_task_guard() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.access_code_id IS DISTINCT FROM OLD.access_code_id OR NEW.client_user_id IS DISTINCT FROM OLD.client_user_id
+     OR NEW.created_at IS DISTINCT FROM OLD.created_at
+     OR (NEW.created_by IS DISTINCT FROM OLD.created_by
+         AND NOT (OLD.created_by IS NOT NULL AND NEW.created_by IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.created_by))) THEN
+    RAISE EXCEPTION 'a task cannot be moved to another person or organization' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+-- 057 staff_suggestion_guard + author -> NULL for a deleted account.
+CREATE OR REPLACE FUNCTION public.staff_suggestion_guard() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF OLD.author_user_id IS NOT NULL AND NEW.author_user_id IS NULL
+     AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.author_user_id)
+     AND ROW(NEW.access_code_id, NEW.client_user_id, NEW.kind, NEW.job_title, NEW.company, NEW.location, NEW.apply_url, NEW.artifact_id, NEW.quote, NEW.body, NEW.status, NEW.responded_at, NEW.created_at)
+         IS NOT DISTINCT FROM ROW(OLD.access_code_id, OLD.client_user_id, OLD.kind, OLD.job_title, OLD.company, OLD.location, OLD.apply_url, OLD.artifact_id, OLD.quote, OLD.body, OLD.status, OLD.responded_at, OLD.created_at) THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.status <> 'open' THEN
+    RAISE EXCEPTION 'an answered suggestion cannot be changed' USING ERRCODE = 'check_violation';
+  END IF;
+  IF ROW(NEW.access_code_id, NEW.client_user_id, NEW.author_user_id, NEW.kind, NEW.job_title, NEW.company, NEW.location, NEW.apply_url, NEW.artifact_id, NEW.quote, NEW.body, NEW.created_at)
+     IS DISTINCT FROM ROW(OLD.access_code_id, OLD.client_user_id, OLD.author_user_id, OLD.kind, OLD.job_title, OLD.company, OLD.location, OLD.apply_url, OLD.artifact_id, OLD.quote, OLD.body, OLD.created_at) THEN
+    RAISE EXCEPTION 'only the status of a suggestion can change' USING ERRCODE = 'check_violation';
+  END IF;
+  -- Inside an organization's scope the only move is to withdraw it.
+  IF NULLIF(current_setting('app.org_id', true), '') IS NOT NULL AND NEW.status <> 'withdrawn' THEN
+    RAISE EXCEPTION 'an organization can withdraw a suggestion, not answer it' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  NEW.responded_at := now();
+  RETURN NEW;
+END;
+$$;
+
+-- 051 sharing_request_guard + requested_by -> NULL for a deleted account.
+CREATE OR REPLACE FUNCTION public.sharing_request_guard() RETURNS TRIGGER
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF OLD.requested_by IS NOT NULL AND NEW.requested_by IS NULL
+     AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.requested_by)
+     AND ROW(NEW.access_code_id, NEW.user_id, NEW.scope, NEW.reason, NEW.status, NEW.created_at, NEW.answered_at)
+         IS NOT DISTINCT FROM ROW(OLD.access_code_id, OLD.user_id, OLD.scope, OLD.reason, OLD.status, OLD.created_at, OLD.answered_at) THEN
+    RETURN NEW;
+  END IF;
+  IF OLD.status <> 'pending' THEN
+    RAISE EXCEPTION 'an answered sharing request cannot be changed' USING ERRCODE = 'check_violation';
+  END IF;
+  IF NEW.access_code_id IS DISTINCT FROM OLD.access_code_id OR NEW.user_id IS DISTINCT FROM OLD.user_id
+     OR NEW.scope IS DISTINCT FROM OLD.scope OR NEW.requested_by IS DISTINCT FROM OLD.requested_by
+     OR NEW.reason IS DISTINCT FROM OLD.reason OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'only the status of a sharing request can change' USING ERRCODE = 'check_violation';
+  END IF;
+  -- WHO may move it WHERE. The participant answers; the org may only withdraw.
+  IF NULLIF(current_setting('app.org_id', true), '') IS NOT NULL AND NEW.status <> 'cancelled' THEN
+    RAISE EXCEPTION 'an organization can withdraw its request, not answer it' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  NEW.answered_at := now();
+  RETURN NEW;
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.org_activity_outcome() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
@@ -823,6 +1024,9 @@ BEGIN
   END IF;
 END $$;
 
+DROP FUNCTION IF EXISTS pg_temp.smr_reach_sql(text);
+DROP FUNCTION IF EXISTS pg_temp.smr_outside_sql();
+
 -- ------------------------------------------------------------ after-guards --
 -- Only what this file creates.
 DO $$
@@ -839,12 +1043,17 @@ BEGIN
   FOREACH p IN ARRAY ARRAY['case_note.case_note_reach', 'case_note_version.case_note_version_reach', 'staff_task.staff_task_reach',
                            'outcome_record.outcome_record_reach', 'retention_check.retention_check_reach',
                            'staff_suggestion.staff_suggestion_reach', 'sharing_request.sharing_request_reach',
-                           'org_activity.org_activity_reach', 'outcome_correction.outcome_correction_reach'] LOOP
+                           'org_activity.org_activity_reach', 'outcome_correction.outcome_correction_reach',
+                           'retention_check.retention_check_no_forged_history'] LOOP
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = split_part(p, '.', 1)
                     AND policyname = split_part(p, '.', 2) AND permissive = 'RESTRICTIVE') THEN
       RAISE EXCEPTION '102 after-guard: restrictive policy % is missing', p;
     END IF;
   END LOOP;
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.outcome_record'::regclass AND contype = 'c'
+              AND pg_get_constraintdef(oid) ~ 'verified_by IS NOT NULL') THEN
+    RAISE EXCEPTION '102 after-guard: a CHECK still requires a living verifier, so deleting a staff account would fail';
+  END IF;
   IF to_regclass('public.retention_check_current') IS NULL THEN
     RAISE EXCEPTION '102 after-guard: retention_check_current index is missing';
   END IF;
@@ -860,8 +1069,10 @@ BEGIN
        OR has_function_privilege('smr_app', 'public.smr_org_role(uuid, uuid)', 'EXECUTE') THEN
       RAISE EXCEPTION '102 after-guard: the app role can call org_activity_write or smr_org_role';
     END IF;
-    IF NOT has_function_privilege('smr_app', 'public.smr_staff_reach(uuid, uuid, uuid)', 'EXECUTE') THEN
-      RAISE EXCEPTION '102 after-guard: the app role cannot call smr_staff_reach, so every scoped read would fail';
+    IF NOT has_function_privilege('smr_app', 'public.smr_staff_reach(uuid, uuid, uuid)', 'EXECUTE')
+       OR NOT has_function_privilege('smr_app', 'public.smr_staff_sees_all(uuid, uuid)', 'EXECUTE')
+       OR NOT has_function_privilege('smr_app', 'public.smr_staff_unit_reach(uuid, uuid, uuid)', 'EXECUTE') THEN
+      RAISE EXCEPTION '102 after-guard: the app role cannot call the reach functions, so every scoped read would fail';
     END IF;
   END IF;
 END $$;
