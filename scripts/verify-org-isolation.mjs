@@ -1180,10 +1180,19 @@ async function accessChecks() {
     const cross = await core.revokeStaffInvite({ orgId: otherOrg, userId: outsider, role: "owner" }, twin.inviteId, { platformAdmin: false });
     check("another organization cannot revoke this organization's invitation", cross.ok === false, JSON.stringify(cross));
     check("another organization reads none of this organization's invitations", (await core.listStaffInvites({ orgId: otherOrg, userId: outsider, role: "owner" })).length === 0);
+    // The cross-org read runs as someone with no invitation anywhere: the invitee
+    // may always read their OWN invitation rows (by design), so using the invitee
+    // here would count those and prove nothing about another organization.
+    const stranger = await mkUser("inv-stranger");
+    await sql`UPDATE access_code SET partner_user_id = ${stranger} WHERE id = ${otherOrg}`;
     const crossRead = await app.transaction([
-      app`SELECT set_config('app.org_id', ${otherOrg}, true)`, app`SELECT set_config('app.user_id', ${outsider}, true)`,
+      app`SELECT set_config('app.org_id', ${otherOrg}, true)`, app`SELECT set_config('app.user_id', ${stranger}, true)`,
       app`SELECT count(*)::int AS n FROM org_staff_invite WHERE access_code_id = ${org.id}`]);
     check("naming this organization's id while scoped to another returns nothing (RLS)", crossRead[2][0].n === 0, JSON.stringify(crossRead[2]));
+    const ownOnly = await app.transaction([
+      app`SELECT set_config('app.org_id', ${otherOrg}, true)`, app`SELECT set_config('app.user_id', ${outsider}, true)`,
+      app`SELECT count(*)::int AS n FROM org_staff_invite WHERE access_code_id = ${org.id} AND user_id <> ${outsider}`]);
+    check("an invitee scoped elsewhere reads only their own invitation rows, never anyone else's", ownOnly[2][0].n === 0, JSON.stringify(ownOnly[2]));
     const forgedAccept = await app.transaction([
       app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${owner}, true)`,
       app`UPDATE org_staff_invite SET accepted_at = now() WHERE id = ${twin.inviteId} RETURNING id`]).then(() => "updated", (e) => String(e?.message ?? e));
