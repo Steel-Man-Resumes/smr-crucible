@@ -32,7 +32,7 @@ test('migration 100: lifecycle stamps, staff invitations, accept, delete only wh
     try { await db.exec(`BEGIN; INSERT INTO _migrations(filename) VALUES ('${f}') ON CONFLICT DO NOTHING;` + readFileSync(MIG + f, 'utf8') + ';COMMIT;'); return true; }
     catch { await db.exec('ROLLBACK').catch(() => {}); return false; }
   };
-  for (const f of readdirSync(MIG).filter((x) => /^\d{3}_.*\.sql$/.test(x) && Number(x.slice(0, 3)) <= 100).sort()) {
+  for (const f of readdirSync(MIG).filter((x) => /^\d{3}_.*\.sql$/.test(x) && Number(x.slice(0, 3)) <= 103).sort()) {
     if (!(await apply(f))) failed.push(f); // 088-091 resource chain refuses on its own guards; unrelated tables
   }
   assert.ok(!failed.includes('100_org_lifecycle_invites.sql'), `100 must apply; failed: ${failed.join(', ')}`);

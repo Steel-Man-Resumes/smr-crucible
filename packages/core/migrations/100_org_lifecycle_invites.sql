@@ -448,6 +448,7 @@ DECLARE
   v_out jsonb := '{}'::jsonb;
   r record;
   n bigint;
+  v_not_self text := '';
 BEGIN
   IF v_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.platform_admin pa WHERE pa.user_id = v_actor) THEN
     RETURN NULL;
@@ -479,13 +480,19 @@ BEGIN
   END IF;
   -- The organization activity log (102, lane L3b) has no foreign keys; count
   -- it when it exists, by whichever organization column it carries.
+  -- Rows about the organization itself (entity 'org': opened, closed, renamed)
+  -- are not history about anyone; an organization whose only activity is its
+  -- own lifecycle can still be deleted (the delete is recorded in org_audit).
   IF to_regclass('public.org_activity') IS NOT NULL THEN
+    v_not_self := CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                        AND table_name = 'org_activity' AND column_name = 'entity')
+                       THEN ' AND entity IS DISTINCT FROM ''org''' ELSE '' END;
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
                 AND table_name = 'org_activity' AND column_name = 'access_code_id') THEN
-      EXECUTE 'SELECT count(*) FROM public.org_activity WHERE access_code_id = $1' INTO n USING p_org;
+      EXECUTE 'SELECT count(*) FROM public.org_activity WHERE access_code_id = $1' || v_not_self INTO n USING p_org;
     ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
                    AND table_name = 'org_activity' AND column_name = 'org_id') THEN
-      EXECUTE 'SELECT count(*) FROM public.org_activity WHERE org_id = $1' INTO n USING p_org;
+      EXECUTE 'SELECT count(*) FROM public.org_activity WHERE org_id = $1' || v_not_self INTO n USING p_org;
     ELSE
       n := 0;
     END IF;
