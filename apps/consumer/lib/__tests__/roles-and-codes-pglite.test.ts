@@ -119,10 +119,35 @@ test("101 in real SQL: admins and the org's own staff cannot join with a code; n
   assert.equal(byUser[U.boss], undefined, "platform admins are never listed");
   const c = (await q<{ partner_to_client: number; client_to_partner: number }>(counts))[0];
   assert.deepEqual([Number(c.partner_to_client), Number(c.client_to_partner)], [1, 4]);
-  const update = DRY.slice(DRY.indexOf("-- BEGIN;")).split("\n").filter((l) => l.startsWith("-- ") && !/^-- (BEGIN|-- COMMIT)/.test(l)).map((l) => l.slice(3)).join("\n");
+  const block = DRY.slice(DRY.indexOf("-- BEGIN;")).split("\n").filter((l) => l.startsWith("-- ") && !/^-- (BEGIN;|-- COMMIT)/.test(l)).map((l) => l.slice(3)).join("\n");
+  const guardDo = block.slice(0, block.indexOf("WITH r AS"));
+  const update = block.slice(block.indexOf("WITH r AS"));
+  assert.match(guardDo, /^DO \$\$[\s\S]*rolbypassrls OR rolsuper[\s\S]*END \$\$;\s*$/, "the UPDATE block starts with the BYPASSRLS guard");
+
+  // Fix round 1: without BYPASSRLS both the dry run and the re-tier stop,
+  // instead of seeing no staff and demoting everyone.
+  await db.exec(`CREATE ROLE l2_nobypass NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO l2_nobypass; GRANT SELECT ON ALL TABLES IN SCHEMA public TO l2_nobypass;`);
+  const asNoBypass = async (sqlText: string) => {
+    await db.exec("BEGIN; SET LOCAL ROLE l2_nobypass;");
+    try { await db.exec(sqlText); await db.exec("ROLLBACK"); return null; } catch (e) { await db.exec("ROLLBACK").catch(() => {}); return String((e as Error).message); }
+  };
+  const dryBody = DRY.slice(DRY.indexOf("\nBEGIN READ ONLY;") + "\nBEGIN READ ONLY;".length, DRY.indexOf("\nROLLBACK;"));
+  assert.match((await asNoBypass(dryBody)) ?? "ran", /dry run needs a role with BYPASSRLS/);
+  assert.match((await asNoBypass(guardDo)) ?? "ran", /re-tier needs a role with BYPASSRLS/);
+
+  await db.exec(guardDo);
   const done = (await q<{ down: number; up: number }>(update))[0];
   assert.deepEqual([Number(done.down), Number(done.up)], [1, 4], "the UPDATE matches section 4");
   assert.equal((await q(preview)).length, 0, "after the re-tier nothing differs");
   assert.equal((await one(`SELECT tier FROM users WHERE id = $1`, [U.boss]))!.tier, "admin");
+
+  // Fix round 1: the after-guard checks the function's OWNER, which CREATE OR
+  // REPLACE keeps, not only current_user. An owner without BYPASSRLS stops 101.
+  await db.exec(`ALTER FUNCTION public.smr_redeem_code(uuid, text) OWNER TO l2_nobypass`);
+  const rerun = await db.exec("BEGIN;" + readFileSync(MIG + "101_roles_and_codes.sql", "utf8") + ";COMMIT;").then(() => null, (e: Error) => String(e.message));
+  await db.exec("ROLLBACK").catch(() => {});
+  assert.match(rerun ?? "applied", /owner of smr_redeem_code must have BYPASSRLS/);
+  await db.exec(`ALTER FUNCTION public.smr_redeem_code(uuid, text) OWNER TO CURRENT_USER`);
+  await db.exec("BEGIN;" + readFileSync(MIG + "101_roles_and_codes.sql", "utf8") + ";COMMIT;");
   await db.close();
 });

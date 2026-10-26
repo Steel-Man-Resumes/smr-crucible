@@ -77,32 +77,21 @@ export function orgViewBannerText(orgName: string | null | undefined): string {
 }
 
 /**
- * Demo organizations carry "(Demo)" in their name (every seeded demo does).
- * Anything else is treated as a real organization: its people are hidden in
- * the DEV menu until the admin expands them on purpose (A1 defect H8).
+ * Fictional accounts: an email ending in .example.invalid can never receive
+ * mail (RFC 2606/6761), so every such account was made up on purpose. The DEV
+ * menu lists only these by default (L2 fix round 1). An organization's NAME
+ * is not used: an org called "(Demo)" can hold real accounts.
  */
-export function isDemoOrgName(name: string | null | undefined): boolean {
-  return !!name && /\(demo\)/i.test(name);
+export const FICTIONAL_EMAIL_SUFFIX = ".example.invalid";
+
+export function isFictionalEmail(email: string | null | undefined): boolean {
+  return !!email && email.trim().toLowerCase().endsWith(FICTIONAL_EMAIL_SUFFIX);
 }
 
-export interface PersonaLike {
-  userId: string;
-  orgName: string;
-  demo?: boolean;
-}
-
-/** Demo personas grouped by org, in API order; real ones counted, not named. */
-export function splitPersonas<T extends PersonaLike>(personas: readonly T[]): { demo: Array<[string, T[]]>; realCount: number } {
-  const groups = new Map<string, T[]>();
-  let realCount = 0;
-  for (const p of personas) {
-    const demo = p.demo ?? isDemoOrgName(p.orgName);
-    if (!demo) { realCount++; continue; }
-    const key = p.orgName || "Unassigned";
-    const g = groups.get(key);
-    if (g) g.push(p); else groups.set(key, [p]);
-  }
-  return { demo: Array.from(groups.entries()), realCount };
+/** What the menu may print for a person: a fictional account's name or email; a real one's name only. */
+export function personaLabel(p: { name: string | null; email: string | null; demo?: boolean }): string {
+  if (p.demo && isFictionalEmail(p.email)) return p.name || p.email || "Sample account";
+  return p.name || "Unnamed account";
 }
 
 /** Org-grouping for any list (used once real orgs are expanded). */

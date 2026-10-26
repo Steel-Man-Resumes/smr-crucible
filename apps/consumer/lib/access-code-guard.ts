@@ -82,3 +82,12 @@ export function parseSeatsInput(raw: unknown): number | null {
   if (typeof raw === "string" && /^\s*\d{1,6}\s*$/.test(raw)) return Number(raw.trim());
   return Number.NaN;
 }
+
+/**
+ * What /api/hub-unlock's bearer caller is told about a refused redemption.
+ * Whether an email belongs to a platform admin is never said to an outside
+ * caller (migration 101, L2 fix round 1): it reads as not_found.
+ */
+export function hubRedeemReason(outcome: string): string {
+  return outcome === "platform_admin" ? "not_found" : outcome;
+}

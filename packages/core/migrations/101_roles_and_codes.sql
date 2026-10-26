@@ -113,6 +113,14 @@ BEGIN
   IF NOT (SELECT prosecdef FROM pg_proc WHERE oid = 'public.smr_redeem_code(uuid, text)'::regprocedure) THEN
     RAISE EXCEPTION '101 after-guard: smr_redeem_code must be SECURITY DEFINER';
   END IF;
+  -- The definer runs as the function's OWNER, and CREATE OR REPLACE keeps an
+  -- existing owner, which need not be current_user. The owner is the role that
+  -- must bypass RLS, or the staff check sees no org_staff rows (fails open).
+  IF NOT EXISTS (SELECT 1 FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+                  WHERE p.oid = 'public.smr_redeem_code(uuid, text)'::regprocedure
+                    AND (r.rolbypassrls OR r.rolsuper)) THEN
+    RAISE EXCEPTION '101 after-guard: the owner of smr_redeem_code must have BYPASSRLS';
+  END IF;
   IF has_function_privilege('public', 'public.smr_redeem_code(uuid, text)', 'EXECUTE') THEN
     RAISE EXCEPTION '101 after-guard: PUBLIC can execute smr_redeem_code';
   END IF;

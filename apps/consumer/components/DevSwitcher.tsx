@@ -14,10 +14,11 @@
  * second factor required, writes refused at the edge AND at every org route
  * (lib/view-as.ts). DevModeBanner names who you are viewing and how to exit.
  *
- * REAL ORGANIZATIONS' PEOPLE ARE HIDDEN until "Show real organizations" is
- * pressed (A1 defect H8): the menu is opened on shared screens, and the
- * personas API does not even send real names until asked. Real participants
- * are never listed here.
+ * ONLY FICTIONAL ACCOUNTS BY DEFAULT (A1 defect H8, fix round 1): accounts
+ * whose email ends in .example.invalid. Real staff come only after "Show
+ * real organizations" is pressed, as name and role, never an email; the
+ * personas API does not even send them until asked. Real participants are
+ * never listed here.
  *
  * The soft "Me: Job Seeker / Observer / Admin" preview stays gone (B7,
  * 2026-10-23): it drew a job seeker's screens while every save landed in the
@@ -29,7 +30,7 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useRealTier, setViewAs } from "@/lib/useUserTier";
 import { useEffectiveRole } from "@/components/RoleProvider";
-import { DEV_MODE_LABELS, currentDevMode, groupByOrg, splitPersonas } from "@/lib/dev-mode";
+import { DEV_MODE_LABELS, currentDevMode, groupByOrg, personaLabel } from "@/lib/dev-mode";
 import { endViewAs, startViewAs } from "@/lib/dev-view-client";
 
 interface Persona {
@@ -45,7 +46,8 @@ interface Persona {
 interface PersonaPayload {
   data?: Persona[];
   participants?: Persona[];
-  realOrgCount?: number;
+  /** How many real staff accounts sit behind "Show real organizations" (a count, no names). */
+  realCount?: number;
 }
 
 const ROLE_LABEL: Record<string, string> = { owner: "Owner", org_admin: "Org leader", staff: "Staff" };
@@ -115,7 +117,7 @@ export function DevSwitcher() {
   const heading = "px-3 pt-2 pb-1 text-[10px] font-bold uppercase text-t-phos-dim border-t border-t-line mt-1";
   const current = (m: string) => (mode === m ? " (now)" : "");
 
-  const staff = splitPersonas(payload?.data ?? []);
+  const staff = groupByOrg(payload?.data ?? []);
   const participants = groupByOrg(payload?.participants ?? []);
 
   function personRow(p: Persona, sub: string) {
@@ -126,7 +128,7 @@ export function DevSwitcher() {
         disabled={starting !== null}
         onClick={() => view(p.userId)}
       >
-        {p.name || p.email}
+        {personaLabel(p)}
         {starting === p.userId && <span className="ml-2 text-[10px] text-t-phos-dim">starting...</span>}
         <span className="block text-[11px] text-[#7da4c4]">{sub}</span>
       </button>
@@ -195,13 +197,13 @@ export function DevSwitcher() {
           {section === "staff" && (
             <div>
               {payload === null && <p className="px-3 py-2 text-xs text-t-phos-dim">Loading...</p>}
-              {payload !== null && staff.demo.length === 0 && (
-                <p className="px-3 py-2 text-xs text-t-phos-dim">No demo organizations have staff yet.</p>
+              {payload !== null && staff.length === 0 && (
+                <p className="px-3 py-2 text-xs text-t-phos-dim">No sample staff accounts yet.</p>
               )}
-              {staff.demo.map(([orgName, people]) => orgGroup(orgName, people, "staff"))}
-              {(payload?.realOrgCount ?? 0) > 0 && !showReal && (
+              {staff.map(([orgName, people]) => orgGroup(orgName, people, "staff"))}
+              {(payload?.realCount ?? 0) > 0 && !showReal && (
                 <button className={`${item} text-t-phos-dim`} onClick={() => setShowReal(true)}>
-                  Show real organizations ({payload?.realOrgCount})
+                  Show real organizations ({payload?.realCount} staff)
                   <span className="block text-[11px]">Hidden so names stay off shared screens. Every view is recorded.</span>
                 </button>
               )}

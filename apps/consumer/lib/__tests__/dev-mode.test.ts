@@ -12,9 +12,9 @@ import {
   currentDevMode,
   devBannerText,
   orgViewBannerText,
-  isDemoOrgName,
+  isFictionalEmail,
+  personaLabel,
   safeReturnPath,
-  splitPersonas,
   groupByOrg,
 } from "../dev-mode";
 
@@ -85,35 +85,37 @@ describe("the banner says who and how to exit", () => {
   });
 });
 
-describe("real organizations' people stay hidden until asked (defect H8)", () => {
-  it("demo is the (Demo) mark; everything else is real", () => {
-    assert.equal(isDemoOrgName("Big Example (Demo)"), true);
-    assert.equal(isDemoOrgName("big example (demo)"), true);
-    assert.equal(isDemoOrgName("A Real Partner"), false);
-    assert.equal(isDemoOrgName("Demonstration Works"), false);
-    assert.equal(isDemoOrgName(null), false);
+describe("only fictional accounts by default; real people only on purpose (H8, fix round 1)", () => {
+  it("fictional means an email ending in .example.invalid, never an org's name", () => {
+    assert.equal(isFictionalEmail("pat@sample.example.invalid"), true);
+    assert.equal(isFictionalEmail("  Pat@Sample.EXAMPLE.INVALID "), true);
+    for (const e of ["pat@example.com", "pat@gmail.com", "pat@example.invalid.com", "pat@x.invalid", "", null, undefined]) assert.equal(isFictionalEmail(e as string), false, String(e));
   });
-  it("splitPersonas names demo people and only counts real ones", () => {
-    const people = [
-      { userId: "1", orgName: "One (Demo)" },
-      { userId: "2", orgName: "Real Partner" },
-      { userId: "3", orgName: "One (Demo)" },
-      { userId: "4", orgName: "Real Partner", demo: false },
-    ];
-    const out = splitPersonas(people);
-    assert.deepEqual(out.demo.map(([org, p]) => [org, p.map((x) => x.userId)]), [["One (Demo)", ["1", "3"]]]);
-    assert.equal(out.realCount, 2);
-    assert.equal(JSON.stringify(out.demo).includes("Real Partner"), false);
-    assert.deepEqual(groupByOrg(people).map(([o]) => o), ["One (Demo)", "Real Partner"]);
+  it("a real person's label is their name only, never an email", () => {
+    assert.equal(personaLabel({ name: "Pat Sample", email: "pat@sample.example.invalid", demo: true }), "Pat Sample");
+    assert.equal(personaLabel({ name: null, email: "pat@sample.example.invalid", demo: true }), "pat@sample.example.invalid");
+    assert.equal(personaLabel({ name: null, email: "real@person.test", demo: true }), "Unnamed account", "a non-fictional email is never printed");
+    assert.equal(personaLabel({ name: "Real Name", email: null, demo: false }), "Real Name");
+    assert.deepEqual(groupByOrg([{ orgName: "A" }, { orgName: "B" }, { orgName: "A" }]).map(([o, p]) => [o, p.length]), [["A", 2], ["B", 1]]);
   });
-  it("the personas API sends real staff only on ?real=1 and never real participants", () => {
+  it("the personas API: fictional accounts by default; real staff only on ?real=1, without email; real participants never", () => {
     const api = code(read("app", "api", "dev", "personas", "route.ts"));
     assert.match(api, /const guard = await requirePlatformAdmin\(\);\s+if \(!guard\.ok\) return guard\.response;/);
     assert.match(api, /const wantReal = new URL\(request\.url\)\.searchParams\.get\("real"\) === "1";/);
-    assert.match(api, /allOrgs\.filter\(\(o\) => \(wantReal \? !isDemoOrgName\(o\.partner_name\) : isDemoOrgName\(o\.partner_name\)\)\)/);
-    assert.match(api, /\.\.\.\(wantReal\s+\?\s+\[\]\s+:\s+\[\s+sql`SELECT r\.user_id/, "participants only for demo orgs");
+    assert.doesNotMatch(api, /isDemoOrgName|\(Demo\)/, "no decision by org name");
+    // participants: filtered to fictional emails in SQL, and only without ?real=1
+    assert.match(api, /\.\.\.\(wantReal\s+\?\s+\[\]\s+:\s+\[\s+sql`SELECT r\.user_id[\s\S]*?right\(lower\(u\.email\), \$\{FICTIONAL_EMAIL_SUFFIX\.length\}\) = \$\{FICTIONAL_EMAIL_SUFFIX\}/);
+    // default: only fictional staff, plus a COUNT of real ones
+    assert.match(api, /data: fictional\.slice\(0, 60\)/);
+    assert.match(api, /realCount: real\.length,/);
+    // ?real=1: email forced to null
+    const realBranch = api.slice(api.indexOf("if (wantReal) {"), api.indexOf("return NextResponse.json({\n    data: fictional"));
+    assert.match(realBranch, /email: null/);
+    assert.doesNotMatch(realBranch, /participants/);
     const dev = code(read("components", "DevSwitcher.tsx"));
     assert.match(dev, /if \(!showReal \|\| real !== null\) return;\s+fetch\("\/api\/dev\/personas\?real=1"/, "real names fetched only after the explicit expand");
+    assert.match(dev, /\{personaLabel\(p\)\}/);
+    assert.doesNotMatch(dev, /p\.name \|\| p\.email/);
   });
 });
 
@@ -126,5 +128,12 @@ describe("audit stays as today", () => {
     assert.match(route, /const guard = await requirePlatformAdmin\(\);/);
     assert.match(route, /maxAge: minutes \* 60,/);
     assert.match(route, /httpOnly: true,/);
+  });
+  it("the status read re-checks admin and two-step before naming anyone (fix round 1)", () => {
+    const route = code(read("app", "api", "dev", "impersonate", "route.ts"));
+    const get = route.slice(route.indexOf("export async function GET"), route.indexOf("export async function DELETE"));
+    const check = get.indexOf("const guard = await requirePlatformAdmin();");
+    assert.ok(check > 0 && check < get.indexOf("SELECT id, name, email FROM users"), "checked before the target is read");
+    assert.match(get, /if \(!guard\.ok \|\| guard\.userId !== imp\.adminId\) \{\s+return NextResponse\.json\(\{ active: false \}\);/);
   });
 });

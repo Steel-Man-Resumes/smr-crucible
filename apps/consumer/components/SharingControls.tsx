@@ -11,7 +11,7 @@
  * wording is not written in this file on purpose: a promise typed into a
  * component can drift from the record of what was promised.
  */
-import { accessLogAction } from "@/lib/access-log-words";
+import { accessLogLine } from "@/lib/access-log-words";
 import { useCallback, useEffect, useState } from "react";
 import { RequirementCard, type RequirementPolicy, type RequirementText } from "@/components/RequirementCard";
 
@@ -136,8 +136,7 @@ export function SharingControls() {
           <ul className="text-sm text-t-phos space-y-1">
             {data.log.map((e, i) => (
               <li key={i}>
-                {e.who || "A staff member"}{e.orgName ? ` at ${e.orgName}` : ""}{" "}
-                {accessLogAction(e.kind, e.scope, label, e.via)} on {when(e.at)}
+                {accessLogLine(e, label)} on {when(e.at)}
               </li>
             ))}
           </ul>

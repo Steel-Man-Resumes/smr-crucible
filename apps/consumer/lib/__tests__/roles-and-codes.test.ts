@@ -164,6 +164,14 @@ describe("codes refuse platform admins and the org's own staff (migration 101)",
     }
     assert.deepEqual(removedAdded, lines(fn(M096)));
   });
+  it("checks the function OWNER for BYPASSRLS, and the dry run and re-tier refuse to run without it (fix round 1)", () => {
+    assert.match(MIG, /JOIN pg_roles r ON r\.oid = p\.proowner[\s\S]*?\(r\.rolbypassrls OR r\.rolsuper\)/);
+    const DRY = readRoot("packages", "core", "migrations", "dry-run", "101_roles_and_codes.sql");
+    const afterBegin = DRY.slice(DRY.indexOf("\nBEGIN READ ONLY;"));
+    assert.ok(afterBegin.indexOf("rolbypassrls OR rolsuper") < afterBegin.indexOf("-- 1. platform admins"), "dry-run guard before any read");
+    const upd = DRY.slice(DRY.indexOf("-- BEGIN;"));
+    assert.ok(upd.indexOf("re-tier needs a role with BYPASSRLS") > 0 && upd.indexOf("re-tier needs a role with BYPASSRLS") < upd.indexOf("WITH r AS"), "re-tier guard before the UPDATE");
+  });
   it("re-asserts PUBLIC revoke and the smr_app grant", () => {
     assert.match(MIG, /REVOKE ALL ON FUNCTION public\.smr_redeem_code\(uuid, text\) FROM PUBLIC;/);
     assert.match(MIG, /REVOKE ALL ON FUNCTION public\.smr_redeem_code\(uuid, text\) FROM smr_app;\s+GRANT EXECUTE ON FUNCTION public\.smr_redeem_code\(uuid, text\) TO smr_app;/);

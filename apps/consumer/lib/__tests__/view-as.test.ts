@@ -25,7 +25,8 @@ import {
   VIEW_AS_REFUSAL,
   ORG_READ_ONLY_REFUSAL,
 } from "../view-as";
-import { accessLogAction } from "../access-log-words";
+import { accessLogAction, accessLogLine } from "../access-log-words";
+import { hubRedeemReason } from "../access-code-guard";
 
 const CONSUMER = join(__dirname, "..", "..");
 const read = (...p: string[]) => readFileSync(join(CONSUMER, ...p), "utf8");
@@ -223,10 +224,27 @@ describe("an admin's look is recorded as the admin, never as the staff member", 
     assert.match(core, /run\(sql\)\(SHARED_OPEN_LOG_SQL, \[\.\.\.p, via \?\? null, actor\.viewedBy \?\? null\]\)/);
     assert.match(core, /\(COALESCE\(\$7::uuid, \$4::uuid\)\)::text/);
   });
-  it("the participant reads it plainly", () => {
+  it("the participant reads it plainly, and the admin is never placed \"at\" the organization (fix round 1)", () => {
     const label = (s: string) => (s === "applications" ? "Your job applications" : s);
-    assert.equal(accessLogAction("opened", "applications", label, "admin view"), "opened your job applications while checking a staff member's view for Steel Man Resumes");
-    assert.match(accessLogAction("queue", "applications", label, "admin view"), /while checking a staff member's work list for Steel Man Resumes$/);
+    const admin = { who: "Alex Admin", orgName: "Sample Org", scope: "applications", via: "admin view" };
+    assert.equal(accessLogLine({ ...admin, kind: "opened" }, label), "Alex Admin from Steel Man Resumes opened your job applications while checking a staff view of Sample Org");
+    assert.equal(accessLogLine({ ...admin, kind: "queue" }, label), "Alex Admin from Steel Man Resumes saw your interview and follow-up dates while checking a staff work list of Sample Org");
+    assert.equal(accessLogLine({ ...admin, kind: "opened", orgName: null, who: null }, label), "An admin from Steel Man Resumes opened your job applications while checking a staff view");
+    for (const kind of ["opened", "queue"]) assert.doesNotMatch(accessLogLine({ ...admin, kind }, label), / at Sample Org/);
+    // staff lines are unchanged
+    assert.equal(accessLogLine({ who: "Lee", orgName: "Sample Org", scope: "applications", kind: "opened", via: null }, label), "Lee at Sample Org opened your job applications");
+    assert.equal(accessLogLine({ who: null, orgName: null, scope: "applications", kind: "queue" }, label), "A staff member had your interview and follow-up dates on their daily work list");
     assert.equal(accessLogAction("queue", "applications", label, null), "had your interview and follow-up dates on their daily work list");
+  });
+  it("Settings and the data export both use the one line", () => {
+    assert.match(code(read("components", "SharingControls.tsx")), /\{accessLogLine\(e, label\)\} on \{when\(e\.at\)\}/);
+    const exp = code(read("app", "api", "user", "export-data", "route.ts"));
+    assert.match(exp, /what: accessLogLine\(e, scopeLabel\)/);
+    assert.doesNotMatch(exp, /at \$\{e\.orgName\}/);
+  });
+  it("the hub's bearer caller is never told an email is a platform admin (fix round 1)", () => {
+    assert.equal(hubRedeemReason("platform_admin"), "not_found");
+    assert.equal(hubRedeemReason("full"), "full");
+    assert.match(code(read("app", "api", "hub-unlock", "route.ts")), /reason: hubRedeemReason\(res\.outcome\)/);
   });
 });

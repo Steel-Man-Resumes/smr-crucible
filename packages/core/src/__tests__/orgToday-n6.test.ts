@@ -144,9 +144,11 @@ test("the read side still decides what is read: the SELECT and the access-log IN
         AND ja.created_at >= COALESCE(g.covers_from, '-infinity'::timestamptz)`)));
   // House lane L2: the once-a-day check keys on whoever is recorded as the
   // opener, the admin during view-as ($5), else the staff member ($3).
+  // and, for an admin, per staff member viewed (fix round 1).
   assert.ok(norm(src).includes(norm(`AND NOT EXISTS (SELECT 1 FROM data_access_log l WHERE l.target_user_id = ja.user_id AND l.accessor_id = (COALESCE($5::uuid, $3::uuid))::text
+                           AND ($5::uuid IS NULL OR l.fields_accessed->>'viewedAs' = ($3::uuid)::text)
                            AND l.access_reason = 'org_work_queue' AND l.accessed_at > date_trunc('day', now()))`)));
-  assert.ok(norm(src).includes(norm(`[...p, actor.viewedBy ?? null]),`)), "the viewer is passed only to the INSERT");
+  assert.ok(norm(src).includes(norm(`run(sql)(WORK_QUEUE_LOG_SQL, [...p, actor.viewedBy ?? null]),`)), "the viewer is passed only to the INSERT");
 });
 
 test("reach: org-wide counts only for view_all; a volunteer gets null", () => {

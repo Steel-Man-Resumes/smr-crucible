@@ -118,6 +118,14 @@ export async function GET() {
   if (!imp || imp.adminId !== session.user.id) {
     return NextResponse.json({ active: false });
   }
+  // The cookie alone is not enough to be told who is being viewed (fix round
+  // 1): the same checks as starting a view, against the database, now. A
+  // revoked admin or a sign-in without two-step learns nothing, and
+  // effectiveAuth already serves them as themselves.
+  const guard = await requirePlatformAdmin();
+  if (!guard.ok || guard.userId !== imp.adminId) {
+    return NextResponse.json({ active: false });
+  }
   const target = await getOne<{ id: string; name: string | null; email: string | null }>(
     `SELECT id, name, email FROM users WHERE id = $1`,
     [imp.targetId]

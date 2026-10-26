@@ -26,6 +26,16 @@
 
 BEGIN READ ONLY;
 
+-- org_staff and access_code_redemption are FORCE RLS. Without BYPASSRLS this
+-- would see NO staff and NO memberships, preview every partner as "goes to
+-- client", and section 4 would agree with it. Stop instead (fix round 1).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND (rolbypassrls OR rolsuper)) THEN
+    RAISE EXCEPTION '101 dry run needs a role with BYPASSRLS; % has none', current_user;
+  END IF;
+END $$;
+
 -- Role facts per account, active organizations only (the app's own rule).
 -- A CTE in each query, not a temp view: a READ ONLY transaction refuses
 -- CREATE, and 082 removed TEMP from non-owner roles.
@@ -99,6 +109,12 @@ ROLLBACK;
 -- :expect_up with section 4's numbers from the LOOK run.
 --
 -- BEGIN;
+-- DO $$
+-- BEGIN
+--   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND (rolbypassrls OR rolsuper)) THEN
+--     RAISE EXCEPTION '101 re-tier needs a role with BYPASSRLS; % has none (it would demote every staff member)', current_user;
+--   END IF;
+-- END $$;
 -- WITH r AS (
 --   SELECT u.id,
 --          (EXISTS (SELECT 1 FROM access_code ac WHERE ac.partner_user_id = u.id AND ac.is_active)
