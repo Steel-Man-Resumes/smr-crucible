@@ -87,15 +87,17 @@ export async function POST(request: Request) {
     if (!UUID.test(inviteId)) return NextResponse.json({ error: "That invitation was not found." }, { status: 404 });
     const scope = scopeOfActor(guard.actor);
     if (body.action === "revoke_invite") {
-      const res = await revokeStaffInvite(scope, inviteId);
+      // platformAdmin: false. This is the organization's own page; a platform
+      // admin acting here is only its owner or admin (review should-fix 2).
+      const res = await revokeStaffInvite(scope, inviteId, { platformAdmin: false });
       return res.ok ? NextResponse.json({ ok: true, message: "Invitation revoked. The link no longer opens your workspace." })
                     : NextResponse.json({ error: res.error }, { status: 400 });
     }
-    const prep = await prepareStaffInviteResend(scope, inviteId);
+    const prep = await prepareStaffInviteResend(scope, inviteId, { platformAdmin: false });
     if (!prep.ok) return NextResponse.json({ error: prep.error }, { status: 400 });
     const origin = new URL(request.url).origin;
     const sent = await sendStaffInviteEmail({ scope, send: prep.send, origin, orgName: guard.actor.orgName, inviterUserId: guard.actor.userId });
-    const message = staffInviteSendMessage(sent, prep.send.email, origin);
+    const message = (prep.restamped ? "The person who first sent this can no longer add staff, so you are now its sender. " : "") + staffInviteSendMessage(sent, prep.send.email, origin);
     return sent === "failed" ? NextResponse.json({ error: message }, { status: 502 }) : NextResponse.json({ ok: true, result: sent, message });
   }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });

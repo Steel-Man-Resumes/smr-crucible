@@ -30,15 +30,20 @@
 --    ON CONFLICT targets the seat and offer flows depend on (096), so a staff
 --    invitation for someone who is also a participant would collide with it.
 --
---    Three paths, recorded in `path`:
---      new_account       an address with no account: the shell account and
---                        the org_staff row are made at invite time (as
---                        before), and the person signs in by the emailed link.
+--    Three paths, recorded in `path` (never shown to the organization):
+--      new_account       an address with no account: a shell account is made
+--                        so the emailed sign-in link works, and NOTHING else.
+--                        The person lands on /dashboard/invites and accepts
+--                        (smr_answer_staff_invite), exactly like an existing
+--                        account. No org_staff row exists before that yes, so
+--                        an expired, revoked or declined invitation grants
+--                        nothing on any later sign-in (security review B2).
 --      existing_account  an address that already has an account, invited by
---                        the owner or an admin: NOTHING is attached until the
---                        person signs in and accepts (smr_answer_staff_invite).
---                        The inviter sees the same answer either way, so the
---                        screen never says whether an address has an account.
+--                        the owner or an admin: nothing is attached until the
+--                        person signs in and accepts.
+--                        Both paths look the same to the organization (status,
+--                        counts, places, answers), so the screen never says
+--                        whether an address has an account (review B1).
 --      admin_added       a platform admin attached an existing account
 --                        directly, from Admin > Organizations (support path).
 --
@@ -247,8 +252,7 @@ BEGIN
      OR NEW.user_id IS DISTINCT FROM OLD.user_id OR NEW.invited_email IS DISTINCT FROM OLD.invited_email
      OR NEW.invited_name IS DISTINCT FROM OLD.invited_name OR NEW.role IS DISTINCT FROM OLD.role
      OR NEW.title IS DISTINCT FROM OLD.title OR NEW.capability_denies IS DISTINCT FROM OLD.capability_denies
-     OR NEW.path IS DISTINCT FROM OLD.path OR NEW.invited_by IS DISTINCT FROM OLD.invited_by
-     OR NEW.invited_at IS DISTINCT FROM OLD.invited_at THEN
+     OR NEW.path IS DISTINCT FROM OLD.path OR NEW.invited_at IS DISTINCT FROM OLD.invited_at THEN
     RAISE EXCEPTION 'an invitation''s person, organization, role and origin cannot change' USING ERRCODE = 'insufficient_privilege';
   END IF;
   -- Accepting and declining belong to the invitee, through
@@ -258,9 +262,24 @@ BEGIN
      AND NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = current_user AND (rolbypassrls OR rolsuper)) THEN
     RAISE EXCEPTION 'only the invited person answers an invitation' USING ERRCODE = 'insufficient_privilege';
   END IF;
+  -- A resend by someone else, when the original inviter can no longer
+  -- invite, makes the resender the inviter of record: only ever to the actor,
+  -- and an admin-role invitation only to the owner or a platform admin.
+  IF NEW.invited_by IS DISTINCT FROM OLD.invited_by THEN
+    IF v_actor IS NULL OR NEW.invited_by IS DISTINCT FROM v_actor THEN
+      RAISE EXCEPTION 'the inviter of record can only become the person acting' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+    IF NEW.role = 'org_admin' AND NOT (
+         EXISTS (SELECT 1 FROM access_code a WHERE a.id = NEW.access_code_id AND a.partner_user_id = v_actor)
+      OR EXISTS (SELECT 1 FROM platform_admin pa WHERE pa.user_id = v_actor)) THEN
+      RAISE EXCEPTION 'only the owner can send an admin invitation' USING ERRCODE = 'insufficient_privilege';
+    END IF;
+  END IF;
   IF NEW.revoked_at IS NOT NULL THEN
     NEW.revoked_at := now();
     NEW.revoked_by := v_actor;
+  ELSE
+    NEW.revoked_by := NULL;
   END IF;
   -- A resend may renew the 14 days, never stretch past them.
   IF NEW.expires_at > now() + interval '14 days' + interval '1 minute' THEN
@@ -405,6 +424,15 @@ $$;
 REVOKE ALL ON FUNCTION public.smr_answer_staff_invite(uuid, boolean) FROM PUBLIC;
 
 -- ------------------------------------------ 4. history and delete (platform) --
+-- SECOND FACTOR. The database cannot see whether a session entered a two-step
+-- code. Every caller of the platform-admin branches below (and of the
+-- platform-admin branches in the invitation guard: admin_added, an admin-role
+-- invitation, re-stamping an admin invitation) is /api/admin/orgs, which
+-- requires requirePlatformAdmin (platform_admin row AND a second-factor
+-- session). The organization's own routes never rely on platform_admin: the
+-- app passes platformAdmin=false there (staffInvites.ts revokeStaffInvite),
+-- so an admin without two-step acting in their own org is only its owner or
+-- org admin.
 -- What would make an organization's delete erase history: a count per table
 -- for every row that points at it (every foreign key to access_code, found in
 -- the catalog so a table added by a later migration is counted without
@@ -441,6 +469,28 @@ BEGIN
   SELECT count(*) INTO n FROM public.org_audit
    WHERE org_id = p_org AND table_name NOT IN ('access_code', 'org_brand');
   IF n > 0 THEN v_out := v_out || jsonb_build_object('audited_changes', n); END IF;
+  -- Usage recorded against the code itself (020; keyed by the code string,
+  -- no foreign key).
+  IF to_regclass('public.partner_usage_event') IS NOT NULL THEN
+    EXECUTE 'SELECT count(*) FROM public.partner_usage_event e
+               WHERE e.code = (SELECT ac.code FROM public.access_code ac WHERE ac.id = $1)'
+      INTO n USING p_org;
+    IF n > 0 THEN v_out := v_out || jsonb_build_object('partner_usage_event', n); END IF;
+  END IF;
+  -- The organization activity log (102, lane L3b) has no foreign keys; count
+  -- it when it exists, by whichever organization column it carries.
+  IF to_regclass('public.org_activity') IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                AND table_name = 'org_activity' AND column_name = 'access_code_id') THEN
+      EXECUTE 'SELECT count(*) FROM public.org_activity WHERE access_code_id = $1' INTO n USING p_org;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                   AND table_name = 'org_activity' AND column_name = 'org_id') THEN
+      EXECUTE 'SELECT count(*) FROM public.org_activity WHERE org_id = $1' INTO n USING p_org;
+    ELSE
+      n := 0;
+    END IF;
+    IF n > 0 THEN v_out := v_out || jsonb_build_object('org_activity', COALESCE((v_out ->> 'org_activity')::bigint, 0) + n); END IF;
+  END IF;
   RETURN v_out;
 END;
 $$;

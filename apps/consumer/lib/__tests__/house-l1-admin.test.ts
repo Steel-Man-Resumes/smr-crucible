@@ -197,7 +197,7 @@ test("an admin's invitation shows Revoke only to the owner", () => {
 
 test("a direct add by a platform admin says so instead of a send count", () => {
   const html = renderToStaticMarkup(React.createElement(StaffInviteList, {
-    invites: [inv({ path: "admin_added", status: "accepted", statusWords: "Accepted", sendCount: 0, canResend: false, canRevoke: false })],
+    invites: [inv({ addedBySupport: true, status: "accepted", statusWords: "Accepted", sendCount: 0, canResend: false, canRevoke: false })],
     endpoint: "/api/admin/orgs", canRevokeAdmin: true, onChanged: () => {},
   }));
   assert.doesNotMatch(html, /Accepted/, "answered rows wait behind the toggle");
@@ -233,8 +233,15 @@ test("routes: Team & access lists, resends and revokes invitations; admin adds s
   assert.match(access, /listStaffInvites\(scopeOfActor\(guard\.actor\)\)/);
   assert.match(access, /body\.action === "resend_invite" \|\| body\.action === "revoke_invite"/);
   assert.match(access, /if \(guard\.actor\.viaPlatformAdmin\) return NextResponse\.json\(\{ error: "You do not have access to that\." \}, \{ status: 403 \}\);/);
+  // Second factor: the org's own page never acts with platform-admin power (review should-fix 2).
+  assert.match(access, /revokeStaffInvite\(scope, inviteId, \{ platformAdmin: false \}\)/);
+  assert.match(access, /prepareStaffInviteResend\(scope, inviteId, \{ platformAdmin: false \}\)/);
+  // B1: the invite answer is built without the path, so it is the same for a new address and an existing account.
+  assert.match(access, /return NextResponse\.json\(\{ ok: true, emailed: sent === "emailed", result: sent, message: staffInviteSendMessage\(sent, res\.email, origin\) \}\);/);
+  assert.doesNotMatch(access, /path: res\.path \}\)|userId: res\.userId \}\)/);
   const admin = read("app/api/admin/orgs/route.ts");
   for (const a of ["rename", "close", "reopen", "delete", "add_staff", "resend_invite", "revoke_invite"]) assert.match(admin, new RegExp(`action === "${a}"`), a);
+  assert.match(admin, /revokeStaffInvite\(scope, inviteId, \{ platformAdmin: true \}\)/);
   assert.match(admin, /const guard = await requirePlatformAdmin\(\);\s*if \(!guard\.ok\) return guard\.response;[\s\S]*export async function POST[\s\S]*const guard = await requirePlatformAdmin\(\);/);
   assert.match(admin, /created: \{\s*owner:/, "Create answers with what was made");
   const mine = read("app/api/staff-invites/route.ts");
@@ -258,6 +265,37 @@ test("admin Organizations: closed hidden behind Show closed, lifecycle words on 
 test("Team & access: every failed save is shown, and the invite form explains existing accounts say yes first", () => {
   const team = read("components/org/TeamAccessPage.tsx");
   assert.ok((team.match(/That did not save\. Check your connection and try again\./g) ?? []).length >= 3);
-  assert.match(team, /someone who already uses Steel Man Resumes signs in and says yes first/);
+  assert.match(team, /sign in, and say yes before they join/);
+  assert.doesNotMatch(team, /inv\.path|userId: string; email/, "the org-facing invitation carries no path or account id");
   assert.match(team, /<StaffInviteList invites=\{invites\} endpoint="\/api\/org\/access"/);
+});
+
+test("B1: the owner-visible answer to an invite is byte-identical for a new address and an existing account", () => {
+  // The route's whole body is { ok, emailed, result, message }, built with no path; the message
+  // depends only on the send result, the typed address and the origin.
+  for (const result of ["emailed", "undeliverable", "failed"] as const) {
+    const forNew = JSON.stringify({ ok: true, emailed: result === "emailed", result, message: staffInviteSendMessage(result, "x@agency.org", "https://a.test") });
+    const forExisting = JSON.stringify({ ok: true, emailed: result === "emailed", result, message: staffInviteSendMessage(result, "x@agency.org", "https://a.test") });
+    assert.equal(forNew, forExisting);
+  }
+  assert.equal(staffInviteSendMessage.length, 3, "no path parameter exists to vary the words");
+});
+
+test("B2: a new address's link lands on the answer page, and its email says nothing changes until they say yes", async () => {
+  const send = read("lib/staff-invite-send.ts");
+  assert.match(send, /mintInviteMagicLink\(send\.email, origin, STAFF_INVITE_TTL_DAYS, "\/dashboard\/invites"\)/);
+  const { buildStaffInviteEmail } = await import("../org-invite-email");
+  const mail = buildStaffInviteEmail({ inviteeName: "Lupe", inviterName: "Dana", orgName: "Southside Bridge (Demo)", roleLabel: "staff", url: "https://a.test/x", origin: "https://a.test", linkDays: 14, invitation: true });
+  assert.match(mail.subject, /invited you/);
+  assert.match(mail.text, /Nothing changes unless you say yes/);
+  assert.match(mail.text, /works for 14 days/);
+});
+
+test("B3: the cohort route refuses before reading anything, for JSON and CSV alike", () => {
+  const route = read("app/api/partner/cohort/route.ts");
+  const gate = route.indexOf("const allowed = await isPartnerUser(");
+  assert.ok(gate > 0 && gate < route.indexOf("getPartnerCohort(session.user.id") && gate < route.indexOf('searchParams.get("format") === "csv"'));
+  const core = readFileSync(join(CONSUMER, "..", "..", "packages", "core", "src", "partnerDashboard.ts"), "utf8");
+  assert.match(core, /FROM access_code WHERE partner_user_id = \$1 AND is_active = true`,\s*\[userId\]\s*\);\s*return Number/);
+  assert.match(core, /SELECT id FROM access_code WHERE partner_user_id = \$1 AND is_active = true`, \[userId\]\)/);
 });

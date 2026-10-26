@@ -145,6 +145,30 @@ test('migration 100: lifecycle stamps, staff invitations, accept, delete only wh
   const added = (await ins({ orgId: org, userId: platform, role: 'org_admin' }, otherOwner, { path: 'admin_added' }))[0] as { accepted_at: string | null };
   assert.ok(added.accepted_at, 'admin_added is accepted when written');
 
+  // ---- B2: a new address is an invitation only, accepted through the function --
+  const [shellA, shellB] = [10, 11].map(id);
+  for (const u of [shellA, shellB]) await q(`INSERT INTO users(id, email, name) VALUES ($1, $2, 'Shell')`, [u, `${u.slice(-4)}@agency.test`]);
+  const newA = ((await ins(OWN, shellA, { path: 'new_account', denies: volDenies }))[0] as { id: string }).id;
+  const newB = ((await ins(OWN, shellB, { path: 'new_account', denies: volDenies }))[0] as { id: string }).id;
+  const staffRow = async (u: string) => (await q(`SELECT role FROM org_staff WHERE access_code_id = $1 AND user_id = $2`, [org, u])).rows as { role: string }[];
+  assert.equal((await staffRow(shellA)).length + (await staffRow(shellB)).length, 0, 'inviting a new address writes no staff row');
+  await db.exec(`ALTER TABLE org_staff_invite DISABLE TRIGGER org_staff_invite_guard; UPDATE org_staff_invite SET expires_at = now() - interval '1 day' WHERE id = '${newA}'; ALTER TABLE org_staff_invite ENABLE TRIGGER org_staff_invite_guard;`);
+  await q(`UPDATE users SET "emailVerified" = now() WHERE id = $1`, [shellA]); // they sign in, 15 days later
+  assert.equal(await answer(shellA, newA, true), 'expired', 'an expired invitation cannot be accepted');
+  assert.equal((await staffRow(shellA)).length, 0, 'an expired invitation plus a sign-in grants no workspace');
+  assert.equal((await q(`SELECT count(*)::int AS n FROM org_capability_override WHERE org_id = $1 AND user_id = $2`, [org, shellA])).rows[0]?.n, 0);
+  assert.equal((await as({ orgId: org, userId: shellA, role: 'staff' }, `SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = $1 AND user_id = $2`, [org, shellA]))[0]?.n, 0);
+  assert.equal(await answer(shellB, newB, true), 'ok', 'within 14 days, the new address accepts');
+  assert.deepEqual((await staffRow(shellB)).map((r) => r.role), ['staff'], 'with the role it was invited to');
+  const newDenies = (await q(`SELECT capability FROM org_capability_override WHERE org_id = $1 AND user_id = $2 AND effect = 'deny' ORDER BY 1`, [org, shellB])).rows.map((r: unknown) => (r as { capability: string }).capability);
+  assert.deepEqual(newDenies, [...volDenies].sort(), 'and the volunteer restrictions stored on the invitation');
+
+  // ---- guard: revoked_by and the inviter of record ---------------------------
+  const inv5 = ((await ins(OWN, member))[0] as { id: string }).id;
+  assert.equal((await as(OWN, `UPDATE org_staff_invite SET send_count = send_count + 1, revoked_by = $2 WHERE id = $1 RETURNING revoked_by`, [inv5, other]))[0]?.revoked_by, null, 'revoked_by stays empty unless it is being revoked');
+  assert.ok(await refused(as(OWN, `UPDATE org_staff_invite SET invited_by = $2 WHERE id = $1 RETURNING id`, [inv5, other])), 'the inviter of record can only become the person acting');
+  assert.equal((await as(OWN, `UPDATE org_staff_invite SET invited_by = $2 WHERE id = $1 RETURNING invited_by`, [inv5, owner]))[0]?.invited_by, owner, 'the resender may take it over');
+
   // ---- audit: who, never the address ----------------------------------------
   const audit = (await q(`SELECT actor, row_summary::text AS s FROM org_audit WHERE table_name = 'org_staff_invite' AND org_id = $1`, [org])).rows as { actor: string; s: string }[];
   assert.ok(audit.length >= 5);
@@ -173,6 +197,10 @@ test('migration 100: lifecycle stamps, staff invitations, accept, delete only wh
   const del = (who: string, o: string, name: string) => one({ userId: who }, `SELECT smr_admin_delete_org($1::uuid, $2) AS r`, [o, name]);
   assert.equal(await del(owner, empty, 'Made By Mistake'), 'refused', 'only a platform admin deletes');
   assert.equal(await del(platform, empty, 'Made By Mistak'), 'name_mismatch');
+  const used = ((await q(`INSERT INTO access_code (code, partner_name, tier) VALUES ('PGLIFE04', 'Used Once', 'client') RETURNING id`)).rows[0] as { id: string }).id;
+  await q(`INSERT INTO partner_usage_event (code, endpoint) VALUES ('PGLIFE04', '/api/forge')`);
+  assert.deepEqual(await hist(platform, used), { partner_usage_event: 1 }, 'usage recorded against the code is history');
+  assert.equal(await del(platform, used, 'Used Once'), 'has_history');
   assert.equal(await del(platform, org, 'Southside Bridge (Demo)'), 'has_history', 'an organization with history is closed, never deleted');
   await q(`INSERT INTO access_code_redemption (user_id, access_code_id) VALUES ($1, $2)`, [member, orgB]);
   assert.equal(await del(platform, orgB, 'Other Program Renamed (Demo)'), 'has_history', 'one member is history');

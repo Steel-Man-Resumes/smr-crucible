@@ -26,8 +26,8 @@ interface Switch { capability: string; label: string; help: string }
 /** A staff invitation (migration 100): status derived on the server. */
 export interface StaffInviteView {
   id: string; email: string; name: string | null; role: "org_admin" | "staff"; title: string | null; volunteer: boolean;
-  /** new_account, existing_account, or admin_added (a platform admin attached an existing account directly). */
-  path?: "new_account" | "existing_account" | "admin_added";
+  /** A platform admin attached this person directly. The org never learns whether an address had an account. */
+  addedBySupport?: boolean;
   status: "pending" | "sent" | "accepted" | "expired" | "revoked" | "declined"; statusWords: string;
   sendCount: number; lastSentAt: string | null; expiresAt: string; invitedAt: string; invitedByName: string | null;
   undeliverable: boolean; canResend: boolean; canRevoke: boolean;
@@ -217,7 +217,7 @@ function InviteStaff({ canAddAdmin, onDone }: { canAddAdmin: boolean; onDone: ()
   return (
     <section className="bg-t-panel border border-t-line p-5">
       <h2 className="font-semibold text-t-white mb-1">Add someone to your team</h2>
-      <p className="text-xs text-t-phos-dim mb-4">They get an email from us. Someone new signs straight in; someone who already uses Steel Man Resumes signs in and says yes first. Invitations are open for 14 days. Staff start with their own caseload only; you can widen that for one person above.</p>
+      <p className="text-xs text-t-phos-dim mb-4">They get an email from us, sign in, and say yes before they join. Invitations are open for 14 days. Staff start with their own caseload only; you can widen that for one person above.</p>
       <div className="grid sm:grid-cols-2 gap-3">
         <div><label htmlFor="st-name" className="block text-xs text-t-phos-dim mb-1">Name</label><input id="st-name" className={input} value={name} onChange={(e) => setName(e.target.value)} /></div>
         <div><label htmlFor="st-email" className="block text-xs text-t-phos-dim mb-1">Work email</label><input id="st-email" type="email" className={input} value={email} onChange={(e) => setEmail(e.target.value)} /></div>
@@ -296,7 +296,7 @@ export function StaffInviteList({ invites, endpoint, extra, canRevokeAdmin, onCh
                 </p>
                 <p className="text-xs mt-1">
                   <span className={`px-1.5 py-0.5 border ${inv.status === "sent" || inv.status === "accepted" ? "border-t-line text-t-phos" : "border-t-amber text-t-amber-bright"}`}>{inv.statusWords}</span>
-                  {inv.path === "admin_added"
+                  {inv.addedBySupport
                     ? <span className="text-t-phos-dim"> · added directly by Steel Man support on {shortDay(inv.invitedAt)}</span>
                     : <span className="text-t-phos-dim"> · sent {inv.sendCount} {inv.sendCount === 1 ? "time" : "times"} · last sent {shortDay(inv.lastSentAt)}{inv.canRevoke ? ` · ${inv.status === "expired" ? "expired" : "open until"} ${shortDay(inv.expiresAt)}` : ""}</span>}
                 </p>

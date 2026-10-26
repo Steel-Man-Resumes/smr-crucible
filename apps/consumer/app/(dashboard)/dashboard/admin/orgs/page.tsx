@@ -198,7 +198,7 @@ function AddStaffForm({ org, busy, act }: {
   return (
     <div className="sm:col-span-2 border border-t-line p-3">
       <div className="text-t-phos-dim mb-1">Add staff (every change is recorded with your name)</div>
-      <p className="text-t-phos-dim mb-2">An account that already exists is added now and gets a short notice. A new address gets an account and a sign-in link that works for 14 days.</p>
+      <p className="text-t-phos-dim mb-2">An account that already exists is added now and gets a short notice. A new address gets an invitation: they sign in with the emailed link and say yes within 14 days.</p>
       <div className="grid sm:grid-cols-2 gap-2">
         <input className={input} placeholder="Name" aria-label="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <input className={input} type="email" placeholder="Email" aria-label="Email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />

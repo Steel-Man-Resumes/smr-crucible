@@ -838,28 +838,66 @@ async function accessChecks() {
   const overview = await core.getOrgAccessOverview(aOwner);
   const ownerScope = { orgId: org.id, userId: owner, role: "owner" };
   const listed = inv.ok ? (await core.listStaffInvites(ownerScope)).find((i) => i.id === inv.inviteId) : null;
-  // Migration 100: an invitee at a new address waits on the Invitations list
-  // (status, resend, revoke) and joins the chart when they first sign in, so
-  // the chart never shows which invitee already had an account.
-  check("the owner can invite someone to staff by email, and they show on the invitation list, not yet on the chart",
-    inv.ok && inv.path === "new_account" && !!listed && listed.status === "pending" && listed.title === "Employment Specialist"
-      && !overview?.some((m) => m.userId === inv.userId), JSON.stringify({ inv, listed }));
+  // Migration 100 + review B2: a new address is an invitation, nothing more,
+  // until the person signs in and says yes.
+  check("the owner can invite someone to staff by email: on the invitation list, not on the chart, no staff row yet",
+    inv.ok && !!listed && listed.status === "pending" && listed.title === "Employment Specialist" && !overview?.some((m) => m.userId === inv.userId)
+      && (await sql`SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${inv.userId}`)[0].n === 0,
+    JSON.stringify({ inv, listed }));
+  check("the organization-facing invitation carries no path and no account id", !!listed && !("path" in listed) && !("userId" in listed), JSON.stringify(listed));
+  check("a new address cannot reach the workspace before saying yes", (await core.resolveOrgActor(inv.userId)) === null);
+  const hireYes = await core.answerStaffInvite(inv.userId, inv.inviteId, true);
+  const aHireNow = await core.resolveOrgActor(inv.userId);
+  check("after yes, the new address is staff in this organization", hireYes.ok && aHireNow?.orgId === org.id && aHireNow?.role === "staff", JSON.stringify(hireYes));
+
   const vol = await core.inviteOrgStaff(aOwner, { name: "Volunteer", email: `${P}-a-vol-${uniq.toLowerCase()}@example.invalid`, role: "volunteer" });
   if (vol.ok) created.users.push(vol.userId);
+  if (vol.ok) await core.answerStaffInvite(vol.userId, vol.inviteId, true);
   const aVol = vol.ok ? await core.resolveOrgActor(vol.userId) : null;
-  check("a volunteer invite lands as staff who cannot invite participants or record placements, and sees only their caseload",
+  check("a volunteer invite, once accepted, is staff who cannot invite participants or record placements, and sees only their caseload",
     !!aVol && aVol.role === "staff" && !aVol.capabilities.has("org.participant.invite") && !aVol.capabilities.has("org.outcome.write") && aVol.reach === "assigned",
     JSON.stringify(vol));
   check("an admin cannot create another admin", (await core.inviteOrgStaff(aAdmin, { name: "X", email: `${P}-a-x-${uniq.toLowerCase()}@example.invalid`, role: "org_admin" })).ok === false);
+
+  // Review B2: an expired new-address invitation plus a later sign-in grants nothing.
+  const late = await core.inviteOrgStaff(aOwner, { name: "Late", email: `${P}-a-late-${uniq.toLowerCase()}@example.invalid`, role: "staff" });
+  if (late.ok) {
+    created.users.push(late.userId);
+    await sql`ALTER TABLE org_staff_invite DISABLE TRIGGER org_staff_invite_guard`;
+    await sql`UPDATE org_staff_invite SET expires_at = now() - interval '1 day' WHERE id = ${late.inviteId}`;
+    await sql`ALTER TABLE org_staff_invite ENABLE TRIGGER org_staff_invite_guard`;
+    await sql`UPDATE users SET "emailVerified" = now() WHERE id = ${late.userId}`; // they sign in after expiry
+    const lateYes = await core.answerStaffInvite(late.userId, late.inviteId, true);
+    check("an expired new-address invitation plus a sign-in gives no workspace and no data",
+      lateYes.result === "expired" && (await core.resolveOrgActor(late.userId)) === null && (await core.getOrgContext(late.userId)) === null
+        && (await sql`SELECT count(*)::int AS n FROM org_staff WHERE user_id = ${late.userId}`)[0].n === 0,
+      JSON.stringify(lateYes));
+  }
+
+  // Review B1: a new address and an existing account look the same to the owner.
+  const placesBefore = await core.staffPlaces(ownerScope);
   const [{ email: outsiderEmail }] = await sql`SELECT email FROM users WHERE id = ${outsider}`;
-  const asked = await core.inviteOrgStaff(aOwner, { name: "Outside Person", email: outsiderEmail, role: "staff" });
+  const asked = await core.inviteOrgStaff(aOwner, { name: "Same Shape", email: outsiderEmail, role: "staff" });
+  const placesMid = await core.staffPlaces(ownerScope);
+  const twinEmail = `${P}-a-twin-${uniq.toLowerCase()}@example.invalid`;
+  const twin = await core.inviteOrgStaff(aOwner, { name: "Same Shape", email: twinEmail, role: "staff" });
+  if (twin.ok) created.users.push(twin.userId);
+  const placesAfter = await core.staffPlaces(ownerScope);
+  const shape = (i) => { if (!i) return null; const { id, email: _e, invitedAt, lastSentAt, expiresAt, ...rest } = i; void id; void _e; void invitedAt; void lastSentAt; void expiresAt; return JSON.stringify(rest); };
+  const ownerList = await core.listStaffInvites(ownerScope);
+  const askedView = ownerList.find((i) => i.id === asked.inviteId), twinView = ownerList.find((i) => i.id === twin.inviteId);
+  check("the owner sees byte-identical invitations for an existing account and a new address (apart from ids, address and times)",
+    asked.ok && twin.ok && !!askedView && shape(askedView) === shape(twinView), `${shape(askedView)} vs ${shape(twinView)}`);
+  check("and the staff places move by one for each", placesMid.n === placesBefore.n + 1 && placesAfter.n === placesMid.n + 1, JSON.stringify([placesBefore, placesMid, placesAfter]));
+  const staffList = await core.getOrgStaff(org.id);
+  check("and neither appears on the team list before saying yes", !staffList.some((m) => m.userId === outsider || (twin.ok && m.userId === twin.userId)));
+  const again = await core.inviteOrgStaff(aOwner, { name: "Same Shape", email: outsiderEmail, role: "staff" });
+  const againTwin = twin.ok ? await core.inviteOrgStaff(aOwner, { name: "Same Shape", email: twinEmail, role: "staff" }) : null;
+  check("inviting again renews the one open invitation, the same way for both",
+    again.ok && again.renewed && again.inviteId === asked.inviteId && againTwin?.ok && againTwin.renewed && againTwin.inviteId === twin.inviteId, JSON.stringify({ again, againTwin }));
   const afterAsk = await core.getOrgAccessOverview(aOwner);
-  check("an address that already has an account is invited, never attached: nothing on the roster until they say yes",
-    asked.ok === true && asked.path === "existing_account" && !afterAsk.some((m) => m.userId === outsider), JSON.stringify(asked));
-  const [{ n: outsiderStaff }] = await sql`SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${outsider}`;
-  check("and no staff row exists for them yet", outsiderStaff === 0, `rows=${outsiderStaff}`);
-  const again = await core.inviteOrgStaff(aOwner, { name: "Outside Person", email: outsiderEmail, role: "staff" });
-  check("inviting the same account again renews the one open invitation", again.ok && again.renewed && again.inviteId === asked.inviteId, JSON.stringify(again));
+  check("an existing account is invited, never attached: nothing on the roster until they say yes",
+    !afterAsk.some((m) => m.userId === outsider) && (await sql`SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${outsider}`)[0].n === 0);
 
   // The invitee's side: their own invitation, answered through the definer function.
   const theirs = await core.myStaffInvites(outsider);
@@ -873,15 +911,12 @@ async function accessChecks() {
     yes.ok && yes.result === "ok" && aOutsider?.orgId === org.id && aOutsider?.role === "staff", JSON.stringify({ yes, role: aOutsider?.role }));
   check("an answered invitation stays answered", (await core.answerStaffInvite(outsider, asked.inviteId, false)).result === "answered");
 
-  // Revoke: a never-signed-in new account loses the staff row with the invitation.
-  if (vol.ok) {
-    const foreign = await core.revokeStaffInvite({ orgId: org.id, userId: cm, role: "staff" }, vol.inviteId).catch(() => ({ ok: false }));
-    // A case manager has no org.staff.manage; the route refuses them first. At
-    // the data layer the org scope is the only door, so prove the cross-org one:
+  // Revoke and cross-org, on the open twin invitation.
+  if (twin.ok) {
     const [{ id: otherOrg }] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active)
                                          VALUES (${"ISOINV" + uniq}, ${P + " invite other"}, 'client', ${outsider}, true) RETURNING id`;
     created.codes.push(otherOrg);
-    const cross = await core.revokeStaffInvite({ orgId: otherOrg, userId: outsider, role: "owner" }, vol.inviteId);
+    const cross = await core.revokeStaffInvite({ orgId: otherOrg, userId: outsider, role: "owner" }, twin.inviteId, { platformAdmin: false });
     check("another organization cannot revoke this organization's invitation", cross.ok === false, JSON.stringify(cross));
     check("another organization reads none of this organization's invitations", (await core.listStaffInvites({ orgId: otherOrg, userId: outsider, role: "owner" })).length === 0);
     const crossRead = await app.transaction([
@@ -890,13 +925,12 @@ async function accessChecks() {
     check("naming this organization's id while scoped to another returns nothing (RLS)", crossRead[2][0].n === 0, JSON.stringify(crossRead[2]));
     const forgedAccept = await app.transaction([
       app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${owner}, true)`,
-      app`UPDATE org_staff_invite SET accepted_at = now() WHERE id = ${vol.inviteId} RETURNING id`]).then(() => "updated", (e) => String(e?.message ?? e));
+      app`UPDATE org_staff_invite SET accepted_at = now() WHERE id = ${twin.inviteId} RETURNING id`]).then(() => "updated", (e) => String(e?.message ?? e));
     check("the app role cannot mark an invitation accepted, even in the org's own scope", forgedAccept !== "updated", forgedAccept);
-    void foreign;
-    const rev = await core.revokeStaffInvite(ownerScope, vol.inviteId);
-    const [{ n: volStaff }] = await sql`SELECT count(*)::int AS n FROM org_staff WHERE access_code_id = ${org.id} AND user_id = ${vol.userId}`;
-    check("revoking a new account's invitation removes the staff row its link would have opened", rev.ok && volStaff === 0 && (await core.resolveOrgActor(vol.userId)) === null, JSON.stringify(rev));
-    check("a revoked invitation cannot be revoked again", (await core.revokeStaffInvite(ownerScope, vol.inviteId)).ok === false);
+    const rev = await core.revokeStaffInvite(ownerScope, twin.inviteId, { platformAdmin: false });
+    const after = await core.answerStaffInvite(twin.userId, twin.inviteId, true);
+    check("a revoked invitation can no longer be accepted, and grants nothing", rev.ok && after.result === "revoked" && (await core.resolveOrgActor(twin.userId)) === null, JSON.stringify({ rev, after }));
+    check("a revoked invitation cannot be revoked again", (await core.revokeStaffInvite(ownerScope, twin.inviteId, { platformAdmin: false })).ok === false);
   }
   const [{ n: inviteAudit }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_staff_invite'`;
   const [{ n: leakedAddress }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_staff_invite' AND row_summary::text LIKE '%example.invalid%'`;
@@ -1428,6 +1462,13 @@ async function platformAdminChecks() {
   check("an empty organization has no history", JSON.stringify(await core.getOrgHistory(lifeOrg, boss)) === "{}");
   const member = await mkUser("life-member");
   await core.redeemAccessCode(member, "ISOLIFE" + lc);
+  // Review B3: a closed organization's owner no longer reads or exports its cohort.
+  check("the owner of an open organization is a partner with its cohort", (await core.isPartnerUser(nobody, "client")) === true
+    && (await core.getPartnerCohort(nobody)).totalJoined === 1);
+  await core.closeOrganization(lifeOrg, "Closed to check the cohort gate", boss);
+  check("after Close, its owner is not a partner (the cohort JSON and CSV routes refuse on this)", (await core.isPartnerUser(nobody, "client")) === false);
+  check("after Close, the owner's cohort read is empty", (await core.getPartnerCohort(nobody)).totalJoined === 0);
+  await core.reopenOrganization(lifeOrg, boss);
   const busy = await core.deleteEmptyOrganization(lifeOrg, `${P} lifecycle renamed`, boss);
   check("an organization with one member is never deleted, and the refusal says why", busy.ok === false && /1 member/.test(busy.error), JSON.stringify(busy));
   const [{ id: emptyOrg }] = await sql`INSERT INTO access_code (code, partner_name, tier, is_active)

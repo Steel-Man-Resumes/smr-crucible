@@ -6,17 +6,25 @@
  * organization's Team & access page and Admin > Organizations read the same
  * list (listStaffInvites) and act through the same functions.
  *
- * THREE PATHS (org_staff_invite.path):
- *   new_account       no account at that address: a shell account and the
- *                     org_staff row are made now (inviteOrgStaff in
- *                     orgAccess.ts), and the emailed link signs them in.
- *   existing_account  the address already has an account. Nothing is attached
- *                     until that person signs in and accepts
- *                     (smr_answer_staff_invite). The inviter gets the same
- *                     answer as for a new address, so this screen never tells
- *                     an organization whether an address has an account.
+ * THREE PATHS (org_staff_invite.path), never shown to an organization:
+ *   new_account       no account at that address: a shell account is made so
+ *                     the emailed sign-in link works, and nothing else. The
+ *                     link lands on /dashboard/invites and the person accepts.
+ *   existing_account  the address already has an account: the same, with a
+ *                     "sign in to answer" email instead of a sign-in link.
  *   admin_added       a platform admin attached an existing account directly
  *                     (adminAddStaff), from Admin > Organizations.
+ *
+ * NOBODY IS ON STAFF BEFORE SAYING YES (security review B2). The org_staff
+ * row and any volunteer restrictions are written only by
+ * smr_answer_staff_invite, which locks the organization and re-checks the
+ * inviter, the expiry and the staff places. An expired, revoked or declined
+ * invitation grants nothing, whatever the person does later.
+ *
+ * NOTHING HERE TELLS AN ORGANIZATION WHO HAS AN ACCOUNT (review B1). The
+ * organization-facing shape (StaffInvite) carries no path and no account id,
+ * and status, counts, staff places and answers are the same for a new
+ * address and an existing account.
  *
  * Status is DERIVED from the stamps (staffInviteStatus), never stored, so it
  * cannot drift: revoked, declined, accepted, expired, sent, or pending (saved,
@@ -77,18 +85,14 @@ export interface StaffInviteStamps {
   acceptedAt: string | Date | null;
   declinedAt: string | Date | null;
   revokedAt: string | Date | null;
-  /** The invitee's account has signed in at least once. */
-  signedIn: boolean;
 }
 
 /** Pure: the status a row shows. */
 export function staffInviteStatus(r: StaffInviteStamps, now: Date = new Date()): StaffInviteStatus {
   if (r.revokedAt) return "revoked";
   if (r.declinedAt) return "declined";
+  // Accepted only by saying yes, on every path: signing in is not a yes.
   if (r.acceptedAt) return "accepted";
-  // A new account accepts by signing in with the link: their staff row
-  // already exists, so the first sign-in is the yes.
-  if (r.path === "new_account" && r.signedIn) return "accepted";
   if (new Date(r.expiresAt).getTime() <= now.getTime()) return "expired";
   return r.sendCount > 0 ? "sent" : "pending";
 }
@@ -98,15 +102,21 @@ export function staffInviteIsOpen(status: StaffInviteStatus): boolean {
   return status === "pending" || status === "sent" || status === "expired";
 }
 
+/**
+ * One invitation as an ORGANIZATION (and the admin page) sees it. No path and
+ * no account id: those would tell the organization whether the address had
+ * an account. Only `addedBySupport`, which is a platform admin's act, not a
+ * fact about the person.
+ */
 export interface StaffInvite {
   id: string;
-  userId: string;
   email: string;
   name: string | null;
   role: "org_admin" | "staff";
   title: string | null;
-  path: StaffInvitePath;
-  /** Started without these (a preset such as volunteer). */
+  /** A platform admin attached this person directly (Admin > Organizations). */
+  addedBySupport: boolean;
+  /** Starts without these (a preset such as volunteer), applied at accept. */
   volunteer: boolean;
   invitedAt: string;
   invitedByName: string | null;
@@ -121,11 +131,20 @@ export interface StaffInvite {
   canRevoke: boolean;
 }
 
+/** Server-side only: the invitation with what the organization must not see. */
+interface StaffInviteRecord extends StaffInvite {
+  userId: string;
+  path: StaffInvitePath;
+  invitedBy: string | null;
+  /** Whoever invited can still invite at this role (owner, platform admin, or an org admin for a staff role). */
+  inviterCanInvite: boolean;
+}
+
 type InviteRow = {
   id: string; user_id: string; invited_email: string; invited_name: string | null; role: string; title: string | null;
-  path: StaffInvitePath; capability_denies: string[] | null; invited_at: string; invited_by_name: string | null;
+  path: StaffInvitePath; capability_denies: string[] | null; invited_at: string; invited_by: string | null; invited_by_name: string | null;
   send_count: number; last_sent_at: string | null; expires_at: string; accepted_at: string | null;
-  declined_at: string | null; revoked_at: string | null; signed_in: boolean;
+  declined_at: string | null; revoked_at: string | null; inviter_can_invite: boolean;
 };
 
 /**
@@ -134,31 +153,47 @@ type InviteRow = {
  */
 export const STAFF_INVITE_LIST_SQL = `
   SELECT i.id, i.user_id, i.invited_email, i.invited_name, i.role, i.title, i.path, i.capability_denies,
-         i.invited_at, inviter.name AS invited_by_name, i.send_count, i.last_sent_at, i.expires_at,
+         i.invited_at, i.invited_by, inviter.name AS invited_by_name, i.send_count, i.last_sent_at, i.expires_at,
          i.accepted_at, i.declined_at, i.revoked_at,
-         (u."emailVerified" IS NOT NULL OR u.password_hash IS NOT NULL
-            OR EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)) AS signed_in
+         (i.invited_by IS NOT NULL AND (
+              EXISTS (SELECT 1 FROM access_code ac WHERE ac.id = i.access_code_id AND ac.partner_user_id = i.invited_by)
+           OR EXISTS (SELECT 1 FROM platform_admin pa WHERE pa.user_id = i.invited_by)
+           OR (i.role <> 'org_admin' AND EXISTS (SELECT 1 FROM org_staff s WHERE s.access_code_id = i.access_code_id
+                                                    AND s.user_id = i.invited_by AND s.role = 'org_admin')))) AS inviter_can_invite
     FROM org_staff_invite i
-    JOIN users u ON u.id = i.user_id
     LEFT JOIN users inviter ON inviter.id = i.invited_by
    WHERE i.access_code_id = $1::uuid
    ORDER BY (i.accepted_at IS NULL AND i.declined_at IS NULL AND i.revoked_at IS NULL) DESC, i.invited_at DESC
    LIMIT 200`;
 
-function toInvite(r: InviteRow, now: Date): StaffInvite {
+function toRecord(r: InviteRow, now: Date): StaffInviteRecord {
   const status = staffInviteStatus({
     path: r.path, sendCount: Number(r.send_count) || 0, expiresAt: r.expires_at,
-    acceptedAt: r.accepted_at, declinedAt: r.declined_at, revokedAt: r.revoked_at, signedIn: !!r.signed_in,
+    acceptedAt: r.accepted_at, declinedAt: r.declined_at, revokedAt: r.revoked_at,
   }, now);
   const open = staffInviteIsOpen(status);
   return {
-    id: r.id, userId: r.user_id, email: r.invited_email, name: r.invited_name,
-    role: r.role === "org_admin" ? "org_admin" : "staff", title: r.title, path: r.path,
+    id: r.id, email: r.invited_email, name: r.invited_name,
+    role: r.role === "org_admin" ? "org_admin" : "staff", title: r.title, addedBySupport: r.path === "admin_added",
     volunteer: (r.capability_denies ?? []).length > 0,
     invitedAt: r.invited_at, invitedByName: r.invited_by_name, sendCount: Number(r.send_count) || 0,
     lastSentAt: r.last_sent_at, expiresAt: r.expires_at, status, statusWords: STAFF_INVITE_STATUS_WORDS[status],
     undeliverable: isUndeliverableEmail(r.invited_email),
-    canResend: open, canRevoke: open,
+    canResend: open && r.path !== "admin_added", canRevoke: open,
+    userId: r.user_id, path: r.path, invitedBy: r.invited_by, inviterCanInvite: !!r.inviter_can_invite,
+  };
+}
+
+/**
+ * Pure: the organization-facing shape, built field by field (never by
+ * spreading the record), so a field added to the record later cannot leak.
+ */
+export function orgFacingInvite(r: StaffInvite): StaffInvite {
+  return {
+    id: r.id, email: r.email, name: r.name, role: r.role, title: r.title, addedBySupport: r.addedBySupport,
+    volunteer: r.volunteer, invitedAt: r.invitedAt, invitedByName: r.invitedByName, sendCount: r.sendCount,
+    lastSentAt: r.lastSentAt, expiresAt: r.expiresAt, status: r.status, statusWords: r.statusWords,
+    undeliverable: r.undeliverable, canResend: r.canResend, canRevoke: r.canRevoke,
   };
 }
 
@@ -167,15 +202,15 @@ const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
 /** Every staff invitation of one organization, newest open first. */
 export async function listStaffInvites(scope: OrgScope, now: Date = new Date()): Promise<StaffInvite[]> {
   const [rows] = await runScoped<[InviteRow[]]>(scope, (sql) => [run(sql)(STAFF_INVITE_LIST_SQL, [scope.orgId])]);
-  return (rows ?? []).map((r) => toInvite(r, now));
+  return (rows ?? []).map((r) => orgFacingInvite(toRecord(r, now)));
 }
 
-/** One invitation of this organization, or null. */
-export async function getStaffInvite(scope: OrgScope, inviteId: string, now: Date = new Date()): Promise<StaffInvite | null> {
+/** One invitation of this organization, server-side only (never returned to a client as is). */
+async function getStaffInviteRecord(scope: OrgScope, inviteId: string, now: Date = new Date()): Promise<StaffInviteRecord | null> {
   const [rows] = await runScoped<[InviteRow[]]>(scope, (sql) => [
     run(sql)(STAFF_INVITE_LIST_SQL.replace("WHERE i.access_code_id = $1::uuid", "WHERE i.access_code_id = $1::uuid AND i.id = $2::uuid"), [scope.orgId, inviteId]),
   ]);
-  return rows?.[0] ? toInvite(rows[0], now) : null;
+  return rows?.[0] ? toRecord(rows[0], now) : null;
 }
 
 /**
@@ -201,54 +236,54 @@ export async function markStaffInviteSent(scope: OrgScope, inviteId: string, sen
 
 export type StaffInviteActionResult = { ok: true } | { ok: false; error: string };
 
-/** Who may close an admin's invitation: the owner, or a platform admin. */
-async function actorOwnsOrIsPlatformAdmin(orgId: string, actorUserId: string): Promise<boolean> {
+/**
+ * Who may act on an admin's invitation: the owner, or (only when the caller
+ * is the platform-admin route, which has checked the second factor) a
+ * platform admin. The organization's own routes pass platformAdmin: false, so
+ * a platform admin without two-step, acting as an org admin there, is just
+ * an org admin (security review should-fix 2).
+ */
+async function actorMayActOnAdminInvite(orgId: string, actorUserId: string, platformAdmin: boolean): Promise<boolean> {
   const row = await getOne<{ ok: boolean }>(
     `SELECT (EXISTS (SELECT 1 FROM access_code a WHERE a.id = $1::uuid AND a.partner_user_id = $2::uuid)
-             OR EXISTS (SELECT 1 FROM platform_admin pa WHERE pa.user_id = $2::uuid)) AS ok`,
-    [orgId, actorUserId]
+             OR ($3::boolean AND EXISTS (SELECT 1 FROM platform_admin pa WHERE pa.user_id = $2::uuid))) AS ok`,
+    [orgId, actorUserId, platformAdmin]
   );
   return !!row?.ok;
 }
 
+/** How a caller reached these functions. */
+export interface StaffInviteCaller {
+  /** True only from /api/admin/orgs (requirePlatformAdmin: platform_admin row and a second-factor session). */
+  platformAdmin: boolean;
+}
+
 /**
- * Revoke an open invitation. For a new account that has never signed in, the
- * staff row made at invite time goes too, so the link can no longer open the
- * workspace. The account itself stays (as a participant revoke leaves it).
- * Both writes are one transaction, and the staff row is removed only when
- * this very statement closed the invitation.
+ * Revoke an open invitation. Nothing else to undo: nobody is on staff before
+ * saying yes, so a revoked invitation simply can no longer be accepted. The
+ * shell account (for a new address) stays, as a participant revoke leaves it.
  */
-export async function revokeStaffInvite(scope: OrgScope, inviteId: string): Promise<StaffInviteActionResult> {
-  const inv = await getStaffInvite(scope, inviteId);
+export async function revokeStaffInvite(scope: OrgScope, inviteId: string, caller: StaffInviteCaller): Promise<StaffInviteActionResult> {
+  const inv = await getStaffInviteRecord(scope, inviteId);
   if (!inv) return { ok: false, error: "That invitation was not found." };
   if (!inv.canRevoke) return { ok: false, error: `That invitation is already ${inv.statusWords.toLowerCase()}. Nothing changed.` };
-  if (inv.role === "org_admin" && !(await actorOwnsOrIsPlatformAdmin(scope.orgId, scope.userId))) {
+  if (inv.role === "org_admin" && !(await actorMayActOnAdminInvite(scope.orgId, scope.userId, caller.platformAdmin))) {
     return { ok: false, error: "Only the owner can revoke an admin's invitation." };
   }
-  const [revoked] = await runScoped<[{ id: string; user_id: string; path: string }[], unknown]>(scope, (sql) => [
+  const [revoked] = await runScoped<[{ id: string }[]]>(scope, (sql) => [
     run(sql)(
       `UPDATE org_staff_invite SET revoked_at = now()
         WHERE id = $1::uuid AND access_code_id = $2::uuid
           AND accepted_at IS NULL AND declined_at IS NULL AND revoked_at IS NULL
-        RETURNING id, user_id, path`,
+        RETURNING id`,
       [inviteId, scope.orgId]
     ),
-    run(sql)(
-      `DELETE FROM org_staff os
-        USING org_staff_invite i, users u
-        WHERE i.id = $1::uuid AND i.access_code_id = $2::uuid AND i.revoked_at IS NOT NULL
-          AND i.path = 'new_account'
-          AND os.access_code_id = i.access_code_id AND os.user_id = i.user_id
-          AND u.id = i.user_id AND u."emailVerified" IS NULL AND u.password_hash IS NULL
-          AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)`,
-      [inviteId, scope.orgId]
-    ),
-  ]);
+  ]).catch(() => [[]] as [{ id: string }[]]);
   if (!revoked?.[0]) return { ok: false, error: "That invitation did not change. Reload and try again." };
   return { ok: true };
 }
 
-/** What a route needs to send (or resend) one invitation's email. */
+/** What a route needs to send (or resend) one invitation's email. Server-side only. */
 export interface StaffInviteSend {
   inviteId: string;
   userId: string;
@@ -260,14 +295,40 @@ export interface StaffInviteSend {
   undeliverable: boolean;
 }
 
-/** Check an invitation can be resent, and return what the email needs. */
-export async function prepareStaffInviteResend(scope: OrgScope, inviteId: string): Promise<{ ok: true; send: StaffInviteSend } | { ok: false; error: string }> {
-  const inv = await getStaffInvite(scope, inviteId);
+/**
+ * Check an invitation can be resent, and return what the email needs. If
+ * whoever sent it can no longer invite (they left, or lost the admin role),
+ * the person resending becomes the inviter of record, so the invitation can
+ * still be accepted (smr_answer_staff_invite re-checks the inviter), and the
+ * screen says so. An admin-role invitation can only be taken over by the
+ * owner (or a platform admin on the admin route).
+ */
+export async function prepareStaffInviteResend(scope: OrgScope, inviteId: string, caller: StaffInviteCaller):
+  Promise<{ ok: true; send: StaffInviteSend; restamped: boolean } | { ok: false; error: string }> {
+  const inv = await getStaffInviteRecord(scope, inviteId);
   if (!inv) return { ok: false, error: "That invitation was not found." };
-  if (!inv.canResend) return { ok: false, error: `That invitation is already ${inv.statusWords.toLowerCase()}. Nothing was sent.` };
+  if (!inv.canRevoke) return { ok: false, error: `That invitation is already ${inv.statusWords.toLowerCase()}. Nothing was sent.` };
   if (inv.path === "admin_added") return { ok: false, error: "That person was added directly. There is nothing to resend." };
+  if (inv.role === "org_admin" && !(await actorMayActOnAdminInvite(scope.orgId, scope.userId, caller.platformAdmin))) {
+    return { ok: false, error: "Only the owner can resend an admin's invitation." };
+  }
+  let restamped = false;
+  if (!inv.inviterCanInvite && inv.invitedBy !== scope.userId) {
+    const [rows] = await runScoped<[{ id: string }[]]>(scope, (sql) => [
+      run(sql)(
+        `UPDATE org_staff_invite SET invited_by = $3::uuid
+          WHERE id = $1::uuid AND access_code_id = $2::uuid
+            AND accepted_at IS NULL AND declined_at IS NULL AND revoked_at IS NULL
+          RETURNING id`,
+        [inviteId, scope.orgId, scope.userId]
+      ),
+    ]).catch(() => [[]] as [{ id: string }[]]);
+    if (!rows?.[0]) return { ok: false, error: "The person who sent this can no longer add staff, and it could not be moved to you. Revoke it and send a new one." };
+    restamped = true;
+  }
   return {
     ok: true,
+    restamped,
     send: { inviteId: inv.id, userId: inv.userId, email: inv.email, name: inv.name, role: inv.role, volunteer: inv.volunteer, path: inv.path, undeliverable: inv.undeliverable },
   };
 }
@@ -300,11 +361,16 @@ export function inviteDeniesFor(preset: StaffPreset | null): string[] {
   return presetOverrideWrites(preset).filter((w) => w.effect === "deny").map((w) => w.capability);
 }
 
-/** SQL: the number of staff places taken: staff rows plus open invitations to existing accounts (their row comes at accept). */
+/**
+ * SQL: staff places taken = staff rows plus open, unexpired invitations.
+ * Every invitation, new address or existing account, holds one place until it
+ * is answered, revoked or expires, so the number moves the same way for both
+ * (security review B1).
+ */
 export const STAFF_PLACES_SQL = `
   SELECT (SELECT COUNT(*)::int FROM org_staff WHERE access_code_id = $1::uuid)
        + (SELECT COUNT(*)::int FROM org_staff_invite i
-           WHERE i.access_code_id = $1::uuid AND i.path = 'existing_account'
+           WHERE i.access_code_id = $1::uuid AND i.path IN ('new_account', 'existing_account')
              AND i.accepted_at IS NULL AND i.declined_at IS NULL AND i.revoked_at IS NULL AND i.expires_at > now()) AS n,
          (SELECT max_staff FROM access_code WHERE id = $1::uuid) AS max,
          (SELECT is_active FROM access_code WHERE id = $1::uuid) AS active`;
@@ -328,15 +394,17 @@ export async function inviteExistingAccount(scope: OrgScope, input: {
   /** Set when every staff place is taken: a new invitation is refused with it (an open one is still renewed). */
   fullReason?: string | null;
 }): Promise<InviteOutcome> {
-  const [open] = await runScoped<[{ id: string }[]]>(scope, (sql) => [
+  const [open] = await runScoped<[{ id: string; path: StaffInvitePath }[]]>(scope, (sql) => [
     run(sql)(
-      `SELECT id FROM org_staff_invite WHERE access_code_id = $1::uuid AND user_id = $2::uuid
+      `SELECT id, path FROM org_staff_invite WHERE access_code_id = $1::uuid AND user_id = $2::uuid
           AND accepted_at IS NULL AND declined_at IS NULL AND revoked_at IS NULL`,
       [scope.orgId, input.userId]
     ),
   ]);
   if (open?.[0]) {
-    return { ok: true, inviteId: open[0].id, userId: input.userId, email: input.email, name: input.name, path: "existing_account", undeliverable: isUndeliverableEmail(input.email), renewed: true };
+    // Pressing Send again renews the one open invitation (new address or not):
+    // the route resends it with the email its path needs. Same answer either way.
+    return { ok: true, inviteId: open[0].id, userId: input.userId, email: input.email, name: input.name, path: open[0].path, undeliverable: isUndeliverableEmail(input.email), renewed: true };
   }
   if (input.fullReason) return { ok: false, error: input.fullReason };
   try {
@@ -430,10 +498,11 @@ export async function adminAddStaff(orgId: string, adminUserId: string, raw: { n
 }
 
 /**
- * A new address: a shell account, the staff row (with a preset's restrictions
- * in the same transaction) and the invitation row. Shared by the owner path
- * (inviteOrgStaff) and the admin path. The preset needs an owner or admin
- * actor (smr_set_capability_override), so the admin path never passes one.
+ * A new address: a shell account (so the emailed sign-in link works) and the
+ * invitation row. NO staff row and NO capability writes: the person accepts
+ * on /dashboard/invites, and smr_answer_staff_invite writes the staff row
+ * with the preset's restrictions (capability_denies) in one transaction
+ * (security review B2). Shared by the owner path and the admin path.
  */
 export async function createNewAccountInvite(scope: OrgScope, input: {
   name: string; email: string; role: "org_admin" | "staff"; title: string | null; preset: StaffPreset | null;
@@ -444,45 +513,21 @@ export async function createNewAccountInvite(scope: OrgScope, input: {
   );
   if (!made[0]) return { ok: false, error: "The invitation was not saved. Try again." };
   const userId = made[0].id;
-  const writes = input.preset ? presetOverrideWrites(input.preset) : [];
-  const denies = inviteDeniesFor(input.preset);
   try {
-    const out = await runScoped<[{ id: string }[], { id: string }[], ...{ r: string }[][]]>(scope, (sql) => [
-      run(sql)(
-        `INSERT INTO org_staff (access_code_id, user_id, role, title, created_by, invited_at, invited_email)
-         SELECT $1::uuid, $2::uuid, $3, $4, $5::uuid, now(), $6
-          WHERE EXISTS (SELECT 1 FROM access_code WHERE id = $1::uuid AND is_active = true)
-            AND (SELECT COUNT(*) FROM org_staff os_c WHERE os_c.access_code_id = $1::uuid) < (SELECT ac_c.max_staff FROM access_code ac_c WHERE ac_c.id = $1::uuid)
-         RETURNING id`,
-        [scope.orgId, userId, input.role, input.title, scope.userId, input.email]
-      ),
+    const [rows] = await runScoped<[{ id: string }[]]>(scope, (sql) => [
       run(sql)(
         `INSERT INTO org_staff_invite (access_code_id, user_id, invited_email, invited_name, role, title, capability_denies, path, send_count)
          SELECT $1::uuid, $2::uuid, $3, $4, $5, $6, $7::text[], 'new_account', 0
-          WHERE EXISTS (SELECT 1 FROM org_staff WHERE access_code_id = $1::uuid AND user_id = $2::uuid)
+          WHERE EXISTS (SELECT 1 FROM access_code WHERE id = $1::uuid AND is_active = true)
          RETURNING id`,
-        [scope.orgId, userId, input.email, input.name, input.role, input.title, denies]
+        [scope.orgId, userId, input.email, input.name, input.role, input.title, inviteDeniesFor(input.preset)]
       ),
-      ...writes.map((w) => sql`SELECT smr_set_capability_override(${userId}::uuid, ${w.capability}, ${w.effect}) AS r`),
     ]);
-    const staffRow = out[0]?.[0];
-    const inviteRow = out[1]?.[0];
-    const presetFailed = writes.length > 0 && out.slice(2).some((r) => (r as { r: string }[])?.[0]?.r !== "ok");
-    if (staffRow && presetFailed) {
-      // Never leave a volunteer with staff powers: take the rows back out.
-      await runScoped(scope, (sql) => [
-        run(sql)(`UPDATE org_staff_invite SET revoked_at = now() WHERE id = $1::uuid`, [inviteRow?.id ?? "00000000-0000-0000-0000-000000000000"]),
-        run(sql)(`DELETE FROM org_staff WHERE access_code_id = $1::uuid AND user_id = $2::uuid`, [scope.orgId, userId]),
-      ]).catch(() => {});
-      await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {});
-      return { ok: false, error: "Could not add them with volunteer settings. Nothing was saved." };
-    }
-    if (!staffRow || !inviteRow) {
-      if (staffRow) await runScoped(scope, (sql) => [run(sql)(`DELETE FROM org_staff WHERE access_code_id = $1::uuid AND user_id = $2::uuid`, [scope.orgId, userId])]).catch(() => {});
+    if (!rows?.[0]) {
       await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {}); // just created here, safe to remove
-      return { ok: false, error: "They were not added. The organization may be full or closed. Nothing was saved." };
+      return { ok: false, error: "That organization is closed. Nothing was saved." };
     }
-    return { ok: true, inviteId: inviteRow.id, userId, email: input.email, name: input.name, path: "new_account", undeliverable: isUndeliverableEmail(input.email), renewed: false };
+    return { ok: true, inviteId: rows[0].id, userId, email: input.email, name: input.name, path: "new_account", undeliverable: isUndeliverableEmail(input.email), renewed: false };
   } catch (err) {
     console.error("staff invite (new account) failed:", (err as Error)?.message || err);
     await query(`DELETE FROM users WHERE id = $1`, [userId]).catch(() => {});
@@ -513,7 +558,7 @@ export async function myStaffInvites(userId: string, now: Date = new Date()): Pr
          FROM org_staff_invite i
          JOIN access_code ac ON ac.id = i.access_code_id
          LEFT JOIN users inviter ON inviter.id = i.invited_by
-        WHERE i.user_id = $1::uuid AND i.path = 'existing_account'
+        WHERE i.user_id = $1::uuid AND i.path IN ('new_account', 'existing_account')
           AND i.accepted_at IS NULL AND i.declined_at IS NULL AND i.revoked_at IS NULL
         ORDER BY i.invited_at DESC LIMIT 20`,
       [userId]

@@ -90,11 +90,15 @@ export interface PartnerCohort {
   };
 }
 
-/** A monitoring partner owns >=1 access code; admins see every cohort. */
+/**
+ * A monitoring partner owns >=1 OPEN access code; admins see every cohort.
+ * A closed organization's owner keeps their account but not its people
+ * (migration 100, security review B3): same rule as getOrgContext.
+ */
 export async function isPartnerUser(userId: string, tier?: string): Promise<boolean> {
   if (tier === "admin") return true;
   const row = await getOne<{ n: string }>(
-    `SELECT COUNT(*)::text AS n FROM access_code WHERE partner_user_id = $1`,
+    `SELECT COUNT(*)::text AS n FROM access_code WHERE partner_user_id = $1 AND is_active = true`,
     [userId]
   );
   return Number(row?.n ?? 0) > 0;
@@ -127,7 +131,8 @@ export async function getPartnerCohort(
   } else {
     const codes = opts.isAdmin
       ? await query<{ id: string }>(`SELECT id FROM access_code`)
-      : await query<{ id: string }>(`SELECT id FROM access_code WHERE partner_user_id = $1`, [userId]);
+      // Owned AND open: a closed organization's cohort is not read or exported (review B3).
+      : await query<{ id: string }>(`SELECT id FROM access_code WHERE partner_user_id = $1 AND is_active = true`, [userId]);
     codeIds = codes.map((c) => c.id);
   }
 

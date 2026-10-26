@@ -236,8 +236,8 @@ export async function POST(request: Request) {
     });
     const what = res.path === "admin_added"
       ? `${res.email} already had an account and is now on the team.`
-      : `${res.email} was new to Steel Man, so an account was made and they are on the team once they sign in.`;
-    const mail = sent === "emailed" ? (res.path === "admin_added" ? " A short notice was emailed." : " A sign-in link was emailed.")
+      : `${res.email} was invited. They join the team when they sign in and say yes, within 14 days.`;
+    const mail = sent === "emailed" ? (res.path === "admin_added" ? " A short notice was emailed." : " The invitation was emailed.")
       : sent === "undeliverable" ? ` ${UNDELIVERABLE_LINE}`
       : " The email did not send; use Resend below.";
     return NextResponse.json({ ok: true, path: res.path, result: sent, message: what + mail });
@@ -247,15 +247,16 @@ export async function POST(request: Request) {
     if (!UUID.test(inviteId)) return NextResponse.json({ error: "That invitation was not found." }, { status: 404 });
     const scope = adminScope(orgId, guard.userId);
     if (action === "revoke_invite") {
-      const res = await revokeStaffInvite(scope, inviteId);
+      // platformAdmin: true. requirePlatformAdmin above checked the second factor.
+      const res = await revokeStaffInvite(scope, inviteId, { platformAdmin: true });
       return res.ok ? NextResponse.json({ ok: true, message: "Invitation revoked." }) : NextResponse.json({ error: res.error }, { status: 400 });
     }
-    const prep = await prepareStaffInviteResend(scope, inviteId);
+    const prep = await prepareStaffInviteResend(scope, inviteId, { platformAdmin: true });
     if (!prep.ok) return NextResponse.json({ error: prep.error }, { status: 400 });
     const org = await getOne<{ partner_name: string }>(`SELECT partner_name FROM access_code WHERE id = $1`, [orgId]);
     const origin = new URL(request.url).origin;
     const sent = await sendStaffInviteEmail({ scope, send: prep.send, origin, orgName: org?.partner_name ?? "your organization", inviterUserId: guard.userId });
-    const message = staffInviteSendMessage(sent, prep.send.email, origin);
+    const message = (prep.restamped ? "The person who first sent this can no longer add staff, so you are now its sender. " : "") + staffInviteSendMessage(sent, prep.send.email, origin);
     return sent === "failed" ? NextResponse.json({ error: message }, { status: 502 }) : NextResponse.json({ ok: true, result: sent, message });
   }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });

@@ -33,7 +33,9 @@ function sha256Hex(message: string): string {
 export async function mintInviteMagicLink(
   email: string,
   origin: string,
-  ttlDays: number = INVITE_TTL_DAYS
+  ttlDays: number = INVITE_TTL_DAYS,
+  /** Where the link lands after sign-in (a path on this site). Staff invitations land on /dashboard/invites. */
+  landingPath: string = "/dashboard"
 ): Promise<string> {
   const days = Number.isInteger(ttlDays) && ttlDays >= 1 && ttlDays <= 14 ? ttlDays : INVITE_TTL_DAYS;
   const secret = process.env.AUTH_SECRET;
@@ -45,7 +47,7 @@ export async function mintInviteMagicLink(
     [email, sha256Hex(`${raw}${secret}`), String(days)]
   );
   const params = new URLSearchParams({
-    callbackUrl: `${origin}/dashboard`,
+    callbackUrl: `${origin}${/^\/dashboard(\/[a-z-]+)?$/.test(landingPath) ? landingPath : "/dashboard"}`,
     token: raw,
     email,
   });
@@ -135,16 +137,24 @@ export function buildStaffInviteEmail(opts: {
   origin: string;
   /** How long the link works. Default 7 (the participant invite's length). */
   linkDays?: number;
+  /** A staff invitation the person still has to accept (migration 100), not an owner being set. */
+  invitation?: boolean;
 }): EmailContent {
   const hello = firstName(opts.inviteeName);
   const inviter = opts.inviterName || opts.orgName;
   const linkDays = opts.linkDays ?? INVITE_TTL_DAYS;
   const loginUrl = `${opts.origin}/login`;
-  const subject = `${opts.orgName} added you to their team on Steel Man Resumes`;
-  const body =
-    `${inviter} added you to the ${opts.orgName} team as ${opts.roleLabel}. ` +
-    `This is where your organization works with the people it serves: your caseload, ` +
-    `your case notes, and anything a participant chooses to share with you.`;
+  const subject = opts.invitation
+    ? `${opts.orgName} invited you to their team on Steel Man Resumes`
+    : `${opts.orgName} added you to their team on Steel Man Resumes`;
+  const body = opts.invitation
+    ? `${inviter} invited you to join the ${opts.orgName} team as ${opts.roleLabel}. ` +
+      `The link opens your account; then you say yes or no. Nothing changes unless you say yes. ` +
+      `On the team you work with the people your organization serves: your caseload, ` +
+      `your case notes, and anything a participant chooses to share with you.`
+    : `${inviter} added you to the ${opts.orgName} team as ${opts.roleLabel}. ` +
+      `This is where your organization works with the people it serves: your caseload, ` +
+      `your case notes, and anything a participant chooses to share with you.`;
   const privacy =
     `One thing to know before you start: participants decide what you can see, one item at a time, ` +
     `and they can see each time you open something they shared.`;

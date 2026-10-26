@@ -20,6 +20,7 @@ import {
   STAFF_PLACES_SQL,
   STAFF_INVITE_LIST_SQL,
   ANSWER_WORDS,
+  orgFacingInvite,
   UNDELIVERABLE_LINE,
 } from "../staffInvites";
 import {
@@ -35,7 +36,7 @@ import { RLS_PROTECTED_TABLES } from "../rlsHealth";
 const SRC = (f: string) => readFileSync(new URL(`../${f}`, import.meta.url), "utf8");
 const MIGRATION = readFileSync(new URL("../../migrations/100_org_lifecycle_invites.sql", import.meta.url), "utf8");
 const NOW = new Date("2026-10-26T12:00:00Z");
-const base = { path: "existing_account" as const, sendCount: 1, expiresAt: "2026-11-09T12:00:00Z", acceptedAt: null, declinedAt: null, revokedAt: null, signedIn: true };
+const base = { path: "existing_account" as const, sendCount: 1, expiresAt: "2026-11-09T12:00:00Z", acceptedAt: null, declinedAt: null, revokedAt: null };
 
 describe("staff invitation status", () => {
   it("is derived from the stamps, endings first", () => {
@@ -46,10 +47,22 @@ describe("staff invitation status", () => {
     assert.equal(staffInviteStatus(base, NOW), "sent");
     assert.equal(staffInviteStatus({ ...base, sendCount: 0 }, NOW), "pending");
   });
-  it("a new account accepts by signing in; an existing account only by saying yes", () => {
-    assert.equal(staffInviteStatus({ ...base, path: "new_account", signedIn: true }, NOW), "accepted");
-    assert.equal(staffInviteStatus({ ...base, path: "new_account", signedIn: false }, NOW), "sent");
-    assert.equal(staffInviteStatus({ ...base, path: "existing_account", signedIn: true }, NOW), "sent", "having an account is not a yes");
+  it("every path is accepted only by saying yes; status never depends on whether an account existed (B1, B2)", () => {
+    for (const path of ["new_account", "existing_account"] as const) {
+      assert.equal(staffInviteStatus({ ...base, path }, NOW), "sent", path);
+      assert.equal(staffInviteStatus({ ...base, path, acceptedAt: "2026-10-25" }, NOW), "accepted", path);
+    }
+  });
+  it("the organization-facing invitation has no path and no account id, and is identical for both paths", () => {
+    const rec = {
+      id: "i", email: "a@agency.org", name: "A", role: "staff" as const, title: null, addedBySupport: false, volunteer: false,
+      invitedAt: "t", invitedByName: null, sendCount: 1, lastSentAt: "t", expiresAt: "t", status: "sent" as const, statusWords: "Sent, waiting for them",
+      undeliverable: false, canResend: true, canRevoke: true,
+    };
+    const fromNew = orgFacingInvite({ ...rec, userId: "u1", path: "new_account", invitedBy: "x" } as never);
+    const fromExisting = orgFacingInvite({ ...rec, userId: "u2", path: "existing_account", invitedBy: "y" } as never);
+    assert.equal(JSON.stringify(fromNew), JSON.stringify(fromExisting));
+    for (const k of ["path", "userId", "invitedBy", "inviterCanInvite"]) assert.ok(!(k in fromNew), k);
   });
   it("only open ones (pending, sent, expired) can be resent or revoked", () => {
     assert.deepEqual((["pending", "sent", "expired", "accepted", "declined", "revoked"] as const).map(staffInviteIsOpen), [true, true, true, false, false, false]);
@@ -107,22 +120,41 @@ describe("the owner path no longer dead-ends on an existing account", () => {
     // The cap refusal is the same words on both paths.
     assert.equal((fn.match(/staffCapReason\(places\.n, places\.max\)/g) ?? []).length, 2);
   });
-  it("the chart hides a new-account invitee until they sign in, so it never shows who already had an account", () => {
-    assert.match(access, /AND NOT \(u\."emailVerified" IS NULL[\s\S]*?i\.path = 'new_account' AND i\.revoked_at IS NULL\)\)/);
+  it("B2: a new address gets no staff row and no capability writes at invite time; acceptance writes them", () => {
+    const inv = SRC("staffInvites.ts");
+    const fn = inv.slice(inv.indexOf("export async function createNewAccountInvite"), inv.indexOf("/** The scope a resolved actor writes under. */"));
+    assert.doesNotMatch(fn, /INSERT INTO org_staff \(|smr_set_capability_override/);
+    assert.match(fn, /'new_account', 0/);
+    assert.match(fn, /inviteDeniesFor\(input\.preset\)/, "volunteer restrictions are stored on the invitation, applied at accept");
+    assert.match(inv, /WHERE i\.user_id = \$1::uuid AND i\.path IN \('new_account', 'existing_account'\)/, "both paths answer on /dashboard/invites");
   });
-  it("staff places count open invitations to existing accounts, which get their row at accept", () => {
+  it("B1: staff places count every open invitation the same way, new address or existing account", () => {
     assert.match(STAFF_PLACES_SQL, /FROM org_staff WHERE access_code_id = \$1::uuid/);
-    assert.match(STAFF_PLACES_SQL, /i\.path = 'existing_account'[\s\S]*expires_at > now\(\)/);
+    assert.match(STAFF_PLACES_SQL, /i\.path IN \('new_account', 'existing_account'\)[\s\S]*expires_at > now\(\)/);
+  });
+  it("B1: pressing Send again renews the one open invitation and keeps its real path for the email", () => {
+    const inv = SRC("staffInvites.ts");
+    assert.match(inv, /SELECT id, path FROM org_staff_invite WHERE access_code_id = \$1::uuid AND user_id = \$2::uuid/);
+    assert.match(inv, /path: open\[0\]\.path, undeliverable: isUndeliverableEmail\(input\.email\), renewed: true/);
   });
   it("the list reads through the org scope only", () => {
     assert.match(STAFF_INVITE_LIST_SQL, /WHERE i\.access_code_id = \$1::uuid/);
     assert.doesNotMatch(STAFF_INVITE_LIST_SQL, /invited_by = |user_id = \$/);
   });
-  it("revoking a new account removes its staff row only if it never signed in, in the same transaction", () => {
+  it("revoke closes the invitation only; an admin's invitation needs the owner, or a platform admin on the admin route", () => {
     const inv = SRC("staffInvites.ts");
     const fn = inv.slice(inv.indexOf("export async function revokeStaffInvite"), inv.indexOf("export interface StaffInviteSend"));
-    assert.match(fn, /UPDATE org_staff_invite SET revoked_at = now\(\)[\s\S]*DELETE FROM org_staff os[\s\S]*i\.path = 'new_account'[\s\S]*u\."emailVerified" IS NULL/);
-    assert.match(fn, /Only the owner can revoke an admin's invitation/);
+    assert.match(fn, /UPDATE org_staff_invite SET revoked_at = now\(\)/);
+    assert.doesNotMatch(fn, /DELETE FROM org_staff/);
+    assert.match(fn, /actorMayActOnAdminInvite\(scope\.orgId, scope\.userId, caller\.platformAdmin\)/);
+    assert.match(inv, /OR \(\$3::boolean AND EXISTS \(SELECT 1 FROM platform_admin pa/);
+  });
+  it("a resend whose original inviter can no longer invite makes the resender the inviter of record", () => {
+    const inv = SRC("staffInvites.ts");
+    const fn = inv.slice(inv.indexOf("export async function prepareStaffInviteResend"));
+    assert.match(fn, /if \(!inv\.inviterCanInvite && inv\.invitedBy !== scope\.userId\)[\s\S]*SET invited_by = \$3::uuid/);
+    assert.match(fn, /Only the owner can resend an admin's invitation/);
+    assert.match(MIGRATION, /the inviter of record can only become the person acting/);
   });
   it("every database answer has words", () => {
     for (const r of ["ok", "declined", "not_found", "revoked", "answered", "expired", "closed", "inviter_gone", "full", "refused"]) {
@@ -201,6 +233,14 @@ describe("migration 100 follows the house pattern", () => {
     const answer = MIGRATION.slice(MIGRATION.indexOf("CREATE OR REPLACE FUNCTION public.smr_answer_staff_invite("));
     assert.match(answer, /v_user uuid := NULLIF\(current_setting\('app\.user_id', true\), ''\)::uuid/);
     assert.match(answer, /i\.user_id <> v_user THEN RETURN 'not_found'/);
+  });
+  it("the guard clears revoked_by unless the invitation is being revoked", () => {
+    assert.match(MIGRATION, /NEW\.revoked_by := v_actor;\n  ELSE\n    NEW\.revoked_by := NULL;/);
+  });
+  it("history also counts usage keyed by the code and the activity log when it exists", () => {
+    assert.match(MIGRATION, /to_regclass\('public\.partner_usage_event'\) IS NOT NULL/);
+    assert.match(MIGRATION, /WHERE e\.code = \(SELECT ac\.code FROM public\.access_code ac WHERE ac\.id = \$1\)/);
+    assert.match(MIGRATION, /to_regclass\('public\.org_activity'\) IS NOT NULL/);
   });
   it("delete counts every foreign key to access_code from the catalog, and locks the row first", () => {
     assert.match(MIGRATION, /c\.contype = 'f' AND c\.confrelid = 'public\.access_code'::regclass/);

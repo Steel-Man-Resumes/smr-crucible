@@ -11,8 +11,9 @@
  *   failed         the send threw: the screen says it did not send
  *
  * A new account gets a sign-in link that lives as long as the invitation
- * (14 days). An existing account gets the "sign in to answer" email. An
- * account a platform admin added directly gets a short notice.
+ * (14 days) and lands on /dashboard/invites to say yes or no. An existing
+ * account gets the "sign in to answer" email. An account a platform admin
+ * added directly gets a short notice.
  */
 import {
   getOne,
@@ -55,9 +56,11 @@ export async function sendStaffInviteEmail(opts: {
   try {
     const inviter = await getOne<{ name: string | null }>(`SELECT name FROM users WHERE id = $1`, [opts.inviterUserId]);
     if (send.path === "new_account") {
-      const url = await mintInviteMagicLink(send.email, origin, STAFF_INVITE_TTL_DAYS);
+      // The link signs them in and lands on the answer page: nobody is on
+      // staff until they say yes there (smr_answer_staff_invite).
+      const url = await mintInviteMagicLink(send.email, origin, STAFF_INVITE_TTL_DAYS, "/dashboard/invites");
       await sendOrgEmail(send.email, buildStaffInviteEmail({
-        inviteeName: send.name, inviterName: inviter?.name ?? null, orgName, roleLabel, url, origin, linkDays: STAFF_INVITE_TTL_DAYS,
+        inviteeName: send.name, inviterName: inviter?.name ?? null, orgName, roleLabel, url, origin, linkDays: STAFF_INVITE_TTL_DAYS, invitation: true,
       }));
     } else if (send.path === "existing_account") {
       await sendOrgEmail(send.email, buildStaffInvitationEmail({

@@ -70,15 +70,6 @@ export async function getOrgAccessOverview(actor: OrgActor): Promise<OrgAccessMe
               (SELECT COUNT(*)::int FROM case_note n WHERE n.access_code_id = $1::uuid AND n.author_user_id = os.user_id AND n.created_at > now() - interval '30 days') AS notes30
          FROM org_staff os JOIN users u ON u.id = os.user_id
         WHERE os.access_code_id = $1::uuid
-          -- Someone invited at a new address joins the chart when they first
-          -- sign in. Until then they are on the Invitations list (with status,
-          -- resend and revoke), exactly like an invited existing account, so
-          -- the chart never shows which invitee already had an account.
-          AND NOT (u."emailVerified" IS NULL AND u.password_hash IS NULL
-                   AND NOT EXISTS (SELECT 1 FROM accounts a WHERE a."userId" = u.id)
-                   AND EXISTS (SELECT 1 FROM org_staff_invite i
-                                WHERE i.access_code_id = os.access_code_id AND i.user_id = os.user_id
-                                  AND i.path = 'new_account' AND i.revoked_at IS NULL))
         ORDER BY (os.role = 'org_admin') DESC, u.name`,
       [actor.orgId]
     ),
@@ -169,9 +160,9 @@ export function staffCapReason(inUse: number, max: number): string {
  * and an existing one, and the same status words, so the screen still says
  * nothing about who has an account.
  *
- * A new address works as before (a shell account and the staff row now, a
- * sign-in link by email), plus an invitation row so it can be resent,
- * revoked, and shows when it expires.
+ * A new address gets a shell account (so the emailed sign-in link works) and
+ * the same invitation: nobody is on staff before saying yes (security review
+ * B2), and nothing the organization sees differs between the two (B1).
  */
 export async function inviteOrgStaff(actor: OrgActor, input: { name: string; email: string; role: string; title?: string | null }):
   Promise<{ ok: true; userId: string; email: string; name: string; inviteId: string; path: StaffInvitePath; undeliverable: boolean; renewed: boolean } | { ok: false; error: string }> {
