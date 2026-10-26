@@ -131,6 +131,8 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       parameters: jsonSchema<{clientId?: string}>({ type: "object", properties: { clientId: ID }, additionalProperties: false }),
       execute: safe(async ({ clientId }) => {
         { const held = outOfFocus(clientId); if (held) return held; }
+        // No person: a caseload-wide list, whose titles name other people (fix round 2).
+        if (!clientId && !lock) caseloadRead = true;
         const person = clientId ?? lock ?? undefined;
         const current = await actor();
         const core = await loadCore();
@@ -220,6 +222,8 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       description: "Search Steel Man's public help directory for a place and need the STAFF MEMBER named. Public listings only; it reads nothing about the participant (not their address, not their saved help list). If no place was given, ask for a town, county or ZIP and the state. Returns up to five listings with how sure we are, the date last checked, phone, hours and link.",
       parameters: jsonSchema<{place: string; needs: string[]}>({ type: "object", properties: { place: { type: "string", minLength: 2, maxLength: 120 }, needs: { type: "array", items: { type: "string", enum: [...RESOURCE_AREAS] }, minItems: 1, maxItems: 3 } }, required: ["place", "needs"], additionalProperties: false }),
       execute: safe(async ({ place, needs }) => {
+        // Directory text is written by others and can carry an id (fix round 2).
+        caseloadRead = true;
         await actor();
         const { parsePlace } = await import("../support-location");
         const parsed = parsePlace(place);

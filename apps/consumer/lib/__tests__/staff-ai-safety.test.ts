@@ -165,3 +165,30 @@ it("fix round 1: the staff member's own message loses only its record sentences,
   assert.equal(gateStaffMessages([{ role: "user", content: "UA Tuesday, then the interview." }]).withheld, true);
   assert.match(STAFF_INPUT_NOTICE, /Add them yourself after\./);
 });
+
+it("fix round 2: the reviewer's second probes are withheld; corrections is matched as a facility word", () => {
+  for (const s of [
+    "PO meeting Tuesday", "Pending charges in Lincoln County", "Revoked last spring", "Violated, went back", "Got out 3 weeks ago",
+    "Released Monday from Dodge", "Did 5 years at Waupun", "On paper until 2027", "On EM", "Wears a bracelet", "Back in county last month",
+    "coyote ridge corrections center", "department of corrections letter", "Charges dropped in June", "Got out this summer",
+  ]) assert.ok(hasStaffRecordWords(s), s);
+  // Chosen: lowercase "corrections" counts only as a facility word (center, facility, department, officer, ...) or
+  // "department of corrections"; capitalized "Corrections" counts anywhere (a proper name). So resume edits pass.
+  for (const s of ["Made corrections to her resume", "Mailed it to the PO Box", "Send the PO number to the vendor", "Emailed her the list"]) {
+    assert.ok(!hasStaffRecordWords(s), s);
+  }
+});
+
+it("fix round 2: assistant turns and tool invocations in the client-sent history are gated too", () => {
+  const g = gateStaffMessages([
+    { role: "user", content: "prep me" },
+    { role: "assistant", content: "Dana is on paper until 2027. She wants forklift work.", parts: [
+      { type: "text", text: "Dana is on paper until 2027. She wants forklift work." },
+      { type: "tool-invocation", toolInvocation: { toolName: "read_participant_overview", state: "result", args: { clientId: "x" }, result: { recentNotes: [{ body: "PO meeting Tuesday" }] } } },
+    ], toolInvocations: [{ toolName: "read_participant_overview", state: "result", result: { recentNotes: [{ body: "Back in county last month" }] } }] },
+  ]);
+  const a = g.messages[1] as { content: string; parts: Record<string, unknown>[]; toolInvocations: unknown[] };
+  assert.equal(a.content, `${RECORD_WITHHELD} She wants forklift work.`);
+  assert.doesNotMatch(JSON.stringify(a), /on paper|PO meeting|Back in county/);
+  assert.equal(g.withheld, false, "the notice is about the staff member's newest message only");
+});

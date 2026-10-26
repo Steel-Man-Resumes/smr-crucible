@@ -65,6 +65,10 @@ const RECORD_WORDS = new RegExp(
     "release (?:next|this|date)", "(?:was|were|been) inside (?:for |since )?\\d", "while inside", "on the inside",
     "drug (?:test|tests|testing|screens?)", "urine (?:test|screen)", "(?:no[- ]contact|restraining|protective) orders?",
     "deferred (?:prosecution|adjudication|sentence)", "diversion program", "public defender", "pre-?sentence", "sheriff", "booked into", "mug ?shot",
+    // Fix round 2.
+    "pending charges?", "charges? (?:pending|filed|dropped)", "revok\\w*", "violat(?:ed|ions?)", "got out \\d", "got out this",
+    "released (?:\\w+day|from)", "did \\d+ (?:years?|months?)", "on paper", "wears? an? (?:ankle )?bracelet", "(?:gps|monitor\\w*) (?:bracelet|tether)",
+    "tether", "back in (?:county|jail)",
     "release date", "released (?:from|in|on|last)", "(?:his|her|their) release", "got out (?:of|in|on|last)", "since (?:he|she|they) got out",
     "supervision (?:officer|agent|terms|conditions|visits?|meetings?|appointments?|check-?ins?)",
     "conditions of (?:release|supervision|probation|parole|bond)",
@@ -77,7 +81,7 @@ const RECORD_WORDS = new RegExp(
   "i"
 );
 // Case-sensitive on purpose: "doc" is a document and "po" is not a word.
-const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.|BOP|RRC|UA|UAs|PSI|DOJ|ICE)(?=\W|$)|\bCorrections?\b|\b(?:[Mm]y|[Hh]is|[Hh]er|[Tt]heir|[Tt]he|[Aa]|[Ww]ith|[Tt]o|[Ss]ee|[Ss]aw|[Cc]all|[Cc]alled|[Mm]eets?|[Mm]et)\s+PO\b(?!\s*[Bb]ox)/;
+const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.|BOP|RRC|UA|UAs|PSI|DOJ|ICE)(?=\W|$)|\bCorrections?\b|\bEM\b|\bPO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))|\b(?:[Mm]y|[Hh]is|[Hh]er|[Tt]heir|[Tt]he|[Aa]|[Ww]ith|[Tt]o|[Ss]ee|[Ss]aw|[Cc]all|[Cc]alled|[Mm]eets?|[Mm]et)\s+PO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))/;
 const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no\.?|num(?:ber)?)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
 
 let plannerLines: string[] | null = null;
@@ -202,28 +206,39 @@ export function withholdRecordSentences(text: string): { text: string; withheld:
   return { text: lines.join("\n"), withheld };
 }
 
+/** Every string inside a value (tool args and results from the client), record sentences withheld. */
+function gateDeep(value: unknown, depth = 0): unknown {
+  if (typeof value === "string") return withholdRecordSentences(value).text;
+  if (depth > 12 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((v) => gateDeep(v, depth + 1));
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, gateDeep(v, depth + 1)]));
+}
+
 /**
- * Every user message in a staff conversation, record sentences withheld
- * (content and text parts alike). `withheld` is about the NEWEST user message,
- * which is the one the notice speaks to.
+ * Every message in a staff conversation as the client sent it: user and
+ * assistant text, text parts, and tool invocations (args and results), record
+ * sentences withheld (fix round 2: nothing from the client reaches a model
+ * ungated). `withheld` is about the NEWEST user message, which is the one the
+ * notice speaks to.
  */
 export function gateStaffMessages<M extends Record<string, unknown>>(messages: readonly M[]): { messages: M[]; withheld: boolean } {
   let lastUser = -1;
   messages.forEach((m, i) => { if (m.role === "user") lastUser = i; });
   let withheld = false;
   const out = messages.map((m, i) => {
-    if (m.role !== "user") return m;
     let hit = false;
     const next: Record<string, unknown> = { ...m };
     if (typeof m.content === "string") { const g = withholdRecordSentences(m.content); next.content = g.text; hit = hit || g.withheld; }
     if (Array.isArray(m.parts)) {
       next.parts = (m.parts as Record<string, unknown>[]).map((p) => {
+        if (p?.type === "tool-invocation") return { ...p, toolInvocation: gateDeep(p.toolInvocation) };
         if (p?.type !== "text" || typeof p.text !== "string") return p;
         const g = withholdRecordSentences(p.text);
         hit = hit || g.withheld;
         return { ...p, text: g.text };
       });
     }
+    if (Array.isArray(m.toolInvocations)) next.toolInvocations = gateDeep(m.toolInvocations);
     if (i === lastUser && hit) withheld = true;
     return next as M;
   });
