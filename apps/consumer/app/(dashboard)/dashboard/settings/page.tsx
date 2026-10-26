@@ -12,6 +12,7 @@
  */
 
 import { LeaveOrgButton } from "@/components/settings/LeaveOrgButton";
+import { DeleteDataControls } from "@/components/settings/DeleteDataControls";
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
 import { SettingsLesson } from "@/components/tour/SettingsLesson";
@@ -29,7 +30,7 @@ import { DecisionLogViewer } from "@/components/DecisionLogViewer";
 import { LoginHistoryCard } from "@/components/LoginHistoryCard";
 import { AccessibilitySettingsSection } from "@/components/AccessibilitySettingsSection";
 import { AvatarSettingsSection } from "@/components/AvatarSettingsSection";
-import { signIn, useSession } from "next-auth/react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
@@ -89,21 +90,14 @@ export default function SettingsPage() {
   const ownerUid = useSession().data?.user?.id;
   const realTier = useRealTier();
   const effectiveRole = useEffectiveRole();
-  // Phase 7.4: delete is now two distinct actions -- "data" keeps the login,
-  // "account" removes everything including the login. Track which one is armed.
-  const [deleteMode, setDeleteMode] = useState<null | "data" | "account">(null);
   // Phase 7.4: per-category export. All on = the full dump (the default).
   const [exportCats, setExportCats] = useState<ExportTicks>(ALL_TICKED);
-  // Phase 1C reauth gate: export and delete both require the current
-  // password (password accounts). Without a password, delete takes the word
-  // DELETE typed out and export takes the own-device tick under the
-  // shared-computer warning (S8: typing DELETE to export was the wrong word).
-  // The server decides which one it needs from the account's password_hash.
+  // Export confirmation belongs to the download controls. Deletion has its
+  // own proof field and account-specific requirements beside each action.
   const [ownDevice, setOwnDevice] = useState(false);
   const [docsStatus, setDocsStatus] = useState<"idle" | "working" | "done">("idle");
   const [docsMessage, setDocsMessage] = useState("");
   const [reauthPassword, setReauthPassword] = useState("");
-  const [reauthTyped, setReauthTyped] = useState("");
 
   const [exportStatus, setExportStatus] = useState<
     "idle" | "exporting" | "done"
@@ -332,36 +326,7 @@ export default function SettingsPage() {
     }
   }
 
-  const [deleting, setDeleting] = useState(false);
-
-  async function deleteAllData(mode: "data" | "account") {
-    setDeleting(true);
-    try {
-      // Delete server-side data first. Reauth-gated (Phase 1C) -- see
-      // apps/consumer/app/api/user/delete-data/route.ts's contract comment.
-      // deleteAccount:true (Phase 7.4) also removes the login/account row.
-      const res = await fetch("/api/user/delete-data", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          confirm: true,
-          password: reauthPassword || undefined,
-          typedConfirmation: reauthTyped || undefined,
-          deleteAccount: mode === "account",
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || "Failed to delete data. Please try again.");
-        setDeleting(false);
-        return;
-      }
-    } catch {
-      alert("Failed to delete data. Please try again.");
-      setDeleting(false);
-      return;
-    }
-
+  async function finishDeletion() {
     // Then clear all localStorage. This list is the difference between "delete
     // my data" actually returning the app to a clean slate and leaving two keys
     // behind that quietly repopulate the next session: the last job search with
@@ -380,12 +345,15 @@ export default function SettingsPage() {
       "view_as",
     ];
     for (const key of keys) {
-      localStorage.removeItem(key);
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // Restricted browser storage must not prevent signing out.
+      }
     }
-    setDeleteMode(null);
     // Force fresh JWT by signing out -- the account is gone (account mode) or
     // the tier was reset server-side (data mode); either way, back to login.
-    window.location.href = "/login";
+    await signOut({ callbackUrl: "/login" });
   }
 
   // Org staff are not job seekers. Their settings should not describe resumes
@@ -566,8 +534,6 @@ export default function SettingsPage() {
           setExportCats={setExportCats}
           reauthPassword={reauthPassword}
           setReauthPassword={setReauthPassword}
-          reauthTyped={reauthTyped}
-          setReauthTyped={setReauthTyped}
           exportData={exportData}
           exportStatus={exportStatus}
           ownDevice={ownDevice}
@@ -575,10 +541,7 @@ export default function SettingsPage() {
           downloadDocuments={downloadDocuments}
           docsStatus={docsStatus}
           docsMessage={docsMessage}
-          deleteMode={deleteMode}
-          setDeleteMode={setDeleteMode}
-          deleteAllData={deleteAllData}
-          deleting={deleting}
+          onDeleted={finishDeletion}
         />}
       </div>
 
@@ -667,8 +630,6 @@ function DataSection({
   setExportCats,
   reauthPassword,
   setReauthPassword,
-  reauthTyped,
-  setReauthTyped,
   exportData,
   exportStatus,
   ownDevice,
@@ -676,17 +637,12 @@ function DataSection({
   downloadDocuments,
   docsStatus,
   docsMessage,
-  deleteMode,
-  setDeleteMode,
-  deleteAllData,
-  deleting,
+  onDeleted,
 }: {
   exportCats: ExportCats;
   setExportCats: React.Dispatch<React.SetStateAction<ExportCats>>;
   reauthPassword: string;
   setReauthPassword: (v: string) => void;
-  reauthTyped: string;
-  setReauthTyped: (v: string) => void;
   exportData: () => void;
   exportStatus: "idle" | "exporting" | "done";
   ownDevice: boolean;
@@ -694,14 +650,12 @@ function DataSection({
   downloadDocuments: () => void;
   docsStatus: "idle" | "working" | "done";
   docsMessage: string;
-  deleteMode: null | "data" | "account";
-  setDeleteMode: (v: null | "data" | "account") => void;
-  deleteAllData: (mode: "data" | "account") => void;
-  deleting: boolean;
+  onDeleted: () => Promise<void>;
 }) {
   // Read the role here rather than threading a prop through several layers.
   const dataSectionRole = useEffectiveRole();
   const isOrgStaff = !!dataSectionRole?.orgRole;
+  const accountId = useSession().data?.user?.id;
   // The record check line shows only while that step is on (settings/layout.tsx).
   const { recordStep } = useServerSwitches();
   const EXPORT_CATS = EXPORT_BOXES;
@@ -750,37 +704,6 @@ function DataSection({
           </ul>
         </div>
 
-        {/* Reauth for export/delete -- password accounts fill the password
-            field. With no password, delete takes the typed word DELETE and
-            export takes the own-device tick under the warning below. */}
-        <div className="bg-t-panel p-5 border border-t-line">
-          <h3 className="font-semibold text-t-white">Confirm your identity</h3>
-          <p className="text-sm text-t-phos-dim mt-1">
-            Exporting or deleting your data is sensitive, so confirm it&apos;s
-            you first. Enter your password. If you sign in with an email link
-            and have no password, a download needs only the tick below, and
-            deleting asks you to type DELETE.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 mt-3">
-            <input
-              type="password"
-              value={reauthPassword}
-              onChange={(e) => setReauthPassword(e.target.value)}
-              placeholder="Your password"
-              autoComplete="current-password"
-              className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
-            />
-            <input
-              type="text"
-              value={reauthTyped}
-              onChange={(e) => setReauthTyped(e.target.value)}
-              placeholder="To delete with no password, type DELETE"
-              aria-label="To delete with no password, type DELETE"
-              className="flex-1 px-3 py-2 bg-t-bg border border-t-line text-t-white text-sm min-h-touch"
-            />
-          </div>
-        </div>
-
         {/* Export data -- per category, then the document files */}
         <div className="bg-t-panel p-5 border border-t-line" id="settings-export">
           <h3 className="font-semibold text-t-white">
@@ -791,6 +714,11 @@ function DataSection({
             ticked for a full copy. Your document files come separately, with
             the button further down.
           </p>
+          <div className="mb-4 space-y-2">
+            <label htmlFor="export-password" className="block text-sm text-t-white">Password for downloads</label>
+            <p id="export-password-help" className="text-sm text-t-phos-dim">If your account has a password, enter it here. If it has no password, leave this blank. Confirm the device below before downloading.</p>
+            <PasswordInput id="export-password" value={reauthPassword} onChange={(event) => setReauthPassword(event.target.value)} autoComplete="current-password" aria-describedby="export-password-help" className="w-full min-h-touch border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white" />
+          </div>
           <div className="space-y-2 mb-4">
             {EXPORT_CATS.map((c) => (
               <label key={c.key} className="flex items-center gap-3 text-sm text-t-white cursor-pointer">
@@ -852,84 +780,7 @@ function DataSection({
           </div>
         </div>
 
-        {/* Delete my data -- keeps the login */}
-        <div className="bg-t-panel p-5 border border-t-red">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-t-white">
-                Delete my data
-              </h3>
-              <p className="text-sm text-t-phos-dim mt-1">
-                {isOrgStaff
-                  ? "Erase anything stored on YOUR account. This only touches what belongs to you. It does not touch your organization, your team, or any participant's records. Your login stays. This cannot be undone."
-                  : "Erase your resumes, plans, and history. Your login stays, so you can sign back in to a fresh, empty account. This cannot be undone."}
-              </p>
-            </div>
-            {deleteMode !== "data" ? (
-              <button
-                onClick={() => setDeleteMode("data")}
-                className="t-focus flex-shrink-0 px-4 py-2 border border-t-red text-t-red text-sm font-medium hover:bg-t-red/10 transition-colors min-h-touch"
-              >
-                Delete data
-              </button>
-            ) : (
-              <div className="flex flex-shrink-0 gap-2">
-                <button
-                  onClick={() => setDeleteMode(null)}
-                  className="px-3 py-2 text-sm text-t-phos-dim hover:text-t-white min-h-touch"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => deleteAllData("data")}
-                  disabled={deleting}
-                  className="t-focus px-4 py-2 bg-t-red text-white text-sm font-bold hover:bg-t-red/80 disabled:opacity-50 transition-colors min-h-touch"
-                >
-                  {deleting ? "Deleting..." : "Confirm delete data"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Delete my account -- removes everything including the login */}
-        <div className="bg-t-panel p-5 border border-t-red">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="font-semibold text-t-white">
-                Delete my account
-              </h3>
-              <p className="text-sm text-t-phos-dim mt-1">
-                Remove everything, including your login. You will be signed out
-                and will not be able to sign back in. This cannot be undone.
-              </p>
-            </div>
-            {deleteMode !== "account" ? (
-              <button
-                onClick={() => setDeleteMode("account")}
-                className="t-focus flex-shrink-0 px-4 py-2 border border-t-red text-t-red text-sm font-medium hover:bg-t-red/10 transition-colors min-h-touch"
-              >
-                Delete account
-              </button>
-            ) : (
-              <div className="flex flex-shrink-0 gap-2">
-                <button
-                  onClick={() => setDeleteMode(null)}
-                  className="px-3 py-2 text-sm text-t-phos-dim hover:text-t-white min-h-touch"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={() => deleteAllData("account")}
-                  disabled={deleting}
-                  className="t-focus px-4 py-2 bg-t-red text-white text-sm font-bold hover:bg-t-red/80 disabled:opacity-50 transition-colors min-h-touch"
-                >
-                  {deleting ? "Deleting..." : "Confirm delete account"}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+        <DeleteDataControls key={accountId || "signed-out"} isOrgStaff={isOrgStaff} onDeleted={onDeleted} />
       </div>
     </section>
   );

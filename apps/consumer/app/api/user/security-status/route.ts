@@ -22,12 +22,14 @@ export async function GET() {
          FROM users WHERE id = $1`,
       [session.user.id]
     );
-    const row = r.rows[0] || {};
+    const row = r.rows[0];
+    if (!row) return NextResponse.json({ error: "Sign in again." }, { status: 401 });
     return NextResponse.json({
+      userId: session.user.id,
       hasPassword: !!row.has_password,
       passwordUpdatedAt: row.password_updated_at || null,
       twoFactorEnabled: !!row.two_factor_enabled,
-    });
+    }, { headers: { "Cache-Control": "no-store" } });
   } finally {
     client.release();
   }
