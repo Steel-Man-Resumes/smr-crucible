@@ -4,14 +4,20 @@
  * Out of reach, another org, or no such person: one indistinct 404.
  */
 import { NextResponse } from "next/server";
+import { requireOrgCapability } from "@/lib/org-guard";
 import { getPersonTimeline, parseTimelineTypes } from "@crucible/core";
-import { crmGate, UUID } from "@/lib/org-crm-gate";
+import { withCrm, UUID } from "@/lib/org-crm-gate";
 
 export const dynamic = "force-dynamic";
 
+/** The org guard, given this request (view-as aware: L2), then the staff workspace check. */
+async function gate(request: Request) {
+  return withCrm(await requireOrgCapability("org.client.view_content", { request }));
+}
+
 export async function GET(request: Request, props: { params: Promise<{ id: string }> }) {
   const { id } = await props.params;
-  const g = await crmGate();
+  const g = await gate(request);
   if (!g.ok) return g.response;
   if (!UUID.test(id)) return NextResponse.json({ error: "Not found." }, { status: 404 });
   const u = new URL(request.url);

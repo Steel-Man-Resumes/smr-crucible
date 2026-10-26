@@ -155,7 +155,8 @@ CREATE OR REPLACE FUNCTION public.participant_contact_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 BEGIN
   -- The person who last edited it deleted their account (B1): keep the row as it was.
-  IF TG_OP = 'UPDATE' AND public.smr_only_gone_refs_cleared(to_jsonb(NEW), to_jsonb(OLD), ARRAY['updated_by'], ARRAY['users']) THEN
+  -- phone_digits is a generated column: NULL in NEW inside a BEFORE trigger, so it is left out of the comparison.
+  IF TG_OP = 'UPDATE' AND public.smr_only_gone_refs_cleared(to_jsonb(NEW) - 'phone_digits', to_jsonb(OLD) - 'phone_digits', ARRAY['updated_by'], ARRAY['users']) THEN
     RETURN NEW;
   END IF;
   IF TG_OP = 'UPDATE' AND (NEW.access_code_id IS DISTINCT FROM OLD.access_code_id OR NEW.participant_user_id IS DISTINCT FROM OLD.participant_user_id) THEN
@@ -215,6 +216,8 @@ CREATE TABLE IF NOT EXISTS staff_draft (
 CREATE UNIQUE INDEX IF NOT EXISTS staff_draft_one
   ON staff_draft (user_id, access_code_id, (COALESCE(participant_user_id, '00000000-0000-0000-0000-000000000000'::uuid)), kind);
 CREATE INDEX IF NOT EXISTS staff_draft_age ON staff_draft (user_id, updated_at);
+-- For the 30-day purge across everyone's drafts.
+CREATE INDEX IF NOT EXISTS staff_draft_updated ON staff_draft (updated_at);
 
 CREATE OR REPLACE FUNCTION public.staff_draft_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
@@ -392,6 +395,12 @@ BEGIN
        OR NEW.created_by IS DISTINCT FROM OLD.created_by OR NEW.created_at IS DISTINCT FROM OLD.created_at THEN
       RAISE EXCEPTION 'a referral cannot be moved to another person, place or organization' USING ERRCODE = 'check_violation';
     END IF;
+    -- A new owner must be on staff and reach the person (S3). Checked on change
+    -- only: an owner who has since left does not freeze the referral.
+    IF NEW.owner_staff_id IS DISTINCT FROM OLD.owner_staff_id AND NEW.owner_staff_id IS NOT NULL
+       AND NOT public.smr_staff_reach(NEW.access_code_id, NEW.owner_staff_id, NEW.participant_user_id) THEN
+      RAISE EXCEPTION 'a referral can be handed only to someone who works with this person' USING ERRCODE = 'insufficient_privilege';
+    END IF;
     IF OLD.status = 'closed' THEN
       RAISE EXCEPTION 'a closed referral stays closed; make a new one' USING ERRCODE = 'check_violation';
     END IF;
@@ -504,8 +513,10 @@ CREATE POLICY referral_insert ON referral FOR INSERT WITH CHECK (
 DROP POLICY IF EXISTS referral_update ON referral;
 CREATE POLICY referral_update ON referral FOR UPDATE
   USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid)
-  WITH CHECK (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
-    AND (owner_staff_id IS NULL OR public.smr_staff_reach(access_code_id, owner_staff_id, participant_user_id)));
+  WITH CHECK (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
+-- The owner's reach is checked by referral_guard only when the owner CHANGES,
+-- so a colleague can still work a referral whose stored owner has left the
+-- staff (and take it over).
 DROP POLICY IF EXISTS referral_reach ON referral;
 CREATE POLICY referral_reach ON referral AS RESTRICTIVE FOR ALL
   USING (NULLIF(current_setting('app.org_id', true), '') IS NULL

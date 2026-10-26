@@ -194,7 +194,7 @@ export const TIMELINE_CHIPS: { key: string; label: string; types: TimelineType[]
   { key: "activity", label: "Other changes", types: ["activity"] },
 ];
 
-export interface TimelineItem {
+export interface PersonTimelineItem {
   /** "<type>:<source id>[:<n>]", unique in one timeline. */
   key: string;
   type: TimelineType;

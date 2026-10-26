@@ -3,9 +3,8 @@
  * statements orgDrafts, orgReferrals, orgSearch and orgTimeline run, against
  * migrations 001-105 in pglite, as the NOSUPERUSER app role (RLS on).
  *
- * Migration 102 (reach, activity log, corrections) is applied for real (this
- * branch sits on lane L3b). 103 (enrollment) belongs to lane L3a: when its
- * file is not here, a minimal stand-in with the house SPEC's columns is made.
+ * Migrations 100 to 104 (and 106) are the real ones from the integration
+ * branch: no stand-ins.
  *
  * Proves: drafts are owner-only (not an admin, not the owner, not another org);
  * referrals are reach-scoped and cross-org sealed in the DATABASE (a raw read
@@ -34,18 +33,6 @@ const skip = !dir || !existsSync(join(dir, '@electric-sql/pglite')) ? 'set SMR_P
 const MIG = new URL('../../../../packages/core/migrations/', import.meta.url).pathname;
 const withTrgm = process.env.SMR_PGLITE_NO_TRGM !== '1';
 
-/** Stand-in for 103, by the house SPEC's columns. Used only when 103's file is absent. */
-const STUB_103 = `
-CREATE TABLE IF NOT EXISTS org_unit (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), access_code_id uuid NOT NULL, parent_id uuid, kind text NOT NULL, name text NOT NULL, status text NOT NULL DEFAULT 'active');
-CREATE TABLE IF NOT EXISTS enrollment (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), access_code_id uuid NOT NULL, org_unit_id uuid NOT NULL, participant_user_id uuid NOT NULL,
-  status text NOT NULL, enrolled_on date, exited_on date, exit_reason text, primary_staff_id uuid, program_participant_id text,
-  created_by uuid, created_at timestamptz NOT NULL DEFAULT now(), updated_by uuid, updated_at timestamptz NOT NULL DEFAULT now());
-ALTER TABLE org_unit ENABLE ROW LEVEL SECURITY; ALTER TABLE org_unit FORCE ROW LEVEL SECURITY;
-ALTER TABLE enrollment ENABLE ROW LEVEL SECURITY; ALTER TABLE enrollment FORCE ROW LEVEL SECURITY;
-CREATE POLICY org_unit_select ON org_unit FOR SELECT USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
-CREATE POLICY enrollment_select ON enrollment FOR SELECT USING (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
-REVOKE ALL ON org_unit, enrollment FROM smr_app; GRANT SELECT ON org_unit, enrollment TO smr_app;`;
-
 test('workflow (105): owner-only drafts, sealed referrals, retention tasks once, consent-true search', { skip, timeout: 600_000 }, async () => {
   const { PGlite } = await import(join(dir!, '@electric-sql/pglite/dist/index.js'));
   const { pgcrypto } = await import(join(dir!, '@electric-sql/pglite/dist/contrib/pgcrypto.js'));
@@ -64,7 +51,7 @@ test('workflow (105): owner-only drafts, sealed referrals, retention tasks once,
   };
   for (const f of files.filter((x) => Number(x.slice(0, 3)) < 105)) await apply(f);
   assert.ok(files.some((f) => f.startsWith('102_')) && !failed.some((f) => f.startsWith('102_')), `105 is tested against the real 102: ${failed.join(' | ')}`);
-  if (!files.some((f) => f.startsWith('103_'))) await db.exec(STUB_103);
+  for (const n of ['102_', '103_', '104_']) assert.ok(files.some((f) => f.startsWith(n)) && !failed.some((f) => f.startsWith(n)), `105 is tested against the real ${n}: ${failed.join(' | ')}`);
   await apply('105_workflow.sql');
   assert.ok(!failed.some((f) => f.startsWith('105_')), `105 must apply: ${failed.filter((f) => f.startsWith('105_')).join(' | ')}`);
 
@@ -354,6 +341,7 @@ test('workflow (105): owner-only drafts, sealed referrals, retention tasks once,
   await as(draftAs(leaver), DRAFT_SQL.save, [org, leaver, p6, 'note', 'leaver draft']);
   const org3 = await mkOrg('PGWF0003', owner2);
   const rpo = ((await q(`INSERT INTO referral (access_code_id, participant_user_id, to_kind, to_access_code_id, to_name, status, created_by) VALUES ($1, $2, 'partner_org', $3, 'Gone Partner', 'draft', $4) RETURNING id`, [org, p6, org3, leaver])).rows[0] as any).id;
+  const contactBefore = (await q(`SELECT updated_at::text AS u FROM participant_contact WHERE participant_user_id = $1`, [p6])).rows[0] as any;
   const evBefore = Number(((await q(`SELECT count(*)::int AS n FROM referral_event`)).rows[0] as any).n);
   const actBefore = Number(((await q(`SELECT count(*)::int AS n FROM org_activity WHERE entity = 'referral'`)).rows[0] as any).n);
   await q(`DELETE FROM client_staff_assignment WHERE staff_user_id = $1`, [leaver]);
@@ -365,11 +353,28 @@ test('workflow (105): owner-only drafts, sealed referrals, retention tasks once,
   assert.equal(kept.length, 3, 'the account delete succeeds and every referral is kept');
   assert.ok(kept.every((r) => r.created_by === null && r.owner_staff_id === null && r.to_access_code_id === null), 'with the gone account and organization cleared');
   assert.ok(kept.some((r) => r.status === 'closed' && r.closed_at), 'closed ones included, still closed');
-  assert.equal(((await q(`SELECT updated_by FROM participant_contact WHERE participant_user_id = $1`, [p6])).rows[0] as any).updated_by, null, 'the contact row is kept, its editor cleared');
+  const contactAfter = (await q(`SELECT updated_by, updated_at::text AS u FROM participant_contact WHERE participant_user_id = $1`, [p6])).rows[0] as any;
+  assert.equal(contactAfter.updated_by, null, 'the contact row is kept, its editor cleared');
+  assert.equal(contactAfter.u, contactBefore.u, 'and it is not re-stamped (the generated phone digits do not count as a change)');
   assert.equal(((await q(`SELECT count(*)::int AS n FROM referral_event WHERE actor_user_id IS NULL AND referral_id = $1`, [rl1])).rows[0] as any).n >= 1, true, 'history is kept, its actor cleared');
   assert.equal(Number(((await q(`SELECT count(*)::int AS n FROM referral_event`)).rows[0] as any).n), evBefore, 'clearing a column wrote no history');
   assert.equal(Number(((await q(`SELECT count(*)::int AS n FROM org_activity WHERE entity = 'referral'`)).rows[0] as any).n), actBefore, 'nor an activity row');
   assert.ok(await fails(as({ orgId: org, userId: admin }, `UPDATE referral SET created_by = NULL WHERE id = $1`, [r2])), 'nobody can clear a live account off a referral');
+
+  // Re-review (2): an owner who left the staff (account still there) does not freeze the referral.
+  const [gone] = [24].map(id);
+  await q(`INSERT INTO users(id, email, name) VALUES ($1, 'acct-24@example.test', 'Staff 24')`, [gone]);
+  await q(`INSERT INTO org_staff (access_code_id, user_id, role) VALUES ($1, $2, 'staff')`, [org, gone]);
+  const rg = (await ins(admin, true, p1, 'other', 'Owner Left Place', 'sent', gone)).length ? ((await q(`SELECT id FROM referral WHERE to_name = 'Owner Left Place'`)).rows[0] as any).id : null;
+  assert.equal(rg, null, 'a staff member who does not reach the person cannot be the owner');
+  await q(`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES ($1, $2, $3, $4)`, [org, p6, gone, owner]);
+  const rg2 = (await ins(admin, true, p6, 'other', 'Owner Left Place', 'sent', gone))[0].id as string;
+  await q(`DELETE FROM client_staff_assignment WHERE staff_user_id = $1`, [gone]);
+  await q(`DELETE FROM org_staff WHERE user_id = $1`, [gone]);
+  assert.equal((await as({ orgId: org, userId: admin }, REFERRAL_SQL.move, [org, true, admin, rg2, 'sent', 'accepted', null, today])).length, 1, 'someone who reaches the person can still move it');
+  assert.ok(await fails(as({ orgId: org, userId: admin }, `UPDATE referral SET owner_staff_id = $2 WHERE id = $1`, [rg2, cm2])), 'handing it to someone who does not reach the person is refused (guard, on change only)');
+  await as({ orgId: org, userId: admin }, `UPDATE referral SET owner_staff_id = $2 WHERE id = $1`, [rg2, admin]);
+  assert.equal(((await q(`SELECT owner_staff_id FROM referral WHERE id = $1`, [rg2])).rows[0] as any).owner_staff_id, admin, 'and it can be taken over');
 
   // S4: a person leaving the organization takes the drafts about them with them.
   await as(draftAs(cm), DRAFT_SQL.save, [org, cm, p7, 'note', 'about someone who is leaving']);

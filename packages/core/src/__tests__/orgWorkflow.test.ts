@@ -86,7 +86,9 @@ describe("referrals: the closed loop", () => {
     assert.equal(canHandOff(actor([]), "colleague"), false);
     assert.equal(canHandOff(actor(["org.client.assign"]), "colleague"), true);
     for (const sql of [REFERRAL_SQL.insert]) assert.match(sql, /public\.smr_staff_reach\(\$1::uuid, \$9::uuid, \$4::uuid\)/);
-    assert.equal((MIG.match(/owner_staff_id IS NULL OR public\.smr_staff_reach\(access_code_id, owner_staff_id, participant_user_id\)/g) ?? []).length, 2, "insert and update policies");
+    assert.equal((MIG.match(/owner_staff_id IS NULL OR public\.smr_staff_reach\(access_code_id, owner_staff_id, participant_user_id\)/g) ?? []).length, 1, "the insert policy");
+    assert.match(MIG, /IF NEW\.owner_staff_id IS DISTINCT FROM OLD\.owner_staff_id AND NEW\.owner_staff_id IS NOT NULL\s+AND NOT public\.smr_staff_reach\(NEW\.access_code_id, NEW\.owner_staff_id, NEW\.participant_user_id\)/,
+      "an update checks the owner only when it changes, so a departed owner does not freeze the referral");
   });
   it("consent for a partner referral is the person's own choice, in the caller's org scope only (S1)", () => {
     const f = MIG.slice(MIG.indexOf("FUNCTION public.smr_referral_consent"), MIG.indexOf("REVOKE ALL ON FUNCTION public.smr_referral_consent"));
@@ -183,7 +185,9 @@ describe("timeline", () => {
     assert.ok(!availableTimelineTypes(["enrollment"], new Set(["enrollment"])).length, "both enrollment and org_unit are needed");
   });
   it("the activity branch leaves out what has its own branch", () => {
-    assert.match(timelineSql(["activity"]), /entity NOT IN \('note', 'task', 'outcome', 'retention', 'referral', 'sharing', 'enrollment'\)/);
+    const a = timelineSql(["activity"]);
+    assert.match(a, /entity NOT IN \('note', 'task', 'outcome', 'retention', 'referral', 'sharing'\)/);
+    assert.match(a, /NOT \(a\.entity = 'enrollment' AND a\.action = 'created'\)/, "enrollment moves and custom field changes stay in");
   });
   it("filter types and cursors are parsed, never trusted", () => {
     assert.deepEqual(parseTimelineTypes("note,task,bogus"), ["note", "task"]);
@@ -242,6 +246,14 @@ describe("Today: referrals past due, and one line per retention check-in", () =>
     ]);
     assert.ok((TODAY_SECTIONS as readonly string[]).includes("referrals"));
   });
+  it("an org's saved Today layout (104) that never mentions referrals still shows them, in code order; hiding it works", async () => {
+    const { resolveTodaySections } = await import("../savedViewsShared");
+    const got = resolveTodaySections(TODAY_SECTIONS, { order: ["quiet", "tasks"], hidden: [] });
+    assert.deepEqual(got.slice(0, 3), ["quiet", "tasks", "retention"]);
+    assert.ok(got.includes("referrals"));
+    assert.ok(!resolveTodaySections(TODAY_SECTIONS, { order: [], hidden: ["referrals"] }).includes("referrals"));
+    assert.deepEqual(resolveTodaySections(TODAY_SECTIONS, { order: ["referrals", "tasks"], hidden: [] }).slice(0, 2), ["referrals", "tasks"], "and an org can put it first");
+  });
   it("no referrals input (before 105) is no section, not an error", () => {
     assert.equal(buildTodayItems(base(), NOW).filter((i) => i.section === "referrals").length, 0);
   });
@@ -281,7 +293,7 @@ describe("migration 105, statically", () => {
   it("account and organization deletes clear columns without tripping a guard or writing history (B1)", () => {
     assert.match(MIG, /FUNCTION public\.smr_only_gone_refs_cleared/);
     assert.equal((MIG.match(/smr_only_gone_refs_cleared\(to_jsonb\(NEW\), to_jsonb\(OLD\),\s+ARRAY\['created_by', 'updated_by', 'owner_staff_id', 'to_access_code_id'\]/g) ?? []).length, 2, "referral guard and history");
-    assert.match(MIG, /smr_only_gone_refs_cleared\(to_jsonb\(NEW\), to_jsonb\(OLD\), ARRAY\['updated_by'\], ARRAY\['users'\]\)/, "participant_contact guard");
+    assert.match(MIG, /smr_only_gone_refs_cleared\(to_jsonb\(NEW\) - 'phone_digits', to_jsonb\(OLD\) - 'phone_digits', ARRAY\['updated_by'\], ARRAY\['users'\]\)/, "participant_contact guard, ignoring the generated column");
   });
   it("drafts go after 30 days, and at once when staff or the person leave (S4)", () => {
     assert.match(MIG, /CREATE TRIGGER staff_draft_drop_on_staff_leave AFTER DELETE ON org_staff/);

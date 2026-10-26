@@ -8,6 +8,7 @@
  */
 import { useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
+import { useOrgTerms } from "@/lib/use-org-terms";
 
 interface Hit { user_id: string; name: string | null; email: string | null; phone: string | null; matched_on: string; mine: boolean }
 const MATCHED: Record<string, string> = { name: "name", other_name: "another name", email: "email", phone: "phone", program_id: "program id" };
@@ -19,6 +20,7 @@ export function StaffSearch({ compact = false, autoFocus = false }: { compact?: 
   const [failed, setFailed] = useState(false);
   const [seesAll, setSeesAll] = useState(true);
   const seq = useRef(0);
+  const words = useOrgTerms();
   const id = useId();
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function StaffSearch({ compact = false, autoFocus = false }: { compact?: 
           {(["all", "mine"] as const).map((s) => (
             <button key={s} type="button" aria-pressed={scope === s} onClick={() => setScope(s)}
               className={`t-focus min-h-touch rounded-[4px] border px-3 ${scope === s ? "border-t-amber text-t-white font-semibold" : "border-t-line text-t-phos-dim"}`}>
-              {s === "all" ? "Everyone I can see" : "My caseload"}
+              {s === "all" ? "Everyone I can see" : `My ${words.caseload}`}
             </button>
           ))}
         </div>

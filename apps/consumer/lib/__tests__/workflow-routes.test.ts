@@ -19,22 +19,20 @@ const ROUTES = [
 it("every workflow route goes through the gate and never runs SQL itself", () => {
   for (const r of ROUTES) {
     const src = read(r);
-    assert.match(src, /crmGate\(/, `${r} gates`);
+    assert.match(src, /async function gate\(request: Request\) \{\n\s+return withCrm\(await requireOrgCapability\("[a-z_.]+", \{ request \}\)\);/, `${r} gates with its request`);
     assert.match(src, /if \(!g\.ok\) return g\.response;/, `${r} stops on a refusal`);
     assert.doesNotMatch(src, /\b(query|getOne|runScoped|queryAsUser)\(/, `${r} has no SQL of its own`);
     assert.match(src, /export const dynamic = "force-dynamic"/);
   }
-  const gate = read("lib/org-crm-gate.ts");
-  assert.match(gate, /requireOrgCapability\(capability\)/);
-  assert.match(gate, /crm_v2/);
+  assert.match(read("lib/org-crm-gate.ts"), /crm_v2/);
 });
 
 it("every write checks same-origin first (text/plain beacons included); duplicates are rate limited", () => {
   for (const r of ["app/api/org/drafts/route.ts", "app/api/org/people/duplicates/route.ts", "app/api/org/clients/[id]/contact/route.ts", "app/api/org/referrals/route.ts"]) {
     const src = read(r);
     for (const m of src.matchAll(/export (?:async function (POST|PUT|DELETE)|const (PUT|POST) = save)/g)) assert.ok(m, r);
-    const writes = [...src.matchAll(/(?:export async function (?:POST|DELETE)|async function save)\([^)]*\) \{\n\s+const cross = refuseCrossOrigin\(/g)].length;
-    const handlers = [...src.matchAll(/(?:export async function (?:POST|DELETE)|async function save)\(/g)].length;
+    const writes = [...src.matchAll(/export async function (?:POST|PUT|DELETE)\([^)]*\) \{\n\s+const cross = refuseCrossOrigin\(/g)].length;
+    const handlers = [...src.matchAll(/export async function (?:POST|PUT|DELETE)\(/g)].length;
     assert.equal(writes, handlers, `${r}: every write handler starts with the same-origin check`);
   }
   assert.match(read("lib/org-crm-gate.ts"), /isSameOriginRequest\(request\.headers\)/);
@@ -47,9 +45,9 @@ it("drafts: the route cannot name another author", () => {
 });
 
 it("the right capability guards each write", () => {
-  assert.match(read("app/api/org/people/duplicates/route.ts"), /crmGate\("org\.participant\.invite"\)/);
-  assert.match(read("app/api/org/clients/[id]/contact/route.ts"), /crmGate\("org\.note\.write"\)/);
-  assert.match(read("app/api/org/referrals/directory/route.ts"), /crmGate\("org\.task\.write"\)/);
+  assert.match(read("app/api/org/people/duplicates/route.ts"), /requireOrgCapability\("org\.participant\.invite", \{ request \}\)/);
+  assert.match(read("app/api/org/clients/[id]/contact/route.ts"), /requireOrgCapability\("org\.note\.write", \{ request \}\)/);
+  assert.match(read("app/api/org/referrals/directory/route.ts"), /requireOrgCapability\("org\.task\.write", \{ request \}\)/);
 });
 
 it("out of reach is one indistinct 404 on the timeline", () => {

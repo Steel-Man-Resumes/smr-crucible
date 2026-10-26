@@ -23,7 +23,7 @@ import type { OrgActor } from "./authz/resolveOrgActor";
 import { scopeOf, run, reachParams, inReach, UUID_RE } from "./orgWorkflowSql";
 import {
   TIMELINE_PAGE_SIZE, parseTimelineCursor, REFERRAL_STATUS_LABELS, isReferralStatus,
-  type TimelineItem, type TimelineType,
+  type PersonTimelineItem, type TimelineType,
 } from "./orgWorkflowShared";
 import { END_REASON_LABELS, OUTCOME_SOURCE_LABELS } from "./orgOutcomes";
 
@@ -95,13 +95,16 @@ const BRANCHES: Record<TimelineType, string> = {
       r.to_name AS f1, e.from_status AS f2, e.to_status AS f3, left(e.status_reason, 200) AS f4, NULL::text AS f5
     FROM referral_event e JOIN referral r ON r.id = e.referral_id LEFT JOIN users au ON au.id = e.actor_user_id
    WHERE e.access_code_id = $1::uuid AND e.participant_user_id = ${P} AND (e.from_status IS NULL OR e.from_status IS DISTINCT FROM e.to_status)`,
-  // Migration 102. Only what has no branch of its own (assignment, program and
-  // field changes); summaries there never hold note bodies or record words.
+  // Migration 102. What has no branch of its own: assignment, enrollment moves
+  // (103), custom field changes (104). Summaries there are fixed words, never
+  // note bodies, field values or record words.
   activity: `SELECT 'activity:' || a.id AS key, 'activity' AS type, a.at AS at, a.id::text AS src, au.name AS actor_name,
       a.entity AS f1, a.action AS f2, left(a.summary, 200) AS f3, NULL::text AS f4, NULL::text AS f5
     FROM org_activity a LEFT JOIN users au ON au.id = a.actor_user_id
    WHERE a.access_code_id = $1::uuid AND a.participant_user_id = ${P}
-     AND a.entity NOT IN ('note', 'task', 'outcome', 'retention', 'referral', 'sharing', 'enrollment')`,
+     AND a.entity NOT IN ('note', 'task', 'outcome', 'retention', 'referral', 'sharing')
+     -- An enrollment's first row is its own branch; its later moves (status, staff, program id) are here.
+     AND NOT (a.entity = 'enrollment' AND a.action = 'created')`,
 };
 
 /** Types whose tables may be missing (later migrations). */
@@ -153,7 +156,7 @@ const ENROLLMENT_STATUS_WORDS: Record<string, string> = {
 };
 
 /** Turn a branch row into the line staff read, and the link to its source. Pure, so the wording is tested. */
-export function timelineItemFromRow(r: TimelineRow, clientId: string): TimelineItem {
+export function timelineItemFromRow(r: TimelineRow, clientId: string): PersonTimelineItem {
   const page = `/dashboard/clients/${clientId}`;
   const base = { key: r.key, type: r.type, at: new Date(r.at).toISOString(), actorName: r.actor_name, detail: null as string | null };
   switch (r.type) {
@@ -203,7 +206,7 @@ export function timelineItemFromRow(r: TimelineRow, clientId: string): TimelineI
 }
 
 export type TimelineResult =
-  | { ok: true; items: TimelineItem[]; next: string | null; types: TimelineType[] }
+  | { ok: true; items: PersonTimelineItem[]; next: string | null; types: TimelineType[] }
   | { ok: false; reason: "no_capability" | "platform_admin_view" | "not_in_reach_or_not_member" };
 
 export async function getPersonTimeline(actor: OrgActor, clientId: string, opts: { types?: readonly TimelineType[]; cursor?: string | null; limit?: number } = {}): Promise<TimelineResult> {

@@ -8,17 +8,23 @@
  * Every rule (reach, path, reasons, consent) is in core and in the database.
  */
 import { NextResponse } from "next/server";
+import { requireOrgCapability } from "@/lib/org-guard";
 import {
   listReferrals, createReferral, moveReferral, updateReferral, getReferralHistory, listReferralOwners,
   REFERRAL_STATUSES, REFERRAL_STATUS_LABELS, REFERRAL_ACTION_LABELS, REFERRAL_TRANSITIONS, REFERRAL_TO_KINDS, REFERRAL_TO_KIND_LABELS, PARTNER_CONSENT_LINE,
 } from "@crucible/core";
-import { crmGate, refuseCrossOrigin, readJson, UUID } from "@/lib/org-crm-gate";
+import { withCrm, refuseCrossOrigin, readJson, UUID } from "@/lib/org-crm-gate";
 
 export const dynamic = "force-dynamic";
+
+/** The org guard, given this request (view-as aware: L2), then the staff workspace check. */
+async function gate(request: Request) {
+  return withCrm(await requireOrgCapability("org.client.view_content", { request }));
+}
 const s = (v: unknown) => (typeof v === "string" ? v : null);
 
 export async function GET(request: Request) {
-  const g = await crmGate();
+  const g = await gate(request);
   if (!g.ok) return g.response;
   const u = new URL(request.url);
   const clientId = u.searchParams.get("clientId");
@@ -42,7 +48,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const cross = refuseCrossOrigin(request);
   if (cross) return cross;
-  const g = await crmGate();
+  const g = await gate(request);
   if (!g.ok) return g.response;
   const b = await readJson(request);
   const rid = s(b.referralId) ?? "";

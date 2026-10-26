@@ -358,6 +358,9 @@ export const NAV_EXTENSIONS: readonly NavExtension[] = [
   // changes need org.settings.manage, checked by the routes and the database.
   { surface: "org", group: "Organization", href: "/dashboard/fields", label: "Fields", navId: "org-nav-fields", needs: "org.cohort.view", module: "custom_fields", after: "Structure" },
   { surface: "org", group: "Organization", href: "/dashboard/layouts", label: "Layouts", navId: "org-nav-layouts", needs: "org.cohort.view", after: "Fields" },
+  // House L5 (105): find anyone you work with, and closed-loop referrals (off with the org's referrals module).
+  { surface: "org", group: "Work", href: "/dashboard/search", label: "Find a person", navId: "org-nav-search", needs: "org.client.view_content", after: "People" },
+  { surface: "org", group: "Work", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", needs: "org.client.view_content", module: "referrals", after: "Asks" },
 ];
 
 /**

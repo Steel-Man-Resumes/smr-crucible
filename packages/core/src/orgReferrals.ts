@@ -29,12 +29,17 @@ export interface Referral {
   id: string; participant_user_id: string; participant_name: string | null;
   to_kind: ReferralToKind; to_resource_id: string | null; to_name: string; reason: string | null;
   status: ReferralStatus; status_reason: string | null;
-  owner_staff_id: string | null; owner_name: string | null; due_on: string | null; consent_ok: boolean;
+  owner_staff_id: string | null; owner_name: string | null;
+  /** The stored owner is still on this organization's staff. False: they left (or there is none); anyone who reaches the person may take it over. */
+  owner_active: boolean;
+  due_on: string | null; consent_ok: boolean;
   delivered_at: string | null; closed_at: string | null; created_at: string; updated_at: string; created_by_name: string | null;
 }
 
 const COLS = `r.id, r.participant_user_id, ${consentName("r.participant_user_id")} AS participant_name,
   r.to_kind, r.to_resource_id, r.to_name, r.reason, r.status, r.status_reason, r.owner_staff_id, ow.name AS owner_name,
+  (r.owner_staff_id IS NOT NULL AND (r.owner_staff_id = (SELECT oa.partner_user_id FROM access_code oa WHERE oa.id = r.access_code_id)
+     OR EXISTS (SELECT 1 FROM org_staff os WHERE os.access_code_id = r.access_code_id AND os.user_id = r.owner_staff_id))) AS owner_active,
   to_char(r.due_on, 'YYYY-MM-DD') AS due_on, r.consent_ok, r.delivered_at, r.closed_at, r.created_at, r.updated_at, cb.name AS created_by_name`;
 const FROM = `FROM referral r LEFT JOIN users ow ON ow.id = r.owner_staff_id LEFT JOIN users cb ON cb.id = r.created_by`;
 

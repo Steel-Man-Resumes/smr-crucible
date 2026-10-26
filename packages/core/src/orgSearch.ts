@@ -38,6 +38,7 @@ let envKnown: { at: number; env: SearchEnv } | null = null;
 export async function getSearchEnv(): Promise<SearchEnv> {
   if (envKnown && Date.now() - envKnown.at < 60_000) return envKnown.env;
   try {
+    // rls-lint-ok(enrollment): reads the catalog (to_regclass, pg_attribute) to learn whether the table exists; no row of it is read.
     const [r] = await query<{ enrollment: boolean; trgm: string | null }>(
       `SELECT (to_regclass('public.enrollment') IS NOT NULL AND EXISTS (SELECT 1 FROM pg_attribute
                WHERE attrelid = to_regclass('public.enrollment') AND attname = 'program_participant_id' AND NOT attisdropped)) AS enrollment,

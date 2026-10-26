@@ -8,7 +8,8 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { TIMELINE_CHIPS, type TimelineItem } from "@crucible/core/src/orgWorkflowShared";
+import { useOrgTerms } from "@/lib/use-org-terms";
+import { TIMELINE_CHIPS, type PersonTimelineItem } from "@crucible/core/src/orgWorkflowShared";
 
 const TYPE_LABEL: Record<string, string> = {
   note: "Note", correction: "Correction", task: "Task", ask: "Ask to share", outcome: "Job", retention: "Check-in",
@@ -19,10 +20,15 @@ const time = (s: string) => new Date(s).toLocaleTimeString(undefined, { hour: "n
 
 export function PersonTimeline({ clientId, first }: { clientId: string; first: string }) {
   const [chips, setChips] = useState<string[]>([]);
-  const [items, setItems] = useState<TimelineItem[] | null>(null);
+  const [items, setItems] = useState<PersonTimelineItem[] | null>(null);
   const [next, setNext] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  // The organization's own words for its programs (house SPEC: never hard-coded).
+  const words = useOrgTerms();
+  const programs = words.plural("program");
+  const chipLabel = (c: { key: string; label: string }) => (c.key === "enrollments" ? programs.charAt(0).toUpperCase() + programs.slice(1) : c.label);
+  const typeLabel = (t: string) => (t === "enrollment" ? words.cap("program") : TYPE_LABEL[t] ?? "Record");
 
   const types = chips.length ? TIMELINE_CHIPS.filter((c) => chips.includes(c.key)).flatMap((c) => c.types) : [];
   const typesParam = types.join(",");
@@ -32,7 +38,7 @@ export function PersonTimeline({ clientId, first }: { clientId: string; first: s
     try {
       const res = await fetch(`/api/org/clients/${clientId}/timeline?${qs}`);
       if (!res.ok) throw new Error();
-      const d = (await res.json()) as { items: TimelineItem[]; next: string | null };
+      const d = (await res.json()) as { items: PersonTimelineItem[]; next: string | null };
       setItems((prev) => (cursor && prev ? [...prev, ...d.items] : d.items));
       setNext(d.next);
     } catch { setFailed(true); if (!cursor) setItems([]); }
@@ -41,7 +47,7 @@ export function PersonTimeline({ clientId, first }: { clientId: string; first: s
 
   const toggle = (k: string) => setChips((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]));
   // Group by day so a long history reads like a diary.
-  const days: { day: string; rows: TimelineItem[] }[] = [];
+  const days: { day: string; rows: PersonTimelineItem[] }[] = [];
   for (const i of items ?? []) {
     const d = when(i.at);
     if (days.length && days[days.length - 1].day === d) days[days.length - 1].rows.push(i);
@@ -56,7 +62,7 @@ export function PersonTimeline({ clientId, first }: { clientId: string; first: s
           className={`t-focus min-h-touch rounded-[4px] border px-3 text-xs ${chips.length === 0 ? "border-t-amber text-t-white font-semibold" : "border-t-line text-t-phos-dim hover:text-t-white"}`}>Everything</button>
         {TIMELINE_CHIPS.map((c) => (
           <button key={c.key} type="button" aria-pressed={chips.includes(c.key)} onClick={() => toggle(c.key)}
-            className={`t-focus min-h-touch rounded-[4px] border px-3 text-xs ${chips.includes(c.key) ? "border-t-amber text-t-white font-semibold" : "border-t-line text-t-phos-dim hover:text-t-white"}`}>{c.label}</button>
+            className={`t-focus min-h-touch rounded-[4px] border px-3 text-xs ${chips.includes(c.key) ? "border-t-amber text-t-white font-semibold" : "border-t-line text-t-phos-dim hover:text-t-white"}`}>{chipLabel(c)}</button>
         ))}
       </div>
       {failed && (
@@ -77,7 +83,7 @@ export function PersonTimeline({ clientId, first }: { clientId: string; first: s
                     <li key={i.key} id={`tl-${i.key.replace(/:/g, "-")}`} className="relative bg-t-panel border border-t-line px-4 py-3 scroll-mt-24">
                       <span aria-hidden="true" className="absolute -left-[1.4rem] top-4 h-2 w-2 rounded-full bg-t-amber" />
                       <p className="text-xs text-t-phos-dim">
-                        <span className="font-semibold text-t-amber-bright">{TYPE_LABEL[i.type] ?? "Record"}</span> · {time(i.at)}{i.actorName ? ` · ${i.actorName}` : ""}
+                        <span className="font-semibold text-t-amber-bright">{typeLabel(i.type)}</span> · {time(i.at)}{i.actorName ? ` · ${i.actorName}` : ""}
                       </p>
                       <p className="mt-1 text-sm text-t-white">{i.title}</p>
                       {i.detail && <p className="mt-1 text-sm text-t-phos whitespace-pre-wrap line-clamp-4">{i.detail}</p>}

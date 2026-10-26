@@ -18,7 +18,7 @@ import { DraftStatus } from "@/components/org/DraftStatus";
 
 export interface ReferralView {
   id: string; participant_user_id: string; participant_name: string | null; to_kind: ReferralToKind; to_name: string; reason: string | null;
-  status: ReferralStatus; status_reason: string | null; owner_staff_id: string | null; owner_name: string | null; due_on: string | null;
+  status: ReferralStatus; status_reason: string | null; owner_staff_id: string | null; owner_name: string | null; owner_active?: boolean; due_on: string | null;
   consent_ok: boolean; delivered_at: string | null; closed_at: string | null; created_at: string; created_by_name: string | null;
 }
 interface Payload { referrals: ReferralView[]; canWrite: boolean; me: string; owners: { id: string; name: string | null }[]; options: { partnerConsentLine: string } }
@@ -53,8 +53,8 @@ export function useReferrals(query: Record<string, string>) {
 }
 
 /** One referral: where, why, where it stands, the next step, and its history. */
-export function ReferralCard({ r, canWrite, owners, showPerson, consentLine, onChange }: {
-  r: ReferralView; canWrite: boolean; owners: { id: string; name: string | null }[]; showPerson?: boolean; consentLine: string; onChange: () => void;
+export function ReferralCard({ r, canWrite, owners, showPerson, consentLine, me, onChange }: {
+  r: ReferralView; canWrite: boolean; owners: { id: string; name: string | null }[]; showPerson?: boolean; consentLine: string; me?: string; onChange: () => void;
 }) {
   const [moving, setMoving] = useState<ReferralStatus | null>(null);
   const [reason, setReason] = useState("");
@@ -97,7 +97,7 @@ export function ReferralCard({ r, canWrite, owners, showPerson, consentLine, onC
           <p className="text-sm font-semibold text-t-white">To {r.to_name}</p>
           {r.reason && <p className="text-sm text-t-phos whitespace-pre-wrap">{r.reason}</p>}
           <p className="mt-1 text-xs text-t-phos-dim">
-            {r.owner_name ? `Owner: ${r.owner_name}` : "No owner"}
+            {r.owner_staff_id && r.owner_active === false ? `Owner: ${r.owner_name || "a staff member"}, who has left` : r.owner_name ? `Owner: ${r.owner_name}` : "No owner"}
             {r.due_on ? ` · ${overdue ? "was due" : "next look"} ${day(r.due_on)}` : ""}
             {` · made ${day(r.created_at)}`}{r.created_by_name ? ` by ${r.created_by_name}` : ""}
           </p>
@@ -107,6 +107,12 @@ export function ReferralCard({ r, canWrite, owners, showPerson, consentLine, onC
         </p>
       </div>
       {r.status_reason && <p className="mt-1 text-xs text-t-phos">Why: {r.status_reason}</p>}
+      {canWrite && r.status !== "closed" && me && r.owner_staff_id !== me && (!r.owner_staff_id || r.owner_active === false) && (
+        <p className="mt-2 border border-t-amber bg-t-panel-2 px-3 py-2 text-xs text-t-amber-bright">
+          {r.owner_staff_id ? "The owner has left the staff, so nobody is following this up." : "Nobody owns this referral, so nobody is following it up."}
+          <button type="button" disabled={busy} onClick={() => update({ ownerId: me })} className="t-focus ml-2 underline underline-offset-4">Take it over</button>
+        </p>
+      )}
       {blocked && r.status === "draft" && <p className="mt-2 border border-t-line bg-t-panel-2 px-3 py-2 text-xs text-t-phos">{consentLine}</p>}
 
       {canWrite && r.status !== "closed" && (
@@ -268,7 +274,7 @@ export function ReferralsPanel({ clientId, first, userId }: { clientId: string; 
       {data.canWrite && <NewReferral clientId={clientId} first={first} userId={userId} consentLine={data.options.partnerConsentLine} onMade={reload} />}
       {data.referrals.length === 0 ? <p className="text-sm text-t-phos-dim">No referrals yet. When you send {first} somewhere for help, record it here so someone follows up.</p> : (
         <ul className="space-y-2">
-          {data.referrals.map((r) => <ReferralCard key={r.id} r={r} canWrite={data.canWrite} owners={data.owners} consentLine={data.options.partnerConsentLine} onChange={reload} />)}
+          {data.referrals.map((r) => <ReferralCard key={r.id} r={r} canWrite={data.canWrite} owners={data.owners} me={data.me} consentLine={data.options.partnerConsentLine} onChange={reload} />)}
         </ul>
       )}
     </section>
@@ -303,7 +309,7 @@ export function ReferralsPage() {
         : data.referrals.length === 0 ? <p className="text-sm text-t-phos-dim">{filter === "overdue" ? "Nothing past due." : "No referrals here."} New referrals are made from a person&apos;s page, under Referrals.</p>
         : (
           <ul className="space-y-2">
-            {data.referrals.map((r) => <ReferralCard key={r.id} r={r} canWrite={data.canWrite} owners={data.owners} showPerson consentLine={data.options.partnerConsentLine} onChange={reload} />)}
+            {data.referrals.map((r) => <ReferralCard key={r.id} r={r} canWrite={data.canWrite} owners={data.owners} me={data.me} showPerson consentLine={data.options.partnerConsentLine} onChange={reload} />)}
           </ul>
         )}
     </div>

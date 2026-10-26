@@ -1,17 +1,20 @@
 /**
- * The gate the staff-workflow routes share (house lane L5): a signed-in org
- * member with the capability, in an organization that has the staff workspace
- * (crm_v2) on. Everything about WHICH rows comes from core, never from here.
+ * What the staff-workflow routes share (house lane L5): the staff workspace
+ * (crm_v2) check after the org guard, the same-origin refusal for writes, and
+ * body reading. Everything about WHICH rows comes from core, never from here.
  */
 import { NextResponse } from "next/server";
-import { getOne, type OrgActor, type OrgCapability } from "@crucible/core";
-import { requireOrgCapability } from "@/lib/org-guard";
+import { getOne, type OrgActor } from "@crucible/core";
+import type { OrgGuardResult } from "@/lib/org-guard";
 import { isSameOriginRequest } from "@/lib/same-origin";
 
 export type CrmGate = { ok: true; actor: OrgActor } | { ok: false; response: NextResponse };
 
-export async function crmGate(capability: OrgCapability = "org.client.view_content"): Promise<CrmGate> {
-  const guard = await requireOrgCapability(capability);
+/**
+ * After the org guard (each route calls requireOrgCapability itself, passing
+ * its request, so view-as is honored: L2): the staff workspace must be on.
+ */
+export async function withCrm(guard: OrgGuardResult): Promise<CrmGate> {
   if (!guard.ok) return guard;
   const flag = await getOne<{ crm_v2: boolean }>(`SELECT crm_v2 FROM access_code WHERE id = $1`, [guard.actor.orgId]);
   if (!flag?.crm_v2) return { ok: false, response: NextResponse.json({ error: "Not found." }, { status: 404 }) };
