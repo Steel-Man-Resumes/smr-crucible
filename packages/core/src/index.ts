@@ -128,3 +128,6 @@ export * from './directoryPublication';
 export * from './resourceList';
 export * from './directoryCoverage';
 export * from './packageDelivery';
+// Staff rewards (111) and staff directory contributions (112), lane S6.
+export * from './staffRewards';
+export * from './directoryContribution';
