@@ -155,6 +155,19 @@ export const RESTRICTED_GRANTS = {
   participant_contact: ["SELECT", "INSERT", "UPDATE"],
   referral: ["SELECT", "INSERT", "UPDATE"],
   referral_event: ["SELECT"],
+  // Staff rewards (111, lane S6). Your own switch; program settings by managers;
+  // a good catch is withdrawn, never edited or deleted; milestones are written
+  // only by definer functions (the app may only mark one seen); a recognition
+  // note is answered only by the person it is about, never deleted.
+  staff_rewards_setting: ["SELECT", "INSERT", "UPDATE (rewards_on, board_ok)"],
+  staff_rewards_org: ["SELECT", "INSERT", "UPDATE (team_board_on, recognition_notes_on, program_rewards)"],
+  staff_kudos: ["SELECT", "INSERT", "UPDATE (withdrawn_at)"],
+  staff_milestone: ["SELECT", "UPDATE (seen_at)"],
+  staff_recognition_note: ["SELECT", "INSERT", "UPDATE (body, period_label, status)"],
+  // Directory contributions (112, lane S6): the data owner's queue. Written
+  // only through the intake and decision functions; read by the owner (RLS).
+  directory_contribution: ["SELECT"],
+  staff_listing_nudge: ["SELECT", "INSERT", "UPDATE (shown_at)"],
 };
 
 /**
@@ -185,6 +198,18 @@ export const APP_FUNCTIONS = [
   "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
   "smr_purge_stale_staff_drafts()",
   "smr_retention_task_marks()",
+  // 111/112 (lane S6): membership check, the caller's own milestones, the
+  // giver board, and the contribution intake, read-back and owner decisions
+  // (each refuses a caller who is not who it needs).
+  "staff_rewards_member(uuid, uuid)",
+  "staff_rewards_refresh()",
+  "staff_kudos_giver_board(integer)",
+  "submit_directory_contribution(jsonb)",
+  "my_directory_contributions()",
+  "withdraw_directory_contribution(uuid)",
+  "decide_directory_contribution(uuid, text, text, text)",
+  "apply_contribution_call(uuid, uuid, uuid)",
+  "directory_contribution_owner()",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -197,6 +222,9 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   "smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)",
   // Answers "is this person a volunteer" for any org: definer-only.
   "smr_is_volunteer(uuid, uuid)",
+  // 111 (lane S6): only definer code awards or takes back a milestone.
+  "staff_milestone_grant(uuid, uuid, text, uuid)",
+  "staff_milestone_revoke(uuid, uuid, uuid)",
   // 104: activity trigger functions (definer); fired by triggers, never called.
   "custom_field_activity()",
   "org_customization_activity()",
@@ -227,6 +255,7 @@ export const DIRECTORY_OBJECTS = [
   "resource_corroboration", "resource_chain_step_corroboration", "resource_relationship", "resource_relationship_event", "resource_corroboration_void", "resource_relationship_event_void", "resource_service_tier_v", "resource_chain_tier_v", "resource_directory_publisher",
   "resource_app_v", "directory_publication_alias", "employer_publication_v", "resource_publication_v", "resource_chain_publication_v",
   "resource_band_publication_v", "resource_chain_band_publication_v", "employer_band_publication_v",
+  "directory_contribution",
 ];
 
 /**
