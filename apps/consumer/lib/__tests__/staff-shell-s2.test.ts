@@ -290,3 +290,22 @@ test("migration 107: guarded, idempotent, a platform-admin-only setter, a guard 
   assert.equal(ORG_OUTBOUND_BRAND_SQL.set, "SELECT public.smr_set_org_branding($1::uuid, $2) AS branding");
   assert.doesNotMatch(sql, /—|–/, "no long dashes");
 });
+
+test("organization emails: signed the organization's way; the account they sign in to is still named truthfully", async () => {
+  const { brandOrgEmail } = await import("../outbound-email-brand");
+  const { buildInviteEmail, buildStaffInvitationEmail } = await import("../org-invite-email");
+  const invite = buildInviteEmail({ inviteeName: "Alma Reyes", inviterName: "Sam Ortiz", orgName: "Lakeshore Works", url: "https://example.invalid/x", origin: "https://example.invalid" });
+  const co = brandOrgEmail(invite, orgOutboundBrand({ name: "Lakeshore Works" }));
+  assert.match(co.text, /Lakeshore Works with Steel Man Resumes\nTruth\. Told Strong\./);
+  assert.match(co.html, /Lakeshore Works with Steel Man Resumes<br>Truth\. Told Strong\./);
+  assert.equal(co.subject, invite.subject);
+  const ex = brandOrgEmail(invite, orgOutboundBrand({ name: "Lakeshore Works", branding: "exclusive" }));
+  assert.doesNotMatch(ex.text, /Truth\. Told Strong/, "the Steel Man tagline is not the organization's signature");
+  assert.match(ex.text, /\nLakeshore Works\nYou received this/);
+  assert.match(ex.text, /free Steel Man Resumes account/, "the body still names the account truthfully");
+  const evil = brandOrgEmail(invite, orgOutboundBrand({ name: "<script>x</script>", branding: "exclusive" }));
+  assert.doesNotMatch(evil.html, /<script>/);
+  const staff = buildStaffInvitationEmail({ inviteeName: "Sam Ortiz", inviterName: null, orgName: "Lakeshore Works", roleLabel: "Case manager", origin: "https://example.invalid", days: 14 });
+  assert.match(brandOrgEmail(staff, orgOutboundBrand({ name: "Lakeshore Works" })).text, /Lakeshore Works with Steel Man Resumes/);
+  assert.deepEqual(brandOrgEmail(invite, orgOutboundBrand({ name: null })), invite, "no name: unchanged");
+});
