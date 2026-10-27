@@ -27,6 +27,13 @@ import { requestHighlight } from "@/lib/highlight-bus";
 import { AssistantActionCard } from "./AssistantActionCard";
 import SpeechInputButton from "@/components/SpeechInputButton";
 import { Send, Check, Settings2 } from "lucide-react";
+// Lane S1 (staff pass 2026-10-27): page buttons, the Add people prefill, screen-built offers.
+import { staffToolActivity } from "@/lib/tools/staff";
+import { staffPageHref, staffPageLabel } from "@/lib/staff-pages";
+import { parseAddPersonPrefill, writeAddPersonPrefill, prefillFullName } from "@/lib/org-add-person-prefill";
+import { offersFor, staffScreenOf, personOnScreen, type StaffOffer } from "@/lib/staff-discovery";
+import { useEffectiveRole } from "@/components/RoleProvider";
+import { StaffTroyDiscovery } from "./StaffTroyDiscovery";
 
 interface ChatSettings {
   coachLength: "brief" | "full";
@@ -77,6 +84,8 @@ const TOOL_ACTIVITY: Record<string, string> = {
   take_me_there: "Taking you there",
   highlight_element: "Pointing at it",
   file_feedback: "Recording your confirmed message",
+  // The staff tool registry's modules (lib/tools/staff), lane S1 and later lanes.
+  ...staffToolActivity(),
 };
 
 /** Page-aware quick prompts — buttons users can tap instead of typing */
@@ -301,6 +310,25 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
     setFocus(null);
     setMessages([]);
     setInput("");
+  }, [setInput, setMessages]);
+  // Lane S1: what t.ROY can do HERE, built from the screen and the person on it.
+  const capabilities = useEffectiveRole()?.capabilities;
+  const screenPerson = focus?.clientId ? { id: focus.clientId, firstName: focus.firstName } : (personOnScreen(pathname) ? { id: personOnScreen(pathname)! } : null);
+  const staffOffers = staff ? offersFor({ screen: staffScreenOf(pathname), person: screenPerson, capabilities }) : [];
+  const inputRef = useRef<HTMLInputElement>(null);
+  /** Using an offer never sends: a skill is opened about the person, or the words go in the box. */
+  const applyOffer = useCallback((o: StaffOffer) => {
+    if (o.skill) {
+      const sameScope = (focusRef.current?.clientId ?? null) === (o.clientId ?? null);
+      if (!sameScope) setMessages([]);
+      const next: StaffTroyRequest = { skill: o.skill, clientId: o.clientId, firstName: sameScope ? focusRef.current?.firstName : undefined };
+      focusRef.current = next;
+      setFocus(next);
+      setInput(skillRequest(o.skill, next.firstName));
+    } else {
+      setInput(o.prompt);
+    }
+    setTimeout(() => inputRef.current?.focus(), 50);
   }, [setInput, setMessages]);
   const [pendingLineHelp, setPendingLineHelp] = useState<string[]>([]);
   useEffect(() => {
@@ -756,6 +784,13 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
               if (inv.toolName === "read_owner_ai_costs") return [{ key: i, href: "/dashboard/admin", label: "owner cost controls" }];
               if (inv.toolName === "read_owner_directory_coverage") return [{ key: i, href: "/dashboard/admin/directory-coverage", label: "coverage review" }];
             }
+            // Lane S1: a page this staff member's own nav shows. The href comes from
+            // our table (lib/staff-pages.ts), never from the model.
+            if (staff && inv?.toolName === "open_staff_page" && inv.state === "result" && (inv.result as { status?: string })?.status === "ok") {
+              const r = inv.result as { page?: string; clientId?: string; label?: string };
+              const href = staffPageHref(r.page, r.clientId);
+              return href ? [{ key: i, href, label: r.page === "person" ? staffPageLabel("person", (r.label ?? "").replace(/'s page$/, "")) : staffPageLabel(r.page) }] : [];
+            }
             if (inv?.toolName === "contextual_handoff" && inv.state === "result") {
               const result = inv.result as { page?: string; selection?: { applicationId?: string; laneId?: string | null; artifactId?: string; revisionId?: string } };
               const href = result.page ? resolveAssistantPage(result.page, result.selection?.applicationId, result.selection) : null;
@@ -784,6 +819,17 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
               ? [{ id: r.participantId, purpose: r.purpose === "case_note" ? "case_note" : "check_in", body: r.body.trim() }] : [];
           })[0] : undefined;
           const draftText = draftFor?.body ?? "";
+          // Lane S1: a filled-in Add people form. Nothing was added or sent; the
+          // button opens the form and the staff member presses Send invite.
+          const addPerson = staff ? parts.flatMap((part) => {
+            if (part.type !== "tool-invocation") return [];
+            const inv = part.toolInvocation as { toolName?: string; state?: string; result?: Record<string, unknown> } | undefined;
+            const r = inv?.result;
+            if (inv?.toolName !== "open_add_person" || inv.state !== "result" || r?.status !== "prefill_ready" || r.saved !== false || r.sent !== false || r.invited !== false) return [];
+            const p = (r.prefill ?? {}) as Record<string, unknown>;
+            const parsed = parseAddPersonPrefill({ ...p, orgId: r.orgId, at: new Date().toISOString() });
+            return parsed ? [parsed] : [];
+          })[0] : undefined;
           // The skill run this answer was logged as (migration 106). Saving the
           // draft or copying the answer marks it used, by this staff member.
           const skillRunId = staff ? skillRunIdOf((message as { annotations?: unknown }).annotations) : null;
@@ -858,6 +904,22 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                   <span className="text-[11px] text-muted">Nothing is saved or sent until you do it.</span>
                 </div>
               )}
+              {!replyStillComing && addPerson && (
+                <div className="flex flex-col items-start gap-1 pl-1">
+                  <button
+                    type="button"
+                    data-staff-add-person=""
+                    onClick={() => {
+                      if (accountId) writeAddPersonPrefill(accountId, { ...addPerson, skillRunId: skillRunId ?? undefined, at: new Date().toISOString() });
+                      router.push("/dashboard/participants");
+                    }}
+                    className="min-h-touch rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
+                  >
+                    Open Add people for {prefillFullName(addPerson)}
+                  </button>
+                  <span className="text-[11px] text-muted">Filled in, not sent. You check it and press Send invite.</span>
+                </div>
+              )}
               {staff && !replyStillComing && answerText && (
                 <div className="flex flex-wrap items-center gap-2 pl-1">
                   <button
@@ -908,8 +970,40 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Staff (lane S1): what t.ROY can do on THIS screen, for this person. A
+          complete request is sent when tapped (they asked); one that needs
+          their words goes in the box. */}
+      {staff && showQuickPrompts && staffOffers.length > 0 && (
+        <div className="pb-3 flex-shrink-0" data-staff-troy-offers="">
+          <p className="pb-2 text-xs text-muted">What I can do here:</p>
+          <div className="flex flex-wrap gap-2">
+            {staffOffers.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                title={o.why}
+                onClick={() => (o.skill || /[\s:]$/.test(o.prompt) ? applyOffer(o) : sendQuickPrompt(o.prompt))}
+                className="rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {staff && (
+        <StaffTroyDiscovery
+          pathname={pathname ?? ""}
+          person={screenPerson}
+          messages={messages as never}
+          isLoading={isLoading}
+          input={input}
+          capabilities={capabilities}
+          onUse={applyOffer}
+        />
+      )}
       {/* Quick prompt buttons — shown before first message */}
-      {showQuickPrompts && (
+      {!staff && showQuickPrompts && (
         <div className="flex flex-wrap gap-2 pb-3 flex-shrink-0">
           {quickPrompts.map((prompt) => (
             <button
@@ -935,6 +1029,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
       {/* Input — shrink-0 keeps it pinned at bottom always */}
       <form ref={formRef} onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t border-border flex-shrink-0">
         <input
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Type a message..."

@@ -99,6 +99,7 @@ export const SEAT_EXEMPT_API: Readonly<Record<string, string>> = {
  * can tell "deliberately gated" from "forgot to decide".
  */
 export const SEAT_GATED_FROM_FORGE: Readonly<Record<string, string>> = {
+  "/api/org/prefs": "staff t.ROY suggestions switch (StaffTroyDiscovery, rendered only for staff=true); a staff workspace route",
   "/api/coach": "the Refinery coach chat (AssistantChat with coach=true); the Forge chat uses /api/assistant",
   "/api/coach/proactive": "Refinery coach only (coach=true)",
   "/api/coach/settings": "Refinery coach only (coach=true)",

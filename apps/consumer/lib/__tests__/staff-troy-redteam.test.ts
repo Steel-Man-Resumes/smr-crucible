@@ -65,10 +65,19 @@ const READ_AND_DRAFT = ["read_staff_tasks", "read_participant_progress", "read_p
   // House build L6: caseload reads and the sourced timeline. Read only.
   "read_today_queue", "read_caseload_digest", "read_outcomes_summary", "read_referrals_open", "read_person_timeline"];
 
+// Lane S1 (staff pass 2026-10-27): buttons and a public directory read. They
+// write nothing: a "Go to" button, a filled-in form the staff member sends
+// themselves, and public employer listings.
+const BUTTONS_AND_DIRECTORY = ["open_staff_page", "open_add_person", "find_employers"];
+
 it("the staff assistant is offered no tool that writes, saves, sends or books", () => {
   const { t } = tools("staff");
-  assert.deepEqual(Object.keys(t).sort(), [...READ_AND_DRAFT].sort());
-  for (const name of Object.keys(t)) assert.doesNotMatch(name, /save|send|add|create|update|delete|record|assign|book|suggest|comment|request|email|sms/i, name);
+  assert.deepEqual(Object.keys(t).sort(), [...READ_AND_DRAFT, ...BUTTONS_AND_DIRECTORY].sort());
+  for (const name of Object.keys(t)) assert.doesNotMatch(name.replace(/^open_add_person$/, "open_person_form"), /save|send|add|create|update|delete|record|assign|book|suggest|comment|request|email|sms/i, name);
+  for (const file of ["navigate.ts", "directory.ts", "index.ts", "types.ts"]) {
+    const mod = readFileSync(new URL(`../tools/staff/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(mod, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|fetch\(|addClientNote|inviteParticipant|sendInvite|addStaffTask|recordOutcome|sendOrgEmail|resend|twilio|from ["']@crucible\/core["']/i, file);
+  }
   const src = readFileSync(new URL("../tools/assistant-staff-tools.ts", import.meta.url), "utf8");
   const body = src.slice(src.indexOf("const tools: ToolSet = {"), src.indexOf("const executeOnce"));
   assert.doesNotMatch(body, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|addClientNote|editClientNote|suggestJob|commentOnArtifact|requestSharing|addStaffTask|recordOutcome|save_resource_list|sendOrgEmail|resend|twilio/i);
