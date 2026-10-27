@@ -1,5 +1,6 @@
 import { evidenceRefs, type StaffToolEvidence } from "./staff-tool-evidence";
 import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
+import { STAFF_PAGE_WORDS } from "./staff-pages";
 /**
  * Nothing unverified reaches a staff member or an admin. Two layers, in order.
  *
@@ -152,7 +153,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // t.ROY reads and drafts; it cannot send, save, file or book (house build
   // L6 red team: "send the email"). An answer that says it did is wrong
   // whatever else is true in it.
-  const acted = text.match(/\bI(?:'ve| have)?\s+(?:already\s+|just\s+)?(?:sent|emailed|texted|messaged|saved|filed|booked|scheduled|submitted|assigned|recorded|logged)\b(?!\s+(?:nothing|no\b))|\b(?:your|the|this|that) (?:message|email|text|note|draft|check-in|referral|reminder) (?:has been|was|is now|got) (?:sent|saved|filed|delivered|scheduled)\b/i);
+  const acted = text.match(/\bI(?:'ve| have)?\s+(?:already\s+|just\s+)?(?:sent|emailed|texted|messaged|saved|filed|booked|scheduled|submitted|assigned|recorded|logged|invited|enrolled)\b(?!\s+(?:nothing|no\b))|\b(?:your|the|this|that|an?) (?:message|email|text|note|draft|check-in|referral|reminder|invite|invitation) (?:has been|was|is now|got) (?:sent|saved|filed|delivered|scheduled)\b|\b(?:has|have) been (?:invited|added to your (?:list|caseload))\b|\bI(?:'ve| have)? (?:already |just )?added (?:them|him|her|\p{Lu}\p{Ll}+) to\b/iu);
   if (acted) problems.push(`"${acted[0]}": t.ROY cannot send, save or book anything; you do that yourself`);
 
   // Citations (summarize-with-sources): every [N1]-style ref must be an item
@@ -214,6 +215,10 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // their list, is not a claim about a person; flagging it read as a finding
   // about someone (staff walk 2026-10-27). Only that sentence shape is let
   // through, and only on the answer path (see opts above).
+  // Lane S1: the new person's name in a filled-in Add people form, which the
+  // staff member typed and the tool checked. Answer path only, like the rule
+  // below: a draft for a participant never gets it.
+  if (opts?.typedNamesInNoMatch) for (const n of (facts.staffToolEvidence ?? []).flatMap((e) => e.newPersonNames ?? [])) known.add(n.toLowerCase());
   const typed = new Set(opts?.typedNamesInNoMatch ? (userSaid ?? "").toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 1) : []);
   // A capitalized word is only a candidate NAME if it is not an ordinary word.
   // The first version listed forty stopwords and flagged everything else, so a
@@ -255,6 +260,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     for (const w of label.toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
   }
   for (const w of (facts.orgName ?? "").toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
+  // Workspace page names t.ROY points people to ("open Add people", "Go to Referrals"), lane S1.
+  for (const w of Array.from(STAFF_PAGE_WORDS)) STOPWORDS.add(w);
+  for (const w of ["invite", "send", "add", "open", "press", "button", "page", "form", "program", "directory", "employers", "employer", "help", "hires", "records", "mark", "reported"]) STOPWORDS.add(w);
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.
   const flagged = new Set<string>();
