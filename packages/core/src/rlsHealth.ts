@@ -91,6 +91,11 @@ export const RLS_PROTECTED_TABLES = [
   "participant_contact",
   "referral",
   "referral_event",
+  // Staff customization (migration 108): what staff may change for
+  // themselves (org-scoped, managers write) and each person's own view
+  // change log (owner-only, append-only but for "undone")
+  "org_customization_policy",
+  "view_change_log",
 ] as const;
 
 export interface RlsHealth {

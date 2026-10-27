@@ -394,6 +394,7 @@ async function main() {
   await aiSkillRunChecks();
   await structureChecks();
   await customizationChecks();
+  await customizationPolicyChecks();
 }
 
 /**
@@ -831,6 +832,102 @@ async function customizationChecks() {
   check("the owner can", (await core.setRoleLayout(aOwner, "staff", "today", { order: ["quiet"], hidden: ["unassigned"] })).ok === true);
   check("staff get it", (await core.getMyRoleLayout(aOther)).today?.hidden?.includes("unassigned") === true);
   check("another organization does not", (await core.getRoleLayouts(aSpy)).today.staff === undefined);
+}
+
+/**
+ * Staff build S3 (migration 108): what staff may change for themselves, and
+ * each person's own view change log. The claims: org admins now manage
+ * settings everywhere the owner does (core and database agree); staff cannot
+ * change the policy, and another organization cannot read or forge it; a
+ * locked choice is refused on write and ignored on read; the change log is
+ * the person's alone (not a colleague's, not the owner's, not another
+ * organization's), cannot be erased or rewritten by the app, and undo works
+ * once; the grid's batch write is all or nothing and holds to reach.
+ * (Neither 108 table holds per-participant rows, so the reach check here is
+ * the owner-only rule on the log and the reach rule on the batch write.)
+ */
+async function customizationPolicyChecks() {
+  console.log("\n  -- customization policy and view change log (108) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ t }] = await sql`SELECT to_regclass('public.view_change_log') AS t`;
+  if (!t) { console.log("  note  108 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("cp-owner"), admin = await mkUser("cp-admin"), cm = await mkUser("cp-cm"), other = await mkUser("cp-other"), spy = await mkUser("cp-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOCP" + uniq}, ${P + " policy"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOCP2" + uniq}, ${P + " policy2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("cp-pat");
+  await core.redeemAccessCode(pat, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aOwner = await A(owner), aAdmin = await A(admin), aCm = await A(cm), aOther = await A(other), aSpy = await A(spy);
+  const raw = async (u, orgId, stmt) => { try { const r = await app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${u}, true)`, stmt(app)]); return r[2]; } catch (e) { return String(e.message); } };
+
+  // Org admins manage settings, everywhere the owner does (Troy 2026-10-27).
+  check("an org admin defines a field", (await core.createFieldDef(aAdmin, { label: "Shift preference", entity: "participant", type: "text" })).ok === true);
+  check("an org admin shares a view", (await core.createSavedView(aAdmin, { surface: "caseload", name: "Team view", shared: true })).ok === true);
+  check("an org admin sets a role layout", (await core.setRoleLayout(aAdmin, "staff", "today", { order: ["tasks"], hidden: [] })).ok === true);
+
+  // The policy: managers write, staff read, other organizations neither.
+  check("staff cannot change what staff may change", (await core.setCustomizationPolicy(aCm, "staff", "today", { today_order: false })).ok === false);
+  check("an org admin can", (await core.setCustomizationPolicy(aAdmin, "staff", "today", { today_order: false })).ok === true);
+  check("staff read their own limits", (await core.getMyCustomizationPolicy(aCm)).today_order === false);
+  check("the owner is never limited", (await core.getMyCustomizationPolicy(aOwner)).today_order === true);
+  const spyRead = await raw(spy, org2.id, (a) => a`SELECT * FROM org_customization_policy WHERE access_code_id = ${org.id}`);
+  check("another organization reads none of the policy", Array.isArray(spyRead) && spyRead.length === 0, JSON.stringify(spyRead));
+  const forged = await raw(spy, org.id, (a) => a`INSERT INTO org_customization_policy (access_code_id, role, surface, allowed) VALUES (${org.id}, 'staff', 'people', '{"grid_edit": false}'::jsonb) RETURNING 1`);
+  check("another organization's owner cannot write it, even forging the scope", typeof forged === "string", JSON.stringify(forged));
+  const staffWrite = await raw(cm, org.id, (a) => a`UPDATE org_customization_policy SET allowed = '{"today_order": true}'::jsonb RETURNING 1`);
+  check("a staff member's own SQL cannot loosen it", Array.isArray(staffWrite) && staffWrite.length === 0, JSON.stringify(staffWrite));
+
+  // Enforced on write and on read.
+  const refused = await core.setTodayOrder(aCm, { order: ["quiet", "tasks"] });
+  check("a locked choice is refused, in the organization's words", refused.ok === false && refused.reason === "policy" && /same for everyone/.test(refused.error), JSON.stringify(refused));
+  await core.setCustomizationPolicy(aAdmin, "staff", "today", null);
+  const applied = await core.setTodayOrder(aCm, { order: ["quiet", "tasks"] });
+  check("allowed again, the change applies and is logged", applied.ok === true && !!applied.changeId, JSON.stringify(applied));
+  await core.setCustomizationPolicy(aOwner, "staff", "today", { today_order: false });
+  check("locked later, the stored choice is ignored on read", (await core.getStaffPrefs(aCm)).effective.todayOrder.length === 0);
+  check("and the full Settings save that leaves it alone still works", (await core.setOwnStaffPrefs(aCm, { ...(await core.getStaffPrefs(aCm)).own, noteKind: "call" })).ok === true);
+  await core.setCustomizationPolicy(aOwner, "staff", "today", null);
+  check("opened again, it comes back", (await core.getStaffPrefs(aCm)).effective.todayOrder[0] === "quiet");
+  await core.setCustomizationPolicy(aOwner, "staff", "people", { personal_views: false });
+  check("personal views locked: saving one is refused", (await core.createSavedView(aCm, { surface: "caseload", name: "Mine", shared: false })).ok === false);
+  await core.setCustomizationPolicy(aOwner, "staff", "people", null);
+
+  // The log: the person's own, append-only but for "undone".
+  const mine = await core.listMyViewChanges(aCm, 10);
+  check("the person reads their own changes", mine.some((c) => c.id === applied.changeId));
+  const colleague = await raw(other, org.id, (a) => a`SELECT id FROM view_change_log`);
+  check("a colleague's own SQL reads none of them", Array.isArray(colleague) && colleague.length === 0, JSON.stringify(colleague));
+  const ownerRead = await raw(owner, org.id, (a) => a`SELECT id FROM view_change_log`);
+  check("nor does the owner", Array.isArray(ownerRead) && ownerRead.length === 0, JSON.stringify(ownerRead));
+  const foreign = await raw(spy, org2.id, (a) => a`SELECT id FROM view_change_log WHERE access_code_id = ${org.id}`);
+  check("nor another organization", Array.isArray(foreign) && foreign.length === 0);
+  const del = await raw(cm, org.id, (a) => a`DELETE FROM view_change_log`);
+  check("the app cannot erase the log", typeof del === "string" && /permission denied/i.test(del), JSON.stringify(del));
+  const rewrite = await raw(cm, org.id, (a) => a`UPDATE view_change_log SET summary = 'x'`);
+  check("or rewrite it", typeof rewrite === "string" && /permission denied/i.test(rewrite), JSON.stringify(rewrite));
+  const asOther = await raw(cm, org.id, (a) => a`INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary) VALUES (${org.id}, ${other}, 'today', 'today_order', 'pref:todayOrder', 'x') RETURNING 1`);
+  check("or write a change into a colleague's log", typeof asOther === "string", JSON.stringify(asOther));
+  const undone = await core.undoViewChange(aCm, { id: applied.changeId });
+  check("undo puts it back and is logged", undone.ok === true && (await core.getStaffPrefs(aCm)).effective.todayOrder.length === 0, JSON.stringify(undone));
+  check("and cannot run twice", (await core.undoViewChange(aCm, { id: applied.changeId })).ok === false);
+  check("a colleague cannot undo it", (await core.undoViewChange(aOther, { id: applied.changeId })).ok === false);
+
+  // The grid's batch write: reach, and all or nothing.
+  const f = await core.createFieldDef(aOwner, { label: "Hours wanted", entity: "participant", type: "number" });
+  const batchOther = await core.setFieldValuesBatch(aOther, [{ entityId: pat, values: { hours_wanted: 20 } }], { fromGrid: true, gridAllowed: true });
+  check("the grid cannot fill in a value for someone the staff member does not reach", batchOther.ok === false, JSON.stringify(batchOther).slice(0, 200));
+  const mixed = await core.setFieldValuesBatch(aCm, [{ entityId: pat, values: { hours_wanted: 20 } }, { entityId: pat, values: { shift_preference: "x".repeat(600) } }], { fromGrid: true, gridAllowed: true });
+  check("one bad cell and nothing is written", mixed.ok === false && Object.keys(mixed.cellErrors ?? {}).length === 1 && !(await core.getFieldValues(aCm, "participant"))[pat]?.hours_wanted, JSON.stringify(mixed).slice(0, 200));
+  const good = await core.setFieldValuesBatch(aCm, [{ entityId: pat, values: { hours_wanted: 20 } }], { fromGrid: true, gridAllowed: true });
+  check("the assigned case manager fills it in from the grid", f.ok && good.ok === true && (await core.getFieldValues(aCm, "participant"))[pat]?.hours_wanted === 20, JSON.stringify(good).slice(0, 200));
+  check("the organization can keep it to the person's page", (await core.setFieldValuesBatch(aCm, [{ entityId: pat, values: { hours_wanted: 30 } }], { fromGrid: true, gridAllowed: false })).ok === false);
+  check("another organization's staff cannot use the batch at all", (await core.setFieldValuesBatch(aSpy, [{ entityId: pat, values: { hours_wanted: 1 } }], { fromGrid: true })).ok === false);
 }
 
 /**
