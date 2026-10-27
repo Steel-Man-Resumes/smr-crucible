@@ -17,6 +17,7 @@
  * Pure and browser-safe: the chat and the server tool both import it.
  */
 import { orgNavFor } from "./org-nav";
+import { NAV_EXTENSIONS } from "./refinery-nav";
 
 export interface StaffPage {
   key: string;
@@ -73,7 +74,10 @@ export function staffPage(key: unknown): StaffPage | null {
  * always-open ones. Same inputs as the sidebar, so the two cannot disagree.
  */
 export function staffPagesFor(capabilities: Iterable<string>, modules?: Readonly<Record<string, boolean>> | null): StaffPage[] {
-  const hrefs = new Set(orgNavFor([...capabilities], modules ?? null).flatMap((g) => g.items.map((i) => i.href)));
+  // Unknown modules (the read failed) close every module-gated page; the
+  // sidebar's "absent means on" would open them (review round 1 nit).
+  const known = modules ?? Object.fromEntries(NAV_EXTENSIONS.flatMap((e) => (e.module ? [[e.module, false]] : [])));
+  const hrefs = new Set(orgNavFor([...capabilities], known).flatMap((g) => g.items.map((i) => i.href)));
   return STAFF_PAGES.filter((p) => p.always || hrefs.has(p.href));
 }
 

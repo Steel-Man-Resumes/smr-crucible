@@ -35,6 +35,14 @@ export function composeStaffTools(ctx: StaffToolContext, existing: ToolSet = {},
   for (const m of modules) {
     for (const [name, t] of Object.entries(m.build(ctx))) {
       if (name in existing || name in out) throw new Error(`staff tool "${name}" is defined twice (module ${m.id})`);
+      // Every module tool fails closed: a thrown error is "unavailable", never an empty answer.
+      const run = t.execute;
+      if (run) {
+        t.execute = async (args, options) => {
+          try { return await run(args, options); }
+          catch { return { status: "unavailable", error: "This step failed. Do not guess, and do not treat it as empty." }; }
+        };
+      }
       out[name] = t;
     }
   }

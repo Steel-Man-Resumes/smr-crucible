@@ -312,11 +312,13 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
     setInput("");
   }, [setInput, setMessages]);
   // Lane S1: what t.ROY can do HERE, built from the screen and the person on it.
-  const capabilities = useEffectiveRole()?.capabilities;
+  const effectiveRole = useEffectiveRole();
+  const capabilities = effectiveRole?.capabilities;
+  const currentOrgId = effectiveRole?.orgId ?? null;
   const screenPerson = focus?.clientId ? { id: focus.clientId, firstName: focus.firstName } : (personOnScreen(pathname) ? { id: personOnScreen(pathname)! } : null);
   const staffOffers = staff ? offersFor({ screen: staffScreenOf(pathname), person: screenPerson, capabilities }) : [];
   const inputRef = useRef<HTMLInputElement>(null);
-  /** Using an offer never sends: a skill is opened about the person, or the words go in the box. */
+  /** applyOffer never sends: a skill is opened about the person, or the words go in the box. (An empty-panel chip with a complete request is sent by sendQuickPrompt instead, on the tap.) */
   const applyOffer = useCallback((o: StaffOffer) => {
     if (o.skill) {
       const sameScope = (focusRef.current?.clientId ?? null) === (o.clientId ?? null);
@@ -827,7 +829,8 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             const r = inv?.result;
             if (inv?.toolName !== "open_add_person" || inv.state !== "result" || r?.status !== "prefill_ready" || r.saved !== false || r.sent !== false || r.invited !== false) return [];
             const p = (r.prefill ?? {}) as Record<string, unknown>;
-            const parsed = parseAddPersonPrefill({ ...p, orgId: r.orgId, at: new Date().toISOString() });
+            // Only for the organization this staff member is in now (review round 1, S5).
+            const parsed = currentOrgId ? parseAddPersonPrefill({ ...p, orgId: r.orgId, at: new Date().toISOString() }, { orgId: currentOrgId }) : null;
             return parsed ? [parsed] : [];
           })[0] : undefined;
           // The skill run this answer was logged as (migration 106). Saving the

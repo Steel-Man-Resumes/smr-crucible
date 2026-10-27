@@ -36,14 +36,31 @@ export function properName(s: string): string {
   return s.replace(/(^|[\s'-])(\p{L})/gu, (_m, sep: string, ch: string) => sep + ch.toUpperCase());
 }
 
-/** True when `value` appears in what the staff member typed: whole words for names, digits for a phone. */
+/** Phone numbers in free text, each as its last 10 digits (one per number, never digits joined across numbers). */
+export function phonesIn(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const m of String(text ?? "").matchAll(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g)) {
+    const d = m[0].replace(/\D/g, "");
+    out.add(d.slice(-10));
+  }
+  return out;
+}
+
+/**
+ * True when `value` is something the staff member typed: whole words for
+ * names, a whole token for an email (never part of a longer address), one
+ * typed number for a phone.
+ */
 export function staffTyped(staffWords: string, value: string, kind: "words" | "email" | "phone"): boolean {
   const said = String(staffWords ?? "");
   if (!value) return false;
-  if (kind === "email") return said.toLowerCase().includes(value.toLowerCase());
+  if (kind === "email") {
+    const want = value.toLowerCase();
+    return said.toLowerCase().split(/[\s,;<>()"'\[\]]+/).map((t) => t.replace(/[.:!?]+$/, "")).includes(want);
+  }
   if (kind === "phone") {
     const digits = value.replace(/\D/g, "").slice(-10);
-    return digits.length === 10 && said.replace(/\D/g, "").includes(digits);
+    return digits.length === 10 && phonesIn(said).has(digits);
   }
   const words = value.toLowerCase().split(/\s+/).filter(Boolean);
   const haystack = ` ${said.toLowerCase().replace(/[^\p{L}\p{M}'-]+/gu, " ")} `;
@@ -161,6 +178,8 @@ export const navigationTools: StaffToolModule = {
             else {
               program = await matchProgram(ctx, actor, programRaw);
               if (!program) leftOut.push("program (no program by that name here)");
+              // The org's own program name goes to the model and the page too: same gate (review round 1, S1).
+              else if (hasStaffRecordWords(program)) { program = null; leftOut.push("program (it read like a record detail)"); }
             }
           }
           const prefill = { firstName: properName(first), lastName: last ? properName(last) : "", email, phone, program };

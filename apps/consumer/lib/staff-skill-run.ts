@@ -103,9 +103,32 @@ export interface StreamedToolResult { toolCallId: string; toolName: string; args
  * table; nothing here is a URL the model wrote.
  */
 export function streamedStaffResults(toolResults: readonly { toolCallId: string; toolName: string; args: unknown; result: unknown }[], names: ReadonlySet<string> = staffStreamedTools()): StreamedToolResult[] {
+  // args are NOT streamed (review round 1, S6): they are what the model asked
+  // for, including values the tool dropped. The chat reads only the result.
   return toolResults.filter((r) => names.has(r.toolName) && r.result && typeof r.result === "object")
-    .map((r) => ({ toolCallId: String(r.toolCallId), toolName: r.toolName, args: r.args ?? {}, result: r.result }))
+    .map((r) => ({ toolCallId: String(r.toolCallId), toolName: r.toolName, args: {}, result: r.result }))
     .slice(0, 4);
+}
+
+/**
+ * The draftBody convention (lib/tools/staff/types.ts): a streamed result that
+ * carries model-written words in `draftBody` passes the same deterministic
+ * draft check as offer_staff_draft before it reaches the browser. One that
+ * fails is held back whole, and the answer says why.
+ */
+export function checkStreamedDrafts(streamed: readonly StreamedToolResult[], check: (body: string) => string[]): { kept: StreamedToolResult[]; held: string[]; notice: string } {
+  const kept: StreamedToolResult[] = [];
+  const held: string[] = [];
+  for (const s of streamed) {
+    const body = (s.result as { draftBody?: unknown } | null)?.draftBody;
+    if (body === undefined) { kept.push(s); continue; }
+    const problems = typeof body === "string" ? check(body) : ["the draft was not text"];
+    if (problems.length) held.push(...problems); else kept.push(s);
+  }
+  const notice = held.length
+    ? `\n\n---\n**A draft was held back.** It did not pass the check: ${[...new Set(held)].join("; ")}. Ask for it again, or write it yourself.`
+    : "";
+  return { kept, held, notice };
 }
 
 /**

@@ -158,11 +158,16 @@ export function StaffTroyDiscovery({ pathname, person, messages, isLoading, inpu
   const stop = useCallback(async () => {
     setOffer(null);
     setEnabled(false);
+    // PUT replaces the person's own prefs, so it is sent only from a good read
+    // that already knows the field (review round 1, S7). A failed read, or a
+    // server that would drop the field, leaves their prefs alone: off for
+    // this visit only.
     try {
       const r = await fetch("/api/org/prefs");
-      const j = r.ok ? await r.json() : null;
-      const own = j && typeof j.own === "object" && j.own ? j.own : {};
-      await fetch("/api/org/prefs", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ own: { ...own, [SUGGESTIONS_PREF]: false } }) });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j || typeof j.own !== "object" || !j.own || !j.effective || typeof j.effective !== "object" || !(SUGGESTIONS_PREF in j.effective)) return;
+      await fetch("/api/org/prefs", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ own: { ...j.own, [SUGGESTIONS_PREF]: false } }) });
     } catch { /* off for this visit either way */ }
   }, []);
   const tryOffer = useCallback((o: StaffOffer) => {

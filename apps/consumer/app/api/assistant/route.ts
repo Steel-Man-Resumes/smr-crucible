@@ -32,7 +32,7 @@ import { effectiveAuth } from "@/lib/effective-auth";
 import { loadSelectedWork, readWorkSelection, selectedWorkPrompt } from "@/lib/assistant-work-context";
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
-import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, streamedStaffResults, staffTypedWords } from "@/lib/staff-skill-run";
+import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
@@ -506,6 +506,14 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
     );
     if (draftCheck.notice) out += draftCheck.notice;
+    // Lane S1: the registry's buttons and cards (Go to, filled-in Add people,
+    // later lanes' cards). Any that carries a model-written draftBody passes the
+    // same draft check first and is held back on a failure (review round 1, S8).
+    const streamedCheck = checkStreamedDrafts(
+      streamedStaffResults(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])),
+      (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
+    );
+    if (streamedCheck.notice) out += streamedCheck.notice;
     if (staffInput?.withheld) out += `\n\n_${STAFF_INPUT_NOTICE}_`;
 
     // The skill-run log (migration 106): who, which skill, about whom, a
@@ -517,8 +525,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // Re-emit as the data-stream protocol the chat client expects: any draft
     // that passed the check, as a finished tool call, the checked text, and
     // the run id for an acceptance (lib/staff-skill-run.ts).
-    // Lane S1: the registry's buttons and cards (Go to, filled-in Add people) ride along too.
-    const streamed = streamedStaffResults(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[]));
+    const streamed = streamedCheck.kept;
     const lines = staffAnswerStreamLines(out, draftCheck.kept, skillRunId, `staff-${Date.now().toString(36)}`, streamed);
     const encoder = new TextEncoder();
     const stream = new ReadableStream({

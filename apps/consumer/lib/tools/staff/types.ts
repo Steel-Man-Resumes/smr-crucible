@@ -21,6 +21,25 @@
  *    gate (lib/staff-ai-safety.ts).
  * Every tool runs under the same five-call budget and the same evidence
  * collector, because the registry's tools are merged before those wrappers.
+ * The registry also wraps every execute so a thrown error comes back as
+ * "unavailable", never as an empty answer; a module should still use
+ * ctx.safe for its own reads.
+ *
+ * HOLD BEFORE AWAIT. A tool about one person calls ctx.hold(clientId)
+ * synchronously, before its first await, and returns the refusal if there is
+ * one. Two calls in the same step run in parallel; claiming after an await
+ * would let both claim different people.
+ *
+ * WHAT A STREAMED RESULT MAY CARRY (review round 1, S8). A streamed tool's
+ * result goes to the browser as it is (its args never do). So:
+ *  - Words the MODEL wrote for someone to read or send (a message, a note, a
+ *    view description) go in one string field, `draftBody`. The route runs
+ *    it through the same deterministic draft check as offer_staff_draft
+ *    (person names in reach, no invented money or numbers, no "I sent") and
+ *    holds the whole result back on a failure.
+ *  - Every other field must be server-made (ids, keys, labels from our own
+ *    tables, dates, counts) or words the staff member typed and the tool
+ *    checked (open_add_person). Never model-written text outside draftBody.
  */
 import type { ToolSet } from "ai";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
@@ -59,7 +78,7 @@ export interface StaffToolContext {
 export interface StaffToolModule {
   id: string;
   build(ctx: StaffToolContext): ToolSet;
-  /** Tools whose result the checked answer re-emits to the chat, so it can show a button or a card. */
+  /** Tools whose result the checked answer re-emits to the chat, so it can show a button or a card. Model-written words only in `draftBody` (see above). */
   streamed?: readonly string[];
   /** One plain activity line per tool, shown while it runs. */
   activity?: Readonly<Record<string, string>>;

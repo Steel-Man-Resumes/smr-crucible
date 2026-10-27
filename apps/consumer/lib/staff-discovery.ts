@@ -16,8 +16,11 @@
  *    again this session.
  *  - Off switch: "Suggestions" in their own staff preferences (default on;
  *    the field is troySuggestions, read through suggestionsOn below).
- *  - Tapping an offer never sends anything: it puts the words in the message
- *    box (or opens a skill), and they press Send.
+ *  - An unasked-for offer (the chip) never sends anything: it puts the words
+ *    in the message box (or opens a skill), and they press Send. In the empty
+ *    panel, where the staff member is choosing from a list, a complete
+ *    request is sent when tapped, like the quick prompts it replaced; one
+ *    that needs their words goes in the box.
  *
  * Pure: the chat drives it with its own clock and events, the tests drive it
  * with numbers.
@@ -83,7 +86,8 @@ export interface OfferInput {
  */
 export function offersFor(input: OfferInput): StaffOffer[] {
   const caps = new Set(input.capabilities ?? []);
-  const can = (c: string) => caps.size === 0 || caps.has(c);
+  // Unknown capabilities (the role has not loaded) offer nothing that needs one (review round 1).
+  const can = (c: string) => caps.has(c);
   const referralsOn = input.modules?.referrals !== false;
   const who = input.person?.id ? input.person : null;
   const first = (who?.firstName ?? "").trim().split(/\s+/)[0] || "";
@@ -157,7 +161,8 @@ export function deadEndOffer(userText: string, answer: string, refused: boolean,
   if (!refused && !REFUSAL.test(answer)) return null;
   const t = userText.toLowerCase();
   const caps = new Set(input.capabilities ?? []);
-  const can = (c: string) => caps.size === 0 || caps.has(c);
+  // Unknown capabilities (the role has not loaded) offer nothing that needs one (review round 1).
+  const can = (c: string) => caps.has(c);
   if (/\b(?:add|invite|enroll|sign (?:up|in)|new (?:person|participant|client))\b/.test(t) && can("org.participant.invite")) {
     return { id: "dead:add", label: "Open Add people filled in", why: "I can fill the form from your words. You press Send invite.", prompt: "Open Add people filled in for " };
   }

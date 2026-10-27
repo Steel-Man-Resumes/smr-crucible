@@ -176,3 +176,18 @@ it("the Add people side reads once, fills the form, and never sends", () => {
   assert.match(src, /Check it, then press Send invite/);
   assert.doesNotMatch(src, /action: "invite"|\/api\/org\/people|requestSubmit/);
 });
+
+it("review S7: 'Stop suggesting' never writes from a failed read or to a server that would drop the field", () => {
+  const chip = readFileSync(new URL("../../components/StaffTroyDiscovery.tsx", import.meta.url), "utf8");
+  const stop = chip.slice(chip.indexOf("const stop = useCallback"), chip.indexOf("const tryOffer"));
+  assert.match(stop, /if \(!r\.ok\) return;/);
+  assert.match(stop, /SUGGESTIONS_PREF in j\.effective/);
+  assert.ok(stop.indexOf("SUGGESTIONS_PREF in j.effective") < stop.indexOf('method: "PUT"'));
+});
+
+it("review nit: unknown capabilities offer nothing that needs one", () => {
+  assert.ok(!offersFor({ screen: "add-people" }).some((o) => o.id === "add:fill"));
+  assert.ok(!offersFor({ screen: "today" }).some((o) => o.id === "today:add"));
+  assert.notEqual(deadEndOffer("add michael shaw", "I can't do that.", false, { screen: "today" })?.id, "dead:add");
+  assert.equal(deadEndOffer("add michael shaw", "I can't do that.", false, { screen: "today", capabilities: staffCaps })?.id, "dead:add");
+});
