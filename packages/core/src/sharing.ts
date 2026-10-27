@@ -180,6 +180,9 @@ export async function getMySuggestions(userId: string): Promise<MySuggestion[]> 
                  ELSE COALESCE(NULLIF(ra.target_context->>'targetJob', ''), CASE ra.artifact_type WHEN 'cover_letter' THEN 'your cover letter' ELSE 'your resume' END) END AS artifact_label
        FROM staff_suggestion s LEFT JOIN users u ON u.id = s.author_user_id LEFT JOIN refinery_artifact ra ON ra.id = s.artifact_id
       WHERE s.client_user_id = $1 AND s.status IN ('open', 'saved') AND (s.status = 'open' OR s.responded_at > now() - interval '7 days')
+        -- Loose suggestions only. Handoff items (110) come with their handoff
+        -- (staffHandoff.getMyHandoffs). to_jsonb: before 110 the column is absent.
+        AND s.kind IN ('job', 'comment') AND to_jsonb(s)->>'handoff_id' IS NULL
       ORDER BY (s.status = 'open') DESC, s.created_at DESC LIMIT 50`,
     [userId]
   );

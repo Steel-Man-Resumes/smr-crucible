@@ -394,6 +394,7 @@ async function main() {
   await aiSkillRunChecks();
   await structureChecks();
   await customizationChecks();
+  await handoffChecks();
 }
 
 /**
@@ -1117,6 +1118,93 @@ async function workflowChecks() {
     tl.ok && ["referral", "task", "outcome", "retention"].every((t) => tl.items.some((i) => i.type === t)), JSON.stringify(tl.ok ? tl.items.map((i) => i.type) : tl));
   check("a colleague gets no timeline for them", (await core.getPersonTimeline(aOther, pat)).ok === false);
   check("another organization gets none", (await core.getPersonTimeline(aSpy, pat)).ok === false);
+}
+
+/**
+ * Handoffs (110, staff pass S5) and connections the client missed. The claims:
+ * only someone who reaches the person can send them a handoff, by core or by
+ * a raw insert; a colleague and another organization read none of it; the
+ * person reads their own live handoffs and answers each item, and nobody else
+ * can; a taken next step lands on their shared list; withdrawn ones vanish for
+ * them; nothing is deleted; the activity log says what happened in fixed words
+ * only. Connections read only shared scopes, and every read is in the
+ * person's access log; a colleague or another organization reads nothing and
+ * logs nothing.
+ */
+async function handoffChecks() {
+  console.log("\n  -- handoffs (110) and connections the client missed --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("ho-owner"), cm = await mkUser("ho-cm"), other = await mkUser("ho-other"), spy = await mkUser("ho-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOHO" + uniq}, ${P + " handoff"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOHP" + uniq}, ${P + " handoff2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("ho-pat"), hers = await mkUser("ho-hers");
+  for (const u of [pat, hers]) await core.redeemAccessCode(u, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES
+            (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${hers}, ${other}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aOther = await A(other), aOwner = await A(owner), aSpy = await A(spy);
+  const rawAs = async (orgId, userId, query) => (await app.transaction([
+    app`SELECT set_config('app.org_id', ${orgId ?? ""}, true)`, app`SELECT set_config('app.user_id', ${userId}, true)`, query(app),
+  ]))[2];
+  const throws = async (p) => { try { await p; return null; } catch (e) { return String(e.message); } };
+  const packet = (step) => ({ note: "Two things worth a look this week", items: [{ kind: "next_step", step, why: "So we can start the forklift class" }] });
+
+  const h1 = await core.sendHandoff(aCm, pat, packet("Bring your ID Tuesday"));
+  check("a case manager sends their person a handoff", h1.ok === true && h1.items === 1, JSON.stringify(h1));
+  check("a colleague cannot send one to someone not theirs", (await core.sendHandoff(aOther, pat, packet("x step"))).ok === false);
+  check("another organization cannot", (await core.sendHandoff(aSpy, pat, packet("y step"))).ok === false);
+  const raw = await throws(rawAs(org.id, other, (a) => a`INSERT INTO staff_handoff (access_code_id, participant_user_id, author_user_id, note) VALUES (${org.id}, ${pat}, ${other}, 'raw note')`));
+  check("the DATABASE refuses a colleague's raw insert (restrictive reach)", !!raw, raw ?? "inserted");
+  check("a colleague reads none of it, in core or the tables",
+    ((await core.listHandoffsFor(aOther, pat)) ?? []).length === 0 && (await rawAs(org.id, other, (a) => a`SELECT id FROM staff_handoff`)).length === 0);
+  check("another organization reads none of it", (await rawAs(org2.id, spy, (a) => a`SELECT id FROM staff_handoff`)).length === 0
+    && (await rawAs(org2.id, spy, (a) => a`SELECT id FROM staff_suggestion WHERE client_user_id = ${pat}`)).length === 0);
+  check("the owner sees it", ((await core.listHandoffsFor(aOwner, pat)) ?? []).some((h) => h.id === h1.id));
+
+  const mine = await core.getMyHandoffs(pat);
+  const item = mine.find((h) => h.id === h1.id)?.items[0];
+  check("the person reads their handoff and its item", !!item && item.kind === "next_step", JSON.stringify(mine));
+  check("someone else in the program reads none of it", (await core.getMyHandoffs(hers)).length === 0);
+  const addItem = await throws(rawAs(null, pat, (a) => a`INSERT INTO staff_suggestion (access_code_id, client_user_id, author_user_id, kind, step_title, body, handoff_id) VALUES (${org.id}, ${pat}, ${pat}, 'next_step', 'mine', 'mine', ${h1.id})`));
+  check("the person cannot add to it", !!addItem, addItem ?? "inserted");
+  const orgAnswer = await throws(rawAs(org.id, cm, (a) => a`UPDATE staff_suggestion SET status = 'saved' WHERE id = ${item.id}`));
+  check("staff cannot answer for the person", !!orgAnswer, orgAnswer ?? "updated");
+  check("another person cannot answer it", (await core.answerMyHandoffItem(hers, item.id, "pass")).ok === false);
+  const took = await core.answerMyHandoffItem(pat, item.id, "take");
+  check("taking a next step puts it on their list from their case manager", took.ok === true && (await core.getMySharedTasks(pat)).some((t) => t.title === "Bring your ID Tuesday"), JSON.stringify(took));
+  check("answering twice changes nothing", (await core.answerMyHandoffItem(pat, item.id, "pass")).ok === false);
+  check("staff see it taken", ((await core.listHandoffsFor(aCm, pat)) ?? []).find((h) => h.id === h1.id)?.items[0]?.status === "saved");
+  const acts = await sql`SELECT entity, summary FROM org_activity WHERE access_code_id = ${org.id} AND participant_user_id = ${pat} AND entity IN ('handoff', 'suggestion')`;
+  check("the activity log says what happened, in fixed words",
+    acts.some((r) => r.summary === "sent them a handoff") && acts.some((r) => r.summary === "they took on a suggested next step")
+    && !acts.some((r) => /ID Tuesday|forklift|worth a look/.test(r.summary)), JSON.stringify(acts));
+
+  const h2 = await core.sendHandoff(aCm, pat, packet("Call the training desk"));
+  check("a colleague who did not send it cannot withdraw it", (await core.withdrawHandoff(aOther, h2.id)) === false);
+  check("the sender can", (await core.withdrawHandoff(aCm, h2.id)) === true);
+  check("a withdrawn handoff is gone for the person", !(await core.getMyHandoffs(pat)).some((h) => h.id === h2.id));
+  const del = await throws(rawAs(org.id, owner, (a) => a`DELETE FROM staff_handoff WHERE id = ${h1.id}`));
+  check("nobody deletes a handoff through the app", !!del && /permission denied/i.test(del), del ?? "deleted");
+
+  // connections: only what was shared, every read logged for the person
+  await sql`INSERT INTO job_application (user_id, job_title, company, location, status) VALUES (${pat}, 'Warehouse Associate', ${P + " Old Job Co"}, 'Lansing, MI', 'saved')`;
+  const logs = async () => (await sql`SELECT count(*)::int AS n FROM data_access_log WHERE target_user_id = ${pat} AND fields_accessed->>'via' = 'connections'`)[0].n;
+  const c0 = await core.getConnectionsFor(aCm, pat);
+  check("before sharing, nothing to match on and nothing opened", c0?.status === "nothing_shared" && (await logs()) === 0, JSON.stringify(c0));
+  await core.grantSharing(pat, org.id, "applications");
+  const c1 = await core.getConnectionsFor(aCm, pat);
+  check("after sharing, their jobs are read and the open is in their log", !!c1 && c1.status !== "nothing_shared" && c1.shared.applications === true && (await logs()) === 1, JSON.stringify(c1));
+  const before = await logs();
+  const c2 = await core.getConnectionsFor(aOther, pat);
+  check("a colleague who does not reach them reads nothing and logs nothing", c2?.status === "not_in_reach" && (await logs()) === before, JSON.stringify(c2));
+  const c3 = await core.getConnectionsFor(aSpy, pat);
+  check("another organization reads nothing and logs nothing", (c3 === null || c3.status === "not_in_reach") && (await logs()) === before, JSON.stringify(c3));
+  check("a colleague's caseload list never names them", !((await core.getCaseloadConnections(aOther))?.people ?? []).some((p) => p.clientId === pat));
 }
 
 /** Tasks (055) and the Today queue: a reason on a work list is information about a person. */

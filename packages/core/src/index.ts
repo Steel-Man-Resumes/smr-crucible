@@ -128,3 +128,7 @@ export * from './directoryPublication';
 export * from './resourceList';
 export * from './directoryCoverage';
 export * from './packageDelivery';
+// Handoffs to a participant and connections the client missed (110, staff pass S5).
+export * from './staffHandoffShared';
+export * from './staffHandoff';
+export * from './staffConnections';

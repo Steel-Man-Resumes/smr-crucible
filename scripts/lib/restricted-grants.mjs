@@ -155,6 +155,8 @@ export const RESTRICTED_GRANTS = {
   participant_contact: ["SELECT", "INSERT", "UPDATE"],
   referral: ["SELECT", "INSERT", "UPDATE"],
   referral_event: ["SELECT"],
+  // Staff pass S5 (110). A handoff is withdrawn, never deleted.
+  staff_handoff: ["SELECT", "INSERT", "UPDATE"],
 };
 
 /**
@@ -185,6 +187,8 @@ export const APP_FUNCTIONS = [
   "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
   "smr_purge_stale_staff_drafts()",
   "smr_retention_task_marks()",
+  // 110: the person takes a next step from a handoff (acts only for app.user_id).
+  "smr_accept_handoff_step(uuid)",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -204,6 +208,10 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   // 105: the retention task maker and its owner rule run only from definer triggers.
   "smr_make_retention_tasks(uuid)",
   "smr_retention_task_owner(uuid, uuid, uuid)",
+  // 110: activity triggers and the item guard (definer); fired by triggers, never called.
+  "org_activity_suggestion()",
+  "org_activity_handoff()",
+  "staff_suggestion_item_guard()",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */
