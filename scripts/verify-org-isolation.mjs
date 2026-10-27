@@ -394,6 +394,98 @@ async function main() {
   await aiSkillRunChecks();
   await structureChecks();
   await customizationChecks();
+  await teamTalkChecks();
+}
+
+/**
+ * Team talk (109, staff side lane S4): comments, the inbox, task handoff,
+ * change requests and note review. The claims: a comment about a person is
+ * read and written only by staff who reach them, never by the participant or
+ * another organization (through core AND by a raw scoped query); a mention of
+ * a colleague who cannot reach the person is refused; the inbox is the
+ * recipient's alone and only the database writes it; a task goes only to a
+ * teammate who reaches the person; a change request is read by the asker and
+ * the managers and answered only by the managers.
+ */
+async function teamTalkChecks() {
+  console.log("\n  -- team talk: comments, inbox, task handoff, change requests (109) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ has }] = await sql`SELECT to_regclass('public.team_comment') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  109 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e?.message ?? e) }; } };
+  const rawAs = async (orgId, userId, query) => (await app.transaction([
+    app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${userId}, true)`, query(app),
+  ]))[2];
+  const owner = await mkUser("tt-owner"), admin = await mkUser("tt-admin"), cm = await mkUser("tt-cm"), other = await mkUser("tt-other"), spy = await mkUser("tt-spy"), spyStaff = await mkUser("tt-spystaff");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOTT" + uniq}, ${P + " team talk"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOTU" + uniq}, ${P + " team talk2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff'), (${org2.id}, ${spyStaff}, 'staff')`;
+  const pat = await mkUser("tt-pat"), hers = await mkUser("tt-hers");
+  for (const u of [pat, hers]) await core.redeemAccessCode(u, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${hers}, ${other}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aOther = await A(other), aAdmin = await A(admin), aOwner = await A(owner), aSpy = await A(spyStaff);
+
+  // comments
+  const c1 = await core.addTeamComment(aCm, { participantId: pat, body: "ISOTT-BODY can someone cover Thursday?", mentions: [admin] });
+  check("a case manager comments on their person and mentions an admin", c1.ok === true, JSON.stringify(c1));
+  const refused = await core.addTeamComment(aCm, { participantId: pat, body: "Can you take this?", mentions: [other] });
+  check("a mention of a colleague who cannot see the person is refused, plainly", refused.ok === false && /cannot see this person/.test(refused.error), JSON.stringify(refused));
+  const forced = await attempt(() => rawAs(org.id, cm, (a) => a`INSERT INTO team_comment (access_code_id, participant_user_id, author_user_id, body, mentions) VALUES (${org.id}, ${pat}, ${cm}, 'x', ARRAY[${other}]::uuid[])`));
+  check("and refused by the database when the app check is skipped", !forced.ok && /mention_out_of_reach/.test(forced.e), JSON.stringify(forced));
+  check("a colleague cannot comment on someone they do not reach", (await core.addTeamComment(aOther, { participantId: pat, body: "Not mine" })).ok === false);
+  const listed = async (actor) => { const r = await core.listTeamComments(actor, pat); return r.ok ? r.comments.length : -1; };
+  check("the case manager, the admin and the owner read the comment", (await listed(aCm)) === 1 && (await listed(aAdmin)) === 1 && (await listed(aOwner)) === 1);
+  check("a colleague who does not reach the person reads nothing, through core", (await listed(aOther)) === -1);
+  check("or by a raw scoped query", (await rawAs(org.id, other, (a) => a`SELECT id FROM team_comment WHERE participant_user_id = ${pat}`)).length === 0);
+  check("another organization reads nothing, even forging the scope", (await rawAs(org.id, spyStaff, (a) => a`SELECT id FROM team_comment`)).length === 0
+    && (await rawAs(org2.id, spyStaff, (a) => a`SELECT id FROM team_comment`)).length === 0 && (await listed(aSpy)) === -1);
+  check("the participant never reads team comments", (await (async () => (await app.transaction([app`SELECT set_config('app.user_id', ${pat}, true)`, app`SELECT id FROM team_comment`]))[1])()).length === 0);
+  const [{ n: unscoped }] = await core.query("SELECT count(*)::int AS n FROM team_comment");
+  check("an unscoped read by the app sees no comments", unscoped === 0, String(unscoped));
+  const del = await attempt(() => rawAs(org.id, cm, (a) => a`DELETE FROM team_comment WHERE author_user_id = ${cm}`));
+  check("a comment is never deleted by the app", !del.ok && /permission denied/i.test(del.e), JSON.stringify(del));
+  const fixed = c1.ok ? await core.correctTeamComment(aCm, c1.id, { body: "ISOTT-BODY corrected: Friday" }) : { ok: false };
+  check("the author corrects it and the earlier wording is kept", fixed.ok && (await core.getTeamCommentHistory(aAdmin, c1.id))?.length === 1);
+  check("nobody else corrects it", c1.ok && (await core.correctTeamComment(aAdmin, c1.id, { body: "rewritten" })).ok === false);
+
+  // inbox
+  const items = async (actor) => (await core.listInbox(actor))?.items ?? [];
+  check("the mentioned admin has the item, in fixed words with no body", (await items(aAdmin)).some((i) => i.kind === "mention" && !/ISOTT-BODY/.test(i.sentence)));
+  check("nobody else reads it, even raw", (await rawAs(org.id, cm, (a) => a`SELECT id FROM staff_inbox_item WHERE recipient_user_id = ${admin}`)).length === 0
+    && (await rawAs(org.id, owner, (a) => a`SELECT id FROM staff_inbox_item WHERE recipient_user_id = ${admin}`)).length === 0);
+  const forgedItem = await attempt(() => rawAs(org.id, cm, (a) => a`INSERT INTO staff_inbox_item (access_code_id, recipient_user_id, kind, ref_table, ref_id, summary) VALUES (${org.id}, ${admin}, 'mention', 'team_comment', ${cm}, 'forged')`));
+  check("the app cannot write an inbox item", !forgedItem.ok && /permission denied/i.test(forgedItem.e), JSON.stringify(forgedItem));
+  check("the recipient marks it read", (await core.markInbox(aAdmin, { all: true, read: true })) >= 1 && (await core.inboxUnreadCount(aAdmin)) === 0);
+
+  // tasks
+  const t1 = await core.addStaffTask(aCm, { title: "ISOTT-TASK bring papers", clientId: pat, ownerId: admin });
+  check("a task about the person can go to the admin, who reaches them", t1.ok === true, JSON.stringify(t1));
+  check("and the admin hears about it", (await items(aAdmin)).some((i) => i.kind === "task_assigned"));
+  check("not to a colleague who cannot see the person", (await core.addStaffTask(aCm, { title: "x task", clientId: pat, ownerId: other })).ok === false);
+  check("not to someone from another organization", (await core.addStaffTask(aCm, { title: "x task", clientId: pat, ownerId: spyStaff })).ok === false);
+  const forcedTask = await attempt(() => rawAs(org.id, cm, (a) => a`INSERT INTO staff_task (access_code_id, client_user_id, owner_user_id, created_by, title) VALUES (${org.id}, ${pat}, ${other}, ${cm}, 'forced')`));
+  check("and the database refuses it when the app check is skipped", !forcedTask.ok && /task_assign_out_of_reach/.test(forcedTask.e), JSON.stringify(forcedTask));
+
+  // change requests
+  const cr = await core.createChangeRequest(aCm, { kind: "field", title: "Add a field for boot size", body: "ISOTT-CR for the warehouse jobs" });
+  check("a case manager asks for a change", cr.ok === true, JSON.stringify(cr));
+  const ids = async (actor, view) => ((await core.listChangeRequests(actor, { view })) ?? []).map((r) => r.id);
+  check("they read their own; a colleague does not", cr.ok && (await ids(aCm, "mine")).includes(cr.id) && !(await ids(aOther, "mine")).includes(cr.id));
+  check("only managers get the queue", (await core.listChangeRequests(aOther, { view: "queue" })) === null && cr.ok && (await ids(aAdmin, "queue")).includes(cr.id));
+  check("another organization reads none, even raw", (await rawAs(org.id, spyStaff, (a) => a`SELECT id FROM org_change_request`)).length === 0);
+  check("the asker cannot answer it", cr.ok && (await core.answerChangeRequest(aCm, cr.id, { status: "done" })).ok === false
+    && (await rawAs(org.id, cm, (a) => a`UPDATE org_change_request SET status = 'done' WHERE id = ${cr.id} RETURNING id`)).length === 0);
+  check("a no needs a reason", cr.ok && (await core.answerChangeRequest(aAdmin, cr.id, { status: "declined" })).ok === false);
+  check("a manager says yes and the asker hears back", cr.ok && (await core.answerChangeRequest(aAdmin, cr.id, { status: "accepted", answer: "Next week" })).ok
+    && (await items(aCm)).some((i) => i.kind === "change_answered"));
+  const acts = await sql`SELECT summary FROM org_activity WHERE access_code_id = ${org.id} AND entity IN ('comment', 'change_request', 'task')`;
+  check("activity rows carry no typed words", acts.length > 0 && acts.every((r) => !/ISOTT-/.test(r.summary)), JSON.stringify(acts.map((r) => r.summary)));
+  // cleanup for rows with no cascade from the org (the activity log is removed by org id in cleanup)
 }
 
 /**
