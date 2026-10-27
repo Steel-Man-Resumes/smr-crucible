@@ -75,7 +75,7 @@ export function LayoutSettingsPage() {
 
       <OrderedChecklist
         title={`Today for ${roleLabel}`}
-        note={today ? "Set by your organization." : "The built-in order. Change it and save."}
+        note={today ? "Set by your organization." : d.canManage ? "The built-in order. Change it and save." : "The built-in order."}
         items={order.map((k) => ({ key: k, label: d.sections.find((s) => s.key === k)?.label ?? k, on: !hidden.has(k) }))}
         disabled={!d.canManage}
         onSave={(items) => put("today", { order: items.map((i) => i.key), hidden: items.filter((i) => !i.on).map((i) => i.key) }, `Saved Today for ${roleLabel}.`)}
@@ -85,7 +85,7 @@ export function LayoutSettingsPage() {
 
       <OrderedChecklist
         title={`People columns for ${roleLabel}`}
-        note={caseload ? "Set by your organization." : "Every built-in column. Change it and save."}
+        note={caseload ? "Set by your organization." : d.canManage ? "Every built-in column. Change it and save." : "Every built-in column."}
         items={[
           ...(caseload?.columns ?? []).map((k) => ({ key: k, label: d.columns.find((c) => c.key === k)?.label ?? k, on: true })),
           ...d.columns.filter((c) => !(caseload?.columns ?? []).includes(c.key)).map((c) => ({ key: c.key, label: c.label, on: !caseload && !c.key.startsWith("cf:") })),

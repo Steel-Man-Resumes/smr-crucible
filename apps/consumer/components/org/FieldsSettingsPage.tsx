@@ -88,7 +88,7 @@ export function FieldsSettingsPage() {
     <div className="mx-auto max-w-3xl">
       <h1 className="font-display text-3xl font-bold text-t-white">Fields</h1>
       <p className="mt-1 text-sm text-t-phos">
-        The details your organization keeps about the people you serve, in your own words. Funders change what they ask for; you change these without waiting on anyone.
+        The details your organization keeps about the people you serve, in your own words.{canManage ? " Funders change what they ask for; you change these without waiting on anyone." : ""}
       </p>
 
       <div role="tablist" aria-label="Where the field goes" className="mt-5 flex flex-wrap gap-1 border-b border-t-line">

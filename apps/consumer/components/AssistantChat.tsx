@@ -702,10 +702,18 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
 
         {messages.length === 0 && !coach && (
           <div className="text-muted text-sm">
-            <p className="mb-2">
-              I&apos;m t.ROY, your AI career coach. Tell me what you need today,
-              or ask me to help you use this page.
-            </p>
+            {staff ? (
+              <p className="mb-2">
+                I&apos;m t.ROY, here for your work with people. I can sort your Today,
+                prep you for a meeting, turn your bullets into a note, or draft a message.
+                Tell me what you need.
+              </p>
+            ) : (
+              <p className="mb-2">
+                I&apos;m t.ROY, your AI career coach. Tell me what you need today,
+                or ask me to help you use this page.
+              </p>
+            )}
             <p>There are no wrong questions.</p>
           </div>
         )}

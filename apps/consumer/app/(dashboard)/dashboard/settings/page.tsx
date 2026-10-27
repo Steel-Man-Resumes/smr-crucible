@@ -45,6 +45,8 @@ import { PREMIUM_CHANGED_EVENT } from "@/components/premium/PremiumGate";
 import { usageWords, type UsageView } from "@/lib/usage-view";
 import { ALL_TICKED, DOCUMENTS_DOWNLOAD_FAILED, EXPORT_BOXES, OWN_DEVICE_LABEL, SHARED_COMPUTER_WARNING, documentsFileName, exportCategories, exportConfirmBody, exportFileName, exportLeavesOut, type ExportTicks } from "@/lib/export-plan";
 
+const STAFF_HIDDEN_EXPORT_BOXES = new Set<string>(["resumes", "applications", "record_check"]);
+
 type UsageData = UsageView | { error: string };
 
 /** Settings -> Usage. The same allowance the tools spend from (lib/usage-view.ts). */
@@ -371,6 +373,15 @@ export default function SettingsPage() {
   // they do not have, or offer to erase "your plans and history" when what the
   // account actually holds is other people's caseload assignments.
   const isOrgStaff = !!effectiveRole?.orgRole;
+  // Staff cannot see the resume, application and record-check boxes, so they
+  // stay ticked: a box unticked before the role loaded must not drop data or
+  // ask staff to tick a box they cannot see (review 2026-10-27).
+  useEffect(() => {
+    if (!isOrgStaff) return;
+    setExportCats((c) => (Array.from(STAFF_HIDDEN_EXPORT_BOXES).every((k) => c[k as keyof ExportTicks])
+      ? c
+      : { ...c, ...Object.fromEntries(Array.from(STAFF_HIDDEN_EXPORT_BOXES).map((k) => [k, true])) } as ExportTicks));
+  }, [isOrgStaff]);
   // View-as or assist (S10): every Settings route answers as the person, and
   // the private sections (security, photo, export, delete) refuse outright.
   const impersonating = effectiveRole?.impersonating ?? null;
@@ -669,7 +680,9 @@ function DataSection({
   const accountId = useSession().data?.user?.id;
   // The record check line shows only while that step is on (settings/layout.tsx).
   const { recordStep } = useServerSwitches();
-  const EXPORT_CATS = EXPORT_BOXES;
+  // Staff seats build no resumes, applications or record checks; those boxes
+  // stay ticked (a full copy still carries anything there) but are not shown.
+  const EXPORT_CATS = isOrgStaff ? EXPORT_BOXES.filter((b) => !STAFF_HIDDEN_EXPORT_BOXES.has(b.key)) : EXPORT_BOXES;
   const anyChecked = Object.values(exportCats).some(Boolean);
   const leftOut = exportLeavesOut(exportCats);
 
@@ -684,8 +697,9 @@ function DataSection({
           <ul className="space-y-2 text-sm text-t-phos-dim">
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
-              Your Forge answers and results are saved to your account so
-              your work is here when you come back
+              {isOrgStaff
+                ? "Your settings, saved views and drafts are saved to your account so your work is here when you come back"
+                : "Your Forge answers and results are saved to your account so your work is here when you come back"}
             </li>
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
@@ -1521,6 +1535,8 @@ function TwoFactorCard({
 
 function AccountSection() {
   const { data: session } = useSession();
+  const accountRole = useEffectiveRole();
+  const contactHeading = accountRole?.orgRole ? "Your contact info" : "Resume Contact Info";
   const [contact, setContact] = useState<{
     name: string; phone: string; email: string; city: string; state: string;
   } | null>(null);
@@ -1578,7 +1594,7 @@ function AccountSection() {
         {!editing ? (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-t-phos-dim uppercase">Resume Contact Info</p>
+              <p className="text-xs text-t-phos-dim uppercase">{contactHeading}</p>
               <button
                 onClick={() => setEditing(true)}
                 className="text-xs text-t-amber-bright hover:text-t-amber font-medium"
@@ -1594,12 +1610,12 @@ function AccountSection() {
                 <div><span className="text-t-phos-dim">Location:</span> <span className="text-t-white">{[contact.city, contact.state].filter(Boolean).join(", ") || "Not set"}</span></div>
               </div>
             ) : (
-              <p className="text-sm text-t-phos-dim">No contact info set. Complete your profile on the dashboard.</p>
+              <p className="text-sm text-t-phos-dim">{accountRole?.orgRole ? "No contact info set yet. Use Edit to add it." : "No contact info set. Complete your profile on the dashboard."}</p>
             )}
           </div>
         ) : (
           <form onSubmit={handleSave} className="space-y-3">
-            <p className="text-xs text-t-phos-dim uppercase mb-1">Edit Resume Contact Info</p>
+            <p className="text-xs text-t-phos-dim uppercase mb-1">Edit {contactHeading}</p>
             <input
               value={editForm.name}
               onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
@@ -1616,7 +1632,7 @@ function AccountSection() {
             <input
               value={editForm.email}
               onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-              placeholder="Resume email"
+              placeholder={accountRole?.orgRole ? "Email" : "Resume email"}
               type="email"
               className="w-full px-3 py-2 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors"
             />

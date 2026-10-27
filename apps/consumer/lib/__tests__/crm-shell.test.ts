@@ -35,8 +35,8 @@ test("nav groups by the job, and each role sees only what it holds", () => {
     "Records: Case notes",
     "Organization: Insights, Team & access, Structure, Fields, Layouts, Add people, Sharing policy, Security & privacy, Activity log, Set up",
   ]);
-  assert.deepEqual(labels(STAFF), ["Work: Today, People, Find a person, Asks, Referrals", "Records: Case notes", "Organization: Add people, Security & privacy, Structure, Fields, Layouts"]);
-  assert.deepEqual(labels(VOLUNTEER), ["Work: Today, People, Find a person, Asks, Referrals", "Records: Case notes", "Organization: Security & privacy, Structure, Fields, Layouts"]);
+  assert.deepEqual(labels(STAFF), ["Work: Today, People, Find a person, Asks, Referrals", "Records: Case notes", "Organization: Add people, Security & privacy"]);
+  assert.deepEqual(labels(VOLUNTEER), ["Work: Today, People, Find a person, Asks, Referrals", "Records: Case notes", "Organization: Security & privacy"]);
   assert.ok(labels(ADMIN)[2].includes("Insights"));
 });
 
