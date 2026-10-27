@@ -101,14 +101,42 @@ function allowedNumbers(facts: OrgFacts): Set<string> {
 /**
  * LAYER 1. Arithmetic and identity. No model, no network, no excuses.
  */
-/** A sentence that says someone is NOT among the people this viewer sees. */
-const NO_MATCH_SENTENCE = /\b(?:isn't|is not|aren't|are not|not)\s+(?:yet\s+)?(?:on|in)\s+your\s+(?:list|caseload)|\bcould(?:n't| not)\s+(?:find|match)\b|\bcan only see people on your list\b/i;
+/**
+ * A clause that says only that someone is NOT among the people this viewer
+ * sees, and nothing else: "Michael Shaw isn't on your list yet", "I couldn't
+ * find Michael Shaw on your list". A clause that adds anything ("..., but he
+ * got the job") does not match, so a claim cannot ride along (review
+ * 2026-10-27, round 2). Straight and curly apostrophes both count.
+ */
+const NAME_PART = "[A-Z][a-z]+(?:\\s+[A-Z][a-z]+)?";
+const NO_MATCH_CLAUSE = new RegExp(
+  "^(?:" +
+    `${NAME_PART}\\s+(?:is\\s+not|isn['\u2019]t)\\s+(?:yet\\s+)?(?:on|in)\\s+your\\s+(?:list|caseload)(?:\\s+(?:here|yet))?` +
+    "|" +
+    `I\\s+(?:could\\s+not|couldn['\u2019]t|cannot|can['\u2019]t)\\s+(?:find|match|see)\\s+${NAME_PART}\\s+(?:on|in)\\s+your\\s+(?:list|caseload)(?:\\s+(?:here|yet))?` +
+  ")\\s*[.!?]?\\s*$"
+);
 
-/** The sentence (or line) of `text` around index `i`. */
-function sentenceAt(text: string, i: number): string {
-  const start = Math.max(text.lastIndexOf(".", i), text.lastIndexOf("!", i), text.lastIndexOf("?", i), text.lastIndexOf("\n", i)) + 1;
-  const ends = [".", "!", "?", "\n"].map((ch) => text.indexOf(ch, i)).filter((x) => x >= 0);
-  return text.slice(start, ends.length ? Math.min(...ends) + 1 : text.length);
+/** The clause of `text` around index `i`: bounded by sentence ends, , ; : and joining words. */
+function clauseAt(text: string, i: number): string {
+  const ends = /[.!?\n]/g;
+  let start = 0;
+  let end = text.length;
+  for (const m of text.matchAll(ends)) {
+    const at = m.index ?? 0;
+    if (at < i) start = at + 1;
+    else { end = at + 1; break; }
+  }
+  const sentence = text.slice(start, end);
+  const r = i - start;
+  let cStart = 0;
+  let cEnd = sentence.length;
+  for (const m of sentence.matchAll(/[,;:]|\b(?:but|and|so|because|though|who|which|while)\b/g)) {
+    const at = m.index ?? 0;
+    if (at + m[0].length <= r) cStart = at + m[0].length;
+    else if (at > r) { cEnd = at; break; }
+  }
+  return sentence.slice(cStart, cEnd).trim();
 }
 
 /**
@@ -234,7 +262,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     const c = m[0];
     const low = c.toLowerCase();
     if (STOPWORDS.has(low) || known.has(low) || flagged.has(c)) continue;
-    if (typed.has(low) && NO_MATCH_SENTENCE.test(sentenceAt(text, m.index ?? 0))) continue;
+    if (typed.has(low) && NO_MATCH_CLAUSE.test(clauseAt(text, m.index ?? 0))) continue;
     flagged.add(c);
     problems.push(`I could not match "${c}" to anyone on your list`);
   }

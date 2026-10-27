@@ -80,6 +80,13 @@ describe("people must be inside reach", () => {
     // The same typed name in any other sentence is still a person outside reach.
     const claim = checkOrgClaimsDeterministic("I can help, and Michael Shaw got the job last week.", FACTS, said, answer);
     assert.deepEqual(claim, ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list']);
+    // Curly apostrophes and the "I couldn't find" form are the same statement.
+    assert.deepEqual(checkOrgClaimsDeterministic("Michael Shaw isn\u2019t on your list yet.", FACTS, said, answer), []);
+    assert.deepEqual(checkOrgClaimsDeterministic("Sorry, I couldn't find Michael Shaw on your list.", FACTS, said, answer), []);
+    // A claim riding in the same sentence as the no-match phrase is still caught (review round 2).
+    assert.equal(checkOrgClaimsDeterministic("Michael isn't on your list, but he got the job at the plant.", FACTS, "is michael on my list", answer).length, 0, "sentence-initial name and a pronoun claim: layer 1 never parsed those; layer 2 checks the claim");
+    assert.ok(checkOrgClaimsDeterministic("I couldn't find a listing nearby, and Michael was hired last week.", FACTS, said, answer).some((p) => p.includes('"Michael"')));
+    assert.ok(checkOrgClaimsDeterministic("I checked, and Michael Shaw isn't on your list but Michael Shaw got the job.", FACTS, said, answer).some((p) => p.includes('"Michael"')));
     // A draft for a participant never gets the allowance (review 2026-10-27).
     assert.equal(checkOrgClaimsDeterministic("Good news, and Michael Shaw isn't on your list.", FACTS, said).length, 2);
     // An untyped name is flagged with the plain wording.
