@@ -257,10 +257,10 @@ describe("database refusals in plain words", () => {
 
 describe("capabilities", () => {
   const owner = computeOrgCapabilities("owner"), admin = computeOrgCapabilities("org_admin"), staff = computeOrgCapabilities("staff");
-  it("every role can enroll; only the owner manages structure", () => {
+  it("every role can enroll; owners and org admins manage structure (Troy 2026-10-27), staff never", () => {
     for (const r of ["owner", "org_admin", "staff"] as const) assert.ok(capabilitiesForRole(r).includes("org.enrollment.write"), r);
     assert.ok(canManageStructure({ viaPlatformAdmin: false, capabilities: owner }));
-    assert.ok(!canManageStructure({ viaPlatformAdmin: false, capabilities: admin }));
+    assert.ok(canManageStructure({ viaPlatformAdmin: false, capabilities: admin }));
     assert.ok(!canManageStructure({ viaPlatformAdmin: false, capabilities: staff }));
     assert.ok(!canManageStructure({ viaPlatformAdmin: true, capabilities: owner }), "a platform admin acting for an org never writes");
     assert.ok(canWriteEnrollments({ viaPlatformAdmin: false, capabilities: staff }));

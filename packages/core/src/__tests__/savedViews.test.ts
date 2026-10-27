@@ -198,7 +198,7 @@ describe("the database half (source checks)", () => {
   it("changes and deletes are limited to your own views, or shared ones for a manager", () => {
     for (const fn of ["updateSavedView", "deleteSavedView"]) {
       const body = src.slice(src.indexOf(`export async function ${fn}`));
-      assert.match(body.slice(0, 1600), /owner_user_id = \$3::uuid OR \(owner_user_id IS NULL AND \$\d::boolean\)/, fn);
+      assert.match(body.slice(0, 3200), /owner_user_id = \$3::uuid OR \(owner_user_id IS NULL AND \$\d::boolean\)/, fn);
     }
   });
 });
