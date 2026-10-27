@@ -186,7 +186,7 @@ describe("timeline", () => {
   });
   it("the activity branch leaves out what has its own branch", () => {
     const a = timelineSql(["activity"]);
-    assert.match(a, /entity NOT IN \('note', 'task', 'outcome', 'retention', 'referral', 'sharing'\)/);
+    assert.match(a, /entity NOT IN \('note', 'task', 'outcome', 'retention', 'referral', 'sharing', 'comment'\)/);
     assert.match(a, /NOT \(a\.entity = 'enrollment' AND a\.action = 'created'\)/, "enrollment moves and custom field changes stay in");
   });
   it("filter types and cursors are parsed, never trusted", () => {
@@ -211,6 +211,10 @@ describe("timeline", () => {
       [{ type: "outcome", key: `outcome:${P}`, f1: "North Dock", f2: "Forklift operator", f3: "2026-09-01", f4: "staff_verified", f5: "recorded" }, "Placement recorded: Forklift operator at North Dock, started Sep 1, 2026", /#outcome-/],
       [{ type: "outcome", key: `outcome:${P}:1`, f1: "North Dock", f3: "2026-10-01", f4: "laid_off", f5: "ended" }, "Job at North Dock ended Oct 1, 2026: Laid off", /#outcome-/],
       [{ type: "retention", key: `retention:${P}`, f1: "30", f2: "unknown", f3: "North Dock" }, "30-day check-in at North Dock: could not reach them", /#outcome-/],
+      // Team talk (109): a comment, a reply with mentions, a corrected one. Never a participant name.
+      [{ type: "comment", key: `comment:${P}`, f1: "comment", f2: "Can you cover Thursday?", f4: "0" }, "Team comment", /\?tab=team#comment-/],
+      [{ type: "comment", key: `comment:${P}`, f1: "reply", f2: "Yes", f4: "2" }, "Reply to a team comment, mentioning 2 team members", /#comment-/],
+      [{ type: "comment", key: `comment:${P}`, f1: "comment", f2: "Fixed", f3: "2026-10-27T00:00:00Z", f4: "1" }, "Team comment, mentioning a team member (since corrected)", /#comment-/],
       [{ type: "retention", key: `retention:${P}`, f1: "30", f2: "employed", f3: "North Dock", f5: "superseded" }, "30-day check-in at North Dock: still working there (since corrected)", /#outcome-/],
       [{ type: "retention", key: `retention:${P}`, f1: "30", f2: "not_employed", f3: "North Dock", f4: "Wrong person called", f5: "correction" }, "Corrected the 30-day check-in at North Dock: no longer there", /#outcome-/],
       [{ type: "outcome", key: "outcomefix:9", f1: "North Dock", f3: "Typo in the start date", f4: "hourly_wage,start_date", f5: "corrected" }, "Placement at North Dock corrected (wage, start date)", /#outcome-/],

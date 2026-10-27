@@ -155,6 +155,18 @@ export const RESTRICTED_GRANTS = {
   participant_contact: ["SELECT", "INSERT", "UPDATE"],
   referral: ["SELECT", "INSERT", "UPDATE"],
   referral_event: ["SELECT"],
+  // Team talk (109, staff side S4). Comments are never deleted; only their
+  // author corrects the wording and mentions (earlier wordings are written by
+  // the trigger). The inbox is written only by definer triggers: the app marks
+  // items read. Change requests: staff ask, managers set status and answer;
+  // replies are never edited. Note reviews move only through definer functions.
+  team_comment: ["SELECT", "INSERT", "UPDATE (body, mentions)"],
+  team_comment_version: ["SELECT"],
+  staff_inbox_item: ["SELECT", "UPDATE (read_at)"],
+  org_change_request: ["SELECT", "INSERT", "UPDATE (status, answer)"],
+  org_change_reply: ["SELECT", "INSERT"],
+  note_review: ["SELECT"],
+  note_review_event: ["SELECT"],
 };
 
 /**
@@ -185,6 +197,14 @@ export const APP_FUNCTIONS = [
   "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
   "smr_purge_stale_staff_drafts()",
   "smr_retention_task_marks()",
+  // 109: called by the team-talk policies, guards and routes as the app role.
+  // Each answers only inside the caller's own org scope.
+  "smr_team_session(uuid)",
+  "smr_team_member(uuid, uuid)",
+  "smr_task_assigner(uuid, uuid)",
+  "smr_note_review_on(uuid)",
+  "smr_note_review_submit(uuid)",
+  "smr_note_review_decide(uuid, text, text)",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -204,6 +224,11 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   // 105: the retention task maker and its owner rule run only from definer triggers.
   "smr_make_retention_tasks(uuid)",
   "smr_retention_task_owner(uuid, uuid, uuid)",
+  // 109: the inbox's only writer, the managers list and the mention check run
+  // only from definer triggers and functions.
+  "smr_inbox_write(uuid, uuid, text, uuid, text, uuid, text)",
+  "smr_org_managers(uuid)",
+  "smr_comment_mentions(uuid, uuid, uuid, uuid[], uuid[])",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */

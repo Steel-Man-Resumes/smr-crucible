@@ -26,12 +26,14 @@ import { DRAFT_SQL } from '@crucible/core/src/orgDrafts';
 import { REFERRAL_SQL, LIST_REFERRALS_SQL } from '@crucible/core/src/orgReferrals';
 import { searchSql, duplicateSql, likeEscape, wordPatterns, type SearchEnv } from '@crucible/core/src/orgSearch';
 import { timelineSql, timelineItemFromRow, type TimelineRow } from '@crucible/core/src/orgTimeline';
-import { TIMELINE_TYPES, normalizeSearch, phoneDigits, duplicateReasons, REFERRAL_TRANSITIONS, REFERRAL_STATUSES } from '@crucible/core/src/orgWorkflowShared';
+import { TIMELINE_TYPES as ALL_TIMELINE_TYPES, normalizeSearch, phoneDigits, duplicateReasons, REFERRAL_TRANSITIONS, REFERRAL_STATUSES } from '@crucible/core/src/orgWorkflowShared';
 
 const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, '@electric-sql/pglite')) ? 'set SMR_PGLITE_DIR to run the pglite workflow test' : false;
 const MIG = new URL('../../../../packages/core/migrations/', import.meta.url).pathname;
 const withTrgm = process.env.SMR_PGLITE_NO_TRGM !== '1';
+// This file applies migrations up to 105; team comments (109) have their own test (team-talk-pglite).
+const TIMELINE_TYPES = ALL_TIMELINE_TYPES.filter((t) => t !== 'comment');
 
 test('workflow (105): owner-only drafts, sealed referrals, retention tasks once, consent-true search', { skip, timeout: 600_000 }, async () => {
   const { PGlite } = await import(join(dir!, '@electric-sql/pglite/dist/index.js'));

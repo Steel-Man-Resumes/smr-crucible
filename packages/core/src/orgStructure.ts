@@ -22,7 +22,7 @@ import {
   DEFAULT_TIMEZONE, ENROLLABLE_KINDS, ENROLLMENT_STATUS_LABELS, PROGRAM_ID_PATTERN, START_STATUSES, UNIT_NAME_MAX,
   canMoveEnrollment, checkUnitTree, labelProblem, LABEL_PROBLEM, DONE_ENROLLMENT_STATUSES, defaultOrgProfile, flattenUnitTree, isEnrollmentStatus, isOrgType,
   isStatusReason, isTimezoneLike, isUnitKind, isUnitRole, normalizeTerms, reasonsFor, resolveOrgModules, resolveOrgTerms,
-  ORG_MODULES,
+  ORG_MODULES, storedOrgModules,
   type EnrollmentStatus, type OrgModules, type OrgProfile, type OrgTerms, type OrgType, type StatusReason,
   type UnitDraft, type UnitKind, type UnitRole,
 } from "./orgStructureShared";
@@ -289,7 +289,7 @@ export async function updateOrgProfile(actor: OrgActor, patch: ProfilePatch): Pr
   try {
     const [rows] = await runScoped<[{ access_code_id: string }[]]>(scopeOf(actor), (sql) => [
       run(sql)(ORG_STRUCTURE_SQL.upsertProfile, [actor.orgId, n.orgType, n.displayName, n.timezone,
-        JSON.stringify(storedTerms(n.terms)), JSON.stringify(n.modules), false]),
+        JSON.stringify(storedTerms(n.terms)), JSON.stringify(storedOrgModules(n.modules)), false]),
     ]);
     if (!rows.length) return REFUSED;
     return { ok: true, profile: { ...current, ...n, saved: true } };
@@ -325,7 +325,7 @@ export async function completeOrgSetup(actor: OrgActor, input: SetupInput):
   try {
     const out = await runScoped<unknown[][]>(scopeOf(actor), (sql) => [
       run(sql)(ORG_STRUCTURE_SQL.upsertProfile, [actor.orgId, n.orgType, n.displayName, n.timezone,
-        JSON.stringify(storedTerms(n.terms)), JSON.stringify(n.modules), true]),
+        JSON.stringify(storedTerms(n.terms)), JSON.stringify(storedOrgModules(n.modules)), true]),
       ...flat.map((u, i) => run(sql)(ORG_STRUCTURE_SQL.insertSetupUnit, [
         actor.orgId, ids[i], u.parentIndex === null ? null : ids[u.parentIndex], u.kind, u.name, ids,
       ])),

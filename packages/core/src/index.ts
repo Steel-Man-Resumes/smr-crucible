@@ -38,6 +38,12 @@ export * from './orgReferrals';
 export * from './orgDrafts';
 export * from './orgSearch';
 export * from './orgTimeline';
+// Team talk (staff side lane S4, migration 109): comments, inbox, task handoff, change requests, note review.
+export * from './teamTalkShared';
+export * from './teamComments';
+export * from './staffInbox';
+export * from './orgChangeRequests';
+export * from './noteReview';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './artifactRevision';
