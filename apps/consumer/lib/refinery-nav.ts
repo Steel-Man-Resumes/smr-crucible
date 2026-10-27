@@ -351,13 +351,14 @@ export const NAV_EXTENSIONS: readonly NavExtension[] = [
   // House L3b (102): the organization's activity log.
   { surface: "org", group: "Organization", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
   // House L3a (103): the organization's programs, sites, teams and caseloads, and first-run setup.
-  { surface: "org", group: "Organization", href: "/dashboard/structure", label: "Structure", navId: "org-nav-structure", needs: "org.cohort.view", after: "Team & access" },
+  { surface: "org", group: "Organization", href: "/dashboard/structure", label: "Structure", navId: "org-nav-structure", needs: "org.settings.manage", after: "Team & access" },
   { surface: "org", group: "Organization", href: "/dashboard/setup", label: "Set up", navId: "org-nav-setup", needs: "org.settings.manage" },
-  // House L4 (104): the org's own fields and per-role layouts. Anyone who sees
-  // the caseload may open them read-only (so they know what a field means);
-  // changes need org.settings.manage, checked by the routes and the database.
-  { surface: "org", group: "Organization", href: "/dashboard/fields", label: "Fields", navId: "org-nav-fields", needs: "org.cohort.view", module: "custom_fields", after: "Structure" },
-  { surface: "org", group: "Organization", href: "/dashboard/layouts", label: "Layouts", navId: "org-nav-layouts", needs: "org.cohort.view", after: "Fields" },
+  // House L4 (104): the org's own fields and per-role layouts. The pages still
+  // open read-only for anyone who sees the caseload (a field's meaning shows on
+  // the person page too), but only people who can change them get the nav entry
+  // (staff walk 2026-10-27). Changes stay checked by the routes and the database.
+  { surface: "org", group: "Organization", href: "/dashboard/fields", label: "Fields", navId: "org-nav-fields", needs: "org.settings.manage", module: "custom_fields", after: "Structure" },
+  { surface: "org", group: "Organization", href: "/dashboard/layouts", label: "Layouts", navId: "org-nav-layouts", needs: "org.settings.manage", after: "Fields" },
   // House L5 (105): find anyone you work with, and closed-loop referrals (off with the org's referrals module).
   { surface: "org", group: "Work", href: "/dashboard/search", label: "Find a person", navId: "org-nav-search", needs: "org.client.view_content", after: "People" },
   { surface: "org", group: "Work", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", needs: "org.client.view_content", module: "referrals", after: "Asks" },

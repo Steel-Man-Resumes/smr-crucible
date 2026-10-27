@@ -165,6 +165,11 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   const known = new Set(
     [...facts.visibleNames, ...facts.staffNames, ...(facts.staffToolEvidence ?? []).flatMap((e) => e.names)].map((n) => n.toLowerCase())
   );
+  // A name the staff member typed is theirs to use. Repeating it back ("Michael
+  // Shaw isn't on your list") is not a claim about a person; flagging it read
+  // as a finding about someone (staff walk 2026-10-27). Layer 2 still checks
+  // anything said ABOUT that person against what the tools returned.
+  for (const w of (userSaid ?? "").toLowerCase().split(/[^a-z'-]+/)) if (w.length > 1) known.add(w);
   // A capitalized word is only a candidate NAME if it is not an ordinary word.
   // The first version listed forty stopwords and flagged everything else, so a
   // heading ("Caseload Snapshot"), the organization's own name, and the second
@@ -211,7 +216,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   for (const c of Array.from(new Set(candidates))) {
     const low = c.toLowerCase();
     if (STOPWORDS.has(low) || known.has(low)) continue;
-    problems.push(`"${c}" is not somebody you have access to`);
+    problems.push(`I could not match "${c}" to anyone on your list`);
   }
 
   return problems;

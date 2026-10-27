@@ -25,6 +25,8 @@ interface AssistantDrawerProps {
   enabled?: boolean;
   /** Optional label for the trigger button */
   triggerLabel?: string;
+  /** Small line under the trigger label: who t.ROY is for on this surface. */
+  triggerSubLabel?: string;
   /**
    * Draw the user's eye to t.ROY (brighter/faster glow + pop) — set this when he
    * has something timely to say. Independent of the one-time first-visit nudge.
@@ -38,6 +40,7 @@ export function AssistantDrawer({
   children,
   enabled = true,
   triggerLabel = "Ask t.ROY",
+  triggerSubLabel = "AI career coach",
   attention = false,
   title = "t.ROY, your AI career coach",
 }: AssistantDrawerProps) {
@@ -144,11 +147,11 @@ export function AssistantDrawer({
           style={isOpen ? { display: "none" } : undefined}
           onClick={() => setIsOpen(true)}
           className="t-focus group relative my-3 ml-auto mr-7 z-30 flex min-h-touch items-center gap-1 rounded-full bg-transparent p-1 sm:fixed sm:bottom-5 sm:right-7 sm:z-40 sm:m-0"
-          aria-label={`${triggerLabel}, your AI career coach, open assistant`}
+          aria-label={`${triggerLabel}, ${triggerSubLabel}, open assistant`}
         >
           <span className="pointer-events-none rounded-xl border border-[#e4d9ff] bg-white/95 px-3 py-2 text-left text-sm font-semibold leading-tight text-[#4c1d95] shadow-sm">
             <span className="block">{triggerLabel}</span>
-            <span className="block text-xs font-normal">AI career coach</span>
+            <span className="block text-xs font-normal">{triggerSubLabel}</span>
           </span>
           <TroyLivingIcon size={62} attention={attention || nudge} />
         </button>

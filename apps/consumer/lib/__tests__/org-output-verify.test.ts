@@ -71,6 +71,16 @@ describe("people must be inside reach", () => {
     assert.match(found[0], /Priya/);
   });
 
+  it("does not flag a name the staff member typed, and words a miss as a match failure", () => {
+    // Staff walk 2026-10-27: "fill in for michael shaw" came back with
+    // "Michael" and "Shaw" flagged as if they were findings about a person.
+    const said = "take me to the add a participant page and fill in for michael shaw";
+    assert.deepEqual(checkOrgClaimsDeterministic("I can't add people, but Michael Shaw isn't on your list yet.", FACTS, said), []);
+    const miss = checkOrgClaimsDeterministic("You should also follow up with Priya this week.", FACTS, said);
+    assert.equal(miss.length, 1);
+    assert.match(miss[0], /^I could not match "Priya" to anyone on your list$/);
+  });
+
   it("catches an entirely invented person", () => {
     assert.ok(problems("Consider checking in with Marcus about his interview.").length > 0);
   });

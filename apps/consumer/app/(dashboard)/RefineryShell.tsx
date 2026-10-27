@@ -55,7 +55,7 @@ import { useUserContext } from "@/lib/use-user-context";
 // client bundle -- see @crucible/core/src/gateRank).
 import { clientToolUnlocked } from "@crucible/core/src/journeyStages";
 import { MemberCoBrandChip, ProductFamilyBrand, ProductBrand } from "@/components/brand/BrandMarks";
-import { ExternalLink, LogOut, Menu, X } from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 import { ProgressionProvider, useProgression } from "@/components/progression/ProgressionProvider";
 import type { BoardLink, StationId } from "@/lib/refinery-nav";
 import { RefineryBoard } from "@/components/nav/RefineryBoard";
@@ -778,7 +778,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
               >
                 <Menu size={21} aria-hidden="true" />
               </button>
-              <ProductFamilyBrand product="refinery" productHref="/dashboard" />
+              <ProductFamilyBrand product="refinery" productHref="/dashboard" tagline={isOrgPartner ? null : undefined} />
             </div>
 
             {/* Right: account links */}
@@ -786,15 +786,6 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
               <DevSwitcher />
               <ViewAsToggle />
               {!isOrgPartner && effectiveRole?.coBrand ? <MemberCoBrandChip orgId={effectiveRole.coBrand.orgId} name={effectiveRole.coBrand.name} hasLogo={effectiveRole.coBrand.hasLogo} className="hidden lg:flex" /> : null}
-              <a
-                href="https://forge.steelmanresumes.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="t-focus hidden min-h-touch items-center gap-1 rounded-[4px] px-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white lg:flex"
-              >
-                The Forge
-                <ExternalLink size={14} aria-hidden="true" />
-              </a>
               <Link
                 href="/dashboard/settings"
                 aria-label="Settings"
@@ -975,14 +966,6 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
           {adminMode ? renderAdminNav(() => setDrawerOpen(false)) : isOrgPartner ? renderOrgNav(() => setDrawerOpen(false)) : <nav aria-label="Career workspace">{renderNavItems(() => setDrawerOpen(false), true)}</nav>}
           <div className="mt-3 pt-3 border-t border-t-line space-y-1">
             {signOutError && <p role="alert" className="px-3 text-sm text-t-red">{signOutError}</p>}
-            <a
-              href="https://forge.steelmanresumes.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex min-h-touch items-center gap-1.5 rounded-[4px] px-3 py-2 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
-            >
-              The Forge <ExternalLink size={14} aria-hidden="true" />
-            </a>
             <button
               onClick={leaveAccount}
               disabled={signingOut}
@@ -995,7 +978,10 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
       </div>
 
       {/* AI Assistant */}
-      <AssistantDrawer title={isOrgPartner ? "t.ROY, for your work with people" : undefined}>
+      <AssistantDrawer
+        title={isOrgPartner ? "t.ROY, for your work with people" : undefined}
+        triggerSubLabel={isOrgPartner ? "for your work with people" : undefined}
+      >
         {!shellUid || authStatus !== "authenticated" || effectiveRole === null ? (
           <p role="status" className="p-5 text-sm text-t-bone-dim">Checking your account...</p>
         ) : (

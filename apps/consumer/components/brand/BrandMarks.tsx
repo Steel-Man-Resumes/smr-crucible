@@ -23,7 +23,8 @@ interface BrandProps {
   className?: string;
 }
 
-export function SteelManBrand({ compact = false, inverse = false, href = "/", className = "" }: BrandProps) {
+/** `tagline` null hides the small line (staff screens are not a career report). */
+export function SteelManBrand({ compact = false, inverse = false, href = "/", className = "", tagline = "Career report" }: BrandProps & { tagline?: string | null }) {
   const content = (
     <span className={`inline-flex items-center gap-2.5 ${inverse ? "text-[#ece7d9]" : "text-t-white"} ${className}`}>
       <img
@@ -34,9 +35,11 @@ export function SteelManBrand({ compact = false, inverse = false, href = "/", cl
       {!compact && (
         <span className="leading-none">
           <strong className="block text-sm font-semibold">Steel Man Resumes</strong>
-          <span className={`mt-1 block font-term text-[9px] uppercase ${inverse ? "text-[#b9bdb6]" : "text-t-bone-dim"}`}>
-            Career report
-          </span>
+          {tagline ? (
+            <span className={`mt-1 block font-term text-[9px] uppercase ${inverse ? "text-[#b9bdb6]" : "text-t-bone-dim"}`}>
+              {tagline}
+            </span>
+          ) : null}
         </span>
       )}
     </span>
@@ -59,11 +62,11 @@ export function ProductBrand({ product, compact = false, href, className = "" }:
   return href ? <Link href={href} aria-label={item.label}>{content}</Link> : content;
 }
 
-export function ProductFamilyBrand({ product, productHref, className = "" }: { product: ProductName; productHref?: string; className?: string }) {
+export function ProductFamilyBrand({ product, productHref, className = "", tagline }: { product: ProductName; productHref?: string; className?: string; tagline?: string | null }) {
   return (
     <div className={`flex min-w-0 items-center gap-3 ${className}`}>
       <span className="sm:hidden"><SteelManBrand compact /></span>
-      <span className="hidden sm:inline-flex"><SteelManBrand /></span>
+      <span className="hidden sm:inline-flex"><SteelManBrand tagline={tagline} /></span>
       <span className="h-9 w-px bg-t-line" aria-hidden="true" />
       <ProductBrand product={product} href={productHref} />
     </div>

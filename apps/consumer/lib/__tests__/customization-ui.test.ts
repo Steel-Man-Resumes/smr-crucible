@@ -171,13 +171,21 @@ test("earlier answers read as sentences, newest first as sent; nothing when ther
   assert.match(read("app/api/org/fields/values/route.ts"), /const wantsHistory = sp\.get\("history"\) === "1" && canSeeFieldHistory\(actor\);/);
 });
 
-test("nav: Fields and Layouts are wired for anyone who sees the caseload (read-only), Fields behind the custom_fields module", async () => {
+test("nav: Structure, Fields and Layouts show only to people who can change them, Fields behind the custom_fields module", async () => {
   const { NAV_EXTENSIONS, orgNavExtensionsFor } = await import("../refinery-nav");
   const fields = NAV_EXTENSIONS.find((e) => e.href === "/dashboard/fields");
   const layouts = NAV_EXTENSIONS.find((e) => e.href === "/dashboard/layouts");
-  assert.deepEqual([fields?.group, fields?.needs, fields?.module, layouts?.group, layouts?.needs], ["Organization", "org.cohort.view", "custom_fields", "Organization", "org.cohort.view"]);
+  const structure = NAV_EXTENSIONS.find((e) => e.href === "/dashboard/structure");
+  assert.deepEqual([fields?.group, fields?.needs, fields?.module, layouts?.group, layouts?.needs, structure?.needs], ["Organization", "org.settings.manage", "custom_fields", "Organization", "org.settings.manage", "org.settings.manage"]);
   const shown = (caps: string[], modules?: Record<string, boolean>) => orgNavExtensionsFor(caps, modules).map((e) => e.href);
-  assert.ok(shown(["org.cohort.view"]).includes("/dashboard/fields"));
-  assert.ok(!shown(["org.cohort.view"], { custom_fields: false }).includes("/dashboard/fields"), "an org that turned custom fields off does not see the page");
+  const staffSeat = ["org.cohort.view", "org.note.write"];
+  for (const href of ["/dashboard/structure", "/dashboard/fields", "/dashboard/layouts"]) {
+    assert.ok(!shown(staffSeat).includes(href), `a staff seat that cannot change ${href} does not get it in the nav`);
+  }
+  const manager = ["org.cohort.view", "org.settings.manage"];
+  assert.ok(shown(manager).includes("/dashboard/fields"));
+  assert.ok(shown(manager).includes("/dashboard/layouts"));
+  assert.ok(shown(manager).includes("/dashboard/structure"));
+  assert.ok(!shown(manager, { custom_fields: false }).includes("/dashboard/fields"), "an org that turned custom fields off does not see the page");
   assert.ok(!shown([]).includes("/dashboard/layouts"));
 });
