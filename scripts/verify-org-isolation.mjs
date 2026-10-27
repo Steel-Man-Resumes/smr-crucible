@@ -394,6 +394,7 @@ async function main() {
   await aiSkillRunChecks();
   await structureChecks();
   await customizationChecks();
+  await outboundBrandChecks();
 }
 
 /**
@@ -656,6 +657,84 @@ async function structureChecks() {
   await sql`DELETE FROM org_profile WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
 }
 
+
+/**
+ * Outbound branding (107, staff pass 2026-10-27 lane S2). The claim: how an
+ * organization's outgoing reports and emails are branded is read by its own
+ * people and nobody else's, and set by a platform admin ONLY, through
+ * smr_set_org_branding. The owner, an org admin and staff cannot flip it on
+ * UPDATE, cannot pick it on a first INSERT, and cannot call the setter.
+ */
+async function outboundBrandChecks() {
+  console.log("\n  -- outbound branding (107) --");
+  const [{ has }] = await sql`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'org_profile' AND column_name = 'branding') AS has`;
+  if (!has) { console.log("  note  107 not applied; skipped"); return; }
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const brand = await import("../packages/core/dist/orgOutboundBrand.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("ob-owner"), admin = await mkUser("ob-admin"), cm = await mkUser("ob-cm");
+  const owner2 = await mkUser("ob-owner2"), cm2 = await mkUser("ob-cm2"), boss = await mkUser("ob-platform");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOOB" + uniq}, ${P + " outbound"}, 'client', ${owner}, true, true) RETURNING id`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOOB2" + uniq}, ${P + " outbound2"}, 'client', ${owner2}, true, true) RETURNING id`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${cm}, 'staff'), (${org2.id}, ${cm2}, 'staff')`;
+  const as = (orgId, userId, ...stmts) => app.transaction([
+    ...(orgId ? [app`SELECT set_config('app.org_id', ${orgId}, true)`] : []),
+    app`SELECT set_config('app.user_id', ${userId}, true)`, ...stmts]);
+  const refused = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+
+  // A first save by the owner: the default goes in, exclusive does not.
+  const firstExclusive = await refused(() => as(org.id, owner, app`INSERT INTO org_profile (access_code_id, branding) VALUES (${org.id}, 'exclusive')`));
+  check("107: the owner cannot pick exclusive branding on a first save", !!firstExclusive, firstExclusive ?? "inserted");
+  const firstPlain = await refused(() => as(org.id, owner, app`INSERT INTO org_profile (access_code_id) VALUES (${org.id})`));
+  check("107: the owner's first save with the default still works", !firstPlain, firstPlain ?? "");
+  for (const [who, id] of [["the owner", owner], ["an org admin", admin], ["staff", cm]]) {
+    const upd = await refused(() => as(org.id, id, app`UPDATE org_profile SET branding = 'exclusive' WHERE access_code_id = ${org.id}`));
+    const [{ b }] = await sql`SELECT branding AS b FROM org_profile WHERE access_code_id = ${org.id}`;
+    check(`107: ${who} cannot flip the branding by UPDATE`, b === "co_brand", upd ?? "no error, and the value is " + b);
+    const setter = await refused(() => as(org.id, id, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'exclusive')`));
+    check(`107: ${who} cannot call the setter`, !!setter && /platform admin/.test(setter), setter ?? "allowed");
+  }
+  const otherOwner = await refused(() => as(org2.id, owner2, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'exclusive')`));
+  check("107: another organization's owner cannot set this one", !!otherOwner, otherOwner ?? "allowed");
+
+  await sql`INSERT INTO platform_admin (user_id, note) VALUES (${boss}, 'isolation fixture')`;
+  try {
+    const set = await as(null, boss, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'exclusive') AS b`);
+    check("107: a platform admin sets exclusive branding", set[1]?.[0]?.b === "exclusive", JSON.stringify(set[1]));
+    const bad = await refused(() => as(null, boss, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'full')`));
+    check("107: an unknown value is refused even for a platform admin", !!bad, bad ?? "accepted");
+    const [{ n }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_profile' AND action = 'BRANDING' AND row_summary->>'branding_to' = 'exclusive'`;
+    check("107: the change is in the audit log", n === 1, `rows ${n}`);
+    // Readers: the organization's own people read it; another organization's do not.
+    const own = await as(org.id, cm, app`SELECT branding FROM org_profile WHERE access_code_id = ${org.id}`);
+    check("107: staff of the organization read their branding", own[2]?.[0]?.branding === "exclusive", JSON.stringify(own[2]));
+    const leak = await as(org2.id, cm2, app`SELECT branding FROM org_profile WHERE access_code_id = ${org.id}`);
+    check("107: staff of another organization read nothing", (leak[2] ?? []).length === 0, JSON.stringify(leak[2]));
+    const leakScoped = await as(org.id, cm2, app`SELECT branding FROM org_profile WHERE access_code_id = ${org.id}`);
+    // app.org_id is set by the app from membership, never from the request; a forged one is the route-forgot case.
+    console.log(`  note  a forged app.org_id reads ${(leakScoped[2] ?? []).length} row(s): 103's select policy trusts the scope the app sets (unchanged by 107)`);
+    const helperOwn = await brand.getOrgOutboundBrand(cm, org.id, "Lakeshore Works");
+    check("107: the helper gives the organization's own name alone once exclusive", helperOwn.line === "Lakeshore Works" && !helperOwn.coBranded, JSON.stringify(helperOwn));
+    const helperOther = await brand.getOrgOutboundBrand(cm2, org.id, "Lakeshore Works");
+    check("107: someone outside the organization gets the safe co-brand default, never its setting", helperOther.coBranded === true, JSON.stringify(helperOther));
+    const back = await as(null, boss, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'co_brand') AS b`);
+    check("107: a platform admin sets it back to co-branded", back[1]?.[0]?.b === "co_brand");
+    // An organization that never ran setup: the setter creates the row and setup still shows.
+    const fresh = await as(null, boss, app`SELECT public.smr_set_org_branding(${org2.id}::uuid, 'exclusive') AS b`);
+    const [p2] = await sql`SELECT branding, setup_completed_at FROM org_profile WHERE access_code_id = ${org2.id}`;
+    check("107: setting it for an organization with no profile creates the row and leaves setup unfinished", fresh[1]?.[0]?.b === "exclusive" && p2?.branding === "exclusive" && p2?.setup_completed_at === null, JSON.stringify(p2));
+    const ownerUpd = await refused(() => as(org2.id, owner2, app`UPDATE org_profile SET branding = 'co_brand' WHERE access_code_id = ${org2.id}`));
+    const [{ b2 }] = await sql`SELECT branding AS b2 FROM org_profile WHERE access_code_id = ${org2.id}`;
+    check("107: and the owner cannot take exclusive off by hand either", b2 === "exclusive", ownerUpd ?? "changed");
+    const ownerWords = await refused(() => as(org2.id, owner2, app`UPDATE org_profile SET timezone = 'America/Denver' WHERE access_code_id = ${org2.id}`));
+    check("107: the owner still saves everything else on the profile", !ownerWords, ownerWords ?? "");
+  } finally {
+    await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
+    await sql`DELETE FROM org_profile WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+  }
+}
 
 /**
  * Staff t.ROY (106, house build L6): the skill-run log and the caseload reads.

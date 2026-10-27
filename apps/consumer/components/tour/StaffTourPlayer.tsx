@@ -19,10 +19,10 @@ import { ChevronLeft, ChevronRight, Pause, Play, X } from 'lucide-react';
 import { TroyLivingIcon } from '@crucible/consumer-ui';
 import { findNavElement } from '@/lib/tour/find-target';
 import { TOUR_COPY } from '@/lib/tour/beats';
-import { CRM_TOUR_COPY, CRM_TOUR_ENDING, beatCopy, beatHref, onBeatPage, type CrmBeat } from '@/lib/tour/crm-beats';
-import { holdMs } from '@/lib/tour/timing';
+import { CRM_EXAMPLE_LABEL, CRM_TOUR_COPY, CRM_TOUR_ENDING, beatCopy, beatHold, beatHref, onBeatPage, type CrmBeat } from '@/lib/tour/crm-beats';
 import { captionPlacement, spotlightRect, unionBox, type Box } from '@/lib/tour/geometry';
 import './entrance-tour.css';
+import './staff-tour.css';
 
 const NARROW = 640;
 const NAV_BREAK = 768;
@@ -99,7 +99,7 @@ export function StaffTourPlayer(props: StaffTourPlayerProps) {
   const beat = i < ENDING ? beats[i] : null;
   const ending = i >= ENDING;
   const copy = beat ? beatCopy(beat, demo) : null;
-  const hold = copy ? holdMs(copy) : 0;
+  const hold = beat ? beatHold(beat, demo) : 0;
   const portrait = view.w < NARROW;
   const mobileNav = view.w < NAV_BREAK;
   const href = beat ? beatHref(beat, personId) : '';
@@ -201,7 +201,8 @@ export function StaffTourPlayer(props: StaffTourPlayerProps) {
     if (ending) { setAnnounce(`${CRM_TOUR_ENDING.title} ${CRM_TOUR_ENDING.body}`); return; }
     if (!cut || !copy) return;
     const head = /[.!?]$/.test(copy.title) ? copy.title : `${copy.title}.`;
-    setAnnounce(`${CRM_TOUR_COPY.stepOf(i + 1, ENDING)}. ${head} ${copy.body}`);
+    const example = copy.example.length ? ` ${CRM_EXAMPLE_LABEL}: ${copy.example.join('. ')}.` : '';
+    setAnnounce(`${CRM_TOUR_COPY.stepOf(i + 1, ENDING)}. ${head} ${copy.body}${example}`);
   }, [i, !!cut, ending]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The card mounts once a stop is lit. Measure it before paint and hand it focus.
@@ -261,6 +262,10 @@ export function StaffTourPlayer(props: StaffTourPlayerProps) {
         <div key={`beat-${i}`} className="et-card__text" style={{ animation: reduced ? 'none' : 'etCap 420ms cubic-bezier(.16,1,.3,1) both' }}>
           <p className="et-cap__t">{copy.title}</p>
           <p className="et-cap__b">{copy.body}</p>
+          {copy.example.length > 0 && <div className="st-example" role="note" aria-label={`${CRM_EXAMPLE_LABEL}, made-up people`}>
+            <p className="st-example__k">{CRM_EXAMPLE_LABEL}</p>
+            <ul>{copy.example.map((line) => <li key={line}>{line}</li>)}</ul>
+          </div>}
         </div>
         <div className="et-mini" aria-hidden="true"><i style={{ width: `${progress * 100}%` }} /></div>
         <div className="et-bar__row">

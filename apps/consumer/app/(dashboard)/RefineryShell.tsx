@@ -62,7 +62,9 @@ import { RefineryBoard } from "@/components/nav/RefineryBoard";
 import { StationStrip } from "@/components/nav/StationStrip";
 import "@/components/nav/refinery-board.css";
 import "@/components/org/org-workspace.css";
+import "@/components/org/OrgSidebar.css";
 import { OrgSidebar } from "@/components/org/OrgSidebar";
+import { useOrgModules } from "@/lib/use-org-modules";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { DevModeBanner } from "@/components/DevModeBanner";
 import { usePendingAccessCode } from "@/lib/use-pending-access-code";
@@ -666,6 +668,8 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   // Staff workspace from the org ROLE (house L2), never the tier.
   void resolvedTier;
   const isOrgPartner = workspace === "staff";
+  // The org's module switches, so a module that is off leaves the staff nav (staff pass S2).
+  const orgModules = useOrgModules(isOrgPartner && !!effectiveRole?.crmV2);
   const isOrgAdmin = orgRole === "owner" || orgRole === "org_admin";
   // ADMIN MODE (house build L1, A1 defect B1). The real account is a platform
   // admin and nothing is being viewed as someone else: the admin sidebar,
@@ -745,6 +749,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
         pathname={pathname}
         orgId={brand?.orgId ?? null}
         hasLogo={!!brand?.orgBrand?.hasLogo}
+        modules={orgModules}
         onItemClick={onItemClick}
       />
     );

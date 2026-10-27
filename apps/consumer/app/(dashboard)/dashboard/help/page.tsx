@@ -29,6 +29,8 @@ import {
 import { findHelpArticle } from "@/lib/helpArticles";
 import { TOUR_HREF } from "@crucible/core/src/journeyStages";
 import { useEffectiveRole } from "@/components/RoleProvider";
+import { StaffHelp } from "@/components/help/StaffHelp";
+import { staffTourAllowed } from "@/lib/tour/staff-tour";
 
 interface MineRow {
   id: string;
@@ -58,7 +60,10 @@ function HelpContent() {
   const pathname = usePathname();
   const { data: session } = useSession();
   // The Settings tour is for clients; staff Settings has no coach section or lesson (SETTINGS-TOUR.md).
-  const settingsTourFor = !useEffectiveRole()?.orgRole;
+  // Staff get their own top (staff pass S2): the staff tour, t.ROY's staff skills, My setup, how to ask for a change.
+  const role = useEffectiveRole();
+  const isStaff = !!role?.orgRole;
+  const settingsTourFor = !isStaff;
   const tier = ((session?.user as { tier?: string })?.tier) || "client";
 
   const [mode, setMode] = useState<SupportCategory>("help");
@@ -179,20 +184,25 @@ function HelpContent() {
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">Help &amp; Feedback</h1>
       <p className="text-base text-t-phos-dim mb-6">
-        One place to get help, report a problem, share an idea, or send Troy a
-        note. Pick what fits.
+        {isStaff
+          ? "How to get the most from this workspace, and one place to report a problem, share an idea, or send Troy a note."
+          : "One place to get help, report a problem, share an idea, or send Troy a note. Pick what fits."}
       </p>
 
-      <div className="mb-6 flex flex-wrap gap-3">
+      {isStaff && <StaffHelp tourAllowed={staffTourAllowed(role)} />}
+
+      {!isStaff && <div className="mb-6 flex flex-wrap gap-3">
         <Link href={TOUR_HREF} className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
           Replay the Refinery tour
         </Link>
         {settingsTourFor && <Link href="/dashboard/settings?tour=settings" className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
           Replay the Settings tour
         </Link>}
-      </div>
+      </div>}
 
-      <div className="mb-6 flex flex-wrap gap-4 text-sm text-t-amber-bright underline"><Link href="/dashboard/settings?lesson=1">Learn your settings</Link><Link href="/dashboard/orientation">Take the orientation check</Link></div>
+      {!isStaff && <div className="mb-6 flex flex-wrap gap-4 text-sm text-t-amber-bright underline"><Link href="/dashboard/settings?lesson=1">Learn your settings</Link><Link href="/dashboard/orientation">Take the orientation check</Link></div>}
+
+      {isStaff && <h2 className="text-lg font-bold text-t-white mb-3">Get help or tell us something</h2>}
 
       {/* Mode picker */}
       <div className="flex flex-wrap gap-2 mb-5">

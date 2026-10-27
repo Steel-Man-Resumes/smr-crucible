@@ -1,17 +1,21 @@
 "use client";
 
 /**
- * <OrgSidebar> -- the staff sidebar (CRM wave 2026-10-25, lane C1).
+ * <OrgSidebar> -- the staff sidebar (CRM wave 2026-10-25, lane C1; rebuilt
+ * around a case manager's day in the staff pass 2026-10-27, lane S2).
  *
  * Rendered by RefineryShell's renderOrgNav inside the forge-workshop scope, the
  * same skin as the participant board. Top: the identity block (OrgMark, the
- * organization's name, a Demo chip, the viewer's role). Then the work grouped
- * by the job, capability-gated (lib/org-nav.ts). Foot: Settings, and Ask t.ROY,
- * which opens the t.ROY drawer in staff mode.
+ * organization's name, a Demo chip, the viewer's role), then the find-a-person
+ * box (the /dashboard/search engine, compact). Then the work grouped by the
+ * day, capability-gated (lib/org-nav.ts). Foot: Help, Ask t.ROY (opens the
+ * t.ROY drawer in staff mode), My setup, Settings.
  */
 import Link from "next/link";
 import { OrgMark } from "@/components/org/OrgMark";
-import { orgNavFor, orgNavActive, orgRoleLine, orgDisplayName } from "@/lib/org-nav";
+import { StaffSearch } from "@/components/org/StaffSearch";
+import { orgNavFor, orgNavActive, orgRoleLine, orgDisplayName, orgFootFor, orgFindBoxFor } from "@/lib/org-nav";
+import { STAFF_FEATURES, type StaffFeatures } from "@/lib/staff-features";
 
 export interface OrgSidebarProps {
   orgName: string | null;
@@ -26,23 +30,43 @@ export interface OrgSidebarProps {
   orgId?: string | null;
   hasLogo?: boolean;
   onItemClick?: () => void;
+  /** The organization's module switches (org_profile.modules); absent means all on. */
+  modules?: Readonly<Record<string, boolean>> | null;
+  /** Small counts beside an item, by navId (the inbox's unread count, once S4 is merged). Zero or absent shows nothing. */
+  counts?: Readonly<Record<string, number>>;
+  /** The staff member's own rewards switch (S6). Wins shows only when it is on. */
+  rewardsOn?: boolean;
+  /** For tests: the build's feature flags (lib/staff-features.ts). */
+  features?: StaffFeatures;
+}
+
+/** "3" or "9+": short, so a count never pushes the label onto two lines. */
+export function navCountText(n: number | undefined): string | null {
+  if (!n || n < 1 || !Number.isFinite(n)) return null;
+  return n > 9 ? "9+" : String(Math.floor(n));
 }
 
 export function OrgSidebar(p: OrgSidebarProps) {
+  const features = p.features ?? STAFF_FEATURES;
   const groups = p.workspace
-    ? orgNavFor(p.capabilities)
+    ? orgNavFor(p.capabilities, p.modules ?? null, undefined, features)
     : [{ label: "Organization", items: p.legacyItems.map((i) => ({ ...i, navId: "" })) }];
   const org = orgDisplayName(p.orgName);
   const roleLine = orgRoleLine(p.orgRole, p.capabilities);
-  const link = (item: { href: string; label: string; navId?: string }, lit: boolean) => (
-    <li key={item.href + item.label}>
-      <Link href={item.href} onClick={p.onItemClick} data-nav-id={item.navId || undefined} data-tour={item.navId || undefined}
-        aria-current={lit ? "page" : undefined} className="t-focus org-link">
-        <span className="org-dot" aria-hidden="true" />
-        {item.label}
-      </Link>
-    </li>
-  );
+  const foot = orgFootFor({ features, rewardsOn: p.rewardsOn });
+  const link = (item: { href: string; label: string; navId?: string }, lit: boolean) => {
+    const count = item.navId ? navCountText(p.counts?.[item.navId]) : null;
+    return (
+      <li key={item.href + item.label}>
+        <Link href={item.href} onClick={p.onItemClick} data-nav-id={item.navId || undefined} data-tour={item.navId || undefined}
+          aria-current={lit ? "page" : undefined} className="t-focus org-link">
+          <span className="org-dot" aria-hidden="true" />
+          <span className="org-link-label">{item.label}</span>
+          {count && <span className="org-count" aria-label={`${count} new`}>{count}</span>}
+        </Link>
+      </li>
+    );
+  };
   return (
     <nav aria-label="Organization workspace" className="org-nav">
       <div className="org-identity" data-tour="crm-org-mark">
@@ -58,6 +82,13 @@ export function OrgSidebar(p: OrgSidebarProps) {
           {roleLine && <p className="org-identity-role">{roleLine}</p>}
         </div>
       </div>
+      {p.workspace && orgFindBoxFor(p.capabilities) && (
+        // A picked result is a link: close the phone drawer the way a nav item does.
+        <div className="org-find" data-tour="org-find-person"
+          onClickCapture={(e) => { if ((e.target as HTMLElement).closest("a")) p.onItemClick?.(); }}>
+          <StaffSearch compact />
+        </div>
+      )}
       {groups.map((group) => (
         <div key={group.label} className="org-group">
           <p className="org-eyebrow">{group.label}</p>
@@ -65,15 +96,18 @@ export function OrgSidebar(p: OrgSidebarProps) {
         </div>
       ))}
       <ul className="org-foot">
-        {link({ href: "/dashboard/settings", label: "Settings", navId: "org-nav-settings" }, p.pathname === "/dashboard/settings")}
-        <li>
-          {/* Opens the t.ROY drawer (staff mode). Same event the line review uses; no text, so nothing is sent. */}
-          <button type="button" data-nav-id="org-nav-troy" className="t-focus org-link org-troy"
-            onClick={() => { p.onItemClick?.(); window.dispatchEvent(new CustomEvent("troy-line-help")); }}>
-            <span className="org-dot" aria-hidden="true" />
-            Ask t.ROY
-          </button>
-        </li>
+        {foot.map((item) => item.href
+          ? link({ href: item.href, label: item.label, navId: item.navId }, orgNavActive(item.href, p.pathname))
+          : (
+            <li key={item.navId}>
+              {/* Opens the t.ROY drawer (staff mode). Same event the line review uses; no text, so nothing is sent. */}
+              <button type="button" data-nav-id={item.navId} data-tour={item.navId} className="t-focus org-link org-troy"
+                onClick={() => { p.onItemClick?.(); window.dispatchEvent(new CustomEvent("troy-line-help")); }}>
+                <span className="org-dot" aria-hidden="true" />
+                {item.label}
+              </button>
+            </li>
+          ))}
       </ul>
     </nav>
   );

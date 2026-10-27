@@ -13,8 +13,9 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { TOURS, TOUR_IDS, isTourId } from '../tour/registry';
 import {
   CRM_ENDING_INDEX, CRM_PERSON_TOKEN, CRM_TOUR_BEATS, CRM_TOUR_COPY, CRM_TOUR_ENDING, CRM_TOUR_GROUPS, CRM_TOUR_STOP_COUNT,
-  applicableBeats, beatCopy, beatHref, onBeatPage, resumeStop, splitHref, stopForBeat,
+  CRM_EXAMPLE_LABEL, applicableBeats, beatCopy, beatHold, beatHref, onBeatPage, resumeStop, splitHref, stopForBeat,
 } from '../tour/crm-beats';
+import { SELECTOR_PREFIX, targetSelector } from '../tour/find-target';
 import { firstPersonFromCohort, isDemoOrg, personIdFromRow, staffTourAllowed, staffTourRequested, STAFF_TOUR_HOME, STAFF_TOUR_OPEN_EVENT } from '../tour/staff-tour';
 import { holdMs, wordCount } from '../tour/timing';
 import { handleTourWrite, type TourWriteStore } from '../tour/tour-write';
@@ -26,7 +27,8 @@ import type { TodayPayload } from '../today-view';
 const ROOT = join(import.meta.dirname, '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 
-const ALL_CAPS = ['org.client.view_content', 'org.insights.view', 'org.staff.manage', 'org.participant.invite', 'org.client.request_sharing'];
+const STAFF_CAPS = ['org.client.view_content', 'org.note.write', 'org.task.write', 'org.participant.invite', 'org.client.request_sharing'];
+const ALL_CAPS = [...STAFF_CAPS, 'org.insights.view', 'org.staff.manage'];
 const PERSON = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
 const TOUR_FILES = ['lib/tour/crm-beats.ts', 'lib/tour/staff-tour.ts', 'lib/tour/find-target.ts', 'components/tour/StaffTourPlayer.tsx', 'components/tour/StaffTour.tsx'];
 
@@ -35,7 +37,7 @@ test('registry: crm is a tour of its own, reserved reward key, grants nothing, s
   assert.deepEqual([...TOUR_IDS], ['entrance', 'settings', 'crm']);
   assert.ok(isTourId('crm'));
   const crm = TOURS.crm;
-  assert.equal(crm.version, 1);
+  assert.equal(crm.version, 2, 'version 2: a version 1 saved place never resumes into the new stops');
   assert.equal(crm.grants, false, 'staff tours grant nothing');
   assert.equal(crm.rewardKey, 'tour:crm');
   assert.equal(crm.completesOnboarding, false);
@@ -65,7 +67,7 @@ test('the reward is never written: completing a crm run calls no grant and retur
   const USER = '00000000-0000-4000-8000-000000000001', RUN = '11111111-1111-4111-8111-111111111111';
   const w = (body: Record<string, unknown>) => handleTourWrite(store, USER, { tourId: 'crm', version: TOURS.crm.version, runId: RUN, sequence: 0, stop: 0, ...body });
   assert.equal((await w({ action: 'start', previousRunId: null })).status, 200);
-  assert.equal((await w({ action: 'progress', sequence: 1, stop: stopForBeat('person-shared') })).status, 200);
+  assert.equal((await w({ action: 'progress', sequence: 1, stop: stopForBeat('person-note') })).status, 200);
   const done = await w({ action: 'complete', sequence: 2, stop: CRM_ENDING_INDEX });
   assert.equal(done.status, 200);
   assert.equal(done.json.reward, null);
@@ -75,28 +77,46 @@ test('the reward is never written: completing a crm run calls no grant and retur
 });
 
 /* Beats */
-test('beats: unique ids, groups in order, DESIGN section 7 order (Today, one person, their screen, Insights, privacy)', () => {
+test('beats: unique ids, groups in order, and the staff path is the eight power stops (staff pass S2)', () => {
   assert.equal(new Set(CRM_TOUR_BEATS.map(b => b.id)).size, CRM_TOUR_BEATS.length);
   const order = CRM_TOUR_GROUPS.map(g => g.id);
   let last = 0;
   for (const b of CRM_TOUR_BEATS) { const at = order.indexOf(b.group); assert.ok(at >= last, `${b.id} out of order`); last = at; }
-  const ids = CRM_TOUR_BEATS.map(b => b.id);
-  assert.deepEqual(ids.slice(0, 3), ['today-start', 'today-reasons', 'today-person']);
-  assert.ok(ids.indexOf('person-shared') < ids.indexOf('person-board'), 'what they shared before their screen');
-  assert.ok(ids.indexOf('person-board') < ids.indexOf('insights-head'));
-  assert.equal(ids.at(-1), 'privacy');
-  assert.ok(CRM_TOUR_BEATS.find(b => b.id === 'insights-print')!.targets.flat().includes('crm-insights-mark'), 'the print stop lights the org mark too');
+  const staff = applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS });
+  assert.deepEqual(staff.map(b => b.id), ['today-sorted', 'today-prep', 'person-timeline', 'person-note', 'person-tasks', 'referrals', 'people-views', 'ask-troy']);
+  const owner = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
+  assert.deepEqual(owner.map(b => b.id), ['today-sorted', 'today-prep', 'person-timeline', 'person-note', 'person-tasks', 'referrals', 'people-views', 'owner-insights', 'owner-team', 'ask-troy']);
+  assert.equal(CRM_TOUR_BEATS.at(-1)!.id, 'ask-troy', 't.ROY across the whole list is the last word');
   for (const b of CRM_TOUR_BEATS) assert.equal(b.minFound, 1);
+  // The old button-pointing stops are gone: the board metaphor and the three privacy stops.
+  for (const gone of ['today-start', 'person-board', 'person-never', 'person-shared', 'privacy']) assert.ok(!CRM_TOUR_BEATS.some(b => b.id === gone), gone);
 });
 
-test('every target is a one-line data-tour id on a real staff screen, and every href is a real route', () => {
-  const sources = ['components/org/TodayPage.tsx', 'components/org/PersonOverview.tsx', 'components/org/ClientPage.tsx', 'components/org/InsightsReport.tsx', 'components/org/OrgSidebar.tsx'].map(read).join('\n');
+test('examples: fixed, labeled, short, about made-up people, and never fetched', () => {
+  assert.equal(CRM_EXAMPLE_LABEL, 'Example');
+  const withExample = CRM_TOUR_BEATS.filter(b => b.example?.length);
+  assert.ok(withExample.length >= 4, 'most power stops show what the tool gives');
+  for (const b of withExample) {
+    assert.ok(b.example!.length <= 3, `${b.id}: at most three lines`);
+    for (const line of b.example!) assert.ok(wordCount(line) <= 16, `${b.id}: "${line}" is short`);
+  }
+  assert.match(read('components/tour/StaffTourPlayer.tsx'), /<p className="st-example__k">\{CRM_EXAMPLE_LABEL\}<\/p>/, 'the card labels it');
+  assert.deepEqual(beatCopy(CRM_TOUR_BEATS.find(b => b.id === 'person-timeline')!, false).example, [], 'no example is an empty list, not undefined');
+});
+
+test('every target: a data-tour id first, a fallback that is on the real screen today, and every href is a real route', () => {
+  const sources = ['components/org/TodayPage.tsx', 'components/org/PersonOverview.tsx', 'components/org/ClientPage.tsx', 'components/org/InsightsReport.tsx', 'components/org/OrgSidebar.tsx', 'components/org/CaseloadWorkbench.tsx', 'components/org/Referrals.tsx', 'components/org/PersonTimeline.tsx'].map(read).join('\n');
   const navIds = new Set([...read('lib/org-nav.ts').matchAll(/navId: "([a-z-]+)"/g)].map(m => m[1]));
   assert.match(read('components/org/OrgSidebar.tsx'), /data-tour=\{item\.navId \|\| undefined\}/, 'sidebar links carry their nav id as the tour id');
+  assert.match(read('components/org/OrgSidebar.tsx'), /data-nav-id=\{item\.navId\} data-tour=\{item\.navId\}/, 'the Ask t.ROY button carries its tour id');
+  const onScreen = (id: string) => id.startsWith(SELECTOR_PREFIX) || sources.includes(`data-tour="${id}"`) || sources.includes(`id="${id}"`) || (sources.includes(`"${id}"`) && /data-tour=\{[^}]*"crm-/.test(sources)) || navIds.has(id);
+  // Ids another lane adds to its own screen (S2-REPORT.md WIRING NEEDED); each has a fallback that is there today.
+  const pending = new Set(['crm-person-timeline-tab', 'crm-person-note-box', 'crm-person-tasks-tab', 'crm-referrals-head', 'crm-people-save-view']);
   for (const b of CRM_TOUR_BEATS) {
-    for (const [id] of b.targets) {
-      const inSource = sources.includes(`data-tour="${id}"`) || sources.includes(`"${id}"`) && /data-tour=\{[^}]*"crm-/.test(sources);
-      assert.ok(inSource || navIds.has(id), `${b.id}: target ${id} is on no staff screen`);
+    for (const ids of b.targets) {
+      assert.ok(!ids[0].startsWith(SELECTOR_PREFIX), `${b.id}: the first id is a data-tour id, not a selector`);
+      if (pending.has(ids[0])) assert.ok(ids.slice(1).some(onScreen), `${b.id}: ${ids[0]} is pending and has no fallback on screen`);
+      else assert.ok(onScreen(ids[0]), `${b.id}: target ${ids[0]} is on no staff screen`);
     }
     const { pathname } = splitHref(beatHref(b, PERSON));
     const seg = pathname.replace('/dashboard/', '').replace(PERSON, '[id]');
@@ -104,30 +124,34 @@ test('every target is a one-line data-tour id on a real staff screen, and every 
     if (b.needsPerson && !b.needsTodayRow) assert.ok(b.href.includes(CRM_PERSON_TOKEN), `${b.id} needs a person but names none`);
     else assert.ok(!b.href.includes(CRM_PERSON_TOKEN));
   }
-  // The conditional targets really are written where the test expects them.
   assert.match(read('components/org/TodayPage.tsx'), /data-tour=\{tourFirst \? "crm-today-first-row" : undefined\} data-client-id=/);
-  assert.match(read('components/org/PersonOverview.tsx'), /data-tour=\{area\.station === "plan" \? "crm-person-never" : undefined\}/);
-  assert.match(read('components/org/ClientPage.tsx'), /data-tour=\{key === "shared" \? "crm-person-shared-tab" : undefined\}/);
+  assert.match(read('components/org/ClientPage.tsx'), /<textarea id="note-body"/, 'the note box fallback');
+  assert.match(read('components/org/ClientPage.tsx'), /<input id="task-title"/, 'the task box fallback');
+  assert.match(read('components/org/CaseloadWorkbench.tsx'), /<div data-testid="caseload-workbench">\s*<div className="mb-2 flex/, 'the People toolbar fallback');
+  assert.match(read('app/(dashboard)/RefineryShell.tsx'), /<main id="main"/, 'the referrals heading fallback lives in #main');
+  // Selectors resolve the way the finder builds them.
+  assert.equal(targetSelector('note-body'), '[id="note-body"], [data-tour="note-body"]');
+  assert.equal(targetSelector('sel:#main h1'), '#main h1');
 });
 
-test('the person stops drop out, never invent, when the list is empty; Insights waits on its capability', () => {
+test('the person stops drop out, never invent, when the list is empty; owner stops wait on their capabilities; a module that is off drops its stop', () => {
   const full = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
   assert.ok(full.every(b => !b.noPeopleOnly));
-  assert.equal(full.filter(b => b.needsPerson).length, 6);
+  assert.equal(full.filter(b => b.needsPerson).length, 4);
   assert.equal(full.length, CRM_TOUR_BEATS.length - 1);
-  const none = applicableBeats({ personId: null, capabilities: ALL_CAPS });
+  const none = applicableBeats({ personId: null, capabilities: STAFF_CAPS });
   assert.ok(none.every(b => !b.needsPerson));
-  assert.equal(none.length, 7, 'review SF-2: no dead stop on the no-people path');
-  assert.ok(!none.some(b => b.id === 'today-person'), 'the first-row stop needs the row');
-  // A person from the caseload read while Today holds only task rows: the row stop is dropped, the person stops stay.
-  const cohortOnly = applicableBeats({ personId: PERSON, todayRow: false, capabilities: ALL_CAPS });
-  assert.ok(!cohortOnly.some(b => b.id === 'today-person'));
-  assert.equal(cohortOnly.filter(b => b.needsPerson).length, 5);
-  assert.deepEqual(none.filter(b => b.noPeopleOnly).map(b => b.id), ['no-people']);
-  assert.match(beatCopy(none.find(b => b.id === 'no-people')!, false).body, /waits until someone joins/);
-  const noInsights = applicableBeats({ personId: PERSON, capabilities: ['org.client.view_content'] });
-  assert.ok(noInsights.every(b => b.group !== 'insights'));
-  assert.ok(noInsights.some(b => b.id === 'privacy'), 'the privacy line is for everyone');
+  assert.deepEqual(none.map(b => b.id), ['today-sorted', 'no-people', 'referrals', 'people-views', 'ask-troy']);
+  assert.match(beatCopy(none.find(b => b.id === 'no-people')!, false).body, /wait until someone joins/);
+  const cohortOnly = applicableBeats({ personId: PERSON, todayRow: false, capabilities: STAFF_CAPS });
+  assert.ok(!cohortOnly.some(b => b.id === 'today-prep'), 'the Prep me stop needs a Today row');
+  assert.equal(cohortOnly.filter(b => b.needsPerson).length, 3);
+  const volunteer = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ['org.client.view_content'] });
+  assert.ok(!volunteer.some(b => b.id === 'person-note' || b.id === 'person-tasks'), 'no stop shows a box the viewer cannot use');
+  assert.ok(volunteer.every(b => b.group !== 'owner'));
+  const noReferrals = applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS, modules: { referrals: false } });
+  assert.ok(!noReferrals.some(b => b.id === 'referrals'), 'referrals switched off: no stop for it');
+  assert.ok(applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS, modules: null }).some(b => b.id === 'referrals'), 'unknown modules count as on');
   for (const b of CRM_TOUR_BEATS) assert.ok(!(b.needsPerson && b.noPeopleOnly));
 });
 
@@ -135,48 +159,48 @@ test('the person page is opened on a named tab, so the staff start-tab setting c
   for (const b of CRM_TOUR_BEATS.filter(b => b.needsPerson && !b.needsTodayRow)) {
     const { pathname, search } = splitHref(beatHref(b, PERSON));
     assert.equal(pathname, `/dashboard/clients/${PERSON}`);
-    assert.match(search, /^\?tab=(notes|screen)$/, `${b.id} names its tab`);
+    assert.match(search, /^\?tab=(notes|timeline|tasks)$/, `${b.id} names its tab`);
   }
-  assert.equal(splitHref(beatHref(CRM_TOUR_BEATS.find(b => b.id === 'person-board')!, PERSON)).search, '?tab=screen');
+  for (const b of CRM_TOUR_BEATS) assert.doesNotMatch(b.href, /tab=shared/, `${b.id} never opens what they shared`);
   const page = read('components/org/ClientPage.tsx');
   assert.match(page, /if \(startTab\) \{ setTab\(startTab\); setItem\(null\); setShared\(null\); return; \}/, 'a start tab skips initialOpen (no fetch, no saved preference)');
   assert.match(read('app/(dashboard)/dashboard/clients/[id]/page.tsx'), /PERSON_TABS\.some\(\(t\) => t\.key === v\)/, 'the route validates ?tab=');
+  for (const tab of ['timeline', 'notes', 'tasks']) assert.match(read('lib/org-person-view.ts') + page, new RegExp(`key: "${tab}"`), `${tab} is a real tab`);
 });
 
 /* Resume by beat id */
 test('resume: the saved stop is a beat id through the full list, and resumes at that beat or the next one that applies', () => {
   const full = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
   const none = applicableBeats({ personId: null, capabilities: ALL_CAPS });
-  const shared = stopForBeat('person-shared');
-  assert.equal(full[resumeStop(shared, full)].id, 'person-shared');
+  const note = stopForBeat('person-note');
+  assert.equal(full[resumeStop(note, full)].id, 'person-note');
   // Saved mid-person on a list that is now empty: the next applying beat, not the same position.
-  assert.equal(none[resumeStop(shared, none)].id, 'no-people');
+  assert.equal(none[resumeStop(note, none)].id, 'no-people');
   assert.equal(none[resumeStop(stopForBeat('no-people'), none)].id, 'no-people');
-  assert.equal(full[resumeStop(stopForBeat('no-people'), full)].id, 'insights-head', 'a no-people place resumes at Insights once someone joined');
-  const noInsights = applicableBeats({ personId: PERSON, capabilities: ['org.client.view_content'] });
-  assert.equal(noInsights[resumeStop(stopForBeat('insights-head'), noInsights)].id, 'privacy');
+  assert.equal(full[resumeStop(stopForBeat('no-people'), full)].id, 'referrals', 'a no-people place resumes at the next stop once someone joined');
+  const staffOnly = applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS });
+  assert.equal(staffOnly[resumeStop(stopForBeat('owner-insights'), staffOnly)].id, 'ask-troy');
   assert.equal(resumeStop(CRM_ENDING_INDEX, full), full.length, 'the ending');
   assert.equal(resumeStop(999, full), full.length);
   for (const bad of [undefined, null, -1, 1.5]) assert.equal(resumeStop(bad as number, full), 0, String(bad));
   assert.equal(stopForBeat('nope'), CRM_ENDING_INDEX);
-  // A position in the resolved path would be wrong: index 3 in `none` is Insights, index 3 in the full list is a person stop.
-  assert.notEqual(none[3].id, CRM_TOUR_BEATS[3].id);
+  assert.notEqual(none[2].id, CRM_TOUR_BEATS[2].id, 'a position in the resolved path would be wrong');
 });
 
 /* Pace */
-test('runtime at reading pace: 75 to 110 s on the full path, under 110 s on every path, demo words included', () => {
-  const sum = (beats: typeof CRM_TOUR_BEATS, demo: boolean) => beats.reduce((a, b) => a + holdMs(beatCopy(b, demo)), 0);
-  const full = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
+test('runtime at reading pace, examples included: about a minute and a half for staff, never past two and a half minutes', () => {
+  const sum = (beats: readonly (typeof CRM_TOUR_BEATS)[number][], demo: boolean) => beats.reduce((a, b) => a + beatHold(b, demo), 0);
+  const staff = applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS });
+  const owner = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
   for (const demo of [false, true]) {
-    const ms = sum(full, demo);
-    assert.ok(ms >= 75_000 && ms <= 110_000, `full path ${demo ? '(demo)' : ''}: ${ms} ms`);
-    console.log(`# runtime ${demo ? 'demo' : 'real'} org, full path (${full.length} stops): ${(ms / 1000).toFixed(1)} s`);
+    const ms = sum(staff, demo);
+    assert.ok(ms >= 60_000 && ms <= 110_000, `staff path ${demo ? '(demo)' : ''}: ${ms} ms`);
+    console.log(`# runtime staff path (${staff.length} stops): ${(ms / 1000).toFixed(1)} s`);
   }
-  console.log(`# runtime no-people path: ${(sum(applicableBeats({ personId: null, capabilities: ALL_CAPS }), false) / 1000).toFixed(1)} s`);
-  for (const ctx of [{ personId: null, capabilities: ALL_CAPS }, { personId: PERSON, todayRow: true, capabilities: [] }, { personId: null, capabilities: [] }]) {
-    assert.ok(sum(applicableBeats(ctx), true) <= 110_000);
-  }
-  console.log(`# runtime no-Insights path: ${(sum(applicableBeats({ personId: PERSON, todayRow: true, capabilities: [] }), false) / 1000).toFixed(1)} s`);
+  const o = sum(owner, false);
+  assert.ok(o <= 150_000, `owner path: ${o} ms`);
+  console.log(`# runtime owner path (${owner.length} stops): ${(o / 1000).toFixed(1)} s`);
+  for (const b of CRM_TOUR_BEATS) assert.ok(beatHold(b, false) >= holdMs(beatCopy(b, false)), `${b.id}: the example adds reading time`);
 });
 
 test('captions: bodies 12 to 30 words, titles short, every stop has both', () => {
@@ -188,6 +212,8 @@ test('captions: bodies 12 to 30 words, titles short, every stop has both', () =>
     }
   }
   assert.ok(wordCount(CRM_TOUR_ENDING.body) <= 30);
+  assert.match(CRM_TOUR_ENDING.body, /picks what you see, and sees when you open it/, 'the privacy line lives in the ending now');
+  assert.match(CRM_TOUR_ENDING.body, /Help/, 'and it says where to replay it');
 });
 
 /* Copy rules and the must-never-claim list */
@@ -197,17 +223,16 @@ test('copy: no long dashes, no double-hyphen stand-in, no emojis, t.ROY spelled 
     assert.doesNotMatch(src, /—|–/, `${f} has a long dash`);
     assert.doesNotMatch(src, / -- /, `${f} has a double-hyphen stand-in`);
     assert.doesNotMatch(src, /\p{Extended_Pictographic}/u, `${f} has an emoji`);
-    for (const m of src.matchAll(/\bt\.?\s?roy\b/gi)) assert.equal(m[0], 't.ROY', `${f}: ${m[0]}`);
+    for (const m of src.matchAll(/(?<![-/])\bt\.?\s?roy\b(?!-)/gi)) assert.equal(m[0], 't.ROY', `${f}: ${m[0]}`); // ids like org-nav-troy and staff-troy are not the name
     assert.doesNotMatch(src, /Steel ?man resumes(?! )|SteelMan|Steel Man Resume\b/);
   }
   const beats = read('lib/tour/crm-beats.ts');
-  assert.match(beats, /Steel Man Resumes/);
   assert.doesNotMatch(beats, /Five Star/);
 });
 
 test('the tour never claims: counts of people helped, "in use" for a demo, compliance words, competitors, labels on the reader', () => {
   const copy = [
-    ...CRM_TOUR_BEATS.flatMap(b => [b.title, b.body, b.demo?.title ?? '', b.demo?.body ?? '']),
+    ...CRM_TOUR_BEATS.flatMap(b => [b.title, b.body, b.demo?.title ?? '', b.demo?.body ?? '', ...(b.example ?? [])]),
     ...Object.values(CRM_TOUR_COPY).map(v => typeof v === 'function' ? v(1, 2) : v),
     ...Object.values(CRM_TOUR_ENDING),
   ].join('\n');
@@ -226,31 +251,30 @@ test('the tour never claims: counts of people helped, "in use" for a demo, compl
     [/\bbonus\b|\breward\b|extra AI action/i, 'a reward (staff tours grant nothing)'],
   ];
   for (const [re, why] of never) assert.doesNotMatch(copy, re, why);
-  // The demo variant exists only on the privacy stop and says "available".
-  const demo = CRM_TOUR_BEATS.filter(b => b.demo);
-  assert.deepEqual(demo.map(b => b.id), ['privacy']);
-  assert.match(demo[0].demo!.body, /available/);
-  assert.match(demo[0].demo!.body, /fictional/);
-  // The teaching moment, word for word in spirit: item by item, who opened what and when.
-  const shared = CRM_TOUR_BEATS.find(b => b.id === 'person-shared')!;
-  assert.match(shared.title, /item by item/);
-  assert.match(shared.body, /who opened what and when/);
-  assert.match(shared.body, /only points/);
+  // No demo variants now: every stop is true for any organization, and examples are labeled made-up.
+  assert.deepEqual(CRM_TOUR_BEATS.filter(b => b.demo).map(b => b.id), []);
+  // Drafts, never actions: the t.ROY stops say who decides.
+  assert.match(CRM_TOUR_BEATS.find(b => b.id === 'ask-troy')!.body, /You decide what is saved or sent/);
+  assert.match(CRM_TOUR_BEATS.find(b => b.id === 'person-note')!.body, /You read it and save it/);
+  assert.match(CRM_TOUR_BEATS.find(b => b.id === 'person-note')!.body, /first wording is kept/);
+
 });
 
-test('the staff tour copy matches the screens it points at', () => {
-  const today = read('components/org/TodayPage.tsx');
-  assert.match(today, /Prep me/);
-  assert.match(read('lib/today-view.ts'), /Midnight of the calendar day|sections/);
-  const overview = read('components/org/PersonOverview.tsx');
-  assert.match(overview, /Progress is private until \$\{first\} turns on sharing/);
-  assert.match(read('lib/org-person-view.ts'), /Never shared with staff, by design\. No program can require it\./);
-  assert.match(read('components/org/ClientPage.tsx'), /can see that you opened it, and when/);
-  const insights = read('components/org/InsightsReport.tsx');
-  assert.match(insights, /As the participant recorded it/);
-  assert.match(insights, /Each person counted once, at the station they are on/);
-  assert.match(insights, /with Steel Man Resumes/);
-  assert.match(insights, /Print report/);
+test('the staff tour copy matches the screens and the code it describes', () => {
+  const todayItems = read('../../packages/core/src/orgTodayItems.ts');
+  for (const label of ['Interviews coming up', 'Referrals past due', 'Gone quiet', 'They answered you']) assert.match(todayItems, new RegExp(label), label);
+  const prep = read('lib/skills/staff-prep-me/SKILL.md');
+  for (const part of ['Where they are', 'What is coming', 'What is open', 'Two questions worth asking']) assert.match(prep, new RegExp(part), `Prep me gives: ${part}`);
+  const page = read('components/org/ClientPage.tsx');
+  assert.match(page, /A shared task shows on THEIR dashboard, and they can tick it/);
+  assert.match(read('lib/org-person-view.ts'), /earlier wording is kept/);
+  assert.match(read('lib/staff-troy.ts'), /"staff-note-from-bullets"/);
+  assert.match(read('lib/staff-troy.ts'), /"Triage my Today"[\s\S]*"Weekly caseload digest"[\s\S]*"Flag stale cases"/);
+  assert.match(read('components/org/CaseloadWorkbench.tsx'), /Save view/);
+  assert.match(read('components/org/CaseloadWorkbench.tsx'), /My views/);
+  assert.match(read('components/org/InsightsReport.tsx'), /Print report/);
+  assert.match(read('components/org/Referrals.tsx'), /Referrals/);
+  assert.match(read('lib/org-nav.ts'), /label: "My setup"/, 'My setup exists where the stop says');
 });
 
 /* No fetch of shared items */
@@ -320,7 +344,7 @@ test('the person comes from the staff member\'s own list: Today\'s first person 
   const controller = read('components/tour/StaffTour.tsx');
   assert.match(controller, /personFromToday\(signal\)/);
   assert.match(controller, /const todayRow = !!person;/);
-  assert.match(controller, /applicableBeats\(\{ personId: person, todayRow, capabilities \}\)/);
+  assert.match(controller, /applicableBeats\(\{ personId: person, todayRow, capabilities, modules \}\)/);
   assert.doesNotMatch(controller, /personId: ['"]/, 'no hard-coded person');
 });
 
@@ -398,13 +422,10 @@ test('review SF-4: a change of search the tour did not ask for pauses it; a push
   assert.match(player, /\[i, landed, href, retry\]/);
 });
 
-test('review SF-1 and SF-5: the drawer reveal is re-asked until the stop is drawn; on phones the board stop lights the lit row', () => {
+test('review SF-1 and SF-5: the drawer reveal is re-asked until the stop is drawn; the phone portrait rule stays in the player', () => {
   const player = read('components/tour/StaffTourPlayer.tsx');
   assert.match(player, /if \(reveal && !lit\) onNavigationReveal\?\.\(true\);/);
   assert.match(player, /if \(portrait && beat\.portraitWithin && els\[0\]\)/);
-  const board = CRM_TOUR_BEATS.find(b => b.id === 'person-board')!;
-  assert.equal(board.portraitWithin, '.person-board-station[aria-current="step"]');
-  assert.match(read('components/org/PersonOverview.tsx'), /className="person-board-station"[^>]*aria-current=\{here \? "step" : undefined\}/);
   for (const b of CRM_TOUR_BEATS.filter(b => b.drawer)) assert.ok(b.targets.flat().every(t => /^org-nav-|^crm-org-mark$/.test(t)), `${b.id} opens the drawer for a sidebar target`);
   assert.match(read('components/org/TodayPage.tsx'), /tourReady=\{!role\?\.impersonating\}/, 'review N-3');
 });

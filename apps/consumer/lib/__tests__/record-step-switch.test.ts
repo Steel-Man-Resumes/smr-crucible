@@ -179,7 +179,7 @@ describe("review M1: the security page and Settings describe the step only while
     const at = page.indexOf("In the record check, what you type");
     assert.ok(at > 0);
     const before = page.slice(Math.max(0, at - 400), at);
-    assert.match(before, /\{recordStep && \(\s*<li/);
+    assert.match(before, /\{recordStep && !isOrgStaff && \(\s*<li/, "staff never see the record check line (staff pass S2)");
     assert.match(page, /const \{ recordStep \} = useServerSwitches\(\);/);
     assert.match(code(read("app/(dashboard)/dashboard/settings/layout.tsx")), /recordStep: recordStepOn\(\)/);
   });

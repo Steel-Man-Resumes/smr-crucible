@@ -9,7 +9,7 @@
  * the run (UUID, rising sequence, compare-and-set saves through one queue),
  * traps focus and makes the shell inert while the tour is open, and pauses on
  * a route change it did not ask for. Unlike it, the tour moves between pages
- * on purpose (Today, one person, Insights): the player asks, the controller
+ * on purpose (Today, one person, Referrals, People, Insights, Team): the player asks, the controller
  * pushes the route and expects it.
  *
  * The person for the participant stops is a real one from the staff member's
@@ -27,6 +27,7 @@ import { STAFF_TOUR_HOME, STAFF_TOUR_OPEN_EVENT, firstPersonFromCohort, isDemoOr
 import { lockPageForTour, leaveAction } from '@/lib/tour/page-lock';
 import { isRetiredRun, retiredRun, runReplacedError, saveFailureAction, tourSaveFailure } from '@/lib/tour/run-conflict';
 import { RunConflictNotice } from './RunConflictNotice';
+import { useOrgModules } from '@/lib/use-org-modules';
 import './entrance-tour.css';
 
 const DEF = TOURS.crm;
@@ -62,6 +63,8 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
   const search = useSearchParams();
   const router = useRouter();
   const requested = staffTourRequested(pathname, search);
+  // A switched-off module drops its stop (referrals), the way it leaves the nav.
+  const modules = useOrgModules(true);
   const [mounted, setMounted] = useState(false);
   const [active, setActive] = useState(false);
   const [beats, setBeats] = useState<CrmBeat[]>([]);
@@ -175,7 +178,7 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
       } catch { person = null; }
     }
     if (signal.aborted || !alive.current) return;
-    const list = same ? same.list : applicableBeats({ personId: person, todayRow, capabilities });
+    const list = same ? same.list : applicableBeats({ personId: person, todayRow, capabilities, modules });
     beatsRef.current = list; setBeats(list); setPersonId(person);
     // Saved progress from an older version never resumes into this one. The
     // place is a beat id (through its index in the full list), never a position in the path.
@@ -187,7 +190,7 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
     beatRef.current = at; savedGroup.current = groupOf(list, at); setStart(at); setAccountId(slot.accountId); setError(''); setNotice(''); setConflict(false); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!(resume && slot.runId)) save('start', canonical(at));
-  }, [capabilities, save]);
+  }, [capabilities, modules, save]);
 
   const load = useCallback(async (mode: 'auto' | 'replay' | 'resume') => {
     requestController.current?.abort(); const controller = new AbortController(); requestController.current = controller;
