@@ -373,6 +373,15 @@ export default function SettingsPage() {
   // they do not have, or offer to erase "your plans and history" when what the
   // account actually holds is other people's caseload assignments.
   const isOrgStaff = !!effectiveRole?.orgRole;
+  // Staff cannot see the resume, application and record-check boxes, so they
+  // stay ticked: a box unticked before the role loaded must not drop data or
+  // ask staff to tick a box they cannot see (review 2026-10-27).
+  useEffect(() => {
+    if (!isOrgStaff) return;
+    setExportCats((c) => (Array.from(STAFF_HIDDEN_EXPORT_BOXES).every((k) => c[k as keyof ExportTicks])
+      ? c
+      : { ...c, ...Object.fromEntries(Array.from(STAFF_HIDDEN_EXPORT_BOXES).map((k) => [k, true])) } as ExportTicks));
+  }, [isOrgStaff]);
   // View-as or assist (S10): every Settings route answers as the person, and
   // the private sections (security, photo, export, delete) refuse outright.
   const impersonating = effectiveRole?.impersonating ?? null;

@@ -14,7 +14,8 @@ import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
  *
  *   LAYER 1, DETERMINISTIC, CANNOT FAIL. Every number in the answer must be a
  *   number we actually computed. Every person named must be inside this
- *   viewer's reach. No model involved, no network, no failure mode -- if this
+ *   viewer's reach (one exception: a name the viewer typed, repeated only to
+ *   say that person is not on their list). No model involved, no network, no failure mode -- if this
  *   layer says a claim is unsupported, it is unsupported.
  *
  *   LAYER 2, A SECOND MODEL. Catches what arithmetic cannot: a plausible
@@ -100,7 +101,23 @@ function allowedNumbers(facts: OrgFacts): Set<string> {
 /**
  * LAYER 1. Arithmetic and identity. No model, no network, no excuses.
  */
-export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userSaid?: string): string[] {
+/** A sentence that says someone is NOT among the people this viewer sees. */
+const NO_MATCH_SENTENCE = /\b(?:isn't|is not|aren't|are not|not)\s+(?:yet\s+)?(?:on|in)\s+your\s+(?:list|caseload)|\bcould(?:n't| not)\s+(?:find|match)\b|\bcan only see people on your list\b/i;
+
+/** The sentence (or line) of `text` around index `i`. */
+function sentenceAt(text: string, i: number): string {
+  const start = Math.max(text.lastIndexOf(".", i), text.lastIndexOf("!", i), text.lastIndexOf("?", i), text.lastIndexOf("\n", i)) + 1;
+  const ends = [".", "!", "?", "\n"].map((ch) => text.indexOf(ch, i)).filter((x) => x >= 0);
+  return text.slice(start, ends.length ? Math.min(...ends) + 1 : text.length);
+}
+
+/**
+ * `opts.typedNamesInNoMatch`: answer path only. A name the staff member typed
+ * may be repeated in a sentence that says the person is NOT on their list
+ * ("Michael Shaw isn't on your list"). Anywhere else, and always in a draft
+ * meant for a participant, a typed name outside reach is still flagged.
+ */
+export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userSaid?: string, opts?: { typedNamesInNoMatch?: boolean }): string[] {
   const problems: string[] = [];
   const allowed = allowedNumbers(facts);
 
@@ -165,11 +182,11 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   const known = new Set(
     [...facts.visibleNames, ...facts.staffNames, ...(facts.staffToolEvidence ?? []).flatMap((e) => e.names)].map((n) => n.toLowerCase())
   );
-  // A name the staff member typed is theirs to use. Repeating it back ("Michael
-  // Shaw isn't on your list") is not a claim about a person; flagging it read
-  // as a finding about someone (staff walk 2026-10-27). Layer 2 still checks
-  // anything said ABOUT that person against what the tools returned.
-  for (const w of (userSaid ?? "").toLowerCase().split(/[^a-z'-]+/)) if (w.length > 1) known.add(w);
+  // A name the staff member typed, repeated back to say the person is not on
+  // their list, is not a claim about a person; flagging it read as a finding
+  // about someone (staff walk 2026-10-27). Only that sentence shape is let
+  // through, and only on the answer path (see opts above).
+  const typed = new Set(opts?.typedNamesInNoMatch ? (userSaid ?? "").toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 1) : []);
   // A capitalized word is only a candidate NAME if it is not an ordinary word.
   // The first version listed forty stopwords and flagged everything else, so a
   // heading ("Caseload Snapshot"), the organization's own name, and the second
@@ -212,10 +229,13 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   for (const w of (facts.orgName ?? "").toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.
-  const candidates = text.match(/(?<=[a-z,;:]\s)[A-Z][a-z]{2,}/g) ?? [];
-  for (const c of Array.from(new Set(candidates))) {
+  const flagged = new Set<string>();
+  for (const m of text.matchAll(/(?<=[a-z,;:]\s)[A-Z][a-z]{2,}/g)) {
+    const c = m[0];
     const low = c.toLowerCase();
-    if (STOPWORDS.has(low) || known.has(low)) continue;
+    if (STOPWORDS.has(low) || known.has(low) || flagged.has(c)) continue;
+    if (typed.has(low) && NO_MATCH_SENTENCE.test(sentenceAt(text, m.index ?? 0))) continue;
+    flagged.add(c);
     problems.push(`I could not match "${c}" to anyone on your list`);
   }
 
@@ -301,7 +321,7 @@ export async function verifyOrgOutput(
   facts: OrgFacts,
   userSaid?: string
 ): Promise<OrgVerdict> {
-  const deterministic = checkOrgClaimsDeterministic(text, facts, userSaid);
+  const deterministic = checkOrgClaimsDeterministic(text, facts, userSaid, { typedNamesInNoMatch: true });
   const model = await checkOrgClaimsWithModel(text, facts, userSaid);
   return {
     ok: deterministic.length === 0 && (model?.length ?? 0) === 0,

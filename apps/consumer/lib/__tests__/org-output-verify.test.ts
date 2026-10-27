@@ -71,14 +71,20 @@ describe("people must be inside reach", () => {
     assert.match(found[0], /Priya/);
   });
 
-  it("does not flag a name the staff member typed, and words a miss as a match failure", () => {
+  it("lets a typed name through only to say that person is not on the list, and only on the answer path", () => {
     // Staff walk 2026-10-27: "fill in for michael shaw" came back with
     // "Michael" and "Shaw" flagged as if they were findings about a person.
     const said = "take me to the add a participant page and fill in for michael shaw";
-    assert.deepEqual(checkOrgClaimsDeterministic("I can't add people, but Michael Shaw isn't on your list yet.", FACTS, said), []);
-    const miss = checkOrgClaimsDeterministic("You should also follow up with Priya this week.", FACTS, said);
-    assert.equal(miss.length, 1);
-    assert.match(miss[0], /^I could not match "Priya" to anyone on your list$/);
+    const answer = { typedNamesInNoMatch: true };
+    assert.deepEqual(checkOrgClaimsDeterministic("I can't add people, but Michael Shaw isn't on your list yet.", FACTS, said, answer), []);
+    // The same typed name in any other sentence is still a person outside reach.
+    const claim = checkOrgClaimsDeterministic("I can help, and Michael Shaw got the job last week.", FACTS, said, answer);
+    assert.deepEqual(claim, ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list']);
+    // A draft for a participant never gets the allowance (review 2026-10-27).
+    assert.equal(checkOrgClaimsDeterministic("Good news, and Michael Shaw isn't on your list.", FACTS, said).length, 2);
+    // An untyped name is flagged with the plain wording.
+    const miss = checkOrgClaimsDeterministic("You should also follow up with Priya this week.", FACTS, said, answer);
+    assert.deepEqual(miss, ['I could not match "Priya" to anyone on your list']);
   });
 
   it("catches an entirely invented person", () => {
