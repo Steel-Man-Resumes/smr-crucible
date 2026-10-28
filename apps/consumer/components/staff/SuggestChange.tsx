@@ -6,6 +6,9 @@
  * (STAFF_FEATURES.changeRequests).
  */
 import { useState } from "react";
+import Link from "next/link";
+import { useEffectiveRole } from "@/components/RoleProvider";
+import { STAFF_FEATURES } from "@/lib/staff-features";
 import { CHANGE_REQUEST_AREAS, CHANGE_REQUEST_MAX, changeRequestError, sendChangeRequest, type ChangeRequestArea } from "@/lib/change-request-client";
 
 const card = "bg-t-panel border border-t-line p-5";
@@ -65,4 +68,17 @@ export function SuggestChange() {
       )}
     </section>
   );
+}
+
+/**
+ * Beside a control the organization keeps the same for everyone (customization
+ * policy, 108): a way to ask for the change instead (S4's route, through the
+ * form above). Only for people who cannot change it themselves, and only when
+ * the change request route is merged.
+ */
+export function SuggestChangeLink({ className = "" }: { className?: string }) {
+  const role = useEffectiveRole();
+  if (!STAFF_FEATURES.changeRequests || !role?.orgRole || role.impersonating) return null;
+  if ((role.capabilities ?? []).includes("org.settings.manage")) return null;
+  return <Link href="/dashboard/my-setup#suggest" className={`t-focus text-t-amber-bright underline underline-offset-4 ${className}`}>Suggest a change</Link>;
 }

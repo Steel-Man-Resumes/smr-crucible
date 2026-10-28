@@ -23,15 +23,17 @@ export const STAFF_FEATURE_KEYS = [
 export type StaffFeature = (typeof STAFF_FEATURE_KEYS)[number];
 export type StaffFeatures = Readonly<Record<StaffFeature, boolean>>;
 
+// Integration 2026-10-28 (S1, S3, S4, S5 merged with S2): on for every surface whose page and route exist
+// on this branch. notificationPrefs stays off (S4 built no notification choices); rewards waits for S6.
 export const STAFF_FEATURES: StaffFeatures = {
-  changeRequests: false,
-  inbox: false,
+  changeRequests: true,
+  inbox: true,
   notificationPrefs: false,
-  viewChangeLog: false,
-  personalLayout: false,
-  suggestionsSwitch: false,
+  viewChangeLog: true,
+  personalLayout: true,
+  suggestionsSwitch: true,
   rewards: false,
-  directory: false,
+  directory: true,
 };
 
 /** True when the feature is on in this build. Unknown names are off. */

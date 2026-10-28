@@ -48,6 +48,8 @@ export const ORG_WORKSPACE_NAV: readonly OrgNavGroup[] = [
     label: ORG_NAV_GROUPS.connect,
     items: [
       { href: "/dashboard/directory", label: "Directory", needs: "org.client.view_content", navId: "org-nav-directory", feature: "directory" },
+      // S5: employers and help that fit what each person shared (same gate as /api/org/connections).
+      { href: "/dashboard/connections", label: "Connections", needs: "org.client.view_content", navId: "org-nav-connections" },
     ],
   },
   {

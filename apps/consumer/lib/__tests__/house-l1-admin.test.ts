@@ -141,7 +141,8 @@ test("registry: org entries follow capability and module switches; admin entries
   assert.deepEqual(sys.items.map((i) => i.label), ["Health", "Coverage", "Evidence", "AI runs"]);
   for (const e of NAV_EXTENSIONS) assert.ok(e.href.startsWith("/dashboard/") && e.navId && (e.surface === "admin" || e.needs), `wired entry ${e.href} names a dashboard route, an id and (for org entries) the capability it needs`);
   // Without extensions, every role's nav is exactly what it was.
-  assert.deepEqual(orgNavFor(caps("staff", STAFF_PRESETS.volunteer.denies), null, []).map((g) => g.label), ["My day", "Records"]);
+  // (Connect holds the merged Directory and Connections pages, base entries since integration 2026-10-28.)
+  assert.deepEqual(orgNavFor(caps("staff", STAFF_PRESETS.volunteer.denies), null, []).map((g) => g.label), ["My day", "Records", "Connect"]);
 });
 
 test("admins no longer reach their tools through the participant Toolbox only: the Toolbox admin links stay for back-compat but the board is never their nav", () => {

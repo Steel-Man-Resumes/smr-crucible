@@ -30,24 +30,19 @@ const labels = (c: string[]) => orgNavFor(c).map((g) => `${g.label}: ${g.items.m
 
 // ── Nav, by role ────────────────────────────────────────────────────────────
 test("nav groups by a case manager's day, and each role sees only what it holds (staff pass S2)", () => {
-  assert.deepEqual(labels(OWNER), [
-    "My day: Today, People, Referrals, Sharing asks",
-    "Records: Case notes",
-    "Bring someone in: Add people",
-    "Reports: Insights, Activity log",
-    "Team: Team & access, Sharing policy",
-    "Set up: Structure, Fields, Layouts, Set up, Security & privacy",
-  ]);
-  assert.deepEqual(labels(STAFF), ["My day: Today, People, Referrals, Sharing asks", "Records: Case notes", "Bring someone in: Add people"]);
-  assert.deepEqual(labels(VOLUNTEER), ["My day: Today, People, Referrals, Sharing asks", "Records: Case notes"]);
-  // An org admin runs the team and reports; Structure, Fields and Layouts wait on org.settings.manage (lane S3 grants it).
-  assert.deepEqual(labels(ADMIN), [
-    "My day: Today, People, Referrals, Sharing asks", "Records: Case notes", "Bring someone in: Add people",
-    "Reports: Insights, Activity log", "Team: Team & access, Sharing policy", "Set up: Security & privacy",
-  ]);
+  // Integration 2026-10-28: S4 Inbox and Change requests, S1 Directory, S5 Connections are merged; S3 gave
+  // org admins org.settings.manage, so their Set up group matches the owner's.
+  const day = "My day: Today, Inbox, People, Referrals, Sharing asks";
+  const connect = "Connect: Directory, Connections";
+  const runs = [day, "Records: Case notes", connect, "Bring someone in: Add people", "Reports: Insights, Activity log",
+    "Team: Team & access, Sharing policy, Change requests", "Set up: Structure, Fields, Layouts, Set up, Security & privacy"];
+  assert.deepEqual(labels(OWNER), runs);
+  assert.deepEqual(labels(ADMIN), runs);
+  assert.deepEqual(labels(STAFF), [day, "Records: Case notes", connect, "Bring someone in: Add people"]);
+  assert.deepEqual(labels(VOLUNTEER), [day, "Records: Case notes", connect]);
   for (const role of [STAFF, VOLUNTEER]) {
     const all = orgNavFor(role).flatMap((g) => g.items.map((i) => i.label));
-    for (const owner of ["Structure", "Fields", "Layouts", "Set up", "Insights", "Team & access", "Security & privacy", "Find a person"]) assert.ok(!all.includes(owner), owner);
+    for (const owner of ["Structure", "Fields", "Layouts", "Set up", "Insights", "Team & access", "Security & privacy", "Find a person", "Change requests"]) assert.ok(!all.includes(owner), owner);
   }
 });
 

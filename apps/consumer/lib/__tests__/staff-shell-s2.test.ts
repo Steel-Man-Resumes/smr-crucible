@@ -18,7 +18,8 @@ import { ORG_FOOT_NAV, orgFootFor, orgFindBoxFor, orgNavActive, orgNavFor } from
 import { NAV_EXTENSIONS } from "../refinery-nav";
 import { OrgSidebar, navCountText } from "../../components/org/OrgSidebar";
 import { loadOrgModules, readModules, resetOrgModulesCache } from "../use-org-modules";
-import { CHANGE_REQUEST_AREAS, changeRequestError, isChangeRequestArea, sendChangeRequest } from "../change-request-client";
+import { AREA_KIND, CHANGE_REQUEST_AREAS, changeRequestError, changeRequestTitle, isChangeRequestArea, sendChangeRequest } from "../change-request-client";
+import { CHANGE_REQUEST_KINDS } from "@crucible/core/src/teamTalkShared";
 import { STAFF_DATA_WORDS, accountChipText, staffUsageLine } from "../staff-settings-words";
 import { usageWords } from "../usage-view";
 import { StaffHelp, STAFF_TOUR_REPLAY_HREF, skillExample, staffSkillAllowed, staffSkillGroups } from "../../components/help/StaffHelp";
@@ -42,14 +43,29 @@ const OWNER = caps("owner");
 const STAFF = caps("staff");
 const VOLUNTEER = caps("staff", STAFF_PRESETS.volunteer.denies);
 const ALL_ON: StaffFeatures = Object.fromEntries(STAFF_FEATURE_KEYS.map((k) => [k, true])) as StaffFeatures;
+const ALL_OFF: StaffFeatures = Object.fromEntries(STAFF_FEATURE_KEYS.map((k) => [k, false])) as StaffFeatures;
 const ORG = "0a0a0a0a-0a0a-4a0a-8a0a-0a0a0a0a0a0a";
 const USER = "0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b";
 
 /* Feature flags */
-test("feature flags: every lane-owned feature starts off, unknown names are off, no flag means on", () => {
-  for (const k of STAFF_FEATURE_KEYS) assert.equal(STAFF_FEATURES[k], false, `${k} waits for its lane`);
+test("feature flags: on only for merged lanes whose page or route exists, unknown names are off, no flag means on", () => {
+  // Integration 2026-10-28: S1, S3, S4, S5 merged with S2. S6 (rewards) is not; S4 built no notification choices.
+  const on = STAFF_FEATURE_KEYS.filter((k) => STAFF_FEATURES[k]).sort();
+  assert.deepEqual(on, ["changeRequests", "directory", "inbox", "personalLayout", "suggestionsSwitch", "viewChangeLog"]);
+  // Never a dead button: every flag that is on has its page, route or component on this branch.
+  const needs: Record<string, string[]> = {
+    changeRequests: ["app/api/org/change-requests/route.ts", "app/(dashboard)/dashboard/change-requests/page.tsx"],
+    inbox: ["app/(dashboard)/dashboard/inbox/page.tsx", "app/api/org/inbox/route.ts"],
+    directory: ["app/(dashboard)/dashboard/directory/page.tsx", "app/api/org/directory/route.ts"],
+    personalLayout: ["components/org/MyViewSettings.tsx", "app/api/org/prefs/view/route.ts"],
+    viewChangeLog: ["app/api/org/prefs/changes/route.ts"],
+    suggestionsSwitch: ["components/staff/TroySuggestionsSwitch.tsx"],
+  };
+  for (const k of on) for (const f of needs[k]) assert.ok(read(f).length > 0, `${k}: ${f}`);
+  assert.equal(STAFF_FEATURES.rewards, false, "S6 not merged: no Wins, no rewards switch");
   assert.equal(staffFeatureOn(undefined), true);
-  assert.equal(staffFeatureOn("inbox"), false);
+  assert.equal(staffFeatureOn("inbox", ALL_OFF), false);
+  assert.equal(staffFeatureOn("rewards"), false);
   assert.equal(staffFeatureOn("inbox", ALL_ON), true);
   assert.equal(staffFeatureOn("nope", ALL_ON), false);
 });
@@ -57,7 +73,8 @@ test("feature flags: every lane-owned feature starts off, unknown names are off,
 /* Nav */
 test("nav: Inbox and Directory appear only once their lanes are merged; Wins only for someone who turned rewards on", () => {
   const flat = (f: StaffFeatures) => orgNavFor(STAFF, null, NAV_EXTENSIONS, f).flatMap((g) => g.items.map((i) => `${g.label}/${i.label}`));
-  assert.ok(!flat(STAFF_FEATURES).some((l) => /Inbox|Directory/.test(l)));
+  assert.ok(!flat(ALL_OFF).some((l) => /Inbox|Directory/.test(l)), "before their lanes merge");
+  assert.ok(flat(STAFF_FEATURES).includes("My day/Inbox") && flat(STAFF_FEATURES).includes("Connect/Directory"), "merged on this branch");
   const on = flat(ALL_ON);
   assert.deepEqual(on.slice(0, 5), ["My day/Today", "My day/Inbox", "My day/People", "My day/Referrals", "My day/Sharing asks"]);
   assert.ok(on.includes("Connect/Directory"));
@@ -137,7 +154,10 @@ test("My setup: one page for personal controls; Suggest a change only behind its
   const settings = read("app/(dashboard)/dashboard/settings/page.tsx");
   assert.doesNotMatch(settings, /<StaffWorkflowSettings/, "the controls live in one place");
   assert.match(settings, /href="\/dashboard\/my-setup"/);
-  assert.equal(STAFF_FEATURES.changeRequests, false, "until S4 merges, the form never renders");
+  // S4 is merged: the form renders for staff, and My setup carries S3's view controls and the t.ROY switch.
+  assert.equal(STAFF_FEATURES.changeRequests, true);
+  assert.match(page, /\{STAFF_FEATURES\.suggestionsSwitch && <TroySuggestionsSwitch \/>\}/);
+  assert.match(page, /\(STAFF_FEATURES\.personalLayout \|\| STAFF_FEATURES\.viewChangeLog\) && !!role\.crmV2 && <div className="mt-5"><MyViewSettings \/><\/div>/);
 });
 
 test("change request: the contract with S4's route, checked before sending, errors in plain words", async () => {
@@ -149,7 +169,11 @@ test("change request: the contract with S4's route, checked before sending, erro
   const calls: { url: string; body: unknown }[] = [];
   const ok = (async (url: string, init: RequestInit) => { calls.push({ url, body: JSON.parse(String(init.body)) }); return new Response("{}", { status: 200 }); }) as unknown as typeof fetch;
   assert.deepEqual(await sendChangeRequest("layouts", "  Show retention check-ins first on Today.  ", ok), { ok: true });
-  assert.deepEqual(calls, [{ url: "/api/org/change-requests", body: { area: "layouts", body: "Show retention check-ins first on Today." } }]);
+  // S4's route: { action: "create", kind, title, body, target } (integration 2026-10-28).
+  assert.deepEqual(calls, [{ url: "/api/org/change-requests", body: { action: "create", kind: "layout", title: "Show retention check-ins first on Today.", body: "Show retention check-ins first on Today.", target: "/dashboard/my-setup" } }]);
+  assert.equal(changeRequestTitle(`${"word ".repeat(60)}`).length <= 140, true, "a long first line is cut to S4's title limit");
+  assert.equal(changeRequestTitle("Hi\nPlease show retention first on Today."), "Hi Please show retention first on Today.", "a first line too short for a title takes the rest");
+  for (const a of CHANGE_REQUEST_AREAS) assert.ok((CHANGE_REQUEST_KINDS as readonly string[]).includes(AREA_KIND[a.key]), a.key);
   const refused = (async () => new Response(JSON.stringify({ error: "Only staff can suggest changes." }), { status: 403 })) as unknown as typeof fetch;
   assert.deepEqual(await sendChangeRequest("other", "Something that would help us.", refused), { ok: false, error: "Only staff can suggest changes." });
   const down = (async () => { throw new Error("offline"); }) as unknown as typeof fetch;
@@ -162,7 +186,7 @@ test("change request: the contract with S4's route, checked before sending, erro
 
 /* Help */
 test("staff Help: the staff tour, the real staff skill list, My setup, the security statement; no participant tour or lessons", () => {
-  const html = renderToStaticMarkup(React.createElement(StaffHelp, { tourAllowed: true }));
+  const html = renderToStaticMarkup(React.createElement(StaffHelp, { tourAllowed: true, features: ALL_OFF }));
   assert.match(html, new RegExp(`href="${STAFF_TOUR_REPLAY_HREF.replace("?", "\\?")}"`));
   assert.equal(STAFF_TOUR_REPLAY_HREF, "/dashboard/today?tour=crm");
   assert.match(html, /href="\/dashboard\/my-setup"/);

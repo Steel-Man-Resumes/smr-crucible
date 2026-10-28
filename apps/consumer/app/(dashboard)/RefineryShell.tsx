@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PolicyAckBanner } from "@/components/PolicyAckBanner";
@@ -64,6 +64,7 @@ import "@/components/nav/refinery-board.css";
 import "@/components/org/org-workspace.css";
 import "@/components/org/OrgSidebar.css";
 import { OrgSidebar } from "@/components/org/OrgSidebar";
+import { useInboxCount } from "@/components/org/InboxCount";
 import { useOrgModules } from "@/lib/use-org-modules";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { DevModeBanner } from "@/components/DevModeBanner";
@@ -740,7 +741,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
     // mark is a monogram.
     const brand = effectiveRole as (typeof effectiveRole & { orgId?: string; orgBrand?: { hasLogo?: boolean } }) | null;
     return (
-      <OrgSidebar
+      <OrgSidebarWithCounts
         orgName={effectiveRole?.orgName ?? null}
         orgRole={orgRole}
         capabilities={effectiveRole?.capabilities ?? []}
@@ -1014,4 +1015,17 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
 
     </div>
   );
+}
+
+/**
+ * The staff sidebar with the Inbox's unread count (S4). A component of its own
+ * so the count is asked for only where the staff sidebar draws, never for a
+ * participant; only with the workspace on (the inbox route is crm_v2 only).
+ */
+function OrgSidebarWithCounts(props: Omit<ComponentProps<typeof OrgSidebar>, "counts">) {
+  return props.workspace ? <OrgSidebarCounted {...props} /> : <OrgSidebar {...props} />;
+}
+function OrgSidebarCounted(props: Omit<ComponentProps<typeof OrgSidebar>, "counts">) {
+  const unread = useInboxCount();
+  return <OrgSidebar {...props} counts={{ "org-nav-inbox": unread }} />;
 }

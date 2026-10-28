@@ -19,6 +19,8 @@ import { useEffectiveRole } from "@/components/RoleProvider";
 import { StaffWorkflowSettings } from "@/components/org/StaffWorkflowSettings";
 import { STAFF_FEATURES } from "@/lib/staff-features";
 import { SuggestChange } from "@/components/staff/SuggestChange";
+import { MyViewSettings } from "@/components/org/MyViewSettings";
+import { TroySuggestionsSwitch } from "@/components/staff/TroySuggestionsSwitch";
 
 const card = "bg-t-panel border border-t-line p-5";
 const linkText = "text-t-amber-bright underline underline-offset-4 hover:text-t-amber";
@@ -53,7 +55,9 @@ export default function MySetupPage() {
       ) : (
         <>
           <nav aria-label="On this page" className="mb-6 flex flex-wrap gap-2 text-xs">
-            {[["landing", "Your screens"], ["views", "Your views"], ...(STAFF_FEATURES.changeRequests ? [["suggest", "Suggest a change"]] : [])].map(([id, label]) => (
+            {[["landing", "Your screens"], ["views", "Your views"],
+              ...(STAFF_FEATURES.suggestionsSwitch ? [["suggestions", "t.ROY suggestions"]] : []),
+              ...(STAFF_FEATURES.changeRequests && !canManage ? [["suggest", "Suggest a change"]] : [])].map(([id, label]) => (
               <a key={id} href={`#${id}`} className="t-focus rounded-[4px] border border-t-line px-3 py-1.5 font-medium text-t-phos-dim hover:border-t-amber hover:text-t-white">{label}</a>
             ))}
           </nav>
@@ -75,7 +79,11 @@ export default function MySetupPage() {
             <p className="mt-3 text-sm text-t-phos-dim">
               You can also ask t.ROY to help: open Ask t.ROY and say what you want to see first.
             </p>
+            {/* S3: list or grid, row height, which view People opens with, person tab order, Today order, and recent changes with Undo. */}
+            {(STAFF_FEATURES.personalLayout || STAFF_FEATURES.viewChangeLog) && !!role.crmV2 && <div className="mt-5"><MyViewSettings /></div>}
           </section>
+
+          {STAFF_FEATURES.suggestionsSwitch && <TroySuggestionsSwitch />}
 
           {STAFF_FEATURES.changeRequests && !canManage && <SuggestChange />}
           {canManage && (

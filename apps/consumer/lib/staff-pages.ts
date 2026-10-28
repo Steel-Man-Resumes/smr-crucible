@@ -8,15 +8,18 @@
  *    allowlist is filtered through orgNavFor (lib/org-nav.ts) with their
  *    capabilities and their organization's module switches. Settings and Help
  *    are on every seat's screen, so they are always open.
- *  - A key whose href is not in anyone's nav yet (Directory, My setup, Inbox
- *    from other lanes) stays closed until that nav entry lands. Nothing here
- *    widens what a role can reach: the page itself still checks.
+ *  - The sidebar's foot (Help, My setup, Settings) and its find-a-person box
+ *    count as the sidebar too (lane S2 moved Find a person out of the list
+ *    into the box; integration 2026-10-28).
+ *  - A key whose href is in nobody's nav (Employers and Local help are the
+ *    job seeker's pages) stays closed. Nothing here widens what a role can
+ *    reach: the page itself still checks.
  *  - t.ROY never moves the screen. He shows a "Go to" button; the staff
  *    member presses it.
  *
  * Pure and browser-safe: the chat and the server tool both import it.
  */
-import { orgNavFor } from "./org-nav";
+import { orgNavFor, orgFootFor, orgFindBoxFor } from "./org-nav";
 import { NAV_EXTENSIONS } from "./refinery-nav";
 
 export interface StaffPage {
@@ -34,7 +37,7 @@ export const STAFF_PAGES: readonly StaffPage[] = [
   { key: "today", href: "/dashboard/today", label: "Today", about: "who needs them today and why" },
   { key: "people", href: "/dashboard/people", label: "People", about: "everyone on their list, as a table" },
   { key: "find-a-person", href: "/dashboard/search", label: "Find a person", about: "search by name, email, phone or program id" },
-  { key: "asks", href: "/dashboard/requests", label: "Asks", about: "requests to share that are waiting" },
+  { key: "asks", href: "/dashboard/requests", label: "Sharing asks", about: "requests to share that are waiting" },
   { key: "referrals", href: "/dashboard/referrals", label: "Referrals", about: "referrals sent and what came back" },
   { key: "case-notes", href: "/dashboard/notes", label: "Case notes", about: "notes across their people" },
   { key: "add-people", href: "/dashboard/participants", label: "Add people", about: "invite someone new by name and email" },
@@ -79,7 +82,10 @@ export function staffPagesFor(capabilities: Iterable<string>, modules?: Readonly
   // Unknown modules (the read failed) close every module-gated page; the
   // sidebar's "absent means on" would open them (review round 1 nit).
   const known = modules ?? Object.fromEntries(NAV_EXTENSIONS.flatMap((e) => (e.module ? [[e.module, false]] : [])));
-  const hrefs = new Set(orgNavFor([...capabilities], known).flatMap((g) => g.items.map((i) => i.href)));
+  const caps = [...capabilities];
+  const hrefs = new Set(orgNavFor(caps, known).flatMap((g) => g.items.map((i) => i.href)));
+  for (const f of orgFootFor()) if (f.href) hrefs.add(f.href);
+  if (orgFindBoxFor(caps)) hrefs.add("/dashboard/search");
   return STAFF_PAGES.filter((p) => p.always || hrefs.has(p.href));
 }
 

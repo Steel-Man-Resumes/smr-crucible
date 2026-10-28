@@ -77,8 +77,12 @@ it("pages: what each role's own sidebar shows, plus Settings and Help; module sw
   const o = keys(owner, { referrals: true, custom_fields: true });
   for (const k of ["team", "fields", "layouts", "structure", "insights", "add-people"]) assert.ok(o.includes(k), k);
   assert.ok(!keys(staff, { referrals: false }).includes("referrals"), "referrals off: no referrals page");
-  // Other lanes' pages stay closed until their nav entry lands.
-  for (const k of ["directory", "my-setup", "inbox"]) assert.ok(!o.includes(k), k);
+  // Integration 2026-10-28: the merged lanes' pages open exactly as the sidebar shows them.
+  for (const k of ["directory", "connections", "my-setup", "inbox", "change-requests", "find-a-person"]) assert.ok(o.includes(k), k);
+  for (const k of ["directory", "connections", "my-setup", "inbox", "find-a-person"]) assert.ok(s.includes(k), `staff: ${k}`);
+  assert.ok(!s.includes("change-requests"), "the change request queue is for the people who answer it");
+  // The job seeker's pages are in no staff sidebar, so they stay closed.
+  for (const k of ["employers", "local-help"]) assert.ok(!o.includes(k) && !s.includes(k), k);
   assert.equal(new Set(STAFF_PAGE_KEYS).size, STAFF_PAGES.length, "keys are unique");
 });
 

@@ -50,7 +50,11 @@ const C = { minTier: "client", minState: "needs_profile" } as const;
 export const STATIONS: readonly Station[] = [
   { id: "overview", short: "Overview", navId: "refinery-nav-overview", href: "/dashboard", label: "Overview", blurb: "Where you are and what is next",
     minTier: "observer", minState: "needs_profile", steps: [], currentFor: [],
-    children: [{ href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "needs_profile" }] },
+    children: [
+      { href: "/dashboard/progress", label: "Progress", minTier: "observer", minState: "needs_profile" },
+      // Staff pass S5: handoffs and shared tasks from their case manager (a Refinery seat comes from an organization).
+      { href: "/dashboard/from-your-case-manager", label: "From your case manager", ...C },
+    ] },
   { id: "find", short: "Find", navId: "refinery-nav-find", legacyId: "refinery-nav-jobs", href: "/dashboard/jobs", label: "Find work", blurb: "Pick a real job worth going after",
     ...C, steps: ["direction"], currentFor: ["direction"],
     children: [
@@ -356,6 +360,9 @@ export const NAV_EXTENSIONS: readonly NavExtension[] = [
   // manager's day. Labels are the groups in lib/org-nav.ts ORG_NAV_GROUPS.
   // S4 (109): the team inbox, with its unread count, once the lane is merged.
   { surface: "org", group: "My day", href: "/dashboard/inbox", label: "Inbox", navId: "org-nav-inbox", needs: "org.cohort.view", after: "Today", feature: "inbox" },
+  // S4 (109): the queue of staff change requests, for the people who answer them (owner and org admins,
+  // core isOrgManager; org.settings.manage is held by exactly those roles). Staff reach their own from the Inbox.
+  { surface: "org", group: "Team", href: "/dashboard/change-requests", label: "Change requests", navId: "org-nav-change-requests", needs: "org.settings.manage", feature: "changeRequests" },
   // House L5 (105): closed-loop referrals (off with the org's referrals module).
   { surface: "org", group: "My day", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", needs: "org.client.view_content", module: "referrals", after: "People" },
   // House L3b (102): the organization's activity log.

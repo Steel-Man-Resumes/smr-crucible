@@ -135,3 +135,19 @@ it("a t.ROY handoff draft passes the route's claim check on its words, and a bad
     assert.equal(out.kept.length, 0, `${note} / ${why} is held`);
   }
 });
+
+it("round 2 (S2 merged): Inbox count in the staff sidebar only, participant link to their case manager, locked controls offer Suggest a change", async () => {
+  const shell = read("../../app/(dashboard)/RefineryShell.tsx");
+  assert.match(shell, /function OrgSidebarCounted[\s\S]*const unread = useInboxCount\(\);[\s\S]*counts=\{\{ "org-nav-inbox": unread \}\}/);
+  assert.match(shell, /return props\.workspace \? <OrgSidebarCounted \{\.\.\.props\} \/> : <OrgSidebar \{\.\.\.props\} \/>;/, "asked only with the workspace on");
+  const { STATIONS } = await import("../refinery-nav");
+  const overview = STATIONS.find((s) => s.id === "overview")!;
+  assert.ok(overview.children.some((c) => c.href === "/dashboard/from-your-case-manager" && c.minTier === "client"));
+  for (const f of ["../../components/org/MyViewSettings.tsx", "../../components/org/StaffWorkflowSettings.tsx"]) assert.match(read(f), /<SuggestChangeLink \/>/, f);
+  const link = read("../../components/staff/SuggestChange.tsx");
+  assert.match(link, /if \(\(role\.capabilities \?\? \[\]\)\.includes\("org\.settings\.manage"\)\) return null;/, "never for people who can change it themselves");
+  assert.match(link, /!STAFF_FEATURES\.changeRequests/);
+  const sw = read("../../components/staff/TroySuggestionsSwitch.tsx");
+  assert.match(sw, /typeof d\.effective\?\.troySuggestions === "boolean"/, "draws only when the pref exists");
+  assert.doesNotMatch(sw + link, /[–—]| -- /);
+});

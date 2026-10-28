@@ -12,6 +12,7 @@ import { useOrgTerms } from "@/lib/use-org-terms";
  * undecided staff see; each person's own choice still wins for them.
  */
 import { useEffect, useState } from "react";
+import { SuggestChangeLink } from "@/components/staff/SuggestChange";
 import {
   CASELOAD_COLUMNS, CASELOAD_COLUMN_LABELS, CASELOAD_SORTS, CASELOAD_SORT_LABELS,
   NOTE_KINDS, NOTE_KIND_LABELS, CLIENT_TABS, CLIENT_TAB_LABELS, LANDINGS, LANDING_LABELS, TODAY_SECTION_KEYS,
@@ -65,7 +66,7 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
           <select id="wf-sort" className={select} value={p.caseloadSort} disabled={locked.has("default_view")} onChange={(e) => change({ caseloadSort: e.target.value as StaffPrefs["caseloadSort"] })}>
             {CASELOAD_SORTS.map((k) => <option key={k} value={k}>{CASELOAD_SORT_LABELS[k]}</option>)}
           </select>
-          <p className="text-xs text-t-phos-dim mt-1">{locked.has("default_view") ? LOCKED_NOTE : "You can still re-sort on the page. This is what it opens with."}</p>
+          <p className="text-xs text-t-phos-dim mt-1">{locked.has("default_view") ? <>{LOCKED_NOTE} <SuggestChangeLink /></> : "You can still re-sort on the page. This is what it opens with."}</p>
         </div>
 
         <fieldset>
@@ -78,7 +79,7 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
               </label>
             ))}
           </div>
-          <p className="text-xs text-t-phos-dim mt-1">The person&apos;s name always shows.{locked.has("columns") ? ` ${LOCKED_NOTE}` : ""}</p>
+          <p className="text-xs text-t-phos-dim mt-1">The person&apos;s name always shows.{locked.has("columns") ? <> {LOCKED_NOTE} <SuggestChangeLink /></> : null}</p>
         </fieldset>
 
         {workspace && (<>
@@ -100,7 +101,7 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
               </label>
             ))}
           </div>
-          {locked.has("today_hide") && <p className="text-xs text-t-phos-dim mt-1">{LOCKED_NOTE}</p>}
+          {locked.has("today_hide") && <p className="text-xs text-t-phos-dim mt-1">{LOCKED_NOTE} <SuggestChangeLink /></p>}
         </fieldset>
         <div>
           <label htmlFor="wf-tab" className="block font-medium text-t-white mb-1">When I open a {terms.participant}, start on</label>

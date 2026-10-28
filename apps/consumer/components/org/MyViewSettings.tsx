@@ -17,6 +17,7 @@ import { PERSON_TAB_KEYS, type StaffPrefs } from "@crucible/core/src/staffPrefsS
 import { ROW_DENSITIES, ROW_DENSITY_LABELS } from "@crucible/core/src/viewLayoutShared";
 import { PERSON_TAB_LABELS } from "@crucible/core/src/viewActionsShared";
 import { POLICY_LOCKED_TEXT, type PolicyAllowed } from "@crucible/core/src/customizationPolicyShared";
+import { SuggestChangeLink } from "@/components/staff/SuggestChange";
 import { VIEW_CHANGED_EVENT, announceViewChanged } from "@/lib/view-change-events";
 
 interface PrefsPayload { effective: StaffPrefs; allowed: PolicyAllowed }
@@ -73,7 +74,7 @@ export function MyViewSettings() {
     [n[i], n[j]] = [n[j], n[i]];
     void run({ action: "setPersonTabsOrder", tabs: n });
   };
-  const locked = (k: keyof PolicyAllowed) => (a[k] === false ? <p className="text-xs text-t-phos-dim">{POLICY_LOCKED_TEXT[k]}</p> : null);
+  const locked = (k: keyof PolicyAllowed) => (a[k] === false ? <p className="text-xs text-t-phos-dim">{POLICY_LOCKED_TEXT[k]} <SuggestChangeLink /></p> : null);
 
   return (
     <div className="space-y-6" data-testid="my-view-settings">
