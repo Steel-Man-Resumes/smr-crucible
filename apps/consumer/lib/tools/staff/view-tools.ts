@@ -50,8 +50,14 @@ import { staffTextGate, WITHHELD_NOTE } from "../../staff-ai-safety";
 type Core = typeof import("@crucible/core");
 
 export interface ViewToolOptions {
-  /** Tests inject a stand-in; production imports @crucible/core. */
-  core?: () => Promise<Core>;
+  /**
+   * Where core comes from: tests pass a stand-in, a server caller passes
+   * () => import("@crucible/core"). Required, never defaulted here: the chat
+   * bundles this file through the registry, and a default dynamic import of
+   * core pulled server code (node:crypto) into the browser build (integration
+   * 2026-10-28). The registry path uses ctx.loadCore() instead.
+   */
+  core: () => Promise<Core>;
   /** What the staff member typed (see ViewToolContext.staffWords). */
   staffWords?: string;
 }
@@ -136,8 +142,8 @@ export const viewToolsModule: ViewToolModule = {
 };
 
 /** The same tools standing alone, with their own small per-request budget. */
-export function buildViewTools(initial: OrgActor, opts: ViewToolOptions = {}): ToolSet {
-  const loadCore = opts.core ?? (() => import("@crucible/core"));
+export function buildViewTools(initial: OrgActor, opts: ViewToolOptions): ToolSet {
+  const loadCore = opts.core;
   const tools = makeViewTools({
     initial, loadCore, staffWords: opts.staffWords ?? "",
     async actor() {

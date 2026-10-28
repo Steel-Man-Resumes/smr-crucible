@@ -101,3 +101,11 @@ it("S1 D1: the Directory's Send to picks a person first, then fills that person'
   }
   assert.doesNotMatch(comp, /[–—]| -- /);
 });
+
+it("the registry stays browser-safe: no staff tool module imports core at run time by itself", () => {
+  // A default `() => import("@crucible/core")` in view-tools.ts pulled node:crypto into the chat's
+  // browser bundle and broke next build (integration 2026-10-28). Modules reach core only via ctx.loadCore().
+  for (const f of ["index.ts", "navigate.ts", "directory.ts", "types.ts", "view-tools.ts", "handoff-tools.ts"]) {
+    assert.doesNotMatch(read(`../tools/staff/${f}`), /(?<!typeof )import\(\s*["']@crucible\/core["']\s*\)/, f);
+  }
+});
