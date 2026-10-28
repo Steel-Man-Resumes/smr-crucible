@@ -151,3 +151,9 @@ it("round 2 (S2 merged): Inbox count in the staff sidebar only, participant link
   assert.match(sw, /typeof d\.effective\?\.troySuggestions === "boolean"/, "draws only when the pref exists");
   assert.doesNotMatch(sw + link, /[–—]| -- /);
 });
+
+it("S2 review round 2 nits: the Activity log CSV says what row 1 is in visible words", () => {
+  const audit = read("../../components/org/AuditPage.tsx");
+  assert.match(audit, /<span id="audit-csv-help" className="text-\[11px\] text-t-phos-dim">\{OUTBOUND_CSV_HELP\}<\/span>/);
+  assert.match(audit, /aria-describedby="audit-csv-help"/);
+});

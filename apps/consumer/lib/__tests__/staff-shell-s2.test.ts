@@ -186,17 +186,21 @@ test("change request: the contract with S4's route, checked before sending, erro
 
 /* Help */
 test("staff Help: the staff tour, the real staff skill list, My setup, the security statement; no participant tour or lessons", () => {
-  const html = renderToStaticMarkup(React.createElement(StaffHelp, { tourAllowed: true, features: ALL_OFF }));
+  const html = renderToStaticMarkup(React.createElement(StaffHelp, { tourAllowed: true, features: ALL_OFF, capabilities: OWNER }));
   assert.match(html, new RegExp(`href="${STAFF_TOUR_REPLAY_HREF.replace("?", "\\?")}"`));
   assert.equal(STAFF_TOUR_REPLAY_HREF, "/dashboard/today?tour=crm");
   assert.match(html, /href="\/dashboard\/my-setup"/);
   assert.match(html, /href="\/dashboard\/org-security"/);
   for (const s of STAFF_SKILLS.filter((x) => x.ready)) assert.match(html, new RegExp(`>${s.label}<`), s.label);
   assert.doesNotMatch(html, /Suggest a change|#suggest/, "no link to a form that is not there yet");
-  const on = renderToStaticMarkup(React.createElement(StaffHelp, { tourAllowed: false, features: { ...STAFF_FEATURES, changeRequests: true } }));
+  const on = renderToStaticMarkup(React.createElement(StaffHelp, { tourAllowed: false, capabilities: OWNER, features: { ...STAFF_FEATURES, changeRequests: true } }));
   assert.match(on, /href="\/dashboard\/my-setup#suggest"/);
   assert.doesNotMatch(on, /Replay the staff tour/, "no replay for someone the tour does not open for");
-  const groups = staffSkillGroups();
+  const groups = staffSkillGroups(STAFF_SKILLS, OWNER);
+  const unknown = staffSkillGroups();
+  assert.equal(unknown.person.length + unknown.caseload.length, 0, "capabilities not known: no skill is listed");
+  assert.equal(staffSkillAllowed(STAFF_SKILLS[0], undefined), false);
+  assert.equal(staffSkillAllowed(STAFF_SKILLS[0], null), false);
   assert.equal(groups.person.length + groups.caseload.length, STAFF_SKILLS.filter((s) => s.ready).length);
   assert.equal(skillExample(STAFF_SKILLS.find((s) => s.id === "staff-timeline-summary")!), "Summarize their timeline for the last 90 days, with sources.");
   assert.equal(skillExample(STAFF_SKILLS.find((s) => s.id === "staff-find-help")!), "Find local help for them. The need is: ...");

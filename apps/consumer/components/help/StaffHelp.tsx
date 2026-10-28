@@ -29,7 +29,8 @@ export const STAFF_SKILL_NEEDS: Partial<Record<StaffSkillId, string>> = {
   "staff-funder-narrative": "org.insights.view",
 };
 export function staffSkillAllowed(skill: StaffSkill, capabilities: readonly string[] | null | undefined): boolean {
-  if (!capabilities) return true;
+  // Unknown capabilities (the role read failed or has not arrived) list no skill: never offer what may be refused.
+  if (!capabilities) return false;
   if (!capabilities.includes("org.client.view_content")) return false;
   const need = STAFF_SKILL_NEEDS[skill.id];
   return !need || capabilities.includes(need);
