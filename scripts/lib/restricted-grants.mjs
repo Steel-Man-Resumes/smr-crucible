@@ -243,6 +243,7 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   "staff_suggestion_item_guard()",
   "staff_handoff_close_items()",
   "staff_handoff_has_items()",
+  "staff_handoff_answer_inbox()",
   // 109: the inbox's only writer, the managers list and the mention check run
   // only from definer triggers and functions.
   "smr_inbox_write(uuid, uuid, text, uuid, text, uuid, text)",

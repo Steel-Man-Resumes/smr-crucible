@@ -59,6 +59,7 @@
 --   DROP TRIGGER staff_suggestion_item_guard ON staff_suggestion;
 --   DROP TRIGGER org_activity_handoff ON staff_handoff; DROP TRIGGER staff_handoff_guard ON staff_handoff;
 --   DROP TRIGGER staff_handoff_close_items ON staff_handoff; DROP TRIGGER staff_handoff_has_items ON staff_handoff;
+--   DROP TRIGGER staff_handoff_answer_inbox ON staff_suggestion;
 --   UPDATE staff_suggestion SET status = 'withdrawn' WHERE kind IN ('employer', 'resource', 'next_step') AND status = 'open';
 --   (keep the table and columns: history stays readable). Remove the
 --   _migrations row only if the columns and table are dropped too.
@@ -455,6 +456,45 @@ CREATE TRIGGER org_activity_handoff AFTER INSERT OR UPDATE ON staff_handoff
   FOR EACH ROW EXECUTE FUNCTION public.org_activity_handoff();
 REVOKE ALL ON FUNCTION public.org_activity_handoff() FROM PUBLIC;
 
+-- The sender's Inbox (integration 2026-10-28; 109's staff_inbox_item kind 'handoff', ref 'staff_handoff'):
+-- when the person takes or passes on something in a handoff, the staff member who sent it gets one
+-- unread item per handoff, refreshed in place. Fixed words only; no actor (the person is shown by
+-- consent through participant_user_id, never by account name). Only while the sender is still on the
+-- team and still reaches the person, the same rules 109's smr_inbox_write keeps. smr_inbox_write itself
+-- cannot be used: it refuses a write without an org scope, and the person answers with none.
+-- Skips quietly where 109 is not applied.
+CREATE OR REPLACE FUNCTION public.staff_handoff_answer_inbox() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_author uuid;
+  v_ok boolean;
+  v_prev text := current_setting('app.org_id', true);
+  v_words text := CASE NEW.status WHEN 'saved' THEN 'took on something from your handoff' ELSE 'passed on something in your handoff' END;
+BEGIN
+  IF to_regclass('public.staff_inbox_item') IS NULL OR to_regprocedure('public.smr_team_member(uuid,uuid)') IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT h.author_user_id INTO v_author FROM public.staff_handoff h WHERE h.id = NEW.handoff_id AND h.access_code_id = NEW.access_code_id;
+  IF v_author IS NULL OR v_author = NEW.client_user_id THEN RETURN NULL; END IF;
+  -- The team and reach rules read app.org_id; the person answers with none. Scope them to the handoff's
+  -- organization for these two checks only, then put the setting back (109's smr_activity_without_actor pattern).
+  PERFORM set_config('app.org_id', NEW.access_code_id::text, true);
+  v_ok := public.smr_team_member(NEW.access_code_id, v_author) AND public.smr_staff_reach(NEW.access_code_id, v_author, NEW.client_user_id);
+  PERFORM set_config('app.org_id', COALESCE(v_prev, ''), true);
+  IF NOT v_ok THEN RETURN NULL; END IF;
+  INSERT INTO public.staff_inbox_item (access_code_id, recipient_user_id, kind, actor_user_id, participant_user_id, ref_table, ref_id, summary)
+  VALUES (NEW.access_code_id, v_author, 'handoff', NULL, NEW.client_user_id, 'staff_handoff', NEW.handoff_id, v_words)
+  ON CONFLICT (recipient_user_id, kind, ref_id) WHERE read_at IS NULL
+  DO UPDATE SET summary = EXCLUDED.summary, created_at = now();
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS staff_handoff_answer_inbox ON staff_suggestion;
+CREATE TRIGGER staff_handoff_answer_inbox AFTER UPDATE OF status ON staff_suggestion
+  FOR EACH ROW WHEN (NEW.handoff_id IS NOT NULL AND OLD.status = 'open' AND NEW.status IN ('saved', 'dismissed'))
+  EXECUTE FUNCTION public.staff_handoff_answer_inbox();
+REVOKE ALL ON FUNCTION public.staff_handoff_answer_inbox() FROM PUBLIC;
+
 -- ------------------------------------------------------------------ grants --
 DO $$
 BEGIN
@@ -470,6 +510,7 @@ BEGIN
     REVOKE ALL ON FUNCTION public.staff_suggestion_item_guard() FROM smr_app;
     REVOKE ALL ON FUNCTION public.staff_handoff_close_items() FROM smr_app;
     REVOKE ALL ON FUNCTION public.staff_handoff_has_items() FROM smr_app;
+    REVOKE ALL ON FUNCTION public.staff_handoff_answer_inbox() FROM smr_app;
   END IF;
 END $$;
 
@@ -501,7 +542,8 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_suggestion'::regclass AND tgname = 'staff_suggestion_item_guard')
      OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_guard')
      OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_close_items')
-     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_has_items') THEN
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_has_items')
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_suggestion'::regclass AND tgname = 'staff_handoff_answer_inbox') THEN
     RAISE EXCEPTION '110 after-guard: a guard trigger is missing';
   END IF;
   -- Every S5 definer must be owned by a role that bypasses RLS, or it would
@@ -509,13 +551,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
               WHERE p.pronamespace = 'public'::regnamespace
                 AND p.proname IN ('smr_accept_handoff_step', 'staff_suggestion_item_guard', 'staff_handoff_close_items',
-                                  'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff')
+                                  'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff', 'staff_handoff_answer_inbox')
                 AND p.prosecdef AND NOT (r.rolbypassrls OR r.rolsuper)) THEN
     RAISE EXCEPTION '110 after-guard: an S5 definer is owned by a role without BYPASSRLS';
   END IF;
   IF (SELECT count(*) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef
         AND p.proname IN ('smr_accept_handoff_step', 'staff_suggestion_item_guard', 'staff_handoff_close_items',
-                          'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff')) <> 6 THEN
+                          'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff', 'staff_handoff_answer_inbox')) <> 7 THEN
     RAISE EXCEPTION '110 after-guard: an S5 definer is missing or not SECURITY DEFINER';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN

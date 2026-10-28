@@ -56,9 +56,11 @@ test('migrations 001 to the newest apply in order; the staff files coexist and r
   assert.match(String((guard.rows[0] as { d: string }).d), /ai_assist/);
 
   const triggers = await db.query(`SELECT tgname FROM pg_trigger WHERE NOT tgisinternal AND tgname = ANY($1) ORDER BY tgname`,
-    [['org_profile_ai_owner_only', 'staff_task_assign_guard', 'case_note_review_lock', 'staff_handoff_close_items', 'staff_handoff_has_items']]);
+    [['org_profile_ai_owner_only', 'staff_task_assign_guard', 'case_note_review_lock', 'staff_handoff_close_items', 'staff_handoff_has_items', 'staff_handoff_answer_inbox']]);
   assert.deepEqual((triggers.rows as { tgname: string }[]).map((r) => r.tgname).sort(),
-    ['case_note_review_lock', 'org_profile_ai_owner_only', 'staff_handoff_close_items', 'staff_handoff_has_items', 'staff_task_assign_guard']);
+    ['case_note_review_lock', 'org_profile_ai_owner_only', 'staff_handoff_answer_inbox', 'staff_handoff_close_items', 'staff_handoff_has_items', 'staff_task_assign_guard']);
+  // S2's 107 (branding) sits in the chain too: its column survives everything after it.
+  assert.equal((await db.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'org_profile' AND column_name = 'branding'`)).rows.length, 1, "107's branding column is in place");
   const kinds = await db.query(`SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conrelid = 'public.staff_suggestion'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) ~ 'next_step'`);
   assert.ok(kinds.rows.length >= 1, "110's new suggestion kinds are in place");
 

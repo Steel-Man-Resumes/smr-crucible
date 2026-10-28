@@ -105,6 +105,8 @@ export function inboxHref(row: Pick<InboxItemRow, "ref_table" | "ref_id" | "part
       return p ? `/dashboard/clients/${p}?tab=tasks#task-${ref}` : "/dashboard/today";
     case "org_change_request":
       return `/dashboard/change-requests#cr-${ref}`;
+    case "staff_handoff":
+      return p ? `/dashboard/clients/${p}?tab=tasks#handoff` : "/dashboard/inbox";
     case "case_note":
       return p ? `/dashboard/clients/${p}?tab=notes#note-${ref}` : "/dashboard/inbox";
     default:

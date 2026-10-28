@@ -155,6 +155,28 @@ test('handoffs (110): reach-sealed sending, the person answers, next steps land 
   assert.equal(after[0].status, 'seen', 'answering opened the handoff');
   assert.deepEqual(after[0].items.map((i: { status: string }) => i.status), ['saved', 'saved', 'dismissed'], 'staff see taken and passed, nothing more');
 
+  // The sender's Inbox (integration 2026-10-28): one unread item per handoff, refreshed in place, fixed words, no actor.
+  const box = (await q(`SELECT recipient_user_id, kind, ref_table, ref_id, summary, actor_user_id, participant_user_id, read_at FROM staff_inbox_item WHERE ref_id = $1`, [h1.id])).rows as Record<string, unknown>[];
+  assert.deepEqual(box, [{ recipient_user_id: cm, kind: 'handoff', ref_table: 'staff_handoff', ref_id: h1.id, summary: 'passed on something in your handoff', actor_user_id: null, participant_user_id: p1, read_at: null }],
+    'three answers, one unread item for the sender, showing the latest');
+  assert.equal((await as({ orgId: org, userId: cm }, `SELECT id FROM staff_inbox_item WHERE ref_id = $1`, [h1.id])).length, 1, 'the sender reads it in their inbox');
+  assert.equal((await as({ orgId: org, userId: cm2 }, `SELECT id FROM staff_inbox_item WHERE ref_id = $1`, [h1.id])).length, 0, 'a colleague does not');
+  assert.equal((await as({ userId: p1 }, `SELECT id FROM staff_inbox_item`)).length, 0, 'the person never reads staff inboxes');
+  // The trigger scopes its reach check to the handoff's organization and puts the setting back.
+  const ibA = await send(cm, false, p1, [step('Call the shelter about Monday')]);
+  const ibItemA = (await q(`SELECT id FROM staff_suggestion WHERE handoff_id = $1`, [ibA.id])).rows[0].id as string;
+  const [ans4, scopeAfter] = await asTx({ userId: p1 }, [[HANDOFF_SQL.answer, [p1, ibItemA, 'dismissed']], [`SELECT NULLIF(current_setting('app.org_id', true), '') AS o`, []]]);
+  assert.equal(ans4.length, 1);
+  assert.equal(scopeAfter[0].o, null, 'the person answers with no org scope, before and after the trigger');
+  assert.equal((await q(`SELECT count(*)::int AS n FROM staff_inbox_item WHERE ref_id = $1`, [ibA.id])).rows[0].n, 1);
+  // A sender who no longer reaches the person gets nothing.
+  const ibB = await send(cm2, false, p2, [step('Bring your work boots')]);
+  await q(`DELETE FROM client_staff_assignment WHERE access_code_id = $1 AND client_user_id = $2 AND staff_user_id = $3`, [org, p2, cm2]);
+  const ibItemB = (await q(`SELECT id FROM staff_suggestion WHERE handoff_id = $1`, [ibB.id])).rows[0].id as string;
+  assert.equal((await as({ userId: p2 }, HANDOFF_SQL.answer, [p2, ibItemB, 'dismissed'])).length, 1, 'the person can still answer');
+  assert.equal((await q(`SELECT count(*)::int AS n FROM staff_inbox_item WHERE ref_id = $1`, [ibB.id])).rows[0].n, 0, 'no inbox item for a sender out of reach');
+  await q(`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES ($1, $2, $3, $4)`, [org, p2, cm2, owner]);
+
   // ------------------------------------------------------------ withdrawing
   const h2 = await send(cm, false, p1, [step('Call the training desk'), step('Ask about boots')]);
   const firstOfH2 = (await as({ userId: p1 }, HANDOFF_SQL.mine, [p1])).find((h) => h.id === h2.id)!.items[0].id;
@@ -162,6 +184,7 @@ test('handoffs (110): reach-sealed sending, the person answers, next steps land 
   assert.equal((await as({ orgId: org, userId: cm2 }, HANDOFF_SQL.withdraw, [org, h2.id, false, cm2])).length, 0, 'a colleague cannot withdraw it');
   const [w] = await asTx({ orgId: org, userId: cm }, [[HANDOFF_SQL.withdraw, [org, h2.id, false, cm]]]);
   assert.equal(w.length, 1, 'the sender withdraws it');
+  assert.equal((await q(`SELECT summary FROM staff_inbox_item WHERE ref_id = $1`, [h2.id])).rows.map((r: any) => r.summary).join(), 'passed on something in your handoff', 'withdrawing adds no inbox item');
   assert.deepEqual((await q(`SELECT status FROM staff_suggestion WHERE handoff_id = $1 ORDER BY position`, [h2.id])).rows.map((r: any) => r.status), ['dismissed', 'withdrawn'],
     'the database closed the open item; the answered one keeps its answer');
   assert.ok(!(await as({ userId: p1 }, HANDOFF_SQL.mine, [p1])).some((h) => h.id === h2.id), 'a withdrawn handoff is gone for the person');
