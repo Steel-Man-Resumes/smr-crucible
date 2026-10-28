@@ -34,6 +34,8 @@ import { parseAddPersonPrefill, writeAddPersonPrefill, prefillFullName } from "@
 import { offersFor, staffScreenOf, personOnScreen, type StaffOffer } from "@/lib/staff-discovery";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { StaffTroyDiscovery } from "./StaffTroyDiscovery";
+import { viewToolCards } from "@/components/org/TroyViewCards";
+import { isHandoffDraftResult, applyHandoffDraft, draftButtonLabel, trayOwner } from "@/lib/handoff-tray";
 
 interface ChatSettings {
   coachLength: "brief" | "full";
@@ -835,6 +837,16 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           })[0] : undefined;
           // The skill run this answer was logged as (migration 106). Saving the
           // draft or copying the answer marks it used, by this staff member.
+          // Lane S5: t.ROY's handoff draft. A button puts it in that person's
+          // tray on their page; the staff member reads it there and presses
+          // Send. Nothing is sent from the chat.
+          const handoffDraft = staff ? parts.flatMap((part) => {
+            if (part.type !== "tool-invocation") return [];
+            const inv = part.toolInvocation as { toolName?: string; state?: string; result?: unknown } | undefined;
+            return inv?.toolName === "draft_handoff" && inv.state === "result" && isHandoffDraftResult(inv.result) ? [inv.result] : [];
+          })[0] : undefined;
+          // Lane S3: the Done (with Undo) and shared-view proposal cards.
+          const viewCards = staff ? viewToolCards(parts.filter((p) => p.type === "tool-invocation").map((p) => p.toolInvocation as { toolName?: string; state?: string; result?: unknown })) : [];
           const skillRunId = staff ? skillRunIdOf((message as { annotations?: unknown }).annotations) : null;
           const answerText = staff ? parts.filter((p) => p.type === "text" && typeof p.text === "string").map((p) => String(p.text)).join("\n\n").trim() : "";
 
@@ -921,6 +933,23 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     Open Add people for {prefillFullName(addPerson)}
                   </button>
                   <span className="text-[11px] text-muted">Filled in, not sent. You check it and press Send invite.</span>
+                </div>
+              )}
+              {!replyStillComing && viewCards.map((c) => <div key={`view-${c.key}`} className="pl-1">{c.node}</div>)}
+              {!replyStillComing && handoffDraft && (
+                <div className="flex flex-col items-start gap-1 pl-1">
+                  <button
+                    type="button"
+                    data-staff-handoff-draft=""
+                    onClick={() => {
+                      const href = applyHandoffDraft(handoffDraft, trayOwner(currentOrgId, accountId ?? null));
+                      if (href) router.push(href);
+                    }}
+                    className="min-h-touch rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
+                  >
+                    {draftButtonLabel(handoffDraft)}
+                  </button>
+                  <span className="text-[11px] text-muted">A draft, not sent. You read it on their page and press Send.</span>
                 </div>
               )}
               {staff && !replyStillComing && answerText && (

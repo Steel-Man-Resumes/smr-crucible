@@ -69,15 +69,24 @@ const READ_AND_DRAFT = ["read_staff_tasks", "read_participant_progress", "read_p
 // write nothing: a "Go to" button, a filled-in form the staff member sends
 // themselves, and public employer listings.
 const BUTTONS_AND_DIRECTORY = ["open_staff_page", "open_add_person", "find_employers"];
+// Staff pass integration. S3: the staff member's OWN view (Troy's one exception: it changes at
+// once, with Undo; shared views are only drafted). S5: connections read and a handoff DRAFT.
+const OWN_VIEW = ["read_my_view", "change_my_view", "undo_my_view_change", "propose_shared_view"];
+const HANDOFF_DRAFTS = ["find_missed_connections", "draft_handoff"];
 
 it("the staff assistant is offered no tool that writes, saves, sends or books", () => {
   const { t } = tools("staff");
-  assert.deepEqual(Object.keys(t).sort(), [...READ_AND_DRAFT, ...BUTTONS_AND_DIRECTORY].sort());
+  assert.deepEqual(Object.keys(t).sort(), [...READ_AND_DRAFT, ...BUTTONS_AND_DIRECTORY, ...OWN_VIEW, ...HANDOFF_DRAFTS].sort());
   for (const name of Object.keys(t)) assert.doesNotMatch(name.replace(/^open_add_person$/, "open_person_form"), /save|send|add|create|update|delete|record|assign|book|suggest|comment|request|email|sms/i, name);
-  for (const file of ["navigate.ts", "directory.ts", "index.ts", "types.ts"]) {
+  for (const file of ["navigate.ts", "directory.ts", "index.ts", "types.ts", "handoff-tools.ts", "view-tools.ts"]) {
     const mod = readFileSync(new URL(`../tools/staff/${file}`, import.meta.url), "utf8");
     assert.doesNotMatch(mod, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|fetch\(|addClientNote|inviteParticipant|sendInvite|addStaffTask|recordOutcome|sendOrgEmail|resend|twilio|from ["']@crucible\/core["']/i, file);
   }
+  // The own-view exception writes only through core's typed view action layer (policy, own view, logged as t.ROY's).
+  const viewTools = readFileSync(new URL("../tools/staff/view-tools.ts", import.meta.url), "utf8");
+  const viewWrites = [...new Set([...viewTools.matchAll(/core\.(dispatchViewAction|undoViewChange|saveSavedView|updateSavedView|deleteSavedView|setOwnStaffPrefs|setStaffPrefs|setRoleLayout|setCustomizationPolicy)\(/g)].map((m) => m[1]))].sort();
+  assert.deepEqual(viewWrites, ["dispatchViewAction", "undoViewChange"]);
+  assert.doesNotMatch(readFileSync(new URL("../tools/staff/handoff-tools.ts", import.meta.url), "utf8"), /sendHandoff|withdrawHandoff|answerMyHandoffItem/, "a handoff is only drafted");
   const src = readFileSync(new URL("../tools/assistant-staff-tools.ts", import.meta.url), "utf8");
   const body = src.slice(src.indexOf("const tools: ToolSet = {"), src.indexOf("const executeOnce"));
   assert.doesNotMatch(body, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|addClientNote|editClientNote|suggestJob|commentOnArtifact|requestSharing|addStaffTask|recordOutcome|save_resource_list|sendOrgEmail|resend|twilio/i);

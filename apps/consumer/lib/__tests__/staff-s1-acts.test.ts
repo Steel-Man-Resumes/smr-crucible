@@ -257,15 +257,18 @@ it("registry: every module composes in, a duplicate name throws, the chat gets a
   const dup = { id: "dup", build: () => ({ read_today_queue: tool({ description: "x", parameters: jsonSchema({ type: "object", properties: {} }), execute: async () => ({}) }) }) };
   assert.throws(() => buildStaffTools(staff, undefined, { core: async () => ({}) as never, modules: [...STAFF_TOOL_MODULES, dup] }), /defined twice/);
   assert.throws(() => composeStaffTools({ safe: (r: unknown) => r } as never, {}, [STAFF_TOOL_MODULES[0], STAFF_TOOL_MODULES[0]]), /defined twice/);
-  assert.deepEqual([...staffStreamedTools()].sort(), ["open_add_person", "open_staff_page"]);
+  // Integration: S3's own-view cards and S5's handoff draft stream too (each module declares its shapes).
+  assert.deepEqual([...staffStreamedTools()].sort(), ["change_my_view", "draft_handoff", "open_add_person", "open_staff_page", "propose_shared_view", "undo_my_view_change"]);
+  assert.deepEqual(streamedDeclarationProblems(), [], "every module's streamed declaration is sound");
   const activity = staffToolActivity();
   for (const n of ["open_staff_page", "open_add_person", "find_employers"]) assert.ok(activity[n], n);
   // Module tools obey the same five-call budget as the core tools.
   const src = readFileSync(new URL("../tools/assistant-staff-tools.ts", import.meta.url), "utf8");
   assert.ok(src.indexOf("composeStaffTools(") < src.indexOf("const executeOnce = executionBudget(5)"));
-  // The registry stays browser-safe: no module imports @crucible/core at the top.
-  for (const f of ["index.ts", "navigate.ts", "directory.ts", "types.ts"]) {
-    assert.doesNotMatch(readFileSync(new URL(`../tools/staff/${f}`, import.meta.url), "utf8"), /^import (?!type)[^\n]*@crucible\/core/m, f);
+  // The registry stays browser-safe: no module imports @crucible/core at the top
+  // (a pure *Shared.ts file is browser-safe and allowed: S5's staffHandoffShared).
+  for (const f of ["index.ts", "navigate.ts", "directory.ts", "types.ts", "view-tools.ts", "handoff-tools.ts"]) {
+    assert.doesNotMatch(readFileSync(new URL(`../tools/staff/${f}`, import.meta.url), "utf8"), /^import (?!type)[^\n]*@crucible\/core(?!\/src\/[A-Za-z]+Shared")/m, f);
   }
 });
 

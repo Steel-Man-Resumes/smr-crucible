@@ -19,14 +19,18 @@ import type { ToolSet } from "ai";
 import type { StaffToolContext, StaffToolModule, StreamedShape } from "./types";
 import { navigationTools } from "./navigate";
 import { directoryTools } from "./directory";
+import { viewToolsModule } from "./view-tools";
+import { handoffToolModule } from "./handoff-tools";
 
 export type { StaffToolContext, StaffToolModule, StreamedShape, StreamedFieldSource } from "./types";
 
 export const STAFF_TOOL_MODULES: readonly StaffToolModule[] = [
   navigationTools,
   directoryTools,
-  // Boss wiring, staff pass lanes (each lane's file exports its module):
-  // S3 viewTools (./view-tools), S5 handoffTools (./handoff-tools), S6 directory contribution tools.
+  // Staff pass lanes (integration 2026-10-28): S3 own-view tools, S5 handoffs.
+  // S4 adds no t.ROY tool. S6 contribution tools join when S6 merges.
+  viewToolsModule,
+  handoffToolModule,
 ];
 
 /** Every module's tools, merged. Throws on a duplicate name, including one already in `existing`. */

@@ -53,6 +53,8 @@ export const STAFF_PAGES: readonly StaffPage[] = [
   { key: "local-help", href: "/dashboard/resources", label: "Local help", about: "the help directory by place and need" },
   { key: "my-setup", href: "/dashboard/my-setup", label: "My setup", about: "their own view, columns, suggestions and rewards" },
   { key: "inbox", href: "/dashboard/inbox", label: "Inbox", about: "mentions, tasks given to them and answers" },
+  { key: "change-requests", href: "/dashboard/change-requests", label: "Change requests", about: "asks to the organization's managers to change fields, layouts or settings" },
+  { key: "connections", href: "/dashboard/connections", label: "Connections", about: "employers and local help that fit what their people shared" },
   // On every seat's screen (the shell's foot).
   { key: "settings", href: "/dashboard/settings", label: "Settings", about: "their account, sign-in and workflow choices", always: true },
   { key: "help", href: "/dashboard/help", label: "Help", about: "how the workspace works, and the tour", always: true },
