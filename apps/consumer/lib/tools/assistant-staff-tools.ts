@@ -61,6 +61,8 @@ export interface StaffToolOptions {
   selectors?: readonly { id: string; firstName: string }[];
   /** Everything the staff member typed this conversation, record sentences withheld (gateStaffMessages). open_add_person fills in only these words. */
   staffWords?: string;
+  /** The caller's network address, for the employer page allowance (find_employers). */
+  clientIp?: string;
   /** Tests swap the registry's modules (lib/tools/staff/index.ts). */
   modules?: readonly StaffToolModule[];
 }
@@ -421,7 +423,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
   const selectors = new Map((opts.selectors ?? []).filter((s) => /^[0-9a-f-]{36}$/i.test(s.id)).map((s) => [s.id.toLowerCase(), String(s.firstName ?? "")] as const));
   Object.assign(tools, composeStaffTools({
     initial, loadCore, actor, hold: outOfFocus, markCaseloadRead: () => { caseloadRead = true; },
-    focusId: focus, namedIds: named, selectors, staffWords: String(opts.staffWords ?? "").slice(0, 8000),
+    focusId: focus, namedIds: named, selectors, staffWords: String(opts.staffWords ?? "").slice(0, 8000), clientIp: opts.clientIp ?? null,
     safe: <A,>(run: (a: A) => Promise<unknown>) => safe(run), refusal, dataNote: DATA_NOTE,
   }, tools, opts.modules ?? STAFF_TOOL_MODULES));
   const executeOnce = executionBudget(5);

@@ -26,6 +26,16 @@ const NO_STORE = { "Cache-Control": "private, no-store" };
 export async function GET(request: Request) {
   const g = await withCrm(await requireOrgCapability("org.client.view_content", { request }));
   if (!g.ok) return g.response;
+  try {
+    return await search(request, g.actor.userId);
+  } catch (err) {
+    // A failed place parse, usage counter or read: say so, never an empty directory.
+    console.error("[org-directory] failed:", err instanceof Error ? err.message : err);
+    return NextResponse.json({ status: "unavailable", error: "The directory did not load just now. That is not the same as no listings. Try again." }, { status: 503, headers: NO_STORE });
+  }
+}
+
+async function search(request: Request, userId: string) {
   const query = parseDirectoryQuery(new URL(request.url).searchParams);
   const { parsePlace } = await import("@/lib/support-location");
   const place = parsePlace(query.place);
@@ -48,7 +58,7 @@ export async function GET(request: Request) {
   let employersLimited = false;
   if (query.show !== "help") {
     const [account, network] = await Promise.all([
-      core.incrementUserUsage(g.actor.userId, EMPLOYER_PAGES_ENDPOINT),
+      core.incrementUserUsage(userId, EMPLOYER_PAGES_ENDPOINT),
       core.incrementIpUsage(getClientIp(request), EMPLOYER_PAGES_ENDPOINT),
     ]);
     // The team allowance: the org guard proved a staff role (staff can hold

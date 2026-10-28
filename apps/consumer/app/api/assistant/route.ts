@@ -32,6 +32,7 @@ import { effectiveAuth } from "@/lib/effective-auth";
 import { loadSelectedWork, readWorkSelection, selectedWorkPrompt } from "@/lib/assistant-work-context";
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
+import { getClientIp } from "@/lib/auth-rate-limit";
 import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { recordStepOn } from "@/lib/server-switch";
@@ -308,7 +309,7 @@ export async function POST(request: Request) {
   const staffInput = staffActor ? gateStaffMessages(messages) : null;
   const staffSaid = staffInput ? lastUserText(staffInput.messages) : "";
   const staffNamed = staffActor ? namedParticipantIds(staffSaid, context.org?.visibleParticipants ?? []) : [];
-  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus, namedClientIds: staffNamed, selectors: context.org?.visibleParticipants ?? [], staffWords: staffTypedWords((staffInput?.messages ?? []) as Record<string, unknown>[]) }) : buildAssistantTools(toolOptions);
+  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus, namedClientIds: staffNamed, selectors: context.org?.visibleParticipants ?? [], staffWords: staffTypedWords((staffInput?.messages ?? []) as Record<string, unknown>[]), clientIp: getClientIp(request) }) : buildAssistantTools(toolOptions);
   const capabilities = assistantCapabilities(tools, { role: platformOwner ? "owner" : staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord, extraPages: staffSkill ? [staffSkill] : [] });
   const baseSystemPrompt =
     (platformOwner ? OWNER_ASSISTANT_PROMPT : buildSystemPrompt(context)) +

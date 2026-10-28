@@ -72,6 +72,8 @@ export interface StaffToolContext {
   readonly selectors: ReadonlyMap<string, string>;
   /** Everything the staff member typed in this conversation, record sentences already withheld. Values a tool fills in must come from here. */
   readonly staffWords: string;
+  /** The caller's network address (null in tests): per-network allowances such as employer pages. */
+  readonly clientIp: string | null;
   /** Wrap an execute: one result per input per request, and a failed read never reads as empty. */
   safe<A>(run: (args: A) => Promise<unknown>): (args: A) => Promise<unknown>;
   /** The plain refusal for a door that said no. */

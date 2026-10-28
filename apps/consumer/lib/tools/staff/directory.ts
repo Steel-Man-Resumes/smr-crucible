@@ -40,8 +40,19 @@ export const directoryTools: StaffToolModule = {
           // Listing text is written by others and can carry an id (same rule as find_local_help).
           ctx.markCaseloadRead();
           if (!US_STATE.test(String(state ?? ""))) return { status: "needs_place", error: "Ask the staff member which state, as two letters." };
-          await ctx.actor();
+          const actor = await ctx.actor();
           const core = await ctx.loadCore();
+          // The same daily employer page allowance as the Directory page and the
+          // public board (account and network), so t.ROY is no way around it.
+          // Imported here, not at the top: this file stays safe for the browser.
+          const paging = await import("../../employer-paging");
+          const [account, network] = await Promise.all([
+            core.incrementUserUsage(actor.userId, paging.EMPLOYER_PAGES_ENDPOINT),
+            ctx.clientIp ? core.incrementIpUsage(ctx.clientIp, paging.EMPLOYER_PAGES_ENDPOINT) : Promise.resolve(0),
+          ]);
+          if (!paging.employerPageAllowed(account, network, "partner")) {
+            return { status: "limited", error: "You've reached today's employer searches. Say that in one line: they can search for a name, a town or a kind of work in the Directory tomorrow, or narrow what they ask now. Do not say there are no employers." };
+          }
           const st = state.toUpperCase();
           const result = await core.searchVerifiedEmployers({ state: st, q: q?.trim() || undefined, industry: industry?.trim() || undefined, bands: ["A", "B"], limit: 25 });
           if (result.status !== "ok") return { status: "unavailable", error: "The employer directory could not be read just now. Do not say there are no employers there." };

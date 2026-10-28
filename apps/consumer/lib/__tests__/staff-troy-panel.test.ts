@@ -28,7 +28,7 @@ it("the server owns the skill and the focus: only a resolved staff member gets t
   assert.match(route, /const staffSkill = staffActor \? \(isStaffSkill\(context\.staffSkill\)/);
   assert.match(route, /const staffFocus = staffActor && isParticipantId\(context\.staffClientId\)/);
   assert.match(route, /if \(!staffActor\) \{ delete context\.staffSkill; delete context\.staffClientId; \}/);
-  assert.match(route, /buildStaffTools\(staffActor, staffEvidence\.record, \{ focusClientId: staffFocus, namedClientIds: staffNamed, selectors: context\.org\?\.visibleParticipants \?\? \[\], staffWords: staffTypedWords\(\(staffInput\?\.messages \?\? \[\]\) as Record<string, unknown>\[\]\) \}\)/);
+  assert.match(route, /buildStaffTools\(staffActor, staffEvidence\.record, \{ focusClientId: staffFocus, namedClientIds: staffNamed, selectors: context\.org\?\.visibleParticipants \?\? \[\], staffWords: staffTypedWords\(\(staffInput\?\.messages \?\? \[\]\) as Record<string, unknown>\[\]\), clientIp: getClientIp\(request\) \}\)/);
   // The audience is still decided only by the server (truth sheet 5, "cannot be told it is talking to staff").
   assert.match(route, /if \(context\.audience === "org_staff"\) context\.audience = undefined;/);
 });
