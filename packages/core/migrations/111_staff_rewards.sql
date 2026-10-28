@@ -65,7 +65,7 @@
 --          public.staff_rewards_member(uuid, uuid), public.staff_kudos_guard(),
 --          public.staff_rewards_setting_guard(), public.staff_rewards_org_guard(),
 --          public.staff_recognition_note_guard(), public.staff_milestone_guard(),
---          public.staff_text_participant_names(text);
+--          public.staff_text_participant_names(text), public.staff_fold_accents(text);
 --        DELETE FROM _migrations WHERE filename = '111_staff_rewards.sql';
 SET LOCAL lock_timeout = '5s';
 
@@ -403,46 +403,71 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.staff_milestone_revoke(uuid, uuid, uuid) FROM PUBLIC;
 
+-- Fold accents the same way the app does (TS: NFD, then drop combining
+-- marks). A fixed translate() table of the Latin letters NFD decomposes, so
+-- it needs no extension and gives the same answer on Neon and in tests.
+CREATE OR REPLACE FUNCTION public.staff_fold_accents(p text) RETURNS text
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $$
+  SELECT translate(COALESCE(p, ''),
+    'ÁÀÂÄÃÅĀĂĄáàâäãåāăąÉÈÊËĒĖĘĚéèêëēėęěÍÌÎÏĪĮíìîïīįÓÒÔÖÕŌŐóòôöõōőÚÙÛÜŪŮŰúùûüūůűÝŸýÿÑŃŇñńňÇĆČçćčŠŚšśŽŹŻžźżŘřŤťĎďĞğŞş',
+    'AAAAAAAAAaaaaaaaaaEEEEEEEEeeeeeeeeIIIIIIiiiiiiOOOOOOOoooooooUUUUUUUuuuuuuuYYyyNNNnnnCCCcccSSssZZZzzzRrTtDdGgSs');
+$$;
+REVOKE ALL ON FUNCTION public.staff_fold_accents(text) FROM PUBLIC;
+
 -- Which participants the WRITER reaches does a piece of staff-written text
--- name? (review round 2). Only people the caller reaches are checked, so the
--- answer never says anything about anyone else in the program. A participant
--- counts when the text has:
---   * their FULL name (all name words, in order), in any case; or
---   * one of their first or last names alone, when that name is 3+ letters,
---     is not an ordinary word (the stopword list below), and is written with
---     a capital letter in the text ("helped Alma", not "a long day").
--- Used before a good catch, a recognition note or a directory update is saved.
+-- name? (review rounds 2 and 3). Only people the caller reaches are checked,
+-- so the answer says nothing about anyone else in the program. Accents are
+-- folded on both sides. A participant counts when the text has, in any case:
+--   * their full name; or their first and last name (middle names skipped);
+--     or, for a name of three words or more, all their surname words together;
+-- or, as a capitalized single word of 3+ letters:
+--   * one of their first or last names in the middle of a sentence (always);
+--   * one at the start of a sentence (start of text, or after . ! ? :) only
+--     when it is not an ordinary word on the stopword list below.
+-- Known gap, on purpose: a lone first name written in lower case is not caught.
+-- The same rule in the app: staffRewardsShared.ts namesMentioned.
 CREATE OR REPLACE FUNCTION public.staff_text_participant_names(p_text text) RETURNS TABLE (reached uuid[])
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
-  v_me   uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
-  v_org  uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
-  v_flat text := ' ' || btrim(regexp_replace(lower(COALESCE(p_text, '')), '[^[:alpha:]]+', ' ', 'g')) || ' ';
-  v_caps text[];
-  v_stop text[] := ARRAY['an','do','le','al','de','la','el','di','du','van','von','del','young','long','hill','king','grant',
-                         'hope','may','will','mark','rose','april','june','july','august','summer','winter','autumn','dawn',
-                         'joy','faith','grace','hunter','page','bill','bob','jack','frank','rich','price','street','lane',
-                         'ford','brown','black','white','green','gray','grey','wood','woods','field','fields','stone','day',
-                         'love','case','park','sun','star','art','ray','gay','guy','sky','rich','penny','sterling','chase',
-                         'dean','hall','bell','early','late','new','best','good','well','west','north','south','east',
-                         'major','miles','child','ward','judge','sage','iris','ivy','lily','autumn','storm','river','forest'];
+  v_me    uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
+  v_org   uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
+  v_text  text := public.staff_fold_accents(p_text);
+  v_flat  text;
+  v_mid   text[];
+  v_start text[];
+  v_stop  text[] := ARRAY['an','do','le','al','de','la','el','di','du','van','von','del','young','long','hill','king','grant',
+                          'hope','may','will','mark','rose','april','june','july','august','summer','winter','autumn','dawn',
+                          'joy','faith','grace','hunter','page','rich','price','street','lane',
+                          'ford','brown','black','white','green','gray','grey','wood','woods','field','fields','stone','day',
+                          'love','case','park','sun','star','art','gay','guy','sky','penny','sterling','chase',
+                          'hall','bell','early','late','new','best','good','well','west','north','south','east',
+                          'major','miles','child','ward','judge','sage','iris','ivy','lily','storm','river','forest'];
 BEGIN
   IF v_me IS NULL OR v_org IS NULL OR NOT public.staff_rewards_member(v_org, v_me) THEN
     RAISE EXCEPTION 'only staff of this organization check their words here' USING ERRCODE = 'insufficient_privilege';
   END IF;
-  -- Words written with a capital letter, lowered for the comparison.
-  v_caps := ARRAY(SELECT lower(m[1]) FROM regexp_matches(COALESCE(p_text, ''), '([[:upper:]][[:alpha:]]*)', 'g') AS m);
+  v_flat := ' ' || btrim(regexp_replace(lower(v_text), '[^[:alpha:]]+', ' ', 'g')) || ' ';
+  -- Capitalized words, split into "first word of a sentence" and "anywhere else".
+  SELECT COALESCE(array_agg(lower(w.word)) FILTER (WHERE w.n > 1), '{}'), COALESCE(array_agg(lower(w.word)) FILTER (WHERE w.n = 1), '{}')
+    INTO v_mid, v_start
+    FROM regexp_split_to_table(v_text, '[.!?:]+') AS sentence,
+         LATERAL (SELECT m[1] AS word, row_number() OVER () AS n FROM regexp_matches(sentence, '([[:alpha:]]+)', 'g') AS m) w
+   WHERE w.word ~ '^[[:upper:]]';
   RETURN QUERY
     SELECT COALESCE(array_agg(x.user_id), '{}'::uuid[])
       FROM (
         SELECT r.user_id,
-               ARRAY(SELECT t FROM unnest(regexp_split_to_array(lower(COALESCE(u.name, '')), '[^[:alpha:]]+')) AS t WHERE t <> '') AS words
+               ARRAY(SELECT t FROM unnest(regexp_split_to_array(lower(public.staff_fold_accents(u.name)), '[^[:alpha:]]+')) AS t WHERE t <> '') AS words
           FROM public.access_code_redemption r JOIN public.users u ON u.id = r.user_id
          WHERE r.access_code_id = v_org AND public.smr_staff_reach(v_org, v_me, r.user_id)
       ) x
      WHERE cardinality(x.words) > 0 AND (
-             (cardinality(x.words) >= 2 AND position(' ' || array_to_string(x.words, ' ') || ' ' IN v_flat) > 0)
-             OR EXISTS (SELECT 1 FROM unnest(x.words) w WHERE length(w) >= 3 AND w <> ALL (v_stop) AND w = ANY (v_caps)));
+             (cardinality(x.words) >= 2 AND (
+                  position(' ' || array_to_string(x.words, ' ') || ' ' IN v_flat) > 0
+               OR position(' ' || x.words[1] || ' ' || x.words[cardinality(x.words)] || ' ' IN v_flat) > 0
+               OR (cardinality(x.words) >= 3 AND position(' ' || array_to_string(x.words[2:], ' ') || ' ' IN v_flat) > 0)))
+             OR EXISTS (SELECT 1 FROM unnest(x.words) w
+                         WHERE length(w) >= 3 AND (w = ANY (v_mid) OR (w = ANY (v_start) AND w <> ALL (v_stop)))));
 END;
 $$;
 REVOKE ALL ON FUNCTION public.staff_text_participant_names(text) FROM PUBLIC;

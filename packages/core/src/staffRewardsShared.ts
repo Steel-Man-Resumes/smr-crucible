@@ -205,39 +205,60 @@ export function cleanKudosBody(raw: unknown): { ok: true; body: string } | { ok:
 
 export interface NamedPerson { id: string; name: string | null }
 
-/** Lower-case name words of two letters or more ("Alma Reyes" -> alma, reyes). */
-export function nameWords(text: string | null | undefined): string[] {
-  // Apostrophes split words on both sides ("Park's" -> park s, "O'Brien" -> o brien), as in the SQL.
-  return String(text ?? "").toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 1);
+/** Fold accents the way 111 staff_fold_accents does: NFD, then drop combining marks. */
+export function foldAccents(text: string | null | undefined): string {
+  return String(text ?? "").normalize("NFD").replace(/\p{M}+/gu, "");
 }
 
-/** Ordinary words that are also names: never matched alone (the same list as 111 staff_text_participant_names). */
+/** Lower-case, accent-folded name words ("Álma Reyes-Lin" -> alma reyes lin). Apostrophes split, as in the SQL. */
+export function nameWords(text: string | null | undefined): string[] {
+  return foldAccents(text).toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 1);
+}
+
+/**
+ * Ordinary words that are also names. Used ONLY for a capitalized word at the
+ * start of a sentence (review round 3). The same list as 111.
+ */
 export const NAME_STOPWORDS: ReadonlySet<string> = new Set([
   "an", "do", "le", "al", "de", "la", "el", "di", "du", "van", "von", "del", "young", "long", "hill", "king", "grant",
   "hope", "may", "will", "mark", "rose", "april", "june", "july", "august", "summer", "winter", "autumn", "dawn",
-  "joy", "faith", "grace", "hunter", "page", "bill", "bob", "jack", "frank", "rich", "price", "street", "lane",
+  "joy", "faith", "grace", "hunter", "page", "rich", "price", "street", "lane",
   "ford", "brown", "black", "white", "green", "gray", "grey", "wood", "woods", "field", "fields", "stone", "day",
-  "love", "case", "park", "sun", "star", "art", "ray", "gay", "guy", "sky", "penny", "sterling", "chase",
-  "dean", "hall", "bell", "early", "late", "new", "best", "good", "well", "west", "north", "south", "east",
+  "love", "case", "park", "sun", "star", "art", "gay", "guy", "sky", "penny", "sterling", "chase",
+  "hall", "bell", "early", "late", "new", "best", "good", "well", "west", "north", "south", "east",
   "major", "miles", "child", "ward", "judge", "sage", "iris", "ivy", "lily", "storm", "river", "forest",
 ]);
 
+/** Capitalized words, split into first-of-a-sentence and anywhere else (sentences end at . ! ? :). */
+function capitalizedWords(text: string): { start: Set<string>; mid: Set<string> } {
+  const start = new Set<string>(), mid = new Set<string>();
+  for (const sentence of foldAccents(text).split(/[.!?:]+/)) {
+    const words = sentence.match(/\p{L}+/gu) ?? [];
+    words.forEach((w, i) => { if (/^\p{Lu}/u.test(w)) (i === 0 ? start : mid).add(w.toLowerCase()); });
+  }
+  return { start, mid };
+}
+
 /**
- * Participants a piece of text names (review round 2), the same rule as the
- * 111 SQL: their FULL name in any case; or one of their first or last names
- * alone when it is 3+ letters, not an ordinary word (NAME_STOPWORDS), and
- * written with a capital in the text. The caller passes only people the
- * writer reaches.
+ * Participants a piece of text names (review rounds 2 and 3), the same rule
+ * as 111 staff_text_participant_names. Accents folded on both sides. In any
+ * case: the full name; first and last name (middle names skipped); for three
+ * words or more, all surname words together. Or a capitalized single first
+ * or last name of 3+ letters: mid-sentence always; at a sentence start only
+ * when it is not an ordinary word (NAME_STOPWORDS). Known gap, on purpose: a
+ * lone first name in lower case is not caught. The caller passes only people
+ * the writer reaches.
  */
 export function namesMentioned(text: string, people: readonly NamedPerson[]): string[] {
   const flat = ` ${nameWords(text).join(" ")} `;
-  const caps = new Set((String(text ?? "").match(/\p{Lu}\p{L}*/gu) ?? []).map((w) => w.toLowerCase()));
+  const caps = capitalizedWords(text);
+  const has = (ws: string[]) => flat.includes(` ${ws.join(" ")} `);
   const found = new Set<string>();
   for (const p of people) {
     const words = nameWords(p.name);
     if (!words.length) continue;
-    const full = words.length >= 2 && flat.includes(` ${words.join(" ")} `);
-    const single = words.some((w) => w.length >= 3 && !NAME_STOPWORDS.has(w) && caps.has(w));
+    const full = words.length >= 2 && (has(words) || has([words[0], words[words.length - 1]]) || (words.length >= 3 && has(words.slice(1))));
+    const single = words.some((w) => w.length >= 3 && (caps.mid.has(w) || (caps.start.has(w) && !NAME_STOPWORDS.has(w))));
     if (full || single) found.add(p.id);
   }
   return [...found];
@@ -337,6 +358,7 @@ export const REWARDS_COPY = {
   kudosTitle: "Good catches",
   kudosGiveLabel: "Send a good catch",
   kudosHelp: "Thank a colleague for a piece of work. Only the two of you see it.",
+  kudosCare: "Talk about the work, not the people you serve. To thank someone for work with a person, send it from that work.",
   recapTitle: "Your month",
   recapHelp: "Copy it or print it to share with your supervisor. Nothing is sent for you.",
   recognitionTitle: "Notes from your program",

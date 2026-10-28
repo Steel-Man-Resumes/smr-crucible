@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  MILESTONES, UNLOCKS, SKILL_MINUTES_SAVED, DEFAULT_MINUTES_SAVED, REWARDS_COPY, LISTING_NUDGE_LINE, NOT_COUNTED_FOR_TIME, RESEARCH_THRESHOLDS, NAME_STOPWORDS,
+  MILESTONES, UNLOCKS, SKILL_MINUTES_SAVED, DEFAULT_MINUTES_SAVED, REWARDS_COPY, LISTING_NUDGE_LINE, NOT_COUNTED_FOR_TIME, RESEARCH_THRESHOLDS, NAME_STOPWORDS, foldAccents,
   buildMonthRecap, canAnswerRecognition, cleanKudosBody, cleanRecognitionBody, hasUnlock, milestoneDef, minutesSaved,
   monthWindow, namesMentioned, timeSavedWords, unlocksFor,
 } from "../staffRewardsShared";
@@ -110,21 +110,26 @@ test("a good catch is a few real words", () => {
   assert.ok(ok.ok && ok.body === "Great catch on the deadline");
 });
 
-test("names (review round 2): full name any case; one name only if 3+ letters, not an ordinary word, and capitalized", () => {
-  const people = [{ id: "a", name: "Alma Reyes" }, { id: "b", name: "Ana Lin" }, { id: "c", name: "Bo Park" }, { id: "d", name: null }, { id: "e", name: "Will Young" }];
+test("names (review rounds 2 and 3): the SQL rule, in the app", () => {
+  const people = [{ id: "a", name: "Alma Reyes" }, { id: "b", name: "Ana Lin" }, { id: "c", name: "Bo Park" }, { id: "d", name: null },
+    { id: "e", name: "Will Young" }, { id: "f", name: "José Luis Ortiz" }, { id: "g", name: "Circe Ayala Solano" }, { id: "h", name: "Bob Hale" }];
   assert.deepEqual(namesMentioned("great catch with alma reyes", people), ["a"], "full name, lower case");
-  assert.deepEqual(namesMentioned("helped Ana", people), ["b"], "a 3-letter capitalized first name");
-  assert.deepEqual(namesMentioned("work on the Reyes file", people), ["a"], "a capitalized last name");
-  assert.deepEqual(namesMentioned("work on the reyes file", people), [], "a single name in lower case is an ordinary word");
+  assert.deepEqual(namesMentioned("helped Ana", people), ["b"], "a capitalized 3-letter first name");
+  assert.deepEqual(namesMentioned("work on the Reyes file", people), ["a"], "a capitalized last name mid-sentence");
+  assert.deepEqual(namesMentioned("work on the reyes file", people), [], "known gap: one name in lower case is not caught");
   assert.deepEqual(namesMentioned("Bo was a great help", people), [], "two letters alone never count");
-  assert.deepEqual(namesMentioned("thanks for bo park's paperwork", people), ["c"], "but a full name does");
-  assert.deepEqual(namesMentioned("It Will be a Long day, Young team", people), [], "ordinary words never count alone");
-  assert.deepEqual(namesMentioned("thanks will young", people), ["e"], "a full name always counts");
+  assert.deepEqual(namesMentioned("thanks for bo park's paperwork", people), ["c"], "a full name does");
+  assert.deepEqual(namesMentioned("Will you look. Young people came: Long day", people), [], "stopwords at a sentence start are ordinary words");
+  assert.deepEqual(namesMentioned("thanks, it was Will who called", people), ["e"], "a capitalized name mid-sentence always counts, stopword or not");
+  assert.deepEqual(namesMentioned("Bob called back", people), ["h"], "plain given names are not stopwords");
+  assert.deepEqual(namesMentioned("thanks for helping jose ortiz", people), ["f"], "first and last, middle skipped, accents folded");
+  assert.deepEqual(namesMentioned("the ayala solano file", people), ["g"], "all surname words together, any case");
+  assert.deepEqual(namesMentioned("thanks for José", people), ["f"], "accents folded on the text side");
   assert.deepEqual(namesMentioned("Almanac review went well", people), [], "whole words only");
-  for (const w of ["an", "do", "le", "al", "de", "young", "long", "hill", "king", "grant", "hope", "may", "will", "mark", "rose", "april", "june"]) {
-    assert.ok(NAME_STOPWORDS.has(w), w);
-    assert.ok(MIG111.includes(`'${w}'`), `111 lists ${w}`);
-  }
+  for (const w of ["bob", "bill", "jack", "frank", "dean", "ray"]) assert.ok(!NAME_STOPWORDS.has(w) && !MIG111.includes(`'${w}'`), `${w} is a plain given name`);
+  const sqlStop = (MIG111.match(/v_stop\s+text\[\] := ARRAY\[([^\]]+)\]/)?.[1] ?? "").match(/'([a-z]+)'/g)?.map((x) => x.slice(1, -1)) ?? [];
+  assert.deepEqual([...new Set(sqlStop)].sort(), [...NAME_STOPWORDS].sort(), "SQL and TS stopwords are identical");
+  assert.equal(foldAccents("Ñúñez Çelik"), "Nunez Celik");
 });
 
 test("the research thresholds are one set of numbers for Troy, the same in 111 and 112", () => {

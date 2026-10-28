@@ -174,8 +174,15 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
   assert.deepEqual(await names(s1, "the Cole file"), [p2], "a capitalized last name");
   assert.deepEqual(await names(s1, "the cole file"), [], "one name in lower case is an ordinary word");
   await q(`UPDATE users SET name = 'Will Young' WHERE id = $1`, [p2]);
-  assert.deepEqual(await names(s1, "It Will be a Long day, Young team"), [], "ordinary words never count alone");
+  assert.deepEqual(await names(s1, "Will you look. Young people came: Long day"), [], "stopwords at a sentence start are ordinary words");
+  assert.deepEqual(await names(s1, "thanks, it was Will who called"), [p2], "a capitalized name mid-sentence always counts (round 3)");
   assert.deepEqual(await names(s1, "thanks will young"), [p2], "a full name always does");
+  await q(`UPDATE users SET name = 'José Luis Ortiz' WHERE id = $1`, [p2]);
+  assert.deepEqual(await names(s1, "thanks for helping jose ortiz"), [p2], "first and last, middle skipped, accents folded");
+  assert.deepEqual(await names(s1, "the luis ortiz file"), [p2], "all surname words together, any case");
+  assert.deepEqual(await names(s1, "thanks for José"), [p2], "accents folded on the text side too");
+  await q(`UPDATE users SET name = 'Bob Hale' WHERE id = $1`, [p2]);
+  assert.deepEqual(await names(s1, "Bob called back"), [p2], "plain given names are not stopwords");
   await q(`UPDATE users SET name = 'Ana Cole' WHERE id = $1`, [p2]);
   assert.deepEqual(await names(s3, "helped Ana"), [], "someone the writer cannot reach is never checked or reported");
   assert.deepEqual(Object.keys((await as(A(s3), `SELECT * FROM public.staff_text_participant_names('x')`))[0]), ["reached"], "no yes/no about anyone else");

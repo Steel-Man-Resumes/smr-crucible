@@ -61,6 +61,7 @@ export function GiveKudos({ toUserId, workKind, workId, compact = false, onSent 
   return (
     <form onSubmit={send} className="border border-t-line rounded-[4px] p-3 my-2 max-w-md" aria-label={REWARDS_COPY.kudosGiveLabel}>
       <p className="text-xs text-t-phos-dim mb-2">{REWARDS_COPY.kudosHelp}</p>
+      <p className="text-xs text-t-phos-dim mb-2">{REWARDS_COPY.kudosCare}</p>
       {!toUserId && (
         <label className="block text-sm text-t-phos mb-2">Who
           <select required value={to} onChange={(e) => setTo(e.target.value)} className="t-focus block w-full mt-1 border border-t-line bg-t-bg p-2">
