@@ -6,11 +6,14 @@
 import { NextResponse } from "next/server";
 import { requireOrgCapability } from "@/lib/org-guard";
 import { getCaseloadConnections } from "@crucible/core";
-import { withCrm } from "@/lib/org-crm-gate";
+import { withCrm, refuseCrossSiteRead } from "@/lib/org-crm-gate";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  // This read writes access-log lines: never on another site's behalf.
+  const crossSite = refuseCrossSiteRead(request);
+  if (crossSite) return crossSite;
   const g = await withCrm(await requireOrgCapability("org.client.view_content", { request }));
   if (!g.ok) return g.response;
   const res = await getCaseloadConnections(g.actor);

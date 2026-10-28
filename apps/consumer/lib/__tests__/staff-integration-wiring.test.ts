@@ -245,3 +245,17 @@ it("final review nit 9: a newline in a model-written reason, role or step cannot
   assert.ok(!/^Item 9|^Item 3 by/m.test(draftBody));
   assert.ok(parseDraftBody(draftBody, shapes));
 });
+
+it("final review nit 11: the connections reads that write access-log lines refuse another site", async () => {
+  const { refuseCrossSiteRead } = await import("../org-crm-gate");
+  const req = (site?: string) => new Request("https://x.test/api/org/connections", site ? { headers: { "sec-fetch-site": site } } : {});
+  assert.equal(refuseCrossSiteRead(req("cross-site"))?.status, 403);
+  assert.equal(refuseCrossSiteRead(req("same-site"))?.status, 403);
+  assert.equal(refuseCrossSiteRead(req("same-origin")), null);
+  assert.equal(refuseCrossSiteRead(req("none")), null);
+  assert.equal(refuseCrossSiteRead(req()), null);
+  for (const f of ["../../app/api/org/connections/route.ts", "../../app/api/org/clients/[id]/connections/route.ts"]) {
+    const src = read(f);
+    assert.ok(src.indexOf("refuseCrossSiteRead(request)") > -1 && src.indexOf("refuseCrossSiteRead(request)") < src.indexOf("requireOrgCapability("), f);
+  }
+});
