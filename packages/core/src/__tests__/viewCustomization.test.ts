@@ -13,7 +13,7 @@ import {
   prefsUnderPolicy, resolveAllPolicies, resolvePolicy, surfaceOfKey, type PolicyAllowed,
 } from "../customizationPolicyShared";
 import {
-  DEFAULT_STAFF_PREFS, PERSON_TAB_KEYS, normalizeStaffPrefs, orderPersonTabs, orderTodaySections, resolveStaffPrefs, staffRewardsOn, staffSuggestionsOn,
+  DEFAULT_STAFF_PREFS, PERSON_TAB_KEYS, normalizeStaffPrefs, orderPersonTabs, orderTodaySections, resolveStaffPrefs, staffSuggestionsOn,
 } from "../staffPrefsShared";
 import {
   EMPTY_GRID_LAYOUT, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, isLayoutColumnId, layoutKeyFor, mergeGridLayouts, normalizeGridLayout, normalizeViewLayouts,
@@ -111,7 +111,7 @@ describe("personal prefs (S3)", () => {
   it("normalizes the new choices", () => {
     const p = normalizeStaffPrefs({
       todayOrder: ["quiet", "nope", "quiet", "tasks"], caseloadColumns: ["name", "status", "cf:housing", "<x>"], defaultView: V1.toUpperCase(),
-      density: "tall", personTabs: ["timeline", "notes", "bogus"], peopleMode: "grid", troySuggestions: false, rewardsOn: true,
+      density: "tall", personTabs: ["timeline", "notes", "bogus"], peopleMode: "grid", troySuggestions: false,
     });
     assert.deepEqual(p.todayOrder, ["quiet", "tasks"]);
     assert.deepEqual(p.caseloadColumns, ["status", "cf:housing"]);
@@ -122,11 +122,12 @@ describe("personal prefs (S3)", () => {
     assert.equal(normalizeStaffPrefs({ defaultView: "none" }).defaultView, "none");
     assert.equal(normalizeStaffPrefs({ defaultView: "'; drop" }).defaultView, undefined);
   });
-  it("suggestions default on, rewards default off (Troy 2026-10-27)", () => {
+  it("suggestions default on; rewards are never a pref (S6's owner-only setting is the one switch)", () => {
     assert.equal(staffSuggestionsOn(DEFAULT_STAFF_PREFS), true);
     assert.equal(staffSuggestionsOn({ troySuggestions: false }), false);
-    assert.equal(staffRewardsOn(DEFAULT_STAFF_PREFS), false);
-    assert.equal(staffRewardsOn({ rewardsOn: true }), true);
+    assert.equal("rewardsOn" in DEFAULT_STAFF_PREFS, false);
+    assert.equal("rewardsOn" in normalizeStaffPrefs({ rewardsOn: true }), false, "a stored or org-default rewardsOn is dropped");
+    assert.equal("rewardsOn" in resolveStaffPrefs({ rewardsOn: true }, { rewardsOn: true }), false);
     assert.equal(staffSuggestionsOn(null), true);
   });
   it("own order first, then the rest in the role's order; a new section never vanishes", () => {

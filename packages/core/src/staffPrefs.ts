@@ -66,7 +66,7 @@ const PREF_WORDS: Partial<Record<keyof StaffPrefs, string>> = {
   caseloadSort: "your usual People order", caseloadHidden: "your People columns", caseloadColumns: "your People columns", defaultView: "which view People opens with",
   density: "row height", peopleMode: "list or grid", viewLayouts: "how the grid looks", clientTab: "which tab a person's page opens on",
   personTabs: "the order of a person's page tabs", noteKind: "your usual note type", noteVisible: "whether notes start shared",
-  troySuggestions: "t.ROY's suggestions", rewardsOn: "rewards", savedViews: "your old saved sorts",
+  troySuggestions: "t.ROY's suggestions", savedViews: "your old saved sorts",
 };
 
 /**
