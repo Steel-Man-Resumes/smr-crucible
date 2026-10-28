@@ -10,7 +10,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { sendToLabel, firstNameOf, type HandoffItemInput } from "@crucible/core/src/staffHandoffShared";
-import { addToTray, type AddResult } from "@/lib/handoff-tray";
+import { addToTray, trayOwner, type AddResult } from "@/lib/handoff-tray";
+import { useEffectiveRole } from "@/components/RoleProvider";
 
 export function addedWords(r: AddResult, name: string | null | undefined): string {
   const first = firstNameOf(name, "their");
@@ -26,12 +27,14 @@ export function SendToButton({ personId, personName, item, viewerId, className }
 }) {
   const session = useSession();
   const staffId = viewerId ?? (session.data?.user as { id?: string } | undefined)?.id ?? null;
+  // Keyed by organization, staff member and person (review r1 #5). No organization, no button.
+  const owner = trayOwner(useEffectiveRole()?.orgId ?? null, staffId);
   const [said, setSaid] = useState<string | null>(null);
-  if (!staffId) return null;
+  if (!owner) return null;
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       <button type="button" className={className ?? "t-focus border border-t-line text-xs text-t-phos px-2 py-1"}
-        onClick={() => setSaid(addedWords(addToTray(staffId, personId, item), personName))}>
+        onClick={() => setSaid(addedWords(addToTray(owner, personId, item), personName))}>
         {sendToLabel(personName)}
       </button>
       {said && (

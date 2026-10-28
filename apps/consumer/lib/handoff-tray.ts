@@ -6,6 +6,11 @@
  * survives moving between pages. Nothing is sent from here; the person page's
  * handoff panel sends, and clears the tray when it does.
  *
+ * THE KEY NAMES THE ORGANIZATION (review r1 #5):
+ * handoff-tray:<orgId>:<staffId>:<personId>. Every function takes an
+ * `owner` from trayOwner(orgId, staffId); without an organization there is no
+ * tray (nothing is kept, nothing is read).
+ *
  * Never localStorage: a shared computer must not keep what a staff member was
  * about to send someone. Cleared at sign-out and account switch with the
  * other staff device copies (boss wiring: the "handoff-tray:" prefix in
@@ -33,32 +38,37 @@ function store(s?: TrayStore | null): TrayStore | null {
   try { return typeof window !== "undefined" ? window.sessionStorage : null; } catch { return null; }
 }
 
-export const trayKey = (staffId: string, personId: string) => `${TRAY_PREFIX}${staffId}:${personId.toLowerCase()}`;
+const ID_RE = /^[0-9a-f-]{36}$/i;
+/** "<orgId>:<staffId>", or null when either is missing: then there is no tray. */
+export function trayOwner(orgId: string | null | undefined, staffId: string | null | undefined): string | null {
+  return orgId && staffId && ID_RE.test(orgId) && ID_RE.test(staffId) ? `${orgId.toLowerCase()}:${staffId.toLowerCase()}` : null;
+}
+export const trayKey = (owner: string, personId: string) => `${TRAY_PREFIX}${owner}:${personId.toLowerCase()}`;
 
 /** A day old is stale: start fresh rather than send something forgotten. */
 const MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-export function readTray(staffId: string, personId: string, s?: TrayStore | null, now = Date.now()): Tray {
+export function readTray(owner: string, personId: string, s?: TrayStore | null, now = Date.now()): Tray {
   const st = store(s);
   const empty: Tray = { items: [], updatedAt: now };
-  if (!st || !staffId || !personId) return empty;
+  if (!st || !owner || !personId) return empty;
   try {
-    const raw = st.getItem(trayKey(staffId, personId));
+    const raw = st.getItem(trayKey(owner, personId));
     if (!raw) return empty;
     const t = JSON.parse(raw) as Tray;
     if (!t || !Array.isArray(t.items) || typeof t.updatedAt !== "number" || now - t.updatedAt > MAX_AGE_MS) {
-      st.removeItem(trayKey(staffId, personId));
+      st.removeItem(trayKey(owner, personId));
       return empty;
     }
     return { ...t, items: t.items.slice(0, HANDOFF_MAX_ITEMS) };
   } catch { return empty; }
 }
 
-function write(staffId: string, personId: string, t: Tray, s?: TrayStore | null): boolean {
+function write(owner: string, personId: string, t: Tray, s?: TrayStore | null): boolean {
   const st = store(s);
   if (!st) return false;
   try {
-    st.setItem(trayKey(staffId, personId), JSON.stringify(t));
+    st.setItem(trayKey(owner, personId), JSON.stringify(t));
     try { if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(TRAY_EVENT, { detail: { personId } })); } catch {}
     return true;
   } catch { return false; }
@@ -76,22 +86,22 @@ export function itemKey(it: HandoffItemInput): string {
 
 export type AddResult = "added" | "already" | "full" | "unavailable";
 
-export function addToTray(staffId: string, personId: string, item: HandoffItemInput, s?: TrayStore | null, now = Date.now()): AddResult {
-  const t = readTray(staffId, personId, s, now);
+export function addToTray(owner: string, personId: string, item: HandoffItemInput, s?: TrayStore | null, now = Date.now()): AddResult {
+  const t = readTray(owner, personId, s, now);
   if (t.items.some((x) => itemKey(x) === itemKey(item))) return "already";
   if (t.items.length >= HANDOFF_MAX_ITEMS) return "full";
-  return write(staffId, personId, { ...t, items: [...t.items, item], updatedAt: now }, s) ? "added" : "unavailable";
+  return write(owner, personId, { ...t, items: [...t.items, item], updatedAt: now }, s) ? "added" : "unavailable";
 }
 
-export function removeFromTray(staffId: string, personId: string, key: string, s?: TrayStore | null, now = Date.now()): void {
-  const t = readTray(staffId, personId, s, now);
-  write(staffId, personId, { ...t, items: t.items.filter((x) => itemKey(x) !== key), updatedAt: now }, s);
+export function removeFromTray(owner: string, personId: string, key: string, s?: TrayStore | null, now = Date.now()): void {
+  const t = readTray(owner, personId, s, now);
+  write(owner, personId, { ...t, items: t.items.filter((x) => itemKey(x) !== key), updatedAt: now }, s);
 }
 
 /** Replace one item (the panel edits a reason or a role in place). */
-export function updateTrayItem(staffId: string, personId: string, key: string, item: HandoffItemInput, s?: TrayStore | null, now = Date.now()): void {
-  const t = readTray(staffId, personId, s, now);
-  write(staffId, personId, { ...t, items: t.items.map((x) => (itemKey(x) === key ? item : x)), updatedAt: now }, s);
+export function updateTrayItem(owner: string, personId: string, key: string, item: HandoffItemInput, s?: TrayStore | null, now = Date.now()): void {
+  const t = readTray(owner, personId, s, now);
+  write(owner, personId, { ...t, items: t.items.map((x) => (itemKey(x) === key ? item : x)), updatedAt: now }, s);
 }
 
 /**
@@ -99,8 +109,8 @@ export function updateTrayItem(staffId: string, personId: string, key: string, i
  * staff member already picked (duplicates skipped, at most ten). It is marked
  * drafted with t.ROY until Send, so the activity log can say so.
  */
-export function putDraftInTray(staffId: string, personId: string, draft: { note: string; items: HandoffItemInput[] }, s?: TrayStore | null, now = Date.now()): Tray {
-  const t = readTray(staffId, personId, s, now);
+export function putDraftInTray(owner: string, personId: string, draft: { note: string; items: HandoffItemInput[] }, s?: TrayStore | null, now = Date.now()): Tray {
+  const t = readTray(owner, personId, s, now);
   const keys = new Set(t.items.map(itemKey));
   const merged = [...t.items];
   for (const it of draft.items) {
@@ -108,19 +118,36 @@ export function putDraftInTray(staffId: string, personId: string, draft: { note:
     if (!keys.has(itemKey(it))) { merged.push(it); keys.add(itemKey(it)); }
   }
   const next: Tray = { items: merged, note: draft.note, draftedByAssistant: true, updatedAt: now };
-  write(staffId, personId, next, s);
+  write(owner, personId, next, s);
   return next;
 }
 
-export function clearTray(staffId: string, personId: string, s?: TrayStore | null): void {
+export function clearTray(owner: string, personId: string, s?: TrayStore | null): void {
   const st = store(s);
-  try { st?.removeItem(trayKey(staffId, personId)); } catch {}
+  try { st?.removeItem(trayKey(owner, personId)); } catch {}
   try { if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(TRAY_EVENT, { detail: { personId } })); } catch {}
 }
 
 /** Every tray key in a store (sign-out and account switch clear them all). */
 export function trayKeysIn(keys: readonly string[]): string[] {
   return keys.filter((k) => k.startsWith(TRAY_PREFIX));
+}
+
+/** A store that can list its keys (sessionStorage). */
+export interface ListStore { readonly length: number; key(i: number): string | null; removeItem(k: string): void }
+
+/**
+ * Remove every tray in this tab: at confirmed sign-out and at account switch,
+ * beside clearStaffDraftCache (lib/confirmed-sign-out.ts and
+ * lib/account-browser-state.ts call it; boss wiring, must land with the merge).
+ */
+export function clearHandoffTrays(store: ListStore | null = typeof sessionStorage === "undefined" ? null : sessionStorage): void {
+  if (!store || typeof store.key !== "function" || typeof store.length !== "number") return;
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < store.length; i++) { const k = store.key(i); if (k && k.startsWith(TRAY_PREFIX)) doomed.push(k); }
+    for (const k of doomed) store.removeItem(k);
+  } catch { /* blocked storage */ }
 }
 
 /* ------------------------------------------- a t.ROY draft, from the chat -- */
@@ -149,9 +176,9 @@ export const draftButtonLabel = (r: HandoffDraftResult) => `Put this in ${r.firs
  * tray and return where to go to read it and press Send. Never sends. null
  * when the draft does not parse (nothing is put anywhere).
  */
-export function applyHandoffDraft(r: HandoffDraftResult, staffId: string, s?: TrayStore | null, now = Date.now()): string | null {
+export function applyHandoffDraft(r: HandoffDraftResult, owner: string | null, s?: TrayStore | null, now = Date.now()): string | null {
   const parsed = parseDraftBody(r.draftBody, r.items, now);
-  if (!parsed) return null;
-  putDraftInTray(staffId, r.clientId, parsed, s, now);
+  if (!parsed || !owner) return null;
+  putDraftInTray(owner, r.clientId, parsed, s, now);
   return `/dashboard/clients/${r.clientId}?tab=tasks#handoff`;
 }

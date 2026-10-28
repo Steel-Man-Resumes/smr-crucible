@@ -8,7 +8,7 @@
  * work. They answer each item. What they take goes to places they already
  * have: an employer or a job to their saved jobs, a place for help to their
  * saved help, a next step to their "From your case manager" list. Staff see
- * only waiting, taken or passed. Nothing about the person's record is read,
+ * whether they opened it, and waiting, taken or passed per item. Nothing about the person's record is read,
  * matched on or sent.
  */
 
@@ -165,7 +165,7 @@ export const TAKEN_WORDS: Record<HandoffItemKind, string> = {
   next_step: "Added to your list from your case manager.",
 };
 export const PASS_WORDS = "Not for me";
-export const HANDOFF_PROMISE = "These are suggestions. What you do with each one is up to you. Your case manager sees only whether you took it or passed.";
+export const HANDOFF_PROMISE = "These are suggestions. What you do with each one is up to you. Your case manager sees whether you opened it, and whether you took or passed on each one.";
 
 /** "Alma" from "Alma Reyes"; a fallback when there is no name to use. */
 export function firstNameOf(name: string | null | undefined, fallback = "them"): string {

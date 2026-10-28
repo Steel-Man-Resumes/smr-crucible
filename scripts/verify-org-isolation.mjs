@@ -1188,6 +1188,15 @@ async function handoffChecks() {
   check("a colleague who did not send it cannot withdraw it", (await core.withdrawHandoff(aOther, h2.id)) === false);
   check("the sender can", (await core.withdrawHandoff(aCm, h2.id)) === true);
   check("a withdrawn handoff is gone for the person", !(await core.getMyHandoffs(pat)).some((h) => h.id === h2.id));
+  const h3 = await core.sendHandoff(aCm, pat, packet("Pick up the bus pass"));
+  await rawAs(org.id, cm, (a) => a`UPDATE staff_handoff SET status = 'withdrawn' WHERE id = ${h3.id}`);
+  const h3items = await sql`SELECT DISTINCT status FROM staff_suggestion WHERE handoff_id = ${h3.id}`;
+  check("a raw withdraw that skips core still closes its open items (database trigger)", h3items.length === 1 && h3items[0].status === "withdrawn", JSON.stringify(h3items));
+  const h4 = await core.sendHandoff(aCm, pat, packet("Visit the job center"));
+  const h4item = (await core.getMyHandoffs(pat)).find((h) => h.id === h4.id)?.items[0];
+  const bare = await throws(rawAs(null, pat, (a) => a`UPDATE staff_suggestion SET status = 'saved' WHERE id = ${h4item.id}`));
+  check("a next step is never taken by a bare status change", !!bare, bare ?? "updated");
+  check("nor through the loose-suggestion answer", (await core.answerSuggestion(pat, h4item.id, "saved")) === false);
   const del = await throws(rawAs(org.id, owner, (a) => a`DELETE FROM staff_handoff WHERE id = ${h1.id}`));
   check("nobody deletes a handoff through the app", !!del && /permission denied/i.test(del), del ?? "deleted");
 

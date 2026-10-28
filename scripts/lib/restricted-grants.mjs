@@ -212,6 +212,8 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   "org_activity_suggestion()",
   "org_activity_handoff()",
   "staff_suggestion_item_guard()",
+  "staff_handoff_close_items()",
+  "staff_handoff_has_items()",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */

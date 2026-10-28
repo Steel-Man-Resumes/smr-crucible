@@ -69,11 +69,6 @@ export const HANDOFF_SQL = {
   withdraw: `UPDATE staff_handoff SET status = 'withdrawn'
               WHERE id = $2::uuid AND access_code_id = $1::uuid AND status <> 'withdrawn' AND ($3::boolean OR author_user_id = $4::uuid)
              RETURNING id`,
-  /** $1 org, $2 handoff. Runs after withdraw in the same transaction; touches nothing if it was refused. */
-  withdrawItems: `UPDATE staff_suggestion SET status = 'withdrawn'
-                   WHERE handoff_id = $2::uuid AND access_code_id = $1::uuid AND status = 'open'
-                     AND EXISTS (SELECT 1 FROM staff_handoff h WHERE h.id = $2::uuid AND h.status = 'withdrawn')
-                  RETURNING id`,
   /** $1 the person. Their live handoffs (the policy hides withdrawn ones) with items, newest first. */
   mine: `SELECT h.id, h.note, h.status, h.created_at, h.seen_at, au.name AS from_name, ac.partner_name AS org_name,
                 COALESCE((SELECT jsonb_agg(jsonb_build_object('id', s.id, 'kind', s.kind, 'status', s.status, 'job_title', s.job_title, 'company', s.company,
@@ -98,6 +93,8 @@ export const HANDOFF_SQL = {
   answer: `UPDATE staff_suggestion SET status = $3::text
             WHERE id = $2::uuid AND client_user_id = $1::uuid AND status = 'open' AND handoff_id IS NOT NULL
               AND ($3::text = 'dismissed' OR kind <> 'next_step')
+              -- Only inside a handoff they can still see (the policy hides withdrawn ones).
+              AND EXISTS (SELECT 1 FROM staff_handoff h WHERE h.id = staff_suggestion.handoff_id AND h.status <> 'withdrawn')
            RETURNING id, handoff_id`,
   /** $1 the person, $2 item. Mark its handoff opened (answering means they opened it). */
   seenByItem: `UPDATE staff_handoff SET status = 'seen'
@@ -205,15 +202,20 @@ export async function listHandoffsFor(actor: OrgActor, clientId: string): Promis
   });
 }
 
-/** Withdraw a handoff and every item still open in it. Answered items keep their answer. */
+/**
+ * Withdraw a handoff. The database closes every item still open in it
+ * (staff_handoff_close_items, 110) and refuses anyone but the sender or
+ * someone who sees everyone; answered items keep their answer.
+ */
 export async function withdrawHandoff(actor: OrgActor, handoffId: string): Promise<boolean> {
   if (!canSendHandoff(actor) || !UUID.test(handoffId ?? "")) return false;
   const seesAll = actor.capabilities.has("org.client.view_all");
-  const [rows] = await runScoped<[{ id: string }[], unknown]>(scopeOf(actor), (sql) => [
-    run(sql)(HANDOFF_SQL.withdraw, [actor.orgId, handoffId, seesAll, actor.userId]),
-    run(sql)(HANDOFF_SQL.withdrawItems, [actor.orgId, handoffId]),
-  ]);
-  return rows.length > 0;
+  try {
+    const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+      run(sql)(HANDOFF_SQL.withdraw, [actor.orgId, handoffId, seesAll, actor.userId]),
+    ]);
+    return rows.length > 0;
+  } catch { return false; }
 }
 
 /* ------------------------------------------------------------ person side -- */

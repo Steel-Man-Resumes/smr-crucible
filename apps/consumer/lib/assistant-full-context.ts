@@ -283,7 +283,9 @@ export async function realFullContextLoaders(): Promise<FullContextLoaders> {
       const score = scoreOf(r.counts);
       return { counts: r.counts, score, band: bandFor(score, isSteelMan(r.counts)).label };
     },
-    staffSuggestions: (userId) => loadCaseManagerSuggestions(userId),
+    // staffSuggestions is NOT registered here until the prompt shows it (review r1 #6): the boss adds
+    // `staffSuggestions: (userId) => loadCaseManagerSuggestions(userId),` in the same commit as the
+    // buildCaseManagerSection line in assistant-prompt.ts, so no turn pays for a read it never shows.
   };
 }
 
@@ -293,9 +295,10 @@ export async function realFullContextLoaders(): Promise<FullContextLoaders> {
  * person's record consent (assembleFullContext, read_my_staff_suggestions).
  * Before migration 110 the handoff read fails and this answers null.
  */
-export async function loadCaseManagerSuggestions(userId: string): Promise<CaseManagerContext | null> {
+export async function loadCaseManagerSuggestions(userId: string, opts: { listings?: boolean } = {}): Promise<CaseManagerContext | null> {
   const core = await import("@crucible/core");
-  const [handoffs, jobs] = await Promise.all([core.getMyHandoffs(userId, { listings: true }), core.getMySuggestions(userId)]);
+  // Per chat turn: no directory re-reads (listings false). read_my_staff_suggestions asks for listings.
+  const [handoffs, jobs] = await Promise.all([core.getMyHandoffs(userId, { listings: opts.listings === true }), core.getMySuggestions(userId)]);
   return core.summarizeForCoach(handoffs, jobs);
 }
 

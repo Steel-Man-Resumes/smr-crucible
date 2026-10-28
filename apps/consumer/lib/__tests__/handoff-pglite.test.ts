@@ -159,13 +159,40 @@ test('handoffs (110): reach-sealed sending, the person answers, next steps land 
   const h2 = await send(cm, false, p1, [step('Call the training desk'), step('Ask about boots')]);
   const firstOfH2 = (await as({ userId: p1 }, HANDOFF_SQL.mine, [p1])).find((h) => h.id === h2.id)!.items[0].id;
   await as({ userId: p1 }, HANDOFF_SQL.answer, [p1, firstOfH2, 'dismissed']);
-  assert.equal((await asTx({ orgId: org, userId: cm2 }, [[HANDOFF_SQL.withdraw, [org, h2.id, false, cm2]], [HANDOFF_SQL.withdrawItems, [org, h2.id]]]))[0].length, 0, 'a colleague cannot withdraw it');
-  const [w, wi] = await asTx({ orgId: org, userId: cm }, [[HANDOFF_SQL.withdraw, [org, h2.id, false, cm]], [HANDOFF_SQL.withdrawItems, [org, h2.id]]]);
-  assert.ok(w.length === 1 && wi.length === 1, 'the sender withdraws it; only the open item is closed');
+  assert.equal((await as({ orgId: org, userId: cm2 }, HANDOFF_SQL.withdraw, [org, h2.id, false, cm2])).length, 0, 'a colleague cannot withdraw it');
+  const [w] = await asTx({ orgId: org, userId: cm }, [[HANDOFF_SQL.withdraw, [org, h2.id, false, cm]]]);
+  assert.equal(w.length, 1, 'the sender withdraws it');
+  assert.deepEqual((await q(`SELECT status FROM staff_suggestion WHERE handoff_id = $1 ORDER BY position`, [h2.id])).rows.map((r: any) => r.status), ['dismissed', 'withdrawn'],
+    'the database closed the open item; the answered one keeps its answer');
   assert.ok(!(await as({ userId: p1 }, HANDOFF_SQL.mine, [p1])).some((h) => h.id === h2.id), 'a withdrawn handoff is gone for the person');
   assert.equal((await q(`SELECT status FROM staff_suggestion WHERE id = $1`, [firstOfH2])).rows[0].status, 'dismissed', 'their answer stays');
   assert.ok(await fails(as({ orgId: org, userId: cm }, `UPDATE staff_handoff SET status = 'sent' WHERE id = $1`, [h2.id]), /withdrawn handoff cannot/), 'withdrawn stays withdrawn');
   assert.ok(await fails(as({ orgId: org, userId: owner }, `DELETE FROM staff_handoff WHERE id = $1`, [h1.id]), /permission denied/), 'nobody deletes a handoff');
+
+  // ------------------------------------------------- review round 1 (DB rules)
+  const h3 = await send(cm, false, p1, [step('Pick up the bus pass'), step('Bring two forms of ID')]);
+  await as({ orgId: org, userId: cm }, `UPDATE staff_handoff SET status = 'withdrawn' WHERE id = $1`, [h3.id]);
+  assert.deepEqual((await q(`SELECT DISTINCT status FROM staff_suggestion WHERE handoff_id = $1`, [h3.id])).rows.map((r: any) => r.status), ['withdrawn'],
+    'a raw UPDATE that skips core still closes every open item (trigger)');
+  const h3item = (await q(`SELECT id FROM staff_suggestion WHERE handoff_id = $1 LIMIT 1`, [h3.id])).rows[0].id as string;
+  assert.equal((await as({ userId: p1 }, HANDOFF_SQL.answer, [p1, h3item, 'dismissed'])).length, 0, 'nothing in a withdrawn handoff can be answered');
+  // A staff member who reaches the person but neither sent it nor sees everyone: refused by the database.
+  const h4 = await send(admin, true, p2, [step('Call the clinic')]);
+  assert.ok(h4.id, 'an admin sends to a colleague\'s person');
+  assert.ok(await fails(as({ orgId: org, userId: cm2 }, `UPDATE staff_handoff SET status = 'withdrawn' WHERE id = $1`, [h4.id]), /only the sender/),
+    'the assigned case manager cannot withdraw what the admin sent (guard)');
+  assert.equal((await as({ orgId: org, userId: owner }, HANDOFF_SQL.withdraw, [org, h4.id, true, owner])).length, 1, 'someone who sees everyone can');
+  // A next step is never "taken" by a bare status change, even skipping core.
+  const h5 = await send(cm, false, p1, [step('Visit the job center')]);
+  const h5item = (await q(`SELECT id FROM staff_suggestion WHERE handoff_id = $1`, [h5.id])).rows[0].id as string;
+  assert.ok(await fails(as({ userId: p1 }, `UPDATE staff_suggestion SET status = 'saved' WHERE id = $1`, [h5item]), /its own path/), 'raw next step -> saved is refused');
+  assert.ok(await fails(as({ userId: p1 }, `UPDATE staff_suggestion SET status = 'saved' WHERE id = $1 AND kind IN ('job', 'comment') AND to_jsonb(staff_suggestion)->>'handoff_id' IS NULL RETURNING id`, [h5item]).then((r) => { if (r.length === 0) throw new Error('no row'); }), /no row/),
+    'answerSuggestion\'s statement no longer reaches handoff items');
+  assert.ok((await as({ userId: p1 }, HANDOFF_SQL.takeStep, [h5item]))[0].task_id, 'the definer path still takes it');
+  // A handoff with no items never commits.
+  assert.ok(await fails(asTx({ orgId: org, userId: cm }, [[HANDOFF_SQL.insert, [p1, org, false, cm, id(990), 'Only a note', false]]]), /at least one item/),
+    'an empty handoff is refused when the transaction commits');
+  assert.equal((await q(`SELECT count(*)::int AS n FROM staff_handoff WHERE id = $1`, [id(990)])).rows[0].n, 0);
 
   // --------------------------------------------------------------- activity
   const acts = (await q(`SELECT entity, action, summary, actor_role FROM org_activity WHERE participant_user_id = $1 AND entity IN ('handoff', 'suggestion') ORDER BY id`, [p1])).rows as Record<string, string>[];

@@ -39,7 +39,10 @@
 --     never a withdrawn one. Their only change to a handoff is sent -> seen;
 --     their only change to an item is the answer (057 guard, extended here to
 --     the new columns).
---   * An organization can only withdraw. Nothing is deleted (no DELETE grant).
+--   * An organization can only withdraw (the sender, or someone who sees
+--     everyone), and withdrawing closes every open item, in the database.
+--     Nothing is deleted (no DELETE grant). A handoff has at least one item.
+--   * A next step is "taken" only through smr_accept_handoff_step.
 --   * Activity rows are built from fixed words only: never a note, a reason,
 --     an employer, a place or a step.
 --
@@ -55,6 +58,7 @@
 --   DROP TRIGGER org_activity_suggestion ON staff_suggestion;
 --   DROP TRIGGER staff_suggestion_item_guard ON staff_suggestion;
 --   DROP TRIGGER org_activity_handoff ON staff_handoff; DROP TRIGGER staff_handoff_guard ON staff_handoff;
+--   DROP TRIGGER staff_handoff_close_items ON staff_handoff; DROP TRIGGER staff_handoff_has_items ON staff_handoff;
 --   UPDATE staff_suggestion SET status = 'withdrawn' WHERE kind IN ('employer', 'resource', 'next_step') AND status = 'open';
 --   (keep the table and columns: history stays readable). Remove the
 --   _migrations row only if the columns and table are dropped too.
@@ -162,6 +166,11 @@ BEGIN
     IF NEW.status <> 'withdrawn' THEN
       RAISE EXCEPTION 'an organization can withdraw a handoff, not answer it' USING ERRCODE = 'insufficient_privilege';
     END IF;
+    -- Withdrawn by the one who sent it, or by someone who sees everyone.
+    IF NOT (OLD.author_user_id IS NOT DISTINCT FROM NULLIF(current_setting('app.user_id', true), '')::uuid
+            OR public.smr_staff_sees_all(OLD.access_code_id, NULLIF(current_setting('app.user_id', true), '')::uuid)) THEN
+      RAISE EXCEPTION 'only the sender, or someone who sees everyone, can withdraw a handoff' USING ERRCODE = 'insufficient_privilege';
+    END IF;
     NEW.seen_at := OLD.seen_at;
     NEW.withdrawn_at := now();
   ELSE
@@ -178,6 +187,38 @@ $$;
 DROP TRIGGER IF EXISTS staff_handoff_guard ON staff_handoff;
 CREATE TRIGGER staff_handoff_guard BEFORE INSERT OR UPDATE ON staff_handoff FOR EACH ROW EXECUTE FUNCTION public.staff_handoff_guard();
 REVOKE ALL ON FUNCTION public.staff_handoff_guard() FROM PUBLIC;
+
+-- Withdrawn means its open items close, on every write path (review r1 #2):
+-- the database does it, not only the app. Answered items keep their answer.
+CREATE OR REPLACE FUNCTION public.staff_handoff_close_items() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+BEGIN
+  IF NEW.status = 'withdrawn' AND OLD.status IS DISTINCT FROM 'withdrawn' THEN
+    UPDATE public.staff_suggestion SET status = 'withdrawn' WHERE handoff_id = NEW.id AND status = 'open';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS staff_handoff_close_items ON staff_handoff;
+CREATE TRIGGER staff_handoff_close_items AFTER UPDATE ON staff_handoff FOR EACH ROW EXECUTE FUNCTION public.staff_handoff_close_items();
+REVOKE ALL ON FUNCTION public.staff_handoff_close_items() FROM PUBLIC;
+
+-- A handoff carries at least one item, checked when the sending transaction
+-- commits (review r1 nit). An empty note-only packet never reaches anyone.
+CREATE OR REPLACE FUNCTION public.staff_handoff_has_items() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.staff_handoff h WHERE h.id = NEW.id)
+     AND NOT EXISTS (SELECT 1 FROM public.staff_suggestion s WHERE s.handoff_id = NEW.id) THEN
+    RAISE EXCEPTION 'a handoff needs at least one item' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS staff_handoff_has_items ON staff_handoff;
+CREATE CONSTRAINT TRIGGER staff_handoff_has_items AFTER INSERT ON staff_handoff
+  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.staff_handoff_has_items();
+REVOKE ALL ON FUNCTION public.staff_handoff_has_items() FROM PUBLIC;
 
 ALTER TABLE staff_handoff ENABLE ROW LEVEL SECURITY;
 ALTER TABLE staff_handoff FORCE ROW LEVEL SECURITY;
@@ -305,6 +346,13 @@ BEGIN
   IF NULLIF(current_setting('app.org_id', true), '') IS NULL AND NEW.status NOT IN ('saved', 'dismissed') THEN
     RAISE EXCEPTION 'the person can take or pass on a suggestion' USING ERRCODE = 'insufficient_privilege';
   END IF;
+  -- A next step is taken only by smr_accept_handoff_step (it runs as the
+  -- owner and makes the task in the same transaction), never by a bare status
+  -- change from the app role, so "taken" always means "on their list" (review r1 #1).
+  IF OLD.kind = 'next_step' AND NEW.status = 'saved'
+     AND NOT EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolname = current_user AND (r.rolbypassrls OR r.rolsuper)) THEN
+    RAISE EXCEPTION 'a next step is taken through its own path' USING ERRCODE = 'insufficient_privilege';
+  END IF;
   NEW.responded_at := now();
   RETURN NEW;
 END;
@@ -420,6 +468,8 @@ BEGIN
     REVOKE ALL ON FUNCTION public.org_activity_suggestion() FROM smr_app;
     REVOKE ALL ON FUNCTION public.org_activity_handoff() FROM smr_app;
     REVOKE ALL ON FUNCTION public.staff_suggestion_item_guard() FROM smr_app;
+    REVOKE ALL ON FUNCTION public.staff_handoff_close_items() FROM smr_app;
+    REVOKE ALL ON FUNCTION public.staff_handoff_has_items() FROM smr_app;
   END IF;
 END $$;
 
@@ -449,7 +499,9 @@ BEGIN
     RAISE EXCEPTION '110 after-guard: org_activity does not accept the suggestion and handoff entities';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_suggestion'::regclass AND tgname = 'staff_suggestion_item_guard')
-     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_guard') THEN
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_guard')
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_close_items')
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_has_items') THEN
     RAISE EXCEPTION '110 after-guard: a guard trigger is missing';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN

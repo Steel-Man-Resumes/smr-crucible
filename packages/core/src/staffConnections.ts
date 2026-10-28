@@ -52,6 +52,8 @@ export interface PersonConnections {
   resources: ResourceMatch[];
   /** Plain words: what matching used, or why there is nothing. */
   note: string;
+  /** The directory-search budget ran out, so not every kind of work or place was checked (said in the note). */
+  capped?: boolean;
 }
 
 export interface ConnectionDeps {
@@ -109,19 +111,40 @@ export const liveConnectionDeps: ConnectionDeps = {
 
 const CAPS = { employers: 5, resources: 3 } as const;
 
-/** Directory questions shared across one call (the caseload asks the same ones for many people). */
-function searchCache(deps: ConnectionDeps) {
+/**
+ * How many distinct directory searches one call may make (review r1: bound
+ * the fan-out). One person: four kinds of work in two places, plus two
+ * places for help, fits in 10. The caseload shares one budget across people
+ * (repeated questions are answered from the cache and cost nothing).
+ */
+export const SEARCH_BUDGET = { person: 10, caseload: 40 } as const;
+const CAPPED = { status: "capped", data: [] as never[] };
+
+/** Directory questions shared across one call (the caseload asks the same ones for many people), within a budget. */
+export function searchCache(deps: ConnectionDeps, budget: number = SEARCH_BUDGET.person) {
   const e = new Map<string, ReturnType<ConnectionDeps["employers"]>>();
   const r = new Map<string, ReturnType<ConnectionDeps["resources"]>>();
+  let used = 0;
+  const spend = () => (used < budget ? (used++, true) : false);
   return {
-    employers(q: string, state?: string) { const k = `${q}|${state ?? ""}`; if (!e.has(k)) e.set(k, deps.employers({ q, state })); return e.get(k)!; },
-    resources(place: MatchPlace) { const ck = foldCity(place.city); const k = `${place.state}|${ck ?? ""}`; if (!r.has(k)) r.set(k, deps.resources({ state: place.state, cityKey: ck })); return r.get(k)!; },
+    get used() { return used; },
+    employers(q: string, state?: string) {
+      const k = `${q}|${state ?? ""}`;
+      if (!e.has(k)) { if (!spend()) return Promise.resolve(CAPPED); e.set(k, deps.employers({ q, state })); }
+      return e.get(k)!;
+    },
+    resources(place: MatchPlace) {
+      const ck = foldCity(place.city); const k = `${place.state}|${ck ?? ""}`;
+      if (!r.has(k)) { if (!spend()) return Promise.resolve(CAPPED); r.set(k, deps.resources({ state: place.state, cityKey: ck })); }
+      return r.get(k)!;
+    },
   };
 }
+export const CAPPED_LINE = "Only the first few kinds of work and places were checked, to keep this quick. Ask about one kind of work to look further.";
 
 /** Pure given the reads: the matches for one person, best first, each with its reason. */
 export async function matchPerson(
-  input: ConnectionInputs, name: string | null, known: KnownItems, cache: ReturnType<typeof searchCache>,
+  input: ConnectionInputs, name: string | null, known: KnownItems, cache: Pick<ReturnType<typeof searchCache>, "employers" | "resources">,
 ): Promise<PersonConnections> {
   const base = {
     clientId: input.clientId, name, firstName: firstNameOf(name, "this person"),
@@ -134,6 +157,7 @@ export async function matchPerson(
   const k = known.get(input.clientId) ?? { employers: new Set<string>(), resources: new Set<string>(), companies: [] };
   const theirCompanies = input.applications.map((a) => a.company).filter((c): c is string => !!c);
   let unavailable = false;
+  let capped = false;
 
   const employers: EmployerMatch[] = [];
   const places: (MatchPlace | null)[] = mi.places.length ? mi.places : [null];
@@ -141,6 +165,7 @@ export async function matchPerson(
     for (const place of places) {
       if (employers.length >= CAPS.employers * 2) break;
       const res = await cache.employers(term.term, place?.state);
+      if (res.status === "capped") { capped = true; continue; }
       if (res.status !== "ok") { unavailable = true; continue; }
       for (const e of res.data) {
         if (employers.some((x) => x.id === e.id) || k.employers.has(e.id.toLowerCase())) continue;
@@ -161,6 +186,7 @@ export async function matchPerson(
   const resources: ResourceMatch[] = [];
   for (const place of mi.places) {
     const res = await cache.resources(place);
+    if (res.status === "capped") { capped = true; continue; }
     if (res.status !== "ok") { unavailable = true; continue; }
     for (const r of res.data) {
       if (resources.length >= CAPS.resources) break;
@@ -184,7 +210,8 @@ export async function matchPerson(
     status: unavailable && found === 0 ? "directory_unavailable" : "ok",
     employers: employers.slice(0, CAPS.employers),
     resources,
-    note,
+    note: capped ? `${note} ${CAPPED_LINE}` : note,
+    ...(capped ? { capped: true } : {}),
   };
 }
 
@@ -196,7 +223,7 @@ export async function getConnectionsFor(actor: OrgActor, clientId: string, name:
   const input = read.rows[0];
   if (!input) return null;
   const known = input.inReach ? await deps.known(actor, [input.clientId]) : new Map();
-  return matchPerson(input, name, known, searchCache(deps));
+  return matchPerson(input, name, known, searchCache(deps, SEARCH_BUDGET.person));
 }
 
 export interface CaseloadConnections {
@@ -221,7 +248,7 @@ export async function getCaseloadConnections(actor: OrgActor, deps: ConnectionDe
   if (!read.ok) return null;
   const reached = read.rows.filter((r) => r.inReach);
   const known = await deps.known(actor, reached.map((r) => r.clientId));
-  const cache = searchCache(deps);
+  const cache = searchCache(deps, SEARCH_BUDGET.caseload);
   const people: PersonConnections[] = [];
   let notSharing = 0;
   for (const input of reached) {
@@ -229,9 +256,10 @@ export async function getCaseloadConnections(actor: OrgActor, deps: ConnectionDe
     if (p.status === "nothing_shared") notSharing++;
     else if (p.employers.length + p.resources.length > 0) people.push(p);
   }
+  const capped = people.some((p) => p.capped);
   return {
     people,
     notSharing,
-    note: `${MATCH_LIMITS_LINE} Looking here is recorded for each person whose shared jobs or resumes were read, and they can see it.`,
+    note: `${MATCH_LIMITS_LINE} Looking here is recorded for each person whose shared jobs or resumes were read, and they can see it.${capped ? ` ${CAPPED_LINE}` : ""}`,
   };
 }

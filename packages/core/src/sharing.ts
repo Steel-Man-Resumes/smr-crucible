@@ -191,7 +191,13 @@ export async function getMySuggestions(userId: string): Promise<MySuggestion[]> 
 /** The participant's answer. 'saved' on a job means THEY saved it (the page does that with their own session first). */
 export async function answerSuggestion(userId: string, suggestionId: string, status: "saved" | "dismissed"): Promise<boolean> {
   const [rows] = await runAsUser<[{ id: string }[]]>(userId, (sql) => [
-    sql`UPDATE staff_suggestion SET status = ${status} WHERE id = ${suggestionId}::uuid AND client_user_id = ${userId} AND status = 'open' RETURNING id`,
+    // Loose job and comment suggestions only: handoff items (110) are answered
+    // through staffHandoff.answerMyHandoffItem, so a next step is never "taken"
+    // without landing on their list (review r1 #1; the 110 guard repeats it).
+    sql`UPDATE staff_suggestion SET status = ${status}
+         WHERE id = ${suggestionId}::uuid AND client_user_id = ${userId} AND status = 'open'
+           AND kind IN ('job', 'comment') AND to_jsonb(staff_suggestion)->>'handoff_id' IS NULL
+        RETURNING id`,
   ]);
   return rows.length > 0;
 }

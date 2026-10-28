@@ -390,6 +390,7 @@ const HISTORY_WORDS: Record<string, [string, string]> = {
   outcome_record: ["outcome", "outcomes"],
   retention_check: ["retention check", "retention checks"],
   staff_suggestion: ["suggestion", "suggestions"],
+  staff_handoff: ["handoff to a participant", "handoffs to participants"],
   sharing_grant: ["sharing choice", "sharing choices"],
   sharing_request: ["ask to share", "asks to share"],
   org_capability_override: ["access setting", "access settings"],

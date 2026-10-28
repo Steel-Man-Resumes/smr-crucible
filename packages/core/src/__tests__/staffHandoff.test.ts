@@ -194,7 +194,8 @@ test("sending needs org.suggest.write, never under a platform admin's look, and 
 test("every staff statement carries the reach rule; person statements act only for $1", () => {
   for (const k of ["insert", "listFor"] as const) assert.ok(HANDOFF_SQL[k].includes(IN_REACH), `${k} carries IN_REACH`);
   assert.match(HANDOFF_SQL.withdraw, /\(\$3::boolean OR author_user_id = \$4::uuid\)/, "only the author or someone who sees everyone withdraws");
-  assert.match(HANDOFF_SQL.withdrawItems, /status = 'open'/, "answered items keep their answer");
+  assert.ok(!("withdrawItems" in HANDOFF_SQL), "closing items on withdraw is the database's job (staff_handoff_close_items)");
+  assert.match(HANDOFF_SQL.answer, /h\.status <> 'withdrawn'/, "an answer needs a live handoff");
   for (const k of ["seen", "item", "answer", "seenByItem"] as const) assert.match(HANDOFF_SQL[k], /\$1::uuid/);
   assert.match(HANDOFF_SQL.answer, /kind <> 'next_step'/, "a next step is taken only through the function");
   assert.match(HANDOFF_SQL.mine, /access_code_redemption/, "only from organizations they still belong to");
@@ -354,4 +355,27 @@ test("the person's words for a match: written to them, no staff wording, no reco
   assert.ok(p.employers[0].whyForThem.startsWith("They hire for warehouse work"));
   assert.ok(!/shared with you|staff/i.test(p.employers[0].whyForThem));
   assert.equal(p.resources[0].whyForThem, "Job help for Lansing, MI, near the jobs you saved.");
+});
+
+test("review r1: the promise is true, answerSuggestion is loose-only, the search fan-out is bounded and said", async () => {
+  assert.match(HANDOFF_PROMISE, /sees whether you opened it, and whether you took or passed on each one/);
+  const sharing = readFileSync(new URL("../sharing.ts", import.meta.url), "utf8");
+  const ans = sharing.slice(sharing.indexOf("export async function answerSuggestion"));
+  assert.match(ans, /kind IN \('job', 'comment'\) AND to_jsonb\(staff_suggestion\)->>'handoff_id' IS NULL/);
+  const { searchCache, SEARCH_BUDGET, CAPPED_LINE } = await import("../staffConnections");
+  let calls = 0;
+  const deps = { employers: async () => { calls++; return { status: "ok", data: [] }; }, resources: async () => { calls++; return { status: "ok", data: [] }; } } as never;
+  const c = searchCache(deps, 2);
+  await c.employers("a"); await c.employers("a"); await c.employers("b");
+  assert.equal((await c.employers("c")).status, "capped");
+  assert.equal(calls, 2, "a repeated question is free; past the budget nothing is asked");
+  assert.ok(SEARCH_BUDGET.person >= 10 && SEARCH_BUDGET.caseload >= SEARCH_BUDGET.person);
+  const many = input({ applications: Array.from({ length: 6 }, (_, i) => ({ jobTitle: `Trade${i} work`, company: null, location: i % 2 ? "Lansing, MI" : "Gary, IN" })) });
+  const p = await matchPerson(many, null, new Map(), searchCache({ employers: async () => ({ status: "ok", data: [] }), resources: async () => ({ status: "ok", data: [] }) } as never, 3));
+  assert.equal(p.capped, true);
+  assert.ok(p.note.endsWith(CAPPED_LINE), "and the note says so");
+  const mig = readFileSync(new URL("../../migrations/110_staff_handoff.sql", import.meta.url), "utf8");
+  assert.match(mig, /CREATE CONSTRAINT TRIGGER staff_handoff_has_items AFTER INSERT ON staff_handoff\s+DEFERRABLE INITIALLY DEFERRED/);
+  assert.match(mig, /CREATE TRIGGER staff_handoff_close_items AFTER UPDATE ON staff_handoff/);
+  assert.match(mig, /OLD\.kind = 'next_step' AND NEW\.status = 'saved'/);
 });

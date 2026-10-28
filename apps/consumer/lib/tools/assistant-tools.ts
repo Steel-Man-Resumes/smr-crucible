@@ -547,7 +547,7 @@ export interface StaffSuggestionReads {
   recordConsent(userId: string): Promise<boolean>;
 }
 const liveStaffSuggestionReads: StaffSuggestionReads = {
-  load: async (userId) => (await import("../assistant-full-context")).loadCaseManagerSuggestions(userId),
+  load: async (userId) => (await import("../assistant-full-context")).loadCaseManagerSuggestions(userId, { listings: true }),
   recordConsent: async (userId) => {
     const { recordPlannerConsent, actingForSomeoneElse } = await import("../hurdles/consent-server");
     const [c, acting] = await Promise.all([recordPlannerConsent(userId).then((r) => r.granted).catch(() => false), actingForSomeoneElse().catch(() => true)]);

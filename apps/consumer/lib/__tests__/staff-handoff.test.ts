@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   addToTray, readTray, removeFromTray, updateTrayItem, clearTray, putDraftInTray, itemKey, trayKey, trayKeysIn, TRAY_PREFIX,
-  isHandoffDraftResult, applyHandoffDraft, draftButtonLabel, type TrayStore,
+  isHandoffDraftResult, applyHandoffDraft, draftButtonLabel, trayOwner, clearHandoffTrays, type TrayStore,
 } from "../handoff-tray";
 import { bandLine, dayWords, CONNECTIONS_LOG_WORDS } from "../handoff-words";
 import { gateForPerson, buildCaseManagerSection, STAFF_WORDS_NOTE, type CaseManagerContext } from "../staff-handoff-context";
@@ -24,7 +24,10 @@ import { addedWords } from "../../components/org/SendToButton";
 import type { HandoffItemInput } from "@crucible/core/src/staffHandoffShared";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 
-const STAFF = "44444444-4444-4444-8444-444444444444";
+const STAFF_ID = "44444444-4444-4444-8444-444444444444";
+const ORG = "55555555-5555-4555-8555-555555555555";
+/** The tray owner: organization and staff member (review r1 #5). */
+const STAFF = trayOwner(ORG, STAFF_ID)!;
 const P1 = "33333333-3333-4333-8333-333333333333";
 const E1 = "11111111-1111-4111-8111-111111111111";
 const R1 = "22222222-2222-4222-8222-222222222222";
@@ -40,7 +43,10 @@ test("the tray collects per staff member and person, never twice, at most ten", 
   const s = mem();
   assert.equal(addToTray(STAFF, P1, step("Bring ID"), s), "added");
   assert.equal(addToTray(STAFF, P1, step("bring id "), s), "already", "the same step, any case or spacing");
-  assert.equal(readTray("someone-else", P1, s).items.length, 0, "another staff member's tray is separate");
+  assert.equal(readTray(trayOwner(ORG, "66666666-6666-4666-8666-666666666666")!, P1, s).items.length, 0, "another staff member's tray is separate");
+  assert.equal(readTray(trayOwner("77777777-7777-4777-8777-777777777777", STAFF_ID)!, P1, s).items.length, 0, "and the same staff member in another organization too");
+  assert.equal(trayKey(STAFF, P1), `handoff-tray:${ORG}:${STAFF_ID}:${P1}`, "the key names the organization");
+  assert.equal(trayOwner(null, STAFF_ID), null, "no organization, no tray");
   for (let i = 0; i < 9; i++) addToTray(STAFF, P1, step(`Step ${i}`), s);
   assert.equal(addToTray(STAFF, P1, step("Eleventh"), s), "full");
   assert.ok(trayKey(STAFF, P1).startsWith(TRAY_PREFIX));
@@ -218,7 +224,7 @@ test("taking saves to their own place FIRST, then answers; a failed save records
 
 /* ------------------------------------------------- staff t.ROY tools -- */
 
-const actorOf = (caps: string[]): OrgActor => ({ userId: STAFF, orgId: "55555555-5555-4555-8555-555555555555", orgName: "Lakeshore Works (Demo)", role: "staff",
+const actorOf = (caps: string[]): OrgActor => ({ userId: STAFF_ID, orgId: "55555555-5555-4555-8555-555555555555", orgName: "Lakeshore Works (Demo)", role: "staff",
   capabilities: new Set(caps) as OrgActor["capabilities"], reach: "assigned" as OrgActor["reach"], viaPlatformAdmin: false });
 const liveCore = {
   confirmDirectoryItems: async (items: HandoffItemInput[]) => ({ ok: true as const, items: items.map((i) => (i.kind === "employer" ? { ...i, name: "Harbor Docks (listed)" } : i)) }),
@@ -273,7 +279,7 @@ test("draft_handoff only drafts: needs_confirmation, never sent, refused for a r
   const outOfReach = ctxFor({ ...core, getClientHeader: async () => ({ ok: false, reason: "not_in_reach_or_not_member" }) }, ["org.suggest.write"]);
   assert.deepEqual(await exec(handoffToolModule.build(outOfReach.ctx), "draft_handoff", { clientId: P1, note: "Hi there", items: [{ kind: "next_step", step: "x y", why: "Because" }] }),
     { status: "refused", error: "not_in_reach_or_not_member" });
-  assert.ok(handoffToolModule.streamed.includes("draft_handoff"));
+  assert.ok("draft_handoff" in handoffToolModule.streamed);
 });
 
 test("find_missed_connections logs as t.ROY and gates every line people wrote", async () => {
@@ -335,4 +341,52 @@ test("draftBody: every model word in one string, and it round-trips exactly", ()
   assert.equal(parseDraftBody(draftBody.replace("Item 2 why", "Item 2 wh"), shapes), null, "a broken body applies nothing");
   assert.equal(parseDraftBody(draftBody, []), null);
   assert.ok(!noteIsComposable("Hi\nItem 1 why: sneaky"));
+});
+
+/* ---------------------------------------------------- review round 1 -- */
+
+test("sign-out and account switch can clear every tray in the tab", () => {
+  const s = mem();
+  addToTray(STAFF, P1, step("Bring ID"), s);
+  s.data.set("staff-draft:x", "keep");
+  const list = { get length() { return s.data.size; }, key: (i: number) => [...s.data.keys()][i] ?? null, removeItem: (k: string) => void s.data.delete(k) };
+  clearHandoffTrays(list);
+  assert.deepEqual([...s.data.keys()], ["staff-draft:x"], "only trays go");
+});
+
+test("only the person answers or opens: anyone acting for them is refused first", () => {
+  const src = route("handoffs/route.ts");
+  const post = src.slice(src.indexOf("export async function POST"));
+  assert.match(post, /actingForSomeoneElse\(\)\.catch\(\(\) => true\)\) return NextResponse\.json\(\{ error: "Only the person can answer this\." \}, \{ status: 403 \}\)/);
+  assert.ok(post.indexOf("actingForSomeoneElse") < post.indexOf("request.json"), "before the body is read");
+});
+
+test("opened means a deliberate open, not showing up on the dashboard", () => {
+  const src = readFileSync(new URL("../../components/MyHandoffs.tsx", import.meta.url), "utf8");
+  const seen = src.indexOf('action: "seen"');
+  assert.ok(seen > src.indexOf("function openIt()") && seen < src.indexOf("function openIt()") + 400, "seen is posted only from openIt");
+  assert.doesNotMatch(src, /useEffect\(\(\) => \{\s*if \(h\.status === "sent"/, "never on render");
+});
+
+test("per-turn context does not re-read listings, and is not loaded until the prompt shows it", () => {
+  const src = readFileSync(new URL("../assistant-full-context.ts", import.meta.url), "utf8");
+  const real = src.slice(src.indexOf("export async function realFullContextLoaders"), src.indexOf("export async function loadCaseManagerSuggestions"));
+  assert.doesNotMatch(real.replace(/\/\/.*$/gm, ""), /staffSuggestions:/, "not registered by default (boss wires it with the prompt line)");
+  assert.match(src, /listings: opts\.listings === true/);
+  assert.match(readFileSync(new URL("../tools/assistant-tools.ts", import.meta.url), "utf8"), /loadCaseManagerSuggestions\(userId, \{ listings: true \}\)/, "the tool still re-reads listings");
+});
+
+test("the module declares every streamed key, and only draftBody is model-written", async () => {
+  const shape = handoffToolModule.streamed.draft_handoff as Record<string, string>;
+  assert.deepEqual(Object.entries(shape).filter(([, v]) => v === "draft").map(([k]) => k), ["draftBody"]);
+  assert.equal(shape.status, "server"); assert.equal(shape.error, "server");
+  const core = { ...liveCore, canSendHandoff: () => true, getClientHeader: async () => ({ ok: true, rows: [{ name: "Alma Reyes" }] }) };
+  const results = [
+    await exec(handoffToolModule.build(ctxFor(core, ["org.suggest.write"]).ctx), "draft_handoff", { clientId: P1, note: "Alma, a few things.", items: [{ kind: "employer", employerId: E1, role: "Forklift", why: "They hire" }, { kind: "next_step", step: "Bring ID", dueOn: "2027-01-05", why: "So we can start" }] }),
+    await exec(handoffToolModule.build(ctxFor(core, ["org.suggest.write"], { status: "refused", error: "one person" }).ctx), "draft_handoff", { clientId: P1, note: "x", items: [] }),
+    await exec(handoffToolModule.build(ctxFor({ ...core, canSendHandoff: () => false }, []).ctx), "draft_handoff", { clientId: P1, note: "Hi there", items: [{ kind: "next_step", step: "x y", why: "Because" }] }),
+    await exec(handoffToolModule.build(ctxFor(core, ["org.suggest.write"]).ctx), "draft_handoff", { clientId: P1, note: "On parole, so", items: [{ kind: "next_step", step: "x y", why: "Because" }] }),
+  ];
+  for (const r of results) for (const k of Object.keys(r)) assert.ok(k in shape, `declared: ${k}`);
+  assert.ok(!JSON.stringify(results[0].items).match(/Forklift|They hire|Bring ID|So we can start|2027-01-05/), "no model words or dates outside draftBody");
 });

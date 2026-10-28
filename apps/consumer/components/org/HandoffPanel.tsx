@@ -14,7 +14,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HANDOFF_MAX_ITEMS, HANDOFF_NOTE_MAX, HANDOFF_STATUS_WORDS, ITEM_STATUS_WORDS, sendToLabel, type HandoffItemInput,
 } from "@crucible/core/src/staffHandoffShared";
-import { addToTray, clearTray, itemKey, readTray, removeFromTray, updateTrayItem, TRAY_EVENT, type Tray } from "@/lib/handoff-tray";
+import { addToTray, clearTray, itemKey, readTray, removeFromTray, trayOwner, updateTrayItem, TRAY_EVENT, type Tray } from "@/lib/handoff-tray";
+import { useEffectiveRole } from "@/components/RoleProvider";
 import { bandLine, dayWords } from "@/lib/handoff-words";
 
 interface ItemView { id: string; kind: string; status: "open" | "saved" | "dismissed" | "withdrawn"; title: string; why: string; due_on: string | null }
@@ -59,6 +60,8 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const label = sendToLabel(first);
+  // The tray is keyed by organization, staff member and person (review r1 #5).
+  const owner = trayOwner(useEffectiveRole()?.orgId ?? null, viewerId);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -72,11 +75,11 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
   useEffect(() => { load(); }, [load]);
 
   const refreshTray = useCallback(() => {
-    if (!viewerId) return;
-    const t = readTray(viewerId, clientId);
+    if (!owner) return;
+    const t = readTray(owner, clientId);
     setTray(t);
     if (t.note && !note) setNote(t.note);
-  }, [viewerId, clientId, note]);
+  }, [owner, clientId, note]);
   useEffect(() => {
     refreshTray();
     const on = () => refreshTray();
@@ -85,7 +88,7 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
   }, [refreshTray]);
 
   async function send() {
-    if (!viewerId) return;
+    if (!owner) return;
     setBusy(true); setMsg(null);
     try {
       const res = await fetch(`/api/org/clients/${clientId}/handoffs`, {
@@ -94,7 +97,7 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setMsg(d.error || "That did not send. Nothing went to them. Try again."); return; }
-      clearTray(viewerId, clientId); setNote(""); setMsg(`Sent. ${first} will see it on their dashboard and can take or pass on each one.`);
+      clearTray(owner, clientId); setNote(""); setMsg(`Sent. ${first} will see it on their dashboard and can take or pass on each one.`);
       load();
     } catch { setMsg("That did not send. Check the connection and try again."); }
     finally { setBusy(false); }
@@ -114,7 +117,7 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
         A short note and a few things worth their time. {first} sees it on their dashboard and decides about each one. You see only whether they took it or passed.
       </p>
 
-      {canSend && viewerId ? (
+      {canSend && owner ? (
         <div className="mt-4 space-y-4">
           {tray.draftedByAssistant && (
             <p className="text-xs text-t-amber-bright border-l-2 border-t-amber pl-2">Drafted with t.ROY. Read every line before you send it.</p>
@@ -123,11 +126,11 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
             <p className="text-sm text-t-phos-dim">Nothing picked yet. Add an employer or a place for help from the directory below, a next step, or use a {`"${label}"`} button on a connection.</p>
           ) : (
             <ol className="space-y-3">
-              {tray.items.map((it) => <TrayItem key={itemKey(it)} it={it} onChange={(next) => updateTrayItem(viewerId, clientId, itemKey(it), next)} onRemove={() => removeFromTray(viewerId, clientId, itemKey(it))} />)}
+              {tray.items.map((it) => <TrayItem key={itemKey(it)} it={it} onChange={(next) => updateTrayItem(owner, clientId, itemKey(it), next)} onRemove={() => removeFromTray(owner, clientId, itemKey(it))} />)}
             </ol>
           )}
-          <DirectoryPicker disabled={tray.items.length >= HANDOFF_MAX_ITEMS} onAdd={(it) => { const r = addToTray(viewerId, clientId, it); setMsg(r === "already" ? "That one is already picked." : r === "full" ? `A handoff holds at most ${HANDOFF_MAX_ITEMS} things.` : r === "unavailable" ? "This browser tab could not keep it. Try again." : null); }} />
-          <StepAdder onAdd={(it) => { const r = addToTray(viewerId, clientId, it); setMsg(r === "already" ? "That step is already picked." : r === "full" ? `A handoff holds at most ${HANDOFF_MAX_ITEMS} things.` : null); }} />
+          <DirectoryPicker disabled={tray.items.length >= HANDOFF_MAX_ITEMS} onAdd={(it) => { const r = addToTray(owner, clientId, it); setMsg(r === "already" ? "That one is already picked." : r === "full" ? `A handoff holds at most ${HANDOFF_MAX_ITEMS} things.` : r === "unavailable" ? "This browser tab could not keep it. Try again." : null); }} />
+          <StepAdder onAdd={(it) => { const r = addToTray(owner, clientId, it); setMsg(r === "already" ? "That step is already picked." : r === "full" ? `A handoff holds at most ${HANDOFF_MAX_ITEMS} things.` : null); }} />
           <label className="block">
             <span className="text-xs font-semibold text-t-phos">Your note to {first}</span>
             <textarea className={`${field} mt-1`} rows={3} maxLength={HANDOFF_NOTE_MAX} value={note} onChange={(e) => setNote(e.target.value)}
@@ -136,7 +139,7 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
           <div className="flex flex-wrap items-center gap-3">
             <button type="button" disabled={busy || tray.items.length === 0 || note.trim().length < 3} onClick={send}
               className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 disabled:opacity-50">{busy ? "Sending..." : label}</button>
-            {tray.items.length > 0 && <button type="button" className={small} onClick={() => { clearTray(viewerId, clientId); setNote(""); }}>Clear</button>}
+            {tray.items.length > 0 && <button type="button" className={small} onClick={() => { clearTray(owner, clientId); setNote(""); }}>Clear</button>}
           </div>
         </div>
       ) : (

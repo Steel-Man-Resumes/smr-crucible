@@ -60,10 +60,13 @@ function useHandoffs() {
 function HandoffBlock({ h, onChange }: { h: Handoff; onChange: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [said, setSaid] = useState<Record<string, string>>({});
+  // "Opened" is a deliberate open (review r1 #4): pressing Open, or answering an item. Never merely showing up on the dashboard.
+  const [open, setOpen] = useState(h.status !== "sent");
   const marked = useRef(false);
-  useEffect(() => {
+  function openIt() {
+    setOpen(true);
     if (h.status === "sent" && !marked.current) { marked.current = true; post("/api/handoffs", { action: "seen", handoffId: h.id }).catch(() => {}); }
-  }, [h.id, h.status]);
+  }
   async function answer(it: Item, take: boolean) {
     setBusy(it.id);
     const res = take ? await takeItem(it).catch(() => ({ ok: false as const, error: "That did not save. Check the connection and try again." }))
@@ -75,6 +78,11 @@ function HandoffBlock({ h, onChange }: { h: Handoff; onChange: () => void }) {
   return (
     <article className="border-l-2 border-t-amber pl-3">
       <p className="text-xs text-t-phos-dim">{h.from_name || "Your case manager"}{h.org_name ? `, ${h.org_name}` : ""}, {dayWords(h.created_at)}</p>
+      {!open ? (
+        <button type="button" onClick={openIt} className="t-focus mt-2 border border-t-line text-sm text-t-phos px-3 py-1.5">
+          Open it ({h.items.length} {h.items.length === 1 ? "thing" : "things"})
+        </button>
+      ) : (<>
       <p className="text-sm text-t-white mt-1 whitespace-pre-line">{h.note}</p>
       <ul className="mt-3 space-y-3">
         {h.items.map((it) => (
@@ -100,6 +108,7 @@ function HandoffBlock({ h, onChange }: { h: Handoff; onChange: () => void }) {
           </li>
         ))}
       </ul>
+      </>)}
     </article>
   );
 }

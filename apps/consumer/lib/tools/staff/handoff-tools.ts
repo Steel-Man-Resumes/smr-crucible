@@ -80,7 +80,18 @@ export async function buildHandoffDraft(core: Pick<Core, "confirmDirectoryItems"
 
 export const handoffToolModule = {
   id: "handoff",
-  streamed: ["draft_handoff"] as const,
+  /**
+   * Declared streamed shape (S1 types StreamedShape, enforced by the route):
+   * every top-level key a draft_handoff result may carry, refusals included.
+   * Only draftBody is model-written. items are server shapes (kinds, checked
+   * ids, listing names, places, links); error words are ours.
+   */
+  streamed: {
+    draft_handoff: {
+      status: "server", error: "server", action: "server", clientId: "server", firstName: "server",
+      items: "server", draftBody: "draft", sent: "server", saved: "server", message: "server",
+    },
+  } as const,
   activity: {
     find_missed_connections: "Looking for connections they may have missed",
     draft_handoff: "Drafting a handoff for you to send",
@@ -100,7 +111,7 @@ export const handoffToolModule = {
           if (!res || res.status === "not_in_reach") return ctx.refusal("not_in_reach_or_not_member");
           const gate = staffTextGate();
           const out = {
-            status: res.status, firstName: res.firstName, shared: res.shared, note: res.note,
+            status: res.status, firstName: res.firstName, shared: res.shared, note: res.note, capped: res.capped === true,
             employers: res.employers.map((e) => ({ employerId: e.id, name: e.name, band: e.band, location: e.location, checkedAt: e.checkedAt,
               reason: gate.pass(e.reason), role: gate.pass(e.role), whyForThem: gate.pass(e.whyForThem) })),
             resources: res.resources.map((r) => ({ resourceId: r.id, name: r.name, band: r.band, area: r.area, place: r.place, reason: gate.pass(r.reason), whyForThem: gate.pass(r.whyForThem) })),
