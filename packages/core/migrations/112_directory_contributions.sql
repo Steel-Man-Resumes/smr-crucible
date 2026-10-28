@@ -212,7 +212,8 @@ BEGIN
       RAISE EXCEPTION 'Invalid contribution: date' USING ERRCODE = 'check_violation';
     END IF;
     v_on := (p->>'interaction_on')::date;
-    IF v_on > current_date OR v_on < current_date - 30 THEN
+    -- UTC days, as the app counts them (and as 073 dates contact events).
+    IF v_on > (now() AT TIME ZONE 'UTC')::date OR v_on < (now() AT TIME ZONE 'UTC')::date - 30 THEN
       RAISE EXCEPTION 'The date has to be in the last 30 days' USING ERRCODE = 'check_violation';
     END IF;
   END IF;

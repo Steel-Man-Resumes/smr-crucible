@@ -30,6 +30,8 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
   const { PGlite } = await import(join(dir!, "@electric-sql/pglite/dist/index.js"));
   const { pgcrypto } = await import(join(dir!, "@electric-sql/pglite/dist/contrib/pgcrypto.js"));
   const db = new PGlite({ extensions: { pgcrypto } });
+  // Neon runs in UTC; the app counts days in UTC. Same here, whatever this machine's zone.
+  await db.exec("SET TIME ZONE 'UTC'");
   await db.exec("CREATE TABLE IF NOT EXISTS _migrations(filename text PRIMARY KEY, applied_at timestamptz DEFAULT now())");
   await db.exec(`CREATE ROLE smr_app NOSUPERUSER NOBYPASSRLS; GRANT USAGE ON SCHEMA public TO smr_app;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO smr_app;
