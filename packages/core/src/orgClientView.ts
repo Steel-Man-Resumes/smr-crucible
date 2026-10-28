@@ -709,6 +709,8 @@ export const CONNECTION_APPS_SQL = `SELECT ja.job_title, ja.company, ja.location
        FROM staff_shared_application ja
       WHERE ja.user_id = $1::uuid AND ${covered("ja.created_at")} AND ${IN_REACH} AND ${SHARED}
       ORDER BY ja.updated_at DESC LIMIT 50`;
+/** Whether the resume scope is shared. Uses every placeholder $1..$5 like the other reads: real Postgres refuses a parameter it never sees (the in-memory test database does not). */
+export const CONNECTION_RESUME_SHARED_SQL = `SELECT (${IN_REACH}) AND (${SHARED}) AS shared`;
 export const CONNECTION_RESUMES_SQL = `SELECT NULLIF(btrim(ra.target_context->>'targetJob'), '') AS target
        FROM staff_shared_artifact ra
       WHERE ra.user_id = $1::uuid AND ra.artifact_type = 'resume' AND ${covered("ra.created_at")} AND ${IN_REACH} AND ${SHARED}
@@ -725,7 +727,7 @@ export async function getConnectionInputs(actor: OrgActor, clientIds: readonly s
     const pa = params(actor, id, "applications"), pr = params(actor, id, "resume");
     return [
       run(sql)(`SELECT (${IN_REACH}) AS in_reach, (${SHARED}) AS shared`, pa),
-      run(sql)(`SELECT (${SHARED}) AS shared`, pr),
+      run(sql)(CONNECTION_RESUME_SHARED_SQL, pr),
       run(sql)(CONNECTION_APPS_SQL, pa),
       run(sql)(SHARED_OPEN_LOG_SQL, [...pa, opts.via ?? "connections", actor.viewedBy ?? null]),
       run(sql)(CONNECTION_RESUMES_SQL, pr),
