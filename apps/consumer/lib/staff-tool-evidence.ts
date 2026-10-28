@@ -130,7 +130,8 @@ export function createStaffEvidenceCollector() {
     items,
     calls,
     record(tool: string, result: unknown) {
-      const pid = obj(result)?.participantId;
+      // A handoff draft names its person as clientId (S5): the run log records it, so "drafted with t.ROY" can be checked by the server.
+      const pid = obj(result)?.participantId ?? (tool === "draft_handoff" && obj(result)?.status === "needs_confirmation" ? obj(result)?.clientId : undefined);
       if (calls.length < 12) calls.push({ tool, participantId: typeof pid === "string" && /^[0-9a-f-]{36}$/i.test(pid) ? pid.toLowerCase() : null });
       if (items.length >= 5) return;
       const projected = projectStaffToolEvidence(tool, result);

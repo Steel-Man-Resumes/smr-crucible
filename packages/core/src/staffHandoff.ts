@@ -40,6 +40,24 @@ export const canSendHandoff = (a: OrgActor) => !a.viaPlatformAdmin && !a.viewedB
 const canViewHandoffs = (a: OrgActor) => !a.viaPlatformAdmin && a.capabilities.has("org.client.view_content");
 
 /** Every statement, exported so the database test runs exactly these. */
+/**
+ * "Drafted with t.ROY" is the server's word, never the browser's (final review should-fix 4): true only
+ * when this sender's own t.ROY run log (106 ai_skill_run) shows draft_handoff about this person in the
+ * last 30 minutes. Exported for tests: $1 org, $2 sender, $3 person.
+ */
+export const TROY_DRAFTED_SQL = `SELECT EXISTS (
+  SELECT 1 FROM ai_skill_run r
+   WHERE r.access_code_id = $1::uuid AND r.actor_user_id = $2::uuid AND r.participant_user_id = $3::uuid
+     AND 'draft_handoff' = ANY (r.tools) AND r.at > now() - interval '30 minutes') AS drafted`;
+
+/** Was a handoff for this person drafted by this sender's t.ROY in the last 30 minutes? A failed read is no. */
+export async function troyDraftedHandoff(actor: OrgActor, clientId: string): Promise<boolean> {
+  try {
+    const [rows] = await runScoped<[{ drafted: boolean }[]]>(scopeOf(actor), (sql) => [run(sql)(TROY_DRAFTED_SQL, [actor.orgId, actor.userId, clientId.toLowerCase()])]);
+    return rows[0]?.drafted === true;
+  } catch { return false; }
+}
+
 export const HANDOFF_SQL = {
   /** $1 person, $2 org, $3 sees-all, $4 actor, $5 new id, $6 note, $7 drafted by t.ROY. */
   insert: `INSERT INTO staff_handoff (id, access_code_id, participant_user_id, author_user_id, note, drafted_by_assistant)
@@ -153,17 +171,20 @@ export function itemsJson(items: HandoffItemInput[]): string {
 }
 
 /** Send one handoff: the packet and its items in one transaction, or nothing. */
-export async function sendHandoff(actor: OrgActor, clientId: string, raw: unknown, dir: DirectoryLookups = liveDirectory): Promise<SendResult> {
+export async function sendHandoff(actor: OrgActor, clientId: string, raw: unknown, dir: DirectoryLookups = liveDirectory,
+  draftedCheck: (actor: OrgActor, clientId: string) => Promise<boolean> = troyDraftedHandoff): Promise<SendResult> {
   if (!canSendHandoff(actor)) return { ok: false, error: "You do not have access to that." };
   if (!UUID.test(clientId ?? "")) return { ok: false, error: "That person is not on your list." };
   const checked = checkHandoff(raw);
   if (!checked.ok) return checked;
   const live = await confirmDirectoryItems(checked.value.items, dir);
   if (!live.ok) return live;
+  // Never what the browser says (final review should-fix 4).
+  const drafted = await draftedCheck(actor, clientId);
   const id = randomUUID();
   try {
     const [made, items] = await runScoped<[{ id: string }[], { id: string }[]]>(scopeOf(actor), (sql) => [
-      run(sql)(HANDOFF_SQL.insert, [...reachParams(actor, clientId), id, checked.value.note, checked.value.draftedByAssistant]),
+      run(sql)(HANDOFF_SQL.insert, [...reachParams(actor, clientId), id, checked.value.note, drafted]),
       run(sql)(HANDOFF_SQL.items, [id, itemsJson(live.items)]),
     ]);
     if (!made[0]) return { ok: false, error: "That person is not on your list." };

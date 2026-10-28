@@ -219,3 +219,18 @@ it("final review should-fix 3: a change already made to your own view always kee
   assert.equal(picked.length, 5); assert.equal(picked[0].toolCallId, "last");
   assert.match(APPLIED_CARD_LINE, /^That change was made\. Undo it here or on My setup, Recent changes to my view\.$/);
 });
+
+it("final review should-fix 4: drafted with t.ROY is the server's word, from the run log", async () => {
+  const route = read("../../app/api/org/clients/[id]/handoffs/route.ts");
+  assert.doesNotMatch(route.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ""), /draftedByAssistant/, "the browser's value is never read");
+  const { TROY_DRAFTED_SQL, sendHandoff } = await import("@crucible/core/src/staffHandoff");
+  assert.match(TROY_DRAFTED_SQL, /'draft_handoff' = ANY \(r\.tools\)/);
+  assert.match(TROY_DRAFTED_SQL, /r\.actor_user_id = \$2::uuid AND r\.participant_user_id = \$3::uuid/);
+  assert.match(TROY_DRAFTED_SQL, /interval '30 minutes'/);
+  assert.equal(sendHandoff.length >= 3, true);
+  const { createStaffEvidenceCollector } = await import("../staff-tool-evidence");
+  const c = createStaffEvidenceCollector();
+  c.record("draft_handoff", { status: "needs_confirmation", clientId: UUID });
+  c.record("draft_handoff", { status: "refused", clientId: UUID });
+  assert.deepEqual(c.calls.map((x) => x.participantId), [UUID, null], "the run log names the person a handoff was drafted for");
+});
