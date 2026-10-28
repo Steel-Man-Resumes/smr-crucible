@@ -106,6 +106,7 @@ it("the registry stays browser-safe: no staff tool module imports core at run ti
   // A default `() => import("@crucible/core")` in view-tools.ts pulled node:crypto into the chat's
   // browser bundle and broke next build (integration 2026-10-28). Modules reach core only via ctx.loadCore().
   for (const f of ["index.ts", "navigate.ts", "directory.ts", "types.ts", "view-tools.ts", "handoff-tools.ts"]) {
-    assert.doesNotMatch(read(`../tools/staff/${f}`), /(?<!typeof )import\(\s*["']@crucible\/core["']\s*\)/, f);
+    const code = read(`../tools/staff/${f}`).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+    assert.doesNotMatch(code, /(?<!typeof )import\(\s*["']@crucible\/core["']\s*\)/, f);
   }
 });
