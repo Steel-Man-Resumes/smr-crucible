@@ -290,10 +290,41 @@ describe("the database halves (source checks)", () => {
   });
   it("the grid's batch write is all or nothing: every cell checked before one transaction", () => {
     const body = fields.slice(fields.indexOf("export async function setFieldValuesBatch"));
-    assert.ok(body.indexOf("if (bad) return") < body.indexOf("INSERT INTO custom_field_value"), "errors return before any write");
+    assert.ok(body.indexOf("if (bad) return") > 0 && body.indexOf("if (bad) return") < body.indexOf("CUSTOM_FIELD_BATCH_SQL.upsert"), "errors return before any write");
     assert.match(body, /if \(!reached\.has\(c\.entityId\)\) \{ cellErrors\[k\] = "That person is not on your caseload\."/);
     assert.match(body, /validateCustomFieldValue\(def, c\.raw/);
     assert.match(body, /opts\.fromGrid && opts\.gridAllowed === false/);
     assert.match(body, /if \(!canWriteFieldValues\(actor\)\)/);
+  });
+});
+
+describe("review round 1", () => {
+  it("t.ROY for staff (ai_assist) is the owner's switch; admins change everything else", async () => {
+    const { aiSwitchRefused, AI_SWITCH_OWNER_ONLY } = await import("../orgStructure");
+    const on = { modules: { ai_assist: true } }, off = { modules: { ai_assist: false } };
+    assert.equal(aiSwitchRefused({ role: "org_admin" }, on, off), true);
+    assert.equal(aiSwitchRefused({ role: "org_admin" }, on, on), false, "a save that leaves it alone passes");
+    assert.equal(aiSwitchRefused({ role: "owner" }, on, off), false);
+    assert.match(AI_SWITCH_OWNER_ONLY, /owner/);
+    const src = read("orgStructure.ts");
+    assert.equal((src.match(/if \(aiSwitchRefused\(actor, current, n\)\) return bad\(AI_SWITCH_OWNER_ONLY\);/g) ?? []).length, 2, "profile update and setup both check it");
+  });
+  it("a policy that cannot be read never opens the limits", () => {
+    const src = read("customizationPolicy.ts");
+    assert.match(src, /if \(opts\.forWrite\) throw err;\s*return \{ \.\.\.NONE_ALLOWED \};/);
+    for (const f of ["viewActions.ts", "staffPrefs.ts", "savedViews.ts"]) assert.match(read(f), /getMyCustomizationPolicy\(actor, \{ forWrite: true \}\)/, f);
+  });
+  it("undo marks first, in the same statement as the change and its log row", async () => {
+    const { VIEW_UNDO_SQL } = await import("../viewActions");
+    for (const [k, sql] of Object.entries(VIEW_UNDO_SQL)) {
+      assert.match(sql, /^WITH m AS \(UPDATE view_change_log SET undone_at = now\(\)\s+WHERE id = \$3::uuid AND user_id = \$1::uuid AND access_code_id = \$2::uuid AND undone_at IS NULL RETURNING id\)/, k);
+      assert.match(sql, /EXISTS \(SELECT 1 FROM m\)/, k);
+    }
+  });
+  it("personal views are not removed while the switch is off; the grid writes in two statements", () => {
+    assert.match(read("savedViews.ts"), /if \(own\[0\]\?\.owner_user_id && !\(await getMyCustomizationPolicy\(actor, \{ forWrite: true \}\)\)\.personal_views\) return false;/);
+    const body = read("customFields.ts").slice(read("customFields.ts").indexOf("export async function setFieldValuesBatch"));
+    assert.match(body, /CUSTOM_FIELD_BATCH_SQL\.upsert/);
+    assert.doesNotMatch(body, /upserts\.map\(\(u\) =>\s*run\(sql\)/);
   });
 });

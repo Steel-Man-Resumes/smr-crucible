@@ -49,7 +49,7 @@ export function ViewChangeDoneCard({ result }: { result: ViewChangeResult }) {
   }
   return (
     <div role="status" className="flex flex-wrap items-center gap-2 rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs text-[#344b38]" data-testid="view-change-card">
-      <span>{undone ? `${undone.replace(/\.$/, "")}.` : `Done: ${String(result.summary ?? "").replace(/\.$/, "")}${result.draftBody ? ` (${result.draftBody})` : ""}. Only your screen changed.`}</span>
+      <span>{undone ? `${undone.replace(/\.$/, "")}.` : `Done: ${String(result.draftBody || result.summary || "").replace(/\.$/, "")}. Only your screen changed.`}</span>
       {!undone && result.changeId && (
         <button type="button" onClick={undo} className={`${btn} border-[#b9cdbd] bg-white hover:bg-[#e3ede5]`}>Undo</button>
       )}

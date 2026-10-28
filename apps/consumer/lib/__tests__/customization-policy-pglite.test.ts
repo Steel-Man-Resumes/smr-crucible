@@ -17,6 +17,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { VIEW_UNDO_SQL } from "@crucible/core/src/viewActions";
+import { CUSTOM_FIELD_BATCH_SQL } from "@crucible/core/src/customFields";
 
 const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, "@electric-sql/pglite")) ? "set SMR_PGLITE_DIR to run the pglite 108 test" : false;
@@ -132,6 +134,39 @@ test("108: customization policy and view change log, as database facts", { skip 
   assert.equal((await as(A(s1), `SELECT id FROM view_change_log WHERE id = $1 AND undone_at IS NOT NULL`, [mine.id])).length, 1);
   assert.match(await err(as(A(s1), `INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary, undone_at) VALUES ($1, $2, 'today', 'x_y', 'pref:todayOrder', 'x', now()) RETURNING 1`, [org, s1])), /starts not undone|row-level security/);
   assert.match(await err(as(A(s1), `INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary) VALUES ($1, $2, 'today', 'x_y', 'drop table', 'x') RETURNING 1`, [org, s1])), /check constraint/i, "targets are shaped");
+
+  // ---- the app's undo statements: mark first, all or nothing, once ---------
+  const [pc] = await logIt(A(s1), s1);
+  const undoPrefs = (who: string) => as(A(who), VIEW_UNDO_SQL.prefs, [who, org, pc.id, JSON.stringify({ todayOrder: [] }), "today", "pref:todayOrder", "Undid: put it first", "[\"tasks\"]", "null", false]);
+  assert.equal((await undoPrefs(s1)).length, 1, "the first undo marks, writes the prefs and logs");
+  assert.equal((await undoPrefs(s1)).length, 0, "a second undo of the same change does nothing");
+  assert.equal(((await q(`SELECT count(*)::int AS n FROM view_change_log WHERE undoes = $1`, [pc.id])).rows[0] as { n: number }).n, 1, "exactly one undo row");
+  const [vw] = await as(A(s1), `INSERT INTO saved_view (access_code_id, owner_user_id, surface, name, definition) VALUES ($1, $2, 'caseload', 'Mine', '{}'::jsonb) RETURNING id`, [org, s1]);
+  const [vc] = await as(A(s1), `INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary, after) VALUES ($1, $2, 'views', 'view_saved', $3, 'Saved your view', '{}'::jsonb) RETURNING id`, [org, s1, `view:${vw.id}`]);
+  assert.equal((await as(A(s1), VIEW_UNDO_SQL.removeCreated, [s1, org, vc.id, vw.id, "Undid: saved your view", "{}", false])).length, 1, "undoing a save removes the view, once");
+  assert.equal((await as(A(s1), `SELECT id FROM saved_view WHERE id = $1`, [vw.id])).length, 0);
+  // Undo of a removed view whose name is taken now: the whole statement fails, the mark rolls back.
+  await as(A(s1), `INSERT INTO saved_view (access_code_id, owner_user_id, surface, name, definition) VALUES ($1, $2, 'caseload', 'Taken', '{}'::jsonb)`, [org, s1]);
+  const [rc] = await as(A(s1), `INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary, before) VALUES ($1, $2, 'views', 'view_removed', $3, 'Removed your view', '{"name":"Taken"}'::jsonb) RETURNING id`, [org, s1, `view:${id(99)}`]);
+  assert.notEqual(await err(as(A(s1), VIEW_UNDO_SQL.restoreRemoved, [s1, org, rc.id, "Taken", "{}", 1, "Undid", JSON.stringify({ name: "Taken" }), false])), "");
+  assert.equal((await as(A(s1), `SELECT id FROM view_change_log WHERE id = $1 AND undone_at IS NULL`, [rc.id])).length, 1, "a failed undo leaves the change not undone");
+  assert.equal((await as(A(s2), VIEW_UNDO_SQL.prefs, [s2, org, rc.id, "{}", "today", "pref:todayOrder", "x", "null", "null", false])).length, 0, "a colleague's undo of my change does nothing");
+
+  // ---- the grid's batch statements, under 104's reach policy --------------
+  await q(`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES ($1, $2, $3, $4)`, [org, p1, s1, owner]);
+  const [hrs] = await as(A(owner), `INSERT INTO custom_field_def (access_code_id, entity, key, label, type) VALUES ($1, 'participant', 'hours', 'Hours', 'number') RETURNING id`, [org]);
+  const [note] = await as(A(owner), `INSERT INTO custom_field_def (access_code_id, entity, key, label, type) VALUES ($1, 'participant', 'note', 'Note', 'text') RETURNING id`, [org]);
+  await as(A(s1), CUSTOM_FIELD_BATCH_SQL.upsert, [org, [hrs.id, note.id], [p1, p1], ["20", JSON.stringify("Mornings")]]);
+  assert.equal((await as(A(s1), `SELECT value FROM custom_field_value WHERE entity_id = $1 ORDER BY value::text`, [p1])).length, 2, "one statement writes many cells");
+  assert.notEqual(await err(as(A(s1), CUSTOM_FIELD_BATCH_SQL.upsert, [org, [hrs.id, note.id], [p1, p1], ["21", "123"]])), "", "a bad value fails the whole statement (104's shape guard)");
+  assert.equal(((await as(A(s1), `SELECT value FROM custom_field_value WHERE def_id = $1`, [hrs.id]))[0] as { value: number }).value, 20, "nothing changed");
+  await q(`INSERT INTO users(id, email, name) VALUES ($1, $2, 'Fixture 08')`, [id(8), `${id(8)}@example.invalid`]);
+  await q(`INSERT INTO org_staff (access_code_id, user_id, role) VALUES ($1, $2, 'staff')`, [org, id(8)]);
+  assert.notEqual(await err(as(A(id(8)), CUSTOM_FIELD_BATCH_SQL.upsert, [org, [hrs.id], [p1], ["5"]])), "", "an unassigned colleague's batch is refused by the reach policy");
+  await as(A(id(8)), CUSTOM_FIELD_BATCH_SQL.clear, [org, [hrs.id], [p1]]);
+  assert.equal((await as(A(s1), `SELECT value FROM custom_field_value WHERE def_id = $1`, [hrs.id])).length, 1, "and cannot clear anything");
+  await as(A(s1), CUSTOM_FIELD_BATCH_SQL.clear, [org, [hrs.id, note.id], [p1, p1]]);
+  assert.equal((await as(A(s1), `SELECT value FROM custom_field_value WHERE entity_id = $1`, [p1])).length, 0, "one statement clears many cells");
 
   // Account deletion takes a person's log with it (by foreign key).
   await q(`DELETE FROM users WHERE id = $1`, [s2]);

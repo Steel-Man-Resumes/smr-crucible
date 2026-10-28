@@ -160,13 +160,18 @@ export function PeopleGrid(props: PeopleGridProps) {
     return !!def && isSensitiveField(def) && !revealed.has(col);
   }, [defsByColumn, revealed]);
 
-  const textOf = useCallback((rowId: string, col: string): string => {
+  /**
+   * A cell's words. `forCopy`: a sensitive answer never leaves by the
+   * clipboard, even after "Show" (showing is for reading on this screen; the
+   * export's own tick is the only way out).
+   */
+  const textOf = useCallback((rowId: string, col: string, forCopy = false): string => {
     const row = rowsById.get(rowId);
     if (!row) return "";
     const def = defsByColumn.get(col);
     if (!def) return builtinText(col, row);
     const v = valueOf(rowId, col);
-    if (isMasked(col)) return isEmpty(v) ? "" : MASK;
+    if (isMasked(col) || (forCopy && isSensitiveField(def))) return isEmpty(v) ? "" : MASK;
     return formatCustomFieldValue(def, v, staffNames);
   }, [rowsById, defsByColumn, builtinText, valueOf, isMasked, staffNames]);
 
@@ -318,7 +323,7 @@ export function PeopleGrid(props: PeopleGridProps) {
       const line = dataLines[r];
       if (!line) continue;
       const row: string[] = [];
-      for (let c = range.c0; c <= range.c1; c++) row.push(textOf(line.rowId, gridCols[c]));
+      for (let c = range.c0; c <= range.c1; c++) row.push(textOf(line.rowId, gridCols[c], true));
       m.push(row);
     }
     return toTsv(m);

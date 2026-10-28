@@ -387,6 +387,19 @@ export type BatchValuesResult =
   | { ok: true; values: FieldValueMap; written: number }
   | { ok: false; error: string; cellErrors?: Record<string, string> };
 
+/** The grid's two statements (exported so the pglite test runs these exact strings). $1 org, then parallel arrays. */
+export const CUSTOM_FIELD_BATCH_SQL = {
+  /** $2 def ids, $3 participant ids, $4 values (JSON text). */
+  upsert: `INSERT INTO custom_field_value (def_id, entity_id, access_code_id, participant_user_id, value)
+           SELECT x.def_id, x.entity_id, $1::uuid, x.entity_id, x.value
+             FROM unnest($2::uuid[], $3::uuid[], $4::jsonb[]) AS x(def_id, entity_id, value)
+           ON CONFLICT (def_id, entity_id) DO UPDATE SET value = EXCLUDED.value
+           WHERE custom_field_value.value IS DISTINCT FROM EXCLUDED.value`,
+  /** $2 def ids, $3 participant ids. */
+  clear: `DELETE FROM custom_field_value v USING unnest($2::uuid[], $3::uuid[]) AS x(def_id, entity_id)
+            WHERE v.access_code_id = $1::uuid AND v.def_id = x.def_id AND v.entity_id = x.entity_id`,
+};
+
 /** The key a cell error is reported under: "<participant id>:<field key>". */
 export const cellKey = (entityId: string, key: string) => `${entityId.toLowerCase()}:${key}`;
 
@@ -462,17 +475,16 @@ export async function setFieldValuesBatch(
   if (bad) return { ok: false, error: bad === 1 ? "Nothing was saved. One cell needs a fix." : `Nothing was saved. ${bad} cells need a fix.`, cellErrors };
   if (upserts.length || clears.length) {
     try {
+      // Two statements whatever the size: one upsert over unnest, one delete.
       await runScoped(scopeOf(actor), (sql) => [
-        ...upserts.map((u) =>
-          run(sql)(
-            `INSERT INTO custom_field_value (def_id, entity_id, access_code_id, participant_user_id, value)
-             VALUES ($2::uuid, $3::uuid, $1::uuid, $3::uuid, $4::jsonb)
-             ON CONFLICT (def_id, entity_id) DO UPDATE SET value = EXCLUDED.value
-             WHERE custom_field_value.value IS DISTINCT FROM EXCLUDED.value`,
-            [actor.orgId, u.defId, u.entityId, JSON.stringify(u.value)],
-          )),
-        ...clears.map((c) =>
-          run(sql)(`DELETE FROM custom_field_value WHERE access_code_id = $1::uuid AND entity_id = $2::uuid AND def_id = $3::uuid`, [actor.orgId, c.entityId, c.defId])),
+        ...(upserts.length ? [run(sql)(
+          CUSTOM_FIELD_BATCH_SQL.upsert,
+          [actor.orgId, upserts.map((u) => u.defId), upserts.map((u) => u.entityId), upserts.map((u) => JSON.stringify(u.value))],
+        )] : []),
+        ...(clears.length ? [run(sql)(
+          CUSTOM_FIELD_BATCH_SQL.clear,
+          [actor.orgId, clears.map((c) => c.defId), clears.map((c) => c.entityId)],
+        )] : []),
       ]);
     } catch (err) {
       return { ok: false, error: plainDbError(err, "Nothing was saved. Try again.") };

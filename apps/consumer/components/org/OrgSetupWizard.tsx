@@ -14,6 +14,7 @@
  * renders: one question per screen, big targets, works at phone width,
  * keyboard and screen reader friendly (each step's heading takes focus).
  */
+import { useOrgRole } from "@/components/RoleProvider";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
@@ -75,7 +76,7 @@ export function OrgSetupWizard() {
   if (loaded === "denied") return (
     <Frame>
       <h1 className="text-2xl font-bold text-t-white mb-2">Set up your organization</h1>
-      <p className="text-sm text-t-phos">Only your organization&apos;s owner can change its setup. Ask them, or look at how it is organized on the Structure page.</p>
+      <p className="text-sm text-t-phos">Only someone who manages your organization&apos;s settings can change its setup. Ask them, or look at how it is organized on the Structure page.</p>
       <Link href="/dashboard/structure" className="t-focus inline-block mt-4 text-sm font-semibold text-t-amber-bright underline underline-offset-4">Structure</Link>
     </Frame>
   );
@@ -271,6 +272,8 @@ function UnitEditor({ unit, path, s, onChange }: { unit: UnitDraft; path: TreePa
 }
 
 function ModulesStep({ s, onChange }: { s: WizardState; onChange: (n: WizardState) => void }) {
+  // t.ROY for staff spends the organization's AI money: the owner's switch (AI cost is the owner's).
+  const isOwner = useOrgRole().orgRole === "owner";
   return (
     <fieldset>
       <legend className="text-sm text-t-phos-dim mb-4">Switch on what helps. Anything off stays out of your team&apos;s way, and you can turn it on later.</legend>
@@ -278,10 +281,12 @@ function ModulesStep({ s, onChange }: { s: WizardState; onChange: (n: WizardStat
         {ORG_MODULES.map((m) => (
           <li key={m}>
             <label className="flex items-start gap-3 bg-t-panel border border-t-line px-4 py-3 cursor-pointer min-h-[44px]">
-              <input type="checkbox" className="t-focus mt-1" checked={s.modules[m]} onChange={(e) => onChange(setModule(s, m, e.target.checked))} />
+              <input type="checkbox" className="t-focus mt-1" checked={s.modules[m]} disabled={m === "ai_assist" && !isOwner}
+                onChange={(e) => onChange(setModule(s, m, e.target.checked))} />
               <span>
                 <span className="block text-sm font-semibold text-t-white">{MODULE_INFO[m].label}</span>
                 <span className="block text-xs text-t-phos-dim">{MODULE_INFO[m].help}</span>
+                {m === "ai_assist" && !isOwner && <span className="block text-xs text-t-amber-bright">Only your organization&apos;s owner turns this on or off, because AI cost is the owner&apos;s.</span>}
               </span>
             </label>
           </li>

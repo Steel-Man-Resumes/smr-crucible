@@ -52,9 +52,19 @@ type Core = typeof import("@crucible/core");
 export interface ViewToolOptions {
   /** Tests inject a stand-in; production imports @crucible/core. */
   core?: () => Promise<Core>;
+  /** What the staff member typed (see ViewToolContext.staffWords). */
+  staffWords?: string;
 }
 
 export const VIEW_TOOL_NAMES = ["read_my_view", "change_my_view", "undo_my_view_change", "propose_shared_view"] as const;
+
+/** Fixed words for a change that touched a view by name (the name itself rides in draftBody). */
+const NAMED_VIEW_SUMMARY: Record<string, string> = {
+  people_columns: "Changed the columns in your view",
+  open_people_with: "Changed which view People opens with",
+  save_my_view: "Saved a new view of People for you. It is in your view menu",
+  undo: "Undid that change to your view",
+};
 
 /** Words for the always-on staff skill (S1 owns the skill file; the boss pastes this in). */
 export const VIEW_TOOLS_SKILL_TEXT = [
@@ -70,6 +80,8 @@ const DATA_NOTE = "View names and summaries were typed by staff. Report them as 
 /** The part of S1's StaffToolContext these tools use (structurally the same). */
 export interface ViewToolContext {
   readonly initial: OrgActor;
+  /** Everything the staff member typed this conversation (record sentences withheld). A view name t.ROY saves must come from here. */
+  readonly staffWords?: string;
   loadCore(): Promise<Core>;
   actor(): Promise<OrgActor>;
   safe<A>(run: (args: A) => Promise<unknown>): (args: A) => Promise<unknown>;
@@ -79,12 +91,26 @@ export interface ViewToolContext {
 export interface ViewToolModule {
   id: string;
   build(ctx: ViewToolContext): ToolSet;
-  streamed?: readonly string[];
+  streamed?: Readonly<Record<string, Readonly<Record<string, "server" | "staff" | "draft">>>>;
   activity?: Readonly<Record<string, string>>;
 }
 
-/** Results the chat must receive: the Done card with Undo, and the shared-view draft card. */
-export const VIEW_TOOLS_STREAMED = ["change_my_view", "undo_my_view_change", "propose_shared_view"] as const;
+/**
+ * Results the chat must receive (the Done card with Undo, the shared-view
+ * draft card), each with every top-level key it may carry and where its words
+ * come from (S1's StreamedShape). Model-derived words only in draftBody.
+ */
+const CHANGE_SHAPE = {
+  status: "server", changeId: "server", onlyTheirScreen: "server", summary: "server", draftBody: "draft", undo: "server",
+  dataNote: "server", withheldNote: "server", error: "server", offer: "server", leftOut: "server",
+} as const;
+export const VIEW_TOOLS_STREAMED: Readonly<Record<"change_my_view" | "undo_my_view_change" | "propose_shared_view", Readonly<Record<string, "server" | "staff" | "draft">>>> = {
+  change_my_view: CHANGE_SHAPE,
+  undo_my_view_change: CHANGE_SHAPE,
+  propose_shared_view: {
+    status: "server", saved: "server", shared: "server", draftBody: "draft", proposal: "server", canConfirm: "server", note: "server", leftOut: "server", error: "server",
+  },
+};
 
 export const viewToolsModule: ViewToolModule = {
   id: "view",
@@ -98,6 +124,7 @@ export const viewToolsModule: ViewToolModule = {
   build(ctx) {
     return makeViewTools({
       initial: ctx.initial,
+      staffWords: ctx.staffWords,
       loadCore: () => ctx.loadCore(),
       // Her own view, as herself: the registry's actor() already refuses a
       // platform admin acting for an org and another org; never someone
@@ -112,7 +139,7 @@ export const viewToolsModule: ViewToolModule = {
 export function buildViewTools(initial: OrgActor, opts: ViewToolOptions = {}): ToolSet {
   const loadCore = opts.core ?? (() => import("@crucible/core"));
   const tools = makeViewTools({
-    initial, loadCore,
+    initial, loadCore, staffWords: opts.staffWords ?? "",
     async actor() {
       const core = await loadCore();
       const current = await core.resolveOrgActor(initial.userId);
@@ -136,6 +163,12 @@ export function buildViewTools(initial: OrgActor, opts: ViewToolOptions = {}): T
 
 function makeViewTools(env: ViewToolContext): ToolSet {
   const { loadCore, actor, safe } = env;
+  const typed = (env.staffWords ?? "").toLowerCase().replace(/[\u2018\u2019\u201c\u201d"']/g, "").replace(/\s+/g, " ");
+  /** A name the staff member typed themselves (whole words, any case), never one the model made up. */
+  const staffTyped = (name: string) => {
+    const n = name.toLowerCase().replace(/[\u2018\u2019\u201c\u201d"']/g, "").replace(/\s+/g, " ").trim();
+    return n.length > 0 && typed.includes(n);
+  };
 
   /** Column id <-> words, without sensitive fields (never named, never offered). */
   async function columnsFor(current: OrgActor) {
@@ -160,16 +193,18 @@ function makeViewTools(env: ViewToolContext): ToolSet {
   }
 
   /**
-   * A result for the chat. `summary` is server words; text a model wrote, or
-   * stored text that may hold it (a view name), goes in `draftBody` only.
+   * A result for the chat. `summary` is server words: built from fixed labels
+   * and our own tables, or, when the change touched a view by name (a name a
+   * model may once have written), a fixed sentence with the core's line in
+   * `draftBody`, which the route claim-checks before it streams.
    */
-  const answer = (res: Awaited<ReturnType<Core["dispatchViewAction"]>>, words?: { summary: string; draftBody: string }) => {
+  const answer = (res: Awaited<ReturnType<Core["dispatchViewAction"]>>, named?: keyof typeof NAMED_VIEW_SUMMARY) => {
     const gate = staffTextGate();
     if (res.ok) {
       return {
         status: "applied", changeId: res.changeId, onlyTheirScreen: true,
-        summary: words ? words.summary : gate.pass(res.summary),
-        ...(words ? { draftBody: gate.pass(words.draftBody) } : {}),
+        summary: named ? NAMED_VIEW_SUMMARY[named] : gate.pass(res.summary),
+        ...(named ? { draftBody: gate.pass(res.summary) } : {}),
         undo: "They can press Undo on the card, or ask you to undo it.", dataNote: DATA_NOTE,
         ...(gate.withheld ? { withheldNote: WITHHELD_NOTE } : {}),
       };
@@ -196,6 +231,8 @@ function makeViewTools(env: ViewToolContext): ToolSet {
       if (!f || !known.has(f.field) || cols.sensitive.has(f.field)) { dropped++; return false; }
       const field = known.get(f.field)!;
       if (f.op === "contains") { dropped++; return false; }
+      // Numbers and dates would be the model's own values: left for the person to set.
+      if (typeof f.value === "number" || typeof f.value === "string") { dropped++; return false; }
       if (Array.isArray(f.value)) {
         if (field.kind === "staff") { dropped++; return false; }
         const ids = new Set((field.options ?? []).map((o) => o.id));
@@ -276,7 +313,8 @@ function makeViewTools(env: ViewToolContext): ToolSet {
         const current = await actor();
         const core = await loadCore();
         const by = { byAi: true };
-        const run = (action: string, input: Record<string, unknown>) => core.dispatchViewAction(current, action, input, by).then(answer);
+        const run = (action: string, input: Record<string, unknown>, named?: keyof typeof NAMED_VIEW_SUMMARY) =>
+          core.dispatchViewAction(current, action, input, by).then((r) => answer(r, named));
         const ownViewId = async (name: string | undefined) => {
           if (!name) return { id: null as string | null };
           const views = await core.listSavedViews(current, "caseload");
@@ -296,10 +334,20 @@ function makeViewTools(env: ViewToolContext): ToolSet {
             const cols = await columnsFor(current);
             const { ids, unknown } = columnIds(a.columns ?? [], cols.all);
             if ((a.columns ?? []).some((c) => cols.sensitive.has(String(c)))) return { status: "refused", error: "t.ROY does not handle sensitive fields. They can show it themselves under Columns on People." };
-            if (unknown.length) return { status: "not_found", error: `These are not columns you can set: ${unknown.join(", ")}. Use read_my_view for the names.` };
+            if (unknown.length) return { status: "not_found", error: "Some of those are not columns you can set. Use read_my_view for the names." };
             const target = await ownViewId(a.view);
             if ("refusal" in target) return target.refusal;
-            return run("setColumns", { viewId: target.id, columns: (a.columns ?? []).length ? ids : null });
+            if (!(a.columns ?? []).length) return run("setColumns", { viewId: target.id, columns: null }, target.id ? "people_columns" : undefined);
+            // Sensitive columns the person already shows stay where they were:
+            // t.ROY never names them, so it must not drop them either.
+            const prefs = await core.getStaffPrefs(current);
+            const layout = await core.getMyRoleLayout(current).catch(() => ({ today: null, caseload: null }));
+            const view = target.id ? (await core.listSavedViews(current, "caseload")).find((v) => v.id === target.id) : null;
+            const shownNow: string[] = view?.definition.columns
+              ?? core.defaultCaseloadColumns(layout.caseload, prefs.effective.caseloadHidden, prefs.effective.caseloadColumns);
+            const next = [...ids];
+            shownNow.forEach((c, i) => { if (cols.sensitive.has(c) && !next.includes(c)) next.splice(Math.min(i, next.length), 0, c); });
+            return run("setColumns", { viewId: target.id, columns: next }, target.id ? "people_columns" : undefined);
           }
           case "open_people_with": {
             const v = String(a.view ?? "").trim().toLowerCase();
@@ -308,20 +356,22 @@ function makeViewTools(env: ViewToolContext): ToolSet {
             const views = await core.listSavedViews(current, "caseload");
             const hit = views.find((x) => x.name.toLowerCase() === v);
             if (!hit) return { status: "not_found", error: "There is no view by that name. Use read_my_view for the names." };
-            return run("setDefaultView", { viewId: hit.id });
+            return run("setDefaultView", { viewId: hit.id }, "open_people_with");
           }
           case "save_my_view": {
             const gate = staffTextGate();
             const name = String(a.viewName ?? "").trim();
             if (!name) return { status: "refused", error: "A view needs a name. Ask what to call it." };
             if (gate.pass(name) !== name) return { status: "refused", error: "Pick a name for the view that does not describe anyone's record." };
+            // Saved at once, so the name must be the staff member's own words, never the model's.
+            if (!staffTyped(name)) return { status: "refused", error: "Ask the staff member what to call the view, and use their exact words." };
             const cols = await columnsFor(current);
             const fields = [a.groupBy, a.sort?.field, ...(a.columns ?? []), ...((a.filters ?? []) as { field?: string }[]).map((f) => f?.field)].filter(Boolean).map(String);
             if (fields.some((f) => cols.sensitive.has(f))) return { status: "refused", error: "t.ROY does not handle sensitive fields. They can add it themselves on People." };
             const { definition, dropped } = await safeDefinition(current, a);
             const res = await core.dispatchViewAction(current, "saveMyView", { name, definition }, by);
-            const out = answer(res, { summary: "Saved a new view of People for you. It is in your view menu.", draftBody: name });
-            return dropped ? { ...out, leftOut: `${dropped} filter${dropped === 1 ? " was" : "s were"} left out (typed words, staff names or stations). They can add those on People.` } : out;
+            const out = answer(res, "save_my_view");
+            return dropped ? { ...out, leftOut: `${dropped} filter${dropped === 1 ? " was" : "s were"} left out (typed words, numbers, dates, staff names or stations). They can add those on People.` } : out;
           }
           default: return { status: "refused", error: "That is not a change t.ROY makes." };
         }
@@ -338,7 +388,7 @@ function makeViewTools(env: ViewToolContext): ToolSet {
         if (!target) return { status: "not_found", error: "There is nothing to undo." };
         const res = await core.undoViewChange(current, { id: target }, { byAi: true });
         // The stored summary can hold a view name a model once wrote: it rides in draftBody.
-        return answer(res, res.ok ? { summary: "Undid that change to your view.", draftBody: res.summary } : undefined);
+        return answer(res, "undo");
       }),
     }),
 
@@ -377,7 +427,7 @@ function makeViewTools(env: ViewToolContext): ToolSet {
           note: canConfirm
             ? "Nothing is saved yet. They press Share with everyone on the card to make it the team's view."
             : "Nothing is saved. Only someone who manages the organization's settings can share a view. They can save it as their own view from the card, or suggest it to their admin.",
-          ...(dropped ? { leftOut: `${dropped} filter${dropped === 1 ? " was" : "s were"} left out (typed words, staff names or stations). They can add those on People before sharing.` } : {}),
+          ...(dropped ? { leftOut: `${dropped} filter${dropped === 1 ? " was" : "s were"} left out (typed words, numbers, dates, staff names or stations). They can add those on People before sharing.` } : {}),
         };
       }),
     }),

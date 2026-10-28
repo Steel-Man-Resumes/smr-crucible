@@ -44,11 +44,23 @@ export async function getPolicyRows(actor: OrgActor): Promise<PolicyRow[]> {
  * changes nothing personal there (the app keeps them read-only), so they get
  * the staff answer, the narrowest one.
  */
-export async function getMyCustomizationPolicy(actor: OrgActor): Promise<PolicyAllowed> {
+export async function getMyCustomizationPolicy(actor: OrgActor, opts: { forWrite?: boolean } = {}): Promise<PolicyAllowed> {
   if (actor.role === "owner" && !actor.viaPlatformAdmin) return { ...ALL_ALLOWED };
-  const rows = await getPolicyRows(actor).catch(() => []);
+  let rows: PolicyRow[];
+  try {
+    // A missing 108 table is "nothing set yet" (getPolicyRows answers []).
+    rows = await getPolicyRows(actor);
+  } catch (err) {
+    // Any other failure never opens the limits: a write stops here; a read
+    // treats every personal choice as locked (the organization's defaults show).
+    if (opts.forWrite) throw err;
+    return { ...NONE_ALLOWED };
+  }
   return resolvePolicy(actor.viaPlatformAdmin ? "staff" : actor.role, rows);
 }
+
+/** Every switch off: what a read uses when the policy cannot be read. */
+const NONE_ALLOWED: PolicyAllowed = Object.fromEntries(Object.keys(ALL_ALLOWED).map((k) => [k, false])) as PolicyAllowed;
 
 /** Every role's switches, for the Layouts page. */
 export async function getAllCustomizationPolicies(actor: OrgActor): Promise<Record<PolicyRole, PolicyAllowed>> {

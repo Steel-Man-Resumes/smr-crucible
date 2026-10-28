@@ -77,7 +77,7 @@ const PREF_WORDS: Partial<Record<keyof StaffPrefs, string>> = {
 export async function setOwnStaffPrefs(actor: OrgActor, prefs: unknown): Promise<SetPrefsResult> {
   const [u, allowed] = await Promise.all([
     getOne<{ staff_prefs: unknown }>(`SELECT staff_prefs FROM users WHERE id = $1`, [actor.userId]),
-    getMyCustomizationPolicy(actor),
+    getMyCustomizationPolicy(actor, { forWrite: true }),
   ]);
   const before = normalizeStaffPrefs(u?.staff_prefs);
   const after = normalizeStaffPrefs(prefs);

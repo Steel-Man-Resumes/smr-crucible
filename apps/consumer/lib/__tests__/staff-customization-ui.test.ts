@@ -139,3 +139,18 @@ test("words: no em or en dashes in the new screens and tools", () => {
     assert.doesNotMatch(read(f), /[–—]/, f);
   }
 });
+
+test("review round 1: the logo stays the owner's; the AI switch is the owner's in the wizard", () => {
+  const brand = read("app/api/org/brand/route.ts");
+  assert.match(brand, /const isLogoOwner = \(a: \{ role: string; viaPlatformAdmin: boolean \}\) => a\.role === "owner" && !a\.viaPlatformAdmin;/);
+  assert.equal((brand.match(/if \(!isLogoOwner\(guard\.actor\)\) return NextResponse\.json\(\{ error: OWNER_ONLY \}, \{ status: 403 \}\);/g) ?? []).length, 2, "POST and DELETE");
+  assert.match(brand, /canManage: isLogoOwner\(actor\)/);
+  const wiz = read("components/org/OrgSetupWizard.tsx");
+  assert.match(wiz, /disabled=\{m === "ai_assist" && !isOwner\}/);
+  assert.match(wiz, /because AI cost is the owner&apos;s/);
+});
+
+test("review round 1: a copied sensitive answer stays hidden even after Show", () => {
+  assert.match(read("components/org/PeopleGrid.tsx"), /if \(isMasked\(col\) \|\| \(forCopy && isSensitiveField\(def\)\)\) return isEmpty\(v\) \? "" : MASK;/);
+  assert.match(read("components/org/PeopleGrid.tsx"), /row\.push\(textOf\(line\.rowId, gridCols\[c\], true\)\)/);
+});

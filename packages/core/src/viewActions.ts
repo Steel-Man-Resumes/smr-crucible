@@ -21,8 +21,8 @@ import type { OrgActor } from "./authz/resolveOrgActor";
 import { getMyCustomizationPolicy, isPolicyTableMissing } from "./customizationPolicy";
 import { isSensitiveField, type CustomFieldDef } from "./customFieldsShared";
 import { listFieldDefs } from "./customFields";
-import { createSavedView, deleteSavedView, getMyRoleLayout, listSavedViews, updateSavedView, type SavedViewRecord } from "./savedViews";
-import { BUILTIN_COLUMN_LABELS, defaultCaseloadColumns, normalizeViewDefinition, type ViewDefinition } from "./savedViewsShared";
+import { createSavedView, deleteSavedView, getMyRoleLayout, listSavedViews, personalViewPolicyRefusal, updateSavedView, type SavedViewRecord } from "./savedViews";
+import { BUILTIN_COLUMN_LABELS, MAX_PERSONAL_VIEWS, cleanViewName, defaultCaseloadColumns, normalizeViewDefinition, type ViewDefinition } from "./savedViewsShared";
 import { normalizeStaffPrefs, resolveStaffPrefs, type StaffPrefs } from "./staffPrefsShared";
 import { lockedChanges, lockedMessage, type PolicyAllowed } from "./customizationPolicyShared";
 import {
@@ -59,7 +59,7 @@ async function loadOwn(actor: OrgActor): Promise<OwnState> {
     runScoped<[{ staff_prefs: unknown; defaults: unknown }[]]>(scopeOf(actor), (sql) => [
       run(sql)(`SELECT u.staff_prefs, (SELECT a.staff_pref_defaults FROM access_code a WHERE a.id = $2::uuid) AS defaults FROM users u WHERE u.id = $1::uuid`, [actor.userId, actor.orgId]),
     ]),
-    getMyCustomizationPolicy(actor),
+    getMyCustomizationPolicy(actor, { forWrite: true }),
   ]);
   const r = rows[0][0];
   return { own: normalizeStaffPrefs(r?.staff_prefs), orgDefaults: normalizeStaffPrefs(r?.defaults), allowed };
@@ -298,10 +298,48 @@ export async function latestUndoableChange(actor: OrgActor, opts: { byAiOnly?: b
   return list.find((e) => !e.undoneAt && e.action !== "undo" && (!opts.byAiOnly || e.byAi)) ?? null;
 }
 
+/*
+ * The undo statements (exported so the pglite test runs these exact
+ * strings). Params: $1 user, $2 org, $3 the change being undone, then each
+ * statement's own. The first step is always the conditional mark.
+ */
+const MARK = `m AS (UPDATE view_change_log SET undone_at = now()
+      WHERE id = $3::uuid AND user_id = $1::uuid AND access_code_id = $2::uuid AND undone_at IS NULL RETURNING id)`;
+const LOG_COLS = `(access_code_id, user_id, surface, action, target, summary, before, after, by_ai, undoes)`;
+export const VIEW_UNDO_SQL = {
+  /** $4 view, $5 summary, $6 before. */
+  removeCreated: `WITH ${MARK}, d AS (DELETE FROM saved_view WHERE id = $4::uuid AND owner_user_id = $1::uuid AND access_code_id = $2::uuid AND EXISTS (SELECT 1 FROM m) RETURNING id)
+           INSERT INTO view_change_log ${LOG_COLS}
+           SELECT $2::uuid, $1::uuid, 'views', 'undo', 'view:' || d.id, $5, $6::jsonb, 'null'::jsonb, $7, $3::uuid FROM d RETURNING id`,
+  /** $4 name, $5 definition, $6 position, $7 summary, $8 after, $9 by_ai. Returns id and view_id. */
+  restoreRemoved: `WITH ${MARK}, c AS (INSERT INTO saved_view (access_code_id, owner_user_id, surface, name, definition, position, created_by)
+               SELECT $2::uuid, $1::uuid, 'caseload', $4, $5::jsonb, $6, $1::uuid WHERE EXISTS (SELECT 1 FROM m) RETURNING id)
+           INSERT INTO view_change_log ${LOG_COLS}
+           SELECT $2::uuid, $1::uuid, 'views', 'undo', 'view:' || c.id, $7, 'null'::jsonb, $8::jsonb, $9, $3::uuid FROM c RETURNING id, (SELECT id FROM c) AS view_id`,
+  /** $4 view, $5 name, $6 definition, $7 summary, $8 before, $9 after, $10 by_ai. */
+  putBack: `WITH ${MARK}, u AS (UPDATE saved_view SET name = $5, definition = $6::jsonb, updated_at = now()
+             WHERE id = $4::uuid AND owner_user_id = $1::uuid AND access_code_id = $2::uuid AND EXISTS (SELECT 1 FROM m) RETURNING id)
+         INSERT INTO view_change_log ${LOG_COLS}
+         SELECT $2::uuid, $1::uuid, 'views', 'undo', 'view:' || u.id, $7, $8::jsonb, $9::jsonb, $10, $3::uuid FROM u RETURNING id`,
+  /** $4 prefs, $5 surface, $6 target, $7 summary, $8 before, $9 after, $10 by_ai. */
+  prefs: `WITH ${MARK}, p AS (UPDATE users SET staff_prefs = $4::jsonb || CASE WHEN jsonb_typeof(staff_prefs->'viewsMovedTo') = 'array'
+             THEN jsonb_build_object('viewsMovedTo', staff_prefs->'viewsMovedTo') ELSE '{}'::jsonb END
+           WHERE id = $1::uuid AND EXISTS (SELECT 1 FROM m) RETURNING id)
+       INSERT INTO view_change_log ${LOG_COLS}
+       SELECT $2::uuid, $1::uuid, $5, 'undo', $6, $7, $8::jsonb, $9::jsonb, $10, $3::uuid FROM p RETURNING id`,
+};
+
 /**
  * Undo one of your own changes: put what it changed back to how it was just
  * before it. The undo is a change too (logged, and it can be undone). The
  * organization's policy still applies: a choice it now locks is not written.
+ *
+ * ONCE, IN THE DATABASE. Every undo is ONE statement whose first step is the
+ * conditional mark (`... SET undone_at = now() WHERE ... AND undone_at IS
+ * NULL RETURNING id`); the change and the new log row run only if that mark
+ * took. Two undos of the same change at once: the second finds it marked and
+ * changes nothing. A change that fails (a name taken) rolls the mark back with
+ * it, so nothing is half done.
  */
 export async function undoViewChange(actor: OrgActor, input: { id: string }, ctx: ViewActionContext = {}): Promise<ViewActionResult> {
   if (!canChangeOwnView(actor)) return NO_ACCESS;
@@ -309,41 +347,50 @@ export async function undoViewChange(actor: OrgActor, input: { id: string }, ctx
   if (!entry) return { ok: false, reason: "missing", error: "That change is not in your list." };
   const plan = planUndo(entry);
   if (!plan.ok) return plan;
-  const markUndone = async () => {
-    try {
-      await runScoped(scopeOf(actor), (sql) => [
-        run(sql)(`UPDATE view_change_log SET undone_at = now() WHERE id = $1::uuid AND user_id = $2::uuid AND access_code_id = $3::uuid AND undone_at IS NULL`, [entry.id, actor.userId, actor.orgId]),
-      ]);
-    } catch (err) { console.error("view change undo mark failed:", (err as Error)?.message ?? err); }
+  const ALREADY: ViewActionResult = { ok: false, reason: "unchanged", error: "That change was already undone." };
+  const { removeCreated, restoreRemoved, putBack, prefs: prefsUndo } = VIEW_UNDO_SQL;
+  const one = async (text: string, params: unknown[]) => {
+    const [rows] = await runScoped<[{ id: string; view_id?: string }[]]>(scopeOf(actor), (sql) => [run(sql)(text, params)]);
+    return rows[0] ?? null;
   };
 
   if (plan.kind === "view") {
     const now = (await listSavedViews(actor, "caseload")).find((v) => v.id === plan.viewId && v.ownerUserId === actor.userId) ?? null;
-    let result: ViewActionResult;
-    if (!plan.restore) {
-      // It was created: undo removes it (if it is still here).
-      if (!now) { await markUndone(); return { ok: false, reason: "unchanged", error: "That view is already gone." }; }
-      if (!(await deleteSavedView(actor, now.id))) return { ok: false, reason: "failed", error: "That did not undo. Try again." };
-      result = { ok: true, changeId: null, summary: plan.summary, target: entry.target, before: viewRecord(now), after: null, view: null };
-    } else if (!now) {
-      // It was removed: undo brings it back (a new id, the same name and arrangement).
-      const res = await createSavedView(actor, { surface: "caseload", name: plan.restore.name, definition: plan.restore.definition, shared: false });
-      if (!res.ok) return { ok: false, reason: "failed", error: res.error };
-      result = { ok: true, changeId: null, summary: plan.summary, target: `view:${res.view.id}`, before: null, after: viewRecord(res.view), view: res.view };
-    } else {
-      const res = await updateSavedView(actor, now.id, { name: plan.restore.name, definition: plan.restore.definition });
-      if (!res.ok) return { ok: false, reason: "failed", error: res.error };
-      result = { ok: true, changeId: null, summary: plan.summary, target: entry.target, before: viewRecord(now), after: viewRecord(res.view), view: res.view };
-    }
-    await markUndone();
-    let changeId: string | null = null;
     try {
-      const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
-        run(sql)(LOG_INSERT, logParams(actor, { surface: "views", action: "undo", target: result.ok ? result.target : entry.target, summary: plan.summary, before: result.ok ? result.before : null, after: result.ok ? result.after : null }, !!ctx.byAi, entry.id)),
-      ]);
-      changeId = rows[0]?.id ?? null;
-    } catch (err) { if (!isPolicyTableMissing(err)) console.error("view change log failed:", (err as Error)?.message ?? err); }
-    return result.ok ? { ...result, changeId } : result;
+      if (!plan.restore) {
+        // It was created: undo removes it (if it is still here).
+        if (!now) return { ok: false, reason: "unchanged", error: "That view is already gone." };
+        const row = await one(
+          removeCreated,
+          [actor.userId, actor.orgId, entry.id, now.id, plan.summary, JSON.stringify(viewRecord(now)), !!ctx.byAi]);
+        return row ? { ok: true, changeId: row.id, summary: plan.summary, target: entry.target, before: viewRecord(now), after: null, view: null } : ALREADY;
+      }
+      const def = normalizeViewDefinition(plan.restore.definition);
+      const name = cleanViewName(plan.restore.name);
+      if (!name) return { ok: false, reason: "invalid", error: "That view's name could not be put back." };
+      const refusal = await personalViewPolicyRefusal(actor, def);
+      if (refusal) return { ok: false, reason: "policy", error: refusal };
+      if (!now) {
+        // It was removed: undo brings it back (a new id, the same name and arrangement).
+        const mine = (await listSavedViews(actor, "caseload")).filter((v) => v.ownerUserId === actor.userId);
+        if (mine.length >= MAX_PERSONAL_VIEWS) return { ok: false, reason: "failed", error: "That is the most views a list can hold. Remove one first." };
+        const row = await one(
+          restoreRemoved,
+          [actor.userId, actor.orgId, entry.id, name, JSON.stringify(def), mine.length, plan.summary, JSON.stringify({ name, definition: def }), !!ctx.byAi]);
+        if (!row) return ALREADY;
+        const view = (await listSavedViews(actor, "caseload")).find((v) => v.id === row.view_id) ?? null;
+        return { ok: true, changeId: row.id, summary: plan.summary, target: `view:${row.view_id}`, before: null, after: { name, definition: def }, view };
+      }
+      const row = await one(
+        putBack,
+        [actor.userId, actor.orgId, entry.id, now.id, name, JSON.stringify(def), plan.summary, JSON.stringify(viewRecord(now)), JSON.stringify({ name, definition: def }), !!ctx.byAi]);
+      if (!row) return ALREADY;
+      const view = (await listSavedViews(actor, "caseload")).find((v) => v.id === now.id) ?? null;
+      return { ok: true, changeId: row.id, summary: plan.summary, target: entry.target, before: viewRecord(now), after: { name, definition: def }, view };
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      return { ok: false, reason: "failed", error: code === "23505" ? "You already have a view with that name. Rename it, then undo again." : "That did not undo. Try again." };
+    }
   }
 
   const s = await loadOwn(actor);
@@ -367,12 +414,16 @@ export async function undoViewChange(actor: OrgActor, input: { id: string }, ctx
   const normalized = normalizeStaffPrefs(nextOwn);
   const blocked = lockedChanges(s.own, normalized, s.allowed);
   if (blocked.length) return { ok: false, reason: "policy", error: lockedMessage(blocked) };
-  if (JSON.stringify(before ?? null) === JSON.stringify(after ?? null)) {
-    await markUndone();
-    return { ok: false, reason: "unchanged", error: "It is already back to how it was." };
+  try {
+    // Mark, then the prefs (same rule as PREFS_UPDATE: viewsMovedTo survives), then the log row: one statement.
+    const row = await one(
+      prefsUndo,
+      [actor.userId, actor.orgId, entry.id, JSON.stringify(normalized), entry.surface, target, plan.summary, JSON.stringify(before ?? null), JSON.stringify(after ?? null), !!ctx.byAi]);
+    if (!row) return ALREADY;
+    return { ok: true, changeId: row.id, summary: plan.summary, target, before, after, prefs: resolveStaffPrefs(s.orgDefaults, normalized, s.allowed) };
+  } catch {
+    return { ok: false, reason: "failed", error: "That did not undo. Try again." };
   }
-  const prefPlan: PrefPlan = { ok: true, nextOwn: normalized, change: { surface: entry.surface, action: "undo", target, summary: plan.summary, before, after } };
-  return commitPref(actor, s, prefPlan, ctx, { of: entry.id });
 }
 
 /* ---------------------------------------------------------- one door ---- */
@@ -383,6 +434,16 @@ export async function undoViewChange(actor: OrgActor, input: { id: string }, ctx
  * cleans its own.
  */
 export async function dispatchViewAction(actor: OrgActor, action: unknown, input: Record<string, unknown>, ctx: ViewActionContext = {}): Promise<ViewActionResult> {
+  try {
+    return await dispatchOne(actor, action, input, ctx);
+  } catch (err) {
+    // The policy could not be read, or the database failed: nothing changed.
+    console.error("view action failed:", (err as Error)?.message ?? err);
+    return { ok: false, reason: "failed", error: "That change did not save. Try again." };
+  }
+}
+
+async function dispatchOne(actor: OrgActor, action: unknown, input: Record<string, unknown>, ctx: ViewActionContext): Promise<ViewActionResult> {
   const i = input && typeof input === "object" && !Array.isArray(input) ? input : {};
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   const viewId = typeof i.viewId === "string" && i.viewId ? i.viewId : null;

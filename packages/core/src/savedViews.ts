@@ -168,8 +168,13 @@ export async function updateSavedView(actor: OrgActor, id: string, patch: { name
  * Why a personal view may not be saved as asked, or null. Personal views need
  * `personal_views`; a personal view that picks its own columns needs `columns`.
  */
+export async function personalViewPolicyRefusal(actor: OrgActor, def: ViewDefinition): Promise<string | null> {
+  return personalViewRefusal(actor, def);
+}
 async function personalViewRefusal(actor: OrgActor, def: ViewDefinition): Promise<string | null> {
-  const allowed = await getMyCustomizationPolicy(actor);
+  let allowed;
+  try { allowed = await getMyCustomizationPolicy(actor, { forWrite: true }); }
+  catch { return "That view did not save. Try again."; }
   if (!allowed.personal_views) return `${POLICY_LOCKED_TEXT.personal_views} ${SUGGEST_CHANGE_LINE}`;
   if (!allowed.columns && def.columns !== null) return `${POLICY_LOCKED_TEXT.columns} ${SUGGEST_CHANGE_LINE}`;
   return null;
@@ -177,6 +182,17 @@ async function personalViewRefusal(actor: OrgActor, def: ViewDefinition): Promis
 
 export async function deleteSavedView(actor: OrgActor, id: string): Promise<boolean> {
   if (!canUseViews(actor) || !UUID.test(id)) return false;
+  // With personal views turned off for this role (108), a personal view is
+  // neither listed nor removed: it stays stored, unchanged, until the switch
+  // opens again (and its owner sees it, and its Undo, again).
+  try {
+    const [own] = await runScoped<[{ owner_user_id: string | null }[]]>(scopeOf(actor), (sql) => [
+      run(sql)(`SELECT owner_user_id FROM saved_view WHERE id = $2::uuid AND access_code_id = $1::uuid`, [actor.orgId, id]),
+    ]);
+    if (own[0]?.owner_user_id && !(await getMyCustomizationPolicy(actor, { forWrite: true })).personal_views) return false;
+  } catch {
+    return false;
+  }
   try {
     const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
       run(sql)(
