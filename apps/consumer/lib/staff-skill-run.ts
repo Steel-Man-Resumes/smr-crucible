@@ -117,7 +117,8 @@ export function streamedShapeProblem(s: StreamedToolResult, shapes: ReadonlyMap<
   const result = s.result as Record<string, unknown> | null;
   if (!result || typeof result !== "object" || Array.isArray(result)) return `${s.toolName} returned something that is not a result`;
   for (const key of Object.keys(result)) {
-    const source = shape[key];
+    // Own keys only (review round 3): "constructor" or "toString" are not declarations.
+    const source = Object.hasOwn(shape, key) ? shape[key] : undefined;
     if (!source) return `${s.toolName} returned an undeclared field "${key}"`;
     if (source === "draft" && key !== "draftBody") return `${s.toolName} declares "${key}" as model-written`;
   }

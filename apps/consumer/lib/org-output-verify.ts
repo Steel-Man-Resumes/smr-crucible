@@ -128,13 +128,28 @@ const NO_MATCH_CLAUSE = new RegExp(
 const PREFILL_NAME = "[A-Z][a-z]*(?:['\u2019-][A-Z][a-z]+)*(?:\\s+(?:(?:de|la|del|van|von|der|da|di|le)\\s+){0,3}[A-Z][a-z]*(?:['\u2019-][A-Z][a-z]+)*){0,3}";
 const PREFILL_CLAUSE = new RegExp(
   "^(?:" +
-    `(?:I(?:\\s+have|['\u2019]ve)?\\s+)?(?:filled\\s+in|opened|set\\s+up|prepared)\\s+(?:the\\s+)?Add\\s+people(?:\\s+form)?\\s+(?:for|with)\\s+${PREFILL_NAME}(?:\\s+(?:with|and)\\s+their\\s+email)?(?:\\s+filled\\s+in)?` +
+    `(?:I(?:\\s+have|['\u2019]ve)?\\s+)?(?:filled\\s+in|opened|set\\s+up|prepared)\\s+(?:the\\s+)?Add\\s+people(?:\\s+form)?\\s+(?:for|with)\\s+(${PREFILL_NAME})(?:\\s+(?:with|and)\\s+their\\s+email)?(?:\\s+filled\\s+in)?` +
     "|" +
-    `${PREFILL_NAME}['\u2019]s\\s+details\\s+are\\s+(?:filled\\s+in|ready)(?:\\s+(?:on|in)\\s+Add\\s+people)?` +
+    `(${PREFILL_NAME})['\u2019]s\\s+details\\s+are\\s+(?:filled\\s+in|ready)(?:\\s+(?:on|in)\\s+Add\\s+people)?` +
     "|" +
-    `Open\\s+Add\\s+people\\s+for\\s+${PREFILL_NAME}` +
+    `Open\\s+Add\\s+people\\s+for\\s+(${PREFILL_NAME})` +
   ")\\s*[.!?]?\\s*$"
 );
+
+const NAME_PARTICLES = new Set(["de", "la", "del", "van", "von", "der", "da", "di", "le"]);
+
+/**
+ * The prefill allowance (review round 3): the whole sentence has the
+ * filled-in shape AND every word matched as the name is the new person's
+ * typed name or a particle, so "for Michael Shaw Hired." gets nothing.
+ */
+function prefillSentenceOk(sentence: string, newPerson: ReadonlySet<string>): boolean {
+  const m = sentence.match(PREFILL_CLAUSE);
+  if (!m) return false;
+  const name = m.slice(1).find((g) => g !== undefined);
+  if (!name) return false;
+  return name.split(/[\s'\u2019-]+/).filter(Boolean).every((w) => newPerson.has(w.toLowerCase()) || NAME_PARTICLES.has(w));
+}
 
 /** The whole sentence (or line) of `text` around index `i`. The prefill allowance needs the whole sentence, not one clause. */
 function sentenceAt(text: string, i: number): string {
@@ -210,7 +225,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // An email address is contact detail too (lane S1, review round 2): it is
   // read as "their email", so its parts are never counts or names, and the
   // sentence it sits in stays whole for the prefill rule.
-  text = text.replace(/[^\s@()<>,;:"']+@[^\s@()<>,;:"']+\.[A-Za-z]{2,24}\b/g, "their email");
+  // Answer path only (review round 3): in a draft for a participant an email
+  // can carry a name ("Marcus.Jones@..."), and the full person check stays.
+  if (opts?.typedNamesInNoMatch) text = text.replace(/[^\s@()<>,;:"']+@[^\s@()<>,;:"']+\.[A-Za-z]{2,24}\b/g, "their email");
   // Whole phrases a tool returned (a job title, a listing, a note) are
   // repeating the record, not new claims. Only the whole phrase: a name
   // inside one is still checked when it appears on its own (review C4 S1).
@@ -317,7 +334,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     const low = c.toLowerCase();
     if (STOPWORDS.has(low) || known.has(low) || flagged.has(c)) continue;
     if (typed.has(low) && NO_MATCH_CLAUSE.test(clauseAt(text, m.index ?? 0))) continue;
-    if (newPerson.has(low) && PREFILL_CLAUSE.test(sentenceAt(text, m.index ?? 0))) continue;
+    if (newPerson.has(low) && prefillSentenceOk(sentenceAt(text, m.index ?? 0), newPerson)) continue;
     flagged.add(c);
     problems.push(`I could not match "${c}" to anyone on your list`);
   }

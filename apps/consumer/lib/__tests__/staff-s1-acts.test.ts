@@ -462,3 +462,33 @@ it("review R2-3: every result our own streamed tools can return keeps the declar
   await push(viaAdmin, "add Rosa", "open_add_person", { firstName: "Rosa" });
   for (const r of results) assert.equal(streamedShapeProblem({ toolCallId: "x", args: {}, ...r }, shapes), null, `${r.toolName} ${String(r.result.status)}`);
 });
+
+/* ------------------------------------------------- review round 3 fixes -- */
+
+it("review R3-1: emails are read as 'their email' only on the answer path; a draft keeps the name inside one", () => {
+  const f: OrgFacts = { caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jordan"], staffNames: [] };
+  assert.ok(checkOrgClaimsDeterministic("Hi Jordan, write to Marcus.Jones@acme.com about the job.", f).some((p) => p.includes("Marcus")), "draft path: must flag");
+});
+
+it("review R3-2: every word read as the name must be the new person's typed name or a particle", async () => {
+  const words = "fill in add people for michael shaw";
+  const { run, evidence } = toolsFor(staff, words);
+  await run("open_add_person", { firstName: "michael", lastName: "shaw" });
+  const f = facts(evidence);
+  for (const bad of ["I filled in Add people for Michael Shaw Hired.", "I filled in Add people for Michael Shaw Never Started.", "Open Add people for Michael Shaw Placed."]) {
+    assert.ok(checkOrgClaimsDeterministic(bad, f, words, { typedNamesInNoMatch: true }).length > 0, bad);
+  }
+  assert.deepEqual(checkOrgClaimsDeterministic("I filled in Add people for Michael Shaw.", f, words, { typedNamesInNoMatch: true }), []);
+  const juan = toolsFor(staff, "add juan de la cruz");
+  await juan.run("open_add_person", { firstName: "juan", lastName: "de la cruz" });
+  assert.deepEqual(checkOrgClaimsDeterministic("I filled in Add people for Juan de la Cruz.", facts(juan.evidence), "add juan de la cruz", { typedNamesInNoMatch: true }), []);
+});
+
+it("review R3-3: declarations are own keys only; prototype names are not declared", () => {
+  const shapes = new Map([["make_card", { status: "server" } as const]]);
+  for (const key of ["constructor", "toString", "__proto__", "hasOwnProperty"]) {
+    const result = JSON.parse(`{"status":"ok","${key}":"Marcus got hired at $40"}`);
+    assert.match(String(streamedShapeProblem({ toolCallId: "x", toolName: "make_card", args: {}, result }, shapes)), /undeclared field/, key);
+  }
+  assert.ok(streamedDeclarationProblems([{ id: "p", build: () => ({}), streamed: { t: Object.create({ status: "server" }) } } as never]).some((p) => /status must be declared/.test(p)));
+});

@@ -68,7 +68,7 @@ export function streamedDeclarationProblems(modules: readonly StaffToolModule[] 
         if (!["server", "staff", "draft"].includes(source)) problems.push(`${m.id}.${toolName}.${key}: unknown source ${String(source)}`);
         if (source === "draft" && key !== "draftBody") problems.push(`${m.id}.${toolName}.${key}: only draftBody may hold model-written words`);
       }
-      if (!("status" in shape)) problems.push(`${m.id}.${toolName}: status must be declared`);
+      if (!Object.hasOwn(shape, "status")) problems.push(`${m.id}.${toolName}: status must be declared`);
     }
   }
   return problems;
