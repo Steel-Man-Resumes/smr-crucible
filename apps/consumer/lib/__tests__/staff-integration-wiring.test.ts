@@ -110,3 +110,28 @@ it("the registry stays browser-safe: no staff tool module imports core at run ti
     assert.doesNotMatch(code, /(?<!typeof )import\(\s*["']@crucible\/core["']\s*\)/, f);
   }
 });
+
+it("a t.ROY handoff draft passes the route's claim check on its words, and a bad one is still held", async () => {
+  // Before integration every draft_handoff was held: the checker read our labels ("Item 2 why:")
+  // and an ISO date's year as names and caseload figures.
+  const { checkOrgClaimsDeterministic } = await import("../org-output-verify");
+  const { checkStreamedDrafts } = await import("../staff-skill-run");
+  const { composeDraftBody, handoffDraftProse } = await import("../handoff-draft-body");
+  const facts = { caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Alma"], staffNames: [], orgName: "Lakeshore Works (Demo)" };
+  const check = (b: string) => checkOrgClaimsDeterministic(b, facts);
+  const card = (note: string, why: string) => {
+    const { draftBody, shapes } = composeDraftBody(note, [
+      { kind: "employer", employerId: UUID, name: "Lakeshore Works (Demo)", role: "Forklift operator", why },
+      { kind: "resource", resourceId: UUID, name: "Example Food Shelf", why: "Food help near you while you look." },
+      { kind: "next_step", step: "Bring your ID to our office", dueOn: "2026-11-05", why: "So we can start your application together." },
+    ]);
+    return { toolCallId: "h", toolName: "draft_handoff", args: {}, result: { status: "needs_confirmation", action: "handoff_draft", clientId: UUID, firstName: "Alma", items: shapes, draftBody, sent: false, saved: false, message: "x" } };
+  };
+  const good = checkStreamedDrafts([card("Alma, here are a few things that could help this week.", "They hire people with records and they are close to you.")], check);
+  assert.equal(good.kept.length, 1, good.notice);
+  assert.match(handoffDraftProse(String((card("Hi.", "Why.").result as { draftBody: string }).draftBody)), /By November 5\./);
+  for (const [note, why] of [["Alma, a few things.", "Ask for Marcus at the front desk."], ["Alma, a few things.", "It pays $22 an hour."], ["Alma, Jordan got hired there.", "They hire people with records."]]) {
+    const out = checkStreamedDrafts([card(note, why)], check);
+    assert.equal(out.kept.length, 0, `${note} / ${why} is held`);
+  }
+});

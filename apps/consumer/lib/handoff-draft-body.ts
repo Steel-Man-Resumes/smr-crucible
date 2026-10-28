@@ -89,3 +89,30 @@ export function parseDraftBody(draftBody: string, shapes: readonly DraftItemShap
   }
   return note.length >= 3 ? { note, items } : null;
 }
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/**
+ * The draft's model-written words as plain prose, for the route's claim check
+ * (integration 2026-10-28). The labels ("Note:", "Item 2 why:") are ours; read
+ * as text they made every draft fail ("Item" and a field's first word looked
+ * like names, an ISO date's year like a caseload figure), so the check held
+ * back every handoff draft. Here each field is its own sentence, as in a
+ * prose draft (offer_staff_draft), and a due date reads "By November 3",
+ * the way a draft would write it. Any line that is not ours is kept as it is,
+ * so nothing escapes the check.
+ */
+export function handoffDraftProse(draftBody: string): string {
+  const sentence = (t: string) => { const s = t.trim(); return !s ? "" : /[.!?]$/.test(s) ? s : `${s}.`; };
+  return String(draftBody ?? "").split("\n").map((line) => {
+    if (line.startsWith("Note: ")) return sentence(line.slice(6));
+    const m = ITEM_LINE.exec(line);
+    if (!m) return sentence(line);
+    if (m[2] === "by") {
+      const d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(m[3].trim());
+      const month = d ? MONTHS[Number(d[2]) - 1] : undefined;
+      return d && month ? `By ${month} ${Number(d[3])}.` : sentence(m[3]);
+    }
+    return sentence(m[3]);
+  }).filter(Boolean).join(" ");
+}

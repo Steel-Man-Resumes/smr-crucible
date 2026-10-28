@@ -20,6 +20,10 @@ import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 import { STAFF_SKILLS, type StaffSkillId } from "./staff-troy";
 import { skillRunInputSummary } from "./staff-ai-safety";
 import { staffStreamedTools, staffStreamedShapes, type StreamedShape } from "./tools/staff";
+import { handoffDraftProse } from "./handoff-draft-body";
+
+/** Cards that pack model words under our own labels are checked as the prose they hold (S5's handoff: "Item 2 why: ..."). */
+const DRAFT_CHECK_TEXT: Readonly<Record<string, (body: string) => string>> = { draft_handoff: handoffDraftProse };
 
 export const GENERAL_SKILL = "staff-general";
 
@@ -147,7 +151,7 @@ export function checkStreamedDrafts(streamed: readonly StreamedToolResult[], che
     if (bad) { held.push(bad); continue; }
     const body = (s.result as { draftBody?: unknown } | null)?.draftBody;
     if (body === undefined) { kept.push(s); continue; }
-    const problems = typeof body === "string" ? check(body) : ["the draft was not text"];
+    const problems = typeof body === "string" ? check((DRAFT_CHECK_TEXT[s.toolName] ?? ((b: string) => b))(body)) : ["the draft was not text"];
     if (problems.length) held.push(...problems); else kept.push(s);
   }
   const notice = held.length
