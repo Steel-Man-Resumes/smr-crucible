@@ -12,7 +12,7 @@
  * it from either one who later cannot.
  */
 import { NextResponse } from "next/server";
-import { giveKudos, withdrawKudos, listColleagues } from "@crucible/core";
+import { giveKudos, withdrawKudos, listKudosColleagues } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 import { effectiveAuth } from "@/lib/effective-auth";
 import { mayWrite, recordWordsIn, RECORD_WORDS_REFUSAL, VIEWING_REFUSAL } from "@/lib/staff-rewards-route";
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   if (guard.viewing || guard.actor.viaPlatformAdmin) return NextResponse.json({ colleagues: [] });
-  const colleagues = await listColleagues(guard.actor);
+  const colleagues = await listKudosColleagues(guard.actor);
   return NextResponse.json({ colleagues: colleagues.map((c) => ({ userId: c.userId, name: c.name })) }, { headers: { "Cache-Control": "private, no-store" } });
 }
 

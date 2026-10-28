@@ -10,7 +10,7 @@
  * take it back. The words carry no record details.
  */
 import { NextResponse } from "next/server";
-import { listOrgRecognitionNotes, writeRecognitionNote, answerRecognitionNote, listColleagues } from "@crucible/core";
+import { listOrgRecognitionNotes, writeRecognitionNote, answerRecognitionNote, listKudosColleagues } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 import { effectiveAuth } from "@/lib/effective-auth";
 import { mayWrite, recordWordsIn, RECORD_WORDS_REFUSAL, VIEWING_REFUSAL } from "@/lib/staff-rewards-route";
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
   if (guard.viewing || guard.actor.viaPlatformAdmin) return NextResponse.json({ notes: [], forReport: [], staff: [] });
   const notes = await listOrgRecognitionNotes(guard.actor);
   if (!notes) return NextResponse.json({ error: "Only the owner or an org admin sees these." }, { status: 403 });
-  const staff = (await listColleagues(guard.actor)).map((c) => ({ userId: c.userId, name: c.name }));
+  const staff = (await listKudosColleagues(guard.actor)).map((c) => ({ userId: c.userId, name: c.name }));
   return NextResponse.json({ notes, forReport: notes.filter((n) => n.status === "approved"), staff }, { headers: { "Cache-Control": "private, no-store" } });
 }
 

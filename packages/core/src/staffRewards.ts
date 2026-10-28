@@ -155,10 +155,10 @@ export async function staffUnlocks(actor: OrgActor): Promise<UnlockKey[]> {
 
 /* -------------------------------------------------------- good catches -- */
 
-export interface Colleague { userId: string; firstName: string | null; name: string | null }
+export interface KudosColleague { userId: string; firstName: string | null; name: string | null }
 
 /** Everyone on this organization's staff (and its owner) except me. Names only. */
-export async function listColleagues(actor: OrgActor): Promise<Colleague[]> {
+export async function listKudosColleagues(actor: OrgActor): Promise<KudosColleague[]> {
   if (actor.viaPlatformAdmin) return [];
   const rows = await one<{ user_id: string; name: string | null }>(actor,
     `SELECT u.id AS user_id, u.name FROM users u
@@ -378,7 +378,7 @@ export interface WinsPayload {
   /** Good catches to me are a colleague's thanks, not a game: shown whatever the switch says. */
   kudos: { received: KudosView[]; given: KudosView[] };
   recognition: RecognitionNote[];
-  colleagues: Colleague[];
+  colleagues: KudosColleague[];
   /** Everything below is empty while the switch is off. */
   milestones: EarnedMilestone[];
   newMilestones: EarnedMilestone[];
@@ -392,7 +392,7 @@ export interface WinsPayload {
 /** Everything the Wins page shows, in one read. */
 export async function getWins(actor: OrgActor, nowMs = Date.now(), approvedThisMonth = 0): Promise<WinsPayload> {
   const [settings, program, kudos, recognition, colleagues] = await Promise.all([
-    getRewardsSettings(actor), getProgramRewards(actor), listKudos(actor), listMyRecognitionNotes(actor), listColleagues(actor),
+    getRewardsSettings(actor), getProgramRewards(actor), listKudos(actor), listMyRecognitionNotes(actor), listKudosColleagues(actor),
   ]);
   const base: WinsPayload = {
     settings, program, kudos, recognition, colleagues,
