@@ -421,7 +421,8 @@ export async function setFieldValuesBatch(
   opts: { fromGrid?: boolean; gridAllowed?: boolean } = {},
 ): Promise<BatchValuesResult> {
   if (!canWriteFieldValues(actor)) return { ok: false, error: "You do not have access to that." };
-  if (opts.fromGrid && opts.gridAllowed === false) {
+  // Every batch is a grid write (final review nit 7): only an explicit yes from the policy lets it through.
+  if (opts.gridAllowed !== true) {
     return { ok: false, error: "Your organization has fields filled in on each person's page, not in the grid. If it should change, ask whoever manages your organization's settings." };
   }
   if (!Array.isArray(items) || !items.length) return { ok: false, error: "Nothing to save." };

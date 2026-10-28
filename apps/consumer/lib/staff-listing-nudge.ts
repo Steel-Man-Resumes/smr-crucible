@@ -43,7 +43,13 @@ export async function listingNudgeFor(
   if (actor.viaPlatformAdmin) return null;
   const on = opts.suggestionsOn ?? (await suggestionsOn(actor, opts.loadCore));
   if (!on) return null;
-  const claimed = await (await opts.loadCore()).claimListingNudge(actor, listing.kind, listing.id).catch(() => false);
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(listing.id ?? ""))) return null;
+  const core = await opts.loadCore();
+  // The listing must exist (final review nit 8): a miss is quiet and writes nothing.
+  const found = await (listing.kind === "employer" ? core.getVerifiedEmployer(listing.id, ["A", "B"]) : core.getVerifiedResource(listing.id, ["A", "B", "C"]))
+    .then((r) => r.status === "ok" && !!r.data).catch(() => false);
+  if (!found) return null;
+  const claimed = await core.claimListingNudge(actor, listing.kind, listing.id).catch(() => false);
   if (!claimed) return null;
   return {
     line: LISTING_NUDGE_LINE,

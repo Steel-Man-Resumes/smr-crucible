@@ -26,21 +26,23 @@ export type DraftItemShape =
 
 /** Split checked items into the server-computed shape and the model-written body. */
 export function composeDraftBody(note: string, items: HandoffItemInput[]): { draftBody: string; shapes: DraftItemShape[] } {
+  // A newline inside a model-written field would start a new line of the body (final review nit 9).
+  const one = (v: string) => String(v ?? "").replace(/[\r\n]+/g, " ").trim();
   const lines = [`Note: ${note}`];
   const shapes: DraftItemShape[] = [];
   items.forEach((it, i) => {
     const n = i + 1;
     if (it.kind === "employer") {
       shapes.push({ kind: "employer", employerId: it.employerId, name: it.name, location: it.location ?? null, applyUrl: it.applyUrl ?? null });
-      lines.push(`Item ${n} role: ${it.role}`);
+      lines.push(`Item ${n} role: ${one(it.role)}`);
     } else if (it.kind === "resource") {
       shapes.push({ kind: "resource", resourceId: it.resourceId, name: it.name });
     } else if (it.kind === "next_step") {
       shapes.push({ kind: "next_step" });
-      lines.push(`Item ${n} step: ${it.step}`);
+      lines.push(`Item ${n} step: ${one(it.step)}`);
       if (it.dueOn) lines.push(`Item ${n} by: ${it.dueOn}`);
     }
-    if (it.kind !== "job") lines.push(`Item ${n} why: ${it.why}`);
+    if (it.kind !== "job") lines.push(`Item ${n} why: ${one(it.why)}`);
   });
   return { draftBody: lines.join("\n"), shapes };
 }

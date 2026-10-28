@@ -127,7 +127,9 @@ test("routes: every new door checks the right capability, and writes refuse view
   }
   assert.match(view, /\{ byAi: false \}/);
   const values = read("app/api/org/fields/values/route.ts");
-  assert.match(values, /setFieldValuesBatch\(guard\.actor, body\.batch, \{ fromGrid, gridAllowed: allowed\?\.grid_edit \?\? true \}\)/);
+  // Final review nit 7: a batch always checks grid_edit, whether or not the body says fromGrid; a failed policy read is a no.
+  assert.match(values, /setFieldValuesBatch\(guard\.actor, body\.batch, \{ fromGrid: true, gridAllowed: allowed\?\.grid_edit === true \}\)/);
+  assert.match(values, /getMyCustomizationPolicy\(guard\.actor, \{ forWrite: true \}\)/);
   assert.match(values, /requireOrgCapability\("org\.note\.write", \{ request \}\)/);
 });
 

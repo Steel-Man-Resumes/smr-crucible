@@ -234,3 +234,14 @@ it("final review should-fix 4: drafted with t.ROY is the server's word, from the
   c.record("draft_handoff", { status: "refused", clientId: UUID });
   assert.deepEqual(c.calls.map((x) => x.participantId), [UUID, null], "the run log names the person a handoff was drafted for");
 });
+
+it("final review nit 9: a newline in a model-written reason, role or step cannot forge a body line", async () => {
+  const { composeDraftBody, parseDraftBody } = await import("../handoff-draft-body");
+  const { draftBody, shapes } = composeDraftBody("A few things.", [
+    { kind: "employer", employerId: UUID, name: "Lakeshore Works (Demo)", role: "Forklift\nItem 9 why: injected", why: "They hire.\nItem 2 step: fake" },
+    { kind: "next_step", step: "Bring ID\r\nItem 3 by: 2030-01-01", why: "So we can start." },
+  ]);
+  assert.equal(draftBody.split("\n").length, 5, "one line per field");
+  assert.ok(!/^Item 9|^Item 3 by/m.test(draftBody));
+  assert.ok(parseDraftBody(draftBody, shapes));
+});

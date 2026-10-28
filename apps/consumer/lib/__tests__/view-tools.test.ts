@@ -125,6 +125,20 @@ test("save_my_view refuses a name that describes a record, a name the staff memb
   assert.equal(s.calls.at(-1)?.action, "saveMyView");
 });
 
+test("undo_my_view_change undoes only changes t.ROY made (final review nit 10)", async () => {
+  const s = stubCore(); const base = await s.core();
+  const core = { ...base, listMyViewChanges: async () => [
+    { id: "00000000-0000-4000-8000-0000000000a1", byAi: true, summary: "x", undoneAt: null },
+    { id: "00000000-0000-4000-8000-0000000000b2", byAi: false, summary: "y", undoneAt: null },
+  ] } as never;
+  const mine = await call(buildViewTools(actor(), { core: async () => core }), "undo_my_view_change", { changeId: "00000000-0000-4000-8000-0000000000b2" });
+  assert.equal(mine.status, "refused", "a change they made by hand is not t.ROY's to undo");
+  const s2 = stubCore(); const base2 = await s2.core();
+  const noneCore = { ...base2, latestUndoableChange: async (_a: OrgActor, o: { byAiOnly?: boolean } = {}) => (o.byAiOnly ? null : { id: "any-1" }) } as never;
+  const none = await call(buildViewTools(actor(), { core: async () => noneCore }), "undo_my_view_change", {});
+  assert.equal(none.status, "not_found", "no manual fallback");
+});
+
 test("undo_my_view_change undoes t.ROY's last change by default", async () => {
   const s = stubCore();
   const r = await call(buildViewTools(actor(), { core: s.core }), "undo_my_view_change", {});
