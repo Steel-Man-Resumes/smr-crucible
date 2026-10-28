@@ -75,6 +75,10 @@ describe("inbox: what an item says and where it goes", () => {
     assert.equal(inboxSentence(row({ participant_name: null })), "Alma Reyes mentioned you in a comment about a person who has not shared their name.");
     assert.equal(inboxSentence(row({ participant_user_id: null, summary: "asked for a change to the fields" })), "Alma Reyes asked for a change to the fields.");
     assert.equal(inboxSentence(row({ actor_user_id: null })).startsWith("Someone who has left the team"), true);
+    // Items with no actor by design (integration 2026-10-28) never read as "someone who has left".
+    assert.equal(inboxSentence({ ...row({ actor_user_id: null, summary: "took on something from your handoff" }), ref_table: "staff_handoff" }), "Jordan took on something from your handoff.");
+    assert.equal(inboxSentence({ ...row({ actor_user_id: null, participant_name: null, summary: "passed on something in your handoff" }), ref_table: "staff_handoff" }), "A person who has not shared their name passed on something in your handoff.");
+    assert.equal(inboxSentence({ ...row({ actor_user_id: null, participant_user_id: null, summary: "your update to the directory was approved" }), ref_table: "directory_contribution" }), "Your update to the directory was approved.");
     assert.equal(inboxPerson(row({ participant_user_id: null })), null);
   });
   it("each item links to where its source lives (which checks reach again)", () => {
@@ -84,7 +88,11 @@ describe("inbox: what an item says and where it goes", () => {
     assert.equal(inboxHref(row({ ref_table: "staff_task", participant_user_id: null })), "/dashboard/today");
     assert.equal(inboxHref(row({ ref_table: "org_change_request", participant_user_id: null })), `/dashboard/change-requests#cr-${B}`);
     assert.equal(inboxHref(row({ ref_table: "case_note" })), `/dashboard/clients/${A}?tab=notes#note-${B}`);
-    assert.equal(inboxHref(row({ ref_table: "staff_kudos" })), "/dashboard/inbox");
+    // Integration 2026-10-28: S6's sources go to Wins and Contribute, S5's handoff answers to the person's tasks tab.
+    assert.equal(inboxHref(row({ ref_table: "staff_kudos" })), "/dashboard/wins");
+    assert.equal(inboxHref(row({ ref_table: "staff_recognition_note" })), "/dashboard/wins");
+    assert.equal(inboxHref(row({ ref_table: "directory_contribution" })), "/dashboard/contribute");
+    assert.equal(inboxHref(row({ ref_table: "nothing_known" })), "/dashboard/inbox");
     assert.equal(inboxHref(row({ participant_user_id: "../../admin", ref_id: "x" })), "/dashboard/inbox?view=team#comment-", "nothing odd gets into a link");
   });
   it("filters cover only known kinds, and every kind has a label", () => {
@@ -253,7 +261,10 @@ describe("migration 109, statically", () => {
     }
   });
   it("inbox kinds and source tables match the CHECKs", () => {
-    assert.deepEqual(sqlList("kind                TEXT NOT NULL CHECK (kind IN"), [...INBOX_KINDS]);
+    // 109's list, then 111 (S6) widens it from the live CHECK with recognition and contribution_answered.
+    const m111 = readFileSync(join(import.meta.dirname, "..", "..", "migrations", "111_staff_rewards.sql"), "utf8");
+    const s6 = (m111.match(/'kind', 'staff_inbox_item_kind_check', ARRAY\[([^\]]*)\]/)?.[1] ?? "").match(/'([a-z_]+)'/g)?.map((x) => x.slice(1, -1)) ?? [];
+    assert.deepEqual([...sqlList("kind                TEXT NOT NULL CHECK (kind IN"), ...s6], [...INBOX_KINDS]);
   });
   it("the task handoff guard skips definer paths and checks the new owner's reach", () => {
     const body = MIG.slice(MIG.indexOf("FUNCTION public.staff_task_assign_guard"), MIG.indexOf("REVOKE ALL ON FUNCTION public.staff_task_assign_guard"));

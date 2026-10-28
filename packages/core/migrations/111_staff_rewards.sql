@@ -533,6 +533,15 @@ BEGIN
       n := n + public.staff_milestone_grant(v_me, v_org, 'first_referral_loop_closed', NULL)::int;
     END IF;
   END IF;
+  -- A handoff sent (110), whatever the person does with it (integration 2026-10-28; 110 also grants it
+  -- at send time). Derived here too, so turning Wins on later finds it.
+  IF to_regclass('public.staff_handoff') IS NOT NULL THEN
+    EXECUTE $q$SELECT EXISTS (SELECT 1 FROM public.staff_handoff h WHERE h.access_code_id = $1 AND h.author_user_id = $2)$q$
+      INTO STRICT closed USING v_org, v_me;
+    IF closed THEN
+      n := n + public.staff_milestone_grant(v_me, v_org, 'first_handoff_sent', NULL)::int;
+    END IF;
+  END IF;
   -- An ask sent with a clear reason (20 characters or more), whatever the
   -- person answers: never a reward for anyone's consent (review round 1).
   IF EXISTS (SELECT 1 FROM public.sharing_request s WHERE s.access_code_id = v_org AND s.requested_by = v_me
@@ -698,6 +707,68 @@ CREATE POLICY staff_recognition_note_update ON staff_recognition_note FOR UPDATE
               OR written_by = NULLIF(current_setting('app.user_id', true), '')::uuid))
   WITH CHECK (access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid);
 
+-- ------------------------------------------------------- team inbox (109) --
+-- Integration 2026-10-28: a good catch received and a recognition note waiting for an answer reach the
+-- person's Inbox (109 staff_inbox_item), through 109's own writer smr_inbox_write (team member, reach,
+-- never yourself, one unread per thing). 109's kind and ref CHECKs are widened from their LIVE
+-- definitions (values already there are kept), with 'recognition' and 'contribution_answered' (112),
+-- 'staff_recognition_note' and 'directory_contribution'. Everything here skips where 109 is absent.
+CREATE OR REPLACE FUNCTION pg_temp.smr_widen_list_check_s6(tbl regclass, col text, cname text, want text[])
+RETURNS void LANGUAGE plpgsql AS $fn$
+DECLARE
+  c record;
+  have text[] := '{}';
+  allv text[];
+  n int := 0;
+  pat text := '\(' || col || ' = ANY|' || col || ' IN';
+BEGIN
+  FOR c IN SELECT oid FROM pg_constraint WHERE conrelid = tbl AND contype = 'c' AND pg_get_constraintdef(oid) ~ pat LOOP
+    have := have || ARRAY(SELECT replace(m[1], '''''', '''') FROM regexp_matches(pg_get_constraintdef(c.oid), '''((?:[^'']|'''')*)''', 'g') m);
+    n := n + 1;
+  END LOOP;
+  IF n = 1 AND have @> want THEN RETURN; END IF;
+  allv := ARRAY(SELECT DISTINCT v FROM unnest(have || want) v ORDER BY v);
+  FOR c IN SELECT conname FROM pg_constraint WHERE conrelid = tbl AND contype = 'c' AND pg_get_constraintdef(oid) ~ pat LOOP
+    EXECUTE format('ALTER TABLE %s DROP CONSTRAINT %I', tbl, c.conname);
+  END LOOP;
+  EXECUTE format('ALTER TABLE %s ADD CONSTRAINT %I CHECK (%I IN (%s))', tbl, cname, col,
+                 (SELECT string_agg(quote_literal(v), ', ') FROM unnest(allv) v));
+END
+$fn$;
+DO $$
+BEGIN
+  IF to_regclass('public.staff_inbox_item') IS NOT NULL THEN
+    PERFORM pg_temp.smr_widen_list_check_s6('public.staff_inbox_item'::regclass, 'kind', 'staff_inbox_item_kind_check', ARRAY['recognition', 'contribution_answered']);
+    PERFORM pg_temp.smr_widen_list_check_s6('public.staff_inbox_item'::regclass, 'ref_table', 'staff_inbox_item_ref_table_check', ARRAY['staff_recognition_note', 'directory_contribution']);
+  END IF;
+END $$;
+DROP FUNCTION IF EXISTS pg_temp.smr_widen_list_check_s6(regclass, text, text, text[]);
+
+CREATE OR REPLACE FUNCTION public.staff_kudos_inbox() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+BEGIN
+  IF to_regprocedure('public.smr_inbox_write(uuid,uuid,text,uuid,text,uuid,text)') IS NULL THEN RETURN NULL; END IF;
+  PERFORM public.smr_inbox_write(NEW.access_code_id, NEW.to_user_id, 'kudos', NEW.participant_user_id, 'staff_kudos', NEW.id, 'sent you a good catch');
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS staff_kudos_inbox ON staff_kudos;
+CREATE TRIGGER staff_kudos_inbox AFTER INSERT ON staff_kudos FOR EACH ROW EXECUTE FUNCTION public.staff_kudos_inbox();
+REVOKE ALL ON FUNCTION public.staff_kudos_inbox() FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION public.staff_recognition_inbox() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+BEGIN
+  IF to_regprocedure('public.smr_inbox_write(uuid,uuid,text,uuid,text,uuid,text)') IS NULL THEN RETURN NULL; END IF;
+  PERFORM public.smr_inbox_write(NEW.access_code_id, NEW.about_user_id, 'recognition', NULL, 'staff_recognition_note', NEW.id,
+    'asked to use a note about your work in a report. It is used only if you say yes');
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS staff_recognition_inbox ON staff_recognition_note;
+CREATE TRIGGER staff_recognition_inbox AFTER INSERT ON staff_recognition_note FOR EACH ROW EXECUTE FUNCTION public.staff_recognition_inbox();
+REVOKE ALL ON FUNCTION public.staff_recognition_inbox() FROM PUBLIC;
+
 -- ---------------------------------------------------------------- grants --
 REVOKE ALL ON staff_rewards_setting, staff_rewards_org, staff_kudos, staff_milestone, staff_recognition_note FROM PUBLIC;
 DO $$
@@ -722,6 +793,8 @@ BEGIN
     GRANT EXECUTE ON FUNCTION public.staff_kudos_giver_board(int) TO smr_app;
     REVOKE ALL ON FUNCTION public.staff_milestone_grant(uuid, uuid, text, uuid) FROM smr_app;
     REVOKE ALL ON FUNCTION public.staff_milestone_revoke(uuid, uuid, uuid) FROM smr_app;
+    REVOKE ALL ON FUNCTION public.staff_kudos_inbox() FROM smr_app;
+    REVOKE ALL ON FUNCTION public.staff_recognition_inbox() FROM smr_app;
   END IF;
 END $$;
 
@@ -744,6 +817,15 @@ BEGIN
   IF (SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname IN
         ('staff_rewards_setting_guard', 'staff_rewards_org_guard', 'staff_kudos_guard', 'staff_milestone_guard', 'staff_recognition_note_guard')) <> 5 THEN
     RAISE EXCEPTION '111: a guard trigger is missing';
+  END IF;
+  IF (SELECT count(*) FROM pg_trigger WHERE NOT tgisinternal AND tgname IN ('staff_kudos_inbox', 'staff_recognition_inbox')) <> 2 THEN
+    RAISE EXCEPTION '111: an inbox trigger is missing';
+  END IF;
+  IF to_regclass('public.staff_inbox_item') IS NOT NULL THEN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = to_regclass('public.staff_inbox_item')
+         AND contype = 'c' AND pg_get_constraintdef(oid) ~ '''recognition''' AND pg_get_constraintdef(oid) ~ '''kudos''') THEN
+      RAISE EXCEPTION '111: staff_inbox_item does not accept recognition items, or lost 109''s kinds';
+    END IF;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     IF has_table_privilege('smr_app', 'public.staff_milestone', 'INSERT')

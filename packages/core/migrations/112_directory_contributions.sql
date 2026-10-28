@@ -595,6 +595,38 @@ BEGIN
   END IF;
 END $$;
 
+-- The answer reaches the person who sent the update (integration 2026-10-28; 109's inbox, kind
+-- 'contribution_answered', widened by 111). The data owner decides with no org scope, so this writes the
+-- item directly, while the sender is still on that organization's staff. Fixed words, no actor. Skips
+-- where 109 is absent.
+CREATE OR REPLACE FUNCTION public.directory_contribution_inbox() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+DECLARE
+  v_words text := CASE NEW.status WHEN 'approved' THEN 'your update to the directory was approved'
+                                  WHEN 'needs_more' THEN 'the directory team asked for more on your update'
+                                  ELSE 'your update to the directory was not used' END;
+BEGIN
+  IF to_regclass('public.staff_inbox_item') IS NULL OR NEW.submitted_by IS NULL THEN RETURN NULL; END IF;
+  IF NOT public.staff_rewards_member(NEW.access_code_id, NEW.submitted_by) THEN RETURN NULL; END IF;
+  INSERT INTO public.staff_inbox_item (access_code_id, recipient_user_id, kind, actor_user_id, participant_user_id, ref_table, ref_id, summary)
+  VALUES (NEW.access_code_id, NEW.submitted_by, 'contribution_answered', NULL, NULL, 'directory_contribution', NEW.id, v_words)
+  ON CONFLICT (recipient_user_id, kind, ref_id) WHERE read_at IS NULL
+  DO UPDATE SET summary = EXCLUDED.summary, created_at = now();
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS directory_contribution_inbox ON directory_contribution;
+CREATE TRIGGER directory_contribution_inbox AFTER UPDATE OF status ON directory_contribution
+  FOR EACH ROW WHEN (OLD.status IS DISTINCT FROM NEW.status AND NEW.status IN ('approved', 'needs_more', 'not_used'))
+  EXECUTE FUNCTION public.directory_contribution_inbox();
+REVOKE ALL ON FUNCTION public.directory_contribution_inbox() FROM PUBLIC;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+    REVOKE ALL ON FUNCTION public.directory_contribution_inbox() FROM smr_app;
+  END IF;
+END $$;
+
 -- ------------------------------------------------------------ after-guards --
 DO $$
 DECLARE
@@ -611,6 +643,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_listing_nudge'::regclass AND tgname = 'staff_listing_nudge_guard' AND NOT tgisinternal) THEN
     RAISE EXCEPTION '112: the nudge guard is missing';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.directory_contribution'::regclass AND tgname = 'directory_contribution_inbox' AND NOT tgisinternal) THEN
+    RAISE EXCEPTION '112: the answer inbox trigger is missing';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     IF has_table_privilege('smr_app', 'public.directory_contribution', 'INSERT')

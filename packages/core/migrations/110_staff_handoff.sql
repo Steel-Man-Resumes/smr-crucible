@@ -59,7 +59,7 @@
 --   DROP TRIGGER staff_suggestion_item_guard ON staff_suggestion;
 --   DROP TRIGGER org_activity_handoff ON staff_handoff; DROP TRIGGER staff_handoff_guard ON staff_handoff;
 --   DROP TRIGGER staff_handoff_close_items ON staff_handoff; DROP TRIGGER staff_handoff_has_items ON staff_handoff;
---   DROP TRIGGER staff_handoff_answer_inbox ON staff_suggestion;
+--   DROP TRIGGER staff_handoff_answer_inbox ON staff_suggestion; DROP TRIGGER staff_handoff_sent_milestone ON staff_handoff;
 --   UPDATE staff_suggestion SET status = 'withdrawn' WHERE kind IN ('employer', 'resource', 'next_step') AND status = 'open';
 --   (keep the table and columns: history stays readable). Remove the
 --   _migrations row only if the columns and table are dropped too.
@@ -495,6 +495,22 @@ CREATE TRIGGER staff_handoff_answer_inbox AFTER UPDATE OF status ON staff_sugges
   EXECUTE FUNCTION public.staff_handoff_answer_inbox();
 REVOKE ALL ON FUNCTION public.staff_handoff_answer_inbox() FROM PUBLIC;
 
+-- The sender's "Passed it on" milestone (111, lane S6), when a handoff is SENT, whatever the person does
+-- with it. 110 applies before 111, so the call is looked up and made dynamically; before 111 it is a
+-- no-op. 111's grant itself checks team membership and the sender's own Wins switch.
+CREATE OR REPLACE FUNCTION public.staff_handoff_sent_milestone() RETURNS trigger
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+BEGIN
+  IF NEW.author_user_id IS NOT NULL AND to_regprocedure('public.staff_milestone_grant(uuid,uuid,text,uuid)') IS NOT NULL THEN
+    EXECUTE 'SELECT public.staff_milestone_grant($1, $2, ''first_handoff_sent'', $3)' USING NEW.author_user_id, NEW.access_code_id, NEW.id;
+  END IF;
+  RETURN NULL;
+END;
+$$;
+DROP TRIGGER IF EXISTS staff_handoff_sent_milestone ON staff_handoff;
+CREATE TRIGGER staff_handoff_sent_milestone AFTER INSERT ON staff_handoff FOR EACH ROW EXECUTE FUNCTION public.staff_handoff_sent_milestone();
+REVOKE ALL ON FUNCTION public.staff_handoff_sent_milestone() FROM PUBLIC;
+
 -- ------------------------------------------------------------------ grants --
 DO $$
 BEGIN
@@ -511,6 +527,7 @@ BEGIN
     REVOKE ALL ON FUNCTION public.staff_handoff_close_items() FROM smr_app;
     REVOKE ALL ON FUNCTION public.staff_handoff_has_items() FROM smr_app;
     REVOKE ALL ON FUNCTION public.staff_handoff_answer_inbox() FROM smr_app;
+    REVOKE ALL ON FUNCTION public.staff_handoff_sent_milestone() FROM smr_app;
   END IF;
 END $$;
 
@@ -543,7 +560,8 @@ BEGIN
      OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_guard')
      OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_close_items')
      OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_has_items')
-     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_suggestion'::regclass AND tgname = 'staff_handoff_answer_inbox') THEN
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_suggestion'::regclass AND tgname = 'staff_handoff_answer_inbox')
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_sent_milestone') THEN
     RAISE EXCEPTION '110 after-guard: a guard trigger is missing';
   END IF;
   -- Every S5 definer must be owned by a role that bypasses RLS, or it would
@@ -551,13 +569,13 @@ BEGIN
   IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
               WHERE p.pronamespace = 'public'::regnamespace
                 AND p.proname IN ('smr_accept_handoff_step', 'staff_suggestion_item_guard', 'staff_handoff_close_items',
-                                  'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff', 'staff_handoff_answer_inbox')
+                                  'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff', 'staff_handoff_answer_inbox', 'staff_handoff_sent_milestone')
                 AND p.prosecdef AND NOT (r.rolbypassrls OR r.rolsuper)) THEN
     RAISE EXCEPTION '110 after-guard: an S5 definer is owned by a role without BYPASSRLS';
   END IF;
   IF (SELECT count(*) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef
         AND p.proname IN ('smr_accept_handoff_step', 'staff_suggestion_item_guard', 'staff_handoff_close_items',
-                          'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff', 'staff_handoff_answer_inbox')) <> 7 THEN
+                          'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff', 'staff_handoff_answer_inbox', 'staff_handoff_sent_milestone')) <> 8 THEN
     RAISE EXCEPTION '110 after-guard: an S5 definer is missing or not SECURITY DEFINER';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN

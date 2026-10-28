@@ -396,6 +396,6 @@ test("review r1: the promise is true, answerSuggestion is loose-only, the search
 test("review r2: 110 checks every S5 definer is owned by a BYPASSRLS role", () => {
   const mig = readFileSync(new URL("../../migrations/110_staff_handoff.sql", import.meta.url), "utf8");
   assert.match(mig, /an S5 definer is owned by a role without BYPASSRLS/);
-  for (const f of ["smr_accept_handoff_step", "staff_suggestion_item_guard", "staff_handoff_close_items", "staff_handoff_has_items", "org_activity_suggestion", "org_activity_handoff", "staff_handoff_answer_inbox"])
+  for (const f of ["smr_accept_handoff_step", "staff_suggestion_item_guard", "staff_handoff_close_items", "staff_handoff_has_items", "org_activity_suggestion", "org_activity_handoff", "staff_handoff_answer_inbox", "staff_handoff_sent_milestone"])
     assert.ok(mig.includes(`'${f}'`), f);
 });

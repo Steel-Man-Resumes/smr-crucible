@@ -53,7 +53,7 @@ export function mentionRefusedLine(name: string | null | undefined, kind: "out_o
 
 /* ------------------------------------------------------------------ inbox -- */
 
-export const INBOX_KINDS = ["mention", "reply", "task_assigned", "change_request", "change_answered", "note_review", "kudos", "handoff"] as const;
+export const INBOX_KINDS = ["mention", "reply", "task_assigned", "change_request", "change_answered", "note_review", "kudos", "handoff", "recognition", "contribution_answered"] as const;
 export type InboxKind = (typeof INBOX_KINDS)[number];
 
 export const INBOX_KIND_LABELS: Record<InboxKind, string> = {
@@ -63,8 +63,10 @@ export const INBOX_KIND_LABELS: Record<InboxKind, string> = {
   change_request: "Change requests",
   change_answered: "Answers to your requests",
   note_review: "Note reviews",
-  kudos: "Kudos",
+  kudos: "Good catches",
   handoff: "Handoffs",
+  recognition: "Notes about your work",
+  contribution_answered: "Directory answers",
 };
 
 /** The filter chips on the Inbox page, in the order staff think of them. */
@@ -74,6 +76,8 @@ export const INBOX_FILTERS: { key: string; label: string; kinds: InboxKind[] }[]
   { key: "tasks", label: "Tasks for you", kinds: ["task_assigned"] },
   { key: "changes", label: "Change requests", kinds: ["change_request", "change_answered"] },
   { key: "reviews", label: "Note reviews", kinds: ["note_review"] },
+  { key: "thanks", label: "Good catches and notes", kinds: ["kudos", "recognition"] },
+  { key: "work", label: "Handoffs and directory", kinds: ["handoff", "contribution_answered"] },
 ];
 
 export function isInboxKind(v: unknown): v is InboxKind {
@@ -107,6 +111,11 @@ export function inboxHref(row: Pick<InboxItemRow, "ref_table" | "ref_id" | "part
       return `/dashboard/change-requests#cr-${ref}`;
     case "staff_handoff":
       return p ? `/dashboard/clients/${p}?tab=tasks#handoff` : "/dashboard/inbox";
+    case "staff_kudos":
+    case "staff_recognition_note":
+      return "/dashboard/wins";
+    case "directory_contribution":
+      return "/dashboard/contribute";
     case "case_note":
       return p ? `/dashboard/clients/${p}?tab=notes#note-${ref}` : "/dashboard/inbox";
     default:
@@ -124,7 +133,11 @@ export function inboxPerson(row: Pick<InboxItemRow, "participant_user_id" | "par
  * One sentence: "Alma Reyes mentioned you in a comment about Jordan."
  * The summary's "them" becomes the person, by consent.
  */
-export function inboxSentence(row: Pick<InboxItemRow, "summary" | "actor_user_id" | "actor_name" | "participant_user_id" | "participant_name">): string {
+export function inboxSentence(row: Pick<InboxItemRow, "summary" | "actor_user_id" | "actor_name" | "participant_user_id" | "participant_name"> & { ref_table?: string }): string {
+  // Items with no actor by design (integration 2026-10-28): a person's answer to a handoff names the
+  // person (by consent), and the directory team's answer is said plainly. Never "someone who has left".
+  if (row.ref_table === "staff_handoff") return `${inboxPerson(row) ?? "They"} ${row.summary}.`;
+  if (row.ref_table === "directory_contribution") return `${row.summary.charAt(0).toUpperCase()}${row.summary.slice(1)}.`;
   const who = row.actor_user_id ? row.actor_name?.trim() || "A team member" : "Someone who has left the team";
   const person = inboxPerson(row);
   const what = person ? row.summary.replace(/\bthem\b/, person) : row.summary;
