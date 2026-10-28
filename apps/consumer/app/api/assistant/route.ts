@@ -32,7 +32,8 @@ import { effectiveAuth } from "@/lib/effective-auth";
 import { loadSelectedWork, readWorkSelection, selectedWorkPrompt } from "@/lib/assistant-work-context";
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
-import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds } from "@/lib/staff-skill-run";
+import { getClientIp } from "@/lib/auth-rate-limit";
+import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
@@ -308,7 +309,7 @@ export async function POST(request: Request) {
   const staffInput = staffActor ? gateStaffMessages(messages) : null;
   const staffSaid = staffInput ? lastUserText(staffInput.messages) : "";
   const staffNamed = staffActor ? namedParticipantIds(staffSaid, context.org?.visibleParticipants ?? []) : [];
-  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus, namedClientIds: staffNamed }) : buildAssistantTools(toolOptions);
+  const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus, namedClientIds: staffNamed, selectors: context.org?.visibleParticipants ?? [], staffWords: staffTypedWords((staffInput?.messages ?? []) as Record<string, unknown>[]), clientIp: getClientIp(request) }) : buildAssistantTools(toolOptions);
   const capabilities = assistantCapabilities(tools, { role: platformOwner ? "owner" : staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord, extraPages: staffSkill ? [staffSkill] : [] });
   const baseSystemPrompt =
     (platformOwner ? OWNER_ASSISTANT_PROMPT : buildSystemPrompt(context)) +
@@ -320,7 +321,7 @@ export async function POST(request: Request) {
     (staffActor && staffFocus ? `\nTHIS CONVERSATION IS ABOUT ONE PARTICIPANT, id ${staffFocus}. Use that id in every tool call. Tools refuse any other id.` : "") +
     // Staff tools are scoped reads and drafts; final output is still verified.
     (platformOwner ? "" : context.org
-      ? "\n\nUse staff tools for scoped reads and drafts only. Drafts are not saved or sent. Never print tool syntax. No participant private coach, papers or record details are accessible."
+      ? "\n\nUse staff tools for scoped reads, drafts, and buttons that open a page or a filled-in form. Drafts are not saved or sent; a button moves nothing until the staff member presses it. Never print tool syntax. No participant private coach, papers or record details are accessible."
       : buildHandsSection(toolOptions)) +
     (staffActor ? "" : memorySection);
   const allowRoleplayOverride =
@@ -506,6 +507,14 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
     );
     if (draftCheck.notice) out += draftCheck.notice;
+    // Lane S1: the registry's buttons and cards (Go to, filled-in Add people,
+    // later lanes' cards). Any that carries a model-written draftBody passes the
+    // same draft check first and is held back on a failure (review round 1, S8).
+    const streamedCheck = checkStreamedDrafts(
+      streamedStaffResults(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])),
+      (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
+    );
+    if (streamedCheck.notice) out += streamedCheck.notice;
     if (staffInput?.withheld) out += `\n\n_${STAFF_INPUT_NOTICE}_`;
 
     // The skill-run log (migration 106): who, which skill, about whom, a
@@ -517,7 +526,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // Re-emit as the data-stream protocol the chat client expects: any draft
     // that passed the check, as a finished tool call, the checked text, and
     // the run id for an acceptance (lib/staff-skill-run.ts).
-    const lines = staffAnswerStreamLines(out, draftCheck.kept, skillRunId, `staff-${Date.now().toString(36)}`);
+    const streamed = streamedCheck.kept;
+    const lines = staffAnswerStreamLines(out, draftCheck.kept, skillRunId, `staff-${Date.now().toString(36)}`, streamed);
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {

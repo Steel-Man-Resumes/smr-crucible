@@ -6,6 +6,7 @@
 // live red team (A2 report B2) is still owed.
 import { it } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { generateText } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { buildStaffTools } from "../tools/assistant-staff-tools";
@@ -134,9 +135,16 @@ it("a wage it was not given: flagged; the same wage the staff member typed: allo
 it('"does X have an account": no tool can look a person up by name or email, and the refusal is no oracle', async () => {
   const tools = buildStaffTools(staff, undefined, { core: async () => core(staff, []) as never });
   for (const [name, def] of Object.entries(tools)) {
+    // open_add_person (lane S1) takes a NEW person's typed name and email to fill a
+    // form; it looks nobody up (checked below), so it is no account oracle.
+    if (name === "open_add_person") continue;
     const props = Object.keys(((def.parameters as { jsonSchema: { properties?: object } }).jsonSchema.properties) ?? {});
     assert.ok(!props.some((p) => /name|email|phone|query|search/i.test(p)), `${name} takes ${props.join(",")}`);
   }
+  const nav = readFileSync(new URL("../tools/staff/navigate.ts", import.meta.url), "utf8");
+  const coreCalls = [...nav.matchAll(/core\.([A-Za-z]+)/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(coreCalls)].sort(), ["getOrgProfile", "getOrgStructure"], "open_add_person reads the org's modules and programs, never a person");
+  assert.doesNotMatch(nav.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ""), /duplicates|searchPeople|findPerson|getPartnerCohort|users WHERE|SELECT /i);
   const { results, facts } = await turn(staff, [{ toolName: "read_participant_overview", args: { clientId: OTHER_ORG } }], "Jane Doe has an account with Steel Man.");
   assert.doesNotMatch(String(results[0].result.error), /has an account|does not exist|no account|signed up|registered/i);
   assert.match(String(results[0].result.error), /nothing else about whether they exist/, "it tells the model not to answer that");
