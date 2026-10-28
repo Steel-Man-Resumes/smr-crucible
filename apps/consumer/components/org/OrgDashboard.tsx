@@ -44,6 +44,8 @@ import { SeeEveryonePanel } from "@/components/org/SeeEveryonePanel";
 import { CaseloadWorkbench } from "@/components/org/CaseloadWorkbench";
 import { STATIONS, stationForJourneyStage } from "@/lib/refinery-nav";
 import { DuplicateWarning } from "@/components/org/DuplicateWarning";
+import { useAddPersonPrefill, AddPersonPrefillNotice } from "@/components/org/AddPersonPrefill";
+import { prefillFullName } from "@/lib/org-add-person-prefill";
 import {
   DEFAULT_STAFF_PREFS,
   CASELOAD_SORTS,
@@ -264,6 +266,8 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
   const [assignError, setAssignError] = useState<string | null>(null);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  // Staff pass S1: t.ROY filled in Add people from the staff member's own words. Nothing is sent until they press Send invite.
+  const prefill = useAddPersonPrefill((p) => { setInviteName(prefillFullName(p)); if (p.email) setInviteEmail(p.email); });
   const [inviteBusy, setInviteBusy] = useState(false);
   const [inviteMsg, setInviteMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [inviteRowBusy, setInviteRowBusy] = useState<string | null>(null);
@@ -348,6 +352,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
         setInviteMsg({ kind: data.emailFailed ? "err" : "ok", text: data.message });
         setInviteName("");
         setInviteEmail("");
+        prefill.sent();
         await load();
       } else {
         setInviteMsg({
@@ -904,6 +909,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                   ? "They get an email that signs them straight in. No code, no password, and they're assigned to you automatically."
                   : "They get an email that signs them straight in. No code, no password. Their seat comes off your organization's allotment right away."}
               </p>
+              {prefill.current && <AddPersonPrefillNotice prefill={prefill.current} onClose={prefill.dismiss} />}
               <form onSubmit={sendInvite} className="flex flex-wrap gap-2">
                 <input
                   type="text"
@@ -930,7 +936,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
                 </button>
               </form>
               {/* House lane L5: "this may be someone you already have" (never names anyone outside the caller's reach). */}
-              {!codeId && <DuplicateWarning name={inviteName} email={inviteEmail} />}
+              {!codeId && <DuplicateWarning name={inviteName} email={inviteEmail} phone={prefill.current?.phone ?? undefined} />}
               {inviteMsg && (
                 <p
                   className={`text-xs mt-3 ${
