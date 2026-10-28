@@ -368,10 +368,12 @@ test("opened means a deliberate open, not showing up on the dashboard", () => {
   assert.doesNotMatch(src, /useEffect\(\(\) => \{\s*if \(h\.status === "sent"/, "never on render");
 });
 
-test("per-turn context does not re-read listings, and is not loaded until the prompt shows it", () => {
+test("per-turn context does not re-read listings, and is loaded only because the prompt shows it", () => {
   const src = readFileSync(new URL("../assistant-full-context.ts", import.meta.url), "utf8");
   const real = src.slice(src.indexOf("export async function realFullContextLoaders"), src.indexOf("export async function loadCaseManagerSuggestions"));
-  assert.doesNotMatch(real.replace(/\/\/.*$/gm, ""), /staffSuggestions:/, "not registered by default (boss wires it with the prompt line)");
+  // Integration (boss wiring): the loader is registered together with the prompt line that shows it.
+  assert.match(real.replace(/\/\/.*$/gm, ""), /staffSuggestions: \(userId\) => loadCaseManagerSuggestions\(userId\),/, "registered without the listings re-read");
+  assert.match(readFileSync(new URL("../assistant-prompt.ts", import.meta.url), "utf8"), /lines\.push\(\.\.\.buildCaseManagerSection\(ctx\)\);/, "the prompt shows what the loader reads");
   assert.match(src, /listings: opts\.listings === true/);
   assert.match(readFileSync(new URL("../tools/assistant-tools.ts", import.meta.url), "utf8"), /loadCaseManagerSuggestions\(userId, \{ listings: true \}\)/, "the tool still re-reads listings");
 });

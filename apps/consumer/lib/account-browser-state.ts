@@ -2,6 +2,7 @@ import { clearForgeBrowserKeys } from "./refinery-guards";
 import { clearTailorBatchStorage } from "./tailor-batch";
 import { clearOrgNoteDrafts } from "./org-note-draft";
 import { clearStaffDraftCache } from "./staff-draft-cache";
+import { clearHandoffTrays } from "./handoff-tray";
 
 type LocalStore = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 type SessionStore = Pick<Storage, "length" | "key" | "removeItem" | "getItem">;
@@ -42,6 +43,7 @@ export function clearAccountBrowserState(
   clearOrgNoteDrafts(session);
   // Unsent autosaved staff drafts (house lane L5, sessionStorage): words about other people.
   clearStaffDraftCache(session);
+  clearHandoffTrays(session);
   if (!local) return;
   for (const key of ACCOUNT_SWITCH_EXTRA_KEYS) {
     try {

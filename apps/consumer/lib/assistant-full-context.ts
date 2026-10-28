@@ -283,9 +283,8 @@ export async function realFullContextLoaders(): Promise<FullContextLoaders> {
       const score = scoreOf(r.counts);
       return { counts: r.counts, score, band: bandFor(score, isSteelMan(r.counts)).label };
     },
-    // staffSuggestions is NOT registered here until the prompt shows it (review r1 #6): the boss adds
-    // `staffSuggestions: (userId) => loadCaseManagerSuggestions(userId),` in the same commit as the
-    // buildCaseManagerSection line in assistant-prompt.ts, so no turn pays for a read it never shows.
+    // Registered with the buildCaseManagerSection line in assistant-prompt.ts (staff pass S5, review r1 #6).
+    staffSuggestions: (userId) => loadCaseManagerSuggestions(userId),
   };
 }
 

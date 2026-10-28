@@ -2,6 +2,7 @@ import { signOut } from "next-auth/react";
 import { clearTailorBatchStorage } from "./tailor-batch";
 import { clearOrgNoteDrafts } from "./org-note-draft";
 import { clearStaffDraftCache } from "./staff-draft-cache";
+import { clearHandoffTrays } from "./handoff-tray";
 import { clearRunSessionStorage } from "./refinery-guards";
 
 /** Keep browser work until the server confirms the account is signed out. */
@@ -21,6 +22,7 @@ export async function confirmedSignOut(): Promise<void> {
         clearTailorBatchStorage();
         clearOrgNoteDrafts();
         clearStaffDraftCache();
+        clearHandoffTrays();
         clearRunSessionStorage();
         return;
       }
