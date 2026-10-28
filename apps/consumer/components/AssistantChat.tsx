@@ -36,6 +36,8 @@ import { useEffectiveRole } from "@/components/RoleProvider";
 import { StaffTroyDiscovery } from "./StaffTroyDiscovery";
 import { viewToolCards } from "@/components/org/TroyViewCards";
 import { isHandoffDraftResult, applyHandoffDraft, draftButtonLabel, trayOwner } from "@/lib/handoff-tray";
+import { ContributeForm, initialFromDraft } from "@/components/org/directory/ContributeForm";
+import { ListingContributeMenu } from "@/components/org/directory/ListingContributeMenu";
 
 interface ChatSettings {
   coachLength: "brief" | "full";
@@ -845,6 +847,22 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             const inv = part.toolInvocation as { toolName?: string; state?: string; result?: unknown } | undefined;
             return inv?.toolName === "draft_handoff" && inv.state === "result" && isHandoffDraftResult(inv.result) ? [inv.result] : [];
           })[0] : undefined;
+          // Lane S6: a directory update t.ROY drafted (a form the staff member checks and sends),
+          // and the one-line listing nudge with its buttons. Nothing is sent from the chat.
+          type S6Card = { kind: "draft"; r: Record<string, unknown> } | { kind: "nudge"; r: Record<string, unknown>; listing: { kind: "employer" | "resource"; id: string } };
+          const s6: S6Card[] = staff ? parts.flatMap((part): S6Card[] => {
+            if (part.type !== "tool-invocation") return [];
+            const inv = part.toolInvocation as { toolName?: string; state?: string; result?: Record<string, unknown> } | undefined;
+            const r = inv?.result;
+            if (inv?.state !== "result" || !r) return [];
+            if (inv.toolName === "draft_directory_contribution" && (r.status === "draft" || r.status === "needs_more") && typeof r.flow === "string" && typeof r.targetKind === "string")
+              return [{ kind: "draft" as const, r }];
+            const listing = r.listing as { kind?: unknown; id?: unknown } | undefined;
+            if (inv.toolName === "listing_check_nudge" && r.status === "ok" && typeof r.line === "string" && (listing?.kind === "employer" || listing?.kind === "resource")
+              && typeof listing.id === "string" && /^[0-9a-f-]{36}$/i.test(listing.id))
+              return [{ kind: "nudge" as const, r, listing: { kind: listing.kind as "employer" | "resource", id: listing.id } }];
+            return [];
+          }) : [];
           // Lane S3: the Done (with Undo) and shared-view proposal cards.
           const viewCards = staff ? viewToolCards(parts.filter((p) => p.type === "tool-invocation").map((p) => p.toolInvocation as { toolName?: string; state?: string; result?: unknown })) : [];
           const skillRunId = staff ? skillRunIdOf((message as { annotations?: unknown }).annotations) : null;
@@ -936,6 +954,16 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                 </div>
               )}
               {!replyStillComing && viewCards.map((c) => <div key={`view-${c.key}`} className="pl-1">{c.node}</div>)}
+              {!replyStillComing && s6.map((c, i) => c.kind === "draft" ? (
+                <div key={`s6-${i}`} className="pl-1" data-staff-contribution-draft="">
+                  <ContributeForm initial={initialFromDraft(c.r as unknown as Parameters<typeof initialFromDraft>[0])} />
+                  <span className="text-[11px] text-muted">A draft, not sent. Check it and press Send.</span>
+                </div>
+              ) : (
+                <div key={`s6-${i}`} className="pl-1" data-staff-listing-nudge="">
+                  <ListingContributeMenu kind={c.listing.kind} id={c.listing.id} name="" nudgeLine={null} />
+                </div>
+              ))}
               {!replyStillComing && handoffDraft && (
                 <div className="flex flex-col items-start gap-1 pl-1">
                   <button

@@ -157,3 +157,34 @@ it("S2 review round 2 nits: the Activity log CSV says what row 1 is in visible w
   assert.match(audit, /<span id="audit-csv-help" className="text-\[11px\] text-t-phos-dim">\{OUTBOUND_CSV_HELP\}<\/span>/);
   assert.match(audit, /aria-describedby="audit-csv-help"/);
 });
+
+it("round 3 (S6 merged): tools, cards, Wins, good catches, the listing nudge and the Directory's contribute slot", () => {
+  assert.match(read("../tools/staff/index.ts"), /viewToolsModule,\s*handoffToolModule,\s*contributeTools,\s*\]/);
+  const chat = read("../../components/AssistantChat.tsx");
+  assert.match(chat, /inv\.toolName === "draft_directory_contribution" && \(r\.status === "draft" \|\| r\.status === "needs_more"\)/);
+  assert.match(chat, /<ContributeForm initial=\{initialFromDraft\(/, "the staff member checks the card and presses Send");
+  assert.match(chat, /inv\.toolName === "listing_check_nudge" && r\.status === "ok"/);
+  assert.match(chat, /<ListingContributeMenu kind=\{c\.listing\.kind\} id=\{c\.listing\.id\} name="" nudgeLine=\{null\} \/>/, "the line is in the answer already");
+  assert.match(read("../skills/staff-operations/SKILL.md"), /After the staff member used a directory listing for someone, call listing_check_nudge once; if it returns a line, end with it word for word\./);
+  const setup = read("../../app/(dashboard)/dashboard/my-setup/page.tsx");
+  assert.match(setup, /<RewardsToggle onChange=\{announceRewardsChanged\} \/>/);
+  assert.doesNotMatch(read("../../../../packages/core/src/staffPrefsShared.ts"), /rewardsOn/, "no second rewards switch in staff prefs");
+  const shell = read("../../app/(dashboard)/RefineryShell.tsx");
+  assert.match(shell, /fetch\("\/api\/org\/rewards\?settings=1"/, "the sidebar reads only the switch, not the whole Wins page");
+  assert.match(shell, /rewardsOn=\{rewardsOn\}/);
+  assert.match(read("../../app/api/org/rewards/route.ts"), /searchParams\.get\("settings"\) === "1"/);
+  const page = read("../../components/org/ClientPage.tsx");
+  assert.match(page, /t\.owner_user_id !== viewerId && <GiveKudos toUserId=\{t\.owner_user_id\} workKind="task" workId=\{t\.id\} compact \/>/);
+  assert.match(page, /n\.author_user_id !== viewerId && <div className="mt-2"><GiveKudos toUserId=\{n\.author_user_id\} workKind="note" workId=\{n\.id\} compact \/>/);
+  const refs = read("../../components/org/Referrals.tsx");
+  assert.match(refs, /r\.owner_staff_id !== me && r\.owner_active !== false && \(\s*<div className="mt-1"><GiveKudos toUserId=\{r\.owner_staff_id\} workKind="referral" workId=\{r\.id\} compact \/>/);
+  assert.match(refs, /askListingNudge\("resource", used\.service_id\)/);
+  assert.match(read("../../components/org/HandoffPanel.tsx"), /askListingNudge\(ref\.kind, ref\.id\)/);
+  assert.match(read("../../components/org/DirectorySendTo.tsx"), /<StaffDirectoryPage SendTo=\{DirectorySendTo\} Contribute=\{DirectoryContribute\} \/>/);
+  const admin = read("../../components/org/rewards/StaffRewardsAdmin.tsx");
+  assert.match(admin, /role\.orgRole !== "owner" && role\.orgRole !== "org_admin"/, "program rewards and recognition notes: managers only");
+  assert.match(read("../../app/(dashboard)/dashboard/team/page.tsx"), /<StaffRewardsAdmin \/>/);
+  // Funder reports: no surface reads recognition notes except the approved-only list.
+  assert.match(read("../../app/api/org/recognition/route.ts"), /forReport: notes\.filter\(\(n\) => n\.status === "approved"\)/);
+  for (const f of ["../../components/org/InsightsReport.tsx", "../../components/org/InsightsPage.tsx", "../skills/staff-funder-narrative/SKILL.md"]) assert.doesNotMatch(read(f), /recognition/i, f);
+});

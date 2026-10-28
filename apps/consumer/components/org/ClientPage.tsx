@@ -49,6 +49,7 @@ import { useNoteReviews, NoteReviewBar, noteCanBeCorrected } from "@/components/
 import { HandoffPanel } from "@/components/org/HandoffPanel";
 import { ConnectionsPanel } from "@/components/org/ConnectionsPanel";
 import { VIEW_CHANGED_EVENT } from "@/lib/view-change-events";
+import { GiveKudos } from "@/components/org/rewards/GiveKudos";
 
 const STATUS_LABEL: Record<string, string> = {
   saved: "Saved", applied: "Applied", heard_back: "Heard back", interviewing: "Interviewing",
@@ -233,7 +234,7 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
             <ReferralsPanel clientId={clientId} first={first} userId={viewer?.userId ?? null} />
           ) : tab === "tasks" ? (
             <>
-              <TasksPanel clientId={clientId} first={first} tasks={tasks} reload={loadTasks} />
+              <TasksPanel clientId={clientId} first={first} tasks={tasks} reload={loadTasks} viewerId={viewer?.userId ?? null} />
               <h2 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mt-8 mb-3">Suggestions</h2>
               <SuggestionsPanel clientId={clientId} first={first} items={suggestions} canSuggest={!!viewer?.canSuggest} onChange={load} />
               <HandoffPanel clientId={clientId} first={first} viewerId={viewer?.userId ?? null} canSend={!!viewer?.canSuggest} />
@@ -318,7 +319,7 @@ export function SharedTab({ client, clientId, first, item, rows, loading, viewer
 interface TaskRow { id: string; title: string; due_on: string | null; shared_with_participant: boolean; done_at: string | null; done_by_participant: boolean; owner_user_id?: string | null; owner_name: string | null }
 
 /** What you and this person have agreed to do. A shared task shows on THEIR dashboard, and they can tick it. */
-function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; first: string; tasks: TaskRow[] | null; reload: () => void }) {
+function TasksPanel({ clientId, first, tasks, reload, viewerId }: { clientId: string; first: string; tasks: TaskRow[] | null; reload: () => void; viewerId?: string | null }) {
   const [title, setTitle] = useState(""); const [due, setDue] = useState(""); const [shared, setShared] = useState(true);
   const [ownerId, setOwnerId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -362,6 +363,8 @@ function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; firs
               <div className="flex gap-4">
                 <button onClick={() => post({ action: t.done_at ? "reopen" : "done", taskId: t.id })} className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">{t.done_at ? "Reopen" : "Mark done"}</button>
                 {!t.done_at && <HandTaskOn taskId={t.id} clientId={clientId} ownerId={t.owner_user_id ?? null} onDone={load} />}
+                {/* S6: thank the colleague whose task this is (never yourself). */}
+                {viewerId && t.owner_user_id && t.owner_user_id !== viewerId && <GiveKudos toUserId={t.owner_user_id} workKind="task" workId={t.id} compact />}
                 {!t.done_at && <button onClick={() => post({ action: "cancel", taskId: t.id })} className="t-focus text-xs text-t-phos-dim underline underline-offset-4 hover:text-t-white">Cancel</button>}
               </div>
             </li>
@@ -752,6 +755,8 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
                   </span>
                 )}
                 <NoteReviewBar noteId={n.id} authorId={n.author_user_id ?? null} data={reviews.data} onChange={reviews.reload} />
+                {/* S6: thank the colleague who wrote this note (never yourself). */}
+                {viewerId && n.author_user_id && n.author_user_id !== viewerId && <div className="mt-2"><GiveKudos toUserId={n.author_user_id} workKind="note" workId={n.id} compact /></div>}
                 {(n.earlier?.length ?? 0) > 0 && (
                   <details className="mt-2">
                     <summary className="text-xs text-t-phos-dim cursor-pointer">Earlier wording ({n.earlier!.length})</summary>

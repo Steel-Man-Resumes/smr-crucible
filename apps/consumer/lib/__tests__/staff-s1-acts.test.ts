@@ -79,7 +79,8 @@ it("pages: what each role's own sidebar shows, plus Settings and Help; module sw
   assert.ok(!keys(staff, { referrals: false }).includes("referrals"), "referrals off: no referrals page");
   // Integration 2026-10-28: the merged lanes' pages open exactly as the sidebar shows them.
   for (const k of ["directory", "connections", "my-setup", "inbox", "change-requests", "find-a-person"]) assert.ok(o.includes(k), k);
-  for (const k of ["directory", "connections", "my-setup", "inbox", "find-a-person"]) assert.ok(s.includes(k), `staff: ${k}`);
+  for (const k of ["directory", "connections", "contribute", "my-setup", "inbox", "find-a-person"]) assert.ok(s.includes(k), `staff: ${k}`);
+  assert.ok(!s.includes("wins"), "Wins opens only for someone whose own switch is on (the sidebar foot decides)");
   assert.ok(!s.includes("change-requests"), "the change request queue is for the people who answer it");
   // The job seeker's pages are in no staff sidebar, so they stay closed.
   for (const k of ["employers", "local-help"]) assert.ok(!o.includes(k) && !s.includes(k), k);
@@ -262,7 +263,7 @@ it("registry: every module composes in, a duplicate name throws, the chat gets a
   assert.throws(() => buildStaffTools(staff, undefined, { core: async () => ({}) as never, modules: [...STAFF_TOOL_MODULES, dup] }), /defined twice/);
   assert.throws(() => composeStaffTools({ safe: (r: unknown) => r } as never, {}, [STAFF_TOOL_MODULES[0], STAFF_TOOL_MODULES[0]]), /defined twice/);
   // Integration: S3's own-view cards and S5's handoff draft stream too (each module declares its shapes).
-  assert.deepEqual([...staffStreamedTools()].sort(), ["change_my_view", "draft_handoff", "open_add_person", "open_staff_page", "propose_shared_view", "undo_my_view_change"]);
+  assert.deepEqual([...staffStreamedTools()].sort(), ["change_my_view", "draft_directory_contribution", "draft_handoff", "listing_check_nudge", "open_add_person", "open_staff_page", "propose_shared_view", "undo_my_view_change"]);
   assert.deepEqual(streamedDeclarationProblems(), [], "every module's streamed declaration is sound");
   const activity = staffToolActivity();
   for (const n of ["open_staff_page", "open_add_person", "find_employers"]) assert.ok(activity[n], n);
@@ -271,7 +272,7 @@ it("registry: every module composes in, a duplicate name throws, the chat gets a
   assert.ok(src.indexOf("composeStaffTools(") < src.indexOf("const executeOnce = executionBudget(5)"));
   // The registry stays browser-safe: no module imports @crucible/core at the top
   // (a pure *Shared.ts file is browser-safe and allowed: S5's staffHandoffShared).
-  for (const f of ["index.ts", "navigate.ts", "directory.ts", "types.ts", "view-tools.ts", "handoff-tools.ts"]) {
+  for (const f of ["index.ts", "navigate.ts", "directory.ts", "types.ts", "view-tools.ts", "handoff-tools.ts", "contribute-tools.ts"]) {
     assert.doesNotMatch(readFileSync(new URL(`../tools/staff/${f}`, import.meta.url), "utf8"), /^import (?!type)[^\n]*@crucible\/core(?!\/src\/[A-Za-z]+Shared")/m, f);
   }
 });

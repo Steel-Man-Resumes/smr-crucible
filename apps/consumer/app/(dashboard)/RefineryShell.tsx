@@ -65,6 +65,8 @@ import "@/components/org/org-workspace.css";
 import "@/components/org/OrgSidebar.css";
 import { OrgSidebar } from "@/components/org/OrgSidebar";
 import { useInboxCount } from "@/components/org/InboxCount";
+import { STAFF_FEATURES } from "@/lib/staff-features";
+import { REWARDS_CHANGED_EVENT } from "@/lib/staff-rewards-events";
 import { useOrgModules } from "@/lib/use-org-modules";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { DevModeBanner } from "@/components/DevModeBanner";
@@ -1027,5 +1029,24 @@ function OrgSidebarWithCounts(props: Omit<ComponentProps<typeof OrgSidebar>, "co
 }
 function OrgSidebarCounted(props: Omit<ComponentProps<typeof OrgSidebar>, "counts">) {
   const unread = useInboxCount();
-  return <OrgSidebar {...props} counts={{ "org-nav-inbox": unread }} />;
+  const rewardsOn = useOwnRewardsOn();
+  return <OrgSidebar {...props} counts={{ "org-nav-inbox": unread }} rewardsOn={rewardsOn} />;
+}
+
+/**
+ * The staff member's own Wins switch (S6, migration 111; owner-only, default off). Wins shows in the
+ * sidebar's foot only when it is on. Read once, and again when My setup's switch changes it.
+ */
+function useOwnRewardsOn(): boolean {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    if (!STAFF_FEATURES.rewards) return;
+    let alive = true;
+    const read = () => fetch("/api/org/rewards?settings=1", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (alive) setOn(d?.settings?.rewardsOn === true); }).catch(() => {});
+    read();
+    window.addEventListener(REWARDS_CHANGED_EVENT, read);
+    return () => { alive = false; window.removeEventListener(REWARDS_CHANGED_EVENT, read); };
+  }, []);
+  return on;
 }

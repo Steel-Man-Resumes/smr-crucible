@@ -113,6 +113,7 @@ export const SEAT_GATED_FROM_FORGE: Readonly<Record<string, string>> = {
   "/api/org/brand/": "an organization's logo, for its own members (OrgMark); a seatless account has no organization, and the Forge and /access render the monogram without calling it",
   "/api/org/ai-skill-run": "staff t.ROY's Copy to use button marks a skill run used (staff panel only); a seatless account has no organization role",
   "/api/org/views": "staff t.ROY's shared-view card (TroyViewCards, rendered only in the staff chat); a staff workspace route",
+  "/api/org/directory-contributions": "staff t.ROY's directory update card (ContributeForm, staff chat only); a staff workspace route",
   "/api/org/prefs/changes": "staff t.ROY's Undo on a view change card (TroyViewCards, staff chat only); a staff workspace route",
 };
 

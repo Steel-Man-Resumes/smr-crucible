@@ -14,6 +14,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { SendToButton } from "@/components/org/SendToButton";
 import { StaffDirectoryPage } from "@/components/org/StaffDirectory";
+import { ListingContributeMenu } from "@/components/org/directory/ListingContributeMenu";
 import type { DirectoryListingRef } from "@/components/org/StaffDirectory";
 import type { HandoffItemInput } from "@crucible/core/src/staffHandoffShared";
 
@@ -94,5 +95,10 @@ export function DirectorySendTo({ listing }: { listing: DirectoryListingRef }) {
  * page cannot pass a component as a prop. S6 adds Contribute={...} here.
  */
 export function StaffDirectoryWithSlots() {
-  return <StaffDirectoryPage SendTo={DirectorySendTo} />;
+  return <StaffDirectoryPage SendTo={DirectorySendTo} Contribute={DirectoryContribute} />;
+}
+
+/** S6's "I called them / Suggest a fix / I know someone there" for one Directory result. */
+export function DirectoryContribute({ listing }: { listing: DirectoryListingRef }) {
+  return <ListingContributeMenu kind={listing.kind} id={listing.id} name={listing.name} />;
 }

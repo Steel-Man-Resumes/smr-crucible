@@ -2,6 +2,7 @@
  * Staff rewards (migration 111, lane S6): the Wins page and the switches.
  *
  *   GET                                   everything the Wins page shows
+ *   GET ?settings=1                       only my own switch (the sidebar's Wins entry; no milestone refresh)
  *   PUT { rewardsOn?, boardOk? }          my own switch (only mine; default off)
  *   PUT { program: { teamBoardOn?, recognitionNotesOn?, programRewards? } }
  *                                         owner or org admin
@@ -11,7 +12,7 @@
  * state, never their milestones. Every write is the person's own.
  */
 import { NextResponse } from "next/server";
-import { getWins, setRewardsSettings, setProgramRewards, markMilestonesSeen, listMyContributions, approvedInWindow, monthWindow, DEFAULT_REWARDS_SETTINGS } from "@crucible/core";
+import { getWins, getRewardsSettings, setRewardsSettings, setProgramRewards, markMilestonesSeen, listMyContributions, approvedInWindow, monthWindow, DEFAULT_REWARDS_SETTINGS } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 import { effectiveAuth } from "@/lib/effective-auth";
 import { mayWrite, recordWordsIn, RECORD_WORDS_REFUSAL, VIEWING_REFUSAL } from "@/lib/staff-rewards-route";
@@ -26,6 +27,9 @@ export async function GET(request: Request) {
   const { actor } = guard;
   if (guard.viewing || actor.viaPlatformAdmin) {
     return NextResponse.json({ viewing: true, settings: DEFAULT_REWARDS_SETTINGS }, { headers: NO_STORE });
+  }
+  if (new URL(request.url).searchParams.get("settings") === "1") {
+    return NextResponse.json({ viewing: false, settings: await getRewardsSettings(actor).catch(() => DEFAULT_REWARDS_SETTINGS) }, { headers: NO_STORE });
   }
   const now = Date.now();
   const month = monthWindow(now);

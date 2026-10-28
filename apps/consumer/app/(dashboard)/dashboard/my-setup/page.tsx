@@ -21,6 +21,8 @@ import { STAFF_FEATURES } from "@/lib/staff-features";
 import { SuggestChange } from "@/components/staff/SuggestChange";
 import { MyViewSettings } from "@/components/org/MyViewSettings";
 import { TroySuggestionsSwitch } from "@/components/staff/TroySuggestionsSwitch";
+import { RewardsToggle } from "@/components/org/rewards/RewardsToggle";
+import { announceRewardsChanged } from "@/lib/staff-rewards-events";
 
 const card = "bg-t-panel border border-t-line p-5";
 const linkText = "text-t-amber-bright underline underline-offset-4 hover:text-t-amber";
@@ -57,6 +59,7 @@ export default function MySetupPage() {
           <nav aria-label="On this page" className="mb-6 flex flex-wrap gap-2 text-xs">
             {[["landing", "Your screens"], ["views", "Your views"],
               ...(STAFF_FEATURES.suggestionsSwitch ? [["suggestions", "t.ROY suggestions"]] : []),
+              ...(STAFF_FEATURES.rewards ? [["wins", "Wins"]] : []),
               ...(STAFF_FEATURES.changeRequests && !canManage ? [["suggest", "Suggest a change"]] : [])].map(([id, label]) => (
               <a key={id} href={`#${id}`} className="t-focus rounded-[4px] border border-t-line px-3 py-1.5 font-medium text-t-phos-dim hover:border-t-amber hover:text-t-white">{label}</a>
             ))}
@@ -84,6 +87,8 @@ export default function MySetupPage() {
           </section>
 
           {STAFF_FEATURES.suggestionsSwitch && <TroySuggestionsSwitch />}
+          {/* S6: the person's own Wins switch (111, owner-only, default off). There is no staff pref for it. */}
+          {STAFF_FEATURES.rewards && <section id="wins" className={`${card} mb-8 scroll-mt-32`}><RewardsToggle onChange={announceRewardsChanged} /></section>}
 
           {STAFF_FEATURES.changeRequests && !canManage && <SuggestChange />}
           {canManage && (

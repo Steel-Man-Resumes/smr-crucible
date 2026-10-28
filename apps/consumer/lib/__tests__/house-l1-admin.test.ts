@@ -35,9 +35,9 @@ test("admin mode: a platform admin with no view-as; never while viewing as someo
   assert.equal(adminSidebarShown(null), false, "no admin nav while the role loads");
 });
 
-test("the admin sidebar has the nine screens, in order, each a real page", () => {
+test("the admin sidebar has the ten screens (S6 adds Staff contributions), in order, each a real page", () => {
   const labels = ADMIN_NAV.flatMap((g) => g.items.map((i) => i.label));
-  assert.deepEqual(labels, ["Operator home", "Organizations", "People", "Access requests", "Premium", "Mini Forge", "Health", "Coverage", "Evidence"]);
+  assert.deepEqual(labels, ["Operator home", "Organizations", "People", "Access requests", "Premium", "Mini Forge", "Health", "Coverage", "Staff contributions", "Evidence"]);
   for (const item of ADMIN_NAV.flatMap((g) => g.items)) {
     if (item.href === "/dashboard") continue;
     const page = join("app/(dashboard)", item.href, "page.tsx");
@@ -60,7 +60,7 @@ test("the admin sidebar never shows the career board; My organization appears on
   const plain = renderToStaticMarkup(React.createElement(AdminSidebar, {
     pathname: "/dashboard", orgRole: null, orgName: null, capabilities: [], workspace: false, legacyItems: [],
   }));
-  for (const label of ["Operator home", "Organizations", "People", "Access requests", "Premium", "Mini Forge", "Health", "Coverage", "Evidence"]) {
+  for (const label of ["Operator home", "Organizations", "People", "Access requests", "Premium", "Mini Forge", "Health", "Coverage", "Staff contributions", "Evidence"]) {
     assert.match(plain, new RegExp(`>${label}<`), label);
   }
   for (const s of STATIONS) assert.doesNotMatch(plain, new RegExp(`>${s.label}<`), `no career station: ${s.label}`);
@@ -138,7 +138,7 @@ test("registry: org entries follow capability and module switches; admin entries
   const work = orgNavFor(staff, null, ext).find((g) => g.label === "My day")!;
   assert.deepEqual(work.items.map((i) => i.label), ["Today", "People", "Referrals", "Sharing asks"]);
   const sys = adminNavWith(ext).find((g) => g.label === "System")!;
-  assert.deepEqual(sys.items.map((i) => i.label), ["Health", "Coverage", "Evidence", "AI runs"]);
+  assert.deepEqual(sys.items.map((i) => i.label), ["Health", "Coverage", "Staff contributions", "Evidence", "AI runs"]);
   for (const e of NAV_EXTENSIONS) assert.ok(e.href.startsWith("/dashboard/") && e.navId && (e.surface === "admin" || e.needs), `wired entry ${e.href} names a dashboard route, an id and (for org entries) the capability it needs`);
   // Without extensions, every role's nav is exactly what it was.
   // (Connect holds the merged Directory and Connections pages, base entries since integration 2026-10-28.)

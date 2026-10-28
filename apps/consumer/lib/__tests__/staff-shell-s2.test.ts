@@ -49,9 +49,9 @@ const USER = "0b0b0b0b-0b0b-4b0b-8b0b-0b0b0b0b0b0b";
 
 /* Feature flags */
 test("feature flags: on only for merged lanes whose page or route exists, unknown names are off, no flag means on", () => {
-  // Integration 2026-10-28: S1, S3, S4, S5 merged with S2. S6 (rewards) is not; S4 built no notification choices.
+  // Integration 2026-10-28: S1 to S6 merged. S4 built no notification choices, so that one stays off.
   const on = STAFF_FEATURE_KEYS.filter((k) => STAFF_FEATURES[k]).sort();
-  assert.deepEqual(on, ["changeRequests", "directory", "inbox", "personalLayout", "suggestionsSwitch", "viewChangeLog"]);
+  assert.deepEqual(on, ["changeRequests", "directory", "inbox", "personalLayout", "rewards", "suggestionsSwitch", "viewChangeLog"]);
   // Never a dead button: every flag that is on has its page, route or component on this branch.
   const needs: Record<string, string[]> = {
     changeRequests: ["app/api/org/change-requests/route.ts", "app/(dashboard)/dashboard/change-requests/page.tsx"],
@@ -60,12 +60,13 @@ test("feature flags: on only for merged lanes whose page or route exists, unknow
     personalLayout: ["components/org/MyViewSettings.tsx", "app/api/org/prefs/view/route.ts"],
     viewChangeLog: ["app/api/org/prefs/changes/route.ts"],
     suggestionsSwitch: ["components/staff/TroySuggestionsSwitch.tsx"],
+    rewards: ["app/(dashboard)/dashboard/wins/page.tsx", "app/api/org/rewards/route.ts", "components/org/rewards/RewardsToggle.tsx"],
   };
   for (const k of on) for (const f of needs[k]) assert.ok(read(f).length > 0, `${k}: ${f}`);
-  assert.equal(STAFF_FEATURES.rewards, false, "S6 not merged: no Wins, no rewards switch");
+  assert.equal(STAFF_FEATURES.notificationPrefs, false, "no notification choices were built: no dead switch");
   assert.equal(staffFeatureOn(undefined), true);
   assert.equal(staffFeatureOn("inbox", ALL_OFF), false);
-  assert.equal(staffFeatureOn("rewards"), false);
+  assert.equal(staffFeatureOn("rewards", ALL_OFF), false);
   assert.equal(staffFeatureOn("inbox", ALL_ON), true);
   assert.equal(staffFeatureOn("nope", ALL_ON), false);
 });
@@ -78,10 +79,11 @@ test("nav: Inbox and Directory appear only once their lanes are merged; Wins onl
   const on = flat(ALL_ON);
   assert.deepEqual(on.slice(0, 5), ["My day/Today", "My day/Inbox", "My day/People", "My day/Referrals", "My day/Sharing asks"]);
   assert.ok(on.includes("Connect/Directory"));
-  assert.deepEqual(orgFootFor().map((i) => i.label), ["Help", "Ask t.ROY", "My setup", "Settings"]);
+  assert.deepEqual(orgFootFor().map((i) => i.label), ["Help", "Ask t.ROY", "My setup", "Settings"], "rewards merged, switch off by default: no Wins");
   assert.deepEqual(orgFootFor({ features: ALL_ON }).map((i) => i.label), ["Help", "Ask t.ROY", "My setup", "Settings"], "rewards merged but switched off: no Wins");
   assert.deepEqual(orgFootFor({ features: ALL_ON, rewardsOn: true }).map((i) => i.label), ["Help", "Ask t.ROY", "My setup", "Wins", "Settings"]);
-  assert.deepEqual(orgFootFor({ rewardsOn: true }).map((i) => i.label), ["Help", "Ask t.ROY", "My setup", "Settings"], "switched on before the lane merged: still no dead page");
+  assert.deepEqual(orgFootFor({ features: ALL_OFF, rewardsOn: true }).map((i) => i.label), ["Help", "Ask t.ROY", "My setup", "Settings"], "switched on before the lane merged: still no dead page");
+  assert.deepEqual(orgFootFor({ rewardsOn: true }).map((i) => i.label), ["Help", "Ask t.ROY", "My setup", "Wins", "Settings"], "on this branch, Wins for someone who turned it on");
   for (const i of ORG_FOOT_NAV) assert.match(i.navId, /^org-nav-/);
 });
 

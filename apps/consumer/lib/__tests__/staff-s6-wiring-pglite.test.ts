@@ -64,10 +64,10 @@ test('S6 wired: good catches, recognition and directory answers reach the Inbox;
 
   // The Inbox's kind and source lists keep 109's values and gain S6's, in one CHECK each.
   const defs = (await q(`SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conrelid = 'public.staff_inbox_item'::regclass AND contype = 'c'`)).rows.map((r: any) => String(r.d));
-  const kinds = defs.filter((d) => /\(kind = ANY/.test(d));
+  const kinds = defs.filter((d: string) => /\(kind = ANY/.test(d));
   assert.equal(kinds.length, 1);
   for (const k of ['mention', 'reply', 'task_assigned', 'change_request', 'change_answered', 'note_review', 'kudos', 'handoff', 'recognition', 'contribution_answered']) assert.ok(kinds[0].includes(`'${k}'`), k);
-  const refs = defs.filter((d) => /\(ref_table = ANY/.test(d));
+  const refs = defs.filter((d: string) => /\(ref_table = ANY/.test(d));
   assert.equal(refs.length, 1);
   for (const r of ['team_comment', 'staff_task', 'org_change_request', 'case_note', 'staff_kudos', 'staff_handoff', 'staff_recognition_note', 'directory_contribution']) assert.ok(refs[0].includes(`'${r}'`), r);
 

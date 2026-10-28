@@ -21,6 +21,7 @@ import { navigationTools } from "./navigate";
 import { directoryTools } from "./directory";
 import { viewToolsModule } from "./view-tools";
 import { handoffToolModule } from "./handoff-tools";
+import { contributeTools } from "./contribute-tools";
 
 export type { StaffToolContext, StaffToolModule, StreamedShape, StreamedFieldSource } from "./types";
 
@@ -28,9 +29,10 @@ export const STAFF_TOOL_MODULES: readonly StaffToolModule[] = [
   navigationTools,
   directoryTools,
   // Staff pass lanes (integration 2026-10-28): S3 own-view tools, S5 handoffs.
-  // S4 adds no t.ROY tool. S6 contribution tools join when S6 merges.
+  // S4 adds no t.ROY tool. S6: the listing nudge and drafted cards for the directory.
   viewToolsModule,
   handoffToolModule,
+  contributeTools,
 ];
 
 /** Every module's tools, merged. Throws on a duplicate name, including one already in `existing`. */

@@ -14,6 +14,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   HANDOFF_MAX_ITEMS, HANDOFF_NOTE_MAX, HANDOFF_STATUS_WORDS, ITEM_STATUS_WORDS, sendToLabel, type HandoffItemInput,
 } from "@crucible/core/src/staffHandoffShared";
+import { ListingContributeMenu } from "@/components/org/directory/ListingContributeMenu";
+import { askListingNudge } from "@/lib/listing-nudge-client";
 import { addToTray, clearTray, itemKey, readTray, removeFromTray, trayOwner, updateTrayItem, TRAY_EVENT, type Tray } from "@/lib/handoff-tray";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { bandLine, dayWords } from "@/lib/handoff-words";
@@ -56,6 +58,7 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
   const [canSend, setCanSend] = useState<boolean>(!!canSendProp);
   const [failed, setFailed] = useState(false);
   const [tray, setTray] = useState<Tray>({ items: [], updatedAt: 0 });
+  const [nudge, setNudge] = useState<{ kind: "employer" | "resource"; id: string; name: string; line: string } | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -97,7 +100,15 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) { setMsg(d.error || "That did not send. Nothing went to them. Try again."); return; }
+      const sent = tray.items;
       clearTray(owner, clientId); setNote(""); setMsg(`Sent. ${first} will see it on their dashboard and can take or pass on each one.`);
+      // S6: ask once about the first listed place in what was sent (at most once a week per listing).
+      setNudge(null);
+      const listed = sent.find((it) => it.kind === "employer" || it.kind === "resource");
+      if (listed) {
+        const ref = listed.kind === "employer" ? { kind: "employer" as const, id: listed.employerId, name: listed.name } : listed.kind === "resource" ? { kind: "resource" as const, id: listed.resourceId, name: listed.name } : null;
+        if (ref) askListingNudge(ref.kind, ref.id).then((line) => { if (line) setNudge({ ...ref, line }); });
+      }
       load();
     } catch { setMsg("That did not send. Check the connection and try again."); }
     finally { setBusy(false); }
@@ -146,6 +157,7 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
         <p className="text-sm text-t-phos-dim mt-3">Your role can see what was sent but cannot send. Ask the person who runs your program if you need to.</p>
       )}
       {msg && <p role="status" className="text-sm text-t-phos mt-3">{msg}</p>}
+      {nudge && <div className="mt-2"><ListingContributeMenu kind={nudge.kind} id={nudge.id} name={nudge.name} nudgeLine={nudge.line} /></div>}
 
       <h3 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mt-6 mb-2">Sent before</h3>
       {failed ? (

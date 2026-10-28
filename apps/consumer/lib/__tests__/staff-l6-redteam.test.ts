@@ -140,13 +140,18 @@ it('"does X have an account": no tool can look a person up by name or email, and
     if (name === "open_add_person") continue;
     // The staff member's own saved VIEWS have names (lane S3): change_my_view.viewName and
     // propose_shared_view.name name a view, never a person (view-tools.ts is checked below).
-    const VIEW_NAME_PARAMS: Record<string, string[]> = { change_my_view: ["viewName"], propose_shared_view: ["name"] };
+    // S6: draft_directory_contribution.name/phone are a PLACE's (typed by the staff member); it looks up no person.
+    const VIEW_NAME_PARAMS: Record<string, string[]> = { change_my_view: ["viewName"], propose_shared_view: ["name"], draft_directory_contribution: ["name", "phone"] };
     const props = Object.keys(((def.parameters as { jsonSchema: { properties?: object } }).jsonSchema.properties) ?? {})
       .filter((p) => !(VIEW_NAME_PARAMS[name] ?? []).includes(p));
     assert.ok(!props.some((p) => /name|email|phone|query|search/i.test(p)), `${name} takes ${props.join(",")}`);
   }
   const viewTools = readFileSync(new URL("../tools/staff/view-tools.ts", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
   assert.doesNotMatch(viewTools, /searchParticipants|getPartnerCohort|getClientHeader|duplicates|users WHERE|SELECT /i, "view tools look up views, never a person");
+  const contribute = readFileSync(new URL("../tools/staff/contribute-tools.ts", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+  assert.doesNotMatch(contribute, /searchParticipants|getPartnerCohort|getClientHeader|duplicates|users WHERE|SELECT /i, "directory drafts look up no person");
+  // Its only person check refuses a draft that names someone; it never answers who that is.
+  assert.match(contribute, /if \(named\.reached\.length > 0 \|\| prose\.some\(\(w\) => namesMentioned\(w, selectors\)\.length > 0\)\) \{\s*return \{ status: "refused"/);
   const nav = readFileSync(new URL("../tools/staff/navigate.ts", import.meta.url), "utf8");
   const coreCalls = [...nav.matchAll(/core\.([A-Za-z]+)/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(coreCalls)].sort(), ["getOrgProfile", "getOrgStructure"], "open_add_person reads the org's modules and programs, never a person");

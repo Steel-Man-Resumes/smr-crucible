@@ -50,6 +50,8 @@ export const ORG_WORKSPACE_NAV: readonly OrgNavGroup[] = [
       { href: "/dashboard/directory", label: "Directory", needs: "org.client.view_content", navId: "org-nav-directory", feature: "directory" },
       // S5: employers and help that fit what each person shared (same gate as /api/org/connections).
       { href: "/dashboard/connections", label: "Connections", needs: "org.client.view_content", navId: "org-nav-connections" },
+      // S6: add a missing place, or see what you sent and the answers (same gate as /api/org/directory-contributions).
+      { href: "/dashboard/contribute", label: "Help the directory", needs: "org.cohort.view", navId: "org-nav-contribute" },
     ],
   },
   {

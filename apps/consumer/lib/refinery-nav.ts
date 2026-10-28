@@ -298,6 +298,7 @@ export const ADMIN_NAV: readonly AdminNavGroup[] = [
     items: [
       { href: "/dashboard/admin/health", label: "Health", navId: "admin-nav-health" },
       { href: "/dashboard/admin/directory-coverage", label: "Coverage", navId: "admin-nav-coverage" },
+      { href: "/dashboard/admin/directory-contributions", label: "Staff contributions", navId: "admin-nav-contributions" },
       { href: "/dashboard/admin", label: "Evidence", navId: "admin-nav-evidence", exact: true },
     ],
   },

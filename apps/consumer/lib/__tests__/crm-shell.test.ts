@@ -33,7 +33,7 @@ test("nav groups by a case manager's day, and each role sees only what it holds 
   // Integration 2026-10-28: S4 Inbox and Change requests, S1 Directory, S5 Connections are merged; S3 gave
   // org admins org.settings.manage, so their Set up group matches the owner's.
   const day = "My day: Today, Inbox, People, Referrals, Sharing asks";
-  const connect = "Connect: Directory, Connections";
+  const connect = "Connect: Directory, Connections, Help the directory";
   const runs = [day, "Records: Case notes", connect, "Bring someone in: Add people", "Reports: Insights, Activity log",
     "Team: Team & access, Sharing policy, Change requests", "Set up: Structure, Fields, Layouts, Set up, Security & privacy"];
   assert.deepEqual(labels(OWNER), runs);
