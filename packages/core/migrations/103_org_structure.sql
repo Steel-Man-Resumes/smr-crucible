@@ -28,6 +28,12 @@
 -- at that site). A VIEWER sees the unit and who works in it, never its people.
 -- 103 refuses to apply without 102, and never defines smr_staff_reach.
 --
+-- LATER FILES PATCH org_profile_guard (staff pass 2026-10-28). 109 adds the
+-- 'note_review' module key to this function's allowed list by rewriting its
+-- stored body. Re-running THIS file replaces the function and drops that key,
+-- so re-apply 109 right after any re-run of 103; 109's after-guard (and the
+-- in-order pglite test) fail when the key is missing.
+--
 -- WHO MAY WRITE (database facts; the routes check capabilities first):
 --   org_profile, org_unit, unit_member: the organization's owner or an org
 --     admin, inside that organization's scope. Never a platform admin acting

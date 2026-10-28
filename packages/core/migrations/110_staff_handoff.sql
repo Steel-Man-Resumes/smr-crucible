@@ -133,7 +133,7 @@ CREATE INDEX IF NOT EXISTS staff_handoff_org_person ON staff_handoff (access_cod
 -- Who may move a handoff where. Not a definer: it reads only NEW, OLD and the
 -- session settings.
 CREATE OR REPLACE FUNCTION public.staff_handoff_guard() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   v_org text := NULLIF(current_setting('app.org_id', true), '');
 BEGIN
@@ -326,7 +326,7 @@ REVOKE ALL ON FUNCTION public.staff_suggestion_item_guard() FROM PUBLIC;
 
 -- 057 + 102 staff_suggestion_guard, with the new columns held fixed too.
 CREATE OR REPLACE FUNCTION public.staff_suggestion_guard() RETURNS TRIGGER
-LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
   IF OLD.author_user_id IS NOT NULL AND NEW.author_user_id IS NULL
      AND NOT EXISTS (SELECT 1 FROM public.users u WHERE u.id = OLD.author_user_id)
@@ -406,7 +406,7 @@ SELECT pg_temp.smr_widen_list_check('org_activity', 'entity', 'org_activity_enti
 -- Fixed words only. A handoff's items are not logged one by one when sent
 -- (the handoff row says it); every answer is.
 CREATE OR REPLACE FUNCTION public.org_activity_suggestion() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.handoff_id IS NULL THEN
@@ -436,7 +436,7 @@ CREATE TRIGGER org_activity_suggestion AFTER INSERT OR UPDATE ON staff_suggestio
 REVOKE ALL ON FUNCTION public.org_activity_suggestion() FROM PUBLIC;
 
 CREATE OR REPLACE FUNCTION public.org_activity_handoff() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     PERFORM public.org_activity_write(NEW.access_code_id, NEW.participant_user_id, NULL, 'handoff', NEW.id::text, 'created',
@@ -464,7 +464,7 @@ REVOKE ALL ON FUNCTION public.org_activity_handoff() FROM PUBLIC;
 -- cannot be used: it refuses a write without an org scope, and the person answers with none.
 -- Skips quietly where 109 is not applied.
 CREATE OR REPLACE FUNCTION public.staff_handoff_answer_inbox() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   v_author uuid;
   v_ok boolean;
@@ -499,7 +499,7 @@ REVOKE ALL ON FUNCTION public.staff_handoff_answer_inbox() FROM PUBLIC;
 -- with it. 110 applies before 111, so the call is looked up and made dynamically; before 111 it is a
 -- no-op. 111's grant itself checks team membership and the sender's own Wins switch.
 CREATE OR REPLACE FUNCTION public.staff_handoff_sent_milestone() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 BEGIN
   IF NEW.author_user_id IS NOT NULL AND to_regprocedure('public.staff_milestone_grant(uuid,uuid,text,uuid)') IS NOT NULL THEN
     EXECUTE 'SELECT public.staff_milestone_grant($1, $2, ''first_handoff_sent'', $3)' USING NEW.author_user_id, NEW.access_code_id, NEW.id;
