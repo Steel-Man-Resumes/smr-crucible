@@ -159,6 +159,8 @@ export const RESTRICTED_GRANTS = {
   // never edited but for the one "undone" mark (a column grant), never
   // deleted by the app.
   view_change_log: ["SELECT", "INSERT", "UPDATE (undone_at)"],
+  // Staff pass S5 (110). A handoff is withdrawn, never deleted.
+  staff_handoff: ["SELECT", "INSERT", "UPDATE"],
 };
 
 /**
@@ -189,6 +191,8 @@ export const APP_FUNCTIONS = [
   "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
   "smr_purge_stale_staff_drafts()",
   "smr_retention_task_marks()",
+  // 110: the person takes a next step from a handoff (acts only for app.user_id).
+  "smr_accept_handoff_step(uuid)",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -211,6 +215,12 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   // 108: trigger functions (the activity writer and the log guard are definer); fired, never called.
   "org_customization_policy_activity()",
   "view_change_log_guard()",
+  // 110: activity triggers and the item guard (definer); fired by triggers, never called.
+  "org_activity_suggestion()",
+  "org_activity_handoff()",
+  "staff_suggestion_item_guard()",
+  "staff_handoff_close_items()",
+  "staff_handoff_has_items()",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */

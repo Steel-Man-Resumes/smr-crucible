@@ -58,7 +58,7 @@ function refuseActor(actor: OrgActor): ClientViewDenied | null {
  * Steps 3 and 4 as SQL over ($1 client, $2 org, $3 actor may see all, $4 actor).
  * Both tables are row-level protected and are read here inside the org scope.
  */
-const IN_REACH = `
+export const IN_REACH = `
   EXISTS (SELECT 1 FROM access_code_redemption r WHERE r.user_id = $1::uuid AND r.access_code_id = $2::uuid)
   AND ($3::boolean OR EXISTS (
         SELECT 1 FROM client_staff_assignment a
@@ -598,6 +598,10 @@ export async function listSuggestions(actor: OrgActor, clientId: string): Promis
               u.name AS author_name, s.author_user_id, s.created_at, s.responded_at
          FROM staff_suggestion s LEFT JOIN users u ON u.id = s.author_user_id
         WHERE s.client_user_id = $1::uuid AND s.access_code_id = $2::uuid AND ${IN_REACH}
+          -- Handoff items (110: employer, resource, next_step, and jobs sent in a
+          -- handoff) are listed with their handoff (staffHandoff.ts), not here.
+          -- (to_jsonb: the column does not exist before 110, and then reads as NULL.)
+          AND s.kind IN ('job', 'comment') AND to_jsonb(s)->>'handoff_id' IS NULL
         ORDER BY s.created_at DESC LIMIT 200`,
       params(actor, clientId)
     ),
@@ -665,4 +669,103 @@ export async function withdrawSuggestion(actor: OrgActor, suggestionId: string):
       [actor.orgId, suggestionId, actor.capabilities.has("org.client.view_all"), actor.userId]),
   ]);
   return rows.length > 0;
+}
+
+/* --------------------------------------- connections the client missed (S5) -- */
+
+/**
+ * What one person SHARED that "connections the client missed" may match on,
+ * read through this door with the same rule as every other read: steps 1 to 4
+ * for the person, step 5 per scope, and the access-log row in the same
+ * transaction, written by the same predicate. The log row is an ordinary
+ * "opened your job applications" / "opened your resumes" line (via
+ * "connections", or "t.ROY" when t.ROY looked for a staff member: "asked
+ * t.ROY, which opened..."), so the person sees it like any open.
+ *
+ * Narrow on purpose: job title, company and place of their tracked jobs; the
+ * target of each shared resume. Never notes, pay, descriptions, resume text,
+ * the record planner, the hurdle plan, or their address.
+ */
+export interface ConnectionInputs {
+  clientId: string;
+  inReach: boolean;
+  applicationsShared: boolean;
+  resumeShared: boolean;
+  applications: { jobTitle: string | null; company: string | null; location: string | null }[];
+  resumeTargets: (string | null)[];
+}
+
+export const CONNECTION_APPS_SQL = `SELECT ja.job_title, ja.company, ja.location
+       FROM staff_shared_application ja
+      WHERE ja.user_id = $1::uuid AND ${covered("ja.created_at")} AND ${IN_REACH} AND ${SHARED}
+      ORDER BY ja.updated_at DESC LIMIT 50`;
+export const CONNECTION_RESUMES_SQL = `SELECT NULLIF(btrim(ra.target_context->>'targetJob'), '') AS target
+       FROM staff_shared_artifact ra
+      WHERE ra.user_id = $1::uuid AND ra.artifact_type = 'resume' AND ${covered("ra.created_at")} AND ${IN_REACH} AND ${SHARED}
+      ORDER BY ra.updated_at DESC LIMIT 20`;
+
+export async function getConnectionInputs(actor: OrgActor, clientIds: readonly string[], opts: { via?: "t.ROY" } = {}): Promise<ClientViewResult<ConnectionInputs>> {
+  const refused = refuseActor(actor);
+  if (refused) return { ok: false, reason: refused };
+  const ids = [...new Set(clientIds.filter((x) => /^[0-9a-f-]{36}$/i.test(x)).map((x) => x.toLowerCase()))].slice(0, 25);
+  if (ids.length === 0) return { ok: true, rows: [] };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const PER = 6;
+  const results = await runScoped<unknown[][]>(scopeOf(actor), (sql) => ids.flatMap((id) => {
+    const pa = params(actor, id, "applications"), pr = params(actor, id, "resume");
+    return [
+      run(sql)(`SELECT (${IN_REACH}) AS in_reach, (${SHARED}) AS shared`, pa),
+      run(sql)(`SELECT (${SHARED}) AS shared`, pr),
+      run(sql)(CONNECTION_APPS_SQL, pa),
+      run(sql)(SHARED_OPEN_LOG_SQL, [...pa, opts.via ?? "connections", actor.viewedBy ?? null]),
+      run(sql)(CONNECTION_RESUMES_SQL, pr),
+      run(sql)(SHARED_OPEN_LOG_SQL, [...pr, opts.via ?? "connections", actor.viewedBy ?? null]),
+    ];
+  }));
+  return {
+    ok: true,
+    rows: ids.map((id, i) => {
+      const r = results.slice(i * PER, i * PER + PER) as [{ in_reach: boolean; shared: boolean }[], { shared: boolean }[], { job_title: string | null; company: string | null; location: string | null }[], unknown, { target: string | null }[], unknown];
+      const inReach = !!r[0][0]?.in_reach;
+      return {
+        clientId: id, inReach,
+        applicationsShared: inReach && !!r[0][0]?.shared,
+        resumeShared: inReach && !!r[1][0]?.shared,
+        applications: r[2].map((a) => ({ jobTitle: a.job_title, company: a.company, location: a.location })),
+        resumeTargets: r[4].map((x) => x.target),
+      };
+    }),
+  };
+}
+
+/**
+ * The people this staff member reaches who share their applications or
+ * resumes with the organization (newest grant first), named by consent the
+ * same way as the client header. The caseload connections list starts here;
+ * getConnectionInputs then checks each person again, scope by scope.
+ * $1 org, $2 sees-all, $3 actor, $4 limit.
+ */
+export const CONNECTION_CANDIDATES_SQL = `SELECT r.user_id AS id,
+         CASE WHEN EXISTS (SELECT 1 FROM staff_progress_counts pc WHERE pc.user_id = r.user_id) THEN u.name ELSE oi.invited_name END AS name,
+         MAX(g.granted_at) AS shared_at
+    FROM access_code_redemption r
+    JOIN users u ON u.id = r.user_id
+    JOIN sharing_grant g ON g.user_id = r.user_id AND g.access_code_id = r.access_code_id AND g.revoked_at IS NULL AND g.scope IN ('applications', 'resume')
+    LEFT JOIN org_invite oi ON oi.user_id = r.user_id AND oi.access_code_id = r.access_code_id
+   WHERE r.access_code_id = $1::uuid
+     AND ($2::boolean OR EXISTS (SELECT 1 FROM client_staff_assignment a
+                                  WHERE a.access_code_id = $1::uuid AND a.client_user_id = r.user_id AND a.staff_user_id = $3::uuid)
+          OR ${unitReachSql("$1::uuid", "$3::uuid", "r.user_id")})
+   GROUP BY r.user_id, u.name, oi.invited_name
+   ORDER BY MAX(g.granted_at) DESC
+   LIMIT $4`;
+
+export async function listConnectionCandidates(actor: OrgActor, limit = 25): Promise<ClientViewResult<{ id: string; name: string | null }>> {
+  const refused = refuseActor(actor);
+  if (refused) return { ok: false, reason: refused };
+  const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
+  const [rows] = await runScoped<[{ id: string; name: string | null }[]]>(scopeOf(actor), (sql) => [
+    run(sql)(CONNECTION_CANDIDATES_SQL, [actor.orgId, actor.capabilities.has("org.client.view_all"), actor.userId, Math.max(1, Math.min(25, limit))]),
+  ]);
+  return { ok: true, rows: rows.map((r) => ({ id: r.id, name: r.name })) };
 }
