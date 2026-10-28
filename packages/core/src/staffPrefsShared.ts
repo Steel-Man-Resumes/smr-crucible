@@ -100,8 +100,6 @@ export interface StaffPrefs {
   viewLayouts: Record<string, GridLayout>;
   /** t.ROY's quiet suggestions at pauses (lane S1). On unless turned off. */
   troySuggestions: boolean;
-  /** Staff rewards and milestones (lane S6). Off unless the person turns it on (Troy 2026-10-27). */
-  rewardsOn: boolean;
 }
 
 export const DEFAULT_STAFF_PREFS: StaffPrefs = {
@@ -122,7 +120,6 @@ export const DEFAULT_STAFF_PREFS: StaffPrefs = {
   peopleMode: "list",
   viewLayouts: {},
   troySuggestions: true,
-  rewardsOn: false,
 };
 
 const oneOf = <T extends string>(list: readonly T[], v: unknown): T | undefined =>
@@ -177,7 +174,6 @@ export function normalizeStaffPrefs(raw: unknown): Partial<StaffPrefs> {
   if (mode) out.peopleMode = mode;
   if (r.viewLayouts && typeof r.viewLayouts === "object" && !Array.isArray(r.viewLayouts)) out.viewLayouts = normalizeViewLayouts(r.viewLayouts);
   if (typeof r.troySuggestions === "boolean") out.troySuggestions = r.troySuggestions;
-  if (typeof r.rewardsOn === "boolean") out.rewardsOn = r.rewardsOn;
   return out;
 }
 
@@ -192,9 +188,12 @@ export function resolveStaffPrefs(orgDefaults: unknown, own: unknown, allowed: P
   return { ...DEFAULT_STAFF_PREFS, ...normalizeStaffPrefs(orgDefaults), ...prefsUnderPolicy(normalizeStaffPrefs(own), allowed) };
 }
 
-/** Typed accessors other lanes read (S1 suggestions, S6 rewards), with their defaults. */
+/**
+ * Typed accessor S1 reads, with its default. (Staff rewards are NOT a pref:
+ * their one switch is S6's owner-only staff_rewards_setting table, so org
+ * defaults can never turn rewards on.)
+ */
 export const staffSuggestionsOn = (p: Partial<StaffPrefs> | null | undefined): boolean => p?.troySuggestions !== false;
-export const staffRewardsOn = (p: Partial<StaffPrefs> | null | undefined): boolean => p?.rewardsOn === true;
 
 /**
  * Today's sections in this person's order: their order first (only sections
