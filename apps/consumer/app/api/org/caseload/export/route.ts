@@ -9,6 +9,7 @@
  * through the reach-checked read. A sensitive field is left out unless it
  * was ticked by id, and what was included is written to the access log.
  */
+import { getOrgOutboundBrand, withOutboundCsvHeader } from "@crucible/core/src/orgOutboundBrand";
 import { NextResponse } from "next/server";
 import {
   buildCaseloadCsv, getFieldValues, getOrgStaffDirectory, getPartnerCohort, listFieldDefs, recordDataAccess,
@@ -57,7 +58,8 @@ export async function POST(request: Request) {
     context: { orgId: actor.orgId, clientCount: cohort.clients.length, customFields: fields.length, sensitiveFields: sensitiveIncluded },
   });
   const date = new Date().toISOString().slice(0, 10);
-  return new NextResponse(csv, {
+  const brand = await getOrgOutboundBrand(actor.userId, actor.orgId, actor.orgName);
+  return new NextResponse(withOutboundCsvHeader(csv, brand, "Caseload", date), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": `attachment; filename="caseload-${date}.csv"`,

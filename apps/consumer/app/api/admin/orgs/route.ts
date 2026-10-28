@@ -231,7 +231,7 @@ export async function POST(request: Request) {
     const org = await getOne<{ partner_name: string }>(`SELECT partner_name FROM access_code WHERE id = $1`, [orgId]);
     const origin = new URL(request.url).origin;
     const sent = await sendStaffInviteEmail({
-      scope: adminScope(orgId, guard.userId), origin, orgName: org?.partner_name ?? "your organization", inviterUserId: guard.userId,
+      scope: adminScope(orgId, guard.userId), origin, orgName: org?.partner_name ?? null, inviterUserId: guard.userId,
       send: { inviteId: res.inviteId, userId: res.userId, email: res.email, name: res.name, role: body.role === "org_admin" ? "org_admin" : "staff", volunteer: false, path: res.path, undeliverable: res.undeliverable },
     });
     const what = res.path === "admin_added"
@@ -255,7 +255,7 @@ export async function POST(request: Request) {
     if (!prep.ok) return NextResponse.json({ error: prep.error }, { status: 400 });
     const org = await getOne<{ partner_name: string }>(`SELECT partner_name FROM access_code WHERE id = $1`, [orgId]);
     const origin = new URL(request.url).origin;
-    const sent = await sendStaffInviteEmail({ scope, send: prep.send, origin, orgName: org?.partner_name ?? "your organization", inviterUserId: guard.userId });
+    const sent = await sendStaffInviteEmail({ scope, send: prep.send, origin, orgName: org?.partner_name ?? null, inviterUserId: guard.userId });
     const message = (prep.restamped ? "The person who first sent this can no longer add staff, so you are now its sender. " : "") + staffInviteSendMessage(sent, prep.send.email, origin);
     return sent === "failed" ? NextResponse.json({ error: message }, { status: 502 }) : NextResponse.json({ ok: true, result: sent, message });
   }

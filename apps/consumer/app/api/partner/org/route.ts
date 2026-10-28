@@ -19,6 +19,8 @@
  * only what the admin themselves typed (name + email), no progress.
  */
 
+import { getOrgOutboundBrand } from "@crucible/core/src/orgOutboundBrand";
+import { brandOrgEmail } from "@/lib/outbound-email-brand";
 import { NextResponse } from "next/server";
 // effectiveAuth: impersonation-aware, so viewing Marianne shows HER org, not
 // the admin's. Blue-view writes are still blocked at the middleware edge.
@@ -368,16 +370,18 @@ export async function POST(request: Request) {
       if (created.notify) {
         try {
           const inviterName = (await auth())?.user?.name || null;
+          // Migration 107: signed the organization's way (co-branded unless exclusive).
+          const brand = await getOrgOutboundBrand(userId, org.accessCodeId, org.orgName);
           if (created.kind === "invited") {
             const url = await mintInviteMagicLink(email, origin);
             await sendOrgEmail(
               email,
-              buildInviteEmail({ inviteeName: name, inviterName, orgName: org.orgName, url, origin })
+              brandOrgEmail(buildInviteEmail({ inviteeName: name, inviterName, orgName: org.orgName, url, origin }), brand)
             );
           } else {
             await sendOrgEmail(
               email,
-              buildOfferEmail({ inviteeName: name, inviterName, orgName: org.orgName, origin })
+              brandOrgEmail(buildOfferEmail({ inviteeName: name, inviterName, orgName: org.orgName, origin }), brand)
             );
           }
         } catch (err: any) {
@@ -435,23 +439,24 @@ export async function POST(request: Request) {
       }
       try {
         const inviterName = (await auth())?.user?.name || null;
+        const brand = await getOrgOutboundBrand(userId, org.accessCodeId, org.orgName);
         if (touched.offer) {
           // An open offer to an existing account: the offer email, never a sign-in link.
           await sendOrgEmail(
             touched.email,
-            buildOfferEmail({ inviteeName: touched.name, inviterName, orgName: org.orgName, origin })
+            brandOrgEmail(buildOfferEmail({ inviteeName: touched.name, inviterName, orgName: org.orgName, origin }), brand)
           );
         } else {
           const url = await mintInviteMagicLink(touched.email, origin);
           await sendOrgEmail(
             touched.email,
-            buildInviteEmail({
+            brandOrgEmail(buildInviteEmail({
               inviteeName: touched.name,
               inviterName,
               orgName: org.orgName,
               url,
               origin,
-            })
+            }), brand)
           );
         }
       } catch (err: any) {

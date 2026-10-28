@@ -7,6 +7,7 @@
  * It contains no names and no per-person rows. Its rows are built in
  * lib/org-insights-report.ts, the one definition the screen and print report share.
  */
+import { getOrgOutboundBrand, withOutboundCsvHeader } from "@crucible/core/src/orgOutboundBrand";
 import { NextResponse } from "next/server";
 import { getOrgInsights, recordDataAccess } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
@@ -27,7 +28,8 @@ export async function GET(request: Request) {
   if (format === "csv") {
     if (!guard.actor.capabilities.has("org.export")) return NextResponse.json({ error: "You do not have access to that." }, { status: 403 });
     await recordDataAccess({ accessorUserId: guard.actor.userId, resource: "org_insights", action: "export", context: { orgId: guard.actor.orgId } });
-    return new NextResponse(insightsCsv(guard.actor.orgName, insights), {
+    const brand = await getOrgOutboundBrand(guard.actor.userId, guard.actor.orgId, guard.actor.orgName);
+    return new NextResponse(withOutboundCsvHeader(insightsCsv(guard.actor.orgName, insights), brand, "Insights", new Date().toISOString().slice(0, 10)), {
       headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="insights-${new Date().toISOString().slice(0, 10)}.csv"`, "cache-control": "no-store" },
     });
   }

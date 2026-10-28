@@ -13,6 +13,7 @@
  * status, Resend and Revoke; and, right after Create, what was made.
  */
 
+import { OutboundBrandingControl } from "@/components/brand/OutboundBrandingControl";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRealTier } from "@/lib/useUserTier";
@@ -300,6 +301,7 @@ function OrgActions({ org, onDone }: { org: OrgRow; onDone: (msg: string) => voi
             onClick={() => act("brand", { action: "set_brand_tier", tier: brandTier }, (d) => `${org.partner_name} branding is now ${d.tier}.`)}>Set</button>
         </div>
       </div>
+      <OutboundBrandingControl orgId={org.id} orgName={org.partner_name} />
       <div>
         <div className="text-t-phos-dim mb-1">Rotate the code</div>
         <button className={btn} disabled={!!busy}

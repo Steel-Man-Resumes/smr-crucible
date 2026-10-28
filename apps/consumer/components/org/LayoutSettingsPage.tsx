@@ -86,7 +86,7 @@ export function LayoutSettingsPage() {
         disabled={!d.canManage}
         onSave={(items) => put("today", { order: items.map((i) => i.key), hidden: items.filter((i) => !i.on).map((i) => i.key) }, `Saved Today for ${roleLabel}.`)}
         onReset={today ? () => put("today", null, `Today for ${roleLabel} is back to the built-in order.`) : undefined}
-        hint="A hidden section is not shown to this role at all. Each person can still arrange their own Today, inside what you allow below."
+        hint={<>A hidden section is not shown to this role at all. Each person can still arrange their own Today, inside what you allow below, in <Link href="/dashboard/my-setup#landing" className="underline underline-offset-4">My setup</Link>.</>}
       />
 
       <OrderedChecklist
@@ -205,7 +205,7 @@ function PolicySurface({ title, switches, allowed, disabled, onSave, onReset }: 
 
 function OrderedChecklist({ title, note, items: initial, disabled, onSave, onReset, hint }: {
   title: string; note: string; items: { key: string; label: string; on: boolean }[]; disabled: boolean;
-  onSave: (items: { key: string; label: string; on: boolean }[]) => void; onReset?: () => void; hint: string;
+  onSave: (items: { key: string; label: string; on: boolean }[]) => void; onReset?: () => void; hint: React.ReactNode;
 }) {
   const [items, setItems] = useState(initial);
   const sig = JSON.stringify(initial);

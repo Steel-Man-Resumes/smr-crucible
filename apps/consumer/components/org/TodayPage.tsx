@@ -346,7 +346,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, onToggleSection, time
           <details className="mt-8 max-w-2xl text-xs text-t-phos-dim">
             <summary className="t-focus inline-flex min-h-touch cursor-pointer items-center text-t-bone-dim underline underline-offset-4">Why someone might not be here</summary>
             <p className="mt-2">
-              Interviews and follow-up dates appear here only for people who chose to share their applications, and they can see that those dates showed up on your list. Someone who shares nothing will not appear for any of that, which is their choice, not a sign that nothing is happening. Choose which sections you see in Settings, under My workflow.
+              Interviews and follow-up dates appear here only for people who chose to share their applications, and they can see that those dates showed up on your list. Someone who shares nothing will not appear for any of that, which is their choice, not a sign that nothing is happening. Choose which sections you see on <Link href="/dashboard/my-setup#landing" className="text-t-amber-bright underline underline-offset-4">My setup</Link>.
             </p>
           </details>
         </div>

@@ -11,6 +11,7 @@
  * sharing or the name typed on their invite), and someone outside this
  * viewer's reach never appears here.
  */
+import { OUTBOUND_CSV_HELP } from "@crucible/core/src/orgOutboundBrandShared";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
@@ -122,7 +123,7 @@ export function AuditPage() {
         <div className="sm:col-span-2 lg:col-span-5 flex flex-wrap items-center gap-3">
           {filtered && <button type="button" onClick={() => setFilters(EMPTY)} className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">Clear filters</button>}
           {canExport && (
-            <a href={`/api/org/activity${query(filters, { format: "csv" })}`} className="t-focus text-xs border border-t-line text-t-phos px-3 py-1.5 hover:text-t-white">
+            <a href={`/api/org/activity${query(filters, { format: "csv" })}`} title={OUTBOUND_CSV_HELP} className="t-focus text-xs border border-t-line text-t-phos px-3 py-1.5 hover:text-t-white">
               Download as a spreadsheet (CSV)
             </a>
           )}

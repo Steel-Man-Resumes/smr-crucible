@@ -25,6 +25,7 @@
  * change for themselves (migration 108), drawn locked with the reason. On a
  * phone the grid falls back to the list.
  */
+import { OUTBOUND_CSV_HELP } from "@crucible/core/src/orgOutboundBrandShared";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { PeopleGrid } from "@/components/org/PeopleGrid";
@@ -299,7 +300,7 @@ export function CaseloadWorkbench<T extends WorkbenchClient>({
 
   return (
     <div data-testid="caseload-workbench">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2" data-tour="crm-people-save-view">
         <div role="radiogroup" aria-label="Show People as" className="inline-flex border border-t-line">
           {(["list", "grid"] as const).map((m) => (
             <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
@@ -654,7 +655,7 @@ function ExportPanel({ defs }: { defs: CustomFieldDef[] }) {
   const [ticked, setTicked] = useState<string[]>([]);
   return (
     <form method="post" action="/api/org/caseload/export" className="mb-3 border border-t-line bg-t-panel px-3 py-3">
-      <p className="text-xs text-t-phos">The spreadsheet has everyone you can see who shares progress, with your organization&apos;s fields. Every download is logged.</p>
+      <p className="text-xs text-t-phos">The spreadsheet has everyone you can see who shares progress, with your organization&apos;s fields. Every download is logged. {OUTBOUND_CSV_HELP}</p>
       {sensitive.length > 0 && (
         <fieldset className="mt-2">
           <legend className="text-xs font-semibold text-t-white">Sensitive fields stay out unless you tick them</legend>

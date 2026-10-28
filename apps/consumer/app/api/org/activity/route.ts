@@ -12,6 +12,7 @@
  * staff who reach that person) and again in the SQL; this route adds the verb.
  * Nothing here writes a row: the log is written only by database triggers.
  */
+import { getOrgOutboundBrand, withOutboundCsvHeader } from "@crucible/core/src/orgOutboundBrand";
 import { NextResponse } from "next/server";
 import {
   listOrgActivity, listParticipantActivity, activityFilterChoices, activityFilters, activitySentence, activityWho, activityPerson,
@@ -55,7 +56,8 @@ export async function GET(request: Request) {
     const f = activityFilters(params);
     await recordDataAccess({ accessorUserId: actor.userId, resource: "org_activity", action: "export",
       context: { orgId: actor.orgId, rows: res.rows.length, entity: f.entity, from: f.from, to: f.to, byPerson: !!f.participantId, byStaff: !!f.staffId } });
-    return new NextResponse(activityCsv(res.rows), {
+    const brand = await getOrgOutboundBrand(actor.userId, actor.orgId, actor.orgName);
+    return new NextResponse(withOutboundCsvHeader(activityCsv(res.rows), brand, "Activity log", new Date().toISOString().slice(0, 10)), {
       headers: {
         "content-type": "text/csv; charset=utf-8",
         "content-disposition": `attachment; filename="activity-${new Date().toISOString().slice(0, 10)}.csv"`,

@@ -13,6 +13,7 @@
  * person) puts the page back as it was saved and shows the route's words.
  */
 
+import { useEffectiveRole } from "@/components/RoleProvider";
 import { useEffect, useState } from "react";
 import { applyUiPrefs, UI_PREFS_EVENT } from "@/lib/ui-prefs-apply";
 import { readSaveError } from "@/lib/save-error";
@@ -42,6 +43,9 @@ const MOTION_OPTIONS: { value: "auto" | "on" | "off"; label: string }[] = [
 ];
 
 export function AccessibilitySettingsSection() {
+  // Staff have t.ROY, not a career coach (staff pass S2, walk T03).
+  const helper = useEffectiveRole()?.orgRole ? "t.ROY" : "your coach";
+  const Helper = helper === "t.ROY" ? "t.ROY" : "Your coach";
   const [coach, setCoach] = useState<CoachA11y | null>(null);
   const [prefs, setPrefs] = useState<UiPrefs | null>(null);
   const [error, setError] = useState<{ part: "coach" | "prefs"; message: string } | null>(null);
@@ -130,21 +134,21 @@ export function AccessibilitySettingsSection() {
           <ToggleRow
             id="settings-plain-language"
             label="Plain language"
-            hint="Shorter words and simpler sentences from your coach."
+            hint={`Shorter words and simpler sentences from ${helper}.`}
             on={!!coach?.coachPlainLanguage}
             onToggle={() => saveCoach({ coachPlainLanguage: !coach?.coachPlainLanguage })}
           />
           <ToggleRow
             id="settings-read-aloud"
             label="Read aloud"
-            hint="Your coach can read its answers out loud."
+            hint={`${Helper} can read ${helper === "t.ROY" ? "his" : "its"} answers out loud.`}
             on={!!coach?.coachVoice}
             onToggle={() => saveCoach({ coachVoice: !coach?.coachVoice })}
           />
           <ToggleRow
             id="settings-spanish"
             label="Spanish (Espanol)"
-            hint="Your coach replies in Spanish."
+            hint={`${Helper} replies in Spanish.`}
             on={coach?.coachLanguage === "es"}
             onToggle={() =>
               saveCoach({ coachLanguage: coach?.coachLanguage === "es" ? "en" : "es" })

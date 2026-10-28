@@ -293,7 +293,7 @@ export function ReferralsPage() {
   const { data, failed, reload } = useReferrals({ filter, ...(mine ? { mine: "1" } : {}) });
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
-      <h1 className="text-xl font-semibold text-t-white">Referrals</h1>
+      <h1 className="text-xl font-semibold text-t-white" data-tour="crm-referrals-head">Referrals</h1>
       <p className="mt-1 mb-4 text-sm text-t-phos-dim">Where people were sent for help, who is following up, and what came of it. A referral is not done until someone records what happened.</p>
       <div role="group" aria-label="Show" className="mb-3 flex flex-wrap gap-2">
         {FILTERS.map((f) => (

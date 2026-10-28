@@ -218,7 +218,7 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
         <div className="min-w-0">
           <div role="tablist" aria-label={`${terms.cap("participant")} sections`} className="flex flex-wrap gap-1 border-b border-t-line mb-5">
             {orderPersonTabs(PERSON_TABS, prefs.personTabs).map(({ key, label }) => (
-              <button key={key} role="tab" aria-selected={tab === key} onClick={() => go({ kind: "tab", tab: key })} data-tour={key === "shared" ? "crm-person-shared-tab" : undefined}
+              <button key={key} role="tab" aria-selected={tab === key} onClick={() => go({ kind: "tab", tab: key })} data-tour={key === "shared" ? "crm-person-shared-tab" : key === "timeline" ? "crm-person-timeline-tab" : key === "tasks" ? "crm-person-tasks-tab" : undefined}
                 className={`t-focus px-4 py-2 text-sm border-b-2 -mb-px ${tab === key ? "border-t-amber text-t-white font-semibold" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>
                 {label}
               </button>
@@ -696,7 +696,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
               <button type="button" onClick={() => { setBody(""); setKind(defaultKind); clearDraft(); autosave.clear(); }} className="t-focus ml-2 underline">Throw it away</button>
             </div>
           )}
-          <textarea id="note-body" value={body} onChange={(e) => setBody(e.target.value)} onBlur={autosave.onBlur} rows={3} maxLength={8000}
+          <textarea id="note-body" data-tour="crm-person-note-box" value={body} onChange={(e) => setBody(e.target.value)} onBlur={autosave.onBlur} rows={3} maxLength={8000}
             className="plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2" />
           <DraftStatus restoredAt={autosave.restoredAt} statusText={autosave.statusText}
             onStartOver={() => { setBody(""); autosave.clear(); }} onDismiss={autosave.dismissRestored} />
