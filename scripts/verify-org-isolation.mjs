@@ -400,6 +400,68 @@ async function main() {
   await outboundBrandChecks();
   await staffRewardsChecks();
   await directoryContributionChecks();
+  await finalCrossOrgProbes();
+}
+
+/**
+ * Final review should-fix 6 (staff pass integration, 2026-10-28): after every
+ * other check has left its rows, probe the staff tables no earlier check reads
+ * across organizations. A staff member of another organization reads none of
+ * them, with its own scope or forging the target's; per-person inbox items
+ * (handoff answers, good catches, recognition questions, directory answers)
+ * are read by their recipient only, never by a colleague or the person.
+ */
+async function finalCrossOrgProbes() {
+  console.log("\n  -- cross-organization and reach probes on the staff tables (107-112) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const app = neon(appUrl);
+  const asOrg = async (orgId, userId, text, params = []) => (await app.transaction([
+    app("SELECT set_config('app.org_id', $1, true)", [orgId ?? ""]), app("SELECT set_config('app.user_id', $1, true)", [userId]), app(text, params),
+  ]))[2];
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const spyOwner = await mkUser("xo-spyowner"), spyStaff = await mkUser("xo-spystaff");
+  const [spyOrg] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOXO" + uniq}, ${P + " cross org probe"}, 'client', ${spyOwner}, true, true) RETURNING id`;
+  created.codes.push(spyOrg.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${spyOrg.id}, ${spyStaff}, 'staff')`;
+  const tables = ["team_comment_version", "org_change_reply", "note_review", "staff_rewards_org", "staff_recognition_note", "staff_listing_nudge", "staff_inbox_item"];
+  for (const t of tables) {
+    const [{ has }] = await sql(`SELECT to_regclass('public.${t}') IS NOT NULL AS has`);
+    if (!has) { console.log(`  note  ${t} not present; skipped`); continue; }
+    const [{ n: rows }] = await sql(`SELECT count(*)::int AS n FROM public.${t}`);
+    if (!rows) { console.log(`  note  ${t} has no rows from earlier checks; probe is empty`); }
+    const [{ org }] = await sql(`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = 'access_code_id') AS org`, [t]);
+    const targets = org ? (await sql(`SELECT DISTINCT access_code_id AS id FROM public.${t} WHERE access_code_id = ANY ($1::uuid[])`, [created.codes])).map((r) => r.id) : [];
+    const own = await asOrg(spyOrg.id, spyStaff, `SELECT count(*)::int AS n FROM public.${t}`);
+    check(`${t}: another organization's staff reads none of it in its own scope`, own[0].n === 0, String(own[0].n));
+    for (const target of targets.slice(0, 3)) {
+      const forged = await asOrg(target, spyStaff, `SELECT count(*)::int AS n FROM public.${t}`);
+      check(`${t}: and none forging the other organization's scope`, forged[0].n === 0, String(forged[0].n));
+    }
+  }
+
+  // Inbox items about the staff side's own work: the recipient's alone.
+  const [{ inbox }] = await sql`SELECT to_regclass('public.staff_inbox_item') IS NOT NULL AS inbox`;
+  if (!inbox) return;
+  const items = await sql`SELECT id, access_code_id, recipient_user_id, participant_user_id, kind FROM staff_inbox_item
+                           WHERE access_code_id = ANY (${created.codes}::uuid[]) AND kind IN ('handoff', 'kudos', 'recognition', 'contribution_answered')`;
+  for (const kind of ["handoff", "kudos", "recognition", "contribution_answered"]) {
+    const it = items.find((r) => r.kind === kind);
+    if (!it) { console.log(`  note  no ${kind} inbox item from earlier checks; probe skipped`); continue; }
+    const [colleague] = await sql`SELECT user_id FROM org_staff WHERE access_code_id = ${it.access_code_id} AND user_id <> ${it.recipient_user_id} LIMIT 1`;
+    const mine = await asOrg(it.access_code_id, it.recipient_user_id, "SELECT id FROM staff_inbox_item WHERE id = $1", [it.id]);
+    check(`${kind} inbox item: the recipient reads it`, mine.length === 1);
+    if (colleague) {
+      const theirs = await asOrg(it.access_code_id, colleague.user_id, "SELECT id FROM staff_inbox_item WHERE id = $1", [it.id]);
+      check(`${kind} inbox item: a colleague does not`, theirs.length === 0);
+    }
+    if (it.participant_user_id) {
+      const person = await asOrg(null, it.participant_user_id, "SELECT id FROM staff_inbox_item WHERE id = $1", [it.id]);
+      const personScoped = await asOrg(it.access_code_id, it.participant_user_id, "SELECT id FROM staff_inbox_item WHERE id = $1", [it.id]);
+      check(`${kind} inbox item: the person it is about does not`, person.length === 0 && personScoped.length === 0);
+    }
+    const spy = await asOrg(it.access_code_id, spyStaff, "SELECT id FROM staff_inbox_item WHERE id = $1", [it.id]);
+    check(`${kind} inbox item: another organization does not, even forging the scope`, spy.length === 0);
+  }
 }
 
 /**
