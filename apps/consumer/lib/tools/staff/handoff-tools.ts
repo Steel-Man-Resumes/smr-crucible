@@ -38,9 +38,9 @@ export interface HandoffToolContext {
   readonly initial: OrgActor;
   loadCore(): Promise<Core>;
   actor(): Promise<OrgActor>;
-  hold(clientId: string | undefined): { status: "refused" | "unavailable" | "not_shared"; error: string } | null;
+  hold(clientId: string | undefined): { status: string; error: string } | null;
   safe<A>(run: (args: A) => Promise<unknown>): (args: A) => Promise<unknown>;
-  refusal(reason: string): { status: "refused" | "unavailable" | "not_shared"; error: string };
+  refusal(reason: string): { status: string; error: string };
   readonly dataNote: string;
   /** Optional (S1's newer context): id -> first name of people on the list. */
   readonly selectors?: ReadonlyMap<string, string>;
