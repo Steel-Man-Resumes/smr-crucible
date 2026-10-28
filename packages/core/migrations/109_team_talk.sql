@@ -50,6 +50,14 @@
 --   note review send: the note's author; decide: the owner or an org admin who
 --               is not the author; both only while they reach the person.
 --
+-- NOTE LOCK HOLDS FOR EVERY ROLE. case_note_review_lock (SECURITY DEFINER)
+-- refuses a change to a pending or approved note even from an owner-credential
+-- maintenance session, on purpose (like 102's retention_check_guard): an
+-- approved note is a signed record. The only way to change one by hand is a
+-- deliberate, logged step in one transaction as the owner role:
+-- ALTER TABLE case_note DISABLE TRIGGER case_note_review_lock; ...; ENABLE it again.
+-- The deleted-account path (author_user_id to NULL) is allowed.
+--
 -- MODULE KEY. 103's org_profile_guard allows a fixed list of module keys. This
 -- file adds 'note_review' to that list by rewriting the stored function body
 -- (pg_get_functiondef + replace), so it works whatever 107 or 108 did to the
@@ -150,6 +158,13 @@ DECLARE
   v_new boolean := COALESCE((NEW.modules ->> 'ai_assist')::boolean, true);
   v_old boolean := CASE WHEN TG_OP = 'UPDATE' THEN COALESCE((OLD.modules ->> 'ai_assist')::boolean, true) ELSE true END;
 BEGIN
+  -- Round 3: the app saves the profile with an upsert (INSERT ... ON CONFLICT
+  -- DO UPDATE). When a row already exists, the BEFORE INSERT sees the proposed
+  -- row against the default, not the stored value; the BEFORE UPDATE OF modules
+  -- firing on the conflict path judges the real change. So: no ruling here.
+  IF TG_OP = 'INSERT' AND EXISTS (SELECT 1 FROM public.org_profile p WHERE p.access_code_id = NEW.access_code_id) THEN
+    RETURN NEW;
+  END IF;
   IF v_new = v_old THEN RETURN NEW; END IF;
   IF v_actor IS NULL AND EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolname = current_user AND (r.rolbypassrls OR r.rolsuper)) THEN
     RETURN NEW;
@@ -1101,7 +1116,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_task'::regclass AND tgname = 'staff_task_assign_guard' AND NOT tgisinternal)
      OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.case_note'::regclass AND tgname = 'case_note_review_lock' AND NOT tgisinternal)
      OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.org_profile'::regclass AND tgname = 'org_profile_ai_owner_only' AND NOT tgisinternal) THEN
-    RAISE EXCEPTION '109: the task handoff guard and the note review lock must exist';
+    RAISE EXCEPTION '109: the task handoff guard, the note review lock and the owner-only AI switch trigger must exist';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     IF has_table_privilege('smr_app', 'public.staff_inbox_item', 'INSERT') OR has_table_privilege('smr_app', 'public.staff_inbox_item', 'DELETE')
