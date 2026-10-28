@@ -242,6 +242,7 @@ describe("migration 109, statically", () => {
     const ai = MIG.slice(MIG.indexOf("FUNCTION public.org_profile_ai_owner_only"), MIG.indexOf("REVOKE ALL ON FUNCTION public.org_profile_ai_owner_only"));
     assert.match(ai, /a\.partner_user_id = v_actor/);
     assert.doesNotMatch(ai, /SECURITY DEFINER/);
+    assert.match(ai, /TG_OP = 'INSERT' AND EXISTS \(SELECT 1 FROM public\.org_profile p WHERE p\.access_code_id = NEW\.access_code_id\)/, "round 3: the upsert's insert step defers to the update trigger");
     assert.match(teamTalkErrorLine("ERROR: ai_assist_owner_only: x"), /Only the owner/);
   });
   it("the activity log takes the two new entities, and the code knows them", () => {

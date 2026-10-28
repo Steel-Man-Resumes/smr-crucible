@@ -30,6 +30,7 @@ import { LIST_CHANGE_REQUESTS_SQL, CHANGE_EVENTS_SQL } from '@crucible/core/src/
 import { NOTE_REVIEWS_SQL, REVIEW_QUEUE_SQL } from '@crucible/core/src/noteReview';
 import { timelineSql } from '@crucible/core/src/orgTimeline';
 import { INBOX_KINDS } from '@crucible/core/src/teamTalkShared';
+import { ORG_STRUCTURE_SQL } from '@crucible/core/src/orgStructure';
 
 const dir = process.env.SMR_PGLITE_DIR;
 const skip = !dir || !existsSync(join(dir, '@electric-sql/pglite')) ? 'set SMR_PGLITE_DIR to run the pglite team talk test' : false;
@@ -317,6 +318,14 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.match(await err(prof(admin, `modules = modules || '{"ai_assist": true}'`)), /ai_assist_owner_only/, 'and only the owner turns it back on');
   await q(`UPDATE org_profile SET modules = modules || '{"ai_assist": true}' WHERE access_code_id = $1`, [org]);
   assert.equal(((await q(`SELECT modules->>'ai_assist' AS a FROM org_profile WHERE access_code_id = $1`, [org])).rows[0] as any).a, 'true', 'owner-credential maintenance is allowed');
+  // Round 3: the app's real save is an upsert. With t.ROY off by the owner, an admin's save that keeps it off works; one that turns it on does not.
+  await prof(owner, `modules = modules || '{"ai_assist": false}'`);
+  const upsert = (actor: string, name: string, ai: boolean) => as(S(actor), ORG_STRUCTURE_SQL.upsertProfile,
+    [org, 'reentry_nonprofit', name, 'America/Chicago', '{}', JSON.stringify({ note_review: true, sites: true, ai_assist: ai }), false]);
+  assert.equal((await upsert(admin, 'Lakeshore Works North (Demo)', false)).length, 1, 'an admin saves the profile (new name) while the owner keeps t.ROY off');
+  assert.equal(((await q(`SELECT display_name, modules->>'ai_assist' AS a FROM org_profile WHERE access_code_id = $1`, [org])).rows[0] as any).a, 'false');
+  assert.match(await err(upsert(admin, 'Lakeshore Works North (Demo)', true)), /ai_assist_owner_only/, 'the same save turning t.ROY on is refused');
+  assert.equal((await upsert(owner, 'Lakeshore Works North (Demo)', true)).length, 1, 'the owner turns it back on through the same save');
 
   /* ------------------------------------------------- timeline and reach -- */
   const tl = await as(S(cm), timelineSql(['comment']), [org, false, cm, p1, null, '', 50]);
