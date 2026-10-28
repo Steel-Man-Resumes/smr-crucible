@@ -109,6 +109,17 @@ export const RLS_PROTECTED_TABLES = [
   "org_change_request_event",
   "note_review",
   "note_review_event",
+  // Staff rewards (migration 111, lane S6): own switch, program settings,
+  // good catches (reach-restricted), milestones and recognition notes
+  "staff_rewards_setting",
+  "staff_rewards_org",
+  "staff_kudos",
+  "staff_milestone",
+  "staff_recognition_note",
+  // Directory contributions (migration 112, lane S6): the data owner's queue
+  // (platform admin RLS) and each staff member's own nudge rows
+  "directory_contribution",
+  "staff_listing_nudge",
 ] as const;
 
 export interface RlsHealth {

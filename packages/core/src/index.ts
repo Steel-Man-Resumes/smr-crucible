@@ -141,3 +141,6 @@ export * from './packageDelivery';
 export * from './staffHandoffShared';
 export * from './staffHandoff';
 export * from './staffConnections';
+// Staff rewards (111) and staff directory contributions (112), lane S6.
+export * from './staffRewards';
+export * from './directoryContribution';

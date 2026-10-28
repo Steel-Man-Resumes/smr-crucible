@@ -398,6 +398,8 @@ async function main() {
   await handoffChecks();
   await teamTalkChecks();
   await outboundBrandChecks();
+  await staffRewardsChecks();
+  await directoryContributionChecks();
 }
 
 /**
@@ -932,6 +934,178 @@ async function aiSkillRunChecks() {
   check("a volunteer (no outcome or insight rights) gets no period numbers", (await core.getOutcomesForPeriod(await A(vol), {})) === null);
   const period = await core.getOutcomesForPeriod(aCm, { from: "2020-01-01", to: "2030-12-31" });
   check("a case manager's period numbers are labelled as their caseload", period?.scope === "people on your caseload", JSON.stringify(period?.scope));
+}
+
+/**
+ * Staff rewards (111, staff side lane S6). The claims: rewards are off until
+ * the person turns them on, and only they can; a good catch goes only between
+ * colleagues of one organization, is read only by the two of them, never by
+ * another organization, and never about someone either cannot reach (and it
+ * leaves the reader's view when they stop reaching them); milestones are
+ * written only by the database and read only by their owner; the board lists
+ * only givers who opted in; a recognition note is answered only by the person
+ * it is about; the app holds no DELETE anywhere here.
+ */
+async function staffRewardsChecks() {
+  console.log("\n  -- staff rewards (111) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ has }] = await sql`SELECT to_regclass('public.staff_kudos') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  111 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("rw-owner"), cm = await mkUser("rw-cm"), cm2 = await mkUser("rw-cm2"), vol = await mkUser("rw-vol"), spy = await mkUser("rw-spy"), spyStaff = await mkUser("rw-spystaff");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISORWD" + uniq}, ${P + " rewards"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISORWD2" + uniq}, ${P + " rewards2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${cm2}, 'staff'), (${org.id}, ${vol}, 'staff'), (${org2.id}, ${spyStaff}, 'staff')`;
+  const pat = await mkUser("rw-pat"), theirs = await mkUser("rw-theirs");
+  await core.redeemAccessCode(pat, org.code); await joinCohortConsent(pat);
+  await core.redeemAccessCode(theirs, org2.code); await joinCohortConsent(theirs);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aCm2 = await A(cm2), aVol = await A(vol), aOwner = await A(owner), aSpy = await A(spy), aSpyStaff = await A(spyStaff);
+  const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e.message) }; } };
+  const scoped = (orgId, userId, q) => app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${userId}, true)`, q]);
+
+  check("rewards are off until the person turns them on", (await core.getRewardsSettings(aCm)).rewardsOn === false);
+  await core.setRewardsSettings(aCm, { rewardsOn: true });
+  check("the person turns their own on", (await core.getRewardsSettings(aCm)).rewardsOn === true);
+  const forced = await attempt(() => scoped(org.id, owner, app`INSERT INTO staff_rewards_setting (user_id, access_code_id, rewards_on) VALUES (${cm2}, ${org.id}, true)`));
+  check("the owner cannot turn rewards on for a staff member, even in SQL", !forced.ok, JSON.stringify(forced));
+  const ownerReads = await scoped(org.id, owner, app`SELECT user_id FROM staff_rewards_setting`);
+  check("and cannot read anyone's switch", (ownerReads.at(-1) ?? []).length === 0);
+
+  const k1 = await core.giveKudos(aCm, { toUserId: cm2, body: "Great catch on the bus pass deadline" });
+  check("a staff member thanks a colleague", k1.ok, JSON.stringify(k1));
+  const cross = await core.giveKudos(aCm, { toUserId: spyStaff, body: "Thanks across the street" });
+  check("not someone in another organization", !cross.ok, JSON.stringify(cross));
+  const forgedOrg = await attempt(() => scoped(org2.id, cm, app`INSERT INTO staff_kudos (access_code_id, from_user_id, to_user_id, body) VALUES (${org2.id}, ${cm}, ${spyStaff}, 'Forged org')`));
+  check("not by forging the other organization's scope", !forgedOrg.ok, JSON.stringify(forgedOrg));
+  const task = await core.addStaffTask(aCm, { title: "Call about the class", clientId: pat });
+  const aboutPat = task.ok ? await core.giveKudos(aCm, { toUserId: vol, body: "Thanks for the help here", workKind: "task", workId: task.id ?? task.task?.id }) : { ok: false };
+  check("not about a participant the receiver cannot reach", !aboutPat.ok, JSON.stringify(aboutPat));
+  const toOwner = task.ok ? await core.giveKudos(aCm, { toUserId: owner, body: "Thanks for backing me up here", workKind: "task", workId: task.id ?? task.task?.id }) : { ok: false };
+  check("about them when both reach them (the owner reaches everyone)", toOwner.ok, JSON.stringify(toOwner));
+  const ids = async (a) => { const k = await core.listKudos(a); return [...k.received, ...k.given].map((x) => x.id); };
+  check("sender and receiver read the good catch", (await ids(aCm)).includes(k1.id) && (await ids(aCm2)).includes(k1.id));
+  check("a third colleague does not", !(await ids(aVol)).includes(k1.id));
+  check("the owner does not read colleagues' good catches", !(await ids(aOwner)).includes(k1.id));
+  check("another organization reads none", (await ids(aSpy)).length === 0 && (await ids(aSpyStaff)).length === 0);
+  const [{ n: unscopedKudos }] = await core.query("SELECT count(*)::int AS n FROM staff_kudos");
+  check("an unscoped app read sees no good catches", unscopedKudos === 0, String(unscopedKudos));
+  if (toOwner.ok) {
+    await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm2} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
+    check("reach: once the sender no longer reaches the person, the good catch about them leaves their view", !(await ids(aCm)).includes(toOwner.id));
+    await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
+  }
+  const del = await attempt(() => scoped(org.id, cm, app`DELETE FROM staff_kudos WHERE id = ${k1.id}`));
+  check("a good catch is never deleted by the app", !del.ok && /permission denied/i.test(del.e), JSON.stringify(del));
+  check("only the sender takes it back", (await core.withdrawKudos(aCm2, k1.id)) === false && (await core.withdrawKudos(aCm, k1.id)) === true);
+
+  const k2 = await core.giveKudos(aCm, { toUserId: cm2, body: "Thanks for covering Friday" });
+  check("Wins off: nothing is recorded", (await core.refreshMilestones(aCm2)) === 0);
+  await core.refreshMilestones(aCm);
+  const ms = (await core.listMyMilestones(aCm)).map((m) => m.key);
+  check("milestones come from facts", ms.includes("first_kudos_given"), JSON.stringify(ms));
+  check("and are private", (await core.listMyMilestones(aCm2)).length === 0 || !(await core.listMyMilestones(aCm2)).some((m) => m.key === "first_kudos_given"));
+  const selfAward = await attempt(() => scoped(org.id, cm, app`INSERT INTO staff_milestone (user_id, access_code_id, key) VALUES (${cm}, ${org.id}, 'directory_anchor')`));
+  check("never self-awarded", !selfAward.ok, JSON.stringify(selfAward));
+  const grant = await attempt(() => scoped(org.id, cm, app`SELECT public.staff_milestone_grant(${cm}::uuid, ${org.id}::uuid, 'directory_anchor', NULL)`));
+  check("the app cannot call the milestone writer", !grant.ok && /permission denied/i.test(grant.e), JSON.stringify(grant));
+  const [{ n: unscopedMs }] = await core.query("SELECT count(*)::int AS n FROM staff_milestone");
+  check("an unscoped app read sees no milestones", unscopedMs === 0, String(unscopedMs));
+
+  // Names: the org-wide detector answers only inside the caller's own organization.
+  await sql`UPDATE users SET name = ${"Zelda" + uniq + " Quill"} WHERE id = ${pat}`;
+  const full = `thanks for helping zelda${uniq.toLowerCase()} quill`;
+  const seen = await core.participantNamesIn(aCm, full);
+  check("the name check finds a participant the writer reaches, by full name in any case", seen.reached.includes(pat), JSON.stringify(seen));
+  const hidden = await core.participantNamesIn(aVol, full);
+  check("someone the writer cannot reach is never checked or reported (no enrollment oracle)", hidden.reached.length === 0 && !("other" in hidden), JSON.stringify(hidden));
+  const outside = await core.participantNamesIn(aSpyStaff, full);
+  check("another organization's staff learn nothing about this one's participants", outside.reached.length === 0, JSON.stringify(outside));
+  const named = await core.giveKudos(aCm, { toUserId: cm2, body: `Thanks for helping Zelda${uniq} Quill` });
+  check("a good catch naming a participant without linked work is refused", !named.ok, JSON.stringify(named));
+  const oracle = await attempt(() => scoped(org.id, cm, app`SELECT public.staff_rewards_member(${org2.id}::uuid, ${spyStaff}::uuid)`));
+  check("the app cannot ask who is staff in another organization", !oracle.ok && /permission denied/i.test(oracle.e), JSON.stringify(oracle));
+
+  const board = (await core.giverBoard(aVol)).map((b) => b.userId);
+  check("the board lists givers who opted in, and nobody who was thanked", board.includes(cm) && !board.includes(cm2), JSON.stringify(board));
+  check("another organization gets no board", (await core.giverBoard(aSpyStaff)).length === 0);
+  void k2;
+
+  const note = await core.writeRecognitionNote(aOwner, { aboutUserId: cm, body: "Built the bus pass checklist the whole team uses" });
+  check("the owner writes a recognition note", note.ok, JSON.stringify(note));
+  check("staff cannot", !(await core.writeRecognitionNote(aCm2, { aboutUserId: cm, body: "Built the bus pass checklist the whole team uses" })).ok);
+  check("not about another organization's staff", !(await core.writeRecognitionNote(aOwner, { aboutUserId: spyStaff, body: "Built the bus pass checklist the whole team uses" })).ok);
+  check("nothing goes in a report before the person says yes", ((await core.listRecognitionForReport(aOwner)) ?? []).length === 0);
+  check("the owner cannot say yes for them", (await core.answerRecognitionNote(aOwner, note.id, "approved")) === false);
+  check("the person says yes", (await core.answerRecognitionNote(aCm, note.id, "approved")) === true);
+  check("then it is in the report", ((await core.listRecognitionForReport(aOwner)) ?? []).some((n) => n.id === note.id));
+  check("a colleague never reads it", !(await core.listMyRecognitionNotes(aCm2)).some((n) => n.id === note.id) && (await core.listRecognitionForReport(aCm2)) === null);
+  check("another organization's owner never reads it", !((await core.listRecognitionForReport(aSpy)) ?? []).some((n) => n.id === note.id));
+}
+
+/**
+ * Directory contributions (112, lane S6). The claims: only staff of the
+ * program submit, through the intake function; staff never read the queue
+ * table and never see a private note; another program sees nothing; only the
+ * data owner decides; a hearsay "call" cannot be submitted; credit follows
+ * approval only; the listing nudge rows are each person's own.
+ */
+async function directoryContributionChecks() {
+  console.log("\n  -- staff directory contributions (112) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ has }] = await sql`SELECT to_regclass('public.directory_contribution') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  112 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("dc-owner"), cm = await mkUser("dc-cm"), cm2 = await mkUser("dc-cm2"), spy = await mkUser("dc-spy"), part = await mkUser("dc-part"), admin = await mkUser("dc-platform");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISODCT" + uniq}, ${P + " contrib"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISODCT2" + uniq}, ${P + " contrib2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${cm2}, 'staff')`;
+  await core.redeemAccessCode(part, org.code); await joinCohortConsent(part);
+  await sql`INSERT INTO platform_admin (user_id, note) VALUES (${admin}, 'isolation test')`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aCm2 = await A(cm2), aOwner = await A(owner), aSpy = await A(spy);
+  const today = new Date().toISOString().slice(0, 10);
+  const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e.message) }; } };
+  try {
+    await core.setRewardsSettings(aCm, { rewardsOn: true });
+    const sent = await core.submitContribution(aCm, { flow: "new_place", targetKind: "employer", details: { name: `Isolation Foods ${uniq} (Demo)`, state: "MI" } }, today);
+    check("a staff member sends a new place", sent.ok, JSON.stringify(sent));
+    const hear = await core.submitContribution(aCm, { flow: "called_today", targetKind: "employer", targetId: sent.id, details: { said: "yes" }, interactionOn: today, interactionMethod: "heard_from_someone" }, today);
+    check("hearsay is never a call", !hear.ok);
+    const asPart = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${part}, true)`,
+      app`SELECT public.submit_directory_contribution(${JSON.stringify({ flow: "new_place", target_kind: "employer", details: { name: "X", state: "MI" } })}::jsonb)`]));
+    check("a participant cannot submit, even with the org scope", !asPart.ok, JSON.stringify(asPart));
+    const direct = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+      app`INSERT INTO directory_contribution (access_code_id, submitted_by, flow, target_kind, details) VALUES (${org.id}, ${cm}, 'new_place', 'employer', '{"name":"x","state":"MI"}')`]));
+    check("the queue is never written directly by the app", !direct.ok && /permission denied/i.test(direct.e), JSON.stringify(direct));
+    const read = await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`, app`SELECT id FROM directory_contribution`]);
+    check("staff never read the queue table", (read.at(-1) ?? []).length === 0);
+    const mine = await core.listMyContributions(aCm);
+    check("staff read back their own", mine.some((r) => r.id === sent.id) && mine.every((r) => !("privateNote" in r)));
+    check("a colleague does not read mine", !(await core.listMyContributions(aCm2)).some((r) => r.id === sent.id));
+    check("the program's owner does", (await core.listMyContributions(aOwner)).some((r) => r.id === sent.id));
+    check("another program does not", !(await core.listMyContributions(aSpy)).some((r) => r.id === sent.id));
+    const [{ n: unscoped }] = await core.query("SELECT count(*)::int AS n FROM directory_contribution");
+    check("an unscoped app read sees no contributions", unscoped === 0, String(unscoped));
+    const ownerTry = await core.decideContribution(owner, sent.id, "approved", "new_row", null).catch((e) => ({ ok: false, e: String(e.message) }));
+    check("a program owner cannot decide (only the data owner)", !ownerTry.ok, JSON.stringify(ownerTry));
+    const queue = await core.listContributionQueue(admin);
+    check("the data owner reads the queue", queue.some((r) => r.id === sent.id));
+    const decided = await core.decideContribution(admin, sent.id, "approved", "new_row", "Thank you");
+    check("the data owner approves", decided.ok, JSON.stringify(decided));
+    check("credit follows approval", (await core.listMyMilestones(aCm)).some((m) => m.key === "first_new_place"));
+    check("listing nudges: once a week per person", (await core.claimListingNudge(aCm, "resource", sent.id)) === true && (await core.claimListingNudge(aCm, "resource", sent.id)) === false
+      && (await core.claimListingNudge(aCm2, "resource", sent.id)) === true);
+  } finally {
+    await sql`DELETE FROM platform_admin WHERE user_id = ${admin}`;
+  }
 }
 
 /**
