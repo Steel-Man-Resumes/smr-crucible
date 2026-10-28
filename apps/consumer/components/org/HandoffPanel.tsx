@@ -114,7 +114,7 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
     <section id="handoff" aria-labelledby="handoff-h" className="bg-t-panel border border-t-line p-5 mt-6">
       <h2 id="handoff-h" className="font-semibold text-t-white">Send to {first}</h2>
       <p className="text-xs text-t-phos-dim mt-1">
-        A short note and a few things worth their time. {first} sees it on their dashboard and decides about each one. You see only whether they took it or passed.
+        A short note and a few things worth their time. {first} sees it on their dashboard and decides about each one. You see whether they opened it, and whether they took or passed on each one. Nothing else comes back.
       </p>
 
       {canSend && owner ? (

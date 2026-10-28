@@ -504,6 +504,20 @@ BEGIN
      OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_handoff'::regclass AND tgname = 'staff_handoff_has_items') THEN
     RAISE EXCEPTION '110 after-guard: a guard trigger is missing';
   END IF;
+  -- Every S5 definer must be owned by a role that bypasses RLS, or it would
+  -- see nothing through the forced policies and fail (review r2).
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_roles r ON r.oid = p.proowner
+              WHERE p.pronamespace = 'public'::regnamespace
+                AND p.proname IN ('smr_accept_handoff_step', 'staff_suggestion_item_guard', 'staff_handoff_close_items',
+                                  'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff')
+                AND p.prosecdef AND NOT (r.rolbypassrls OR r.rolsuper)) THEN
+    RAISE EXCEPTION '110 after-guard: an S5 definer is owned by a role without BYPASSRLS';
+  END IF;
+  IF (SELECT count(*) FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.prosecdef
+        AND p.proname IN ('smr_accept_handoff_step', 'staff_suggestion_item_guard', 'staff_handoff_close_items',
+                          'staff_handoff_has_items', 'org_activity_suggestion', 'org_activity_handoff')) <> 6 THEN
+    RAISE EXCEPTION '110 after-guard: an S5 definer is missing or not SECURITY DEFINER';
+  END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     IF has_table_privilege('smr_app', 'public.staff_handoff', 'DELETE') OR has_table_privilege('smr_app', 'public.staff_suggestion', 'DELETE') THEN
       RAISE EXCEPTION '110 after-guard: the app role can delete a handoff or a suggestion';
