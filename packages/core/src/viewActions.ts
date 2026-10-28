@@ -23,7 +23,7 @@ import { isSensitiveField, type CustomFieldDef } from "./customFieldsShared";
 import { listFieldDefs } from "./customFields";
 import { createSavedView, deleteSavedView, getMyRoleLayout, listSavedViews, personalViewPolicyRefusal, updateSavedView, type SavedViewRecord } from "./savedViews";
 import { BUILTIN_COLUMN_LABELS, MAX_PERSONAL_VIEWS, cleanViewName, defaultCaseloadColumns, normalizeViewDefinition, type ViewDefinition } from "./savedViewsShared";
-import { normalizeStaffPrefs, resolveStaffPrefs, type StaffPrefs } from "./staffPrefsShared";
+import { normalizeStaffPrefs, prefsDelta, resolveStaffPrefs, type StaffPrefs } from "./staffPrefsShared";
 import { lockedChanges, lockedMessage, type PolicyAllowed } from "./customizationPolicyShared";
 import {
   planDefaultColumns, planDefaultView, planDensity, planFold, planGridLayout, planHide, planPeopleMode, planPersonTabs, planTodayOrder, planUndo,
@@ -68,18 +68,25 @@ async function loadOwn(actor: OrgActor): Promise<OwnState> {
 /** The log insert, as a statement (shared by every writer). */
 const LOG_INSERT = `INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary, before, after, by_ai, undoes)
   VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10::uuid) RETURNING id`;
+const prefsUpdateParams = (userId: string, before: Partial<StaffPrefs>, after: Partial<StaffPrefs>) => {
+  const d = prefsDelta(before, after);
+  return [userId, JSON.stringify(d.set), d.remove];
+};
 const logParams = (actor: OrgActor, c: PlannedChange, byAi: boolean, undoes: string | null = null) =>
   [actor.orgId, actor.userId, c.surface, c.action, c.target, c.summary.slice(0, 200), JSON.stringify(c.before ?? null), JSON.stringify(c.after ?? null), byAi, undoes];
-/** Same as setOwnStaffPrefs: the server-owned viewsMovedTo marker survives. */
-const PREFS_UPDATE = `UPDATE users SET staff_prefs = $2::jsonb || CASE WHEN jsonb_typeof(staff_prefs->'viewsMovedTo') = 'array'
-  THEN jsonb_build_object('viewsMovedTo', staff_prefs->'viewsMovedTo') ELSE '{}'::jsonb END WHERE id = $1::uuid`;
+/**
+ * Only the keys that changed are written ($2 keys to set, $3 keys to remove)
+ * on the stored object, so a change made elsewhere since the read (another
+ * tab, the server-owned viewsMovedTo marker) is never overwritten.
+ */
+const PREFS_UPDATE = `UPDATE users SET staff_prefs = (COALESCE(staff_prefs, '{}'::jsonb) - $3::text[]) || $2::jsonb WHERE id = $1::uuid`;
 
 /** Write a planned pref change and its log row together. */
 async function commitPref(actor: OrgActor, state: OwnState, plan: PrefPlan, ctx: ViewActionContext, undo?: { of: string }): Promise<ViewActionResult> {
   if (!plan.ok) return plan;
   const c = plan.change;
   const write = async (withLog: boolean) => runScoped<unknown[]>(scopeOf(actor), (sql) => [
-    run(sql)(PREFS_UPDATE, [actor.userId, JSON.stringify(plan.nextOwn)]),
+    run(sql)(PREFS_UPDATE, prefsUpdateParams(actor.userId, state.own, plan.nextOwn)),
     ...(withLog ? [run(sql)(LOG_INSERT, logParams(actor, c, !!ctx.byAi, undo?.of ?? null))] : []),
     ...(withLog && undo ? [run(sql)(`UPDATE view_change_log SET undone_at = now() WHERE id = $1::uuid AND user_id = $2::uuid AND access_code_id = $3::uuid AND undone_at IS NULL`, [undo.of, actor.userId, actor.orgId])] : []),
   ]);
@@ -305,10 +312,15 @@ export async function latestUndoableChange(actor: OrgActor, opts: { byAiOnly?: b
  */
 const MARK = `m AS (UPDATE view_change_log SET undone_at = now()
       WHERE id = $3::uuid AND user_id = $1::uuid AND access_code_id = $2::uuid AND undone_at IS NULL RETURNING id)`;
+/** The mark for an undo that needs the person's view ($4) still there: a vanished view marks nothing. */
+const MARK_VIEW = `m AS (UPDATE view_change_log SET undone_at = now()
+      WHERE id = $3::uuid AND user_id = $1::uuid AND access_code_id = $2::uuid AND undone_at IS NULL
+        AND EXISTS (SELECT 1 FROM saved_view sv WHERE sv.id = $4::uuid AND sv.owner_user_id = $1::uuid AND sv.access_code_id = $2::uuid)
+      RETURNING id)`;
 const LOG_COLS = `(access_code_id, user_id, surface, action, target, summary, before, after, by_ai, undoes)`;
 export const VIEW_UNDO_SQL = {
   /** $4 view, $5 summary, $6 before. */
-  removeCreated: `WITH ${MARK}, d AS (DELETE FROM saved_view WHERE id = $4::uuid AND owner_user_id = $1::uuid AND access_code_id = $2::uuid AND EXISTS (SELECT 1 FROM m) RETURNING id)
+  removeCreated: `WITH ${MARK_VIEW}, d AS (DELETE FROM saved_view WHERE id = $4::uuid AND owner_user_id = $1::uuid AND access_code_id = $2::uuid AND EXISTS (SELECT 1 FROM m) RETURNING id)
            INSERT INTO view_change_log ${LOG_COLS}
            SELECT $2::uuid, $1::uuid, 'views', 'undo', 'view:' || d.id, $5, $6::jsonb, 'null'::jsonb, $7, $3::uuid FROM d RETURNING id`,
   /** $4 name, $5 definition, $6 position, $7 summary, $8 after, $9 by_ai. Returns id and view_id. */
@@ -317,13 +329,12 @@ export const VIEW_UNDO_SQL = {
            INSERT INTO view_change_log ${LOG_COLS}
            SELECT $2::uuid, $1::uuid, 'views', 'undo', 'view:' || c.id, $7, 'null'::jsonb, $8::jsonb, $9, $3::uuid FROM c RETURNING id, (SELECT id FROM c) AS view_id`,
   /** $4 view, $5 name, $6 definition, $7 summary, $8 before, $9 after, $10 by_ai. */
-  putBack: `WITH ${MARK}, u AS (UPDATE saved_view SET name = $5, definition = $6::jsonb, updated_at = now()
+  putBack: `WITH ${MARK_VIEW}, u AS (UPDATE saved_view SET name = $5, definition = $6::jsonb, updated_at = now()
              WHERE id = $4::uuid AND owner_user_id = $1::uuid AND access_code_id = $2::uuid AND EXISTS (SELECT 1 FROM m) RETURNING id)
          INSERT INTO view_change_log ${LOG_COLS}
          SELECT $2::uuid, $1::uuid, 'views', 'undo', 'view:' || u.id, $7, $8::jsonb, $9::jsonb, $10, $3::uuid FROM u RETURNING id`,
-  /** $4 prefs, $5 surface, $6 target, $7 summary, $8 before, $9 after, $10 by_ai. */
-  prefs: `WITH ${MARK}, p AS (UPDATE users SET staff_prefs = $4::jsonb || CASE WHEN jsonb_typeof(staff_prefs->'viewsMovedTo') = 'array'
-             THEN jsonb_build_object('viewsMovedTo', staff_prefs->'viewsMovedTo') ELSE '{}'::jsonb END
+  /** $4 keys to set (object), $5 surface, $6 target, $7 summary, $8 before, $9 after, $10 by_ai, $11 keys to remove. Only those keys change. */
+  prefs: `WITH ${MARK}, p AS (UPDATE users SET staff_prefs = (COALESCE(staff_prefs, '{}'::jsonb) - $11::text[]) || $4::jsonb
            WHERE id = $1::uuid AND EXISTS (SELECT 1 FROM m) RETURNING id)
        INSERT INTO view_change_log ${LOG_COLS}
        SELECT $2::uuid, $1::uuid, $5, 'undo', $6, $7, $8::jsonb, $9::jsonb, $10, $3::uuid FROM p RETURNING id`,
@@ -418,7 +429,7 @@ export async function undoViewChange(actor: OrgActor, input: { id: string }, ctx
     // Mark, then the prefs (same rule as PREFS_UPDATE: viewsMovedTo survives), then the log row: one statement.
     const row = await one(
       prefsUndo,
-      [actor.userId, actor.orgId, entry.id, JSON.stringify(normalized), entry.surface, target, plan.summary, JSON.stringify(before ?? null), JSON.stringify(after ?? null), !!ctx.byAi]);
+      [actor.userId, actor.orgId, entry.id, JSON.stringify(prefsDelta(s.own, normalized).set), entry.surface, target, plan.summary, JSON.stringify(before ?? null), JSON.stringify(after ?? null), !!ctx.byAi, prefsDelta(s.own, normalized).remove]);
     if (!row) return ALREADY;
     return { ok: true, changeId: row.id, summary: plan.summary, target, before, after, prefs: resolveStaffPrefs(s.orgDefaults, normalized, s.allowed) };
   } catch {

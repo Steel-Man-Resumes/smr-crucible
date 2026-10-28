@@ -163,11 +163,15 @@ export function buildViewTools(initial: OrgActor, opts: ViewToolOptions = {}): T
 
 function makeViewTools(env: ViewToolContext): ToolSet {
   const { loadCore, actor, safe } = env;
-  const typed = (env.staffWords ?? "").toLowerCase().replace(/[\u2018\u2019\u201c\u201d"']/g, "").replace(/\s+/g, " ");
+  // Words as tokens: lowercase, punctuation to spaces, one space between, a
+  // space at each end, so a name matches only on whole words ("ing we" never
+  // matches "housing week"; "Week 1 housing" matches "Week 1, housing").
+  const tokens = (t: string) => ` ${t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/g, " ").trim()} `;
+  const typed = tokens(env.staffWords ?? "");
   /** A name the staff member typed themselves (whole words, any case), never one the model made up. */
   const staffTyped = (name: string) => {
-    const n = name.toLowerCase().replace(/[\u2018\u2019\u201c\u201d"']/g, "").replace(/\s+/g, " ").trim();
-    return n.length > 0 && typed.includes(n);
+    const n = tokens(name);
+    return n.trim().length > 0 && typed.includes(n);
   };
 
   /** Column id <-> words, without sensitive fields (never named, never offered). */

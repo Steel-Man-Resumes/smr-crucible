@@ -317,9 +317,22 @@ describe("review round 1", () => {
   it("undo marks first, in the same statement as the change and its log row", async () => {
     const { VIEW_UNDO_SQL } = await import("../viewActions");
     for (const [k, sql] of Object.entries(VIEW_UNDO_SQL)) {
-      assert.match(sql, /^WITH m AS \(UPDATE view_change_log SET undone_at = now\(\)\s+WHERE id = \$3::uuid AND user_id = \$1::uuid AND access_code_id = \$2::uuid AND undone_at IS NULL RETURNING id\)/, k);
+      assert.match(sql, /^WITH m AS \(UPDATE view_change_log SET undone_at = now\(\)\s+WHERE id = \$3::uuid AND user_id = \$1::uuid AND access_code_id = \$2::uuid AND undone_at IS NULL[\s\S]*?RETURNING id\)/, k);
       assert.match(sql, /EXISTS \(SELECT 1 FROM m\)/, k);
     }
+  });
+  it("round 2: an undo of a view marks nothing when the view is gone; prefs writes change only the keys that changed", async () => {
+    const { VIEW_UNDO_SQL } = await import("../viewActions");
+    for (const k of ["removeCreated", "putBack"] as const) {
+      const mark = VIEW_UNDO_SQL[k].slice(0, VIEW_UNDO_SQL[k].indexOf("RETURNING id)"));
+      assert.match(mark, /EXISTS \(SELECT 1 FROM saved_view sv WHERE sv\.id = \$4::uuid AND sv\.owner_user_id = \$1::uuid/, k);
+    }
+    assert.match(VIEW_UNDO_SQL.prefs, /staff_prefs = \(COALESCE\(staff_prefs, '\{\}'::jsonb\) - \$11::text\[\]\) \|\| \$4::jsonb/);
+    const { prefsDelta } = await import("../staffPrefsShared");
+    assert.deepEqual(prefsDelta({ density: "tall", noteKind: "call" }, { density: "compact", noteKind: "call", landing: "caseload" }), { set: { density: "compact", landing: "caseload" }, remove: [] });
+    assert.deepEqual(prefsDelta({ density: "tall", todayOrder: ["tasks"] }, { todayOrder: ["tasks"] }), { set: {}, remove: ["density"] });
+    for (const f of ["staffPrefs.ts", "viewActions.ts"]) assert.match(read(f), /\(COALESCE\(staff_prefs, '\{\}'::jsonb\) - \$3::text\[\]\) \|\| \$2::jsonb/, f);
+    assert.doesNotMatch(read("staffPrefs.ts"), /\[actor\.userId, JSON\.stringify\(after\)\]/, "never the whole object from an earlier read");
   });
   it("personal views are not removed while the switch is off; the grid writes in two statements", () => {
     assert.match(read("savedViews.ts"), /if \(own\[0\]\?\.owner_user_id && !\(await getMyCustomizationPolicy\(actor, \{ forWrite: true \}\)\)\.personal_views\) return false;/);

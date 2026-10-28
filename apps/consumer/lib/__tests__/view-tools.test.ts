@@ -224,3 +224,12 @@ test("people_columns keeps sensitive columns the person already shows, in place"
   assert.equal(r.status, "applied");
   assert.deepEqual(s.calls[0].input.columns, ["cf:housing", "cf:parole_end"]);
 });
+
+test("round 2: a saved view's name must be the staff member's whole words", async () => {
+  const s = stubCore();
+  const save = (typed: string, viewName: string) => call(buildViewTools(actor(), { core: s.core, staffWords: typed }), "change_my_view", { change: "save_my_view", viewName });
+  assert.equal((await save("save the housing week list", "ing we")).status, "refused", "part of a word never counts");
+  assert.equal((await save("call it Week 1, housing", "Week 1 housing")).status, "applied", "punctuation and spaces do not matter");
+  assert.equal((await save("WEEK 1 HOUSING!", "week 1 housing")).status, "applied", "case does not matter");
+  assert.equal((await save("housing", "Housing first")).status, "refused");
+});

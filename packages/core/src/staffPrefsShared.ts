@@ -213,3 +213,20 @@ export function orderTodaySections<T extends { key: string }>(sections: readonly
 export function orderPersonTabs<T extends { key: string }>(tabs: readonly T[], own: readonly string[] | undefined): T[] {
   return orderTodaySections(tabs, own);
 }
+
+/**
+ * What a write must change on the STORED prefs to go from `before` to
+ * `after`: the keys to set (with their new values) and the keys to remove.
+ * Writers apply only these (`(prefs - remove) || set`), never the whole
+ * object from an earlier read.
+ */
+export function prefsDelta(before: Partial<StaffPrefs>, after: Partial<StaffPrefs>): { set: Partial<StaffPrefs>; remove: string[] } {
+  const set: Record<string, unknown> = {};
+  const remove: string[] = [];
+  for (const k of Object.keys(DEFAULT_STAFF_PREFS) as (keyof StaffPrefs)[]) {
+    const a = before[k], b = after[k];
+    if (JSON.stringify(a ?? null) === JSON.stringify(b ?? null)) continue;
+    if (b === undefined) remove.push(k); else set[k] = b;
+  }
+  return { set: set as Partial<StaffPrefs>, remove };
+}

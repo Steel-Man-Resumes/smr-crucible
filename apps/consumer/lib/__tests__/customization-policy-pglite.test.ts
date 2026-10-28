@@ -137,9 +137,11 @@ test("108: customization policy and view change log, as database facts", { skip 
 
   // ---- the app's undo statements: mark first, all or nothing, once ---------
   const [pc] = await logIt(A(s1), s1);
-  const undoPrefs = (who: string) => as(A(who), VIEW_UNDO_SQL.prefs, [who, org, pc.id, JSON.stringify({ todayOrder: [] }), "today", "pref:todayOrder", "Undid: put it first", "[\"tasks\"]", "null", false]);
+  await q(`UPDATE users SET staff_prefs = '{"todayOrder": ["tasks"], "density": "tall", "viewsMovedTo": ["x"]}'::jsonb WHERE id = $1`, [s1]);
+  const undoPrefs = (who: string) => as(A(who), VIEW_UNDO_SQL.prefs, [who, org, pc.id, "{}", "today", "pref:todayOrder", "Undid: put it first", "[\"tasks\"]", "null", false, ["todayOrder"]]);
   assert.equal((await undoPrefs(s1)).length, 1, "the first undo marks, writes the prefs and logs");
   assert.equal((await undoPrefs(s1)).length, 0, "a second undo of the same change does nothing");
+  assert.deepEqual(((await q(`SELECT staff_prefs FROM users WHERE id = $1`, [s1])).rows[0] as { staff_prefs: unknown }).staff_prefs, { density: "tall", viewsMovedTo: ["x"] }, "only the undone key changed");
   assert.equal(((await q(`SELECT count(*)::int AS n FROM view_change_log WHERE undoes = $1`, [pc.id])).rows[0] as { n: number }).n, 1, "exactly one undo row");
   const [vw] = await as(A(s1), `INSERT INTO saved_view (access_code_id, owner_user_id, surface, name, definition) VALUES ($1, $2, 'caseload', 'Mine', '{}'::jsonb) RETURNING id`, [org, s1]);
   const [vc] = await as(A(s1), `INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary, after) VALUES ($1, $2, 'views', 'view_saved', $3, 'Saved your view', '{}'::jsonb) RETURNING id`, [org, s1, `view:${vw.id}`]);
@@ -150,7 +152,12 @@ test("108: customization policy and view change log, as database facts", { skip 
   const [rc] = await as(A(s1), `INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary, before) VALUES ($1, $2, 'views', 'view_removed', $3, 'Removed your view', '{"name":"Taken"}'::jsonb) RETURNING id`, [org, s1, `view:${id(99)}`]);
   assert.notEqual(await err(as(A(s1), VIEW_UNDO_SQL.restoreRemoved, [s1, org, rc.id, "Taken", "{}", 1, "Undid", JSON.stringify({ name: "Taken" }), false])), "");
   assert.equal((await as(A(s1), `SELECT id FROM view_change_log WHERE id = $1 AND undone_at IS NULL`, [rc.id])).length, 1, "a failed undo leaves the change not undone");
-  assert.equal((await as(A(s2), VIEW_UNDO_SQL.prefs, [s2, org, rc.id, "{}", "today", "pref:todayOrder", "x", "null", "null", false])).length, 0, "a colleague's undo of my change does nothing");
+  assert.equal((await as(A(s2), VIEW_UNDO_SQL.prefs, [s2, org, rc.id, "{}", "today", "pref:todayOrder", "x", "null", "null", false, []])).length, 0, "a colleague's undo of my change does nothing");
+  // A view that vanished since the change: the mark does not take, the change stays not undone.
+  const [gone] = await as(A(s1), `INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary, after) VALUES ($1, $2, 'views', 'view_saved', $3, 'Saved', '{}'::jsonb) RETURNING id`, [org, s1, `view:${id(98)}`]);
+  assert.equal((await as(A(s1), VIEW_UNDO_SQL.removeCreated, [s1, org, gone.id, id(98), "Undid", "{}", false])).length, 0);
+  assert.equal((await as(A(s1), VIEW_UNDO_SQL.putBack, [s1, org, gone.id, id(98), "N", "{}", "Undid", "{}", "{}", false])).length, 0);
+  assert.equal((await as(A(s1), `SELECT id FROM view_change_log WHERE id = $1 AND undone_at IS NULL`, [gone.id])).length, 1, "a vanished view marks nothing");
 
   // ---- the grid's batch statements, under 104's reach policy --------------
   await q(`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES ($1, $2, $3, $4)`, [org, p1, s1, owner]);

@@ -14,7 +14,7 @@ import type { OrgActor } from "./authz/resolveOrgActor";
 import { getQuietAfterDays } from "./orgStaffPerformance";
 import { getMyCustomizationPolicy, isPolicyTableMissing } from "./customizationPolicy";
 import { lockedChanges, lockedMessage, lockedKeys as lockedKeyList, type PolicyAllowed, type PolicyKey } from "./customizationPolicyShared";
-import { normalizeStaffPrefs, resolveStaffPrefs, DEFAULT_STAFF_PREFS, type StaffPrefs } from "./staffPrefsShared";
+import { normalizeStaffPrefs, prefsDelta, resolveStaffPrefs, DEFAULT_STAFF_PREFS, type StaffPrefs } from "./staffPrefsShared";
 
 export * from "./staffPrefsShared";
 
@@ -83,17 +83,19 @@ export async function setOwnStaffPrefs(actor: OrgActor, prefs: unknown): Promise
   const after = normalizeStaffPrefs(prefs);
   const blocked = lockedChanges(before, after, allowed);
   if (blocked.length) return { ok: false, error: lockedMessage(blocked), locked: blocked };
-  // viewsMovedTo is server-owned (savedViews.ts, migrateLegacySavedViews): it
-  // records which organizations already got this person's old saved sorts as
-  // saved views. The normalizer never lets a client set it, and this write
-  // keeps it, so "Back to defaults" cannot bring deleted views back.
-  const UPDATE = `UPDATE users SET staff_prefs = $2::jsonb || CASE WHEN jsonb_typeof(staff_prefs->'viewsMovedTo') = 'array'
-       THEN jsonb_build_object('viewsMovedTo', staff_prefs->'viewsMovedTo') ELSE '{}'::jsonb END WHERE id = $1`;
+  // Only the choices that changed are written, on the stored object: a
+  // choice changed elsewhere since this read is kept, and so is the
+  // server-owned viewsMovedTo marker (savedViews.ts, migrateLegacySavedViews),
+  // which the normalizer never lets a client set.
+  const delta = prefsDelta(before, after);
+  const UPDATE = `UPDATE users SET staff_prefs = (COALESCE(staff_prefs, '{}'::jsonb) - $3::text[]) || $2::jsonb WHERE id = $1`;
+  const params = [actor.userId, JSON.stringify(delta.set), delta.remove];
   const changed = (Object.keys(DEFAULT_STAFF_PREFS) as (keyof StaffPrefs)[])
     .filter((k) => JSON.stringify(before[k] ?? null) !== JSON.stringify(after[k] ?? null))
     .slice(0, 20);
-  if (actor.viaPlatformAdmin || !changed.length) {
-    await query(UPDATE, [actor.userId, JSON.stringify(after)]);
+  if (!changed.length) return { ok: true };
+  if (actor.viaPlatformAdmin) {
+    await query(UPDATE, params);
     return { ok: true };
   }
   const scope: OrgScope = { orgId: actor.orgId, userId: actor.userId, role: actor.role };
@@ -102,7 +104,7 @@ export async function setOwnStaffPrefs(actor: OrgActor, prefs: unknown): Promise
     VALUES ($1::uuid, $2::uuid, $3, 'settings', $4, $5, $6::jsonb, $7::jsonb, false)`;
   try {
     await runScoped(scope, (sql) => [
-      run(sql)(UPDATE, [actor.userId, JSON.stringify(after)]),
+      run(sql)(UPDATE, params),
       ...changed.map((k) => run(sql)(LOG, [
         actor.orgId, actor.userId, PREF_SURFACE[k] ?? "people", `pref:${k}`,
         `Changed ${PREF_WORDS[k] ?? "a setting"} in My workflow`, JSON.stringify(before[k] ?? null), JSON.stringify(after[k] ?? null),
@@ -110,7 +112,7 @@ export async function setOwnStaffPrefs(actor: OrgActor, prefs: unknown): Promise
     ]);
   } catch (err) {
     if (!isPolicyTableMissing(err)) throw err;
-    await query(UPDATE, [actor.userId, JSON.stringify(after)]);
+    await query(UPDATE, params);
   }
   return { ok: true };
 }
