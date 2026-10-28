@@ -28,6 +28,7 @@
 import { readJobFit } from "./job-fit";
 import { disclosurePlanContext, LATEST_DISCLOSURE_PLAN_SQL, LATEST_DISCLOSURE_SCRIPT_SQL, type DisclosureRow } from "./disclosure-context";
 import type { UserFullContext } from "./use-user-context";
+import { gateForPerson, type CaseManagerContext, type UserFullContextWithCaseManager } from "./staff-handoff-context";
 
 export const FULL_CONTEXT_CAPS = { resumes: 5, applications: 10, lanes: 5, hurdles: 3, hurdleLines: 2 } as const;
 
@@ -86,6 +87,12 @@ export interface FullContextParts {
   hurdlePlan: HurdlePlanRow | null;
   progression: ProgressionLike | null;
   meter: MeterLike | null;
+  /**
+   * What their case manager sent them that is still open (staff pass S5),
+   * UNGATED as read; assembleFullContext gates it with recordConsent. Absent
+   * when the loader is not given, null when it was not loaded.
+   */
+  fromCaseManager?: CaseManagerContext | null;
 }
 
 const str = (v: unknown, max: number): string | null => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : null);
@@ -132,7 +139,7 @@ export function summarizeProgression(p: ProgressionLike | null): UserFullContext
 }
 
 /** Pure: the snapshot shape buildFullUserSection() reads, from the loaded parts. */
-export function assembleFullContext(p: FullContextParts): UserFullContext {
+export function assembleFullContext(p: FullContextParts): UserFullContextWithCaseManager {
   const { profile, consumerProfile: cp } = p;
   const fo = cp?.forge_output ?? null;
   const resumes = p.resumes.slice(0, FULL_CONTEXT_CAPS.resumes);
@@ -191,6 +198,8 @@ export function assembleFullContext(p: FullContextParts): UserFullContext {
     hurdlePlan: summarizeHurdlePlan(p.hurdlePlan),
     progression: summarizeProgression(p.progression),
     meter: p.meter ? { score: p.meter.score, band: p.meter.band, counts: p.meter.counts } : null,
+    // Staff-written words pass the person's own record gate before the model sees them.
+    ...(p.fromCaseManager !== undefined ? { fromCaseManager: p.fromCaseManager ? gateForPerson(p.fromCaseManager, p.recordConsent) : null } : {}),
   };
 }
 
@@ -208,6 +217,8 @@ export interface FullContextLoaders {
   hurdlePlan(userId: string): Promise<HurdlePlanRow | null>;
   progression(userId: string): Promise<ProgressionLike | null>;
   meter(userId: string): Promise<MeterLike | null>;
+  /** Open handoffs and suggested jobs from their case manager (staff pass S5). Optional: a loader set without it loads none. */
+  staffSuggestions?(userId: string): Promise<CaseManagerContext | null>;
 }
 
 async function soft<T>(p: Promise<T>, fallback: T, what: string): Promise<T> {
@@ -218,10 +229,10 @@ async function soft<T>(p: Promise<T>, fallback: T, what: string): Promise<T> {
  * Load the whole context for one signed-in person. Returns null only when the
  * profile itself cannot be read; every other part fails toward "not loaded".
  */
-export async function loadUserFullContext(userId: string, loaders: FullContextLoaders): Promise<UserFullContext | null> {
+export async function loadUserFullContext(userId: string, loaders: FullContextLoaders): Promise<UserFullContextWithCaseManager | null> {
   const profile = await loaders.profile(userId);
   if (!profile) return null;
-  const [consumerProfile, resumes, disclosure, consent, actingFor, lanes, hurdlePlan, progression, meter] = await Promise.all([
+  const [consumerProfile, resumes, disclosure, consent, actingFor, lanes, hurdlePlan, progression, meter, fromCaseManager] = await Promise.all([
     soft(loaders.consumerProfile(userId), null, "consumer profile"),
     soft(loaders.resumes(userId), [], "resumes"),
     soft(loaders.disclosure(userId), { latest: null, latestWithScript: null }, "disclosure plan"),
@@ -232,12 +243,14 @@ export async function loadUserFullContext(userId: string, loaders: FullContextLo
     soft(loaders.hurdlePlan(userId), null, "hurdle plan"),
     soft(loaders.progression(userId), null, "progression"),
     soft(loaders.meter(userId), null, "meter"),
+    loaders.staffSuggestions ? soft(loaders.staffSuggestions(userId), null, "case manager suggestions") : Promise.resolve(undefined),
   ]);
   return assembleFullContext({
     userId, profile, consumerProfile, resumes,
     disclosureRow: disclosure.latest, disclosureScriptRow: disclosure.latestWithScript,
     recordConsent: consent && !actingFor,
     lanes, hurdlePlan, progression, meter,
+    ...(fromCaseManager !== undefined ? { fromCaseManager } : {}),
   });
 }
 
@@ -270,7 +283,20 @@ export async function realFullContextLoaders(): Promise<FullContextLoaders> {
       const score = scoreOf(r.counts);
       return { counts: r.counts, score, band: bandFor(score, isSteelMan(r.counts)).label };
     },
+    staffSuggestions: (userId) => loadCaseManagerSuggestions(userId),
   };
+}
+
+/**
+ * Open handoffs (with each listing re-read) and open suggested jobs, as the
+ * person (RLS on, no org scope). UNGATED here: the caller gates with the
+ * person's record consent (assembleFullContext, read_my_staff_suggestions).
+ * Before migration 110 the handoff read fails and this answers null.
+ */
+export async function loadCaseManagerSuggestions(userId: string): Promise<CaseManagerContext | null> {
+  const core = await import("@crucible/core");
+  const [handoffs, jobs] = await Promise.all([core.getMyHandoffs(userId, { listings: true }), core.getMySuggestions(userId)]);
+  return core.summarizeForCoach(handoffs, jobs);
 }
 
 export interface FullContextTurn {

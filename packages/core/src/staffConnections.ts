@@ -26,18 +26,21 @@ import { getConnectionInputs, listConnectionCandidates, type ConnectionInputs } 
 import { runScoped } from "./db";
 import { searchVerifiedEmployers, searchVerifiedResources, type PublishedEmployer, type PublishedResource } from "./directoryPublication";
 import {
-  employerMatchReason, firstNameOf, matchInputs, resourceMatchReason, sameCompany, MATCH_LIMITS_LINE, NOTHING_SHARED_LINE,
+  employerMatchReason, employerWhyForThem, firstNameOf, matchInputs, resourceMatchReason, resourceWhyForThem, sameCompany, MATCH_LIMITS_LINE, NOTHING_SHARED_LINE,
   type MatchPlace,
 } from "./staffHandoffShared";
 
 export interface EmployerMatch {
   kind: "employer"; id: string; name: string; band: "A" | "B"; bandReason: string; location: string | null; roleTypes: string | null;
   applyUrl: string | null; checkedAt: string | null; reason: string;
+  /** The same reason in words for the person: the item's "why" if staff send it. */
+  whyForThem: string;
   /** The role to put on their saved jobs if staff send it: the shared title it matched. */
   role: string;
 }
 export interface ResourceMatch {
   kind: "resource"; id: string; name: string; band: string; bandReason: string; area: string; place: string; checkedAt: string | null; reason: string;
+  whyForThem: string;
 }
 export interface PersonConnections {
   clientId: string;
@@ -52,7 +55,7 @@ export interface PersonConnections {
 }
 
 export interface ConnectionDeps {
-  inputs(actor: OrgActor, ids: readonly string[]): ReturnType<typeof getConnectionInputs>;
+  inputs(actor: OrgActor, ids: readonly string[], opts?: { via?: "t.ROY" }): ReturnType<typeof getConnectionInputs>;
   candidates(actor: OrgActor): ReturnType<typeof listConnectionCandidates>;
   employers(q: { q: string; state?: string }): Promise<{ status: string; data: PublishedEmployer[] }>;
   resources(q: { state: string; cityKey: string | null }): Promise<{ status: string; data: PublishedResource[] }>;
@@ -146,6 +149,7 @@ export async function matchPerson(
           kind: "employer", id: e.id, name: e.name, band: e.band, bandReason: e.band_reason, location: e.location ?? ([e.city, e.state].filter(Boolean).join(", ") || null),
           roleTypes: e.roleTypes, applyUrl: e.applyUrl, checkedAt: e.checkedAt ?? null,
           reason: employerMatchReason({ band: e.band, checkedAt: e.checkedAt, state: e.state }, term, place),
+          whyForThem: employerWhyForThem({ band: e.band, state: e.state }, term, place),
           role: term.from,
         });
       }
@@ -163,7 +167,7 @@ export async function matchPerson(
       if (resources.some((x) => x.id === r.service_id) || k.resources.has(r.service_id.toLowerCase())) continue;
       resources.push({
         kind: "resource", id: r.service_id, name: r.service_name ? `${r.service_name}, ${r.org_name}` : r.org_name, band: r.band, bandReason: r.band_reason,
-        area: r.area_label, place: place.label, checkedAt: r.last_checked ?? null, reason: resourceMatchReason(r, place),
+        area: r.area_label, place: place.label, checkedAt: r.last_checked ?? null, reason: resourceMatchReason(r, place), whyForThem: resourceWhyForThem(r, place),
       });
     }
   }
@@ -185,9 +189,9 @@ export async function matchPerson(
 }
 
 /** One person: reach, consent and the log are all in getConnectionInputs. null = no access. */
-export async function getConnectionsFor(actor: OrgActor, clientId: string, name: string | null = null, deps: ConnectionDeps = liveConnectionDeps): Promise<PersonConnections | null> {
+export async function getConnectionsFor(actor: OrgActor, clientId: string, name: string | null = null, deps: ConnectionDeps = liveConnectionDeps, opts: { via?: "t.ROY" } = {}): Promise<PersonConnections | null> {
   if (actor.viaPlatformAdmin || !actor.capabilities.has("org.client.view_content")) return null;
-  const read = await deps.inputs(actor, [clientId]);
+  const read = await deps.inputs(actor, [clientId], opts);
   if (!read.ok) return null;
   const input = read.rows[0];
   if (!input) return null;

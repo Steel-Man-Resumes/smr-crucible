@@ -289,6 +289,15 @@ export function resourceMatchReason(r: { band: string; area_label?: string | nul
   return `${r.area_label ?? "Job help"} for ${place.label} (${band}). Matches where the jobs they shared are.`;
 }
 
+/** The same match in words for the person, used as the item's "why" if staff send it (staff edit it first). */
+export function employerWhyForThem(e: { band: string; state: string }, term: { term: string; from: string; source: "applications" | "resume" }, place: MatchPlace | null): string {
+  const mark = e.band === "A" ? "have the hiring mark" : "have reported hiring evidence";
+  return `They hire for ${term.term} work${place ? ` in ${place.state}` : ""} and ${mark}. It fits "${term.from}", ${term.source === "applications" ? "a job you saved" : "a resume you made"}.`;
+}
+export function resourceWhyForThem(r: { area_label?: string | null }, place: MatchPlace): string {
+  return `${r.area_label ?? "Job help"} for ${place.label}, near the jobs you saved.`;
+}
+
 /** Normalized company name, for "already on their list". */
 export function sameCompany(a: string | null | undefined, b: string | null | undefined): boolean {
   const n = (s: string | null | undefined) => String(s ?? "").toLowerCase().replace(/\b(inc|llc|co|corp|corporation|company|the)\b/g, "").replace(/[^a-z0-9]+/g, "");

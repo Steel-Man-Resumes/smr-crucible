@@ -344,3 +344,14 @@ test("activity summaries are fixed words: no NEW.note, NEW.body or names in them
   assert.equal(fns.length, 2);
   for (const f of fns) assert.ok(!/NEW\.(note|body|step_title|job_title|company|ref_name|location)/.test(f), "no typed text reaches a summary");
 });
+
+test("the person's words for a match: written to them, no staff wording, no record words", async () => {
+  const { employerWhyForThem, resourceWhyForThem } = await import("../staffHandoffShared");
+  const w = employerWhyForThem({ band: "A", state: "MI" }, { term: "warehouse", from: "Warehouse Associate", source: "applications" }, { state: "MI", city: "Lansing", label: "Lansing, MI" });
+  assert.equal(w, 'They hire for warehouse work in MI and have the hiring mark. It fits "Warehouse Associate", a job you saved.');
+  assert.equal(resourceWhyForThem({ area_label: "Job help" }, { state: "MI", city: "Lansing", label: "Lansing, MI" }), "Job help for Lansing, MI, near the jobs you saved.");
+  const p = await matchPerson(input(), "Alma Reyes", new Map(), cacheFrom([pub(E1, "Harbor", "A")], [res(R1, "Place")]) as never);
+  assert.ok(p.employers[0].whyForThem.startsWith("They hire for warehouse work"));
+  assert.ok(!/shared with you|staff/i.test(p.employers[0].whyForThem));
+  assert.equal(p.resources[0].whyForThem, "Job help for Lansing, MI, near the jobs you saved.");
+});

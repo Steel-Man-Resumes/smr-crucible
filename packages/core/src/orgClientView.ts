@@ -679,7 +679,8 @@ export async function withdrawSuggestion(actor: OrgActor, suggestionId: string):
  * for the person, step 5 per scope, and the access-log row in the same
  * transaction, written by the same predicate. The log row is an ordinary
  * "opened your job applications" / "opened your resumes" line (via
- * "connections"), so the person sees it on their sharing page like any open.
+ * "connections", or "t.ROY" when t.ROY looked for a staff member: "asked
+ * t.ROY, which opened..."), so the person sees it like any open.
  *
  * Narrow on purpose: job title, company and place of their tracked jobs; the
  * target of each shared resume. Never notes, pay, descriptions, resume text,
@@ -703,7 +704,7 @@ export const CONNECTION_RESUMES_SQL = `SELECT NULLIF(btrim(ra.target_context->>'
       WHERE ra.user_id = $1::uuid AND ra.artifact_type = 'resume' AND ${covered("ra.created_at")} AND ${IN_REACH} AND ${SHARED}
       ORDER BY ra.updated_at DESC LIMIT 20`;
 
-export async function getConnectionInputs(actor: OrgActor, clientIds: readonly string[]): Promise<ClientViewResult<ConnectionInputs>> {
+export async function getConnectionInputs(actor: OrgActor, clientIds: readonly string[], opts: { via?: "t.ROY" } = {}): Promise<ClientViewResult<ConnectionInputs>> {
   const refused = refuseActor(actor);
   if (refused) return { ok: false, reason: refused };
   const ids = [...new Set(clientIds.filter((x) => /^[0-9a-f-]{36}$/i.test(x)).map((x) => x.toLowerCase()))].slice(0, 25);
@@ -716,9 +717,9 @@ export async function getConnectionInputs(actor: OrgActor, clientIds: readonly s
       run(sql)(`SELECT (${IN_REACH}) AS in_reach, (${SHARED}) AS shared`, pa),
       run(sql)(`SELECT (${SHARED}) AS shared`, pr),
       run(sql)(CONNECTION_APPS_SQL, pa),
-      run(sql)(SHARED_OPEN_LOG_SQL, [...pa, "connections", actor.viewedBy ?? null]),
+      run(sql)(SHARED_OPEN_LOG_SQL, [...pa, opts.via ?? "connections", actor.viewedBy ?? null]),
       run(sql)(CONNECTION_RESUMES_SQL, pr),
-      run(sql)(SHARED_OPEN_LOG_SQL, [...pr, "connections", actor.viewedBy ?? null]),
+      run(sql)(SHARED_OPEN_LOG_SQL, [...pr, opts.via ?? "connections", actor.viewedBy ?? null]),
     ];
   }));
   return {

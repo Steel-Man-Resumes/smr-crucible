@@ -7,8 +7,12 @@
  * "Save to my jobs" saves it with the PARTICIPANT'S session through the same
  * route as any job they found, and only then records their answer. "Not for me"
  * needs no reason and the case manager is not told one.
+ *
+ * Handoffs (staff pass S5, migration 110) show first, in their own card: a
+ * note plus several things, each answered on its own (components/MyHandoffs).
  */
 import { useCallback, useEffect, useState } from "react";
+import { MyHandoffsCard } from "@/components/MyHandoffs";
 
 interface S { id: string; kind: "job" | "comment"; job_title: string | null; company: string | null; location: string | null; apply_url: string | null;
   artifact_label: string | null; quote: string | null; body: string; status: string; from_name: string | null }
@@ -18,8 +22,8 @@ export function MySuggestions() {
   const [busy, setBusy] = useState<string | null>(null);
   const load = useCallback(() => { fetch("/api/suggestions").then((r) => (r.ok ? r.json() : { suggestions: [] })).then((d) => setItems(d.suggestions ?? [])).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
-  const open = items.filter((i) => i.status === "open");
-  if (open.length === 0) return null;
+  const open = items.filter((i) => i.status === "open" && (i.kind === "job" || i.kind === "comment"));
+  if (open.length === 0) return <MyHandoffsCard />;
 
   async function answer(s: S, a: "saved" | "dismissed") {
     setBusy(s.id);
@@ -33,6 +37,8 @@ export function MySuggestions() {
   }
 
   return (
+    <>
+    <MyHandoffsCard />
     <section aria-labelledby="my-suggestions" className="bg-t-panel border border-t-line p-5">
       <h2 id="my-suggestions" className="font-semibold text-t-white mb-3">Suggestions from your case manager</h2>
       <ul className="space-y-4">
@@ -61,5 +67,6 @@ export function MySuggestions() {
         ))}
       </ul>
     </section>
+    </>
   );
 }
