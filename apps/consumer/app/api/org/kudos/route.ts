@@ -6,15 +6,17 @@
  *   PATCH { id }                          take back one I sent
  *
  * The words never carry record details (the staff t.ROY detector) and never
- * name a participant unless the good catch is sent from that person's own
- * task, note or referral; the database then checks both colleagues can see
- * them, and hides it from either one who later cannot.
+ * name any participant of the organization (any case; first, last or full
+ * name) unless the good catch is sent from that person's own task, note or
+ * referral; the database then checks both colleagues can see them, and hides
+ * it from either one who later cannot.
  */
 import { NextResponse } from "next/server";
-import { giveKudos, withdrawKudos, listColleagues, reachableParticipantNames, namesMentioned } from "@crucible/core";
+import { giveKudos, withdrawKudos, listColleagues } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 import { effectiveAuth } from "@/lib/effective-auth";
 import { mayWrite, recordWordsIn, RECORD_WORDS_REFUSAL, VIEWING_REFUSAL } from "@/lib/staff-rewards-route";
+import { readJsonStrict, refuseCrossOrigin, NOT_JSON } from "@/lib/staff-rewards-route";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +29,9 @@ export async function GET(request: Request) {
 }
 
 async function gate(request: Request) {
+  // Same-origin first, before the session is read (lib/org-crm-gate.ts).
+  const crossOrigin = refuseCrossOrigin(request);
+  if (crossOrigin) return { response: crossOrigin } as const;
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return { response: guard.response } as const;
   const session = await effectiveAuth();
@@ -39,22 +44,23 @@ async function gate(request: Request) {
 export async function POST(request: Request) {
   const w = await gate(request);
   if ("response" in w) return w.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   const text = String(body?.body ?? "");
   if (recordWordsIn([text])) return NextResponse.json({ error: RECORD_WORDS_REFUSAL }, { status: 400 });
-  const mentioned = namesMentioned(text, await reachableParticipantNames(w.actor));
   const res = await giveKudos(w.actor, {
     toUserId: String(body?.toUserId ?? ""), body: text,
     workKind: body?.workKind ? String(body.workKind) as never : null,
     workId: body?.workId ? String(body.workId) : null,
-  }, mentioned);
+  });
   return res.ok ? NextResponse.json({ ok: true, id: res.id }) : NextResponse.json({ error: res.reason }, { status: 400 });
 }
 
 export async function PATCH(request: Request) {
   const w = await gate(request);
   if ("response" in w) return w.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   const ok = await withdrawKudos(w.actor, String(body?.id ?? ""));
   return ok ? NextResponse.json({ ok: true }) : NextResponse.json({ ok: false }, { status: 404 });
 }

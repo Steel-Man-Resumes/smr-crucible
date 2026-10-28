@@ -82,6 +82,9 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
     assert.equal((await one<{ ok: boolean }>(`SELECT has_function_privilege('fresh_app', 'public.${fn}', 'EXECUTE') AS ok`)).ok, false, `fresh app role cannot run ${fn}`);
   }
   assert.equal((await one<{ ok: boolean }>(`SELECT has_function_privilege('fresh_app', 'public.submit_directory_contribution(jsonb)', 'EXECUTE') AS ok`)).ok, true);
+  for (const role of ["smr_app", "fresh_app"]) {
+    assert.equal((await one<{ ok: boolean }>(`SELECT has_function_privilege('${role}', 'public.staff_rewards_member(uuid,uuid)', 'EXECUTE') AS ok`)).ok, false, `${role}: no membership oracle`);
+  }
 
   const q = (t: string, p: unknown[] = []) => db.query(t, p);
   const as = async (who: { orgId?: string; userId?: string }, text: string, params: unknown[] = []) => {
@@ -158,11 +161,32 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
   assert.match(await err(as(A(s1), `DELETE FROM staff_kudos WHERE id = $1`, [k1.id])), /permission denied/, "never deleted");
   assert.ok(await refused(as(A(s2), `UPDATE staff_kudos SET withdrawn_at = now() WHERE id = $1 RETURNING id`, [k1.id])), "the receiver cannot withdraw it");
 
+  // A listing link must be a real listing; "other" work carries no link.
+  assert.match(await err(send(s1, s2, { kind: "listing", work: id(777) })), /not in your organization/, "a listing link that is not a listing");
+  assert.match(await err(send(s1, s2, { kind: "other", work: id(778) })), /not linked/);
+
+  // ---- names: every participant of the org, any case, first, last or full ----
+  const names = (who: string, text: string) => as(A(who), `SELECT reached, other FROM public.staff_text_participant_names($1)`, [text]);
+  await q(`UPDATE users SET name = 'Ana Cole' WHERE id = $1`, [p2]);
+  const r1 = (await names(s1, "great catch with alma06 reyes"))[0];
+  assert.deepEqual([r1.reached, r1.other], [[p1], false], "lower case, full name, reached");
+  assert.deepEqual((await names(s1, "helped Ana"))[0].reached, [p2], "a short first name");
+  assert.deepEqual((await names(s1, "the cole file"))[0].reached, [p2], "a last name");
+  const r2 = (await names(s3, "helped Ana"))[0];
+  assert.deepEqual([r2.reached, r2.other], [[], true], "someone the writer cannot see: only a yes, never who");
+  assert.deepEqual((await names(s1, "Great catch on the deadline"))[0].other, false);
+  assert.match(await err(as({ orgId: org, userId: p1 }, `SELECT * FROM public.staff_text_participant_names('x')`)), /only staff/, "not for a participant");
+
   // ---- milestones from facts ------------------------------------------------
+  assert.equal(Number((await as(A(s3), `SELECT public.staff_rewards_refresh() AS n`))[0].n), 0, "Wins off: nothing is recorded");
+  // An ask with a clear reason counts whatever the answer (a pending one here).
+  await q(`INSERT INTO sharing_request (access_code_id, user_id, scope, requested_by, reason) VALUES ($1, $2, 'progress', $3, 'To plan your interview prep together this week')`, [org, p1, s1]);
   const earned = await as(A(s1), `SELECT public.staff_rewards_refresh() AS n`);
   assert.ok(Number(earned[0].n) >= 1, "refresh earns from facts");
   const keys = (await as(A(s1), `SELECT key FROM staff_milestone ORDER BY key`)).map((r) => r.key);
   assert.ok(keys.includes("first_kudos_given"), JSON.stringify(keys));
+  assert.ok(keys.includes("first_clear_ask"), "an ask sent with a clear reason, not yet answered, counts");
+  assert.ok(!keys.includes("first_ask_answered"));
   assert.equal(Number((await as(A(s1), `SELECT public.staff_rewards_refresh() AS n`))[0].n), 0, "each milestone once");
   assert.equal((await as(A(s2), `SELECT key FROM staff_milestone`)).length, 0, "milestones are private");
   assert.match(await err(as(A(s1), `INSERT INTO staff_milestone (user_id, access_code_id, key) VALUES ($1, $2, 'directory_anchor')`, [s1, org])), /permission denied/, "never self-awarded");
@@ -172,7 +196,8 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
 
   // ---- the board shows givers who opted in -----------------------------------
   await send(s2, s1);
-  const board = await as(A(s3), `SELECT giver_id, giver_name, gave FROM public.staff_kudos_giver_board(30)`);
+  const board = await as(A(s3), `SELECT * FROM public.staff_kudos_giver_board(30)`);
+  assert.deepEqual(Object.keys(board[0] ?? {}).sort(), ["giver_id", "giver_name"], "names only, no counts");
   assert.deepEqual(board.map((r) => r.giver_id), [s1], "only the giver who turned rewards on (s2 gave too, but did not opt in)");
   assert.equal((await as({ orgId: org, userId: staffB }, `SELECT * FROM public.staff_kudos_giver_board(30)`)).length, 0, "an outsider gets no board");
   await as(A(owner), `INSERT INTO staff_rewards_org (access_code_id, team_board_on) VALUES ($1, false)`, [org]);
@@ -192,12 +217,15 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
   assert.match(await err(as(A(admin), `DELETE FROM staff_recognition_note WHERE id = $1`, [rn.id])), /permission denied/);
 
   // ---- directory contributions ------------------------------------------------
-  const submit = (who: string, p: Record<string, unknown>, orgId = org) => as({ orgId, userId: who }, `SELECT public.submit_directory_contribution($1::jsonb) AS id`, [JSON.stringify(p)]);
+  const submit = async (who: string, p: Record<string, unknown>, orgId = org) =>
+    (await as({ orgId, userId: who }, `SELECT public.submit_directory_contribution($1::jsonb) AS r`, [JSON.stringify(p)])).map((x) => x.r as { id: string; earlier: boolean });
   const today = new Date().toISOString().slice(0, 10);
   const [np] = await submit(s1, { flow: "new_place", target_kind: "employer", details: { name: "Harbor Freight Lines (Demo)", state: "MI", city: "Muskegon", secret: "dropped" } });
   assert.ok(np.id, "a new place comes in");
   const [again] = await submit(s1, { flow: "new_place", target_kind: "employer", details: { name: "harbor freight lines (demo)", state: "MI" } });
   assert.equal(again.id, np.id, "the same thing twice in a day is one submission");
+  assert.equal(again.earlier, true, "and the app is told so");
+  assert.equal(np.earlier, false);
   assert.match(await err(submit(s1, { flow: "new_place", target_kind: "employer", details: { name: "No State" } })), /name and state/);
   assert.match(await err(submit(staffB, { flow: "new_place", target_kind: "employer", details: { name: "X", state: "MI" } })), /only staff/, "not someone outside the program");
   assert.match(await err(submit(p1, { flow: "new_place", target_kind: "employer", details: { name: "X", state: "MI" } })), /only staff/, "not a participant");
@@ -241,19 +269,43 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
     assert.match(await err(as(A(s1), `SELECT public.apply_contribution_call($1, NULL, NULL)`, [callId])), /only the directory owner/);
     const wrote = await as(A(platform), `SELECT public.apply_contribution_call($1, NULL, NULL) AS w`, [callId]);
     assert.equal(wrote[0].w, "employer_confirmed");
-    const conf = await one<{ method: string; confirmed_by: string }>(`SELECT method, confirmed_by FROM employer_relationship_confirmation WHERE note = $1`, [`Staff contribution ${callId}`]);
+    const conf = await one<{ method: string; confirmed_by: string; provenance: string }>(`SELECT method, confirmed_by, provenance FROM employer_relationship_confirmation WHERE note = $1`, [`Staff contribution ${callId}`]);
+    assert.equal(conf.provenance, "partner_staff", "a program's call, never read as Steel Man's own");
     assert.equal(conf.method, "phone_call");
     assert.equal(conf.confirmed_by, `org:${org}`, "the program is the source, never a person's name");
-    const rel = await one<{ avenue: string; partner_org_id: string }>(`SELECT avenue, partner_org_id FROM employer_relationship WHERE note = $1`, [`Staff contribution ${callId}`]);
+    const rel = await one<{ avenue: string; partner_org_id: string; provenance: string }>(`SELECT avenue, partner_org_id, provenance FROM employer_relationship WHERE note = $1`, [`Staff contribution ${callId}`]);
+    assert.equal(rel.provenance, "partner_staff");
+    assert.equal((await one<{ n: number }>(`SELECT count(*)::int AS n FROM employer_relationship WHERE provenance NOT IN ('smr', 'partner_staff')`)).n, 0);
     assert.equal(rel.avenue, "partner_org");
     assert.equal(rel.partner_org_id, org);
     assert.match(await err(as(A(platform), `SELECT public.decide_directory_contribution($1, 'not_used', NULL, NULL)`, [callId])), /not after the call was recorded/);
 
-    // Revert within 30 days takes the credit back.
+    // Nothing is recorded while Wins is off: s2's approval earns nothing until they turn it on.
     await as(A(platform), `SELECT public.decide_directory_contribution($1, 'approved', 'warm_intro', NULL)`, [ks.id]);
+    assert.ok(!(await as(A(s2), `SELECT key FROM staff_milestone`)).some((r) => r.key === "first_warm_intro"), "switch off: no milestone");
+    await as(A(s2), `INSERT INTO staff_rewards_setting (user_id, access_code_id, rewards_on) VALUES ($1, $2, true)`, [s2, org]);
+    await as(A(s2), `SELECT public.staff_rewards_refresh()`);
+    const s2keys = (await as(A(s2), `SELECT key FROM staff_milestone`)).map((r) => r.key);
+    assert.ok(s2keys.includes("first_warm_intro") && s2keys.includes("research_helper"), `turning Wins on derives approved work: ${JSON.stringify(s2keys)}`);
+    // Revert within 30 days takes the credit back.
     assert.ok((await as(A(s2), `SELECT key FROM staff_milestone`)).some((r) => r.key === "first_warm_intro"));
     await as(A(platform), `SELECT public.decide_directory_contribution($1, 'not_used', NULL, 'Turned out to be a different company')`, [ks.id]);
     assert.ok(!(await as(A(s2), `SELECT key FROM staff_milestone`)).some((r) => r.key === "first_warm_intro"), "a reverted approval takes its milestone back");
+
+    // Thresholds follow the running total: correction (2) + new row (1) = 3 earns research_helper on the
+    // second; reverting the FIRST drops the total to 1, so research_helper goes too.
+    const [cor] = await submit(s2, { flow: "correction", target_kind: "employer", target_id: emp, details: { change: "Moved to Pine St" } });
+    const [nr] = await submit(s2, { flow: "new_place", target_kind: "employer", details: { name: "Dockside Supply (Demo)", state: "MI" } });
+    await as(A(platform), `SELECT public.decide_directory_contribution($1, 'approved', 'correction', NULL)`, [cor.id]);
+    await as(A(platform), `SELECT public.decide_directory_contribution($1, 'approved', 'new_row', NULL)`, [nr.id]);
+    assert.ok((await as(A(s2), `SELECT key FROM staff_milestone`)).some((r) => r.key === "research_helper"), "3 credits: research helper");
+    await as(A(platform), `SELECT public.decide_directory_contribution($1, 'not_used', NULL, NULL)`, [cor.id]);
+    const left = (await as(A(s2), `SELECT key FROM staff_milestone`)).map((r) => r.key);
+    assert.ok(!left.includes("research_helper") && left.includes("first_new_place"), `below the threshold after a revert: ${JSON.stringify(left)}`);
+
+    // The data owner never approves their own contribution.
+    const own = ((await q(`INSERT INTO directory_contribution (access_code_id, submitted_by, flow, target_kind, details) VALUES ($1, $2, 'new_place', 'employer', '{"name":"Self (Demo)","state":"MI"}') RETURNING id`, [org, platform])).rows[0] as { id: string }).id;
+    assert.match(await err(as(A(platform), `SELECT public.decide_directory_contribution($1, 'approved', 'new_row', NULL)`, [own])), /Someone else reviews your own/);
   } else {
     console.log(`  note: employer tables did not apply in pglite (${failedEarly.filter((f) => /061|071/.test(f)).join(", ") || "unknown"}); employer flows skipped`);
   }
@@ -271,7 +323,9 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
     await as(A(platform), `SELECT public.decide_directory_contribution($1, 'approved', 'verified_call', NULL)`, [visit.id]);
     assert.match(await err(as(A(platform), `SELECT public.apply_contribution_call($1, NULL, NULL)`, [visit.id])), /live check/, "a resource call names the check it confirmed");
     assert.equal((await as(A(platform), `SELECT public.apply_contribution_call($1, $2, NULL) AS w`, [visit.id, check]))[0].w, "resource_confirmed");
-    const ev = await one<{ kind: string; method: string; recorded_by: string; check_id: string }>(`SELECT kind, method, recorded_by, check_id FROM resource_relationship_event WHERE note = $1`, [`Staff contribution ${visit.id}`]);
+    const ev = await one<{ kind: string; method: string; recorded_by: string; check_id: string; provenance: string }>(`SELECT kind, method, recorded_by, check_id, provenance FROM resource_relationship_event WHERE note = $1`, [`Staff contribution ${visit.id}`]);
+    assert.equal(ev.provenance, "partner_staff");
+    assert.equal((await one<{ p: string }>(`SELECT provenance AS p FROM resource_relationship WHERE note = $1`, [`Staff contribution ${visit.id}`])).p, "partner_staff");
     assert.deepEqual([ev.kind, ev.method, ev.recorded_by, ev.check_id], ["confirmed", "in_person", `org:${org}`, check], "a visit is in person; the program is the source");
     assert.match(await err(as(A(platform), `SELECT public.apply_contribution_call($1, $2, NULL)`, [visit.id, check])), /not yet recorded/, "recorded once");
   }

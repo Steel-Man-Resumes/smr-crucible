@@ -35,7 +35,7 @@ interface Wins {
   newMilestones?: Milestone[];
   unlocks?: UnlockKey[];
   time?: { weekMinutes: number; monthMinutes: number };
-  board?: { userId: string; firstName: string; gave: number }[];
+  board?: { userId: string; firstName: string }[];
   recap?: { title: string; lines: string[]; text: string; empty: boolean } | null;
 }
 
@@ -167,7 +167,7 @@ export function WinsPage({ accountId = "staff" }: { accountId?: string }) {
         <section aria-labelledby="wins-board" className="border border-t-line rounded-[4px] p-4">
           <h2 id="wins-board" className="font-semibold text-t-white">{REWARDS_COPY.boardTitle}</h2>
           {(w.board ?? []).length === 0 ? <p className="text-sm text-t-phos-dim mt-1">{REWARDS_COPY.boardEmpty}</p> : (
-            <ul className="mt-2 flex flex-wrap gap-3">{(w.board ?? []).map((b) => <li key={b.userId} className="text-sm border border-t-line rounded-[4px] px-3 py-1">{b.firstName} <span className="text-t-phos-dim">thanked a colleague {b.gave === 1 ? "once" : `${b.gave} times`}</span></li>)}</ul>)}
+            <ul className="mt-2 flex flex-wrap gap-3">{(w.board ?? []).map((b) => <li key={b.userId} className="text-sm border border-t-line rounded-[4px] px-3 py-1">{b.firstName}</li>)}</ul>)}
           <p className="mt-2 text-xs text-t-phos-dim">{REWARDS_COPY.boardHelp}</p>
         </section>
       )}

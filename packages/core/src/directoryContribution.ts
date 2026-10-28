@@ -12,6 +12,7 @@
 import { queryAsUser, runScoped, type OrgScope } from "./db";
 import type { OrgActor } from "./authz/resolveOrgActor";
 import { LISTING_NUDGE_DAYS } from "./staffRewardsShared";
+import { participantNamesIn } from "./staffRewards";
 import {
   intakePayload, normalizeContribution, CONTRIBUTION_OUTCOMES,
   type ContributionFlow, type ContributionKind, type ContributionOutcome, type ContributionStatus,
@@ -33,7 +34,7 @@ function readableRefusal(e: unknown): string | null {
   const msg = String((e as { message?: string })?.message ?? "").replace(/^ERROR:\s*/, "").trim();
   const code = String((e as { code?: string })?.code ?? "");
   if (code !== "23514" && code !== "42501" && !/check_violation|insufficient_privilege/.test(msg)) return null;
-  if (/^(A |The |That |Tell |Invalid|only |Hearsay|Name |Only |An )/.test(msg) && msg.length < 200) return msg.replace(/^Invalid contribution(: )?/, "Something is missing: ").replace(/: $/, ".");
+  if (/^(A |The |That |Tell |Invalid|only |Hearsay|Name |Only |An |Someone )/.test(msg) && msg.length < 200) return msg.replace(/^Invalid contribution(: )?/, "Something is missing: ").replace(/: $/, ".");
   return "That could not be sent.";
 }
 
@@ -49,13 +50,20 @@ export interface MyContribution {
  * date. The app has already put the free text through the record-word gate.
  */
 export async function submitContribution(actor: OrgActor, raw: unknown, today: string):
-  Promise<{ ok: true; id: string } | { ok: false; reason: string }> {
+  Promise<{ ok: true; id: string; earlier: boolean } | { ok: false; reason: string }> {
   if (actor.viaPlatformAdmin) return { ok: false, reason: "Nothing is sent while you are viewing as someone else." };
   const norm = normalizeContribution(raw, today);
   if (!norm.ok) return { ok: false, reason: norm.error };
+  // What they said and what changed are about the place, never a participant (review round 1).
+  const words = [norm.value.details.said, norm.value.details.change].filter(Boolean).join(" ");
+  if (words) {
+    const named = await participantNamesIn(actor, words);
+    if (named.other || named.reached.length > 0) return { ok: false, reason: "Leave out anyone on your organization's list. This is about the place." };
+  }
   try {
-    const rows = await one<{ id: string }>(actor, `SELECT public.submit_directory_contribution($1::jsonb) AS id`, [JSON.stringify(intakePayload(norm.value))]);
-    return rows[0]?.id ? { ok: true, id: rows[0].id } : { ok: false, reason: "That could not be sent." };
+    const rows = await one<{ r: { id?: string; earlier?: boolean } | null }>(actor, `SELECT public.submit_directory_contribution($1::jsonb) AS r`, [JSON.stringify(intakePayload(norm.value))]);
+    const r = rows[0]?.r;
+    return r?.id ? { ok: true, id: r.id, earlier: !!r.earlier } : { ok: false, reason: "That could not be sent." };
   } catch (e) {
     const r = readableRefusal(e);
     if (r) return { ok: false, reason: r };

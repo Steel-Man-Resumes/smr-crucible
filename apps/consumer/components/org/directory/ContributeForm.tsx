@@ -88,7 +88,7 @@ export function ContributeForm({ initial = {}, flows, onDone, onCancel }: {
       const res = await fetch("/api/org/directory-contributions", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(p) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.error || "That did not send.");
-      setMsg("Sent for review. Thank you. You will see the answer under Help the directory.");
+      setMsg(body.earlier ? "You already sent this today. We kept your first one, and it is waiting for review." : "Sent for review. Thank you. You will see the answer under Help the directory.");
       onDone?.(body.id);
     } catch (err) {
       setMsg(err instanceof Error ? err.message : "That did not send.");

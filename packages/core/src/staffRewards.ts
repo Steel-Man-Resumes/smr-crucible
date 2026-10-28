@@ -179,15 +179,31 @@ export async function reachableParticipantNames(actor: OrgActor): Promise<NamedP
   return rows;
 }
 
+/**
+ * Which participants does this text name? The 111 definer function checks
+ * every participant of the organization (any case; full, first or last name;
+ * two letters or more). It returns the ids this staff member reaches, and
+ * only a yes/no for anyone else.
+ */
+export async function participantNamesIn(actor: OrgActor, text: string): Promise<{ reached: string[]; other: boolean }> {
+  if (actor.viaPlatformAdmin || !String(text ?? "").trim()) return { reached: [], other: false };
+  const rows = await one<{ reached: string[] | null; other: boolean | null }>(actor,
+    `SELECT reached, other FROM public.staff_text_participant_names($1)`, [String(text)]);
+  return { reached: (rows[0]?.reached ?? []).map((x) => String(x).toLowerCase()), other: !!rows[0]?.other };
+}
+
+export const NAME_REFUSAL = "Leave people's names out. To thank someone for work about a person, send it from that person's own task, note or referral, so we can check you both can see them.";
+
 export interface KudosInput { toUserId: string; body: string; workKind?: KudosWorkKind | null; workId?: string | null }
 
 /**
  * Send a good catch. The app has already put the words through the record
- * gate; `mentioned` is the participants the words name (namesMentioned). A
- * name is allowed only when it is the person the linked work is about, and
- * the database then checks that both colleagues reach them.
+ * gate. Any participant name in the words (participantNamesIn, every
+ * participant of the organization) is allowed only when it is the person the
+ * linked task, note or referral is about; the database then checks that both
+ * colleagues reach them.
  */
-export async function giveKudos(actor: OrgActor, input: KudosInput, mentioned: readonly string[] = []):
+export async function giveKudos(actor: OrgActor, input: KudosInput):
   Promise<{ ok: true; id: string } | { ok: false; reason: string }> {
   if (actor.viaPlatformAdmin) return { ok: false, reason: "Nothing is sent while you are viewing as someone else." };
   const body = cleanKudosBody(input.body);
@@ -196,19 +212,24 @@ export async function giveKudos(actor: OrgActor, input: KudosInput, mentioned: r
   if (input.toUserId.toLowerCase() === actor.userId.toLowerCase()) return { ok: false, reason: "Pick a colleague, not yourself." };
   const kind = input.workKind && (KUDOS_WORK_KINDS as readonly string[]).includes(input.workKind) ? input.workKind : null;
   const workId = input.workId && UUID.test(input.workId) ? input.workId : null;
+  if (input.workId && !workId) return { ok: false, reason: "That piece of work was not found." };
   if (workId && !kind) return { ok: false, reason: "Say what kind of work this was." };
+  if (kind === "other" && workId) return { ok: false, reason: "Other work is not linked. Leave the link out." };
+  const named = await participantNamesIn(actor, body.body);
+  if (named.other) return { ok: false, reason: NAME_REFUSAL };
+  const mentioned = named.reached;
   if (mentioned.length > 0) {
     // A name is allowed only for the person the linked work is about (read as
     // the sender, so reach applies); the database then checks the receiver too.
     const table = kind === "task" ? "staff_task" : kind === "note" ? "case_note" : kind === "referral" ? "referral" : null;
     const col = kind === "referral" ? "participant_user_id" : "client_user_id";
     if (!workId || !table) {
-      return { ok: false, reason: "Leave the person's name out, or send this from their task, note or referral so we can check you both can see them." };
+      return { ok: false, reason: NAME_REFUSAL };
     }
     const about = await one<{ p: string | null }>(actor, `SELECT ${col} AS p FROM ${table} WHERE id = $1::uuid AND access_code_id = $2::uuid`, [workId, actor.orgId]);
     const who = String(about[0]?.p ?? "").toLowerCase();
     if (!who || mentioned.some((m) => m.toLowerCase() !== who)) {
-      return { ok: false, reason: "The note names someone this work is not about. Leave their name out." };
+      return { ok: false, reason: NAME_REFUSAL };
     }
   }
   try {
@@ -255,14 +276,15 @@ export async function listKudos(actor: OrgActor, limit = 50): Promise<{ received
   return { received: received.slice(0, limit), given: given.slice(0, limit) };
 }
 
-export interface BoardRow { userId: string; firstName: string; gave: number }
+/** First names only: no counts, no ranking (review round 1). */
+export interface BoardRow { userId: string; firstName: string }
 
 /** Thanks GIVEN in the last N days, by people who opted in. Never who was thanked. */
 export async function giverBoard(actor: OrgActor, days = 30): Promise<BoardRow[]> {
   if (actor.viaPlatformAdmin) return [];
-  const rows = await one<{ giver_id: string; giver_name: string; gave: number }>(actor,
-    `SELECT giver_id, giver_name, gave FROM public.staff_kudos_giver_board($1::int)`, [Math.round(days)]);
-  return rows.map((r) => ({ userId: r.giver_id, firstName: r.giver_name, gave: Number(r.gave) }));
+  const rows = await one<{ giver_id: string; giver_name: string }>(actor,
+    `SELECT giver_id, giver_name FROM public.staff_kudos_giver_board($1::int)`, [Math.round(days)]);
+  return rows.map((r) => ({ userId: r.giver_id, firstName: r.giver_name }));
 }
 
 /* ---------------------------------------------------------- time saved -- */
@@ -289,6 +311,9 @@ export async function writeRecognitionNote(actor: OrgActor, input: { aboutUserId
   const body = cleanRecognitionBody(input.body);
   if (!body.ok) return { ok: false, reason: body.error };
   const label = String(input.periodLabel ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || null;
+  // A funder report never names a participant (review round 1).
+  const named = await participantNamesIn(actor, `${body.body} ${label ?? ""}`);
+  if (named.other || named.reached.length > 0) return { ok: false, reason: "Leave participants' names out of a note for a funder report." };
   try {
     const rows = await one<{ id: string }>(actor,
       `INSERT INTO staff_recognition_note (access_code_id, about_user_id, written_by, body, period_label) VALUES ($1::uuid, $2::uuid, $3::uuid, $4, $5) RETURNING id`,
@@ -390,10 +415,10 @@ export async function getWins(actor: OrgActor, nowMs = Date.now(), approvedThisM
     firstName: null,
     milestones: milestones.filter((m) => inMonth(m.earnedAt)).map((m) => ({ key: m.key, earnedAt: m.earnedAt })),
     kudosGiven: kudos.given.filter((k) => inMonth(k.at)).length,
-    kudosReceived: kudos.received.filter((k) => inMonth(k.at)).map((k) => ({ body: k.body, fromFirstName: k.otherFirstName })),
+    kudosReceivedFrom: kudos.received.filter((k) => inMonth(k.at)).map((k) => k.otherFirstName),
     minutesSaved: monthMinutes,
     contributionsApproved: approvedThisMonth,
-    recognitionNotes: recognition.filter((n) => n.status === "approved" && inMonth(n.decidedAt ?? n.createdAt)).map((n) => ({ body: n.body })),
+    recognitionApproved: recognition.filter((n) => n.status === "approved" && inMonth(n.decidedAt ?? n.createdAt)).length,
   });
   return {
     ...base,

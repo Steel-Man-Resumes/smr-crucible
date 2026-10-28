@@ -14,6 +14,7 @@ import { listOrgRecognitionNotes, writeRecognitionNote, answerRecognitionNote, l
 import { requireOrgCapability } from "@/lib/org-guard";
 import { effectiveAuth } from "@/lib/effective-auth";
 import { mayWrite, recordWordsIn, RECORD_WORDS_REFUSAL, VIEWING_REFUSAL } from "@/lib/staff-rewards-route";
+import { readJsonStrict, refuseCrossOrigin, NOT_JSON } from "@/lib/staff-rewards-route";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,9 @@ export async function GET(request: Request) {
 }
 
 async function gate(request: Request) {
+  // Same-origin first, before the session is read (lib/org-crm-gate.ts).
+  const crossOrigin = refuseCrossOrigin(request);
+  if (crossOrigin) return { response: crossOrigin } as const;
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return { response: guard.response } as const;
   const session = await effectiveAuth();
@@ -40,16 +44,18 @@ async function gate(request: Request) {
 export async function POST(request: Request) {
   const w = await gate(request);
   if ("response" in w) return w.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   if (recordWordsIn([String(body?.body ?? ""), String(body?.periodLabel ?? "")])) return NextResponse.json({ error: RECORD_WORDS_REFUSAL }, { status: 400 });
-  const res = await writeRecognitionNote(w.actor, { aboutUserId: String(body?.aboutUserId ?? ""), body: String(body?.body ?? ""), periodLabel: body?.periodLabel ?? null });
+  const res = await writeRecognitionNote(w.actor, { aboutUserId: String(body?.aboutUserId ?? ""), body: String(body?.body ?? ""), periodLabel: body?.periodLabel == null ? null : String(body.periodLabel) });
   return res.ok ? NextResponse.json({ ok: true, id: res.id }) : NextResponse.json({ error: res.reason }, { status: 400 });
 }
 
 export async function PATCH(request: Request) {
   const w = await gate(request);
   if ("response" in w) return w.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   const status = String(body?.status ?? "");
   if (!["approved", "declined", "withdrawn"].includes(status)) return NextResponse.json({ error: "Not found." }, { status: 404 });
   const ok = await answerRecognitionNote(w.actor, String(body?.id ?? ""), status as "approved" | "declined" | "withdrawn");

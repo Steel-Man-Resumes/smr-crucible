@@ -9,9 +9,13 @@
 --     for anyone (Troy 2026-10-27: "give them the option to toggle that on in
 --     their own setting"; research: games help when people agree to them).
 --   * Never a score on client outcomes, records, notes written or contacts
---     made. Milestones come from craft and learning facts (closing a referral
---     loop with a reason, a first saved view, using a t.ROY draft, giving a
---     good catch, an approved directory contribution), each counted once.
+--     made, and never a reward for a participant's decision or consent.
+--     Milestones come from the staff member's own acts (closing a referral
+--     loop with the reason written, an ask sent with a clear reason, a first
+--     saved view, using a t.ROY draft, giving a good catch, an approved
+--     directory contribution), each counted once.
+--   * Nothing is recorded while the switch is off; turning it on derives the
+--     milestones again from the facts.
 --   * The only team board shows recognition GIVEN (a "received" board lowered
 --     helping in the study we follow). staff_kudos_giver_board() lists only
 --     givers who turned rewards on and left "show me on the board" on.
@@ -60,7 +64,8 @@
 --          public.staff_milestone_grant(uuid, uuid, text, uuid), public.staff_milestone_revoke(uuid, uuid, uuid),
 --          public.staff_rewards_member(uuid, uuid), public.staff_kudos_guard(),
 --          public.staff_rewards_setting_guard(), public.staff_rewards_org_guard(),
---          public.staff_recognition_note_guard(), public.staff_milestone_guard();
+--          public.staff_recognition_note_guard(), public.staff_milestone_guard(),
+--          public.staff_text_participant_names(text);
 --        DELETE FROM _migrations WHERE filename = '111_staff_rewards.sql';
 SET LOCAL lock_timeout = '5s';
 
@@ -250,8 +255,16 @@ BEGIN
     ELSIF NEW.work_kind = 'referral' AND to_regclass('public.referral') IS NOT NULL THEN
       EXECUTE 'SELECT participant_user_id, true FROM public.referral WHERE id = $1 AND access_code_id = $2'
         INTO v_participant, v_found USING NEW.work_id, v_org;
-    ELSIF NEW.work_kind IN ('listing', 'other') THEN
-      v_found := true;  -- a directory listing or other work names no participant
+    ELSIF NEW.work_kind = 'listing' THEN
+      -- A directory listing names no participant; it must be a real listing.
+      IF to_regclass('public.employer_org') IS NOT NULL THEN
+        EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.employer_org WHERE id = $1)' INTO v_found USING NEW.work_id;
+      END IF;
+      IF NOT COALESCE(v_found, false) AND to_regclass('public.resource_service') IS NOT NULL THEN
+        EXECUTE 'SELECT EXISTS (SELECT 1 FROM public.resource_service WHERE id = $1)' INTO v_found USING NEW.work_id;
+      END IF;
+    ELSIF NEW.work_kind = 'other' THEN
+      RAISE EXCEPTION 'other work is not linked; leave the link out' USING ERRCODE = 'check_violation';
     END IF;
     IF NOT COALESCE(v_found, false) THEN
       RAISE EXCEPTION 'that piece of work is not in your organization' USING ERRCODE = 'insufficient_privilege';
@@ -363,6 +376,12 @@ BEGIN
   IF p_user IS NULL OR p_org IS NULL OR p_key IS NULL OR NOT public.staff_rewards_member(p_org, p_user) THEN
     RETURN false;
   END IF;
+  -- Nothing is recorded while the person's Wins switch is off (review round 1,
+  -- nit 12). Turning it on runs staff_rewards_refresh, which derives every
+  -- milestone again from the facts, including approved directory work.
+  IF NOT EXISTS (SELECT 1 FROM public.staff_rewards_setting s WHERE s.user_id = p_user AND s.access_code_id = p_org AND s.rewards_on) THEN
+    RETURN false;
+  END IF;
   INSERT INTO public.staff_milestone (user_id, access_code_id, key, source_ref)
   VALUES (p_user, p_org, p_key, p_ref)
   ON CONFLICT (user_id, access_code_id, key) DO NOTHING;
@@ -384,6 +403,37 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.staff_milestone_revoke(uuid, uuid, uuid) FROM PUBLIC;
 
+-- Which participants does a piece of staff-written text name? Case-insensitive
+-- whole words: any full, first or last name (two letters or more) of ANY
+-- participant of the organization in scope, not only the ones the writer
+-- reaches. Returns the ids the caller reaches, and only a yes/no for anyone
+-- else (so it never tells a staff member who else is in the program).
+-- Used before a good catch, a recognition note or a directory draft is saved.
+CREATE OR REPLACE FUNCTION public.staff_text_participant_names(p_text text) RETURNS TABLE (reached uuid[], other boolean)
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+DECLARE
+  v_me  uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
+  v_org uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
+  v_words text[];
+BEGIN
+  IF v_me IS NULL OR v_org IS NULL OR NOT public.staff_rewards_member(v_org, v_me) THEN
+    RAISE EXCEPTION 'only staff of this organization check their words here' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  v_words := ARRAY(SELECT w FROM unnest(regexp_split_to_array(lower(COALESCE(p_text, '')), '[^[:alpha:]'']+')) AS w WHERE length(w) >= 2);
+  RETURN QUERY
+    WITH named AS (
+      SELECT r.user_id
+        FROM public.access_code_redemption r JOIN public.users u ON u.id = r.user_id
+       WHERE r.access_code_id = v_org
+         AND ARRAY(SELECT t FROM unnest(regexp_split_to_array(lower(COALESCE(u.name, '')), '[^[:alpha:]'']+')) AS t WHERE length(t) >= 2) && v_words
+    )
+    SELECT COALESCE(array_agg(n.user_id) FILTER (WHERE public.smr_staff_reach(v_org, v_me, n.user_id)), '{}'::uuid[]),
+           COALESCE(bool_or(NOT public.smr_staff_reach(v_org, v_me, n.user_id)), false)
+      FROM named n;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.staff_text_participant_names(text) FROM PUBLIC;
+
 -- The caller's own craft and learning milestones, from facts. Each is earned
 -- once; nothing here counts notes, contacts, messages or any client outcome.
 -- Returns how many new milestones were earned.
@@ -394,11 +444,15 @@ DECLARE
   v_org uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
   n int := 0;
   k text;
+  ref uuid;
   closed boolean;
   learned int;
 BEGIN
   IF v_me IS NULL OR v_org IS NULL OR NOT public.staff_rewards_member(v_org, v_me) THEN
     RETURN 0;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.staff_rewards_setting s WHERE s.user_id = v_me AND s.access_code_id = v_org AND s.rewards_on) THEN
+    RETURN 0;  -- Wins off: nothing recorded
   END IF;
 
   IF EXISTS (SELECT 1 FROM public.staff_kudos k WHERE k.access_code_id = v_org AND k.from_user_id = v_me AND k.withdrawn_at IS NULL) THEN
@@ -429,19 +483,23 @@ BEGIN
   IF learned >= 3 THEN
     n := n + public.staff_milestone_grant(v_me, v_org, 'learn_three_tools', NULL)::int;
   END IF;
-  -- Closing a referral loop is practice, whatever the answer was: delivered, or
-  -- ended (declined, unable to reach, closed) WITH a reason written down.
+  -- Closing a referral loop is the staff member's own act: the referral reached
+  -- an end (any end: delivered, declined, unable to reach, closed) AND they
+  -- wrote the reason down. What happened for the person never counts.
   IF to_regclass('public.referral') IS NOT NULL THEN
     EXECUTE $q$SELECT EXISTS (SELECT 1 FROM public.referral f WHERE f.access_code_id = $1 AND f.owner_staff_id = $2
-               AND (f.status = 'service_delivered'
-                    OR (f.status IN ('declined', 'unable_to_contact', 'closed') AND length(btrim(COALESCE(f.status_reason, ''))) > 0)))$q$
+               AND f.status IN ('service_delivered', 'declined', 'unable_to_contact', 'closed')
+               AND length(btrim(COALESCE(f.status_reason, ''))) > 0)$q$
       INTO STRICT closed USING v_org, v_me;
     IF closed THEN
       n := n + public.staff_milestone_grant(v_me, v_org, 'first_referral_loop_closed', NULL)::int;
     END IF;
   END IF;
-  IF EXISTS (SELECT 1 FROM public.sharing_request s WHERE s.access_code_id = v_org AND s.requested_by = v_me AND s.status = 'approved') THEN
-    n := n + public.staff_milestone_grant(v_me, v_org, 'first_ask_answered', NULL)::int;
+  -- An ask sent with a clear reason (20 characters or more), whatever the
+  -- person answers: never a reward for anyone's consent (review round 1).
+  IF EXISTS (SELECT 1 FROM public.sharing_request s WHERE s.access_code_id = v_org AND s.requested_by = v_me
+               AND length(btrim(s.reason)) >= 20) THEN
+    n := n + public.staff_milestone_grant(v_me, v_org, 'first_clear_ask', NULL)::int;
   END IF;
   -- A week with nothing past due: on staff a week or more, finished at least
   -- one task this week, nothing open is past due, and nothing finished this
@@ -459,6 +517,30 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.staff_recognition_note r WHERE r.access_code_id = v_org AND r.about_user_id = v_me AND r.status = 'approved') THEN
     n := n + public.staff_milestone_grant(v_me, v_org, 'recognized_by_program', NULL)::int;
   END IF;
+  -- Approved directory work (112), derived again here so turning Wins on
+  -- later loses nothing. Each milestone points at the contribution that
+  -- earned it, so a revert takes it back. Credit: a call or a warm
+  -- introduction 3, a correction 2, a new row 1; thresholds 3, 10, 25
+  -- (staffRewardsShared.ts RESEARCH_THRESHOLDS).
+  IF to_regclass('public.directory_contribution') IS NOT NULL THEN
+    FOR k, ref IN EXECUTE $q$
+      WITH mine AS (
+        SELECT c.id, c.outcome, c.decided_at,
+               sum(CASE c.outcome WHEN 'verified_call' THEN 3 WHEN 'warm_intro' THEN 3 WHEN 'correction' THEN 2 WHEN 'new_row' THEN 1 ELSE 0 END)
+                 OVER (ORDER BY c.decided_at, c.id) AS running
+          FROM public.directory_contribution c
+         WHERE c.access_code_id = $1 AND c.submitted_by = $2 AND c.status = 'approved')
+      SELECT DISTINCT ON (key) key, id FROM (
+        SELECT CASE outcome WHEN 'verified_call' THEN 'first_verified_listing' WHEN 'warm_intro' THEN 'first_warm_intro'
+                            WHEN 'correction' THEN 'first_correction' ELSE 'first_new_place' END AS key, id, decided_at FROM mine
+        UNION ALL SELECT 'research_helper', id, decided_at FROM mine WHERE running >= 3
+        UNION ALL SELECT 'research_partner', id, decided_at FROM mine WHERE running >= 10
+        UNION ALL SELECT 'directory_anchor', id, decided_at FROM mine WHERE running >= 25) x
+      ORDER BY key, decided_at, id $q$ USING v_org, v_me
+    LOOP
+      n := n + public.staff_milestone_grant(v_me, v_org, k, ref)::int;
+    END LOOP;
+  END IF;
   RETURN n;
 END;
 $$;
@@ -466,8 +548,9 @@ REVOKE ALL ON FUNCTION public.staff_rewards_refresh() FROM PUBLIC;
 
 -- The team board: recognition GIVEN, never received. Only givers who turned
 -- rewards on and left "show me on the board" on; only when the organization
--- keeps the board on. Names and how many good catches each gave, in name order.
-CREATE OR REPLACE FUNCTION public.staff_kudos_giver_board(p_days int) RETURNS TABLE (giver_id uuid, giver_name text, gave int)
+-- keeps the board on. First names only, in name order: no counts, no ranking
+-- (review round 1: nothing that grows with volume).
+CREATE OR REPLACE FUNCTION public.staff_kudos_giver_board(p_days int) RETURNS TABLE (giver_id uuid, giver_name text)
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   v_me   uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
@@ -481,7 +564,7 @@ BEGIN
     RETURN;
   END IF;
   RETURN QUERY
-    SELECT k.from_user_id, COALESCE(NULLIF(split_part(btrim(u.name), ' ', 1), ''), 'A colleague')::text, count(*)::int
+    SELECT k.from_user_id, COALESCE(NULLIF(split_part(btrim(u.name), ' ', 1), ''), 'A colleague')::text
       FROM public.staff_kudos k
       JOIN public.staff_rewards_setting s ON s.user_id = k.from_user_id AND s.access_code_id = v_org AND s.rewards_on AND s.board_ok
       JOIN public.users u ON u.id = k.from_user_id
@@ -593,7 +676,10 @@ BEGIN
     GRANT UPDATE (seen_at) ON staff_milestone TO smr_app;
     GRANT SELECT, INSERT ON staff_recognition_note TO smr_app;
     GRANT UPDATE (body, period_label, status) ON staff_recognition_note TO smr_app;
-    GRANT EXECUTE ON FUNCTION public.staff_rewards_member(uuid, uuid) TO smr_app;
+    -- staff_rewards_member answers "is this person staff there" for ANY org:
+    -- definer code only (review round 1), never the app.
+    REVOKE ALL ON FUNCTION public.staff_rewards_member(uuid, uuid) FROM smr_app;
+    GRANT EXECUTE ON FUNCTION public.staff_text_participant_names(text) TO smr_app;
     GRANT EXECUTE ON FUNCTION public.staff_rewards_refresh() TO smr_app;
     GRANT EXECUTE ON FUNCTION public.staff_kudos_giver_board(int) TO smr_app;
     REVOKE ALL ON FUNCTION public.staff_milestone_grant(uuid, uuid, text, uuid) FROM smr_app;
@@ -631,7 +717,8 @@ BEGIN
        OR has_column_privilege('smr_app', 'public.staff_recognition_note', 'about_user_id', 'UPDATE') THEN
       RAISE EXCEPTION '111: smr_app holds more than it may on the rewards tables';
     END IF;
-    IF has_function_privilege('smr_app', 'public.staff_milestone_grant(uuid, uuid, text, uuid)', 'EXECUTE')
+    IF has_function_privilege('smr_app', 'public.staff_rewards_member(uuid, uuid)', 'EXECUTE')
+       OR has_function_privilege('smr_app', 'public.staff_milestone_grant(uuid, uuid, text, uuid)', 'EXECUTE')
        OR has_function_privilege('smr_app', 'public.staff_milestone_revoke(uuid, uuid, uuid)', 'EXECUTE') THEN
       RAISE EXCEPTION '111: smr_app must never award or take back a milestone directly';
     END IF;

@@ -17,13 +17,15 @@ type CoreLoader = () => Promise<Core>;
 
 /**
  * The Suggestions switch, read from staff prefs with a default of ON. The
- * field belongs to lanes S1/S3 (staff prefs, key `suggestions`); until it
+ * field belongs to lanes S1/S3 (staff prefs, key `troySuggestions`); until it
  * exists the normalizer drops the key and this stays on, the spec's default.
  */
 export async function suggestionsOn(actor: OrgActor, loadCore: CoreLoader): Promise<boolean> {
   try {
     const prefs = await (await loadCore()).getStaffPrefs(actor);
-    return (prefs.effective as unknown as Record<string, unknown>).suggestions !== false;
+    const e = prefs.effective as unknown as Record<string, unknown>;
+    // S3 names the switch troySuggestions; an earlier name was suggestions. Either one off means off.
+    return e.troySuggestions !== false && e.suggestions !== false;
   } catch {
     // A read that fails never nags: no line.
     return false;

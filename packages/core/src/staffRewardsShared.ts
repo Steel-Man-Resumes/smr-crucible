@@ -34,16 +34,22 @@ export interface MilestoneDef {
  * Every milestone the database can write (111 staff_rewards_refresh, 112
  * decide_directory_contribution, and lane S5's handoff trigger). A key the
  * database writes that is not here is ignored by the screens.
+ *
+ * Each one is the staff member's OWN act. None rewards a participant's
+ * decision, consent or outcome (review round 1): an ask counts when it is
+ * sent with a clear reason, whatever the answer; a referral loop counts when
+ * the staff member records how it ended, whatever the end; a handoff counts
+ * when it is sent.
  */
 export const MILESTONES: readonly MilestoneDef[] = [
   { key: "first_kudos_given", group: "team", title: "You lifted someone up", detail: "You sent a colleague a good catch. That is how a team gets stronger." },
   { key: "kudos_four_weeks", group: "team", title: "A habit of thanks", detail: "You noticed good work in four different weeks." },
   { key: "recognized_by_program", group: "team", title: "Your program noticed", detail: "You said yes to a note about your work for a funder report." },
-  { key: "first_referral_loop_closed", group: "craft", title: "Closed the loop", detail: "A referral of yours reached its end with the reason written down." },
-  { key: "first_ask_answered", group: "craft", title: "Asked the right way", detail: "Someone said yes to an ask you sent with a clear reason." },
+  { key: "first_referral_loop_closed", group: "craft", title: "Closed the loop", detail: "A referral of yours reached its end and you wrote down why." },
+  { key: "first_clear_ask", group: "craft", title: "Asked the right way", detail: "You sent an ask with the reason spelled out. However they answer, that is good practice." },
   { key: "first_saved_view", group: "craft", title: "Shaped your own view", detail: "You saved a view that fits how you work." },
   { key: "clear_week", group: "craft", title: "A clear week", detail: "A week with nothing past due and everything finished on time." },
-  { key: "first_handoff_accepted", group: "craft", title: "Your handoff landed", detail: "Someone accepted something you found for them." },
+  { key: "first_handoff_sent", group: "craft", title: "Passed it on", detail: "You sent someone what you found for them, with a note." },
   { key: "first_draft_accepted", group: "learning", title: "First t.ROY draft used", detail: "You used a draft t.ROY wrote for you." },
   { key: "learn_note_from_bullets", group: "learning", title: "Notes from bullets", detail: "You turned quick bullets into a full note." },
   { key: "learn_prep_me", group: "learning", title: "Prepped in a minute", detail: "You used Prep me before a meeting." },
@@ -139,20 +145,24 @@ export function hasUnlock(earnedKeys: Iterable<string>, key: UnlockKey): boolean
  * kept low on purpose; the page says they are estimates.
  */
 export const SKILL_MINUTES_SAVED: Readonly<Record<string, number>> = {
-  "staff-note-from-bullets": 10,
-  "staff-outcome-note": 8,
   "staff-prep-me": 10,
   "staff-timeline-summary": 10,
-  "staff-outreach-draft": 6,
   "staff-funder-narrative": 45,
   "staff-caseload-digest": 15,
   "staff-triage-today": 5,
   "staff-find-help": 10,
-  "staff-check-in": 5,
   "staff-stale-flags": 10,
   "staff-what-changed": 5,
 };
 export const DEFAULT_MINUTES_SAVED = 3;
+/**
+ * Skills whose drafts are notes or messages to people. They never count
+ * toward time saved, so the number can never grow with notes written or
+ * contacts made (review round 1). Everything else counts at its estimate.
+ */
+export const NOT_COUNTED_FOR_TIME: ReadonlySet<string> = new Set([
+  "staff-note-from-bullets", "staff-outcome-note", "staff-outreach-draft", "staff-check-in",
+]);
 
 export interface AcceptedRun { skill: string; acceptedAt: string }
 
@@ -161,7 +171,7 @@ export function minutesSaved(runs: readonly AcceptedRun[], fromMs: number, toMs:
   let total = 0;
   for (const r of runs) {
     const t = Date.parse(r.acceptedAt);
-    if (!Number.isFinite(t) || t < fromMs || t >= toMs) continue;
+    if (!Number.isFinite(t) || t < fromMs || t >= toMs || NOT_COUNTED_FOR_TIME.has(r.skill)) continue;
     total += SKILL_MINUTES_SAVED[r.skill] ?? DEFAULT_MINUTES_SAVED;
   }
   return total;
@@ -195,25 +205,29 @@ export function cleanKudosBody(raw: unknown): { ok: true; body: string } | { ok:
 
 export interface NamedPerson { id: string; name: string | null }
 
+/** Lower-case name words of two letters or more ("Alma Reyes" -> alma, reyes). */
+export function nameWords(text: string | null | undefined): string[] {
+  return String(text ?? "").toLowerCase().split(/[^\p{L}']+/u).filter((w) => w.length >= 2);
+}
+
 /**
- * Participants named in a good catch, by full name or by a first name of four
- * or more letters, as a whole word with a capital (case-sensitive, so "Grace"
- * the person is found and "grace" the word is not). Pure; the caller passes
- * only the people the sender reaches, which are the only names they know.
+ * Participants a piece of text names: any full, first or last name, any
+ * case, as whole words, two letters or more (review round 1: "alma reyes",
+ * "Ana", "the Reyes file" all count). Pure; the server runs the same rule in
+ * SQL over every participant of the organization
+ * (111 staff_text_participant_names). It leans toward refusing: a word that
+ * is also somebody's name ("Will", "May") is refused until it is sent from
+ * that person's own work.
  */
 export function namesMentioned(text: string, people: readonly NamedPerson[]): string[] {
+  const words = new Set(nameWords(text));
   const found = new Set<string>();
-  const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  for (const p of people) {
-    const full = (p.name ?? "").trim().replace(/\s+/g, " ");
-    if (!full) continue;
-    const first = full.split(" ")[0];
-    const tries = [full];
-    if (first.length >= 4 && /^[A-Z]/.test(first)) tries.push(first);
-    if (tries.some((n) => new RegExp(`(^|[^\\p{L}])${esc(n)}($|[^\\p{L}])`, "u").test(text))) found.add(p.id);
-  }
+  for (const p of people) if (nameWords(p.name).some((w) => words.has(w))) found.add(p.id);
   return [...found];
 }
+
+/** The research credit thresholds (112 decide and 111 refresh use the same numbers). For Troy to review. */
+export const RESEARCH_THRESHOLDS = { research_helper: 3, research_partner: 10, directory_anchor: 25 } as const;
 
 /* ------------------------------------------------------- the month recap -- */
 
@@ -223,10 +237,12 @@ export interface MonthRecapInput {
   firstName: string | null;
   milestones: { key: string; earnedAt: string }[];
   kudosGiven: number;
-  kudosReceived: { body: string; fromFirstName: string | null }[];
+  /** Who thanked me this month: first names only. Never their words. */
+  kudosReceivedFrom: (string | null)[];
   minutesSaved: number;
   contributionsApproved: number;
-  recognitionNotes: { body: string }[];
+  /** How many notes I agreed my program may use. Never their words. */
+  recognitionApproved: number;
 }
 
 export interface MonthRecap { title: string; lines: string[]; text: string; empty: boolean }
@@ -243,13 +259,15 @@ export function buildMonthRecap(input: MonthRecapInput): MonthRecap {
   const saved = timeSavedWords(input.minutesSaved);
   if (saved) lines.push(`t.ROY drafts I used saved me ${saved}.`);
   if (input.kudosGiven > 0) lines.push(`I sent ${input.kudosGiven === 1 ? "one good catch" : `${input.kudosGiven} good catches`} to colleagues.`);
-  for (const k of input.kudosReceived.slice(0, 3)) {
-    lines.push(`${k.fromFirstName ?? "A colleague"} wrote: "${k.body}"`);
+  if (input.kudosReceivedFrom.length > 0) {
+    const names = [...new Set(input.kudosReceivedFrom.map((n) => n ?? "a colleague"))].slice(0, 5);
+    const n = input.kudosReceivedFrom.length;
+    lines.push(`Thanked by ${names.join(", ")} (${n === 1 ? "one good catch" : `${n} good catches`}).`);
   }
   if (input.contributionsApproved > 0) {
     lines.push(`${input.contributionsApproved === 1 ? "One update" : `${input.contributionsApproved} updates`} I sent to the shared directory passed review.`);
   }
-  for (const r of input.recognitionNotes.slice(0, 2)) lines.push(`Noted by my program: "${r.body}"`);
+  if (input.recognitionApproved > 0) lines.push(`My program noted my work for a funder report (${input.recognitionApproved === 1 ? "one note" : `${input.recognitionApproved} notes`}).`);
   const title = `${input.firstName ? `${input.firstName}'s` : "My"} month: ${input.monthLabel}`;
   const empty = lines.length === 0;
   if (empty) lines.push("A quiet month on this page. The work still counts.");
@@ -294,11 +312,11 @@ export const REWARDS_COPY = {
   toggleLabel: "Show my wins",
   toggleHelp: "Milestones, time saved, and your month. Private to you. Nothing here counts notes, calls or anyone's results.",
   boardLabel: "Show my name on the thank you board",
-  boardHelp: "The board lists people who thanked a colleague this month. It never shows who was thanked.",
+  boardHelp: "The board lists people who thanked a colleague this month, by first name. It never shows who was thanked, or how many.",
   boardTitle: "Thanks given this month",
   boardEmpty: "Nobody on the board yet. A good catch takes ten seconds.",
   timeTitle: "Time back",
-  timeHelp: "An estimate from t.ROY drafts you saved or copied. Not a stopwatch.",
+  timeHelp: "An estimate from t.ROY drafts you saved or copied. Notes and messages to people are not counted. Not a stopwatch.",
   kudosTitle: "Good catches",
   kudosGiveLabel: "Send a good catch",
   kudosHelp: "Thank a colleague for a piece of work. Only the two of you see it.",

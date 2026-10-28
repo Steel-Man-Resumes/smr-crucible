@@ -17,6 +17,7 @@ import { submitContribution, listMyContributions, withdrawContribution, contribu
 import { requireOrgCapability } from "@/lib/org-guard";
 import { effectiveAuth } from "@/lib/effective-auth";
 import { mayWrite, recordWordsIn, todayUtc, VIEWING_REFUSAL } from "@/lib/staff-rewards-route";
+import { readJsonStrict, refuseCrossOrigin, NOT_JSON } from "@/lib/staff-rewards-route";
 
 export const dynamic = "force-dynamic";
 const RECORD_REFUSAL = "Keep anyone's record, court or supervision details out of this. It is about the place.";
@@ -29,6 +30,9 @@ export async function GET(request: Request) {
 }
 
 async function gate(request: Request) {
+  // Same-origin first, before the session is read (lib/org-crm-gate.ts).
+  const crossOrigin = refuseCrossOrigin(request);
+  if (crossOrigin) return { response: crossOrigin } as const;
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return { response: guard.response } as const;
   const session = await effectiveAuth();
@@ -41,19 +45,23 @@ async function gate(request: Request) {
 export async function POST(request: Request) {
   const w = await gate(request);
   if ("response" in w) return w.response;
-  const body = await request.json().catch(() => null);
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   const today = todayUtc();
   const norm = normalizeContribution(body, today);
   if (!norm.ok) return NextResponse.json({ error: norm.error }, { status: 400 });
   if (recordWordsIn(contributionFreeText(norm.value))) return NextResponse.json({ error: RECORD_REFUSAL }, { status: 400 });
   const res = await submitContribution(w.actor, body, today);
-  return res.ok ? NextResponse.json({ ok: true, id: res.id }) : NextResponse.json({ error: res.reason }, { status: 400 });
+  if (!res.ok) return NextResponse.json({ error: res.reason }, { status: 400 });
+  return NextResponse.json({ ok: true, id: res.id, earlier: res.earlier,
+    message: res.earlier ? "You already sent this today. We kept your first one; it is waiting for review." : "Sent for review. Thank you." });
 }
 
 export async function PATCH(request: Request) {
   const w = await gate(request);
   if ("response" in w) return w.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   const ok = await withdrawContribution(w.actor, String(body?.id ?? ""));
   return ok ? NextResponse.json({ ok: true }) : NextResponse.json({ ok: false }, { status: 404 });
 }

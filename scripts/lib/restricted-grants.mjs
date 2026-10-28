@@ -198,10 +198,10 @@ export const APP_FUNCTIONS = [
   "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
   "smr_purge_stale_staff_drafts()",
   "smr_retention_task_marks()",
-  // 111/112 (lane S6): membership check, the caller's own milestones, the
+  // 111/112 (lane S6): the name check, the caller's own milestones, the
   // giver board, and the contribution intake, read-back and owner decisions
   // (each refuses a caller who is not who it needs).
-  "staff_rewards_member(uuid, uuid)",
+  "staff_text_participant_names(text)",
   "staff_rewards_refresh()",
   "staff_kudos_giver_board(integer)",
   "submit_directory_contribution(jsonb)",
@@ -225,6 +225,8 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   // 111 (lane S6): only definer code awards or takes back a milestone.
   "staff_milestone_grant(uuid, uuid, text, uuid)",
   "staff_milestone_revoke(uuid, uuid, uuid)",
+  // 111: answers "is this person staff there" for any org: definer code only.
+  "staff_rewards_member(uuid, uuid)",
   // 104: activity trigger functions (definer); fired by triggers, never called.
   "custom_field_activity()",
   "org_customization_activity()",

@@ -50,9 +50,13 @@
 -- ALSO: staff_listing_nudge, one row per staff member per listing, so t.ROY
 -- asks "Did this place still check out?" at most once a week per listing.
 --
--- APPLY AFTER 111 (staff_milestone_grant). Additive: two tables and six
--- functions; alters no existing table, view or policy, and changes no
--- publication contract.
+-- APPLY AFTER 111 (staff_milestone_grant). Additive: two tables, six
+-- functions, and a `provenance` column ('smr' by default, 'partner_staff'
+-- for a program's call) on employer_relationship, its confirmations,
+-- resource_relationship and its events. No view, policy, existing CHECK or
+-- publication contract changes. FOR TROY: a program's live call counts as
+-- the documented interaction (R3 / the Tier 2 relationship) and is marked
+-- partner_staff, so any later count of Steel Man's own contacts excludes it.
 --
 -- ROLLBACK, in this order:
 --   1. Revert the S6 app code and deploy that.
@@ -64,6 +68,7 @@
 --          public.decide_directory_contribution(uuid, text, text, text),
 --          public.apply_contribution_call(uuid, uuid, uuid), public.directory_contribution_owner(),
 --          public.staff_listing_nudge_guard();
+--        (the provenance columns may stay: every existing row reads 'smr'.)
 --        DELETE FROM _migrations WHERE filename = '112_directory_contributions.sql';
 --      Rows already written to employer_relationship_confirmation or
 --      resource_relationship_event stay (they are dated facts; void a wrong
@@ -140,6 +145,26 @@ CREATE TABLE IF NOT EXISTS staff_listing_nudge (
   PRIMARY KEY (user_id, access_code_id, listing_kind, listing_id)
 );
 
+-- ------------------------------------------------------------ provenance --
+-- A staff member's live call is the documented interaction (Troy's
+-- direction), but it is a PARTNER's call, not Steel Man's own. Every
+-- relationship and contact row apply_contribution_call writes says so in a
+-- structured column, so nothing later reads it as SMR's own contact. Existing
+-- rows are Steel Man's ('smr'). New columns only; no existing CHECK is
+-- rebuilt. The 073 relationship guard keeps the column fixed after insert.
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['employer_relationship', 'employer_relationship_confirmation', 'resource_relationship', 'resource_relationship_event'] LOOP
+    IF to_regclass('public.' || t) IS NOT NULL THEN
+      EXECUTE format('ALTER TABLE %I ADD COLUMN IF NOT EXISTS provenance TEXT NOT NULL DEFAULT %L', t, 'smr');
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = ('public.' || t)::regclass AND conname = t || '_provenance_known') THEN
+        EXECUTE format('ALTER TABLE %I ADD CONSTRAINT %I CHECK (provenance IN (%L, %L))', t, t || '_provenance_known', 'smr', 'partner_staff');
+      END IF;
+    END IF;
+  END LOOP;
+END $$;
+
 -- --------------------------------------------------------------- helpers --
 CREATE OR REPLACE FUNCTION public.directory_contribution_owner() RETURNS boolean
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
@@ -148,7 +173,7 @@ $$;
 REVOKE ALL ON FUNCTION public.directory_contribution_owner() FROM PUBLIC;
 
 -- ---------------------------------------------------------------- intake --
-CREATE OR REPLACE FUNCTION public.submit_directory_contribution(p jsonb) RETURNS uuid
+CREATE OR REPLACE FUNCTION public.submit_directory_contribution(p jsonb) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
   v_me     uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
@@ -240,7 +265,7 @@ BEGIN
      AND (v_target IS NOT NULL OR lower(c.details->>'name') = lower(v_clean->>'name'))
    ORDER BY c.created_at DESC LIMIT 1;
   IF v_id IS NOT NULL THEN
-    RETURN v_id;
+    RETURN jsonb_build_object('id', v_id, 'earlier', true);
   END IF;
 
   IF (SELECT count(*) FROM public.directory_contribution c WHERE c.access_code_id = v_org AND c.submitted_by = v_me
@@ -256,7 +281,7 @@ BEGIN
       v_note,
       COALESCE((p->>'credit_org_ok')::boolean, true), COALESCE((p->>'credit_person_ok')::boolean, false))
   RETURNING id INTO v_id;
-  RETURN v_id;
+  RETURN jsonb_build_object('id', v_id, 'earlier', false);
 END;
 $$;
 REVOKE ALL ON FUNCTION public.submit_directory_contribution(jsonb) FROM PUBLIC;
@@ -328,6 +353,9 @@ BEGIN
   END IF;
   SELECT * INTO c FROM public.directory_contribution WHERE id = p_id FOR UPDATE;
   IF NOT FOUND THEN RETURN false; END IF;
+  IF c.submitted_by IS NOT DISTINCT FROM v_me THEN
+    RAISE EXCEPTION 'Someone else reviews your own contribution' USING ERRCODE = 'insufficient_privilege';
+  END IF;
 
   IF c.status = 'approved' THEN
     -- Only a revert: approved to not used, within 30 days, before any call was recorded.
@@ -339,6 +367,14 @@ BEGIN
      WHERE id = p_id;
     IF c.submitted_by IS NOT NULL THEN
       PERFORM public.staff_milestone_revoke(c.submitted_by, c.access_code_id, c.id);
+      -- Thresholds are earned by the running total, so a revert can drop
+      -- the person below one another contribution reached: take that back too.
+      SELECT COALESCE(sum(CASE x.outcome WHEN 'verified_call' THEN 3 WHEN 'warm_intro' THEN 3 WHEN 'correction' THEN 2 WHEN 'new_row' THEN 1 ELSE 0 END), 0)
+        INTO v_credit FROM public.directory_contribution x
+       WHERE x.access_code_id = c.access_code_id AND x.submitted_by = c.submitted_by AND x.status = 'approved';
+      DELETE FROM public.staff_milestone m
+       WHERE m.user_id = c.submitted_by AND m.access_code_id = c.access_code_id
+         AND ((m.key = 'research_helper' AND v_credit < 3) OR (m.key = 'research_partner' AND v_credit < 10) OR (m.key = 'directory_anchor' AND v_credit < 25));
     END IF;
     RETURN true;
   END IF;
@@ -408,15 +444,16 @@ BEGIN
     IF v_rorg IS NULL THEN RAISE EXCEPTION 'That service was not found' USING ERRCODE = 'check_violation'; END IF;
     SELECT r.id INTO v_rel FROM public.resource_relationship r
      WHERE r.org_id = v_rorg AND r.service_id = c.target_id AND r.status = 'active' AND r.started_on <= c.interaction_on
+       AND r.provenance = 'partner_staff'
      ORDER BY r.started_on LIMIT 1;
     IF v_rel IS NULL THEN
-      INSERT INTO public.resource_relationship (org_id, service_id, started_on, note)
-      VALUES (v_rorg, c.target_id, c.interaction_on, 'Staff contribution ' || c.id::text)
+      INSERT INTO public.resource_relationship (org_id, service_id, started_on, note, provenance)
+      VALUES (v_rorg, c.target_id, c.interaction_on, 'Staff contribution ' || c.id::text, 'partner_staff')
       RETURNING id INTO v_rel;
     END IF;
     -- The 073 guard checks the check is live and belongs to this service.
-    INSERT INTO public.resource_relationship_event (relationship_id, service_id, check_id, kind, occurred_on, method, recorded_by, note)
-    VALUES (v_rel, c.target_id, p_check_id, 'confirmed', c.interaction_on, v_method, v_by, 'Staff contribution ' || c.id::text);
+    INSERT INTO public.resource_relationship_event (relationship_id, service_id, check_id, kind, occurred_on, method, recorded_by, note, provenance)
+    VALUES (v_rel, c.target_id, p_check_id, 'confirmed', c.interaction_on, v_method, v_by, 'Staff contribution ' || c.id::text, 'partner_staff');
     UPDATE public.directory_contribution SET applied_at = now() WHERE id = c.id;
     RETURN 'resource_confirmed';
   END IF;
@@ -426,15 +463,15 @@ BEGIN
   END IF;
   SELECT r.id INTO v_rel FROM public.employer_relationship r
    WHERE r.org_id = c.target_id AND r.avenue = 'partner_org' AND r.partner_org_id = c.access_code_id
-     AND r.place_id IS NOT DISTINCT FROM p_place_id AND r.status = 'active'
+     AND r.place_id IS NOT DISTINCT FROM p_place_id AND r.status = 'active' AND r.provenance = 'partner_staff'
    LIMIT 1;
   IF v_rel IS NULL THEN
-    INSERT INTO public.employer_relationship (org_id, place_id, avenue, partner_org_id, started_on, note)
-    VALUES (c.target_id, p_place_id, 'partner_org', c.access_code_id, c.interaction_on, 'Staff contribution ' || c.id::text)
+    INSERT INTO public.employer_relationship (org_id, place_id, avenue, partner_org_id, started_on, note, provenance)
+    VALUES (c.target_id, p_place_id, 'partner_org', c.access_code_id, c.interaction_on, 'Staff contribution ' || c.id::text, 'partner_staff')
     RETURNING id INTO v_rel;
   END IF;
-  INSERT INTO public.employer_relationship_confirmation (org_id, relationship_id, confirmed_on, method, confirmed_by, note)
-  VALUES (c.target_id, v_rel, c.interaction_on, v_method, v_by, 'Staff contribution ' || c.id::text);
+  INSERT INTO public.employer_relationship_confirmation (org_id, relationship_id, confirmed_on, method, confirmed_by, note, provenance)
+  VALUES (c.target_id, v_rel, c.interaction_on, v_method, v_by, 'Staff contribution ' || c.id::text, 'partner_staff');
   UPDATE public.directory_contribution SET applied_at = now() WHERE id = c.id;
   RETURN 'employer_confirmed';
 END;

@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { mayWrite, recordWordsIn, todayUtc, RECORD_WORDS_REFUSAL } from "../staff-rewards-route";
-import { contributeTools, typedByStaff, CONTRIBUTE_TOOL_NAMES, type ContributeToolContext } from "../tools/staff/contribute-tools";
+import { contributeTools, typedByStaff, methodTypedByStaff, CONTRIBUTE_TOOL_NAMES, CONTRIBUTE_STREAMED, type ContributeToolContext } from "../tools/staff/contribute-tools";
 import { listingNudgeFor, suggestionsOn } from "../staff-listing-nudge";
 import { LISTING_NUDGE_LINE, namesMentioned } from "@crucible/core/src/staffRewardsShared";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
@@ -38,6 +38,11 @@ function stand(over: Record<string, unknown> = {}) {
     claimListingNudge: async () => { calls.push("claim"); return over.claim ?? true; },
     staffUnlocks: async () => { calls.push("unlocks"); return over.unlocks ?? ["directory_scout"]; },
     reachableParticipantNames: async () => [{ id: "p1", name: "Alma Reyes" }],
+    // Stand-in for 111 staff_text_participant_names: "Alma Reyes" is reached; "Dana" is someone the staff member cannot see.
+    participantNamesIn: async (_a: unknown, text: string) => ({
+      reached: namesMentioned(text, [{ id: "p1", name: "Alma Reyes" }]),
+      other: namesMentioned(text, [{ id: "p2", name: "Dana Cole" }]).length > 0,
+    }),
     namesMentioned,
     submitContribution: async () => { calls.push("SUBMIT"); return { ok: true, id: "x" }; },
   };
@@ -50,6 +55,14 @@ test("route rules: only the person themselves writes", () => {
   assert.equal(mayWrite({ viaPlatformAdmin: true, actorUserId: "a", sessionUserId: "a" }), false, "not a platform admin acting on an org");
   assert.equal(mayWrite({ viaPlatformAdmin: false, actorUserId: "a", sessionUserId: "b" }), false, "not someone else's session");
   assert.equal(mayWrite({ viaPlatformAdmin: false, actorUserId: "a", sessionUserId: null }), false);
+});
+
+test("route rules: writes take application/json only", async () => {
+  const { readJsonStrict, isJsonRequest } = await import("../staff-rewards-route");
+  const mk = (type: string) => new Request("https://example.test/api/org/kudos", { method: "POST", headers: { "content-type": type }, body: JSON.stringify({ a: 1 }) });
+  assert.equal(isJsonRequest(mk("application/json; charset=utf-8").headers), true);
+  assert.deepEqual(await readJsonStrict(mk("application/json")), { a: 1 });
+  assert.equal(await readJsonStrict(mk("text/plain")), null, "text/plain is refused (no beacon-style writes here)");
 });
 
 test("route rules: record words are refused in words other people read", () => {
@@ -81,9 +94,19 @@ test("suggestionsOn defaults to on, and a failed read never nags", async () => {
   assert.equal(await suggestionsOn(actor, async () => ({ getStaffPrefs: async () => { throw new Error("down"); } }) as never), false);
 });
 
-test("the module has S1's shape: id, streamed tools, an activity line for each", () => {
+/** S1's rule (lib/staff-skill-run.ts checkStreamedDrafts): every key declared, only draftBody may be "draft". */
+function assertDeclared(tool: (typeof CONTRIBUTE_TOOL_NAMES)[number], result: Record<string, unknown>) {
+  const shape = CONTRIBUTE_STREAMED[tool];
+  for (const k of Object.keys(result)) assert.ok(k in shape, `${tool}: undeclared key ${k}`);
+}
+
+test("the module has S1's shape: id, streamed shapes, an activity line for each", () => {
   assert.equal(contributeTools.id, "contribute");
-  assert.deepEqual([...(contributeTools.streamed ?? [])].sort(), [...CONTRIBUTE_TOOL_NAMES].sort());
+  assert.deepEqual(Object.keys(contributeTools.streamed ?? {}).sort(), [...CONTRIBUTE_TOOL_NAMES].sort());
+  for (const [tool, shape] of Object.entries(CONTRIBUTE_STREAMED)) {
+    for (const [k, src] of Object.entries(shape)) assert.ok(src !== "draft" || k === "draftBody", `${tool}.${k}: only draftBody may be draft`);
+    assert.equal(shape.status, "server"); assert.equal(shape.error, "server");
+  }
   for (const n of CONTRIBUTE_TOOL_NAMES) assert.ok(contributeTools.activity?.[n], n);
   const src = readFileSync(join(ROOT, "lib/tools/staff/contribute-tools.ts"), "utf8");
   assert.ok(!/^import [^;]*from "@crucible\/core";/m.test(src), "no top-level core import (browser-safe)");
@@ -94,8 +117,17 @@ test("the nudge tool returns the fixed line or quiet, never model words", async 
   assert.equal(r.status, "ok");
   assert.equal(r.line, LISTING_NUDGE_LINE);
   assert.deepEqual(r.listing, { kind: "employer", id: LISTING });
+  assertDeclared("listing_check_nudge", r);
   assert.equal((await run(build(stand({ claim: false }).core), "listing_check_nudge", { kind: "employer", listingId: LISTING })).status, "quiet");
   assert.equal((await run(build(stand().core), "listing_check_nudge", { kind: "employer", listingId: "drop table" })).status, "quiet");
+});
+
+test("method typed by the staff member", () => {
+  assert.ok(methodTypedByStaff("I called them this morning", "phone_call"));
+  assert.ok(!methodTypedByStaff("They are open Tuesdays", "phone_call"));
+  assert.ok(methodTypedByStaff("I stopped by on my way in", "site_visit"));
+  assert.ok(!methodTypedByStaff("I called them", "site_visit"));
+  assert.ok(!methodTypedByStaff("anything", null));
 });
 
 test("staff-typed check: words, phone digits, tokens", () => {
@@ -112,6 +144,7 @@ test("the draft tool: model words only in draftBody, fields only what the staff 
   const s = stand();
   const today = new Date().toISOString().slice(0, 10);
   const t = build(s.core, { staffWords: "I called Lakeshore Pantry today, they are still open Tuesdays" });
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   const r = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "resource", listingId: LISTING, name: "Lakeshore Pantry", city: "Grand Haven", said: "Still open Tuesdays from 9 to 1", interactionOn: today, interactionMethod: "phone_call" });
   assert.equal(r.status, "draft", JSON.stringify(r));
   assert.equal(r.draftBody, "Still open Tuesdays from 9 to 1", "the model's wording is the draft body, which the route claim-checks");
@@ -119,6 +152,15 @@ test("the draft tool: model words only in draftBody, fields only what the staff 
   assert.equal(card.fields.name, "Lakeshore Pantry", "typed by the staff member: kept");
   assert.equal(card.fields.city, undefined, "not typed by the staff member: left out");
   assert.deepEqual(r.leftOut, ["city"]);
+  assertDeclared("draft_directory_contribution", r);
+  assert.equal((card as unknown as { interactionMethod: string }).interactionMethod, "phone_call", "they said they called");
+  // A date or method the staff member did not say stays blank; they pick on the card (review round 1).
+  const unsaid = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "resource", listingId: LISTING, said: "Open", interactionOn: yesterday, interactionMethod: "site_visit" });
+  const uc = unsaid.card as { interactionOn: unknown; interactionMethod: unknown };
+  assert.equal(uc.interactionOn, null);
+  assert.equal(uc.interactionMethod, null);
+  assert.deepEqual(unsaid.leftOut, ["date", "how"]);
+  assert.equal(unsaid.status, "needs_more");
   assert.equal(card.draftBodyField, "said");
   assert.ok(!JSON.stringify({ ...r, draftBody: null }).includes("Tuesdays from 9"), "model words appear nowhere but draftBody");
   assert.match(String(r.note), /presses Send\. Nothing was sent\./);
@@ -136,6 +178,11 @@ test("red team: the draft tool refuses record words, a caseload name, and never 
   assert.match(String(named.error), /never a participant/);
   const selector = await run(t, "draft_directory_contribution", { flow: "correction", targetKind: "employer", listingId: LISTING, change: "Marisol said they moved" });
   assert.equal(selector.status, "refused", "a first name from the staff member's list counts too");
+  const lower = await run(t, "draft_directory_contribution", { flow: "correction", targetKind: "employer", listingId: LISTING, change: "alma reyes says they moved" });
+  assert.equal(lower.status, "refused", "lower case counts");
+  const unseen = await run(t, "draft_directory_contribution", { flow: "correction", targetKind: "employer", listingId: LISTING, change: "the Cole family said they moved" });
+  assert.equal(unseen.status, "refused", "a participant the staff member cannot see counts too");
+  for (const x of [rec, named, selector, lower, unseen]) assertDeclared("draft_directory_contribution", x);
   const ks = await run(t, "draft_directory_contribution", { flow: "knows_someone", targetKind: "employer", listingId: LISTING });
   assert.equal(ks.status, "draft", JSON.stringify(ks));
   assert.ok(!JSON.stringify(ks).includes("typed on the card"), "no private note placeholder is streamed");
@@ -172,6 +219,12 @@ test("every S6 org route checks a capability, and every write checks it is the p
       assert.match(src, /mayWrite\(/, `${f} ${verb} refuses view-as and other sessions`);
       assert.match(src, new RegExp(`export async function ${verb}\\(request: Request\\) \\{\\n  const w = await gate\\(request\\);`), `${f} ${verb}: the gate is the first await`);
     }
+  }
+  for (const f of S6_FILES.filter((x) => x.startsWith("app/api/org/"))) {
+    const src = readFileSync(join(ROOT, f), "utf8");
+    assert.match(src, /refuseCrossOrigin\(request\)/, `${f}: same-origin first`);
+    assert.ok(!/request\.json\(/.test(src), `${f}: reads JSON only through readJsonStrict`);
+    if (/export async function (POST|PUT|PATCH)/.test(src)) assert.match(src, /readJsonStrict\(request\)/, f);
   }
   const admin = readFileSync(join(ROOT, "app/api/admin/directory-contributions/route.ts"), "utf8");
   assert.match(admin, /requirePlatformAdmin\(/);

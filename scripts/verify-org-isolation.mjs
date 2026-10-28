@@ -818,6 +818,7 @@ async function staffRewardsChecks() {
   check("only the sender takes it back", (await core.withdrawKudos(aCm2, k1.id)) === false && (await core.withdrawKudos(aCm, k1.id)) === true);
 
   const k2 = await core.giveKudos(aCm, { toUserId: cm2, body: "Thanks for covering Friday" });
+  check("Wins off: nothing is recorded", (await core.refreshMilestones(aCm2)) === 0);
   await core.refreshMilestones(aCm);
   const ms = (await core.listMyMilestones(aCm)).map((m) => m.key);
   check("milestones come from facts", ms.includes("first_kudos_given"), JSON.stringify(ms));
@@ -828,6 +829,19 @@ async function staffRewardsChecks() {
   check("the app cannot call the milestone writer", !grant.ok && /permission denied/i.test(grant.e), JSON.stringify(grant));
   const [{ n: unscopedMs }] = await core.query("SELECT count(*)::int AS n FROM staff_milestone");
   check("an unscoped app read sees no milestones", unscopedMs === 0, String(unscopedMs));
+
+  // Names: the org-wide detector answers only inside the caller's own organization.
+  await sql`UPDATE users SET name = ${"Zelda" + uniq + " Quill"} WHERE id = ${pat}`;
+  const seen = await core.participantNamesIn(aCm, `thanks for helping zelda${uniq.toLowerCase()}`);
+  check("the name check finds a participant the writer reaches, any case", seen.reached.includes(pat), JSON.stringify(seen));
+  const hidden = await core.participantNamesIn(aVol, `thanks for helping zelda${uniq.toLowerCase()}`);
+  check("for someone the writer cannot see it says only yes, never who", hidden.other === true && hidden.reached.length === 0, JSON.stringify(hidden));
+  const outside = await core.participantNamesIn(aSpyStaff, `thanks for helping zelda${uniq.toLowerCase()}`);
+  check("another organization's staff learn nothing about this one's participants", outside.other === false && outside.reached.length === 0, JSON.stringify(outside));
+  const named = await core.giveKudos(aVol, { toUserId: cm2, body: `Thanks for helping Zelda${uniq}` });
+  check("a good catch naming a participant without linked work is refused", !named.ok, JSON.stringify(named));
+  const oracle = await attempt(() => scoped(org.id, cm, app`SELECT public.staff_rewards_member(${org2.id}::uuid, ${spyStaff}::uuid)`));
+  check("the app cannot ask who is staff in another organization", !oracle.ok && /permission denied/i.test(oracle.e), JSON.stringify(oracle));
 
   const board = (await core.giverBoard(aVol)).map((b) => b.userId);
   check("the board lists givers who opted in, and nobody who was thanked", board.includes(cm) && !board.includes(cm2), JSON.stringify(board));
@@ -873,6 +887,7 @@ async function directoryContributionChecks() {
   const today = new Date().toISOString().slice(0, 10);
   const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e.message) }; } };
   try {
+    await core.setRewardsSettings(aCm, { rewardsOn: true });
     const sent = await core.submitContribution(aCm, { flow: "new_place", targetKind: "employer", details: { name: `Isolation Foods ${uniq} (Demo)`, state: "MI" } }, today);
     check("a staff member sends a new place", sent.ok, JSON.stringify(sent));
     const hear = await core.submitContribution(aCm, { flow: "called_today", targetKind: "employer", targetId: sent.id, details: { said: "yes" }, interactionOn: today, interactionMethod: "heard_from_someone" }, today);

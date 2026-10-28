@@ -58,10 +58,13 @@ export interface ContributeToolContext {
   readonly selectors: ReadonlyMap<string, string>;
   safe<A>(run: (args: A) => Promise<unknown>): (args: A) => Promise<unknown>;
 }
+/** S1's StreamedShape: where each top-level key of a streamed result comes from. Only draftBody may be "draft". */
+export type StreamedFieldSource = "server" | "staff" | "draft";
+export type StreamedShape = Readonly<Record<string, StreamedFieldSource>>;
 export interface ContributeToolModule {
   id: string;
   build(ctx: ContributeToolContext): ToolSet;
-  streamed?: readonly string[];
+  streamed?: Readonly<Record<string, StreamedShape>>;
   activity?: Readonly<Record<string, string>>;
 }
 
@@ -92,9 +95,38 @@ interface DraftArgs {
   website?: string; phone?: string; change?: string; said?: string; interactionOn?: string; interactionMethod?: string;
 }
 
+/**
+ * Every key each streamed result may carry, and where its words come from
+ * (S1 contract, review round 2). Refusals and errors are our own words.
+ */
+export const CONTRIBUTE_STREAMED: Readonly<Record<(typeof CONTRIBUTE_TOOL_NAMES)[number], StreamedShape>> = {
+  listing_check_nudge: { status: "server", error: "server", line: "server", buttons: "server", listing: "server" },
+  draft_directory_contribution: {
+    status: "server", error: "server", missing: "server", title: "server", note: "server", leftOut: "server",
+    // flow/kind/method are validated enums, the listing id is shape-checked, every other card value was typed by the staff member.
+    card: "staff",
+    draftBody: "draft",
+  },
+};
+
+/** Did the staff member name how they reached the place? Their words, not the model's. */
+export function methodTypedByStaff(staffWords: string, method: ContactMethod | null): boolean {
+  if (!method) return false;
+  const said = String(staffWords ?? "").toLowerCase();
+  const re: Record<ContactMethod, RegExp> = {
+    phone_call: /\b(call|called|calling|phoned|phone)\b/,
+    in_person: /\bin person\b|\bface to face\b/,
+    email_reply: /\b(emailed|e-mailed|email|e-mail)\b.*\b(back|reply|replied|answered)\b|\b(replied|wrote back)\b/,
+    site_visit: /\b(visit|visited|stopped by|went by|went to)\b/,
+    website: /\b(website|site|online|web page|webpage)\b/,
+    heard_from_someone: /\b(heard|told me|someone said)\b/,
+  };
+  return re[method].test(said);
+}
+
 export const contributeTools: ContributeToolModule = {
   id: "contribute",
-  streamed: CONTRIBUTE_TOOL_NAMES,
+  streamed: CONTRIBUTE_STREAMED,
   activity: {
     listing_check_nudge: "Checking whether to ask about this listing",
     draft_directory_contribution: "Drafting a directory update for you to check",
@@ -145,11 +177,11 @@ export const contributeTools: ContributeToolModule = {
           if (words.some((w) => hasStaffRecordWords(w))) {
             return { status: "refused", error: "The words mention a record, a court matter or supervision. Ask the staff member to say it without those details; it is about the place." };
           }
-          const people = [
-            ...(await core.reachableParticipantNames(actor).catch(() => [])),
-            ...[...ctx.selectors].map(([id, first]) => ({ id, name: first })),
-          ];
-          if (words.some((w) => namesMentioned(w, people).length > 0)) {
+          // Every participant of the organization (111 staff_text_participant_names: any case,
+          // first, last or full name), plus the first names the route passed for this staff member.
+          const named = await core.participantNamesIn(actor, words.join(" ")).catch(() => ({ reached: ["?"], other: true }));
+          const selectors = [...ctx.selectors].map(([id, first]) => ({ id, name: first }));
+          if (named.other || named.reached.length > 0 || words.some((w) => namesMentioned(w, selectors).length > 0)) {
             return { status: "refused", error: "The words name a person on their caseload. The directory is about the place, never a participant. Ask them to leave the name out." };
           }
 
@@ -167,8 +199,12 @@ export const contributeTools: ContributeToolModule = {
             name: keep("name", a.name, "words"), city: keep("city", a.city, "words"), state,
             website: keep("website", a.website, "token"), phone: keep("phone", a.phone, "phone"),
           };
-          const interactionOn = !a.interactionOn ? null : a.interactionOn === today || typedByStaff(ctx.staffWords, a.interactionOn, "token") ? a.interactionOn : (leftOut.push("date"), null);
-          const interactionMethod = a.interactionMethod && (CONTACT_METHODS as readonly string[]).includes(a.interactionMethod) ? (a.interactionMethod as ContactMethod) : null;
+          // The date and how they reached the place stay blank unless the staff member said them; they pick on the card (review round 1).
+          const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+          const saidDay = (a.interactionOn === today && /\btoday\b/i.test(ctx.staffWords)) || (a.interactionOn === yesterday && /\byesterday\b/i.test(ctx.staffWords));
+          const interactionOn = !a.interactionOn ? null : saidDay || typedByStaff(ctx.staffWords, a.interactionOn, "token") ? a.interactionOn : (leftOut.push("date"), null);
+          const methodArg = a.interactionMethod && (CONTACT_METHODS as readonly string[]).includes(a.interactionMethod) ? (a.interactionMethod as ContactMethod) : null;
+          const interactionMethod = methodTypedByStaff(ctx.staffWords, methodArg) ? methodArg : (methodArg ? (leftOut.push("how"), null) : null);
           const draftBody = (a.flow === "called_today" ? a.said : a.flow === "correction" ? a.change : "")?.trim() || null;
           const listingId = a.listingId && UUID.test(a.listingId) ? a.listingId.toLowerCase() : null;
 

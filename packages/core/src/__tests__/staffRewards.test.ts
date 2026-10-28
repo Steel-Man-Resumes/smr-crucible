@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  MILESTONES, UNLOCKS, SKILL_MINUTES_SAVED, DEFAULT_MINUTES_SAVED, REWARDS_COPY, LISTING_NUDGE_LINE,
+  MILESTONES, UNLOCKS, SKILL_MINUTES_SAVED, DEFAULT_MINUTES_SAVED, REWARDS_COPY, LISTING_NUDGE_LINE, NOT_COUNTED_FOR_TIME, RESEARCH_THRESHOLDS, nameWords,
   buildMonthRecap, canAnswerRecognition, cleanKudosBody, cleanRecognitionBody, hasUnlock, milestoneDef, minutesSaved,
   monthWindow, namesMentioned, timeSavedWords, unlocksFor,
 } from "../staffRewardsShared";
@@ -25,11 +25,22 @@ test("every milestone key fits the 111 key shape and is written by the database 
   assert.equal(new Set(keys).size, keys.length, "no duplicate keys");
   for (const k of keys) {
     assert.match(k, /^[a-z][a-z0-9_]{2,40}$/, k);
-    // first_handoff_accepted is written by lane S5's trigger (WIRING NEEDED); every other key appears in 111 or 112.
-    if (k === "first_handoff_accepted") continue;
+    // first_handoff_sent is written by lane S5's trigger (WIRING NEEDED); every other key appears in 111 or 112.
+    if (k === "first_handoff_sent") continue;
     const learned = k.startsWith("learn_") && k !== "learn_three_tools" ? `staff-${k.slice(6).replace(/_/g, "-")}` : null;
     assert.ok(MIG111.includes(`'${k}'`) || MIG112.includes(`'${k}'`) || (learned && MIG111.includes(`'${learned}'`)), `${k} is awarded by 111 or 112`);
   }
+});
+
+test("no milestone rewards a participant's decision, consent or outcome (review round 1)", () => {
+  const keys = MILESTONES.map((m) => m.key);
+  for (const gone of ["first_ask_answered", "first_handoff_accepted"]) assert.ok(!keys.includes(gone), gone);
+  assert.ok(!MIG111.includes("'first_ask_answered'"));
+  assert.ok(!/s\.status = 'approved'/.test(MIG111), "no milestone waits on a participant's yes to an ask");
+  assert.ok(!/f\.status = 'service_delivered'\s*\n\s*OR/.test(MIG111), "delivered alone (a provider's outcome) never earns the loop milestone");
+  assert.match(MIG111, /length\(btrim\(COALESCE\(f\.status_reason, ''\)\)\) > 0/, "the loop counts when the staff member writes the reason");
+  assert.match(MIG111, /length\(btrim\(s\.reason\)\) >= 20/, "the ask counts when it is sent with a clear reason, any answer");
+  for (const m of MILESTONES) assert.ok(!/accepted|said yes|approved your|hired/i.test(`${m.title} ${m.detail}`) || ["first_draft_accepted", "recognized_by_program"].includes(m.key), `${m.key} is the staff member's own act`);
 });
 
 test("no milestone counts volume, notes, contacts or a client outcome", () => {
@@ -74,7 +85,11 @@ test("time saved: accepted drafts at the stated estimate, inside the window only
     { skill: "staff-prep-me", acceptedAt: "not a date" },
   ];
   const m = minutesSaved(runs, t0, Date.parse("2026-11-01T00:00:00Z"));
-  assert.equal(m, SKILL_MINUTES_SAVED["staff-note-from-bullets"] + SKILL_MINUTES_SAVED["staff-funder-narrative"] + DEFAULT_MINUTES_SAVED);
+  assert.equal(m, SKILL_MINUTES_SAVED["staff-funder-narrative"] + DEFAULT_MINUTES_SAVED, "notes written never count toward time saved");
+  for (const k of ["staff-note-from-bullets", "staff-outcome-note", "staff-outreach-draft", "staff-check-in"]) {
+    assert.ok(NOT_COUNTED_FOR_TIME.has(k) && SKILL_MINUTES_SAVED[k] === undefined, `${k} is not counted`);
+    assert.equal(minutesSaved([{ skill: k, acceptedAt: "2026-10-02T10:00:00Z" }], t0, Date.parse("2026-11-01T00:00:00Z")), 0);
+  }
   assert.equal(minutesSaved([], t0, t0 + 1), 0);
 });
 
@@ -95,13 +110,24 @@ test("a good catch is a few real words", () => {
   assert.ok(ok.ok && ok.body === "Great catch on the deadline");
 });
 
-test("names in a good catch: full names, distinctive first names, whole words, case-sensitive", () => {
-  const people = [{ id: "a", name: "Alma Reyes" }, { id: "b", name: "Grace Lin" }, { id: "c", name: "Bo Park" }, { id: "d", name: null }];
-  assert.deepEqual(namesMentioned("Thanks for helping Alma with the bus pass", people), ["a"]);
-  assert.deepEqual(namesMentioned("Thanks for the grace you showed", people), [], "the word, not the person");
-  assert.deepEqual(namesMentioned("Bo was a great help", people), [], "a short first name alone is too common to count");
-  assert.deepEqual(namesMentioned("Thanks for Bo Park's paperwork", people), ["c"], "a full name counts");
+test("names in a good catch: any case, full, first or last name, short names too, whole words (review round 1)", () => {
+  const people = [{ id: "a", name: "Alma Reyes" }, { id: "b", name: "Ana Lin" }, { id: "c", name: "Bo Park" }, { id: "d", name: null }];
+  assert.deepEqual(namesMentioned("great catch with alma reyes", people), ["a"], "lower case");
+  assert.deepEqual(namesMentioned("helped Ana", people), ["b"], "a short first name");
+  assert.deepEqual(namesMentioned("work on Reyes file", people), ["a"], "a last name");
+  assert.deepEqual(namesMentioned("Bo was a great help", people), ["c"], "two letters count");
   assert.deepEqual(namesMentioned("Almanac review went well", people), [], "whole words only");
+  assert.deepEqual(namesMentioned("Great catch on the deadline", people), []);
+  assert.deepEqual(nameWords("Alma  Reyes-Lin"), ["alma", "reyes", "lin"]);
+});
+
+test("the research thresholds are one set of numbers for Troy, the same in 111 and 112", () => {
+  assert.deepEqual(RESEARCH_THRESHOLDS, { research_helper: 3, research_partner: 10, directory_anchor: 25 });
+  for (const [k, n] of Object.entries(RESEARCH_THRESHOLDS)) {
+    assert.ok(MIG112.includes(`v_credit >= ${n} THEN PERFORM public.staff_milestone_grant(c.submitted_by, c.access_code_id, '${k}'`), `112 grants ${k} at ${n}`);
+    assert.ok(MIG111.includes(`'${k}', id, decided_at FROM mine WHERE running >= ${n}`), `111 derives ${k} at ${n}`);
+    assert.ok(MIG112.includes(`m.key = '${k}' AND v_credit < ${n}`), `112 takes ${k} back below ${n}`);
+  }
 });
 
 test("recognition answers: yes or no, take a yes back, change a no to yes", () => {
@@ -123,18 +149,20 @@ test("the month recap: craft, thanks and time back, never an outcome", () => {
   const recap = buildMonthRecap({
     monthLabel: "October 2026", firstName: "Alma",
     milestones: [{ key: "first_kudos_given", earnedAt: "2026-10-02" }, { key: "made_up", earnedAt: "2026-10-03" }],
-    kudosGiven: 2, kudosReceived: [{ body: "Great catch on the deadline", fromFirstName: "Sam" }],
-    minutesSaved: 125, contributionsApproved: 1, recognitionNotes: [{ body: "Built the checklist" }],
+    kudosGiven: 2, kudosReceivedFrom: ["Sam", "Lee", "Sam"],
+    minutesSaved: 125, contributionsApproved: 1, recognitionApproved: 1,
   });
   assert.equal(recap.title, "Alma's month: October 2026");
   assert.ok(recap.lines.some((l) => l.includes("You lifted someone up")));
   assert.ok(recap.lines.some((l) => l.includes("about 2 hours")));
   assert.ok(recap.lines.some((l) => l.includes("2 good catches")));
-  assert.ok(recap.lines.some((l) => l.includes('Sam wrote: "Great catch on the deadline"')));
+  assert.ok(recap.lines.some((l) => l === "Thanked by Sam, Lee (3 good catches)."), JSON.stringify(recap.lines));
+  assert.ok(!recap.text.includes('"'), "never a colleague's words");
+  assert.ok(recap.lines.some((l) => l.includes("one note")));
   assert.ok(recap.lines.some((l) => l.includes("One update")));
   assert.ok(!recap.text.includes("made_up"));
   assert.ok(!/[–—]/.test(recap.text));
-  const empty = buildMonthRecap({ monthLabel: "October 2026", firstName: null, milestones: [], kudosGiven: 0, kudosReceived: [], minutesSaved: 0, contributionsApproved: 0, recognitionNotes: [] });
+  const empty = buildMonthRecap({ monthLabel: "October 2026", firstName: null, milestones: [], kudosGiven: 0, kudosReceivedFrom: [], minutesSaved: 0, contributionsApproved: 0, recognitionApproved: 0 });
   assert.ok(empty.empty && empty.title.startsWith("My month"));
 });
 
@@ -172,8 +200,10 @@ test("input checks run before the database: self, bad ids, a name with no linked
   assert.equal((await giveKudos(staff, { toUserId: staff.userId, body: "Great catch on that" })).ok, false, "not yourself");
   assert.equal((await giveKudos(staff, { toUserId: "nope", body: "Great catch on that" })).ok, false);
   assert.equal((await giveKudos(staff, { toUserId: "00000000-0000-4000-8000-000000000009", body: "x" })).ok, false, "too short");
-  const named = await giveKudos(staff, { toUserId: "00000000-0000-4000-8000-000000000009", body: "Thanks for helping Alma" }, ["00000000-0000-4000-8000-000000000010"]);
-  assert.ok(!named.ok && /Leave the person's name out/.test(named.reason), "a named person needs the linked work");
+  const other = await giveKudos(staff, { toUserId: "00000000-0000-4000-8000-000000000009", body: "Thanks for the help", workKind: "other", workId: "00000000-0000-4000-8000-000000000010" });
+  assert.ok(!other.ok && /not linked/.test(other.reason), "other work carries no link");
+  const badId = await giveKudos(staff, { toUserId: "00000000-0000-4000-8000-000000000009", body: "Thanks for the help", workKind: "listing", workId: "not-an-id" });
+  assert.ok(!badId.ok && /not found/.test(badId.reason), "a listing link must be an id");
   assert.equal((await writeRecognitionNote(staff, { aboutUserId: "00000000-0000-4000-8000-000000000003", body: "Built the checklist the whole team uses" })).ok, false, "staff cannot write recognition notes");
   assert.equal((await setProgramRewards(staff, { teamBoardOn: false })).ok, false, "staff cannot change program settings");
 });

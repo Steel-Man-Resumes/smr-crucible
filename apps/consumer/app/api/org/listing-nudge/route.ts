@@ -11,14 +11,17 @@
 import { NextResponse } from "next/server";
 import { requireOrgCapability } from "@/lib/org-guard";
 import { listingNudgeFor } from "@/lib/staff-listing-nudge";
+import { readJsonStrict, refuseCrossOrigin } from "@/lib/staff-rewards-route";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const crossOrigin = refuseCrossOrigin(request);
+  if (crossOrigin) return crossOrigin;
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
   if (guard.viewing || guard.actor.viaPlatformAdmin) return NextResponse.json({ line: null });
-  const body = await request.json().catch(() => ({}));
+  const body = (await readJsonStrict(request)) ?? {};
   const kind = body?.kind === "employer" || body?.kind === "resource" ? body.kind : null;
   if (!kind) return NextResponse.json({ line: null });
   const nudge = await listingNudgeFor(guard.actor, { kind, id: String(body?.id ?? "") }, { loadCore: () => import("@crucible/core") });

@@ -14,7 +14,8 @@ import { NextResponse } from "next/server";
 import { getWins, setRewardsSettings, setProgramRewards, markMilestonesSeen, listMyContributions, approvedInWindow, monthWindow, DEFAULT_REWARDS_SETTINGS } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 import { effectiveAuth } from "@/lib/effective-auth";
-import { mayWrite, VIEWING_REFUSAL } from "@/lib/staff-rewards-route";
+import { mayWrite, recordWordsIn, RECORD_WORDS_REFUSAL, VIEWING_REFUSAL } from "@/lib/staff-rewards-route";
+import { readJsonStrict, refuseCrossOrigin, NOT_JSON } from "@/lib/staff-rewards-route";
 
 export const dynamic = "force-dynamic";
 const NO_STORE = { "Cache-Control": "private, no-store" };
@@ -34,6 +35,9 @@ export async function GET(request: Request) {
 }
 
 async function gate(request: Request) {
+  // Same-origin first, before the session is read (lib/org-crm-gate.ts).
+  const crossOrigin = refuseCrossOrigin(request);
+  if (crossOrigin) return { response: crossOrigin } as const;
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return { response: guard.response } as const;
   const session = await effectiveAuth();
@@ -46,9 +50,11 @@ async function gate(request: Request) {
 export async function PUT(request: Request) {
   const w = await gate(request);
   if ("response" in w) return w.response;
-  const body = await request.json().catch(() => ({}));
-  if (body && typeof body.program === "object" && body.program) {
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
+  if (typeof body.program === "object" && body.program) {
     const p = body.program as Record<string, unknown>;
+    if (typeof p.programRewards === "string" && recordWordsIn([p.programRewards])) return NextResponse.json({ error: RECORD_WORDS_REFUSAL }, { status: 400 });
     const res = await setProgramRewards(w.actor, {
       teamBoardOn: typeof p.teamBoardOn === "boolean" ? p.teamBoardOn : undefined,
       recognitionNotesOn: typeof p.recognitionNotesOn === "boolean" ? p.recognitionNotesOn : undefined,
@@ -68,7 +74,8 @@ export async function PUT(request: Request) {
 export async function POST(request: Request) {
   const w = await gate(request);
   if ("response" in w) return w.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   if (body?.action !== "seen" || !Array.isArray(body.keys)) return NextResponse.json({ error: "Not found." }, { status: 404 });
   const n = await markMilestonesSeen(w.actor, body.keys.map((k: unknown) => String(k)));
   return NextResponse.json({ ok: true, marked: n });

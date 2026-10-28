@@ -13,6 +13,9 @@
  *    colleague's inbox, a funder report and the directory queue.
  */
 import { hasStaffRecordWords } from "./staff-ai-safety";
+import { readJson, refuseCrossOrigin } from "./org-crm-gate";
+
+export { refuseCrossOrigin };
 
 export const RECORD_WORDS_REFUSAL = "Keep record, court and supervision details out of this. Say what was done well, without them.";
 export const VIEWING_REFUSAL = "Nothing is saved while you are viewing as someone else.";
@@ -34,3 +37,16 @@ export function mayWrite(c: WriterCheck): boolean {
 export function todayUtc(nowMs = Date.now()): string {
   return new Date(nowMs).toISOString().slice(0, 10);
 }
+
+/** Is this a JSON body? (Writes here take application/json only, never text/plain.) */
+export function isJsonRequest(headers: Headers): boolean {
+  return /^application\/json\b/i.test(headers.get("content-type") ?? "");
+}
+
+/** The JSON body of a write, or null when it is not application/json (the route answers 415). */
+export async function readJsonStrict(request: Request): Promise<Record<string, unknown> | null> {
+  if (!isJsonRequest(request.headers)) return null;
+  return readJson(request);
+}
+
+export const NOT_JSON = "Send this as JSON.";
