@@ -58,7 +58,7 @@ export type CaseloadStatusFilter = (typeof CASELOAD_STATUSES)[number];
 export const CASELOAD_STATUS_LABELS: Record<CaseloadStatusFilter, string> = { "": "Everyone", behind: "Gone quiet", active: "Active this week", steady: "Steady", hired: "Hired" };
 
 /** A person's page tabs, in the built-in order (apps/consumer lib/org-person-view.ts PERSON_TABS; a test holds them equal). */
-export const PERSON_TAB_KEYS = ["notes", "timeline", "tasks", "referrals", "outcomes", "shared", "screen"] as const;
+export const PERSON_TAB_KEYS = ["notes", "timeline", "team", "tasks", "referrals", "outcomes", "shared", "screen"] as const;
 export type PersonTabKey = (typeof PERSON_TAB_KEYS)[number];
 
 /** How People opens: the list (table) or the grid (spreadsheet). */

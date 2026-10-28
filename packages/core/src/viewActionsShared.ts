@@ -241,7 +241,7 @@ export function planGridLayout(own: Partial<StaffPrefs>, viewId: string | null, 
 /* ------------------------------------------------------------ a person --- */
 
 export const PERSON_TAB_LABELS: Record<PersonTabKey, string> = {
-  notes: "Notes", timeline: "Timeline", tasks: "Tasks and suggestions", referrals: "Referrals", outcomes: "Outcomes", shared: "What they shared", screen: "Their screen",
+  notes: "Notes", timeline: "Timeline", team: "Team talk", tasks: "Tasks and suggestions", referrals: "Referrals", outcomes: "Outcomes", shared: "What they shared", screen: "Their screen",
 };
 
 export function planPersonTabs(own: Partial<StaffPrefs>, tabs: readonly unknown[], allowed: PolicyAllowed): PrefPlan {

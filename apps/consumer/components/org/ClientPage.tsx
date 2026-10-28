@@ -42,7 +42,13 @@ import {
   NOTE_CARE_LINE, PERSON_TABS, SHARE_SCOPES as SCOPES, capFirst, firstName, initialOpen, noteOwnershipLine, scopeToFetch,
   type OpenEvent, type PersonTab, type ShareScope as Scope,
 } from "@/lib/org-person-view";
-import { DEFAULT_STAFF_PREFS, NOTE_KINDS as KINDS, NOTE_KIND_LABELS, type StaffPrefs } from "@crucible/core/src/staffPrefsShared";
+import { DEFAULT_STAFF_PREFS, NOTE_KINDS as KINDS, NOTE_KIND_LABELS, orderPersonTabs, type StaffPrefs } from "@crucible/core/src/staffPrefsShared";
+import { TeamCommentsPanel } from "@/components/org/TeamComments";
+import { AssigneeSelect, HandTaskOn } from "@/components/org/TaskAssign";
+import { useNoteReviews, NoteReviewBar, noteCanBeCorrected } from "@/components/org/NoteReview";
+import { HandoffPanel } from "@/components/org/HandoffPanel";
+import { ConnectionsPanel } from "@/components/org/ConnectionsPanel";
+import { VIEW_CHANGED_EVENT } from "@/lib/view-change-events";
 
 const STATUS_LABEL: Record<string, string> = {
   saved: "Saved", applied: "Applied", heard_back: "Heard back", interviewing: "Interviewing",
@@ -113,7 +119,11 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
   }, [clientId]);
   useEffect(() => { load(); loadTasks(); }, [load, loadTasks]);
   useEffect(() => {
-    fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {});
+    const readPrefs = () => { fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.effective && setPrefs(d.effective)).catch(() => {}); };
+    readPrefs();
+    // t.ROY or Undo changed this person's own view (tab order): read it again (staff pass S3).
+    window.addEventListener(VIEW_CHANGED_EVENT, readPrefs);
+    return () => window.removeEventListener(VIEW_CHANGED_EVENT, readPrefs);
   }, []);
 
   /**
@@ -207,7 +217,7 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
       <div className={`grid gap-5 ${STAFF_TROY_READY ? "lg:grid-cols-[minmax(0,1fr)_17rem]" : ""}`}>
         <div className="min-w-0">
           <div role="tablist" aria-label={`${terms.cap("participant")} sections`} className="flex flex-wrap gap-1 border-b border-t-line mb-5">
-            {PERSON_TABS.map(({ key, label }) => (
+            {orderPersonTabs(PERSON_TABS, prefs.personTabs).map(({ key, label }) => (
               <button key={key} role="tab" aria-selected={tab === key} onClick={() => go({ kind: "tab", tab: key })} data-tour={key === "shared" ? "crm-person-shared-tab" : undefined}
                 className={`t-focus px-4 py-2 text-sm border-b-2 -mb-px ${tab === key ? "border-t-amber text-t-white font-semibold" : "border-transparent text-t-phos-dim hover:text-t-white"}`}>
                 {label}
@@ -217,6 +227,8 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
 
           {tab === "timeline" ? (
             <PersonTimeline clientId={clientId} first={first} />
+          ) : tab === "team" ? (
+            <TeamCommentsPanel clientId={clientId} first={first} />
           ) : tab === "referrals" ? (
             <ReferralsPanel clientId={clientId} first={first} userId={viewer?.userId ?? null} />
           ) : tab === "tasks" ? (
@@ -224,6 +236,8 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
               <TasksPanel clientId={clientId} first={first} tasks={tasks} reload={loadTasks} />
               <h2 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mt-8 mb-3">Suggestions</h2>
               <SuggestionsPanel clientId={clientId} first={first} items={suggestions} canSuggest={!!viewer?.canSuggest} onChange={load} />
+              <HandoffPanel clientId={clientId} first={first} viewerId={viewer?.userId ?? null} canSend={!!viewer?.canSuggest} />
+              <ConnectionsPanel clientId={clientId} first={first} viewerId={viewer?.userId ?? null} canSend={!!viewer?.canSuggest} />
             </>
           ) : tab === "outcomes" ? (
             <OutcomesPanel clientId={clientId} first={first} />
@@ -301,11 +315,12 @@ export function SharedTab({ client, clientId, first, item, rows, loading, viewer
   );
 }
 
-interface TaskRow { id: string; title: string; due_on: string | null; shared_with_participant: boolean; done_at: string | null; done_by_participant: boolean; owner_name: string | null }
+interface TaskRow { id: string; title: string; due_on: string | null; shared_with_participant: boolean; done_at: string | null; done_by_participant: boolean; owner_user_id?: string | null; owner_name: string | null }
 
 /** What you and this person have agreed to do. A shared task shows on THEIR dashboard, and they can tick it. */
 function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; first: string; tasks: TaskRow[] | null; reload: () => void }) {
   const [title, setTitle] = useState(""); const [due, setDue] = useState(""); const [shared, setShared] = useState(true);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const load = reload;
   async function post(body: Record<string, unknown>) {
@@ -316,7 +331,7 @@ function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; firs
   }
   return (
     <section>
-      <form onSubmit={(e) => { e.preventDefault(); if (title.trim().length < 2) return; post({ action: "add", title, dueOn: due || null, clientId, shared }); setTitle(""); setDue(""); }}
+      <form onSubmit={(e) => { e.preventDefault(); if (title.trim().length < 2) return; post({ action: "add", title, dueOn: due || null, clientId, shared, ownerId }); setTitle(""); setDue(""); setOwnerId(null); }}
         className="bg-t-panel border border-t-line p-5 mb-5">
         <label htmlFor="task-title" className="block font-semibold text-t-white mb-2">Add a task</label>
         <div className="flex flex-wrap gap-2">
@@ -324,6 +339,7 @@ function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; firs
             className="plain-field t-focus flex-1 min-w-[14rem] bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2" />
           <label className="sr-only" htmlFor="task-due">Due date</label>
           <input id="task-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} className="plain-field t-focus bg-t-panel-2 border border-t-line text-sm text-t-phos px-3 py-2" />
+          <AssigneeSelect clientId={clientId} value={ownerId} onChange={setOwnerId} />
           <button disabled={title.trim().length < 2} className="t-focus bg-t-amber text-[#14100a] text-sm font-semibold px-4 py-2 disabled:opacity-50">Add</button>
         </div>
         <label className="text-xs text-t-phos-dim flex items-center gap-2 mt-3">
@@ -345,6 +361,7 @@ function TasksPanel({ clientId, first, tasks, reload }: { clientId: string; firs
               </div>
               <div className="flex gap-4">
                 <button onClick={() => post({ action: t.done_at ? "reopen" : "done", taskId: t.id })} className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">{t.done_at ? "Reopen" : "Mark done"}</button>
+                {!t.done_at && <HandTaskOn taskId={t.id} clientId={clientId} ownerId={t.owner_user_id ?? null} onDone={load} />}
                 {!t.done_at && <button onClick={() => post({ action: "cancel", taskId: t.id })} className="t-focus text-xs text-t-phos-dim underline underline-offset-4 hover:text-t-white">Cancel</button>}
               </div>
             </li>
@@ -611,6 +628,8 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; body: string } | null>(null);
+  // Staff pass S4: optional supervisor review of notes (renders nothing unless the organization turns it on).
+  const reviews = useNoteReviews(clientId);
   // A draft t.ROY wrote, placed here from the assistant. It is NOT saved:
   // it sits in this box, marked, until the staff member saves or discards it.
   const draftKey = viewerId ? orgNoteDraftKey(viewerId, clientId) : null;
@@ -644,7 +663,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "add_note", body, kind, draftedByAssistant: !!draft, skillRunId: draft?.skillRunId }) });
     setBusy(false);
-    if (res.ok) { setBody(""); setKind(defaultKind); clearDraft(); autosave.clear(); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
+    if (res.ok) { setBody(""); setKind(defaultKind); clearDraft(); autosave.clear(); onSaved(); reviews.reload(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that.");
   }
   // A draft check-in becomes an "Email" only when the person who saved it
   // says they sent it. The kind change is kept as an earlier version.
@@ -653,7 +672,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "edit_note", noteId: n.id, body: n.body, kind: "email" }) });
     setBusy(false);
-    if (res.ok) onSaved(); else setMsg((await res.json().catch(() => ({}))).error || "Could not mark it sent.");
+    if (res.ok) { onSaved(); reviews.reload(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not mark it sent.");
   }
   async function saveCorrection() {
     if (!editing) return;
@@ -661,7 +680,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
     const res = await fetch(`/api/org/clients/${clientId}`, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "edit_note", noteId: editing.id, body: editing.body }) });
     setBusy(false);
-    if (res.ok) { setEditing(null); onSaved(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that correction.");
+    if (res.ok) { setEditing(null); onSaved(); reviews.reload(); } else setMsg((await res.json().catch(() => ({}))).error || "Could not save that correction.");
   }
   return (
     <section>
@@ -724,7 +743,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
                 ) : (
                   <p className="text-sm text-t-white whitespace-pre-wrap">{n.body}</p>
                 )}
-                {!isEditing && mine && (
+                {!isEditing && mine && noteCanBeCorrected(reviews.data, n.id) && (
                   <span className="flex flex-wrap gap-4 mt-2">
                     <button onClick={() => setEditing({ id: n.id, body: n.body })} className="t-focus text-xs text-t-phos underline">Correct this note</button>
                     {n.kind === "draft" && (
@@ -732,6 +751,7 @@ function NotesPanel({ clientId, first, notes, canWrite, viewerId, onSaved, defau
                     )}
                   </span>
                 )}
+                <NoteReviewBar noteId={n.id} authorId={n.author_user_id ?? null} data={reviews.data} onChange={reviews.reload} />
                 {(n.earlier?.length ?? 0) > 0 && (
                   <details className="mt-2">
                     <summary className="text-xs text-t-phos-dim cursor-pointer">Earlier wording ({n.earlier!.length})</summary>

@@ -14,7 +14,7 @@
 import { STATIONS, stationForJourneyStage, type StationId } from "./refinery-nav";
 
 export type ShareScope = "applications" | "resume" | "documents";
-export type PersonTab = "notes" | "timeline" | "tasks" | "referrals" | "outcomes" | "shared" | "screen";
+export type PersonTab = "notes" | "timeline" | "team" | "tasks" | "referrals" | "outcomes" | "shared" | "screen";
 
 export interface ScopeView {
   shared: boolean; sharedAt: string | null; requestPending: boolean; required: boolean; stoppedByParticipant: boolean; fromDate: string | null;
@@ -38,6 +38,8 @@ export const PERSON_TABS: { key: PersonTab; label: string }[] = [
   { key: "notes", label: "Notes" },
   // House lane L5: everything on record, newest first; and closed-loop referrals.
   { key: "timeline", label: "Timeline" },
+  // Staff pass S4: comments among the team about this person (migration 109).
+  { key: "team", label: "Team talk" },
   { key: "tasks", label: "Tasks and suggestions" },
   { key: "referrals", label: "Referrals" },
   { key: "outcomes", label: "Outcomes" },
