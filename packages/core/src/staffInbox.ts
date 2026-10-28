@@ -68,7 +68,20 @@ export async function inboxUnreadCount(actor: OrgActor): Promise<number> {
   }
 }
 
-/** Mark some (ids) or all of my items read, or some unread. Returns how many changed. */
+/** $1 org, $2 me, $3 all, $4 read (else unread), $5 ids. Exported for the database test. */
+export const MARK_INBOX_SQL = `UPDATE staff_inbox_item i SET read_at = CASE WHEN $4::boolean THEN now() ELSE NULL END
+  WHERE i.access_code_id = $1::uuid AND i.recipient_user_id = $2::uuid
+    AND ($3::boolean OR i.id = ANY ($5::uuid[]))
+    AND (CASE WHEN $4::boolean THEN i.read_at IS NULL ELSE i.read_at IS NOT NULL END)
+    -- Marking unread: never when a newer unread item for the same thing exists
+    -- (staff_inbox_item_once allows one unread per recipient, kind and source).
+    AND ($4::boolean OR NOT EXISTS (
+          SELECT 1 FROM staff_inbox_item n
+           WHERE n.recipient_user_id = i.recipient_user_id AND n.kind = i.kind AND n.ref_id = i.ref_id
+             AND n.read_at IS NULL AND n.id <> i.id))
+  RETURNING i.id`;
+
+/** Mark some (ids) or all of my items read, or some unread. Returns how many changed. Real failures throw. */
 export async function markInbox(actor: OrgActor, input: { ids?: unknown; all?: boolean; read: boolean }): Promise<number | null> {
   if (!canUse(actor)) return null;
   const ids = Array.isArray(input.ids) ? input.ids.filter((v): v is string => typeof v === "string" && UUID_PATTERN.test(v)).slice(0, 200) : [];
@@ -76,13 +89,9 @@ export async function markInbox(actor: OrgActor, input: { ids?: unknown; all?: b
   if (input.all && !input.read) return 0;
   const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
     run(sql)(
-      `UPDATE staff_inbox_item i SET read_at = CASE WHEN $4::boolean THEN now() ELSE NULL END
-        WHERE i.access_code_id = $1::uuid AND i.recipient_user_id = $2::uuid
-          AND ($3::boolean OR i.id = ANY ($5::uuid[]))
-          AND (CASE WHEN $4::boolean THEN i.read_at IS NULL ELSE i.read_at IS NOT NULL END)
-        RETURNING i.id`,
+      MARK_INBOX_SQL,
       [actor.orgId, actor.userId, !!input.all, input.read, ids]
     ),
-  ]).catch(() => [[] as { id: string }[]]);
+  ]);
   return rows.length;
 }

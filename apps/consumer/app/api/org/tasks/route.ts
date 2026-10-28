@@ -6,18 +6,14 @@
  *        { action: "assign", taskId, ownerId }   hand a task to a colleague who reaches the person (lane S4, migration 109)
  */
 import { NextResponse } from "next/server";
-import { getOne, listStaffTasks, addStaffTask, updateStaffTask, assignStaffTask, listTaskAssignees } from "@crucible/core";
+import { listStaffTasks, addStaffTask, updateStaffTask, assignStaffTask, listTaskAssignees } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
+import { withCrm, refuseCrossOrigin, readJson, UUID } from "@/lib/org-crm-gate";
 
 export const dynamic = "force-dynamic";
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function gate(request: Request) {
-  const guard = await requireOrgCapability("org.client.view_content", { request });
-  if (!guard.ok) return guard;
-  const flag = await getOne<{ crm_v2: boolean }>(`SELECT crm_v2 FROM access_code WHERE id = $1`, [guard.actor.orgId]);
-  if (!flag?.crm_v2) return { ok: false as const, response: NextResponse.json({ error: "Not found." }, { status: 404 }) };
-  return guard;
+  return withCrm(await requireOrgCapability("org.client.view_content", { request }));
 }
 
 export async function GET(request: Request) {
@@ -33,9 +29,16 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const cross = refuseCrossOrigin(request);
+  if (cross) return cross;
+  // Task writes come only from this app's own forms as JSON; a text/plain body
+  // (what a cross-site form or a beacon can send) is never parsed (review round 1).
+  if (!/^application\/json\b/i.test(request.headers.get("content-type") ?? "")) {
+    return NextResponse.json({ error: "Send this as JSON." }, { status: 415 });
+  }
   const g = await gate(request);
   if (!g.ok) return g.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJson(request);
   if (body.action === "add") {
     if (body.clientId && !UUID.test(String(body.clientId))) return NextResponse.json({ error: "Not found." }, { status: 404 });
     if (body.ownerId && !UUID.test(String(body.ownerId))) return NextResponse.json({ error: "A task can only go to someone on your team." }, { status: 400 });
@@ -49,8 +52,8 @@ export async function POST(request: Request) {
     const res = await assignStaffTask(g.actor, String(body.taskId), String(body.ownerId));
     return res.ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: res.error }, { status: 400 });
   }
-  if (["done", "reopen", "cancel"].includes(body.action) && UUID.test(String(body.taskId ?? ""))) {
-    const ok = await updateStaffTask(g.actor, String(body.taskId), body.action);
+  if (typeof body.action === "string" && ["done", "reopen", "cancel"].includes(body.action) && UUID.test(String(body.taskId ?? ""))) {
+    const ok = await updateStaffTask(g.actor, String(body.taskId), body.action as "done" | "reopen" | "cancel");
     return ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "That task is not yours to change." }, { status: 400 });
   }
   return NextResponse.json({ error: "Unknown action." }, { status: 400 });

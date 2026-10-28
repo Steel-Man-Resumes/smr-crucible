@@ -25,7 +25,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { LIST_COMMENTS_SQL, COLLEAGUES_SQL } from '@crucible/core/src/teamComments';
-import { LIST_INBOX_SQL, UNREAD_COUNT_SQL } from '@crucible/core/src/staffInbox';
+import { LIST_INBOX_SQL, UNREAD_COUNT_SQL, MARK_INBOX_SQL } from '@crucible/core/src/staffInbox';
 import { LIST_CHANGE_REQUESTS_SQL } from '@crucible/core/src/orgChangeRequests';
 import { NOTE_REVIEWS_SQL, REVIEW_QUEUE_SQL } from '@crucible/core/src/noteReview';
 import { timelineSql } from '@crucible/core/src/orgTimeline';
@@ -168,6 +168,16 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.equal((await as(S(cm), `UPDATE staff_inbox_item SET read_at = now() WHERE recipient_user_id = $1 RETURNING id`, [admin])).length, 0, 'nobody marks another person\'s items');
   assert.equal((await as(S(admin), `UPDATE staff_inbox_item SET read_at = now() WHERE recipient_user_id = $1 AND read_at IS NULL RETURNING id`, [admin])).length, 1, 'the recipient marks theirs read');
   assert.equal(await unreadN(admin), 0);
+  // Review round 1: marking unread never collides with a newer unread item for the same thing.
+  const markAs = (actor: string, all: boolean, read: boolean, ids: string[]) => as(S(actor), MARK_INBOX_SQL, [org, actor, all, read, ids]);
+  const oldItem = (await inbox(admin)).find((i) => i.kind === 'mention')!.id;
+  await as(S(cm), `UPDATE team_comment SET mentions = '{}'::uuid[] WHERE id = $1`, [c1.id]);
+  await as(S(cm), `UPDATE team_comment SET mentions = ARRAY[$2]::uuid[] WHERE id = $1`, [c1.id, admin]);
+  assert.equal(await unreadN(admin), 1, 'a fresh mention of the same comment is a new unread item');
+  assert.deepEqual(await markAs(admin, false, false, [oldItem]), [], 'the older one is not marked unread beside it (no unique-index error)');
+  assert.equal((await markAs(admin, true, true, [])).length, 1);
+  assert.equal((await markAs(admin, false, false, [oldItem])).length, 1, 'with nothing newer unread, it can be marked unread');
+  await markAs(admin, true, true, []);
 
   /* --------------------------------------------------------------- tasks -- */
   const addTask = (actor: string, person: string | null, ownerId: string, title = 'TT-TASK bring papers') =>
@@ -197,6 +207,11 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   // Someone who neither made nor owns it, without assign rights, cannot hand it on even when they reach the person.
   const tk4 = (await as(S(admin), `INSERT INTO staff_task (access_code_id, client_user_id, owner_user_id, created_by, title) VALUES ($1, $2, $3, $3, 'TT-TASK admin own') RETURNING id`, [org, p1, admin]))[0].id;
   assert.match(await err(as(S(cm), `UPDATE staff_task SET owner_user_id = $2 WHERE id = $1`, [tk4, cm])), /task_assign_refused/, 'not their task to hand on');
+  // Review N2: a deny on org.client.assign wins for an org admin too.
+  await q(`INSERT INTO org_capability_override (org_id, user_id, capability, effect) VALUES ($1, $2, 'org.client.assign', 'deny')`, [org, admin]);
+  const tk5 = (await addTask(owner, p1, owner, 'TT-TASK owner own'))[0].id;
+  assert.match(await err(as(S(admin), `UPDATE staff_task SET owner_user_id = $2 WHERE id = $1`, [tk5, admin])), /task_assign_refused/, 'an admin denied assigning cannot hand on someone else\'s task');
+  await q(`DELETE FROM org_capability_override WHERE org_id = $1 AND user_id = $2 AND capability = 'org.client.assign'`, [org, admin]);
   // The 105 retention task maker (a definer path) still makes tasks for the assigned case manager.
   const o1 = (await as(S(admin), `INSERT INTO outcome_record (access_code_id, client_user_id, employer, start_date, source, created_by) VALUES ($1, $2, 'Lakeshore Works (Demo)', current_date - 10, 'staff_reported', $3) RETURNING id`, [org, p1, admin]))[0].id;
   const made = await q(`SELECT owner_user_id FROM staff_task WHERE source_id = $1`, [o1]);
@@ -220,7 +235,7 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.ok(!(await inbox(cm2)).some((i) => i.ref_id === cr), 'other staff do not');
   assert.equal((await as(S(cm), `UPDATE org_change_request SET status = 'done' WHERE id = $1 RETURNING id`, [cr])).length, 0, 'the asker cannot answer their own request');
   assert.match(await err(as(S(admin), `UPDATE org_change_request SET title = 'Rewritten' WHERE id = $1`, [cr])), /permission denied/, 'what was asked cannot be reworded');
-  assert.match(await err(as(S(admin), `UPDATE org_change_request SET status = 'declined' WHERE id = $1`, [cr])), /declined_why/, 'a no needs a reason');
+  assert.match(await err(as(S(admin), `UPDATE org_change_request SET status = 'declined' WHERE id = $1`, [cr])), /declined_why|change_request_needs_reason/, 'a no needs a reason');
   await as(S(admin), `UPDATE org_change_request SET status = 'accepted', answer = 'Yes, next week' WHERE id = $1`, [cr]);
   const after = (await as(S(cm), `SELECT status, answer, answered_by FROM org_change_request WHERE id = $1`, [cr]))[0];
   assert.deepEqual([after.status, after.answer, after.answered_by], ['accepted', 'Yes, next week', admin], 'stamped with who answered');
@@ -230,9 +245,12 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.match(await err(as(S(cm2), `INSERT INTO org_change_reply (request_id, access_code_id, author_user_id, body) VALUES ($1, $2, $3, 'Me too')`, [cr, org, cm2])), /row-level security|replies here/i, 'a bystander cannot reply');
   assert.equal((await as(S(cm), `SELECT count(*)::int AS n FROM org_change_reply WHERE request_id = $1`, [cr]))[0].n, 2);
   assert.equal((await as(S(cm2), `SELECT count(*)::int AS n FROM org_change_reply WHERE request_id = $1`, [cr]))[0].n, 0, 'replies follow their request');
+  assert.match(await err(as(S(admin), `UPDATE org_change_request SET status = 'declined' WHERE id = $1`, [cr])), /change_request_needs_reason/, 'a no needs words written for it, not the earlier yes');
   await as(S(admin), `UPDATE org_change_request SET status = 'done' WHERE id = $1`, [cr]);
   assert.match(await err(as(S(admin), `UPDATE org_change_request SET status = 'open' WHERE id = $1`, [cr])), /change_request_move/, 'done stays done');
-  const crAct = await q(`SELECT summary FROM org_activity WHERE entity = 'change_request' ORDER BY id`);
+  const crAct = await q(`SELECT summary, actor_user_id, staff_user_id FROM org_activity WHERE entity = 'change_request' ORDER BY id`);
+  assert.ok(crAct.rows.every((r: any) => r.actor_user_id === null && r.staff_user_id === null), 'change-request activity names nobody (every staff member can read it)');
+  assert.equal((await as(S(cm), `SELECT current_setting('app.user_id', true) AS u`))[0].u, cm, 'and the session user is untouched');
   assert.ok(crAct.rows.length >= 4 && crAct.rows.every((r: any) => !/TT-CR-BODY|shoe|Thank|On it/.test(r.summary)), 'activity says what happened, never what was typed');
 
   /* ---------------------------------------------------------- note review -- */
@@ -247,6 +265,9 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.equal(await submit(cm), 'ok');
   assert.equal(await submit(cm), 'already_pending');
   assert.match(await err(as(S(cm), `UPDATE case_note SET body = 'changed while pending' WHERE id = $1`, [note])), /note_pending/, 'read-only while pending');
+  for (const set of [`occurred_at = now() - interval '2 days'`, `drafted_by_assistant = true`, `visible_to_participant = true`]) {
+    assert.match(await err(as(S(cm), `UPDATE case_note SET ${set} WHERE id = $1`, [note])), /note_pending/, `pending: ${set} refused`);
+  }
   assert.equal(await decide(cm, 'approve', null), 'not_reviewer', 'a case manager does not review');
   assert.equal(await decide(admin, 'send_back', ''), 'needs_comment', 'sending back needs a comment');
   assert.equal(await decide(admin, 'send_back', 'Say which boots and when'), 'ok');
@@ -259,6 +280,9 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.equal((await as(S(cm), REVIEW_QUEUE_SQL, [org, false, cm])).length, 0, 'never your own note in your queue');
   assert.equal(await decide(owner, 'approve', null), 'ok');
   assert.match(await err(as(S(cm), `UPDATE case_note SET body = 'after approval' WHERE id = $1`, [note])), /note_locked/, 'approved notes are locked');
+  for (const set of [`kind = 'meeting'`, `occurred_at = now()`, `drafted_by_assistant = true`, `visible_to_participant = true`]) {
+    assert.match(await err(as(S(cm), `UPDATE case_note SET ${set} WHERE id = $1`, [note])), /note_locked/, `approved: ${set} refused`);
+  }
   const states = await as(S(cm), NOTE_REVIEWS_SQL, [org, false, cm, p1]);
   assert.deepEqual([states[0].status, states[0].events.map((e: any) => e.to_status)], ['approved', ['pending', 'sent_back', 'pending', 'approved']]);
   assert.equal(states[0].events[1].comment, 'Say which boots and when');

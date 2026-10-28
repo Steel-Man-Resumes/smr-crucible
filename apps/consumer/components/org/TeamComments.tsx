@@ -13,6 +13,7 @@
  * Reads and writes /api/org/comments only. Nothing is sent outside the app.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { COMMENT_CARE_LINE, TEAM_THREAD_CARE_LINE } from "@crucible/core/src/teamTalkShared";
 
 interface Mentioned { id: string; name: string | null }
 interface CommentView {
@@ -206,7 +207,7 @@ export function TeamCommentsPanel({ clientId, first }: { clientId: string | null
   return (
     <section aria-labelledby="team-talk-h">
       <h2 id="team-talk-h" className="text-sm font-semibold text-t-white">{clientId ? "Team talk" : "Team board"}</h2>
-      <p className="mt-1 mb-3 text-xs text-t-phos-dim">{data?.careLine ?? "Only your team sees comments, never the person. Keep record details in case notes."}</p>
+      <p className="mt-1 mb-3 text-xs text-t-phos-dim">{data?.careLine ?? COMMENT_CARE_LINE}{clientId ? "" : ` ${TEAM_THREAD_CARE_LINE}`}</p>
       {failed ? <p role="alert" className="text-sm text-t-white">Comments did not load. <button type="button" onClick={load} className="t-focus underline">Try again</button></p>
         : !data ? <p className="text-sm text-t-phos-dim">Getting comments...</p>
         : (

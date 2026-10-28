@@ -34,6 +34,7 @@ import type { OrgActor } from "./authz/resolveOrgActor";
 import { unitReachSql } from "./orgUnitReach";
 import { SHARING_SCOPES, isSharingScope, type SharingScope } from "./sharingScopes";
 import { staffStepLabel } from "./journeyStages";
+import { teamTalkErrorLine } from "./teamTalkShared";
 
 export type ClientViewDenied =
   | "no_capability"
@@ -474,7 +475,9 @@ export async function editClientNote(actor: OrgActor, clientId: string, noteId: 
   const body = (input.body ?? "").trim();
   if (!body || body.length > 8000) return { ok: false, error: "A note needs some text, up to 8000 characters." };
   const run = (sql: unknown) => sql as (s: string, q: unknown[]) => unknown;
-  const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+  let rows: { id: string }[];
+  try {
+    [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
     run(sql)(
       `UPDATE case_note n SET body = $6, kind = COALESCE($7::text, n.kind)
         WHERE n.id = $5::uuid AND n.client_user_id = $1::uuid AND n.access_code_id = $2::uuid
@@ -483,7 +486,14 @@ export async function editClientNote(actor: OrgActor, clientId: string, noteId: 
         RETURNING n.id`,
       [...params(actor, clientId), noteId, body, input.kind && NOTE_KINDS.has(input.kind) ? input.kind : null]
     ),
-  ]);
+    ]);
+  } catch (e) {
+    // Note review (migration 109): a pending or approved note is locked by the
+    // database. Say so plainly (a 400 from the route); any other failure is real.
+    const message = (e as Error)?.message ?? "";
+    if (/note_locked|note_pending/.test(message)) return { ok: false, error: teamTalkErrorLine(message) };
+    throw e;
+  }
   return rows[0] ? { ok: true } : { ok: false, error: "Nothing changed. Only the person who wrote a note can correct it, and the wording has to be different." };
 }
 

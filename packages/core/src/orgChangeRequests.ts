@@ -108,7 +108,9 @@ export async function answerChangeRequest(actor: OrgActor, id: string, input: { 
   if (!cur[0]) return { ok: false, error: "That request is not here." };
   const to = isChangeRequestStatus(input.status) ? input.status : cur[0].status;
   const finalAnswer = answer ?? cur[0].answer;
-  const bad = checkChangeMove(cur[0].status, to, finalAnswer);
+  // A "no" needs words given now, different from any earlier answer (review N4).
+  const fresh = !!answer && answer !== cur[0].answer;
+  const bad = checkChangeMove(cur[0].status, to, finalAnswer, to === "declined" && cur[0].status !== "declined" ? fresh : true);
   if (bad) return { ok: false, error: bad };
   if (to === cur[0].status && finalAnswer === cur[0].answer) return { ok: false, error: "Nothing changed." };
   try {

@@ -229,6 +229,7 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   "smr_inbox_write(uuid, uuid, text, uuid, text, uuid, text)",
   "smr_org_managers(uuid)",
   "smr_comment_mentions(uuid, uuid, uuid, uuid[], uuid[])",
+  "smr_activity_without_actor(uuid, text, text, text, text)",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */

@@ -113,7 +113,8 @@ BEGIN
   IF v_def IS NULL THEN
     RAISE EXCEPTION '109: org_activity_entity_check is missing';
   END IF;
-  SELECT array_agg(m[1]) INTO v_vals FROM regexp_matches(v_def, '''([a-z_]+)''', 'g') AS m;
+  -- Quote-safe: a value is everything between quotes, with '' read as one quote (the S5 pattern).
+  SELECT array_agg(replace(m[1], '''''', '''')) INTO v_vals FROM regexp_matches(v_def, '''((?:[^'']|'''''')*)''', 'g') AS m;
   IF NOT (COALESCE(v_vals, '{}') @> v_new) THEN
     SELECT array_agg(DISTINCT x ORDER BY x) INTO v_all FROM unnest(COALESCE(v_vals, '{}') || v_new) AS x;
     ALTER TABLE org_activity DROP CONSTRAINT org_activity_entity_check;
@@ -175,12 +176,13 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
     p_org IS NOT NULL AND p_user IS NOT NULL
     AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid
     AND (EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id = p_user)
-         OR ((EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user AND s.role = 'org_admin')
-              OR EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user)
-                 AND EXISTS (SELECT 1 FROM public.org_capability_override o WHERE o.org_id = p_org AND o.user_id = p_user
-                               AND o.capability = 'org.client.assign' AND o.effect = 'grant'))
-             AND NOT EXISTS (SELECT 1 FROM public.org_capability_override o WHERE o.org_id = p_org AND o.user_id = p_user
-                               AND o.capability = 'org.client.assign' AND o.effect = 'deny'))),
+         OR EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user AND s.role = 'org_admin')
+         OR (EXISTS (SELECT 1 FROM public.org_staff s WHERE s.access_code_id = p_org AND s.user_id = p_user)
+             AND EXISTS (SELECT 1 FROM public.org_capability_override o WHERE o.org_id = p_org AND o.user_id = p_user
+                           AND o.capability = 'org.client.assign' AND o.effect = 'grant')))
+    -- A deny wins for EVERY role, as in computeOrgCapabilities (review N2).
+    AND NOT EXISTS (SELECT 1 FROM public.org_capability_override o WHERE o.org_id = p_org AND o.user_id = p_user
+                      AND o.capability = 'org.client.assign' AND o.effect = 'deny'),
     false)
 $$;
 REVOKE ALL ON FUNCTION public.smr_task_assigner(uuid, uuid) FROM PUBLIC;
@@ -596,6 +598,25 @@ $$;
 REVOKE ALL ON FUNCTION public.org_activity_task() FROM PUBLIC;
 
 -- ======================================================= change requests ==
+
+-- Change-request activity rows are about nobody, so every staff session can
+-- read them (102's org_activity_reach). A request is the asker's and the
+-- managers' business only, so its rows carry NO actor and NO staff member
+-- (review N5): the request itself keeps who asked and who answered, readable
+-- by exactly those people. app.user_id is blanked for the one write and put
+-- back (transaction-local, as runScoped sets it). Definer-only.
+CREATE OR REPLACE FUNCTION public.smr_activity_without_actor(p_org uuid, p_entity text, p_entity_id text, p_action text, p_summary text)
+RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_prev text := current_setting('app.user_id', true);
+BEGIN
+  PERFORM set_config('app.user_id', '', true);
+  PERFORM public.org_activity_write(p_org, NULL, NULL, p_entity, p_entity_id, p_action, p_summary);
+  PERFORM set_config('app.user_id', COALESCE(v_prev, ''), true);
+END;
+$$;
+REVOKE ALL ON FUNCTION public.smr_activity_without_actor(uuid, text, text, text, text) FROM PUBLIC;
 CREATE TABLE IF NOT EXISTS org_change_request (
   id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   access_code_id   UUID NOT NULL REFERENCES access_code(id) ON DELETE CASCADE,
@@ -673,6 +694,11 @@ BEGIN
        OR (OLD.status = 'accepted' AND NEW.status IN ('done', 'declined'))) THEN
     RAISE EXCEPTION 'change_request_move: that answer does not follow from where the request is' USING ERRCODE = 'check_violation';
   END IF;
+  -- Saying no always says why, in words written for this no (review N4).
+  IF NEW.status = 'declined' AND OLD.status <> 'declined'
+     AND (NEW.answer IS NOT DISTINCT FROM OLD.answer OR length(btrim(COALESCE(NEW.answer, ''))) < 3) THEN
+    RAISE EXCEPTION 'change_request_needs_reason: say why, in a fresh answer' USING ERRCODE = 'check_violation';
+  END IF;
   IF NEW.status = OLD.status AND NEW.answer IS NOT DISTINCT FROM OLD.answer THEN
     NEW.answered_by := OLD.answered_by; NEW.answered_at := OLD.answered_at; NEW.updated_at := OLD.updated_at;
     RETURN NEW;
@@ -695,7 +721,7 @@ DECLARE
   v_words text;
 BEGIN
   IF TG_OP = 'INSERT' THEN
-    PERFORM public.org_activity_write(NEW.access_code_id, NULL, NULL, 'change_request', NEW.id::text, 'created',
+    PERFORM public.smr_activity_without_actor(NEW.access_code_id, 'change_request', NEW.id::text, 'created',
       'asked for a change to ' || public.smr_change_kind_words(NEW.kind));
     FOR m IN SELECT * FROM public.smr_org_managers(NEW.access_code_id) LOOP
       PERFORM public.smr_inbox_write(NEW.access_code_id, m, 'change_request', NULL, 'org_change_request', NEW.id,
@@ -707,7 +733,7 @@ BEGIN
   v_words := CASE WHEN NEW.status IS DISTINCT FROM OLD.status THEN
                     CASE NEW.status WHEN 'accepted' THEN 'said yes to' WHEN 'declined' THEN 'said no to' WHEN 'done' THEN 'finished' ELSE 'answered' END
                   ELSE 'changed the answer to' END;
-  PERFORM public.org_activity_write(NEW.access_code_id, NULL, NEW.requested_by, 'change_request', NEW.id::text,
+  PERFORM public.smr_activity_without_actor(NEW.access_code_id, 'change_request', NEW.id::text,
     CASE WHEN NEW.status IS DISTINCT FROM OLD.status THEN 'status_changed' ELSE 'updated' END,
     v_words || ' a change request about ' || public.smr_change_kind_words(NEW.kind));
   PERFORM public.smr_inbox_write(NEW.access_code_id, NEW.requested_by, 'change_answered', NULL, 'org_change_request', NEW.id,
@@ -754,7 +780,7 @@ DECLARE
   r record;
 BEGIN
   SELECT q.requested_by, q.kind INTO r FROM public.org_change_request q WHERE q.id = NEW.request_id;
-  PERFORM public.org_activity_write(NEW.access_code_id, NULL, NULL, 'change_request', NEW.request_id::text, 'updated',
+  PERFORM public.smr_activity_without_actor(NEW.access_code_id, 'change_request', NEW.request_id::text, 'updated',
     'replied on a change request about ' || public.smr_change_kind_words(r.kind));
   IF NEW.author_user_id IS NOT DISTINCT FROM r.requested_by THEN
     FOR m IN SELECT * FROM public.smr_org_managers(NEW.access_code_id) LOOP
@@ -903,14 +929,23 @@ $$;
 REVOKE ALL ON FUNCTION public.smr_note_review_decide(uuid, text, text) FROM PUBLIC;
 
 -- The lock: a note waiting for review (while the module is on) or approved
--- cannot be reworded, by anyone. Definer, so it sees the review row whoever
--- writes. An account being deleted (author to NULL) changes no wording.
+-- cannot be changed by anyone: not its wording or kind, not when it happened,
+-- not whether t.ROY drafted it, and not whether the person may see it (review
+-- round 1). So a pending note can never be shown to the participant before it
+-- is approved, and an approved note's visibility never changes in place: to
+-- change anything about an approved note, its author writes a NEW note that
+-- says what changed (and, with review on, sends that one for review). An
+-- account being deleted (author to NULL) changes none of these. Definer, so
+-- it sees the review row whoever writes.
 CREATE OR REPLACE FUNCTION public.case_note_review_lock() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_status text;
 BEGIN
-  IF NEW.body IS NOT DISTINCT FROM OLD.body AND NEW.kind IS NOT DISTINCT FROM OLD.kind THEN RETURN NEW; END IF;
+  IF ROW(NEW.body, NEW.kind, NEW.occurred_at, NEW.drafted_by_assistant, NEW.visible_to_participant)
+     IS NOT DISTINCT FROM ROW(OLD.body, OLD.kind, OLD.occurred_at, OLD.drafted_by_assistant, OLD.visible_to_participant) THEN
+    RETURN NEW;
+  END IF;
   SELECT r.status INTO v_status FROM public.note_review r WHERE r.note_id = OLD.id;
   IF v_status = 'approved' THEN
     RAISE EXCEPTION 'note_locked: an approved note is locked' USING ERRCODE = 'check_violation';
@@ -969,6 +1004,7 @@ BEGIN
                               public.smr_note_review_on(uuid), public.smr_note_review_submit(uuid),
                               public.smr_note_review_decide(uuid, text, text) TO smr_app;
     REVOKE ALL ON FUNCTION public.smr_inbox_write(uuid, uuid, text, uuid, text, uuid, text), public.smr_org_managers(uuid),
+                           public.smr_activity_without_actor(uuid, text, text, text, text),
                            public.smr_comment_mentions(uuid, uuid, uuid, uuid[], uuid[]) FROM smr_app;
   END IF;
 END $$;

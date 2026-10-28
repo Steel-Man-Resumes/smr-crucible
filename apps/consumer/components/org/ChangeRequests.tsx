@@ -113,7 +113,7 @@ function RequestCard({ r, manager, canWrite, onChange }: { r: RequestView; manag
           ) : (
             <div className="flex flex-wrap gap-4">
               {next.map((s) => (
-                <button key={s} type="button" onClick={() => setMoving(s)} className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">{CHANGE_REQUEST_ACTION_LABELS[s]}</button>
+                <button key={s} type="button" onClick={() => { setMoving(s); if (s === "declined") setAnswer(""); }} className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">{CHANGE_REQUEST_ACTION_LABELS[s]}</button>
               ))}
             </div>
           )}

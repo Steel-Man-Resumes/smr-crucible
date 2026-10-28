@@ -14,10 +14,10 @@ import {
   INBOX_KINDS, INBOX_FILTERS, INBOX_KIND_LABELS, inboxHref, inboxSentence, inboxPerson,
   CHANGE_REQUEST_KINDS, CHANGE_REQUEST_STATUSES, CHANGE_REQUEST_TRANSITIONS, CHANGE_REQUEST_KIND_LABELS, CHANGE_REQUEST_STATUS_LABELS,
   CHANGE_REQUEST_ACTION_LABELS, CHANGE_REQUEST_CARE_LINE, checkChangeMove, checkChangeRequestDraft, changeRequestTarget,
-  NOTE_REVIEW_REASONS, NOTE_REVIEW_STATUSES, NOTE_REVIEW_STATUS_LABELS, teamTalkErrorLine,
+  NOTE_REVIEW_REASONS, NOTE_REVIEW_STATUSES, NOTE_REVIEW_STATUS_LABELS, teamTalkErrorLine, TEAM_THREAD_CARE_LINE,
 } from "../teamTalkShared";
 import { refuseMentions, LIST_COMMENTS_SQL, COLLEAGUES_SQL } from "../teamComments";
-import { LIST_INBOX_SQL, UNREAD_COUNT_SQL, inboxFilterKinds } from "../staffInbox";
+import { LIST_INBOX_SQL, UNREAD_COUNT_SQL, MARK_INBOX_SQL, inboxFilterKinds } from "../staffInbox";
 import { LIST_CHANGE_REQUESTS_SQL, isOrgManager } from "../orgChangeRequests";
 import { NOTE_REVIEWS_SQL, REVIEW_QUEUE_SQL } from "../noteReview";
 import { storedOrgModules, DEFAULT_ORG_MODULES, ORG_MODULES } from "../orgStructureShared";
@@ -96,6 +96,8 @@ describe("inbox: what an item says and where it goes", () => {
   it("the statements read only the actor's own items", () => {
     assert.match(LIST_INBOX_SQL, /i\.recipient_user_id = \$2::uuid/);
     assert.match(UNREAD_COUNT_SQL, /i\.recipient_user_id = \$2::uuid AND i\.read_at IS NULL/);
+    assert.match(MARK_INBOX_SQL, /i\.recipient_user_id = \$2::uuid/);
+    assert.match(MARK_INBOX_SQL, /\$4::boolean OR NOT EXISTS/, "marking unread never collides with a newer unread item");
   });
 });
 
@@ -122,6 +124,9 @@ describe("change requests", () => {
     assert.equal(checkChangeMove("open", "declined", "We track that elsewhere"), null);
     assert.ok(checkChangeMove("done", "open", null));
     assert.equal(checkChangeMove("open", "open", null), null);
+    // Review N4: a no needs words written for it, not an answer left from an earlier yes.
+    assert.equal(checkChangeMove("accepted", "declined", "Yes, next week", false), "Say why, so they know what to do next.");
+    assert.match(MIG, /change_request_needs_reason/);
     assert.match(MIG, /status <> 'declined' OR length\(btrim\(COALESCE\(answer, ''\)\)\) >= 3/);
   });
   it("kinds and statuses match the database CHECKs", () => {
@@ -180,7 +185,7 @@ describe("database messages", () => {
     assert.match(teamTalkErrorLine('new row violates row-level security policy for table "team_comment"'), /caseload/);
   });
   it("no UI line uses an em or en dash or a double hyphen", () => {
-    const lines = [COMMENT_CARE_LINE, CHANGE_REQUEST_CARE_LINE, ...Object.values(INBOX_KIND_LABELS), ...Object.values(CHANGE_REQUEST_KIND_LABELS),
+    const lines = [COMMENT_CARE_LINE, TEAM_THREAD_CARE_LINE, CHANGE_REQUEST_CARE_LINE, ...Object.values(INBOX_KIND_LABELS), ...Object.values(CHANGE_REQUEST_KIND_LABELS),
       ...Object.values(CHANGE_REQUEST_STATUS_LABELS), ...Object.values(CHANGE_REQUEST_ACTION_LABELS), ...Object.values(NOTE_REVIEW_REASONS),
       ...Object.values(NOTE_REVIEW_STATUS_LABELS), ...Array.from(MIG.matchAll(/RAISE EXCEPTION '[a-z_]+: ([^']+)'/g)).map((m) => m[1])];
     for (const l of lines) assert.doesNotMatch(l, /[–—]| -- /, l);
@@ -217,6 +222,15 @@ describe("migration 109, statically", () => {
     }
     assert.doesNotMatch(MIG, /\|\|\s*p_comment|\|\|\s*v_say/);
     for (const word of ["parole", "probation", "offense", "conviction", "felon", "inmate"]) assert.ok(!MIG.toLowerCase().includes(`'${word}`), word);
+  });
+  it("review round 1: the note lock covers every field, the activity list is widened quote-safe, a deny wins, change requests name nobody", () => {
+    const lock = MIG.slice(MIG.indexOf("FUNCTION public.case_note_review_lock"), MIG.indexOf("REVOKE ALL ON FUNCTION public.case_note_review_lock"));
+    for (const col of ["body", "kind", "occurred_at", "drafted_by_assistant", "visible_to_participant"]) assert.match(lock, new RegExp(`NEW\\.${col}`), col);
+    assert.ok(MIG.includes("regexp_matches(v_def, '''((?:[^'']|'''''')*)''', 'g')"));
+    const assigner = MIG.slice(MIG.indexOf("FUNCTION public.smr_task_assigner"), MIG.indexOf("REVOKE ALL ON FUNCTION public.smr_task_assigner"));
+    assert.match(assigner, /\)\)\)\n\s+-- A deny wins for EVERY role[^\n]*\n\s+AND NOT EXISTS/);
+    const after = MIG.slice(MIG.indexOf("FUNCTION public.org_change_request_after"), MIG.indexOf("REVOKE ALL ON FUNCTION public.org_change_reply_after"));
+    assert.doesNotMatch(after, /org_activity_write/, "change-request activity goes through the actor-free writer");
   });
   it("the activity log takes the two new entities, and the code knows them", () => {
     assert.match(MIG, /v_new text\[\] := ARRAY\['comment', 'change_request'\]/);

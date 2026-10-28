@@ -51,6 +51,18 @@ export function reviewStep(input: { status: NoteReviewStatus | null; authorId: s
   return "none";
 }
 
+/**
+ * May this note be corrected now? False while it waits for review (module on)
+ * and once it is approved: the database refuses both (109 case_note_review_lock),
+ * so the person page hides "Correct this note" with this. Pure, for tests.
+ */
+export function noteCanBeCorrected(data: Pick<NoteReviewsData, "enabled" | "reviews"> | null, noteId: string): boolean {
+  const status = data?.reviews.find((r) => r.note_id === noteId)?.status ?? null;
+  if (status === "approved") return false;
+  if (status === "pending" && data?.enabled) return false;
+  return true;
+}
+
 export function NoteReviewBar({ noteId, authorId, data, onChange }: { noteId: string; authorId: string | null; data: NoteReviewsData | null; onChange: () => void }) {
   const [sendingBack, setSendingBack] = useState(false);
   const [comment, setComment] = useState("");
@@ -67,6 +79,8 @@ export function NoteReviewBar({ noteId, authorId, data, onChange }: { noteId: st
         Review: <span className={status === "approved" ? "text-t-white" : status === "sent_back" ? "text-t-amber-bright" : "text-t-phos"}>{NOTE_REVIEW_STATUS_LABELS[status ?? "draft"]}</span>
         {review ? ` · ${day(review.updated_at)}` : ""}
       </p>
+      {status === "approved" && <p className="mt-1 text-t-phos-dim">Approved notes are locked. To change something, write a new note that says what changed.</p>}
+      {status === "pending" && <p className="mt-1 text-t-phos-dim">It cannot be changed while it waits for review.</p>}
       {status === "sent_back" && lastBack?.comment && (
         <p className="mt-1 text-t-phos"><span className="text-t-phos-dim">{lastBack.actor_name || "The reviewer"} asked:</span> {lastBack.comment}</p>
       )}

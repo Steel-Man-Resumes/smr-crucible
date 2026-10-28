@@ -12,7 +12,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { teamTalkForModel } from "../team-talk-safety";
 import { RECORD_WITHHELD } from "../staff-ai-safety";
 import { mentionQuery } from "../../components/org/TeamComments";
-import { reviewStep } from "../../components/org/NoteReview";
+import { reviewStep, noteCanBeCorrected } from "../../components/org/NoteReview";
 
 const read = (p: string) => readFileSync(new URL(`../../${p}`, import.meta.url), "utf8");
 const ROUTES = ["app/api/org/comments/route.ts", "app/api/org/inbox/route.ts", "app/api/org/change-requests/route.ts", "app/api/org/note-review/route.ts"];
@@ -48,6 +48,16 @@ it("comments offer only teammates who can see the person, and talk needs view_co
   assert.match(src, /colleagues\.filter\(\(c\) => c\.reaches\)/);
   assert.match(src, /requireOrgCapability\("org\.client\.view_content"/);
   assert.match(src, /canWrite: !g\.actor\.viaPlatformAdmin && !g\.actor\.viewedBy/, "an admin viewing as staff reads, never writes");
+});
+
+it("tasks: same-origin first, JSON only, the staff-workspace gate (review round 1)", () => {
+  const src = read("app/api/org/tasks/route.ts");
+  assert.match(src, /export async function POST\(request: Request\) \{\n\s+const cross = refuseCrossOrigin\(request\);\n\s+if \(cross\) return cross;/);
+  assert.match(src, /application\\\/json/);
+  assert.match(src, /status: 415/);
+  assert.match(src, /return withCrm\(await requireOrgCapability\("org\.client\.view_content", \{ request \}\)\);/);
+  assert.match(src, /await readJson\(request\)/);
+  assert.doesNotMatch(src, /request\.json\(\)/);
 });
 
 it("tasks: a new owner id is checked and handing on goes through core", () => {
@@ -86,6 +96,13 @@ it("review: the right next step for each viewer", () => {
   assert.equal(reviewStep({ status: "pending", authorId: other, me, reviewer: true }), "decide");
   assert.equal(reviewStep({ status: "pending", authorId: other, me, reviewer: false }), "wait");
   assert.equal(reviewStep({ status: "approved", authorId: me, me, reviewer: true }), "none");
+  const data = (status: "pending" | "sent_back" | "approved" | null, enabled = true) => ({ enabled, reviews: status ? [{ note_id: "n1", status, updated_at: "", events: [] }] : [] });
+  assert.equal(noteCanBeCorrected(data(null), "n1"), true);
+  assert.equal(noteCanBeCorrected(data("sent_back"), "n1"), true);
+  assert.equal(noteCanBeCorrected(data("pending"), "n1"), false, "hidden while pending");
+  assert.equal(noteCanBeCorrected(data("pending", false), "n1"), true, "the module switched off lifts the pending lock");
+  assert.equal(noteCanBeCorrected(data("approved", false), "n1"), false, "approved stays locked");
+  assert.equal(noteCanBeCorrected(null, "n1"), true);
 });
 
 it("the Inbox and Change requests pages exist", () => {
@@ -101,4 +118,10 @@ it("UI copy: no em or en dashes, no double hyphen in text, never a label on a pe
     assert.doesNotMatch(src, /\b(felon|offender|ex-con|inmate)\b/i, `${f}: no labels`);
     assert.doesNotMatch(src, /sendEmail|from "resend"|twilio|\bsms\b|\/api\/(?:email|sms|text)/i, `${f}: in-app only`);
   }
+});
+
+it("a locked or pending note comes back as a plain 400 sentence, never a 500 (review round 1)", () => {
+  const core = read("../../packages/core/src/orgClientView.ts");
+  assert.match(core, /if \(\/note_locked\|note_pending\/\.test\(message\)\) return \{ ok: false, error: teamTalkErrorLine\(message\) \};\n\s+throw e;/);
+  assert.match(read("app/api/org/clients/[id]/route.ts"), /editClientNote[\s\S]*?NextResponse\.json\(\{ error: res\.error \}, \{ status: 400 \}\)/);
 });

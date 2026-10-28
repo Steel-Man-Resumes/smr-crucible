@@ -40,6 +40,8 @@ export function checkCommentBody(input: unknown): { ok: true; body: string } | {
 
 /** Shown under every comment box. Comments are team talk; the record lives in case notes. */
 export const COMMENT_CARE_LINE = "Only your team sees comments, never the person. Keep record details in case notes.";
+/** Shown on the team board, which every teammate reads whatever their caseload (review N3). */
+export const TEAM_THREAD_CARE_LINE = "Everyone on your team reads the team board. Do not name people here; talk about a person on their page.";
 
 /** The plain message when a mention is refused (the database refuses it too). */
 export function mentionRefusedLine(name: string | null | undefined, kind: "out_of_reach" | "not_team"): string {
@@ -196,11 +198,15 @@ export function checkChangeRequestDraft(input: { kind?: unknown; title?: unknown
   return { ok: true, kind, title, body };
 }
 
-/** Can a manager move a request from `from` to `to`, with this answer? */
-export function checkChangeMove(from: ChangeRequestStatus, to: ChangeRequestStatus, answer: string | null | undefined): string | null {
+/**
+ * Can a manager move a request from `from` to `to`, with this answer? A "no"
+ * always needs words written for that no (`fresh`: the answer given now, not
+ * one left from an earlier yes). The database checks the same (109 guard).
+ */
+export function checkChangeMove(from: ChangeRequestStatus, to: ChangeRequestStatus, answer: string | null | undefined, fresh = true): string | null {
   if (from === to) return null;
   if (!CHANGE_REQUEST_TRANSITIONS[from].includes(to)) return "That answer does not follow from where the request is.";
-  if (to === "declined" && (answer ?? "").trim().length < 3) return "Say why, so they know what to do next.";
+  if (to === "declined" && (!fresh || (answer ?? "").trim().length < 3)) return "Say why, so they know what to do next.";
   if ((answer ?? "").length > CHANGE_BODY_MAX) return `Keep the answer under ${CHANGE_BODY_MAX} characters.`;
   return null;
 }
@@ -249,6 +255,7 @@ export function teamTalkErrorLine(message: string | null | undefined): string {
   if (/task_assign_closed/.test(m)) return "A finished or cancelled task stays where it is.";
   if (/task_assign_nobody/.test(m)) return "A task needs someone to own it.";
   if (/change_request_move/.test(m)) return "That answer does not follow from where the request is.";
+  if (/change_request_needs_reason/.test(m)) return "Say why, so they know what to do next.";
   if (/note_locked/.test(m)) return "An approved note is locked.";
   if (/note_pending/.test(m)) return "This note is waiting for review, so it cannot be changed right now.";
   if (/row-level security|not in your reach/.test(m)) return "That person is not on your caseload.";
