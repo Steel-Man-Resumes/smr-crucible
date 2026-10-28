@@ -152,7 +152,7 @@ END $$;
 -- app.user_id) is allowed; every app session must be the owner
 -- (access_code.partner_user_id = app.user_id). S3 enforces the same in the app.
 CREATE OR REPLACE FUNCTION public.org_profile_ai_owner_only() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_new boolean := COALESCE((NEW.modules ->> 'ai_assist')::boolean, true);
@@ -187,7 +187,7 @@ CREATE TRIGGER org_profile_ai_owner_only BEFORE INSERT OR UPDATE OF modules ON o
 -- caller's own org_staff row. Unlike smr_org_staff_session (104) a platform
 -- admin is NOT staff here: team talk is for the team.
 CREATE OR REPLACE FUNCTION public.smr_team_session(p_org uuid) RETURNS boolean
-LANGUAGE sql STABLE SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE sql STABLE SET search_path = pg_catalog, public AS $$
   SELECT p_org IS NOT NULL AND NULLIF(current_setting('app.user_id', true), '') IS NOT NULL AND (
     EXISTS (SELECT 1 FROM public.access_code a
              WHERE a.id = p_org AND a.partner_user_id = NULLIF(current_setting('app.user_id', true), '')::uuid)
@@ -200,7 +200,7 @@ REVOKE ALL ON FUNCTION public.smr_team_session(uuid) FROM PUBLIC;
 -- own org scope (like smr_staff_reach), so it is never an oracle about another
 -- organization; inside the scope the staff list is already readable.
 CREATE OR REPLACE FUNCTION public.smr_team_member(p_org uuid, p_user uuid) RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
   SELECT COALESCE(
     p_org IS NOT NULL AND p_user IS NOT NULL
     AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid
@@ -214,7 +214,7 @@ REVOKE ALL ON FUNCTION public.smr_team_member(uuid, uuid) FROM PUBLIC;
 -- admins by role, or a 'grant' exception; a 'deny' exception always wins
 -- (computeOrgCapabilities). Only inside the caller's own org scope.
 CREATE OR REPLACE FUNCTION public.smr_task_assigner(p_org uuid, p_user uuid) RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
   SELECT COALESCE(
     p_org IS NOT NULL AND p_user IS NOT NULL
     AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid
@@ -233,7 +233,7 @@ REVOKE ALL ON FUNCTION public.smr_task_assigner(uuid, uuid) FROM PUBLIC;
 -- Is supervisor review of case notes switched on for this organization?
 -- Only inside the caller's own org scope.
 CREATE OR REPLACE FUNCTION public.smr_note_review_on(p_org uuid) RETURNS boolean
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
   SELECT COALESCE(
     (SELECT p.modules ->> 'note_review' = 'true' FROM public.org_profile p
       WHERE p.access_code_id = p_org AND p_org = NULLIF(current_setting('app.org_id', true), '')::uuid),
@@ -244,7 +244,7 @@ REVOKE ALL ON FUNCTION public.smr_note_review_on(uuid) FROM PUBLIC;
 -- The owner and the org admins of an organization (who answer change requests
 -- and review notes). Definer-only: it answers for the org being written to.
 CREATE OR REPLACE FUNCTION public.smr_org_managers(p_org uuid) RETURNS SETOF uuid
-LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
   SELECT a.partner_user_id FROM public.access_code a WHERE a.id = p_org AND a.partner_user_id IS NOT NULL
   UNION
   SELECT s.user_id FROM public.org_staff s WHERE s.access_code_id = p_org AND s.role = 'org_admin'
@@ -305,7 +305,7 @@ CREATE POLICY staff_inbox_item_reach ON staff_inbox_item AS RESTRICTIVE FOR ALL
 CREATE OR REPLACE FUNCTION public.smr_inbox_write(
   p_org uuid, p_recipient uuid, p_kind text, p_participant uuid, p_ref_table text, p_ref_id uuid, p_summary text)
 RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
 BEGIN
@@ -323,7 +323,7 @@ REVOKE ALL ON FUNCTION public.smr_inbox_write(uuid, uuid, text, uuid, text, uuid
 
 -- Leaving the staff ends that person's inbox in that organization.
 CREATE OR REPLACE FUNCTION public.staff_inbox_on_staff_removed() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 BEGIN
   DELETE FROM public.staff_inbox_item WHERE access_code_id = OLD.access_code_id AND recipient_user_id = OLD.user_id;
   RETURN NULL;
@@ -368,7 +368,7 @@ CREATE INDEX IF NOT EXISTS team_comment_version_comment ON team_comment_version 
 -- cleaned list (no repeats, not the author). Definer-only.
 CREATE OR REPLACE FUNCTION public.smr_comment_mentions(p_org uuid, p_author uuid, p_participant uuid, p_mentions uuid[], p_check uuid[])
 RETURNS uuid[]
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_out uuid[];
   m uuid;
@@ -393,7 +393,7 @@ REVOKE ALL ON FUNCTION public.smr_comment_mentions(uuid, uuid, uuid, uuid[], uui
 -- earlier wording kept on a correction. SECURITY DEFINER: it reads the
 -- membership tables and writes team_comment_version (no app grant).
 CREATE OR REPLACE FUNCTION public.team_comment_guard() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_org   uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
@@ -460,7 +460,7 @@ CREATE TRIGGER team_comment_guard BEFORE INSERT OR UPDATE ON team_comment
 
 -- AFTER: the activity row (fixed words, never the body) and the inbox items.
 CREATE OR REPLACE FUNCTION public.team_comment_after() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   m uuid;
   v_parent_author uuid;
@@ -547,7 +547,7 @@ CREATE POLICY team_comment_version_select ON team_comment_version FOR SELECT USI
 -- scripts) run as a BYPASSRLS role and are not this guard's business; the app
 -- role is. It calls the scoped definer helpers above, granted to the app.
 CREATE OR REPLACE FUNCTION public.staff_task_assign_guard() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
 BEGIN
@@ -586,7 +586,7 @@ CREATE TRIGGER staff_task_assign_guard BEFORE INSERT OR UPDATE OF owner_user_id 
 
 -- The new owner's inbox item.
 CREATE OR REPLACE FUNCTION public.staff_task_assigned() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 BEGIN
   IF NEW.owner_user_id IS NULL OR NEW.source_kind IS NOT NULL THEN RETURN NULL; END IF;
   IF (TG_OP = 'INSERT' AND NEW.owner_user_id IS DISTINCT FROM NEW.created_by)
@@ -606,7 +606,7 @@ CREATE TRIGGER staff_task_assigned AFTER INSERT OR UPDATE OF owner_user_id ON st
 -- 102's task activity, with a handoff logged as 'assigned' (the new owner as
 -- the staff member it was about). Every other branch is 102's, word for word.
 CREATE OR REPLACE FUNCTION public.org_activity_task() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.source_kind IS NULL AND NEW.owner_user_id IS NOT NULL AND NEW.owner_user_id IS DISTINCT FROM NEW.created_by THEN
@@ -650,7 +650,7 @@ REVOKE ALL ON FUNCTION public.org_activity_task() FROM PUBLIC;
 -- back (transaction-local, as runScoped sets it). Definer-only.
 CREATE OR REPLACE FUNCTION public.smr_activity_without_actor(p_org uuid, p_entity text, p_entity_id text, p_action text, p_summary text)
 RETURNS void
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_prev text := current_setting('app.user_id', true);
 BEGIN
@@ -692,7 +692,7 @@ CREATE TABLE IF NOT EXISTS org_change_reply (
 CREATE INDEX IF NOT EXISTS org_change_reply_request ON org_change_reply (request_id, created_at);
 
 CREATE OR REPLACE FUNCTION public.smr_change_kind_words(p_kind text) RETURNS text
-LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE sql IMMUTABLE SET search_path = pg_catalog, public AS $$
   SELECT CASE p_kind WHEN 'field' THEN 'the fields' WHEN 'layout' THEN 'a screen layout' WHEN 'view' THEN 'a shared view'
                      WHEN 'structure' THEN 'programs, sites or teams' WHEN 'terminology' THEN 'the words we use'
                      WHEN 'policy' THEN 'what staff can change' ELSE 'something else' END
@@ -701,7 +701,7 @@ REVOKE ALL ON FUNCTION public.smr_change_kind_words(text) FROM PUBLIC;
 
 -- BEFORE guard. Definer: reads membership and stamps who answered.
 CREATE OR REPLACE FUNCTION public.org_change_request_guard() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_org   uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
@@ -773,7 +773,7 @@ CREATE TABLE IF NOT EXISTS org_change_request_event (
 CREATE INDEX IF NOT EXISTS org_change_request_event_request ON org_change_request_event (request_id, at);
 
 CREATE OR REPLACE FUNCTION public.org_change_request_after() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   m uuid;
   v_words text;
@@ -808,7 +808,7 @@ CREATE TRIGGER org_change_request_after AFTER INSERT OR UPDATE ON org_change_req
 
 -- Replies: the asker and the managers, on a request in this organization.
 CREATE OR REPLACE FUNCTION public.org_change_reply_guard() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_org   uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
@@ -834,7 +834,7 @@ CREATE TRIGGER org_change_reply_guard BEFORE INSERT ON org_change_reply
   FOR EACH ROW EXECUTE FUNCTION public.org_change_reply_guard();
 
 CREATE OR REPLACE FUNCTION public.org_change_reply_after() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   m uuid;
   r record;
@@ -925,7 +925,7 @@ CREATE INDEX IF NOT EXISTS note_review_event_note ON note_review_event (note_id,
 -- Send a note for review: its author, while the module is on and they reach
 -- the person. Returns 'ok' or a reason word the app turns into a sentence.
 CREATE OR REPLACE FUNCTION public.smr_note_review_submit(p_note uuid) RETURNS text
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_org   uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
@@ -961,7 +961,7 @@ REVOKE ALL ON FUNCTION public.smr_note_review_submit(uuid) FROM PUBLIC;
 -- Decide: the owner or an org admin, never the author, while the note waits.
 -- 'approve' locks it; 'send_back' needs the reviewer's words (3 to 1000).
 CREATE OR REPLACE FUNCTION public.smr_note_review_decide(p_note uuid, p_decision text, p_comment text) RETURNS text
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_org   uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
@@ -1011,7 +1011,7 @@ REVOKE ALL ON FUNCTION public.smr_note_review_decide(uuid, text, text) FROM PUBL
 -- and only when the account is gone). The version trigger (051/102) touches
 -- edited_at only when the body or kind changes, which this lock refuses anyway.
 CREATE OR REPLACE FUNCTION public.case_note_review_lock() RETURNS trigger
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_status text;
 BEGIN
@@ -1105,7 +1105,6 @@ BEGIN
                    AND pg_get_constraintdef(oid) LIKE '%''comment''%' AND pg_get_constraintdef(oid) LIKE '%''change_request''%') THEN
     RAISE EXCEPTION '109: the activity log must accept comment and change_request rows';
   END IF;
-  -- 103 owns org_profile_guard; a re-run of 103 drops this key (see 103's header). Caught here on any 109 run.
   IF position('''note_review''' IN (SELECT prosrc FROM pg_proc WHERE oid = 'public.org_profile_guard()'::regprocedure)) = 0 THEN
     RAISE EXCEPTION '109: org_profile_guard must accept the note_review module';
   END IF;

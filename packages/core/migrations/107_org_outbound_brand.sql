@@ -69,7 +69,7 @@ END $$;
 -- platform_admin, which the app role can already read. The actor is
 -- app.user_id, which only the app's own session code sets.
 CREATE OR REPLACE FUNCTION public.org_profile_branding_guard() RETURNS trigger
-LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_changed boolean;
@@ -97,7 +97,7 @@ CREATE TRIGGER org_profile_branding_guard BEFORE INSERT OR UPDATE ON org_profile
 -- organization never ran setup (setup still shows: it reads
 -- setup_completed_at, not whether a row exists).
 CREATE OR REPLACE FUNCTION public.smr_set_org_branding(p_org uuid, p_branding text) RETURNS text
-LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
   v_before text;
