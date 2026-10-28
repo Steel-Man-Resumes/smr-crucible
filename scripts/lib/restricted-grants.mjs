@@ -155,6 +155,10 @@ export const RESTRICTED_GRANTS = {
   participant_contact: ["SELECT", "INSERT", "UPDATE"],
   referral: ["SELECT", "INSERT", "UPDATE"],
   referral_event: ["SELECT"],
+  // Staff build S3 (108). A person's own view change log: written by them,
+  // never edited but for the one "undone" mark (a column grant), never
+  // deleted by the app.
+  view_change_log: ["SELECT", "INSERT", "UPDATE (undone_at)"],
 };
 
 /**
@@ -204,6 +208,9 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   // 105: the retention task maker and its owner rule run only from definer triggers.
   "smr_make_retention_tasks(uuid)",
   "smr_retention_task_owner(uuid, uuid, uuid)",
+  // 108: trigger functions (the activity writer and the log guard are definer); fired, never called.
+  "org_customization_policy_activity()",
+  "view_change_log_guard()",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */

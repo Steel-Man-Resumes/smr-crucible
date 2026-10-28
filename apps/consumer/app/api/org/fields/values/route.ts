@@ -5,13 +5,19 @@
  *   GET ?entity=enrollment&participant=<id>      that person's enrollments and their values
  *   GET ...&history=1                            also earlier answers (managers only)
  *   PUT { entity, entityId, values: { key: value } }   set or clear (empty clears)
+ *   PUT { entity: "participant", batch: [{ entityId, values }], fromGrid: true }
+ *        many people at once (the People grid: an edit, a paste, a clear).
+ *        ALL OR NOTHING: one bad cell and nothing is written; every bad cell
+ *        comes back in cellErrors ("<person id>:<field key>" -> reason). From
+ *        the grid it also needs the organization's grid_edit switch (108).
  * Reach is checked in core (SQL) and by the database reach policy. Writes
  * need org.note.write: a value is an org record about a person, like a note.
  * Every change lands in the activity log by database trigger.
  */
 import { NextResponse } from "next/server";
 import {
-  canSeeFieldHistory, canWriteFieldValues, getFieldValueHistory, getFieldValues, getOrgStaffDirectory, isCustomFieldEntity, listFieldDefs, listParticipantEnrollments, setFieldValues,
+  canSeeFieldHistory, canWriteFieldValues, getFieldValueHistory, getFieldValues, getMyCustomizationPolicy, getOrgStaffDirectory, isCustomFieldEntity, listFieldDefs,
+  listParticipantEnrollments, setFieldValues, setFieldValuesBatch,
 } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 
@@ -55,6 +61,14 @@ export async function PUT(request: Request) {
   const guard = await requireOrgCapability("org.note.write", { request });
   if (!guard.ok) return guard.response;
   const body = await request.json().catch(() => ({}));
+  if (Array.isArray(body.batch)) {
+    if (body.entity !== "participant") return NextResponse.json({ error: "No such record." }, { status: 400 });
+    const fromGrid = body.fromGrid === true;
+    const allowed = fromGrid ? await getMyCustomizationPolicy(guard.actor) : null;
+    const res = await setFieldValuesBatch(guard.actor, body.batch, { fromGrid, gridAllowed: allowed?.grid_edit ?? true });
+    if (res.ok) return NextResponse.json(res);
+    return NextResponse.json(res, { status: res.error === "You do not have access to that." || /not in the grid/.test(res.error) ? 403 : 400 });
+  }
   if (!isCustomFieldEntity(body.entity) || typeof body.entityId !== "string") return NextResponse.json({ error: "No such record." }, { status: 400 });
   const res = await setFieldValues(guard.actor, body.entity, body.entityId, body.values ?? {});
   if (res.ok) return NextResponse.json(res);

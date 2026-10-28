@@ -11,13 +11,16 @@
  *        { action: "update", id, name?, definition?, roleDefault? }
  *        { action: "delete", id }
  *        { action: "reorder", surface, ids, shared? }
- * Anyone on staff keeps personal views; shared views need org.settings.manage
- * (core and the database policy both check). A view never widens reach.
+ * Anyone on staff keeps personal views (when the organization's policy, 108,
+ * lets their role); shared views need org.settings.manage: the owner and org
+ * admins (core and the database policy both check). A view never widens reach.
+ * Personal views go through the typed view action layer, so each save,
+ * change and removal is logged for the person and can be undone.
  */
 import { NextResponse } from "next/server";
 import {
-  canManageSharedViews, createSavedView, deleteSavedView, getMyRoleLayout, getStaffPrefs, isViewSurface, listSavedViews, migrateLegacySavedViews,
-  reorderSavedViews, updateSavedView,
+  canManageSharedViews, canWriteFieldValues, createSavedView, deleteMyView, deleteSavedView, getMyRoleLayout, getStaffPrefs, isViewSurface, listSavedViews,
+  migrateLegacySavedViews, reorderSavedViews, saveMyView, updateMyView, updateSavedView,
 } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
 
@@ -36,6 +39,17 @@ export async function GET(request: Request) {
     roleColumns: layout.caseload?.columns ?? null,
     personalHidden: prefs.effective.caseloadHidden,
     defaultSort: prefs.effective.caseloadSort,
+    // Staff build S3: the person's own choices (policy already applied) and
+    // what their role may change for themselves.
+    personalColumns: prefs.effective.caseloadColumns,
+    defaultView: prefs.effective.defaultView,
+    density: prefs.effective.density,
+    mode: prefs.effective.peopleMode,
+    layouts: prefs.effective.viewLayouts,
+    allowed: prefs.allowed,
+    // Fill in fields from the grid: the same people who may fill them in on a
+    // person's page (org.note.write), when the organization allows it here.
+    canEditValues: canWriteFieldValues(actor) && prefs.allowed.grid_edit,
   });
 }
 
@@ -52,15 +66,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ moved });
     }
     case "create": {
+      if (body.shared !== true) {
+        // Personal: logged, undoable (view action layer).
+        const mine = await saveMyView(guard.actor, { name: body.name, definition: body.definition });
+        return mine.ok ? NextResponse.json({ ok: true, view: mine.view, changeId: mine.changeId }) : NextResponse.json({ error: mine.error }, { status: mine.reason === "policy" ? 403 : 400 });
+      }
       const res = await createSavedView(guard.actor, body);
       return res.ok ? NextResponse.json(res) : NextResponse.json({ error: res.error }, { status: 400 });
     }
     case "update": {
+      if (await isMine(guard.actor, id)) {
+        const mine = await updateMyView(guard.actor, { id, name: body.name, definition: body.definition });
+        if (mine.ok) return NextResponse.json({ ok: true, view: mine.view, changeId: mine.changeId });
+        if (mine.reason !== "unchanged") return NextResponse.json({ error: mine.error }, { status: mine.reason === "policy" ? 403 : 400 });
+      }
       const res = await updateSavedView(guard.actor, id, body);
       return res.ok ? NextResponse.json(res) : NextResponse.json({ error: res.error }, { status: 400 });
     }
-    case "delete":
+    case "delete": {
+      if (await isMine(guard.actor, id)) {
+        const mine = await deleteMyView(guard.actor, { id });
+        return mine.ok ? NextResponse.json({ ok: true, changeId: mine.changeId }) : NextResponse.json({ error: mine.error }, { status: 404 });
+      }
       return (await deleteSavedView(guard.actor, id)) ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "No such view, or it is not yours to remove." }, { status: 404 });
+    }
     case "reorder": {
       const ok = isViewSurface(body.surface) && Array.isArray(body.ids) && (await reorderSavedViews(guard.actor, body.surface, body.ids, body.shared === true));
       return ok ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "The new order did not save. Try again." }, { status: 400 });
@@ -68,4 +97,10 @@ export async function POST(request: Request) {
     default:
       return NextResponse.json({ error: "Unknown action." }, { status: 400 });
   }
+}
+
+/** One of the caller's own personal views (listed under the policy). */
+async function isMine(actor: Parameters<typeof listSavedViews>[0], id: string): Promise<boolean> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return false;
+  return (await listSavedViews(actor, "caseload")).some((v) => v.id === id.toLowerCase() && v.ownerUserId === actor.userId);
 }

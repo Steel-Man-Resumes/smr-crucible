@@ -279,6 +279,17 @@ function storedTerms(terms: OrgTerms): Record<string, string> {
   return normalizeTerms(terms).terms as Record<string, string>;
 }
 
+/**
+ * t.ROY for staff (modules.ai_assist) spends the organization's AI money, and
+ * AI cost is the owner's (org.costs.view). So since org admins also manage
+ * settings (2026-10-27), only the OWNER turns it on or off; an admin may
+ * rename the organization, change words and the other modules.
+ */
+export const AI_SWITCH_OWNER_ONLY = "Only the organization's owner turns t.ROY for staff on or off, because AI cost is the owner's.";
+export function aiSwitchRefused(actor: Pick<OrgActor, "role">, current: { modules: { ai_assist: boolean } }, next: { modules: { ai_assist: boolean } }): boolean {
+  return actor.role !== "owner" && current.modules.ai_assist !== next.modules.ai_assist;
+}
+
 /** Change type, name, time zone, words or modules (org.settings.manage). */
 export async function updateOrgProfile(actor: OrgActor, patch: ProfilePatch): Promise<StructureResult<{ profile: OrgProfile }>> {
   if (!canManageStructure(actor)) return REFUSED;
@@ -286,6 +297,7 @@ export async function updateOrgProfile(actor: OrgActor, patch: ProfilePatch): Pr
   const checked = applyProfilePatch(current, patch);
   if (!checked.ok) return bad(checked.error);
   const n = checked.next;
+  if (aiSwitchRefused(actor, current, n)) return bad(AI_SWITCH_OWNER_ONLY);
   try {
     const [rows] = await runScoped<[{ access_code_id: string }[]]>(scopeOf(actor), (sql) => [
       run(sql)(ORG_STRUCTURE_SQL.upsertProfile, [actor.orgId, n.orgType, n.displayName, n.timezone,
@@ -312,6 +324,7 @@ export async function completeOrgSetup(actor: OrgActor, input: SetupInput):
   const checked = applyProfilePatch(current, input);
   if (!checked.ok) return bad(checked.error);
   const n = checked.next;
+  if (aiSwitchRefused(actor, current, n)) return bad(AI_SWITCH_OWNER_ONLY);
 
   let units: UnitDraft[] = [];
   if (input.units !== undefined && input.units !== null) {

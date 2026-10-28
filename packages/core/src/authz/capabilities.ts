@@ -120,6 +120,13 @@ const ROLE_BUNDLES: Record<OrgStaffRole, readonly OrgCapability[]> = {
     "org.staff.view",
     "org.staff.invite",
     "org.staff.manage",
+    // Org admins run the organization's set-up with the owner (Troy,
+    // 2026-10-27): structure, fields, layouts, shared views, staff defaults
+    // and what staff may change for themselves. The database already agreed:
+    // smr_org_manager (104) and the structure writers (103) admit an
+    // org_admin. Still owner only, on purpose: the logo (099 checks
+    // access_code.partner_user_id), seats offers and AI cost.
+    "org.settings.manage",
     "org.seats.view",
     "org.export",
     "org.audit.view",
