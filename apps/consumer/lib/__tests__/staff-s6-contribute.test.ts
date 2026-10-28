@@ -38,11 +38,8 @@ function stand(over: Record<string, unknown> = {}) {
     claimListingNudge: async () => { calls.push("claim"); return over.claim ?? true; },
     staffUnlocks: async () => { calls.push("unlocks"); return over.unlocks ?? ["directory_scout"]; },
     reachableParticipantNames: async () => [{ id: "p1", name: "Alma Reyes" }],
-    // Stand-in for 111 staff_text_participant_names: "Alma Reyes" is reached; "Dana" is someone the staff member cannot see.
-    participantNamesIn: async (_a: unknown, text: string) => ({
-      reached: namesMentioned(text, [{ id: "p1", name: "Alma Reyes" }]),
-      other: namesMentioned(text, [{ id: "p2", name: "Dana Cole" }]).length > 0,
-    }),
+    // Stand-in for 111 staff_text_participant_names: only people the writer reaches ("Alma Reyes").
+    participantNamesIn: async (_a: unknown, text: string) => { calls.push(`names:${text}`); return { reached: namesMentioned(text, [{ id: "p1", name: "Alma Reyes" }]) }; },
     namesMentioned,
     submitContribution: async () => { calls.push("SUBMIT"); return { ok: true, id: "x" }; },
   };
@@ -103,6 +100,10 @@ function assertDeclared(tool: (typeof CONTRIBUTE_TOOL_NAMES)[number], result: Re
 test("the module has S1's shape: id, streamed shapes, an activity line for each", () => {
   assert.equal(contributeTools.id, "contribute");
   assert.deepEqual(Object.keys(contributeTools.streamed ?? {}).sort(), [...CONTRIBUTE_TOOL_NAMES].sort());
+  const d = CONTRIBUTE_STREAMED.draft_directory_contribution;
+  for (const k of ["flow", "targetKind", "listingId", "interactionMethod", "draftBodyField"]) assert.equal(d[k], "server", `${k}: validated, so server`);
+  for (const k of ["fields", "interactionOn"]) assert.equal(d[k], "staff", `${k}: typed by the staff member`);
+  assert.ok(!("card" in d), "no mixed card key");
   for (const [tool, shape] of Object.entries(CONTRIBUTE_STREAMED)) {
     for (const [k, src] of Object.entries(shape)) assert.ok(src !== "draft" || k === "draftBody", `${tool}.${k}: only draftBody may be draft`);
     assert.equal(shape.status, "server"); assert.equal(shape.error, "server");
@@ -148,15 +149,16 @@ test("the draft tool: model words only in draftBody, fields only what the staff 
   const r = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "resource", listingId: LISTING, name: "Lakeshore Pantry", city: "Grand Haven", said: "Still open Tuesdays from 9 to 1", interactionOn: today, interactionMethod: "phone_call" });
   assert.equal(r.status, "draft", JSON.stringify(r));
   assert.equal(r.draftBody, "Still open Tuesdays from 9 to 1", "the model's wording is the draft body, which the route claim-checks");
-  const card = r.card as { fields: Record<string, unknown>; draftBodyField: string; listingId: string };
+  const card = r as unknown as { fields: Record<string, unknown>; draftBodyField: string; listingId: string };
   assert.equal(card.fields.name, "Lakeshore Pantry", "typed by the staff member: kept");
   assert.equal(card.fields.city, undefined, "not typed by the staff member: left out");
   assert.deepEqual(r.leftOut, ["city"]);
   assertDeclared("draft_directory_contribution", r);
   assert.equal((card as unknown as { interactionMethod: string }).interactionMethod, "phone_call", "they said they called");
+  assert.ok(!s.calls.some((c) => c.startsWith("names:") && c.includes("Lakeshore")), "the place's own name is never name-checked");
   // A date or method the staff member did not say stays blank; they pick on the card (review round 1).
   const unsaid = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "resource", listingId: LISTING, said: "Open", interactionOn: yesterday, interactionMethod: "site_visit" });
-  const uc = unsaid.card as { interactionOn: unknown; interactionMethod: unknown };
+  const uc = unsaid as { interactionOn: unknown; interactionMethod: unknown };
   assert.equal(uc.interactionOn, null);
   assert.equal(uc.interactionMethod, null);
   assert.deepEqual(unsaid.leftOut, ["date", "how"]);
@@ -180,9 +182,11 @@ test("red team: the draft tool refuses record words, a caseload name, and never 
   assert.equal(selector.status, "refused", "a first name from the staff member's list counts too");
   const lower = await run(t, "draft_directory_contribution", { flow: "correction", targetKind: "employer", listingId: LISTING, change: "alma reyes says they moved" });
   assert.equal(lower.status, "refused", "lower case counts");
-  const unseen = await run(t, "draft_directory_contribution", { flow: "correction", targetKind: "employer", listingId: LISTING, change: "the Cole family said they moved" });
-  assert.equal(unseen.status, "refused", "a participant the staff member cannot see counts too");
-  for (const x of [rec, named, selector, lower, unseen]) assertDeclared("draft_directory_contribution", x);
+  const place = await run(t, "draft_directory_contribution", { flow: "new_place", targetKind: "employer", name: "Reyes Bakery", state: "MI" });
+  assert.notEqual(place.status, "refused", "a place's own name is never treated as a person's (review round 2)");
+  const ordinary = await run(t, "draft_directory_contribution", { flow: "correction", targetKind: "employer", listingId: LISTING, change: "they are open late, it has been a long week" });
+  assert.notEqual(ordinary.status, "refused", "ordinary words are not names");
+  for (const x of [rec, named, selector, lower, place, ordinary]) assertDeclared("draft_directory_contribution", x);
   const ks = await run(t, "draft_directory_contribution", { flow: "knows_someone", targetKind: "employer", listingId: LISTING });
   assert.equal(ks.status, "draft", JSON.stringify(ks));
   assert.ok(!JSON.stringify(ks).includes("typed on the card"), "no private note placeholder is streamed");

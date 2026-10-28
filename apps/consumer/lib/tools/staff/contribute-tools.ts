@@ -103,8 +103,10 @@ export const CONTRIBUTE_STREAMED: Readonly<Record<(typeof CONTRIBUTE_TOOL_NAMES)
   listing_check_nudge: { status: "server", error: "server", line: "server", buttons: "server", listing: "server" },
   draft_directory_contribution: {
     status: "server", error: "server", missing: "server", title: "server", note: "server", leftOut: "server",
-    // flow/kind/method are validated enums, the listing id is shape-checked, every other card value was typed by the staff member.
-    card: "staff",
+    // Model-chosen but validated (review round 2): enums from our own lists and a UUID-shaped id.
+    flow: "server", targetKind: "server", listingId: "server", interactionMethod: "server", draftBodyField: "server",
+    // Only values the staff member typed (checked against their words).
+    fields: "staff", interactionOn: "staff",
     draftBody: "draft",
   },
 };
@@ -177,11 +179,13 @@ export const contributeTools: ContributeToolModule = {
           if (words.some((w) => hasStaffRecordWords(w))) {
             return { status: "refused", error: "The words mention a record, a court matter or supervision. Ask the staff member to say it without those details; it is about the place." };
           }
-          // Every participant of the organization (111 staff_text_participant_names: any case,
-          // first, last or full name), plus the first names the route passed for this staff member.
-          const named = await core.participantNamesIn(actor, words.join(" ")).catch(() => ({ reached: ["?"], other: true }));
+          // Names (review round 2): only what they SAID or want CHANGED is checked, never the
+          // place's own name or city, and only against people this staff member reaches
+          // (111 staff_text_participant_names) plus the first names the route passed.
+          const prose = [a.change, a.said].filter((x): x is string => !!x);
+          const named = prose.length ? await core.participantNamesIn(actor, prose.join(" ")).catch(() => ({ reached: ["?"] })) : { reached: [] as string[] };
           const selectors = [...ctx.selectors].map(([id, first]) => ({ id, name: first }));
-          if (named.other || named.reached.length > 0 || words.some((w) => namesMentioned(w, selectors).length > 0)) {
+          if (named.reached.length > 0 || prose.some((w) => namesMentioned(w, selectors).length > 0)) {
             return { status: "refused", error: "The words name a person on their caseload. The directory is about the place, never a participant. Ask them to leave the name out." };
           }
 
@@ -215,16 +219,16 @@ export const contributeTools: ContributeToolModule = {
             interactionOn, interactionMethod,
             privateNote: a.flow === "knows_someone" ? "typed on the card" : null,
           }, today);
-          const card = {
-            flow: a.flow, targetKind: a.targetKind, listingId, fields, interactionOn, interactionMethod,
-            // Where draftBody goes on the form: "said" for a call, "change" for a correction.
-            draftBodyField: a.flow === "called_today" ? "said" : a.flow === "correction" ? "change" : null,
-          };
           return {
             status: checked.ok ? "draft" : "needs_more",
             ...(checked.ok ? {} : { missing: checked.error }),
             title: FLOW_LABELS[a.flow].title,
-            card,
+            // Validated enums and a shape-checked id: server.
+            flow: a.flow, targetKind: a.targetKind, listingId, interactionMethod,
+            // Where draftBody goes on the form: "said" for a call, "change" for a correction.
+            draftBodyField: a.flow === "called_today" ? "said" : a.flow === "correction" ? "change" : null,
+            // Words and a date the staff member typed: staff.
+            fields, interactionOn,
             draftBody,
             leftOut,
             note: a.flow === "knows_someone"

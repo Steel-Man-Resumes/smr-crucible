@@ -165,16 +165,20 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
   assert.match(await err(send(s1, s2, { kind: "listing", work: id(777) })), /not in your organization/, "a listing link that is not a listing");
   assert.match(await err(send(s1, s2, { kind: "other", work: id(778) })), /not linked/);
 
-  // ---- names: every participant of the org, any case, first, last or full ----
-  const names = (who: string, text: string) => as(A(who), `SELECT reached, other FROM public.staff_text_participant_names($1)`, [text]);
+  // ---- names (review round 2): only people the writer reaches; full name any case,
+  //      or one capitalized 3+ letter name that is not an ordinary word ----
+  const names = async (who: string, text: string) => ((await as(A(who), `SELECT reached FROM public.staff_text_participant_names($1)`, [text]))[0].reached as string[]);
   await q(`UPDATE users SET name = 'Ana Cole' WHERE id = $1`, [p2]);
-  const r1 = (await names(s1, "great catch with alma06 reyes"))[0];
-  assert.deepEqual([r1.reached, r1.other], [[p1], false], "lower case, full name, reached");
-  assert.deepEqual((await names(s1, "helped Ana"))[0].reached, [p2], "a short first name");
-  assert.deepEqual((await names(s1, "the cole file"))[0].reached, [p2], "a last name");
-  const r2 = (await names(s3, "helped Ana"))[0];
-  assert.deepEqual([r2.reached, r2.other], [[], true], "someone the writer cannot see: only a yes, never who");
-  assert.deepEqual((await names(s1, "Great catch on the deadline"))[0].other, false);
+  assert.deepEqual(await names(s1, "great catch with alma06 reyes"), [p1], "full name, lower case");
+  assert.deepEqual(await names(s1, "helped Ana"), [p2], "a capitalized 3-letter first name");
+  assert.deepEqual(await names(s1, "the Cole file"), [p2], "a capitalized last name");
+  assert.deepEqual(await names(s1, "the cole file"), [], "one name in lower case is an ordinary word");
+  await q(`UPDATE users SET name = 'Will Young' WHERE id = $1`, [p2]);
+  assert.deepEqual(await names(s1, "It Will be a Long day, Young team"), [], "ordinary words never count alone");
+  assert.deepEqual(await names(s1, "thanks will young"), [p2], "a full name always does");
+  await q(`UPDATE users SET name = 'Ana Cole' WHERE id = $1`, [p2]);
+  assert.deepEqual(await names(s3, "helped Ana"), [], "someone the writer cannot reach is never checked or reported");
+  assert.deepEqual(Object.keys((await as(A(s3), `SELECT * FROM public.staff_text_participant_names('x')`))[0]), ["reached"], "no yes/no about anyone else");
   assert.match(await err(as({ orgId: org, userId: p1 }, `SELECT * FROM public.staff_text_participant_names('x')`)), /only staff/, "not for a participant");
 
   // ---- milestones from facts ------------------------------------------------
@@ -276,6 +280,11 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
     const rel = await one<{ avenue: string; partner_org_id: string; provenance: string }>(`SELECT avenue, partner_org_id, provenance FROM employer_relationship WHERE note = $1`, [`Staff contribution ${callId}`]);
     assert.equal(rel.provenance, "partner_staff");
     assert.equal((await one<{ n: number }>(`SELECT count(*)::int AS n FROM employer_relationship WHERE provenance NOT IN ('smr', 'partner_staff')`)).n, 0);
+    assert.match(await err(q(`UPDATE employer_relationship SET provenance = 'smr' WHERE note = $1`, [`Staff contribution ${callId}`])), /provenance is fixed/, "provenance never changes after insert, even for the owner");
+    const pv = await one<{ source_label: string; program_id: string }>(`SELECT source_label, program_id FROM directory_contact_provenance_v WHERE listing_kind = 'employer' AND relationship_id = (SELECT id FROM employer_relationship WHERE note = $1)`, [`Staff contribution ${callId}`]);
+    assert.equal(pv.source_label, "partner staff call", "the owner's view says whose call it was");
+    assert.equal(pv.program_id, org);
+    assert.match(await err(as(A(platform), `SELECT * FROM directory_contact_provenance_v`)), /permission denied/, "owner-only: the app role holds nothing on it");
     assert.equal(rel.avenue, "partner_org");
     assert.equal(rel.partner_org_id, org);
     assert.match(await err(as(A(platform), `SELECT public.decide_directory_contribution($1, 'not_used', NULL, NULL)`, [callId])), /not after the call was recorded/);
@@ -326,6 +335,8 @@ test("111 and 112: rewards and directory contributions as database facts", { ski
     const ev = await one<{ kind: string; method: string; recorded_by: string; check_id: string; provenance: string }>(`SELECT kind, method, recorded_by, check_id, provenance FROM resource_relationship_event WHERE note = $1`, [`Staff contribution ${visit.id}`]);
     assert.equal(ev.provenance, "partner_staff");
     assert.equal((await one<{ p: string }>(`SELECT provenance AS p FROM resource_relationship WHERE note = $1`, [`Staff contribution ${visit.id}`])).p, "partner_staff");
+    assert.equal((await one<{ l: string }>(`SELECT source_label AS l FROM directory_contact_provenance_v WHERE listing_kind = 'resource' AND service_id = $1`, [svc])).l, "partner staff call");
+    assert.match(await err(q(`UPDATE resource_relationship_event SET provenance = 'smr' WHERE note = $1`, [`Staff contribution ${visit.id}`])), /provenance is fixed|insert-only/, "an event never changes");
     assert.deepEqual([ev.kind, ev.method, ev.recorded_by, ev.check_id], ["confirmed", "in_person", `org:${org}`, check], "a visit is in person; the program is the source");
     assert.match(await err(as(A(platform), `SELECT public.apply_contribution_call($1, $2, NULL)`, [visit.id, check])), /not yet recorded/, "recorded once");
   }

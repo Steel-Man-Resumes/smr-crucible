@@ -28,15 +28,16 @@ export interface ContributeInitial {
  * values. draftBody is the claim-checked wording; it goes in "said" or
  * "change". The staff member still checks everything and presses Send.
  */
-export function initialFromDraft(card: {
+export function initialFromDraft(result: {
   flow: ContributionFlow; targetKind: ContributionKind; listingId: string | null;
   fields: { name?: string; city?: string; state?: string; website?: string; phone?: string };
   interactionOn: string | null; interactionMethod: ContactMethod | null; draftBodyField: "said" | "change" | null;
-}, draftBody: string | null): ContributeInitial {
+  draftBody: string | null;
+}): ContributeInitial {
   return {
-    flow: card.flow, targetKind: card.targetKind, targetId: card.listingId, ...card.fields,
-    interactionOn: card.interactionOn, interactionMethod: card.interactionMethod,
-    ...(card.draftBodyField && draftBody ? { [card.draftBodyField]: draftBody } : {}),
+    flow: result.flow, targetKind: result.targetKind, targetId: result.listingId, ...result.fields,
+    interactionOn: result.interactionOn, interactionMethod: result.interactionMethod,
+    ...(result.draftBodyField && result.draftBody ? { [result.draftBodyField]: result.draftBody } : {}),
   };
 }
 

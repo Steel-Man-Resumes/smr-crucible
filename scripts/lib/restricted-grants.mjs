@@ -167,6 +167,9 @@ export const RESTRICTED_GRANTS = {
   // Directory contributions (112, lane S6): the data owner's queue. Written
   // only through the intake and decision functions; read by the owner (RLS).
   directory_contribution: ["SELECT"],
+  // 112: every documented contact with its provenance (partner staff call or
+  // Steel Man), for the data owner's Tier 2 / R3 decisions. Owner-only.
+  directory_contact_provenance_v: [],
   staff_listing_nudge: ["SELECT", "INSERT", "UPDATE (shown_at)"],
 };
 
@@ -257,7 +260,7 @@ export const DIRECTORY_OBJECTS = [
   "resource_corroboration", "resource_chain_step_corroboration", "resource_relationship", "resource_relationship_event", "resource_corroboration_void", "resource_relationship_event_void", "resource_service_tier_v", "resource_chain_tier_v", "resource_directory_publisher",
   "resource_app_v", "directory_publication_alias", "employer_publication_v", "resource_publication_v", "resource_chain_publication_v",
   "resource_band_publication_v", "resource_chain_band_publication_v", "employer_band_publication_v",
-  "directory_contribution",
+  "directory_contribution", "directory_contact_provenance_v",
 ];
 
 /**

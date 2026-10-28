@@ -58,7 +58,7 @@ export async function submitContribution(actor: OrgActor, raw: unknown, today: s
   const words = [norm.value.details.said, norm.value.details.change].filter(Boolean).join(" ");
   if (words) {
     const named = await participantNamesIn(actor, words);
-    if (named.other || named.reached.length > 0) return { ok: false, reason: "Leave out anyone on your organization's list. This is about the place." };
+    if (named.reached.length > 0) return { ok: false, reason: "Leave out anyone on your organization's list. This is about the place." };
   }
   try {
     const rows = await one<{ r: { id?: string; earlier?: boolean } | null }>(actor, `SELECT public.submit_directory_contribution($1::jsonb) AS r`, [JSON.stringify(intakePayload(norm.value))]);

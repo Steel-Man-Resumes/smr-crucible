@@ -68,7 +68,8 @@
 --          public.decide_directory_contribution(uuid, text, text, text),
 --          public.apply_contribution_call(uuid, uuid, uuid), public.directory_contribution_owner(),
 --          public.staff_listing_nudge_guard();
---        (the provenance columns may stay: every existing row reads 'smr'.)
+--        DROP VIEW IF EXISTS directory_contact_provenance_v;
+--        (the provenance columns and their fixed-value triggers may stay: every existing row reads 'smr'.)
 --        DELETE FROM _migrations WHERE filename = '112_directory_contributions.sql';
 --      Rows already written to employer_relationship_confirmation or
 --      resource_relationship_event stay (they are dated facts; void a wrong
@@ -163,6 +164,62 @@ BEGIN
       END IF;
     END IF;
   END LOOP;
+END $$;
+
+-- A row's provenance is fixed once written (review round 2): nobody turns a
+-- program's call into Steel Man's own, or back.
+CREATE OR REPLACE FUNCTION public.directory_provenance_fixed() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public, pg_temp AS $$
+BEGIN
+  IF NEW.provenance IS DISTINCT FROM OLD.provenance THEN
+    RAISE EXCEPTION 'provenance is fixed once written' USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.directory_provenance_fixed() FROM PUBLIC;
+DO $$
+DECLARE t text;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['employer_relationship', 'employer_relationship_confirmation', 'resource_relationship', 'resource_relationship_event'] LOOP
+    IF to_regclass('public.' || t) IS NOT NULL THEN
+      EXECUTE format('DROP TRIGGER IF EXISTS %I ON %I', t || '_provenance_fixed', t);
+      EXECUTE format('CREATE TRIGGER %I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION public.directory_provenance_fixed()', t || '_provenance_fixed', t);
+    END IF;
+  END LOOP;
+END $$;
+
+-- Where the data owner decides Tier 2 and R3: every documented contact, with
+-- who made it. Owner-only (the app role holds nothing; read it with the owner
+-- credential or neon-run, as the other tier views). Public views are
+-- unchanged: Troy rules on public treatment.
+DO $$
+BEGIN
+  IF to_regclass('public.employer_relationship_confirmation') IS NOT NULL AND to_regclass('public.resource_relationship_event') IS NOT NULL THEN
+    EXECUTE $v$
+      CREATE OR REPLACE VIEW directory_contact_provenance_v WITH (security_barrier = true) AS
+      SELECT 'employer'::text AS listing_kind, r.org_id AS listing_org_id, r.place_id, NULL::uuid AS service_id,
+             r.id AS relationship_id, c.id AS contact_row_id, c.confirmed_on AS occurred_on, c.method,
+             c.provenance, CASE c.provenance WHEN 'partner_staff' THEN 'partner staff call' ELSE 'Steel Man' END AS source_label,
+             r.partner_org_id AS program_id, a.partner_name AS program_name
+        FROM public.employer_relationship r
+        JOIN public.employer_relationship_confirmation c ON c.relationship_id = r.id
+        LEFT JOIN public.access_code a ON a.id = r.partner_org_id
+      UNION ALL
+      SELECT 'resource'::text, rr.org_id, NULL::uuid, e.service_id, rr.id, e.id, e.occurred_on, e.method,
+             e.provenance, CASE e.provenance WHEN 'partner_staff' THEN 'partner staff call' ELSE 'Steel Man' END,
+             CASE WHEN e.recorded_by ~ '^org:[0-9a-f-]{36}$' THEN substr(e.recorded_by, 5)::uuid END,
+             (SELECT a2.partner_name FROM public.access_code a2 WHERE e.recorded_by = 'org:' || a2.id::text)
+        FROM public.resource_relationship rr
+        JOIN public.resource_relationship_event e ON e.relationship_id = rr.id
+       WHERE e.kind IN ('confirmed', 'working')
+         AND NOT EXISTS (SELECT 1 FROM public.resource_relationship_event_void v WHERE v.event_id = e.id)
+    $v$;
+    REVOKE ALL ON directory_contact_provenance_v FROM PUBLIC;
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
+      REVOKE ALL ON directory_contact_provenance_v FROM smr_app;
+    END IF;
+  END IF;
 END $$;
 
 -- --------------------------------------------------------------- helpers --

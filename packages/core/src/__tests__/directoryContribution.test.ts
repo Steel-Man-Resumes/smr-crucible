@@ -75,7 +75,9 @@ test("the app's rules and weights are the 112 migration's", () => {
   assert.match(MIG, /outcome = 'correction' AND flow IN \('correction', 'called_today'\)/);
   assert.match(MIG, /recheck_on = COALESCE\(c\.interaction_on, current_date\) \+ 365/, "a yearly re-check, the 211 standard");
   // No publication view or contract is touched: credit is recorded, not shown (decision 5).
-  assert.ok(!/CREATE (OR REPLACE )?VIEW/i.test(MIG));
+  const views = [...MIG.matchAll(/CREATE (?:OR REPLACE )?VIEW (\w+)/gi)].map((m) => m[1]);
+  assert.deepEqual(views, ["directory_contact_provenance_v"], "the only view is the owner-only provenance view (review round 2)");
+  assert.match(MIG, /REVOKE ALL ON directory_contact_provenance_v FROM smr_app/);
   assert.ok(!/employer_publication_rows|resource_publication_v/.test(MIG));
 });
 

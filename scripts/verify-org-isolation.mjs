@@ -832,13 +832,14 @@ async function staffRewardsChecks() {
 
   // Names: the org-wide detector answers only inside the caller's own organization.
   await sql`UPDATE users SET name = ${"Zelda" + uniq + " Quill"} WHERE id = ${pat}`;
-  const seen = await core.participantNamesIn(aCm, `thanks for helping zelda${uniq.toLowerCase()}`);
-  check("the name check finds a participant the writer reaches, any case", seen.reached.includes(pat), JSON.stringify(seen));
-  const hidden = await core.participantNamesIn(aVol, `thanks for helping zelda${uniq.toLowerCase()}`);
-  check("for someone the writer cannot see it says only yes, never who", hidden.other === true && hidden.reached.length === 0, JSON.stringify(hidden));
-  const outside = await core.participantNamesIn(aSpyStaff, `thanks for helping zelda${uniq.toLowerCase()}`);
-  check("another organization's staff learn nothing about this one's participants", outside.other === false && outside.reached.length === 0, JSON.stringify(outside));
-  const named = await core.giveKudos(aVol, { toUserId: cm2, body: `Thanks for helping Zelda${uniq}` });
+  const full = `thanks for helping zelda${uniq.toLowerCase()} quill`;
+  const seen = await core.participantNamesIn(aCm, full);
+  check("the name check finds a participant the writer reaches, by full name in any case", seen.reached.includes(pat), JSON.stringify(seen));
+  const hidden = await core.participantNamesIn(aVol, full);
+  check("someone the writer cannot reach is never checked or reported (no enrollment oracle)", hidden.reached.length === 0 && !("other" in hidden), JSON.stringify(hidden));
+  const outside = await core.participantNamesIn(aSpyStaff, full);
+  check("another organization's staff learn nothing about this one's participants", outside.reached.length === 0, JSON.stringify(outside));
+  const named = await core.giveKudos(aCm, { toUserId: cm2, body: `Thanks for helping Zelda${uniq} Quill` });
   check("a good catch naming a participant without linked work is refused", !named.ok, JSON.stringify(named));
   const oracle = await attempt(() => scoped(org.id, cm, app`SELECT public.staff_rewards_member(${org2.id}::uuid, ${spyStaff}::uuid)`));
   check("the app cannot ask who is staff in another organization", !oracle.ok && /permission denied/i.test(oracle.e), JSON.stringify(oracle));

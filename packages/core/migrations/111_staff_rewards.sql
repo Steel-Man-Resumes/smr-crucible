@@ -403,33 +403,46 @@ END;
 $$;
 REVOKE ALL ON FUNCTION public.staff_milestone_revoke(uuid, uuid, uuid) FROM PUBLIC;
 
--- Which participants does a piece of staff-written text name? Case-insensitive
--- whole words: any full, first or last name (two letters or more) of ANY
--- participant of the organization in scope, not only the ones the writer
--- reaches. Returns the ids the caller reaches, and only a yes/no for anyone
--- else (so it never tells a staff member who else is in the program).
--- Used before a good catch, a recognition note or a directory draft is saved.
-CREATE OR REPLACE FUNCTION public.staff_text_participant_names(p_text text) RETURNS TABLE (reached uuid[], other boolean)
+-- Which participants the WRITER reaches does a piece of staff-written text
+-- name? (review round 2). Only people the caller reaches are checked, so the
+-- answer never says anything about anyone else in the program. A participant
+-- counts when the text has:
+--   * their FULL name (all name words, in order), in any case; or
+--   * one of their first or last names alone, when that name is 3+ letters,
+--     is not an ordinary word (the stopword list below), and is written with
+--     a capital letter in the text ("helped Alma", not "a long day").
+-- Used before a good catch, a recognition note or a directory update is saved.
+CREATE OR REPLACE FUNCTION public.staff_text_participant_names(p_text text) RETURNS TABLE (reached uuid[])
 LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog, public, pg_temp AS $$
 DECLARE
-  v_me  uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
-  v_org uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
-  v_words text[];
+  v_me   uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
+  v_org  uuid := NULLIF(current_setting('app.org_id', true), '')::uuid;
+  v_flat text := ' ' || btrim(regexp_replace(lower(COALESCE(p_text, '')), '[^[:alpha:]]+', ' ', 'g')) || ' ';
+  v_caps text[];
+  v_stop text[] := ARRAY['an','do','le','al','de','la','el','di','du','van','von','del','young','long','hill','king','grant',
+                         'hope','may','will','mark','rose','april','june','july','august','summer','winter','autumn','dawn',
+                         'joy','faith','grace','hunter','page','bill','bob','jack','frank','rich','price','street','lane',
+                         'ford','brown','black','white','green','gray','grey','wood','woods','field','fields','stone','day',
+                         'love','case','park','sun','star','art','ray','gay','guy','sky','rich','penny','sterling','chase',
+                         'dean','hall','bell','early','late','new','best','good','well','west','north','south','east',
+                         'major','miles','child','ward','judge','sage','iris','ivy','lily','autumn','storm','river','forest'];
 BEGIN
   IF v_me IS NULL OR v_org IS NULL OR NOT public.staff_rewards_member(v_org, v_me) THEN
     RAISE EXCEPTION 'only staff of this organization check their words here' USING ERRCODE = 'insufficient_privilege';
   END IF;
-  v_words := ARRAY(SELECT w FROM unnest(regexp_split_to_array(lower(COALESCE(p_text, '')), '[^[:alpha:]'']+')) AS w WHERE length(w) >= 2);
+  -- Words written with a capital letter, lowered for the comparison.
+  v_caps := ARRAY(SELECT lower(m[1]) FROM regexp_matches(COALESCE(p_text, ''), '([[:upper:]][[:alpha:]]*)', 'g') AS m);
   RETURN QUERY
-    WITH named AS (
-      SELECT r.user_id
-        FROM public.access_code_redemption r JOIN public.users u ON u.id = r.user_id
-       WHERE r.access_code_id = v_org
-         AND ARRAY(SELECT t FROM unnest(regexp_split_to_array(lower(COALESCE(u.name, '')), '[^[:alpha:]'']+')) AS t WHERE length(t) >= 2) && v_words
-    )
-    SELECT COALESCE(array_agg(n.user_id) FILTER (WHERE public.smr_staff_reach(v_org, v_me, n.user_id)), '{}'::uuid[]),
-           COALESCE(bool_or(NOT public.smr_staff_reach(v_org, v_me, n.user_id)), false)
-      FROM named n;
+    SELECT COALESCE(array_agg(x.user_id), '{}'::uuid[])
+      FROM (
+        SELECT r.user_id,
+               ARRAY(SELECT t FROM unnest(regexp_split_to_array(lower(COALESCE(u.name, '')), '[^[:alpha:]]+')) AS t WHERE t <> '') AS words
+          FROM public.access_code_redemption r JOIN public.users u ON u.id = r.user_id
+         WHERE r.access_code_id = v_org AND public.smr_staff_reach(v_org, v_me, r.user_id)
+      ) x
+     WHERE cardinality(x.words) > 0 AND (
+             (cardinality(x.words) >= 2 AND position(' ' || array_to_string(x.words, ' ') || ' ' IN v_flat) > 0)
+             OR EXISTS (SELECT 1 FROM unnest(x.words) w WHERE length(w) >= 3 AND w <> ALL (v_stop) AND w = ANY (v_caps)));
 END;
 $$;
 REVOKE ALL ON FUNCTION public.staff_text_participant_names(text) FROM PUBLIC;

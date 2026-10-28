@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  MILESTONES, UNLOCKS, SKILL_MINUTES_SAVED, DEFAULT_MINUTES_SAVED, REWARDS_COPY, LISTING_NUDGE_LINE, NOT_COUNTED_FOR_TIME, RESEARCH_THRESHOLDS, nameWords,
+  MILESTONES, UNLOCKS, SKILL_MINUTES_SAVED, DEFAULT_MINUTES_SAVED, REWARDS_COPY, LISTING_NUDGE_LINE, NOT_COUNTED_FOR_TIME, RESEARCH_THRESHOLDS, NAME_STOPWORDS,
   buildMonthRecap, canAnswerRecognition, cleanKudosBody, cleanRecognitionBody, hasUnlock, milestoneDef, minutesSaved,
   monthWindow, namesMentioned, timeSavedWords, unlocksFor,
 } from "../staffRewardsShared";
@@ -110,15 +110,21 @@ test("a good catch is a few real words", () => {
   assert.ok(ok.ok && ok.body === "Great catch on the deadline");
 });
 
-test("names in a good catch: any case, full, first or last name, short names too, whole words (review round 1)", () => {
-  const people = [{ id: "a", name: "Alma Reyes" }, { id: "b", name: "Ana Lin" }, { id: "c", name: "Bo Park" }, { id: "d", name: null }];
-  assert.deepEqual(namesMentioned("great catch with alma reyes", people), ["a"], "lower case");
-  assert.deepEqual(namesMentioned("helped Ana", people), ["b"], "a short first name");
-  assert.deepEqual(namesMentioned("work on Reyes file", people), ["a"], "a last name");
-  assert.deepEqual(namesMentioned("Bo was a great help", people), ["c"], "two letters count");
+test("names (review round 2): full name any case; one name only if 3+ letters, not an ordinary word, and capitalized", () => {
+  const people = [{ id: "a", name: "Alma Reyes" }, { id: "b", name: "Ana Lin" }, { id: "c", name: "Bo Park" }, { id: "d", name: null }, { id: "e", name: "Will Young" }];
+  assert.deepEqual(namesMentioned("great catch with alma reyes", people), ["a"], "full name, lower case");
+  assert.deepEqual(namesMentioned("helped Ana", people), ["b"], "a 3-letter capitalized first name");
+  assert.deepEqual(namesMentioned("work on the Reyes file", people), ["a"], "a capitalized last name");
+  assert.deepEqual(namesMentioned("work on the reyes file", people), [], "a single name in lower case is an ordinary word");
+  assert.deepEqual(namesMentioned("Bo was a great help", people), [], "two letters alone never count");
+  assert.deepEqual(namesMentioned("thanks for bo park's paperwork", people), ["c"], "but a full name does");
+  assert.deepEqual(namesMentioned("It Will be a Long day, Young team", people), [], "ordinary words never count alone");
+  assert.deepEqual(namesMentioned("thanks will young", people), ["e"], "a full name always counts");
   assert.deepEqual(namesMentioned("Almanac review went well", people), [], "whole words only");
-  assert.deepEqual(namesMentioned("Great catch on the deadline", people), []);
-  assert.deepEqual(nameWords("Alma  Reyes-Lin"), ["alma", "reyes", "lin"]);
+  for (const w of ["an", "do", "le", "al", "de", "young", "long", "hill", "king", "grant", "hope", "may", "will", "mark", "rose", "april", "june"]) {
+    assert.ok(NAME_STOPWORDS.has(w), w);
+    assert.ok(MIG111.includes(`'${w}'`), `111 lists ${w}`);
+  }
 });
 
 test("the research thresholds are one set of numbers for Troy, the same in 111 and 112", () => {
@@ -155,11 +161,12 @@ test("the month recap: craft, thanks and time back, never an outcome", () => {
   assert.equal(recap.title, "Alma's month: October 2026");
   assert.ok(recap.lines.some((l) => l.includes("You lifted someone up")));
   assert.ok(recap.lines.some((l) => l.includes("about 2 hours")));
-  assert.ok(recap.lines.some((l) => l.includes("2 good catches")));
-  assert.ok(recap.lines.some((l) => l === "Thanked by Sam, Lee (3 good catches)."), JSON.stringify(recap.lines));
+  assert.ok(recap.lines.some((l) => l === "I sent good catches to colleagues."));
+  assert.ok(recap.lines.some((l) => l === "Thanked by Sam and Lee."), JSON.stringify(recap.lines));
+  assert.ok(!/\d/.test(recap.lines.join(" ").replace(/about [\d.]+ (hours?|minutes)/, "")), "names only, no counts (review round 2)");
   assert.ok(!recap.text.includes('"'), "never a colleague's words");
-  assert.ok(recap.lines.some((l) => l.includes("one note")));
-  assert.ok(recap.lines.some((l) => l.includes("One update")));
+  assert.ok(recap.lines.some((l) => l.includes("funder report")));
+  assert.ok(recap.lines.some((l) => l.includes("passed review")));
   assert.ok(!recap.text.includes("made_up"));
   assert.ok(!/[–—]/.test(recap.text));
   const empty = buildMonthRecap({ monthLabel: "October 2026", firstName: null, milestones: [], kudosGiven: 0, kudosReceivedFrom: [], minutesSaved: 0, contributionsApproved: 0, recognitionApproved: 0 });

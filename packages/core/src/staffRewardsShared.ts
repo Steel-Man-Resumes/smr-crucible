@@ -207,22 +207,39 @@ export interface NamedPerson { id: string; name: string | null }
 
 /** Lower-case name words of two letters or more ("Alma Reyes" -> alma, reyes). */
 export function nameWords(text: string | null | undefined): string[] {
-  return String(text ?? "").toLowerCase().split(/[^\p{L}']+/u).filter((w) => w.length >= 2);
+  // Apostrophes split words on both sides ("Park's" -> park s, "O'Brien" -> o brien), as in the SQL.
+  return String(text ?? "").toLowerCase().split(/[^\p{L}]+/u).filter((w) => w.length >= 1);
 }
 
+/** Ordinary words that are also names: never matched alone (the same list as 111 staff_text_participant_names). */
+export const NAME_STOPWORDS: ReadonlySet<string> = new Set([
+  "an", "do", "le", "al", "de", "la", "el", "di", "du", "van", "von", "del", "young", "long", "hill", "king", "grant",
+  "hope", "may", "will", "mark", "rose", "april", "june", "july", "august", "summer", "winter", "autumn", "dawn",
+  "joy", "faith", "grace", "hunter", "page", "bill", "bob", "jack", "frank", "rich", "price", "street", "lane",
+  "ford", "brown", "black", "white", "green", "gray", "grey", "wood", "woods", "field", "fields", "stone", "day",
+  "love", "case", "park", "sun", "star", "art", "ray", "gay", "guy", "sky", "penny", "sterling", "chase",
+  "dean", "hall", "bell", "early", "late", "new", "best", "good", "well", "west", "north", "south", "east",
+  "major", "miles", "child", "ward", "judge", "sage", "iris", "ivy", "lily", "storm", "river", "forest",
+]);
+
 /**
- * Participants a piece of text names: any full, first or last name, any
- * case, as whole words, two letters or more (review round 1: "alma reyes",
- * "Ana", "the Reyes file" all count). Pure; the server runs the same rule in
- * SQL over every participant of the organization
- * (111 staff_text_participant_names). It leans toward refusing: a word that
- * is also somebody's name ("Will", "May") is refused until it is sent from
- * that person's own work.
+ * Participants a piece of text names (review round 2), the same rule as the
+ * 111 SQL: their FULL name in any case; or one of their first or last names
+ * alone when it is 3+ letters, not an ordinary word (NAME_STOPWORDS), and
+ * written with a capital in the text. The caller passes only people the
+ * writer reaches.
  */
 export function namesMentioned(text: string, people: readonly NamedPerson[]): string[] {
-  const words = new Set(nameWords(text));
+  const flat = ` ${nameWords(text).join(" ")} `;
+  const caps = new Set((String(text ?? "").match(/\p{Lu}\p{L}*/gu) ?? []).map((w) => w.toLowerCase()));
   const found = new Set<string>();
-  for (const p of people) if (nameWords(p.name).some((w) => words.has(w))) found.add(p.id);
+  for (const p of people) {
+    const words = nameWords(p.name);
+    if (!words.length) continue;
+    const full = words.length >= 2 && flat.includes(` ${words.join(" ")} `);
+    const single = words.some((w) => w.length >= 3 && !NAME_STOPWORDS.has(w) && caps.has(w));
+    if (full || single) found.add(p.id);
+  }
   return [...found];
 }
 
@@ -258,16 +275,16 @@ export function buildMonthRecap(input: MonthRecapInput): MonthRecap {
   if (earned.length) lines.push(`New this month: ${earned.map((d) => d.title).join("; ")}.`);
   const saved = timeSavedWords(input.minutesSaved);
   if (saved) lines.push(`t.ROY drafts I used saved me ${saved}.`);
-  if (input.kudosGiven > 0) lines.push(`I sent ${input.kudosGiven === 1 ? "one good catch" : `${input.kudosGiven} good catches`} to colleagues.`);
+  if (input.kudosGiven > 0) lines.push("I sent good catches to colleagues.");
   if (input.kudosReceivedFrom.length > 0) {
+    // Names only: no counts (review round 2).
     const names = [...new Set(input.kudosReceivedFrom.map((n) => n ?? "a colleague"))].slice(0, 5);
-    const n = input.kudosReceivedFrom.length;
-    lines.push(`Thanked by ${names.join(", ")} (${n === 1 ? "one good catch" : `${n} good catches`}).`);
+    lines.push(`Thanked by ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}.`);
   }
   if (input.contributionsApproved > 0) {
-    lines.push(`${input.contributionsApproved === 1 ? "One update" : `${input.contributionsApproved} updates`} I sent to the shared directory passed review.`);
+    lines.push("Updates I sent to the shared directory passed review.");
   }
-  if (input.recognitionApproved > 0) lines.push(`My program noted my work for a funder report (${input.recognitionApproved === 1 ? "one note" : `${input.recognitionApproved} notes`}).`);
+  if (input.recognitionApproved > 0) lines.push("My program noted my work for a funder report.");
   const title = `${input.firstName ? `${input.firstName}'s` : "My"} month: ${input.monthLabel}`;
   const empty = lines.length === 0;
   if (empty) lines.push("A quiet month on this page. The work still counts.");

@@ -58,7 +58,8 @@ export function ContributionQueue() {
             {r.sourceUrl && <p><span className="font-semibold">Source:</span> {r.sourceUrl}</p>}
             {r.privateNote && <p className="border-l-2 border-t-amber pl-2"><span className="font-semibold">Private:</span> {r.privateNote}</p>}
             {r.targetId && <p className="text-xs">Listing id {r.targetId}</p>}
-            <p className="mt-1">{STATUS_WORDS[r.status]}{r.outcome ? ` (${OUTCOME_WORDS[r.outcome]})` : ""}{r.appliedAt ? " Call recorded." : ""}</p>
+            <p className="mt-1">{STATUS_WORDS[r.status]}{r.outcome ? ` (${OUTCOME_WORDS[r.outcome]})` : ""}{r.appliedAt ? " Recorded as a partner staff call." : ""}</p>
+            {r.flow === "called_today" && <p className="text-xs"><span className="font-semibold">Source:</span> partner staff call ({r.orgName ?? "a program"}), not Steel Man&apos;s own contact. It is recorded with provenance partner_staff and shows that way in directory_contact_provenance_v.</p>}
             {(r.status === "received" || r.status === "needs_more") && (
               <div className="mt-2 space-y-2">
                 <input maxLength={300} placeholder="Short answer to the staff member (optional)" value={answer[r.id] ?? ""} onChange={(e) => setAnswer({ ...answer, [r.id]: e.target.value })} className="block w-full border border-t-line bg-t-bg p-2" />
