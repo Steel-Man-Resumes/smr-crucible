@@ -15,8 +15,9 @@ import { useEffect, useState } from "react";
 export type OrgModules = Readonly<Record<string, boolean>>;
 
 const TTL_MS = 5 * 60 * 1000;
-let cache: { modules: OrgModules | null; at: number } | null = null;
-let inflight: Promise<OrgModules | null> | null = null;
+// Keyed by organization, so an account that changes organization (or a view-as) never reads another org's switches.
+let cache: { key: string; modules: OrgModules | null; at: number } | null = null;
+let inflight: { key: string; p: Promise<OrgModules | null> } | null = null;
 
 /** Only boolean switches survive: anything else in the payload is ignored. Pure, exported for tests. */
 export function readModules(payload: unknown): OrgModules | null {
@@ -27,26 +28,30 @@ export function readModules(payload: unknown): OrgModules | null {
   return out;
 }
 
-export function loadOrgModules(fetcher: typeof fetch = fetch): Promise<OrgModules | null> {
-  if (cache && Date.now() - cache.at < TTL_MS) return Promise.resolve(cache.modules);
-  if (inflight) return inflight;
-  inflight = fetcher("/api/org/profile", { headers: { accept: "application/json" } })
+export function loadOrgModules(orgKey: string | null | undefined, fetcher: typeof fetch = fetch): Promise<OrgModules | null> {
+  const key = orgKey ?? "";
+  if (cache && cache.key === key && Date.now() - cache.at < TTL_MS) return Promise.resolve(cache.modules);
+  if (inflight && inflight.key === key) return inflight.p;
+  const p = fetcher("/api/org/profile", { headers: { accept: "application/json" } })
     .then((r) => (r.ok ? r.json() : null))
     .then(readModules)
     .catch(() => null)
-    .then((modules) => { cache = { modules, at: Date.now() }; inflight = null; return modules; });
-  return inflight;
+    .then((modules) => { cache = { key, modules, at: Date.now() }; if (inflight?.key === key) inflight = null; return modules; });
+  inflight = { key, p };
+  return p;
 }
 
 export function resetOrgModulesCache(): void { cache = null; inflight = null; }
 
-export function useOrgModules(enabled: boolean): OrgModules | null {
-  const [modules, setModules] = useState<OrgModules | null>(() => (enabled ? cache?.modules ?? null : null));
+export function useOrgModules(enabled: boolean, orgKey: string | null | undefined): OrgModules | null {
+  const key = orgKey ?? "";
+  const [modules, setModules] = useState<OrgModules | null>(() => (enabled && cache?.key === key ? cache.modules : null));
   useEffect(() => {
     if (!enabled) { setModules(null); return; }
     let live = true;
-    loadOrgModules().then((m) => { if (live) setModules(m); });
+    setModules(cache?.key === key ? cache.modules : null);
+    loadOrgModules(key).then((m) => { if (live) setModules(m); });
     return () => { live = false; };
-  }, [enabled]);
+  }, [enabled, key]);
   return modules;
 }

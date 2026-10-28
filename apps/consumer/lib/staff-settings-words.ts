@@ -24,7 +24,8 @@ export function staffUsageLine(line: string): string {
 
 export const STAFF_DATA_WORDS = {
   sharing: "We never sell personal information. It goes only to the services that run the app.",
-  exportScope: "This is your own account: your settings, saved views, drafts and t.ROY conversations. Case notes, tasks and records about the people you serve belong to your organization and are not in this file.",
+  // What /api/user/export-data returns for a staff seat (lib/export-plan.ts boxes, plus the full-copy extras).
+  exportScope: "This is your own account: your t.ROY conversations, consent records, usage and activity history, and with every box ticked, your sign-in history. Case notes, tasks and records about the people you serve belong to your organization and are not in this file.",
   trustLink: { href: "/dashboard/org-security", before: "Want to know how the people you serve are protected?", label: "Read the security statement" },
   setupCard: "Where you land, what Today shows, your columns and your views now live on My setup, with every other way to shape your own work.",
 };

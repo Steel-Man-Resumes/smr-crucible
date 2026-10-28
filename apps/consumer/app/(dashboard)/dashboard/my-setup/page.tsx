@@ -35,12 +35,17 @@ export default function MySetupPage() {
     );
   }
   const impersonating = !!role.impersonating;
-  const canManage = (role.capabilities ?? []).includes("org.settings.manage");
+  const capabilities = role.capabilities ?? [];
+  const canManage = capabilities.includes("org.settings.manage");
+  const seesToday = capabilities.includes("org.client.view_content");
   return (
     <div className="max-w-2xl">
       <h1 className="text-2xl font-bold text-t-white mb-2">My setup</h1>
       <p className="text-base text-t-phos-dim mb-6">
-        Every way to shape your own work, in one place. These are yours alone: nobody else&apos;s screen changes, and nothing here changes what you are allowed to see.
+        Every way to shape your own work, in one place. Nothing here changes what you are allowed to see.
+        {canManage
+          ? " Most of it is yours alone. Two controls are marked for everyone here: the quiet count and Make this the default for everyone here. Those set the starting point for your whole organization; each person can still change their own."
+          : " These are yours alone: nobody else's screen changes."}
       </p>
 
       {impersonating ? (
@@ -62,9 +67,11 @@ export default function MySetupPage() {
             <p className="text-sm text-t-phos-dim">
               On <Link href="/dashboard/people" className={linkText}>People</Link>, use Columns, Filter, Sort and Group to see your list the way you work, then press Save view. It is saved under My views, for you only, and People opens on the last one you picked.
             </p>
-            <p className="mt-3 text-sm text-t-phos-dim">
-              On <Link href="/dashboard/today" className={linkText}>Today</Link>, Fold any section you do not need right now. It stays folded for you until you open it again.
-            </p>
+            {seesToday && (
+              <p className="mt-3 text-sm text-t-phos-dim">
+                On <Link href="/dashboard/today" className={linkText}>Today</Link>, Fold any section you do not need right now. It stays folded for you until you open it again.
+              </p>
+            )}
             <p className="mt-3 text-sm text-t-phos-dim">
               You can also ask t.ROY to help: open Ask t.ROY and say what you want to see first.
             </p>
@@ -75,7 +82,7 @@ export default function MySetupPage() {
             <section aria-labelledby="org-h" className={`${card} mb-8`}>
               <h2 id="org-h" className="text-lg font-bold text-t-white mb-1">For everyone in your organization</h2>
               <p className="text-sm text-t-phos-dim">
-                You run this organization&apos;s setup. <Link href="/dashboard/fields" className={linkText}>Fields</Link>, <Link href="/dashboard/layouts" className={linkText}>Layouts</Link> and <Link href="/dashboard/structure" className={linkText}>Structure</Link> change what everyone sees.
+                You run this organization&apos;s setup. The controls above marked for everyone here change the starting point for every staff member. <Link href="/dashboard/fields" className={linkText}>Fields</Link>, <Link href="/dashboard/layouts" className={linkText}>Layouts</Link> and <Link href="/dashboard/structure" className={linkText}>Structure</Link> change what everyone sees.
               </p>
             </section>
           )}

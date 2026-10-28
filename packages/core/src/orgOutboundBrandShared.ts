@@ -39,8 +39,6 @@ export interface OutboundBrand {
   line: string;
   /** The words after the organization's name in a two-part header ("with Steel Man Resumes"), or null when exclusive. */
   withLine: string | null;
-  /** For an email's From display name and the subject prefix. */
-  senderName: string;
 }
 
 /** The organization's name for outbound use: one line, no "(Demo)", 120 characters at most. */
@@ -59,12 +57,12 @@ export function orgOutboundBrand(org: { name?: string | null; branding?: unknown
   const branding = resolveOrgBranding(org?.branding);
   // Exclusive needs a name to stand on: with none, Steel Man Resumes still signs it.
   if (branding === "exclusive" && orgName) {
-    return { branding, orgName, coBranded: false, line: orgName, withLine: null, senderName: orgName };
+    return { branding, orgName, coBranded: false, line: orgName, withLine: null };
   }
   if (!orgName) {
-    return { branding, orgName: "", coBranded: true, line: STEEL_MAN, withLine: null, senderName: STEEL_MAN };
+    return { branding, orgName: "", coBranded: true, line: STEEL_MAN, withLine: null };
   }
-  return { branding, orgName, coBranded: true, line: `${orgName} with ${STEEL_MAN}`, withLine: `with ${STEEL_MAN}`, senderName: `${orgName} via ${STEEL_MAN}` };
+  return { branding, orgName, coBranded: true, line: `${orgName} with ${STEEL_MAN}`, withLine: `with ${STEEL_MAN}` };
 }
 
 /** A CSV cell, quoted, with spreadsheet formula starters defused. */
@@ -88,6 +86,9 @@ export function withOutboundCsvHeader(csv: string, brand: OutboundBrand, what: s
   const body = bom ? csv.slice(1) : csv;
   return `${bom}${outboundCsvHeaderLine(brand, what, on)}\r\n${body}`;
 }
+
+/** What a download's help says about the brand line on top (staff pass S2). */
+export const OUTBOUND_CSV_HELP = "The first row says who it is from; the column headings are on row 2.";
 
 /** An email footer line: "Sent by Lakeshore Works with Steel Man Resumes." */
 export function outboundEmailFooter(brand: OutboundBrand): string {

@@ -189,7 +189,7 @@ function HelpContent() {
           : "One place to get help, report a problem, share an idea, or send Troy a note. Pick what fits."}
       </p>
 
-      {isStaff && <StaffHelp tourAllowed={staffTourAllowed(role)} />}
+      {isStaff && <StaffHelp tourAllowed={staffTourAllowed(role)} capabilities={role?.capabilities ?? []} workspace={!!role?.crmV2} />}
 
       {!isStaff && <div className="mb-6 flex flex-wrap gap-3">
         <Link href={TOUR_HREF} className="t-focus inline-flex min-h-touch items-center border border-t-line px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">

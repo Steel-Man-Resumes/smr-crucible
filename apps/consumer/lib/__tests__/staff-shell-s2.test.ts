@@ -17,11 +17,11 @@ import { STAFF_FEATURES, STAFF_FEATURE_KEYS, staffFeatureOn, type StaffFeatures 
 import { ORG_FOOT_NAV, orgFootFor, orgFindBoxFor, orgNavActive, orgNavFor } from "../org-nav";
 import { NAV_EXTENSIONS } from "../refinery-nav";
 import { OrgSidebar, navCountText } from "../../components/org/OrgSidebar";
-import { readModules } from "../use-org-modules";
+import { loadOrgModules, readModules, resetOrgModulesCache } from "../use-org-modules";
 import { CHANGE_REQUEST_AREAS, changeRequestError, isChangeRequestArea, sendChangeRequest } from "../change-request-client";
 import { STAFF_DATA_WORDS, accountChipText, staffUsageLine } from "../staff-settings-words";
 import { usageWords } from "../usage-view";
-import { StaffHelp, STAFF_TOUR_REPLAY_HREF, skillExample, staffSkillGroups } from "../../components/help/StaffHelp";
+import { StaffHelp, STAFF_TOUR_REPLAY_HREF, skillExample, staffSkillAllowed, staffSkillGroups } from "../../components/help/StaffHelp";
 import { STAFF_SKILLS } from "../staff-troy";
 import {
   DEFAULT_ORG_BRANDING, STEEL_MAN, isOrgBranding, orgOutboundBrand, outboundCsvHeaderLine, outboundEmailFooter, outboundOrgName,
@@ -29,7 +29,7 @@ import {
 } from "@crucible/core/src/orgOutboundBrandShared";
 import { ORG_OUTBOUND_BRAND_SQL } from "@crucible/core/src/orgOutboundBrand";
 import { ADMIN_BRANDING_WORDS, handleAdminOutboundBrandGet, handleAdminOutboundBrandPost, handleOutboundBrandGet } from "../outbound-brand-http";
-import { readOutboundBrand } from "../../components/brand/useOrgOutboundBrand";
+import { loadOrgOutboundBrand, readOutboundBrand, resetOrgOutboundBrandCache } from "../../components/brand/useOrgOutboundBrand";
 import { OutboundBrandLine } from "../../components/brand/OutboundBrandLine";
 import { OUTBOUND_BRANDING_OPTIONS } from "../../components/brand/OutboundBrandingControl";
 import { targetSelector } from "../tour/find-target";
@@ -111,7 +111,7 @@ test("sidebar: the find box on top, the foot in order (Help, Ask t.ROY, My setup
   assert.doesNotMatch(legacy, /org-find-person/, "older organizations keep their flat list");
   const shell = read("app/(dashboard)/RefineryShell.tsx");
   assert.match(shell, /import "@\/components\/org\/OrgSidebar\.css";/);
-  assert.match(shell, /const orgModules = useOrgModules\(isOrgPartner && !!effectiveRole\?\.crmV2\);/);
+  assert.match(shell, /const orgModules = useOrgModules\(isOrgPartner && !!effectiveRole\?\.crmV2, effectiveRole\?\.orgId \?\? effectiveRole\?\.accountId \?\? null\);/);
   assert.match(shell, /modules=\{orgModules\}/);
 });
 
@@ -177,7 +177,7 @@ test("staff Help: the staff tour, the real staff skill list, My setup, the secur
   assert.equal(skillExample(STAFF_SKILLS.find((s) => s.id === "staff-timeline-summary")!), "Summarize their timeline for the last 90 days, with sources.");
   assert.equal(skillExample(STAFF_SKILLS.find((s) => s.id === "staff-find-help")!), "Find local help for them. The need is: ...");
   const page = read("app/(dashboard)/dashboard/help/page.tsx");
-  assert.match(page, /\{isStaff && <StaffHelp tourAllowed=\{staffTourAllowed\(role\)\} \/>\}/);
+  assert.match(page, /\{isStaff && <StaffHelp tourAllowed=\{staffTourAllowed\(role\)\} capabilities=\{role\?\.capabilities \?\? \[\]\} workspace=\{!!role\?\.crmV2\} \/>\}/);
   assert.match(page, /\{!isStaff && <div className="mb-6 flex flex-wrap gap-4 text-sm text-t-amber-bright underline"><Link href="\/dashboard\/settings\?lesson=1">/);
   assert.match(page, /\{!isStaff && <div className="mb-6 flex flex-wrap gap-3">\s*<Link href=\{TOUR_HREF\}/, "the participant tour link is participants only");
 });
@@ -209,10 +209,10 @@ test("staff Settings words: role chip, usage line, data lines, trust link", () =
 test("outbound brand: co-branded by default, the organization alone only when exclusive, one line, never a stand-in name", () => {
   assert.equal(DEFAULT_ORG_BRANDING, "co_brand");
   assert.deepEqual(orgOutboundBrand({ name: "Lakeshore Works", branding: "co_brand" }), {
-    branding: "co_brand", orgName: "Lakeshore Works", coBranded: true, line: "Lakeshore Works with Steel Man Resumes", withLine: "with Steel Man Resumes", senderName: "Lakeshore Works via Steel Man Resumes",
+    branding: "co_brand", orgName: "Lakeshore Works", coBranded: true, line: "Lakeshore Works with Steel Man Resumes", withLine: "with Steel Man Resumes",
   });
   assert.deepEqual(orgOutboundBrand({ name: "Lakeshore Works", branding: "exclusive" }), {
-    branding: "exclusive", orgName: "Lakeshore Works", coBranded: false, line: "Lakeshore Works", withLine: null, senderName: "Lakeshore Works",
+    branding: "exclusive", orgName: "Lakeshore Works", coBranded: false, line: "Lakeshore Works", withLine: null,
   });
   for (const odd of [undefined, null, "", "EXCLUSIVE", "full", 1, {}]) assert.equal(orgOutboundBrand({ name: "Lakeshore Works", branding: odd }).coBranded, true, String(odd));
   assert.equal(orgOutboundBrand({ name: "Lakeshore Works (Demo)" }).line, "Lakeshore Works with Steel Man Resumes", "the demo chip is not part of the brand");
@@ -308,4 +308,56 @@ test("organization emails: signed the organization's way; the account they sign 
   const staff = buildStaffInvitationEmail({ inviteeName: "Sam Ortiz", inviterName: null, orgName: "Lakeshore Works", roleLabel: "Case manager", origin: "https://example.invalid", days: 14 });
   assert.match(brandOrgEmail(staff, orgOutboundBrand({ name: "Lakeshore Works" })).text, /Lakeshore Works with Steel Man Resumes/);
   assert.deepEqual(brandOrgEmail(invite, orgOutboundBrand({ name: null })), invite, "no name: unchanged");
+});
+
+/* Review round 1 */
+test("review r1: My setup is in the foot only where the workspace exists; Help lists only skills the person can use", () => {
+  assert.deepEqual(orgFootFor({ workspace: false }).map((i) => i.label), ["Help", "Ask t.ROY", "Settings"]);
+  assert.deepEqual(orgFootFor({ workspace: true }).map((i) => i.label), ["Help", "Ask t.ROY", "My setup", "Settings"]);
+  const legacy = renderToStaticMarkup(React.createElement(OrgSidebar, { orgName: "Lakeshore Works", orgRole: "staff", capabilities: STAFF, workspace: false, legacyItems: [], pathname: "/dashboard" }));
+  assert.doesNotMatch(legacy, /My setup/);
+  const note = STAFF_SKILLS.find((s) => s.id === "staff-note-from-bullets")!;
+  const funder = STAFF_SKILLS.find((s) => s.id === "staff-funder-narrative")!;
+  const prep = STAFF_SKILLS.find((s) => s.id === "staff-prep-me")!;
+  assert.equal(staffSkillAllowed(note, VOLUNTEER), VOLUNTEER.includes("org.note.write"));
+  assert.equal(staffSkillAllowed(funder, STAFF), STAFF.includes("org.insights.view"));
+  assert.equal(staffSkillAllowed(funder, OWNER), true);
+  assert.equal(staffSkillAllowed(prep, caps("staff", ["org.client.view_content"])), false, "no shared work, no staff skills");
+  const none = renderToStaticMarkup(React.createElement(StaffHelp, { tourAllowed: false, capabilities: caps("staff", ["org.client.view_content"]), workspace: false }));
+  assert.match(none, /staff skills are not on for you/);
+  assert.doesNotMatch(none, /dashboard\/my-setup/, "no My setup link where it does not exist");
+  const staffHtml = renderToStaticMarkup(React.createElement(StaffHelp, { tourAllowed: true, capabilities: STAFF }));
+  if (!STAFF.includes("org.insights.view")) assert.doesNotMatch(staffHtml, />Funder narrative</);
+});
+
+test("review r1: My setup says plainly which two controls reach everyone; the Today link only for people who have Today", () => {
+  const page = read("app/(dashboard)/dashboard/my-setup/page.tsx");
+  assert.match(page, /\{canManage\s*\? " Most of it is yours alone\. Two controls are marked for everyone here/);
+  assert.match(page, /: " These are yours alone: nobody else's screen changes\."/);
+  assert.match(page, /\{seesToday && \(/);
+  assert.match(read("components/org/StaffWorkflowSettings.tsx"), /For everyone here: count someone as quiet after[\s\S]*Make this the default for everyone here/, "the two controls the intro names");
+});
+
+test("review r1: export words match what the export holds; the tasks stop says the task leaves Today", () => {
+  assert.doesNotMatch(STAFF_DATA_WORDS.exportScope, /saved views|drafts/);
+  assert.match(STAFF_DATA_WORDS.exportScope, /t\.ROY conversations, consent records, usage and activity history, and with every box ticked, your sign-in history/);
+  assert.match(read("lib/export-plan.ts"), /Chat history with t\.ROY[\s\S]*Consent records[\s\S]*Usage totals[\s\S]*Your activity history[\s\S]*your sign-in history/);
+  assert.match(read("lib/tour/crm-beats.ts"), /you see it here, and it leaves your Today\./);
+});
+
+test("review r1: the module and brand caches are keyed by organization", async () => {
+  resetOrgModulesCache(); resetOrgOutboundBrandCache();
+  let calls = 0;
+  const f = (async () => { calls++; return new Response(JSON.stringify({ profile: { modules: { referrals: calls === 1 } }, brand: { orgName: `Org ${calls}`, branding: "co_brand" } })); }) as unknown as typeof fetch;
+  assert.deepEqual(await loadOrgModules("org-a", f), { referrals: true });
+  assert.deepEqual(await loadOrgModules("org-a", f), { referrals: true }, "cached for the same org");
+  assert.deepEqual(await loadOrgModules("org-b", f), { referrals: false }, "another org reads again");
+  assert.equal(calls, 2);
+  assert.equal((await loadOrgOutboundBrand("org-a", f))!.orgName, "Org 3");
+  assert.equal((await loadOrgOutboundBrand("org-a", f))!.orgName, "Org 3");
+  assert.equal((await loadOrgOutboundBrand("org-b", f))!.orgName, "Org 4");
+  resetOrgModulesCache(); resetOrgOutboundBrandCache();
+  const tour = read("components/tour/StaffTour.tsx");
+  assert.match(tour, /const modules = same \? null : await loadOrgModules\(orgKey\);\s*if \(signal\.aborted/, "the tour waits for the switches before deciding its path");
+  assert.doesNotMatch(tour, /useOrgModules/, "no fetch from the tour for anyone it does not open for");
 });

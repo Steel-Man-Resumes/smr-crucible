@@ -71,19 +71,20 @@ export const ORG_WORKSPACE_NAV: readonly OrgNavGroup[] = [
  * drawer, drawn by OrgSidebar where `href` is null), My setup, Wins (once the
  * rewards lane is merged and only for people who turned rewards on), Settings.
  */
-export interface OrgFootItem { href: string | null; label: string; navId: string; feature?: StaffFeature }
+export interface OrgFootItem { href: string | null; label: string; navId: string; feature?: StaffFeature; /** Only for organizations with the per-person workspace (crm_v2). */ workspaceOnly?: boolean }
 export const ORG_FOOT_NAV: readonly OrgFootItem[] = [
   { href: "/dashboard/help", label: "Help", navId: "org-nav-help" },
   { href: null, label: "Ask t.ROY", navId: "org-nav-troy" },
-  { href: "/dashboard/my-setup", label: "My setup", navId: "org-nav-my-setup" },
+  { href: "/dashboard/my-setup", label: "My setup", navId: "org-nav-my-setup", workspaceOnly: true },
   { href: "/dashboard/wins", label: "Wins", navId: "org-nav-wins", feature: "rewards" },
   { href: "/dashboard/settings", label: "Settings", navId: "org-nav-settings" },
 ];
 
 /** The foot items this build shows. `rewardsOn` is the staff member's own switch (S6); Wins needs both. */
-export function orgFootFor(opts: { features?: StaffFeatures; rewardsOn?: boolean } = {}): OrgFootItem[] {
+export function orgFootFor(opts: { features?: StaffFeatures; rewardsOn?: boolean; workspace?: boolean } = {}): OrgFootItem[] {
   const features = opts.features ?? STAFF_FEATURES;
-  return ORG_FOOT_NAV.filter((i) => staffFeatureOn(i.feature, features) && (i.feature !== "rewards" || opts.rewardsOn === true));
+  return ORG_FOOT_NAV.filter((i) => staffFeatureOn(i.feature, features) && (i.feature !== "rewards" || opts.rewardsOn === true)
+    && (!i.workspaceOnly || opts.workspace !== false));
 }
 
 /** The find-a-person box at the top of the sidebar: only for people who may open what others shared (the search route's own gate). */

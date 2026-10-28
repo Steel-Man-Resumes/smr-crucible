@@ -110,7 +110,7 @@ export const CRM_TOUR_BEATS: readonly CrmBeat[] = [
     id: 'person-tasks', group: 'person', href: `/dashboard/clients/${CRM_PERSON_TOKEN}?tab=tasks`, needsPerson: true, needs: 'org.task.write', minFound: 1,
     targets: [['crm-person-tasks-tab', 'task-title']],
     title: 'A next step you both see',
-    body: 'Share a task and it shows on their own page too. When they tick it done, you see it here and on Today.',
+    body: 'Share a task and it shows on their own page too. When they tick it done, you see it here, and it leaves your Today.',
   },
   {
     id: 'no-people', group: 'person', href: '/dashboard/today', noPeopleOnly: true, drawer: true, minFound: 1, targets: [['org-nav-people']],

@@ -669,7 +669,7 @@ function RefineryShellContent({ children }: { children: ReactNode }) {
   void resolvedTier;
   const isOrgPartner = workspace === "staff";
   // The org's module switches, so a module that is off leaves the staff nav (staff pass S2).
-  const orgModules = useOrgModules(isOrgPartner && !!effectiveRole?.crmV2);
+  const orgModules = useOrgModules(isOrgPartner && !!effectiveRole?.crmV2, effectiveRole?.orgId ?? effectiveRole?.accountId ?? null);
   const isOrgAdmin = orgRole === "owner" || orgRole === "org_admin";
   // ADMIN MODE (house build L1, A1 defect B1). The real account is a platform
   // admin and nothing is being viewed as someone else: the admin sidebar,

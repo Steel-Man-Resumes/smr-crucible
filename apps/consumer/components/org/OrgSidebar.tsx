@@ -53,7 +53,7 @@ export function OrgSidebar(p: OrgSidebarProps) {
     : [{ label: "Organization", items: p.legacyItems.map((i) => ({ ...i, navId: "" })) }];
   const org = orgDisplayName(p.orgName);
   const roleLine = orgRoleLine(p.orgRole, p.capabilities);
-  const foot = orgFootFor({ features, rewardsOn: p.rewardsOn });
+  const foot = orgFootFor({ features, rewardsOn: p.rewardsOn, workspace: p.workspace });
   const link = (item: { href: string; label: string; navId?: string }, lit: boolean) => {
     const count = item.navId ? navCountText(p.counts?.[item.navId]) : null;
     return (
