@@ -136,7 +136,10 @@ export function inboxPerson(row: Pick<InboxItemRow, "participant_user_id" | "par
 export function inboxSentence(row: Pick<InboxItemRow, "summary" | "actor_user_id" | "actor_name" | "participant_user_id" | "participant_name"> & { ref_table?: string }): string {
   // Items with no actor by design (integration 2026-10-28): a person's answer to a handoff names the
   // person (by consent), and the directory team's answer is said plainly. Never "someone who has left".
-  if (row.ref_table === "staff_handoff") return `${inboxPerson(row) ?? "They"} ${row.summary}.`;
+  if (row.ref_table === "staff_handoff") {
+    const who = inboxPerson(row) ?? "They";
+    return `${who.charAt(0).toUpperCase()}${who.slice(1)} ${row.summary}.`;
+  }
   if (row.ref_table === "directory_contribution") return `${row.summary.charAt(0).toUpperCase()}${row.summary.slice(1)}.`;
   const who = row.actor_user_id ? row.actor_name?.trim() || "A team member" : "Someone who has left the team";
   const person = inboxPerson(row);
