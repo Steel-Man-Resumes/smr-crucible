@@ -256,6 +256,7 @@ export function teamTalkErrorLine(message: string | null | undefined): string {
   if (/task_assign_nobody/.test(m)) return "A task needs someone to own it.";
   if (/change_request_move/.test(m)) return "That answer does not follow from where the request is.";
   if (/change_request_needs_reason/.test(m)) return "Say why, so they know what to do next.";
+  if (/ai_assist_owner_only/.test(m)) return "Only the owner turns t.ROY on or off for your organization.";
   if (/note_locked/.test(m)) return "An approved note is locked.";
   if (/note_pending/.test(m)) return "This note is waiting for review, so it cannot be changed right now.";
   if (/row-level security|not in your reach/.test(m)) return "That person is not on your caseload.";

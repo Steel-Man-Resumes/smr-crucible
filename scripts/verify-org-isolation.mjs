@@ -483,6 +483,19 @@ async function teamTalkChecks() {
   check("a no needs a reason", cr.ok && (await core.answerChangeRequest(aAdmin, cr.id, { status: "declined" })).ok === false);
   check("a manager says yes and the asker hears back", cr.ok && (await core.answerChangeRequest(aAdmin, cr.id, { status: "accepted", answer: "Next week" })).ok
     && (await items(aCm)).some((i) => i.kind === "change_answered"));
+  const hist = cr.ok ? await core.getChangeRequest(aCm, cr.id) : null;
+  check("the asker sees who answered (answer history)", (hist?.events ?? []).some((e) => e.to_status === "accepted"));
+  check("a colleague sees no answer history, even raw", (await rawAs(org.id, other, (a) => a`SELECT id FROM org_change_request_event`)).length === 0);
+  const crActs = await sql`SELECT actor_user_id, staff_user_id FROM org_activity WHERE access_code_id = ${org.id} AND entity = 'change_request'`;
+  check("change-request activity names nobody", crActs.length > 0 && crActs.every((r) => r.actor_user_id === null && r.staff_user_id === null));
+  // The AI switch is the owner's (109 review round 2).
+  await sql`INSERT INTO org_profile (access_code_id, org_type) VALUES (${org.id}, 'reentry_nonprofit') ON CONFLICT DO NOTHING`;
+  const aiByAdmin = await attempt(() => rawAs(org.id, admin, (a) => a`UPDATE org_profile SET modules = modules || '{"ai_assist": false}' WHERE access_code_id = ${org.id}`));
+  check("an org admin cannot turn t.ROY off for the organization", !aiByAdmin.ok && /ai_assist_owner_only/.test(aiByAdmin.e), JSON.stringify(aiByAdmin));
+  const renameByAdmin = await attempt(() => rawAs(org.id, admin, (a) => a`UPDATE org_profile SET display_name = 'Isotest renamed' WHERE access_code_id = ${org.id} RETURNING access_code_id`));
+  check("but can rename it", renameByAdmin.ok && renameByAdmin.v.length === 1, JSON.stringify(renameByAdmin));
+  const aiByOwner = await attempt(() => rawAs(org.id, owner, (a) => a`UPDATE org_profile SET modules = modules || '{"ai_assist": false}' WHERE access_code_id = ${org.id} RETURNING access_code_id`));
+  check("the owner can", aiByOwner.ok && aiByOwner.v.length === 1, JSON.stringify(aiByOwner));
   const acts = await sql`SELECT summary FROM org_activity WHERE access_code_id = ${org.id} AND entity IN ('comment', 'change_request', 'task')`;
   check("activity rows carry no typed words", acts.length > 0 && acts.every((r) => !/ISOTT-/.test(r.summary)), JSON.stringify(acts.map((r) => r.summary)));
   // cleanup for rows with no cascade from the org (the activity log is removed by org id in cleanup)

@@ -79,6 +79,12 @@ export const MARK_INBOX_SQL = `UPDATE staff_inbox_item i SET read_at = CASE WHEN
           SELECT 1 FROM staff_inbox_item n
            WHERE n.recipient_user_id = i.recipient_user_id AND n.kind = i.kind AND n.ref_id = i.ref_id
              AND n.read_at IS NULL AND n.id <> i.id))
+    -- and of several read items for the same thing named in one request, only the newest.
+    AND ($4::boolean OR NOT EXISTS (
+          SELECT 1 FROM staff_inbox_item o
+           WHERE o.id = ANY ($5::uuid[]) AND o.id <> i.id
+             AND o.recipient_user_id = i.recipient_user_id AND o.kind = i.kind AND o.ref_id = i.ref_id
+             AND (o.created_at, o.id) > (i.created_at, i.id)))
   RETURNING i.id`;
 
 /** Mark some (ids) or all of my items read, or some unread. Returns how many changed. Real failures throw. */

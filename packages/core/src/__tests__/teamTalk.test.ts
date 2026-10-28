@@ -98,6 +98,7 @@ describe("inbox: what an item says and where it goes", () => {
     assert.match(UNREAD_COUNT_SQL, /i\.recipient_user_id = \$2::uuid AND i\.read_at IS NULL/);
     assert.match(MARK_INBOX_SQL, /i\.recipient_user_id = \$2::uuid/);
     assert.match(MARK_INBOX_SQL, /\$4::boolean OR NOT EXISTS/, "marking unread never collides with a newer unread item");
+    assert.match(MARK_INBOX_SQL, /o\.id = ANY \(\$5::uuid\[\]\)[\s\S]*\(o\.created_at, o\.id\) > \(i\.created_at, i\.id\)/, "only the newest of several named in one request");
   });
 });
 
@@ -193,7 +194,7 @@ describe("database messages", () => {
 });
 
 describe("migration 109, statically", () => {
-  const NEW_TABLES = ["team_comment", "team_comment_version", "staff_inbox_item", "org_change_request", "org_change_reply", "note_review", "note_review_event"];
+  const NEW_TABLES = ["team_comment", "team_comment_version", "staff_inbox_item", "org_change_request", "org_change_reply", "org_change_request_event", "note_review", "note_review_event"];
   it("every new table is forced RLS, listed for the health check and the lint", () => {
     for (const t of NEW_TABLES) {
       assert.match(MIG, new RegExp(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`), t);
@@ -225,12 +226,23 @@ describe("migration 109, statically", () => {
   });
   it("review round 1: the note lock covers every field, the activity list is widened quote-safe, a deny wins, change requests name nobody", () => {
     const lock = MIG.slice(MIG.indexOf("FUNCTION public.case_note_review_lock"), MIG.indexOf("REVOKE ALL ON FUNCTION public.case_note_review_lock"));
-    for (const col of ["body", "kind", "occurred_at", "drafted_by_assistant", "visible_to_participant"]) assert.match(lock, new RegExp(`NEW\\.${col}`), col);
+    // Round 2: the whole row, less only the column a deleted account clears.
+    assert.ok(lock.includes("IF (to_jsonb(NEW) - 'author_user_id') = (to_jsonb(OLD) - 'author_user_id') THEN"));
     assert.ok(MIG.includes("regexp_matches(v_def, '''((?:[^'']|'''''')*)''', 'g')"));
     const assigner = MIG.slice(MIG.indexOf("FUNCTION public.smr_task_assigner"), MIG.indexOf("REVOKE ALL ON FUNCTION public.smr_task_assigner"));
     assert.match(assigner, /\)\)\)\n\s+-- A deny wins for EVERY role[^\n]*\n\s+AND NOT EXISTS/);
     const after = MIG.slice(MIG.indexOf("FUNCTION public.org_change_request_after"), MIG.indexOf("REVOKE ALL ON FUNCTION public.org_change_reply_after"));
     assert.doesNotMatch(after, /org_activity_write/, "change-request activity goes through the actor-free writer");
+  });
+  it("review round 2: fresh answers compare trimmed, definer-only helpers are asserted, the AI switch is the owner's", () => {
+    assert.ok(MIG.includes("btrim(COALESCE(NEW.answer, '')) = btrim(COALESCE(OLD.answer, ''))"));
+    for (const fn of ["smr_activity_without_actor(uuid, text, text, text, text)", "smr_org_managers(uuid)", "smr_comment_mentions(uuid, uuid, uuid, uuid[], uuid[])"]) {
+      assert.ok(MIG.includes(`has_function_privilege('smr_app', 'public.${fn}', 'EXECUTE')`), fn);
+    }
+    const ai = MIG.slice(MIG.indexOf("FUNCTION public.org_profile_ai_owner_only"), MIG.indexOf("REVOKE ALL ON FUNCTION public.org_profile_ai_owner_only"));
+    assert.match(ai, /a\.partner_user_id = v_actor/);
+    assert.doesNotMatch(ai, /SECURITY DEFINER/);
+    assert.match(teamTalkErrorLine("ERROR: ai_assist_owner_only: x"), /Only the owner/);
   });
   it("the activity log takes the two new entities, and the code knows them", () => {
     assert.match(MIG, /v_new text\[\] := ARRAY\['comment', 'change_request'\]/);

@@ -165,6 +165,8 @@ export const RESTRICTED_GRANTS = {
   staff_inbox_item: ["SELECT", "UPDATE (read_at)"],
   org_change_request: ["SELECT", "INSERT", "UPDATE (status, answer)"],
   org_change_reply: ["SELECT", "INSERT"],
+  // Who answered and what they wrote, one row per answer, trigger-written (109 review round 2).
+  org_change_request_event: ["SELECT"],
   note_review: ["SELECT"],
   note_review_event: ["SELECT"],
 };

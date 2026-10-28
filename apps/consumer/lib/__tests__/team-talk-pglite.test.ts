@@ -26,7 +26,7 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { LIST_COMMENTS_SQL, COLLEAGUES_SQL } from '@crucible/core/src/teamComments';
 import { LIST_INBOX_SQL, UNREAD_COUNT_SQL, MARK_INBOX_SQL } from '@crucible/core/src/staffInbox';
-import { LIST_CHANGE_REQUESTS_SQL } from '@crucible/core/src/orgChangeRequests';
+import { LIST_CHANGE_REQUESTS_SQL, CHANGE_EVENTS_SQL } from '@crucible/core/src/orgChangeRequests';
 import { NOTE_REVIEWS_SQL, REVIEW_QUEUE_SQL } from '@crucible/core/src/noteReview';
 import { timelineSql } from '@crucible/core/src/orgTimeline';
 import { INBOX_KINDS } from '@crucible/core/src/teamTalkShared';
@@ -178,6 +178,13 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.equal((await markAs(admin, true, true, [])).length, 1);
   assert.equal((await markAs(admin, false, false, [oldItem])).length, 1, 'with nothing newer unread, it can be marked unread');
   await markAs(admin, true, true, []);
+  // Review round 2: two read items for the same thing named in one unread request: only the newest goes unread.
+  const both = (await inbox(admin)).filter((i) => i.kind === 'mention' && i.ref_id === c1.id).map((i) => i.id);
+  assert.equal(both.length, 2, 'two read items for the same comment');
+  const back = await markAs(admin, false, false, both);
+  assert.equal(back.length, 1, 'one goes unread, no unique-index error');
+  assert.equal(back[0].id, both[0], 'and it is the newest');
+  await markAs(admin, true, true, []);
 
   /* --------------------------------------------------------------- tasks -- */
   const addTask = (actor: string, person: string | null, ownerId: string, title = 'TT-TASK bring papers') =>
@@ -246,8 +253,17 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.equal((await as(S(cm), `SELECT count(*)::int AS n FROM org_change_reply WHERE request_id = $1`, [cr]))[0].n, 2);
   assert.equal((await as(S(cm2), `SELECT count(*)::int AS n FROM org_change_reply WHERE request_id = $1`, [cr]))[0].n, 0, 'replies follow their request');
   assert.match(await err(as(S(admin), `UPDATE org_change_request SET status = 'declined' WHERE id = $1`, [cr])), /change_request_needs_reason/, 'a no needs words written for it, not the earlier yes');
+  assert.match(await err(as(S(admin), `UPDATE org_change_request SET status = 'declined', answer = '  Yes, next week ' WHERE id = $1`, [cr])), /change_request_needs_reason/, 'the same words with spaces around them are not fresh');
   await as(S(admin), `UPDATE org_change_request SET status = 'done' WHERE id = $1`, [cr]);
   assert.match(await err(as(S(admin), `UPDATE org_change_request SET status = 'open' WHERE id = $1`, [cr])), /change_request_move/, 'done stays done');
+  // Review round 2: who answered, kept per answer, for the asker and the managers only.
+  const ev = (actor: string, manager: boolean) => as(S(actor), CHANGE_EVENTS_SQL, [org, actor, cr, manager]);
+  assert.deepEqual((await ev(cm, false)).map((e) => [e.from_status, e.to_status, e.answer, e.actor_name]),
+    [['open', 'accepted', 'Yes, next week', `Person ${admin.slice(-2)}`], ['accepted', 'done', 'Yes, next week', `Person ${admin.slice(-2)}`]], 'the asker sees every answer and who gave it');
+  assert.equal((await ev(owner, true)).length, 2, 'so do the managers');
+  assert.equal((await as(S(cm2), `SELECT count(*)::int AS n FROM org_change_request_event`))[0].n, 0, 'a colleague sees none, even raw');
+  assert.equal((await as(S(staff2, org2), `SELECT count(*)::int AS n FROM org_change_request_event`))[0].n, 0, 'nor another organization');
+  assert.match(await err(as(S(admin), `INSERT INTO org_change_request_event (request_id, access_code_id, from_status, to_status) VALUES ($1, $2, 'open', 'done')`, [cr, org])), /permission denied/, 'history is trigger-written only');
   const crAct = await q(`SELECT summary, actor_user_id, staff_user_id FROM org_activity WHERE entity = 'change_request' ORDER BY id`);
   assert.ok(crAct.rows.every((r: any) => r.actor_user_id === null && r.staff_user_id === null), 'change-request activity names nobody (every staff member can read it)');
   assert.equal((await as(S(cm), `SELECT current_setting('app.user_id', true) AS u`))[0].u, cm, 'and the session user is untouched');
@@ -280,7 +296,8 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.equal((await as(S(cm), REVIEW_QUEUE_SQL, [org, false, cm])).length, 0, 'never your own note in your queue');
   assert.equal(await decide(owner, 'approve', null), 'ok');
   assert.match(await err(as(S(cm), `UPDATE case_note SET body = 'after approval' WHERE id = $1`, [note])), /note_locked/, 'approved notes are locked');
-  for (const set of [`kind = 'meeting'`, `occurred_at = now()`, `drafted_by_assistant = true`, `visible_to_participant = true`]) {
+  for (const set of [`kind = 'meeting'`, `occurred_at = now()`, `drafted_by_assistant = true`, `visible_to_participant = true`,
+                     `created_at = now() - interval '9 days'`, `edited_at = now()`, `edited_at = NULL`]) {
     assert.match(await err(as(S(cm), `UPDATE case_note SET ${set} WHERE id = $1`, [note])), /note_locked/, `approved: ${set} refused`);
   }
   const states = await as(S(cm), NOTE_REVIEWS_SQL, [org, false, cm, p1]);
@@ -289,6 +306,17 @@ test('team talk (109): sealed comments, refused mentions, owner-only inbox, hand
   assert.equal((await as(S(cm2), NOTE_REVIEWS_SQL, [org, false, cm2, p1])).length, 0, 'out of reach: no reviews');
   assert.equal((await as(S(cm2), `SELECT count(*)::int AS n FROM note_review_event`))[0].n, 0, 'not even raw');
   assert.match(await err(as(S(owner), `UPDATE note_review SET status = 'pending'`)), /permission denied/, 'reviews move only through the functions');
+
+  /* ----------------------------------------- the AI switch is the owner's -- */
+  const prof = (actor: string, set: string) => as(S(actor), `UPDATE org_profile SET ${set} WHERE access_code_id = $1 RETURNING access_code_id`, [org]);
+  assert.match(await err(prof(admin, `modules = modules || '{"ai_assist": false}'`)), /ai_assist_owner_only/, 'an org admin cannot turn t.ROY off');
+  assert.equal((await prof(admin, `display_name = 'Lakeshore Works (Demo)'`)).length, 1, 'but can rename the organization');
+  assert.equal((await prof(admin, `modules = modules || '{"sites": true, "ai_assist": true}'`)).length, 1, 'and change other modules (ai_assist unchanged: missing reads as on)');
+  assert.equal((await prof(cm, `modules = modules || '{"ai_assist": false}'`).catch(() => [])).length, 0, 'nor can a case manager (not a manager: no row to change)');
+  assert.equal((await prof(owner, `modules = modules || '{"ai_assist": false}'`)).length, 1, 'the owner can');
+  assert.match(await err(prof(admin, `modules = modules || '{"ai_assist": true}'`)), /ai_assist_owner_only/, 'and only the owner turns it back on');
+  await q(`UPDATE org_profile SET modules = modules || '{"ai_assist": true}' WHERE access_code_id = $1`, [org]);
+  assert.equal(((await q(`SELECT modules->>'ai_assist' AS a FROM org_profile WHERE access_code_id = $1`, [org])).rows[0] as any).a, 'true', 'owner-credential maintenance is allowed');
 
   /* ------------------------------------------------- timeline and reach -- */
   const tl = await as(S(cm), timelineSql(['comment']), [org, false, cm, p1, null, '', 50]);

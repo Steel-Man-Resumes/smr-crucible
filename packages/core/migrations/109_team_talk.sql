@@ -137,6 +137,34 @@ BEGIN
   END IF;
 END $$;
 
+-- Review round 2 (boss): the organization's AI switch (modules.ai_assist,
+-- "t.ROY for staff") is the OWNER's call. Org admins keep every other module,
+-- the words, the type and the name. Missing key = on (the default). SECURITY
+-- INVOKER on purpose: an owner-credential maintenance script (BYPASSRLS, no
+-- app.user_id) is allowed; every app session must be the owner
+-- (access_code.partner_user_id = app.user_id). S3 enforces the same in the app.
+CREATE OR REPLACE FUNCTION public.org_profile_ai_owner_only() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_actor uuid := NULLIF(current_setting('app.user_id', true), '')::uuid;
+  v_new boolean := COALESCE((NEW.modules ->> 'ai_assist')::boolean, true);
+  v_old boolean := CASE WHEN TG_OP = 'UPDATE' THEN COALESCE((OLD.modules ->> 'ai_assist')::boolean, true) ELSE true END;
+BEGIN
+  IF v_new = v_old THEN RETURN NEW; END IF;
+  IF v_actor IS NULL AND EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolname = current_user AND (r.rolbypassrls OR r.rolsuper)) THEN
+    RETURN NEW;
+  END IF;
+  IF v_actor IS NULL OR NOT EXISTS (SELECT 1 FROM public.access_code a WHERE a.id = NEW.access_code_id AND a.partner_user_id = v_actor) THEN
+    RAISE EXCEPTION 'ai_assist_owner_only: only the owner turns t.ROY on or off for the organization' USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.org_profile_ai_owner_only() FROM PUBLIC;
+DROP TRIGGER IF EXISTS org_profile_ai_owner_only ON org_profile;
+CREATE TRIGGER org_profile_ai_owner_only BEFORE INSERT OR UPDATE OF modules ON org_profile
+  FOR EACH ROW EXECUTE FUNCTION public.org_profile_ai_owner_only();
+
 -- =============================================================== helpers ==
 
 -- Is the SESSION user on this organization's staff (owner or any org_staff
@@ -696,7 +724,7 @@ BEGIN
   END IF;
   -- Saying no always says why, in words written for this no (review N4).
   IF NEW.status = 'declined' AND OLD.status <> 'declined'
-     AND (NEW.answer IS NOT DISTINCT FROM OLD.answer OR length(btrim(COALESCE(NEW.answer, ''))) < 3) THEN
+     AND (btrim(COALESCE(NEW.answer, '')) = btrim(COALESCE(OLD.answer, '')) OR length(btrim(COALESCE(NEW.answer, ''))) < 3) THEN
     RAISE EXCEPTION 'change_request_needs_reason: say why, in a fresh answer' USING ERRCODE = 'check_violation';
   END IF;
   IF NEW.status = OLD.status AND NEW.answer IS NOT DISTINCT FROM OLD.answer THEN
@@ -714,6 +742,21 @@ DROP TRIGGER IF EXISTS org_change_request_guard ON org_change_request;
 CREATE TRIGGER org_change_request_guard BEFORE INSERT OR UPDATE ON org_change_request
   FOR EACH ROW EXECUTE FUNCTION public.org_change_request_guard();
 
+-- Who said yes, no or done, and what they wrote, kept for good (review round 2):
+-- one row per answer, written only by the trigger below; read by the asker
+-- and the managers (exactly who reads the request).
+CREATE TABLE IF NOT EXISTS org_change_request_event (
+  id               BIGSERIAL PRIMARY KEY,
+  request_id       UUID NOT NULL REFERENCES org_change_request(id) ON DELETE CASCADE,
+  access_code_id   UUID NOT NULL REFERENCES access_code(id) ON DELETE CASCADE,
+  from_status      TEXT NOT NULL,
+  to_status        TEXT NOT NULL,
+  answer           TEXT,
+  actor_user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+  at               TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS org_change_request_event_request ON org_change_request_event (request_id, at);
+
 CREATE OR REPLACE FUNCTION public.org_change_request_after() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
@@ -730,6 +773,8 @@ BEGIN
     RETURN NULL;
   END IF;
   IF NEW.answered_at IS NOT DISTINCT FROM OLD.answered_at THEN RETURN NULL; END IF;
+  INSERT INTO public.org_change_request_event (request_id, access_code_id, from_status, to_status, answer, actor_user_id)
+  VALUES (NEW.id, NEW.access_code_id, OLD.status, NEW.status, NEW.answer, NEW.answered_by);
   v_words := CASE WHEN NEW.status IS DISTINCT FROM OLD.status THEN
                     CASE NEW.status WHEN 'accepted' THEN 'said yes to' WHEN 'declined' THEN 'said no to' WHEN 'done' THEN 'finished' ELSE 'answered' END
                   ELSE 'changed the answer to' END;
@@ -803,6 +848,8 @@ ALTER TABLE org_change_request ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org_change_request FORCE ROW LEVEL SECURITY;
 ALTER TABLE org_change_reply ENABLE ROW LEVEL SECURITY;
 ALTER TABLE org_change_reply FORCE ROW LEVEL SECURITY;
+ALTER TABLE org_change_request_event ENABLE ROW LEVEL SECURITY;
+ALTER TABLE org_change_request_event FORCE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS org_change_request_select ON org_change_request;
 CREATE POLICY org_change_request_select ON org_change_request FOR SELECT USING (
@@ -823,6 +870,11 @@ DROP POLICY IF EXISTS org_change_reply_select ON org_change_reply;
 CREATE POLICY org_change_reply_select ON org_change_reply FOR SELECT USING (
   access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
   AND EXISTS (SELECT 1 FROM public.org_change_request q WHERE q.id = org_change_reply.request_id));
+-- Answer history: visible exactly when its request is (the asker and the managers).
+DROP POLICY IF EXISTS org_change_request_event_select ON org_change_request_event;
+CREATE POLICY org_change_request_event_select ON org_change_request_event FOR SELECT USING (
+  access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
+  AND EXISTS (SELECT 1 FROM public.org_change_request q WHERE q.id = org_change_request_event.request_id));
 DROP POLICY IF EXISTS org_change_reply_insert ON org_change_reply;
 CREATE POLICY org_change_reply_insert ON org_change_reply FOR INSERT WITH CHECK (
   access_code_id = NULLIF(current_setting('app.org_id', true), '')::uuid
@@ -937,13 +989,18 @@ REVOKE ALL ON FUNCTION public.smr_note_review_decide(uuid, text, text) FROM PUBL
 -- says what changed (and, with review on, sends that one for review). An
 -- account being deleted (author to NULL) changes none of these. Definer, so
 -- it sees the review row whoever writes.
+-- Review round 2: the WHOLE row is compared, so no column (created_at,
+-- edited_at, or one a later migration adds) can change in place. The one key
+-- left out is author_user_id: a deleted account's ON DELETE SET NULL is an
+-- UPDATE that must succeed (102's case_note_keep_version allows exactly that,
+-- and only when the account is gone). The version trigger (051/102) touches
+-- edited_at only when the body or kind changes, which this lock refuses anyway.
 CREATE OR REPLACE FUNCTION public.case_note_review_lock() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
   v_status text;
 BEGIN
-  IF ROW(NEW.body, NEW.kind, NEW.occurred_at, NEW.drafted_by_assistant, NEW.visible_to_participant)
-     IS NOT DISTINCT FROM ROW(OLD.body, OLD.kind, OLD.occurred_at, OLD.drafted_by_assistant, OLD.visible_to_participant) THEN
+  IF (to_jsonb(NEW) - 'author_user_id') = (to_jsonb(OLD) - 'author_user_id') THEN
     RETURN NEW;
   END IF;
   SELECT r.status INTO v_status FROM public.note_review r WHERE r.note_id = OLD.id;
@@ -990,7 +1047,8 @@ DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
     REVOKE ALL ON team_comment, team_comment_version, staff_inbox_item, org_change_request, org_change_reply,
-                  note_review, note_review_event FROM smr_app;
+                  org_change_request_event, note_review, note_review_event FROM smr_app;
+    GRANT SELECT ON org_change_request_event TO smr_app;
     GRANT SELECT, INSERT ON team_comment TO smr_app;
     GRANT UPDATE (body, mentions) ON team_comment TO smr_app;
     GRANT SELECT ON team_comment_version TO smr_app;
@@ -1016,7 +1074,7 @@ DECLARE
   c record;
 BEGIN
   FOREACH t IN ARRAY ARRAY['team_comment', 'team_comment_version', 'staff_inbox_item', 'org_change_request', 'org_change_reply',
-                           'note_review', 'note_review_event'] LOOP
+                           'org_change_request_event', 'note_review', 'note_review_event'] LOOP
     SELECT relrowsecurity, relforcerowsecurity INTO c FROM pg_class WHERE oid = ('public.' || t)::regclass;
     IF NOT (c.relrowsecurity AND c.relforcerowsecurity) THEN
       RAISE EXCEPTION '109: % must have row-level security enabled and forced', t;
@@ -1041,7 +1099,8 @@ BEGIN
     END IF;
   END LOOP;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.staff_task'::regclass AND tgname = 'staff_task_assign_guard' AND NOT tgisinternal)
-     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.case_note'::regclass AND tgname = 'case_note_review_lock' AND NOT tgisinternal) THEN
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.case_note'::regclass AND tgname = 'case_note_review_lock' AND NOT tgisinternal)
+     OR NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.org_profile'::regclass AND tgname = 'org_profile_ai_owner_only' AND NOT tgisinternal) THEN
     RAISE EXCEPTION '109: the task handoff guard and the note review lock must exist';
   END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'smr_app') THEN
@@ -1058,6 +1117,15 @@ BEGIN
     END IF;
     IF has_function_privilege('smr_app', 'public.smr_inbox_write(uuid, uuid, text, uuid, text, uuid, text)', 'EXECUTE') THEN
       RAISE EXCEPTION '109: the app must not write inbox items directly';
+    END IF;
+    IF has_function_privilege('smr_app', 'public.smr_activity_without_actor(uuid, text, text, text, text)', 'EXECUTE')
+       OR has_function_privilege('smr_app', 'public.smr_org_managers(uuid)', 'EXECUTE')
+       OR has_function_privilege('smr_app', 'public.smr_comment_mentions(uuid, uuid, uuid, uuid[], uuid[])', 'EXECUTE') THEN
+      RAISE EXCEPTION '109: the actor-free activity writer, the managers list and the mention check are definer-only';
+    END IF;
+    IF has_table_privilege('smr_app', 'public.org_change_request_event', 'INSERT') OR has_table_privilege('smr_app', 'public.org_change_request_event', 'UPDATE')
+       OR has_table_privilege('smr_app', 'public.org_change_request_event', 'DELETE') THEN
+      RAISE EXCEPTION '109: the answer history is written only by its trigger';
     END IF;
   END IF;
 END $$;

@@ -75,6 +75,8 @@ export function explainStructureError(err: unknown): { ok: false; error: string;
   if (isMissingTable(err)) return NOT_READY;
   const code = (err as { code?: string })?.code;
   const message = String((err as { message?: string })?.message ?? "");
+  // 109 (review round 2): the AI switch is the owner's alone.
+  if (/ai_assist_owner_only/.test(message)) return { ok: false, error: "Only the owner turns t.ROY on or off for your organization.", status: 403 };
   if (code === "42501" || /row-level security|permission denied/i.test(message)) return REFUSED;
   if (code === "23505") {
     if (/enrollment_one_open/.test(message)) return { ok: false, error: "They are already in that one. Change the status on the one they have.", status: 409 };

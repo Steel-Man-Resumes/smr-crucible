@@ -34,6 +34,8 @@ export interface ChangeRequest {
   created_at: string; updated_at: string; reply_count: number; mine: boolean;
 }
 export interface ChangeReply { id: string; author_user_id: string | null; author_name: string | null; body: string; created_at: string }
+/** One answer: who moved it, from what to what, with what words (109 review round 2). */
+export interface ChangeEvent { from_status: ChangeRequestStatus; to_status: ChangeRequestStatus; answer: string | null; actor_name: string | null; at: string }
 
 const COLS = `q.id, q.kind, q.title, q.body, q.target, q.status, q.answer, q.requested_by, rb.name AS requested_by_name,
   ab.name AS answered_by_name, q.answered_at, q.created_at, q.updated_at,
@@ -60,17 +62,24 @@ export async function listChangeRequests(actor: OrgActor, opts: { view?: "mine" 
   return rows;
 }
 
-export async function getChangeRequest(actor: OrgActor, id: string): Promise<{ request: ChangeRequest; replies: ChangeReply[] } | null> {
+/** $1 org, $2 me, $3 request, $4 manager. Exported for the database test. */
+export const CHANGE_EVENTS_SQL = `SELECT e.from_status, e.to_status, e.answer, u.name AS actor_name, e.at
+  FROM org_change_request_event e JOIN org_change_request q ON q.id = e.request_id LEFT JOIN users u ON u.id = e.actor_user_id
+ WHERE e.request_id = $3::uuid AND q.access_code_id = $1::uuid AND ($4::boolean OR q.requested_by = $2::uuid)
+ ORDER BY e.at, e.id`;
+
+export async function getChangeRequest(actor: OrgActor, id: string): Promise<{ request: ChangeRequest; replies: ChangeReply[]; events: ChangeEvent[] } | null> {
   if (!canAsk(actor) || !UUID_PATTERN.test(id)) return null;
-  const [req, replies] = await runScoped<[ChangeRequest[], ChangeReply[]]>(scopeOf(actor), (sql) => [
+  const [req, replies, events] = await runScoped<[ChangeRequest[], ChangeReply[], ChangeEvent[]]>(scopeOf(actor), (sql) => [
     run(sql)(`SELECT ${COLS} ${FROM} WHERE q.access_code_id = $1::uuid AND q.id = $3::uuid AND ($4::boolean OR q.requested_by = $2::uuid)`,
       [actor.orgId, actor.userId, id, isOrgManager(actor)]),
     run(sql)(`SELECT r.id, r.author_user_id, u.name AS author_name, r.body, r.created_at
                 FROM org_change_reply r JOIN org_change_request q ON q.id = r.request_id LEFT JOIN users u ON u.id = r.author_user_id
                WHERE r.request_id = $3::uuid AND q.access_code_id = $1::uuid AND ($4::boolean OR q.requested_by = $2::uuid)
                ORDER BY r.created_at`, [actor.orgId, actor.userId, id, isOrgManager(actor)]),
+    run(sql)(CHANGE_EVENTS_SQL, [actor.orgId, actor.userId, id, isOrgManager(actor)]),
   ]);
-  return req[0] ? { request: req[0], replies } : null;
+  return req[0] ? { request: req[0], replies, events } : null;
 }
 
 export type ChangeWrite = { ok: true; id: string } | { ok: false; error: string };
@@ -109,7 +118,7 @@ export async function answerChangeRequest(actor: OrgActor, id: string, input: { 
   const to = isChangeRequestStatus(input.status) ? input.status : cur[0].status;
   const finalAnswer = answer ?? cur[0].answer;
   // A "no" needs words given now, different from any earlier answer (review N4).
-  const fresh = !!answer && answer !== cur[0].answer;
+  const fresh = !!answer && answer.trim() !== (cur[0].answer ?? "").trim();
   const bad = checkChangeMove(cur[0].status, to, finalAnswer, to === "declined" && cur[0].status !== "declined" ? fresh : true);
   if (bad) return { ok: false, error: bad };
   if (to === cur[0].status && finalAnswer === cur[0].answer) return { ok: false, error: "Nothing changed." };

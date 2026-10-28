@@ -99,6 +99,7 @@ export const RLS_PROTECTED_TABLES = [
   "staff_inbox_item",
   "org_change_request",
   "org_change_reply",
+  "org_change_request_event",
   "note_review",
   "note_review_event",
 ] as const;

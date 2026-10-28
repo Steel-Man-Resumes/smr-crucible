@@ -24,6 +24,7 @@ interface RequestView {
   created_at: string; updated_at: string; reply_count: number; mine: boolean;
 }
 interface ReplyView { id: string; author_user_id: string | null; author_name: string | null; body: string; created_at: string }
+interface EventView { from_status: ChangeRequestStatus; to_status: ChangeRequestStatus; answer: string | null; actor_name: string | null; at: string }
 interface Payload { requests: RequestView[]; view: "mine" | "queue"; manager: boolean; me: string; canWrite: boolean }
 
 const field = "plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2";
@@ -75,6 +76,7 @@ export function SuggestChangeForm({ target, defaultKind = "other", onDone }: { t
 function RequestCard({ r, manager, canWrite, onChange }: { r: RequestView; manager: boolean; canWrite: boolean; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const [replies, setReplies] = useState<ReplyView[] | null>(null);
+  const [events, setEvents] = useState<EventView[]>([]);
   const [reply, setReply] = useState("");
   const [moving, setMoving] = useState<ChangeRequestStatus | null>(null);
   const [answer, setAnswer] = useState(r.answer ?? "");
@@ -83,6 +85,7 @@ function RequestCard({ r, manager, canWrite, onChange }: { r: RequestView; manag
     const res = await fetch(`/api/org/change-requests?id=${r.id}`).catch(() => null);
     const d = res && res.ok ? await res.json() : null;
     setReplies(d?.replies ?? []);
+    setEvents(d?.events ?? []);
   }, [r.id]);
   useEffect(() => { if (open && replies === null) loadReplies(); }, [open, replies, loadReplies]);
   const act = async (body: Record<string, unknown>, after?: () => void) => { setMsg(null); const err = await post(body); if (err) setMsg(err); else { after?.(); onChange(); } };
@@ -124,6 +127,15 @@ function RequestCard({ r, manager, canWrite, onChange }: { r: RequestView; manag
       </button>
       {open && (
         <div className="mt-2">
+          {events.length > 0 && (
+            <ul className="mb-2 space-y-1" aria-label="Answers so far">
+              {events.map((e, i) => (
+                <li key={i} className="text-xs text-t-phos-dim">
+                  {e.actor_name || "An admin"}: {CHANGE_REQUEST_STATUS_LABELS[e.to_status]} ({day(e.at)}){e.answer ? `. "${e.answer}"` : ""}
+                </li>
+              ))}
+            </ul>
+          )}
           {replies === null ? <p className="text-xs text-t-phos-dim">Getting replies...</p> : (
             <ul className="space-y-2">
               {replies.map((x) => (
