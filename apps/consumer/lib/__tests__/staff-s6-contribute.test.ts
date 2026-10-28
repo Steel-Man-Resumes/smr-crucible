@@ -9,7 +9,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { mayWrite, recordWordsIn, todayUtc, RECORD_WORDS_REFUSAL } from "../staff-rewards-route";
-import { buildContributeTools, listingNudgeFor, suggestionsOn, CONTRIBUTE_TOOL_NAMES } from "../tools/staff/contribute-tools";
+import { contributeTools, typedByStaff, CONTRIBUTE_TOOL_NAMES, type ContributeToolContext } from "../tools/staff/contribute-tools";
+import { listingNudgeFor, suggestionsOn } from "../staff-listing-nudge";
 import { LISTING_NUDGE_LINE, namesMentioned } from "@crucible/core/src/staffRewardsShared";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 
@@ -19,9 +20,17 @@ const actor: OrgActor = {
   role: "staff", capabilities: new Set(["org.cohort.view"]), reach: "assigned", viaPlatformAdmin: false,
 };
 const LISTING = "00000000-0000-4000-8000-000000000099";
-const run = (t: ReturnType<typeof buildContributeTools>, name: string, args: unknown) =>
+type Tools = ReturnType<typeof contributeTools.build>;
+const run = (t: Tools, name: string, args: unknown) =>
   (t[name].execute as (a: unknown, o: unknown) => Promise<Record<string, unknown>>)(args, { toolCallId: "x", messages: [] });
-
+function ctxFor(core: () => Promise<never>, over: Partial<ContributeToolContext> & { actorOver?: Partial<OrgActor> } = {}): ContributeToolContext {
+  return {
+    initial: actor, loadCore: core, actor: async () => ({ ...actor, ...(over.actorOver ?? {}) }),
+    staffWords: over.staffWords ?? "", selectors: over.selectors ?? new Map(),
+    safe: (fn) => async (x) => { try { return await fn(x); } catch { return { status: "unavailable" }; } },
+  };
+}
+const build = (core: () => Promise<never>, over: Parameters<typeof ctxFor>[1] = {}) => contributeTools.build(ctxFor(core, over));
 function stand(over: Record<string, unknown> = {}) {
   const calls: string[] = [];
   const core = {
@@ -53,20 +62,17 @@ test("route rules: record words are refused in words other people read", () => {
 
 test("the nudge: one line, only when suggestions are on, at most once a week (the claim decides)", async () => {
   const on = stand();
-  const n = await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { core: on.core });
+  const n = await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { loadCore: on.core });
   assert.equal(n?.line, LISTING_NUDGE_LINE);
   assert.equal(LISTING_NUDGE_LINE, "Did this place still check out? Called them lately?");
   assert.deepEqual(n?.flows.map((f) => f.flow), ["called_today", "correction"]);
-
   const off = stand({ suggestions: false });
-  assert.equal(await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { core: off.core }), null, "suggestions off: quiet");
+  assert.equal(await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { loadCore: off.core }), null, "suggestions off: quiet");
   assert.ok(!off.calls.includes("claim"), "and the week is not used up");
-
   const already = stand({ claim: false });
-  assert.equal(await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { core: already.core }), null, "asked this week already: quiet");
-
-  assert.equal(await listingNudgeFor({ ...actor, viaPlatformAdmin: true }, { kind: "resource", id: LISTING }, { core: on.core }), null);
-  assert.equal(await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { core: off.core, suggestionsOn: true }) !== null, true, "the registry may pass S1's switch in");
+  assert.equal(await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { loadCore: already.core }), null, "asked this week already: quiet");
+  assert.equal(await listingNudgeFor({ ...actor, viaPlatformAdmin: true }, { kind: "resource", id: LISTING }, { loadCore: on.core }), null);
+  assert.notEqual(await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { loadCore: off.core, suggestionsOn: true }), null, "the registry may pass S1's switch in");
 });
 
 test("suggestionsOn defaults to on, and a failed read never nags", async () => {
@@ -75,46 +81,72 @@ test("suggestionsOn defaults to on, and a failed read never nags", async () => {
   assert.equal(await suggestionsOn(actor, async () => ({ getStaffPrefs: async () => { throw new Error("down"); } }) as never), false);
 });
 
-test("the nudge tool returns the line or quiet", async () => {
-  assert.deepEqual([...CONTRIBUTE_TOOL_NAMES].sort(), ["draft_directory_contribution", "listing_check_nudge"]);
-  const t = buildContributeTools(actor, { core: stand().core });
-  const r = await run(t, "listing_check_nudge", { kind: "employer", listingId: LISTING });
-  assert.equal(r.status, "ok");
-  assert.equal(r.line, LISTING_NUDGE_LINE);
-  const q = await run(buildContributeTools(actor, { core: stand({ claim: false }).core }), "listing_check_nudge", { kind: "employer", listingId: LISTING });
-  assert.equal(q.status, "quiet");
+test("the module has S1's shape: id, streamed tools, an activity line for each", () => {
+  assert.equal(contributeTools.id, "contribute");
+  assert.deepEqual([...(contributeTools.streamed ?? [])].sort(), [...CONTRIBUTE_TOOL_NAMES].sort());
+  for (const n of CONTRIBUTE_TOOL_NAMES) assert.ok(contributeTools.activity?.[n], n);
+  const src = readFileSync(join(ROOT, "lib/tools/staff/contribute-tools.ts"), "utf8");
+  assert.ok(!/^import [^;]*from "@crucible\/core";/m.test(src), "no top-level core import (browser-safe)");
 });
 
-test("the draft tool drafts a card and sends nothing", async () => {
+test("the nudge tool returns the fixed line or quiet, never model words", async () => {
+  const r = await run(build(stand().core), "listing_check_nudge", { kind: "employer", listingId: LISTING });
+  assert.equal(r.status, "ok");
+  assert.equal(r.line, LISTING_NUDGE_LINE);
+  assert.deepEqual(r.listing, { kind: "employer", id: LISTING });
+  assert.equal((await run(build(stand({ claim: false }).core), "listing_check_nudge", { kind: "employer", listingId: LISTING })).status, "quiet");
+  assert.equal((await run(build(stand().core), "listing_check_nudge", { kind: "employer", listingId: "drop table" })).status, "quiet");
+});
+
+test("staff-typed check: words, phone digits, tokens", () => {
+  const said = "I called Lakeshore Pantry in Muskegon MI today at (231) 555-0142, see https://example.org/pantry";
+  assert.ok(typedByStaff(said, "Lakeshore Pantry", "words"));
+  assert.ok(!typedByStaff(said, "Harbor Foods", "words"));
+  assert.ok(typedByStaff(said, "231-555-0142", "phone"));
+  assert.ok(!typedByStaff(said, "231-555-9999", "phone"));
+  assert.ok(typedByStaff(said, "MI", "token"));
+  assert.ok(typedByStaff(said, "https://example.org/pantry", "token"));
+});
+
+test("the draft tool: model words only in draftBody, fields only what the staff member typed, and it sends nothing", async () => {
   const s = stand();
-  const t = buildContributeTools(actor, { core: s.core, today: "2026-10-27" });
-  const r = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "resource", listingId: LISTING, said: "Still open Tuesdays", interactionOn: "2026-10-27", interactionMethod: "phone_call" });
+  const today = new Date().toISOString().slice(0, 10);
+  const t = build(s.core, { staffWords: "I called Lakeshore Pantry today, they are still open Tuesdays" });
+  const r = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "resource", listingId: LISTING, name: "Lakeshore Pantry", city: "Grand Haven", said: "Still open Tuesdays from 9 to 1", interactionOn: today, interactionMethod: "phone_call" });
   assert.equal(r.status, "draft", JSON.stringify(r));
+  assert.equal(r.draftBody, "Still open Tuesdays from 9 to 1", "the model's wording is the draft body, which the route claim-checks");
+  const card = r.card as { fields: Record<string, unknown>; draftBodyField: string; listingId: string };
+  assert.equal(card.fields.name, "Lakeshore Pantry", "typed by the staff member: kept");
+  assert.equal(card.fields.city, undefined, "not typed by the staff member: left out");
+  assert.deepEqual(r.leftOut, ["city"]);
+  assert.equal(card.draftBodyField, "said");
+  assert.ok(!JSON.stringify({ ...r, draftBody: null }).includes("Tuesdays from 9"), "model words appear nowhere but draftBody");
   assert.match(String(r.note), /presses Send\. Nothing was sent\./);
   assert.ok(!s.calls.includes("SUBMIT"), "never submits");
-  const missing = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "resource", listingId: LISTING, said: "Still open", interactionMethod: "heard_from_someone", interactionOn: "2026-10-27" });
-  assert.equal(missing.status, "needs_more", "hearsay is not a call, even in a draft");
+  const hearsay = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "resource", listingId: LISTING, said: "Still open", interactionMethod: "heard_from_someone", interactionOn: today });
+  assert.equal(hearsay.status, "needs_more", "hearsay is not a call, even in a draft");
 });
 
 test("red team: the draft tool refuses record words, a caseload name, and never carries who someone knows", async () => {
-  const t = buildContributeTools(actor, { core: stand().core, today: "2026-10-27" });
+  const t = build(stand().core, { selectors: new Map([["p9", "Marisol"]]) });
   const rec = await run(t, "draft_directory_contribution", { flow: "correction", targetKind: "employer", listingId: LISTING, change: "They will not hire anyone on probation now" });
   assert.equal(rec.status, "refused");
-  const named = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "employer", listingId: LISTING, said: "They said Alma Reyes can start Monday", interactionOn: "2026-10-27", interactionMethod: "phone_call" });
+  const named = await run(t, "draft_directory_contribution", { flow: "called_today", targetKind: "employer", listingId: LISTING, said: "They said Alma Reyes can start Monday", interactionMethod: "phone_call" });
   assert.equal(named.status, "refused");
   assert.match(String(named.error), /never a participant/);
+  const selector = await run(t, "draft_directory_contribution", { flow: "correction", targetKind: "employer", listingId: LISTING, change: "Marisol said they moved" });
+  assert.equal(selector.status, "refused", "a first name from the staff member's list counts too");
   const ks = await run(t, "draft_directory_contribution", { flow: "knows_someone", targetKind: "employer", listingId: LISTING });
-  assert.equal(ks.status, "draft");
-  assert.equal((ks.card as Record<string, unknown>).privateNote, null, "t.ROY never holds a personal contact");
+  assert.equal(ks.status, "draft", JSON.stringify(ks));
+  assert.ok(!JSON.stringify(ks).includes("typed on the card"), "no private note placeholder is streamed");
   assert.match(String(ks.note), /types who they know in the private box/);
 });
 
 test("the draft tool is the directory_scout unlock: before it, it points to the form", async () => {
-  const t = buildContributeTools(actor, { core: stand({ unlocks: [] }).core });
-  const r = await run(t, "draft_directory_contribution", { flow: "new_place", targetKind: "employer", name: "Harbor Freight Lines (Demo)", state: "MI" });
+  const r = await run(build(stand({ unlocks: [] }).core), "draft_directory_contribution", { flow: "new_place", targetKind: "employer", name: "Harbor Freight Lines (Demo)", state: "MI" });
   assert.equal(r.status, "locked");
   assert.match(String(r.error), /\/dashboard\/contribute/);
-  const viewing = buildContributeTools({ ...actor, viaPlatformAdmin: true }, { core: stand().core });
+  const viewing = build(stand().core, { actorOver: { viaPlatformAdmin: true } });
   assert.equal((await run(viewing, "draft_directory_contribution", { flow: "new_place", targetKind: "employer", name: "X", state: "MI" })).status, "refused");
 });
 
@@ -128,7 +160,7 @@ const S6_FILES = [
   "app/api/org/directory-contributions/route.ts", "app/api/org/listing-nudge/route.ts", "app/api/admin/directory-contributions/route.ts",
   ...walk(join(ROOT, "components/org/rewards")).map((f) => f.slice(ROOT.length)),
   ...walk(join(ROOT, "components/org/directory")).map((f) => f.slice(ROOT.length)),
-  "lib/tools/staff/contribute-tools.ts", "lib/staff-rewards-route.ts",
+  "lib/tools/staff/contribute-tools.ts", "lib/staff-rewards-route.ts", "lib/staff-listing-nudge.ts",
 ];
 
 test("every S6 org route checks a capability, and every write checks it is the person themselves", () => {
@@ -138,6 +170,7 @@ test("every S6 org route checks a capability, and every write checks it is the p
     for (const verb of ["POST", "PUT", "PATCH"]) {
       if (!new RegExp(`export async function ${verb}\\b`).test(src) || f.includes("listing-nudge")) continue;
       assert.match(src, /mayWrite\(/, `${f} ${verb} refuses view-as and other sessions`);
+      assert.match(src, new RegExp(`export async function ${verb}\\(request: Request\\) \\{\\n  const w = await gate\\(request\\);`), `${f} ${verb}: the gate is the first await`);
     }
   }
   const admin = readFileSync(join(ROOT, "app/api/admin/directory-contributions/route.ts"), "utf8");

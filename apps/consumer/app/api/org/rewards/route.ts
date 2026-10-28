@@ -33,7 +33,7 @@ export async function GET(request: Request) {
   return NextResponse.json({ viewing: false, isManager: actor.role === "owner" || actor.role === "org_admin", ...wins }, { headers: NO_STORE });
 }
 
-async function writer(request: Request) {
+async function gate(request: Request) {
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return { response: guard.response } as const;
   const session = await effectiveAuth();
@@ -44,7 +44,7 @@ async function writer(request: Request) {
 }
 
 export async function PUT(request: Request) {
-  const w = await writer(request);
+  const w = await gate(request);
   if ("response" in w) return w.response;
   const body = await request.json().catch(() => ({}));
   if (body && typeof body.program === "object" && body.program) {
@@ -66,7 +66,7 @@ export async function PUT(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const w = await writer(request);
+  const w = await gate(request);
   if ("response" in w) return w.response;
   const body = await request.json().catch(() => ({}));
   if (body?.action !== "seen" || !Array.isArray(body.keys)) return NextResponse.json({ error: "Not found." }, { status: 404 });

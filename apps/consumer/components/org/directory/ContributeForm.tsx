@@ -23,6 +23,23 @@ export interface ContributeInitial {
   interactionOn?: string | null; interactionMethod?: ContactMethod | null;
 }
 
+/**
+ * The t.ROY draft card (draft_directory_contribution) as this form's starting
+ * values. draftBody is the claim-checked wording; it goes in "said" or
+ * "change". The staff member still checks everything and presses Send.
+ */
+export function initialFromDraft(card: {
+  flow: ContributionFlow; targetKind: ContributionKind; listingId: string | null;
+  fields: { name?: string; city?: string; state?: string; website?: string; phone?: string };
+  interactionOn: string | null; interactionMethod: ContactMethod | null; draftBodyField: "said" | "change" | null;
+}, draftBody: string | null): ContributeInitial {
+  return {
+    flow: card.flow, targetKind: card.targetKind, targetId: card.listingId, ...card.fields,
+    interactionOn: card.interactionOn, interactionMethod: card.interactionMethod,
+    ...(card.draftBodyField && draftBody ? { [card.draftBodyField]: draftBody } : {}),
+  };
+}
+
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

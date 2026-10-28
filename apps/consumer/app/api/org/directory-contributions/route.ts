@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   return NextResponse.json({ contributions: await listMyContributions(guard.actor) }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
-async function writer(request: Request) {
+async function gate(request: Request) {
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return { response: guard.response } as const;
   const session = await effectiveAuth();
@@ -39,7 +39,7 @@ async function writer(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const w = await writer(request);
+  const w = await gate(request);
   if ("response" in w) return w.response;
   const body = await request.json().catch(() => null);
   const today = todayUtc();
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const w = await writer(request);
+  const w = await gate(request);
   if ("response" in w) return w.response;
   const body = await request.json().catch(() => ({}));
   const ok = await withdrawContribution(w.actor, String(body?.id ?? ""));

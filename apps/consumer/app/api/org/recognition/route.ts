@@ -27,7 +27,7 @@ export async function GET(request: Request) {
   return NextResponse.json({ notes, forReport: notes.filter((n) => n.status === "approved"), staff }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
-async function writer(request: Request) {
+async function gate(request: Request) {
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return { response: guard.response } as const;
   const session = await effectiveAuth();
@@ -38,7 +38,7 @@ async function writer(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const w = await writer(request);
+  const w = await gate(request);
   if ("response" in w) return w.response;
   const body = await request.json().catch(() => ({}));
   if (recordWordsIn([String(body?.body ?? ""), String(body?.periodLabel ?? "")])) return NextResponse.json({ error: RECORD_WORDS_REFUSAL }, { status: 400 });
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const w = await writer(request);
+  const w = await gate(request);
   if ("response" in w) return w.response;
   const body = await request.json().catch(() => ({}));
   const status = String(body?.status ?? "");

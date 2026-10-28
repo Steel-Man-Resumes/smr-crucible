@@ -10,7 +10,7 @@
  */
 import { NextResponse } from "next/server";
 import { requireOrgCapability } from "@/lib/org-guard";
-import { listingNudgeFor } from "@/lib/tools/staff/contribute-tools";
+import { listingNudgeFor } from "@/lib/staff-listing-nudge";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +21,6 @@ export async function POST(request: Request) {
   const body = await request.json().catch(() => ({}));
   const kind = body?.kind === "employer" || body?.kind === "resource" ? body.kind : null;
   if (!kind) return NextResponse.json({ line: null });
-  const nudge = await listingNudgeFor(guard.actor, { kind, id: String(body?.id ?? "") });
+  const nudge = await listingNudgeFor(guard.actor, { kind, id: String(body?.id ?? "") }, { loadCore: () => import("@crucible/core") });
   return NextResponse.json({ line: nudge?.line ?? null, flows: nudge?.flows ?? [] });
 }
