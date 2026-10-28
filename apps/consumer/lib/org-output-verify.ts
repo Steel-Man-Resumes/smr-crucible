@@ -124,13 +124,15 @@ const NO_MATCH_CLAUSE = new RegExp(
  * saying the form is filled in, and nothing else. "Michael Shaw got the job, so I filled in
  * Add people" does not match, so a claim cannot ride along.
  */
+/** A full name as people write it: O'Brien, O’Neil, Mary-Jane, De La Cruz, Juan de la Cruz, van der Berg (review round 2 nit). */
+const PREFILL_NAME = "[A-Z][a-z]*(?:['\u2019-][A-Z][a-z]+)*(?:\\s+(?:(?:de|la|del|van|von|der|da|di|le)\\s+){0,3}[A-Z][a-z]*(?:['\u2019-][A-Z][a-z]+)*){0,3}";
 const PREFILL_CLAUSE = new RegExp(
   "^(?:" +
-    `(?:I(?:\\s+have|['\u2019]ve)?\\s+)?(?:filled\\s+in|opened|set\\s+up|prepared)\\s+(?:the\\s+)?Add\\s+people(?:\\s+form)?\\s+(?:for|with)\\s+${NAME_PART}(?:\\s+filled\\s+in)?` +
+    `(?:I(?:\\s+have|['\u2019]ve)?\\s+)?(?:filled\\s+in|opened|set\\s+up|prepared)\\s+(?:the\\s+)?Add\\s+people(?:\\s+form)?\\s+(?:for|with)\\s+${PREFILL_NAME}(?:\\s+(?:with|and)\\s+their\\s+email)?(?:\\s+filled\\s+in)?` +
     "|" +
-    `${NAME_PART}['\u2019]s\\s+details\\s+are\\s+(?:filled\\s+in|ready)(?:\\s+(?:on|in)\\s+Add\\s+people)?` +
+    `${PREFILL_NAME}['\u2019]s\\s+details\\s+are\\s+(?:filled\\s+in|ready)(?:\\s+(?:on|in)\\s+Add\\s+people)?` +
     "|" +
-    `Open\\s+Add\\s+people\\s+for\\s+${NAME_PART}` +
+    `Open\\s+Add\\s+people\\s+for\\s+${PREFILL_NAME}` +
   ")\\s*[.!?]?\\s*$"
 );
 
@@ -138,7 +140,8 @@ const PREFILL_CLAUSE = new RegExp(
 function sentenceAt(text: string, i: number): string {
   let start = 0;
   let end = text.length;
-  for (const m of text.matchAll(/[.!?\n]/g)) {
+  // A period inside an email or a number ("example.com", "3.5") does not end a sentence (review round 2).
+  for (const m of text.matchAll(/[.!?](?=\s|$)|\n/g)) {
     const at = m.index ?? 0;
     if (at < i) start = at + 1;
     else { end = at + 1; break; }
@@ -186,7 +189,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // added notes to the form" is not about a person. A past fact read from a
   // record ("an email was sent Oct 3") is not flagged: only "your/the/this/that"
   // drafts said to be sent.
-  const acted = text.match(/\bI(?:'ve| have)?\s+(?:already\s+|just\s+)?(?:sent|emailed|texted|messaged|saved|filed|booked|scheduled|submitted|assigned|recorded|logged|invited|enrolled)\b(?!\s+(?:nothing|no\b))|\b(?:your|the|this|that) (?:message|email|text|note|draft|check-in|referral|reminder|invite|invitation) (?:has been|was|is now|got) (?:sent|saved|filed|delivered|scheduled)\b|\b(?:has|have) been (?:added|invited|enrolled)\b|\b(?:is|are) (?:now )?(?:added|invited)\b|\b(?:is|are) now (?:enrolled|on your (?:list|caseload))\b|\binvite (?:is )?on its way\b/i)
+  const acted = text.match(/\bI(?:'ve| have)?\s+(?:already\s+|just\s+)?(?:sent|emailed|texted|messaged|saved|filed|booked|scheduled|submitted|assigned|recorded|logged|invited|enrolled)\b(?!\s+(?:nothing|no\b))|\b(?:your|the|this|that) (?:message|email|text|note|draft|check-in|referral|reminder|invite|invitation) (?:has been|was|is now|got) (?:sent|saved|filed|delivered|scheduled)\b|(?:\b(?:has|have)|['\u2019](?:s|ve)) been (?:added|invited|enrolled)\b|\binvite (?:was |got )?(?:sent|went out)\b|\bthe invite went out\b|\b(?:is|are) (?:now )?(?:added|invited)\b|\b(?:is|are) now (?:enrolled|on your (?:list|caseload))\b|\binvite (?:is )?on its way\b/i)
     ?? text.match(/\bI(?:'ve| have)? (?:already |just )?added (?:them|him|her|[A-Z][a-z]+)\b/);
   if (acted) problems.push(`"${acted[0]}": t.ROY cannot send, save or book anything; you do that yourself`);
 
@@ -204,6 +207,10 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // A phone number is contact detail, not a count (review C4 B1): skip it
   // rather than letting its digit groups into the allowed numbers.
   text = text.replace(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}\b/g, " ");
+  // An email address is contact detail too (lane S1, review round 2): it is
+  // read as "their email", so its parts are never counts or names, and the
+  // sentence it sits in stays whole for the prefill rule.
+  text = text.replace(/[^\s@()<>,;:"']+@[^\s@()<>,;:"']+\.[A-Za-z]{2,24}\b/g, "their email");
   // Whole phrases a tool returned (a job title, a listing, a note) are
   // repeating the record, not new claims. Only the whole phrase: a name
   // inside one is still checked when it appears on its own (review C4 S1).

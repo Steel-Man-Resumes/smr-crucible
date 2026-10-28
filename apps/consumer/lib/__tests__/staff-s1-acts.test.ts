@@ -10,12 +10,12 @@ import { generateText, tool, jsonSchema } from "ai";
 import { MockLanguageModelV1 } from "ai/test";
 import { parseDataStreamPart } from "@ai-sdk/ui-utils";
 import { buildStaffTools } from "../tools/assistant-staff-tools";
-import { composeStaffTools, staffStreamedTools, staffToolActivity, STAFF_TOOL_MODULES } from "../tools/staff";
+import { composeStaffTools, staffStreamedTools, staffToolActivity, staffStreamedShapes, streamedDeclarationProblems, STAFF_TOOL_MODULES } from "../tools/staff";
 import { properName, staffTyped, phonesIn } from "../tools/staff/navigate";
 import { employerMarkWords } from "../tools/staff/directory";
 import { createStaffEvidenceCollector } from "../staff-tool-evidence";
 import { checkOrgClaimsDeterministic, type OrgFacts } from "../org-output-verify";
-import { staffAnswerStreamLines, streamedStaffResults, staffTypedWords, checkStreamedDrafts } from "../staff-skill-run";
+import { staffAnswerStreamLines, streamedStaffResults, staffTypedWords, checkStreamedDrafts, streamedShapeProblem } from "../staff-skill-run";
 import { staffPagesFor, staffPageHref, staffPageLabel, STAFF_PAGES, STAFF_PAGE_KEYS } from "../staff-pages";
 import { computeOrgCapabilities, STAFF_PRESETS } from "@crucible/core/src/authz/capabilities";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
@@ -358,7 +358,8 @@ it("review S6 and S8: streamed results never carry the model's args, and a model
   const f: OrgFacts = { caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Alma"], staffNames: [], orgName: "Lakeshore Works (Demo)" };
   const check = (body: string) => checkOrgClaimsDeterministic(body, f);
   const card = (id: string, draftBody?: unknown) => ({ toolCallId: id, toolName: "propose_shared_view", args: {}, result: { status: "needs_confirmation", ...(draftBody === undefined ? {} : { draftBody }) } });
-  const out = checkStreamedDrafts([card("a"), card("b", "Hi Alma, see you Tuesday."), card("c", "Hi Alma, Marisol says your pay is $22 an hour."), card("d", 7)], check);
+  const shapes = new Map([["propose_shared_view", { status: "server", draftBody: "draft" } as const]]);
+  const out = checkStreamedDrafts([card("a"), card("b", "Hi Alma, see you Tuesday."), card("c", "Hi Alma, Marisol says your pay is $22 an hour."), card("d", 7)], check, shapes);
   assert.deepEqual(out.kept.map((k) => k.toolCallId), ["a", "b"]);
   assert.match(out.notice, /held back/);
   const route = readFileSync(new URL("../../app/api/assistant/route.ts", import.meta.url), "utf8");
@@ -390,4 +391,74 @@ it("review S5: both prefill sides check the current organization from the role",
   assert.match(hook, /if \(!viewerId \|\| !orgId\) return;/);
   const chat = readFileSync(new URL("../../components/AssistantChat.tsx", import.meta.url), "utf8");
   assert.match(chat, /parseAddPersonPrefill\([^;]*\{ orgId: currentOrgId \}\)/);
+});
+
+/* ------------------------------------------------- review round 2 fixes -- */
+
+it("review R2-1: an email in the filled-in sentence neither splits it nor flags the name", async () => {
+  const words = "fill in add people for michael shaw, mshaw@example.com";
+  const { run, evidence } = toolsFor(staff, words);
+  const r = await run("open_add_person", { firstName: "michael", lastName: "shaw", email: "mshaw@example.com" });
+  assert.equal((r.prefill as R).email, "mshaw@example.com");
+  const f = facts(evidence);
+  for (const good of ["I filled in Add people for Michael Shaw with mshaw@example.com. Press Send invite.", "I filled in Add people for Michael Shaw and their email. Press Send invite."]) {
+    assert.deepEqual(checkOrgClaimsDeterministic(good, f, words, { typedNamesInNoMatch: true }), [], good);
+  }
+  // A rider after the email is still its own claim.
+  assert.ok(checkOrgClaimsDeterministic("I filled in Add people for Michael Shaw with mshaw@example.com, and Shaw starts Monday.", f, words, { typedNamesInNoMatch: true }).some((p) => p.includes("Shaw")));
+});
+
+it("review R2 nit: names as people write them pass the filled-in sentence", async () => {
+  for (const [first, last] of [["Sean", "O'Brien"], ["Mary-Jane", "Watts"], ["Ana", "De La Cruz"], ["Juan", "de la Cruz"], ["Dara", "O\u2019Neil"]]) {
+    const words = `add ${first} ${last}`;
+    const { run, evidence } = toolsFor(staff, words);
+    const r = await run("open_add_person", { firstName: first, lastName: last });
+    assert.equal(r.status, "prefill_ready", `${first} ${last}`);
+    const full = `${(r.prefill as R).firstName} ${(r.prefill as R).lastName}`;
+    assert.deepEqual(checkOrgClaimsDeterministic(`I filled in Add people for ${full}.`, facts(evidence), words, { typedNamesInNoMatch: true }), [], full);
+  }
+  assert.ok(!staffTyped("acct 7775550100199", "555-010-0199", "phone"), "a number inside a longer digit run is not a typed phone");
+});
+
+it("review R2-2: contractions and short forms of adding or inviting are flagged", () => {
+  const f: OrgFacts = { caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Alma"], staffNames: [] };
+  for (const claim of ["He's been added.", "They've been invited.", "Invite sent.", "Her invite went out this morning.", "The invite went out.", "Your invite was sent.", "She\u2019s been enrolled."]) {
+    assert.ok(checkOrgClaimsDeterministic(claim, f, "", { typedNamesInNoMatch: true }).some((p) => /cannot send, save or book/.test(p)), claim);
+  }
+});
+
+it("review R2-3: streamed results must keep their module's declared shape; the probe is held", () => {
+  assert.deepEqual(streamedDeclarationProblems(), [], "every module's declaration is sound");
+  const bad = { id: "bad", build: () => ({}), streamed: { x: { status: "server", note: "draft" } } } as never;
+  assert.ok(streamedDeclarationProblems([bad]).some((p) => /only draftBody/.test(p)));
+  const shapes = new Map([["make_card", { status: "server", draftBody: "draft", items: "server" } as const]]);
+  const check = (body: string) => checkOrgClaimsDeterministic(body, { caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jordan"], staffNames: [] });
+  const probe = { toolCallId: "p", toolName: "make_card", args: {}, result: { items: [{ draftBody: "Hi Jordan, Marcus says hi." }], note: "Marcus got hired at $40" } };
+  const out = checkStreamedDrafts([probe], check, shapes);
+  assert.equal(out.kept.length, 0);
+  assert.match(out.held.join(" "), /undeclared field "note"|below the top level/);
+  // Even with every top-level key declared, a nested draftBody is held.
+  const nested = checkStreamedDrafts([{ ...probe, result: { status: "ok", items: [{ draftBody: "Hi Jordan, Marcus says hi." }] } }], check, shapes);
+  assert.match(nested.held.join(" "), /below the top level/);
+  // An undeclared tool is held; a well-formed draftBody that passes is kept.
+  assert.equal(checkStreamedDrafts([{ ...probe, toolName: "who_knows" }], check, shapes).kept.length, 0);
+  assert.equal(checkStreamedDrafts([{ ...probe, result: { status: "ok", draftBody: "Hi Jordan, see you Tuesday." } }], check, shapes).kept.length, 1);
+});
+
+it("review R2-3: every result our own streamed tools can return keeps the declared shape", async () => {
+  const shapes = staffStreamedShapes();
+  const results: { toolName: string; result: R }[] = [];
+  const push = async (actor: OrgActor, words: string, toolName: string, args: R, extra: Parameters<typeof toolsFor>[2] = {}) => results.push({ toolName, result: await toolsFor(actor, words, extra).run(toolName, args) });
+  await push(staff, "", "open_staff_page", { page: "today" });
+  await push(staff, "", "open_staff_page", { page: "team" });
+  await push(staff, "", "open_staff_page", { page: "admin" });
+  await push(staff, "", "open_staff_page", { page: "person", clientId: ALMA });
+  await push(staff, "", "open_staff_page", { page: "person", clientId: OTHER });
+  await push(viaAdmin, "", "open_staff_page", { page: "today" });
+  await push(staff, "x", "open_staff_page", { page: "person", clientId: ALMA }, { focus: OTHER, selectors: [{ id: ALMA, firstName: "Alma" }] });
+  await push(staff, "add rosa diaz rosa@example.invalid 555 010 0199 job readiness", "open_add_person", { firstName: "rosa", lastName: "diaz", email: "rosa@example.invalid", phone: "5550100199", program: "job readiness" });
+  await push(staff, "add someone", "open_add_person", { firstName: "Jordan" });
+  await push(volunteer, "add Rosa", "open_add_person", { firstName: "Rosa" });
+  await push(viaAdmin, "add Rosa", "open_add_person", { firstName: "Rosa" });
+  for (const r of results) assert.equal(streamedShapeProblem({ toolCallId: "x", args: {}, ...r }, shapes), null, `${r.toolName} ${String(r.result.status)}`);
 });

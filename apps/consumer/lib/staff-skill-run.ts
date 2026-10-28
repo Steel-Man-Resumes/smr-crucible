@@ -19,7 +19,7 @@
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 import { STAFF_SKILLS, type StaffSkillId } from "./staff-troy";
 import { skillRunInputSummary } from "./staff-ai-safety";
-import { staffStreamedTools } from "./tools/staff";
+import { staffStreamedTools, staffStreamedShapes, type StreamedShape } from "./tools/staff";
 
 export const GENERAL_SKILL = "staff-general";
 
@@ -110,23 +110,47 @@ export function streamedStaffResults(toolResults: readonly { toolCallId: string;
     .slice(0, 4);
 }
 
+/** Why a streamed result breaks its declared shape, or null when it keeps it. */
+export function streamedShapeProblem(s: StreamedToolResult, shapes: ReadonlyMap<string, StreamedShape>): string | null {
+  const shape = shapes.get(s.toolName);
+  if (!shape) return `${s.toolName} has no declared result shape`;
+  const result = s.result as Record<string, unknown> | null;
+  if (!result || typeof result !== "object" || Array.isArray(result)) return `${s.toolName} returned something that is not a result`;
+  for (const key of Object.keys(result)) {
+    const source = shape[key];
+    if (!source) return `${s.toolName} returned an undeclared field "${key}"`;
+    if (source === "draft" && key !== "draftBody") return `${s.toolName} declares "${key}" as model-written`;
+  }
+  // draftBody counts only at the top level, where the check below reads it.
+  const nested = (v: unknown, depth: number): boolean => {
+    if (!v || typeof v !== "object") return false;
+    if (depth > 0 && !Array.isArray(v) && "draftBody" in (v as object)) return true;
+    return Object.values(v as object).some((x) => nested(x, depth + 1));
+  };
+  if (nested(result, 0)) return `${s.toolName} has model-written words below the top level`;
+  return null;
+}
+
 /**
- * The draftBody convention (lib/tools/staff/types.ts): a streamed result that
- * carries model-written words in `draftBody` passes the same deterministic
- * draft check as offer_staff_draft before it reaches the browser. One that
- * fails is held back whole, and the answer says why.
+ * Enforced, not a convention (review rounds 1 and 2, S8). Every streamed
+ * result must keep its module's declared shape (lib/tools/staff/types.ts),
+ * and a top-level `draftBody` (the only place model-written words may be)
+ * passes the same deterministic draft check as offer_staff_draft. A result
+ * that fails either is held back whole, and the answer says why.
  */
-export function checkStreamedDrafts(streamed: readonly StreamedToolResult[], check: (body: string) => string[]): { kept: StreamedToolResult[]; held: string[]; notice: string } {
+export function checkStreamedDrafts(streamed: readonly StreamedToolResult[], check: (body: string) => string[], shapes: ReadonlyMap<string, StreamedShape> = staffStreamedShapes()): { kept: StreamedToolResult[]; held: string[]; notice: string } {
   const kept: StreamedToolResult[] = [];
   const held: string[] = [];
   for (const s of streamed) {
+    const bad = streamedShapeProblem(s, shapes);
+    if (bad) { held.push(bad); continue; }
     const body = (s.result as { draftBody?: unknown } | null)?.draftBody;
     if (body === undefined) { kept.push(s); continue; }
     const problems = typeof body === "string" ? check(body) : ["the draft was not text"];
     if (problems.length) held.push(...problems); else kept.push(s);
   }
   const notice = held.length
-    ? `\n\n---\n**A draft was held back.** It did not pass the check: ${[...new Set(held)].join("; ")}. Ask for it again, or write it yourself.`
+    ? `\n\n---\n**A draft or card was held back.** It did not pass the check: ${[...new Set(held)].join("; ")}. Ask for it again, or do it yourself.`
     : "";
   return { kept, held, notice };
 }

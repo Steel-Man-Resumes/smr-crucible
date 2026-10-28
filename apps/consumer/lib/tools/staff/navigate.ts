@@ -39,7 +39,7 @@ export function properName(s: string): string {
 /** Phone numbers in free text, each as its last 10 digits (one per number, never digits joined across numbers). */
 export function phonesIn(text: string): Set<string> {
   const out = new Set<string>();
-  for (const m of String(text ?? "").matchAll(/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g)) {
+  for (const m of String(text ?? "").matchAll(/(?<!\d)(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?!\d)/g)) {
     const d = m[0].replace(/\D/g, "");
     out.add(d.slice(-10));
   }
@@ -93,7 +93,12 @@ async function matchProgram(ctx: StaffToolContext, actor: Awaited<ReturnType<Sta
 
 export const navigationTools: StaffToolModule = {
   id: "navigation",
-  streamed: ["open_staff_page", "open_add_person"],
+  // Declared result shapes (types.ts): every key server-made, except the
+  // prefill, which holds only values the staff member typed and the tool checked.
+  streamed: {
+    open_staff_page: { status: "server", error: "server", page: "server", clientId: "server", label: "server", about: "server", navigated: "server", buttonShown: "server", note: "server" },
+    open_add_person: { status: "server", error: "server", saved: "server", sent: "server", invited: "server", page: "server", orgId: "server", prefill: "staff", leftOut: "server", needsEmail: "server", note: "server" },
+  },
   activity: {
     open_staff_page: "Finding that page",
     open_add_person: "Getting Add people ready",

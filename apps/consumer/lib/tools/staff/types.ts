@@ -30,8 +30,13 @@
  * one. Two calls in the same step run in parallel; claiming after an await
  * would let both claim different people.
  *
- * WHAT A STREAMED RESULT MAY CARRY (review round 1, S8). A streamed tool's
- * result goes to the browser as it is (its args never do). So:
+ * WHAT A STREAMED RESULT MAY CARRY (review rounds 1 and 2, S8). A streamed
+ * tool's result goes to the browser as it is (its args never do), so each
+ * module DECLARES, per streamed tool, every top-level key its results may
+ * have and where its words come from (StreamedShape). The route enforces it
+ * (lib/staff-skill-run.ts checkStreamedDrafts): a result with an undeclared
+ * key, a "draft" key other than draftBody, or a draftBody below the top
+ * level is held back whole, with a notice. So:
  *  - Words the MODEL wrote for someone to read or send (a message, a note, a
  *    view description) go in one string field, `draftBody`. The route runs
  *    it through the same deterministic draft check as offer_staff_draft
@@ -75,11 +80,28 @@ export interface StaffToolContext {
   readonly dataNote: string;
 }
 
+/**
+ * Where a streamed result's top-level field comes from:
+ *  - "server": made by the server (ids, keys, labels from our own tables,
+ *    statuses, dates, counts, fixed notes in our own words);
+ *  - "staff": words the staff member typed, checked by the tool;
+ *  - "draft": model-written words. Only the key `draftBody` may be "draft";
+ *    the route runs it through the participant-draft check.
+ */
+export type StreamedFieldSource = "server" | "staff" | "draft";
+/** Every top-level key a streamed tool's result may carry. Anything else is held back. */
+export type StreamedShape = Readonly<Record<string, StreamedFieldSource>>;
+
 export interface StaffToolModule {
   id: string;
   build(ctx: StaffToolContext): ToolSet;
-  /** Tools whose result the checked answer re-emits to the chat, so it can show a button or a card. Model-written words only in `draftBody` (see above). */
-  streamed?: readonly string[];
+  /**
+   * Tools whose result the checked answer re-emits to the chat (a button or a
+   * card), each with its declared shape. Model-written words only in a
+   * top-level `draftBody` (see above). Refusals ({status, error}) need those
+   * two keys declared too.
+   */
+  streamed?: Readonly<Record<string, StreamedShape>>;
   /** One plain activity line per tool, shown while it runs. */
   activity?: Readonly<Record<string, string>>;
 }

@@ -16,11 +16,11 @@
  * streamed list from here (modules never import @crucible/core at the top).
  */
 import type { ToolSet } from "ai";
-import type { StaffToolContext, StaffToolModule } from "./types";
+import type { StaffToolContext, StaffToolModule, StreamedShape } from "./types";
 import { navigationTools } from "./navigate";
 import { directoryTools } from "./directory";
 
-export type { StaffToolContext, StaffToolModule } from "./types";
+export type { StaffToolContext, StaffToolModule, StreamedShape, StreamedFieldSource } from "./types";
 
 export const STAFF_TOOL_MODULES: readonly StaffToolModule[] = [
   navigationTools,
@@ -51,7 +51,27 @@ export function composeStaffTools(ctx: StaffToolContext, existing: ToolSet = {},
 
 /** Tools whose results the checked staff answer re-emits, so the chat can show their button or card. */
 export function staffStreamedTools(modules: readonly StaffToolModule[] = STAFF_TOOL_MODULES): ReadonlySet<string> {
-  return new Set(modules.flatMap((m) => m.streamed ?? []));
+  return new Set(modules.flatMap((m) => Object.keys(m.streamed ?? {})));
+}
+
+/** Each streamed tool's declared result shape (types.ts StreamedShape). */
+export function staffStreamedShapes(modules: readonly StaffToolModule[] = STAFF_TOOL_MODULES): ReadonlyMap<string, StreamedShape> {
+  return new Map(modules.flatMap((m) => Object.entries(m.streamed ?? {})));
+}
+
+/** Problems with a module's declarations (a registry test runs this on every module). Empty means sound. */
+export function streamedDeclarationProblems(modules: readonly StaffToolModule[] = STAFF_TOOL_MODULES): string[] {
+  const problems: string[] = [];
+  for (const m of modules) {
+    for (const [toolName, shape] of Object.entries(m.streamed ?? {})) {
+      for (const [key, source] of Object.entries(shape)) {
+        if (!["server", "staff", "draft"].includes(source)) problems.push(`${m.id}.${toolName}.${key}: unknown source ${String(source)}`);
+        if (source === "draft" && key !== "draftBody") problems.push(`${m.id}.${toolName}.${key}: only draftBody may hold model-written words`);
+      }
+      if (!("status" in shape)) problems.push(`${m.id}.${toolName}: status must be declared`);
+    }
+  }
+  return problems;
 }
 
 /** The chat's activity line for each module tool. */

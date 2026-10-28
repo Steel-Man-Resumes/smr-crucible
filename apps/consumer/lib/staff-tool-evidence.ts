@@ -97,7 +97,7 @@ export function projectStaffToolEvidence(tool: string, result: unknown): StaffTo
   }
   if (tool === "open_add_person" && r.status === "prefill_ready" && r.saved === false && r.sent === false && r.invited === false) {
     const p = obj(r.prefill) ?? {};
-    const newPersonNames = [str(p.firstName, 60), str(p.lastName, 60)].flatMap((n) => (n ? n.split(/\s+/) : [])).filter(Boolean);
+    const newPersonNames = [str(p.firstName, 60), str(p.lastName, 60)].flatMap((n) => (n ? n.split(/[\s'\u2019-]+/) : [])).filter(Boolean);
     labels.push("Add people", "Send invite");
     return { tool, names, numbers, labels, newPersonNames, facts: { prefill: { firstName: str(p.firstName, 60), lastName: str(p.lastName, 60), email: p.email ? "given" : null, phone: p.phone ? "given" : null, program: str(p.program, 80) }, leftOut: Array.isArray(r.leftOut) ? r.leftOut.slice(0, 5) : [], saved: false, sent: false, invited: false, meaning: "A filled-in Add people form, not sent. The staff member checks it and presses Send invite. Nobody was added." } };
   }
