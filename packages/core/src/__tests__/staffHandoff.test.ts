@@ -169,6 +169,19 @@ test("directory items are re-read: names and places come from the listing, not t
   assert.equal(s.name, "Job Center, Capital Area");
 });
 
+test("a listed employer's link comes from the live listing too: a browser-typed link is never kept", async () => {
+  const typed = await confirmDirectoryItems([{ kind: "employer", employerId: E1, name: "X", role: "Forklift", applyUrl: "https://phish.example.invalid/apply", why: "Because" }], dir());
+  assert.ok(typed.ok);
+  if (typed.ok) assert.equal((typed.items[0] as { applyUrl: string | null }).applyUrl, "https://example.org/jobs");
+  const none = await confirmDirectoryItems([{ kind: "employer", employerId: E1, name: "X", role: "Forklift", applyUrl: "https://phish.example.invalid/apply", why: "Because" }],
+    dir({ employer: async () => ({ status: "ok", data: { id: E1, name: "Harbor Docks (listed)", location: "Lansing, MI", city: null, state: null, applyUrl: null } }) }));
+  assert.ok(none.ok);
+  if (none.ok) assert.equal((none.items[0] as { applyUrl: string | null }).applyUrl, null, "no listed link: no link at all");
+  const plain = await confirmDirectoryItems([{ kind: "employer", employerId: E1, name: "X", role: "Forklift", why: "Because" }],
+    dir({ employer: async () => ({ status: "ok", data: { id: E1, name: "Harbor Docks (listed)", location: null, city: "Lansing", state: "MI", applyUrl: "http://plain.example.org" } }) }));
+  if (plain.ok) assert.equal((plain.items[0] as { applyUrl: string | null }).applyUrl, null, "only an https listing link is passed on");
+});
+
 test("a listing that is gone, or a failed lookup, stops the whole send", async () => {
   const gone = await confirmDirectoryItems([{ kind: "employer", employerId: R1, name: "X", role: "Y", why: "Because" }], dir());
   assert.equal(gone.ok, false); assert.match(gone.ok ? "" : gone.error, /no longer listed/);

@@ -131,7 +131,9 @@ export async function confirmDirectoryItems(items: HandoffItemInput[], dir: Dire
       if (r.status !== "ok") return { ok: false, error: "The directory could not be checked just now. Try again in a minute." };
       if (!r.data) return { ok: false, error: `Item ${i + 1}: that employer is no longer listed. Take it out, or pick another.` };
       const place = r.data.location ?? ([r.data.city, r.data.state].filter(Boolean).join(", ") || null);
-      out.push({ ...it, name: r.data.name.slice(0, 200), location: place?.slice(0, 200) ?? null, applyUrl: it.applyUrl ?? (r.data.applyUrl && /^https:\/\/\S+$/.test(r.data.applyUrl) ? r.data.applyUrl.slice(0, 1000) : null) });
+      // Name, place AND link come from the live listing, never the browser (integration 2026-10-28):
+      // a browser-typed link on a listed employer is dropped; no https link listed means no link.
+      out.push({ ...it, name: r.data.name.slice(0, 200), location: place?.slice(0, 200) ?? null, applyUrl: r.data.applyUrl && /^https:\/\/\S+$/.test(r.data.applyUrl) ? r.data.applyUrl.slice(0, 1000) : null });
     } else if (it.kind === "resource") {
       const r = await dir.resource(it.resourceId);
       if (r.status !== "ok") return { ok: false, error: "The directory could not be checked just now. Try again in a minute." };
