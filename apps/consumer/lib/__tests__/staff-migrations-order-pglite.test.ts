@@ -39,7 +39,7 @@ test('migrations 001 to the newest apply in order; the staff files coexist and r
   const ours = failed.filter((f) => Number(f.slice(0, 3)) >= 99);
   if (failed.length > ours.length) console.log(`older files pglite cannot run (not this pass's): ${failed.filter((f) => Number(f.slice(0, 3)) < 99).map((f) => f.slice(0, 60)).join(' | ')}`);
   assert.deepEqual(ours, [], `every file from 099 applies in order: ${ours.join(' | ')}`);
-  for (const n of ['108_', '109_', '110_']) assert.ok(files.some((f) => f.startsWith(n)), `${n} is on this branch`);
+  for (const n of ['107_', '108_', '109_', '110_', '111_', '112_']) assert.ok(files.some((f) => f.startsWith(n)), `${n} is on this branch`);
 
   const entities = async () => {
     const r = await db.query(`SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conrelid = 'public.org_activity'::regclass AND conname = 'org_activity_entity_check'`);
@@ -59,6 +59,12 @@ test('migrations 001 to the newest apply in order; the staff files coexist and r
     [['org_profile_ai_owner_only', 'staff_task_assign_guard', 'case_note_review_lock', 'staff_handoff_close_items', 'staff_handoff_has_items', 'staff_handoff_answer_inbox']]);
   assert.deepEqual((triggers.rows as { tgname: string }[]).map((r) => r.tgname).sort(),
     ['case_note_review_lock', 'org_profile_ai_owner_only', 'staff_handoff_answer_inbox', 'staff_handoff_close_items', 'staff_handoff_has_items', 'staff_task_assign_guard']);
+  // S6 (111, 112): the inbox kinds keep 109's values plus S6's, in one CHECK; S6's triggers are in place.
+  const inboxKinds = (await db.query(`SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conrelid = 'public.staff_inbox_item'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) ~ '\\(kind = ANY'`)).rows.map((r: any) => String(r.d));
+  assert.equal(inboxKinds.length, 1, 'one inbox kind CHECK');
+  for (const k of ['mention', 'kudos', 'handoff', 'recognition', 'contribution_answered']) assert.ok(inboxKinds[0].includes(`'${k}'`), k);
+  const s6 = await db.query(`SELECT tgname FROM pg_trigger WHERE NOT tgisinternal AND tgname = ANY($1) ORDER BY tgname`, [['staff_kudos_inbox', 'staff_recognition_inbox', 'directory_contribution_inbox', 'staff_handoff_sent_milestone']]);
+  assert.equal(s6.rows.length, 4, 'S6 inbox and milestone triggers');
   // S2's 107 (branding) sits in the chain too: its column survives everything after it.
   assert.equal((await db.query(`SELECT 1 FROM information_schema.columns WHERE table_name = 'org_profile' AND column_name = 'branding'`)).rows.length, 1, "107's branding column is in place");
   const kinds = await db.query(`SELECT pg_get_constraintdef(oid) AS d FROM pg_constraint WHERE conrelid = 'public.staff_suggestion'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) ~ 'next_step'`);
