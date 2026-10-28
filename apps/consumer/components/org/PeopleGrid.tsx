@@ -377,10 +377,39 @@ export function PeopleGrid(props: PeopleGridProps) {
     if (!ok) undo.current.push(step);
   }, [saveCells, posOf]);
 
+  /*
+   * Copy and paste. A focused grid is not an editable field, so browsers send
+   * the clipboard events to the page, not to the grid: listen on the
+   * document, act only while the grid itself has focus (not while a cell is
+   * being typed in, where the field's own copy and paste work as usual).
+   */
+  const clip = useRef({ copyText, pasteText, editing: !!editing, range });
+  clip.current = { copyText, pasteText, editing: !!editing, range };
+  useEffect(() => {
+    const mine = () => !clip.current.editing && typeof document !== "undefined" && document.activeElement === scroller.current;
+    const onCopy = (e: ClipboardEvent) => {
+      if (!mine() || !e.clipboardData) return;
+      e.preventDefault();
+      e.clipboardData.setData("text/plain", clip.current.copyText());
+      const r = clip.current.range;
+      const n = (r.r1 - r.r0 + 1) * (r.c1 - r.c0 + 1);
+      setSay({ kind: "ok", text: n === 1 ? "Copied 1 cell." : `Copied ${n} cells.` });
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      if (!mine() || !e.clipboardData) return;
+      e.preventDefault();
+      void clip.current.pasteText(e.clipboardData.getData("text/plain"));
+    };
+    document.addEventListener("copy", onCopy);
+    document.addEventListener("paste", onPaste);
+    return () => { document.removeEventListener("copy", onCopy); document.removeEventListener("paste", onPaste); };
+  }, []);
+
   /* ------------------------------------------------------------ keys ----- */
 
   const onKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (editing || menu) return;
+    // Keys pressed on a header button, the summary row or a menu are theirs, not the grid's.
+    if (editing || menu || e.target !== e.currentTarget) return;
     const mod = e.ctrlKey || e.metaKey;
     const bounds = { rows: dataLines.length, cols: gridCols.length, page: Math.max(1, Math.floor(viewport / lineHeight) - 2) };
     if (!bounds.rows) return;
@@ -553,7 +582,7 @@ export function PeopleGrid(props: PeopleGridProps) {
             <div key={col} id={cellId(r, c)} role="gridcell" aria-colindex={c + 2} aria-selected={sel} aria-readonly={!!locked}
               aria-invalid={err ? true : undefined} title={err ?? (isActive && locked ? locked : undefined)}
               onMouseDown={(e) => {
-                if (e.button !== 0) return;
+                if (e.button !== 0 || isEditing) return;
                 if (e.shiftKey) setAnchor(anchor ?? active); else setAnchor(null);
                 setActive({ row: r, col: c });
                 setCellErrors({});
@@ -637,8 +666,6 @@ export function PeopleGrid(props: PeopleGridProps) {
         tabIndex={0}
         onKeyDown={onKeyDown}
         onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
-        onCopy={(e) => { if (editing) return; e.preventDefault(); e.clipboardData.setData("text/plain", copyText()); const n = (range.r1 - range.r0 + 1) * (range.c1 - range.c0 + 1); setSay({ kind: "ok", text: n === 1 ? "Copied 1 cell." : `Copied ${n} cells.` }); }}
-        onPaste={(e) => { if (editing) return; e.preventDefault(); void pasteText(e.clipboardData.getData("text/plain")); }}
         className="t-focus relative overflow-auto border border-t-line bg-t-panel outline-none focus-visible:ring-2 focus-visible:ring-t-amber"
         style={{ height: height ?? "max(360px, calc(100vh - 300px))" }}
       >
