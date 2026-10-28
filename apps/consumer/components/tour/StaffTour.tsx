@@ -9,7 +9,7 @@
  * the run (UUID, rising sequence, compare-and-set saves through one queue),
  * traps focus and makes the shell inert while the tour is open, and pauses on
  * a route change it did not ask for. Unlike it, the tour moves between pages
- * on purpose (Today, one person, Insights): the player asks, the controller
+ * on purpose (Today, one person, Referrals, People, Insights, Team): the player asks, the controller
  * pushes the route and expects it.
  *
  * The person for the participant stops is a real one from the staff member's
@@ -27,6 +27,7 @@ import { STAFF_TOUR_HOME, STAFF_TOUR_OPEN_EVENT, firstPersonFromCohort, isDemoOr
 import { lockPageForTour, leaveAction } from '@/lib/tour/page-lock';
 import { isRetiredRun, retiredRun, runReplacedError, saveFailureAction, tourSaveFailure } from '@/lib/tour/run-conflict';
 import { RunConflictNotice } from './RunConflictNotice';
+import { loadOrgModules } from '@/lib/use-org-modules';
 import './entrance-tour.css';
 
 const DEF = TOURS.crm;
@@ -41,7 +42,7 @@ export function StaffTour({ onNavigationReveal }: { onNavigationReveal?: (open: 
   const role = useEffectiveRole();
   const allowed = staffTourAllowed(role);
   if (!allowed || !role) return null;
-  return <StaffTourController key={role.accountId} capabilities={role.capabilities ?? []} demo={isDemoOrg(role.orgName)} onNavigationReveal={onNavigationReveal} />;
+  return <StaffTourController key={role.accountId} capabilities={role.capabilities ?? []} orgKey={role.orgId ?? role.accountId} demo={isDemoOrg(role.orgName)} onNavigationReveal={onNavigationReveal} />;
 }
 
 /** Today's first person row, if the page has drawn one (no request). */
@@ -57,7 +58,7 @@ async function personFromToday(signal: AbortSignal): Promise<string | null> {
   return null;
 }
 
-export function StaffTourController({ capabilities, demo, onNavigationReveal }: { capabilities: readonly string[]; demo: boolean; onNavigationReveal?: (open: boolean) => void }) {
+export function StaffTourController({ capabilities, orgKey, demo, onNavigationReveal }: { capabilities: readonly string[]; orgKey?: string | null; demo: boolean; onNavigationReveal?: (open: boolean) => void }) {
   const pathname = usePathname();
   const search = useSearchParams();
   const router = useRouter();
@@ -174,8 +175,10 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
         if (res.ok) person = firstPersonFromCohort(await res.json());
       } catch { person = null; }
     }
+    // A switched-off module drops its stop (referrals), the way it leaves the nav. Read before the path is decided, never after.
+    const modules = same ? null : await loadOrgModules(orgKey);
     if (signal.aborted || !alive.current) return;
-    const list = same ? same.list : applicableBeats({ personId: person, todayRow, capabilities });
+    const list = same ? same.list : applicableBeats({ personId: person, todayRow, capabilities, modules });
     beatsRef.current = list; setBeats(list); setPersonId(person);
     // Saved progress from an older version never resumes into this one. The
     // place is a beat id (through its index in the full list), never a position in the path.
@@ -187,7 +190,7 @@ export function StaffTourController({ capabilities, demo, onNavigationReveal }: 
     beatRef.current = at; savedGroup.current = groupOf(list, at); setStart(at); setAccountId(slot.accountId); setError(''); setNotice(''); setConflict(false); setActive(true);
     oldFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (!(resume && slot.runId)) save('start', canonical(at));
-  }, [capabilities, save]);
+  }, [capabilities, orgKey, save]);
 
   const load = useCallback(async (mode: 'auto' | 'replay' | 'resume') => {
     requestController.current?.abort(); const controller = new AbortController(); requestController.current = controller;

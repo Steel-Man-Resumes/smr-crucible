@@ -176,7 +176,7 @@ test("nav: Structure, Fields and Layouts show only to people who can change them
   const fields = NAV_EXTENSIONS.find((e) => e.href === "/dashboard/fields");
   const layouts = NAV_EXTENSIONS.find((e) => e.href === "/dashboard/layouts");
   const structure = NAV_EXTENSIONS.find((e) => e.href === "/dashboard/structure");
-  assert.deepEqual([fields?.group, fields?.needs, fields?.module, layouts?.group, layouts?.needs, structure?.needs], ["Organization", "org.settings.manage", "custom_fields", "Organization", "org.settings.manage", "org.settings.manage"]);
+  assert.deepEqual([fields?.group, fields?.needs, fields?.module, layouts?.group, layouts?.needs, structure?.needs], ["Set up", "org.settings.manage", "custom_fields", "Set up", "org.settings.manage", "org.settings.manage"]);
   const shown = (caps: string[], modules?: Record<string, boolean>) => orgNavExtensionsFor(caps, modules).map((e) => e.href);
   const staffSeat = ["org.cohort.view", "org.note.write"];
   for (const href of ["/dashboard/structure", "/dashboard/fields", "/dashboard/layouts"]) {

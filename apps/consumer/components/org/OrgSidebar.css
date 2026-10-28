@@ -1,0 +1,20 @@
+/* Staff sidebar additions (staff pass 2026-10-27, lane S2): the find-a-person
+   box, counts beside an item, and a label that never wraps under a count.
+   Inside the .forge-workshop scope like org-workspace.css: workshop t-* tokens,
+   no new colors. */
+.org-nav .org-find { margin: 0 0 14px; padding: 0 2px; }
+.org-nav .org-find input[type="search"] {
+  min-height: 40px; background: var(--t-panel-2); border-color: var(--t-line); color: var(--t-white);
+  font-size: 13px;
+}
+.org-nav .org-find input[type="search"]::placeholder { color: var(--t-bone-dim); opacity: 1; }
+.org-nav .org-find input[type="search"]:focus { border-color: var(--t-amber-bright); outline: none; }
+/* The results float over the nav below; keep them inside the sidebar's width and above the links. */
+.org-nav .org-find [aria-live] { z-index: 40; }
+.org-nav .org-link-label { min-width: 0; flex: 1 1 auto; overflow-wrap: anywhere; }
+.org-nav .org-count {
+  flex: none; min-width: 20px; padding: 0 6px; border-radius: 999px;
+  border: 1px solid var(--t-amber); color: var(--t-amber-bright);
+  font: 600 10px/18px var(--t-mono); text-align: center;
+}
+.org-nav .org-link[aria-current="page"] .org-count { background: var(--t-amber); color: #14100a; border-color: var(--t-amber-bright); }

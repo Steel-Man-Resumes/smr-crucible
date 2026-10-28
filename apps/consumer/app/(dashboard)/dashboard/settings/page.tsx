@@ -11,6 +11,7 @@
  * - Daily AI usage display
  */
 
+import Link from "next/link";
 import { LeaveOrgButton } from "@/components/settings/LeaveOrgButton";
 import { DeleteDataControls } from "@/components/settings/DeleteDataControls";
 import { useServerSwitches } from "@/components/ServerSwitches";
@@ -21,7 +22,6 @@ import { CoachSettingsSection } from "@/components/CoachSettingsSection";
 import { SharingConsentSection } from "@/components/SharingConsentSection";
 import { ORG_JOINED_EVENT } from "@/lib/join-sharing-prompt";
 import { SharingControls } from "@/components/SharingControls";
-import { StaffWorkflowSettings } from "@/components/org/StaffWorkflowSettings";
 import { OrgSetupGuide } from "@/components/org/OrgSetupGuide";
 import { RequirementCard, type RequirementPolicy, type RequirementText } from "@/components/RequirementCard";
 import { ConsentPanel } from "@/components/ConsentPanel";
@@ -36,6 +36,7 @@ import { clearAccountBrowserState } from "@/lib/account-browser-state";
 import { useRealTier } from "@/lib/useUserTier";
 import { TBtn } from "@crucible/consumer-ui";
 import { useEffectiveRole } from "@/components/RoleProvider";
+import { STAFF_DATA_WORDS, accountChipText, staffUsageLine } from "@/lib/staff-settings-words";
 import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { ownForgeRunExportEntry, eraseLocalForgeRun } from "@/lib/forge-carry";
@@ -50,10 +51,11 @@ const STAFF_HIDDEN_EXPORT_BOXES = new Set<string>(["resumes", "applications", "r
 type UsageData = UsageView | { error: string };
 
 /** Settings -> Usage. The same allowance the tools spend from (lib/usage-view.ts). */
-function UsageCard({ usage }: { usage: UsageData | null }) {
+function UsageCard({ usage, staff = false }: { usage: UsageData | null; staff?: boolean }) {
   if (!usage) return <p className="text-sm text-t-phos-dim">Loading usage...</p>;
   if ("error" in usage) return <p className="text-sm text-t-phos-dim">{usage.error}</p>;
-  const words = usageWords(usage);
+  const raw = usageWords(usage);
+  const words = staff ? { ...raw, line: staffUsageLine(raw.line), bonusLine: raw.bonusLine ? staffUsageLine(raw.bonusLine) : null } : raw;
   const total = usage.kind === "allowance" ? (usage.base ?? 0) + usage.bonus : 0;
   return (
     <div>
@@ -392,7 +394,7 @@ export default function SettingsPage() {
   // None of that is theirs. What IS theirs is how their caseload is arranged.
   const SECTIONS: { id: string; label: string }[] = isOrgStaff
     ? [
-        { id: "workflow", label: "My workflow" },
+        { id: "workflow", label: "My setup" },
         { id: "account", label: "Account" },
         { id: "accessibility", label: "Accessibility" },
         { id: "privacy", label: "AI transparency" },
@@ -469,8 +471,14 @@ export default function SettingsPage() {
               <OrgSetupGuide />
             </>
           )}
-          <GroupHeading>My workflow</GroupHeading>
-          <StaffWorkflowSettings workspace={!!effectiveRole?.crmV2} />
+          <GroupHeading>My setup</GroupHeading>
+          {/* Moved to its own page (staff pass S2): every personal control in one place. */}
+          <section className="mb-8 bg-t-panel p-5 border border-t-line">
+            <p className="text-sm text-t-phos-dim">{STAFF_DATA_WORDS.setupCard}</p>
+            <Link href="/dashboard/my-setup" className="t-focus mt-3 inline-flex min-h-touch items-center px-4 py-2 border border-t-amber text-t-amber-bright text-sm font-medium hover:bg-t-amber/10">
+              Open My setup
+            </Link>
+          </section>
         </div>
       )}
 
@@ -577,7 +585,7 @@ export default function SettingsPage() {
             Daily Usage
           </h2>
           <div className="bg-t-panel p-5 border border-t-line">
-            <UsageCard usage={usage} />
+            <UsageCard usage={usage} staff={isOrgStaff} />
           </div>
         </section>
 
@@ -604,6 +612,15 @@ export default function SettingsPage() {
             >
               Open Help &amp; Feedback
             </a>
+            {isOrgStaff ? (
+              <p className="text-xs text-t-phos-dim pt-1">
+                {STAFF_DATA_WORDS.trustLink.before}{" "}
+                <a href={STAFF_DATA_WORDS.trustLink.href} className="text-t-amber-bright hover:text-t-amber underline">
+                  {STAFF_DATA_WORDS.trustLink.label}
+                </a>
+                .
+              </p>
+            ) : (
             <p className="text-xs text-t-phos-dim pt-1">
               Want to know exactly how we protect your data?{" "}
               <a href="/dashboard/security" className="text-t-amber-bright hover:text-t-amber underline">
@@ -611,6 +628,7 @@ export default function SettingsPage() {
               </a>
               .
             </p>
+            )}
           </div>
         </section>
 
@@ -706,7 +724,7 @@ function DataSection({
               Conversations with t.ROY are saved to your account so he can
               remember your recent work. Deleting your data clears them.
             </li>
-            {recordStep && (
+            {recordStep && !isOrgStaff && (
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
               In the record check, what you type about your record goes to
@@ -718,9 +736,7 @@ function DataSection({
             )}
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
-              We never sell your personal information. It goes only to the
-              services that run the app, and to a program when you choose to
-              share with it
+              {isOrgStaff ? STAFF_DATA_WORDS.sharing : "We never sell your personal information. It goes only to the services that run the app, and to a program when you choose to share with it"}
             </li>
             <li className="flex gap-2">
               <span className="text-t-amber flex-shrink-0">&bull;</span>
@@ -735,9 +751,9 @@ function DataSection({
             Download your data
           </h3>
           <p className="text-sm text-t-phos-dim mt-1 mb-3">
-            Get a copy of what we have stored, as one file. Keep every box
-            ticked for a full copy. Your document files come separately, with
-            the button further down.
+            {isOrgStaff
+              ? `Get a copy of what we have stored, as one file. ${STAFF_DATA_WORDS.exportScope}`
+              : "Get a copy of what we have stored, as one file. Keep every box ticked for a full copy. Your document files come separately, with the button further down."}
           </p>
           <div className="mb-4 space-y-2">
             <label htmlFor="export-password" className="block text-sm text-t-white">Password for downloads</label>
@@ -787,7 +803,7 @@ function DataSection({
                 ? "Downloaded"
                 : "Export"}
           </button>
-          <div className="mt-5 border-t border-t-line pt-4">
+          {!isOrgStaff && <div className="mt-5 border-t border-t-line pt-4">
             <h4 className="text-sm font-semibold text-t-white">Your document files</h4>
             <p className="text-sm text-t-phos-dim mt-1 mb-3">
               Every file in Private records and documents, in one ZIP, up to about
@@ -802,7 +818,7 @@ function DataSection({
               {docsStatus === "working" ? "Preparing..." : docsStatus === "done" ? "Downloaded" : "Download my documents"}
             </button>
             {docsMessage && <p role="alert" className="text-sm text-t-amber-bright mt-2">{docsMessage}</p>}
-          </div>
+          </div>}
         </div>
 
         <DeleteDataControls key={accountId || "signed-out"} isOrgStaff={isOrgStaff} onDeleted={onDeleted} />
@@ -1586,7 +1602,7 @@ function AccountSection() {
             <p className="text-sm font-medium text-t-white">{session?.user?.email || "Unknown"}</p>
           </div>
           <span className="text-xs text-t-amber-bright border border-t-amber px-2 py-1">
-            {(session?.user as any)?.tier || "client"}
+            {accountChipText({ orgRole: accountRole?.orgRole, capabilities: accountRole?.capabilities ?? [], tier: (session?.user as { tier?: string } | undefined)?.tier })}
           </span>
         </div>
 

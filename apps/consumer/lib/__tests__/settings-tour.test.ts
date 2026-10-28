@@ -281,7 +281,7 @@ test('impersonation: never offered, never opened, never written for the person',
   assert.match(ctl, /if \(mode === 'chip' \|\| data\.impersonating\) return;/);
   assert.match(ctl, /const open = !!slot && !slot\.impersonating &&/, 'N-2: no resume chip under view-as before the role loads');
   assert.match(read('app/(dashboard)/dashboard/help/page.tsx'), /\{settingsTourFor && <Link href="\/dashboard\/settings\?tour=settings"/, 'N-5: Help offers the replay to non-staff only');
-  assert.match(read('app/(dashboard)/dashboard/help/page.tsx'), /const settingsTourFor = !useEffectiveRole\(\)\?\.orgRole;/);
+  assert.match(read('app/(dashboard)/dashboard/help/page.tsx'), /const isStaff = !!role\?\.orgRole;\s*const settingsTourFor = !isStaff;/);
   assert.match(ctl, /settingsTourAllowed\(\{ tier, orgRole: role\?\.orgRole, impersonating: role\?\.impersonating \}\)/);
   assert.match(ctl, /if \(!mounted \|\| !allowed\) return null;/);
   assert.match(ctl, /tourId: 'settings'/, 'every write names its tour, so the entrance slot is never touched');

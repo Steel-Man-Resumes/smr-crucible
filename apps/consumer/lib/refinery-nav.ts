@@ -14,6 +14,7 @@
 import type { ProgressStep, ProgressStepId } from "./progression-ui";
 import type { UserTier } from "./useUserTier";
 import type { OnboardingState } from "./useOnboarding";
+import { STAFF_FEATURES, staffFeatureOn, type StaffFeature, type StaffFeatures } from "./staff-features";
 
 export type StationId = "overview" | "find" | "tailor" | "plan" | "practice" | "apply" | "next";
 
@@ -324,16 +325,17 @@ export function adminNavActive(item: Pick<AdminNavItem, "href" | "exact">, pathn
  *
  *   surface  "admin": platform admin sidebar; "org": staff workspace sidebar
  *   group    an existing group label (admin: Platform, Products, System;
- *            org: Work, Records, Organization) or a new one, added at the end
+ *            org: My day, Records, Connect, Bring someone in, Reports, Team,
+ *            Set up) or a new one, added at the end
  *   needs    org only: the capability the item needs (same as lib/org-nav.ts)
  *   module   org only: an org_profile.modules key (L3a); hidden when that
  *            module is switched off for the organization
  *   after    optional: the label of the item to place it after; else last
  *
  * Examples (commented until each screen merges):
- *   { surface: "org", group: "Organization", href: "/dashboard/structure", label: "Programs and sites", navId: "org-nav-structure", needs: "org.settings.manage" },
- *   { surface: "org", group: "Records", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
- *   { surface: "org", group: "Work", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", module: "referrals", after: "Asks" },
+ *   { surface: "org", group: "Set up", href: "/dashboard/structure", label: "Programs and sites", navId: "org-nav-structure", needs: "org.settings.manage" },
+ *   { surface: "org", group: "Reports", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
+ *   { surface: "org", group: "My day", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", module: "referrals", after: "People" },
  *   { surface: "admin", group: "System", href: "/dashboard/admin/ai-runs", label: "AI runs", navId: "admin-nav-ai-runs" },
  */
 export interface NavExtension {
@@ -345,23 +347,30 @@ export interface NavExtension {
   needs?: string;
   module?: string;
   after?: string;
+  /** Org only: a lib/staff-features.ts flag; hidden until the lane behind it is merged. */
+  feature?: StaffFeature;
 }
 
 export const NAV_EXTENSIONS: readonly NavExtension[] = [
+  // Staff pass 2026-10-27 (lane S2): the same screens, grouped around a case
+  // manager's day. Labels are the groups in lib/org-nav.ts ORG_NAV_GROUPS.
+  // S4 (109): the team inbox, with its unread count, once the lane is merged.
+  { surface: "org", group: "My day", href: "/dashboard/inbox", label: "Inbox", navId: "org-nav-inbox", needs: "org.cohort.view", after: "Today", feature: "inbox" },
+  // House L5 (105): closed-loop referrals (off with the org's referrals module).
+  { surface: "org", group: "My day", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", needs: "org.client.view_content", module: "referrals", after: "People" },
   // House L3b (102): the organization's activity log.
-  { surface: "org", group: "Organization", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
-  // House L3a (103): the organization's programs, sites, teams and caseloads, and first-run setup.
-  { surface: "org", group: "Organization", href: "/dashboard/structure", label: "Structure", navId: "org-nav-structure", needs: "org.settings.manage", after: "Team & access" },
-  { surface: "org", group: "Organization", href: "/dashboard/setup", label: "Set up", navId: "org-nav-setup", needs: "org.settings.manage" },
-  // House L4 (104): the org's own fields and per-role layouts. The pages still
-  // open read-only for anyone who sees the caseload (a field's meaning shows on
-  // the person page too), but only people who can change them get the nav entry
-  // (staff walk 2026-10-27). Changes stay checked by the routes and the database.
-  { surface: "org", group: "Organization", href: "/dashboard/fields", label: "Fields", navId: "org-nav-fields", needs: "org.settings.manage", module: "custom_fields", after: "Structure" },
-  { surface: "org", group: "Organization", href: "/dashboard/layouts", label: "Layouts", navId: "org-nav-layouts", needs: "org.settings.manage", after: "Fields" },
-  // House L5 (105): find anyone you work with, and closed-loop referrals (off with the org's referrals module).
-  { surface: "org", group: "Work", href: "/dashboard/search", label: "Find a person", navId: "org-nav-search", needs: "org.client.view_content", after: "People" },
-  { surface: "org", group: "Work", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", needs: "org.client.view_content", module: "referrals", after: "Asks" },
+  { surface: "org", group: "Reports", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
+  // House L3a (103) and L4 (104): structure, fields, layouts and first-run
+  // setup, only for people who can change them (staff walk 2026-10-27). The
+  // pages still open read-only for anyone who sees the caseload; changes stay
+  // checked by the routes and the database.
+  { surface: "org", group: "Set up", href: "/dashboard/structure", label: "Structure", navId: "org-nav-structure", needs: "org.settings.manage" },
+  { surface: "org", group: "Set up", href: "/dashboard/fields", label: "Fields", navId: "org-nav-fields", needs: "org.settings.manage", module: "custom_fields", after: "Structure" },
+  { surface: "org", group: "Set up", href: "/dashboard/layouts", label: "Layouts", navId: "org-nav-layouts", needs: "org.settings.manage", after: "Fields" },
+  { surface: "org", group: "Set up", href: "/dashboard/setup", label: "Set up", navId: "org-nav-setup", needs: "org.settings.manage", after: "Layouts" },
+  // Reference, not daily work: staff reach it from Help; the people who run the organization keep it here, last.
+  { surface: "org", group: "Set up", href: "/dashboard/org-security", label: "Security & privacy", navId: "org-nav-security", needs: "org.staff.manage" },
+  // House L5 (105): /dashboard/search stays a page; the sidebar's find-a-person box (OrgSidebar) replaces its nav entry.
 ];
 
 /**
@@ -399,8 +408,9 @@ export function adminNavWith(extensions: readonly NavExtension[] = NAV_EXTENSION
  * gates applied. `modules` is the org's module switches (absent: all on).
  */
 export function orgNavExtensionsFor(capabilities: readonly string[], modules?: Readonly<Record<string, boolean>> | null,
-  extensions: readonly NavExtension[] = NAV_EXTENSIONS): NavExtension[] {
+  extensions: readonly NavExtension[] = NAV_EXTENSIONS, features: StaffFeatures = STAFF_FEATURES): NavExtension[] {
   return extensions.filter((e) => e.surface === "org"
     && (!e.needs || capabilities.includes(e.needs))
-    && (!e.module || !modules || modules[e.module] !== false));
+    && (!e.module || !modules || modules[e.module] !== false)
+    && staffFeatureOn(e.feature, features));
 }
