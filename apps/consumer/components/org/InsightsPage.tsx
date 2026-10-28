@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { InsightsReport, type InsightsData } from "@/components/org/InsightsReport";
 import { useEffectiveRole } from "@/components/RoleProvider";
+import { useOrgOutboundBrand } from "@/components/brand/useOrgOutboundBrand";
 
 export function InsightsPage() {
   const [d, setD] = useState<InsightsData | null>(null);
@@ -17,6 +18,7 @@ export function InsightsPage() {
   const role = useEffectiveRole();
   const [error, setError] = useState<"forbidden" | "failed" | null>(null);
   const [canExport, setCanExport] = useState(false);
+  const outboundBrand = useOrgOutboundBrand(org.name, org.id || role?.orgId);
   const load = useCallback(() => {
     setError(null);
     fetch("/api/org/insights").then(async (r) => {
@@ -52,5 +54,5 @@ export function InsightsPage() {
     </div>
   );
   // The brand lane (C3) carries orgId and the brand read on the role payload; the print header draws the logo from it.
-  return <InsightsReport d={d} orgName={org.name} orgId={role?.orgId || org.id || org.name} hasLogo={!!role?.orgBrand?.hasLogo} canExport={canExport} onPrint={() => window.print()} />;
+  return <InsightsReport d={d} orgName={org.name} orgId={role?.orgId || org.id || org.name} hasLogo={!!role?.orgBrand?.hasLogo} canExport={canExport} onPrint={() => window.print()} outboundBrand={outboundBrand} />;
 }

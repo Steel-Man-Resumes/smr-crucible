@@ -117,7 +117,7 @@ export function DeleteDataControls({ isOrgStaff, onDeleted }: {
           {action === "account"
             ? "Remove your saved work and your login. You will be signed out. This cannot be undone."
             : isOrgStaff
-              ? "Erase data belonging to your account and remove your program links. Other people's records stay. Your login stays. This cannot be undone."
+              ? "Erase your own account data. Notes and records you wrote stay with your organization. Your login stays. This cannot be undone."
               : "Erase your saved work and history and remove your program links. Your login stays, so you can start again. This cannot be undone."}
         </p>
         {!active ? <button type="button" disabled={deleting || !userId} onClick={() => choose(action)} className="t-focus mt-3 min-h-touch border border-t-red px-4 py-2 text-sm text-t-red disabled:opacity-50">

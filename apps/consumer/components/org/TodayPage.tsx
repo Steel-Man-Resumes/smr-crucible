@@ -17,8 +17,16 @@
  * Layout and states follow the CRM design (2026-10-25): date, reason strip,
  * rows with initials and station, a right rail with tasks and This week, real
  * loading and error states with a retry.
+ *
+ * STAFF BUILD S3: each person can put Today's sections in their own order and
+ * fold them, inside what their organization allows (migration 108). Every
+ * such change goes through the view action layer (/api/org/prefs/view), so it
+ * is logged and can be undone; t.ROY makes the same changes the same way, and
+ * the page reads them again when the chat says it changed something.
  */
 import { useCallback, useEffect, useState } from "react";
+import { orderTodaySections } from "@crucible/core/src/staffPrefsShared";
+import { VIEW_CHANGED_EVENT, announceViewChanged } from "@/lib/view-change-events";
 import Link from "next/link";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { OrgSetupPrompt } from "@/components/org/OrgSetupPrompt";
@@ -41,23 +49,40 @@ export type TodayState =
 
 const first = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "them";
 
+/** This person's own Today choices and what their role may change (from /api/org/prefs). */
+export interface TodayOwn { order: string[]; canOrder: boolean; canFold: boolean; canHide: boolean }
+
 export function TodayPage() {
   const role = useEffectiveRole();
   const [state, setState] = useState<TodayState>({ status: "loading" });
+  const [own, setOwn] = useState<TodayOwn>({ order: [], canOrder: true, canFold: true, canHide: true });
+  const [note, setNote] = useState<{ kind: "ok" | "err"; text: string; changeId?: string | null } | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const load = useCallback(async () => {
     setState((s) => (s.status === "ready" ? s : { status: "loading" }));
     try {
-      const res = await fetch("/api/org/today", { cache: "no-store" });
+      const [res, prefs] = await Promise.all([
+        fetch("/api/org/today", { cache: "no-store" }),
+        fetch("/api/org/prefs", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ]);
       if (res.status === 403) { setState({ status: "forbidden" }); return; }
       if (!res.ok) { setState({ status: "error" }); return; }
       setState({ status: "ready", data: await res.json() });
+      if (prefs?.effective) {
+        const a = prefs.allowed ?? {};
+        setOwn({ order: prefs.effective.todayOrder ?? [], canOrder: a.today_order !== false, canFold: a.today_fold !== false, canHide: a.today_hide !== false });
+      }
       setNow(Date.now());
     } catch {
       setState({ status: "error" });
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const again = () => { void load(); };
+    window.addEventListener(VIEW_CHANGED_EVENT, again);
+    return () => window.removeEventListener(VIEW_CHANGED_EVENT, again);
+  }, [load]);
 
   async function task(body: Record<string, unknown>): Promise<boolean> {
     try {
@@ -69,31 +94,77 @@ export function TodayPage() {
     }
   }
 
+  /** One change to this person's own Today, through the view action layer. */
+  async function change(body: Record<string, unknown>): Promise<boolean> {
+    try {
+      const res = await fetch("/api/org/prefs/view", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) { if (d.reason !== "unchanged") setNote({ kind: "err", text: d.error || "That did not save. Try again." }); return false; }
+      setNote({ kind: "ok", text: `${d.summary}.`, changeId: d.changeId ?? null });
+      return true;
+    } catch {
+      setNote({ kind: "err", text: "That did not save. Try again." });
+      return false;
+    }
+  }
+
   // Folding a section is this person's own choice (staff prefs, todayCollapsed).
   // The screen folds at once; the choice is saved behind it, and a failed
   // save only means it unfolds next time.
   async function toggle(key: string) {
     if (state.status !== "ready") return;
     const collapsed = toggleCollapsed(state.data.collapsed, key);
+    const folded = collapsed.includes(key);
     setState({ status: "ready", data: { ...state.data, collapsed } });
-    try {
-      const own = await fetch("/api/org/prefs").then((r) => (r.ok ? r.json() : null)).then((d) => d?.own ?? {});
-      await fetch("/api/org/prefs", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ own: { ...own, todayCollapsed: collapsed } }) });
-    } catch { /* kept on screen; not saved */ }
+    const ok = await change({ action: "foldSection", section: key, folded });
+    if (!ok) setState((s) => (s.status === "ready" ? { status: "ready", data: { ...s.data, collapsed: toggleCollapsed(s.data.collapsed, key) } } : s));
+    else setNote(null); // a fold is its own feedback
+  }
+
+  async function arrange(order: string[], hidden: { key: string; hidden: boolean }[]) {
+    let ok = true;
+    if (own.canOrder) ok = (await change({ action: "setTodayOrder", order })) && ok;
+    for (const h of hidden) ok = (await change({ action: "hideSection", section: h.key, hidden: h.hidden })) && ok;
+    await load();
+    if (ok) announceViewChanged({ target: "pref:todayOrder" });
+  }
+
+  async function undo(changeId: string) {
+    const res = await fetch("/api/org/prefs/changes", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "undo", id: changeId }) }).catch(() => null);
+    const d = res ? await res.json().catch(() => ({})) : {};
+    setNote(res?.ok ? { kind: "ok", text: `${d.summary ?? "Undone"}.` } : { kind: "err", text: d.error || "That did not undo. Try again." });
+    await load();
   }
 
   // The staff tour never opens under view-as or assist, so the control is not drawn there (review N-3).
   // First run: the owner sees a nudge to set the organization up (house lane L3a); never under view-as.
+  const writable = !role?.impersonating;
   return (
     <>
       {!role?.impersonating && <div className="mx-auto max-w-6xl"><OrgSetupPrompt placement="today" /></div>}
-      <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task} onToggleSection={role?.impersonating ? undefined : toggle} tourReady={!role?.impersonating} />
+      {note && (
+        <div className="mx-auto mb-3 flex max-w-6xl flex-wrap items-center gap-3 text-sm">
+          <p role={note.kind === "err" ? "alert" : "status"} className={note.kind === "err" ? "text-t-amber-bright" : "text-t-phos"}>{note.text}</p>
+          {note.kind === "ok" && note.changeId && (
+            <button type="button" onClick={() => undo(note.changeId!)} className="t-focus min-h-touch text-xs font-semibold text-t-amber-bright underline underline-offset-4">Undo</button>
+          )}
+        </div>
+      )}
+      <TodayView state={state} nowMs={now} onRetry={() => { setState({ status: "loading" }); load(); }} onTask={task}
+        onToggleSection={writable && own.canFold ? toggle : undefined} tourReady={!role?.impersonating}
+        personalOrder={own.order} onArrange={writable && (own.canOrder || own.canHide) ? arrange : undefined} canOrder={own.canOrder} canHide={own.canHide} />
     </>
   );
 }
 
-export function TodayView({ state, nowMs, onRetry, onTask, onToggleSection, timeZone, troyReady = STAFF_TROY_READY, tourReady = true }: {
+export function TodayView({ state, nowMs, onRetry, onTask, onToggleSection, timeZone, troyReady = STAFF_TROY_READY, tourReady = true, personalOrder, onArrange, canOrder = true, canHide = true }: {
   state: TodayState; nowMs: number; onRetry?: () => void; onTask?: (body: Record<string, unknown>) => Promise<boolean>; timeZone?: string;
+  /** This person's own section order (S3). Their order first, then the role's order. */
+  personalOrder?: string[];
+  /** Arrange my Today (S3): absent when the organization locks both order and hiding, or under view-as. */
+  onArrange?: (order: string[], hidden: { key: string; hidden: boolean }[]) => Promise<void>;
+  canOrder?: boolean;
+  canHide?: boolean;
   /** Fold or unfold a section for this person. Absent: no fold control (view-as, tests). */
   onToggleSection?: (key: string) => void;
   /** Staff t.ROY buttons show only once C4's launcher is merged (STAFF_TROY_READY). */
@@ -102,6 +173,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, onToggleSection, time
   tourReady?: boolean;
 }) {
   const terms = useOrgTerms();
+  const [arranging, setArranging] = useState(false);
   // data-tour ids are the staff tour's targets (lib/tour/crm-beats.ts); the
   // "Show me around" control opens it (components/tour/StaffTour.tsx listens).
   const header = (sentence: React.ReactNode) => (
@@ -166,7 +238,8 @@ export function TodayView({ state, nowMs, onRetry, onTask, onToggleSection, time
   const items = visibleItems(d);
   const strip = reasonStrip(d);
   const hiddenCount = hiddenSectionCount(d);
-  const shown = d.sections.filter((s) => !d.hidden.includes(s.key));
+  const ordered = orderTodaySections(d.sections, personalOrder);
+  const shown = ordered.filter((s) => !d.hidden.includes(s.key));
   const empty = items.length === 0;
   const hiddenItems = hiddenItemCount(d);
   const nobody = nobodySharesLine(d);
@@ -192,7 +265,17 @@ export function TodayView({ state, nowMs, onRetry, onTask, onToggleSection, time
               {hiddenCount === 1 ? "1 section hidden in your settings" : `${hiddenCount} sections hidden in your settings`}
             </Link>
           )}
+          {onArrange && (
+            <button type="button" aria-expanded={arranging} onClick={() => setArranging(!arranging)}
+              className="t-focus inline-flex min-h-touch flex-none items-center whitespace-nowrap px-2 text-xs text-t-bone-dim underline underline-offset-4 hover:text-t-white">
+              Arrange my Today
+            </button>
+          )}
         </nav>
+      )}
+      {onArrange && arranging && (
+        <ArrangeToday sections={ordered} hidden={d.hidden} canOrder={canOrder} canHide={canHide}
+          onCancel={() => setArranging(false)} onSave={async (order, hidden) => { await onArrange(order, hidden); setArranging(false); }} />
       )}
 
       <div className="grid gap-8 lg:grid-cols-3">
@@ -263,7 +346,7 @@ export function TodayView({ state, nowMs, onRetry, onTask, onToggleSection, time
           <details className="mt-8 max-w-2xl text-xs text-t-phos-dim">
             <summary className="t-focus inline-flex min-h-touch cursor-pointer items-center text-t-bone-dim underline underline-offset-4">Why someone might not be here</summary>
             <p className="mt-2">
-              Interviews and follow-up dates appear here only for people who chose to share their applications, and they can see that those dates showed up on your list. Someone who shares nothing will not appear for any of that, which is their choice, not a sign that nothing is happening. Choose which sections you see in Settings, under My workflow.
+              Interviews and follow-up dates appear here only for people who chose to share their applications, and they can see that those dates showed up on your list. Someone who shares nothing will not appear for any of that, which is their choice, not a sign that nothing is happening. Choose which sections you see on <Link href="/dashboard/my-setup#landing" className="text-t-amber-bright underline underline-offset-4">My setup</Link>.
             </p>
           </details>
         </div>
@@ -373,5 +456,59 @@ function TaskAdd({ onTask }: { onTask?: (body: Record<string, unknown>) => Promi
       </div>
       {failed && <p role="alert" className="mt-2 text-xs text-t-red">That task did not save. Try again.</p>}
     </form>
+  );
+}
+
+/**
+ * Arrange my Today (S3): this person's own order, and which sections they
+ * show, inside what the organization allows. Nobody else's Today changes.
+ */
+export function ArrangeToday({ sections, hidden, canOrder, canHide, onSave, onCancel }: {
+  sections: { key: string; label: string }[]; hidden: string[]; canOrder: boolean; canHide: boolean;
+  onSave: (order: string[], hidden: { key: string; hidden: boolean }[]) => Promise<void>; onCancel: () => void;
+}) {
+  const [items, setItems] = useState(sections.map((s) => ({ ...s, on: !hidden.includes(s.key) })));
+  const [saving, setSaving] = useState(false);
+  const move = (i: number, by: number) => {
+    const j = i + by;
+    if (j < 0 || j >= items.length) return;
+    const n = [...items];
+    [n[i], n[j]] = [n[j], n[i]];
+    setItems(n);
+  };
+  return (
+    <section aria-labelledby="arrange-today-h" className="mb-6 border border-t-line bg-t-panel px-4 py-4">
+      <h2 id="arrange-today-h" className="text-sm font-semibold text-t-white">Arrange my Today</h2>
+      <p className="text-xs text-t-phos-dim">Only your own Today changes. You can undo it from the note that appears, or from My setup.</p>
+      {!canOrder && <p role="note" className="mt-2 text-xs text-t-white">Your organization keeps the order of Today the same for everyone.</p>}
+      {!canHide && <p role="note" className="mt-2 text-xs text-t-white">Your organization keeps every Today section showing for everyone.</p>}
+      <ul className="mt-3 space-y-1">
+        {items.map((it, i) => (
+          <li key={it.key} className="flex items-center gap-2">
+            <label className="flex min-h-touch flex-1 items-center gap-2 text-sm text-t-phos">
+              <input type="checkbox" className="t-focus" disabled={!canHide} checked={it.on} onChange={(e) => setItems(items.map((x, k) => (k === i ? { ...x, on: e.target.checked } : x)))} />
+              {it.label}
+            </label>
+            {canOrder && (
+              <span className="flex">
+                <button type="button" aria-label={`Move ${it.label} up`} disabled={i === 0} onClick={() => move(i, -1)} className="t-focus min-h-touch px-2 text-xs text-t-phos-dim hover:text-t-white disabled:opacity-30">&uarr;</button>
+                <button type="button" aria-label={`Move ${it.label} down`} disabled={i === items.length - 1} onClick={() => move(i, 1)} className="t-focus min-h-touch px-2 text-xs text-t-phos-dim hover:text-t-white disabled:opacity-30">&darr;</button>
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" disabled={saving}
+          onClick={async () => {
+            setSaving(true);
+            const changedHidden = items.filter((x) => x.on === hidden.includes(x.key)).map((x) => ({ key: x.key, hidden: !x.on }));
+            await onSave(items.map((x) => x.key), canHide ? changedHidden : []);
+            setSaving(false);
+          }}
+          className="t-focus min-h-touch rounded-[4px] bg-[#4f6b57] px-4 text-sm font-semibold text-white hover:bg-[#3d5745] disabled:opacity-50">Save my order</button>
+        <button type="button" onClick={onCancel} className="t-focus min-h-touch px-3 text-sm text-t-phos-dim underline underline-offset-4">Cancel</button>
+      </div>
+    </section>
   );
 }

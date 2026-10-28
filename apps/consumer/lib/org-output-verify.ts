@@ -1,5 +1,6 @@
 import { evidenceRefs, type StaffToolEvidence } from "./staff-tool-evidence";
 import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
+import { STAFF_PAGE_WORDS } from "./staff-pages";
 /**
  * Nothing unverified reaches a staff member or an admin. Two layers, in order.
  *
@@ -117,6 +118,52 @@ const NO_MATCH_CLAUSE = new RegExp(
   ")\\s*[.!?]?\\s*$"
 );
 
+/**
+ * Lane S1 (review round 1, S2): the one shape in which the new person's name
+ * from a filled-in Add people form may appear in an answer: a whole sentence
+ * saying the form is filled in, and nothing else. "Michael Shaw got the job, so I filled in
+ * Add people" does not match, so a claim cannot ride along.
+ */
+/** A full name as people write it: O'Brien, O’Neil, Mary-Jane, De La Cruz, Juan de la Cruz, van der Berg (review round 2 nit). */
+const PREFILL_NAME = "[A-Z][a-z]*(?:['\u2019-][A-Z][a-z]+)*(?:\\s+(?:(?:de|la|del|van|von|der|da|di|le)\\s+){0,3}[A-Z][a-z]*(?:['\u2019-][A-Z][a-z]+)*){0,3}";
+const PREFILL_CLAUSE = new RegExp(
+  "^(?:" +
+    `(?:I(?:\\s+have|['\u2019]ve)?\\s+)?(?:filled\\s+in|opened|set\\s+up|prepared)\\s+(?:the\\s+)?Add\\s+people(?:\\s+form)?\\s+(?:for|with)\\s+(${PREFILL_NAME})(?:\\s+(?:with|and)\\s+their\\s+email)?(?:\\s+filled\\s+in)?` +
+    "|" +
+    `(${PREFILL_NAME})['\u2019]s\\s+details\\s+are\\s+(?:filled\\s+in|ready)(?:\\s+(?:on|in)\\s+Add\\s+people)?` +
+    "|" +
+    `Open\\s+Add\\s+people\\s+for\\s+(${PREFILL_NAME})` +
+  ")\\s*[.!?]?\\s*$"
+);
+
+const NAME_PARTICLES = new Set(["de", "la", "del", "van", "von", "der", "da", "di", "le"]);
+
+/**
+ * The prefill allowance (review round 3): the whole sentence has the
+ * filled-in shape AND every word matched as the name is the new person's
+ * typed name or a particle, so "for Michael Shaw Hired." gets nothing.
+ */
+function prefillSentenceOk(sentence: string, newPerson: ReadonlySet<string>): boolean {
+  const m = sentence.match(PREFILL_CLAUSE);
+  if (!m) return false;
+  const name = m.slice(1).find((g) => g !== undefined);
+  if (!name) return false;
+  return name.split(/[\s'\u2019-]+/).filter(Boolean).every((w) => newPerson.has(w.toLowerCase()) || NAME_PARTICLES.has(w));
+}
+
+/** The whole sentence (or line) of `text` around index `i`. The prefill allowance needs the whole sentence, not one clause. */
+function sentenceAt(text: string, i: number): string {
+  let start = 0;
+  let end = text.length;
+  // A period inside an email or a number ("example.com", "3.5") does not end a sentence (review round 2).
+  for (const m of text.matchAll(/[.!?](?=\s|$)|\n/g)) {
+    const at = m.index ?? 0;
+    if (at < i) start = at + 1;
+    else { end = at + 1; break; }
+  }
+  return text.slice(start, end).trim();
+}
+
 /** The clause of `text` around index `i`: bounded by sentence ends, , ; : and joining words. */
 function clauseAt(text: string, i: number): string {
   const ends = /[.!?\n]/g;
@@ -152,7 +199,13 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // t.ROY reads and drafts; it cannot send, save, file or book (house build
   // L6 red team: "send the email"). An answer that says it did is wrong
   // whatever else is true in it.
-  const acted = text.match(/\bI(?:'ve| have)?\s+(?:already\s+|just\s+)?(?:sent|emailed|texted|messaged|saved|filed|booked|scheduled|submitted|assigned|recorded|logged)\b(?!\s+(?:nothing|no\b))|\b(?:your|the|this|that) (?:message|email|text|note|draft|check-in|referral|reminder) (?:has been|was|is now|got) (?:sent|saved|filed|delivered|scheduled)\b/i);
+  // Lane S1 (review round 1, S3): inviting and adding people is the staff
+  // member's click too. The name branch is case-sensitive on purpose: "I just
+  // added notes to the form" is not about a person. A past fact read from a
+  // record ("an email was sent Oct 3") is not flagged: only "your/the/this/that"
+  // drafts said to be sent.
+  const acted = text.match(/\bI(?:'ve| have)?\s+(?:already\s+|just\s+)?(?:sent|emailed|texted|messaged|saved|filed|booked|scheduled|submitted|assigned|recorded|logged|invited|enrolled)\b(?!\s+(?:nothing|no\b))|\b(?:your|the|this|that) (?:message|email|text|note|draft|check-in|referral|reminder|invite|invitation) (?:has been|was|is now|got) (?:sent|saved|filed|delivered|scheduled)\b|(?:\b(?:has|have)|['\u2019](?:s|ve)) been (?:added|invited|enrolled)\b|\binvite (?:was |got )?(?:sent|went out)\b|\bthe invite went out\b|\b(?:is|are) (?:now )?(?:added|invited)\b|\b(?:is|are) now (?:enrolled|on your (?:list|caseload))\b|\binvite (?:is )?on its way\b/i)
+    ?? text.match(/\bI(?:'ve| have)? (?:already |just )?added (?:them|him|her|[A-Z][a-z]+)\b/);
   if (acted) problems.push(`"${acted[0]}": t.ROY cannot send, save or book anything; you do that yourself`);
 
   // Citations (summarize-with-sources): every [N1]-style ref must be an item
@@ -169,6 +222,12 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // A phone number is contact detail, not a count (review C4 B1): skip it
   // rather than letting its digit groups into the allowed numbers.
   text = text.replace(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}\b/g, " ");
+  // An email address is contact detail too (lane S1, review round 2): it is
+  // read as "their email", so its parts are never counts or names, and the
+  // sentence it sits in stays whole for the prefill rule.
+  // Answer path only (review round 3): in a draft for a participant an email
+  // can carry a name ("Marcus.Jones@..."), and the full person check stays.
+  if (opts?.typedNamesInNoMatch) text = text.replace(/[^\s@()<>,;:"']+@[^\s@()<>,;:"']+\.[A-Za-z]{2,24}\b/g, "their email");
   // Whole phrases a tool returned (a job title, a listing, a note) are
   // repeating the record, not new claims. Only the whole phrase: a name
   // inside one is still checked when it appears on its own (review C4 S1).
@@ -214,6 +273,11 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // their list, is not a claim about a person; flagging it read as a finding
   // about someone (staff walk 2026-10-27). Only that sentence shape is let
   // through, and only on the answer path (see opts above).
+  // Lane S1: the new person's name in a filled-in Add people form, which the
+  // staff member typed and the tool checked. Answer path only, like the rule
+  // below: a draft for a participant never gets it.
+  // Accepted only inside PREFILL_CLAUSE (review round 1, S2), never added to `known`.
+  const newPerson = new Set(opts?.typedNamesInNoMatch ? (facts.staffToolEvidence ?? []).flatMap((e) => e.newPersonNames ?? []).map((n) => n.toLowerCase()) : []);
   const typed = new Set(opts?.typedNamesInNoMatch ? (userSaid ?? "").toLowerCase().split(/[^a-z]+/).filter((w) => w.length > 1) : []);
   // A capitalized word is only a candidate NAME if it is not an ordinary word.
   // The first version listed forty stopwords and flagged everything else, so a
@@ -255,6 +319,13 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     for (const w of label.toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
   }
   for (const w of (facts.orgName ?? "").toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
+  // Workspace page names t.ROY points people to ("open Add people", "Go to
+  // Referrals"), lane S1. Answer path only: a draft for a participant keeps
+  // the full person check ("Hi Jordan, Mark from the program..." is flagged).
+  if (opts?.typedNamesInNoMatch) {
+    for (const w of Array.from(STAFF_PAGE_WORDS)) STOPWORDS.add(w);
+    for (const w of ["invite", "send", "add", "open", "press", "button", "page", "form", "directory", "employers", "employer", "hires", "records", "reported"]) STOPWORDS.add(w);
+  }
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.
   const flagged = new Set<string>();
@@ -263,6 +334,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     const low = c.toLowerCase();
     if (STOPWORDS.has(low) || known.has(low) || flagged.has(c)) continue;
     if (typed.has(low) && NO_MATCH_CLAUSE.test(clauseAt(text, m.index ?? 0))) continue;
+    if (newPerson.has(low) && prefillSentenceOk(sentenceAt(text, m.index ?? 0), newPerson)) continue;
     flagged.add(c);
     problems.push(`I could not match "${c}" to anyone on your list`);
   }

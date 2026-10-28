@@ -11,6 +11,7 @@ export function accessLogAction(kind: string | undefined, scope: string, label: 
   if (scope === "assistant:progress") return "asked t.ROY to look at the progress you share with them";
   if (scope === "assistant:tasks") return "asked t.ROY to look at their tasks about you";
   if (scope === "assistant:timeline") return "asked t.ROY to summarize what you share and what their organization has on file about you";
+  if (via === "connections") return `opened ${label(scope).toLowerCase()} to look for employers and job help that fit you`;
   if (via === "t.ROY") return `asked t.ROY, which opened ${label(scope).toLowerCase()}`;
   return `opened ${label(scope).toLowerCase()}`;
 }

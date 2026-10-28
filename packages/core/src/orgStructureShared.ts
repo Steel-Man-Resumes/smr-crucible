@@ -146,12 +146,14 @@ export function capTerm(word: string): string {
 
 /* -------------------------------------------------------------- modules -- */
 
-export const ORG_MODULES = ["programs", "sites", "teams", "referrals", "outcomes", "custom_fields", "saved_views", "ai_assist"] as const;
+// note_review joins in migration 109 (staff side S4): supervisor review of case notes, off by default.
+export const ORG_MODULES = ["programs", "sites", "teams", "referrals", "outcomes", "custom_fields", "saved_views", "ai_assist", "note_review"] as const;
 export type OrgModule = (typeof ORG_MODULES)[number];
 export type OrgModules = Record<OrgModule, boolean>;
 
 export const DEFAULT_ORG_MODULES: Readonly<OrgModules> = Object.freeze({
   programs: true, sites: false, teams: false, referrals: true, outcomes: true, custom_fields: true, saved_views: true, ai_assist: true,
+  note_review: false,
 });
 
 export const MODULE_INFO: Record<OrgModule, { label: string; help: string }> = {
@@ -163,7 +165,21 @@ export const MODULE_INFO: Record<OrgModule, { label: string; help: string }> = {
   custom_fields: { label: "Your own fields", help: "Add the fields your funders ask about." },
   saved_views: { label: "Saved views", help: "Save the lists your team looks at every day." },
   ai_assist: { label: "t.ROY for staff", help: "Drafts and summaries for your team. Nothing is saved or sent without a click." },
+  note_review: { label: "Supervisor review of case notes", help: "Staff send a note for review. The owner or an admin approves it, which locks it, or sends it back with a comment." },
 };
+
+/**
+ * The modules as stored. A switch that is off AND newer than 103's guard list
+ * (note_review, migration 109) is left out, so an app release that runs ahead
+ * of its migration never writes a key the database does not know yet; a
+ * missing key reads as its default (off).
+ */
+export const MODULES_ADDED_LATER: readonly OrgModule[] = ["note_review"];
+export function storedOrgModules(m: OrgModules): Partial<OrgModules> {
+  const out: Partial<OrgModules> = {};
+  for (const k of ORG_MODULES) if (!(MODULES_ADDED_LATER.includes(k) && !m[k])) out[k] = m[k];
+  return out;
+}
 
 export function resolveOrgModules(stored: unknown): OrgModules {
   const out: OrgModules = { ...DEFAULT_ORG_MODULES };

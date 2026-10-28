@@ -177,6 +177,15 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
     });
   }
 
+  if (opts.surface === 'refinery') {
+    // Staff pass S5: what their case manager sent them. Read only; they answer on their own screen.
+    tools.read_my_staff_suggestions = tool({
+      description: "Read what the person's case manager sent them that is still waiting (handoffs: a note plus employers, places for help, next steps; and suggested jobs), with each item's id and status. Use when they ask what their case manager sent, or when a suggestion fits what they are working on. They take or pass on each one themselves on their dashboard or the From your case manager page; you cannot answer for them, and never pressure them.",
+      parameters: jsonSchema<Record<string, never>>({ type: "object", properties: {}, additionalProperties: false }),
+      execute: async () => readMyStaffSuggestions(userId),
+    });
+  }
+
   tools.contextual_handoff = tool({
     description: "Prepare a button to continue with this exact selected job, lane and saved revision. Use for tailoring, interview practice and applications. The user chooses when to move.",
     parameters: jsonSchema<{page: "application-tailor" | "interview" | "applications"}>({ type: "object", properties: { page: { type: "string", enum: ["application-tailor", "interview", "applications"] } }, required: ["page"], additionalProperties: false }),
@@ -531,6 +540,41 @@ export function buildAssistantTools(opts: AssistantToolOptions): ToolSet {
   return tools;
 }
 
+/** Injectable reads for read_my_staff_suggestions (tests run it without a database). */
+export interface StaffSuggestionReads {
+  load(userId: string): Promise<import("../staff-handoff-context").CaseManagerContext | null>;
+  /** The person's record_planner yes at the current version, and nobody acting for them. Fails closed. */
+  recordConsent(userId: string): Promise<boolean>;
+}
+const liveStaffSuggestionReads: StaffSuggestionReads = {
+  load: async (userId) => (await import("../assistant-full-context")).loadCaseManagerSuggestions(userId, { listings: true }),
+  recordConsent: async (userId) => {
+    const { recordPlannerConsent, actingForSomeoneElse } = await import("../hurdles/consent-server");
+    const [c, acting] = await Promise.all([recordPlannerConsent(userId).then((r) => r.granted).catch(() => false), actingForSomeoneElse().catch(() => true)]);
+    return c && !acting;
+  },
+};
+
+/**
+ * read_my_staff_suggestions. Staff-written words pass the person's own record
+ * gate (lib/staff-handoff-context.ts gateForPerson) before the model sees them.
+ */
+export async function readMyStaffSuggestions(userId: string, reads: StaffSuggestionReads = liveStaffSuggestionReads) {
+  try {
+    const [raw, consent] = await Promise.all([reads.load(userId), reads.recordConsent(userId).catch(() => false)]);
+    if (!raw) return { status: "none", openCount: 0, handoffs: [], jobs: [] };
+    const { gateForPerson, STAFF_WORDS_NOTE } = await import("../staff-handoff-context");
+    const gated = gateForPerson(raw, consent);
+    return {
+      status: "ok", ...gated,
+      whereToAnswer: { page: "/dashboard/from-your-case-manager", label: "From your case manager" },
+      note: `${STAFF_WORDS_NOTE} Taking an employer or a job saves it to their jobs; a place for help goes to their help list; a next step goes on their list from their case manager. Passing needs no reason.`,
+    };
+  } catch {
+    return { status: "unavailable", error: "What their case manager sent could not be read just now. Do not say there is nothing; point them to the From your case manager page." };
+  }
+}
+
 /**
  * Prompt section describing the hands. Appended to the system prompt by both
  * routes so tool doctrine lives next to the tools, not scattered in prompts.
@@ -545,7 +589,7 @@ export function buildHandsSection(opts: AssistantToolOptions): string {
 - save_resource_list and preview_document_correction: show a confirmation card. They do not save; wait for the person to click and for a real success result.
 - search_jobs, then save_job: find real openings and save the one the user picks.
 - add_follow_up_reminder: set a follow-up date on a tracked application (confirm the date first).
-- file_feedback: when the user reports a bug, confusion, or an idea, or wants to tell Troy something, offer to file it. Only file after they explicitly say yes. Never file silently.
+${opts.surface === "refinery" ? "- read_my_staff_suggestions: what their case manager sent them that is still waiting. They take or pass on each one themselves (dashboard, or the From your case manager page); you never answer for them and never pressure them.\n" : ""}- file_feedback: when the user reports a bug, confusion, or an idea, or wants to tell Troy something, offer to file it. Only file after they explicitly say yes. Never file silently.
 `
     : "";
   const signInLine = authed

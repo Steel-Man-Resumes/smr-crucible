@@ -29,6 +29,7 @@ export const REFINERY_PAGES: Record<string, string> = {
   vault: "/dashboard/vault",
   progress: "/dashboard/progress",
   settings: "/dashboard/settings",
+  "from-your-case-manager": "/dashboard/from-your-case-manager",
 };
 
 /** Pages t.ROY may navigate to inside the Forge (pre-auth safe). */

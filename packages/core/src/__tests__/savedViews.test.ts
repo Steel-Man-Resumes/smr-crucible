@@ -142,7 +142,7 @@ describe("the old saved sorts move over with the same meaning", () => {
     // and each survives the allowlist it will be read through
     for (const v of legacy) assert.deepEqual(normalizeViewDefinition(legacyViewToDefinition(v)), legacyViewToDefinition(v));
   });
-  it("the move is idempotent, keeps the old list, and its marker survives a prefs save (source)", () => {
+  it("the move is idempotent, keeps the old list, and its marker survives a prefs save (source)", async () => {
     const sv = readFileSync(new URL("../savedViews.ts", import.meta.url), "utf8");
     const mv = sv.slice(sv.indexOf("export async function migrateLegacySavedViews"));
     assert.match(mv, /if \(moved\.includes\(actor\.orgId\)\) return 0;/);
@@ -150,7 +150,11 @@ describe("the old saved sorts move over with the same meaning", () => {
     assert.match(mv, /'\{viewsMovedTo\}'/);
     assert.doesNotMatch(mv.slice(0, mv.indexOf("\n}\n")), /savedViews'|- 'savedViews'|#- /, "the old list is never removed");
     const sp = readFileSync(new URL("../staffPrefs.ts", import.meta.url), "utf8");
-    assert.match(sp, /jsonb_build_object\('viewsMovedTo', staff_prefs->'viewsMovedTo'\)/);
+    // The marker survives because prefs writes change only the keys that changed (round 2): the marker is never one of them.
+    assert.match(sp, /\(COALESCE\(staff_prefs, '\{\}'::jsonb\) - \$3::text\[\]\) \|\| \$2::jsonb/);
+    const { prefsDelta } = await import("../staffPrefsShared");
+    const d = prefsDelta(normalizeStaffPrefs({ density: "tall" }), normalizeStaffPrefs({}));
+    assert.ok(!("viewsMovedTo" in d.set) && !d.remove.includes("viewsMovedTo"), "a write never touches the marker");
     assert.equal("viewsMovedTo" in normalizeStaffPrefs({ viewsMovedTo: ["x"] }), false, "a client can never set the marker");
   });
 });
@@ -198,7 +202,7 @@ describe("the database half (source checks)", () => {
   it("changes and deletes are limited to your own views, or shared ones for a manager", () => {
     for (const fn of ["updateSavedView", "deleteSavedView"]) {
       const body = src.slice(src.indexOf(`export async function ${fn}`));
-      assert.match(body.slice(0, 1600), /owner_user_id = \$3::uuid OR \(owner_user_id IS NULL AND \$\d::boolean\)/, fn);
+      assert.match(body.slice(0, 3200), /owner_user_id = \$3::uuid OR \(owner_user_id IS NULL AND \$\d::boolean\)/, fn);
     }
   });
 });

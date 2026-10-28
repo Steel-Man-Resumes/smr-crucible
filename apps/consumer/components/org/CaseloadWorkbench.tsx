@@ -16,11 +16,26 @@
  *
  * Sensitive fields show to staff who reach the person (they are org records),
  * and are marked; they leave in an export only when ticked.
+ *
+ * STAFF BUILD S3 (2026-10-27): a Grid mode beside the list (PeopleGrid, a
+ * spreadsheet over the same rows and the same view), the person's own look
+ * per view (widths, frozen columns, summaries, row height; saved for them
+ * alone through the view action layer, logged and undoable), a view they can
+ * make People open with, and the organization's limits on what their role may
+ * change for themselves (migration 108), drawn locked with the reason. On a
+ * phone the grid falls back to the list.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { OUTBOUND_CSV_HELP } from "@crucible/core/src/orgOutboundBrandShared";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { PeopleGrid } from "@/components/org/PeopleGrid";
+import { VIEW_CHANGED_EVENT } from "@/lib/view-change-events";
+import { mergeGridLayouts, layoutKeyFor, type GridLayout, type RowDensity } from "@crucible/core/src/viewLayoutShared";
+import type { GridLayoutPatch } from "@crucible/core/src/viewActionsShared";
+import type { PolicyAllowed } from "@crucible/core/src/customizationPolicyShared";
 import {
   EMPTY_VIEW, FILTER_OPS, FILTER_OP_LABELS, LAYOUT_ROLES, LAYOUT_ROLE_LABELS, applyView, caseloadViewFields, defaultCaseloadColumns, groupRows,
-  initialViewId, isGroupableKind, normalizeViewDefinition,
+  initialViewId, isGroupableKind, normalizeViewDefinition, sameArrangement,
   type ViewDefinition, type ViewField, type ViewFilter, type ViewRow,
 } from "@crucible/core/src/savedViewsShared";
 import { formatCustomFieldValue, isSensitiveField, type CustomFieldDef } from "@crucible/core/src/customFieldsShared";
@@ -32,13 +47,63 @@ export interface WorkbenchClient {
 }
 
 interface SavedViewRecord { id: string; name: string; ownerUserId: string | null; roleDefault: string | null; position: number; definition: ViewDefinition }
-interface ViewsPayload { views: SavedViewRecord[]; role: string; canShare: boolean; canExport: boolean; roleColumns: string[] | null; personalHidden: string[]; defaultSort: CaseloadSort }
+interface ViewsPayload {
+  views: SavedViewRecord[]; role: string; canShare: boolean; canExport: boolean; roleColumns: string[] | null; personalHidden: string[]; defaultSort: CaseloadSort;
+  // S3: the person's own choices and their role's limits (absent on an older server: everything allowed, list mode).
+  personalColumns?: string[] | null; defaultView?: string | null; density?: RowDensity; mode?: "list" | "grid";
+  layouts?: Record<string, GridLayout>; allowed?: Partial<PolicyAllowed>; canEditValues?: boolean;
+}
 interface ValuesPayload { defs: CustomFieldDef[]; values: Record<string, Record<string, unknown>>; staff: { id: string; name: string }[] }
 
 const VIEW_KEY = "smr.caseload.view";
 const readStored = (): string | null => { try { return window.localStorage.getItem(VIEW_KEY); } catch { return null; } };
 const writeStored = (v: string) => { try { window.localStorage.setItem(VIEW_KEY, v); } catch { /* private window: fine */ } };
-const sameDef = (a: ViewDefinition, b: ViewDefinition) => JSON.stringify(normalizeViewDefinition(a)) === JSON.stringify(normalizeViewDefinition(b));
+const sameDef = (a: ViewDefinition, b: ViewDefinition) => sameArrangement(a, b);
+const DATE_FMT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
+const fmtDay = (v: unknown) => { if (typeof v !== "string" || !v) return ""; const t = Date.parse(v); return Number.isFinite(t) ? DATE_FMT.format(new Date(t)) : ""; };
+
+/** True on screens wide enough for the grid (the grid falls back to the list on a phone). */
+function useWide(): boolean {
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(min-width: 768px)");
+    const set = () => setWide(mq.matches);
+    set();
+    mq.addEventListener?.("change", set);
+    return () => mq.removeEventListener?.("change", set);
+  }, []);
+  return wide;
+}
+
+/** One person's own grid look, saved behind the screen: changes made within a moment go as one. */
+function useLayoutSaver(readOnly: boolean, onSaved: (summary: string) => void) {
+  const queue = useRef<{ viewId: string | null; patch: GridLayoutPatch } | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flush = useCallback(() => {
+    const q = queue.current;
+    queue.current = null;
+    if (!q || readOnly) return;
+    fetch("/api/org/prefs/view", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "setGridLayout", viewId: q.viewId, patch: q.patch }) })
+      .then((r) => r.json().catch(() => ({})).then((d) => ({ ok: r.ok, d })))
+      .then(({ ok, d }) => { if (!ok && d?.reason !== "unchanged") onSaved(d?.error || "That look was not saved. It stays on this screen."); })
+      .catch(() => { /* kept on screen; not saved */ });
+  }, [readOnly, onSaved]);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); flush(); }, [flush]);
+  return useCallback((viewId: string | null, patch: GridLayoutPatch) => {
+    const q = queue.current && queue.current.viewId === viewId ? queue.current.patch : (queue.current ? (flush(), {}) : {});
+    queue.current = {
+      viewId,
+      patch: {
+        ...q, ...patch,
+        widths: patch.widths || q.widths ? { ...(q.widths ?? {}), ...(patch.widths ?? {}) } : undefined,
+        summaries: patch.summaries || q.summaries ? { ...(q.summaries ?? {}), ...(patch.summaries ?? {}) } : undefined,
+      },
+    };
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(flush, 900);
+  }, [flush]);
+}
 
 const btn = "t-focus inline-flex min-h-touch items-center gap-1 border border-t-line bg-t-panel px-3 text-xs text-t-phos hover:border-t-line-strong hover:text-t-white";
 const btnOn = "t-focus inline-flex min-h-touch items-center gap-1 border border-t-amber bg-t-panel px-3 text-xs text-t-white";
@@ -78,6 +143,11 @@ export function CaseloadWorkbench<T extends WorkbenchClient>({
   const [panel, setPanel] = useState<Panel>(null);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [now] = useState(() => Date.now());
+  const [mode, setModeState] = useState<"list" | "grid">("list");
+  const [localLayouts, setLocalLayouts] = useState<Record<string, GridLayout>>({});
+  const router = useRouter();
+  const wide = useWide();
+  const saveLayout = useLayoutSaver(readOnly, useCallback((text: string) => setMsg({ kind: "err", text }), []));
 
   const load = useCallback(async () => {
     const [v, f] = await Promise.all([
@@ -101,13 +171,22 @@ export function CaseloadWorkbench<T extends WorkbenchClient>({
       .then(({ v, moved }) => {
       if (!v) return;
       const fromUrl = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("view") : null;
-      const id = initialViewId(v.views, v.role, fromUrl ?? readStored());
+      // A link (?view=) wins; then the view this person chose to open People with; then the last one; then the role's.
+      const id = initialViewId(v.views, v.role, fromUrl ?? readStored(), fromUrl ? null : v.defaultView ?? null);
+      if (v.mode) setModeState(v.mode);
       const chosen = v.views.find((x) => x.id === id);
       setActiveId(chosen?.id ?? null);
       setDraft(chosen ? chosen.definition : EMPTY_VIEW);
       if (moved > 0) setMsg({ kind: "ok", text: moved === 1 ? "Your saved view moved to the view menu." : `Your ${moved} saved views moved to the view menu.` });
     });
   }, [load, readOnly]);
+
+  // t.ROY changed this person's own view (the chat's Done card fires this): read it again.
+  useEffect(() => {
+    const again = () => { void load(); };
+    window.addEventListener(VIEW_CHANGED_EVENT, again);
+    return () => window.removeEventListener(VIEW_CHANGED_EVENT, again);
+  }, [load]);
 
   const defsById = useMemo(() => new Map(vals.defs.map((d) => [`cf:${d.key}`, d])), [vals.defs]);
   const staffNames = useMemo(() => new Map(vals.staff.map((s) => [s.id, s.name])), [vals.staff]);
@@ -135,9 +214,38 @@ export function CaseloadWorkbench<T extends WorkbenchClient>({
   const shown = applyView(rows, draft, { fields, nowMs: now, presetSorts: presetRowSorts, defaultSort, staffNames, find });
   const groups = groupRows(shown, draft.groupBy, { fields, staffNames });
 
-  const columns = (draft.columns ?? defaultCaseloadColumns(meta?.roleColumns ? { columns: meta.roleColumns } : null, meta?.personalHidden ?? []))
+  const columns = (draft.columns ?? defaultCaseloadColumns(meta?.roleColumns ? { columns: meta.roleColumns } : null, meta?.personalHidden ?? [], meta?.personalColumns ?? null))
     .filter((c) => fieldById.has(c) && c !== "name");
   const active = meta?.views.find((v) => v.id === activeId) ?? null;
+  const allowed = { personal_views: true, columns: true, column_width: true, density: true, default_view: true, grid_edit: true, ...(meta?.allowed ?? {}) };
+  // Managers arrange shared views whatever the personal limits say.
+  const canArrange = allowed.columns || !!meta?.canShare;
+  const layoutKey = layoutKeyFor(activeId);
+  const layout = mergeGridLayouts(active?.definition.grid ?? null, localLayouts[layoutKey] ?? meta?.layouts?.[layoutKey] ?? null);
+  const showGrid = mode === "grid" && wide;
+  function setMode(next: "list" | "grid") {
+    setModeState(next);
+    if (!readOnly) fetch("/api/org/prefs/view", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "setPeopleMode", mode: next }) }).catch(() => {});
+  }
+  function changeLayout(patch: GridLayoutPatch) {
+    const base = localLayouts[layoutKey] ?? meta?.layouts?.[layoutKey] ?? active?.definition.grid ?? null;
+    const cur = mergeGridLayouts(null, base);
+    const next: GridLayout = {
+      widths: { ...cur.widths }, frozen: patch.frozen ?? cur.frozen, rowHeight: patch.rowHeight !== undefined ? patch.rowHeight : cur.rowHeight, summaries: { ...cur.summaries },
+    };
+    for (const [k, w] of Object.entries(patch.widths ?? {})) { if (w === null) delete next.widths[k]; else next.widths[k] = w; }
+    for (const [k, v] of Object.entries(patch.summaries ?? {})) { if (v === null) delete next.summaries[k]; else next.summaries[k] = v; }
+    setLocalLayouts((m) => ({ ...m, [layoutKey]: next }));
+    saveLayout(activeId, patch);
+  }
+  const builtinText = (col: string, r: ViewRow): string => {
+    const v = r.values[col];
+    if (col === "stage" || col === "status") return fieldById.get(col)?.options?.find((o) => o.id === String(v))?.label ?? "";
+    if (col === "staff") return v ? staffNames.get(String(v)) ?? byId.get(r.id)?.assignedStaffName ?? "" : "";
+    if (col === "lastActive" || col === "joined") return fmtDay(v);
+    if (col === "applications") return typeof v === "number" ? String(v) : "";
+    return typeof v === "string" ? v : "";
+  };
   const dirty = active ? !sameDef(active.definition, draft) : !sameDef(EMPTY_VIEW, draft);
   const canEditActive = !!active && (active.ownerUserId !== null || !!meta?.canShare);
 
@@ -192,7 +300,15 @@ export function CaseloadWorkbench<T extends WorkbenchClient>({
 
   return (
     <div data-testid="caseload-workbench">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2" data-tour="crm-people-save-view">
+        <div role="radiogroup" aria-label="Show People as" className="inline-flex border border-t-line">
+          {(["list", "grid"] as const).map((m) => (
+            <button key={m} type="button" role="radio" aria-checked={mode === m} onClick={() => setMode(m)}
+              className={`t-focus min-h-touch px-3 text-xs ${mode === m ? "bg-t-panel-3 font-semibold text-t-white" : "bg-t-panel text-t-phos hover:text-t-white"}`}>
+              {m === "list" ? "List" : "Grid"}
+            </button>
+          ))}
+        </div>
         <label className="sr-only" htmlFor="caseload-view">View</label>
         <select id="caseload-view" value={activeId ?? ""} onChange={(e) => chooseView(e.target.value)} className={`${input} min-h-touch max-w-[14rem]`}>
           <option value="">Everyone (default)</option>
@@ -221,10 +337,14 @@ export function CaseloadWorkbench<T extends WorkbenchClient>({
       </div>
       {msg && <p role={msg.kind === "err" ? "alert" : "status"} className={`mb-2 text-xs ${msg.kind === "err" ? "text-t-amber-bright" : "text-t-phos"}`}>{msg.text}</p>}
 
-      {panel === "columns" && (
+      {panel === "columns" && (canArrange ? (
         <ColumnsPanel fields={fields.filter((f) => f.id !== "name")} columns={columns} onChange={(cols) => setDraft({ ...draft, columns: cols })}
           onReset={() => setDraft({ ...draft, columns: null })} />
-      )}
+      ) : (
+        <p role="note" className="mb-3 border border-t-line bg-t-panel px-3 py-3 text-xs text-t-white">
+          Your organization keeps the People columns the same for everyone. If it should change, ask whoever manages your organization&apos;s settings.
+        </p>
+      ))}
       {panel === "filters" && <FiltersPanel fields={fields} filters={draft.filters} onChange={setFilters} staff={vals.staff} />}
       {panel === "sort" && (
         <div className="mb-3 flex flex-wrap items-center gap-2 border border-t-line bg-t-panel px-3 py-3">
@@ -255,11 +375,18 @@ export function CaseloadWorkbench<T extends WorkbenchClient>({
       )}
       {panel === "save" && !readOnly && (
         <SavePanel active={active} canEditActive={canEditActive} canShare={!!meta?.canShare} draft={draft}
+          canSavePersonal={allowed.personal_views} canChooseDefault={allowed.default_view} isDefault={!!active && meta?.defaultView === active.id}
+          onMakeDefault={async (on) => {
+            const res = await fetch("/api/org/prefs/view", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "setDefaultView", viewId: on && active ? active.id : null }) });
+            const d = await res.json().catch(() => ({}));
+            setMsg(res.ok ? { kind: "ok", text: d.summary ? `${d.summary}.` : "Saved." } : { kind: "err", text: d.error || "That did not save. Try again." });
+            if (res.ok) await load();
+          }}
           onCreate={async (name, isShared, roleDefault) => {
-            const v = await post({ action: "create", surface: "caseload", name, definition: draft, shared: isShared, roleDefault }, `Saved "${name}".`);
+            const v = await post({ action: "create", surface: "caseload", name, definition: { ...draft, grid: layout }, shared: isShared, roleDefault }, `Saved "${name}".`);
             if (v && v !== true) { setActiveId(v.id); writeStored(v.id); setPanel(null); }
           }}
-          onUpdate={async () => { if (active) await post({ action: "update", id: active.id, definition: draft }, `Updated "${active.name}".`); }}
+          onUpdate={async () => { if (active) await post({ action: "update", id: active.id, definition: { ...draft, grid: layout } }, `Updated "${active.name}".`); }}
           onRename={async (name) => { if (active) await post({ action: "update", id: active.id, name }, "Renamed."); }}
           onRoleDefault={async (role) => { if (active) await post({ action: "update", id: active.id, roleDefault: role || null }, role ? "It now opens first for that role." : "It no longer opens first for anyone."); }}
           onDelete={async () => {
@@ -277,7 +404,34 @@ export function CaseloadWorkbench<T extends WorkbenchClient>({
         </label>
       )}
 
-      {shown.length === 0 ? (
+      {mode === "grid" && !wide && (
+        <p role="note" className="mb-2 text-xs text-t-phos-dim">The grid needs a wider screen. Here is the list; the grid is back on a computer or tablet.</p>
+      )}
+      {showGrid && shown.length > 0 ? (
+        <PeopleGrid
+          groups={groups}
+          columns={columns}
+          fields={fields}
+          defsByColumn={defsById}
+          staff={vals.staff}
+          layout={layout}
+          density={meta?.density ?? "regular"}
+          sort={draft.sort && fieldById.has(draft.sort.field) ? draft.sort : null}
+          groupBy={draft.groupBy}
+          canEdit={!readOnly && !!meta?.canEditValues}
+          editOffReason={readOnly ? "This is a read-only look at the organization." : allowed.grid_edit ? undefined : "Your organization has fields filled in on each person's page, not in the grid."}
+          canArrange={canArrange}
+          canStyle={allowed.column_width && !readOnly}
+          onLayout={changeLayout}
+          onColumns={(cols) => setDraft({ ...draft, columns: cols })}
+          onSort={(sort) => setDraft({ ...draft, sort })}
+          onGroupBy={(groupBy) => setDraft({ ...draft, groupBy })}
+          onValues={(values) => setVals((v) => ({ ...v, values: { ...v.values, ...values } }))}
+          onOpen={(id) => router.push(`/dashboard/clients/${id}`)}
+          builtinText={builtinText}
+          labelOf={(col) => fieldById.get(col)?.label ?? col}
+        />
+      ) : shown.length === 0 ? (
         <div className="border border-t-line bg-t-panel px-5 py-8 text-center text-t-phos-dim">
           {clients.length > 0 ? (
             <>No one matches this view.{(filterCount > 0 || find) && <> <button type="button" className="t-focus underline underline-offset-4" onClick={() => { setFind(""); setFilters([]); }}>Clear the filters</button></>}</>
@@ -422,25 +576,34 @@ function FilterValue({ filter, kind, options, onChange }: { filter: ViewFilter; 
   return <input aria-label="Text" type="text" maxLength={200} className={`${input} min-h-touch w-40`} value={typeof filter.value === "string" ? filter.value : ""} onChange={(e) => onChange(e.target.value)} />;
 }
 
-function SavePanel({ active, canEditActive, canShare, onCreate, onUpdate, onRename, onRoleDefault, onDelete }: {
+function SavePanel({ active, canEditActive, canShare, canSavePersonal = true, canChooseDefault = true, isDefault = false, onMakeDefault, onCreate, onUpdate, onRename, onRoleDefault, onDelete }: {
   active: SavedViewRecord | null; canEditActive: boolean; canShare: boolean; draft: ViewDefinition;
+  /** The organization lets this role keep its own views (108). */
+  canSavePersonal?: boolean;
+  /** The organization lets this role pick which view People opens with (108). */
+  canChooseDefault?: boolean;
+  isDefault?: boolean;
+  onMakeDefault?: (on: boolean) => Promise<void>;
   onCreate: (name: string, shared: boolean, roleDefault: string | null) => Promise<void>;
   onUpdate: () => Promise<void>; onRename: (name: string) => Promise<void>; onRoleDefault: (role: string) => Promise<void>; onDelete: () => Promise<void>;
 }) {
   const [name, setName] = useState("");
-  const [isShared, setShared] = useState(false);
+  const [isShared, setShared] = useState(!canSavePersonal && canShare);
   const [role, setRole] = useState("");
   const [rename, setRename] = useState(active?.name ?? "");
   return (
     <div className="mb-3 grid gap-4 border border-t-line bg-t-panel px-3 py-3 sm:grid-cols-2">
       <form onSubmit={(e) => { e.preventDefault(); if (name.trim()) onCreate(name.trim(), isShared, isShared && role ? role : null); }} className="space-y-2">
         <h3 className="text-xs font-semibold text-t-white">Save as a new view</h3>
+        {!canSavePersonal && !canShare && (
+          <p role="note" className="text-xs text-t-white">Your organization does not use personal views. The shared views are in the view menu. If it should change, ask whoever manages your organization&apos;s settings.</p>
+        )}
         <label className="block text-xs text-t-phos-dim" htmlFor="wb-name">Name (for example: My quiet people)</label>
         <input id="wb-name" value={name} maxLength={60} onChange={(e) => setName(e.target.value)} className={`${input} min-h-touch w-full`} />
         {canShare && (
           <>
             <label className="flex min-h-touch items-center gap-2 text-xs text-t-phos">
-              <input type="checkbox" className="t-focus" checked={isShared} onChange={(e) => setShared(e.target.checked)} />
+              <input type="checkbox" className="t-focus" checked={isShared} disabled={!canSavePersonal} onChange={(e) => setShared(e.target.checked)} />
               Share it with everyone in the organization
             </label>
             {isShared && (
@@ -454,7 +617,7 @@ function SavePanel({ active, canEditActive, canShare, onCreate, onUpdate, onRena
             {isShared && <p className="text-[11px] text-t-phos-dim">A shared view only arranges the list. Each person still sees only the people they are allowed to see.</p>}
           </>
         )}
-        <button disabled={!name.trim()} className="t-focus min-h-touch bg-[#4f6b57] px-4 text-xs font-semibold text-white disabled:opacity-50">Save view</button>
+        <button disabled={!name.trim() || (!isShared && !canSavePersonal)} className="t-focus min-h-touch bg-[#4f6b57] px-4 text-xs font-semibold text-white disabled:opacity-50">Save view</button>
       </form>
       {active && canEditActive && (
         <div className="space-y-2">
@@ -476,6 +639,12 @@ function SavePanel({ active, canEditActive, canShare, onCreate, onUpdate, onRena
           <button type="button" onClick={onDelete} className="t-focus min-h-touch text-xs text-t-phos-dim underline underline-offset-4 hover:text-t-amber-bright">Remove this view</button>
         </div>
       )}
+      {active && onMakeDefault && canChooseDefault && (
+        <label className="flex min-h-touch items-center gap-2 text-xs text-t-phos sm:col-span-2">
+          <input type="checkbox" className="t-focus" checked={isDefault} onChange={(e) => void onMakeDefault(e.target.checked)} />
+          Open People with &quot;{active.name}&quot; for me
+        </label>
+      )}
     </div>
   );
 }
@@ -486,7 +655,7 @@ function ExportPanel({ defs }: { defs: CustomFieldDef[] }) {
   const [ticked, setTicked] = useState<string[]>([]);
   return (
     <form method="post" action="/api/org/caseload/export" className="mb-3 border border-t-line bg-t-panel px-3 py-3">
-      <p className="text-xs text-t-phos">The spreadsheet has everyone you can see who shares progress, with your organization&apos;s fields. Every download is logged.</p>
+      <p className="text-xs text-t-phos">The spreadsheet has everyone you can see who shares progress, with your organization&apos;s fields. Every download is logged. {OUTBOUND_CSV_HELP}</p>
       {sensitive.length > 0 && (
         <fieldset className="mt-2">
           <legend className="text-xs font-semibold text-t-white">Sensitive fields stay out unless you tick them</legend>

@@ -21,6 +21,7 @@
 
 import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
 import { RESEARCH_CONTEXT } from "./research-context";
+import { buildCaseManagerSection } from "./staff-handoff-context";
 import { forgeWallState, type ForgeWall } from "./forge-access";
 import { sanitizeForPrompt, sanitizeArray, sanitizeOrEmpty } from "@/lib/sanitize";
 import type { UserFullContext } from "./use-user-context";
@@ -615,6 +616,7 @@ function buildFullUserSection(ctx: UserFullContext): string {
     gaps.forEach((g) => lines.push(`  - ${g}`));
   }
 
+  lines.push(...buildCaseManagerSection(ctx));
   lines.push(...buildServerPartsSection(ctx));
 
   // The explicit "what's locked + the one-click unblock" model, shared with the

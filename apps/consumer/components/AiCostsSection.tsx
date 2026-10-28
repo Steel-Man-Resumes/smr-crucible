@@ -8,6 +8,7 @@
  * <AiCostsOwnSection>   = the signed-in user's own usage (settings page).
  */
 
+import { useEffectiveRole } from "@/components/RoleProvider";
 import { useEffect, useState } from "react";
 import { AiPolicyEditor } from "./AiPolicyEditor";
 import { labelForEndpoint } from "@/lib/ai-usage-labels";
@@ -175,6 +176,7 @@ export function AiCostsAdminSection() {
 }
 
 export function AiCostsOwnSection() {
+  const staff = !!useEffectiveRole()?.orgRole;
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");
 
@@ -239,10 +241,10 @@ export function AiCostsOwnSection() {
             Cost tracking began Aug 2, 2026. AI work before that date is not
             shown here.
           </p>
-          <p className="text-[10px] text-t-phos-dim">
+          {!staff && <p className="text-[10px] text-t-phos-dim">
             If a partner organization sponsors your account, they see this too.
             That is how your access stays free.
-          </p>
+          </p>}
         </div>
       )}
     </Shell>

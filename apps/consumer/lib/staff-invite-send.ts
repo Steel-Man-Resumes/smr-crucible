@@ -15,6 +15,8 @@
  * account gets the "sign in to answer" email. An account a platform admin
  * added directly gets a short notice.
  */
+import { getOrgOutboundBrand } from "@crucible/core/src/orgOutboundBrand";
+import { brandOrgEmail } from "@/lib/outbound-email-brand";
 import {
   getOne,
   markStaffInviteSent,
@@ -42,11 +44,13 @@ export async function sendStaffInviteEmail(opts: {
   scope: OrgScope;
   send: StaffInviteSend;
   origin: string;
-  orgName: string;
+  /** The organization's name; null when unknown (the email then says "your organization" and the brand line falls back to Steel Man Resumes). */
+  orgName: string | null;
   /** The person inviting (their name goes in the email). */
   inviterUserId: string;
 }): Promise<StaffInviteSendResult> {
-  const { scope, send, origin, orgName } = opts;
+  const { scope, send, origin } = opts;
+  const orgName = opts.orgName ?? "your organization";
   if (send.undeliverable) {
     // Renew the window so the person can still accept by signing in; count no send.
     await markStaffInviteSent(scope, send.inviteId, false).catch(() => false);
@@ -54,20 +58,22 @@ export async function sendStaffInviteEmail(opts: {
   }
   const roleLabel = staffRoleLabel(send.role, send.volunteer);
   try {
+    // Migration 107: signed the organization's way (co-branded unless exclusive).
+    const brand = await getOrgOutboundBrand(opts.inviterUserId, scope.orgId, opts.orgName);
     const inviter = await getOne<{ name: string | null }>(`SELECT name FROM users WHERE id = $1`, [opts.inviterUserId]);
     if (send.path === "new_account") {
       // The link signs them in and lands on the answer page: nobody is on
       // staff until they say yes there (smr_answer_staff_invite).
       const url = await mintInviteMagicLink(send.email, origin, STAFF_INVITE_TTL_DAYS, "/dashboard/invites");
-      await sendOrgEmail(send.email, buildStaffInviteEmail({
+      await sendOrgEmail(send.email, brandOrgEmail(buildStaffInviteEmail({
         inviteeName: send.name, inviterName: inviter?.name ?? null, orgName, roleLabel, url, origin, linkDays: STAFF_INVITE_TTL_DAYS, invitation: true,
-      }));
+      }), brand));
     } else if (send.path === "existing_account") {
-      await sendOrgEmail(send.email, buildStaffInvitationEmail({
+      await sendOrgEmail(send.email, brandOrgEmail(buildStaffInvitationEmail({
         inviteeName: send.name, inviterName: inviter?.name ?? null, orgName, roleLabel, origin, days: STAFF_INVITE_TTL_DAYS,
-      }));
+      }), brand));
     } else {
-      await sendOrgEmail(send.email, buildStaffAddedEmail({ inviteeName: send.name, orgName, roleLabel, origin }));
+      await sendOrgEmail(send.email, brandOrgEmail(buildStaffAddedEmail({ inviteeName: send.name, orgName, roleLabel, origin }), brand));
     }
   } catch (err) {
     console.error("staff invite email failed:", (err as Error)?.message || err);

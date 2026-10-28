@@ -35,9 +35,9 @@ test("admin mode: a platform admin with no view-as; never while viewing as someo
   assert.equal(adminSidebarShown(null), false, "no admin nav while the role loads");
 });
 
-test("the admin sidebar has the nine screens, in order, each a real page", () => {
+test("the admin sidebar has the ten screens (S6 adds Staff contributions), in order, each a real page", () => {
   const labels = ADMIN_NAV.flatMap((g) => g.items.map((i) => i.label));
-  assert.deepEqual(labels, ["Operator home", "Organizations", "People", "Access requests", "Premium", "Mini Forge", "Health", "Coverage", "Evidence"]);
+  assert.deepEqual(labels, ["Operator home", "Organizations", "People", "Access requests", "Premium", "Mini Forge", "Health", "Coverage", "Staff contributions", "Evidence"]);
   for (const item of ADMIN_NAV.flatMap((g) => g.items)) {
     if (item.href === "/dashboard") continue;
     const page = join("app/(dashboard)", item.href, "page.tsx");
@@ -60,7 +60,7 @@ test("the admin sidebar never shows the career board; My organization appears on
   const plain = renderToStaticMarkup(React.createElement(AdminSidebar, {
     pathname: "/dashboard", orgRole: null, orgName: null, capabilities: [], workspace: false, legacyItems: [],
   }));
-  for (const label of ["Operator home", "Organizations", "People", "Access requests", "Premium", "Mini Forge", "Health", "Coverage", "Evidence"]) {
+  for (const label of ["Operator home", "Organizations", "People", "Access requests", "Premium", "Mini Forge", "Health", "Coverage", "Staff contributions", "Evidence"]) {
     assert.match(plain, new RegExp(`>${label}<`), label);
   }
   for (const s of STATIONS) assert.doesNotMatch(plain, new RegExp(`>${s.label}<`), `no career station: ${s.label}`);
@@ -72,7 +72,7 @@ test("the admin sidebar never shows the career board; My organization appears on
   }));
   assert.match(withOrg, /My organization/);
   assert.match(withOrg, /Southside Bridge<span class="org-demo-chip">Demo<\/span>, owner/);
-  for (const label of ["Today", "People", "Asks", "Case notes", "Insights", "Team &amp; access"]) assert.match(withOrg, new RegExp(`>${label}<`), label);
+  for (const label of ["Today", "People", "Sharing asks", "Case notes", "Insights", "Team &amp; access"]) assert.match(withOrg, new RegExp(`>${label}<`), label);
   assert.match(withOrg, /aria-current="page"[^>]*>.*?Today/);
 });
 
@@ -129,19 +129,20 @@ test("registry: one line places a screen after a named item, in a new group, or 
 test("registry: org entries follow capability and module switches; admin entries join the admin sidebar", () => {
   const ext: NavExtension[] = [
     { surface: "org", group: "Records", href: "/dashboard/audit", label: "Activity log", navId: "org-nav-audit", needs: "org.audit.view" },
-    { surface: "org", group: "Work", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", module: "referrals", after: "Asks" },
+    { surface: "org", group: "My day", href: "/dashboard/referrals", label: "Referrals", navId: "org-nav-referrals", module: "referrals", after: "People" },
     { surface: "admin", group: "System", href: "/dashboard/admin/ai-runs", label: "AI runs", navId: "admin-nav-ai-runs" },
   ];
   const staff = caps("staff");
   assert.deepEqual(orgNavExtensionsFor(staff, null, ext).map((e) => e.label), ["Referrals"], "no audit capability, module unknown counts as on");
   assert.deepEqual(orgNavExtensionsFor([...staff, "org.audit.view"], { referrals: false }, ext).map((e) => e.label), ["Activity log"], "module off hides it");
-  const work = orgNavFor(staff, null, ext).find((g) => g.label === "Work")!;
-  assert.deepEqual(work.items.map((i) => i.label), ["Today", "People", "Asks", "Referrals"]);
+  const work = orgNavFor(staff, null, ext).find((g) => g.label === "My day")!;
+  assert.deepEqual(work.items.map((i) => i.label), ["Today", "People", "Referrals", "Sharing asks"]);
   const sys = adminNavWith(ext).find((g) => g.label === "System")!;
-  assert.deepEqual(sys.items.map((i) => i.label), ["Health", "Coverage", "Evidence", "AI runs"]);
+  assert.deepEqual(sys.items.map((i) => i.label), ["Health", "Coverage", "Staff contributions", "Evidence", "AI runs"]);
   for (const e of NAV_EXTENSIONS) assert.ok(e.href.startsWith("/dashboard/") && e.navId && (e.surface === "admin" || e.needs), `wired entry ${e.href} names a dashboard route, an id and (for org entries) the capability it needs`);
   // Without extensions, every role's nav is exactly what it was.
-  assert.deepEqual(orgNavFor(caps("staff", STAFF_PRESETS.volunteer.denies)).map((g) => g.label), ["Work", "Records", "Organization"]);
+  // (Connect holds the merged Directory and Connections pages, base entries since integration 2026-10-28.)
+  assert.deepEqual(orgNavFor(caps("staff", STAFF_PRESETS.volunteer.denies), null, []).map((g) => g.label), ["My day", "Records", "Connect"]);
 });
 
 test("admins no longer reach their tools through the participant Toolbox only: the Toolbox admin links stay for back-compat but the board is never their nav", () => {

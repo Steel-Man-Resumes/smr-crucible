@@ -378,6 +378,122 @@ export async function setFieldValues(actor: OrgActor, entity: CustomFieldEntity,
   return { ok: true, values: after };
 }
 
+/* ------------------------------------------------------- many at once (grid) -- */
+
+export const MAX_BATCH_RECORDS = 500;
+export const MAX_BATCH_CELLS = 2000;
+
+export type BatchValuesResult =
+  | { ok: true; values: FieldValueMap; written: number }
+  | { ok: false; error: string; cellErrors?: Record<string, string> };
+
+/** The grid's two statements (exported so the pglite test runs these exact strings). $1 org, then parallel arrays. */
+export const CUSTOM_FIELD_BATCH_SQL = {
+  /** $2 def ids, $3 participant ids, $4 values (JSON text). */
+  upsert: `INSERT INTO custom_field_value (def_id, entity_id, access_code_id, participant_user_id, value)
+           SELECT x.def_id, x.entity_id, $1::uuid, x.entity_id, x.value
+             FROM unnest($2::uuid[], $3::uuid[], $4::jsonb[]) AS x(def_id, entity_id, value)
+           ON CONFLICT (def_id, entity_id) DO UPDATE SET value = EXCLUDED.value
+           WHERE custom_field_value.value IS DISTINCT FROM EXCLUDED.value`,
+  /** $2 def ids, $3 participant ids. */
+  clear: `DELETE FROM custom_field_value v USING unnest($2::uuid[], $3::uuid[]) AS x(def_id, entity_id)
+            WHERE v.access_code_id = $1::uuid AND v.def_id = x.def_id AND v.entity_id = x.entity_id`,
+};
+
+/** The key a cell error is reported under: "<participant id>:<field key>". */
+export const cellKey = (entityId: string, key: string) => `${entityId.toLowerCase()}:${key}`;
+
+/**
+ * Set or clear values on MANY people at once: the People grid (an edit, a
+ * paste, a fill, a clear). ALL OR NOTHING: every cell is checked first (the
+ * field exists and takes answers, the value fits the field, the person is in
+ * reach); one bad cell and nothing is written, and every bad cell comes back
+ * with its own plain reason. Then one transaction writes them all. The
+ * database's reach policy and guard check every row again, and its triggers
+ * log each change and keep each earlier answer.
+ *
+ * `fromGrid`: the organization may keep filling in fields to the person's
+ * page (customization policy `grid_edit`, 108).
+ */
+export async function setFieldValuesBatch(
+  actor: OrgActor,
+  items: { entityId: string; values: Record<string, unknown> }[],
+  opts: { fromGrid?: boolean; gridAllowed?: boolean } = {},
+): Promise<BatchValuesResult> {
+  if (!canWriteFieldValues(actor)) return { ok: false, error: "You do not have access to that." };
+  if (opts.fromGrid && opts.gridAllowed === false) {
+    return { ok: false, error: "Your organization has fields filled in on each person's page, not in the grid. If it should change, ask whoever manages your organization's settings." };
+  }
+  if (!Array.isArray(items) || !items.length) return { ok: false, error: "Nothing to save." };
+  if (items.length > MAX_BATCH_RECORDS) return { ok: false, error: `Change at most ${MAX_BATCH_RECORDS} people at a time.` };
+  const cells: { entityId: string; key: string; raw: unknown }[] = [];
+  for (const it of items) {
+    if (!it || typeof it.entityId !== "string" || !UUID.test(it.entityId) || !it.values || typeof it.values !== "object" || Array.isArray(it.values)) {
+      return { ok: false, error: "Some of those rows are not people on your list." };
+    }
+    for (const [key, raw] of Object.entries(it.values)) cells.push({ entityId: it.entityId.toLowerCase(), key, raw });
+  }
+  if (!cells.length) return { ok: false, error: "Nothing to save." };
+  if (cells.length > MAX_BATCH_CELLS) return { ok: false, error: `Change at most ${MAX_BATCH_CELLS.toLocaleString("en-US")} cells at a time.` };
+
+  const ids = Array.from(new Set(cells.map((c) => c.entityId)));
+  const defs = await listFieldDefs(actor, { entity: "participant", includeRetired: true });
+  const byKey = new Map(defs.map((d) => [d.key, d]));
+  const seesAll = actor.capabilities.has("org.client.view_all");
+  const units = await unitReachAvailable(actor);
+  let reached: Set<string>;
+  try {
+    const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
+      run(sql)(`SELECT x.id::text AS id FROM unnest($4::uuid[]) AS x(id) WHERE ${reachSql("x.id", units)}`, [actor.orgId, seesAll, actor.userId, ids]),
+    ]);
+    reached = new Set(rows.map((r) => r.id.toLowerCase()));
+  } catch (err) {
+    if (isCustomizationTableMissing(err)) return { ok: false, error: "Custom fields are not switched on yet for this workspace." };
+    throw err;
+  }
+  const current = await getFieldValues(actor, "participant", { entityIds: ids.filter((i) => reached.has(i)) });
+  const needsStaff = cells.some((c) => byKey.get(c.key)?.type === "staff_member");
+  const staffIds = needsStaff ? new Set((await getOrgStaffDirectory(actor)).map((x) => x.id.toLowerCase())) : undefined;
+
+  const cellErrors: Record<string, string> = {};
+  const upserts: { defId: string; entityId: string; value: CustomFieldValue }[] = [];
+  const clears: { defId: string; entityId: string }[] = [];
+  for (const c of cells) {
+    const k = cellKey(c.entityId, c.key);
+    if (!reached.has(c.entityId)) { cellErrors[k] = "That person is not on your caseload."; continue; }
+    const def = byKey.get(c.key);
+    if (!def) { cellErrors[k] = "That field no longer exists."; continue; }
+    if (def.retiredAt) { cellErrors[k] = `${def.label} is retired. Its old answers stay, but it takes no new ones.`; continue; }
+    const prev = current[c.entityId]?.[c.key];
+    const keepRetired = typeof prev === "string" ? [prev] : Array.isArray(prev) ? prev.map(String) : [];
+    const res = validateCustomFieldValue(def, c.raw, { staffIds, allowRetiredOption: keepRetired });
+    if (!res.ok) { cellErrors[k] = res.error; continue; }
+    if (res.value === null) { if (prev !== undefined) clears.push({ defId: def.id, entityId: c.entityId }); }
+    else if (JSON.stringify(prev) !== JSON.stringify(res.value)) upserts.push({ defId: def.id, entityId: c.entityId, value: res.value });
+  }
+  const bad = Object.keys(cellErrors).length;
+  if (bad) return { ok: false, error: bad === 1 ? "Nothing was saved. One cell needs a fix." : `Nothing was saved. ${bad} cells need a fix.`, cellErrors };
+  if (upserts.length || clears.length) {
+    try {
+      // Two statements whatever the size: one upsert over unnest, one delete.
+      await runScoped(scopeOf(actor), (sql) => [
+        ...(upserts.length ? [run(sql)(
+          CUSTOM_FIELD_BATCH_SQL.upsert,
+          [actor.orgId, upserts.map((u) => u.defId), upserts.map((u) => u.entityId), upserts.map((u) => JSON.stringify(u.value))],
+        )] : []),
+        ...(clears.length ? [run(sql)(
+          CUSTOM_FIELD_BATCH_SQL.clear,
+          [actor.orgId, clears.map((c) => c.defId), clears.map((c) => c.entityId)],
+        )] : []),
+      ]);
+    } catch (err) {
+      return { ok: false, error: plainDbError(err, "Nothing was saved. Try again.") };
+    }
+  }
+  const after = await getFieldValues(actor, "participant", { entityIds: ids });
+  return { ok: true, values: after, written: upserts.length + clears.length };
+}
+
 /* ------------------------------------------------------------ value history -- */
 
 export interface FieldValueVersion {

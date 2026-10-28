@@ -30,6 +30,8 @@ export const RLS_PROTECTED_TABLES = [
   "outcome_record",
   "retention_check",
   "staff_suggestion",
+  // handoffs to a participant (110, staff pass S5), org scope plus reach, and the person's own rows
+  "staff_handoff",
   // staff invitations (100), org scope plus the invitee's own rows
   "org_staff_invite",
   // participant-owned, owner only
@@ -91,6 +93,33 @@ export const RLS_PROTECTED_TABLES = [
   "participant_contact",
   "referral",
   "referral_event",
+  // Staff customization (migration 108): what staff may change for
+  // themselves (org-scoped, managers write) and each person's own view
+  // change log (owner-only, append-only but for "undone")
+  "org_customization_policy",
+  "view_change_log",
+  // Team talk (migration 109, staff side S4): comments and their earlier
+  // wordings (reach-restricted), each person's own inbox, change requests and
+  // replies (asker and managers), note reviews (reach-restricted)
+  "team_comment",
+  "team_comment_version",
+  "staff_inbox_item",
+  "org_change_request",
+  "org_change_reply",
+  "org_change_request_event",
+  "note_review",
+  "note_review_event",
+  // Staff rewards (migration 111, lane S6): own switch, program settings,
+  // good catches (reach-restricted), milestones and recognition notes
+  "staff_rewards_setting",
+  "staff_rewards_org",
+  "staff_kudos",
+  "staff_milestone",
+  "staff_recognition_note",
+  // Directory contributions (migration 112, lane S6): the data owner's queue
+  // (platform admin RLS) and each staff member's own nudge rows
+  "directory_contribution",
+  "staff_listing_nudge",
 ] as const;
 
 export interface RlsHealth {

@@ -279,7 +279,7 @@
       "id": "staff-operations",
       "title": "Scoped staff work",
       "file": "staff-operations/SKILL.md",
-      "version": 3,
+      "version": 4,
       "pages": [],
       "roles": [
         "staff",
@@ -287,7 +287,7 @@
         "org_admin"
       ],
       "always": true,
-      "summary": "Rules for every staff skill: read and draft only, every read logged for the participant, record text withheld, caseload tools scoped to reach, the human step closes every answer."
+      "summary": "Rules for every staff skill: read, draft, and buttons that open a page or a filled-in form; nothing saved or sent except changes to the staff member's own view, with Undo; every read logged for the participant, record text withheld, caseload tools scoped to reach, the human step closes every answer."
     },
     {
       "id": "staff-prep-me",

@@ -8,8 +8,14 @@
  *  - A preference arranges a person's own screen. It never widens access.
  *  - Normalizing never throws: unknown keys are dropped, bad values fall back.
  *
- * RESOLUTION: built-in default  <-  organization default  <-  the person's own.
+ * RESOLUTION: built-in default  <-  organization default  <-  the person's own,
+ * where "the person's own" first loses any choice the organization's
+ * customization policy locks for their role (customizationPolicyShared,
+ * migration 108). A locked choice stays stored and comes back if the policy
+ * opens again.
  */
+import { ROW_DENSITIES, normalizeViewLayouts, isLayoutColumnId, type RowDensity, type GridLayout } from "./viewLayoutShared";
+import { ALL_ALLOWED, prefsUnderPolicy, type PolicyAllowed } from "./customizationPolicyShared";
 export const CASELOAD_COLUMNS = ["stage", "nextStep", "applications", "lastActive", "staff", "status"] as const;
 export type CaseloadColumn = (typeof CASELOAD_COLUMNS)[number];
 export const CASELOAD_COLUMN_LABELS: Record<CaseloadColumn, string> = {
@@ -51,6 +57,14 @@ export const CASELOAD_STATUSES = ["", "behind", "active", "steady", "hired"] as 
 export type CaseloadStatusFilter = (typeof CASELOAD_STATUSES)[number];
 export const CASELOAD_STATUS_LABELS: Record<CaseloadStatusFilter, string> = { "": "Everyone", behind: "Gone quiet", active: "Active this week", steady: "Steady", hired: "Hired" };
 
+/** A person's page tabs, in the built-in order (apps/consumer lib/org-person-view.ts PERSON_TABS; a test holds them equal). */
+export const PERSON_TAB_KEYS = ["notes", "timeline", "team", "tasks", "referrals", "outcomes", "shared", "screen"] as const;
+export type PersonTabKey = (typeof PERSON_TAB_KEYS)[number];
+
+/** How People opens: the list (table) or the grid (spreadsheet). */
+export const PEOPLE_MODES = ["list", "grid"] as const;
+export type PeopleMode = (typeof PEOPLE_MODES)[number];
+
 /** A named arrangement of the caseload: "My interviews", "Alma's quiet people". */
 export interface SavedView { name: string; sort: CaseloadSort; status: CaseloadStatusFilter; staffId: string }
 export const MAX_SAVED_VIEWS = 8;
@@ -70,6 +84,22 @@ export interface StaffPrefs {
   /** Whether "let them see this note" starts ticked. */
   noteVisible: boolean;
   clientTab: ClientTabPref;
+  /** Today's sections in this person's own order (the role's order fills in the rest). Empty = the role's order. */
+  todayOrder: TodaySectionKey[];
+  /** People columns, in order, when no view is chosen. null = the role's layout (minus caseloadHidden). */
+  caseloadColumns: string[] | null;
+  /** Which view People opens with: a view id, "none" for everyone with no view, null for the usual rule (last chosen, then the role's). */
+  defaultView: string | null;
+  /** Row height in the People grid. */
+  density: RowDensity;
+  /** A person's page tabs in this person's own order. Empty = the built-in order. */
+  personTabs: PersonTabKey[];
+  /** List or grid on People. */
+  peopleMode: PeopleMode;
+  /** This person's own grid look per view ("default" = no view chosen): widths, frozen, row height, summaries. */
+  viewLayouts: Record<string, GridLayout>;
+  /** t.ROY's quiet suggestions at pauses (lane S1). On unless turned off. */
+  troySuggestions: boolean;
 }
 
 export const DEFAULT_STAFF_PREFS: StaffPrefs = {
@@ -82,6 +112,14 @@ export const DEFAULT_STAFF_PREFS: StaffPrefs = {
   noteKind: "note",
   noteVisible: false,
   clientTab: "notes",
+  todayOrder: [],
+  caseloadColumns: null,
+  defaultView: null,
+  density: "regular",
+  personTabs: [],
+  peopleMode: "list",
+  viewLayouts: {},
+  troySuggestions: true,
 };
 
 const oneOf = <T extends string>(list: readonly T[], v: unknown): T | undefined =>
@@ -122,9 +160,72 @@ export function normalizeStaffPrefs(raw: unknown): Partial<StaffPrefs> {
   if (typeof r.noteVisible === "boolean") out.noteVisible = r.noteVisible;
   const tab = oneOf(CLIENT_TABS, r.clientTab);
   if (tab) out.clientTab = tab;
+  if (Array.isArray(r.todayOrder)) out.todayOrder = Array.from(new Set(r.todayOrder.map((c) => oneOf(TODAY_SECTION_KEYS, c)).filter(Boolean))) as TodaySectionKey[];
+  if (r.caseloadColumns === null) out.caseloadColumns = null;
+  else if (Array.isArray(r.caseloadColumns)) {
+    out.caseloadColumns = Array.from(new Set(r.caseloadColumns.filter(isLayoutColumnId).filter((c) => c !== "name"))).slice(0, 30);
+  }
+  if (r.defaultView === null) out.defaultView = null;
+  else if (typeof r.defaultView === "string" && (r.defaultView === "none" || VIEW_ID.test(r.defaultView))) out.defaultView = r.defaultView.toLowerCase();
+  const density = oneOf(ROW_DENSITIES, r.density);
+  if (density) out.density = density;
+  if (Array.isArray(r.personTabs)) out.personTabs = Array.from(new Set(r.personTabs.map((c) => oneOf(PERSON_TAB_KEYS, c)).filter(Boolean))) as PersonTabKey[];
+  const mode = oneOf(PEOPLE_MODES, r.peopleMode);
+  if (mode) out.peopleMode = mode;
+  if (r.viewLayouts && typeof r.viewLayouts === "object" && !Array.isArray(r.viewLayouts)) out.viewLayouts = normalizeViewLayouts(r.viewLayouts);
+  if (typeof r.troySuggestions === "boolean") out.troySuggestions = r.troySuggestions;
   return out;
 }
 
-export function resolveStaffPrefs(orgDefaults: unknown, own: unknown): StaffPrefs {
-  return { ...DEFAULT_STAFF_PREFS, ...normalizeStaffPrefs(orgDefaults), ...normalizeStaffPrefs(own) };
+const VIEW_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * What the screens use. `allowed` is the customization policy for this
+ * person's role (all allowed when omitted): a choice it locks falls back to
+ * the organization's default, then the built-in one.
+ */
+export function resolveStaffPrefs(orgDefaults: unknown, own: unknown, allowed: PolicyAllowed = ALL_ALLOWED): StaffPrefs {
+  return { ...DEFAULT_STAFF_PREFS, ...normalizeStaffPrefs(orgDefaults), ...prefsUnderPolicy(normalizeStaffPrefs(own), allowed) };
+}
+
+/**
+ * Typed accessor S1 reads, with its default. (Staff rewards are NOT a pref:
+ * their one switch is S6's owner-only staff_rewards_setting table, so org
+ * defaults can never turn rewards on.)
+ */
+export const staffSuggestionsOn = (p: Partial<StaffPrefs> | null | undefined): boolean => p?.troySuggestions !== false;
+
+/**
+ * Today's sections in this person's order: their order first (only sections
+ * the role shows), then the rest in the role's order. A section added later
+ * shows up, never vanishes.
+ */
+export function orderTodaySections<T extends { key: string }>(sections: readonly T[], own: readonly string[] | undefined): T[] {
+  if (!own?.length) return [...sections];
+  const byKey = new Map(sections.map((s) => [s.key, s]));
+  const first = own.filter((k) => byKey.has(k)).map((k) => byKey.get(k)!);
+  const seen = new Set(first.map((s) => s.key));
+  return [...first, ...sections.filter((s) => !seen.has(s.key))];
+}
+
+/** A person's page tabs in this person's order (same rule as Today). */
+export function orderPersonTabs<T extends { key: string }>(tabs: readonly T[], own: readonly string[] | undefined): T[] {
+  return orderTodaySections(tabs, own);
+}
+
+/**
+ * What a write must change on the STORED prefs to go from `before` to
+ * `after`: the keys to set (with their new values) and the keys to remove.
+ * Writers apply only these (`(prefs - remove) || set`), never the whole
+ * object from an earlier read.
+ */
+export function prefsDelta(before: Partial<StaffPrefs>, after: Partial<StaffPrefs>): { set: Partial<StaffPrefs>; remove: string[] } {
+  const set: Record<string, unknown> = {};
+  const remove: string[] = [];
+  for (const k of Object.keys(DEFAULT_STAFF_PREFS) as (keyof StaffPrefs)[]) {
+    const a = before[k], b = after[k];
+    if (JSON.stringify(a ?? null) === JSON.stringify(b ?? null)) continue;
+    if (b === undefined) remove.push(k); else set[k] = b;
+  }
+  return { set: set as Partial<StaffPrefs>, remove };
 }

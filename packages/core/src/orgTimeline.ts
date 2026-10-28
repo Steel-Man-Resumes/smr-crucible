@@ -95,6 +95,13 @@ const BRANCHES: Record<TimelineType, string> = {
       r.to_name AS f1, e.from_status AS f2, e.to_status AS f3, left(e.status_reason, 200) AS f4, NULL::text AS f5
     FROM referral_event e JOIN referral r ON r.id = e.referral_id LEFT JOIN users au ON au.id = e.actor_user_id
    WHERE e.access_code_id = $1::uuid AND e.participant_user_id = ${P} AND (e.from_status IS NULL OR e.from_status IS DISTINCT FROM e.to_status)`,
+  // Migration 109 (lane S4). Team comments about the person: staff only, under
+  // the same reach as everything here (and team_comment_reach in the database).
+  comment: `SELECT 'comment:' || c.id AS key, 'comment' AS type, c.created_at AS at, c.id::text AS src, au.name AS actor_name,
+      CASE WHEN c.parent_id IS NULL THEN 'comment' ELSE 'reply' END AS f1, left(c.body, 280) AS f2, c.edited_at::text AS f3,
+      cardinality(c.mentions)::text AS f4, NULL::text AS f5
+    FROM team_comment c LEFT JOIN users au ON au.id = c.author_user_id
+   WHERE c.access_code_id = $1::uuid AND c.participant_user_id = ${P}`,
   // Migration 102. What has no branch of its own: assignment, enrollment moves
   // (103), custom field changes (104). Summaries there are fixed words, never
   // note bodies, field values or record words.
@@ -102,7 +109,7 @@ const BRANCHES: Record<TimelineType, string> = {
       a.entity AS f1, a.action AS f2, left(a.summary, 200) AS f3, NULL::text AS f4, NULL::text AS f5
     FROM org_activity a LEFT JOIN users au ON au.id = a.actor_user_id
    WHERE a.access_code_id = $1::uuid AND a.participant_user_id = ${P}
-     AND a.entity NOT IN ('note', 'task', 'outcome', 'retention', 'referral', 'sharing')
+     AND a.entity NOT IN ('note', 'task', 'outcome', 'retention', 'referral', 'sharing', 'comment')
      -- An enrollment's first row is its own branch; its later moves (status, staff, program id) are here.
      AND NOT (a.entity = 'enrollment' AND a.action = 'created')`,
 };
@@ -111,6 +118,7 @@ const BRANCHES: Record<TimelineType, string> = {
 export const OPTIONAL_TIMELINE_TABLES: Partial<Record<TimelineType, string[]>> = {
   enrollment: ["enrollment", "org_unit"],
   activity: ["org_activity"],
+  comment: ["team_comment"],
 };
 
 /**
@@ -198,6 +206,12 @@ export function timelineItemFromRow(r: TimelineRow, clientId: string): PersonTim
     case "referral": {
       const to = isReferralStatus(r.f3) ? REFERRAL_STATUS_LABELS[r.f3].toLowerCase() : r.f3;
       return { ...base, title: r.f2 == null ? `Referral to ${r.f1} made (${to})` : `Referral to ${r.f1}: ${to}`, detail: r.f4, href: `${page}?tab=referrals#referral-${r.src}` };
+    }
+    case "comment": {
+      const n = Number(r.f4 ?? 0);
+      const mentioned = n === 1 ? ", mentioning a team member" : n > 1 ? `, mentioning ${n} team members` : "";
+      return { ...base, title: `${r.f1 === "reply" ? "Reply to a team comment" : "Team comment"}${mentioned}${r.f3 ? " (since corrected)" : ""}`,
+        detail: r.f2, href: `${page}?tab=team#comment-${r.src}` };
     }
     case "activity":
     default:

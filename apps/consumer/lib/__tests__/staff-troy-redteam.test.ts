@@ -65,10 +65,35 @@ const READ_AND_DRAFT = ["read_staff_tasks", "read_participant_progress", "read_p
   // House build L6: caseload reads and the sourced timeline. Read only.
   "read_today_queue", "read_caseload_digest", "read_outcomes_summary", "read_referrals_open", "read_person_timeline"];
 
+// Lane S1 (staff pass 2026-10-27): buttons and a public directory read. They
+// write nothing: a "Go to" button, a filled-in form the staff member sends
+// themselves, and public employer listings.
+const BUTTONS_AND_DIRECTORY = ["open_staff_page", "open_add_person", "find_employers"];
+// Staff pass integration. S3: the staff member's OWN view (Troy's one exception: it changes at
+// once, with Undo; shared views are only drafted). S5: connections read and a handoff DRAFT.
+const OWN_VIEW = ["read_my_view", "change_my_view", "undo_my_view_change", "propose_shared_view"];
+const HANDOFF_DRAFTS = ["find_missed_connections", "draft_handoff"];
+// S6: one line about a listing just used, and a directory update drafted as a card (sends nothing).
+const DIRECTORY_DRAFTS = ["listing_check_nudge", "draft_directory_contribution"];
+
 it("the staff assistant is offered no tool that writes, saves, sends or books", () => {
   const { t } = tools("staff");
-  assert.deepEqual(Object.keys(t).sort(), [...READ_AND_DRAFT].sort());
-  for (const name of Object.keys(t)) assert.doesNotMatch(name, /save|send|add|create|update|delete|record|assign|book|suggest|comment|request|email|sms/i, name);
+  assert.deepEqual(Object.keys(t).sort(), [...READ_AND_DRAFT, ...BUTTONS_AND_DIRECTORY, ...OWN_VIEW, ...HANDOFF_DRAFTS, ...DIRECTORY_DRAFTS].sort());
+  for (const name of Object.keys(t)) assert.doesNotMatch(name.replace(/^open_add_person$/, "open_person_form"), /save|send|add|create|update|delete|record|assign|book|suggest|comment|request|email|sms/i, name);
+  // contribute-tools.ts talks about "updates" and "records" in its words to the model, so it gets the
+  // same check with SQL written as SQL (case-sensitive) instead of the bare words.
+  assert.doesNotMatch(readFileSync(new URL("../tools/staff/contribute-tools.ts", import.meta.url), "utf8"),
+    /\bINSERT INTO\b|\bUPDATE \w+ SET\b|\bDELETE FROM\b|fetch\(|addClientNote|inviteParticipant|sendInvite|addStaffTask|recordOutcome|sendOrgEmail|resend|twilio|from ["']@crucible\/core["']/, "contribute-tools.ts");
+  for (const file of ["navigate.ts", "directory.ts", "index.ts", "types.ts", "handoff-tools.ts", "view-tools.ts"]) {
+    const mod = readFileSync(new URL(`../tools/staff/${file}`, import.meta.url), "utf8");
+    assert.doesNotMatch(mod, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|fetch\(|addClientNote|inviteParticipant|sendInvite|addStaffTask|recordOutcome|sendOrgEmail|resend|twilio|from ["']@crucible\/core["']/i, file);
+  }
+  // The own-view exception writes only through core's typed view action layer (policy, own view, logged as t.ROY's).
+  const viewTools = readFileSync(new URL("../tools/staff/view-tools.ts", import.meta.url), "utf8");
+  const viewWrites = [...new Set([...viewTools.matchAll(/core\.(dispatchViewAction|undoViewChange|saveSavedView|updateSavedView|deleteSavedView|setOwnStaffPrefs|setStaffPrefs|setRoleLayout|setCustomizationPolicy)\(/g)].map((m) => m[1]))].sort();
+  assert.deepEqual(viewWrites, ["dispatchViewAction", "undoViewChange"]);
+  assert.doesNotMatch(readFileSync(new URL("../tools/staff/handoff-tools.ts", import.meta.url), "utf8"), /sendHandoff|withdrawHandoff|answerMyHandoffItem/, "a handoff is only drafted");
+  assert.doesNotMatch(readFileSync(new URL("../tools/staff/contribute-tools.ts", import.meta.url), "utf8"), /submitContribution|submit_directory_contribution|withdrawContribution|giveKudos/, "a directory update is only drafted");
   const src = readFileSync(new URL("../tools/assistant-staff-tools.ts", import.meta.url), "utf8");
   const body = src.slice(src.indexOf("const tools: ToolSet = {"), src.indexOf("const executeOnce"));
   assert.doesNotMatch(body, /\bINSERT\b|\bUPDATE\b|\bDELETE\b|addClientNote|editClientNote|suggestJob|commentOnArtifact|requestSharing|addStaffTask|recordOutcome|save_resource_list|sendOrgEmail|resend|twilio/i);

@@ -155,6 +155,42 @@ export const RESTRICTED_GRANTS = {
   participant_contact: ["SELECT", "INSERT", "UPDATE"],
   referral: ["SELECT", "INSERT", "UPDATE"],
   referral_event: ["SELECT"],
+  // Staff build S3 (108). A person's own view change log: written by them,
+  // never edited but for the one "undone" mark (a column grant), never
+  // deleted by the app.
+  view_change_log: ["SELECT", "INSERT", "UPDATE (undone_at)"],
+  // Staff pass S5 (110). A handoff is withdrawn, never deleted.
+  staff_handoff: ["SELECT", "INSERT", "UPDATE"],
+  // Team talk (109, staff side S4). Comments are never deleted; only their
+  // author corrects the wording and mentions (earlier wordings are written by
+  // the trigger). The inbox is written only by definer triggers: the app marks
+  // items read. Change requests: staff ask, managers set status and answer;
+  // replies are never edited. Note reviews move only through definer functions.
+  team_comment: ["SELECT", "INSERT", "UPDATE (body, mentions)"],
+  team_comment_version: ["SELECT"],
+  staff_inbox_item: ["SELECT", "UPDATE (read_at)"],
+  org_change_request: ["SELECT", "INSERT", "UPDATE (status, answer)"],
+  org_change_reply: ["SELECT", "INSERT"],
+  // Who answered and what they wrote, one row per answer, trigger-written (109 review round 2).
+  org_change_request_event: ["SELECT"],
+  note_review: ["SELECT"],
+  note_review_event: ["SELECT"],
+  // Staff rewards (111, lane S6). Your own switch; program settings by managers;
+  // a good catch is withdrawn, never edited or deleted; milestones are written
+  // only by definer functions (the app may only mark one seen); a recognition
+  // note is answered only by the person it is about, never deleted.
+  staff_rewards_setting: ["SELECT", "INSERT", "UPDATE (rewards_on, board_ok)"],
+  staff_rewards_org: ["SELECT", "INSERT", "UPDATE (team_board_on, recognition_notes_on, program_rewards)"],
+  staff_kudos: ["SELECT", "INSERT", "UPDATE (withdrawn_at)"],
+  staff_milestone: ["SELECT", "UPDATE (seen_at)"],
+  staff_recognition_note: ["SELECT", "INSERT", "UPDATE (body, period_label, status)"],
+  // Directory contributions (112, lane S6): the data owner's queue. Written
+  // only through the intake and decision functions; read by the owner (RLS).
+  directory_contribution: ["SELECT"],
+  // 112: every documented contact with its provenance (partner staff call or
+  // Steel Man), for the data owner's Tier 2 / R3 decisions. Owner-only.
+  directory_contact_provenance_v: [],
+  staff_listing_nudge: ["SELECT", "INSERT", "UPDATE (shown_at)"],
 };
 
 /**
@@ -185,6 +221,28 @@ export const APP_FUNCTIONS = [
   "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
   "smr_purge_stale_staff_drafts()",
   "smr_retention_task_marks()",
+  // 110: the person takes a next step from a handoff (acts only for app.user_id).
+  "smr_accept_handoff_step(uuid)",
+  // 109: called by the team-talk policies, guards and routes as the app role.
+  // Each answers only inside the caller's own org scope.
+  "smr_team_session(uuid)",
+  "smr_team_member(uuid, uuid)",
+  "smr_task_assigner(uuid, uuid)",
+  "smr_note_review_on(uuid)",
+  "smr_note_review_submit(uuid)",
+  "smr_note_review_decide(uuid, text, text)",
+  // 111/112 (lane S6): the name check, the caller's own milestones, the
+  // giver board, and the contribution intake, read-back and owner decisions
+  // (each refuses a caller who is not who it needs).
+  "staff_text_participant_names(text)",
+  "staff_rewards_refresh()",
+  "staff_kudos_giver_board(integer)",
+  "submit_directory_contribution(jsonb)",
+  "my_directory_contributions()",
+  "withdraw_directory_contribution(uuid)",
+  "decide_directory_contribution(uuid, text, text, text)",
+  "apply_contribution_call(uuid, uuid, uuid)",
+  "directory_contribution_owner()",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -197,6 +255,11 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   "smr_structure_activity(uuid, uuid, uuid, text, uuid, text, text)",
   // Answers "is this person a volunteer" for any org: definer-only.
   "smr_is_volunteer(uuid, uuid)",
+  // 111 (lane S6): only definer code awards or takes back a milestone.
+  "staff_milestone_grant(uuid, uuid, text, uuid)",
+  "staff_milestone_revoke(uuid, uuid, uuid)",
+  // 111: answers "is this person staff there" for any org: definer code only.
+  "staff_rewards_member(uuid, uuid)",
   // 104: activity trigger functions (definer); fired by triggers, never called.
   "custom_field_activity()",
   "org_customization_activity()",
@@ -204,6 +267,26 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   // 105: the retention task maker and its owner rule run only from definer triggers.
   "smr_make_retention_tasks(uuid)",
   "smr_retention_task_owner(uuid, uuid, uuid)",
+  // 108: trigger functions (the activity writer and the log guard are definer); fired, never called.
+  "org_customization_policy_activity()",
+  "view_change_log_guard()",
+  // 110: activity triggers and the item guard (definer); fired by triggers, never called.
+  "org_activity_suggestion()",
+  "org_activity_handoff()",
+  "staff_suggestion_item_guard()",
+  "staff_handoff_close_items()",
+  "staff_handoff_has_items()",
+  "staff_handoff_answer_inbox()",
+  "staff_handoff_sent_milestone()",
+  "staff_kudos_inbox()",
+  "staff_recognition_inbox()",
+  "directory_contribution_inbox()",
+  // 109: the inbox's only writer, the managers list and the mention check run
+  // only from definer triggers and functions.
+  "smr_inbox_write(uuid, uuid, text, uuid, text, uuid, text)",
+  "smr_org_managers(uuid)",
+  "smr_comment_mentions(uuid, uuid, uuid, uuid[], uuid[])",
+  "smr_activity_without_actor(uuid, text, text, text, text)",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */
@@ -227,6 +310,7 @@ export const DIRECTORY_OBJECTS = [
   "resource_corroboration", "resource_chain_step_corroboration", "resource_relationship", "resource_relationship_event", "resource_corroboration_void", "resource_relationship_event_void", "resource_service_tier_v", "resource_chain_tier_v", "resource_directory_publisher",
   "resource_app_v", "directory_publication_alias", "employer_publication_v", "resource_publication_v", "resource_chain_publication_v",
   "resource_band_publication_v", "resource_chain_band_publication_v", "employer_band_publication_v",
+  "directory_contribution", "directory_contact_provenance_v",
 ];
 
 /**

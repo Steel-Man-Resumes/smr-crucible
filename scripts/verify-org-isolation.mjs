@@ -394,6 +394,116 @@ async function main() {
   await aiSkillRunChecks();
   await structureChecks();
   await customizationChecks();
+  await customizationPolicyChecks();
+  await handoffChecks();
+  await teamTalkChecks();
+  await outboundBrandChecks();
+  await staffRewardsChecks();
+  await directoryContributionChecks();
+}
+
+/**
+ * Team talk (109, staff side lane S4): comments, the inbox, task handoff,
+ * change requests and note review. The claims: a comment about a person is
+ * read and written only by staff who reach them, never by the participant or
+ * another organization (through core AND by a raw scoped query); a mention of
+ * a colleague who cannot reach the person is refused; the inbox is the
+ * recipient's alone and only the database writes it; a task goes only to a
+ * teammate who reaches the person; a change request is read by the asker and
+ * the managers and answered only by the managers.
+ */
+async function teamTalkChecks() {
+  console.log("\n  -- team talk: comments, inbox, task handoff, change requests (109) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ has }] = await sql`SELECT to_regclass('public.team_comment') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  109 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e?.message ?? e) }; } };
+  const rawAs = async (orgId, userId, query) => (await app.transaction([
+    app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${userId}, true)`, query(app),
+  ]))[2];
+  const owner = await mkUser("tt-owner"), admin = await mkUser("tt-admin"), cm = await mkUser("tt-cm"), other = await mkUser("tt-other"), spy = await mkUser("tt-spy"), spyStaff = await mkUser("tt-spystaff");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOTT" + uniq}, ${P + " team talk"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOTU" + uniq}, ${P + " team talk2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff'), (${org2.id}, ${spyStaff}, 'staff')`;
+  const pat = await mkUser("tt-pat"), hers = await mkUser("tt-hers");
+  for (const u of [pat, hers]) await core.redeemAccessCode(u, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${hers}, ${other}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aOther = await A(other), aAdmin = await A(admin), aOwner = await A(owner), aSpy = await A(spyStaff);
+
+  // comments
+  const c1 = await core.addTeamComment(aCm, { participantId: pat, body: "ISOTT-BODY can someone cover Thursday?", mentions: [admin] });
+  check("a case manager comments on their person and mentions an admin", c1.ok === true, JSON.stringify(c1));
+  const refused = await core.addTeamComment(aCm, { participantId: pat, body: "Can you take this?", mentions: [other] });
+  check("a mention of a colleague who cannot see the person is refused, plainly", refused.ok === false && /cannot see this person/.test(refused.error), JSON.stringify(refused));
+  const forced = await attempt(() => rawAs(org.id, cm, (a) => a`INSERT INTO team_comment (access_code_id, participant_user_id, author_user_id, body, mentions) VALUES (${org.id}, ${pat}, ${cm}, 'x', ARRAY[${other}]::uuid[])`));
+  check("and refused by the database when the app check is skipped", !forced.ok && /mention_out_of_reach/.test(forced.e), JSON.stringify(forced));
+  check("a colleague cannot comment on someone they do not reach", (await core.addTeamComment(aOther, { participantId: pat, body: "Not mine" })).ok === false);
+  const listed = async (actor) => { const r = await core.listTeamComments(actor, pat); return r.ok ? r.comments.length : -1; };
+  check("the case manager, the admin and the owner read the comment", (await listed(aCm)) === 1 && (await listed(aAdmin)) === 1 && (await listed(aOwner)) === 1);
+  check("a colleague who does not reach the person reads nothing, through core", (await listed(aOther)) === -1);
+  check("or by a raw scoped query", (await rawAs(org.id, other, (a) => a`SELECT id FROM team_comment WHERE participant_user_id = ${pat}`)).length === 0);
+  check("another organization reads nothing, even forging the scope", (await rawAs(org.id, spyStaff, (a) => a`SELECT id FROM team_comment`)).length === 0
+    && (await rawAs(org2.id, spyStaff, (a) => a`SELECT id FROM team_comment`)).length === 0 && (await listed(aSpy)) === -1);
+  check("the participant never reads team comments", (await (async () => (await app.transaction([app`SELECT set_config('app.user_id', ${pat}, true)`, app`SELECT id FROM team_comment`]))[1])()).length === 0);
+  const [{ n: unscoped }] = await core.query("SELECT count(*)::int AS n FROM team_comment");
+  check("an unscoped read by the app sees no comments", unscoped === 0, String(unscoped));
+  const del = await attempt(() => rawAs(org.id, cm, (a) => a`DELETE FROM team_comment WHERE author_user_id = ${cm}`));
+  check("a comment is never deleted by the app", !del.ok && /permission denied/i.test(del.e), JSON.stringify(del));
+  const fixed = c1.ok ? await core.correctTeamComment(aCm, c1.id, { body: "ISOTT-BODY corrected: Friday" }) : { ok: false };
+  check("the author corrects it and the earlier wording is kept", fixed.ok && (await core.getTeamCommentHistory(aAdmin, c1.id))?.length === 1);
+  check("nobody else corrects it", c1.ok && (await core.correctTeamComment(aAdmin, c1.id, { body: "rewritten" })).ok === false);
+
+  // inbox
+  const items = async (actor) => (await core.listInbox(actor))?.items ?? [];
+  check("the mentioned admin has the item, in fixed words with no body", (await items(aAdmin)).some((i) => i.kind === "mention" && !/ISOTT-BODY/.test(i.sentence)));
+  check("nobody else reads it, even raw", (await rawAs(org.id, cm, (a) => a`SELECT id FROM staff_inbox_item WHERE recipient_user_id = ${admin}`)).length === 0
+    && (await rawAs(org.id, owner, (a) => a`SELECT id FROM staff_inbox_item WHERE recipient_user_id = ${admin}`)).length === 0);
+  const forgedItem = await attempt(() => rawAs(org.id, cm, (a) => a`INSERT INTO staff_inbox_item (access_code_id, recipient_user_id, kind, ref_table, ref_id, summary) VALUES (${org.id}, ${admin}, 'mention', 'team_comment', ${cm}, 'forged')`));
+  check("the app cannot write an inbox item", !forgedItem.ok && /permission denied/i.test(forgedItem.e), JSON.stringify(forgedItem));
+  check("the recipient marks it read", (await core.markInbox(aAdmin, { all: true, read: true })) >= 1 && (await core.inboxUnreadCount(aAdmin)) === 0);
+
+  // tasks
+  const t1 = await core.addStaffTask(aCm, { title: "ISOTT-TASK bring papers", clientId: pat, ownerId: admin });
+  check("a task about the person can go to the admin, who reaches them", t1.ok === true, JSON.stringify(t1));
+  check("and the admin hears about it", (await items(aAdmin)).some((i) => i.kind === "task_assigned"));
+  check("not to a colleague who cannot see the person", (await core.addStaffTask(aCm, { title: "x task", clientId: pat, ownerId: other })).ok === false);
+  check("not to someone from another organization", (await core.addStaffTask(aCm, { title: "x task", clientId: pat, ownerId: spyStaff })).ok === false);
+  const forcedTask = await attempt(() => rawAs(org.id, cm, (a) => a`INSERT INTO staff_task (access_code_id, client_user_id, owner_user_id, created_by, title) VALUES (${org.id}, ${pat}, ${other}, ${cm}, 'forced')`));
+  check("and the database refuses it when the app check is skipped", !forcedTask.ok && /task_assign_out_of_reach/.test(forcedTask.e), JSON.stringify(forcedTask));
+
+  // change requests
+  const cr = await core.createChangeRequest(aCm, { kind: "field", title: "Add a field for boot size", body: "ISOTT-CR for the warehouse jobs" });
+  check("a case manager asks for a change", cr.ok === true, JSON.stringify(cr));
+  const ids = async (actor, view) => ((await core.listChangeRequests(actor, { view })) ?? []).map((r) => r.id);
+  check("they read their own; a colleague does not", cr.ok && (await ids(aCm, "mine")).includes(cr.id) && !(await ids(aOther, "mine")).includes(cr.id));
+  check("only managers get the queue", (await core.listChangeRequests(aOther, { view: "queue" })) === null && cr.ok && (await ids(aAdmin, "queue")).includes(cr.id));
+  check("another organization reads none, even raw", (await rawAs(org.id, spyStaff, (a) => a`SELECT id FROM org_change_request`)).length === 0);
+  check("the asker cannot answer it", cr.ok && (await core.answerChangeRequest(aCm, cr.id, { status: "done" })).ok === false
+    && (await rawAs(org.id, cm, (a) => a`UPDATE org_change_request SET status = 'done' WHERE id = ${cr.id} RETURNING id`)).length === 0);
+  check("a no needs a reason", cr.ok && (await core.answerChangeRequest(aAdmin, cr.id, { status: "declined" })).ok === false);
+  check("a manager says yes and the asker hears back", cr.ok && (await core.answerChangeRequest(aAdmin, cr.id, { status: "accepted", answer: "Next week" })).ok
+    && (await items(aCm)).some((i) => i.kind === "change_answered"));
+  const hist = cr.ok ? await core.getChangeRequest(aCm, cr.id) : null;
+  check("the asker sees who answered (answer history)", (hist?.events ?? []).some((e) => e.to_status === "accepted"));
+  check("a colleague sees no answer history, even raw", (await rawAs(org.id, other, (a) => a`SELECT id FROM org_change_request_event`)).length === 0);
+  const crActs = await sql`SELECT actor_user_id, staff_user_id FROM org_activity WHERE access_code_id = ${org.id} AND entity = 'change_request'`;
+  check("change-request activity names nobody", crActs.length > 0 && crActs.every((r) => r.actor_user_id === null && r.staff_user_id === null));
+  // The AI switch is the owner's (109 review round 2).
+  await sql`INSERT INTO org_profile (access_code_id, org_type) VALUES (${org.id}, 'reentry_nonprofit') ON CONFLICT DO NOTHING`;
+  const aiByAdmin = await attempt(() => rawAs(org.id, admin, (a) => a`UPDATE org_profile SET modules = modules || '{"ai_assist": false}' WHERE access_code_id = ${org.id}`));
+  check("an org admin cannot turn t.ROY off for the organization", !aiByAdmin.ok && /ai_assist_owner_only/.test(aiByAdmin.e), JSON.stringify(aiByAdmin));
+  const renameByAdmin = await attempt(() => rawAs(org.id, admin, (a) => a`UPDATE org_profile SET display_name = 'Isotest renamed' WHERE access_code_id = ${org.id} RETURNING access_code_id`));
+  check("but can rename it", renameByAdmin.ok && renameByAdmin.v.length === 1, JSON.stringify(renameByAdmin));
+  const aiByOwner = await attempt(() => rawAs(org.id, owner, (a) => a`UPDATE org_profile SET modules = modules || '{"ai_assist": false}' WHERE access_code_id = ${org.id} RETURNING access_code_id`));
+  check("the owner can", aiByOwner.ok && aiByOwner.v.length === 1, JSON.stringify(aiByOwner));
+  const acts = await sql`SELECT summary FROM org_activity WHERE access_code_id = ${org.id} AND entity IN ('comment', 'change_request', 'task')`;
+  check("activity rows carry no typed words", acts.length > 0 && acts.every((r) => !/ISOTT-/.test(r.summary)), JSON.stringify(acts.map((r) => r.summary)));
+  // cleanup for rows with no cascade from the org (the activity log is removed by org id in cleanup)
 }
 
 /**
@@ -658,6 +768,84 @@ async function structureChecks() {
 
 
 /**
+ * Outbound branding (107, staff pass 2026-10-27 lane S2). The claim: how an
+ * organization's outgoing reports and emails are branded is read by its own
+ * people and nobody else's, and set by a platform admin ONLY, through
+ * smr_set_org_branding. The owner, an org admin and staff cannot flip it on
+ * UPDATE, cannot pick it on a first INSERT, and cannot call the setter.
+ */
+async function outboundBrandChecks() {
+  console.log("\n  -- outbound branding (107) --");
+  const [{ has }] = await sql`SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'org_profile' AND column_name = 'branding') AS has`;
+  if (!has) { console.log("  note  107 not applied; skipped"); return; }
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const brand = await import("../packages/core/dist/orgOutboundBrand.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("ob-owner"), admin = await mkUser("ob-admin"), cm = await mkUser("ob-cm");
+  const owner2 = await mkUser("ob-owner2"), cm2 = await mkUser("ob-cm2"), boss = await mkUser("ob-platform");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOOB" + uniq}, ${P + " outbound"}, 'client', ${owner}, true, true) RETURNING id`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOOB2" + uniq}, ${P + " outbound2"}, 'client', ${owner2}, true, true) RETURNING id`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${cm}, 'staff'), (${org2.id}, ${cm2}, 'staff')`;
+  const as = (orgId, userId, ...stmts) => app.transaction([
+    ...(orgId ? [app`SELECT set_config('app.org_id', ${orgId}, true)`] : []),
+    app`SELECT set_config('app.user_id', ${userId}, true)`, ...stmts]);
+  const refused = async (fn) => { try { await fn(); return null; } catch (e) { return String(e?.message ?? e); } };
+
+  // A first save by the owner: the default goes in, exclusive does not.
+  const firstExclusive = await refused(() => as(org.id, owner, app`INSERT INTO org_profile (access_code_id, branding) VALUES (${org.id}, 'exclusive')`));
+  check("107: the owner cannot pick exclusive branding on a first save", !!firstExclusive, firstExclusive ?? "inserted");
+  const firstPlain = await refused(() => as(org.id, owner, app`INSERT INTO org_profile (access_code_id) VALUES (${org.id})`));
+  check("107: the owner's first save with the default still works", !firstPlain, firstPlain ?? "");
+  for (const [who, id] of [["the owner", owner], ["an org admin", admin], ["staff", cm]]) {
+    const upd = await refused(() => as(org.id, id, app`UPDATE org_profile SET branding = 'exclusive' WHERE access_code_id = ${org.id}`));
+    const [{ b }] = await sql`SELECT branding AS b FROM org_profile WHERE access_code_id = ${org.id}`;
+    check(`107: ${who} cannot flip the branding by UPDATE`, b === "co_brand", upd ?? "no error, and the value is " + b);
+    const setter = await refused(() => as(org.id, id, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'exclusive')`));
+    check(`107: ${who} cannot call the setter`, !!setter && /platform admin/.test(setter), setter ?? "allowed");
+  }
+  const otherOwner = await refused(() => as(org2.id, owner2, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'exclusive')`));
+  check("107: another organization's owner cannot set this one", !!otherOwner, otherOwner ?? "allowed");
+
+  await sql`INSERT INTO platform_admin (user_id, note) VALUES (${boss}, 'isolation fixture')`;
+  try {
+    const set = await as(null, boss, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'exclusive') AS b`);
+    check("107: a platform admin sets exclusive branding", set[1]?.[0]?.b === "exclusive", JSON.stringify(set[1]));
+    const bad = await refused(() => as(null, boss, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'full')`));
+    check("107: an unknown value is refused even for a platform admin", !!bad, bad ?? "accepted");
+    const [{ n }] = await sql`SELECT count(*)::int AS n FROM org_audit WHERE org_id = ${org.id} AND table_name = 'org_profile' AND action = 'BRANDING' AND row_summary->>'branding_to' = 'exclusive'`;
+    check("107: the change is in the audit log", n === 1, `rows ${n}`);
+    // Readers: the organization's own people read it; another organization's do not.
+    const own = await as(org.id, cm, app`SELECT branding FROM org_profile WHERE access_code_id = ${org.id}`);
+    check("107: staff of the organization read their branding", own[2]?.[0]?.branding === "exclusive", JSON.stringify(own[2]));
+    const leak = await as(org2.id, cm2, app`SELECT branding FROM org_profile WHERE access_code_id = ${org.id}`);
+    check("107: staff of another organization read nothing", (leak[2] ?? []).length === 0, JSON.stringify(leak[2]));
+    const leakScoped = await as(org.id, cm2, app`SELECT branding FROM org_profile WHERE access_code_id = ${org.id}`);
+    // app.org_id is set by the app from membership, never from the request; a forged one is the route-forgot case.
+    console.log(`  note  a forged app.org_id reads ${(leakScoped[2] ?? []).length} row(s): 103's select policy trusts the scope the app sets (unchanged by 107)`);
+    const helperOwn = await brand.getOrgOutboundBrand(cm, org.id, "Lakeshore Works");
+    check("107: the helper gives the organization's own name alone once exclusive", helperOwn.line === "Lakeshore Works" && !helperOwn.coBranded, JSON.stringify(helperOwn));
+    const helperOther = await brand.getOrgOutboundBrand(cm2, org.id, "Lakeshore Works");
+    check("107: someone outside the organization gets the safe co-brand default, never its setting", helperOther.coBranded === true, JSON.stringify(helperOther));
+    const back = await as(null, boss, app`SELECT public.smr_set_org_branding(${org.id}::uuid, 'co_brand') AS b`);
+    check("107: a platform admin sets it back to co-branded", back[1]?.[0]?.b === "co_brand");
+    // An organization that never ran setup: the setter creates the row and setup still shows.
+    const fresh = await as(null, boss, app`SELECT public.smr_set_org_branding(${org2.id}::uuid, 'exclusive') AS b`);
+    const [p2] = await sql`SELECT branding, setup_completed_at FROM org_profile WHERE access_code_id = ${org2.id}`;
+    check("107: setting it for an organization with no profile creates the row and leaves setup unfinished", fresh[1]?.[0]?.b === "exclusive" && p2?.branding === "exclusive" && p2?.setup_completed_at === null, JSON.stringify(p2));
+    const ownerUpd = await refused(() => as(org2.id, owner2, app`UPDATE org_profile SET branding = 'co_brand' WHERE access_code_id = ${org2.id}`));
+    const [{ b2 }] = await sql`SELECT branding AS b2 FROM org_profile WHERE access_code_id = ${org2.id}`;
+    check("107: and the owner cannot take exclusive off by hand either", b2 === "exclusive", ownerUpd ?? "changed");
+    const ownerWords = await refused(() => as(org2.id, owner2, app`UPDATE org_profile SET timezone = 'America/Denver' WHERE access_code_id = ${org2.id}`));
+    check("107: the owner still saves everything else on the profile", !ownerWords, ownerWords ?? "");
+  } finally {
+    await sql`DELETE FROM platform_admin WHERE user_id = ${boss}`;
+    await sql`DELETE FROM org_profile WHERE access_code_id = ANY(${[org.id, org2.id]}::uuid[])`;
+  }
+}
+
+/**
  * Staff t.ROY (106, house build L6): the skill-run log and the caseload reads.
  * The claim: a run is written only by the staff member, in their own
  * organization, about someone they reach; read by them and the organization's
@@ -749,6 +937,178 @@ async function aiSkillRunChecks() {
 }
 
 /**
+ * Staff rewards (111, staff side lane S6). The claims: rewards are off until
+ * the person turns them on, and only they can; a good catch goes only between
+ * colleagues of one organization, is read only by the two of them, never by
+ * another organization, and never about someone either cannot reach (and it
+ * leaves the reader's view when they stop reaching them); milestones are
+ * written only by the database and read only by their owner; the board lists
+ * only givers who opted in; a recognition note is answered only by the person
+ * it is about; the app holds no DELETE anywhere here.
+ */
+async function staffRewardsChecks() {
+  console.log("\n  -- staff rewards (111) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ has }] = await sql`SELECT to_regclass('public.staff_kudos') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  111 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("rw-owner"), cm = await mkUser("rw-cm"), cm2 = await mkUser("rw-cm2"), vol = await mkUser("rw-vol"), spy = await mkUser("rw-spy"), spyStaff = await mkUser("rw-spystaff");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISORWD" + uniq}, ${P + " rewards"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISORWD2" + uniq}, ${P + " rewards2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${cm2}, 'staff'), (${org.id}, ${vol}, 'staff'), (${org2.id}, ${spyStaff}, 'staff')`;
+  const pat = await mkUser("rw-pat"), theirs = await mkUser("rw-theirs");
+  await core.redeemAccessCode(pat, org.code); await joinCohortConsent(pat);
+  await core.redeemAccessCode(theirs, org2.code); await joinCohortConsent(theirs);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aCm2 = await A(cm2), aVol = await A(vol), aOwner = await A(owner), aSpy = await A(spy), aSpyStaff = await A(spyStaff);
+  const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e.message) }; } };
+  const scoped = (orgId, userId, q) => app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${userId}, true)`, q]);
+
+  check("rewards are off until the person turns them on", (await core.getRewardsSettings(aCm)).rewardsOn === false);
+  await core.setRewardsSettings(aCm, { rewardsOn: true });
+  check("the person turns their own on", (await core.getRewardsSettings(aCm)).rewardsOn === true);
+  const forced = await attempt(() => scoped(org.id, owner, app`INSERT INTO staff_rewards_setting (user_id, access_code_id, rewards_on) VALUES (${cm2}, ${org.id}, true)`));
+  check("the owner cannot turn rewards on for a staff member, even in SQL", !forced.ok, JSON.stringify(forced));
+  const ownerReads = await scoped(org.id, owner, app`SELECT user_id FROM staff_rewards_setting`);
+  check("and cannot read anyone's switch", (ownerReads.at(-1) ?? []).length === 0);
+
+  const k1 = await core.giveKudos(aCm, { toUserId: cm2, body: "Great catch on the bus pass deadline" });
+  check("a staff member thanks a colleague", k1.ok, JSON.stringify(k1));
+  const cross = await core.giveKudos(aCm, { toUserId: spyStaff, body: "Thanks across the street" });
+  check("not someone in another organization", !cross.ok, JSON.stringify(cross));
+  const forgedOrg = await attempt(() => scoped(org2.id, cm, app`INSERT INTO staff_kudos (access_code_id, from_user_id, to_user_id, body) VALUES (${org2.id}, ${cm}, ${spyStaff}, 'Forged org')`));
+  check("not by forging the other organization's scope", !forgedOrg.ok, JSON.stringify(forgedOrg));
+  const task = await core.addStaffTask(aCm, { title: "Call about the class", clientId: pat });
+  const aboutPat = task.ok ? await core.giveKudos(aCm, { toUserId: vol, body: "Thanks for the help here", workKind: "task", workId: task.id ?? task.task?.id }) : { ok: false };
+  check("not about a participant the receiver cannot reach", !aboutPat.ok, JSON.stringify(aboutPat));
+  const toOwner = task.ok ? await core.giveKudos(aCm, { toUserId: owner, body: "Thanks for backing me up here", workKind: "task", workId: task.id ?? task.task?.id }) : { ok: false };
+  check("about them when both reach them (the owner reaches everyone)", toOwner.ok, JSON.stringify(toOwner));
+  const ids = async (a) => { const k = await core.listKudos(a); return [...k.received, ...k.given].map((x) => x.id); };
+  check("sender and receiver read the good catch", (await ids(aCm)).includes(k1.id) && (await ids(aCm2)).includes(k1.id));
+  check("a third colleague does not", !(await ids(aVol)).includes(k1.id));
+  check("the owner does not read colleagues' good catches", !(await ids(aOwner)).includes(k1.id));
+  check("another organization reads none", (await ids(aSpy)).length === 0 && (await ids(aSpyStaff)).length === 0);
+  const [{ n: unscopedKudos }] = await core.query("SELECT count(*)::int AS n FROM staff_kudos");
+  check("an unscoped app read sees no good catches", unscopedKudos === 0, String(unscopedKudos));
+  if (toOwner.ok) {
+    await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm2} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
+    check("reach: once the sender no longer reaches the person, the good catch about them leaves their view", !(await ids(aCm)).includes(toOwner.id));
+    await sql`UPDATE client_staff_assignment SET staff_user_id = ${cm} WHERE access_code_id = ${org.id} AND client_user_id = ${pat}`;
+  }
+  const del = await attempt(() => scoped(org.id, cm, app`DELETE FROM staff_kudos WHERE id = ${k1.id}`));
+  check("a good catch is never deleted by the app", !del.ok && /permission denied/i.test(del.e), JSON.stringify(del));
+  check("only the sender takes it back", (await core.withdrawKudos(aCm2, k1.id)) === false && (await core.withdrawKudos(aCm, k1.id)) === true);
+
+  const k2 = await core.giveKudos(aCm, { toUserId: cm2, body: "Thanks for covering Friday" });
+  check("Wins off: nothing is recorded", (await core.refreshMilestones(aCm2)) === 0);
+  await core.refreshMilestones(aCm);
+  const ms = (await core.listMyMilestones(aCm)).map((m) => m.key);
+  check("milestones come from facts", ms.includes("first_kudos_given"), JSON.stringify(ms));
+  check("and are private", (await core.listMyMilestones(aCm2)).length === 0 || !(await core.listMyMilestones(aCm2)).some((m) => m.key === "first_kudos_given"));
+  const selfAward = await attempt(() => scoped(org.id, cm, app`INSERT INTO staff_milestone (user_id, access_code_id, key) VALUES (${cm}, ${org.id}, 'directory_anchor')`));
+  check("never self-awarded", !selfAward.ok, JSON.stringify(selfAward));
+  const grant = await attempt(() => scoped(org.id, cm, app`SELECT public.staff_milestone_grant(${cm}::uuid, ${org.id}::uuid, 'directory_anchor', NULL)`));
+  check("the app cannot call the milestone writer", !grant.ok && /permission denied/i.test(grant.e), JSON.stringify(grant));
+  const [{ n: unscopedMs }] = await core.query("SELECT count(*)::int AS n FROM staff_milestone");
+  check("an unscoped app read sees no milestones", unscopedMs === 0, String(unscopedMs));
+
+  // Names: the org-wide detector answers only inside the caller's own organization.
+  await sql`UPDATE users SET name = ${"Zelda" + uniq + " Quill"} WHERE id = ${pat}`;
+  const full = `thanks for helping zelda${uniq.toLowerCase()} quill`;
+  const seen = await core.participantNamesIn(aCm, full);
+  check("the name check finds a participant the writer reaches, by full name in any case", seen.reached.includes(pat), JSON.stringify(seen));
+  const hidden = await core.participantNamesIn(aVol, full);
+  check("someone the writer cannot reach is never checked or reported (no enrollment oracle)", hidden.reached.length === 0 && !("other" in hidden), JSON.stringify(hidden));
+  const outside = await core.participantNamesIn(aSpyStaff, full);
+  check("another organization's staff learn nothing about this one's participants", outside.reached.length === 0, JSON.stringify(outside));
+  const named = await core.giveKudos(aCm, { toUserId: cm2, body: `Thanks for helping Zelda${uniq} Quill` });
+  check("a good catch naming a participant without linked work is refused", !named.ok, JSON.stringify(named));
+  const oracle = await attempt(() => scoped(org.id, cm, app`SELECT public.staff_rewards_member(${org2.id}::uuid, ${spyStaff}::uuid)`));
+  check("the app cannot ask who is staff in another organization", !oracle.ok && /permission denied/i.test(oracle.e), JSON.stringify(oracle));
+
+  const board = (await core.giverBoard(aVol)).map((b) => b.userId);
+  check("the board lists givers who opted in, and nobody who was thanked", board.includes(cm) && !board.includes(cm2), JSON.stringify(board));
+  check("another organization gets no board", (await core.giverBoard(aSpyStaff)).length === 0);
+  void k2;
+
+  const note = await core.writeRecognitionNote(aOwner, { aboutUserId: cm, body: "Built the bus pass checklist the whole team uses" });
+  check("the owner writes a recognition note", note.ok, JSON.stringify(note));
+  check("staff cannot", !(await core.writeRecognitionNote(aCm2, { aboutUserId: cm, body: "Built the bus pass checklist the whole team uses" })).ok);
+  check("not about another organization's staff", !(await core.writeRecognitionNote(aOwner, { aboutUserId: spyStaff, body: "Built the bus pass checklist the whole team uses" })).ok);
+  check("nothing goes in a report before the person says yes", ((await core.listRecognitionForReport(aOwner)) ?? []).length === 0);
+  check("the owner cannot say yes for them", (await core.answerRecognitionNote(aOwner, note.id, "approved")) === false);
+  check("the person says yes", (await core.answerRecognitionNote(aCm, note.id, "approved")) === true);
+  check("then it is in the report", ((await core.listRecognitionForReport(aOwner)) ?? []).some((n) => n.id === note.id));
+  check("a colleague never reads it", !(await core.listMyRecognitionNotes(aCm2)).some((n) => n.id === note.id) && (await core.listRecognitionForReport(aCm2)) === null);
+  check("another organization's owner never reads it", !((await core.listRecognitionForReport(aSpy)) ?? []).some((n) => n.id === note.id));
+}
+
+/**
+ * Directory contributions (112, lane S6). The claims: only staff of the
+ * program submit, through the intake function; staff never read the queue
+ * table and never see a private note; another program sees nothing; only the
+ * data owner decides; a hearsay "call" cannot be submitted; credit follows
+ * approval only; the listing nudge rows are each person's own.
+ */
+async function directoryContributionChecks() {
+  console.log("\n  -- staff directory contributions (112) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ has }] = await sql`SELECT to_regclass('public.directory_contribution') IS NOT NULL AS has`;
+  if (!has) { console.log("  note  112 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("dc-owner"), cm = await mkUser("dc-cm"), cm2 = await mkUser("dc-cm2"), spy = await mkUser("dc-spy"), part = await mkUser("dc-part"), admin = await mkUser("dc-platform");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISODCT" + uniq}, ${P + " contrib"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISODCT2" + uniq}, ${P + " contrib2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${cm2}, 'staff')`;
+  await core.redeemAccessCode(part, org.code); await joinCohortConsent(part);
+  await sql`INSERT INTO platform_admin (user_id, note) VALUES (${admin}, 'isolation test')`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aCm2 = await A(cm2), aOwner = await A(owner), aSpy = await A(spy);
+  const today = new Date().toISOString().slice(0, 10);
+  const attempt = async (f) => { try { return { ok: true, v: await f() }; } catch (e) { return { ok: false, e: String(e.message) }; } };
+  try {
+    await core.setRewardsSettings(aCm, { rewardsOn: true });
+    const sent = await core.submitContribution(aCm, { flow: "new_place", targetKind: "employer", details: { name: `Isolation Foods ${uniq} (Demo)`, state: "MI" } }, today);
+    check("a staff member sends a new place", sent.ok, JSON.stringify(sent));
+    const hear = await core.submitContribution(aCm, { flow: "called_today", targetKind: "employer", targetId: sent.id, details: { said: "yes" }, interactionOn: today, interactionMethod: "heard_from_someone" }, today);
+    check("hearsay is never a call", !hear.ok);
+    const asPart = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${part}, true)`,
+      app`SELECT public.submit_directory_contribution(${JSON.stringify({ flow: "new_place", target_kind: "employer", details: { name: "X", state: "MI" } })}::jsonb)`]));
+    check("a participant cannot submit, even with the org scope", !asPart.ok, JSON.stringify(asPart));
+    const direct = await attempt(() => app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`,
+      app`INSERT INTO directory_contribution (access_code_id, submitted_by, flow, target_kind, details) VALUES (${org.id}, ${cm}, 'new_place', 'employer', '{"name":"x","state":"MI"}')`]));
+    check("the queue is never written directly by the app", !direct.ok && /permission denied/i.test(direct.e), JSON.stringify(direct));
+    const read = await app.transaction([app`SELECT set_config('app.org_id', ${org.id}, true)`, app`SELECT set_config('app.user_id', ${cm}, true)`, app`SELECT id FROM directory_contribution`]);
+    check("staff never read the queue table", (read.at(-1) ?? []).length === 0);
+    const mine = await core.listMyContributions(aCm);
+    check("staff read back their own", mine.some((r) => r.id === sent.id) && mine.every((r) => !("privateNote" in r)));
+    check("a colleague does not read mine", !(await core.listMyContributions(aCm2)).some((r) => r.id === sent.id));
+    check("the program's owner does", (await core.listMyContributions(aOwner)).some((r) => r.id === sent.id));
+    check("another program does not", !(await core.listMyContributions(aSpy)).some((r) => r.id === sent.id));
+    const [{ n: unscoped }] = await core.query("SELECT count(*)::int AS n FROM directory_contribution");
+    check("an unscoped app read sees no contributions", unscoped === 0, String(unscoped));
+    const ownerTry = await core.decideContribution(owner, sent.id, "approved", "new_row", null).catch((e) => ({ ok: false, e: String(e.message) }));
+    check("a program owner cannot decide (only the data owner)", !ownerTry.ok, JSON.stringify(ownerTry));
+    const queue = await core.listContributionQueue(admin);
+    check("the data owner reads the queue", queue.some((r) => r.id === sent.id));
+    const decided = await core.decideContribution(admin, sent.id, "approved", "new_row", "Thank you");
+    check("the data owner approves", decided.ok, JSON.stringify(decided));
+    check("credit follows approval", (await core.listMyMilestones(aCm)).some((m) => m.key === "first_new_place"));
+    check("listing nudges: once a week per person", (await core.claimListingNudge(aCm, "resource", sent.id)) === true && (await core.claimListingNudge(aCm, "resource", sent.id)) === false
+      && (await core.claimListingNudge(aCm2, "resource", sent.id)) === true);
+  } finally {
+    await sql`DELETE FROM platform_admin WHERE user_id = ${admin}`;
+  }
+}
+
+/**
  * Customization (104, house build L4): custom fields, values, saved views and
  * role layouts. The claims: another organization reads none of it; a staff
  * member who does not reach a participant can neither read nor write that
@@ -831,6 +1191,102 @@ async function customizationChecks() {
   check("the owner can", (await core.setRoleLayout(aOwner, "staff", "today", { order: ["quiet"], hidden: ["unassigned"] })).ok === true);
   check("staff get it", (await core.getMyRoleLayout(aOther)).today?.hidden?.includes("unassigned") === true);
   check("another organization does not", (await core.getRoleLayouts(aSpy)).today.staff === undefined);
+}
+
+/**
+ * Staff build S3 (migration 108): what staff may change for themselves, and
+ * each person's own view change log. The claims: org admins now manage
+ * settings everywhere the owner does (core and database agree); staff cannot
+ * change the policy, and another organization cannot read or forge it; a
+ * locked choice is refused on write and ignored on read; the change log is
+ * the person's alone (not a colleague's, not the owner's, not another
+ * organization's), cannot be erased or rewritten by the app, and undo works
+ * once; the grid's batch write is all or nothing and holds to reach.
+ * (Neither 108 table holds per-participant rows, so the reach check here is
+ * the owner-only rule on the log and the reach rule on the batch write.)
+ */
+async function customizationPolicyChecks() {
+  console.log("\n  -- customization policy and view change log (108) --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const [{ t }] = await sql`SELECT to_regclass('public.view_change_log') AS t`;
+  if (!t) { console.log("  note  108 not applied; skipped"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("cp-owner"), admin = await mkUser("cp-admin"), cm = await mkUser("cp-cm"), other = await mkUser("cp-other"), spy = await mkUser("cp-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOCP" + uniq}, ${P + " policy"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOCP2" + uniq}, ${P + " policy2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${admin}, 'org_admin'), (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("cp-pat");
+  await core.redeemAccessCode(pat, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES (${org.id}, ${pat}, ${cm}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aOwner = await A(owner), aAdmin = await A(admin), aCm = await A(cm), aOther = await A(other), aSpy = await A(spy);
+  const raw = async (u, orgId, stmt) => { try { const r = await app.transaction([app`SELECT set_config('app.org_id', ${orgId}, true)`, app`SELECT set_config('app.user_id', ${u}, true)`, stmt(app)]); return r[2]; } catch (e) { return String(e.message); } };
+
+  // Org admins manage settings, everywhere the owner does (Troy 2026-10-27).
+  check("an org admin defines a field", (await core.createFieldDef(aAdmin, { label: "Shift preference", entity: "participant", type: "text" })).ok === true);
+  check("an org admin shares a view", (await core.createSavedView(aAdmin, { surface: "caseload", name: "Team view", shared: true })).ok === true);
+  check("an org admin sets a role layout", (await core.setRoleLayout(aAdmin, "staff", "today", { order: ["tasks"], hidden: [] })).ok === true);
+
+  // The policy: managers write, staff read, other organizations neither.
+  check("staff cannot change what staff may change", (await core.setCustomizationPolicy(aCm, "staff", "today", { today_order: false })).ok === false);
+  check("an org admin can", (await core.setCustomizationPolicy(aAdmin, "staff", "today", { today_order: false })).ok === true);
+  check("staff read their own limits", (await core.getMyCustomizationPolicy(aCm)).today_order === false);
+  check("the owner is never limited", (await core.getMyCustomizationPolicy(aOwner)).today_order === true);
+  const spyRead = await raw(spy, org2.id, (a) => a`SELECT * FROM org_customization_policy WHERE access_code_id = ${org.id}`);
+  check("another organization reads none of the policy", Array.isArray(spyRead) && spyRead.length === 0, JSON.stringify(spyRead));
+  const forged = await raw(spy, org.id, (a) => a`INSERT INTO org_customization_policy (access_code_id, role, surface, allowed) VALUES (${org.id}, 'staff', 'people', '{"grid_edit": false}'::jsonb) RETURNING 1`);
+  check("another organization's owner cannot write it, even forging the scope", typeof forged === "string", JSON.stringify(forged));
+  const staffWrite = await raw(cm, org.id, (a) => a`UPDATE org_customization_policy SET allowed = '{"today_order": true}'::jsonb RETURNING 1`);
+  check("a staff member's own SQL cannot loosen it", Array.isArray(staffWrite) && staffWrite.length === 0, JSON.stringify(staffWrite));
+
+  // Enforced on write and on read.
+  const refused = await core.setTodayOrder(aCm, { order: ["quiet", "tasks"] });
+  check("a locked choice is refused, in the organization's words", refused.ok === false && refused.reason === "policy" && /same for everyone/.test(refused.error), JSON.stringify(refused));
+  await core.setCustomizationPolicy(aAdmin, "staff", "today", null);
+  const applied = await core.setTodayOrder(aCm, { order: ["quiet", "tasks"] });
+  check("allowed again, the change applies and is logged", applied.ok === true && !!applied.changeId, JSON.stringify(applied));
+  await core.setCustomizationPolicy(aOwner, "staff", "today", { today_order: false });
+  check("locked later, the stored choice is ignored on read", (await core.getStaffPrefs(aCm)).effective.todayOrder.length === 0);
+  check("and the full Settings save that leaves it alone still works", (await core.setOwnStaffPrefs(aCm, { ...(await core.getStaffPrefs(aCm)).own, noteKind: "call" })).ok === true);
+  await core.setCustomizationPolicy(aOwner, "staff", "today", null);
+  check("opened again, it comes back", (await core.getStaffPrefs(aCm)).effective.todayOrder[0] === "quiet");
+  await core.setCustomizationPolicy(aOwner, "staff", "people", { personal_views: false });
+  check("personal views locked: saving one is refused", (await core.createSavedView(aCm, { surface: "caseload", name: "Mine", shared: false })).ok === false);
+  await core.setCustomizationPolicy(aOwner, "staff", "people", null);
+
+  // The log: the person's own, append-only but for "undone".
+  const mine = await core.listMyViewChanges(aCm, 10);
+  check("the person reads their own changes", mine.some((c) => c.id === applied.changeId));
+  const colleague = await raw(other, org.id, (a) => a`SELECT id FROM view_change_log`);
+  check("a colleague's own SQL reads none of them", Array.isArray(colleague) && colleague.length === 0, JSON.stringify(colleague));
+  const ownerRead = await raw(owner, org.id, (a) => a`SELECT id FROM view_change_log`);
+  check("nor does the owner", Array.isArray(ownerRead) && ownerRead.length === 0, JSON.stringify(ownerRead));
+  const foreign = await raw(spy, org2.id, (a) => a`SELECT id FROM view_change_log WHERE access_code_id = ${org.id}`);
+  check("nor another organization", Array.isArray(foreign) && foreign.length === 0);
+  const del = await raw(cm, org.id, (a) => a`DELETE FROM view_change_log`);
+  check("the app cannot erase the log", typeof del === "string" && /permission denied/i.test(del), JSON.stringify(del));
+  const rewrite = await raw(cm, org.id, (a) => a`UPDATE view_change_log SET summary = 'x'`);
+  check("or rewrite it", typeof rewrite === "string" && /permission denied/i.test(rewrite), JSON.stringify(rewrite));
+  const asOther = await raw(cm, org.id, (a) => a`INSERT INTO view_change_log (access_code_id, user_id, surface, action, target, summary) VALUES (${org.id}, ${other}, 'today', 'today_order', 'pref:todayOrder', 'x') RETURNING 1`);
+  check("or write a change into a colleague's log", typeof asOther === "string", JSON.stringify(asOther));
+  const undone = await core.undoViewChange(aCm, { id: applied.changeId });
+  check("undo puts it back and is logged", undone.ok === true && (await core.getStaffPrefs(aCm)).effective.todayOrder.length === 0, JSON.stringify(undone));
+  check("and cannot run twice", (await core.undoViewChange(aCm, { id: applied.changeId })).ok === false);
+  check("a colleague cannot undo it", (await core.undoViewChange(aOther, { id: applied.changeId })).ok === false);
+
+  // The grid's batch write: reach, and all or nothing.
+  const f = await core.createFieldDef(aOwner, { label: "Hours wanted", entity: "participant", type: "number" });
+  const batchOther = await core.setFieldValuesBatch(aOther, [{ entityId: pat, values: { hours_wanted: 20 } }], { fromGrid: true, gridAllowed: true });
+  check("the grid cannot fill in a value for someone the staff member does not reach", batchOther.ok === false, JSON.stringify(batchOther).slice(0, 200));
+  const mixed = await core.setFieldValuesBatch(aCm, [{ entityId: pat, values: { hours_wanted: 20 } }, { entityId: pat, values: { shift_preference: "x".repeat(600) } }], { fromGrid: true, gridAllowed: true });
+  check("one bad cell and nothing is written", mixed.ok === false && Object.keys(mixed.cellErrors ?? {}).length === 1 && !(await core.getFieldValues(aCm, "participant"))[pat]?.hours_wanted, JSON.stringify(mixed).slice(0, 200));
+  const good = await core.setFieldValuesBatch(aCm, [{ entityId: pat, values: { hours_wanted: 20 } }], { fromGrid: true, gridAllowed: true });
+  check("the assigned case manager fills it in from the grid", f.ok && good.ok === true && (await core.getFieldValues(aCm, "participant"))[pat]?.hours_wanted === 20, JSON.stringify(good).slice(0, 200));
+  check("the organization can keep it to the person's page", (await core.setFieldValuesBatch(aCm, [{ entityId: pat, values: { hours_wanted: 30 } }], { fromGrid: true, gridAllowed: false })).ok === false);
+  check("another organization's staff cannot use the batch at all", (await core.setFieldValuesBatch(aSpy, [{ entityId: pat, values: { hours_wanted: 1 } }], { fromGrid: true })).ok === false);
 }
 
 /**
@@ -1117,6 +1573,102 @@ async function workflowChecks() {
     tl.ok && ["referral", "task", "outcome", "retention"].every((t) => tl.items.some((i) => i.type === t)), JSON.stringify(tl.ok ? tl.items.map((i) => i.type) : tl));
   check("a colleague gets no timeline for them", (await core.getPersonTimeline(aOther, pat)).ok === false);
   check("another organization gets none", (await core.getPersonTimeline(aSpy, pat)).ok === false);
+}
+
+/**
+ * Handoffs (110, staff pass S5) and connections the client missed. The claims:
+ * only someone who reaches the person can send them a handoff, by core or by
+ * a raw insert; a colleague and another organization read none of it; the
+ * person reads their own live handoffs and answers each item, and nobody else
+ * can; a taken next step lands on their shared list; withdrawn ones vanish for
+ * them; nothing is deleted; the activity log says what happened in fixed words
+ * only. Connections read only shared scopes, and every read is in the
+ * person's access log; a colleague or another organization reads nothing and
+ * logs nothing.
+ */
+async function handoffChecks() {
+  console.log("\n  -- handoffs (110) and connections the client missed --");
+  if (!appUrl) { console.log("  skip  needs the app credential"); return; }
+  const core = await import("../packages/core/dist/index.js");
+  const app = neon(appUrl);
+  const uniq = Date.now().toString(36).toUpperCase().slice(-6);
+  const owner = await mkUser("ho-owner"), cm = await mkUser("ho-cm"), other = await mkUser("ho-other"), spy = await mkUser("ho-spy");
+  const [org] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOHO" + uniq}, ${P + " handoff"}, 'client', ${owner}, true, true) RETURNING id, code`;
+  const [org2] = await sql`INSERT INTO access_code (code, partner_name, tier, partner_user_id, is_active, crm_v2) VALUES (${"ISOHP" + uniq}, ${P + " handoff2"}, 'client', ${spy}, true, true) RETURNING id, code`;
+  created.codes.push(org.id, org2.id);
+  await sql`INSERT INTO org_staff (access_code_id, user_id, role) VALUES (${org.id}, ${cm}, 'staff'), (${org.id}, ${other}, 'staff')`;
+  const pat = await mkUser("ho-pat"), hers = await mkUser("ho-hers");
+  for (const u of [pat, hers]) await core.redeemAccessCode(u, org.code);
+  await sql`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES
+            (${org.id}, ${pat}, ${cm}, ${owner}), (${org.id}, ${hers}, ${other}, ${owner})`;
+  const A = (u) => core.resolveOrgActor(u);
+  const aCm = await A(cm), aOther = await A(other), aOwner = await A(owner), aSpy = await A(spy);
+  const rawAs = async (orgId, userId, query) => (await app.transaction([
+    app`SELECT set_config('app.org_id', ${orgId ?? ""}, true)`, app`SELECT set_config('app.user_id', ${userId}, true)`, query(app),
+  ]))[2];
+  const throws = async (p) => { try { await p; return null; } catch (e) { return String(e.message); } };
+  const packet = (step) => ({ note: "Two things worth a look this week", items: [{ kind: "next_step", step, why: "So we can start the forklift class" }] });
+
+  const h1 = await core.sendHandoff(aCm, pat, packet("Bring your ID Tuesday"));
+  check("a case manager sends their person a handoff", h1.ok === true && h1.items === 1, JSON.stringify(h1));
+  check("a colleague cannot send one to someone not theirs", (await core.sendHandoff(aOther, pat, packet("x step"))).ok === false);
+  check("another organization cannot", (await core.sendHandoff(aSpy, pat, packet("y step"))).ok === false);
+  const raw = await throws(rawAs(org.id, other, (a) => a`INSERT INTO staff_handoff (access_code_id, participant_user_id, author_user_id, note) VALUES (${org.id}, ${pat}, ${other}, 'raw note')`));
+  check("the DATABASE refuses a colleague's raw insert (restrictive reach)", !!raw, raw ?? "inserted");
+  check("a colleague reads none of it, in core or the tables",
+    ((await core.listHandoffsFor(aOther, pat)) ?? []).length === 0 && (await rawAs(org.id, other, (a) => a`SELECT id FROM staff_handoff`)).length === 0);
+  check("another organization reads none of it", (await rawAs(org2.id, spy, (a) => a`SELECT id FROM staff_handoff`)).length === 0
+    && (await rawAs(org2.id, spy, (a) => a`SELECT id FROM staff_suggestion WHERE client_user_id = ${pat}`)).length === 0);
+  check("the owner sees it", ((await core.listHandoffsFor(aOwner, pat)) ?? []).some((h) => h.id === h1.id));
+
+  const mine = await core.getMyHandoffs(pat);
+  const item = mine.find((h) => h.id === h1.id)?.items[0];
+  check("the person reads their handoff and its item", !!item && item.kind === "next_step", JSON.stringify(mine));
+  check("someone else in the program reads none of it", (await core.getMyHandoffs(hers)).length === 0);
+  const addItem = await throws(rawAs(null, pat, (a) => a`INSERT INTO staff_suggestion (access_code_id, client_user_id, author_user_id, kind, step_title, body, handoff_id) VALUES (${org.id}, ${pat}, ${pat}, 'next_step', 'mine', 'mine', ${h1.id})`));
+  check("the person cannot add to it", !!addItem, addItem ?? "inserted");
+  const orgAnswer = await throws(rawAs(org.id, cm, (a) => a`UPDATE staff_suggestion SET status = 'saved' WHERE id = ${item.id}`));
+  check("staff cannot answer for the person", !!orgAnswer, orgAnswer ?? "updated");
+  check("another person cannot answer it", (await core.answerMyHandoffItem(hers, item.id, "pass")).ok === false);
+  const took = await core.answerMyHandoffItem(pat, item.id, "take");
+  check("taking a next step puts it on their list from their case manager", took.ok === true && (await core.getMySharedTasks(pat)).some((t) => t.title === "Bring your ID Tuesday"), JSON.stringify(took));
+  check("answering twice changes nothing", (await core.answerMyHandoffItem(pat, item.id, "pass")).ok === false);
+  check("staff see it taken", ((await core.listHandoffsFor(aCm, pat)) ?? []).find((h) => h.id === h1.id)?.items[0]?.status === "saved");
+  const acts = await sql`SELECT entity, summary FROM org_activity WHERE access_code_id = ${org.id} AND participant_user_id = ${pat} AND entity IN ('handoff', 'suggestion')`;
+  check("the activity log says what happened, in fixed words",
+    acts.some((r) => r.summary === "sent them a handoff") && acts.some((r) => r.summary === "they took on a suggested next step")
+    && !acts.some((r) => /ID Tuesday|forklift|worth a look/.test(r.summary)), JSON.stringify(acts));
+
+  const h2 = await core.sendHandoff(aCm, pat, packet("Call the training desk"));
+  check("a colleague who did not send it cannot withdraw it", (await core.withdrawHandoff(aOther, h2.id)) === false);
+  check("the sender can", (await core.withdrawHandoff(aCm, h2.id)) === true);
+  check("a withdrawn handoff is gone for the person", !(await core.getMyHandoffs(pat)).some((h) => h.id === h2.id));
+  const h3 = await core.sendHandoff(aCm, pat, packet("Pick up the bus pass"));
+  await rawAs(org.id, cm, (a) => a`UPDATE staff_handoff SET status = 'withdrawn' WHERE id = ${h3.id}`);
+  const h3items = await sql`SELECT DISTINCT status FROM staff_suggestion WHERE handoff_id = ${h3.id}`;
+  check("a raw withdraw that skips core still closes its open items (database trigger)", h3items.length === 1 && h3items[0].status === "withdrawn", JSON.stringify(h3items));
+  const h4 = await core.sendHandoff(aCm, pat, packet("Visit the job center"));
+  const h4item = (await core.getMyHandoffs(pat)).find((h) => h.id === h4.id)?.items[0];
+  const bare = await throws(rawAs(null, pat, (a) => a`UPDATE staff_suggestion SET status = 'saved' WHERE id = ${h4item.id}`));
+  check("a next step is never taken by a bare status change", !!bare, bare ?? "updated");
+  check("nor through the loose-suggestion answer", (await core.answerSuggestion(pat, h4item.id, "saved")) === false);
+  const del = await throws(rawAs(org.id, owner, (a) => a`DELETE FROM staff_handoff WHERE id = ${h1.id}`));
+  check("nobody deletes a handoff through the app", !!del && /permission denied/i.test(del), del ?? "deleted");
+
+  // connections: only what was shared, every read logged for the person
+  await sql`INSERT INTO job_application (user_id, job_title, company, location, status) VALUES (${pat}, 'Warehouse Associate', ${P + " Old Job Co"}, 'Lansing, MI', 'saved')`;
+  const logs = async () => (await sql`SELECT count(*)::int AS n FROM data_access_log WHERE target_user_id = ${pat} AND fields_accessed->>'via' = 'connections'`)[0].n;
+  const c0 = await core.getConnectionsFor(aCm, pat);
+  check("before sharing, nothing to match on and nothing opened", c0?.status === "nothing_shared" && (await logs()) === 0, JSON.stringify(c0));
+  await core.grantSharing(pat, org.id, "applications");
+  const c1 = await core.getConnectionsFor(aCm, pat);
+  check("after sharing, their jobs are read and the open is in their log", !!c1 && c1.status !== "nothing_shared" && c1.shared.applications === true && (await logs()) === 1, JSON.stringify(c1));
+  const before = await logs();
+  const c2 = await core.getConnectionsFor(aOther, pat);
+  check("a colleague who does not reach them reads nothing and logs nothing", c2?.status === "not_in_reach" && (await logs()) === before, JSON.stringify(c2));
+  const c3 = await core.getConnectionsFor(aSpy, pat);
+  check("another organization reads nothing and logs nothing", (c3 === null || c3.status === "not_in_reach") && (await logs()) === before, JSON.stringify(c3));
+  check("a colleague's caseload list never names them", !((await core.getCaseloadConnections(aOther))?.people ?? []).some((p) => p.clientId === pat));
 }
 
 /** Tasks (055) and the Today queue: a reason on a work list is information about a person. */

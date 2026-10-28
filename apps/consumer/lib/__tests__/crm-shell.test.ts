@@ -29,15 +29,21 @@ const VOLUNTEER = caps("staff", STAFF_PRESETS.volunteer.denies);
 const labels = (c: string[]) => orgNavFor(c).map((g) => `${g.label}: ${g.items.map((i) => i.label).join(", ")}`);
 
 // ── Nav, by role ────────────────────────────────────────────────────────────
-test("nav groups by the job, and each role sees only what it holds", () => {
-  assert.deepEqual(labels(OWNER), [
-    "Work: Today, People, Find a person, Asks, Referrals",
-    "Records: Case notes",
-    "Organization: Insights, Team & access, Structure, Fields, Layouts, Add people, Sharing policy, Security & privacy, Activity log, Set up",
-  ]);
-  assert.deepEqual(labels(STAFF), ["Work: Today, People, Find a person, Asks, Referrals", "Records: Case notes", "Organization: Add people, Security & privacy"]);
-  assert.deepEqual(labels(VOLUNTEER), ["Work: Today, People, Find a person, Asks, Referrals", "Records: Case notes", "Organization: Security & privacy"]);
-  assert.ok(labels(ADMIN)[2].includes("Insights"));
+test("nav groups by a case manager's day, and each role sees only what it holds (staff pass S2)", () => {
+  // Integration 2026-10-28: S4 Inbox and Change requests, S1 Directory, S5 Connections are merged; S3 gave
+  // org admins org.settings.manage, so their Set up group matches the owner's.
+  const day = "My day: Today, Inbox, People, Referrals, Sharing asks";
+  const connect = "Connect: Directory, Connections, Help the directory";
+  const runs = [day, "Records: Case notes", connect, "Bring someone in: Add people", "Reports: Insights, Activity log",
+    "Team: Team & access, Sharing policy, Change requests", "Set up: Structure, Fields, Layouts, Set up, Security & privacy"];
+  assert.deepEqual(labels(OWNER), runs);
+  assert.deepEqual(labels(ADMIN), runs);
+  assert.deepEqual(labels(STAFF), [day, "Records: Case notes", connect, "Bring someone in: Add people"]);
+  assert.deepEqual(labels(VOLUNTEER), [day, "Records: Case notes", connect]);
+  for (const role of [STAFF, VOLUNTEER]) {
+    const all = orgNavFor(role).flatMap((g) => g.items.map((i) => i.label));
+    for (const owner of ["Structure", "Fields", "Layouts", "Set up", "Insights", "Team & access", "Security & privacy", "Find a person", "Change requests"]) assert.ok(!all.includes(owner), owner);
+  }
 });
 
 test("role line: Owner, Admin, Case manager, Volunteer", () => {
@@ -59,7 +65,7 @@ test("sidebar renders the identity block, groups, Settings and Ask t.ROY; never 
   assert.match(html, /aria-current="page"[^>]*>.*?Today/);
   assert.match(html, /Settings/);
   assert.match(html, /Ask t\.ROY/);
-  for (const g of ["Work", "Records", "Organization"]) assert.match(html, new RegExp(`class="org-eyebrow">${g}<`));
+  for (const g of ["My day", "Records"]) assert.match(html, new RegExp(`class="org-eyebrow">${g}<`));
 });
 
 test("lit item: a person's page lights People, /dashboard lights Today while it forwards", () => {
@@ -103,7 +109,7 @@ test("landing: workspace staff go to Today; Caseload choice, old anchors and sta
   assert.equal(orgLanding({ orgRole: "staff", crmV2: true, hash: "", landing: "today", capabilities: notesOnly }), "/dashboard/people");
   assert.ok(!orgNavFor(notesOnly).flatMap((g) => g.items).some((i) => i.label === "Today"), "and Today is not in their nav");
   // N10: Asks follows the ask-to-share switch.
-  assert.ok(!orgNavFor(caps("staff", ["org.client.request_sharing"])).flatMap((g) => g.items).some((i) => i.label === "Asks"));
+  assert.ok(!orgNavFor(caps("staff", ["org.client.request_sharing"])).flatMap((g) => g.items).some((i) => i.label === "Sharing asks"));
 });
 
 test("landing is wired: /dashboard forwards workspace staff, People renders the caseload, the caseload no longer redirects itself", () => {

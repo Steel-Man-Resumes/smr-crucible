@@ -12,6 +12,7 @@ import { useOrgTerms } from "@/lib/use-org-terms";
  * undecided staff see; each person's own choice still wins for them.
  */
 import { useEffect, useState } from "react";
+import { SuggestChangeLink } from "@/components/staff/SuggestChange";
 import {
   CASELOAD_COLUMNS, CASELOAD_COLUMN_LABELS, CASELOAD_SORTS, CASELOAD_SORT_LABELS,
   NOTE_KINDS, NOTE_KIND_LABELS, CLIENT_TABS, CLIENT_TAB_LABELS, LANDINGS, LANDING_LABELS, TODAY_SECTION_KEYS,
@@ -23,7 +24,10 @@ const TODAY_LABELS: Record<string, string> = {
   acknowledgement: "Waiting on an acknowledgement", quiet: "Gone quiet", never_started: "Never started", unassigned: "Not assigned to anyone",
 };
 
-interface State { effective: StaffPrefs; own: Partial<StaffPrefs>; orgDefaults: Partial<StaffPrefs>; canSetOrgDefaults: boolean; quietAfterDays: number }
+interface State { effective: StaffPrefs; own: Partial<StaffPrefs>; orgDefaults: Partial<StaffPrefs>; canSetOrgDefaults: boolean; quietAfterDays: number; locked?: string[] }
+
+/** Said beside a control the organization keeps the same for everyone (customization policy, migration 108). */
+const LOCKED_NOTE = "Your organization keeps this the same for everyone.";
 
 /** `workspace`: the participant pages exist for this org, so their options mean something. */
 export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
@@ -37,12 +41,16 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
 
   async function put(body: Record<string, unknown>, message: string) {
     const res = await fetch("/api/org/prefs", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    if (res.ok) { setState(await res.json()); setSaved(message); } else setSaved("That did not save.");
+    if (res.ok) { setState(await res.json()); setSaved(message); return; }
+    // 403 { error, locked }: the organization keeps that choice the same for everyone; say so in its words.
+    const d = await res.json().catch(() => ({}));
+    setSaved(typeof d.error === "string" && d.error ? d.error : "That did not save.");
   }
   const change = (patch: Partial<StaffPrefs>) => state && put({ own: { ...state.own, ...patch } }, "Saved.");
 
   if (!state) return null;
   const p = state.effective;
+  const locked = new Set(state.locked ?? []);
   const select = "t-focus bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2 w-full sm:w-72";
   const toggleColumn = (c: CaseloadColumn) =>
     change({ caseloadHidden: p.caseloadHidden.includes(c) ? p.caseloadHidden.filter((x) => x !== c) : [...p.caseloadHidden, c] });
@@ -55,10 +63,10 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
       <div className="bg-t-panel border border-t-line p-5 space-y-6">
         <div>
           <label htmlFor="wf-sort" className="block font-medium text-t-white mb-1">Order my caseload by</label>
-          <select id="wf-sort" className={select} value={p.caseloadSort} onChange={(e) => change({ caseloadSort: e.target.value as StaffPrefs["caseloadSort"] })}>
+          <select id="wf-sort" className={select} value={p.caseloadSort} disabled={locked.has("default_view")} onChange={(e) => change({ caseloadSort: e.target.value as StaffPrefs["caseloadSort"] })}>
             {CASELOAD_SORTS.map((k) => <option key={k} value={k}>{CASELOAD_SORT_LABELS[k]}</option>)}
           </select>
-          <p className="text-xs text-t-phos-dim mt-1">You can still re-sort on the page. This is what it opens with.</p>
+          <p className="text-xs text-t-phos-dim mt-1">{locked.has("default_view") ? <>{LOCKED_NOTE} <SuggestChangeLink /></> : "You can still re-sort on the page. This is what it opens with."}</p>
         </div>
 
         <fieldset>
@@ -66,12 +74,12 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
           <div className="flex flex-wrap gap-x-6 gap-y-2">
             {CASELOAD_COLUMNS.map((c) => (
               <label key={c} className="text-sm text-t-phos flex items-center gap-2">
-                <input type="checkbox" className="t-focus" checked={!p.caseloadHidden.includes(c)} onChange={() => toggleColumn(c)} />
+                <input type="checkbox" className="t-focus" checked={!p.caseloadHidden.includes(c)} disabled={locked.has("columns")} onChange={() => toggleColumn(c)} />
                 {CASELOAD_COLUMN_LABELS[c]}
               </label>
             ))}
           </div>
-          <p className="text-xs text-t-phos-dim mt-1">The person&apos;s name always shows.</p>
+          <p className="text-xs text-t-phos-dim mt-1">The person&apos;s name always shows.{locked.has("columns") ? <> {LOCKED_NOTE} <SuggestChangeLink /></> : null}</p>
         </fieldset>
 
         {workspace && (<>
@@ -87,12 +95,13 @@ export function StaffWorkflowSettings({ workspace }: { workspace: boolean }) {
           <div className="flex flex-wrap gap-x-6 gap-y-2">
             {TODAY_SECTION_KEYS.map((k) => (
               <label key={k} className="text-sm text-t-phos flex items-center gap-2">
-                <input type="checkbox" className="t-focus" checked={!p.todayHidden.includes(k)}
+                <input type="checkbox" className="t-focus" checked={!p.todayHidden.includes(k)} disabled={locked.has("today_hide")}
                   onChange={() => change({ todayHidden: p.todayHidden.includes(k) ? p.todayHidden.filter((x) => x !== k) : [...p.todayHidden, k] })} />
                 {TODAY_LABELS[k]}
               </label>
             ))}
           </div>
+          {locked.has("today_hide") && <p className="text-xs text-t-phos-dim mt-1">{LOCKED_NOTE} <SuggestChangeLink /></p>}
         </fieldset>
         <div>
           <label htmlFor="wf-tab" className="block font-medium text-t-white mb-1">When I open a {terms.participant}, start on</label>

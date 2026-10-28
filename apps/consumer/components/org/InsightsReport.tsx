@@ -13,6 +13,8 @@ import React from "react";
 import { OrgMark } from "@/components/org/OrgMark";
 import { PERIOD_LABEL, endedBeforeNote, stationRows } from "@/lib/org-insights-report";
 import { DEMO_SAMPLE_LINE } from "@/lib/demo-line";
+import { OutboundBrandLine } from "@/components/brand/OutboundBrandLine";
+import { OUTBOUND_CSV_HELP, orgOutboundBrand, type OutboundBrand } from "@crucible/core/src/orgOutboundBrandShared";
 
 export interface InsightsData {
   asOf: string; quietAfterDays: number;
@@ -61,9 +63,12 @@ const H = ({ children }: { children: React.ReactNode }) => (
   <h2 className="text-xs font-semibold uppercase tracking-wide text-t-amber-bright mb-3 pb-2 border-b border-t-line">{children}</h2>
 );
 
-export function InsightsReport({ d, orgName, orgId, hasLogo, canExport, onPrint, generatedAt }: {
+export function InsightsReport({ d, orgName, orgId, hasLogo, canExport, onPrint, generatedAt, outboundBrand }: {
   d: InsightsData; orgName: string; orgId: string; hasLogo: boolean; canExport: boolean; onPrint?: () => void; generatedAt?: string;
+  /** Migration 107: co-branded with Steel Man Resumes unless the organization is exclusive. Absent: co-branded. */
+  outboundBrand?: OutboundBrand;
 }) {
+  const brand = outboundBrand ?? orgOutboundBrand({ name: orgName });
   const n = d.people.sharingProgress;
   const overN = `of ${n} sharing progress`;
   const pct = (x: number) => (n ? `${Math.round((x / n) * 100)}% of ${n} sharing progress` : `Of ${n} sharing progress`);
@@ -84,7 +89,7 @@ export function InsightsReport({ d, orgName, orgId, hasLogo, canExport, onPrint,
             <span className="block text-xs">Insights · {PERIOD_LABEL}, as of {longDay(d.asOf)}</span>
           </span>
         </span>
-        <span className="text-xs">with Steel Man Resumes</span>
+        <OutboundBrandLine brand={brand} />
       </header>
       {isDemo(orgName) && <p className="ins-demo hidden print:block text-xs">{DEMO_PRINT_LINE}</p>}
 
@@ -95,7 +100,7 @@ export function InsightsReport({ d, orgName, orgId, hasLogo, canExport, onPrint,
           <span className="text-xs border border-t-line rounded-[3px] px-2 py-0.5 text-t-phos-dim" title="A date range comes later. For now every figure covers everything on record.">{PERIOD_LABEL}</span>
         </span>
         <span className="flex gap-4">
-          {canExport && <a href="/api/org/insights?format=csv" className="t-focus text-xs font-semibold text-t-amber-bright underline underline-offset-4 hover:text-t-amber">Download for a funder (CSV)</a>}
+          {canExport && <a href="/api/org/insights?format=csv" title={OUTBOUND_CSV_HELP} className="t-focus text-xs font-semibold text-t-amber-bright underline underline-offset-4 hover:text-t-amber">Download for a funder (CSV)</a>}
           <button type="button" onClick={onPrint} data-tour="crm-insights-print" className="t-focus text-xs text-t-phos underline underline-offset-4 hover:text-t-white">Print report</button>
         </span>
       </div>

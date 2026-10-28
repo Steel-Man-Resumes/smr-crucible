@@ -32,8 +32,8 @@ function spy<T>(answer: T) {
 }
 
 describe("who may", () => {
-  it("manage: the owner only, never a platform admin acting for the org", () => {
-    assert.deepEqual([canManage(owner), canManage(admin), canManage(staff), canManage(platform)], [true, false, false, false]);
+  it("manage: the owner and org admins (Troy 2026-10-27), never staff or a platform admin acting for the org", () => {
+    assert.deepEqual([canManage(owner), canManage(admin), canManage(staff), canManage(platform)], [true, true, false, false]);
   });
   it("enroll: every role except a volunteer and a platform admin", () => {
     assert.deepEqual([canEnroll(owner), canEnroll(admin), canEnroll(staff), canEnroll(volunteer), canEnroll(platform)], [true, true, true, false, false]);
@@ -57,7 +57,7 @@ describe("profile", () => {
   });
   it("PATCH refuses non-managers before touching the database, and passes only known fields", async () => {
     const updateOrgProfile = spy({ ok: true as const, profile: defaultOrgProfile(ORG) });
-    for (const who of [admin, staff, platform]) assert.equal((await handleProfilePatch(req({ terms: {} }), who, { updateOrgProfile })).status, 403);
+    for (const who of [staff, platform]) assert.equal((await handleProfilePatch(req({ terms: {} }), who, { updateOrgProfile })).status, 403);
     assert.equal(updateOrgProfile.calls.length, 0);
     const r = await handleProfilePatch(req({ terms: { site: "center" }, sneaky: 1, setupCompletedAt: "x" }), owner, { updateOrgProfile });
     assert.equal(r.status, 200);
@@ -101,9 +101,9 @@ describe("structure", () => {
     assert.equal(st.staff.length, 0); assert.equal(st.canManage, false); assert.equal(st.canEnroll, true);
     assert.equal((await handleStructureGet(staff, { getOrgStructure: async () => null })).status, 403);
   });
-  it("POST: every action is refused for staff, an admin and a platform admin, with no database call", async () => {
+  it("POST: every action is refused for staff and a platform admin, with no database call", async () => {
     const d = deps();
-    for (const who of [staff, admin, platform]) for (const action of ["create_unit", "close_unit", "set_member"]) {
+    for (const who of [staff, platform]) for (const action of ["create_unit", "close_unit", "set_member"]) {
       assert.equal((await handleStructurePost(req({ action, unitId: "u", userId: "s" }), who, d)).status, 403);
     }
     assert.equal(Object.values(d).reduce((n, f) => n + f.calls.length, 0), 0);

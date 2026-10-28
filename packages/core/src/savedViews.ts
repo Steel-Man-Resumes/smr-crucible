@@ -14,6 +14,8 @@ import {
   type CaseloadLayout, type LayoutRole, type TodayLayout, type ViewDefinition, type ViewSurface,
 } from "./savedViewsShared";
 import { normalizeStaffPrefs } from "./staffPrefsShared";
+import { getMyCustomizationPolicy } from "./customizationPolicy";
+import { POLICY_LOCKED_TEXT, SUGGEST_CHANGE_LINE } from "./customizationPolicyShared";
 
 export * from "./savedViewsShared";
 
@@ -21,6 +23,7 @@ const scopeOf = (a: OrgActor): OrgScope => ({ orgId: a.orgId, userId: a.userId, 
 const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** Shared views and role layouts: people who manage the organization's settings (owner and org admins, Troy 2026-10-27). */
 export const canManageSharedViews = (a: OrgActor) => !a.viaPlatformAdmin && a.capabilities.has("org.settings.manage");
 const canUseViews = (a: OrgActor) => !a.viaPlatformAdmin && a.capabilities.has("org.cohort.view");
 
@@ -45,19 +48,30 @@ function viewFromRow(r: Record<string, unknown>): SavedViewRecord | null {
 }
 const VIEW_COLS = `id, surface, name, owner_user_id, role_default, position, definition`;
 
-/** Your own views and the organization's shared ones, for one list. */
+/**
+ * Your own views and the organization's shared ones, for one list. The
+ * organization's customization policy (108) applies on READ: with personal
+ * views turned off for your role, yours stay stored but are not listed; with
+ * your own columns turned off, a personal view keeps its filters and sort but
+ * shows the usual columns. Turning the switch back on brings them back.
+ */
 export async function listSavedViews(actor: OrgActor, surface: ViewSurface): Promise<SavedViewRecord[]> {
   if (!canUseViews(actor) || !isViewSurface(surface)) return [];
   try {
-    const [rows] = await runScoped<[Record<string, unknown>[]]>(scopeOf(actor), (sql) => [
-      run(sql)(
-        `SELECT ${VIEW_COLS} FROM saved_view
-          WHERE access_code_id = $1::uuid AND surface = $2 AND (owner_user_id IS NULL OR owner_user_id = $3::uuid)
-          ORDER BY (owner_user_id IS NULL) DESC, position, lower(name)`,
-        [actor.orgId, surface, actor.userId],
-      ),
+    const [[rows], allowed] = await Promise.all([
+      runScoped<[Record<string, unknown>[]]>(scopeOf(actor), (sql) => [
+        run(sql)(
+          `SELECT ${VIEW_COLS} FROM saved_view
+            WHERE access_code_id = $1::uuid AND surface = $2 AND (owner_user_id IS NULL OR owner_user_id = $3::uuid)
+            ORDER BY (owner_user_id IS NULL) DESC, position, lower(name)`,
+          [actor.orgId, surface, actor.userId],
+        ),
+      ]),
+      getMyCustomizationPolicy(actor),
     ]);
-    return rows.map(viewFromRow).filter((v): v is SavedViewRecord => !!v);
+    return rows.map(viewFromRow).filter((v): v is SavedViewRecord => !!v)
+      .filter((v) => v.ownerUserId === null || allowed.personal_views)
+      .map((v) => (v.ownerUserId !== null && !allowed.columns ? { ...v, definition: { ...v.definition, columns: null } } : v));
   } catch (err) {
     if (isCustomizationTableMissing(err)) return [];
     throw err;
@@ -86,6 +100,10 @@ export async function createSavedView(actor: OrgActor, input: ViewInput): Promis
   const roleDefault = shared && isLayoutRole(input.roleDefault) ? input.roleDefault : null;
   const definition = normalizeViewDefinition(input.definition);
   const surface = input.surface;
+  if (!shared) {
+    const refused = await personalViewRefusal(actor, definition);
+    if (refused) return { ok: false, error: refused };
+  }
   try {
     const existing = await listSavedViews(actor, surface);
     const mine = existing.filter((v) => (shared ? v.ownerUserId === null : v.ownerUserId === actor.userId));
@@ -109,8 +127,22 @@ export async function updateSavedView(actor: OrgActor, id: string, patch: { name
   if (!canUseViews(actor) || !UUID.test(id)) return { ok: false, error: "No such view." };
   const name = patch.name === undefined ? null : cleanViewName(patch.name);
   if (patch.name !== undefined && !name) return { ok: false, error: "Give the view a name." };
-  const definition = patch.definition === undefined ? null : JSON.stringify(normalizeViewDefinition(patch.definition));
+  const normalized = patch.definition === undefined ? null : normalizeViewDefinition(patch.definition);
+  const definition = normalized === null ? null : JSON.stringify(normalized);
   const setRole = patch.roleDefault !== undefined;
+  // The policy applies to your own views only (shared views are a manager's,
+  // and the update below only reaches them for a manager).
+  try {
+    const [own] = await runScoped<[{ owner_user_id: string | null }[]]>(scopeOf(actor), (sql) => [
+      run(sql)(`SELECT owner_user_id FROM saved_view WHERE id = $2::uuid AND access_code_id = $1::uuid`, [actor.orgId, id]),
+    ]);
+    if (own[0]?.owner_user_id) {
+      const refused = await personalViewRefusal(actor, normalized ?? { columns: null, filters: [], sort: null, groupBy: null });
+      if (refused) return { ok: false, error: refused };
+    }
+  } catch (err) {
+    return { ok: false, error: viewError(err) };
+  }
   const roleDefault = isLayoutRole(patch.roleDefault) ? patch.roleDefault : null;
   try {
     // A shared view is changed only by a manager (the policy says so too);
@@ -132,8 +164,35 @@ export async function updateSavedView(actor: OrgActor, id: string, patch: { name
   }
 }
 
+/**
+ * Why a personal view may not be saved as asked, or null. Personal views need
+ * `personal_views`; a personal view that picks its own columns needs `columns`.
+ */
+export async function personalViewPolicyRefusal(actor: OrgActor, def: ViewDefinition): Promise<string | null> {
+  return personalViewRefusal(actor, def);
+}
+async function personalViewRefusal(actor: OrgActor, def: ViewDefinition): Promise<string | null> {
+  let allowed;
+  try { allowed = await getMyCustomizationPolicy(actor, { forWrite: true }); }
+  catch { return "That view did not save. Try again."; }
+  if (!allowed.personal_views) return `${POLICY_LOCKED_TEXT.personal_views} ${SUGGEST_CHANGE_LINE}`;
+  if (!allowed.columns && def.columns !== null) return `${POLICY_LOCKED_TEXT.columns} ${SUGGEST_CHANGE_LINE}`;
+  return null;
+}
+
 export async function deleteSavedView(actor: OrgActor, id: string): Promise<boolean> {
   if (!canUseViews(actor) || !UUID.test(id)) return false;
+  // With personal views turned off for this role (108), a personal view is
+  // neither listed nor removed: it stays stored, unchanged, until the switch
+  // opens again (and its owner sees it, and its Undo, again).
+  try {
+    const [own] = await runScoped<[{ owner_user_id: string | null }[]]>(scopeOf(actor), (sql) => [
+      run(sql)(`SELECT owner_user_id FROM saved_view WHERE id = $2::uuid AND access_code_id = $1::uuid`, [actor.orgId, id]),
+    ]);
+    if (own[0]?.owner_user_id && !(await getMyCustomizationPolicy(actor, { forWrite: true })).personal_views) return false;
+  } catch {
+    return false;
+  }
   try {
     const [rows] = await runScoped<[{ id: string }[]]>(scopeOf(actor), (sql) => [
       run(sql)(

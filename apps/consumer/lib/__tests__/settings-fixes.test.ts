@@ -226,7 +226,7 @@ test('S5: the route and the page read the allowance, not getUserDailyLimit and t
   assert.match(route, /buildUsageView\(/);
   assert.doesNotMatch(route, /getUserDailyUsage/);
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
-  assert.match(page, /<UsageCard usage=\{usage\} \/>/);
+  assert.match(page, /<UsageCard usage=\{usage\} staff=\{isOrgStaff\} \/>/);
   assert.doesNotMatch(page, /Resets at midnight\./);
 });
 

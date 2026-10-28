@@ -11,6 +11,7 @@
  */
 import type { CustomFieldDef, CustomFieldType } from "./customFieldsShared";
 import { CASELOAD_COLUMNS, CASELOAD_COLUMN_LABELS, CASELOAD_SORTS, TODAY_SECTION_KEYS, type SavedView as LegacySavedView, type TodaySectionKey } from "./staffPrefsShared";
+import { normalizeGridLayout, type GridLayout } from "./viewLayoutShared";
 
 export const VIEW_SURFACES = ["caseload", "today", "tasks", "outcomes", "referrals", "enrollments"] as const;
 export type ViewSurface = (typeof VIEW_SURFACES)[number];
@@ -117,6 +118,13 @@ export interface ViewDefinition {
   /** A field, or a preset sort ("needs_attention" ...). null = the default sort. */
   sort: ViewSort | null;
   groupBy: string | null;
+  /**
+   * The grid's look saved with the view (widths, frozen columns, row height,
+   * summary row): where the view starts for everyone who opens it. Each
+   * person's own resizing is kept in their prefs (viewLayouts), never here,
+   * unless they save the view. null = the plain look.
+   */
+  grid?: GridLayout | null;
 }
 export const EMPTY_VIEW: ViewDefinition = { columns: null, filters: [], sort: null, groupBy: null };
 
@@ -161,7 +169,15 @@ export function normalizeViewDefinition(raw: unknown): ViewDefinition {
     if (typeof s.field === "string" && (isViewFieldId(s.field) || PRESET_SORTS.includes(s.field))) sort = { field: s.field, dir: s.dir === "desc" ? "desc" : "asc" };
   }
   const groupBy = isViewFieldId(r.groupBy) && r.groupBy !== "name" ? r.groupBy : null;
-  return { columns, filters, sort, groupBy };
+  const out: ViewDefinition = { columns, filters, sort, groupBy };
+  if (r.grid && typeof r.grid === "object" && !Array.isArray(r.grid)) out.grid = normalizeGridLayout(r.grid);
+  return out;
+}
+
+/** Two definitions mean the same arrangement (the grid's look is not part of it: resizing never makes a view "changed"). */
+export function sameArrangement(a: ViewDefinition, b: ViewDefinition): boolean {
+  const strip = (d: ViewDefinition) => { const n = normalizeViewDefinition(d); return JSON.stringify({ columns: n.columns, filters: n.filters, sort: n.sort, groupBy: n.groupBy }); };
+  return strip(a) === strip(b);
 }
 
 /** A saved name: one line, 1 to 60 characters. */
@@ -338,7 +354,10 @@ export function resolveTodaySections<K extends string>(all: readonly K[], layout
  * the org set one, else every built-in, minus what the person hid for
  * themselves (Settings, My workflow).
  */
-export function defaultCaseloadColumns(layout: CaseloadLayout | null, personalHidden: readonly string[]): string[] {
+export function defaultCaseloadColumns(layout: CaseloadLayout | null, personalHidden: readonly string[], personalColumns: readonly string[] | null = null): string[] {
+  // A person's own column list (prefs.caseloadColumns, when the organization
+  // lets them choose) wins over the role's layout.
+  if (personalColumns && personalColumns.length) return personalColumns.filter((c) => c !== "name");
   const base = layout && layout.columns.length ? layout.columns : [...BUILTIN_CASELOAD_COLUMNS];
   return base.filter((c) => !personalHidden.includes(c));
 }
@@ -347,7 +366,10 @@ export function defaultCaseloadColumns(layout: CaseloadLayout | null, personalHi
  * Which view opens first for a person: the one they chose last (if it still
  * exists), else a shared view set as their role's default, else none.
  */
-export function initialViewId(views: { id: string; ownerUserId: string | null; roleDefault: string | null; position: number }[], role: string, lastChosen: string | null): string | null {
+export function initialViewId(views: { id: string; ownerUserId: string | null; roleDefault: string | null; position: number }[], role: string, lastChosen: string | null, chosenDefault: string | null = null): string | null {
+  // An explicit "open People with this view" (prefs.defaultView) comes first.
+  if (chosenDefault === "none") return null;
+  if (chosenDefault && views.some((v) => v.id === chosenDefault)) return chosenDefault;
   if (lastChosen === "" ) return null;
   if (lastChosen && views.some((v) => v.id === lastChosen)) return lastChosen;
   const def = views.filter((v) => v.ownerUserId === null && v.roleDefault === role).sort((a, b) => a.position - b.position)[0];

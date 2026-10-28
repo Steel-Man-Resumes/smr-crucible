@@ -21,6 +21,7 @@
  * reload.
  */
 
+import { useEffectiveRole } from "@/components/RoleProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { TBtn } from "@crucible/consumer-ui";
@@ -63,6 +64,8 @@ interface AvatarAssetView {
 
 export function AvatarSettingsSection() {
   const { data: session } = useSession();
+  // Staff seats build no resume (staff pass S2, walk T03).
+  const staff = !!useEffectiveRole()?.orgRole;
   const fallbackInitial = (session?.user?.name || session?.user?.email || "?")
     .trim()
     .charAt(0)
@@ -253,7 +256,7 @@ export function AvatarSettingsSection() {
       <h3 className="font-semibold text-t-white mb-1">Your picture</h3>
       <p className="text-sm text-t-phos-dim mb-4">
         Use a simple drawing or a photo for your account. This picture is only for
-        your account. It is never automatically added to your resume.
+        your account.{staff ? "" : " It is never automatically added to your resume."}
       </p>
 
       {/* ---- Illustrated builder ---- */}
@@ -338,8 +341,7 @@ export function AvatarSettingsSection() {
         <h4 className="font-semibold text-t-white mb-1">Use a photo</h4>
         <p className="text-sm text-t-phos-dim mb-3">
           Add a photo of yourself. It is cropped to a square on your device before
-          it is sent, kept encrypted, and only you can open it. It is never added
-          to your resume.
+          it is sent, kept encrypted, and only you can open it.{staff ? "" : " It is never added to your resume."}
         </p>
 
         <div className="flex items-center gap-3 flex-wrap">

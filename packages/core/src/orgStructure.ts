@@ -22,7 +22,7 @@ import {
   DEFAULT_TIMEZONE, ENROLLABLE_KINDS, ENROLLMENT_STATUS_LABELS, PROGRAM_ID_PATTERN, START_STATUSES, UNIT_NAME_MAX,
   canMoveEnrollment, checkUnitTree, labelProblem, LABEL_PROBLEM, DONE_ENROLLMENT_STATUSES, defaultOrgProfile, flattenUnitTree, isEnrollmentStatus, isOrgType,
   isStatusReason, isTimezoneLike, isUnitKind, isUnitRole, normalizeTerms, reasonsFor, resolveOrgModules, resolveOrgTerms,
-  ORG_MODULES,
+  ORG_MODULES, storedOrgModules,
   type EnrollmentStatus, type OrgModules, type OrgProfile, type OrgTerms, type OrgType, type StatusReason,
   type UnitDraft, type UnitKind, type UnitRole,
 } from "./orgStructureShared";
@@ -75,6 +75,8 @@ export function explainStructureError(err: unknown): { ok: false; error: string;
   if (isMissingTable(err)) return NOT_READY;
   const code = (err as { code?: string })?.code;
   const message = String((err as { message?: string })?.message ?? "");
+  // 109 (review round 2): the AI switch is the owner's alone.
+  if (/ai_assist_owner_only/.test(message)) return { ok: false, error: "Only the owner turns t.ROY on or off for your organization.", status: 403 };
   if (code === "42501" || /row-level security|permission denied/i.test(message)) return REFUSED;
   if (code === "23505") {
     if (/enrollment_one_open/.test(message)) return { ok: false, error: "They are already in that one. Change the status on the one they have.", status: 409 };
@@ -279,6 +281,17 @@ function storedTerms(terms: OrgTerms): Record<string, string> {
   return normalizeTerms(terms).terms as Record<string, string>;
 }
 
+/**
+ * t.ROY for staff (modules.ai_assist) spends the organization's AI money, and
+ * AI cost is the owner's (org.costs.view). So since org admins also manage
+ * settings (2026-10-27), only the OWNER turns it on or off; an admin may
+ * rename the organization, change words and the other modules.
+ */
+export const AI_SWITCH_OWNER_ONLY = "Only the organization's owner turns t.ROY for staff on or off, because AI cost is the owner's.";
+export function aiSwitchRefused(actor: Pick<OrgActor, "role">, current: { modules: { ai_assist: boolean } }, next: { modules: { ai_assist: boolean } }): boolean {
+  return actor.role !== "owner" && current.modules.ai_assist !== next.modules.ai_assist;
+}
+
 /** Change type, name, time zone, words or modules (org.settings.manage). */
 export async function updateOrgProfile(actor: OrgActor, patch: ProfilePatch): Promise<StructureResult<{ profile: OrgProfile }>> {
   if (!canManageStructure(actor)) return REFUSED;
@@ -286,10 +299,11 @@ export async function updateOrgProfile(actor: OrgActor, patch: ProfilePatch): Pr
   const checked = applyProfilePatch(current, patch);
   if (!checked.ok) return bad(checked.error);
   const n = checked.next;
+  if (aiSwitchRefused(actor, current, n)) return bad(AI_SWITCH_OWNER_ONLY);
   try {
     const [rows] = await runScoped<[{ access_code_id: string }[]]>(scopeOf(actor), (sql) => [
       run(sql)(ORG_STRUCTURE_SQL.upsertProfile, [actor.orgId, n.orgType, n.displayName, n.timezone,
-        JSON.stringify(storedTerms(n.terms)), JSON.stringify(n.modules), false]),
+        JSON.stringify(storedTerms(n.terms)), JSON.stringify(storedOrgModules(n.modules)), false]),
     ]);
     if (!rows.length) return REFUSED;
     return { ok: true, profile: { ...current, ...n, saved: true } };
@@ -312,6 +326,7 @@ export async function completeOrgSetup(actor: OrgActor, input: SetupInput):
   const checked = applyProfilePatch(current, input);
   if (!checked.ok) return bad(checked.error);
   const n = checked.next;
+  if (aiSwitchRefused(actor, current, n)) return bad(AI_SWITCH_OWNER_ONLY);
 
   let units: UnitDraft[] = [];
   if (input.units !== undefined && input.units !== null) {
@@ -325,7 +340,7 @@ export async function completeOrgSetup(actor: OrgActor, input: SetupInput):
   try {
     const out = await runScoped<unknown[][]>(scopeOf(actor), (sql) => [
       run(sql)(ORG_STRUCTURE_SQL.upsertProfile, [actor.orgId, n.orgType, n.displayName, n.timezone,
-        JSON.stringify(storedTerms(n.terms)), JSON.stringify(n.modules), true]),
+        JSON.stringify(storedTerms(n.terms)), JSON.stringify(storedOrgModules(n.modules)), true]),
       ...flat.map((u, i) => run(sql)(ORG_STRUCTURE_SQL.insertSetupUnit, [
         actor.orgId, ids[i], u.parentIndex === null ? null : ids[u.parentIndex], u.kind, u.name, ids,
       ])),

@@ -23,6 +23,9 @@ export * from './aiSkillRun';
 export * from './staffPrefs';
 export * from './customFields';
 export * from './savedViews';
+export * from './customizationPolicy';
+export * from './viewActions';
+export * from './viewLayoutShared';
 export * from './caseloadExportShared';
 export * from './orgAccess';
 export * from './staffInvites';
@@ -38,6 +41,12 @@ export * from './orgReferrals';
 export * from './orgDrafts';
 export * from './orgSearch';
 export * from './orgTimeline';
+// Team talk (staff side lane S4, migration 109): comments, inbox, task handoff, change requests, note review.
+export * from './teamTalkShared';
+export * from './teamComments';
+export * from './staffInbox';
+export * from './orgChangeRequests';
+export * from './noteReview';
 export * from './forgeSession';
 export * from './refineryArtifact';
 export * from './artifactRevision';
@@ -128,3 +137,10 @@ export * from './directoryPublication';
 export * from './resourceList';
 export * from './directoryCoverage';
 export * from './packageDelivery';
+// Handoffs to a participant and connections the client missed (110, staff pass S5).
+export * from './staffHandoffShared';
+export * from './staffHandoff';
+export * from './staffConnections';
+// Staff rewards (111) and staff directory contributions (112), lane S6.
+export * from './staffRewards';
+export * from './directoryContribution';

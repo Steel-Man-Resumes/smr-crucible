@@ -11,6 +11,9 @@
  * Nothing here sends anything to anyone.
  */
 import { useCallback, useEffect, useState } from "react";
+import { GiveKudos } from "@/components/org/rewards/GiveKudos";
+import { ListingContributeMenu } from "@/components/org/directory/ListingContributeMenu";
+import { askListingNudge } from "@/lib/listing-nudge-client";
 import Link from "next/link";
 import { REFERRAL_STATUS_LABELS, REFERRAL_ACTION_LABELS, REFERRAL_TRANSITIONS, referralNeedsReason, isReferralOverdue, type ReferralStatus, type ReferralToKind } from "@crucible/core/src/orgWorkflowShared";
 import { useAutosaveDraft } from "@/lib/use-autosave-draft";
@@ -101,6 +104,10 @@ export function ReferralCard({ r, canWrite, owners, showPerson, consentLine, me,
             {r.due_on ? ` · ${overdue ? "was due" : "next look"} ${day(r.due_on)}` : ""}
             {` · made ${day(r.created_at)}`}{r.created_by_name ? ` by ${r.created_by_name}` : ""}
           </p>
+          {/* S6: thank the colleague who owns this referral (never yourself). */}
+          {me && r.owner_staff_id && r.owner_staff_id !== me && r.owner_active !== false && (
+            <div className="mt-1"><GiveKudos toUserId={r.owner_staff_id} workKind="referral" workId={r.id} compact /></div>
+          )}
         </div>
         <p className={`text-xs px-2 py-1 border ${r.status === "closed" ? "border-t-line text-t-phos-dim" : overdue ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-white"}`}>
           {REFERRAL_STATUS_LABELS[r.status]}{r.status === "closed" ? (r.delivered_at ? ", help was given" : ", no help recorded") : ""}{overdue ? " · past due" : ""}
@@ -187,6 +194,8 @@ function NewReferral({ clientId, first, userId, consentLine, onMade }: { clientI
   const [send, setSend] = useState(true);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  // S6: after a referral to a listed place, one line asking whether it still checked out.
+  const [nudge, setNudge] = useState<{ id: string; name: string; line: string } | null>(null);
   const draft = useAutosaveDraft({ userId, clientId, kind: "referral_reason", value: reason, setValue: setReason });
 
   useEffect(() => {
@@ -204,7 +213,10 @@ function NewReferral({ clientId, first, userId, consentLine, onMade }: { clientI
     setBusy(false);
     if (!res.ok) { setMsg({ kind: "err", text: res.error ?? "That did not save." }); return; }
     draft.clear();
+    const used = kind === "directory_resource" ? picked : null;
     setReason(""); setToName(""); setPicked(null); setQ("");
+    setNudge(null);
+    if (used) askListingNudge("resource", used.service_id).then((line) => { if (line) setNudge({ id: used.service_id, name: used.label, line }); });
     setMsg({ kind: "ok", text: res.note || "Referral saved. It is on the list below with its next date." });
     onMade();
   }
@@ -260,6 +272,7 @@ function NewReferral({ clientId, first, userId, consentLine, onMade }: { clientI
       )}
       <button disabled={!ready} className="t-focus mt-3 min-h-touch bg-t-amber px-4 text-sm font-semibold text-[#14100a] disabled:opacity-50">{busy ? "Saving..." : "Save referral"}</button>
       {msg && <p role={msg.kind === "err" ? "alert" : "status"} className={`mt-2 text-xs ${msg.kind === "err" ? "text-t-amber-bright" : "text-t-phos"}`}>{msg.text}</p>}
+      {nudge && <div className="mt-2"><ListingContributeMenu kind="resource" id={nudge.id} name={nudge.name} nudgeLine={nudge.line} /></div>}
     </form>
   );
 }
@@ -293,7 +306,7 @@ export function ReferralsPage() {
   const { data, failed, reload } = useReferrals({ filter, ...(mine ? { mine: "1" } : {}) });
   return (
     <div className="max-w-5xl mx-auto px-4 py-6">
-      <h1 className="text-xl font-semibold text-t-white">Referrals</h1>
+      <h1 className="text-xl font-semibold text-t-white" data-tour="crm-referrals-head">Referrals</h1>
       <p className="mt-1 mb-4 text-sm text-t-phos-dim">Where people were sent for help, who is following up, and what came of it. A referral is not done until someone records what happened.</p>
       <div role="group" aria-label="Show" className="mb-3 flex flex-wrap gap-2">
         {FILTERS.map((f) => (

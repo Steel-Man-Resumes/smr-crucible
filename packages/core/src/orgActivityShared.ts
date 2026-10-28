@@ -12,10 +12,12 @@
  * invite, else none.
  */
 
-/** Kinds of record a row can be about. The database CHECK holds the same list. */
+/** Kinds of record a row can be about. The database CHECK holds the same list (102, widened by later migrations: 109). */
 export const ACTIVITY_ENTITIES = [
   "note", "task", "outcome", "retention", "assignment", "sharing", "invite", "staff", "org",
   "enrollment", "unit", "referral", "custom_field", "view",
+  // Team talk (lane S4, migration 109): a comment's summary never holds its body.
+  "comment", "change_request",
 ] as const;
 export type ActivityEntity = (typeof ACTIVITY_ENTITIES)[number];
 
@@ -34,6 +36,8 @@ export const ACTIVITY_ENTITY_LABELS: Record<ActivityEntity, string> = {
   referral: "Referrals",
   custom_field: "Custom fields",
   view: "Saved views",
+  comment: "Team comments",
+  change_request: "Change requests",
 };
 
 export function isActivityEntity(v: unknown): v is ActivityEntity {

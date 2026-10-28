@@ -15,7 +15,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  DELEGABLE_CAPABILITIES,
   ORG_CAPABILITIES,
+  STAFF_PRESETS,
   ORG_STAFF_ROLES,
   capabilitiesForRole,
   cohortReach,
@@ -36,12 +38,20 @@ describe("org role bundles", () => {
     assert.equal(cohortReach(computeOrgCapabilities("org_admin")), "all");
   });
 
-  it("reserves money and settings for the owner", () => {
-    for (const cap of ["org.costs.view", "org.settings.manage"] as const) {
-      assert.equal(computeOrgCapabilities("staff").has(cap), false);
-      assert.equal(computeOrgCapabilities("org_admin").has(cap), false);
-      assert.equal(computeOrgCapabilities("owner").has(cap), true);
-    }
+  it("reserves money for the owner", () => {
+    assert.equal(computeOrgCapabilities("staff").has("org.costs.view"), false);
+    assert.equal(computeOrgCapabilities("org_admin").has("org.costs.view"), false);
+    assert.equal(computeOrgCapabilities("owner").has("org.costs.view"), true);
+  });
+
+  it("lets owners and org admins manage settings (structure, fields, layouts), never staff (Troy 2026-10-27)", () => {
+    assert.equal(computeOrgCapabilities("staff").has("org.settings.manage"), false);
+    assert.equal(computeOrgCapabilities("org_admin").has("org.settings.manage"), true);
+    assert.equal(computeOrgCapabilities("owner").has("org.settings.manage"), true);
+    // Not delegable: a staff member cannot be handed it one at a time.
+    assert.equal(DELEGABLE_CAPABILITIES.some((d) => d.capability === "org.settings.manage"), false);
+    // The volunteer preset never carries it either.
+    assert.equal(computeOrgCapabilities("staff", [], STAFF_PRESETS.volunteer.denies).has("org.settings.manage"), false);
   });
 
   it("grants impersonation to nobody by default", () => {
