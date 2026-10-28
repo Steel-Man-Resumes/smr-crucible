@@ -180,7 +180,7 @@ export function duplicateReasons(
 
 /* ------------------------------------------------------------------- timeline -- */
 
-export const TIMELINE_TYPES = ["note", "correction", "task", "ask", "outcome", "retention", "enrollment", "referral", "activity"] as const;
+export const TIMELINE_TYPES = ["note", "correction", "task", "ask", "outcome", "retention", "enrollment", "referral", "comment", "activity"] as const;
 export type TimelineType = (typeof TIMELINE_TYPES)[number];
 
 /** Filter chips: one per kind of work, in the order staff think of them. */
@@ -191,6 +191,8 @@ export const TIMELINE_CHIPS: { key: string; label: string; types: TimelineType[]
   { key: "outcomes", label: "Jobs and check-ins", types: ["outcome", "retention"] },
   { key: "referrals", label: "Referrals", types: ["referral"] },
   { key: "enrollments", label: "Programs", types: ["enrollment"] },
+  // Team talk (lane S4, migration 109): staff comments about the person. Never shown to them.
+  { key: "team", label: "Team talk", types: ["comment"] },
   { key: "activity", label: "Other changes", types: ["activity"] },
 ];
 

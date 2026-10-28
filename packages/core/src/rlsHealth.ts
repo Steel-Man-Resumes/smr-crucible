@@ -98,6 +98,17 @@ export const RLS_PROTECTED_TABLES = [
   // change log (owner-only, append-only but for "undone")
   "org_customization_policy",
   "view_change_log",
+  // Team talk (migration 109, staff side S4): comments and their earlier
+  // wordings (reach-restricted), each person's own inbox, change requests and
+  // replies (asker and managers), note reviews (reach-restricted)
+  "team_comment",
+  "team_comment_version",
+  "staff_inbox_item",
+  "org_change_request",
+  "org_change_reply",
+  "org_change_request_event",
+  "note_review",
+  "note_review_event",
 ] as const;
 
 export interface RlsHealth {

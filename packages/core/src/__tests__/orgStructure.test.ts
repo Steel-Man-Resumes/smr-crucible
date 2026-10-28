@@ -40,7 +40,10 @@ describe("the TypeScript lists match 103", () => {
   });
   it("word keys and modules the profile guard accepts", () => {
     assert.deepEqual(sqlList("IF k NOT IN ('participant'"), [...TERM_KEYS]);
-    assert.deepEqual(sqlList("IF k NOT IN ('programs'"), [...ORG_MODULES]);
+    // 109 (staff side S4) adds note_review to the guard's list by rewriting the function body.
+    const SQL109 = readFileSync(join(__dirname, "..", "..", "migrations", "109_team_talk.sql"), "utf8");
+    assert.ok(SQL109.includes("EXECUTE replace(v, '''ai_assist''', '''ai_assist'', ''note_review''')"));
+    assert.deepEqual([...sqlList("IF k NOT IN ('programs'"), "note_review"], [...ORG_MODULES]);
   });
   it("enrollable kinds", () => {
     assert.deepEqual(sqlList("IF v_unit.kind NOT IN"), [...ENROLLABLE_KINDS]);
@@ -112,7 +115,7 @@ describe("words", () => {
 
 describe("modules and profile", () => {
   it("modules default on except sites and teams", () => {
-    assert.deepEqual({ ...DEFAULT_ORG_MODULES }, { programs: true, sites: false, teams: false, referrals: true, outcomes: true, custom_fields: true, saved_views: true, ai_assist: true });
+    assert.deepEqual({ ...DEFAULT_ORG_MODULES }, { programs: true, sites: false, teams: false, referrals: true, outcomes: true, custom_fields: true, saved_views: true, ai_assist: true, note_review: false });
     assert.equal(resolveOrgModules({ sites: true, programs: "yes", junk: true }).sites, true);
     assert.equal(resolveOrgModules({ programs: "yes" }).programs, true, "a non-boolean keeps the default");
   });

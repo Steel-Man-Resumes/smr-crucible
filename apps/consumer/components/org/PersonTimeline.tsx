@@ -13,7 +13,7 @@ import { TIMELINE_CHIPS, type PersonTimelineItem } from "@crucible/core/src/orgW
 
 const TYPE_LABEL: Record<string, string> = {
   note: "Note", correction: "Correction", task: "Task", ask: "Ask to share", outcome: "Job", retention: "Check-in",
-  enrollment: "Program", referral: "Referral", activity: "Change",
+  enrollment: "Program", referral: "Referral", comment: "Team talk", activity: "Change",
 };
 const when = (s: string) => new Date(s).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 const time = (s: string) => new Date(s).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });

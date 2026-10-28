@@ -161,6 +161,20 @@ export const RESTRICTED_GRANTS = {
   view_change_log: ["SELECT", "INSERT", "UPDATE (undone_at)"],
   // Staff pass S5 (110). A handoff is withdrawn, never deleted.
   staff_handoff: ["SELECT", "INSERT", "UPDATE"],
+  // Team talk (109, staff side S4). Comments are never deleted; only their
+  // author corrects the wording and mentions (earlier wordings are written by
+  // the trigger). The inbox is written only by definer triggers: the app marks
+  // items read. Change requests: staff ask, managers set status and answer;
+  // replies are never edited. Note reviews move only through definer functions.
+  team_comment: ["SELECT", "INSERT", "UPDATE (body, mentions)"],
+  team_comment_version: ["SELECT"],
+  staff_inbox_item: ["SELECT", "UPDATE (read_at)"],
+  org_change_request: ["SELECT", "INSERT", "UPDATE (status, answer)"],
+  org_change_reply: ["SELECT", "INSERT"],
+  // Who answered and what they wrote, one row per answer, trigger-written (109 review round 2).
+  org_change_request_event: ["SELECT"],
+  note_review: ["SELECT"],
+  note_review_event: ["SELECT"],
 };
 
 /**
@@ -193,6 +207,14 @@ export const APP_FUNCTIONS = [
   "smr_retention_task_marks()",
   // 110: the person takes a next step from a handoff (acts only for app.user_id).
   "smr_accept_handoff_step(uuid)",
+  // 109: called by the team-talk policies, guards and routes as the app role.
+  // Each answers only inside the caller's own org scope.
+  "smr_team_session(uuid)",
+  "smr_team_member(uuid, uuid)",
+  "smr_task_assigner(uuid, uuid)",
+  "smr_note_review_on(uuid)",
+  "smr_note_review_submit(uuid)",
+  "smr_note_review_decide(uuid, text, text)",
 ];
 /**
  * Functions the app role must NEVER execute: the activity log's only writer,
@@ -221,6 +243,12 @@ export const APP_FORBIDDEN_FUNCTIONS = [
   "staff_suggestion_item_guard()",
   "staff_handoff_close_items()",
   "staff_handoff_has_items()",
+  // 109: the inbox's only writer, the managers list and the mention check run
+  // only from definer triggers and functions.
+  "smr_inbox_write(uuid, uuid, text, uuid, text, uuid, text)",
+  "smr_org_managers(uuid)",
+  "smr_comment_mentions(uuid, uuid, uuid, uuid[], uuid[])",
+  "smr_activity_without_actor(uuid, text, text, text, text)",
 ];
 
 /** "UPDATE (a, b)" -> { privilege: "UPDATE", columns: ["a", "b"] }; a table privilege -> null. */

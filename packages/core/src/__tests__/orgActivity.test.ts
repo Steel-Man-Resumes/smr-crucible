@@ -6,7 +6,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import {
   activitySentence, activityWho, activityPerson, activityFilters, activityDate, activityCsv, csvCell,
   ACTIVITY_ENTITIES, ACTIVITY_ENTITY_LABELS, isActivityEntity, type ActivityRow,
@@ -126,10 +126,18 @@ describe("migration 102 agrees with the TypeScript it copies", () => {
     assert.ok(STAFF_PRESETS.volunteer.denies.includes("org.outcome.write"), "the volunteer preset denies it, which the function honors");
     assert.match(MIGRATION, /capability = 'org.outcome.write' AND o.effect = 'deny'/);
   });
-  it("the entity list matches the database CHECK", () => {
+  it("the entity list matches the database CHECK (102's list plus what later migrations add to it)", () => {
     const check = MIGRATION.match(/entity\s+TEXT NOT NULL CHECK \(entity IN \(([^)]*)\)\)/)?.[1] ?? "";
-    const inSql = Array.from(check.matchAll(/'([a-z_]+)'/g)).map((m) => m[1]).sort();
-    assert.deepEqual(inSql, [...ACTIVITY_ENTITIES].sort());
+    const inSql = new Set(Array.from(check.matchAll(/'([a-z_]+)'/g)).map((m) => m[1]));
+    // Later migrations rebuild org_activity_entity_check from what it holds plus their own list (109: v_new).
+    const dir = new URL("../../migrations/", import.meta.url);
+    for (const f of readdirSync(dir).filter((x) => /^\d{3}_.*\.sql$/.test(x) && Number(x.slice(0, 3)) > 102).sort()) {
+      const src = readFileSync(new URL(f, dir), "utf8");
+      if (!/org_activity_entity_check/.test(src)) continue;
+      const added = src.match(/v_new text\[\] := ARRAY\[([^\]]*)\]/)?.[1] ?? "";
+      for (const m of added.matchAll(/'([a-z_]+)'/g)) inSql.add(m[1]);
+    }
+    assert.deepEqual([...inSql].sort(), [...ACTIVITY_ENTITIES].sort());
   });
   it("trigger summaries are fixed words: no typed column is ever concatenated into one", () => {
     // The text columns a person types. None may appear in a summary expression.
