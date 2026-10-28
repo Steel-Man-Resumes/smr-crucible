@@ -188,3 +188,34 @@ it("round 3 (S6 merged): tools, cards, Wins, good catches, the listing nudge and
   assert.match(read("../../app/api/org/recognition/route.ts"), /forReport: notes\.filter\(\(n\) => n\.status === "approved"\)/);
   for (const f of ["../../components/org/InsightsReport.tsx", "../../components/org/InsightsPage.tsx", "../skills/staff-funder-narrative/SKILL.md"]) assert.doesNotMatch(read(f), /recognition/i, f);
 });
+
+it("final review should-fix 3: a change already made to your own view always keeps its card", async () => {
+  const { checkStreamedDrafts, streamedStaffResults, APPLIED_CARD_LINE, STREAMED_MAX } = await import("../staff-skill-run");
+  const { checkOrgClaimsDeterministic } = await import("../org-output-verify");
+  const facts = { caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Alma"], staffNames: [], orgName: "Lakeshore Works (Demo)" };
+  const check = (b: string) => checkOrgClaimsDeterministic(b, facts);
+  const applied = (draftBody?: unknown, extra: Record<string, unknown> = {}) => ({ toolCallId: "v", toolName: "change_my_view", args: {}, result: {
+    status: "applied", changeId: UUID, onlyTheirScreen: true, summary: "Changed the columns in your view", undo: "They can press Undo on the card, or ask you to undo it.",
+    ...(draftBody === undefined ? {} : { draftBody }), ...extra } });
+  // A clean card streams as it is, with no extra line.
+  const ok = checkStreamedDrafts([applied('Changed your view "Week 1 housing"')], check);
+  assert.equal(ok.kept.length, 1); assert.equal(ok.notice, "");
+  // A name the check refuses: the card still streams, without draftBody, with the fixed summary and the fixed line.
+  const bad = checkStreamedDrafts([applied('Changed your view "Marcus Jones quiet ones"')], check);
+  assert.equal(bad.kept.length, 1, "never held");
+  const r = bad.kept[0].result as Record<string, unknown>;
+  assert.equal(r.draftBody, undefined); assert.equal(r.summary, "Changed the columns in your view"); assert.equal(r.changeId, UUID);
+  assert.ok(bad.notice.includes(APPLIED_CARD_LINE));
+  // An undeclared key: still shown, the key is dropped.
+  const odd = checkStreamedDrafts([applied(undefined, { sneaky: "words the model wrote" })], check);
+  assert.equal(odd.kept.length, 1); assert.equal((odd.kept[0].result as Record<string, unknown>).sneaky, undefined);
+  // A proposal (nothing applied) is still held whole.
+  const proposal = checkStreamedDrafts([{ toolCallId: "p", toolName: "propose_shared_view", args: {}, result: { status: "needs_confirmation", draftBody: "Marcus Jones quiet ones" } }], check);
+  assert.equal(proposal.kept.length, 0);
+  // Five cards fit (the budget), and an applied change comes first so the cap never drops it.
+  assert.equal(STREAMED_MAX, 5);
+  const many = [1, 2, 3, 4, 5].map((i) => ({ toolCallId: `o${i}`, toolName: "open_staff_page", args: {}, result: { status: "ok", page: "today" } }));
+  const picked = streamedStaffResults([...many, { ...applied(), toolCallId: "last" }]);
+  assert.equal(picked.length, 5); assert.equal(picked[0].toolCallId, "last");
+  assert.match(APPLIED_CARD_LINE, /^That change was made\. Undo it here or on My setup, Recent changes to my view\.$/);
+});
