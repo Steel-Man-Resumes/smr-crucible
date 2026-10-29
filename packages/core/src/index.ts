@@ -18,6 +18,7 @@ export * from './sharing';
 export * from './sharingPolicy';
 export * from './orgClientView';
 export * from './orgStaffAssistant';
+export * from './localDay';
 export * from './orgStaffCaseload';
 export * from './aiSkillRun';
 export * from './staffPrefs';

@@ -26,12 +26,18 @@ import {
 } from "./orgClientView";
 import { listStaffTasks } from "./staffTasks";
 import { listOutcomes } from "./orgOutcomes";
+import { localDay, DEFAULT_LOCAL_TIME_ZONE } from "./localDay";
 
 export type StaffAssistantResult<T> = { ok: true; data: T } | { ok: false; reason: ClientViewDenied };
 
 const first = (n: string | null | undefined) => (n ?? "").trim().split(/\s+/)[0] || null;
 const clip = (s: string | null | undefined, max: number) => (s ?? "").replace(/\s+/g, " ").trim().slice(0, max);
-const ymd = (s: string | null | undefined) => (s ? String(s).slice(0, 10) : null);
+/**
+ * A stored time as a day in the organization's zone (localDay.ts). It was
+ * String(s).slice(0, 10), which turned a Date into "Thu Oct 29" and read an
+ * evening in UTC (demo fix T2). Plain dates pass through unchanged.
+ */
+const dayIn = (timeZone: string | null | undefined) => (s: string | Date | null | undefined) => localDay(s, timeZone);
 
 export interface OverviewApplication {
   jobTitle: string; company: string; location: string | null; status: string;
@@ -63,7 +69,8 @@ export interface ClientOverview {
 }
 
 /** Everything prep-me needs, in one logged read. */
-export async function getClientOverview(actor: OrgActor, clientId: string, opts: { tasks: boolean }): Promise<StaffAssistantResult<ClientOverview>> {
+export async function getClientOverview(actor: OrgActor, clientId: string, opts: { tasks: boolean; timeZone?: string | null }): Promise<StaffAssistantResult<ClientOverview>> {
+  const ymd = dayIn(opts.timeZone || DEFAULT_LOCAL_TIME_ZONE);
   const opened = await recordStaffAssistantOpen(actor, clientId, "overview");
   if (!opened.ok) return { ok: false, reason: opened.reason };
   const header = await getClientHeader(actor, clientId);
@@ -138,13 +145,15 @@ export interface ClientChanges {
  * table, so a station move is not reported; the current station is in the
  * overview.
  */
-export async function getClientChanges(actor: OrgActor, clientId: string, since: string, opts: { tasks: boolean }): Promise<StaffAssistantResult<ClientChanges>> {
+export async function getClientChanges(actor: OrgActor, clientId: string, since: string, opts: { tasks: boolean; timeZone?: string | null }): Promise<StaffAssistantResult<ClientChanges>> {
+  const timeZone = opts.timeZone || DEFAULT_LOCAL_TIME_ZONE;
+  const ymd = dayIn(timeZone);
   const opened = await recordStaffAssistantOpen(actor, clientId, "changes");
   if (!opened.ok) return { ok: false, reason: opened.reason };
   const header = await getClientHeader(actor, clientId);
   if (!header.ok) return { ok: false, reason: header.reason };
   const h = header.rows[0];
-  const after = (d: string | null | undefined) => !!d && String(d).slice(0, 10) >= since;
+  const after = (d: string | Date | null | undefined) => { const day = ymd(d); return !!day && day >= since; };
   const [notes, suggestions, asks, tasks, outcomes] = await Promise.all([
     getClientNotes(actor, clientId),
     listSuggestions(actor, clientId),
@@ -188,7 +197,7 @@ export async function getClientChanges(actor: OrgActor, clientId: string, since:
   changes.sort((x, y) => (x.on < y.on ? 1 : x.on > y.on ? -1 : 0));
   return {
     ok: true,
-    data: { firstName: first(h.name), from: since, to: new Date().toISOString().slice(0, 10), changes: changes.slice(0, 40), applicationsRead, lastActiveAt: ymd(h.progress?.lastActiveAt) },
+    data: { firstName: first(h.name), from: since, to: localDay(new Date(), timeZone)!, changes: changes.slice(0, 40), applicationsRead, lastActiveAt: ymd(h.progress?.lastActiveAt) },
   };
 }
 
@@ -238,8 +247,9 @@ export interface TimelineRows {
  * to cite. Applications appear ONLY when they were shared and read
  * (rows.applications not null). Never a wage.
  */
-export function buildClientTimeline(clientId: string, firstName: string | null, rows: TimelineRows, from: string, to: string, cap = 40): ClientTimeline {
-  const inRange = (d: string | null | undefined) => !!d && String(d).slice(0, 10) >= from && String(d).slice(0, 10) <= to;
+export function buildClientTimeline(clientId: string, firstName: string | null, rows: TimelineRows, from: string, to: string, cap = 40, timeZone?: string | null): ClientTimeline {
+  const ymd = dayIn(timeZone);
+  const inRange = (d: string | Date | null | undefined) => { const day = ymd(d); return !!day && day >= from && day <= to; };
   const raw: Omit<TimelineItem, "ref">[] = [];
   for (const n of rows.notes) if (inRange(n.occurred_at)) raw.push({ source: "note", sourceId: n.id, on: ymd(n.occurred_at)!, what: `${first(n.author_name) ?? "Someone"} wrote a ${n.kind} note`, body: clip(n.body, 300) });
   for (const t of rows.tasks ?? []) {
@@ -282,7 +292,7 @@ export function buildClientTimeline(clientId: string, firstName: string | null, 
  * first (assistant:timeline), exactly like the overview: no row, no read.
  * Applications only for someone who shares them, through the logged door.
  */
-export async function getClientTimeline(actor: OrgActor, clientId: string, range: { from: string; to: string }, opts: { tasks: boolean }): Promise<StaffAssistantResult<ClientTimeline>> {
+export async function getClientTimeline(actor: OrgActor, clientId: string, range: { from: string; to: string }, opts: { tasks: boolean; timeZone?: string | null }): Promise<StaffAssistantResult<ClientTimeline>> {
   const opened = await recordStaffAssistantOpen(actor, clientId, "timeline");
   if (!opened.ok) return { ok: false, reason: opened.reason };
   const header = await getClientHeader(actor, clientId);
@@ -309,6 +319,6 @@ export async function getClientTimeline(actor: OrgActor, clientId: string, range
       suggestions: suggestions.ok ? suggestions.rows : [],
       outcomes: outcomes ?? [],
       applications,
-    }, range.from, range.to),
+    }, range.from, range.to, 40, opts.timeZone || DEFAULT_LOCAL_TIME_ZONE),
   };
 }

@@ -82,6 +82,8 @@ export function pluckMessages(incoming: unknown): Array<Record<string, unknown>>
       if (typeof m.id === "string") out.id = m.id;
       if (Array.isArray(m.parts)) out.parts = m.parts;
       if (Array.isArray(m.toolInvocations)) out.toolInvocations = m.toolInvocations;
+      // Staff answers carry the server's tool record here (lib/staff-tool-record.ts). The model never sees annotations raw.
+      if (Array.isArray(m.annotations)) out.annotations = m.annotations.slice(0, 8);
       return out;
     });
 }
@@ -563,12 +565,13 @@ export async function readMyStaffSuggestions(userId: string, reads: StaffSuggest
   try {
     const [raw, consent] = await Promise.all([reads.load(userId), reads.recordConsent(userId).catch(() => false)]);
     if (!raw) return { status: "none", openCount: 0, handoffs: [], jobs: [] };
-    const { gateForPerson, STAFF_WORDS_NOTE } = await import("../staff-handoff-context");
+    const { gateForPerson, STAFF_WORDS_NOTE, BEFORE_YOU_APPLY } = await import("../staff-handoff-context");
     const gated = gateForPerson(raw, consent);
     return {
       status: "ok", ...gated,
       whereToAnswer: { page: "/dashboard/from-your-case-manager", label: "From your case manager" },
       note: `${STAFF_WORDS_NOTE} Taking an employer or a job saves it to their jobs; a place for help goes to their help list; a next step goes on their list from their case manager. Passing needs no reason.`,
+      beforeYouApply: BEFORE_YOU_APPLY,
     };
   } catch {
     return { status: "unavailable", error: "What their case manager sent could not be read just now. Do not say there is nothing; point them to the From your case manager page." };
