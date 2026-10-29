@@ -2,6 +2,7 @@ import { evidenceRefs, type StaffToolEvidence } from "./staff-tool-evidence";
 import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
 import { STAFF_PAGE_WORDS } from "./staff-pages";
 import { STAFF_SKILLS } from "./staff-troy";
+import { TODAY_SECTION_LABELS } from "@crucible/core/src/orgTodayItems";
 /**
  * Nothing unverified reaches a staff member or an admin. Two layers, in order.
  *
@@ -59,6 +60,12 @@ export interface OrgFacts {
    * flagged as unsupported and the warning trains people to ignore it.
    */
   needsAttention?: string[];
+  /**
+   * Demo fix T1 follow-up: the staff member's own typed messages in this
+   * conversation (the last 10 user messages, staffTypedWords; never assistant
+   * text). Used ONLY to find places they typed (typedPlaceWords), answer path only.
+   */
+  staffTyped?: string;
   /** The organization's own name, whose words are not people. */
   orgName?: string;
   /** The organization's "quiet after N days". A number the answer may say. */
@@ -95,18 +102,24 @@ const DAY = "(?:3[01]|[12]\\d|0?[1-9])";
  * the day is followed by the end, a newline, punctuation, a dash or "(", a
  * clock time, or one of these words (round 4 widened the list). "In
  * October 22 graduates" and "Since Oct 1 1500 people" stay counts.
+ * Demo fix T1 round 2 (review S3): a singular record word ("Your Oct 27
+ * note", "Your Oct 27 interview") or a capitalized word ("Oct 27 Jean
+ * called") may follow too. "Oct 23 hired.", "October 23 placed." and
+ * "Oct 27 interviews." stay counts.
  */
 const FOLLOW_WORDS = (
   "at and to through or in on by until from for when before after the his her their " +
   // Round 4 (review R3, S1): words that follow a date in ordinary answers.
-  "this last next too so but was is were he she they it with via we you i as if then while during around"
+  "this last next too so but was is were he she they it with via we you i as if then while during around " +
+  // Demo fix T1 round 2: singular record words.
+  "note meeting call appointment interview visit session check-in entry update deadline hearing shift orientation start task text email message letter"
 ).split(" ").map((w) => `[${w[0]}${w[0].toUpperCase()}]${w.slice(1)}`).join("|");
 const DATE_FOLLOW =
   "(?=[ \\t]*$|[ \\t]*\\n|\\s*[.,;:!?)\\]]|\\s*[(\\-\u2013\u2014]" +
   // A clock time: "Thu Oct 29 9:00 AM", "Oct 24 6 PM".
   "|\\s+\\d{1,2}(?::\\d{2})?\\s*(?:[AaPp]\\.?[Mm]\\b)|\\s+\\d{1,2}:\\d{2}\\b" +
-  `|\\s+(?:${FOLLOW_WORDS})\\b)`;
-const WRITTEN_DATE = new RegExp(
+  `|\\s+(?:${FOLLOW_WORDS})\\b|\\s+[A-Z])`;
+const ANSWER_DATE = new RegExp(
   `(?:\\b${WEEKDAY}\\.?,?\\s+)?\\b${MONTH}\\.?\\s+${DAY}(?:st|nd|rd|th)?\\b(?:,\\s+(?:19|20)\\d{2}\\b${DATE_FOLLOW}|${DATE_FOLLOW})` +
     "|\\b\\d{4}-\\d{2}-\\d{2}(?:T[\\d:.]+Z?)?\\b",
   "g"
@@ -296,6 +309,111 @@ function clauseAt(text: string, i: number): string {
 }
 
 /**
+ * Demo fix T1 (2026-10-28): the workspace's own words t.ROY says on the
+ * answer path ("press Undo", "Retention check-ins due" as a Today section).
+ * The sidebar and view words, and every Today section label from the code
+ * that draws Today. Answer path only, like the page words.
+ */
+const UI_WORDS: readonly string[] = [
+  ..."undo today inbox people directory connections settings grid list saved view views column columns row rows section sections folded unfolded shown hidden".split(" "),
+  ...Object.values(TODAY_SECTION_LABELS).flatMap((l) => l.toLowerCase().split(/[^a-z]+/)).filter((w) => w.length >= 2),
+];
+
+const US_STATE_NAMES = "alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia";
+/** Two-letter codes are matched in capitals only ("in", "or" are ordinary words); OK, HI and ME are left out because "Michael Shaw, OK?" is a person (review S4). The full names still match. */
+const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|ID|IL|IN|IA|KS|KY|LA|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY";
+const STATE_CODE_AFTER = new RegExp(`^,\\s*(?:${US_STATE_CODES})\\b`);
+const STATE_NAME_AFTER = new RegExp(`^,\\s*(?:${US_STATE_NAMES})\\b`, "i");
+/** True when `after` starts with a comma and a US state ("Jackson, MI", "Jackson, Michigan"). */
+const stateAfter = (after: string) => STATE_CODE_AFTER.test(after) || STATE_NAME_AFTER.test(after);
+
+/**
+ * Demo fix T1 (2026-10-28): words the staff member typed THIS TURN as a
+ * place, not a person. A place is the one to three words right after "in",
+ * "near" or "around" ("employers in Jackson", "near grand rapids"), or words
+ * followed by a comma and a US state ("Jackson, Michigan", "Grand Rapids,
+ * MI"), which also covers "at", "from" and "to". A bare "to Michael Shaw" or
+ * "from Marcus" is NOT a place: those prepositions take people as often as
+ * towns. A possessive ("in Valjean's file") is never a place. Answer path only.
+ */
+export function typedPlaceWords(said: string, opts?: { notBeforeQuestion?: boolean }): Set<string> {
+  const places = new Set<string>();
+  const tokens = [...said.matchAll(/[A-Za-z][A-Za-z'\u2019-]*|[^A-Za-z\s]+/g)].map((m) => ({ w: m[0], at: m.index ?? 0 }));
+  const word = (t: { w: string } | undefined) => !!t && /^[A-Za-z][a-z]*$/i.test(t.w) && !/['\u2019]/.test(t.w);
+  const ordinary = (w: string) => notANameWord(w.toLowerCase()) || UI_WORDS.includes(w.toLowerCase());
+  for (let i = 0; i < tokens.length; i++) {
+    const prep = tokens[i].w.toLowerCase();
+    const run: string[] = [];
+    let j = i + 1;
+    while (j < tokens.length && run.length < 3 && word(tokens[j]) && !ordinary(tokens[j].w)) run.push(tokens[j++].w);
+    if (!run.length) continue;
+    // A possessive right after the run ("in Jean Valjean's file") is a person's thing, not a place.
+    if (j < tokens.length && /['\u2019]/.test(tokens[j].w)) continue;
+    const after = said.slice(tokens[j - 1].at + tokens[j - 1].w.length);
+    // Review S4: in an earlier message, "in Michael Shaw?" asks about a person far more often than a town.
+    if (opts?.notBeforeQuestion && /^\s*\?/.test(after)) continue;
+    const stateNext = stateAfter(after);
+    if (["in", "near", "around"].includes(prep) || (["at", "from", "to"].includes(prep) && stateNext)) for (const w of run) places.add(w.toLowerCase());
+  }
+  // "Jackson, Michigan." with no preposition: the one or two capitalized words before the state.
+  for (const m of said.matchAll(/\b((?:[A-Z][a-z]+\s+)?[A-Z][a-z]+)(?=,)/g)) {
+    if (!stateAfter(said.slice((m.index ?? 0) + m[0].length))) continue;
+    for (const w of m[1].split(/\s+/)) if (!ordinary(w)) places.add(w.toLowerCase());
+  }
+  return places;
+}
+
+/** Text with contact details, links, ids and ISO dates taken out, so their digits are never read as figures. */
+function plainToolText(t: string): string {
+  return t
+    .replace(/https?:\/\/\S+|www\.\S+/gi, " ")
+    .replace(/[^\s@()<>,;:"']+@[^\s@()<>,;:"']+\.[A-Za-z]{2,24}\b/g, " ")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, " ")
+    .replace(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}\b/g, " ")
+    .replace(/\b\d{4}-\d{2}-\d{2}(?:T[\d:.+-]+Z?)?\b/g, " ");
+}
+
+/**
+ * Demo fix T1 (2026-10-28): the words and figures in what THIS TURN's tool
+ * reads returned for this staff member (staffToolEvidence.toolText, built by
+ * the server from the tool results, never from the browser; every read is
+ * already reach-checked). An answer that repeats "Kelly 33", "Hydraulics" or
+ * an employer on someone's tracker is repeating the record, not inventing.
+ * Answer path only.
+ */
+function toolTextKnown(evidence: readonly StaffToolEvidence[]): { words: Set<string>; numbers: Set<string> } {
+  const words = new Set<string>();
+  const numbers = new Set<string>();
+  for (const raw of evidence.flatMap((e) => e.toolText ?? [])) {
+    const t = plainToolText(raw);
+    for (const m of t.matchAll(/[A-Za-z]{3,}/g)) words.add(m[0].toLowerCase());
+    for (const m of t.matchAll(/(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/])/g)) numbers.add(String(Number(m[0])));
+  }
+  return { words, numbers };
+}
+
+/**
+ * The note added under a staff answer that layer 1 or 2 could not support
+ * (demo fix T1: the old footer read "I could not support I could not match
+ * ..." and always talked about "the figure"). One plain sentence per flag;
+ * the dashboard line names the figure only when a number was flagged.
+ */
+export function orgFlagNotice(problems: readonly string[]): string {
+  const sentence = (p: string) => {
+    const t = p.trim().replace(/[.;\s]+$/, "");
+    // Layer 1 problems are already sentences about the check; layer 2 returns the answer's own words.
+    const own = /^(?:the (?:figure|amount|rate|source|summary)|I could not match|"[^"]*": t\.ROY cannot)\b/.test(t);
+    const s = own ? t : `I could not support this: "${t.replace(/"/g, "'")}"`;
+    return s.charAt(0).toUpperCase() + s.slice(1) + ".";
+  };
+  const numeric = problems.some((p) => /^the (?:figure|amount|rate) /.test(p.trim()));
+  const close = numeric
+    ? "Your dashboard is the system of record, so take the figure from there, not from me."
+    : "Your dashboard is the system of record, so check there before you use this.";
+  return "\n\n---\n**Check these before you use them.** " + problems.map(sentence).join(" ") + " " + close;
+}
+
+/**
  * `opts.typedNamesInNoMatch`: answer path only. A name the staff member typed
  * may be repeated in a sentence that says the person is NOT on their list
  * ("Michael Shaw isn't on your list"). Anywhere else, and always in a draft
@@ -304,6 +422,9 @@ function clauseAt(text: string, i: number): string {
 export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userSaid?: string, opts?: { typedNamesInNoMatch?: boolean }): string[] {
   const problems: string[] = [];
   const allowed = allowedNumbers(facts);
+  // Demo fix T1: words and figures from this turn's tool reads (answer path only).
+  const fromTools = opts?.typedNamesInNoMatch ? toolTextKnown(facts.staffToolEvidence ?? []) : { words: new Set<string>(), numbers: new Set<string>() };
+  // Review S2: tool-text figures are their own set, accepted only as a plain number, never as a rate.
 
   // t.ROY reads and drafts; it cannot send, save, file or book (house build
   // L6 red team: "send the email"). An answer that says it did is wrong
@@ -340,6 +461,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // Whole phrases a tool returned (a job title, a listing, a note) are
   // repeating the record, not new claims. Only the whole phrase: a name
   // inside one is still checked when it appears on its own (review C4 S1).
+  // Demo fix T1: on the ANSWER path the words of this turn's tool text are
+  // known as well (toolTextKnown); a draft for a participant keeps this rule.
   for (const phrase of (facts.staffToolEvidence ?? []).flatMap((e) => e.phrases ?? []).sort((a, b) => b.length - a.length)) {
     if (phrase.length >= 3) text = text.split(phrase).join(" ");
   }
@@ -359,7 +482,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
 
   // A written date is not a count (W08). Replaced with words, not a blank, so a
   // capitalized name right after it is still read as mid-sentence and checked.
-  if (opts?.typedNamesInNoMatch) text = text.replace(WRITTEN_DATE, "the date");
+  if (opts?.typedNamesInNoMatch) text = text.replace(ANSWER_DATE, "the date");
 
   // Every standalone integer must be one we can account for. Money, dates and
   // percentages are skipped -- they are reported elsewhere and are not the
@@ -371,7 +494,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
       /(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/]|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
     ) ?? [];
   for (const n of numbers) {
-    if (!allowed.has(n)) {
+    if (!allowed.has(n) && !fromTools.numbers.has(n)) {
       problems.push(`the figure "${n}" is not one of this caseload's numbers`);
     }
   }
@@ -420,6 +543,13 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     // participant keep the full person check, as before.
     for (const w of JOB_WORDS) STOPWORDS.add(w);
     for (const w of ["invite", "send", "add", "open", "press", "button", "page", "form", "directory", "employers", "employer", "hires", "records", "reported"]) STOPWORDS.add(w);
+    // Demo fix T1: sidebar, view and Today section words ("press Undo", "Retention check-ins due").
+    for (const w of UI_WORDS) STOPWORDS.add(w);
+    // Demo fix T1: words from this turn's tool reads, and places the staff member typed this turn.
+    for (const w of Array.from(fromTools.words)) known.add(w);
+    for (const w of Array.from(typedPlaceWords(userSaid ?? ""))) known.add(w);
+    // Places typed earlier in the conversation count too (one message at a time, so no rule spans two messages).
+    for (const said of (facts.staffTyped ?? "").split("\n")) for (const w of Array.from(typedPlaceWords(said, { notBeforeQuestion: true }))) known.add(w);
   }
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.
