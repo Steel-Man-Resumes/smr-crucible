@@ -3,6 +3,7 @@ import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
 import { STAFF_PAGE_WORDS } from "./staff-pages";
 import { STAFF_SKILLS } from "./staff-troy";
 import { TODAY_SECTION_LABELS } from "@crucible/core/src/orgTodayItems";
+import { STATIONS } from "./refinery-nav";
 /**
  * Nothing unverified reaches a staff member or an admin. Two layers, in order.
  *
@@ -66,6 +67,14 @@ export interface OrgFacts {
    * text). Used ONLY to find places they typed (typedPlaceWords), answer path only.
    */
   staffTyped?: string;
+  /**
+   * Demo fix T1 round 3: the result lines of earlier answers' lookup records
+   * that this server signed for this staff member (staff-tool-record.ts
+   * readToolRecord, HMAC-verified; never the record's args, never unverified
+   * annotation text, never assistant answer text). Answer path only, read like
+   * this turn's toolText.
+   */
+  priorToolRecords?: string[];
   /** The organization's own name, whose words are not people. */
   orgName?: string;
   /** The organization's "quiet after N days". A number the answer may say. */
@@ -314,7 +323,17 @@ function clauseAt(text: string, i: number): string {
  * The sidebar and view words, and every Today section label from the code
  * that draws Today. Answer path only, like the page words.
  */
+/**
+ * Demo fix T1 round 3: the tracker's status labels as staff see them
+ * (components/org/ClientPage.tsx STATUS_LABEL and app/api/applications
+ * VALID_STATUSES; neither is an importable shared constant) plus the other
+ * status words of the lead's list.
+ */
+const APPLICATION_STATUS_WORDS = "saved applied heard back interviewing offered offer hired started work declined rejected withdrawn not selected archived";
 const UI_WORDS: readonly string[] = [
+  ...APPLICATION_STATUS_WORDS.split(" "),
+  // The person's stations as staff see them ("Find work", "Tailor and package"), from the one station list.
+  ...STATIONS.flatMap((s) => s.label.toLowerCase().split(/[^a-z]+/)).filter((w) => w.length >= 2),
   ..."undo today inbox people directory connections settings grid list saved view views column columns row rows section sections folded unfolded shown hidden".split(" "),
   ...Object.values(TODAY_SECTION_LABELS).flatMap((l) => l.toLowerCase().split(/[^a-z]+/)).filter((w) => w.length >= 2),
 ];
@@ -322,6 +341,16 @@ const UI_WORDS: readonly string[] = [
 const US_STATE_NAMES = "alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia";
 /** Two-letter codes are matched in capitals only ("in", "or" are ordinary words); OK, HI and ME are left out because "Michael Shaw, OK?" is a person (review S4). The full names still match. */
 const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|ID|IL|IN|IA|KS|KY|LA|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY";
+/**
+ * Demo fix T1 round 3: a written US state name ("Michigan", "North
+ * Carolina", "District of Columbia") is a place, never a person, on the
+ * answer path. Whole names only, capitalized as written. The trade: a person
+ * named Georgia or Virginia is not caught by layer 1 in an answer.
+ */
+const STATE_NAME_TEXT = new RegExp(
+  `\\b(?:${US_STATE_NAMES.split("|").sort((a, b) => b.length - a.length).map((n) => n.split(" ").map((w) => (w === "of" ? w : w[0].toUpperCase() + w.slice(1))).join("\\s+")).join("|")}|D\\.?C\\.?)\\b`,
+  "g"
+);
 const STATE_CODE_AFTER = new RegExp(`^,\\s*(?:${US_STATE_CODES})\\b`);
 const STATE_NAME_AFTER = new RegExp(`^,\\s*(?:${US_STATE_NAMES})\\b`, "i");
 /** True when `after` starts with a comma and a US state ("Jackson, MI", "Jackson, Michigan"). */
@@ -381,10 +410,10 @@ function plainToolText(t: string): string {
  * an employer on someone's tracker is repeating the record, not inventing.
  * Answer path only.
  */
-function toolTextKnown(evidence: readonly StaffToolEvidence[]): { words: Set<string>; numbers: Set<string> } {
+function toolTextKnown(evidence: readonly StaffToolEvidence[], priorRecords: readonly string[] = []): { words: Set<string>; numbers: Set<string> } {
   const words = new Set<string>();
   const numbers = new Set<string>();
-  for (const raw of evidence.flatMap((e) => e.toolText ?? [])) {
+  for (const raw of [...evidence.flatMap((e) => e.toolText ?? []), ...priorRecords]) {
     const t = plainToolText(raw);
     for (const m of t.matchAll(/[A-Za-z]{3,}/g)) words.add(m[0].toLowerCase());
     for (const m of t.matchAll(/(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/])/g)) numbers.add(String(Number(m[0])));
@@ -423,7 +452,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   const problems: string[] = [];
   const allowed = allowedNumbers(facts);
   // Demo fix T1: words and figures from this turn's tool reads (answer path only).
-  const fromTools = opts?.typedNamesInNoMatch ? toolTextKnown(facts.staffToolEvidence ?? []) : { words: new Set<string>(), numbers: new Set<string>() };
+  const fromTools = opts?.typedNamesInNoMatch ? toolTextKnown(facts.staffToolEvidence ?? [], facts.priorToolRecords ?? []) : { words: new Set<string>(), numbers: new Set<string>() };
   // Review S2: tool-text figures are their own set, accepted only as a plain number, never as a rate.
 
   // t.ROY reads and drafts; it cannot send, save, file or book (house build
@@ -545,6 +574,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     for (const w of ["invite", "send", "add", "open", "press", "button", "page", "form", "directory", "employers", "employer", "hires", "records", "reported"]) STOPWORDS.add(w);
     // Demo fix T1: sidebar, view and Today section words ("press Undo", "Retention check-ins due").
     for (const w of UI_WORDS) STOPWORDS.add(w);
+    // Demo fix T1 round 3: state names are places ("your organization is in Michigan").
+    text = text.replace(STATE_NAME_TEXT, "the state");
     // Demo fix T1: words from this turn's tool reads, and places the staff member typed this turn.
     for (const w of Array.from(fromTools.words)) known.add(w);
     for (const w of Array.from(typedPlaceWords(userSaid ?? ""))) known.add(w);
