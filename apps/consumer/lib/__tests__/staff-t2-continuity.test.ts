@@ -255,3 +255,9 @@ it("state default: the skill and the tool say to use the organization's state, a
   assert.match(dir, /else their organization's state from the system prompt/);
   assert.doesNotMatch(dir, /If no state was given, ask for one/);
 });
+
+it("review R2 S2: a record echoed mid-line is cut; ordinary brackets stay", async () => {
+  const { dropToolRecordEcho } = await import("../staff-tool-record");
+  assert.equal(dropToolRecordEcho("Here you go. [t.ROY lookup record: find_employers q=Lansing] Two listings."), "Here you go. Two listings.");
+  assert.equal(dropToolRecordEcho("See [the Directory] for more."), "See [the Directory] for more.");
+});

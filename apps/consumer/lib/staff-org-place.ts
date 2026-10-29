@@ -18,7 +18,7 @@ import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 /** Zones used by one state only. Multi-state zones (New_York, Chicago, Denver, Los_Angeles) are left out on purpose. */
 const ZONE_STATE: Readonly<Record<string, string>> = {
   "America/Detroit": "MI", "America/Menominee": "MI",
-  "America/Boise": "ID", "America/Phoenix": "AZ",
+  "America/Phoenix": "AZ",
   "America/Anchorage": "AK", "America/Juneau": "AK", "America/Sitka": "AK", "America/Nome": "AK", "America/Yakutat": "AK", "America/Metlakatla": "AK", "America/Adak": "AK",
   "Pacific/Honolulu": "HI", "America/Puerto_Rico": "PR",
 };

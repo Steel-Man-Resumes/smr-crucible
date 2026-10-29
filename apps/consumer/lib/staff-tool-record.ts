@@ -227,5 +227,10 @@ export const TOOL_RECORD_ECHO = "[t.ROY lookup record";
 
 /** Drop any line of a model answer that echoes a record (review S1): the record is never shown to the staff member. */
 export function dropToolRecordEcho(answer: string): string {
-  return answer.split("\n").filter((l) => !l.trimStart().startsWith(TOOL_RECORD_ECHO)).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  // Whole lines, and a record echoed mid-line (review R2 S2): cut from the opening words to the closing bracket or line end.
+  return answer
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith(TOOL_RECORD_ECHO))
+    .map((l) => l.replace(/\s*\[t\.ROY lookup record[^\]\n]*\]?/g, ""))
+    .join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
