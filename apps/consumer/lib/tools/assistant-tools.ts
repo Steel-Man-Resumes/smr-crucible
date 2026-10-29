@@ -82,6 +82,8 @@ export function pluckMessages(incoming: unknown): Array<Record<string, unknown>>
       if (typeof m.id === "string") out.id = m.id;
       if (Array.isArray(m.parts)) out.parts = m.parts;
       if (Array.isArray(m.toolInvocations)) out.toolInvocations = m.toolInvocations;
+      // Staff answers carry the server's tool record here (lib/staff-tool-record.ts). The model never sees annotations raw.
+      if (Array.isArray(m.annotations)) out.annotations = m.annotations.slice(0, 8);
       return out;
     });
 }

@@ -139,7 +139,8 @@ it("B3: a draft that claims it was sent, or names a wage nobody gave, is held ba
 
 it("fix round 1: the route sends gated staff words to the models and tells the staff member", () => {
   const route = read("../../app/api/assistant/route.ts");
-  assert.match(route, /const staffInput = staffActor \? gateStaffMessages\(messages\) : null;/);
+  // Demo fix T2: earlier answers get their tool record back first; the gate still runs over all of it.
+  assert.match(route, /const staffInput = staffActor \? gateStaffMessages\(withStaffToolRecords\(messages\)\) : null;/);
   assert.match(route, /messages: \(staffInput\?\.messages \?\? messages\) as never,/);
   assert.match(route, /verifyOrgOutput\(answer, facts, userSaid \|\| undefined\)/);
   assert.match(route, /if \(staffInput\?\.withheld\) out \+= `\\n\\n_\$\{STAFF_INPUT_NOTICE\}_`;/);

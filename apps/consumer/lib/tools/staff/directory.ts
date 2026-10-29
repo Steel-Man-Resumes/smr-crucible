@@ -30,7 +30,7 @@ export const directoryTools: StaffToolModule = {
   build(ctx) {
     return {
       find_employers: tool({
-        description: "Search Steel Man's public employer directory for employers that hire people with records, in a state the STAFF MEMBER named (two letters), optionally by kind of work or employer name (q) and industry. Public listings only; reads nothing about any participant. Returns up to six, the mark first, each with the date its evidence was checked and when it needs a recheck. If no state was given, ask for one.",
+        description: "Search Steel Man's public employer directory for employers that hire people with records, in a state (two letters): the one the STAFF MEMBER named, else one they used earlier in this conversation, else their organization's state from the system prompt. q is one word or phrase matched against the employer's name, industry, city and kinds of work: for a town (Jackson, say), put the town in q; else a kind of work or an employer name. industry is optional. Public listings only; reads nothing about any participant. Returns up to six, the mark first, each with the date its evidence was checked and when it needs a recheck. Ask for a state only when there is none of those.",
         parameters: jsonSchema<{ state: string; q?: string; industry?: string }>({
           type: "object",
           properties: { state: { type: "string", minLength: 2, maxLength: 2 }, q: { type: "string", maxLength: 80 }, industry: { type: "string", maxLength: 80 } },
