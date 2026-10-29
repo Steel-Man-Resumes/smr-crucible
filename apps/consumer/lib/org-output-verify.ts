@@ -60,6 +60,12 @@ export interface OrgFacts {
    * flagged as unsupported and the warning trains people to ignore it.
    */
   needsAttention?: string[];
+  /**
+   * Demo fix T1 follow-up: the staff member's own typed messages in this
+   * conversation (the last 10 user messages, staffTypedWords; never assistant
+   * text). Used ONLY to find places they typed (typedPlaceWords), answer path only.
+   */
+  staffTyped?: string;
   /** The organization's own name, whose words are not people. */
   orgName?: string;
   /** The organization's "quiet after N days". A number the answer may say. */
@@ -533,6 +539,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     // Demo fix T1: words from this turn's tool reads, and places the staff member typed this turn.
     for (const w of Array.from(fromTools.words)) known.add(w);
     for (const w of Array.from(typedPlaceWords(userSaid ?? ""))) known.add(w);
+    // Places typed earlier in the conversation count too (one message at a time, so no rule spans two messages).
+    for (const said of (facts.staffTyped ?? "").split("\n")) for (const w of Array.from(typedPlaceWords(said))) known.add(w);
   }
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.

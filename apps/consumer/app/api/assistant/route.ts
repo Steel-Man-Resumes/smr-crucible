@@ -447,6 +447,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       visibleNames: context.org.visibleNames ?? context.org.needsAttention ?? [],
       // Name words the staff member typed that the server matched to one person in reach (W08).
       resolvedNames: staffResolved.map((r) => r.word),
+      // The staff member's last 10 typed messages (user role only): places they typed earlier (demo fix T1).
+      staffTyped: staffInput ? staffTypedWords((staffInput.messages ?? []) as Record<string, unknown>[]) : undefined,
       staffNames: context.org.staffNames ?? [],
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,

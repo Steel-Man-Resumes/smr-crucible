@@ -95,6 +95,27 @@ describe("T1: what must still be flagged", () => {
   });
 });
 
+describe("T1 follow-up: places typed earlier in the conversation", () => {
+  // As the route builds it: staffTypedWords, the user's own messages only, newest last.
+  const typed = (...m: string[]) => m.join("\n");
+
+  it("Lansing typed two turns earlier, then a turn with no tool read: no flag", () => {
+    const facts: OrgFacts = { ...LUPE, staffTyped: typed("find employers in Lansing that hire people with records", "put my tasks first on Today", "what can you do?") };
+    assert.deepEqual(checkOrgClaimsDeterministic("I can run a real Lansing search if you want one, and you can press Undo.", facts, "what can you do?", answer), []);
+    assert.deepEqual(checkOrgClaimsDeterministic("I can run a real Lansing search if you want one.", LUPE, "what can you do?", answer), [name("Lansing")], "without the earlier message it is still checked");
+  });
+
+  it("Michael Shaw typed earlier as a person still flags", () => {
+    const facts: OrgFacts = { ...LUPE, staffTyped: typed("talk to Michael Shaw", "find employers in Lansing", "what can you do?") };
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job in Lansing.", facts, "what can you do?", answer), [name("Michael"), name("Shaw")]);
+  });
+
+  it("the draft path ignores earlier messages", () => {
+    const facts: OrgFacts = { ...LUPE, staffTyped: "find employers in Lansing" };
+    assert.deepEqual(checkOrgClaimsDeterministic("Hi Jean, try the Lansing search.", facts, ""), checkOrgClaimsDeterministic("Hi Jean, try the Lansing search.", LUPE, ""));
+  });
+});
+
 describe("T1: the footer reads as plain sentences", () => {
   it("one sentence per flag, no figure line for a name", () => {
     assert.equal(
