@@ -11,7 +11,7 @@
  * a correction, a contact). The boss wires them in the page file.
  */
 import { useCallback, useState, type ComponentType } from "react";
-import { AREA_WORDS, type DirectoryEmployer, type DirectoryResource, type DirectoryShow } from "@/lib/staff-directory";
+import { AREA_WORDS, employerGroups, type DirectoryEmployer, type DirectoryResource, type DirectoryShow } from "@/lib/staff-directory";
 import { RESOURCE_AREAS, type ResourceArea } from "@crucible/core/src/resourceDirectoryShared";
 
 /** What a slot gets: the listing, never a person. */
@@ -20,7 +20,7 @@ export type DirectorySlot = ComponentType<{ listing: DirectoryListingRef }>;
 
 interface Payload {
   status: "ok";
-  place: { state: string; city: string | null; zip: string | null };
+  place: { state: string; city: string | null; zip: string | null; cityName?: string | null; stateName?: string | null };
   help: DirectoryResource[] | null; helpUnavailable: boolean;
   employers: DirectoryEmployer[] | null; employersUnavailable: boolean; employersLimited: string | null;
   sectors: string[];
@@ -59,7 +59,16 @@ function ResourceCard({ r, SendTo, Contribute }: { r: DirectoryResource; SendTo?
       <p className="mt-0.5 text-xs text-t-phos">{r.need}{r.where ? ` · ${r.where}` : ""}</p>
       <p className={`mt-1 text-xs ${r.band === "A" ? "text-t-phos" : "text-t-amber-bright"}`}><span className="font-semibold">{r.howSure}.</span> {r.howSureDetail}</p>
       <dl className="mt-1 grid gap-x-3 text-xs text-t-phos-dim sm:grid-cols-2">
-        {r.phone && <div><dt className="sr-only">Phone</dt><dd><a className="t-focus underline" href={`tel:${r.phone.replace(/[^\d+]/g, "")}`}>{r.phone}</a></dd></div>}
+        {r.phones.length > 0 && (
+          <div><dt className="sr-only">Phone</dt>
+            {r.phones.map((p, i) => (
+              <dd key={i}>
+                {p.label ? `${p.label}: ` : ""}
+                {p.tel ? <a className="t-focus underline" href={p.tel}>{p.number}</a> : <span>{p.number}</span>}
+              </dd>
+            ))}
+          </div>
+        )}
         {r.hours && <div><dt className="sr-only">Hours</dt><dd>{r.hours}</dd></div>}
         {r.eligibility && <div className="sm:col-span-2"><dt className="inline">Who it is for: </dt><dd className="inline">{r.eligibility}</dd></div>}
       </dl>
@@ -170,7 +179,13 @@ export function StaffDirectoryPage({ SendTo, Contribute }: { SendTo?: DirectoryS
             <h2 id="dir-employers" className="text-base font-semibold text-t-white">Employers that hire people with records</h2>
             <p className="mt-1 mb-2 text-xs text-t-phos-dim">{data.words.mark}</p>
             {data.employers.length === 0 ? <p className="text-sm text-t-phos-dim">{data.words.emptyEmployers}</p>
-              : <ul className="space-y-2">{data.employers.map((e) => <EmployerCard key={e.id} e={e} SendTo={SendTo} Contribute={Contribute} />)}</ul>}
+              : employerGroups(data.employers, data.place).map((g) => (
+                <div key={g.key} className="mt-3" data-employer-group={g.key}>
+                  {g.heading && <h3 className="mb-1 text-sm font-semibold text-t-white">{g.heading}</h3>}
+                  {g.note && <p className="mb-2 text-xs text-t-phos-dim">{g.note}</p>}
+                  <ul className="space-y-2">{g.employers.map((e) => <EmployerCard key={e.id} e={e} SendTo={SendTo} Contribute={Contribute} />)}</ul>
+                </div>
+              ))}
           </section>
         )}
         {data?.employersUnavailable && <p role="alert" className="text-sm text-t-white">Employers did not load just now. That is not the same as none there. Try again.</p>}

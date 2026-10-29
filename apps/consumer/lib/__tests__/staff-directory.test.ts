@@ -88,3 +88,93 @@ it("open_staff_page knows the Directory; the page file exists", () => {
   assert.match(staffPage("directory")!.about, /local help/);
   assert.ok(existsSync(new URL("../../app/(dashboard)/dashboard/directory/page.tsx", import.meta.url)));
 });
+
+/* ------------------------------------------ demo-eve E2 (2026-10-28) -- */
+
+import { splitPhones, telHref, clipText, employerGroups, inPickedState, cityFold, TEXT_LIMITS } from "../staff-directory";
+
+// The live Lansing listing (Gateway Youth Housing) showed "Youth Housing Crisis Hotline 877-833-368":
+// the field was cut at 40 characters, then every digit left was dialed as one number.
+const LANSING_PHONE = "Main office 517-882-4000; Youth Housing Crisis Hotline 877-833-3680 (24 hours)";
+
+it("phones: the whole field is kept, each number gets its own label and its own valid tel link", () => {
+  const [r] = shapeResources([res("gw", "B", { phone: LANSING_PHONE })]);
+  assert.equal(r.phone, LANSING_PHONE, "never cut");
+  assert.deepEqual(r.phones, [
+    { label: "Main office", number: "517-882-4000", tel: "tel:+15178824000" },
+    { label: "Youth Housing Crisis Hotline", number: "877-833-3680 (24 hours)", tel: "tel:+18778333680" },
+  ]);
+  assert.deepEqual(splitPhones("Youth Housing Crisis Hotline 877-833-3680"), [{ label: "Youth Housing Crisis Hotline", number: "877-833-3680", tel: "tel:+18778333680" }]);
+});
+
+it("phones: the old 40-character cut and anything that is not a whole number gets no link", () => {
+  const cut = (LANSING_PHONE.replace(/^Main office 517-882-4000; /, "")).slice(0, 40);
+  assert.equal(cut, "Youth Housing Crisis Hotline 877-833-368", "the exact string seen live");
+  assert.deepEqual(splitPhones(cut), [{ label: null, number: cut, tel: null }], "nine digits: shown as text, never dialed");
+  assert.equal(telHref("877-833-368"), null);
+  assert.equal(telHref("1 (517) 555-0100"), "tel:+15175550100");
+  assert.equal(telHref("517-555-0100 ext. 12"), "tel:+15175550100", "extension shown, main line dialed");
+  assert.equal(telHref("22345678901"), null, "11 digits must start with 1");
+  assert.equal(telHref("12345678901"), "tel:+12345678901");
+  assert.equal(telHref("0175550100"), null, "no area code starts with 0");
+  assert.deepEqual(splitPhones("Call 211"), [{ label: null, number: "Call 211", tel: null }]);
+  assert.deepEqual(splitPhones("(517) 555-0100 or (517) 555-0101").map((p) => p.tel), ["tel:+15175550100", "tel:+15175550101"]);
+  assert.deepEqual(splitPhones(null), []);
+  assert.deepEqual(splitPhones("Account 5175550100123").map((p) => p.tel), [null], "digits inside a longer run are not a phone");
+  const page = readFileSync(new URL("../../components/org/StaffDirectory.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(page, /replace\(\/\[\^\\d\+\]\/g/, "the page no longer builds a tel link from every digit in the field");
+  assert.match(page, /p\.tel \?/);
+});
+
+it("listing text: whole when it fits, cut at a word with '...' when it does not, limits sized for real listings", () => {
+  assert.equal(clipText("  Mon to Fri,   9 to 5 ", 200), "Mon to Fri, 9 to 5");
+  const long = "Youth ages 16 to 24 who are homeless or at risk of homelessness in Ingham County, with or without a referral";
+  const c = clipText(long, 60)!;
+  assert.ok(c.endsWith("..."), c);
+  assert.ok(long.startsWith(c.slice(0, -3)), "a prefix of the real words");
+  assert.ok(/\b(County|Ingham|in|of|at|homelessness)$/.test(c.slice(0, -3)), `ends on a whole word: ${c}`);
+  assert.equal(clipText("", 10), null);
+  assert.ok(TEXT_LIMITS.phone >= 300 && TEXT_LIMITS.eligibility >= 600 && TEXT_LIMITS.hours >= 300 && TEXT_LIMITS.caveats >= 400);
+  const [r] = shapeResources([res("e", "A", { eligibility: long, hours: "Mon to Fri 9 to 5. Walk-ins until 3, appointments after." })]);
+  assert.equal(r.eligibility, long, "real eligibility text is never cut");
+  assert.equal(r.hours, "Mon to Fri 9 to 5. Walk-ins until 3, appointments after.");
+  const [e] = shapeEmployers([emp("c", "A", { caveats: "x ".repeat(600) })], { today: "2026-10-27" });
+  assert.ok(e.caveats!.endsWith("...") && e.caveats!.length <= TEXT_LIMITS.caveats + 3);
+});
+
+it("city: local employers first (the mark, then reported), then elsewhere in the state; labeled honestly", () => {
+  const rows = [emp("a-det", "A", { city: "Detroit" }), emp("b-lan", "B"), emp("a-lan", "A"), emp("a-gr", "A", { city: "Grand Rapids" })];
+  const out = shapeEmployers(rows, { city: "lansing", today: "2026-10-27" });
+  assert.deepEqual(out.map((e) => e.id), ["a-lan", "b-lan", "a-det", "a-gr"], "a reported Lansing employer comes before a marked one elsewhere");
+  assert.deepEqual(out.map((e) => e.inPlace), [true, true, false, false]);
+  const groups = employerGroups(out, { cityName: "Lansing", stateName: "Michigan" });
+  assert.deepEqual(groups.map((g) => [g.heading, g.employers.map((e) => e.id)]), [["In Lansing", ["a-lan", "b-lan"]], ["Elsewhere in Michigan", ["a-det", "a-gr"]]]);
+  assert.equal(groups[0].note, null);
+  const none = employerGroups(shapeEmployers([emp("a-det", "A", { city: "Detroit" })], { city: "lansing", today: "2026-10-27" }), { cityName: "Lansing", stateName: "Michigan" });
+  assert.deepEqual(none.map((g) => g.heading), ["Elsewhere in Michigan"]);
+  assert.match(none[0].note!, /^No employer listed in Lansing for this search yet\./);
+  assert.deepEqual(employerGroups(out, { cityName: null, stateName: "Michigan" }).map((g) => g.heading), [null], "no city typed: one plain list");
+  assert.equal(shapeEmployers(rows, { today: "2026-10-27" }).every((e) => !e.inPlace), true);
+  assert.equal(cityFold("Grand Rapids"), "grandrapids");
+  assert.equal(cityFold("grand rapids"), cityFold("Grand-Rapids"));
+});
+
+it("city: the route ranks the typed city inside the query, before its limit, and sends the label words", () => {
+  const route = readFileSync(new URL("../../app/api/org/directory/route.ts", import.meta.url), "utf8");
+  assert.match(route, /searchVerifiedEmployers\(\{[^}]*city: cityFold\(place\.cityKey\)/);
+  assert.match(route, /cityName:/);
+  assert.match(route, /stateName: stateName\(place\.state\)/);
+  const page = readFileSync(new URL("../../components/org/StaffDirectory.tsx", import.meta.url), "utf8");
+  assert.match(page, /employerGroups\(data\.employers, data\.place\)/);
+});
+
+it("handoff picker: only the searched state's listings, and a state is required", () => {
+  const rows = [{ id: "1", state: "MI" }, { id: "2", state: "MO" }, { id: "3", state: "WI" }, { id: "4", state: null }, { id: "5", state: "mi" }];
+  assert.deepEqual(inPickedState(rows, "MI").map((r) => r.id), ["1", "4", "5"]);
+  const route = readFileSync(new URL("../../app/api/org/handoffs/directory/route.ts", import.meta.url), "utf8");
+  const code = route.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, "");
+  assert.match(code, /if \(!st && .*Pick a state first/);
+  assert.equal((code.match(/inPickedState\(r\.data, st!\)/g) ?? []).length, 2, "employers and places for help");
+  assert.ok(code.indexOf("requireOrgCapability") < code.indexOf("searchVerifiedEmployers"), "the gate still runs first");
+  assert.doesNotMatch(code, /participant|clientId|SELECT/i, "still reads nothing about a person");
+});

@@ -57,3 +57,13 @@ test('public bands default to A, keep place and bands as parameters, and cap eac
  assert.match(app.sql,/FROM resource_app_v/);assert.deepEqual(app.params,[['food'],'MT',['lincoln'],'libby','59923',50]);assert.doesNotMatch(app.sql,/band/);
  assert.equal(RESOURCE_BAND_LABELS.C,'Found, could not confirm. Call first.');
 });
+
+test('employer search: a typed city ranks first inside the query, before the limit, and never filters (demo-eve E2)',()=>{
+ const x=publishedEmployerSql({state:'MI',bands:['A','B'],limit:25,city:'Lansing'});
+ assert.match(x.sql,/ORDER BY CASE WHEN lower\(regexp_replace\(coalesce\(city,''\),'\[\^A-Za-z\]','','g'\)\)=\$3 THEN 0 ELSE 1 END,band,state,name,id LIMIT \$4 OFFSET \$5/);
+ assert.equal(x.params[2],'lansing');assert.equal(x.params[3],25);
+ assert.ok(!/WHERE[^]*city[^]*ORDER BY/.test(x.sql.replace(/concat_ws\([^)]*\)/,'')),'the city is not a WHERE filter');
+ assert.equal(publishedEmployerSql({city:"Grand Rapids'; DROP"}).params.includes('grandrapidsdrop'),true,'letters only, always a bound parameter');
+ assert.match(publishedEmployerSql({state:'MI'}).sql,/ORDER BY band,state,name,id/,'no city: same order as before');
+ assert.match(publishedEmployerSql({state:'MI',city:'  '}).sql,/ORDER BY band,state,name,id/);
+});
