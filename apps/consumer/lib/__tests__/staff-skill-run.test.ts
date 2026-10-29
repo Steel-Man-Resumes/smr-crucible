@@ -188,3 +188,47 @@ it("W08: the prompt names the open page's person and the resolved words, never a
   assert.match(route, /\(staffActor \? staffSubjectPrompt\(staffFocus, staffPeople, staffResolved\) : ""\) \+/);
   assert.match(route, /resolvedNames: staffResolved\.map\(\(r\) => r\.word\),/);
 });
+
+// W08 review round 2 (2026-10-28): S1 split names, S3 possessive, S4 lowercase
+// ordinary words and middle names, S5 job words, S1 prompt wording.
+it("W08 round 2: a typed full name resolves only if every part fits one person", () => {
+  const MJ = "00000000-0000-0000-0000-00000000001a";
+  const AS = "00000000-0000-0000-0000-00000000001b";
+  const JEAN = "00000000-0000-0000-0000-00000000001c";
+  const people = [{ id: MJ, name: "Michael Jones" }, { id: AS, name: "Ann Shaw" }, { id: JEAN, name: "Jean Valjean" }];
+  // S1: "Michael Shaw" is one name and fits nobody: nothing, on or off a page.
+  assert.deepEqual(resolveTypedNames("Prep me for Michael Shaw", people, null), []);
+  assert.deepEqual(resolveTypedNames("Prep me for Michael Shaw", people, MJ), []);
+  assert.deepEqual(resolveTypedNames("Did Michael Jones call?", people, null).map((r) => [r.word, r.id]), [["Michael", MJ], ["Jones", MJ]]);
+  // S3: a possessive still resolves on his page.
+  assert.deepEqual(resolveTypedNames("Prep me for Valjean's interview", people, JEAN), [{ word: "Valjean", id: JEAN, firstName: "Jean" }]);
+  assert.deepEqual(resolveTypedNames("Prep me for Valjean’s interview", people, JEAN).map((r) => r.word), ["Valjean"]);
+});
+
+it("W08 round 2: lowercase ordinary words, middle names and job words never resolve", () => {
+  const JGV = "00000000-0000-0000-0000-00000000002a";
+  const MD = "00000000-0000-0000-0000-00000000002b";
+  const people = [{ id: JGV, name: "Jean Grant Valjean" }, { id: MD, name: "Minnie Driver" }];
+  // S4: an English word on the page is not the person, and the middle name is never matched.
+  assert.deepEqual(resolveTypedNames("She wants a grant for training", people, JGV), []);
+  assert.deepEqual(resolveTypedNames("Ask Grant about it", people, JGV), [], "middle names are never matched");
+  assert.deepEqual(resolveTypedNames("prep me for valjean", people, JGV).map((r) => r.word), ["valjean"]);
+  assert.deepEqual(resolveTypedNames("prep me for valjean", people, null), [], "lowercase only for the open page");
+  // S5: a job title is not a person named Driver, on or off a page.
+  assert.deepEqual(resolveTypedNames("Is the Forklift Driver opening still up?", people, null), []);
+  assert.deepEqual(resolveTypedNames("Is the Forklift Driver opening still up?", people, MD), []);
+  assert.deepEqual(resolveTypedNames("Will he take the Driver job?", people, null), []);
+  // A capitalized surname on its own still resolves.
+  assert.deepEqual(resolveTypedNames("How is Valjean doing?", people, null).map((r) => r.id), [JGV]);
+});
+
+it("W08 round 2: only the open page's person gets 'never say not on their list'", () => {
+  const JEAN = "00000000-0000-0000-0000-00000000003a";
+  const MARQUS = "00000000-0000-0000-0000-00000000003b";
+  const people = [{ id: JEAN, name: "Jean Valjean" }, { id: MARQUS, name: "Marqus Relly" }];
+  const other = staffSubjectPrompt(null, people, resolveTypedNames("Prep me for Relly", people, null));
+  assert.match(other, /"word":"Relly"/);
+  assert.ok(!other.includes("Never say"), "a match off the page is data only");
+  const onPage = staffSubjectPrompt(JEAN, people, resolveTypedNames("Prep me for Valjean", people, JEAN));
+  assert.match(onPage, /pageOpen true is part of the name of the person whose page is open: it means that person\. Never say that person is not on their list\./);
+});

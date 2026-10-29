@@ -180,3 +180,36 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
     assert.ok(checkOrgClaimsDeterministic("Jean should call Mason about the Forklift Driver opening.", LUPE, said, answer).some((p) => p.includes('"Mason"')));
   });
 });
+
+describe("W08 review round 2", () => {
+  const LUPE: OrgFacts = {
+    caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
+    visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+  };
+  const answer = { typedNamesInNoMatch: true };
+
+  it("S2: a resolved surname is allowed on the answer path only; a draft flags it as before", () => {
+    const facts: OrgFacts = { ...LUPE, resolvedNames: ["Valjean"] };
+    const t = "Hi Jean, I saw Valjean on the list today.";
+    assert.deepEqual(checkOrgClaimsDeterministic(t, facts, "Prep me for Valjean", answer), []);
+    assert.deepEqual(checkOrgClaimsDeterministic(t, facts, "Prep me for Valjean"), ['I could not match "Valjean" to anyone on your list']);
+    assert.deepEqual(checkOrgClaimsDeterministic(t, facts, "Prep me for Valjean"), checkOrgClaimsDeterministic(t, LUPE, "Prep me for Valjean"), "draft path identical with or without the resolution");
+  });
+
+  it("S6: a count after a month name is still a count", () => {
+    for (const [t, n] of [
+      ["In October 38 participants finished the program.", "38"],
+      ["As of today Oct 27 people are stalled.", "27"],
+      ["In Oct 45 people started.", "45"],
+      ["Tom saw it May 20 days ago.", "20"],
+    ] as const) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [`the figure "${n}" is not one of this caseload's numbers`], t);
+    }
+  });
+
+  it("S6: real dates still pass", () => {
+    for (const t of ["Jean was last active Sun Oct 25 this week.", "Jean joined October 25, 2026 by his sharing.", "Jean was last active 10/25 this week.", "Jean was active Oct 31 and Nov 1 too."]) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [], t);
+    }
+  });
+});
