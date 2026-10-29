@@ -92,10 +92,20 @@ const WEEKDAY = "(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon
 const DAY = "(?:3[01]|[12]\\d|0?[1-9])";
 /**
  * Round 3 (B1): an allow-list, not a deny-list. "Month D" is a date only when
- * the day is followed by the end, punctuation, or one of these words. "In
+ * the day is followed by the end, a newline, punctuation, a dash or "(", a
+ * clock time, or one of these words (round 4 widened the list). "In
  * October 22 graduates" and "Since Oct 1 1500 people" stay counts.
  */
-const DATE_FOLLOW = "(?=\\s*$|\\s*[.,;:!?)\\]]|\\s+(?:at|and|to|through|or|in|on|by|until|from|for|when|before|after|the|his|her|their)\\b)";
+const FOLLOW_WORDS = (
+  "at and to through or in on by until from for when before after the his her their " +
+  // Round 4 (review R3, S1): words that follow a date in ordinary answers.
+  "this last next too so but was is were he she they it with via we you i as if then while during around"
+).split(" ").map((w) => `[${w[0]}${w[0].toUpperCase()}]${w.slice(1)}`).join("|");
+const DATE_FOLLOW =
+  "(?=[ \\t]*$|[ \\t]*\\n|\\s*[.,;:!?)\\]]|\\s*[(\\-\u2013\u2014]" +
+  // A clock time: "Thu Oct 29 9:00 AM", "Oct 24 6 PM".
+  "|\\s+\\d{1,2}(?::\\d{2})?\\s*(?:[AaPp]\\.?[Mm]\\b)|\\s+\\d{1,2}:\\d{2}\\b" +
+  `|\\s+(?:${FOLLOW_WORDS})\\b)`;
 const WRITTEN_DATE = new RegExp(
   `(?:\\b${WEEKDAY}\\.?,?\\s+)?\\b${MONTH}\\.?\\s+${DAY}(?:st|nd|rd|th)?\\b(?:,\\s+(?:19|20)\\d{2}\\b${DATE_FOLLOW}|${DATE_FOLLOW})` +
     "|\\b\\d{4}-\\d{2}-\\d{2}(?:T[\\d:.]+Z?)?\\b",

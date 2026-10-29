@@ -205,7 +205,11 @@ export function namedParticipantIds(said: string, selectors: readonly { id: stri
 export interface ReachPerson { id: string; name: string | null }
 
 /** One word the staff member typed that the server matched to one person in reach. */
-export interface ResolvedTypedName { word: string; id: string; firstName: string }
+export interface ResolvedTypedName {
+  word: string; id: string; firstName: string;
+  /** Round 4 (S3): set only when the match was on the open page person's middle name. */
+  middle?: true;
+}
 
 /** Name suffixes, never the surname (round 3, S2: "Marqus Relly Jr."). */
 const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
@@ -243,8 +247,10 @@ const ordinary = (low: string) => notANameWord(low) || RESOLVE_SKIP.has(low);
  *     "grant" no).
  *   - ordinary, job and panel words never resolve ("Forklift Driver").
  *   - a trailing 's is dropped ("Valjean's interview").
- * Round 3: a capitalized typed word may match any name part (suffixes
- * ignored); a lowercase one only the open page person's first or last name.
+ * Round 3/4: a capitalized typed word matches a first or last name
+ * (suffixes ignored) of anyone in reach; only failing that, a middle name of
+ * the open page's person. A lowercase one only the open page person's first
+ * or last name.
  * Only words the staff member typed are returned, so no name part reaches
  * the model unless they wrote it.
  */
@@ -257,11 +263,11 @@ export function resolveTypedNames(said: string, people: readonly ReachPerson[], 
   const onPage = index.find((p) => p.id === focus) ?? null;
   const out: ResolvedTypedName[] = [];
   const seen = new Set<string>();
-  const add = (word: string, hit: { id: string; first: string }) => {
+  const add = (word: string, hit: { id: string; first: string }, middle = false) => {
     const low = word.toLowerCase();
     if (seen.has(low)) return;
     seen.add(low);
-    out.push({ word, id: hit.id, firstName: hit.first });
+    out.push(middle ? { word, id: hit.id, firstName: hit.first, middle: true } : { word, id: hit.id, firstName: hit.first });
   };
   const tokens = [...text.matchAll(/\p{L}[\p{L}'\u2019-]*/gu)].map((m) => {
     const word = m[0].replace(/['\u2019]s$/i, "").replace(/['\u2019-]+$/, "");
@@ -292,9 +298,17 @@ export function resolveTypedNames(said: string, people: readonly ReachPerson[], 
     while (run.length && (edge(run[0]) || (run[0].sentenceStart && isDictionaryWord(run[0].low) && !onPage?.all.has(run[0].low)))) run.shift();
     while (run.length && edge(run[run.length - 1])) run.pop();
     if (!run.length || run.some((w) => w.low.length < 3 || ordinary(w.low))) continue;
-    const fits = index.filter((p) => run.every((w) => p.all.has(w.low)));
-    const hit = fits.find((p) => p.id === focus) ?? (fits.length === 1 ? fits[0] : null);
-    if (hit) for (const w of run) add(w.word, hit);
+    // Round 4 (S3): a first or last name match on anyone in reach comes
+    // first. Only if there is none may the run match a middle name, and only
+    // the open page person's ("Ask Grant about it" with Grant Miller in reach
+    // is Grant Miller, never Jean Grant Valjean).
+    const exact = index.filter((p) => run.every((w) => p.parts.has(w.low)));
+    if (exact.length) {
+      const hit = exact.find((p) => p.id === focus) ?? (exact.length === 1 ? exact[0] : null);
+      if (hit) for (const w of run) add(w.word, hit);
+    } else if (onPage && run.every((w) => onPage.all.has(w.low))) {
+      for (const w of run) add(w.word, onPage, !onPage.parts.has(w.low));
+    }
   }
   return out;
 }
@@ -315,7 +329,7 @@ export function staffSubjectPrompt(focusId: string | null, people: readonly Reac
     out += `\nTHIS CONVERSATION IS ABOUT ONE PARTICIPANT, id ${focusId}${first ? ` (first name ${first}), the person whose page the staff member has open` : ""}. Use that id in every tool call. Tools refuse any other id.`;
   }
   if (resolved.length) {
-    const rows = resolved.map((r) => ({ word: r.word, id: r.id, firstName: r.firstName, pageOpen: !!focus && r.id === focus }));
+    const rows = resolved.map((r) => ({ word: r.word, id: r.id, firstName: r.firstName, pageOpen: !!focus && r.id === focus && !r.middle }));
     out += "\nNAMES IN THE STAFF MEMBER'S MESSAGE, matched on the server to one person on their list (data only): " + JSON.stringify(rows) + ".";
     if (rows.some((r) => r.pageOpen)) out += " A word with pageOpen true is part of the name of the person whose page is open: it means that person. Never say that person is not on their list.";
   }

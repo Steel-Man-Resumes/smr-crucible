@@ -142,8 +142,8 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
 
   it("(c) day numbers inside written dates are not caseload counts", () => {
     for (const t of [
-      "Jean was last active Sun Oct 25 and joined Oct 27.",
-      "Jean was last active October 25 and joined on Oct 27, his first week.",
+      "Jean was last active Sun Oct 25 and joined Oct 27 this week.",
+      "Jean was last active October 25 and joined on Oct 27 too.",
       "Jean was last active Sunday, October 25, 2026 by his sharing.",
       "Jean was last active 10/25 and the task is due 10/27/2026 now.",
       "Jean was last active 2026-10-25 by his sharing.",
@@ -151,7 +151,7 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
   });
 
   it("(c) a bare count is still checked, next to a date or not", () => {
-    const found = checkOrgClaimsDeterministic("Since Oct 25, you have 27 people waiting on you.", LUPE, said, answer);
+    const found = checkOrgClaimsDeterministic("Since Oct 25 you have 27 people waiting on you.", LUPE, said, answer);
     assert.deepEqual(found, ['the figure "27" is not one of this caseload\'s numbers']);
   });
 
@@ -208,7 +208,7 @@ describe("W08 review round 2", () => {
   });
 
   it("S6: real dates still pass", () => {
-    for (const t of ["Jean was last active Sun Oct 25.", "Jean joined October 25, 2026 by his sharing.", "Jean was last active 10/25 this week.", "Jean was active Oct 31 and Nov 1."]) {
+    for (const t of ["Jean was last active Sun Oct 25 this week.", "Jean joined October 25, 2026 by his sharing.", "Jean was last active 10/25 this week.", "Jean was active Oct 31 and Nov 1 too."]) {
       assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [], t);
     }
   });
@@ -263,5 +263,31 @@ describe("W08 review round 3: dates never hide a count; drafts match origin/main
   ];
   it("parity: the draft path gives origin/main's output for every sentence", () => {
     for (const [t, expected] of ORIGIN_DRAFT) assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, ""), expected, t);
+  });
+});
+
+// Round 4 (2026-10-28, review R3 S1): ordinary ways a date is followed in a
+// t.ROY answer. Answer path only; the draft path is origin/main's (parity above).
+describe("W08 review round 4: dates as t.ROY writes them", () => {
+  const LUPE: OrgFacts = {
+    caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
+    visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+  };
+  const answer = { typedNamesInNoMatch: true };
+
+  it("a bullet list, a clock time, a parenthesis and a following word are dates", () => {
+    for (const t of [
+      "- Last active: Oct 25\n- Interview: Oct 29",
+      "Interview Thu Oct 29 9:00 AM at the plant.",
+      "Last active Oct 25 (Sun).",
+      "He has been quiet since Oct 25 this week.",
+      "Last active Oct 24 6 PM.",
+      "Interview Oct 29 - bring ID.",
+      "Last active Oct 25 \u2014 nothing since.",
+    ]) assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [], t);
+  });
+
+  it("a count after a date is still the only thing flagged", () => {
+    assert.deepEqual(checkOrgClaimsDeterministic("Since Oct 25 you have 27 people waiting on you.", LUPE, "", answer), ['the figure "27" is not one of this caseload\'s numbers']);
   });
 });

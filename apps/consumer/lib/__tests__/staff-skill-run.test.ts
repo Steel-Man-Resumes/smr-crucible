@@ -249,11 +249,30 @@ it("W08 round 3: honorifics and suffixes are dropped; a capitalized word matches
   const MARQUS = "00000000-0000-0000-0000-00000000005b";
   const people = [{ id: CECI, name: "Circe Ayala Solano" }, { id: MARQUS, name: "Marqus Relly Jr." }];
   assert.deepEqual(resolveTypedNames("Prep me for Ms. Ayala", people, CECI).map((r) => [r.word, r.id]), [["Ayala", CECI]]);
-  assert.deepEqual(resolveTypedNames("Prep me for Ms. Ayala", people, null).map((r) => r.id), [CECI]);
+  assert.deepEqual(resolveTypedNames("Prep me for Ms. Ayala", people, null), [], "round 4: a middle name matches only the open page's person");
   assert.deepEqual(resolveTypedNames("How is Relly doing?", people, MARQUS).map((r) => [r.word, r.id]), [["Relly", MARQUS]]);
   assert.deepEqual(resolveTypedNames("prep me for relly", people, MARQUS).map((r) => r.word), ["relly"], "lowercase surname on his page, past the suffix");
   assert.deepEqual(resolveTypedNames("Is Dr Relly Jr in?", people, null).map((r) => r.word), ["Relly"]);
   // Still never a guess: a lowercase middle name, or a name part nobody in reach has.
   assert.deepEqual(resolveTypedNames("she said ayala", people, CECI), []);
   assert.deepEqual(resolveTypedNames("Prep me for Ms. Shaw", people, CECI), []);
+});
+
+// Round 4 (review R3, S3): a first or last name on anyone in reach beats the
+// open page person's middle name, and a middle-name match never gets the
+// "never say not on their list" line.
+it("W08 round 4: 'Ask Grant about it' is Grant Miller, not Jean Grant Valjean's middle name", () => {
+  const JGV = "00000000-0000-0000-0000-00000000006a";
+  const GM = "00000000-0000-0000-0000-00000000006b";
+  const people = [{ id: JGV, name: "Jean Grant Valjean" }, { id: GM, name: "Grant Miller" }];
+  assert.deepEqual(resolveTypedNames("Ask Grant about it", people, JGV).map((r) => [r.word, r.id]), [["Grant", GM]]);
+  assert.deepEqual(resolveTypedNames("Is Grant ready?", people, null).map((r) => r.id), [GM]);
+  const prompt = staffSubjectPrompt(JGV, people, resolveTypedNames("Ask Grant about it", people, JGV));
+  assert.ok(!prompt.includes("Never say"), "the open page's person was not matched on first or last name");
+  // Without Grant Miller, the page person's middle name matches, but still no "never say" line.
+  const solo = [{ id: JGV, name: "Jean Grant Valjean" }];
+  const r = resolveTypedNames("Ask Grant about it", solo, JGV);
+  assert.deepEqual(r.map((x) => [x.word, x.id, x.middle]), [["Grant", JGV, true]]);
+  assert.ok(!staffSubjectPrompt(JGV, solo, r).includes("Never say"));
+  assert.ok(staffSubjectPrompt(JGV, solo, resolveTypedNames("Prep me for Valjean", solo, JGV)).includes("Never say"));
 });
