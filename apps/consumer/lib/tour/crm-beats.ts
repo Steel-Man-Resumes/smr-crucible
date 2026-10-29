@@ -6,7 +6,8 @@
  * really leave me feeling I needed it cuz of the power of the tools". So every
  * stop now shows a tool doing work, not a button: a sorted Today, Prep me, the
  * timeline, a note from bullets, a shared task, referrals that come back, the
- * list made your own, and t.ROY across the whole caseload. Owners and admins
+ * list made your own, and t.ROY across the whole caseload (v3 below swaps the
+ * timeline and referrals stops for Send to and the Directory). Owners and admins
  * get two more (Insights for a funder, who sees whom). The privacy line moved
  * into the ending.
  *
@@ -16,9 +17,17 @@
  * about fictional people, never a live answer. Claims are checked against the
  * code: Today (packages/core/src/orgTodayItems.ts, components/org/TodayPage.tsx),
  * Prep me (lib/skills/staff-prep-me/SKILL.md), the person page
- * (components/org/ClientPage.tsx, PersonTimeline.tsx), referrals
- * (components/org/Referrals.tsx), the caseload views (CaseloadWorkbench.tsx),
+ * (components/org/ClientPage.tsx), Send to (components/org/HandoffPanel.tsx),
+ * the Directory (components/org/StaffDirectory.tsx), the caseload views (CaseloadWorkbench.tsx),
  * Insights (InsightsReport.tsx), Team & access, the staff skills (lib/staff-troy.ts).
+ *
+ * Version 3 (demo fixes 2026-10-28, lane E3). On the live walk the Referrals
+ * stop lit a page with nothing on it, and the two strongest staff tools were
+ * missing: the Directory and "Send to <first name>". Referrals and the
+ * timeline stop are gone (Prep me already catches you up in one click, and a
+ * referral's follow-up day still shows on Today under Referrals past due);
+ * Directory search and the person page's Send to panel take their places.
+ * A staff seat still sees eight stops.
  *
  * Targets: each inner list is one element, its data-tour id first, then
  * fallbacks (an element id, or `sel:<css>`, lib/tour/find-target.ts). Ids not
@@ -29,10 +38,11 @@
  * CRM_TOUR_BEATS (every beat, in this order), or CRM_ENDING_INDEX. The client
  * turns that index back into a beat id and resumes at that beat, or at the
  * next one that applies (resumeStop), never at a position in the shorter
- * resolved path. The registry's version is 2, so a version 1 place never
+ * resolved path. The registry's version is 3, so a version 1 or 2 place never
  * resumes here.
  */
 import { holdMs } from './timing';
+import { STAFF_FEATURES, staffFeatureOn, type StaffFeature, type StaffFeatures } from '../staff-features';
 
 export type CrmTourGroup = 'today' | 'person' | 'follow' | 'owner' | 'assistant';
 export const CRM_TOUR_GROUPS: readonly { id: CrmTourGroup; label: string }[] = [
@@ -60,6 +70,8 @@ export interface CrmBeat {
   needs?: string;
   /** An org_profile.modules switch the page needs (absent modules: on). */
   module?: string;
+  /** A staff feature flag the page needs (lib/staff-features.ts), the same flag its nav entry uses. */
+  feature?: StaffFeature;
   /** The sidebar must be visible for this stop (opens the phone drawer). */
   drawer?: boolean;
   /**
@@ -94,12 +106,6 @@ export const CRM_TOUR_BEATS: readonly CrmBeat[] = [
     example: ['Coming: interview Thursday, from her shared applications', 'Open: bring ID, a task you both see', 'Ask: what would make Thursday easier?'],
   },
   {
-    id: 'person-timeline', group: 'person', href: `/dashboard/clients/${CRM_PERSON_TOKEN}?tab=timeline`, needsPerson: true, minFound: 1,
-    targets: [['crm-person-timeline-tab', 'sel:[role="tablist"] [role="tab"][aria-selected="true"]']],
-    title: 'Catch up in one place',
-    body: 'Notes, tasks, referrals, outcomes and changes in one line, newest first, each linked to where it came from. No digging before a meeting.',
-  },
-  {
     id: 'person-note', group: 'person', href: `/dashboard/clients/${CRM_PERSON_TOKEN}?tab=notes`, needsPerson: true, needs: 'org.note.write', minFound: 1,
     targets: [['crm-person-note-box', 'note-body']],
     title: 'Write it rough',
@@ -113,15 +119,25 @@ export const CRM_TOUR_BEATS: readonly CrmBeat[] = [
     body: 'Share a task and it shows on their own page too. When they tick it done, you see it here, and it leaves your Today.',
   },
   {
+    // Same page as the task stop: the Send to panel sits under their tasks (components/org/HandoffPanel.tsx, section#handoff).
+    id: 'person-handoff', group: 'person', href: `/dashboard/clients/${CRM_PERSON_TOKEN}?tab=tasks`, needsPerson: true, needs: 'org.suggest.write', minFound: 1,
+    targets: [['crm-person-handoff', 'handoff']],
+    title: 'Send it to them, see their answer',
+    body: 'Pick a job, an employer, a place for help or a next step and add a short note. They take or pass on each one, and you see which.',
+    example: ['You send Alma: the warehouse lead, the bus pass office, bring ID Tuesday', 'Alma took the warehouse lead and the bus pass. She passed on the other.'],
+  },
+  {
     id: 'no-people', group: 'person', href: '/dashboard/today', noPeopleOnly: true, drawer: true, minFound: 1, targets: [['org-nav-people']],
     title: 'Nobody on your list yet',
     body: 'The person stops wait until someone joins your organization. Each person decides what you see of their work. Replay this tour when they do.',
   },
   {
-    id: 'referrals', group: 'follow', href: '/dashboard/referrals', needs: 'org.client.view_content', module: 'referrals', minFound: 1,
-    targets: [['crm-referrals-head', 'sel:#main h1']],
-    title: 'Referrals that come back',
-    body: 'Send someone to local help and set a day to follow up. If the day slips, it lands on Today under Referrals past due.',
+    // Lights the search form, never the results list (it is empty until a search runs).
+    id: 'directory', group: 'follow', href: '/dashboard/directory', needs: 'org.client.view_content', feature: 'directory', minFound: 1,
+    targets: [['crm-directory-search', 'sel:form[aria-label="Search the directory"]']],
+    title: 'Local help and employers, one search',
+    body: 'Type a town and what they need. You get local help and employers that hire people with records, checked listings first, each one ready to send.',
+    example: ['You type: Lansing, MI, food and a forklift job', 'You get: the checked food pantry first, then employers near Lansing', 'Send to Alma puts one on her page'],
   },
   {
     id: 'people-views', group: 'follow', href: '/dashboard/people', minFound: 1,
@@ -165,8 +181,9 @@ export interface CrmTourContext {
 }
 
 /** Which beats this run can show, in order, decided once at the start. */
-export function applicableBeats(ctx: Pick<CrmTourContext, 'personId' | 'capabilities' | 'todayRow' | 'modules'>): CrmBeat[] {
+export function applicableBeats(ctx: Pick<CrmTourContext, 'personId' | 'capabilities' | 'todayRow' | 'modules'> & { features?: StaffFeatures }): CrmBeat[] {
   return CRM_TOUR_BEATS.filter(b => {
+    if (b.feature && !staffFeatureOn(b.feature, ctx.features ?? STAFF_FEATURES)) return false;
     if (b.needsPerson && !ctx.personId) return false;
     if (b.needsTodayRow && !ctx.todayRow) return false;
     if (b.noPeopleOnly && ctx.personId) return false;

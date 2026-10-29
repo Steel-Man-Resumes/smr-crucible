@@ -58,7 +58,9 @@ function StartInner() {
   const [saveError, setSaveError] = useState("");
   const navigating = useRef(false);
   // The account's saved resume (R1 revision), for the "welcome back" line.
-  const [accountRev, setAccountRev] = useState<{ number: number; status: string } | null>(null);
+  const [accountRev, setAccountRev] = useState<{ number: number; status: string; artifactId: string; fromWriter?: boolean } | null>(null);
+  // Keep going waits for that read, so a fast tap never skips saved work.
+  const [revChecked, setRevChecked] = useState(false);
   // Journey completion records the analysis; redirect also requires a finished resume.
   const [forgeComplete, setForgeComplete] = useState<boolean>(false);
   const [target, setTarget] = useState<string>("");
@@ -69,8 +71,14 @@ function StartInner() {
     let live = true;
     fetch("/api/revisions?forge=1", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => live && j?.revision && setAccountRev({ number: Number(j.revision.number), status: String(j.revision.status) }))
-      .catch(() => undefined);
+      .then((j) => live && j?.revision && setAccountRev({
+        number: Number(j.revision.number),
+        status: String(j.revision.status),
+        artifactId: String(j.revision.artifactId || ""),
+        fromWriter: j.revision.fromWriter === true,
+      }))
+      .catch(() => undefined)
+      .finally(() => live && setRevChecked(true));
     fetch("/api/user/journey", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => live && setForgeComplete(j?.snapshot?.metrics?.forgeComplete === true))
@@ -238,6 +246,8 @@ function StartInner() {
       hasForgeOutput: !!session.forgeOutput,
       hasResumeText: !!session.resumeText,
       forgeNext: planForgePath({ ...session, laneTask: task }).screens[0].path,
+      // The account's saved resume is where Keep going goes, not a new intake.
+      savedWork: accountRev,
     });
     return (
       <div data-testid="lane-home">
@@ -264,7 +274,8 @@ function StartInner() {
               if (session.laneTask !== task) keepInRun(task);
               router.push(seat(next));
             }}
-            className="t-focus mt-5 min-h-touch w-full bg-t-amber px-6 py-3 text-base font-bold text-white hover:bg-t-amber-bright sm:w-auto"
+            disabled={focus.signedIn && !revChecked}
+            className="t-focus mt-5 min-h-touch w-full bg-t-amber px-6 py-3 text-base font-bold text-white hover:bg-t-amber-bright disabled:opacity-60 sm:w-auto"
             data-testid="lane-home-continue"
           >
             Keep going

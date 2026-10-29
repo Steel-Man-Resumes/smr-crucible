@@ -150,12 +150,30 @@ export function forgeStartUrl(hostname: string, from = "refinery"): string {
  */
 export function keepGoingHref(
   task: LaneTask,
-  ctx: { signedIn: boolean; hasForgeOutput: boolean; hasResumeText: boolean; forgeNext: string }
+  ctx: { signedIn: boolean; hasForgeOutput: boolean; hasResumeText: boolean; forgeNext: string; savedWork?: SavedWork | null }
 ): string {
   if (task === "interview") return routeHref(task, { signedIn: ctx.signedIn, hasResume: false });
-  if (task === "resume") return ctx.hasForgeOutput ? "/output" : ctx.forgeNext;
-  if (task === "job") return ctx.hasForgeOutput ? "/output" : ctx.hasResumeText ? ctx.forgeNext : `${START_PATH}?step=job`;
+  // A resume saved to the account wins over this browser's empty run (demo
+  // review 2026-10-28, Ceci: "version 2 saved", then Keep going asked
+  // "Do you have a resume?"). Never restart intake over saved work.
+  const saved = ctx.signedIn && !ctx.hasForgeOutput && ctx.savedWork?.artifactId ? savedWorkHref(ctx.savedWork) : null;
+  if (task === "resume") return ctx.hasForgeOutput ? "/output" : saved ?? ctx.forgeNext;
+  if (task === "job") return ctx.hasForgeOutput ? "/output" : saved ?? (ctx.hasResumeText ? ctx.forgeNext : `${START_PATH}?step=job`);
   return routeHref(task, { signedIn: ctx.signedIn, hasResume: false });
+}
+
+/** The account's newest saved Forge resume, as GET /api/revisions?forge=1 returns it. */
+export interface SavedWork { artifactId: string; status: string; fromWriter?: boolean }
+
+/**
+ * Where saved work continues. A draft the writer made opens on its own cards
+ * ("Check and finish", the same place the Refinery's lane home sends it).
+ * Anything else (a finished resume, a page saved as it was given) opens in My
+ * resumes, where View shows it: never a new build and never the intake.
+ */
+export function savedWorkHref(w: SavedWork): string {
+  if (w.fromWriter === true && w.status !== "finished") return `/output?check=${encodeURIComponent(w.artifactId)}&${CARDS_PARAM}=1`;
+  return "/dashboard/vault";
 }
 
 /** The three document kinds behind "Creative work, a CV, or a performer page". */

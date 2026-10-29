@@ -19,6 +19,7 @@ import Link from "next/link";
 import { HANDOFF_PROMISE, PASS_WORDS, TAKE_WORDS, TAKEN_WORDS, type HandoffItemKind } from "@crucible/core/src/staffHandoffShared";
 import { bandLine, dayWords } from "@/lib/handoff-words";
 import { MySharedTasks } from "@/components/MySharedTasks";
+import { HANDOFFS_EMPTY, HANDOFFS_LOAD_FAILED, HANDOFFS_RETRY, loadMyHandoffs } from "@/lib/my-handoffs-load";
 
 interface Item {
   id: string; kind: HandoffItemKind; status: "open" | "saved" | "dismissed"; title: string; why: string;
@@ -50,11 +51,26 @@ export async function takeItem(it: Item, f: (url: string, body: unknown) => Prom
 
 function useHandoffs() {
   const [handoffs, setHandoffs] = useState<Handoff[] | null>(null);
+  // A failed read is its own state, never an empty list (demo review 2026-10-28).
+  const [failed, setFailed] = useState(false);
   const load = useCallback(() => {
-    fetch("/api/handoffs", { cache: "no-store" }).then((r) => (r.ok ? r.json() : { handoffs: [] })).then((d) => setHandoffs(d.handoffs ?? [])).catch(() => setHandoffs([]));
+    loadMyHandoffs<Handoff>().then((res) => {
+      if (res.ok) { setFailed(false); setHandoffs(res.handoffs); } else setFailed(true);
+    });
   }, []);
+  const retry = useCallback(() => { setFailed(false); setHandoffs(null); load(); }, [load]);
   useEffect(() => { load(); }, [load]);
-  return { handoffs, reload: load };
+  return { handoffs, failed, reload: load, retry };
+}
+
+/** The failed-read line with its Retry button, on the dashboard card and the page. */
+export function HandoffsLoadFailed({ onRetry }: { onRetry: () => void }) {
+  return (
+    <p role="alert" className="text-sm text-t-white" data-testid="handoffs-failed">
+      {HANDOFFS_LOAD_FAILED}{" "}
+      <button type="button" onClick={onRetry} className="t-focus underline underline-offset-4">{HANDOFFS_RETRY}</button>
+    </p>
+  );
 }
 
 function HandoffBlock({ h, onChange }: { h: Handoff; onChange: () => void }) {
@@ -115,8 +131,17 @@ function HandoffBlock({ h, onChange }: { h: Handoff; onChange: () => void }) {
 
 /** The dashboard card: renders nothing unless something is waiting for an answer. */
 export function MyHandoffsCard() {
-  const { handoffs, reload } = useHandoffs();
+  const { handoffs, failed, reload, retry } = useHandoffs();
   const open = (handoffs ?? []).filter((h) => h.items.some((i) => i.status === "open"));
+  // A failed read says so, with Retry, instead of quietly showing nothing.
+  if (failed) {
+    return (
+      <section aria-labelledby="my-handoffs" className="bg-t-panel border border-t-line p-5">
+        <h2 id="my-handoffs" className="font-semibold text-t-white">From your case manager</h2>
+        <div className="mt-2"><HandoffsLoadFailed onRetry={retry} /></div>
+      </section>
+    );
+  }
   if (open.length === 0) return null;
   return (
     <section aria-labelledby="my-handoffs" className="bg-t-panel border border-t-line p-5">
@@ -129,7 +154,7 @@ export function MyHandoffsCard() {
 }
 
 export function MyHandoffsPage() {
-  const { handoffs, reload } = useHandoffs();
+  const { handoffs, failed, reload, retry } = useHandoffs();
   return (
     <div className="max-w-3xl px-4 py-8 space-y-6">
       <header>
@@ -137,8 +162,9 @@ export function MyHandoffsPage() {
         <p className="text-sm text-t-phos-dim mt-2">{HANDOFF_PROMISE}</p>
       </header>
       <MySharedTasks />
-      {handoffs === null ? <p className="text-sm text-t-phos-dim">Loading...</p>
-        : handoffs.length === 0 ? <p className="text-sm text-t-phos-dim">Nothing new from your case manager in the last 30 days.</p>
+      {failed ? <HandoffsLoadFailed onRetry={retry} />
+        : handoffs === null ? <p className="text-sm text-t-phos-dim">Loading...</p>
+        : handoffs.length === 0 ? <p className="text-sm text-t-phos-dim">{HANDOFFS_EMPTY}</p>
         : <div className="space-y-6">{handoffs.map((h) => <HandoffBlock key={h.id} h={h} onChange={reload} />)}</div>}
     </div>
   );
