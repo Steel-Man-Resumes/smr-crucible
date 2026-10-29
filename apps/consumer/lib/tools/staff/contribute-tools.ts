@@ -57,6 +57,8 @@ export interface ContributeToolContext {
   readonly staffWords: string;
   readonly selectors: ReadonlyMap<string, string>;
   safe<A>(run: (args: A) => Promise<unknown>): (args: A) => Promise<unknown>;
+  /** Listing ids a directory read returned earlier in this request (types.ts). Absent: none. */
+  listingsRead?(): ReadonlySet<string>;
 }
 /** S1's StreamedShape: where each top-level key of a streamed result comes from. Only draftBody may be "draft". */
 export type StreamedFieldSource = "server" | "staff" | "draft";
@@ -69,6 +71,30 @@ export interface ContributeToolModule {
 }
 
 export const CONTRIBUTE_TOOL_NAMES = ["listing_check_nudge", "draft_directory_contribution"] as const;
+
+/** The directory reads whose listings a nudge may follow (demo fix T2 round 3). */
+export const DIRECTORY_READ_TOOLS: ReadonlySet<string> = new Set(["find_employers", "find_local_help", "find_missed_connections"]);
+
+/**
+ * The listing ids a directory read returned (find_employers: employers[].id;
+ * find_local_help: listings[].id; find_missed_connections: employers[].employerId
+ * and resources[].resourceId). Lower case, UUID-shaped only.
+ */
+export function directoryListingIds(toolName: string, result: unknown): string[] {
+  if (!DIRECTORY_READ_TOOLS.has(toolName) || !result || typeof result !== "object") return [];
+  const r = result as Record<string, unknown>;
+  if (r.status !== "ok") return [];
+  const ids: string[] = [];
+  const take = (rows: unknown, key: string) => {
+    if (!Array.isArray(rows)) return;
+    for (const row of rows) {
+      const v = (row as Record<string, unknown> | null)?.[key];
+      if (typeof v === "string" && UUID.test(v)) ids.push(v.toLowerCase());
+    }
+  };
+  take(r.employers, "id"); take(r.listings, "id"); take(r.employers, "employerId"); take(r.resources, "resourceId");
+  return ids;
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID = { type: "string", pattern: "^[0-9a-fA-F-]{36}$" };
 const SHORT = { type: "string", maxLength: 200 };
@@ -136,7 +162,7 @@ export const contributeTools: ContributeToolModule = {
   build(ctx) {
     return {
       listing_check_nudge: tool({
-        description: "Call ONCE after the staff member used a directory listing for someone (sent a referral to it, handed it to a participant, or chose it as a suggestion). It tells you whether you may ask them one short question about the listing. If it returns a line, end your answer with that line, word for word, and nothing more about it. If it returns quiet, do not mention it. Never call it twice for the same listing in one answer.",
+        description: "NEVER for a search request (\"find employers in Lansing\", \"find help in Jackson\"): answer a search with find_employers or find_local_help and their results. Call this ONCE only when the staff member says they USED or SENT a listing for someone (sent a referral to it, handed it to a participant, chose it as a suggestion), and only for a listing a directory search in this same answer returned (otherwise it stays quiet). It tells you whether you may ask them one short question about the listing. Write your whole answer first; if it returns a line, add that line at the very end, word for word, and nothing more about it. If it returns quiet, do not mention it. Never call it twice for the same listing in one answer.",
         parameters: jsonSchema<{ kind: ContributionKind; listingId: string }>({
           type: "object",
           properties: { kind: { type: "string", enum: ["employer", "resource"] }, listingId: ID },
@@ -144,6 +170,10 @@ export const contributeTools: ContributeToolModule = {
         }),
         execute: ctx.safe(async ({ kind, listingId }: { kind: ContributionKind; listingId: string }) => {
           if ((kind !== "employer" && kind !== "resource") || !UUID.test(String(listingId ?? ""))) return { status: "quiet" };
+          // Demo fix T2 round 3: a nudge never comes first. Only a listing a directory read
+          // returned earlier in this same request (live 923c517: "find employers in Lansing"
+          // got only the nudge line and its buttons, no employers).
+          if (!(ctx.listingsRead?.() ?? new Set<string>()).has(String(listingId).toLowerCase())) return { status: "quiet" };
           const actor = await ctx.actor();
           const nudge = await listingNudgeFor(actor, { kind, id: listingId }, { loadCore: () => ctx.loadCore() });
           if (!nudge) return { status: "quiet" };

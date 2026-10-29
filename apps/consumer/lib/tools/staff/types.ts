@@ -80,6 +80,13 @@ export interface StaffToolContext {
   refusal(reason: string): StaffToolRefusal;
   /** Said in every result that carries text people wrote. */
   readonly dataNote: string;
+  /**
+   * Listing ids a directory read (find_employers, find_local_help,
+   * find_missed_connections) returned earlier in THIS request (demo fix T2
+   * round 3). listing_check_nudge stays quiet for any other listing.
+   * Absent (an old test context): treated as empty.
+   */
+  listingsRead?(): ReadonlySet<string>;
 }
 
 /**

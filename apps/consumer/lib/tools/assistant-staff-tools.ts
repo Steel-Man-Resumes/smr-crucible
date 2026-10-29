@@ -40,6 +40,7 @@ import { localDay, DEFAULT_LOCAL_TIME_ZONE } from "@crucible/core/src/localDay";
 import { stationForJourneyStage, STATIONS } from "../refinery-nav";
 import { staffTextGate, safeCustomFields, WITHHELD_NOTE } from "../staff-ai-safety";
 import { composeStaffTools, STAFF_TOOL_MODULES, type StaffToolModule } from "./staff";
+import { directoryListingIds } from "./staff/contribute-tools";
 
 type Core = typeof import("@crucible/core");
 
@@ -447,15 +448,17 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
   // employer directory, and later lanes' tools. Merged here, before the budget
   // and the evidence collector, so they obey both; same hold, same actor check.
   const selectors = new Map((opts.selectors ?? []).filter((s) => /^[0-9a-f-]{36}$/i.test(s.id)).map((s) => [s.id.toLowerCase(), String(s.firstName ?? "")] as const));
+  // Listing ids the directory reads returned in this request (demo fix T2 round 3): the nudge follows only these.
+  const listingIds = new Set<string>();
   Object.assign(tools, composeStaffTools({
-    initial, loadCore, actor, hold: outOfFocus, markCaseloadRead: () => { caseloadRead = true; },
+    initial, loadCore, actor, hold: outOfFocus, markCaseloadRead: () => { caseloadRead = true; }, listingsRead: () => listingIds,
     focusId: focus, namedIds: named, selectors, staffWords: String(opts.staffWords ?? "").slice(0, 8000), clientIp: opts.clientIp ?? null,
     safe: <A,>(run: (a: A) => Promise<unknown>) => safe(run), refusal, dataNote: DATA_NOTE,
   }, tools, opts.modules ?? STAFF_TOOL_MODULES));
   const executeOnce = executionBudget(5);
   for (const [name, definition] of Object.entries(tools)) {
     const execute = definition.execute;
-    if (execute) definition.execute = (args, options) => executeOnce(name, args, async () => { const result = await execute(args, options); onEvidence?.(name, result); return result; });
+    if (execute) definition.execute = (args, options) => executeOnce(name, args, async () => { const result = await execute(args, options); for (const id of directoryListingIds(name, result)) listingIds.add(id); onEvidence?.(name, result); return result; });
   }
   return tools;
 }

@@ -37,6 +37,7 @@ import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffD
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
 import { staffHomeStatePrompt } from "@/lib/staff-org-place";
+import { staffAnswerText } from "@/lib/staff-answer-text";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
@@ -442,7 +443,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     });
     // A safety decline comes back as finishReason "unknown" with no text. Never
     // send a staff member an empty answer; say it plainly instead.
-    const answer = replyOrFallback(generated.text);
+    // Every step's words, never a card line alone (lib/staff-answer-text.ts; demo fix T2 round 3).
+    const answer = replyOrFallback(staffAnswerText(generated.steps, generated.text));
 
     const facts = {
       staffToolEvidence: staffEvidence.items,
