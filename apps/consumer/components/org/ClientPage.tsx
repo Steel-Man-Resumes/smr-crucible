@@ -39,7 +39,7 @@ import { useAutosaveDraft } from "@/lib/use-autosave-draft";
 import { STAFF_TROY_READY } from "@/lib/staff-troy";
 import { GlanceRow, PersonHeaderCard, PersonRail, Skeleton, StationStrip, TheirScreenBoard, scopeStateText } from "@/components/org/PersonOverview";
 import {
-  NOTE_CARE_LINE, PERSON_TABS, SHARE_SCOPES as SCOPES, capFirst, firstName, initialOpen, noteOwnershipLine, scopeToFetch,
+  NOTE_CARE_LINE, PERSON_TABS, SHARE_SCOPES as SCOPES, capFirst, firstName, initialOpen, noteOwnershipLine, scopeToFetch, scopesAfterRead, stoppedSharingLine,
   type OpenEvent, type PersonTab, type ShareScope as Scope,
 } from "@/lib/org-person-view";
 import { DEFAULT_STAFF_PREFS, NOTE_KINDS as KINDS, NOTE_KIND_LABELS, orderPersonTabs, type StaffPrefs } from "@crucible/core/src/staffPrefsShared";
@@ -50,6 +50,7 @@ import { HandoffPanel } from "@/components/org/HandoffPanel";
 import { ConnectionsPanel } from "@/components/org/ConnectionsPanel";
 import { VIEW_CHANGED_EVENT } from "@/lib/view-change-events";
 import { GiveKudos } from "@/components/org/rewards/GiveKudos";
+import { workEntryDates } from "@/components/resume/resumeModel";
 
 const STATUS_LABEL: Record<string, string> = {
   saved: "Saved", applied: "Applied", heard_back: "Heard back", interviewing: "Interviewing",
@@ -98,6 +99,8 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
   const [tab, setTab] = useState<PersonTab>("notes");
   const [item, setItem] = useState<Scope | null>(null);
   const [shared, setShared] = useState<Record<string, unknown>[] | null>(null);
+  // Scopes the participant stopped sharing while this page was open (W11): the read said so.
+  const [stoppedNow, setStoppedNow] = useState<Partial<Record<Scope, true>>>({});
   const [loadingTab, setLoadingTab] = useState(false);
   const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
   const [opened, setOpened] = useState(false);
@@ -143,6 +146,17 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
     const res = await fetch(`/api/org/clients/${clientId}?scope=${scope}`).catch(() => null);
     const d = res && res.ok ? await res.json() : { rows: [] };
     setShared(d.rows ?? []); setLoadingTab(false);
+    // W11: the read was refused but this page still says shared. Read the header again and say
+    // "stopped" only if the fresh header agrees (an admin outside an assigned-staff policy can see a
+    // header that says shared while the read says not; that is not the participant stopping).
+    // Display only; the read was already refused. A failed re-read changes nothing on screen.
+    if (scopesAfterRead(client.scopes, scope, d.shared).stopped) {
+      const fresh = await fetch(`/api/org/clients/${clientId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (fresh?.client && !fresh.client.scopes?.[scope]?.shared) {
+        setClient(fresh.client); setNotes(fresh.notes); setViewer(fresh.viewer); setSuggestions(fresh.suggestions ?? []);
+        setStoppedNow((m) => ({ ...m, [scope]: true }));
+      }
+    }
   }, [client, clientId]);
 
   // Start where this person asked to start (Settings -> My workflow). A shared
@@ -248,7 +262,7 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
             <NotesPanel clientId={clientId} first={first} notes={notes} canWrite={!!viewer?.canWriteNotes} viewerId={viewer?.userId ?? null} onSaved={load}
               defaultKind={prefs.noteKind} />
           ) : (
-            <SharedTab client={client} clientId={clientId} first={first} item={item} rows={shared} loading={loadingTab} viewer={viewer}
+            <SharedTab client={client} clientId={clientId} first={first} item={item} rows={shared} loading={loadingTab} viewer={viewer} stopped={!!(item && stoppedNow[item])}
               suggestions={suggestions} onPick={(s) => go({ kind: "item", scope: s })} onChange={load} />
           )}
         </div>
@@ -259,9 +273,11 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
 }
 
 /** What they shared: pick an item. Picking a shared one is the logged open. Exported for tests. */
-export function SharedTab({ client, clientId, first, item, rows, loading, viewer, suggestions, onPick, onChange }: {
+export function SharedTab({ client, clientId, first, item, rows, loading, viewer, suggestions, onPick, onChange, stopped = false }: {
   client: Client; clientId: string; first: string; item: Scope | null; rows: Record<string, unknown>[] | null; loading: boolean;
   viewer: { canRequest: boolean; canSuggest?: boolean } | null; suggestions: Suggestion[]; onPick: (s: Scope) => void; onChange: () => void;
+  /** The participant stopped sharing this item while the page was open (W11). */
+  stopped?: boolean;
 }) {
   const st = item ? client.scopes[item] : null;
   return (
@@ -309,8 +325,13 @@ export function SharedTab({ client, clientId, first, item, rows, loading, viewer
           </p>
         </div>
       ) : (
-        <AskPanel clientId={clientId} first={first} scope={SCOPES.find((s) => s.key === item)!} pending={st.requestPending}
-          canRequest={!!viewer?.canRequest} onAsked={onChange} />
+        <>
+          {stopped && (
+            <p role="status" className="text-sm text-t-white bg-t-panel border border-t-amber px-4 py-3 mb-4">{stoppedSharingLine(first, item)}</p>
+          )}
+          <AskPanel clientId={clientId} first={first} scope={SCOPES.find((s) => s.key === item)!} pending={st.requestPending}
+            canRequest={!!viewer?.canRequest} onAsked={onChange} />
+        </>
       )}
     </section>
   );
@@ -534,7 +555,7 @@ function ArtifactBody({ content }: { content: unknown }) {
             {c.experience.map((e, i) => (
               <li key={e.id ?? i}>
                 <p className="text-t-white">{[e.title, e.company].filter(Boolean).join(", ")}</p>
-                <p className="text-xs text-t-phos-dim">{[e.startDate, e.endDate].filter(Boolean).join(" to ")}</p>
+                <p className="text-xs text-t-phos-dim">{e.startDate || e.endDate ? workEntryDates(e) : ""}</p>
                 {!!e.bullets?.length && <ul className="list-disc pl-5 mt-1 space-y-0.5">{e.bullets.map((b, j) => <li key={j}>{b}</li>)}</ul>}
               </li>
             ))}

@@ -150,6 +150,35 @@ export function initialOpen(pref: string, last: string | null, scopes: Record<Sh
 }
 
 /**
+ * After a shared-item read, the server's answer wins over the header the page
+ * loaded with (walkthrough W11, 2026-10-27). If the participant stopped
+ * sharing while the page was open, the read comes back `shared: false`; the
+ * page must then stop saying "Shared". Display only: access was already
+ * refused by the server. This only ever turns sharing OFF in the view; a
+ * read can never turn a scope on here (that waits for the next header load).
+ * Returns the same object when nothing changed.
+ */
+export function scopesAfterRead(
+  scopes: Record<ShareScope, ScopeView>, scope: ShareScope, serverShared: unknown,
+): { scopes: Record<ShareScope, ScopeView>; stopped: boolean } {
+  const was = scopes[scope];
+  if (serverShared !== false || !was?.shared) return { scopes, stopped: false };
+  return {
+    scopes: {
+      ...scopes,
+      [scope]: { ...was, shared: false, sharedAt: null, fromDate: null, requestPending: false, stoppedByParticipant: was.required ? true : was.stoppedByParticipant },
+    },
+    stopped: true,
+  };
+}
+
+/** The line shown when a scope stopped being shared while the page was open (W11). */
+export function stoppedSharingLine(first: string, scope: ShareScope): string {
+  const label = SHARE_SCOPES.find((s) => s.key === scope)?.label.toLowerCase() ?? "this";
+  return `Not shared. ${capFirst(first)} turned off sharing for ${label}.`;
+}
+
+/**
  * Their screen, station by station: what each holds and what staff can see of
  * it. A map, not a window. "never" areas are not part of any sharing choice.
  */
