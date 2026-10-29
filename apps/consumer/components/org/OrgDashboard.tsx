@@ -46,6 +46,7 @@ import { STATIONS, stationForJourneyStage } from "@/lib/refinery-nav";
 import { DuplicateWarning } from "@/components/org/DuplicateWarning";
 import { useAddPersonPrefill, AddPersonPrefillNotice } from "@/components/org/AddPersonPrefill";
 import { prefillFullName } from "@/lib/org-add-person-prefill";
+import { joinedNotSharingLine } from "@/lib/org-joined-not-sharing";
 import {
   DEFAULT_STAFF_PREFS,
   CASELOAD_SORTS,
@@ -521,8 +522,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
           {joinedNotSharing > 0 && !drillStaffId && !ownCaseloadOnly && clients.length === 0 && (
             <span>
               {" "}
-              {joinedNotSharing} {joinedNotSharing === 1 ? "person has" : "people have"} joined with the
-              code; they can turn on sharing from their own Settings.
+              {joinedNotSharingLine(joinedNotSharing, terms.program)}
             </span>
           )}
         </div>
@@ -653,7 +653,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
         unassignedJoined: data?.unassignedJoined ?? null,
         adminNames: staff.filter((m) => m.role === "org_admin").map((m) => m.name || ""),
       }).message
-    : `No one is sharing progress here yet.${joinedNotSharing > 0 ? ` ${joinedNotSharing} ${joinedNotSharing === 1 ? "person has" : "people have"} joined with the code; they can turn on sharing from their own Settings.` : ""}`;
+    : `No one is sharing progress here yet.${joinedNotSharing > 0 ? ` ${joinedNotSharingLine(joinedNotSharing, terms.program)}` : ""}`;
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
@@ -1116,8 +1116,7 @@ export function OrgDashboard({ codeId = "", view: requestedView = "all" }: { cod
 
           {clients.length > 0 && joinedNotSharing > 0 && (
             <p className="text-xs text-t-phos-dim mt-4">
-              {joinedNotSharing} more {joinedNotSharing === 1 ? "person has" : "people have"} joined with the
-              code but have not turned on sharing yet. They control that from their own Settings.
+              {joinedNotSharingLine(joinedNotSharing, terms.program, { more: true })}
             </p>
           )}
 
