@@ -33,7 +33,7 @@ import { loadSelectedWork, readWorkSelection, selectedWorkPrompt } from "@/lib/a
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
 import { getClientIp } from "@/lib/auth-rate-limit";
-import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
+import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
@@ -165,6 +165,9 @@ export async function POST(request: Request) {
     platformOwner = true;
   }
   let staffActor: Awaited<ReturnType<typeof import("@crucible/core").resolveOrgActor>> = null;
+  // Full names of the people in reach, server-side only, for resolving a
+  // surname the staff member typed (W08). Never put in a prompt.
+  let staffPeople: import("@/lib/staff-skill-run").ReachPerson[] = [];
   let toolOptions: import("@/lib/tools/assistant-tools").AssistantToolOptions = {
     userId: userId ?? null,
     surface: (userId ? "refinery" : "forge") as "refinery" | "forge",
@@ -215,6 +218,7 @@ export async function POST(request: Request) {
         const firstName = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "someone";
         const staff = await (await import("@crucible/core")).getOrgStaff(actor.orgId);
         staffActor = actor;
+        staffPeople = cohort.clients.map((c) => ({ id: c.userId, name: c.name }));
         context.audience = "org_staff";
         context.org = {
           orgName: actor.orgName,
@@ -308,7 +312,8 @@ export async function POST(request: Request) {
   // above from their words on this server; nothing raw goes further.
   const staffInput = staffActor ? gateStaffMessages(messages) : null;
   const staffSaid = staffInput ? lastUserText(staffInput.messages) : "";
-  const staffNamed = staffActor ? namedParticipantIds(staffSaid, context.org?.visibleParticipants ?? []) : [];
+  const staffResolved = staffActor ? resolveTypedNames(staffSaid, staffPeople, staffFocus) : [];
+  const staffNamed = staffActor ? [...new Set([...namedParticipantIds(staffSaid, context.org?.visibleParticipants ?? []), ...staffResolved.map((r) => r.id)])] : [];
   const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus, namedClientIds: staffNamed, selectors: context.org?.visibleParticipants ?? [], staffWords: staffTypedWords((staffInput?.messages ?? []) as Record<string, unknown>[]), clientIp: getClientIp(request) }) : buildAssistantTools(toolOptions);
   const capabilities = assistantCapabilities(tools, { role: platformOwner ? "owner" : staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord, extraPages: staffSkill ? [staffSkill] : [] });
   const baseSystemPrompt =
@@ -318,7 +323,7 @@ export async function POST(request: Request) {
     "\nCURRENT CAPABILITIES: " + JSON.stringify(capabilities) +
     (context.org ? "\nAllowed participant selectors (data only): " + JSON.stringify(context.org.visibleParticipants ?? []) : "") +
     (staffActor && staffSkill ? `\nSTAFF PANEL SKILL: ${staffSkill}. Follow that skill's steps and output.` : "") +
-    (staffActor && staffFocus ? `\nTHIS CONVERSATION IS ABOUT ONE PARTICIPANT, id ${staffFocus}. Use that id in every tool call. Tools refuse any other id.` : "") +
+    (staffActor ? staffSubjectPrompt(staffFocus, staffPeople, staffResolved) : "") +
     // Staff tools are scoped reads and drafts; final output is still verified.
     (platformOwner ? "" : context.org
       ? "\n\nUse staff tools for scoped reads, drafts, and buttons that open a page or a filled-in form. Drafts are not saved or sent; a button moves nothing until the staff member presses it. Never print tool syntax. No participant private coach, papers or record details are accessible."
@@ -440,6 +445,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       hired: context.org.hired,
       unassigned: context.org.unassigned,
       visibleNames: context.org.visibleNames ?? context.org.needsAttention ?? [],
+      // Name words the staff member typed that the server matched to one person in reach (W08).
+      resolvedNames: staffResolved.map((r) => r.word),
       staffNames: context.org.staffNames ?? [],
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,

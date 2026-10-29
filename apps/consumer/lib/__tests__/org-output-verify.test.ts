@@ -114,3 +114,180 @@ describe("clean output passes", () => {
     assert.deepEqual(problems(answer), []);
   });
 });
+
+// Demo walk W08 (2026-10-27): Lupe on Jean Valjean's page, "Prep me". The
+// useful summary came back with "Prep", "Forklift" and "Driver" reported as
+// people outside her access, and the day numbers in "Oct 27" and "October 25"
+// reported as caseload figures. False warnings teach staff to ignore the box.
+describe("W08: dates, job words, panel labels and a resolved surname are not claims", () => {
+  const LUPE: OrgFacts = {
+    caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
+    visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+  };
+  const answer = { typedNamesInNoMatch: true };
+  const said = "Prep me for my next conversation with Jean Valjean.";
+
+  it("(b) a job title, a skill word and the panel's own label are not people", () => {
+    assert.deepEqual(
+      checkOrgClaimsDeterministic("Here is your Prep for Jean, who saved a Forklift Driver opening and asked about Warehouse shifts.", LUPE, said, answer),
+      []
+    );
+  });
+
+  it("(b) a draft for the participant keeps the full person check, job words included", () => {
+    // Job words are answer-path only (CC 2026-10-28): drafts stay as strict as before W08.
+    const found = checkOrgClaimsDeterministic("Hi Jean, I saw the Forklift Driver opening you saved.", LUPE, said);
+    assert.ok(found.some((p) => p.includes('"Forklift"')));
+  });
+
+  it("(c) day numbers inside written dates are not caseload counts", () => {
+    for (const t of [
+      "Jean was last active Sun Oct 25 and joined Oct 27 this week.",
+      "Jean was last active October 25 and joined on Oct 27 too.",
+      "Jean was last active Sunday, October 25, 2026 by his sharing.",
+      "Jean was last active 10/25 and the task is due 10/27/2026 now.",
+      "Jean was last active 2026-10-25 by his sharing.",
+    ]) assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, said, answer), [], t);
+  });
+
+  it("(c) a bare count is still checked, next to a date or not", () => {
+    const found = checkOrgClaimsDeterministic("Since Oct 25 you have 27 people waiting on you.", LUPE, said, answer);
+    assert.deepEqual(found, ['the figure "27" is not one of this caseload\'s numbers']);
+  });
+
+  it("(a) a surname the server resolved to someone in reach is not flagged", () => {
+    const resolved: OrgFacts = { ...LUPE, resolvedNames: ["Valjean"] };
+    assert.deepEqual(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", resolved, said, answer), []);
+    assert.ok(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", LUPE, said, answer).some((p) => p.includes('"Valjean"')), "without the server match it is still checked");
+  });
+
+  it("REGRESSION: an out-of-reach name is still flagged beside a date and a job word, on both paths", () => {
+    const t = "Jean met Michael Shaw on Oct 27 for a Forklift Driver opening.";
+    const expected = ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list'];
+    assert.deepEqual(checkOrgClaimsDeterministic(t, { ...LUPE, resolvedNames: ["Valjean"] }, said, answer), expected);
+    const draft = checkOrgClaimsDeterministic(t, LUPE, said);
+    for (const e of expected) assert.ok(draft.includes(e), `draft path: ${e}`);
+    // A name right after a date is still mid-sentence once the date is read as a date.
+    assert.deepEqual(
+      checkOrgClaimsDeterministic("Jean has an interview on Oct 27 and Michael set it up for him.", LUPE, said, answer),
+      ['I could not match "Michael" to anyone on your list']
+    );
+    // The panel's label words are answer-path only: a draft keeps the full check.
+    assert.ok(checkOrgClaimsDeterministic("Hi Jean, your Triage is set.", LUPE, said).some((p) => p.includes('"Triage"')));
+  });
+
+  it("names that are also job words stay checked as names", () => {
+    assert.ok(checkOrgClaimsDeterministic("Jean should call Mason about the Forklift Driver opening.", LUPE, said, answer).some((p) => p.includes('"Mason"')));
+  });
+});
+
+describe("W08 review round 2", () => {
+  const LUPE: OrgFacts = {
+    caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
+    visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+  };
+  const answer = { typedNamesInNoMatch: true };
+
+  it("S2: a resolved surname is allowed on the answer path only; a draft flags it as before", () => {
+    const facts: OrgFacts = { ...LUPE, resolvedNames: ["Valjean"] };
+    const t = "Hi Jean, I saw Valjean on the list today.";
+    assert.deepEqual(checkOrgClaimsDeterministic(t, facts, "Prep me for Valjean", answer), []);
+    assert.deepEqual(checkOrgClaimsDeterministic(t, facts, "Prep me for Valjean"), ['I could not match "Valjean" to anyone on your list']);
+    assert.deepEqual(checkOrgClaimsDeterministic(t, facts, "Prep me for Valjean"), checkOrgClaimsDeterministic(t, LUPE, "Prep me for Valjean"), "draft path identical with or without the resolution");
+  });
+
+  it("S6: a count after a month name is still a count", () => {
+    for (const [t, n] of [
+      ["In October 38 participants finished the program.", "38"],
+      ["As of today Oct 27 people are stalled.", "27"],
+      ["In Oct 45 people started.", "45"],
+      ["Tom saw it May 20 days ago.", "20"],
+    ] as const) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [`the figure "${n}" is not one of this caseload's numbers`], t);
+    }
+  });
+
+  it("S6: real dates still pass", () => {
+    for (const t of ["Jean was last active Sun Oct 25 this week.", "Jean joined October 25, 2026 by his sharing.", "Jean was last active 10/25 this week.", "Jean was active Oct 31 and Nov 1 too."]) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [], t);
+    }
+  });
+});
+
+// Round 3 (2026-10-28, review R2 B1): dates are read as dates on the answer
+// path only, and only before the end, punctuation or a short list of words.
+describe("W08 review round 3: dates never hide a count; drafts match origin/main", () => {
+  const LUPE: OrgFacts = {
+    caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
+    visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+  };
+  const answer = { typedNamesInNoMatch: true };
+  const fig = (n: string) => `the figure "${n}" is not one of this caseload's numbers`;
+
+  it("B1: every invented count after a month stays flagged on BOTH paths", () => {
+    for (const [t, n] of [
+      ["Since Oct 1, 2500 participants have enrolled.", "2500"],
+      ["Since Oct 1 1500 people enrolled.", "1500"],
+      ["In October 22 graduates got jobs.", "22"],
+      ["In September 19 young adults enrolled.", "19"],
+      ["Since Sept 1, 1800 meals were served.", "1800"],
+      ["In October 38 participants finished the program.", "38"],
+    ] as const) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [fig(n)], `answer: ${t}`);
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, ""), [fig(n)], `draft: ${t}`);
+    }
+  });
+
+  it("B1: real dates pass on the answer path", () => {
+    for (const t of ["Jean was last active Sun Oct 25", "Jean joined October 25, 2026.", "Jean was active Oct 31 and Nov 1.", "Jean was last active Oct 24 at 6 PM."]) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [], t);
+    }
+  });
+
+  // Expected outputs captured from origin/main ad00ff05's checkOrgClaimsDeterministic
+  // (draft path: no opts) on 2026-10-28. The draft path must not drift from them.
+  const ORIGIN_DRAFT: readonly (readonly [string, readonly string[]])[] = [
+    ["Since Oct 1, 2500 participants have enrolled.", [fig("2500")]],
+    ["Since Oct 1 1500 people enrolled.", [fig("1500")]],
+    ["In October 22 graduates got jobs.", [fig("22")]],
+    ["In September 19 young adults enrolled.", [fig("19")]],
+    ["Since Sept 1, 1800 meals were served.", [fig("1800")]],
+    ["Jean was last active Sun Oct 25 at noon.", [fig("25")]],
+    ["Jean joined October 25, 2026.", []],
+    ["Jean was active Oct 31 and Nov 1.", [fig("31")]],
+    ["Jean was last active Oct 24 at 6 PM.", []],
+    ["Jean met Michael Shaw on Oct 27 about a Forklift Driver opening.", [fig("27"), 'I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list', 'I could not match "Forklift" to anyone on your list', 'I could not match "Driver" to anyone on your list']],
+    ["Hi Jean, I saw the Forklift Driver opening you saved.", ['I could not match "Forklift" to anyone on your list', 'I could not match "Driver" to anyone on your list']],
+    ["Jean was last active 2026-10-25 by his sharing.", [fig("2026")]],
+    ["Oct 27 Marcus called about 27 people.", [fig("27"), fig("27")]],
+  ];
+  it("parity: the draft path gives origin/main's output for every sentence", () => {
+    for (const [t, expected] of ORIGIN_DRAFT) assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, ""), expected, t);
+  });
+});
+
+// Round 4 (2026-10-28, review R3 S1): ordinary ways a date is followed in a
+// t.ROY answer. Answer path only; the draft path is origin/main's (parity above).
+describe("W08 review round 4: dates as t.ROY writes them", () => {
+  const LUPE: OrgFacts = {
+    caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
+    visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+  };
+  const answer = { typedNamesInNoMatch: true };
+
+  it("a bullet list, a clock time, a parenthesis and a following word are dates", () => {
+    for (const t of [
+      "- Last active: Oct 25\n- Interview: Oct 29",
+      "Interview Thu Oct 29 9:00 AM at the plant.",
+      "Last active Oct 25 (Sun).",
+      "He has been quiet since Oct 25 this week.",
+      "Last active Oct 24 6 PM.",
+      "Interview Oct 29 - bring ID.",
+      "Last active Oct 25 \u2014 nothing since.",
+    ]) assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [], t);
+  });
+
+  it("a count after a date is still the only thing flagged", () => {
+    assert.deepEqual(checkOrgClaimsDeterministic("Since Oct 25 you have 27 people waiting on you.", LUPE, "", answer), ['the figure "27" is not one of this caseload\'s numbers']);
+  });
+});
