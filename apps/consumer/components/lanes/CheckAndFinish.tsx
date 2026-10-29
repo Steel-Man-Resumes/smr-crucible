@@ -11,12 +11,23 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CHECK_AND_FINISH_LABEL, DRAFT_BADGE } from "@/lib/lane-task";
+import { CHECK_OPENING_LINE, CHECK_SLOW_LINE, CHECK_SLOW_LINK, CHECK_SLOW_MS } from "@/lib/tailor-readiness";
 
 export const checkAndFinishHref = (artifactId: string) => `/output?check=${encodeURIComponent(artifactId)}`;
 
 /** The draft line and the link. `status` known: shown at once; unknown: read from the newest revision. */
 export function CheckAndFinish({ artifactId, status, className = "", showBadge = true }: { artifactId: string; status?: "draft" | "finished" | null; className?: string; showBadge?: boolean }) {
   const [known, setKnown] = useState<"draft" | "finished" | null>(status ?? null);
+  // W13 (2026-10-28): the click always answers. The line says the check is
+  // opening; if the page has not changed after a few seconds, it offers a
+  // plain link that loads the check page directly.
+  const [opening, setOpening] = useState(false);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!opening) return;
+    const t = setTimeout(() => setSlow(true), CHECK_SLOW_MS);
+    return () => clearTimeout(t);
+  }, [opening]);
   useEffect(() => {
     if (status) {
       setKnown(status);
@@ -47,9 +58,23 @@ export function CheckAndFinish({ artifactId, status, className = "", showBadge =
           {DRAFT_BADGE}
         </span>
       )}
-      <Link href={checkAndFinishHref(artifactId)} className="t-focus inline-flex min-h-touch items-center text-sm font-semibold text-t-amber-bright underline underline-offset-2 hover:text-t-amber" data-testid="check-and-finish-link">
+      <Link href={checkAndFinishHref(artifactId)} onClick={() => setOpening(true)} aria-busy={opening} className="t-focus inline-flex min-h-touch items-center text-sm font-semibold text-t-amber-bright underline underline-offset-2 hover:text-t-amber" data-testid="check-and-finish-link">
         {CHECK_AND_FINISH_LABEL}
       </Link>
+      {opening && (
+        <p role="status" className="w-full text-xs text-t-phos" data-testid="check-and-finish-opening">
+          {slow ? (
+            <>
+              {CHECK_SLOW_LINE}{" "}
+              <a href={checkAndFinishHref(artifactId)} className="t-focus underline underline-offset-2" data-testid="check-and-finish-direct">
+                {CHECK_SLOW_LINK}
+              </a>
+            </>
+          ) : (
+            CHECK_OPENING_LINE
+          )}
+        </p>
+      )}
     </div>
   );
 }

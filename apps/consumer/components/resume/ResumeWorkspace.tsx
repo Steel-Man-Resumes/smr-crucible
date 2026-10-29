@@ -12,6 +12,8 @@ import { TroyWork } from "@crucible/consumer-ui";
 import { SavedPackagePreview } from "./SavedPackagePreview";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { hasBaseContact, tailoredContact } from "@/lib/document-contact";
+import { tailorStartNotice } from "@/lib/tailor-readiness";
+import { useProgression } from "@/components/progression/ProgressionProvider";
 import { boardHandoff, loadJobHandoff, singleTailorCost, type PendingTailor } from "@/lib/tailor-handoff";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -165,6 +167,33 @@ export function ResumeWorkspace() {
   // Full resume generation (from job board)
   const [generatingFull, setGeneratingFull] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  // W09: the server's error code (progression_locked before early access), so
+  // the setup screen can explain it at the button instead of failing silently.
+  const [genErrorCode, setGenErrorCode] = useState<string | null>(null);
+  const tailorNoticeRef = useRef<HTMLDivElement>(null);
+  const progression = useProgression();
+  // The run's progress screen is short, so the setup screen comes back
+  // scrolled away from the button: bring the notice into view and focus it.
+  useEffect(() => {
+    if (!genError || !showSetup) return;
+    const el = tailorNoticeRef.current;
+    if (!el) return;
+    try { el.scrollIntoView({ block: "center", behavior: "smooth" }); } catch {}
+    el.focus({ preventScroll: true });
+  }, [genError, genErrorCode, showSetup]);
+  // Opened early from the notice (or anywhere): the lock notice has done its job.
+  // Only a change from locked to open clears it, so a stale progress read can
+  // never hide the notice the moment it appears.
+  const tailorAccess = progression?.data?.steps.find((step) => step.id === "tailor")?.access;
+  const lastTailorAccess = useRef(tailorAccess);
+  useEffect(() => {
+    const was = lastTailorAccess.current;
+    if (tailorAccess) lastTailorAccess.current = tailorAccess;
+    if (genErrorCode === "progression_locked" && was === "locked" && tailorAccess && tailorAccess !== "locked") {
+      setGenError(null);
+      setGenErrorCode(null);
+    }
+  }, [genErrorCode, tailorAccess]);
   const [tailoringNotes, setTailoringNotes] = useState<string[]>([]);
   // The tailor's truth check result. It used to be computed and then
   // dropped here, so the person never saw a warning the server raised.
@@ -534,6 +563,7 @@ export function ResumeWorkspace() {
       try {
         setGeneratingFull(true);
         setGenError(null);
+        setGenErrorCode(null);
         setShowSetup(false);
 
         // Pre-fill target info immediately
@@ -690,7 +720,7 @@ export function ResumeWorkspace() {
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || "Generation failed");
+          throw Object.assign(new Error(errData.error || "Generation failed"), { code: typeof errData.code === "string" ? errData.code : null });
         }
 
         const { resume, coverLetter, disclosureBrief: brief, tailoringNotes: notes, grounding, finalizationBlocked, verificationNotice } = await res.json();
@@ -792,6 +822,7 @@ export function ResumeWorkspace() {
         if(epoch !== packageEpoch.current) return;
         console.error("Career-package generation error:", err);
         setGenError(err.message || "Could not generate resume. Try importing from Forge instead.");
+        setGenErrorCode(typeof err?.code === "string" ? err.code : null);
         setShowSetup(true);
         setGeneratingFull(false);
       }
@@ -1246,6 +1277,39 @@ export function ResumeWorkspace() {
 
   // --- Setup screen (target + import options) ---
   if (showSetup) {
+    // W09: a run that could not start says why, at the button, with the one
+    // step that opens it (the same early-access request as the path's lock).
+    const notice = genError ? tailorStartNotice(genErrorCode, genError) : null;
+    const tailorStep = progression?.data?.steps.find((step) => step.id === "tailor") ?? null;
+    const tailorNotice = notice ? (
+      <div
+        ref={tailorNoticeRef}
+        role="alert"
+        tabIndex={-1}
+        data-testid="tailor-start-notice"
+        data-kind={notice.kind}
+        className="border border-t-amber bg-t-panel p-4 text-left"
+      >
+        <p className="text-sm font-semibold text-t-white">{notice.heading}</p>
+        <p className="mt-1 text-sm text-t-phos">{notice.body}</p>
+        {notice.kind === "locked" && tailorStep && progression ? (
+          <>
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => progression.ask(tailorStep)}
+              data-testid="tailor-ask-early"
+              className="t-focus mt-3 min-h-touch bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
+            >
+              {notice.action}
+            </button>
+            <p className="mt-1 text-xs text-t-phos-dim">{notice.hint}</p>
+          </>
+        ) : notice.kind === "locked" ? (
+          <p className="mt-2 text-xs text-t-phos-dim">{`${notice.action} from the path on the left. ${notice.hint}`}</p>
+        ) : null}
+      </div>
+    ) : null;
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">
@@ -1516,6 +1580,7 @@ export function ResumeWorkspace() {
                         ? "Uses your base resume and the job description you pasted. Only what's true about you, aimed at this posting."
                         : "Uses your base resume. Paste the job description above for a sharper match. Only what's true about you, aimed at this posting."}
                   </p>
+                  {tailorNotice}
                   <a
                     href={EDIT_RESUME_HREF}
                     className="t-focus block w-full text-center px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright text-base font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
@@ -1539,6 +1604,7 @@ export function ResumeWorkspace() {
                   >
                     Or start a blank resume here
                   </button>
+                  {tailorNotice}
                 </>
               )}
             </div>

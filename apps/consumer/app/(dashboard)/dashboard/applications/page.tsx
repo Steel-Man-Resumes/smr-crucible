@@ -16,6 +16,8 @@ import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
 import { TierGate } from "@/components/TierGate";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { StatusBadges } from "@/components/apply/StatusBadges";
+import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
+import { revisionStatusOf, trackerReadinessLine, type TailoredStatus } from "@/lib/tailor-readiness";
 import { oneActionCostLine, toolRemaining, draftFailureWords, type UsageView } from "@/lib/usage-view";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -108,6 +110,34 @@ const PIPELINE: {
 ];
 
 const TERMINAL_STATUSES = ["declined", "rejected"];
+
+/**
+ * W13 (2026-10-28): the tracker says what the Tailor says. The newest
+ * revision of the tailored resume decides "finished" or "draft" (the same
+ * read as the Tailor's Check and finish line); a draft gets the same way out.
+ */
+function TailoredReadiness({ artifactId }: { artifactId: string }) {
+  const [status, setStatus] = useState<TailoredStatus | null>(null);
+  useEffect(() => {
+    let live = true;
+    setStatus(null);
+    fetch(`/api/revisions?artifactId=${encodeURIComponent(artifactId)}`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => live && setStatus(revisionStatusOf(j)))
+      .catch(() => live && setStatus("draft"));
+    return () => {
+      live = false;
+    };
+  }, [artifactId]);
+  const line = trackerReadinessLine(status);
+  if (!line) return null;
+  return (
+    <div className="mb-2" data-testid="tracker-readiness" data-status={status ?? ""}>
+      <p className="text-xs text-t-phos-dim">{line}</p>
+      {status === "draft" && <CheckAndFinish artifactId={artifactId} status="draft" showBadge={false} />}
+    </div>
+  );
+}
 
 // ─── Main ───────────────────────────────────────────────────────────────────
 
@@ -400,9 +430,7 @@ function ApplicationsPage() {
                         {stage.status === "saved" && (
                           <div className="mt-3">
                             {app.resume_artifact_id && (
-                              <p className="text-xs text-t-phos-dim mb-2">
-                                Your tailored resume is ready. Apply when you are:
-                              </p>
+                              <TailoredReadiness artifactId={app.resume_artifact_id} />
                             )}
                             <ApplyActions
                               applicationId={app.id}
