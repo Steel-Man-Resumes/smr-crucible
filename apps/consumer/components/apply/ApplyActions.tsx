@@ -27,6 +27,7 @@
 
 import { useEffect, useState } from "react";
 import { classifyApplyUrl } from "@/lib/apply-destination";
+import { NO_LINK_SAVED_LINE } from "@/lib/tailor-readiness";
 import Link from "next/link";
 import { usePremium } from "@/components/premium/PremiumGate";
 import { PREMIUM_TOOL_LABELS, toolIsOpen } from "@/lib/premium";
@@ -340,7 +341,7 @@ export function ApplyActions({
 
       {!chosenUrl && !applyLinkUnreadable && !draft && (
         <p className="text-[11px] text-t-phos-dim">
-          This job has no online application. t.ROY will draft an email you can send with your resume and cover letter, and show you how to find the employer&apos;s address.
+          {NO_LINK_SAVED_LINE}
         </p>
       )}
 

@@ -6,7 +6,7 @@
  * unchanged so the single-job path behaves exactly as before.
  */
 import { readOwnForgeSession } from "./forge-carry";
-import { isSamePerson } from "./is-same-person";
+import { hasBaseContact, tailoredContact } from "./document-contact";
 
 export interface TailorContext {
   generator: {
@@ -67,17 +67,6 @@ export async function loadTailorContext(ownerUid: string | null | undefined, lan
       if (contact) contactInfo = contact;
     }
   } catch {}
-  // The profile fills gaps only when it is the same person (see ResumeWorkspace).
-  if (baseDocContact) {
-    const fill: any = isSamePerson(baseDocContact.name, contactInfo.name) ? contactInfo : {};
-    contactInfo = {
-      name: baseDocContact.name || fill.name || "",
-      phone: baseDocContact.phone || fill.phone || "",
-      email: baseDocContact.email || fill.email || "",
-      city: baseDocContact.city || fill.city || "",
-      state: baseDocContact.state || fill.state || "",
-    };
-  }
   let activeId: string | null = null;
   try { activeId = localStorage.getItem("active_baseline_id"); } catch {}
   const laneCandidates = resumes.filter((a) => (a.lane_id || null) === (laneId || null));
@@ -85,6 +74,10 @@ export async function loadTailorContext(ownerUid: string | null | undefined, lan
     laneCandidates.find((a) => a.id === activeId && (a.is_locked || a.is_current)) ||
     laneCandidates.find((a) => a.is_locked || a.is_current) || null;
   const forgeBase = laneCandidates.find((a) => a?.target_context?.source === "forge");
+  // The base this job is tailored from decides the contact block (W10): the
+  // profile never adds a phone or email it left off (lib/document-contact.ts).
+  const parent = approvedBase || forgeBase;
+  contactInfo = tailoredContact(hasBaseContact(parent?.content?.contact) ? parent.content.contact : baseDocContact, contactInfo);
   return {
     generator: {
       forgeOutput, resumeText, contact: contactInfo, challenges, criminalRecord,
