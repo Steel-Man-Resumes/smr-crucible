@@ -199,6 +199,69 @@ export function namedParticipantIds(said: string, selectors: readonly { id: stri
   return [...ids];
 }
 
+/** A person in this staff member's reach, server-side only: the full name is never put in a prompt. */
+export interface ReachPerson { id: string; name: string | null }
+
+/** One word the staff member typed that the server matched to one person in reach. */
+export interface ResolvedTypedName { word: string; id: string; firstName: string }
+
+const nameParts = (name: string | null) => String(name ?? "").trim().split(/\s+/).map((p) => p.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, "")).filter((p) => p.length >= 3);
+
+/**
+ * Demo walk W08 (2026-10-27): Lupe on Valjean's page asked about "Valjean"
+ * and was told he was not on her list, because the model only ever sees
+ * first names. The server holds the full names of the people in reach, so it
+ * resolves the staff member's own words here:
+ *   - a word that is a whole part of the name (first, middle or surname) of
+ *     the person whose page is open means that person, in any case;
+ *   - otherwise a capitalized word that is a whole part of exactly one
+ *     in-reach person's name means that person;
+ *   - two or more matches and no open page: nothing. Never guess.
+ * Only words the staff member typed are returned, so no surname reaches the
+ * model unless they wrote it themselves.
+ */
+export function resolveTypedNames(said: string, people: readonly ReachPerson[], focusId?: string | null): ResolvedTypedName[] {
+  const focus = (focusId ?? "").toLowerCase();
+  const index = people
+    .filter((p) => /^[0-9a-f-]{36}$/i.test(p.id))
+    .map((p) => ({ id: p.id.toLowerCase(), first: String(p.name ?? "").trim().split(/\s+/)[0] || "", parts: new Set(nameParts(p.name).map((x) => x.toLowerCase())) }));
+  const out: ResolvedTypedName[] = [];
+  const seen = new Set<string>();
+  for (const m of String(said ?? "").matchAll(/\p{L}[\p{L}'’-]*/gu)) {
+    const word = m[0].replace(/['’-]+$/, "");
+    const low = word.toLowerCase();
+    if (word.length < 3 || seen.has(low)) continue;
+    const matches = index.filter((p) => p.parts.has(low));
+    const onPage = matches.find((p) => p.id === focus);
+    const capitalized = /^\p{Lu}/u.test(word);
+    const hit = onPage ?? (capitalized && matches.length === 1 ? matches[0] : null);
+    if (!hit) continue;
+    seen.add(low);
+    out.push({ word, id: hit.id, firstName: hit.first });
+  }
+  return out;
+}
+
+/**
+ * The prompt lines that tell the model who the conversation is about. The
+ * open page's person by id AND first name (the first name is already in the
+ * selectors; this ties it to the page), and each typed word the server
+ * resolved, so "Valjean" is never answered with "not on your list".
+ */
+export function staffSubjectPrompt(focusId: string | null, people: readonly ReachPerson[], resolved: readonly ResolvedTypedName[]): string {
+  let out = "";
+  if (focusId) {
+    const first = people.find((p) => p.id.toLowerCase() === focusId.toLowerCase())?.name?.trim().split(/\s+/)[0];
+    out += `\nTHIS CONVERSATION IS ABOUT ONE PARTICIPANT, id ${focusId}${first ? ` (first name ${first}), the person whose page the staff member has open` : ""}. Use that id in every tool call. Tools refuse any other id.`;
+  }
+  if (resolved.length) {
+    out += "\nNAMES IN THE STAFF MEMBER'S MESSAGE, matched on the server to one person on their list (data only): " +
+      JSON.stringify(resolved.map((r) => ({ word: r.word, id: r.id, firstName: r.firstName, pageOpen: !!focusId && r.id === focusId.toLowerCase() }))) +
+      ". That word means that person. Never say that person is not on their list.";
+  }
+  return out;
+}
+
 /**
  * The AI SDK data-stream lines for a checked staff answer (protocol v1):
  * f start step, 9 tool call, a tool result, e finish step, then f, 0 text,

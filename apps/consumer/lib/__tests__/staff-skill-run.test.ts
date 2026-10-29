@@ -4,7 +4,7 @@ import { it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { parseDataStreamPart, callChatApi, shouldResubmitMessages } from "@ai-sdk/ui-utils";
-import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, skillRunParticipant, staffSkillLabel, checkStaffDrafts, namedParticipantIds } from "../staff-skill-run";
+import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, skillRunParticipant, staffSkillLabel, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt } from "../staff-skill-run";
 import { checkOrgClaimsDeterministic, type OrgFacts } from "../org-output-verify";
 import { skillRunIdOf, staffSkillsFor, staffSkillFromText, STAFF_SKILLS } from "../staff-troy";
 import { computeOrgCapabilities } from "@crucible/core/src/authz/capabilities";
@@ -150,4 +150,41 @@ it("fix round 1: named participants come only from the staff member's own words"
   assert.deepEqual(namedParticipantIds("prep me for dana please", sel), [DANA]);
   assert.deepEqual(namedParticipantIds("Danae and Leeland", sel), [], "whole words only");
   assert.deepEqual(namedParticipantIds("look at 00000000-0000-0000-0000-000000000009", sel), ["00000000-0000-0000-0000-000000000009"]);
+});
+
+// Demo walk W08 (2026-10-27): on Jean Valjean's page, "Valjean" was answered
+// with "not on your list" because the model only sees first names.
+it("W08: a surname or name part typed on a person's page resolves to that person", () => {
+  const JEAN = "00000000-0000-0000-0000-00000000000a";
+  const MARQUS = "00000000-0000-0000-0000-00000000000b";
+  const JEANNE = "00000000-0000-0000-0000-00000000000c";
+  const people = [{ id: JEAN, name: "Jean Valjean" }, { id: MARQUS, name: "Marqus Relly" }];
+  // On his page, any case.
+  assert.deepEqual(resolveTypedNames("prep me for valjean", people, JEAN), [{ word: "valjean", id: JEAN, firstName: "Jean" }]);
+  // No page open: a capitalized surname that fits exactly one person.
+  assert.deepEqual(resolveTypedNames("Prep me for Relly", people, null), [{ word: "Relly", id: MARQUS, firstName: "Marqus" }]);
+  // Whole name parts only, and ordinary words are not names.
+  assert.deepEqual(resolveTypedNames("Prep me for Valj and Rel", people, null), []);
+  // Two people share a name part: the open page decides; with no page, nothing (never guess).
+  const two = [...people, { id: JEANNE, name: "Jean Okafor" }];
+  assert.deepEqual(resolveTypedNames("Prep me for Jean", two, JEAN).map((r) => r.id), [JEAN]);
+  assert.deepEqual(resolveTypedNames("Prep me for Jean", two, null), []);
+  // Someone outside reach is never in the list, so nothing resolves to them.
+  assert.deepEqual(resolveTypedNames("Prep me for Michael Shaw", people, JEAN), []);
+});
+
+it("W08: the prompt names the open page's person and the resolved words, never an untyped surname", () => {
+  const JEAN = "00000000-0000-0000-0000-00000000000a";
+  const people = [{ id: JEAN, name: "Jean Valjean" }];
+  const bare = staffSubjectPrompt(JEAN, people, []);
+  assert.match(bare, /ABOUT ONE PARTICIPANT, id 00000000-0000-0000-0000-00000000000a \(first name Jean\), the person whose page the staff member has open/);
+  assert.ok(!bare.includes("Valjean"), "a surname the staff member did not type never reaches the model");
+  const typed = staffSubjectPrompt(JEAN, people, resolveTypedNames("Valjean", people, JEAN));
+  assert.match(typed, /"word":"Valjean","id":"00000000-0000-0000-0000-00000000000a","firstName":"Jean","pageOpen":true/);
+  assert.match(typed, /Never say that person is not on their list/);
+  assert.equal(staffSubjectPrompt(null, people, []), "");
+  const route = read("../../app/api/assistant/route.ts");
+  assert.match(route, /const staffResolved = staffActor \? resolveTypedNames\(staffSaid, staffPeople, staffFocus\) : \[\];/);
+  assert.match(route, /\(staffActor \? staffSubjectPrompt\(staffFocus, staffPeople, staffResolved\) : ""\) \+/);
+  assert.match(route, /resolvedNames: staffResolved\.map\(\(r\) => r\.word\),/);
 });
