@@ -1,6 +1,7 @@
 import { evidenceRefs, type StaffToolEvidence } from "./staff-tool-evidence";
 import { quietSpan } from "@crucible/core/src/orgStaffPerformanceShared";
 import { STAFF_PAGE_WORDS } from "./staff-pages";
+import { STAFF_SKILLS } from "./staff-troy";
 /**
  * Nothing unverified reaches a staff member or an admin. Two layers, in order.
  *
@@ -46,6 +47,13 @@ export interface OrgFacts {
   /** Staff names in this org, which staff may legitimately mention. */
   staffNames: string[];
   /**
+   * Name words the staff member typed that the server matched to exactly one
+   * person in this viewer's reach (W08: "Valjean" for Jean Valjean). Built
+   * from server-side full names, never from the answer, so a name outside
+   * reach can never get in here.
+   */
+  resolvedNames?: string[];
+  /**
    * First names with no activity in two weeks. The generator is told these, so
    * the checker must be too -- otherwise every true "Colton has gone quiet" is
    * flagged as unsupported and the warning trains people to ignore it.
@@ -67,6 +75,46 @@ export interface OrgVerdict {
 
 /** Numbers that are always safe: years, small ordinals in prose, percentages of nothing. */
 const ALWAYS_FINE = new Set(["0", "1", "2", "3", "4", "5", "6", "7", "10", "12", "14", "24", "30"]);
+
+/**
+ * A date written out is a date, not a headcount (demo walk W08: "Sun Oct 25"
+ * and "Oct 27" were reported as caseload figures). Month first ("Oct 27",
+ * "October 25, 2026", "Sun Oct 25") and ISO ("2026-10-25"). Not day first:
+ * "3 March appointments" stays a count. Months must be capitalized, so "you may 12" is not a date.
+ * Slash dates ("10/25") are already skipped by the number pattern.
+ */
+const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+const WEEKDAY = "(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tues?|Wed|Thu(?:rs?)?|Fri|Sat|Sun)";
+const WRITTEN_DATE = new RegExp(
+  `(?:\\b${WEEKDAY}\\.?,?\\s+)?\\b${MONTH}\\.?\\s+\\d{1,2}(?:st|nd|rd|th)?\\b(?:,?\\s+\\d{4}\\b)?(?![\\d:/-])` +
+    "|\\b\\d{4}-\\d{2}-\\d{2}(?:T[\\d:.]+Z?)?\\b",
+  "g"
+);
+
+/**
+ * Job, trade and skill words a staff answer uses about someone's search
+ * ("his saved Forklift Driver job", W08). Ordinary words, not people. Words
+ * that are also common first names (Mason, Porter, Hunter, Cooper, Carter,
+ * Tanner, Parker, Taylor, Jack, Chase) are left out on purpose, so those are
+ * still checked as names. Applies to drafts too: a draft about a job is the
+ * normal case, and none of these is a person.
+ */
+const JOB_WORDS = (
+  "forklift driver drivers warehouse picker pickers packer packers stocker stockers loader unloader shipping receiving dock " +
+  "operator operators machine machinist welder welding fabricator fabrication assembler assembly production line lead leads " +
+  "supervisor manager shift shifts overnight crew cook cooks prep dishwasher busser cashier clerk retail sales associate " +
+  "customer representative janitor janitorial custodian custodial housekeeping housekeeper cleaner cleaning maintenance " +
+  "technician mechanic automotive diesel truck trucking cdl delivery courier route laborer labor general construction " +
+  "carpenter electrician plumber hvac roofer roofing painter landscaper landscaping groundskeeper mover movers security guard " +
+  "caregiver aide cna kitchen restaurant barista baker butcher deli grocery stock inventory cycle scanner scanning pallet " +
+  "freight logistics material materials handler sanitation laundry recycling manufacturing factory plant grill fry dish " +
+  "safety osha certified certification certificate license licensed training trainee apprentice apprenticeship entry level " +
+  "full part time temp temporary seasonal hourly remote onsite position positions role roles opening openings posting postings " +
+  "hiring hire tailored tracker saved warehouse"
+).split(/\s+/);
+
+/** The staff panel's own button words ("Prep me", "Draft a check-in"): the tool's labels, not people. */
+const SKILL_LABEL_WORDS = STAFF_SKILLS.flatMap((k) => k.label.toLowerCase().split(/[^a-z]+/)).filter((w) => w.length >= 3);
 
 /**
  * Numbers a sentence is allowed to contain, derived from the facts.
@@ -248,6 +296,10 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     if (m[1] !== "0" && m[1] !== "100" && !allowed.has(m[1])) problems.push(`the rate "${m[0].trim()}" is not one the query computed`);
   }
 
+  // A written date is not a count (W08). Replaced with words, not a blank, so a
+  // capitalized name right after it is still read as mid-sentence and checked.
+  text = text.replace(WRITTEN_DATE, "the date");
+
   // Every standalone integer must be one we can account for. Money, dates and
   // percentages are skipped -- they are reported elsewhere and are not the
   // class of claim that gets copied into a headcount.
@@ -267,7 +319,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // check that stops one organization's participant being discussed inside
   // another's conversation, and it is the reason names are worth parsing at all.
   const known = new Set(
-    [...facts.visibleNames, ...facts.staffNames, ...(facts.staffToolEvidence ?? []).flatMap((e) => e.names)].map((n) => n.toLowerCase())
+    [...facts.visibleNames, ...facts.staffNames, ...(facts.resolvedNames ?? []), ...(facts.staffToolEvidence ?? []).flatMap((e) => e.names)].map((n) => n.toLowerCase())
   );
   // A name the staff member typed, repeated back to say the person is not on
   // their list, is not a claim about a person; flagging it read as a finding
@@ -319,11 +371,14 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     for (const w of label.toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
   }
   for (const w of (facts.orgName ?? "").toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
+  for (const w of JOB_WORDS) STOPWORDS.add(w);
   // Workspace page names t.ROY points people to ("open Add people", "Go to
   // Referrals"), lane S1. Answer path only: a draft for a participant keeps
   // the full person check ("Hi Jordan, Mark from the program..." is flagged).
   if (opts?.typedNamesInNoMatch) {
     for (const w of Array.from(STAFF_PAGE_WORDS)) STOPWORDS.add(w);
+    // The panel's own button words ("Prep", W08). Answer path only, like the page words.
+    for (const w of SKILL_LABEL_WORDS) STOPWORDS.add(w);
     for (const w of ["invite", "send", "add", "open", "press", "button", "page", "form", "directory", "employers", "employer", "hires", "records", "reported"]) STOPWORDS.add(w);
   }
   // Capitalized words mid-sentence are the candidates; sentence-initial words
