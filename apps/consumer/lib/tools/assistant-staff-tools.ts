@@ -36,6 +36,7 @@ import { tool, jsonSchema, type ToolSet } from "ai";
 import type { OrgActor } from "@crucible/core/src/authz/resolveOrgActor";
 import { oncePerInput } from "./assistant-data-tools";
 import { RESOURCE_AREAS } from "@crucible/core/src/resourceDirectoryShared";
+import { localDay, DEFAULT_LOCAL_TIME_ZONE } from "@crucible/core/src/localDay";
 import { stationForJourneyStage, STATIONS } from "../refinery-nav";
 import { staffTextGate, safeCustomFields, WITHHELD_NOTE } from "../staff-ai-safety";
 import { composeStaffTools, STAFF_TOOL_MODULES, type StaffToolModule } from "./staff";
@@ -121,6 +122,23 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
     if (!current || current.orgId !== initial.orgId || current.viaPlatformAdmin || current.reach === "none") throw new Error("scope_unavailable");
     return current;
   }
+  /**
+   * The organization's time zone (org_profile.timezone), read once per
+   * request. Every day a tool reports is cut in it, so t.ROY says the same
+   * day as the person's card for anyone working in that zone (demo fix T2:
+   * "last active Thu Oct 29" against a card that said Oct 28).
+   */
+  let zone: Promise<string> | null = null;
+  function orgTimeZone(current: OrgActor): Promise<string> {
+    zone ??= (async () => {
+      try {
+        const core = await loadCore();
+        const profile = core.getOrgProfile ? await core.getOrgProfile(current) : null;
+        return profile?.timezone || DEFAULT_LOCAL_TIME_ZONE;
+      } catch { return DEFAULT_LOCAL_TIME_ZONE; }
+    })();
+    return zone;
+  }
   async function tasksOn(orgId: string) {
     const core = await loadCore();
     const enabled = await core.getOne<{crm_v2: boolean}>("SELECT crm_v2 FROM access_code WHERE id = $1", [orgId]);
@@ -164,7 +182,8 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         const refused = await logOpen(current, clientId, "progress"); if (refused) return refused;
         const result = await c.getClientHeader(current, clientId);
         if (!result.ok) return result;
-        return { status: "ok", readAt: new Date().toISOString(), participantId: clientId, data: result.rows.map((h) => ({ name: h.name?.split(/\s+/)[0], progress: h.progress, scopes: h.scopes })) };
+        const timeZone = await orgTimeZone(current);
+        return { status: "ok", readAt: new Date().toISOString(), participantId: clientId, data: result.rows.map((h) => ({ name: h.name?.split(/\s+/)[0], progress: h.progress ? { ...h.progress, lastActiveAt: localDay(h.progress.lastActiveAt, timeZone) } : h.progress, scopes: h.scopes })) };
       }),
     }),
     read_participant_overview: tool({
@@ -174,7 +193,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         { const held = outOfFocus(clientId); if (held) return held; }
         const current = await actor();
         const core = await loadCore();
-        const result = await core.getClientOverview(current, clientId, { tasks: await tasksOn(current.orgId) });
+        const result = await core.getClientOverview(current, clientId, { tasks: await tasksOn(current.orgId), timeZone: await orgTimeZone(current) });
         if (!result.ok) return refusal(result.reason);
         // The organization's own fields about this person (lane L4), when set up: never a sensitive one.
         const fieldRows = core.getParticipantCustomFieldRows ? await core.getParticipantCustomFieldRows(current, clientId).catch(() => null) : null;
@@ -217,7 +236,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         const since = new Date(Date.now() - span * 86_400_000).toISOString().slice(0, 10);
         const current = await actor();
         const core = await loadCore();
-        const result = await core.getClientChanges(current, clientId, since, { tasks: await tasksOn(current.orgId) });
+        const result = await core.getClientChanges(current, clientId, since, { tasks: await tasksOn(current.orgId), timeZone: await orgTimeZone(current) });
         if (!result.ok) return refusal(result.reason);
         // The record gate (H1): a change line can carry a task title.
         const gate = staffTextGate();
@@ -301,18 +320,19 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         const core = await loadCore();
         const view = await core.getTodayView(current);
         if (!view) return { status: "unavailable", error: "Today is not part of your role here." };
+        const timeZone = await orgTimeZone(current);
         const gate = staffTextGate();
         const held = lock;
         const items = view.items.filter((i) => !held || i.clientId === held);
         const counts: Record<string, number> = {};
         for (const i of items) counts[i.section] = (counts[i.section] ?? 0) + 1;
         return {
-          status: "ok", readAt: new Date().toISOString(), asOf: new Date().toISOString().slice(0, 10), dataNote: DATA_NOTE,
+          status: "ok", readAt: new Date().toISOString(), asOf: localDay(new Date(), timeZone), dataNote: DATA_NOTE,
           volunteer: view.volunteer, heldToOnePerson: !!held,
           sections: Object.entries(counts).map(([section, count]) => ({ section, label: core.TODAY_SECTION_LABELS[section as keyof typeof core.TODAY_SECTION_LABELS] ?? section, count })),
           items: items.slice(0, 40).map((i) => ({
             section: i.section, participantId: i.clientId, firstName: i.clientName ? i.clientName.trim().split(/\s+/)[0] : null,
-            reason: gate.pass(i.reason), when: i.when ? String(i.when).slice(0, 10) : null, action: i.action.label,
+            reason: gate.pass(i.reason), when: localDay(i.when, timeZone), action: i.action.label,
           })),
           total: items.length, more: items.length > 40,
           ...(gate.withheld ? { recordWithheld: gate.withheld, withheldNote: WITHHELD_NOTE } : {}),
@@ -327,7 +347,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         caseloadRead = true;
         const current = await actor();
         const core = await loadCore();
-        const digest = await core.getCaseloadDigest(current);
+        const digest = await core.getCaseloadDigest(current, Date.now(), { timeZone: await orgTimeZone(current) });
         if (!digest) return { status: "unavailable", error: "The caseload is not part of your role here." };
         const held = lock;
         const people = digest.people.filter((p) => !held || p.participantId === held);
@@ -394,7 +414,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
         if (start > end) [start, end] = [end, start];
         const current = await actor();
         const core = await loadCore();
-        const result = await core.getClientTimeline(current, clientId, { from: start, to: end }, { tasks: await tasksOn(current.orgId) });
+        const result = await core.getClientTimeline(current, clientId, { from: start, to: end }, { tasks: await tasksOn(current.orgId), timeZone: await orgTimeZone(current) });
         if (!result.ok) return refusal(result.reason);
         const gate = staffTextGate();
         // Every free-text field passes the gate, not only what and body (fix round 1, B1).

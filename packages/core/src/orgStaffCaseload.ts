@@ -26,6 +26,7 @@ import { getQuietAfterDays } from "./orgStaffPerformance";
 import { listStaffTasks } from "./staffTasks";
 import { listOutcomes, summarizeOutcomes, OUTCOME_SOURCE_LABELS, type Outcome } from "./orgOutcomes";
 import { listSharingRequests } from "./orgClientView";
+import { localDay } from "./localDay";
 
 const scopeOf = (a: OrgActor): OrgScope => ({ orgId: a.orgId, userId: a.userId, role: a.role });
 const run = (sql: unknown) => sql as (s: string, p: unknown[]) => unknown;
@@ -129,6 +130,8 @@ export interface DigestInput {
   actorUserId: string;
   seesAll: boolean;
   quietDays: number;
+  /** The organization's zone (org_profile.timezone): last active and note days are read in it (demo fix T2). Absent: UTC days. */
+  timeZone?: string | null;
   cohort: { userId: string; name: string | null; lastActiveAt: string | null; joinedAt: string; hired: boolean; assignedStaffId: string | null }[];
   tasks: { client_user_id: string | null; client_name: string | null; due_on: string | null; done_at: string | null }[];
   outcomes: { client_user_id: string; client_name: string | null; due_marks: number[]; ended_on: string | null }[];
@@ -172,8 +175,8 @@ export function buildCaseloadDigest(input: DigestInput, nowMs: number, cap = 40)
   for (const c of input.cohort) {
     const p = get(c.userId, c.name);
     p.progressShared = true;
-    p.lastActiveOn = ymd(c.lastActiveAt);
-    p.joinedOn = ymd(c.joinedAt);
+    p.lastActiveOn = localDay(c.lastActiveAt, input.timeZone);
+    p.joinedOn = localDay(c.joinedAt, input.timeZone);
     p.startedWork = c.hired;
     p.assignedToYou = c.assignedStaffId === input.actorUserId;
   }
@@ -206,7 +209,7 @@ export function buildCaseloadDigest(input: DigestInput, nowMs: number, cap = 40)
   }
   for (const n of input.lastNotes) {
     const p = people.get(n.client_user_id);
-    if (p) p.lastNoteOn = ymd(n.last_on);
+    if (p) p.lastNoteOn = localDay(n.last_on, input.timeZone);
   }
 
   for (const p of people.values()) {
@@ -250,7 +253,7 @@ export function buildCaseloadDigest(input: DigestInput, nowMs: number, cap = 40)
 }
 
 /** Everyone this staff member reaches, with stale flags and reasons. No note bodies, no wages. */
-export async function getCaseloadDigest(actor: OrgActor, nowMs = Date.now()): Promise<CaseloadDigest | null> {
+export async function getCaseloadDigest(actor: OrgActor, nowMs = Date.now(), opts: { timeZone?: string | null } = {}): Promise<CaseloadDigest | null> {
   if (actor.viaPlatformAdmin || !actor.capabilities.has("org.client.view_content")) return null;
   const seesAll = actor.capabilities.has("org.client.view_all");
   const hasFn = await hasStaffReachFunction();
@@ -286,6 +289,7 @@ export async function getCaseloadDigest(actor: OrgActor, nowMs = Date.now()): Pr
     asks: asks.ok ? asks.rows : [],
     lastNotes: scoped[0],
     reachable: new Set(scoped[1].map((r) => r.user_id)),
+    timeZone: opts.timeZone ?? null,
   }, nowMs);
 }
 
