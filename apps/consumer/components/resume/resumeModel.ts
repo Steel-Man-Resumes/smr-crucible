@@ -302,6 +302,15 @@ export function createWorkEntry(): WorkEntry {
   };
 }
 
+/**
+ * A job's dates as the participant's printable shows them: an empty end date
+ * is the current job, "Present" ("2021 - Present"). One rule for the preview,
+ * the download and the staff read-only view (walkthrough W12, 2026-10-27).
+ */
+export function workEntryDates(entry: { startDate?: string | null; endDate?: string | null }): string {
+  return [entry.startDate, entry.endDate || "Present"].filter(Boolean).join(" - ");
+}
+
 export function createEducationEntry(): EducationEntry {
   return {
     id: crypto.randomUUID(),
@@ -544,7 +553,7 @@ export function formatResumeDownload(input: AnyResumeDocument): string {
     lines.push("PROFESSIONAL EXPERIENCE", "");
     for (const entry of filledExp) {
       // "TITLE | Company, Dates" -- 2 pipe parts so DOCX builder renders title bold
-      const dates = [entry.startDate, entry.endDate || "Present"].filter(Boolean).join(" - ");
+      const dates = workEntryDates(entry);
       const companyDates = [entry.company, dates].filter(Boolean).join(", ");
       const titleLine = companyDates ? `${entry.title} | ${companyDates}` : entry.title;
       lines.push(titleLine);

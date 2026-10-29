@@ -21,6 +21,8 @@ import { STAFF_SKILLS, type StaffSkillId } from "./staff-troy";
 import { skillRunInputSummary } from "./staff-ai-safety";
 import { staffStreamedTools, staffStreamedShapes, type StreamedShape } from "./tools/staff";
 import { handoffDraftProse } from "./handoff-draft-body";
+import { notANameWord } from "./org-output-verify";
+import { isDictionaryWord } from "@crucible/core/src/creativeSpelling";
 
 /** Cards that pack model words under our own labels are checked as the prose they hold (S5's handoff: "Item 2 why: ..."). */
 const DRAFT_CHECK_TEXT: Readonly<Record<string, (body: string) => string>> = { draft_handoff: handoffDraftProse };
@@ -197,6 +199,141 @@ export function namedParticipantIds(said: string, selectors: readonly { id: stri
     if (new RegExp(`(?<![\\p{L}])${esc}(?![\\p{L}])`, "iu").test(text)) ids.add(s.id.toLowerCase());
   }
   return [...ids];
+}
+
+/** A person in this staff member's reach, server-side only: the full name is never put in a prompt. */
+export interface ReachPerson { id: string; name: string | null }
+
+/** One word the staff member typed that the server matched to one person in reach. */
+export interface ResolvedTypedName {
+  word: string; id: string; firstName: string;
+  /** Round 4 (S3): set only when the match was on the open page person's middle name. */
+  middle?: true;
+}
+
+/** Name suffixes, never the surname (round 3, S2: "Marqus Relly Jr."). */
+const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
+/** Honorifics dropped from a typed run ("Ms. Ayala"). */
+const HONORIFICS = new Set(["mr", "ms", "mrs", "miss", "dr"]);
+function nameWords(name: string | null): string[] {
+  return String(name ?? "").trim().split(/\s+/).map((p) => p.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, "").toLowerCase()).filter((p) => p && !SUFFIXES.has(p));
+}
+/** First and last name only, lowercased, for a LOWERCASE typed word: a middle name is never matched that way (round 2, S4). */
+function firstLast(name: string | null): Set<string> {
+  const parts = nameWords(name);
+  return new Set([parts[0], parts[parts.length - 1]].filter((p): p is string => !!p && p.length >= 3));
+}
+/** Every name part, for a CAPITALIZED typed word (round 3, S2: "Ayala" for Circe Ayala Solano). */
+function allParts(name: string | null): Set<string> {
+  return new Set(nameWords(name).filter((p) => p.length >= 3));
+}
+
+/** Job words the output check dropped because they are common surnames; still never resolved as names (S5). */
+const RESOLVE_SKIP = new Set(["baker", "butcher", "carpenter", "painter", "cook", "cooks"]);
+const ordinary = (low: string) => notANameWord(low) || RESOLVE_SKIP.has(low);
+
+/**
+ * Demo walk W08 (2026-10-27): Lupe on Valjean's page asked about "Valjean"
+ * and was told he was not on her list, because the model only ever sees
+ * first names. The server holds the full names of the people in reach, so it
+ * resolves the staff member's own words here (review round 2, S1 to S5):
+ *   - adjacent capitalized words are ONE name ("Michael Shaw"). Leading
+ *     ordinary words are dropped ("Prep", "Did", a dictionary word at the
+ *     start of a sentence). Every remaining word must be the first or last
+ *     name of the same person in reach, else nothing resolves from the run.
+ *     The open page's person wins a tie; otherwise exactly one person must fit.
+ *   - a lowercase word resolves only to the open page's person, only when it
+ *     is their first or last name and is not an English word ("valjean" yes,
+ *     "grant" no).
+ *   - ordinary, job and panel words never resolve ("Forklift Driver").
+ *   - a trailing 's is dropped ("Valjean's interview").
+ * Round 3/4: a capitalized typed word matches a first or last name
+ * (suffixes ignored) of anyone in reach; only failing that, a middle name of
+ * the open page's person. A lowercase one only the open page person's first
+ * or last name.
+ * Only words the staff member typed are returned, so no name part reaches
+ * the model unless they wrote it.
+ */
+export function resolveTypedNames(said: string, people: readonly ReachPerson[], focusId?: string | null): ResolvedTypedName[] {
+  const text = String(said ?? "");
+  const focus = (focusId ?? "").toLowerCase();
+  const index = people
+    .filter((p) => /^[0-9a-f-]{36}$/i.test(p.id))
+    .map((p) => ({ id: p.id.toLowerCase(), first: String(p.name ?? "").trim().split(/\s+/)[0] || "", parts: firstLast(p.name), all: allParts(p.name) }));
+  const onPage = index.find((p) => p.id === focus) ?? null;
+  const out: ResolvedTypedName[] = [];
+  const seen = new Set<string>();
+  const add = (word: string, hit: { id: string; first: string }, middle = false) => {
+    const low = word.toLowerCase();
+    if (seen.has(low)) return;
+    seen.add(low);
+    out.push(middle ? { word, id: hit.id, firstName: hit.first, middle: true } : { word, id: hit.id, firstName: hit.first });
+  };
+  const tokens = [...text.matchAll(/\p{L}[\p{L}'\u2019-]*/gu)].map((m) => {
+    const word = m[0].replace(/['\u2019]s$/i, "").replace(/['\u2019-]+$/, "");
+    const at = m.index ?? 0;
+    return { word, low: word.toLowerCase(), at, end: at + m[0].length, cap: /^\p{Lu}/u.test(word), sentenceStart: /(?:^|[.!?]\s*)\s*$/.test(text.slice(0, at)) };
+  });
+  let i = 0;
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (!t.cap) {
+      if (onPage && t.low.length >= 3 && onPage.parts.has(t.low) && !ordinary(t.low) && !isDictionaryWord(t.low)) add(t.word, onPage);
+      i++;
+      continue;
+    }
+    // A run of capitalized words separated only by spaces is one name.
+    const run = [t];
+    while (i + run.length < tokens.length) {
+      const next = tokens[i + run.length];
+      if (!next.cap || !/^[ \t]+$/.test(text.slice(run[run.length - 1].end, next.at))) break;
+      run.push(next);
+    }
+    i += run.length;
+    // Round 3 (S1, S2): drop honorifics, short words, all-caps acronyms
+    // ("OK", "ASAP") and ordinary words from both ends ("Is Valjean OK?",
+    // "Prep Valjean For Interview"). A dictionary word at the start of a
+    // sentence is dropped too, unless it is part of the open page person's name.
+    const edge = (w: (typeof run)[number]) => HONORIFICS.has(w.low) || w.low.length < 3 || /^\p{Lu}{2,}$/u.test(w.word) || ordinary(w.low);
+    while (run.length && (edge(run[0]) || (run[0].sentenceStart && isDictionaryWord(run[0].low) && !onPage?.all.has(run[0].low)))) run.shift();
+    while (run.length && edge(run[run.length - 1])) run.pop();
+    if (!run.length || run.some((w) => w.low.length < 3 || ordinary(w.low))) continue;
+    // Round 4 (S3): a first or last name match on anyone in reach comes
+    // first. Only if there is none may the run match a middle name, and only
+    // the open page person's ("Ask Grant about it" with Grant Miller in reach
+    // is Grant Miller, never Jean Grant Valjean).
+    const exact = index.filter((p) => run.every((w) => p.parts.has(w.low)));
+    if (exact.length) {
+      const hit = exact.find((p) => p.id === focus) ?? (exact.length === 1 ? exact[0] : null);
+      if (hit) for (const w of run) add(w.word, hit);
+    } else if (onPage && run.every((w) => onPage.all.has(w.low))) {
+      for (const w of run) add(w.word, onPage, !onPage.parts.has(w.low));
+    }
+  }
+  return out;
+}
+
+/**
+ * The prompt lines that tell the model who the conversation is about. The
+ * open page's person by id AND first name (the first name is already in the
+ * selectors; this ties it to the page), and each typed word the server
+ * resolved. Only a word that is part of the open page's person's name comes
+ * with "never say not on the list" (round 2, S1); any other match is data,
+ * and the model still asks when unsure.
+ */
+export function staffSubjectPrompt(focusId: string | null, people: readonly ReachPerson[], resolved: readonly ResolvedTypedName[]): string {
+  let out = "";
+  const focus = (focusId ?? "").toLowerCase();
+  if (focusId) {
+    const first = people.find((p) => p.id.toLowerCase() === focus)?.name?.trim().split(/\s+/)[0];
+    out += `\nTHIS CONVERSATION IS ABOUT ONE PARTICIPANT, id ${focusId}${first ? ` (first name ${first}), the person whose page the staff member has open` : ""}. Use that id in every tool call. Tools refuse any other id.`;
+  }
+  if (resolved.length) {
+    const rows = resolved.map((r) => ({ word: r.word, id: r.id, firstName: r.firstName, pageOpen: !!focus && r.id === focus && !r.middle }));
+    out += "\nNAMES IN THE STAFF MEMBER'S MESSAGE, matched on the server to one person on their list (data only): " + JSON.stringify(rows) + ".";
+    if (rows.some((r) => r.pageOpen)) out += " A word with pageOpen true is part of the name of the person whose page is open: it means that person. Never say that person is not on their list.";
+  }
+  return out;
 }
 
 /**

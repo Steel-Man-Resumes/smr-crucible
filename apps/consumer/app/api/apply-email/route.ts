@@ -95,7 +95,7 @@ async function handlePost(request: Request) {
   const loc = sanitizeOrEmpty(app.location, 120);
   const locLine = loc && loc.toLowerCase() !== "not specified" ? `\n- Location: ${loc}` : "";
 
-  const prompt = `You are t.ROY, helping a job seeker apply for a job by EMAIL because the employer offers no online application link.
+  const prompt = `You are t.ROY, helping a job seeker apply for a job by EMAIL because no online application link was saved for this job. Do not say or suggest that the employer has no online application.
 
 THE JOB:
 - Role: ${role || "(not given: say 'the open position', never write a placeholder)"}

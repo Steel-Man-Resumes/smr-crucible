@@ -26,7 +26,6 @@ import { saveArtifactReceipt } from "@/lib/artifact-save";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { getOpusMessage } from "@/lib/opus-messages";
-import { escapeHtml } from "@/lib/escape-html";
 import { useUserContext } from "@/lib/use-user-context";
 import { ConfidenceCoach } from "@/components/ConfidenceCoach";
 import { CheckCircle2 } from "lucide-react";
@@ -38,7 +37,8 @@ import { HurdlePlanView, type WordingStatus } from "@/components/hurdles/HurdleP
 import { HURDLES, type HurdleId } from "@/lib/hurdles/graph";
 import { INITIAL_STATE, hurdlesOf, plannerReducer, position, reachedAnswers } from "@/lib/hurdles/reducer";
 import { coverageOf } from "@/lib/hurdles/coverage";
-import { buildHurdlePlan, buildSavePayload, hurdlePlanText, newestRestorablePlan, SAVED_PLAN_TYPES, COACHING_LINE, type HurdlePlan } from "@/lib/hurdles/plan";
+import { buildHurdlePlan, buildSavePayload, newestRestorablePlan, SAVED_PLAN_TYPES, type HurdlePlan } from "@/lib/hurdles/plan";
+import { buildHurdlePlanPrintHtml } from "@/lib/hurdles/plan-print";
 import { withoutRecordContent } from "@/lib/hurdles/phrase";
 import { getNode } from "@/lib/hurdles/graph";
 import { applyConstraints } from "@/lib/hurdles/filters";
@@ -327,8 +327,10 @@ function DisclosurePlannerPage() {
   function downloadPlan() {
     if (!plan) return;
     const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-    const body = hurdlePlanText(plan, wording.summaries as Record<string, string>).split("\n").map((l) => (l ? `<p>${escapeHtml(l)}</p>` : "")).join("");
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8" /><title>Your plan</title><style>body{font-family:Georgia,serif;color:#1a1a1a;font-size:12pt;line-height:1.6;margin:0.85in}p{margin:0 0 6pt}.c{border:1pt solid #d4b896;padding:8pt 12pt;margin-bottom:14pt;font-size:10pt}</style></head><body><h1>Your plan${targetJob ? `: ${escapeHtml(targetJob)}` : ""}</h1><p>${date}</p><div class="c"><strong>${COACHING_LINE}</strong> Built from your answers. Anything you didn't answer stays open.</div>${body}</body></html>`;
+    // Built from the plan's structure (T02, 2026-10-28). t.ROY's reading goes
+    // in only while it is shown on screen: the download never holds more than
+    // the screen shows.
+    const html = buildHurdlePlanPrintHtml(plan, { targetJob, date, summaries: showReading ? wording.summaries : undefined });
     const w = window.open("", "_blank");
     if (!w) return;
     w.document.write(html);
