@@ -211,7 +211,9 @@ it("W08 round 2: lowercase ordinary words, middle names and job words never reso
   const people = [{ id: JGV, name: "Jean Grant Valjean" }, { id: MD, name: "Minnie Driver" }];
   // S4: an English word on the page is not the person, and the middle name is never matched.
   assert.deepEqual(resolveTypedNames("She wants a grant for training", people, JGV), []);
-  assert.deepEqual(resolveTypedNames("Ask Grant about it", people, JGV), [], "middle names are never matched");
+  // Round 3: a CAPITALIZED word the staff member typed may match a middle name (they typed it).
+  assert.deepEqual(resolveTypedNames("Ask Grant about it", people, JGV).map((r) => r.id), [JGV]);
+  assert.deepEqual(resolveTypedNames("ask grant about it", people, JGV), [], "a lowercase word never matches a middle name");
   assert.deepEqual(resolveTypedNames("prep me for valjean", people, JGV).map((r) => r.word), ["valjean"]);
   assert.deepEqual(resolveTypedNames("prep me for valjean", people, null), [], "lowercase only for the open page");
   // S5: a job title is not a person named Driver, on or off a page.
@@ -231,4 +233,27 @@ it("W08 round 2: only the open page's person gets 'never say not on their list'"
   assert.ok(!other.includes("Never say"), "a match off the page is data only");
   const onPage = staffSubjectPrompt(JEAN, people, resolveTypedNames("Prep me for Valjean", people, JEAN));
   assert.match(onPage, /pageOpen true is part of the name of the person whose page is open: it means that person\. Never say that person is not on their list\./);
+});
+
+// Round 3 (review R2, S1 and S2): trailing words, honorifics, suffixes, any name part.
+it("W08 round 3: trailing words do not sink the name on his page", () => {
+  const JEAN = "00000000-0000-0000-0000-00000000004a";
+  const people = [{ id: JEAN, name: "Jean Valjean" }];
+  for (const said of ["Is Valjean OK?", "Prep me for Valjean ASAP", "Prep Valjean For Interview"]) {
+    assert.deepEqual(resolveTypedNames(said, people, JEAN).map((r) => [r.word, r.id]), [["Valjean", JEAN]], said);
+  }
+});
+
+it("W08 round 3: honorifics and suffixes are dropped; a capitalized word matches any name part", () => {
+  const CECI = "00000000-0000-0000-0000-00000000005a";
+  const MARQUS = "00000000-0000-0000-0000-00000000005b";
+  const people = [{ id: CECI, name: "Circe Ayala Solano" }, { id: MARQUS, name: "Marqus Relly Jr." }];
+  assert.deepEqual(resolveTypedNames("Prep me for Ms. Ayala", people, CECI).map((r) => [r.word, r.id]), [["Ayala", CECI]]);
+  assert.deepEqual(resolveTypedNames("Prep me for Ms. Ayala", people, null).map((r) => r.id), [CECI]);
+  assert.deepEqual(resolveTypedNames("How is Relly doing?", people, MARQUS).map((r) => [r.word, r.id]), [["Relly", MARQUS]]);
+  assert.deepEqual(resolveTypedNames("prep me for relly", people, MARQUS).map((r) => r.word), ["relly"], "lowercase surname on his page, past the suffix");
+  assert.deepEqual(resolveTypedNames("Is Dr Relly Jr in?", people, null).map((r) => r.word), ["Relly"]);
+  // Still never a guess: a lowercase middle name, or a name part nobody in reach has.
+  assert.deepEqual(resolveTypedNames("she said ayala", people, CECI), []);
+  assert.deepEqual(resolveTypedNames("Prep me for Ms. Shaw", people, CECI), []);
 });

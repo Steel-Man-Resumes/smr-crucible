@@ -207,10 +207,21 @@ export interface ReachPerson { id: string; name: string | null }
 /** One word the staff member typed that the server matched to one person in reach. */
 export interface ResolvedTypedName { word: string; id: string; firstName: string }
 
-/** First and last name only, lowercased: a middle name is never matched, so it is never revealed (round 2, S4). */
+/** Name suffixes, never the surname (round 3, S2: "Marqus Relly Jr."). */
+const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv"]);
+/** Honorifics dropped from a typed run ("Ms. Ayala"). */
+const HONORIFICS = new Set(["mr", "ms", "mrs", "miss", "dr"]);
+function nameWords(name: string | null): string[] {
+  return String(name ?? "").trim().split(/\s+/).map((p) => p.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, "").toLowerCase()).filter((p) => p && !SUFFIXES.has(p));
+}
+/** First and last name only, lowercased, for a LOWERCASE typed word: a middle name is never matched that way (round 2, S4). */
 function firstLast(name: string | null): Set<string> {
-  const parts = String(name ?? "").trim().split(/\s+/).map((p) => p.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, "").toLowerCase()).filter(Boolean);
+  const parts = nameWords(name);
   return new Set([parts[0], parts[parts.length - 1]].filter((p): p is string => !!p && p.length >= 3));
+}
+/** Every name part, for a CAPITALIZED typed word (round 3, S2: "Ayala" for Circe Ayala Solano). */
+function allParts(name: string | null): Set<string> {
+  return new Set(nameWords(name).filter((p) => p.length >= 3));
 }
 
 /** Job words the output check dropped because they are common surnames; still never resolved as names (S5). */
@@ -232,15 +243,17 @@ const ordinary = (low: string) => notANameWord(low) || RESOLVE_SKIP.has(low);
  *     "grant" no).
  *   - ordinary, job and panel words never resolve ("Forklift Driver").
  *   - a trailing 's is dropped ("Valjean's interview").
- * Middle names are never matched. Only words the staff member typed are
- * returned, so no surname reaches the model unless they wrote it.
+ * Round 3: a capitalized typed word may match any name part (suffixes
+ * ignored); a lowercase one only the open page person's first or last name.
+ * Only words the staff member typed are returned, so no name part reaches
+ * the model unless they wrote it.
  */
 export function resolveTypedNames(said: string, people: readonly ReachPerson[], focusId?: string | null): ResolvedTypedName[] {
   const text = String(said ?? "");
   const focus = (focusId ?? "").toLowerCase();
   const index = people
     .filter((p) => /^[0-9a-f-]{36}$/i.test(p.id))
-    .map((p) => ({ id: p.id.toLowerCase(), first: String(p.name ?? "").trim().split(/\s+/)[0] || "", parts: firstLast(p.name) }));
+    .map((p) => ({ id: p.id.toLowerCase(), first: String(p.name ?? "").trim().split(/\s+/)[0] || "", parts: firstLast(p.name), all: allParts(p.name) }));
   const onPage = index.find((p) => p.id === focus) ?? null;
   const out: ResolvedTypedName[] = [];
   const seen = new Set<string>();
@@ -271,9 +284,15 @@ export function resolveTypedNames(said: string, people: readonly ReachPerson[], 
       run.push(next);
     }
     i += run.length;
-    while (run.length && (ordinary(run[0].low) || (run[0].sentenceStart && isDictionaryWord(run[0].low)))) run.shift();
+    // Round 3 (S1, S2): drop honorifics, short words, all-caps acronyms
+    // ("OK", "ASAP") and ordinary words from both ends ("Is Valjean OK?",
+    // "Prep Valjean For Interview"). A dictionary word at the start of a
+    // sentence is dropped too, unless it is part of the open page person's name.
+    const edge = (w: (typeof run)[number]) => HONORIFICS.has(w.low) || w.low.length < 3 || /^\p{Lu}{2,}$/u.test(w.word) || ordinary(w.low);
+    while (run.length && (edge(run[0]) || (run[0].sentenceStart && isDictionaryWord(run[0].low) && !onPage?.all.has(run[0].low)))) run.shift();
+    while (run.length && edge(run[run.length - 1])) run.pop();
     if (!run.length || run.some((w) => w.low.length < 3 || ordinary(w.low))) continue;
-    const fits = index.filter((p) => run.every((w) => p.parts.has(w.low)));
+    const fits = index.filter((p) => run.every((w) => p.all.has(w.low)));
     const hit = fits.find((p) => p.id === focus) ?? (fits.length === 1 ? fits[0] : null);
     if (hit) for (const w of run) add(w.word, hit);
   }

@@ -81,18 +81,23 @@ const ALWAYS_FINE = new Set(["0", "1", "2", "3", "4", "5", "6", "7", "10", "12",
  * and "Oct 27" were reported as caseload figures). Month first ("Oct 27",
  * "October 25, 2026", "Sun Oct 25") and ISO ("2026-10-25"). Not day first:
  * "3 March appointments" stays a count. Months must be capitalized, so "you may 12" is not a date.
- * Round 2 (S6): the day must be 1 to 31 and must not be followed by a count
- * noun, so "In October 38 participants" and "Oct 27 people" stay counts.
+ * Round 2 (S6): the day must be 1 to 31. Round 3 (B1): see DATE_FOLLOW, and
+ * the replacement runs on the answer path only, so a draft's numbers are
+ * checked exactly as before.
  * Slash dates ("10/25") are already skipped by the number pattern.
  */
 const MONTH = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
 const WEEKDAY = "(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon|Tues?|Wed|Thu(?:rs?)?|Fri|Sat|Sun)";
 /** A day of the month, 1 to 31 ("Oct 45" is not a date; review round 2, S6). */
 const DAY = "(?:3[01]|[12]\\d|0?[1-9])";
-/** "Oct 27 people are stalled" is a count after a month, not a date (S6). */
-const COUNT_NOUN = "(?:people|persons|participants|clients|cases|folks|members|staff|of|more|new|days|weeks|months|years|hours|times)\\b";
+/**
+ * Round 3 (B1): an allow-list, not a deny-list. "Month D" is a date only when
+ * the day is followed by the end, punctuation, or one of these words. "In
+ * October 22 graduates" and "Since Oct 1 1500 people" stay counts.
+ */
+const DATE_FOLLOW = "(?=\\s*$|\\s*[.,;:!?)\\]]|\\s+(?:at|and|to|through|or|in|on|by|until|from|for|when|before|after|the|his|her|their)\\b)";
 const WRITTEN_DATE = new RegExp(
-  `(?:\\b${WEEKDAY}\\.?,?\\s+)?\\b${MONTH}\\.?\\s+${DAY}(?:st|nd|rd|th)?\\b(?!\\s+${COUNT_NOUN})(?:,?\\s+\\d{4}\\b)?(?![\\d:/-])` +
+  `(?:\\b${WEEKDAY}\\.?,?\\s+)?\\b${MONTH}\\.?\\s+${DAY}(?:st|nd|rd|th)?\\b(?:,\\s+(?:19|20)\\d{2}\\b${DATE_FOLLOW}|${DATE_FOLLOW})` +
     "|\\b\\d{4}-\\d{2}-\\d{2}(?:T[\\d:.]+Z?)?\\b",
   "g"
 );
@@ -344,7 +349,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
 
   // A written date is not a count (W08). Replaced with words, not a blank, so a
   // capitalized name right after it is still read as mid-sentence and checked.
-  text = text.replace(WRITTEN_DATE, "the date");
+  if (opts?.typedNamesInNoMatch) text = text.replace(WRITTEN_DATE, "the date");
 
   // Every standalone integer must be one we can account for. Money, dates and
   // percentages are skipped -- they are reported elsewhere and are not the
