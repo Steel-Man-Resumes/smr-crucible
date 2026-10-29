@@ -7,7 +7,12 @@ import {
   rememberDismissed,
   shouldShowJoinPrompt,
   wasDismissed,
+  DISMISS_COOKIE,
+  dismissCookieAssignment,
+  readDismissCookie,
+  dismissToken,
 } from "../join-sharing-prompt";
+import { readFileSync } from "node:fs";
 
 function memoryStorage() {
   const m = new Map<string, string>();
@@ -84,5 +89,63 @@ describe("Not now: asked once, nothing sent anywhere", () => {
     assert.doesNotThrow(() => rememberDismissed(brokenStorage, "user-1", "org-1"));
     assert.equal(wasDismissed(brokenStorage, "user-1", "org-1"), false);
     assert.equal(wasDismissed(null, "user-1", "org-1"), false);
+  });
+});
+
+describe("Not now holds on both hosts (demo review 2026-10-28, Ceci)", () => {
+  const U = "0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f";
+  const O = "1a1a1a1a-1a1a-4a1a-8a1a-1a1a1a1a1a1a";
+  const cookieValue = (assignment: string) => assignment.split(";")[0];
+
+  it("Not now on one host silences the prompt on the other, through the shared cookie", () => {
+    const set = dismissCookieAssignment("", U, O, "refinery.steelmanresumes.com", "https:")!;
+    assert.match(set, /; Domain=\.steelmanresumes\.com/);
+    assert.match(set, /; Secure/);
+    assert.match(set, /SameSite=Lax/);
+    // The Forge host: empty localStorage of its own, but the same cookie.
+    const forgeCookie = `other=1; ${cookieValue(set)}`;
+    assert.equal(shouldShowJoinPrompt({ show: true, orgId: O }, U, memoryStorage(), forgeCookie), false);
+    assert.equal(wasDismissed(memoryStorage(), U, O, forgeCookie), true);
+  });
+
+  it("the cookie is per person and per organization, and holds no words", () => {
+    const c = cookieValue(dismissCookieAssignment("", U, O, "forge.steelmanresumes.com", "https:")!);
+    assert.equal(c, `${DISMISS_COOKIE}=${dismissToken(U, O)}`);
+    assert.ok(!c.includes(U) && !c.includes(O), "no raw ids in a cookie every subdomain can read");
+    const other = "2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b";
+    assert.equal(shouldShowJoinPrompt({ show: true, orgId: O }, other, memoryStorage(), c), true, "the next person on a shared computer is still asked");
+    assert.equal(shouldShowJoinPrompt({ show: true, orgId: other }, U, memoryStorage(), c), true, "a different organization still asks");
+  });
+
+  it("host-only off steelmanresumes.com; keeps the newest eight pairs; never duplicates", () => {
+    assert.doesNotMatch(dismissCookieAssignment("", U, O, "localhost", "http:")!, /Domain=|Secure/);
+    let jar = "";
+    for (let i = 0; i < 10; i++) jar = cookieValue(dismissCookieAssignment(jar, `u${i}`, O, "localhost", "http:")!);
+    jar = cookieValue(dismissCookieAssignment(jar, "u9", O, "localhost", "http:")!);
+    const pairs = readDismissCookie(jar);
+    assert.equal(pairs.length, 8);
+    assert.equal(new Set(pairs).size, 8);
+    assert.equal(pairs.at(-1), dismissToken("u9", O));
+  });
+
+  it("malformed or hostile values are ignored, never trusted", () => {
+    assert.equal(dismissCookieAssignment("", "a;b", O, "localhost", "http:"), null);
+    assert.equal(dismissCookieAssignment("", U, "x=y", "localhost", "http:"), null);
+    const tok = dismissToken(U, O);
+    assert.deepEqual(readDismissCookie(`${DISMISS_COOKIE}=${tok}.A!B.${U}..x;y`), [tok]);
+    // An old raw-id cookie from before this change is ignored, not trusted.
+    assert.deepEqual(readDismissCookie(`${DISMISS_COOKIE}=${U}.${O}`).includes(tok), false);
+    assert.deepEqual(readDismissCookie(null), []);
+  });
+
+  it("the server still decides whether to ask: the cookie can only silence, never show, and Yes still writes consent", () => {
+    assert.equal(shouldShowJoinPrompt({ show: false }, U, memoryStorage(), ""), false);
+    assert.equal(shouldShowJoinPrompt(null, U, memoryStorage(), `${DISMISS_COOKIE}=`), false);
+    const src = readFileSync(new URL("../../components/JoinSharingPrompt.tsx", import.meta.url), "utf8");
+    assert.match(src, /shouldShowJoinPrompt\(decision, decision\.viewerId, storage\(\), cookies\(\)\)/);
+    assert.match(src, /body: JSON\.stringify\(\{ layer: "sharing", action: "grant", source: "join_prompt" \}\)/, "Yes is unchanged");
+    // Not now still sends nothing to the server.
+    const notNow = src.slice(src.indexOf("function notNow"), src.indexOf("return (", src.indexOf("function notNow")));
+    assert.doesNotMatch(notNow, /fetch\(/);
   });
 });

@@ -15,7 +15,7 @@ import { requireOrgCapability } from "@/lib/org-guard";
 import { withCrm } from "@/lib/org-crm-gate";
 import { getClientIp } from "@/lib/auth-rate-limit";
 import { EMPLOYER_PAGES_ENDPOINT, EMPLOYER_PAGES_LIMIT_MESSAGE, employerPageAllowed } from "@/lib/employer-paging";
-import { parseDirectoryQuery, shapeResources, shapeEmployers, sectorsOf, DIRECTORY_WORDS } from "@/lib/staff-directory";
+import { parseDirectoryQuery, shapeResources, shapeEmployers, sectorsOf, cityFold, DIRECTORY_WORDS } from "@/lib/staff-directory";
 import { RESOURCE_AREAS } from "@crucible/core/src/resourceDirectoryShared";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
 
 async function search(request: Request, userId: string) {
   const query = parseDirectoryQuery(new URL(request.url).searchParams);
-  const { parsePlace } = await import("@/lib/support-location");
+  const { parsePlace, stateName } = await import("@/lib/support-location");
   const place = parsePlace(query.place);
   if (!place.state) return NextResponse.json({ status: "needs_place", error: DIRECTORY_WORDS.needsPlace }, { status: 400, headers: NO_STORE });
   const core = await import("@crucible/core");
@@ -65,7 +65,8 @@ async function search(request: Request, userId: string) {
     // any account tier, L2), and staff look up for many people.
     if (!employerPageAllowed(account, network, "partner")) employersLimited = true;
     else {
-      const result = await core.searchVerifiedEmployers({ state: place.state, q: query.q ?? undefined, industry: query.sector ?? undefined, bands: ["A", "B"], limit: 25 });
+      // The typed city ranks first INSIDE the query, before its limit, so local employers are never cut by the statewide cap.
+      const result = await core.searchVerifiedEmployers({ state: place.state, q: query.q ?? undefined, industry: query.sector ?? undefined, bands: ["A", "B"], limit: 25, city: cityFold(place.cityKey) || null });
       if (result.status === "ok") { employers = shapeEmployers(result.data, { city: place.cityKey }); sectors = sectorsOf(result.data); }
       else employersUnavailable = true;
     }
@@ -73,7 +74,12 @@ async function search(request: Request, userId: string) {
 
   return NextResponse.json({
     status: "ok", asOf: new Date().toISOString(),
-    place: { state: place.state, city: place.cityKey ?? null, zip: place.zip ?? null },
+    place: {
+      state: place.state, city: place.cityKey ?? null, zip: place.zip ?? null,
+      // Words for the labels: "In Lansing", then "Elsewhere in Michigan".
+      cityName: place.cityKey && place.label?.includes(",") ? place.label.slice(0, place.label.lastIndexOf(",")).trim() || null : null,
+      stateName: stateName(place.state) ?? place.state,
+    },
     help, helpUnavailable, employers, employersUnavailable, sectors,
     employersLimited: employersLimited ? EMPLOYER_PAGES_LIMIT_MESSAGE : null,
     words: DIRECTORY_WORDS,

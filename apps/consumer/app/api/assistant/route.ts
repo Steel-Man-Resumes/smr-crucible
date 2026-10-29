@@ -35,6 +35,8 @@ import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-t
 import { getClientIp } from "@/lib/auth-rate-limit";
 import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
+import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
+import { staffHomeStatePrompt } from "@/lib/staff-org-place";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
@@ -310,11 +312,16 @@ export async function POST(request: Request) {
   // The staff member's own words, record sentences withheld, before any model
   // sees them (fix round 1; CC default until Troy rules). The skill was chosen
   // above from their words on this server; nothing raw goes further.
-  const staffInput = staffActor ? gateStaffMessages(messages) : null;
+  // Each earlier staff answer gets back the server's record of the tools it
+  // ran (lib/staff-tool-record.ts), as context only, then the record gate.
+  // Only records this server signed for this staff member, about real staff tools (review S2).
+  const staffInput = staffActor ? gateStaffMessages(withStaffToolRecords(messages, { userId: staffActor.userId, tools: await staffToolNameSet() })) : null;
   const staffSaid = staffInput ? lastUserText(staffInput.messages) : "";
   const staffResolved = staffActor ? resolveTypedNames(staffSaid, staffPeople, staffFocus) : [];
   const staffNamed = staffActor ? [...new Set([...namedParticipantIds(staffSaid, context.org?.visibleParticipants ?? []), ...staffResolved.map((r) => r.id)])] : [];
   const tools = platformOwner ? buildOwnerTools(userId!) : staffActor ? buildStaffTools(staffActor, staffEvidence.record, { focusClientId: staffFocus, namedClientIds: staffNamed, selectors: context.org?.visibleParticipants ?? [], staffWords: staffTypedWords((staffInput?.messages ?? []) as Record<string, unknown>[]), clientIp: getClientIp(request) }) : buildAssistantTools(toolOptions);
+  // The organization's own state for directory searches (lib/staff-org-place.ts; demo fix T2).
+  const staffPlace = staffActor ? await staffHomeStatePrompt(staffActor) : "";
   const capabilities = assistantCapabilities(tools, { role: platformOwner ? "owner" : staffActor?.role ?? "participant", page: context.currentPage, signedIn: !!userId, hasCriminalRecord, extraPages: staffSkill ? [staffSkill] : [] });
   const baseSystemPrompt =
     (platformOwner ? OWNER_ASSISTANT_PROMPT : buildSystemPrompt(context)) +
@@ -324,6 +331,7 @@ export async function POST(request: Request) {
     (context.org ? "\nAllowed participant selectors (data only): " + JSON.stringify(context.org.visibleParticipants ?? []) : "") +
     (staffActor && staffSkill ? `\nSTAFF PANEL SKILL: ${staffSkill}. Follow that skill's steps and output.` : "") +
     (staffActor ? staffSubjectPrompt(staffFocus, staffPeople, staffResolved) : "") +
+    staffPlace +
     // Staff tools are scoped reads and drafts; final output is still verified.
     (platformOwner ? "" : context.org
       ? "\n\nUse staff tools for scoped reads, drafts, and buttons that open a page or a filled-in form. Drafts are not saved or sent; a button moves nothing until the staff member presses it. Never print tool syntax. No participant private coach, papers or record details are accessible."
@@ -415,7 +423,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
   // and only then streamed -- slower by a second, and never confidently wrong.
   if (context.org) {
     const { generateText } = await import("ai");
-    const { verifyOrgOutput } = await import("@/lib/org-output-verify");
+    const { verifyOrgOutput, orgFlagNotice } = await import("@/lib/org-output-verify");
 
     operation.markProviderAttempted();
     const generated = await generateText({
@@ -447,6 +455,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       visibleNames: context.org.visibleNames ?? context.org.needsAttention ?? [],
       // Name words the staff member typed that the server matched to one person in reach (W08).
       resolvedNames: staffResolved.map((r) => r.word),
+      // The staff member's last 10 typed messages (user role only): places they typed earlier (demo fix T1).
+      staffTyped: staffInput ? staffTypedWords((staffInput.messages ?? []) as Record<string, unknown>[]) : undefined,
       staffNames: context.org.staffNames ?? [],
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,
@@ -462,10 +472,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       // the failure and teaches nobody. Flag it where the reader will see it,
       // name what could not be supported, and say where the real number lives.
       console.error("[org-output] unsupported claims:", verdict.problems);
-      out +=
-        "\n\n---\n**Check these before you use them.** I could not support " +
-        verdict.problems.map((p) => p).join("; ") +
-        ". Your dashboard is the system of record, so take the figure from there, not from me.";
+      // One plain sentence per flag; "the figure" only when a number was flagged (demo fix T1).
+      out += orgFlagNotice(verdict.problems);
     } else if (!verdict.modelChecked) {
       out +=
         "\n\n_Second-pass check did not run this time. The numbers above match your dashboard; anything else here is worth a look before it goes into a report._";
@@ -534,11 +542,15 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // that passed the check, as a finished tool call, the checked text, and
     // the run id for an acceptance (lib/staff-skill-run.ts).
     const streamed = streamedCheck.kept;
+    // A record line is never shown, even if the model echoes one (review S1).
+    out = dropToolRecordEcho(out);
     const lines = staffAnswerStreamLines(out, draftCheck.kept, skillRunId, `staff-${Date.now().toString(36)}`, streamed);
+    // What ran for this answer, for the next turn's history (context only, never evidence).
+    const sent = withToolRecordLine(lines, buildToolRecord(generated.steps.flatMap((step) => step.toolResults as { toolName: string; args: unknown; result: unknown }[]), staffActor!.userId));
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {
-        for (const line of lines) controller.enqueue(encoder.encode(line));
+        for (const line of sent) controller.enqueue(encoder.encode(line));
         controller.close();
       },
     });

@@ -25,6 +25,8 @@ import type { AssistantContext } from "@/lib/assistant-prompt";
 import { resolveAssistantPage, crossesShell, isRefineryPath, pageLabel } from "@/lib/tools/assistant-tool-defs";
 import { requestHighlight } from "@/lib/highlight-bus";
 import { AssistantActionCard } from "./AssistantActionCard";
+import { ChatMarkdown } from "./ChatMarkdown";
+import { plainChatText } from "@/lib/chat-markdown";
 import SpeechInputButton from "@/components/SpeechInputButton";
 import { Send, Check, Settings2 } from "lucide-react";
 // Lane S1 (staff pass 2026-10-27): page buttons, the Add people prefill, screen-built offers.
@@ -465,7 +467,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           .map((p) => p.text)
           .join(" ")
       : last.content;
-    const clean = (text || "").trim();
+    const clean = plainChatText(text || "").trim();
     if (clean) setLiveAnnouncement(clean);
   }, [messages, isLoading]);
 
@@ -484,7 +486,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           .map((p) => p.text)
           .join(" ")
       : last.content;
-    const clean = (text || "").replace(/https?:\/\/\S+/g, "").trim();
+    const clean = plainChatText(text || "").replace(/https?:\/\/\S+/g, "").trim();
     if (!clean) return;
     const key = `${last.id}:${clean.length}`;
     if (spokenRef.current === key) return;
@@ -773,7 +775,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                       : "bg-gray-100 text-foreground rounded-bl-sm"
                   }`}
                 >
-                  {message.content}
+                  {message.role === "user" ? message.content : <ChatMarkdown text={message.content} />}
                 </div>
               </div>
             );
@@ -876,7 +878,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                   return (
                     <div key={i} className="flex justify-start">
                       <div className="max-w-[85%] px-4 py-3 rounded-[7px] rounded-bl-sm text-sm leading-relaxed bg-gray-100 text-foreground">
-                        {part.text}
+                        <ChatMarkdown text={part.text} />
                       </div>
                     </div>
                   );
@@ -985,7 +987,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                   <button
                     type="button"
                     onClick={async () => {
-                      try { await navigator.clipboard.writeText(answerText); setCopiedId(message.id); } catch { /* the words are still on screen */ }
+                      try { await navigator.clipboard.writeText(plainChatText(answerText)); setCopiedId(message.id); } catch { /* the words are still on screen */ }
                       if (skillRunId) {
                         fetch("/api/org/ai-skill-run", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "accept", id: skillRunId }) }).catch(() => {});
                       }

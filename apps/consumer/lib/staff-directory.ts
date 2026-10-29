@@ -74,7 +74,10 @@ export interface DirectoryResource {
   howSure: string;
   howSureDetail: string;
   lastChecked: string | null;
+  /** The phone field exactly as listed (never cut). */
   phone: string | null;
+  /** The same field split into numbers, each with its own label; tel only for a whole US number. */
+  phones: PhonePart[];
   hours: string | null;
   website: string | null;
   where: string | null;
@@ -100,6 +103,59 @@ export interface DirectoryEmployer {
   caveats: string | null;
   apply: string | null;
   source: string | null;
+  /** True when a city was typed and this listing is in it. Local listings come first. */
+  inPlace: boolean;
+}
+
+/** One number from a phone field: "Youth Housing Crisis Hotline" + "877-833-3680". */
+export interface PhonePart {
+  /** The words before the number ("Main line", "Youth Housing Crisis Hotline"), if any. */
+  label: string | null;
+  /** The number as listed, with any extension. */
+  number: string;
+  /** "tel:+18778333680" only when the number is a whole US number (10 digits, or 11 starting with 1). */
+  tel: string | null;
+}
+
+// A US-shaped number: optional +1, area code (with or without parentheses), 3 + 4 digits, optional extension.
+const PHONE_RE = /(?:\+?1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}(?:\s*(?:x|ext\.?|extension)\s*\d{1,6})?/gi;
+const CONNECTOR = /^(?:[\s,;:|/&-]|\b(?:or|and|call|phone|tel)\b)+|(?:[\s,;:|/&(-]|\b(?:or|and)\b)+$/gi;
+
+/** The tel: link for one number, or null when it does not parse to a whole US number. Never dials. */
+export function telHref(number: string): string | null {
+  const main = number.replace(/\s*(?:x|ext\.?|extension)\s*\d{1,6}$/i, "");
+  const d = main.replace(/\D/g, "");
+  if (d.length === 10 && /^[2-9]/.test(d)) return `tel:+1${d}`;
+  if (d.length === 11 && d[0] === "1" && /^[2-9]/.test(d.slice(1))) return `tel:+${d}`;
+  return null;
+}
+
+/**
+ * Split a listed phone field into its numbers. Some listings hold several
+ * ("Main 517-555-0100; Youth Housing Crisis Hotline 877-833-3680"), and a
+ * single tel link built from all the digits dials nothing real. Text that
+ * holds no whole number comes back as one part with no link.
+ */
+export function splitPhones(raw: string | null | undefined): PhonePart[] {
+  const s = (raw ?? "").replace(/\s+/g, " ").trim();
+  if (!s) return [];
+  const parts: PhonePart[] = [];
+  let last = 0;
+  for (const m of s.matchAll(PHONE_RE)) {
+    const at = m.index ?? 0;
+    // A digit right before or after means this is part of a longer run, not a phone number.
+    if (/\d/.test(s[at - 1] ?? "") || /\d/.test(s[at + m[0].length] ?? "")) continue;
+    const label = s.slice(last, at).replace(CONNECTOR, "").trim();
+    parts.push({ label: label || null, number: m[0].trim(), tel: telHref(m[0]) });
+    last = at + m[0].length;
+  }
+  if (parts.length === 0) return [{ label: null, number: s, tel: null }];
+  const tail = s.slice(last).replace(CONNECTOR, "").replace(/^\(|\)$/g, "").trim();
+  if (tail) {
+    const p = parts[parts.length - 1];
+    parts[parts.length - 1] = { ...p, number: `${p.number} (${tail})` };
+  }
+  return parts;
 }
 
 type ResourceRowLike = {
@@ -115,7 +171,23 @@ type EmployerRowLike = {
 
 const day = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
 const httpUrl = (v: unknown) => (typeof v === "string" && /^https?:\/\//i.test(v) ? v.slice(0, 500) : null);
-const text = (v: unknown, n: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : null);
+/**
+ * Listing text, whole when it fits. A long field is cut at a word boundary
+ * and says so with "...", never in the middle of a word or a number.
+ */
+export function clipText(v: unknown, n: number): string | null {
+  if (typeof v !== "string") return null;
+  const s = v.replace(/\s+/g, " ").trim();
+  if (!s) return null;
+  if (s.length <= n) return s;
+  const cut = s.slice(0, n + 1);
+  const space = cut.lastIndexOf(" ");
+  const head = (space > n * 0.6 ? cut.slice(0, space) : s.slice(0, n)).replace(/[\s,;:.(-]+$/, "");
+  return `${head}...`;
+}
+const text = clipText;
+/** Plenty for real listings; the cuts only stop a runaway field from flooding the page. */
+export const TEXT_LIMITS = { phone: 600, hours: 500, eligibility: 900, industry: 120, location: 240, roles: 400, evidence: 900, caveats: 700 } as const;
 
 /** Checked, then listed, then found; the directory's own order inside a band. */
 export function shapeResources(rows: readonly ResourceRowLike[], max = DIRECTORY_MAX_EACH): DirectoryResource[] {
@@ -129,35 +201,77 @@ export function shapeResources(rows: readonly ResourceRowLike[], max = DIRECTORY
       kind: "resource" as const, id: r.service_id, name: r.service_name ? `${r.org_name}: ${r.service_name}` : r.org_name,
       organization: r.org_name, service: r.service_name ?? null, need: area ?? r.area_label ?? "Help",
       band, howSure: label.label, howSureDetail: label.detail, lastChecked: day(r.last_checked),
-      phone: text(r.phone, 40), hours: text(r.hours, 200), website: httpUrl(r.website), where,
-      eligibility: text(r.eligibility, 300), source: httpUrl(r.source_url),
+      phone: text(r.phone, TEXT_LIMITS.phone), phones: splitPhones(text(r.phone, TEXT_LIMITS.phone)), hours: text(r.hours, TEXT_LIMITS.hours), website: httpUrl(r.website), where,
+      eligibility: text(r.eligibility, TEXT_LIMITS.eligibility), source: httpUrl(r.source_url),
     };
   });
 }
 
+/** The fold the employer query ranks on: letters only ("Grand Rapids" -> "grandrapids"). Same in SQL. */
+export function cityFold(v: string | null | undefined): string {
+  return String(v ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z]/g, "");
+}
+
 /**
- * The mark first, then reported. Inside a band, employers in the typed city
- * come first. A row past its recheck date is never shown (the reader already
- * drops them; this holds if one slips through).
+ * Employers in the typed city first, then the rest of the state; inside each,
+ * the mark (A) before reported (B). The city is a preference, not a filter:
+ * the query ranks the city first before its limit (publishedEmployerSql
+ * city), so local listings are never pushed out by the statewide cap. A row
+ * past its recheck date is never shown (the reader already drops them; this
+ * holds if one slips through).
  */
 export function shapeEmployers(rows: readonly EmployerRowLike[], opts: { city?: string | null; today?: string; max?: number } = {}): DirectoryEmployer[] {
   const today = opts.today ?? new Date().toISOString().slice(0, 10);
-  const city = (opts.city ?? "").toLowerCase().replace(/[^a-z]/g, "");
-  const inCity = (r: EmployerRowLike) => (city && (r.city ?? "").toLowerCase().replace(/[^a-z]/g, "") === city ? 0 : 1);
+  const city = cityFold(opts.city);
+  const isLocal = (r: EmployerRowLike) => !!city && cityFold(r.city) === city;
   const rank = (b: unknown) => (b === "A" ? 0 : 1);
   return rows
     .filter((r) => r.band === "A" || r.band === "B")
     .filter((r) => !day(r.expiresAt) || day(r.expiresAt)! > today)
     .map((r, i) => ({ r, i }))
-    .sort((x, y) => rank(x.r.band) - rank(y.r.band) || inCity(x.r) - inCity(y.r) || x.i - y.i)
+    .sort((x, y) => Number(isLocal(y.r)) - Number(isLocal(x.r)) || rank(x.r.band) - rank(y.r.band) || x.i - y.i)
     .slice(0, opts.max ?? DIRECTORY_MAX_EACH)
     .map(({ r }) => ({
-      kind: "employer" as const, id: r.id, name: r.name, industry: text(r.industry, 80),
-      where: text(r.location, 120) ?? ([r.city, r.state].filter(Boolean).join(", ") || null),
+      kind: "employer" as const, id: r.id, name: r.name, industry: text(r.industry, TEXT_LIMITS.industry),
+      where: text(r.location, TEXT_LIMITS.location) ?? ([r.city, r.state].filter(Boolean).join(", ") || null),
       band: r.band as "A" | "B", howSure: employerEvidenceLabel(r.band),
-      evidenceOn: day(r.checkedAt), recheckBy: day(r.expiresAt), roles: text(r.roleTypes, 200),
-      evidence: text(r.evidence, 300), caveats: text(r.caveats, 200), apply: httpUrl(r.applyUrl), source: httpUrl(r.sourceUrl),
+      evidenceOn: day(r.checkedAt), recheckBy: day(r.expiresAt), roles: text(r.roleTypes, TEXT_LIMITS.roles),
+      evidence: text(r.evidence, TEXT_LIMITS.evidence), caveats: text(r.caveats, TEXT_LIMITS.caveats), apply: httpUrl(r.applyUrl), source: httpUrl(r.sourceUrl),
+      inPlace: isLocal(r),
     }));
+}
+
+export interface EmployerGroup { key: "local" | "elsewhere" | "all"; heading: string | null; note: string | null; employers: DirectoryEmployer[] }
+
+/**
+ * How the employer list is labeled, honestly: "In Lansing" then "Elsewhere
+ * in Michigan" when a city was typed; one list when it was not. When the city
+ * has nothing listed, the page says so before showing the rest of the state.
+ */
+export function employerGroups(employers: readonly DirectoryEmployer[], place: { cityName?: string | null; stateName?: string | null }): EmployerGroup[] {
+  const state = place.stateName || "the state";
+  if (!place.cityName) return [{ key: "all", heading: null, note: null, employers: [...employers] }];
+  const local = employers.filter((e) => e.inPlace);
+  const rest = employers.filter((e) => !e.inPlace);
+  const out: EmployerGroup[] = [];
+  if (local.length) out.push({ key: "local", heading: `In ${place.cityName}`, note: null, employers: local });
+  if (rest.length) out.push({
+    key: "elsewhere", heading: `Elsewhere in ${state}`,
+    note: local.length ? null : `No employer listed in ${place.cityName} for this search yet. These are elsewhere in ${state}.`,
+    employers: rest,
+  });
+  return out;
+}
+
+/**
+ * Rows for the state being searched, and nothing tagged to another state.
+ * The resource reader always adds national rows, and some of those are one
+ * state's offices (a Social Security field office listed for Missouri); a
+ * Michigan search should not offer them. A national row with no state stays.
+ */
+export function inPickedState<T extends { state?: string | null }>(rows: readonly T[], state: string): T[] {
+  const st = state.toUpperCase();
+  return rows.filter((r) => !r.state || r.state.toUpperCase() === st);
 }
 
 /** Sectors to filter by: the industries in what came back, sorted. */

@@ -82,7 +82,7 @@ test("public caveats keep the honest caveat and drop the research log", () => {
                "The evidence is an aggregator copy for one role.");
   assert.equal(publicCaveat("Confirm current openings. [found_by: claude (sweep)]"), "Confirm current openings.");
   assert.equal(publicCaveat("[CC spot-check 2026-09-24: the page lists a background check as a requirement]"),
-               "the page lists a background check as a requirement.");
+               "The page lists a background check as a requirement.");
   assert.equal(publicCaveat("Reads as ban-the-box style language. Confirm the opening."), "Confirm the opening.");
   assert.equal(publicCaveat("Re-verified today, no change."), null);
   assert.equal(publicCaveat(null), null);

@@ -27,7 +27,8 @@ import type { TodayPayload } from '../today-view';
 const ROOT = join(import.meta.dirname, '..', '..');
 const read = (p: string) => readFileSync(join(ROOT, p), 'utf8');
 
-const STAFF_CAPS = ['org.client.view_content', 'org.note.write', 'org.task.write', 'org.participant.invite', 'org.client.request_sharing'];
+// The staff bundle's tour-relevant capabilities (packages/core/src/authz/capabilities.ts ROLE_BUNDLES.staff).
+const STAFF_CAPS = ['org.client.view_content', 'org.note.write', 'org.task.write', 'org.suggest.write', 'org.participant.invite', 'org.client.request_sharing'];
 const ALL_CAPS = [...STAFF_CAPS, 'org.insights.view', 'org.staff.manage'];
 const PERSON = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
 const TOUR_FILES = ['lib/tour/crm-beats.ts', 'lib/tour/staff-tour.ts', 'lib/tour/find-target.ts', 'components/tour/StaffTourPlayer.tsx', 'components/tour/StaffTour.tsx'];
@@ -37,7 +38,7 @@ test('registry: crm is a tour of its own, reserved reward key, grants nothing, s
   assert.deepEqual([...TOUR_IDS], ['entrance', 'settings', 'crm']);
   assert.ok(isTourId('crm'));
   const crm = TOURS.crm;
-  assert.equal(crm.version, 2, 'version 2: a version 1 saved place never resumes into the new stops');
+  assert.equal(crm.version, 3, 'version 3: a version 1 or 2 saved place never resumes into the new stops');
   assert.equal(crm.grants, false, 'staff tours grant nothing');
   assert.equal(crm.rewardKey, 'tour:crm');
   assert.equal(crm.completesOnboarding, false);
@@ -83,9 +84,9 @@ test('beats: unique ids, groups in order, and the staff path is the eight power 
   let last = 0;
   for (const b of CRM_TOUR_BEATS) { const at = order.indexOf(b.group); assert.ok(at >= last, `${b.id} out of order`); last = at; }
   const staff = applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS });
-  assert.deepEqual(staff.map(b => b.id), ['today-sorted', 'today-prep', 'person-timeline', 'person-note', 'person-tasks', 'referrals', 'people-views', 'ask-troy']);
+  assert.deepEqual(staff.map(b => b.id), ['today-sorted', 'today-prep', 'person-note', 'person-tasks', 'person-handoff', 'directory', 'people-views', 'ask-troy']);
   const owner = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ALL_CAPS });
-  assert.deepEqual(owner.map(b => b.id), ['today-sorted', 'today-prep', 'person-timeline', 'person-note', 'person-tasks', 'referrals', 'people-views', 'owner-insights', 'owner-team', 'ask-troy']);
+  assert.deepEqual(owner.map(b => b.id), ['today-sorted', 'today-prep', 'person-note', 'person-tasks', 'person-handoff', 'directory', 'people-views', 'owner-insights', 'owner-team', 'ask-troy']);
   assert.equal(CRM_TOUR_BEATS.at(-1)!.id, 'ask-troy', 't.ROY across the whole list is the last word');
   for (const b of CRM_TOUR_BEATS) assert.equal(b.minFound, 1);
   // The old button-pointing stops are gone: the board metaphor and the three privacy stops.
@@ -101,17 +102,17 @@ test('examples: fixed, labeled, short, about made-up people, and never fetched',
     for (const line of b.example!) assert.ok(wordCount(line) <= 16, `${b.id}: "${line}" is short`);
   }
   assert.match(read('components/tour/StaffTourPlayer.tsx'), /<p className="st-example__k">\{CRM_EXAMPLE_LABEL\}<\/p>/, 'the card labels it');
-  assert.deepEqual(beatCopy(CRM_TOUR_BEATS.find(b => b.id === 'person-timeline')!, false).example, [], 'no example is an empty list, not undefined');
+  assert.deepEqual(beatCopy(CRM_TOUR_BEATS.find(b => b.id === 'person-tasks')!, false).example, [], 'no example is an empty list, not undefined');
 });
 
 test('every target: a data-tour id first, a fallback that is on the real screen today, and every href is a real route', () => {
-  const sources = ['components/org/TodayPage.tsx', 'components/org/PersonOverview.tsx', 'components/org/ClientPage.tsx', 'components/org/InsightsReport.tsx', 'components/org/OrgSidebar.tsx', 'components/org/CaseloadWorkbench.tsx', 'components/org/Referrals.tsx', 'components/org/PersonTimeline.tsx'].map(read).join('\n');
+  const sources = ['components/org/TodayPage.tsx', 'components/org/PersonOverview.tsx', 'components/org/ClientPage.tsx', 'components/org/InsightsReport.tsx', 'components/org/OrgSidebar.tsx', 'components/org/CaseloadWorkbench.tsx', 'components/org/Referrals.tsx', 'components/org/PersonTimeline.tsx', 'components/org/HandoffPanel.tsx', 'components/org/StaffDirectory.tsx'].map(read).join('\n');
   const navIds = new Set([...read('lib/org-nav.ts').matchAll(/navId: "([a-z-]+)"/g)].map(m => m[1]));
   assert.match(read('components/org/OrgSidebar.tsx'), /data-tour=\{item\.navId \|\| undefined\}/, 'sidebar links carry their nav id as the tour id');
   assert.match(read('components/org/OrgSidebar.tsx'), /data-nav-id=\{item\.navId\} data-tour=\{item\.navId\}/, 'the Ask t.ROY button carries its tour id');
   const onScreen = (id: string) => id.startsWith(SELECTOR_PREFIX) || sources.includes(`data-tour="${id}"`) || sources.includes(`id="${id}"`) || (sources.includes(`"${id}"`) && /data-tour=\{[^}]*"crm-/.test(sources)) || navIds.has(id);
   // Ids another lane adds to its own screen (S2-REPORT.md WIRING NEEDED); each has a fallback that is there today.
-  const pending = new Set(['crm-person-timeline-tab', 'crm-person-note-box', 'crm-person-tasks-tab', 'crm-referrals-head', 'crm-people-save-view']);
+  const pending = new Set(['crm-person-timeline-tab', 'crm-person-note-box', 'crm-person-tasks-tab', 'crm-referrals-head', 'crm-people-save-view', 'crm-person-handoff', 'crm-directory-search']);
   for (const b of CRM_TOUR_BEATS) {
     for (const ids of b.targets) {
       assert.ok(!ids[0].startsWith(SELECTOR_PREFIX), `${b.id}: the first id is a data-tour id, not a selector`);
@@ -128,7 +129,12 @@ test('every target: a data-tour id first, a fallback that is on the real screen 
   assert.match(read('components/org/ClientPage.tsx'), /<textarea id="note-body"/, 'the note box fallback');
   assert.match(read('components/org/ClientPage.tsx'), /<input id="task-title"/, 'the task box fallback');
   assert.match(read('components/org/CaseloadWorkbench.tsx'), /<div data-testid="caseload-workbench">\s*<div className="mb-2 flex/, 'the People toolbar fallback');
-  assert.match(read('app/(dashboard)/RefineryShell.tsx'), /<main id="main"/, 'the referrals heading fallback lives in #main');
+  // v3 fallbacks on screens other lanes own (HandoffPanel, StaffDirectory): present for every staff seat, never an empty list.
+  assert.match(read('components/org/HandoffPanel.tsx'), /<section id="handoff" aria-labelledby="handoff-h"/, 'the Send to panel fallback');
+  assert.match(read('components/org/HandoffPanel.tsx'), /<h2 id="handoff-h"[^>]*>Send to \{first\}<\/h2>/);
+  assert.match(read('components/org/StaffDirectory.tsx'), /<form onSubmit=\{search\}[^>]*aria-label="Search the directory">/, 'the Directory search form fallback');
+  assert.match(read('components/org/ClientPage.tsx'), /tab === "tasks" \? \([\s\S]*?<HandoffPanel /, 'Send to lives on the tasks tab the stop opens');
+  assert.ok(!CRM_TOUR_BEATS.some(b => b.targets.flat().some(t => /referrals|results|list/i.test(t) && !t.startsWith('crm-person-tasks'))), 'no stop points at a list that can be empty');
   // Selectors resolve the way the finder builds them.
   assert.equal(targetSelector('note-body'), '[id="note-body"], [data-tour="note-body"]');
   assert.equal(targetSelector('sel:#main h1'), '#main h1');
@@ -141,17 +147,20 @@ test('the person stops drop out, never invent, when the list is empty; owner sto
   assert.equal(full.length, CRM_TOUR_BEATS.length - 1);
   const none = applicableBeats({ personId: null, capabilities: STAFF_CAPS });
   assert.ok(none.every(b => !b.needsPerson));
-  assert.deepEqual(none.map(b => b.id), ['today-sorted', 'no-people', 'referrals', 'people-views', 'ask-troy']);
+  assert.deepEqual(none.map(b => b.id), ['today-sorted', 'no-people', 'directory', 'people-views', 'ask-troy']);
   assert.match(beatCopy(none.find(b => b.id === 'no-people')!, false).body, /wait until someone joins/);
   const cohortOnly = applicableBeats({ personId: PERSON, todayRow: false, capabilities: STAFF_CAPS });
   assert.ok(!cohortOnly.some(b => b.id === 'today-prep'), 'the Prep me stop needs a Today row');
   assert.equal(cohortOnly.filter(b => b.needsPerson).length, 3);
   const volunteer = applicableBeats({ personId: PERSON, todayRow: true, capabilities: ['org.client.view_content'] });
-  assert.ok(!volunteer.some(b => b.id === 'person-note' || b.id === 'person-tasks'), 'no stop shows a box the viewer cannot use');
+  assert.ok(!volunteer.some(b => b.id === 'person-note' || b.id === 'person-tasks' || b.id === 'person-handoff'), 'no stop shows a box the viewer cannot use');
   assert.ok(volunteer.every(b => b.group !== 'owner'));
-  const noReferrals = applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS, modules: { referrals: false } });
-  assert.ok(!noReferrals.some(b => b.id === 'referrals'), 'referrals switched off: no stop for it');
-  assert.ok(applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS, modules: null }).some(b => b.id === 'referrals'), 'unknown modules count as on');
+  // The Directory stop follows the same feature flag as its nav entry (lib/org-nav.ts feature: "directory").
+  assert.match(read('lib/org-nav.ts'), /href: "\/dashboard\/directory", label: "Directory", needs: "org\.client\.view_content", navId: "org-nav-directory", feature: "directory"/);
+  const flagsOff = { changeRequests: true, inbox: true, notificationPrefs: false, viewChangeLog: true, personalLayout: true, suggestionsSwitch: true, rewards: true, directory: false };
+  assert.ok(!applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS, features: flagsOff }).some(b => b.id === 'directory'), 'directory off: no stop for it');
+  assert.ok(applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS }).some(b => b.id === 'directory'), 'this build has the directory on');
+  assert.ok(applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS, modules: { referrals: false } }).length === 8, 'the referrals module switch no longer removes a stop');
   for (const b of CRM_TOUR_BEATS) assert.ok(!(b.needsPerson && b.noPeopleOnly));
 });
 
@@ -177,7 +186,7 @@ test('resume: the saved stop is a beat id through the full list, and resumes at 
   // Saved mid-person on a list that is now empty: the next applying beat, not the same position.
   assert.equal(none[resumeStop(note, none)].id, 'no-people');
   assert.equal(none[resumeStop(stopForBeat('no-people'), none)].id, 'no-people');
-  assert.equal(full[resumeStop(stopForBeat('no-people'), full)].id, 'referrals', 'a no-people place resumes at the next stop once someone joined');
+  assert.equal(full[resumeStop(stopForBeat('no-people'), full)].id, 'directory', 'a no-people place resumes at the next stop once someone joined');
   const staffOnly = applicableBeats({ personId: PERSON, todayRow: true, capabilities: STAFF_CAPS });
   assert.equal(staffOnly[resumeStop(stopForBeat('owner-insights'), staffOnly)].id, 'ask-troy');
   assert.equal(resumeStop(CRM_ENDING_INDEX, full), full.length, 'the ending');
@@ -274,6 +283,14 @@ test('the staff tour copy matches the screens and the code it describes', () => 
   assert.match(read('components/org/CaseloadWorkbench.tsx'), /My views/);
   assert.match(read('components/org/InsightsReport.tsx'), /Print report/);
   assert.match(read('components/org/Referrals.tsx'), /Referrals/);
+  // v3: Send to and the Directory say only what those screens do.
+  const handoff = read('components/org/HandoffPanel.tsx');
+  assert.match(handoff, /whether they took or passed on each one/, 'Send to: they take or pass on each one, and you see which');
+  assert.match(read('components/org/SendToButton.tsx') + handoff, /next_step|next step/i, 'a next step can be sent');
+  const dir = read('components/org/StaffDirectory.tsx');
+  assert.match(dir, /Local help and employers that hire people with records/);
+  assert.match(dir, /Checked listings come first/);
+  assert.match(read('components/org/DirectorySendTo.tsx'), /<SendToButton /, 'each listing can be sent to a person');
   assert.match(read('lib/org-nav.ts'), /label: "My setup"/, 'My setup exists where the stop says');
 });
 

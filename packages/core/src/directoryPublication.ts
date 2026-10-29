@@ -2,6 +2,7 @@
 import { query } from './db';
 import { resourceBandSql, RESOURCE_BAND_FIELDS, parseBands, type ResourceAppRow, type ResourcePlaceQuery, type ResourceBand } from './resourceDirectoryShared';
 import { clampEmployerPage, employerLikePattern, publicCaveat } from './employer';
+import { publicEvidence } from './publicNote';
 /** 2026-10-18.v3: resources and chain steps carry band ('A' checked, 'B' listed, 'C' found) and band_reason
  * (migration 089); reads default to band A, so a v2 caller sees the same rows as before. v2 added
  * tier_confidence and corroboration_points (migration 088). */
@@ -48,23 +49,33 @@ export type EmployerBand='A'|'B';
 export function parseEmployerBands(raw:unknown):EmployerBand[] {return typeof raw==='string'&&raw.toUpperCase().includes('B')?['A','B']:['A'];}
 export const EMPLOYER_PAGE_MAX=200;
 export function employerPageSize(limit:unknown):number {const n=Number(limit);return Number.isFinite(n)&&n>=1?Math.min(EMPLOYER_PAGE_MAX,Math.floor(n)):25;}
-export function publishedEmployerSql(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number;bands?:readonly EmployerBand[]}) {
+/** city: a preferred city, folded to letters only ("grandrapids"). It ranks that city's employers first BEFORE the limit; it never filters. */
+export function publishedEmployerSql(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number;bands?:readonly EmployerBand[];city?:string|null}) {
  const params:unknown[]=[];const where=["expires_at > (now() AT TIME ZONE 'UTC')::date"];
  params.push([...(opts.bands??['A'])].filter(b=>b==='A'||b==='B'));where.push(`band=ANY($${params.length}::text[])`);
  const q=employerLikePattern(opts.q);
  if(q){params.push(q);where.push(`concat_ws(' ',name,industry,city,state,role_types) ILIKE $${params.length} ESCAPE '\\'`);}
  if(opts.state && /^[A-Z]{2}$/.test(opts.state)){params.push(opts.state);where.push(`state=$${params.length}`);}
  if(opts.industry){params.push(opts.industry.slice(0,80));where.push(`industry=$${params.length}`);}
+ let order='band,state,name,id';
+ const city=typeof opts.city==='string'?opts.city.toLowerCase().replace(/[^a-z]/g,'').slice(0,80):'';
+ if(city){params.push(city);order=`CASE WHEN lower(regexp_replace(coalesce(city,''),'[^A-Za-z]','','g'))=$${params.length} THEN 0 ELSE 1 END,${order}`;}
  const size=employerPageSize(opts.limit);params.push(size);const limitAt=params.length;params.push(clampEmployerPage(opts.page)*size);
- return {sql:`SELECT ${EMPLOYER_FIELDS} FROM employer_band_publication_v WHERE ${where.join(' AND ')} ORDER BY band,state,name,id LIMIT $${limitAt} OFFSET $${params.length}`,params};
+ return {sql:`SELECT ${EMPLOYER_FIELDS} FROM employer_band_publication_v WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT $${limitAt} OFFSET $${params.length}`,params};
 }
-export function searchVerifiedEmployers(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number;bands?:readonly EmployerBand[]}={}) {
- return publicationRead<PublishedEmployer[]>([],async()=>{const {sql,params}=publishedEmployerSql(opts);const rows=await query<PublishedEmployer>(sql,params);return rows.map(r=>({...r,caveats:publicCaveat(r.caveats)}));});
+/** The public face of one employer row: the research log in caveats (and any log text in
+ * evidence) never leaves the server. Every reader of the publication (site, staff, t.ROY) gets this. */
+export function publicEmployerRow(r:PublishedEmployer):PublishedEmployer{
+ const evidence=publicEvidence(r.evidence);
+ return {...r,evidence:evidence??(r.evidence?r.band_reason:null),caveats:publicCaveat(r.caveats)};
+}
+export function searchVerifiedEmployers(opts:{q?:string;state?:string;industry?:string;page?:number;limit?:number;bands?:readonly EmployerBand[];city?:string|null}={}) {
+ return publicationRead<PublishedEmployer[]>([],async()=>{const {sql,params}=publishedEmployerSql(opts);const rows=await query<PublishedEmployer>(sql,params);return rows.map(publicEmployerRow);});
 }
 export function getVerifiedEmployer(id:string,bands:readonly EmployerBand[]=['A','B']) {
  return publicationRead<PublishedEmployer|null>(null,async()=>{if(!isPublicationId(id))return null;
  const rows=await query<PublishedEmployer>(`SELECT ${EMPLOYER_FIELDS} FROM employer_band_publication_v WHERE id=$1::uuid AND band=ANY($2::text[])`,[id,[...bands]]);
- return rows[0]?{...rows[0],caveats:publicCaveat(rows[0].caveats)}:null;});
+ return rows[0]?publicEmployerRow(rows[0]):null;});
 }
 export function resolvePublishedEmployerAlias(source:string,externalId:string){
  return publicationRead<string|null>(null,async()=>{if(!['website','airtable','employer_intel'].includes(source)||!externalId||externalId.length>160)return null;

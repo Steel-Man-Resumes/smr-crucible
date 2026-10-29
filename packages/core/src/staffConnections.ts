@@ -37,6 +37,8 @@ export interface EmployerMatch {
   whyForThem: string;
   /** The role to put on their saved jobs if staff send it: the shared title it matched. */
   role: string;
+  /** How many directory listings this employer has that matched (one card per employer; 1 when only one). */
+  sites: number;
 }
 export interface ResourceMatch {
   kind: "resource"; id: string; name: string; band: string; bandReason: string; area: string; place: string; checkedAt: string | null; reason: string;
@@ -140,6 +142,34 @@ export function searchCache(deps: ConnectionDeps, budget: number = SEARCH_BUDGET
     },
   };
 }
+/** The employer, not the site: "MNP Corporation" and "MNP Corp." are one. */
+export function companyKey(name: string | null | undefined): string {
+  return String(name ?? "").toLowerCase().replace(/\b(inc|llc|co|corp|corporation|company|the)\b/g, "").replace(/[^a-z0-9]+/g, "") || String(name ?? "").toLowerCase();
+}
+
+/**
+ * Pure: keep one match per employer, in the given order (the mark first).
+ * The kept card is the best site: the mark over reported, then a site in a
+ * city the person's shared jobs are in, then the directory's order. sites
+ * counts the listings it stands for, so the card can say "4 locations".
+ */
+export function onePerEmployer(matches: readonly EmployerMatch[], nearCities: ReadonlySet<string | null> = new Set()): EmployerMatch[] {
+  const groups = new Map<string, EmployerMatch[]>();
+  for (const m of matches) {
+    const k = companyKey(m.name);
+    const g = groups.get(k);
+    if (g) g.push(m); else groups.set(k, [m]);
+  }
+  const near = (m: EmployerMatch) => {
+    const city = foldCity(String(m.location ?? "").split(",")[0]);
+    return city && nearCities.has(city) ? 0 : 1;
+  };
+  return [...groups.values()].map((g) => {
+    const best = g.map((m, i) => ({ m, i })).sort((x, y) => (x.m.band === y.m.band ? 0 : x.m.band === "A" ? -1 : 1) || near(x.m) - near(y.m) || x.i - y.i)[0].m;
+    return { ...best, sites: g.length };
+  }).map((m, i) => ({ m, i })).sort((x, y) => (x.m.band === y.m.band ? 0 : x.m.band === "A" ? -1 : 1) || x.i - y.i).map(({ m }) => m);
+}
+
 export const CAPPED_LINE = "Only the first few kinds of work and places were checked, to keep this quick. Ask about one kind of work to look further.";
 
 /** Pure given the reads: the matches for one person, best first, each with its reason. */
@@ -161,9 +191,10 @@ export async function matchPerson(
 
   const employers: EmployerMatch[] = [];
   const places: (MatchPlace | null)[] = mi.places.length ? mi.places : [null];
+  const distinct = () => new Set(employers.map((x) => companyKey(x.name))).size;
   for (const term of mi.terms) {
     for (const place of places) {
-      if (employers.length >= CAPS.employers * 2) break;
+      if (distinct() >= CAPS.employers * 2) break;
       const res = await cache.employers(term.term, place?.state);
       if (res.status === "capped") { capped = true; continue; }
       if (res.status !== "ok") { unavailable = true; continue; }
@@ -176,12 +207,17 @@ export async function matchPerson(
           reason: employerMatchReason({ band: e.band, checkedAt: e.checkedAt, state: e.state }, term, place),
           whyForThem: employerWhyForThem({ band: e.band, state: e.state }, term, place),
           role: term.from,
+          sites: 1,
         });
       }
     }
   }
   // The mark first, then the directory's own order.
   employers.sort((x, y) => (x.band === y.band ? 0 : x.band === "A" ? -1 : 1));
+  // One card per employer, BEFORE the limit (an employer with four sites
+  // used to fill four of the five slots with the same name and reason).
+  const nearCities = new Set(mi.places.map((p) => foldCity(p.city)).filter(Boolean));
+  const distinctEmployers = onePerEmployer(employers, nearCities);
 
   const resources: ResourceMatch[] = [];
   for (const place of mi.places) {
@@ -208,7 +244,7 @@ export async function matchPerson(
   return {
     ...base,
     status: unavailable && found === 0 ? "directory_unavailable" : "ok",
-    employers: employers.slice(0, CAPS.employers),
+    employers: distinctEmployers.slice(0, CAPS.employers),
     resources,
     note: capped ? `${note} ${CAPPED_LINE}` : note,
     ...(capped ? { capped: true } : {}),

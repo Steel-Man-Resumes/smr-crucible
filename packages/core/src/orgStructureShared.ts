@@ -560,6 +560,8 @@ export const DEFAULT_TIMEZONE = "America/Chicago";
 /** US time zones offered in the wizard; any IANA zone the database knows is accepted. */
 export const COMMON_TIMEZONES: readonly { id: string; label: string }[] = [
   { id: "America/New_York", label: "Eastern" },
+  // Michigan's own zone (same clock as Eastern): it also tells staff t.ROY the organization is in Michigan (demo fix T2).
+  { id: "America/Detroit", label: "Eastern (Michigan)" },
   { id: "America/Chicago", label: "Central" },
   { id: "America/Denver", label: "Mountain" },
   { id: "America/Phoenix", label: "Arizona" },
