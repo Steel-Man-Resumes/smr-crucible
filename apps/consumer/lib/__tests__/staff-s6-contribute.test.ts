@@ -28,6 +28,7 @@ function ctxFor(core: () => Promise<never>, over: Partial<ContributeToolContext>
     initial: actor, loadCore: core, actor: async () => ({ ...actor, ...(over.actorOver ?? {}) }),
     staffWords: over.staffWords ?? "", selectors: over.selectors ?? new Map(),
     safe: (fn) => async (x) => { try { return await fn(x); } catch { return { status: "unavailable" }; } },
+    ...(over.listingsRead ? { listingsRead: over.listingsRead } : {}),
   };
 }
 const build = (core: () => Promise<never>, over: Parameters<typeof ctxFor>[1] = {}) => contributeTools.build(ctxFor(core, over));
@@ -120,13 +121,15 @@ test("the module has S1's shape: id, streamed shapes, an activity line for each"
 });
 
 test("the nudge tool returns the fixed line or quiet, never model words", async () => {
-  const r = await run(build(stand().core), "listing_check_nudge", { kind: "employer", listingId: LISTING });
+  // Demo fix T2 round 3: only for a listing a directory read returned in this request.
+  const read = { listingsRead: () => new Set([LISTING]) };
+  const r = await run(build(stand().core, read), "listing_check_nudge", { kind: "employer", listingId: LISTING });
   assert.equal(r.status, "ok");
   assert.equal(r.line, LISTING_NUDGE_LINE);
   assert.deepEqual(r.listing, { kind: "employer", id: LISTING });
   assertDeclared("listing_check_nudge", r);
-  assert.equal((await run(build(stand({ claim: false }).core), "listing_check_nudge", { kind: "employer", listingId: LISTING })).status, "quiet");
-  assert.equal((await run(build(stand().core), "listing_check_nudge", { kind: "employer", listingId: "drop table" })).status, "quiet");
+  assert.equal((await run(build(stand({ claim: false }).core, read), "listing_check_nudge", { kind: "employer", listingId: LISTING })).status, "quiet");
+  assert.equal((await run(build(stand().core, read), "listing_check_nudge", { kind: "employer", listingId: "drop table" })).status, "quiet");
 });
 
 test("method typed by the staff member", () => {

@@ -165,7 +165,8 @@ it("round 3 (S6 merged): tools, cards, Wins, good catches, the listing nudge and
   assert.match(chat, /<ContributeForm initial=\{initialFromDraft\(/, "the staff member checks the card and presses Send");
   assert.match(chat, /inv\.toolName === "listing_check_nudge" && r\.status === "ok"/);
   assert.match(chat, /<ListingContributeMenu kind=\{c\.listing\.kind\} id=\{c\.listing\.id\} name="" nudgeLine=\{null\} \/>/, "the line is in the answer already");
-  assert.match(read("../skills/staff-operations/SKILL.md"), /After the staff member used a directory listing for someone, call listing_check_nudge once; if it returns a line, end with it word for word\./);
+  // Demo fix T2 round 3: never for a search, only after a same-answer directory read, line at the very end.
+  assert.match(read("../skills/staff-operations/SKILL.md"), /Never call listing_check_nudge for a search request\. Call it once only when the staff member says they USED or SENT a listing for someone/);
   const setup = read("../../app/(dashboard)/dashboard/my-setup/page.tsx");
   assert.match(setup, /<RewardsToggle onChange=\{announceRewardsChanged\} \/>/);
   assert.doesNotMatch(read("../../../../packages/core/src/staffPrefsShared.ts"), /rewardsOn/, "no second rewards switch in staff prefs");

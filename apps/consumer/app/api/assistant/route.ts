@@ -36,7 +36,9 @@ import { getClientIp } from "@/lib/auth-rate-limit";
 import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
+import { priorToolRecordResults } from "@/lib/staff-prior-records";
 import { staffHomeStatePrompt } from "@/lib/staff-org-place";
+import { staffAnswerText } from "@/lib/staff-answer-text";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
@@ -316,6 +318,13 @@ export async function POST(request: Request) {
   // ran (lib/staff-tool-record.ts), as context only, then the record gate.
   // Only records this server signed for this staff member, about real staff tools (review S2).
   const staffInput = staffActor ? gateStaffMessages(withStaffToolRecords(messages, { userId: staffActor.userId, tools: await staffToolNameSet() })) : null;
+  // Demo fix T1 round 3: the RESULT lines of earlier answers' lookup records,
+  // only entries this server signed for this staff member (readToolRecord
+  // drops anything else). Never the args, never answer text. The answer check
+  // reads their words as known, like this turn's tool text.
+  const staffPriorRecords = staffActor
+    ? priorToolRecordResults(messages as Record<string, unknown>[], { userId: staffActor.userId, tools: await staffToolNameSet() })
+    : [];
   const staffSaid = staffInput ? lastUserText(staffInput.messages) : "";
   const staffResolved = staffActor ? resolveTypedNames(staffSaid, staffPeople, staffFocus) : [];
   const staffNamed = staffActor ? [...new Set([...namedParticipantIds(staffSaid, context.org?.visibleParticipants ?? []), ...staffResolved.map((r) => r.id)])] : [];
@@ -442,7 +451,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     });
     // A safety decline comes back as finishReason "unknown" with no text. Never
     // send a staff member an empty answer; say it plainly instead.
-    const answer = replyOrFallback(generated.text);
+    // Every step's words, never a card line alone (lib/staff-answer-text.ts; demo fix T2 round 3).
+    const answer = replyOrFallback(staffAnswerText(generated.steps, generated.text));
 
     const facts = {
       staffToolEvidence: staffEvidence.items,
@@ -457,6 +467,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       resolvedNames: staffResolved.map((r) => r.word),
       // The staff member's last 10 typed messages (user role only): places they typed earlier (demo fix T1).
       staffTyped: staffInput ? staffTypedWords((staffInput.messages ?? []) as Record<string, unknown>[]) : undefined,
+      // Server-signed lookup records of earlier answers, result lines only (demo fix T1 round 3).
+      priorToolRecords: staffPriorRecords,
       staffNames: context.org.staffNames ?? [],
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,

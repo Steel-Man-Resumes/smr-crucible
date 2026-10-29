@@ -53,7 +53,7 @@ const MAX_RESULT = 320;
 const TOOL_NAME = /^[a-z][a-z0-9_]{2,47}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Fields that name the thing a row is about, in the order to try them. */
-const NAME_FIELDS = ["employer", "organization", "service", "label", "section"] as const;
+const NAME_FIELDS = ["employer", "company", "organization", "service", "label", "section"] as const;
 
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 3).trimEnd()}...` : s);
 const oneLine = (s: unknown) => String(s ?? "").replace(/\s+/g, " ").trim();
@@ -78,7 +78,9 @@ function rowName(row: unknown): string | null {
   for (const f of NAME_FIELDS) {
     const v = r[f];
     if (typeof v === "string" && v.trim() && !UUID.test(v)) {
-      const city = typeof r.city === "string" && r.city.trim() ? ` (${oneLine(r.city)})` : "";
+      // City, else the row's location (an application's "Milwaukee, WI"), so a later turn's check knows the place (T1-R3).
+      const place = typeof r.city === "string" && r.city.trim() ? r.city : typeof r.location === "string" && r.location.trim() ? r.location : "";
+      const city = place ? ` (${oneLine(place)})` : "";
       return clip(oneLine(v) + city, 70);
     }
   }
