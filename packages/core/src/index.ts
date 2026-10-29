@@ -65,6 +65,7 @@ export * from './refineryAccess';
 export * from './orgCode';
 export * from './systemHealth';
 export * from './employer';
+export * from './publicNote';
 export * from './resourceDirectory';
 export * from './hiddenEmployers';
 export * from './currentBlock';

@@ -5,6 +5,7 @@
  */
 
 import { query, getOne } from "./db";
+import { publicNote } from "./publicNote";
 
 export interface Employer {
   id: string;
@@ -50,19 +51,11 @@ function locationOf(e: { primary_city: string | null; county: string | null; wi_
  */
 /**
  * The honest caveat a job seeker should read, without the research log: drop
- * bracketed review notes and any sentence about how or when it was researched.
+ * bracketed review labels and any sentence about how, when or by whom it was
+ * researched or ranked (see publicNote).
  */
 export function publicCaveat(limitations: string | null | undefined): string | null {
-  if (!limitations) return null;
-  // A bracketed review note can hold a caveat a job seeker needs (a background-
-  // check requirement); keep its text, minus the "who reviewed it:" label.
-  const text = limitations.replace(/\[([^\]]*)\]/g, (_m, inner: string) => {
-    const t = inner.replace(/^[^:]{0,60}\d{4}-\d{2}-\d{2}:\s*/, "").trim();
-    return " " + (/[.!?]$/.test(t) ? t : t + ".");
-  });
-  const internal = /ledger|re-?verified|re-?check|prior|sweep|airtable|found_by|curated|\bCC\b|agent|this session|today|ban.the.box|fair.chance|individualized.assessment/i;
-  const kept = text.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter((x) => x && !internal.test(x));
-  return kept.length ? kept.join(" ") : null;
+  return publicNote(limitations);
 }
 
 async function listDirectoryEmployers(opts: { limit?: number; industry?: string }): Promise<PublicEmployer[]> {
