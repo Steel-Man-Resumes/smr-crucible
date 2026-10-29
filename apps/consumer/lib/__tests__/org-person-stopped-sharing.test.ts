@@ -89,3 +89,13 @@ test("W11: the page applies the server's answer right after the one shared read"
   const apply = src.indexOf("scopesAfterRead(", at);
   assert.ok(apply > at && apply - at < 700, "scopesAfterRead follows the ?scope= read");
 });
+
+test("W11: 'stopped' is shown only when a fresh header also says not shared (review should-fix)", () => {
+  const src = readFileSync(join(ROOT, "components/org/ClientPage.tsx"), "utf8");
+  const at = src.indexOf("scopesAfterRead(client.scopes");
+  const block = src.slice(at, at + 900);
+  const reread = block.indexOf("fetch(`/api/org/clients/${clientId}`)");
+  const guard = block.indexOf("!fresh.client.scopes?.[scope]?.shared");
+  const mark = block.indexOf("setStoppedNow(");
+  assert.ok(reread > 0 && guard > reread && mark > guard, "re-read, then check, then mark stopped");
+});

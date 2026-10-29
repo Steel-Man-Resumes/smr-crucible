@@ -146,14 +146,18 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
     const res = await fetch(`/api/org/clients/${clientId}?scope=${scope}`).catch(() => null);
     const d = res && res.ok ? await res.json() : { rows: [] };
     setShared(d.rows ?? []); setLoadingTab(false);
-    // W11: the server's "not shared" wins over the header this page loaded with. Show it now, then
-    // read the header again for the full state (required, asked). Display only; the read was already refused.
+    // W11: the read was refused but this page still says shared. Read the header again and say
+    // "stopped" only if the fresh header agrees (an admin outside an assigned-staff policy can see a
+    // header that says shared while the read says not; that is not the participant stopping).
+    // Display only; the read was already refused. A failed re-read changes nothing on screen.
     if (scopesAfterRead(client.scopes, scope, d.shared).stopped) {
-      setClient((c) => (c ? { ...c, scopes: scopesAfterRead(c.scopes, scope, d.shared).scopes } : c));
-      setStoppedNow((m) => ({ ...m, [scope]: true }));
-      load();
+      const fresh = await fetch(`/api/org/clients/${clientId}`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+      if (fresh?.client && !fresh.client.scopes?.[scope]?.shared) {
+        setClient(fresh.client); setNotes(fresh.notes); setViewer(fresh.viewer); setSuggestions(fresh.suggestions ?? []);
+        setStoppedNow((m) => ({ ...m, [scope]: true }));
+      }
     }
-  }, [client, clientId, load]);
+  }, [client, clientId]);
 
   // Start where this person asked to start (Settings -> My workflow). A shared
   // item opens automatically only if it is already shared: landing on it is a
