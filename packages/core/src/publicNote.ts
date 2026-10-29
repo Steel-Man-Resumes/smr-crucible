@@ -73,15 +73,30 @@ function sentences(text: string): string[] {
   return out;
 }
 
-/** One sentence, cleaned: null when nothing a visitor needs is left. */
-function cleanSentence(sentence: string): string | null {
+/**
+ * A limit a visitor must know about (who is excluded, eligibility, review one by one). When text
+ * that says one is dropped as research log, the card gets FIXED_LIMIT_LINE instead, never silence.
+ * Kept narrow on purpose: "case-by-case", "not", "no" and "only" are not on it.
+ */
+const LIMITING = /violen\w*|\bsex\b|sex offen\w*|registr(?:y|ant)|\btheft\b|\bfraud\b|\bdrug\w*|\bDUI\b|within \w+ years?|look-?back|eligib\w*|ineligib\w*|probation|parole|supervision|preclud\w*|individual(?:ized)? (?:basis|assessment)|disqualif\w*|bars? (?:some|certain|people)|background check (?:is )?required|exclud\w*|\bexcept\b|\bunless\b/i;
+/** The visitor line that stands in for a limit that was only written in research language. */
+export const FIXED_LIMIT_LINE = "Some limits apply. Ask the employer before you apply.";
+
+const HAS_WORD = /[\p{L}\p{N}]/u;
+
+/** One sentence, cleaned: null when nothing a visitor needs is left. Dropped text goes to `dropped`. */
+function cleanSentence(sentence: string, dropped: string[]): string | null {
   // A name inside an aside ("(Troy)", "(boss ruling 1)") means the whole sentence is a ruling.
-  if (/\(([^()]*)\)/.test(sentence) && [...sentence.matchAll(/\(([^()]*)\)/g)].some((m) => isAuthored(m[1]))) return null;
+  if (/\(([^()]*)\)/.test(sentence) && [...sentence.matchAll(/\(([^()]*)\)/g)].some((m) => isAuthored(m[1]))) { dropped.push(sentence); return null; }
   // Cut a research aside in parentheses; the sentence around it can still stand.
-  const s = sentence.replace(/\s*\(([^()]*)\)/g, (m, inner: string) => (hasResearchMarker(inner) ? "" : m)).trim();
+  const s = sentence.replace(/\s*\(([^()]*)\)/g, (m, inner: string) => (hasResearchMarker(inner) ? (dropped.push(inner), "") : m)).trim();
   const end = /[.!?]['"\u2019\u201d)]?$/.exec(s)?.[0] ?? ".";
   const body = end === "." && !s.endsWith(".") ? s : s.slice(0, s.length - end.length);
-  const clauses = body.split(/;\s+/).map((c) => c.trim()).filter((c) => c && !hasResearchMarker(c));
+  const clauses = body.split(/;\s+/).map((c) => c.trim()).filter((c) => {
+    if (!HAS_WORD.test(c)) return false;
+    if (hasResearchMarker(c)) { dropped.push(c); return false; }
+    return true;
+  });
   if (!clauses.length) return null;
   return capitalize(clauses.join("; ") + end);
 }
@@ -100,12 +115,13 @@ export function publicNote(raw: string | null | undefined): string | null {
   });
   // The page already labels this "Know this:"; a "caveat:" label inside is noise.
   text = text.replace(/\b[Cc]aveat:\s*(\S)/g, (_m, c: string) => c.toUpperCase());
+  const dropped: string[] = [];
   const kept = sentences(text)
-    .map(cleanSentence)
+    .map((x) => cleanSentence(x, dropped))
     .filter((x): x is string => !!x);
-  if (!kept.length) return null;
+  if (dropped.some((d) => LIMITING.test(d)) && !kept.includes(FIXED_LIMIT_LINE)) kept.push(FIXED_LIMIT_LINE);
   const out = kept.join(" ").replace(/\s{2,}/g, " ").trim();
-  return out || null;
+  return HAS_WORD.test(out) ? out : null;
 }
 
 /**

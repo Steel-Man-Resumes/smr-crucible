@@ -5,7 +5,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { publicNote, publicEvidence, hasResearchMarker } from "../publicNote";
+import { publicNote, publicEvidence, hasResearchMarker, FIXED_LIMIT_LINE } from "../publicNote";
 import { publicEmployerRow, type PublishedEmployer } from "../directoryPublication";
 import { publicCaveat } from "../employer";
 
@@ -64,7 +64,7 @@ test("a research aside in parentheses goes and the sentence stays; a 'Caveat:' l
   assert.equal(publicNote(REUSE_HAWAII),
     "Mission employer, paid work. Records are one named barrier among several (like Coalfield WV). Page undated; the site shows a 2025 annual report and a 'We're hiring' banner. A paid transitional job with a program around it, not a permanent job.");
   assert.equal(publicNote(CEO_NOLA),
-    "Short-term paid transitional crew job with placement help afterward, not a permanent job. The New Orleans page does not itself say \"paid daily\". The program serves only people with records.");
+    "Short-term paid transitional crew job with placement help afterward, not a permanent job. The New Orleans page does not itself say \"paid daily\". The program serves only people with records. Some limits apply. Ask the employer before you apply.");
   assert.equal(publicNote(CEO_DENVER),
     "Short-term paid transitional crew job with placement help afterward, not a permanent job. Pay: the Denver ESE Collective entry says CEO \"provides immediate paid employment\"; the page's own stories mention a \"beautification transitional work crew\".");
 });
@@ -124,4 +124,31 @@ test("a quoted employer line ending a sentence stays when the next sentence is a
 test("nothing the old caveat filter hid comes back", () => {
   for (const raw of ["Added by the agents.", "Rechecked in the sweep.", "Listed in the prior ledger.", "Reads as fair-chance language.", "Airtable row 12.", "Found by an agent today."])
     assert.equal(publicNote(raw), null, raw);
+});
+
+// Round 2 (review 2026-10-28): a limit written only in research language must not vanish.
+const CEO_MEMPHIS = "Per Wave 1 ruling 1, CEO counts as ONE employer per state; caveat: short-term paid transitional crew job with placement help afterward, not a permanent job. The Memphis page does not itself say \"paid daily\". Stage 2 noted a probation/parole eligibility rule seen only on findhelp.";
+
+test("a dropped limit leaves the fixed visitor line on the two live cards", () => {
+  assert.equal(FIXED_LIMIT_LINE, "Some limits apply. Ask the employer before you apply.");
+  assert.equal(hasResearchMarker(FIXED_LIMIT_LINE), false);
+  assert.equal(publicNote(CEO_MEMPHIS),
+    "Short-term paid transitional crew job with placement help afterward, not a permanent job. The Memphis page does not itself say \"paid daily\". " + FIXED_LIMIT_LINE);
+  const jhu = publicNote(JHU) ?? "";
+  assert.ok(jhu.endsWith(FIXED_LIMIT_LINE), jhu);
+  assert.equal(jhu.split(FIXED_LIMIT_LINE).length, 2, "the line appears once");
+  assert.equal(hasResearchMarker(jhu), false);
+});
+
+test("a limit sharing a sentence with a marker gives the fixed line, never null", () => {
+  for (const raw of ["Only non-violent records, per stage 2.", "Boss: no violent or sex offenses.", "Background check required (Troy confirmed)."])
+    assert.equal(publicNote(raw), FIXED_LIMIT_LINE, raw);
+});
+
+test("pure log with no limit still leaves no caveat; stray punctuation is not a caveat", () => {
+  assert.equal(publicNote(MILE_HIGH), null);
+  assert.equal(publicNote("CEO counts as ONE employer statewide (boss ruling 1). Promote if the posting names records."), null);
+  assert.equal(publicNote("Case-by-case is only an Atlanta local floor phrase."), null);
+  assert.equal(publicNote(";"), null);
+  assert.equal(publicNote(" ; . "), null);
 });
