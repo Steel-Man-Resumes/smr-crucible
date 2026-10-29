@@ -20,14 +20,23 @@ export const STAFF_TOOLS_NO_TEXT = "I ran the search but have nothing to show ye
 
 const withoutNudge = (t: string) => t.split(LISTING_NUDGE_LINE).join("").trim();
 
-export function staffAnswerText(steps: readonly { text?: string; toolCalls?: readonly unknown[] }[], finalText: string): string {
-  const final = String(finalText ?? "").trim();
+type Step = { text?: string; toolCalls?: readonly unknown[]; toolResults?: readonly { toolName?: string; result?: unknown }[] };
+
+/** The nudge line stays only when the nudge tool itself answered ok this turn (its buttons render then); otherwise it is cut (review R3 S2). */
+function nudgeOk(steps: readonly Step[]): boolean {
+  return steps.some((s) => (s.toolResults ?? []).some((r) => r?.toolName === "listing_check_nudge" && (r.result as { status?: unknown } | null)?.status === "ok"));
+}
+
+export function staffAnswerText(steps: readonly Step[], finalText: string): string {
+  const keepNudge = nudgeOk(steps);
+  const clean = (s: string) => (keepNudge ? s : withoutNudge(s).replace(/[ \t]{2,}/g, " ").trim());
+  const final = clean(String(finalText ?? "").trim());
   const toolsRan = steps.some((s) => (s.toolCalls?.length ?? 0) > 0);
   if (withoutNudge(final)) return final;
   const earlier = steps.map((s) => withoutNudge(String(s.text ?? ""))).filter(Boolean);
   // The last step's text is in steps too; it is nudge-only here, so it was dropped above.
   const body = [...new Set(earlier)].join("\n\n");
-  const nudged = final.includes(LISTING_NUDGE_LINE) || steps.some((s) => String(s.text ?? "").includes(LISTING_NUDGE_LINE));
+  const nudged = keepNudge && (final.includes(LISTING_NUDGE_LINE) || steps.some((s) => String(s.text ?? "").includes(LISTING_NUDGE_LINE)));
   if (body) return nudged ? `${body}\n\n${LISTING_NUDGE_LINE}` : body;
   return toolsRan ? STAFF_TOOLS_NO_TEXT : TROY_EMPTY_REPLY;
 }

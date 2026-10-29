@@ -59,7 +59,8 @@ it("listing ids come only from ok directory reads", () => {
 it("the answer is every step's words, never a card line alone", () => {
   const answer = "I found one Lansing employer: Eastside Fish Fry & Grill, in Michigan, your organization's state.";
   // The live shape: answer written alongside the tool call, the last step only the nudge line.
-  assert.equal(staffAnswerText([{ text: answer, toolCalls: [{}] }, { text: LISTING_NUDGE_LINE, toolCalls: [] }], LISTING_NUDGE_LINE), `${answer}\n\n${LISTING_NUDGE_LINE}`);
+  // No ok nudge result this turn, so the copied line is cut (review R3 S2); the answer stands alone.
+  assert.equal(staffAnswerText([{ text: answer, toolCalls: [{}] }, { text: LISTING_NUDGE_LINE, toolCalls: [] }], LISTING_NUDGE_LINE), answer);
   // A normal answer in the last step is used as is (no preamble added).
   assert.equal(staffAnswerText([{ text: "Let me look.", toolCalls: [{}] }, { text: answer, toolCalls: [] }], answer), answer);
   // Nothing said at all after tools ran: a plain line, never only a card.
@@ -97,4 +98,16 @@ it("the route uses every step's words; the skill and the tool say search first, 
   assert.match(contribute, /NEVER for a search request/);
   assert.match(contribute, /only for a listing a directory search in this same answer returned/);
   assert.match(read("../tools/staff/directory.ts"), /else their organization's state from the system prompt/);
+});
+
+it("review R3 S2: the nudge line is cut unless the nudge tool answered ok this turn", async () => {
+  const { staffAnswerText } = await import("../staff-answer-text");
+  const { LISTING_NUDGE_LINE } = await import("@crucible/core/src/staffRewardsShared");
+  const answerStep = { text: "Eastside Fish Fry & Grill, Lansing, carries our mark.", toolCalls: [{}], toolResults: [{ toolName: "find_employers", result: { status: "ok" } }] };
+  const quiet = staffAnswerText([answerStep, { text: LISTING_NUDGE_LINE, toolCalls: [{}], toolResults: [{ toolName: "listing_check_nudge", result: { status: "quiet" } }] }], LISTING_NUDGE_LINE);
+  assert.ok(!quiet.includes(LISTING_NUDGE_LINE) && quiet.includes("Eastside"));
+  const copied = staffAnswerText([{ text: `Here are the listings. ${LISTING_NUDGE_LINE}`, toolCalls: [] }], `Here are the listings. ${LISTING_NUDGE_LINE}`);
+  assert.equal(copied, "Here are the listings.");
+  const ok = staffAnswerText([answerStep, { text: LISTING_NUDGE_LINE, toolCalls: [{}], toolResults: [{ toolName: "listing_check_nudge", result: { status: "ok" } }] }], LISTING_NUDGE_LINE);
+  assert.ok(ok.endsWith(LISTING_NUDGE_LINE) && ok.includes("Eastside"));
 });

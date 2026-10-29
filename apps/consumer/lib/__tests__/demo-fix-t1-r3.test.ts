@@ -72,11 +72,11 @@ describe("T1 round 3: the live retest answers on 923c517 are clean", () => {
     assert.deepEqual(checkOrgClaimsDeterministic(E2, facts, "Prep me for Valjean\u2019s interview", answer), []);
   });
 
-  it("E2 with no read this turn: Interviewing, Wisconsin and Michigan are clean; Milwaukee needs the record to carry the location", () => {
+  it("E2 with no read this turn: clean, the signed record now carries each application's location", () => {
     const msgs = conversation("read_participant_overview", { clientId: "11111111-2222-3333-4444-555555555555" }, OVERVIEW_WI, ["Prep me for Valjean", "Prep me for Valjean\u2019s interview"]);
     const facts: OrgFacts = { ...LUPE, resolvedNames: ["Valjean"], priorToolRecords: priorToolRecordResults(msgs, check) };
-    // KNOWN GAP (reported): staff-tool-record.ts (lane T2) writes no company or location for application rows.
-    assert.deepEqual(checkOrgClaimsDeterministic(E2, facts, "Prep me for Valjean\u2019s interview", answer), [name("Milwaukee")]);
+    // Closed in integration: staff-tool-record.ts rowName reads "company" and falls back to "location".
+    assert.deepEqual(checkOrgClaimsDeterministic(E2, facts, "Prep me for Valjean\u2019s interview", answer), []);
   });
 });
 
@@ -116,5 +116,14 @@ describe("T1 round 3: what must still be flagged", () => {
     const facts: OrgFacts = { ...LUPE, priorToolRecords: ["ok, 1 employers: Eastside Fish Fry & Grill (Lansing)"] };
     assert.ok(checkOrgClaimsDeterministic("Hi Jean, Eastside Fish Fry in Michigan is hiring.", facts, "").includes(name("Eastside")));
     assert.ok(checkOrgClaimsDeterministic("Hi Jean, the job is in Michigan.", LUPE, "").includes(name("Michigan")));
+  });
+});
+
+describe("T1-R3 review: earlier records add words, never figures", () => {
+  it("a '25 employers' record does not let '25 people' through", () => {
+    const facts: OrgFacts = { ...LUPE, priorToolRecords: ["ok, 25 employers: Eastside Fish Fry & Grill (Lansing)"] };
+    const found = checkOrgClaimsDeterministic("Your caseload has 25 people.", facts, "how many people do I have?", answer);
+    assert.ok(found.some((p) => p.includes('"25"')), JSON.stringify(found));
+    assert.deepEqual(checkOrgClaimsDeterministic("Eastside Fish Fry & Grill is in Lansing.", facts, "what can you do?", answer), []);
   });
 });

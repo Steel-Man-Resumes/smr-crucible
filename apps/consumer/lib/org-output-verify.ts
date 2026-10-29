@@ -413,11 +413,14 @@ function plainToolText(t: string): string {
 function toolTextKnown(evidence: readonly StaffToolEvidence[], priorRecords: readonly string[] = []): { words: Set<string>; numbers: Set<string> } {
   const words = new Set<string>();
   const numbers = new Set<string>();
-  for (const raw of [...evidence.flatMap((e) => e.toolText ?? []), ...priorRecords]) {
+  for (const raw of evidence.flatMap((e) => e.toolText ?? [])) {
     const t = plainToolText(raw);
     for (const m of t.matchAll(/[A-Za-z]{3,}/g)) words.add(m[0].toLowerCase());
     for (const m of t.matchAll(/(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/])/g)) numbers.add(String(Number(m[0])));
   }
+  // Earlier turns' signed records add WORDS only, never figures (review T1-R3): a "25 employers" record
+  // must not let "your caseload has 25 people" through.
+  for (const raw of priorRecords) for (const m of plainToolText(raw).matchAll(/[A-Za-z]{3,}/g)) words.add(m[0].toLowerCase());
   return { words, numbers };
 }
 
