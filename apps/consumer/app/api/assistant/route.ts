@@ -35,7 +35,7 @@ import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-t
 import { getClientIp } from "@/lib/auth-rate-limit";
 import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
-import { withStaffToolRecords, buildToolRecord, withToolRecordLine } from "@/lib/staff-tool-record";
+import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
 import { staffHomeStatePrompt } from "@/lib/staff-org-place";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
@@ -314,7 +314,8 @@ export async function POST(request: Request) {
   // above from their words on this server; nothing raw goes further.
   // Each earlier staff answer gets back the server's record of the tools it
   // ran (lib/staff-tool-record.ts), as context only, then the record gate.
-  const staffInput = staffActor ? gateStaffMessages(withStaffToolRecords(messages)) : null;
+  // Only records this server signed for this staff member, about real staff tools (review S2).
+  const staffInput = staffActor ? gateStaffMessages(withStaffToolRecords(messages, { userId: staffActor.userId, tools: await staffToolNameSet() })) : null;
   const staffSaid = staffInput ? lastUserText(staffInput.messages) : "";
   const staffResolved = staffActor ? resolveTypedNames(staffSaid, staffPeople, staffFocus) : [];
   const staffNamed = staffActor ? [...new Set([...namedParticipantIds(staffSaid, context.org?.visibleParticipants ?? []), ...staffResolved.map((r) => r.id)])] : [];
@@ -541,9 +542,11 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // that passed the check, as a finished tool call, the checked text, and
     // the run id for an acceptance (lib/staff-skill-run.ts).
     const streamed = streamedCheck.kept;
+    // A record line is never shown, even if the model echoes one (review S1).
+    out = dropToolRecordEcho(out);
     const lines = staffAnswerStreamLines(out, draftCheck.kept, skillRunId, `staff-${Date.now().toString(36)}`, streamed);
     // What ran for this answer, for the next turn's history (context only, never evidence).
-    const sent = withToolRecordLine(lines, buildToolRecord(generated.steps.flatMap((step) => step.toolResults as { toolName: string; args: unknown; result: unknown }[])));
+    const sent = withToolRecordLine(lines, buildToolRecord(generated.steps.flatMap((step) => step.toolResults as { toolName: string; args: unknown; result: unknown }[]), staffActor!.userId));
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       start(controller) {

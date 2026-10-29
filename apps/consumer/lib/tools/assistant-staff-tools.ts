@@ -95,6 +95,12 @@ export function checkedFirst<T extends { band?: string | null }>(rows: readonly 
 
 const ISO_DAY = { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" };
 
+/** Every staff tool's name, from the real registry (built with no actor read and no database). */
+export function staffToolNames(): string[] {
+  const placeholder = { userId: "00000000-0000-0000-0000-000000000000", orgId: "00000000-0000-0000-0000-000000000000", role: "case_manager", reach: "assigned", capabilities: new Set() } as unknown as OrgActor;
+  return Object.keys(buildStaffTools(placeholder, undefined, { core: async () => { throw new Error("names only"); } }));
+}
+
 export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, result: unknown) => void, opts: StaffToolOptions = {}): ToolSet {
   const loadCore = opts.core ?? (() => import("@crucible/core"));
   const focus = opts.focusClientId && /^[0-9a-f-]{36}$/i.test(opts.focusClientId) ? opts.focusClientId.toLowerCase() : null;
