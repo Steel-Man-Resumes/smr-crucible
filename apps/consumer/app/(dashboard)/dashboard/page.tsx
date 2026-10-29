@@ -37,6 +37,7 @@ import { AdminHome } from "@/components/admin/AdminHome";
 import { useEffectiveRole, useWorkspace } from "@/components/RoleProvider";
 import { orgLanding } from "@/lib/org-nav";
 import { TBtn } from "@crucible/consumer-ui";
+import { CONTACT_NUDGE, profileAsNudge } from "@/lib/profile-nudge";
 
 // Shared fact-history snapshot for a compact progress recap.
 
@@ -251,7 +252,12 @@ export default function DashboardPage() {
   }
 
   // ─── State: needs_profile ─────────────────────────────────────────────
-  if (onboarding.state === "needs_profile" && !isAdmin) {
+  // Only someone with nothing saved yet gets the contact form as the page.
+  // Saved work keeps the dashboard, with the form as a quiet nudge below
+  // (lib/profile-nudge.ts; demo review 2026-10-28, Marqus).
+  const contactNudge = onboarding.state === "needs_profile" && !isAdmin
+    && profileAsNudge({ forgeComplete: onboarding.forgeComplete, resumeCount: onboarding.resumeCount, artifactCount: totalArtifacts });
+  if (onboarding.state === "needs_profile" && !isAdmin && !contactNudge) {
     return (
       <div className="space-y-10">
         <ProgressOverview />
@@ -270,6 +276,13 @@ export default function DashboardPage() {
       <MiniForgeBanner />
       <ProgressOverview />
       {focus.task ? <LaneHome laneId={focus.laneId} task={focus.task} hidePrimaryAction /> : <h1 className="text-2xl font-bold text-t-white">Overview</h1>}
+      {contactNudge && (
+        <details id="profile-setup" className="scroll-mt-48 border border-t-line bg-t-panel p-4" data-testid="contact-nudge">
+          <summary className="t-focus cursor-pointer text-sm font-medium text-t-white">{CONTACT_NUDGE.summary}</summary>
+          <p className="mt-1 text-xs text-t-phos-dim">{CONTACT_NUDGE.hint}</p>
+          <div className="mt-4"><ProfileSetup contact={onboarding.contact} onComplete={onboarding.refresh} quiet /></div>
+        </details>
+      )}
       <MySharedTasks />
       <MySuggestions />
       <SavedJobsPanel heading="Applications to keep moving" limit={3} />
@@ -409,9 +422,12 @@ function ObserverDashboard() {
 function ProfileSetup({
   contact,
   onComplete,
+  quiet = false,
 }: {
   contact: UserContact | null;
   onComplete: () => void;
+  /** The optional nudge for someone with saved work: no "required", no welcome page. */
+  quiet?: boolean;
 }) {
   const [name, setName] = useState(contact?.name || "");
   const [email, setEmail] = useState(contact?.email || "");
@@ -424,7 +440,7 @@ function ProfileSetup({
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !phone.trim()) {
-      setError("Name and phone number are required for your resume.");
+      setError(quiet ? CONTACT_NUDGE.needBoth : "Name and phone number are required for your resume.");
       return;
     }
 
@@ -453,23 +469,32 @@ function ProfileSetup({
 
   return (
     <div className="max-w-lg mx-auto">
-      <h1 className="text-2xl font-bold text-t-white mb-2">
-        {name ? `Welcome, ${name.split(" ")[0]}` : "Welcome to The Refinery"}
-      </h1>
-      <p className="text-base text-t-phos-dim mb-4">
-        I analyzed your background in The Forge. Now we put it to work.
-        These details go on your resume header. Nothing else.
-      </p>
+      {quiet ? (
+        <>
+          <h2 className="text-lg font-semibold text-t-white mb-1">{CONTACT_NUDGE.title}</h2>
+          <p className="text-sm text-t-phos-dim mb-4">{CONTACT_NUDGE.intro}</p>
+        </>
+      ) : (
+        <>
+          <h1 className="text-2xl font-bold text-t-white mb-2">
+            {name ? `Welcome, ${name.split(" ")[0]}` : "Welcome to The Refinery"}
+          </h1>
+          <p className="text-base text-t-phos-dim mb-4">
+            I analyzed your background in The Forge. Now we put it to work.
+            These details go on your resume header. Nothing else.
+          </p>
+        </>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="text-sm font-medium text-t-white block mb-1">Full Name *</label>
+          <label className="text-sm font-medium text-t-white block mb-1">{quiet ? "Full name" : "Full Name *"}</label>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Your full name (as it appears on a resume)"
             className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
-            required
+            required={!quiet}
           />
           <p className="text-xs text-t-phos-dim mt-1">Top of every resume we build for you.</p>
         </div>
@@ -487,16 +512,16 @@ function ProfileSetup({
         </div>
 
         <div>
-          <label className="text-sm font-medium text-t-white block mb-1">Phone Number *</label>
+          <label className="text-sm font-medium text-t-white block mb-1">{quiet ? "Phone number" : "Phone Number *"}</label>
           <input
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="(414) 555-1234"
             className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
-            required
+            required={!quiet}
           />
-          <p className="text-xs text-t-phos-dim mt-1">Required on resumes. Employers call this number.</p>
+          <p className="text-xs text-t-phos-dim mt-1">{quiet ? "Employers call this number." : "Required on resumes. Employers call this number."}</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -532,7 +557,7 @@ function ProfileSetup({
         </div>
 
         <TBtn type="submit" disabled={saving || !name.trim() || !phone.trim()} className="w-full">
-          {saving ? "saving..." : "save & continue"}
+          {saving ? "saving..." : quiet ? CONTACT_NUDGE.save : "save & continue"}
         </TBtn>
       </form>
     </div>
