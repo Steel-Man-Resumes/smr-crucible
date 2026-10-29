@@ -415,7 +415,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
   // and only then streamed -- slower by a second, and never confidently wrong.
   if (context.org) {
     const { generateText } = await import("ai");
-    const { verifyOrgOutput } = await import("@/lib/org-output-verify");
+    const { verifyOrgOutput, orgFlagNotice } = await import("@/lib/org-output-verify");
 
     operation.markProviderAttempted();
     const generated = await generateText({
@@ -462,10 +462,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       // the failure and teaches nobody. Flag it where the reader will see it,
       // name what could not be supported, and say where the real number lives.
       console.error("[org-output] unsupported claims:", verdict.problems);
-      out +=
-        "\n\n---\n**Check these before you use them.** I could not support " +
-        verdict.problems.map((p) => p).join("; ") +
-        ". Your dashboard is the system of record, so take the figure from there, not from me.";
+      // One plain sentence per flag; "the figure" only when a number was flagged (demo fix T1).
+      out += orgFlagNotice(verdict.problems);
     } else if (!verdict.modelChecked) {
       out +=
         "\n\n_Second-pass check did not run this time. The numbers above match your dashboard; anything else here is worth a look before it goes into a report._";
