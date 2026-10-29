@@ -38,6 +38,8 @@ const LABEL_KEYS = new Set(["title", "station", "need", "howSure", "nextStepThey
 const PHRASE_KEYS = new Set(["jobTitle", "company", "employer", "location", "organization", "service", "city", "county", "what", "reason", "body", "hours", "eligibility", "toName", "industry", "roles", "caveats", "evidence"]);
 /** Keys whose value repeats what the staff member asked for (the place, the query), not what the read found. */
 const ECHO_KEYS = new Set(["place", "q", "query", "needs"]);
+/** Staff-written free text kept out of toolText (review S1): it stays in phrases as before. */
+const FREE_TEXT_KEYS = new Set(["body", "what", "reason"]);
 /** Tools whose bounded result is walked by the named-field rules below. */
 const WALKED_TOOLS = new Set(["read_participant_overview", "read_recent_changes", "find_local_help", "find_employers",
   "read_today_queue", "read_caseload_digest", "read_outcomes_summary", "read_referrals_open", "read_person_timeline"]);
@@ -97,7 +99,9 @@ export function projectStaffToolEvidence(tool: string, result: unknown): StaffTo
         if (LABEL_KEYS.has(key)) { labels.push(v.slice(0, 200)); if (!echo && toolText.length < 300) toolText.push(v.slice(0, 300)); return; }
         if (PHRASE_KEYS.has(key) && v.trim().length >= 3) {
           phrases.push(v.trim().slice(0, 300));
-          if (!echo && toolText.length < 300) toolText.push(v.trim().slice(0, 300));
+          // Review S1: staff-written free text (a note body, a change line, a Today or ask reason) can name
+          // anyone; it stays a whole phrase only, never loose known words.
+          if (!echo && !FREE_TEXT_KEYS.has(key) && toolText.length < 300) toolText.push(v.trim().slice(0, 300));
         }
         return;
       }

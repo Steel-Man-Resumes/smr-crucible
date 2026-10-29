@@ -116,6 +116,43 @@ describe("T1 follow-up: places typed earlier in the conversation", () => {
   });
 });
 
+describe("T1 round 2 (review S1 to S4)", () => {
+  it("S1: a name in a note body or a Today reason is not loose known text", () => {
+    const leaky = JSON.parse(JSON.stringify(OVERVIEW_RESULT));
+    leaky.recentNotes.push({ author: "Lupe", on: "2026-10-26", body: "Rode to the job fair with Marcus Delgado from the Tuesday group; his PO Dana Whitfield says 14 people from his unit got hired. Address 1234 Main St." });
+    const today = { status: "ok", readAt: "2026-10-28T20:00:00Z", asOf: "2026-10-28", items: [{ section: "tasks", firstName: "Jean", reason: "Call Rosa Quintero back about the Ogden shift", when: "2026-10-29", action: "Open" }], total: 1 };
+    const facts = withTools(projectStaffToolEvidence("read_participant_overview", leaky)!, projectStaffToolEvidence("read_today_queue", today)!);
+    assert.ok(checkOrgClaimsDeterministic("Marcus Delgado also got hired at Ogden last week.", facts, "", answer).includes(name("Delgado")));
+    const po = checkOrgClaimsDeterministic("Jean's PO, Dana Whitfield, wants him at the Ogden shift.", facts, "", answer);
+    assert.ok(po.includes(name("Dana")) && po.includes(name("Whitfield")), JSON.stringify(po));
+    assert.ok(checkOrgClaimsDeterministic("Rosa Quintero said the Ogden shift is open to Jean.", facts, "", answer).includes(name("Quintero")));
+    assert.ok(checkOrgClaimsDeterministic("Of your caseload, 1234 people got hired.", facts, "", answer).includes(fig("1234")));
+  });
+
+  it("S2: a figure from listing text is never a rate", () => {
+    assert.ok(checkOrgClaimsDeterministic("Your placement rate is 33%.", withTools(employers), "", answer).some((p) => p.includes('"33%"')));
+    assert.deepEqual(checkOrgClaimsDeterministic("Kelly runs the Kelly 33 program.", withTools(employers), "", answer), []);
+  });
+
+  it("S3: invented counts after a month stay flagged; record words and the demo answers pass", () => {
+    for (const [t, n] of [["In October 23 graduated.", "23"], ["Oct 23 hired.", "23"], ["In October 23 of your people got hired.", "23"], ["October 23 placed.", "23"], ["Oct 23 total.", "23"], ["Oct 27 interviews.", "27"]] as const) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [fig(n)], t);
+    }
+    for (const t of ["Your Oct 27 note says he has not confirmed.", "Your Oct 27 interview at STS is on file.", "Oct 27 Jean called."]) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, "", answer), [], t);
+    }
+  });
+
+  it("S4: OK, HI and ME are not states; an earlier question about a name is not a place", () => {
+    assert.deepEqual([...typedPlaceWords("Michael Shaw, OK?")], []);
+    assert.deepEqual([...typedPlaceWords("Michael Shaw, ME")], []);
+    assert.deepEqual([...typedPlaceWords("Lansing, Michigan")], ["lansing"]);
+    const facts: OrgFacts = { ...LUPE, staffTyped: "any news in Michael Shaw?\nwhat can you do?" };
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", facts, "what can you do?", answer), [name("Michael"), name("Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I found Michael Shaw on your list; he was hired.", { ...LUPE, staffTyped: "talk to Michael Shaw, OK?" }, "", answer), [name("Michael"), name("Shaw")]);
+  });
+});
+
 describe("T1: the footer reads as plain sentences", () => {
   it("one sentence per flag, no figure line for a name", () => {
     assert.equal(

@@ -88,7 +88,7 @@ const ALWAYS_FINE = new Set(["0", "1", "2", "3", "4", "5", "6", "7", "10", "12",
  * and "Oct 27" were reported as caseload figures). Month first ("Oct 27",
  * "October 25, 2026", "Sun Oct 25") and ISO ("2026-10-25"). Not day first:
  * "3 March appointments" stays a count. Months must be capitalized, so "you may 12" is not a date.
- * Round 2 (S6): the day must be 1 to 31. Demo fix T1: see ANSWER_DATE, and
+ * Round 2 (S6): the day must be 1 to 31. Round 3 (B1): see DATE_FOLLOW, and
  * the replacement runs on the answer path only, so a draft's numbers are
  * checked exactly as before.
  * Slash dates ("10/25") are already skipped by the number pattern.
@@ -98,22 +98,29 @@ const WEEKDAY = "(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday|Mon
 /** A day of the month, 1 to 31 ("Oct 45" is not a date; review round 2, S6). */
 const DAY = "(?:3[01]|[12]\\d|0?[1-9])";
 /**
- * Demo fix T1 (2026-10-28, replaces the round 3 and 4 allow-list of words
- * that may follow a date): on the answer path "Month D" (D 1 to 31) is a
- * date UNLESS a count noun follows it, right after the day or one word later.
- * "Your Oct 27 note", "Oct 24 at 6 PM" and "Oct 29." are dates; "In October
- * 22 graduates", "Oct 27 people" and "In September 19 young adults" stay
- * counts. Answer path only: a draft's numbers are checked exactly as before.
+ * Round 3 (B1): an allow-list, not a deny-list. "Month D" is a date only when
+ * the day is followed by the end, a newline, punctuation, a dash or "(", a
+ * clock time, or one of these words (round 4 widened the list). "In
+ * October 22 graduates" and "Since Oct 1 1500 people" stay counts.
+ * Demo fix T1 round 2 (review S3): a singular record word ("Your Oct 27
+ * note", "Your Oct 27 interview") or a capitalized word ("Oct 27 Jean
+ * called") may follow too. "Oct 23 hired.", "October 23 placed." and
+ * "Oct 27 interviews." stay counts.
  */
-const COUNT_NOUNS = (
-  "people participants participant clients client persons person cases case folks members member staff men women residents " +
-  "students graduates grads hires adults adult youth young others individuals families households kids children " +
-  "applications applicants jobs placements referrals interviews enrollments enrolled meals visits sessions calls " +
-  "days weeks months years hours minutes times percent"
-).split(" ").join("|");
+const FOLLOW_WORDS = (
+  "at and to through or in on by until from for when before after the his her their " +
+  // Round 4 (review R3, S1): words that follow a date in ordinary answers.
+  "this last next too so but was is were he she they it with via we you i as if then while during around " +
+  // Demo fix T1 round 2: singular record words.
+  "note meeting call appointment interview visit session check-in entry update deadline hearing shift orientation start task text email message letter"
+).split(" ").map((w) => `[${w[0]}${w[0].toUpperCase()}]${w.slice(1)}`).join("|");
+const DATE_FOLLOW =
+  "(?=[ \\t]*$|[ \\t]*\\n|\\s*[.,;:!?)\\]]|\\s*[(\\-\u2013\u2014]" +
+  // A clock time: "Thu Oct 29 9:00 AM", "Oct 24 6 PM".
+  "|\\s+\\d{1,2}(?::\\d{2})?\\s*(?:[AaPp]\\.?[Mm]\\b)|\\s+\\d{1,2}:\\d{2}\\b" +
+  `|\\s+(?:${FOLLOW_WORDS})\\b|\\s+[A-Z])`;
 const ANSWER_DATE = new RegExp(
-  `(?:\\b${WEEKDAY}\\.?,?\\s+)?\\b${MONTH}\\.?\\s+${DAY}(?:st|nd|rd|th)?\\b(?:,\\s+(?:19|20)\\d{2}\\b)?` +
-    `(?!\\s+(?:[A-Za-z'\u2019-]+\\s+)?(?:${COUNT_NOUNS})\\b)(?![\\d,.]*\\d)` +
+  `(?:\\b${WEEKDAY}\\.?,?\\s+)?\\b${MONTH}\\.?\\s+${DAY}(?:st|nd|rd|th)?\\b(?:,\\s+(?:19|20)\\d{2}\\b${DATE_FOLLOW}|${DATE_FOLLOW})` +
     "|\\b\\d{4}-\\d{2}-\\d{2}(?:T[\\d:.]+Z?)?\\b",
   "g"
 );
@@ -313,8 +320,8 @@ const UI_WORDS: readonly string[] = [
 ];
 
 const US_STATE_NAMES = "alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia";
-/** Two-letter codes are matched in capitals only: "ok", "me", "in" and "or" are ordinary words. */
-const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY";
+/** Two-letter codes are matched in capitals only ("in", "or" are ordinary words); OK, HI and ME are left out because "Michael Shaw, OK?" is a person (review S4). The full names still match. */
+const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|ID|IL|IN|IA|KS|KY|LA|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY";
 const STATE_CODE_AFTER = new RegExp(`^,\\s*(?:${US_STATE_CODES})\\b`);
 const STATE_NAME_AFTER = new RegExp(`^,\\s*(?:${US_STATE_NAMES})\\b`, "i");
 /** True when `after` starts with a comma and a US state ("Jackson, MI", "Jackson, Michigan"). */
@@ -329,7 +336,7 @@ const stateAfter = (after: string) => STATE_CODE_AFTER.test(after) || STATE_NAME
  * "from Marcus" is NOT a place: those prepositions take people as often as
  * towns. A possessive ("in Valjean's file") is never a place. Answer path only.
  */
-export function typedPlaceWords(said: string): Set<string> {
+export function typedPlaceWords(said: string, opts?: { notBeforeQuestion?: boolean }): Set<string> {
   const places = new Set<string>();
   const tokens = [...said.matchAll(/[A-Za-z][A-Za-z'\u2019-]*|[^A-Za-z\s]+/g)].map((m) => ({ w: m[0], at: m.index ?? 0 }));
   const word = (t: { w: string } | undefined) => !!t && /^[A-Za-z][a-z]*$/i.test(t.w) && !/['\u2019]/.test(t.w);
@@ -343,6 +350,8 @@ export function typedPlaceWords(said: string): Set<string> {
     // A possessive right after the run ("in Jean Valjean's file") is a person's thing, not a place.
     if (j < tokens.length && /['\u2019]/.test(tokens[j].w)) continue;
     const after = said.slice(tokens[j - 1].at + tokens[j - 1].w.length);
+    // Review S4: in an earlier message, "in Michael Shaw?" asks about a person far more often than a town.
+    if (opts?.notBeforeQuestion && /^\s*\?/.test(after)) continue;
     const stateNext = stateAfter(after);
     if (["in", "near", "around"].includes(prep) || (["at", "from", "to"].includes(prep) && stateNext)) for (const w of run) places.add(w.toLowerCase());
   }
@@ -415,7 +424,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   const allowed = allowedNumbers(facts);
   // Demo fix T1: words and figures from this turn's tool reads (answer path only).
   const fromTools = opts?.typedNamesInNoMatch ? toolTextKnown(facts.staffToolEvidence ?? []) : { words: new Set<string>(), numbers: new Set<string>() };
-  for (const n of Array.from(fromTools.numbers)) allowed.add(n);
+  // Review S2: tool-text figures are their own set, accepted only as a plain number, never as a rate.
 
   // t.ROY reads and drafts; it cannot send, save, file or book (house build
   // L6 red team: "send the email"). An answer that says it did is wrong
@@ -485,7 +494,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
       /(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/]|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
     ) ?? [];
   for (const n of numbers) {
-    if (!allowed.has(n)) {
+    if (!allowed.has(n) && !fromTools.numbers.has(n)) {
       problems.push(`the figure "${n}" is not one of this caseload's numbers`);
     }
   }
@@ -540,7 +549,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     for (const w of Array.from(fromTools.words)) known.add(w);
     for (const w of Array.from(typedPlaceWords(userSaid ?? ""))) known.add(w);
     // Places typed earlier in the conversation count too (one message at a time, so no rule spans two messages).
-    for (const said of (facts.staffTyped ?? "").split("\n")) for (const w of Array.from(typedPlaceWords(said))) known.add(w);
+    for (const said of (facts.staffTyped ?? "").split("\n")) for (const w of Array.from(typedPlaceWords(said, { notBeforeQuestion: true }))) known.add(w);
   }
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.
