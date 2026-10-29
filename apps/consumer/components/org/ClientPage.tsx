@@ -39,7 +39,7 @@ import { useAutosaveDraft } from "@/lib/use-autosave-draft";
 import { STAFF_TROY_READY } from "@/lib/staff-troy";
 import { GlanceRow, PersonHeaderCard, PersonRail, Skeleton, StationStrip, TheirScreenBoard, scopeStateText } from "@/components/org/PersonOverview";
 import {
-  NOTE_CARE_LINE, PERSON_TABS, SHARE_SCOPES as SCOPES, capFirst, firstName, initialOpen, noteOwnershipLine, scopeToFetch,
+  NOTE_CARE_LINE, PERSON_TABS, SHARE_SCOPES as SCOPES, capFirst, firstName, initialOpen, noteOwnershipLine, scopeToFetch, scopesAfterRead, stoppedSharingLine,
   type OpenEvent, type PersonTab, type ShareScope as Scope,
 } from "@/lib/org-person-view";
 import { DEFAULT_STAFF_PREFS, NOTE_KINDS as KINDS, NOTE_KIND_LABELS, orderPersonTabs, type StaffPrefs } from "@crucible/core/src/staffPrefsShared";
@@ -98,6 +98,8 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
   const [tab, setTab] = useState<PersonTab>("notes");
   const [item, setItem] = useState<Scope | null>(null);
   const [shared, setShared] = useState<Record<string, unknown>[] | null>(null);
+  // Scopes the participant stopped sharing while this page was open (W11): the read said so.
+  const [stoppedNow, setStoppedNow] = useState<Partial<Record<Scope, true>>>({});
   const [loadingTab, setLoadingTab] = useState(false);
   const [prefs, setPrefs] = useState<StaffPrefs>(DEFAULT_STAFF_PREFS);
   const [opened, setOpened] = useState(false);
@@ -143,7 +145,14 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
     const res = await fetch(`/api/org/clients/${clientId}?scope=${scope}`).catch(() => null);
     const d = res && res.ok ? await res.json() : { rows: [] };
     setShared(d.rows ?? []); setLoadingTab(false);
-  }, [client, clientId]);
+    // W11: the server's "not shared" wins over the header this page loaded with. Show it now, then
+    // read the header again for the full state (required, asked). Display only; the read was already refused.
+    if (scopesAfterRead(client.scopes, scope, d.shared).stopped) {
+      setClient((c) => (c ? { ...c, scopes: scopesAfterRead(c.scopes, scope, d.shared).scopes } : c));
+      setStoppedNow((m) => ({ ...m, [scope]: true }));
+      load();
+    }
+  }, [client, clientId, load]);
 
   // Start where this person asked to start (Settings -> My workflow). A shared
   // item opens automatically only if it is already shared: landing on it is a
@@ -248,7 +257,7 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
             <NotesPanel clientId={clientId} first={first} notes={notes} canWrite={!!viewer?.canWriteNotes} viewerId={viewer?.userId ?? null} onSaved={load}
               defaultKind={prefs.noteKind} />
           ) : (
-            <SharedTab client={client} clientId={clientId} first={first} item={item} rows={shared} loading={loadingTab} viewer={viewer}
+            <SharedTab client={client} clientId={clientId} first={first} item={item} rows={shared} loading={loadingTab} viewer={viewer} stopped={!!(item && stoppedNow[item])}
               suggestions={suggestions} onPick={(s) => go({ kind: "item", scope: s })} onChange={load} />
           )}
         </div>
@@ -259,9 +268,11 @@ export function ClientPage({ clientId, startTab }: { clientId: string; startTab?
 }
 
 /** What they shared: pick an item. Picking a shared one is the logged open. Exported for tests. */
-export function SharedTab({ client, clientId, first, item, rows, loading, viewer, suggestions, onPick, onChange }: {
+export function SharedTab({ client, clientId, first, item, rows, loading, viewer, suggestions, onPick, onChange, stopped = false }: {
   client: Client; clientId: string; first: string; item: Scope | null; rows: Record<string, unknown>[] | null; loading: boolean;
   viewer: { canRequest: boolean; canSuggest?: boolean } | null; suggestions: Suggestion[]; onPick: (s: Scope) => void; onChange: () => void;
+  /** The participant stopped sharing this item while the page was open (W11). */
+  stopped?: boolean;
 }) {
   const st = item ? client.scopes[item] : null;
   return (
@@ -309,8 +320,13 @@ export function SharedTab({ client, clientId, first, item, rows, loading, viewer
           </p>
         </div>
       ) : (
-        <AskPanel clientId={clientId} first={first} scope={SCOPES.find((s) => s.key === item)!} pending={st.requestPending}
-          canRequest={!!viewer?.canRequest} onAsked={onChange} />
+        <>
+          {stopped && (
+            <p role="status" className="text-sm text-t-white bg-t-panel border border-t-amber px-4 py-3 mb-4">{stoppedSharingLine(first, item)}</p>
+          )}
+          <AskPanel clientId={clientId} first={first} scope={SCOPES.find((s) => s.key === item)!} pending={st.requestPending}
+            canRequest={!!viewer?.canRequest} onAsked={onChange} />
+        </>
       )}
     </section>
   );
