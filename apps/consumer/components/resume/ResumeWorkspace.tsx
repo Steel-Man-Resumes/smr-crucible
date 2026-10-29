@@ -11,6 +11,7 @@
 import { TroyWork } from "@crucible/consumer-ui";
 import { SavedPackagePreview } from "./SavedPackagePreview";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
+import { hasBaseContact, tailoredContact } from "@/lib/document-contact";
 import { boardHandoff, loadJobHandoff, singleTailorCost, type PendingTailor } from "@/lib/tailor-handoff";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -28,7 +29,6 @@ import { printResumePdf } from "./resumePrint";
 import { RECHECK_HREF, RECHECK_LINE, needsRecheck } from "@/lib/recheck-copy";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { BaselineSelector } from "@/components/apply/BaselineSelector";
-import { isSamePerson } from "@/lib/is-same-person";
 import { useSession } from "next-auth/react";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import { useLanes } from "@/components/lanes/useLanes";
@@ -618,7 +618,8 @@ export function ResumeWorkspace() {
           } catch {}
         }
 
-        // Account profile fills whatever the base resume doesn't carry.
+        // Account profile: used as is only when no base contact block is known
+        // (see tailoredContact below).
         try {
           const profileRes = await fetch("/api/user/profile");
           if (profileRes.ok) {
@@ -627,37 +628,13 @@ export function ResumeWorkspace() {
           }
         } catch {}
 
-        // Document identity: base resume contact wins field-by-field; profile
-        // is the fallback. (Identity-desync fix, Fable analysis 2026-06-10.
-        // The generated doc's Contact section stays fully editable as always.)
-        //
-        // BUT the profile may only fill gaps when it is the SAME PERSON. One
-        // account can carry a resume for someone else -- a staff member helping
-        // a participant, or a demo persona -- and in that case the account's own
-        // phone, email, city and state are a different human's contact details.
-        // Silently pasting them onto the document is the worst failure this
-        // screen can produce, so a name mismatch drops the profile entirely and
-        // leaves the field blank. A blank phone is visible and fixable in one
-        // click; the wrong person's phone ships.
-        if (baseDocContact) {
-          const fill: any = isSamePerson(baseDocContact.name, contactInfo.name)
-            ? contactInfo
-            : {};
-          contactInfo = {
-            name: baseDocContact.name || fill.name || "",
-            phone: baseDocContact.phone || fill.phone || "",
-            email: baseDocContact.email || fill.email || "",
-            city: baseDocContact.city || fill.city || "",
-            state: baseDocContact.state || fill.state || "",
-          };
-        }
-
         // R5/R6 -> 1A: resolve the person's HUMAN-APPROVED base resume -- the
         // one they are "searching as" (R6 active baseline) or their pinned
         // "current" resume -- and pass its ID. The server verifies ownership +
         // approval/lock state and loads the content itself (Phase 1A); the
         // client never sends approved text.
         let approvedArtifactId: string | undefined;
+        let parentContact: any = null;
         try {
           const artRes = await fetch("/api/artifacts?type=resume&limit=50&examples=hide");
           if (artRes.ok) {
@@ -674,9 +651,19 @@ export function ResumeWorkspace() {
               laneCandidates.find((a) => a.is_locked || a.is_current) || null;
             if (approvedBase?.id) approvedArtifactId = approvedBase.id;
             const forgeBase = laneCandidates.find((a) => (a.target_context as any)?.source === "forge");
+            const parent = approvedBase || forgeBase;
+            if (hasBaseContact(parent?.content?.contact)) parentContact = parent.content.contact;
             tailorParentRef.current = approvedBase?.id || forgeBase?.id || null;
           }
         } catch {}
+
+        // Document identity (W10, 2026-10-28): the base resume this job is
+        // tailored from decides the contact block. Its own block wins over the
+        // Forge copy in this browser; the profile never adds a phone or email
+        // the base left off, and fills city/state only for the same person
+        // (lib/document-contact.ts). The generator applies the same rule
+        // against the approved base on the server.
+        contactInfo = tailoredContact(parentContact ?? baseDocContact, contactInfo);
 
         // Call the career package generation API
         const res = await fetch("/api/resume-generate-full", {

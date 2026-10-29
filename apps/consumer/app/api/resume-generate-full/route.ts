@@ -25,6 +25,7 @@ import { buildFullContext, userContextFromForge, type JobContext } from "@/lib/c
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { formatPhoneUS } from "@/lib/phone";
+import { hasBaseContact, tailoredContact } from "@/lib/document-contact";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { letterClosingStyle } from "@/lib/letter-style";
 import { evidenceAnswerText } from "@/lib/number-truth";
@@ -123,6 +124,8 @@ async function handlePost(request: Request) {
     // The person's own bullet-workshop answers saved on that approved resume
     // (what they did, how many, and so on), read server-side like the rest of it.
     let approvedEvidenceAnswers: string[] = [];
+    // W10 (2026-10-28): the approved base's own contact block, when it has one.
+    let approvedContact: unknown = null;
     if (approvedArtifactId !== undefined) {
       if (typeof approvedArtifactId !== "string" || !approvedArtifactId) {
         return NextResponse.json(
@@ -147,11 +150,12 @@ async function handlePost(request: Request) {
       }
       const doc = decision.content as any;
       approvedEvidenceAnswers = evidenceAnswerText(doc);
-      approvedResumeText = formatResumeDownload(
+      const approvedDoc =
         doc?.formatVersion === 2 || doc?.formatVersion === 3
           ? doc
-          : migrateLegacyResume(doc)
-      );
+          : migrateLegacyResume(doc);
+      approvedResumeText = formatResumeDownload(approvedDoc);
+      approvedContact = approvedDoc?.contact ?? null;
       if (!approvedResumeText.trim()) {
         console.warn(
           `Approved base ${approvedArtifactId} formatted to empty text; generating without an approved base`
@@ -169,11 +173,15 @@ async function handlePost(request: Request) {
 
     // Blank stays blank: the name signs a letter an employer reads, so a missing
     // name must fall back to "Candidate", never the prompt label "not specified".
-    const contactName = sanitizeOrEmpty(contact?.name, 100);
-    const contactPhone = sanitizeOrEmpty(contact?.phone, 30);
-    const contactEmail = sanitizeOrEmpty(contact?.email, 100);
-    const contactCity = sanitizeOrEmpty(contact?.city, 50);
-    const contactState = sanitizeOrEmpty(contact?.state, 20);
+    // The tailored copy follows the base resume's contact choices (W10): a
+    // phone or email the approved base left off is never added here, whatever
+    // the request carried (lib/document-contact.ts).
+    const docContact = hasBaseContact(approvedContact) ? tailoredContact(approvedContact, contact) : contact;
+    const contactName = sanitizeOrEmpty(docContact?.name, 100);
+    const contactPhone = sanitizeOrEmpty(docContact?.phone, 30);
+    const contactEmail = sanitizeOrEmpty(docContact?.email, 100);
+    const contactCity = sanitizeOrEmpty(docContact?.city, 50);
+    const contactState = sanitizeOrEmpty(docContact?.state, 20);
     const contactPlace = [contactCity, contactState].filter(Boolean).join(", ");
 
     // ─── Generate resume + cover letter in parallel ───────────────────
@@ -392,12 +400,12 @@ ${contactName || "Candidate"}`;
         createdFrom: "job" as const,
       },
       contact: {
-        name: contact?.name || "",
+        name: docContact?.name || "",
         // Server-side choke point: a tailored document never ships a raw digit string
-        phone: formatPhoneUS(contact?.phone),
-        email: contact?.email || "",
-        city: contact?.city || "",
-        state: contact?.state || "",
+        phone: formatPhoneUS(docContact?.phone),
+        email: docContact?.email || "",
+        city: docContact?.city || "",
+        state: docContact?.state || "",
       },
       summary: plainPunctuation(summaryCheck.text || parsed.summary || "", swapLog),
       // Bullets pass through the structured truth gate (verifyResumeBullets):
