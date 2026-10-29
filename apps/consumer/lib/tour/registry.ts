@@ -53,7 +53,8 @@ export const TOURS: Record<TourId, TourDef> = {
   // ending. Staff tours grant nothing: the key is reserved so no other tour can
   // take it, and grants stays false for good (a bonus is a participant's thing).
   // Version 2 (staff pass 2026-10-27): new stops, so a version 1 place never resumes.
-  crm: { id: 'crm', version: 2, stopCount: CRM_TOUR_STOP_COUNT, rewardKey: 'tour:crm', rewardLabel: 'Staff tour finished', grants: false, minWatchMs: 45_000, completesOnboarding: false },
+  // Version 3 (demo fixes 2026-10-28): Directory and Send to replace referrals and the timeline.
+  crm: { id: 'crm', version: 3, stopCount: CRM_TOUR_STOP_COUNT, rewardKey: 'tour:crm', rewardLabel: 'Staff tour finished', grants: false, minWatchMs: 45_000, completesOnboarding: false },
 };
 
 export function isTourId(value: unknown): value is TourId {
