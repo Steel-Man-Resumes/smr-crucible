@@ -99,19 +99,38 @@ export function staffTypedWords(messages: readonly Record<string, unknown>[]): s
 /** A module tool's finished call that the chat must receive (a "Go to" button, a prefilled form, a card). */
 export interface StreamedToolResult { toolCallId: string; toolName: string; args: unknown; result: unknown }
 
+/** As many cards as the five-call budget can make. */
+export const STREAMED_MAX = 5;
+/** Said when an own-view change was made but its card had to lose its words (final review should-fix 3). */
+export const APPLIED_CARD_LINE = "That change was made. Undo it here or on My setup, Recent changes to my view.";
+const isApplied = (r: { result: unknown }) => (r.result as { status?: unknown } | null)?.status === "applied";
+
+/**
+ * A change already made must keep its card (its Undo). Keep only the keys the
+ * module declares as server-made, never draftBody and never an undeclared key.
+ */
+function appliedCardOnly(s: StreamedToolResult, shapes: ReadonlyMap<string, StreamedShape>): StreamedToolResult {
+  const shape = shapes.get(s.toolName) ?? {};
+  const r = s.result as Record<string, unknown>;
+  const kept = Object.fromEntries(Object.entries(r).filter(([k]) => Object.hasOwn(shape, k) && shape[k] === "server"));
+  return { ...s, result: { ...kept, status: "applied" } };
+}
+
 /**
  * The results of the registry's streamed tools (lib/tools/staff/index.ts,
  * lane S1): open_staff_page, open_add_person and later lanes' cards. All of
  * them, refusals too, so the chat can show the button or an honest "could
- * not complete". At most four. The chat resolves every href from its own
- * table; nothing here is a URL the model wrote.
+ * not complete". At most five, the same as the five-call budget, and a change
+ * already made to the staff member's own view ("applied") always comes first,
+ * so it is never the one left out (final review should-fix 3). The chat
+ * resolves every href from its own table; nothing here is a URL the model wrote.
  */
 export function streamedStaffResults(toolResults: readonly { toolCallId: string; toolName: string; args: unknown; result: unknown }[], names: ReadonlySet<string> = staffStreamedTools()): StreamedToolResult[] {
   // args are NOT streamed (review round 1, S6): they are what the model asked
   // for, including values the tool dropped. The chat reads only the result.
-  return toolResults.filter((r) => names.has(r.toolName) && r.result && typeof r.result === "object")
-    .map((r) => ({ toolCallId: String(r.toolCallId), toolName: r.toolName, args: {}, result: r.result }))
-    .slice(0, 4);
+  const all = toolResults.filter((r) => names.has(r.toolName) && r.result && typeof r.result === "object")
+    .map((r) => ({ toolCallId: String(r.toolCallId), toolName: r.toolName, args: {}, result: r.result }));
+  return [...all.filter(isApplied), ...all.filter((r) => !isApplied(r))].slice(0, STREAMED_MAX);
 }
 
 /** Why a streamed result breaks its declared shape, or null when it keeps it. */
@@ -146,17 +165,19 @@ export function streamedShapeProblem(s: StreamedToolResult, shapes: ReadonlyMap<
 export function checkStreamedDrafts(streamed: readonly StreamedToolResult[], check: (body: string) => string[], shapes: ReadonlyMap<string, StreamedShape> = staffStreamedShapes()): { kept: StreamedToolResult[]; held: string[]; notice: string } {
   const kept: StreamedToolResult[] = [];
   const held: string[] = [];
+  let appliedTrimmed = false;
   for (const s of streamed) {
     const bad = streamedShapeProblem(s, shapes);
-    if (bad) { held.push(bad); continue; }
     const body = (s.result as { draftBody?: unknown } | null)?.draftBody;
-    if (body === undefined) { kept.push(s); continue; }
-    const problems = typeof body === "string" ? check((DRAFT_CHECK_TEXT[s.toolName] ?? ((b: string) => b))(body)) : ["the draft was not text"];
-    if (problems.length) held.push(...problems); else kept.push(s);
+    const problems = bad ? [bad] : body === undefined ? [] : typeof body === "string" ? check((DRAFT_CHECK_TEXT[s.toolName] ?? ((b: string) => b))(body)) : ["the draft was not text"];
+    if (!problems.length) { kept.push(s); continue; }
+    // A change to the staff member's own view already happened: never hide its card.
+    if (isApplied(s)) { kept.push(appliedCardOnly(s, shapes)); appliedTrimmed = true; continue; }
+    held.push(...problems);
   }
-  const notice = held.length
+  const notice = (held.length
     ? `\n\n---\n**A draft or card was held back.** It did not pass the check: ${[...new Set(held)].join("; ")}. Ask for it again, or do it yourself.`
-    : "";
+    : "") + (appliedTrimmed ? `\n\n${APPLIED_CARD_LINE}` : "");
   return { kept, held, notice };
 }
 

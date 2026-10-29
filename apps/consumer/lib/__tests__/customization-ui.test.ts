@@ -96,8 +96,10 @@ test("routes check the right capability before anything else", () => {
   for (const [file, method, cap] of routes) {
     const src = read(file);
     const body = src.slice(src.indexOf(`export async function ${method}`));
-    assert.match(body.split("\n").slice(0, 3).join("\n"), new RegExp(`requireOrgCapability\\("${cap.replace(/\./g, "\\.")}", \\{ request \\}\\)`), `${method} ${file}`);
-    assert.match(body.split("\n").slice(0, 4).join("\n"), /if \(!guard\.ok\) return guard\.response;/, `${method} ${file}`);
+    // A same-origin refusal (synchronous, reads nothing) may come first on a write (final review should-fix 2).
+    const lines = body.split("\n").filter((l) => !/^\s*\/\/|refuseCrossOrigin\(request\)|if \(crossOrigin\) return crossOrigin;/.test(l));
+    assert.match(lines.slice(0, 3).join("\n"), new RegExp(`requireOrgCapability\\("${cap.replace(/\./g, "\\.")}", \\{ request \\}\\)`), `${method} ${file}`);
+    assert.match(lines.slice(0, 4).join("\n"), /if \(!guard\.ok\) return guard\.response;/, `${method} ${file}`);
   }
 });
 
@@ -148,7 +150,8 @@ test("GET /api/org/views never writes; the one-time move is a POST the screen ca
   assert.match(post, /case "move_legacy": \{\n      if \(guard\.actor\.viaPlatformAdmin\) return NextResponse\.json\(\{ moved: 0 \}\);/);
   assert.match(read("components/org/CaseloadWorkbench.tsx"), /JSON\.stringify\(\{ action: "move_legacy" \}\)/);
   // Read-only view-as: the org guard serves only GET/HEAD while viewing, so the move cannot run under it (L2).
-  assert.match(post, /^export async function POST\(request: Request\) \{\n  const guard = await requireOrgCapability\("org\.cohort\.view", \{ request \}\);/);
+  // Same-origin first (final review should-fix 2), then the org guard before anything else.
+  assert.match(post, /^export async function POST\(request: Request\) \{\n  \/\/ Same-origin first, JSON only \(final review should-fix 2\)\.\n  const crossOrigin = refuseCrossOrigin\(request\);\n  if \(crossOrigin\) return crossOrigin;\n  const guard = await requireOrgCapability\("org\.cohort\.view", \{ request \}\);/);
   assert.match(read("lib/org-guard.ts"), /orgRouteIdentity\(session, opts\.request\?\.method \?\? null\)/);
 });
 

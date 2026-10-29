@@ -118,10 +118,18 @@ test("routes: every new door checks the right capability, and writes refuse view
     assert.match(body.slice(0, 300), new RegExp(`requireOrgCapability\\("${cap.replace(/\./g, "\\.")}", \\{ request \\}\\)`), `${file} ${method}`);
   }
   const view = read("app/api/org/prefs/view/route.ts");
-  assert.match(view, /VIEW_ACTIONS as readonly string\[\]\)\.includes\(body\?\.action\)/);
+  assert.match(view, /VIEW_ACTIONS as readonly string\[\]\)\.includes\(action\)/);
+  // Final review should-fix 2: same-origin first, then JSON only (415), on every view write.
+  for (const f of ["app/api/org/prefs/view/route.ts", "app/api/org/prefs/changes/route.ts", "app/api/org/views/route.ts"]) {
+    const post = read(f).slice(read(f).indexOf("export async function POST("));
+    assert.ok(post.indexOf("refuseCrossOrigin(request)") > -1 && post.indexOf("refuseCrossOrigin(request)") < post.indexOf("requireOrgCapability("), `${f}: same-origin first`);
+    assert.match(post, /const body = await readJsonStrict\(request\);\s*if \(!body\) return NextResponse\.json\(\{ error: NOT_JSON \}, \{ status: 415 \}\);/, `${f}: JSON only`);
+  }
   assert.match(view, /\{ byAi: false \}/);
   const values = read("app/api/org/fields/values/route.ts");
-  assert.match(values, /setFieldValuesBatch\(guard\.actor, body\.batch, \{ fromGrid, gridAllowed: allowed\?\.grid_edit \?\? true \}\)/);
+  // Final review nit 7: a batch always checks grid_edit, whether or not the body says fromGrid; a failed policy read is a no.
+  assert.match(values, /setFieldValuesBatch\(guard\.actor, body\.batch, \{ fromGrid: true, gridAllowed: allowed\?\.grid_edit === true \}\)/);
+  assert.match(values, /getMyCustomizationPolicy\(guard\.actor, \{ forWrite: true \}\)/);
   assert.match(values, /requireOrgCapability\("org\.note\.write", \{ request \}\)/);
 });
 

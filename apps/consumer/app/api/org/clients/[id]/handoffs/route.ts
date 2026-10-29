@@ -1,7 +1,7 @@
 /**
  * Handoffs to one person (migration 110, staff pass S5).
  *   GET                                    what staff sent them and each answer (waiting, taken, passed)
- *   POST { action: "send", note, items, draftedByAssistant? }   send a handoff (org.suggest.write)
+ *   POST { action: "send", note, items }   send a handoff (org.suggest.write); "drafted with t.ROY" is set by the server
  *   POST { action: "withdraw", handoffId }                      take back what is still open
  * Reach, the item rules and the live directory check are in core and in the
  * database; this route only gates and reads the body. Never under view-as.
@@ -37,7 +37,8 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
   if (!UUID.test(id)) return NextResponse.json({ error: "Not found." }, { status: 404 });
   const b = await readJson(request);
   if (b.action === "send") {
-    const res = await sendHandoff(g.actor, id, { note: b.note, items: b.items, draftedByAssistant: b.draftedByAssistant === true });
+    // draftedByAssistant is decided by the server from the t.ROY run log; the browser's value is ignored.
+    const res = await sendHandoff(g.actor, id, { note: b.note, items: b.items });
     return res.ok ? NextResponse.json({ ok: true, id: res.id, items: res.items }) : NextResponse.json({ error: res.error }, { status: 400 });
   }
   if (b.action === "withdraw") {

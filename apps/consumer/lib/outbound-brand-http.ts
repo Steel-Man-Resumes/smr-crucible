@@ -46,6 +46,10 @@ export const ADMIN_BRANDING_WORDS: Record<string, string> = {
 };
 
 export async function handleAdminOutboundBrandPost(adminUserId: string, request: Request, deps: OutboundBrandSetDeps): Promise<NextResponse> {
+  // JSON only: anything else is never parsed (final review should-fix 1).
+  if (!(request.headers.get("content-type") || "").toLowerCase().startsWith("application/json")) {
+    return NextResponse.json({ error: "Send this as JSON." }, { status: 415 });
+  }
   const body = await request.json().catch(() => null) as { orgId?: unknown; branding?: unknown } | null;
   const orgId = typeof body?.orgId === "string" ? body.orgId : "";
   if (!UUID.test(orgId)) return NextResponse.json({ error: "Pick an organization." }, { status: 400 });

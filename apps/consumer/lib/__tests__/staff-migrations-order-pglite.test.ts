@@ -75,4 +75,12 @@ test('migrations 001 to the newest apply in order; the staff files coexist and r
   const again = failed.filter((f) => Number(f.slice(0, 3)) >= 99);
   assert.deepEqual(again, [], `every staff file runs twice cleanly: ${again.join(' | ')}`);
   assert.equal(await entities(), before, 'a second run leaves the entity CHECK as it was');
+  // A re-run of 103 may replace org_profile_guard and drop 109's module key; re-applying 109 puts it back.
+  const guardHas = async () => /note_review/.test(String(((await db.query(`SELECT prosrc FROM pg_proc WHERE oid = 'public.org_profile_guard()'::regprocedure`)).rows[0] as { prosrc: string }).prosrc));
+  await apply(files.find((f) => f.startsWith('103_'))!);
+  if (!(await guardHas())) {
+    await apply(files.find((f) => f.startsWith('109_'))!);
+    assert.equal(await guardHas(), true, '109 restores note_review after a 103 re-run');
+  }
+  assert.deepEqual(failed.filter((f) => Number(f.slice(0, 3)) >= 99), [], 'the re-runs fail nothing');
 });

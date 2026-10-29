@@ -389,13 +389,22 @@ function makeViewTools(env: ViewToolContext): ToolSet {
     }),
 
     undo_my_view_change: tool({
-      description: "Undo a change to the staff member's OWN view: the last one you made for them, unless they name another from read_my_view's recentChanges (changeId). Puts that one thing back. Only their screen.",
+      description: "Undo a change YOU (t.ROY) made to the staff member's OWN view: the last one, unless they name another of yours from read_my_view's recentChanges (changeId, byTroy true). Puts that one thing back. Only their screen. A change they made by hand is theirs to undo on My setup.",
       parameters: jsonSchema<{ changeId?: string }>({ type: "object", properties: { changeId: { type: "string", pattern: "^[0-9a-fA-F-]{36}$" } }, additionalProperties: false }),
       execute: safe(async ({ changeId }) => {
         const current = await actor();
         const core = await loadCore();
-        const target = changeId ?? (await core.latestUndoableChange(current, { byAiOnly: true }))?.id ?? (await core.latestUndoableChange(current))?.id;
-        if (!target) return { status: "not_found", error: "There is nothing to undo." };
+        // Only changes t.ROY made (final review nit 10): a change the staff member made by hand is theirs to undo on the card or My setup.
+        let target: string | undefined;
+        if (changeId) {
+          const mine = await core.listMyViewChanges(current, 30);
+          const hit = mine.find((c) => c.id.toLowerCase() === changeId.toLowerCase());
+          if (!hit || !hit.byAi) return { status: "refused", error: "t.ROY undoes only changes t.ROY made. They can undo their own changes on My setup, Recent changes to my view." };
+          target = hit.id;
+        } else {
+          target = (await core.latestUndoableChange(current, { byAiOnly: true }))?.id;
+        }
+        if (!target) return { status: "not_found", error: "There is no change t.ROY made to undo." };
         const res = await core.undoViewChange(current, { id: target }, { byAi: true });
         // The stored summary can hold a view name a model once wrote: it rides in draftBody.
         return answer(res, "undo");

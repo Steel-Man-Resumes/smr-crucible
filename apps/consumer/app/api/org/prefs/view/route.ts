@@ -17,17 +17,23 @@
 import { NextResponse } from "next/server";
 import { dispatchViewAction, VIEW_ACTIONS } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
+import { refuseCrossOrigin, readJsonStrict, NOT_JSON } from "@/lib/staff-rewards-route";
 
 export const dynamic = "force-dynamic";
 
 const STATUS: Record<string, number> = { policy: 403, access: 403, missing: 404, invalid: 400, unchanged: 409, failed: 500 };
 
 export async function POST(request: Request) {
+  // Same-origin first, JSON only (final review should-fix 2).
+  const crossOrigin = refuseCrossOrigin(request);
+  if (crossOrigin) return crossOrigin;
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
-  const body = await request.json().catch(() => ({}));
-  if (!(VIEW_ACTIONS as readonly string[]).includes(body?.action)) return NextResponse.json({ error: "Unknown change.", reason: "invalid" }, { status: 400 });
-  const { action, ...input } = body;
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
+  const action = typeof body.action === "string" ? body.action : "";
+  if (!(VIEW_ACTIONS as readonly string[]).includes(action)) return NextResponse.json({ error: "Unknown change.", reason: "invalid" }, { status: 400 });
+  const { action: _action, ...input } = body;
   const res = await dispatchViewAction(guard.actor, action, input, { byAi: false });
   if (!res.ok) return NextResponse.json({ error: res.error, reason: res.reason }, { status: STATUS[res.reason] ?? 400 });
   return NextResponse.json(res);

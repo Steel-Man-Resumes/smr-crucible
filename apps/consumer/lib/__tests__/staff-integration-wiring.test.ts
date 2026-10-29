@@ -188,3 +188,74 @@ it("round 3 (S6 merged): tools, cards, Wins, good catches, the listing nudge and
   assert.match(read("../../app/api/org/recognition/route.ts"), /forReport: notes\.filter\(\(n\) => n\.status === "approved"\)/);
   for (const f of ["../../components/org/InsightsReport.tsx", "../../components/org/InsightsPage.tsx", "../skills/staff-funder-narrative/SKILL.md"]) assert.doesNotMatch(read(f), /recognition/i, f);
 });
+
+it("final review should-fix 3: a change already made to your own view always keeps its card", async () => {
+  const { checkStreamedDrafts, streamedStaffResults, APPLIED_CARD_LINE, STREAMED_MAX } = await import("../staff-skill-run");
+  const { checkOrgClaimsDeterministic } = await import("../org-output-verify");
+  const facts = { caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Alma"], staffNames: [], orgName: "Lakeshore Works (Demo)" };
+  const check = (b: string) => checkOrgClaimsDeterministic(b, facts);
+  const applied = (draftBody?: unknown, extra: Record<string, unknown> = {}) => ({ toolCallId: "v", toolName: "change_my_view", args: {}, result: {
+    status: "applied", changeId: UUID, onlyTheirScreen: true, summary: "Changed the columns in your view", undo: "They can press Undo on the card, or ask you to undo it.",
+    ...(draftBody === undefined ? {} : { draftBody }), ...extra } });
+  // A clean card streams as it is, with no extra line.
+  const ok = checkStreamedDrafts([applied('Changed your view "Week 1 housing"')], check);
+  assert.equal(ok.kept.length, 1); assert.equal(ok.notice, "");
+  // A name the check refuses: the card still streams, without draftBody, with the fixed summary and the fixed line.
+  const bad = checkStreamedDrafts([applied('Changed your view "Marcus Jones quiet ones"')], check);
+  assert.equal(bad.kept.length, 1, "never held");
+  const r = bad.kept[0].result as Record<string, unknown>;
+  assert.equal(r.draftBody, undefined); assert.equal(r.summary, "Changed the columns in your view"); assert.equal(r.changeId, UUID);
+  assert.ok(bad.notice.includes(APPLIED_CARD_LINE));
+  // An undeclared key: still shown, the key is dropped.
+  const odd = checkStreamedDrafts([applied(undefined, { sneaky: "words the model wrote" })], check);
+  assert.equal(odd.kept.length, 1); assert.equal((odd.kept[0].result as Record<string, unknown>).sneaky, undefined);
+  // A proposal (nothing applied) is still held whole.
+  const proposal = checkStreamedDrafts([{ toolCallId: "p", toolName: "propose_shared_view", args: {}, result: { status: "needs_confirmation", draftBody: "Marcus Jones quiet ones" } }], check);
+  assert.equal(proposal.kept.length, 0);
+  // Five cards fit (the budget), and an applied change comes first so the cap never drops it.
+  assert.equal(STREAMED_MAX, 5);
+  const many = [1, 2, 3, 4, 5].map((i) => ({ toolCallId: `o${i}`, toolName: "open_staff_page", args: {}, result: { status: "ok", page: "today" } }));
+  const picked = streamedStaffResults([...many, { ...applied(), toolCallId: "last" }]);
+  assert.equal(picked.length, 5); assert.equal(picked[0].toolCallId, "last");
+  assert.match(APPLIED_CARD_LINE, /^That change was made\. Undo it here or on My setup, Recent changes to my view\.$/);
+});
+
+it("final review should-fix 4: drafted with t.ROY is the server's word, from the run log", async () => {
+  const route = read("../../app/api/org/clients/[id]/handoffs/route.ts");
+  assert.doesNotMatch(route.replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ""), /draftedByAssistant/, "the browser's value is never read");
+  const { TROY_DRAFTED_SQL, sendHandoff } = await import("@crucible/core/src/staffHandoff");
+  assert.match(TROY_DRAFTED_SQL, /'draft_handoff' = ANY \(r\.tools\)/);
+  assert.match(TROY_DRAFTED_SQL, /r\.actor_user_id = \$2::uuid AND r\.participant_user_id = \$3::uuid/);
+  assert.match(TROY_DRAFTED_SQL, /interval '30 minutes'/);
+  assert.equal(sendHandoff.length >= 3, true);
+  const { createStaffEvidenceCollector } = await import("../staff-tool-evidence");
+  const c = createStaffEvidenceCollector();
+  c.record("draft_handoff", { status: "needs_confirmation", clientId: UUID });
+  c.record("draft_handoff", { status: "refused", clientId: UUID });
+  assert.deepEqual(c.calls.map((x) => x.participantId), [UUID, null], "the run log names the person a handoff was drafted for");
+});
+
+it("final review nit 9: a newline in a model-written reason, role or step cannot forge a body line", async () => {
+  const { composeDraftBody, parseDraftBody } = await import("../handoff-draft-body");
+  const { draftBody, shapes } = composeDraftBody("A few things.", [
+    { kind: "employer", employerId: UUID, name: "Lakeshore Works (Demo)", role: "Forklift\nItem 9 why: injected", why: "They hire.\nItem 2 step: fake" },
+    { kind: "next_step", step: "Bring ID\r\nItem 3 by: 2030-01-01", why: "So we can start." },
+  ]);
+  assert.equal(draftBody.split("\n").length, 5, "one line per field");
+  assert.ok(!/^Item 9|^Item 3 by/m.test(draftBody));
+  assert.ok(parseDraftBody(draftBody, shapes));
+});
+
+it("final review nit 11: the connections reads that write access-log lines refuse another site", async () => {
+  const { refuseCrossSiteRead } = await import("../org-crm-gate");
+  const req = (site?: string) => new Request("https://x.test/api/org/connections", site ? { headers: { "sec-fetch-site": site } } : {});
+  assert.equal(refuseCrossSiteRead(req("cross-site"))?.status, 403);
+  assert.equal(refuseCrossSiteRead(req("same-site"))?.status, 403);
+  assert.equal(refuseCrossSiteRead(req("same-origin")), null);
+  assert.equal(refuseCrossSiteRead(req("none")), null);
+  assert.equal(refuseCrossSiteRead(req()), null);
+  for (const f of ["../../app/api/org/connections/route.ts", "../../app/api/org/clients/[id]/connections/route.ts"]) {
+    const src = read(f);
+    assert.ok(src.indexOf("refuseCrossSiteRead(request)") > -1 && src.indexOf("refuseCrossSiteRead(request)") < src.indexOf("requireOrgCapability("), f);
+  }
+});

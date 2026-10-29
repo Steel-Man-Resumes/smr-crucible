@@ -36,6 +36,9 @@ function stand(over: Record<string, unknown> = {}) {
   const core = {
     getStaffPrefs: async () => { calls.push("prefs"); return { effective: { suggestions: over.suggestions ?? true } }; },
     claimListingNudge: async () => { calls.push("claim"); return over.claim ?? true; },
+    // Final review nit 8: the listing is looked up first.
+    getVerifiedEmployer: async (id: string) => { calls.push("lookup"); return { status: "ok", data: over.missing ? null : { id } }; },
+    getVerifiedResource: async (id: string) => { calls.push("lookup"); return { status: "ok", data: over.missing ? null : { service_id: id } }; },
     staffUnlocks: async () => { calls.push("unlocks"); return over.unlocks ?? ["directory_scout"]; },
     reachableParticipantNames: async () => [{ id: "p1", name: "Alma Reyes" }],
     // Stand-in for 111 staff_text_participant_names: only people the writer reaches ("Alma Reyes").
@@ -83,6 +86,9 @@ test("the nudge: one line, only when suggestions are on, at most once a week (th
   assert.equal(await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { loadCore: already.core }), null, "asked this week already: quiet");
   assert.equal(await listingNudgeFor({ ...actor, viaPlatformAdmin: true }, { kind: "resource", id: LISTING }, { loadCore: on.core }), null);
   assert.notEqual(await listingNudgeFor(actor, { kind: "resource", id: LISTING }, { loadCore: off.core, suggestionsOn: true }), null, "the registry may pass S1's switch in");
+  const gone = stand({ missing: true });
+  assert.equal(await listingNudgeFor(actor, { kind: "employer", id: LISTING }, { loadCore: gone.core }), null, "a listing that does not exist: quiet");
+  assert.ok(gone.calls.includes("lookup") && !gone.calls.includes("claim"), "and nothing is written");
 });
 
 test("suggestionsOn defaults to on, and a failed read never nags", async () => {

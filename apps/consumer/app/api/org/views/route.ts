@@ -23,6 +23,7 @@ import {
   migrateLegacySavedViews, reorderSavedViews, saveMyView, updateMyView, updateSavedView,
 } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
+import { refuseCrossOrigin, readJsonStrict, NOT_JSON } from "@/lib/staff-rewards-route";
 
 export const dynamic = "force-dynamic";
 
@@ -54,9 +55,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Same-origin first, JSON only (final review should-fix 2).
+  const crossOrigin = refuseCrossOrigin(request);
+  if (crossOrigin) return crossOrigin;
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   const id = typeof body.id === "string" ? body.id : "";
   switch (body.action) {
     case "move_legacy": {

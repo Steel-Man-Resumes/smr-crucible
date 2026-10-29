@@ -294,7 +294,7 @@ describe("the database halves (source checks)", () => {
     assert.ok(body.indexOf("if (bad) return") > 0 && body.indexOf("if (bad) return") < body.indexOf("CUSTOM_FIELD_BATCH_SQL.upsert"), "errors return before any write");
     assert.match(body, /if \(!reached\.has\(c\.entityId\)\) \{ cellErrors\[k\] = "That person is not on your caseload\."/);
     assert.match(body, /validateCustomFieldValue\(def, c\.raw/);
-    assert.match(body, /opts\.fromGrid && opts\.gridAllowed === false/);
+    assert.match(body, /if \(opts\.gridAllowed !== true\) \{/, "every batch needs the policy's explicit yes (final review nit 7)");
     assert.match(body, /if \(!canWriteFieldValues\(actor\)\)/);
   });
 });

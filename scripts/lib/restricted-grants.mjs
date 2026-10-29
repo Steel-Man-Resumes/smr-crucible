@@ -221,6 +221,8 @@ export const APP_FUNCTIONS = [
   "smr_only_gone_refs_cleared(jsonb, jsonb, text[], text[])",
   "smr_purge_stale_staff_drafts()",
   "smr_retention_task_marks()",
+  // 107: the outbound branding setter (refuses everyone but a platform admin inside).
+  "smr_set_org_branding(uuid, text)",
   // 110: the person takes a next step from a handoff (acts only for app.user_id).
   "smr_accept_handoff_step(uuid)",
   // 109: called by the team-talk policies, guards and routes as the app role.

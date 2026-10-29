@@ -276,7 +276,11 @@ test("outbound brand routes: staff read their own organization only; admin read 
   assert.deepEqual(seen[0], [USER, ORG, "Lakeshore Works"], "the guard's organization, never one the request names");
   assert.equal((await handleAdminOutboundBrandGet(USER, new URL("https://x.test/api?orgId=nope"), deps)).status, 400);
   assert.equal((await handleAdminOutboundBrandGet(USER, new URL(`https://x.test/api?orgId=${ORG}`), deps)).status, 200);
-  const post = (body: unknown) => handleAdminOutboundBrandPost(USER, new Request("https://x.test", { method: "POST", body: JSON.stringify(body) }), deps);
+  const post = (body: unknown) => handleAdminOutboundBrandPost(USER, new Request("https://x.test", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), deps);
+  // Final review should-fix 1: non-JSON is refused unparsed, and the route checks same-origin JSON before the admin guard.
+  assert.equal((await handleAdminOutboundBrandPost(USER, new Request("https://x.test", { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" }), deps)).status, 415);
+  const adminRoute = read("app/api/admin/orgs/outbound-brand/route.ts");
+  assert.ok(adminRoute.indexOf("isSameOriginJsonPost(request.headers)") > -1 && adminRoute.indexOf("isSameOriginJsonPost(request.headers)") < adminRoute.lastIndexOf("requirePlatformAdmin()"), "same-origin JSON before the admin guard");
   assert.equal((await post({ orgId: ORG, branding: "full" })).status, 400);
   assert.equal((await post({ orgId: "x", branding: "exclusive" })).status, 400);
   assert.equal((await post({ orgId: ORG, branding: "exclusive" })).status, 200);

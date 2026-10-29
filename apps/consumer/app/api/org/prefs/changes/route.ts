@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { listMyViewChanges, undoViewChange } from "@crucible/core";
 import { requireOrgCapability } from "@/lib/org-guard";
+import { refuseCrossOrigin, readJsonStrict, NOT_JSON } from "@/lib/staff-rewards-route";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // Same-origin first, JSON only (final review should-fix 2).
+  const crossOrigin = refuseCrossOrigin(request);
+  if (crossOrigin) return crossOrigin;
   const guard = await requireOrgCapability("org.cohort.view", { request });
   if (!guard.ok) return guard.response;
-  const body = await request.json().catch(() => ({}));
+  const body = await readJsonStrict(request);
+  if (!body) return NextResponse.json({ error: NOT_JSON }, { status: 415 });
   if (body?.action !== "undo" || typeof body.id !== "string") return NextResponse.json({ error: "Say which change to undo." }, { status: 400 });
   const res = await undoViewChange(guard.actor, { id: body.id }, { byAi: false });
   if (!res.ok) return NextResponse.json({ error: res.error, reason: res.reason }, { status: res.reason === "missing" ? 404 : res.reason === "policy" || res.reason === "access" ? 403 : 409 });

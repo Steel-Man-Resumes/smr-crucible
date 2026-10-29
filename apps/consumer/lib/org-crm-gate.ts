@@ -31,6 +31,18 @@ export function refuseCrossOrigin(request: Request): NextResponse | null {
   return isSameOriginRequest(request.headers) ? null : NextResponse.json({ error: "Not allowed." }, { status: 403 });
 }
 
+/**
+ * For a GET that writes (an access-log line in the person's own log): refuse a
+ * request the browser says came from another site (Sec-Fetch-Site cross-site
+ * or same-site), so a link or image elsewhere cannot make reads in a staff
+ * member's name. A same-origin fetch, a typed address ("none") and a client
+ * that sends no such header pass (final review nit 11).
+ */
+export function refuseCrossSiteRead(request: Request): NextResponse | null {
+  const site = (request.headers.get("sec-fetch-site") || "").toLowerCase();
+  return site === "cross-site" || site === "same-site" ? NextResponse.json({ error: "Not allowed." }, { status: 403 }) : null;
+}
+
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** JSON body, also when it arrives as text/plain (navigator.sendBeacon on page hide). */

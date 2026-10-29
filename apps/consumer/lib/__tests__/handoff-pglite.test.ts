@@ -20,7 +20,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { HANDOFF_SQL, itemsJson } from '@crucible/core/src/staffHandoff';
+import { HANDOFF_SQL, itemsJson, TROY_DRAFTED_SQL } from '@crucible/core/src/staffHandoff';
 import { CONNECTION_APPS_SQL, CONNECTION_RESUMES_SQL, CONNECTION_CANDIDATES_SQL, SHARED_OPEN_LOG_SQL } from '@crucible/core/src/orgClientView';
 import type { HandoffItemInput } from '@crucible/core/src/staffHandoffShared';
 
@@ -176,6 +176,24 @@ test('handoffs (110): reach-sealed sending, the person answers, next steps land 
   assert.equal((await as({ userId: p2 }, HANDOFF_SQL.answer, [p2, ibItemB, 'dismissed'])).length, 1, 'the person can still answer');
   assert.equal((await q(`SELECT count(*)::int AS n FROM staff_inbox_item WHERE ref_id = $1`, [ibB.id])).rows[0].n, 0, 'no inbox item for a sender out of reach');
   await q(`INSERT INTO client_staff_assignment (access_code_id, client_user_id, staff_user_id, assigned_by) VALUES ($1, $2, $3, $4)`, [org, p2, cm2, owner]);
+
+  // "Drafted with t.ROY" comes from the sender's own run log (final review should-fix 4).
+  const runRow = async (actor: string, person: string, tools: string[], ago?: string) => {
+    const [row] = await as({ orgId: org, userId: actor }, `INSERT INTO ai_skill_run (access_code_id, actor_user_id, skill, participant_user_id, input_summary, tools, output_hash)
+      VALUES ($1, $2, 'staff-general', $3, 'Asked t.ROY', $4, $5) RETURNING id`, [org, actor, person, tools, 'a'.repeat(64)]);
+    // Age a row for the 30-minute window (test-only, past the run log's own guard).
+    if (ago) await db.exec(`SET session_replication_role = replica; UPDATE ai_skill_run SET at = now() - interval '${ago}' WHERE id = '${row.id}'; SET session_replication_role = origin;`);
+  };
+  const drafted = async (actor: string, person: string) => (await as({ orgId: org, userId: actor }, TROY_DRAFTED_SQL, [org, actor, person]))[0].drafted as boolean;
+  assert.equal(await drafted(cm, p1), false, 'no run, no label');
+  await runRow(cm, p1, ['find_missed_connections']);
+  assert.equal(await drafted(cm, p1), false, 'a run without draft_handoff does not count');
+  await runRow(cm, p1, ['draft_handoff'], '45 minutes');
+  assert.equal(await drafted(cm, p1), false, 'older than 30 minutes does not count');
+  await runRow(cm, p1, ['find_missed_connections', 'draft_handoff']);
+  assert.equal(await drafted(cm, p1), true, 'this sender drafted for this person just now');
+  assert.equal(await drafted(cm, p2), false, 'not for another person');
+  assert.equal(await drafted(cm2, p1), false, "not on a colleague's run");
 
   // ------------------------------------------------------------ withdrawing
   const h2 = await send(cm, false, p1, [step('Call the training desk'), step('Ask about boots')]);

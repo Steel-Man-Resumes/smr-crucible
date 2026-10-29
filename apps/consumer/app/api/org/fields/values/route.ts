@@ -63,9 +63,9 @@ export async function PUT(request: Request) {
   const body = await request.json().catch(() => ({}));
   if (Array.isArray(body.batch)) {
     if (body.entity !== "participant") return NextResponse.json({ error: "No such record." }, { status: 400 });
-    const fromGrid = body.fromGrid === true;
-    const allowed = fromGrid ? await getMyCustomizationPolicy(guard.actor) : null;
-    const res = await setFieldValuesBatch(guard.actor, body.batch, { fromGrid, gridAllowed: allowed?.grid_edit ?? true });
+    // A batch is the grid's write, whatever the body says (final review nit 7): the grid_edit switch always applies.
+    const allowed = await getMyCustomizationPolicy(guard.actor, { forWrite: true }).catch(() => null);
+    const res = await setFieldValuesBatch(guard.actor, body.batch, { fromGrid: true, gridAllowed: allowed?.grid_edit === true });
     if (res.ok) return NextResponse.json(res);
     return NextResponse.json(res, { status: res.error === "You do not have access to that." || /not in the grid/.test(res.error) ? 403 : 400 });
   }
