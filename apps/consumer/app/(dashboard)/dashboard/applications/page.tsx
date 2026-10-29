@@ -124,7 +124,7 @@ function TailoredReadiness({ artifactId }: { artifactId: string }) {
     fetch(`/api/revisions?artifactId=${encodeURIComponent(artifactId)}`, { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => live && setStatus(revisionStatusOf(j)))
-      .catch(() => live && setStatus("draft"));
+      .catch(() => live && setStatus("unknown"));
     return () => {
       live = false;
     };

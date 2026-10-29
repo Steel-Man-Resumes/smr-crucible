@@ -114,7 +114,7 @@ test("W13: tracker readiness follows the newest revision, draft unless finished"
   assert.equal(revisionStatusOf({ revision: { status: "finished" } }), "finished");
   assert.equal(revisionStatusOf({ revision: { status: "draft" } }), "draft");
   assert.equal(revisionStatusOf({ revision: null }), "draft");
-  assert.equal(revisionStatusOf(null), "draft");
+  assert.equal(revisionStatusOf(null), "unknown"); // a failed read is not a draft (review should-fix)
   assert.equal(trackerReadinessLine("finished"), TRACKER_FINISHED_LINE);
   assert.equal(trackerReadinessLine("draft"), TRACKER_DRAFT_LINE);
   assert.equal(trackerReadinessLine(null), null);
@@ -146,4 +146,19 @@ test("new copy: no em dashes, no double hyphen, plain words", () => {
     assert.doesNotMatch(l, /—|–|--/, l);
     assert.doesNotMatch(l, /felon/i, l);
   }
+});
+
+test("review should-fix: a failed tracker read is not called a draft", async () => {
+  const m = await import("../tailor-readiness");
+  assert.equal(m.revisionStatusOf(null), "unknown");
+  assert.equal(m.trackerReadinessLine("unknown"), "Apply when you are:");
+  assert.equal(m.revisionStatusOf({ revision: { status: "finished" } }), "finished");
+  assert.equal(m.revisionStatusOf({ revision: null }), "draft");
+});
+
+test("review should-fix: server codes never reach the person", async () => {
+  const m = await import("../tailor-readiness");
+  assert.equal(m.tailorStartNotice("x", "approved_source_rejected").body, "We could not tailor your resume just now. Try again.");
+  assert.equal(m.tailorStartNotice("x", "invalid_approved_artifact").body, "We could not tailor your resume just now. Try again.");
+  assert.equal(m.tailorStartNotice("x", "Could not read the selected job.").body, "Could not read the selected job.");
 });
