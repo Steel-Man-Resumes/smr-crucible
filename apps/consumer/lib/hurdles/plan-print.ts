@@ -93,7 +93,7 @@ const STYLE = `
   .note { font-size: 10pt; color: #8a5a00; }
   .disclaimer { font-size: 10pt; font-weight: bold; }
   @media screen { body { max-width: 7in; margin: 0.6in auto; padding: 0 16px; } }
-  section { break-inside: avoid-page; }
+  li, blockquote, .reading { break-inside: avoid; }
   h2, h3 { break-after: avoid; }
   @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
 `;
