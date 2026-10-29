@@ -5,8 +5,9 @@
  * may that organization see your progress?
  *
  * "Yes" sets the same 'sharing' consent as the Settings switch, through the
- * same POST /api/consent. "Not now" sends nothing and stores nothing on the
- * server; this browser remembers not to ask again. The server decides whether
+ * same POST /api/consent. "Not now" stores nothing on the server; this
+ * browser remembers not to ask again, on the Forge and the Refinery alike
+ * (lib/join-sharing-prompt.ts). The server decides whether
  * to ask at all (GET /api/sharing/join-prompt): never for someone who already
  * chose, never for staff, never where a program requires sharing.
  *
@@ -17,6 +18,7 @@ import { JOIN_SHARING_PROMPT_TEXT as TEXT } from "@crucible/core/src/joinSharing
 import {
   ORG_JOINED_EVENT,
   SHARING_CHANGED_EVENT,
+  dismissCookieAssignment,
   rememberDismissed,
   shouldShowJoinPrompt,
 } from "@/lib/join-sharing-prompt";
@@ -25,6 +27,9 @@ interface Decision { show: boolean; orgId?: string; orgName?: string; viewerId?:
 
 const storage = () => {
   try { return window.localStorage; } catch { return null; }
+};
+const cookies = () => {
+  try { return document.cookie; } catch { return ""; }
 };
 
 export function JoinSharingPrompt() {
@@ -64,7 +69,7 @@ export function JoinSharingPrompt() {
       </div>
     );
   }
-  if (!decision || !shouldShowJoinPrompt(decision, decision.viewerId, storage())) return null;
+  if (!decision || !shouldShowJoinPrompt(decision, decision.viewerId, storage(), cookies())) return null;
 
   async function yes() {
     setState("saving");
@@ -85,7 +90,15 @@ export function JoinSharingPrompt() {
   }
 
   function notNow() {
-    if (decision?.viewerId && decision.orgId) rememberDismissed(storage(), decision.viewerId, decision.orgId);
+    if (decision?.viewerId && decision.orgId) {
+      rememberDismissed(storage(), decision.viewerId, decision.orgId);
+      try {
+        const set = dismissCookieAssignment(document.cookie, decision.viewerId, decision.orgId, window.location.hostname, window.location.protocol);
+        if (set) document.cookie = set;
+      } catch {
+        // Cookies blocked: this host still remembers.
+      }
+    }
     setState("closed");
   }
 

@@ -40,14 +40,48 @@ export function settingsTextVersionFor(layer: string, defaultVersion: string): s
   return layer === "sharing" ? SETTINGS_SHARING_TEXT_VERSION : defaultVersion;
 }
 
-/** "Not now" is remembered in this browser only. Nothing is sent or stored on the server. */
+/**
+ * "Not now" is remembered in this browser only. Nothing is stored on the
+ * server, and the server never reads it.
+ *
+ * Two places in this browser (demo review 2026-10-28: Ceci said Not now on the
+ * Refinery, then the Forge asked again): localStorage, and a small cookie the
+ * Forge and Refinery hosts share (Domain .steelmanresumes.com in production,
+ * host-only elsewhere). Each host has its own localStorage, so the cookie is
+ * what carries the answer across. It holds only "<user id>.<org id>" pairs,
+ * no words and no choice beyond "do not ask here again".
+ */
 export function dismissKey(userId: string, orgId: string): string {
   return `smr.joinSharingPrompt.dismissed:${userId}:${orgId}`;
 }
 
+export const DISMISS_COOKIE = "smr_jsp_not_now";
+const ID_RE = /^[0-9A-Za-z-]{1,64}$/;
+const MAX_COOKIE_PAIRS = 8;
+
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 
-export function wasDismissed(storage: StorageLike | null, userId: string, orgId: string): boolean {
+/** The "<user>.<org>" pairs in the Not now cookie; anything malformed is ignored. */
+export function readDismissCookie(cookie: string | null | undefined): string[] {
+  const m = new RegExp(`(?:^|;\\s*)${DISMISS_COOKIE}=([^;]*)`).exec(cookie || "");
+  if (!m) return [];
+  return m[1].split(",").filter((pair) => {
+    const [u, o, extra] = pair.split(".");
+    return extra === undefined && !!u && !!o && ID_RE.test(u) && ID_RE.test(o);
+  });
+}
+
+/** The document.cookie assignment that adds this pair (newest kept, at most eight). Null for an id that is not an id. */
+export function dismissCookieAssignment(cookie: string | null | undefined, userId: string, orgId: string, hostname: string, protocol: string): string | null {
+  if (!ID_RE.test(userId) || !ID_RE.test(orgId)) return null;
+  const pair = `${userId}.${orgId}`;
+  const pairs = [...readDismissCookie(cookie).filter((p) => p !== pair), pair].slice(-MAX_COOKIE_PAIRS);
+  const shared = hostname === "steelmanresumes.com" || hostname.endsWith(".steelmanresumes.com");
+  return `${DISMISS_COOKIE}=${pairs.join(",")}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax${shared ? "; Domain=.steelmanresumes.com" : ""}${protocol === "https:" ? "; Secure" : ""}`;
+}
+
+export function wasDismissed(storage: StorageLike | null, userId: string, orgId: string, cookie?: string | null): boolean {
+  if (readDismissCookie(cookie).includes(`${userId}.${orgId}`)) return true;
   try {
     return !!storage && storage.getItem(dismissKey(userId, orgId)) === "1";
   } catch {
@@ -63,14 +97,15 @@ export function rememberDismissed(storage: StorageLike | null, userId: string, o
   }
 }
 
-/** Show only when the server says to ask, we know who is asking, and they have not said "Not now" here. */
+/** Show only when the server says to ask, we know who is asking, and they have not said "Not now" on either host. */
 export function shouldShowJoinPrompt(
   decision: { show: boolean; orgId?: string } | null,
   userId: string | null | undefined,
-  storage: StorageLike | null
+  storage: StorageLike | null,
+  cookie?: string | null
 ): boolean {
   if (!decision?.show || !decision.orgId || !userId) return false;
-  return !wasDismissed(storage, userId, decision.orgId);
+  return !wasDismissed(storage, userId, decision.orgId, cookie);
 }
 
 /** Fired after joining an organization or changing sharing, so open screens re-check. */

@@ -36,7 +36,7 @@ import { writerSourceFrom } from "../writer-receipt";
 import { saveFinishRevision, type ArtifactLite, type RevisionStore } from "../revision-save";
 import { resumeTextToDocument } from "../revision-to-doc";
 import { saveFirstSection, listVersions, restoreVersion, type LaneFirstStore } from "../lane-first-save";
-import { refineryOpenWithoutResume, keepGoingHref, taskNeedsResume, forgeStartUrl } from "../lane-task";
+import { refineryOpenWithoutResume, keepGoingHref, savedWorkHref, taskNeedsResume, forgeStartUrl } from "../lane-task";
 import { revisionContentHash, type ArtifactRevision, type InsertRevisionResult, type NewRevision } from "@crucible/core/src/artifactRevision";
 import { RESUME, SOURCE, finishState, allAnswered, OWN_WORDS } from "./fixtures/revision-run";
 import { FORGE_SIGN_IN_PAGES } from "../forge-access";
@@ -520,6 +520,30 @@ test("H1: Keep going follows the route; the lane home's next step too", () => {
   assert.deepEqual(laneHomeNext("job", null), { label: "Pick a job to go after", href: "/dashboard/jobs" });
   assert.deepEqual(laneHomeNext("interview", null), { label: "Practice for your interview", href: "/dashboard/interview" });
   assert.match(read("app/(forge)/start/page.tsx"), /const next = keepGoingHref\(task,/);
+});
+
+test("demo 10/29 (Ceci): Keep going opens the account's saved resume, never the intake", () => {
+  const ctx = { signedIn: true, hasForgeOutput: false, hasResumeText: false, forgeNext: "/resume" };
+  const draft = { artifactId: "a1b2", status: "draft", fromWriter: true };
+  // The live bug: "version 2 saved", then Keep going asked "Do you have a resume?".
+  assert.equal(keepGoingHref("resume", { ...ctx, savedWork: draft }), "/output?check=a1b2&cards=1", "the writer's draft opens on its cards");
+  assert.equal(keepGoingHref("job", { ...ctx, savedWork: draft }), "/output?check=a1b2&cards=1");
+  assert.equal(keepGoingHref("resume", { ...ctx, hasResumeText: true, savedWork: draft }), "/output?check=a1b2&cards=1", "a stale local text never beats the account");
+  // A page saved as given, or a finished one: My resumes, where View shows it. Never a new build.
+  assert.equal(keepGoingHref("resume", { ...ctx, savedWork: { artifactId: "a1b2", status: "draft", fromWriter: false } }), "/dashboard/vault");
+  assert.equal(keepGoingHref("resume", { ...ctx, savedWork: { artifactId: "a1b2", status: "finished", fromWriter: true } }), "/dashboard/vault");
+  assert.equal(savedWorkHref({ artifactId: "a b", status: "draft", fromWriter: true }), "/output?check=a%20b&cards=1");
+  // This browser's own finished run still opens where it is; no saved work keeps the old routes.
+  assert.equal(keepGoingHref("resume", { ...ctx, hasForgeOutput: true, savedWork: draft }), "/output");
+  assert.equal(keepGoingHref("resume", { ...ctx, savedWork: null }), "/resume");
+  assert.equal(keepGoingHref("resume", { ...ctx, savedWork: { artifactId: "", status: "draft" } }), "/resume");
+  assert.equal(keepGoingHref("resume", { ...ctx, signedIn: false, savedWork: draft }), "/resume", "signed out has no account work");
+  assert.equal(keepGoingHref("support", { ...ctx, savedWork: draft }), "/dashboard/resources#support", "other routes keep their own page");
+  for (const task of ["resume", "job"] as const) assert.notEqual(keepGoingHref(task, { ...ctx, savedWork: draft }), "/resume");
+  const start = read("app/(forge)/start/page.tsx");
+  assert.match(start, /savedWork: accountRev,/);
+  assert.match(start, /artifactId: String\(j\.revision\.artifactId/);
+  assert.match(start, /disabled=\{focus\.signedIn && !revChecked\}/, "Keep going waits for the saved-work read");
 });
 
 test("L1: the lane home heading keeps the label's own casing", () => {
