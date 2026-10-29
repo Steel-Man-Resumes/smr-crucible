@@ -9,6 +9,7 @@
  */
 
 import type { ResumeDocument, SectionScore } from "./resumeModel";
+import { workEntryDates } from "./resumeModel";
 
 interface Props {
   doc: ResumeDocument;
@@ -134,9 +135,7 @@ export function ResumePreview({ doc, sections, overall }: Props) {
                         <p className="text-[11px] text-gray-500 italic leading-snug mb-0.5">
                           {[
                             entry.company,
-                            [entry.startDate, entry.endDate || "Present"]
-                              .filter(Boolean)
-                              .join(" - "),
+                            workEntryDates(entry),
                           ]
                             .filter(Boolean)
                             .join("  |  ")}

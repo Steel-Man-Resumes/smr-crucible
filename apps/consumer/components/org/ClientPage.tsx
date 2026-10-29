@@ -50,6 +50,7 @@ import { HandoffPanel } from "@/components/org/HandoffPanel";
 import { ConnectionsPanel } from "@/components/org/ConnectionsPanel";
 import { VIEW_CHANGED_EVENT } from "@/lib/view-change-events";
 import { GiveKudos } from "@/components/org/rewards/GiveKudos";
+import { workEntryDates } from "@/components/resume/resumeModel";
 
 const STATUS_LABEL: Record<string, string> = {
   saved: "Saved", applied: "Applied", heard_back: "Heard back", interviewing: "Interviewing",
@@ -550,7 +551,7 @@ function ArtifactBody({ content }: { content: unknown }) {
             {c.experience.map((e, i) => (
               <li key={e.id ?? i}>
                 <p className="text-t-white">{[e.title, e.company].filter(Boolean).join(", ")}</p>
-                <p className="text-xs text-t-phos-dim">{[e.startDate, e.endDate].filter(Boolean).join(" to ")}</p>
+                <p className="text-xs text-t-phos-dim">{e.startDate || e.endDate ? workEntryDates(e) : ""}</p>
                 {!!e.bullets?.length && <ul className="list-disc pl-5 mt-1 space-y-0.5">{e.bullets.map((b, j) => <li key={j}>{b}</li>)}</ul>}
               </li>
             ))}
