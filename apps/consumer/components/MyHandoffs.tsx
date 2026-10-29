@@ -17,7 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { HANDOFF_PROMISE, PASS_WORDS, TAKE_WORDS, TAKEN_WORDS, type HandoffItemKind } from "@crucible/core/src/staffHandoffShared";
-import { bandLine, dayWords } from "@/lib/handoff-words";
+import { dayWords, evidenceWords, whenWords } from "@/lib/handoff-words";
 import { MySharedTasks } from "@/components/MySharedTasks";
 import { HANDOFFS_EMPTY, HANDOFFS_LOAD_FAILED, HANDOFFS_RETRY, loadMyHandoffs } from "@/lib/my-handoffs-load";
 
@@ -93,7 +93,7 @@ function HandoffBlock({ h, onChange }: { h: Handoff; onChange: () => void }) {
   }
   return (
     <article className="border-l-2 border-t-amber pl-3">
-      <p className="text-xs text-t-phos-dim">{h.from_name || "Your case manager"}{h.org_name ? `, ${h.org_name}` : ""}, {dayWords(h.created_at)}</p>
+      <p className="text-xs text-t-phos-dim">{h.from_name || "Your case manager"}{h.org_name ? `, ${h.org_name}` : ""}, {whenWords(h.created_at)}</p>
       {!open ? (
         <button type="button" onClick={openIt} className="t-focus mt-2 border border-t-line text-sm text-t-phos px-3 py-1.5">
           Open it ({h.items.length} {h.items.length === 1 ? "thing" : "things"})
@@ -106,7 +106,7 @@ function HandoffBlock({ h, onChange }: { h: Handoff; onChange: () => void }) {
             <p className="text-sm text-t-white">{it.title}{it.kind !== "next_step" && it.location ? `, ${it.location}` : ""}</p>
             {(it.kind === "employer" || it.kind === "resource") && it.listing && (
               <p className="text-xs text-t-phos-dim mt-0.5">
-                {it.listing.checkFailed ? "We could not check this listing just now." : !it.listing.stillListed ? "No longer listed." : `${bandLine(it.kind, it.listing.band)}${it.listing.checkedAt ? `, checked ${dayWords(it.listing.checkedAt)}` : ""}.`}
+                {it.listing.checkFailed ? "We could not check this listing just now." : !it.listing.stillListed ? "No longer listed." : `${evidenceWords(it.kind as "employer" | "resource", it.listing.band, it.listing.checkedAt)}.`}
               </p>
             )}
             {it.kind === "next_step" && it.due_on && <p className="text-xs text-t-phos-dim mt-0.5">By {dayWords(it.due_on)}</p>}
