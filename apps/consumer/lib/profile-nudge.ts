@@ -16,7 +16,7 @@ export function profileAsNudge(o: { forgeComplete: boolean; resumeCount: number;
 
 export const CONTACT_NUDGE = {
   summary: "Add a phone number to your resume header",
-  hint: "Optional for now. Employers call this number, so add it when you are ready.",
+  hint: "Tailor for a job opens once your name and phone are saved. Employers call this number.",
   title: "Your contact details",
   intro: "These go on your resume header. Nothing else.",
   needBoth: "Add a name and a phone number to save these.",

@@ -10,6 +10,7 @@ import {
   DISMISS_COOKIE,
   dismissCookieAssignment,
   readDismissCookie,
+  dismissToken,
 } from "../join-sharing-prompt";
 import { readFileSync } from "node:fs";
 
@@ -109,7 +110,8 @@ describe("Not now holds on both hosts (demo review 2026-10-28, Ceci)", () => {
 
   it("the cookie is per person and per organization, and holds no words", () => {
     const c = cookieValue(dismissCookieAssignment("", U, O, "forge.steelmanresumes.com", "https:")!);
-    assert.equal(c, `${DISMISS_COOKIE}=${U}.${O}`);
+    assert.equal(c, `${DISMISS_COOKIE}=${dismissToken(U, O)}`);
+    assert.ok(!c.includes(U) && !c.includes(O), "no raw ids in a cookie every subdomain can read");
     const other = "2b2b2b2b-2b2b-4b2b-8b2b-2b2b2b2b2b2b";
     assert.equal(shouldShowJoinPrompt({ show: true, orgId: O }, other, memoryStorage(), c), true, "the next person on a shared computer is still asked");
     assert.equal(shouldShowJoinPrompt({ show: true, orgId: other }, U, memoryStorage(), c), true, "a different organization still asks");
@@ -123,13 +125,16 @@ describe("Not now holds on both hosts (demo review 2026-10-28, Ceci)", () => {
     const pairs = readDismissCookie(jar);
     assert.equal(pairs.length, 8);
     assert.equal(new Set(pairs).size, 8);
-    assert.equal(pairs.at(-1), `u9.${O}`);
+    assert.equal(pairs.at(-1), dismissToken("u9", O));
   });
 
   it("malformed or hostile values are ignored, never trusted", () => {
     assert.equal(dismissCookieAssignment("", "a;b", O, "localhost", "http:"), null);
     assert.equal(dismissCookieAssignment("", U, "x=y", "localhost", "http:"), null);
-    assert.deepEqual(readDismissCookie(`${DISMISS_COOKIE}=a.b.c,${U}.${O},.x,y.`), [`${U}.${O}`]);
+    const tok = dismissToken(U, O);
+    assert.deepEqual(readDismissCookie(`${DISMISS_COOKIE}=${tok}.A!B.${U}..x;y`), [tok]);
+    // An old raw-id cookie from before this change is ignored, not trusted.
+    assert.deepEqual(readDismissCookie(`${DISMISS_COOKIE}=${U}.${O}`).includes(tok), false);
     assert.deepEqual(readDismissCookie(null), []);
   });
 

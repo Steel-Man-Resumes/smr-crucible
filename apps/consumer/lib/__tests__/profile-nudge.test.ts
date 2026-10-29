@@ -37,7 +37,8 @@ test("quiet mode never says required, and fills in nothing", () => {
     assert.doesNotMatch(w, /required|must/i, w);
     assert.ok(!/[–—]| -- /.test(w), w);
   }
-  assert.match(CONTACT_NUDGE.hint, /Optional/);
+  // Honest about the gate (review 2026-10-29): Tailor stays locked until name and phone are saved.
+  assert.match(CONTACT_NUDGE.hint, /Tailor for a job opens once your name and phone are saved/);
   // The fields start from what the account holds, never a made-up value.
   assert.match(page, /const \[phone, setPhone\] = useState\(contact\?\.phone \|\| ""\);/);
 });
