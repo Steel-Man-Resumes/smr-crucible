@@ -15,9 +15,9 @@ import { useState } from "react";
 import Link from "next/link";
 import type { HandoffItemInput } from "@crucible/core/src/staffHandoffShared";
 import { SendToButton } from "@/components/org/SendToButton";
-import { bandLine, dayWords } from "@/lib/handoff-words";
+import { evidenceWords } from "@/lib/handoff-words";
 
-interface EmployerMatch { kind: "employer"; id: string; name: string; band: "A" | "B"; location: string | null; applyUrl: string | null; checkedAt: string | null; reason: string; whyForThem: string; role: string }
+interface EmployerMatch { kind: "employer"; id: string; name: string; band: "A" | "B"; location: string | null; applyUrl: string | null; checkedAt: string | null; reason: string; whyForThem: string; role: string; sites?: number }
 interface ResourceMatch { kind: "resource"; id: string; name: string; band: string; area: string; place: string; checkedAt: string | null; reason: string; whyForThem: string }
 export interface PersonConnectionsView {
   clientId: string; name: string | null; firstName: string; status: "ok" | "nothing_shared" | "not_in_reach" | "directory_unavailable";
@@ -25,6 +25,14 @@ export interface PersonConnectionsView {
 }
 
 export const LOOK_LINE = "Looking reads the jobs and resumes they share with you. It is recorded where they can see it. Their record is never used.";
+
+/** The kind and place in front of the standing: "Employer, Lansing, MI and 3 more locations. " */
+export function matchPlaceLine(m: EmployerMatch | ResourceMatch): string {
+  if (m.kind === "resource") return `${m.area}. `;
+  const more = (m.sites ?? 1) - 1;
+  const where = m.location ? `, ${m.location}${more > 0 ? ` and ${more} more location${more === 1 ? "" : "s"}` : ""}` : more > 0 ? `, ${more + 1} locations` : "";
+  return `Employer${where}. `;
+}
 
 /** What a match becomes in their handoff. The why is written for them; staff can edit it before sending. */
 export function matchToItem(m: EmployerMatch | ResourceMatch): HandoffItemInput {
@@ -43,7 +51,7 @@ function Matches({ p, viewerId, canSend }: { p: PersonConnectionsView; viewerId:
         {all.map((m) => (
           <li key={`${m.kind}:${m.id}`} className="border-l-2 border-t-line pl-3">
             <p className="text-sm text-t-white">{m.name}
-              <span className="ml-2 text-xs text-t-phos-dim">{m.kind === "employer" ? "Employer" : m.area}. {bandLine(m.kind, m.band)}{m.checkedAt ? `, checked ${dayWords(m.checkedAt)}` : ""}.</span>
+              <span className="ml-2 text-xs text-t-phos-dim">{matchPlaceLine(m)}{evidenceWords(m.kind, m.band, m.checkedAt)}.</span>
             </p>
             <p className="text-xs text-t-phos mt-1">Why: {m.reason}</p>
             {canSend && <div className="mt-1"><SendToButton personId={p.clientId} personName={p.name} viewerId={viewerId} item={matchToItem(m)} /></div>}

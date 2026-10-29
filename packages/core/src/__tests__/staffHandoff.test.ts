@@ -399,3 +399,42 @@ test("review r2: 110 checks every S5 definer is owned by a BYPASSRLS role", () =
   for (const f of ["smr_accept_handoff_step", "staff_suggestion_item_guard", "staff_handoff_close_items", "staff_handoff_has_items", "org_activity_suggestion", "org_activity_handoff", "staff_handoff_answer_inbox", "staff_handoff_sent_milestone"])
     assert.ok(mig.includes(`'${f}'`), f);
 });
+
+/* ------------------------------- demo-eve E2: one card per employer -- */
+
+import { onePerEmployer, companyKey } from "../staffConnections";
+
+test("connections: an employer with several sites is one card, deduped BEFORE the limit (live: MNP Corporation four times)", async () => {
+  // The live case: four MNP sites with the same name and reason filled four of five slots.
+  const mnp = (n: number, city: string) => ({ ...pub(`${n}${n}${n}${n}${n}${n}${n}${n}-1111-4111-8111-111111111111`, "MNP Corporation", "A"), city, location: `${city}, MI` });
+  const emps = [
+    pub("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "Key Personnel", "A"),
+    mnp(1, "Flint"), mnp(2, "Utica"), mnp(3, "Lansing"), mnp(4, "Detroit"),
+    pub("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "Cascade Engineering", "A"),
+    pub("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "Harbor Freightways", "B"),
+    pub("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "Lakeside Plastics", "A"),
+    pub("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "Northpoint Foods", "A"),
+  ];
+  const p = await matchPerson(input({ applications: [{ jobTitle: "Forklift operator", company: null, location: "Lansing, MI" }] }), "Marqus Relly", new Map(), cacheFrom(emps, []) as never);
+  const names = p.employers.map((e) => e.name);
+  assert.equal(names.filter((n) => n === "MNP Corporation").length, 1, "one MNP card");
+  assert.equal(new Set(names).size, names.length, "every card is a different employer");
+  assert.equal(p.employers.length, 5, "the five slots hold five different employers");
+  assert.deepEqual(names, ["Key Personnel", "MNP Corporation", "Cascade Engineering", "Lakeside Plastics", "Northpoint Foods"], "the mark first, directory order kept");
+  const m = p.employers.find((e) => e.name === "MNP Corporation")!;
+  assert.equal(m.sites, 4);
+  assert.equal(m.location, "Lansing, MI", "the site in the city of the job they shared is the one shown");
+  assert.equal(p.employers.find((e) => e.name === "Key Personnel")!.sites, 1);
+});
+
+test("connections: one per employer keeps the marked site over a reported one, and names fold like sameCompany", () => {
+  const base = { kind: "employer" as const, bandReason: "", roleTypes: null, applyUrl: null, checkedAt: null, reason: "r", whyForThem: "w", role: "Cook", sites: 1 };
+  const out = onePerEmployer([
+    { ...base, id: "1", name: "Harbor Co.", band: "B", location: "Flint, MI" },
+    { ...base, id: "2", name: "Other", band: "A", location: "Flint, MI" },
+    { ...base, id: "3", name: "HARBOR COMPANY", band: "A", location: "Detroit, MI" },
+  ]);
+  assert.deepEqual(out.map((e) => [e.id, e.sites]), [["3", 2], ["2", 1]], "the marked Harbor site stands for both, and the mark sorts first");
+  assert.equal(companyKey("MNP Corporation"), companyKey("MNP Corp."));
+  assert.notEqual(companyKey("MNP"), companyKey("MNO"));
+});

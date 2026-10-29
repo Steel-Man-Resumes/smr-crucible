@@ -392,3 +392,52 @@ test("the module declares every streamed key, and only draftBody is model-writte
   for (const r of results) for (const k of Object.keys(r)) assert.ok(k in shape, `declared: ${k}`);
   assert.ok(!JSON.stringify(results[0].items).match(/Forklift|They hire|Bring ID|So we can start|2027-01-05/), "no model words or dates outside draftBody");
 });
+
+/* ----------------------------- demo-eve E2: words said once, local days -- */
+
+import { evidenceWords, whenWords } from "../handoff-words";
+import { resultStanding } from "../../components/org/HandoffPanel";
+import { matchPlaceLine } from "../../components/org/ConnectionsPanel";
+
+test("standing and date are said once: never 'Checked. checked', never 'not yet checked by us. checked'", () => {
+  assert.equal(evidenceWords("resource", "A", "2026-10-22"), "Checked Oct 22, 2026");
+  assert.equal(evidenceWords("resource", "B", "2026-10-04"), "Listed, not yet checked by us, source reviewed Oct 4, 2026");
+  assert.equal(evidenceWords("resource", "C", "2026-10-04"), "Found in a public list, unconfirmed, source reviewed Oct 4, 2026");
+  assert.equal(evidenceWords("resource", "A", null), "Checked");
+  assert.equal(evidenceWords("employer", "A", "2026-10-22"), "Has the hiring mark, checked Oct 22, 2026");
+  for (const band of ["A", "B", "C"]) {
+    const line = evidenceWords("resource", band, "2026-10-04");
+    assert.ok((line.match(/check/gi) ?? []).length <= 1, `one "checked" at most: ${line}`);
+  }
+  const picker = (band: string) => ["Grand Rapids, MI", resultStanding({ kind: "resource", id: R1, name: "SSA", location: "Grand Rapids, MI", band, bandLine: bandLine("resource", band), checkedAt: "2026-10-04" })].join(". ");
+  assert.equal(picker("A"), "Grand Rapids, MI. Checked Oct 4, 2026");
+  assert.equal(picker("B"), "Grand Rapids, MI. Listed, not yet checked by us, source reviewed Oct 4, 2026");
+  const e = resultToItem({ kind: "employer", id: E1, name: "Harbor", location: "Lansing, MI", band: "A", bandLine: "Has the hiring mark", checkedAt: "2026-10-12" }, "Welder");
+  assert.equal(e.why, "Has the hiring mark, checked Oct 12, 2026.");
+  const src = readFileSync(new URL("../../components/org/HandoffPanel.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(src, /r\.bandLine, r\.checkedAt \?/, "the picker line no longer appends a second 'checked'");
+});
+
+test("a handoff's sent date is the viewer's local day, like the Inbox; calendar days never shift", () => {
+  // Sent 8:35 PM Mountain on Oct 28 = 02:35 UTC Oct 29. The live page said Oct 29; the Inbox said Oct 28.
+  assert.equal(whenWords("2026-10-29T02:35:00.000Z", "America/Denver"), "Oct 28, 2026");
+  assert.equal(whenWords("2026-10-29T02:35:00.000Z", "America/Detroit"), "Oct 28, 2026");
+  assert.equal(whenWords("2026-10-29T02:35:00.000Z", "UTC"), "Oct 29, 2026");
+  assert.equal(whenWords("2026-10-27"), "Oct 27, 2026", "a bare day stays that day");
+  assert.equal(whenWords(null), "");
+  assert.equal(dayWords("2026-10-22 00:00:00+00"), "Oct 22, 2026", "a checked date stored as a timestamp keeps its day");
+  assert.equal(dayWords("2026-10-22T00:00:00.000Z"), "Oct 22, 2026");
+  const src = readFileSync(new URL("../../components/org/HandoffPanel.tsx", import.meta.url), "utf8");
+  assert.match(src, /\{whenWords\(h\.created_at\)\}/);
+  const inbox = readFileSync(new URL("../../components/org/InboxPage.tsx", import.meta.url), "utf8");
+  assert.match(inbox, /toLocaleDateString\(undefined,/, "the Inbox shows the viewer's local day; handoffs now match it");
+});
+
+test("a connection card names the place once and how many sites it stands for", () => {
+  const base = { kind: "employer" as const, id: E1, name: "MNP Corporation", band: "A" as const, applyUrl: null, checkedAt: "2026-10-22", reason: "r", whyForThem: "w", role: "Forklift operator" };
+  assert.equal(matchPlaceLine({ ...base, location: "Lansing, MI", sites: 4 }), "Employer, Lansing, MI and 3 more locations. ");
+  assert.equal(matchPlaceLine({ ...base, location: "Lansing, MI", sites: 2 }), "Employer, Lansing, MI and 1 more location. ");
+  assert.equal(matchPlaceLine({ ...base, location: "Lansing, MI" }), "Employer, Lansing, MI. ");
+  assert.equal(matchPlaceLine({ ...base, location: null, sites: 3 }), "Employer, 3 locations. ");
+  assert.equal(matchPlaceLine({ kind: "resource", id: R1, name: "Job Center", band: "A", area: "Job help", place: "Lansing, MI", checkedAt: null, reason: "r", whyForThem: "w" }), "Job help. ");
+});

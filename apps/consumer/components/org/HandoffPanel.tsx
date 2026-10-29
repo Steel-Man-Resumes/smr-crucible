@@ -18,14 +18,20 @@ import { ListingContributeMenu } from "@/components/org/directory/ListingContrib
 import { askListingNudge } from "@/lib/listing-nudge-client";
 import { addToTray, clearTray, itemKey, readTray, removeFromTray, trayOwner, updateTrayItem, TRAY_EVENT, type Tray } from "@/lib/handoff-tray";
 import { useEffectiveRole } from "@/components/RoleProvider";
-import { bandLine, dayWords } from "@/lib/handoff-words";
+import { dayWords, evidenceWords, whenWords } from "@/lib/handoff-words";
 
 interface ItemView { id: string; kind: string; status: "open" | "saved" | "dismissed" | "withdrawn"; title: string; why: string; due_on: string | null }
 interface HandoffView {
   id: string; note: string; status: "sent" | "seen" | "withdrawn"; drafted_by_assistant: boolean; created_at: string; seen_at: string | null;
   author_name: string | null; items: ItemView[]; canWithdraw: boolean;
 }
-interface DirResult { kind: "employer" | "resource"; id: string; name: string; location: string | null; roleTypes?: string | null; applyUrl?: string | null; area?: string; bandLine: string; checkedAt: string | null }
+interface DirResult { kind: "employer" | "resource"; id: string; name: string; location: string | null; roleTypes?: string | null; applyUrl?: string | null; area?: string; band?: string | null; bandLine: string; checkedAt: string | null }
+
+/** The listing's standing and date, said once ("Checked Oct 22, 2026", never "Checked. checked Oct 22"). */
+export function resultStanding(r: DirResult): string {
+  if (r.band !== undefined) return evidenceWords(r.kind, r.band, r.checkedAt);
+  return r.kind === "employer" && r.checkedAt ? `${r.bandLine}, checked ${dayWords(r.checkedAt)}` : r.bandLine;
+}
 
 const field = "plain-field t-focus w-full bg-t-panel-2 border border-t-line text-sm text-t-white px-3 py-2";
 const small = "t-focus text-xs text-t-amber-bright underline underline-offset-4";
@@ -40,7 +46,7 @@ export function firstRole(roleTypes: string | null | undefined, fallback = ""): 
 export function resultToItem(r: DirResult, roleHint: string): HandoffItemInput {
   if (r.kind === "employer") {
     return { kind: "employer", employerId: r.id, name: r.name, role: firstRole(r.roleTypes, roleHint) || roleHint || "Open roles", location: r.location, applyUrl: r.applyUrl ?? null,
-      why: `${r.bandLine}${r.checkedAt ? `, checked ${dayWords(r.checkedAt)}` : ""}.` };
+      why: `${resultStanding(r)}.` };
   }
   return { kind: "resource", resourceId: r.id, name: r.name, why: `${r.area ?? "Help"} near ${r.location || "you"}. ${r.bandLine}.` };
 }
@@ -171,7 +177,7 @@ export function HandoffPanel({ clientId, first, viewerId, canSend: canSendProp }
           {handoffs.map((h) => (
             <li key={h.id} className="border-l-2 border-t-line pl-3">
               <p className="text-xs text-t-phos-dim">
-                {dayWords(h.created_at)}{h.author_name ? `, from ${h.author_name}` : ""}{h.drafted_by_assistant ? ", drafted with t.ROY" : ""}. {HANDOFF_STATUS_WORDS[h.status]}.
+                {whenWords(h.created_at)}{h.author_name ? `, from ${h.author_name}` : ""}{h.drafted_by_assistant ? ", drafted with t.ROY" : ""}. {HANDOFF_STATUS_WORDS[h.status]}.
               </p>
               <p className="text-sm text-t-white mt-1 whitespace-pre-line">{h.note}</p>
               <ul className="mt-2 space-y-1">
@@ -249,7 +255,7 @@ function DirectoryPicker({ onAdd, disabled }: { onAdd: (it: HandoffItemInput) =>
         <ul className="mt-3 space-y-2">
           {results.map((r) => (
             <li key={r.id} className="flex items-start justify-between gap-3 text-sm">
-              <span className="text-t-white">{r.name}<span className="block text-xs text-t-phos-dim">{[r.location, r.bandLine, r.checkedAt ? `checked ${dayWords(r.checkedAt)}` : ""].filter(Boolean).join(". ")}</span></span>
+              <span className="text-t-white">{r.name}<span className="block text-xs text-t-phos-dim">{[r.location, resultStanding(r)].filter(Boolean).join(". ")}</span></span>
               <button type="button" disabled={disabled} className="t-focus shrink-0 border border-t-line text-xs text-t-phos px-2 py-1 disabled:opacity-50" onClick={() => onAdd(resultToItem(r, q.trim()))}>Add</button>
             </li>
           ))}
