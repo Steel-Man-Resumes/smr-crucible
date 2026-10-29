@@ -66,7 +66,7 @@ function rowName(row: unknown): string | null {
   for (const f of NAME_FIELDS) {
     const v = r[f];
     if (typeof v === "string" && v.trim() && !UUID.test(v)) {
-      const city = typeof r.city === "string" && r.city.trim() && f !== "city" ? ` (${oneLine(r.city)})` : "";
+      const city = typeof r.city === "string" && r.city.trim() ? ` (${oneLine(r.city)})` : "";
       return clip(oneLine(v) + city, 70);
     }
   }
