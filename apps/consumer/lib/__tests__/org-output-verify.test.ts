@@ -134,8 +134,10 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
     );
   });
 
-  it("(b) a job title in a draft for the participant is not a person either", () => {
-    assert.deepEqual(checkOrgClaimsDeterministic("Hi Jean, I saw the Forklift Driver opening you saved.", LUPE, said), []);
+  it("(b) a draft for the participant keeps the full person check, job words included", () => {
+    // Job words are answer-path only (CC 2026-10-28): drafts stay as strict as before W08.
+    const found = checkOrgClaimsDeterministic("Hi Jean, I saw the Forklift Driver opening you saved.", LUPE, said);
+    assert.ok(found.some((p) => p.includes('"Forklift"')));
   });
 
   it("(c) day numbers inside written dates are not caseload counts", () => {
@@ -163,7 +165,8 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
     const t = "Jean met Michael Shaw on Oct 27 about a Forklift Driver opening.";
     const expected = ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list'];
     assert.deepEqual(checkOrgClaimsDeterministic(t, { ...LUPE, resolvedNames: ["Valjean"] }, said, answer), expected);
-    assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, said), expected, "draft path");
+    const draft = checkOrgClaimsDeterministic(t, LUPE, said);
+    for (const e of expected) assert.ok(draft.includes(e), `draft path: ${e}`);
     // A name right after a date is still mid-sentence once the date is read as a date.
     assert.deepEqual(
       checkOrgClaimsDeterministic("Jean has an interview on Oct 27 Michael set up for him.", LUPE, said, answer),

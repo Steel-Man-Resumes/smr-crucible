@@ -102,11 +102,11 @@ const WRITTEN_DATE = new RegExp(
 const JOB_WORDS = (
   "forklift driver drivers warehouse picker pickers packer packers stocker stockers loader unloader shipping receiving dock " +
   "operator operators machine machinist welder welding fabricator fabrication assembler assembly production line lead leads " +
-  "supervisor manager shift shifts overnight crew cook cooks prep dishwasher busser cashier clerk retail sales associate " +
+  "supervisor manager shift shifts overnight crew prep dishwasher busser cashier clerk retail sales associate " +
   "customer representative janitor janitorial custodian custodial housekeeping housekeeper cleaner cleaning maintenance " +
   "technician mechanic automotive diesel truck trucking cdl delivery courier route laborer labor general construction " +
-  "carpenter electrician plumber hvac roofer roofing painter landscaper landscaping groundskeeper mover movers security guard " +
-  "caregiver aide cna kitchen restaurant barista baker butcher deli grocery stock inventory cycle scanner scanning pallet " +
+  "electrician plumber hvac roofer roofing landscaper landscaping groundskeeper mover movers security guard " +
+  "caregiver aide cna kitchen restaurant barista deli grocery stock inventory cycle scanner scanning pallet " +
   "freight logistics material materials handler sanitation laundry recycling manufacturing factory plant grill fry dish " +
   "safety osha certified certification certificate license licensed training trainee apprentice apprenticeship entry level " +
   "full part time temp temporary seasonal hourly remote onsite position positions role roles opening openings posting postings " +
@@ -371,7 +371,6 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     for (const w of label.toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
   }
   for (const w of (facts.orgName ?? "").toLowerCase().split(/[^a-z]+/)) if (w) STOPWORDS.add(w);
-  for (const w of JOB_WORDS) STOPWORDS.add(w);
   // Workspace page names t.ROY points people to ("open Add people", "Go to
   // Referrals"), lane S1. Answer path only: a draft for a participant keeps
   // the full person check ("Hi Jordan, Mark from the program..." is flagged).
@@ -379,6 +378,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     for (const w of Array.from(STAFF_PAGE_WORDS)) STOPWORDS.add(w);
     // The panel's own button words ("Prep", W08). Answer path only, like the page words.
     for (const w of SKILL_LABEL_WORDS) STOPWORDS.add(w);
+    // Job and skill words ("Forklift Driver", W08). Answer path only: drafts for a
+    // participant keep the full person check, as before.
+    for (const w of JOB_WORDS) STOPWORDS.add(w);
     for (const w of ["invite", "send", "add", "open", "press", "button", "page", "form", "directory", "employers", "employer", "hires", "records", "reported"]) STOPWORDS.add(w);
   }
   // Capitalized words mid-sentence are the candidates; sentence-initial words
