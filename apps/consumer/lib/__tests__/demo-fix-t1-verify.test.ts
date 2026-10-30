@@ -125,10 +125,13 @@ describe("T1 round 2 (review S1 to S4)", () => {
     const leaky = JSON.parse(JSON.stringify(OVERVIEW_RESULT));
     leaky.recentNotes.push({ author: "Lupe", on: "2026-10-26", body: "Rode to the job fair with Marcus Delgado from the Tuesday group; his PO Dana Whitfield says 14 people from his unit got hired. Address 1234 Main St." });
     const today = { status: "ok", readAt: "2026-10-28T20:00:00Z", asOf: "2026-10-28", items: [{ section: "tasks", firstName: "Jean", reason: "Call Rosa Quintero back about the Ogden shift", when: "2026-10-29", action: "Open" }], total: 1 };
-    // 2026-10-30: Marcus Delgado is in this org but not Lupe's: flagged even though a note she can see names him.
-    const facts: OrgFacts = { ...withTools(projectStaffToolEvidence("read_participant_overview", leaky)!, projectStaffToolEvidence("read_today_queue", today)!), outOfReachNames: ["Marcus Delgado"] };
-    assert.ok(checkOrgClaimsDeterministic("Marcus Delgado also got hired at Ogden last week.", facts, "", answer).includes(name("Marcus Delgado")));
-    assert.ok(checkOrgClaimsDeterministic("Jean saw Marcus at the fair.", facts, "", answer).includes(name("Marcus")));
+    // 2026-10-30: Marcus Delgado is in this org but not Lupe's. A note she can read names him, so naming him
+    // repeats the record (review F8/R2-3 ruling: the record wins); a claim about him is layer 2's. Someone
+    // out of reach whom no record of hers names is still flagged.
+    const facts: OrgFacts = { ...withTools(projectStaffToolEvidence("read_participant_overview", leaky)!, projectStaffToolEvidence("read_today_queue", today)!), outOfReachNames: ["Marcus Delgado", "Nina Okafor"] };
+    assert.deepEqual(checkOrgClaimsDeterministic("Marcus Delgado also got hired at Ogden last week.", facts, "", answer), []);
+    assert.ok(checkOrgClaimsDeterministic("Jean saw Nina Okafor at the fair.", facts, "", answer).includes(name("Nina Okafor")));
+    assert.ok(checkOrgClaimsDeterministic("Jean saw Nina at the fair.", facts, "", answer).includes(name("Nina")));
     // People outside the organization (a PO, an employer contact) are not anyone's caseload: layer 1 leaves
     // them to layer 2 on the answer path, and the draft path still checks them.
     assert.deepEqual(checkOrgClaimsDeterministic("Jean's PO, Dana Whitfield, wants him at the Ogden shift.", facts, "", answer), []);

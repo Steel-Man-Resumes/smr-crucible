@@ -57,6 +57,13 @@ export interface OrgFacts {
    */
   outOfReachNames?: string[];
   /**
+   * Every word in this request's conversation, all roles, full length,
+   * normalized (conversationWords below). A person outside reach whose name
+   * appears ANYWHERE in it is left to the typed-word check, so the output
+   * check never answers "does this person exist" (review R2-1).
+   */
+  conversationWords?: string[];
+  /**
    * Name words the staff member typed that the server matched to exactly one
    * person in this viewer's reach (W08: "Valjean" for Jean Valjean). Built
    * from server-side full names, never from the answer, so a name outside
@@ -354,6 +361,52 @@ const US_STATE_NAMES = "alabama|alaska|arizona|arkansas|california|colorado|conn
 const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|ID|IL|IN|IA|KS|KY|LA|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY";
 /** Every word of a US state name, lowercase ("new", "york", "michigan"), for typed words on the answer path. */
 const STATE_WORDS: ReadonlySet<string> = new Set(US_STATE_NAMES.split(/[|\s]+/).filter((w) => w !== "of"));
+/**
+ * A name word as the check compares it: compatibility-normalized, accents and
+ * invisible format characters removed, lowercase (review R2-1: "Ce\u200Bci",
+ * NFD accents and "José"/"Jose" all compare equal).
+ */
+export function normName(w: string): string {
+  return w.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+/**
+ * The words of a text, normalized, plus spelled-out names joined: letters split
+ * by dashes or dots inside one word ("C-e-c-i"), and runs of single-letter
+ * words ("C e c i"). Review R2-1.
+ */
+function nameWords(t: string): string[] {
+  const norm = t.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC").toLocaleLowerCase("en-US");
+  const out: string[] = [...(norm.match(/\p{L}+/gu) ?? [])];
+  let run = "";
+  for (const chunk of norm.split(/\s+/)) {
+    const letters = chunk.match(/\p{L}+/gu) ?? [];
+    if (letters.length > 1 && letters.every((l) => l.length === 1)) out.push(letters.join(""));
+    if (letters.length === 1 && letters[0].length === 1) run += letters[0];
+    else { if (run.length > 1) out.push(run); run = ""; }
+  }
+  if (run.length > 1) out.push(run);
+  return out;
+}
+
+/**
+ * Every word of a chat request's messages (all roles, string or text-part
+ * content, full length), normalized. Built by the assistant route for
+ * OrgFacts.conversationWords.
+ */
+export function conversationWords(messages: readonly unknown[]): string[] {
+  const texts: string[] = [];
+  for (const m of messages) {
+    const c = (m as { content?: unknown } | null)?.content;
+    if (typeof c === "string") texts.push(c);
+    else if (Array.isArray(c)) for (const part of c) { const t = (part as { text?: unknown } | null)?.text; if (typeof t === "string") texts.push(t); }
+  }
+  return Array.from(new Set(nameWords(texts.join("\n"))));
+}
+
+/** A word that is a place or a business by what follows it ("Lincoln County", "Chase Bank", "Austin, TX"). Review R2-4. */
+const PLACE_AFTER = /^(?:\s+(?:County|City|Township|Parish|Bank|Street|St\b|Avenue|Ave\b|Road|Rd\b|Lake|River|Falls|Park|Heights|Springs|Valley|Center|Centre|Corporation|Company|Inc\b|LLC\b)|,\s*[A-Z]{2}\b)/;
+
 const STATE_CODE_AFTER = new RegExp(`^,\\s*(?:${US_STATE_CODES})\\b`);
 const STATE_NAME_AFTER = new RegExp(`^,\\s*(?:${US_STATE_NAMES})\\b`, "i");
 /** True when `after` starts with a comma and a US state ("Jackson, MI", "Jackson, Michigan"). */
@@ -608,50 +661,65 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // participant (no opts) keeps the full check below, unchanged.
   const flagged = new Set<string>();
   if (opts?.typedNamesInNoMatch) {
-    const L = (w: string) => w.toLocaleLowerCase("en-US");
-    const words = (t: string) => (t.match(/\p{L}+/gu) ?? []).map(L);
-    const typedAll = new Set([...words(userSaid ?? ""), ...words(facts.staffTyped ?? "")]);
+    const N = normName;
+    const typedAll = new Set([...nameWords(userSaid ?? ""), ...nameWords(facts.staffTyped ?? "")]);
+    // Names of people this viewer may see never switch the out-of-reach scan off (review R2-2).
+    const inReach = new Set([...facts.visibleNames, ...facts.staffNames, ...(facts.resolvedNames ?? [])].flatMap((n) => nameWords(n)));
+    const said = new Set([...typedAll, ...(facts.conversationWords ?? [])].filter((w) => !inReach.has(w)));
     const midSentence = (i: number) => i >= 2 && /\s/u.test(text[i - 1]) && /[\p{Ll},;:]/u.test(text[i - 2]);
     const flag = (shown: string) => {
       const clean = shown.replace(/\s+/g, " ").trim();
-      for (const part of clean.split(/[\s-]+/)) flagged.add(L(part));
+      for (const part of clean.split(/[\s-]+/)) flagged.add(N(part));
       problems.push(`I could not match "${clean}" to anyone on your list`);
     };
+    // The record's own text, normalized, single-spaced: a whole name found
+    // in it is repeating the record (F8, review R2-3: a phrase, not a bag of words).
+    const recordText = ` ${nameWords([...(facts.staffToolEvidence ?? []).flatMap((e) => [...(e.toolText ?? []), ...(e.phrases ?? [])]), ...(facts.priorToolRecords ?? [])].join("\n")).join(" ")} `;
+    const answerWords = new Set(nameWords(text));
     const people = (facts.outOfReachNames ?? [])
       .map((n) => n.trim().split(/\s+/).filter(Boolean))
       .filter((parts) => parts.length > 0)
-      // Left to (1): anyone whose name the staff member typed (F1).
-      .filter((parts) => !parts.some((p) => p.split("-").some((x) => typedAll.has(L(x)))));
+      // Anyone named anywhere in this conversation is left to the typed-word check (F1, R2-1).
+      .filter((parts) => !parts.some((p) => nameWords(p).some((x) => said.has(x))))
+      // A person the record this viewer can read names in full (a note, a Today
+      // reason) is repeating the record; claims about them are layer 2's (F8, R2-3).
+      .filter((parts) => !recordText.includes(` ${parts.map((p) => nameWords(p).join(" ")).join(" ")} `))
+      // Only people whose first name is in the answer can be in it (speed, review R2).
+      .filter((parts) => nameWords(parts[0]).some((f) => answerWords.has(f)));
+    const normText = text.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC");
+    const plain = (p: string) => p.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC");
+    const esc = (p: string) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const cap = (p: string) => p.charAt(0).toLocaleUpperCase("en-US") + p.slice(1);
-    const esc = (p: string) => cap(p).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    // (2a) Full names, and first plus last without a middle name (F2), in any
-    // position. Case-sensitive on the capital (F6: "I will hunt" is not Will
-    // Hunt). A name the record itself shows this viewer is repeating the
-    // record (F8): every part known, not flagged.
+    // (2a) Full names, and first name with each later part (F2), in any
+    // position; capitalized as names are written, or in capitals (F6, R2-6).
     for (const parts of people) {
       if (parts.length < 2) continue;
-      if (parts.every((p) => known.has(L(p)))) continue;
-      // The whole name first, then the first name with each later part ("Circe Ayala", "Circe Solano").
       const variants = [parts, ...(parts.length > 2 ? parts.slice(1).map((p) => [parts[0], p]) : [])];
+      let hit: RegExpExecArray | null = null;
       for (const v of variants) {
-        const hit = new RegExp(`(?<!\\p{L})${v.map(esc).join("\\s+")}(?!\\p{L})`, "u").exec(text);
-        if (hit) { flag(hit[0]); break; }
+        for (const form of [v.map((p) => esc(cap(plain(p)))), v.map((p) => esc(plain(p).toLocaleUpperCase("en-US")))]) {
+          hit = new RegExp(`(?<!\\p{L})${form.join("\\s+")}(?!\\p{L})`, "u").exec(normText);
+          if (hit) break;
+        }
+        if (hit) break;
       }
+      if (hit) flag(hit[0]);
     }
     // (2b) First names in any position; later name parts when that person's
-    // first name is in the answer. Hyphenated parts count on their own (F3).
-    const inText = new Set(words(text));
+    // first name is in the answer (F3: hyphenated parts count on their own).
+    // A word that is a place by what follows it is not a person (R2-4).
     const outFirst = new Set<string>();
     const outLater = new Set<string>();
     for (const parts of people) {
-      const firsts = parts[0].split("-").map(L);
-      for (const f of firsts) outFirst.add(f);
-      if (firsts.some((f) => inText.has(f))) for (const p of parts.slice(1)) for (const x of p.split("-")) outLater.add(L(x));
+      for (const f of nameWords(parts[0])) outFirst.add(f);
+      for (const p of parts.slice(1)) for (const x of nameWords(p)) outLater.add(x);
     }
-    for (const m of text.matchAll(/(?<!\p{L})\p{Lu}\p{Ll}+(?!\p{L})/gu)) {
+    // Three letters or more, an inner capital allowed ("DeShawn"); review R2-5, R2-6.
+    for (const m of text.matchAll(/(?<!\p{L})\p{Lu}\p{Ll}+(?:\p{Lu}\p{Ll}+)*(?!\p{L})/gu)) {
       const c = m[0];
-      const low = L(c);
-      if (STOPWORDS.has(low) || known.has(low) || flagged.has(low)) continue;
+      if (c.length < 3) continue;
+      const low = N(c);
+      if (STOPWORDS.has(low) || known.has(low) || known.has(c.toLowerCase()) || flagged.has(low)) continue;
       const at = m.index ?? 0;
       if (typedAll.has(low)) {
         // (1) A word they typed, mid-sentence, as the old check read it. A
@@ -662,7 +730,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
         flag(c);
         continue;
       }
-      if (outFirst.has(low) || outLater.has(low)) flag(c);
+      if (!outFirst.has(low) && !outLater.has(low)) continue;
+      if (STATE_WORDS.has(low) || PLACE_AFTER.test(text.slice(at + c.length))) continue;
+      flag(c);
     }
     return problems;
   }

@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { checkOrgClaimsDeterministic, type OrgFacts } from "../org-output-verify";
+import { checkOrgClaimsDeterministic, conversationWords, type OrgFacts } from "../org-output-verify";
 
 // 2026-10-30: on the staff ANSWER path, layer 1 flags a name only when it is a
 // real person in this organization outside the viewer's reach. Towns,
@@ -117,5 +117,38 @@ describe("review round 1 findings (2026-10-30)", () => {
   it("F9: no raw newline inside a flag", () => {
     const out = check("Update:\nCeci\nAyala got the job.");
     assert.ok(out.every((p) => !p.includes("\n")), JSON.stringify(out));
+  });
+});
+
+describe("review round 2 findings (2026-10-30)", () => {
+  const f = (extra: Partial<OrgFacts>): OrgFacts => ({ ...LUPE, ...extra });
+  it("R2-1: a name anywhere in the conversation is never answered differently for a real and an invented person", () => {
+    const longAgo = conversationWords([{ role: "user", content: "x".repeat(9000) }, { role: "user", content: "how is Ceci Ayala doing" }, { role: "assistant", content: "..." }]);
+    const fakeAgo = conversationWords([{ role: "user", content: "x".repeat(9000) }, { role: "user", content: "how is Zelda Quark doing" }]);
+    assert.deepEqual(check("Ceci Ayala got hired at Meijer.", "say that name again", f({ conversationWords: longAgo })), []);
+    assert.deepEqual(check("Zelda Quark got hired at Meijer.", "say that name again", f({ outOfReachNames: [], conversationWords: fakeAgo })), []);
+    for (const disguised of ["C-e-c-i A-y-a-l-a", "Ce​ci Ay​ala", "Ceci Ayala".normalize("NFD")]) {
+      assert.deepEqual(check("Ceci Ayala got hired at Meijer.", "", f({ conversationWords: conversationWords([{ role: "user", content: disguised }]) })), [], disguised);
+    }
+  });
+  it("R2-2: typing the first name of someone in reach does not switch off an out-of-reach namesake", () => {
+    const g = f({ visibleNames: ["Jean", "Marqus", "Tom"] });
+    assert.deepEqual(check("Good news, Tom Jackson got hired.", "how is Tom doing", g), [name("Tom Jackson")]);
+  });
+  it("R2-3: the record must show the whole name, not its words scattered", () => {
+    const g = f({ staffToolEvidence: [{ tool: "find_employers", facts: {}, numbers: [], names: [], labels: [], phrases: [], toolText: ["Jackson MI. Ayala Staffing. Relly Foods."] } as never] });
+    assert.deepEqual(check("Good news, Ceci Ayala got hired.", "", g), [name("Ceci Ayala")]);
+  });
+  it("R2-4: a first name that is a place by what follows it is not a person", () => {
+    const g = f({ outOfReachNames: ["Georgia Smith", "Chase Brown", "Lincoln Hale"] });
+    for (const t of ["Your organization is in Georgia.", "Chase Bank has second chance accounts.", "Try the office in Lincoln County.", "There is one in Austin, TX."]) assert.deepEqual(check(t, "", g), [], t);
+    assert.deepEqual(check("You could ask Chase about it.", "", g), [name("Chase")]);
+  });
+  it("R2-5: two-letter words are not names", () => {
+    assert.deepEqual(check("You could ask Dr Lee at the clinic.", "is Dr Lee still there", f({ outOfReachNames: [] })), [name("Lee")]);
+  });
+  it("R2-6: a full name in capitals and a name with an inner capital", () => {
+    assert.deepEqual(check("UPDATE: CECI AYALA GOT HIRED."), [name("CECI AYALA")]);
+    assert.deepEqual(check("You could also ask DeShawn.", "", f({ outOfReachNames: ["DeShawn Price"] })), [name("DeShawn")]);
   });
 });

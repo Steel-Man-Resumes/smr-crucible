@@ -236,7 +236,8 @@ export async function POST(request: Request) {
           const orgWide = await getPartnerCohort(userId, { accessCodeId: actor.orgId });
           // The org read must contain this caseload; an empty or short read would
           // silently check nobody, so it fails closed instead.
-          if (cohort.clients.some((c) => !orgWide.clients.some((o) => o.userId === c.userId))) {
+          const orgIds = new Set(orgWide.clients.map((o) => o.userId));
+          if (cohort.clients.some((c) => !orgIds.has(c.userId))) {
             throw new Error("org-wide cohort read is missing people in reach");
           }
           staffOutOfReach = orgWide.clients
@@ -461,7 +462,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
   // and only then streamed -- slower by a second, and never confidently wrong.
   if (context.org) {
     const { generateText } = await import("ai");
-    const { verifyOrgOutput, orgFlagNotice } = await import("@/lib/org-output-verify");
+    const { verifyOrgOutput, orgFlagNotice, conversationWords } = await import("@/lib/org-output-verify");
 
     operation.markProviderAttempted();
     const generated = await generateText({
@@ -500,6 +501,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       priorToolRecords: staffPriorRecords,
       staffNames: context.org.staffNames ?? [],
       outOfReachNames: staffOutOfReach,
+      // Every word of this request's conversation, all roles, full length (review R2-1). Layer 1 only.
+      conversationWords: conversationWords([...(staffInput?.messages ?? []), ...(messages as unknown[])]),
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,
       quietDays: context.org.quietDays,
