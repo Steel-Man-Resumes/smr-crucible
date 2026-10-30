@@ -52,3 +52,7 @@ it("prompt review R2-3: a page with line breaks never adds lines to the prompt",
   const tail = p.slice(p.lastIndexOf("## WHERE THEY ARE"));
   assert.equal(tail.split("\n").length, 2, tail);
 });
+
+it("prompt review R3-1: clock times carry AM or PM", () => {
+  assert.match(staff("today"), /Write every clock time with AM or PM/);
+});
