@@ -279,3 +279,21 @@ describe("harness TRAP-NUMBER-02 (2026-10-30)", () => {
     assert.ok(check("That's 62 percent of your caseload.", "", f3).some((p) => p.includes("62")));
   });
 });
+
+describe("review round 11 findings (2026-10-31)", () => {
+  const fig = (n: string) => `the figure "${n}" is not one of this caseload's numbers`;
+  const big: OrgFacts = { ...LUPE, caseload: 40 };
+  it("N11-1: dates, clock minutes, places and pages at a sentence end are not counts", () => {
+    for (const t of ["Her interview is at 2:45.", "The program runs through June 2027.", "The grant closes December 2026.", "Starting January 2026, the cohort meets weekly.", "That covers Q3 2026.", "She graduated in 1998.", "Since 1999, the shelter has been open.", "Ask for room 204.", "Send it to PO Box 1066.", "Exit at mile marker 48.", "See page 2 of 15."]) {
+      assert.deepEqual(checkOrgClaimsDeterministic(t, big, "", { typedNamesInNoMatch: true }), [], t);
+      assert.deepEqual(checkOrgClaimsDeterministic(`Hi Jean, ${t.charAt(0).toLowerCase()}${t.slice(1)}`, big, "").filter((p) => p.startsWith("the figure")), [], `draft: ${t}`);
+    }
+  });
+  it("N11-2: a count after a label, a year or a help line is still a count", () => {
+    for (const [t, n] of [["Region 43 people got jobs.", "43"], ["Level 57 participants passed.", "57"], ["Of 2025 total participants, 12 got jobs.", "2025"], ["In 2026 additional placements.", "2026"], ["2024-45 new participants started.", "2024"]] as const) {
+      assert.ok(checkOrgClaimsDeterministic(t, big, "", { typedNamesInNoMatch: true }).includes(fig(n)), t);
+    }
+    assert.ok(checkOrgClaimsDeterministic("Text 211 any participants.", big, "", { typedNamesInNoMatch: true }).includes(fig("211")));
+    assert.deepEqual(checkOrgClaimsDeterministic("If anyone is in danger, call 911 right away.", big, "", { typedNamesInNoMatch: true }), []);
+  });
+});

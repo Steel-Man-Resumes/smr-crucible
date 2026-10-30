@@ -591,21 +591,26 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // become HELPLINE (all capitals, so the name check reads nothing new); the verb stays.
   // "Text 211 participants" and "211 people were served" stay figures.
   text = text
-    .replace(/\b(call(?:\s+or\s+text)?|text|dial)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any|anytime|now|today|24\/7)\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
+    .replace(/\b(call(?:\s+or\s+text)?|text|dial)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any ?time|now|today|right away|immediately|24\/7)\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
     .replace(/\b(?:911|988|211)\b(?=\s*\((?:call|text))/gi, "HELPLINE");
   // A year after a time word is a date, not a count (staff prompt review F8; review N10-2, N10-3): "In
   // 2026", "since 2024", "FY 2026", "2025-26", "from 2025 to 2026". Never when a count noun follows
   // ("for 2026 participants"); a two-digit range end only attached ("2025-26"); a "to/through" range
   // only with a full year ("from 2025 to 40" keeps 40). Digits become YEAR (all capitals).
   text = text.replace(
-    /\b(in|since|during|by|for|through|from|until|of|FY|fiscal year)(\s+)(20[0-4]\d)((?:-\d{2}(?!\d))|(?:\s+(?:to|through)\s+20[0-4]\d))?\b(?!\s*(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served|of)\b)/gi,
+    /\b(in|since|during|by|for|through|from|until|of|FY|fiscal year)(\s+)(19[5-9]\d|20[0-4]\d)((?:-\d{2}(?!\d))|(?:\s+(?:to|through)\s+(?:19[5-9]\d|20[0-4]\d)))?\b(?!\s+(?:[A-Za-z]+\s+){0,2}(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served|of)\b)/gi,
     (_m, head: string, sp: string, _y: string, range: string | undefined) => `${head}${sp}YEAR${range ? range.replace(/\d+/g, "YEAR") : ""}`
   );
   // A written year range is a date wherever it stands ("the 2025-26 cohort", "2025-2026"), unless a count
   // noun follows ("2024-45 participants").
-  text = text.replace(/\b20[0-4]\d-(?:20[0-4]\d|\d{2})(?!\d)(?!\s*(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served|of)\b)/gi, "YEAR-YEAR");
+  text = text.replace(/\b(?:19[5-9]\d|20[0-4]\d)-(?:19[5-9]\d|20[0-4]\d|\d{2})(?!\d)(?!\s+(?:[A-Za-z]+\s+){0,2}(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served|of)\b)/gi, "YEAR-YEAR");
+  // A month or a quarter with a year is a date ("June 2027", "Dec. 2026", "Q3 2026"; review N11-1).
+  text = text.replace(/\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|June?|July?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?|Q[1-4])\.?,?\s+(?:19[5-9]\d|20[0-4]\d)\b(?!\s+(?:[A-Za-z]+\s+){0,2}(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served|of)\b)/g, "MONTH YEAR");
   // A number that labels a place or a step is not a count ("Region 9.", "Room 204", "Step 3", "Exit 12").
-  text = text.replace(/\b(Region|Room|Suite|Unit|Floor|Building|Step|Station|Exit|Highway|Route|Grade|Level|Tier|Chapter|Section|Form|Line|Bus|Ward|District|Zone|Apt|Apartment)(\s+)\d{1,4}\b/g, (_m, w: string, sp: string) => `${w}${sp}LABELNUM`);
+  // Case-insensitive ("room 204"), and never when a count noun follows ("Region 40 people"; review N11-1, N11-2).
+  text = text.replace(/\b(Region|Room|Suite|Unit|Floor|Building|Step|Station|Exit|Highway|Route|Grade|Level|Tier|Chapter|Section|Form|Line|Bus|Ward|District|Zone|Apt|Apartment|P\.?\s?O\.?\s+Box|Box|Page|Mile marker)(\s+)\d{1,5}\b(?!\s+(?:[A-Za-z]+\s+){0,2}(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served)\b)/gi, (_m, w: string, sp: string) => `${w}${sp}LABELNUM`);
+  // "Page 2 of 15": the total is a page count, not a headcount.
+  text = text.replace(/\bLABELNUM\s+of\s+\d{1,4}\b/g, "LABELNUM of LABELNUM");
   // A phone number is contact detail, not a count (review C4 B1): skip it
   // rather than letting its digit groups into the allowed numbers.
   text = text.replace(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}\b/g, " ");
@@ -658,7 +663,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // "a 2-minute check-in", "by 9am", "the 3rd".
   const numbers =
     text.match(
-      /(?<![$\d.,%/-])\b\d{1,4}\b(?!\.\d|,\d{3}\b|[\d%/]|\s?percent\b|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
+      /(?<![$\d.,%/:-])\b\d{1,4}\b(?!\.\d|,\d{3}\b|[\d%/]|\s?percent\b|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
     ) ?? [];
   for (const n of numbers) {
     if (!allowed.has(n) && !fromTools.numbers.has(n)) {
