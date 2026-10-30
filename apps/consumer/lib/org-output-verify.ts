@@ -511,7 +511,12 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   const problems: string[] = [];
   const allowed = allowedNumbers(facts);
   // Demo fix T1: words and figures from this turn's tool reads (answer path only).
-  const fromTools = opts?.typedNamesInNoMatch ? toolTextKnown(facts.staffToolEvidence ?? [], facts.priorToolRecords ?? []) : { words: new Set<string>(), numbers: new Set<string>() };
+  // Answer path: the words and figures of this turn's server reads (and earlier turns' signed records,
+  // words only). Draft path (2026-10-30, harness ROOM-11): only the words of company, employer and
+  // organization names this turn's reads returned (orgText), never free text, job titles or figures.
+  const fromTools = opts?.typedNamesInNoMatch
+    ? toolTextKnown(facts.staffToolEvidence ?? [], facts.priorToolRecords ?? [])
+    : { words: new Set((facts.staffToolEvidence ?? []).flatMap((e) => e.orgText ?? []).flatMap((t) => t.toLowerCase().match(/[a-z]{3,}/g) ?? [])), numbers: new Set<string>() };
   // Review S2: tool-text figures are their own set, accepted only as a plain number, never as a rate.
 
   // t.ROY reads and drafts; it cannot send, save, file or book (house build
@@ -579,7 +584,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // "a 2-minute check-in", "by 9am", "the 3rd".
   const numbers =
     text.match(
-      /(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/]|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
+      /(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/]|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m|characters?|chars?|words?)\b|(?:st|nd|rd|th)\b|:\d)/gi
     ) ?? [];
   for (const n of numbers) {
     if (!allowed.has(n) && !fromTools.numbers.has(n)) {
@@ -638,7 +643,6 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     // skipped below (STATE_WORDS). Not swapped out of the text any more, so a
     // person named Georgia Smith is still found (review F4).
     // Demo fix T1: words from this turn's tool reads, and places the staff member typed this turn.
-    for (const w of Array.from(fromTools.words)) known.add(w);
     for (const w of Array.from(typedPlaceWords(userSaid ?? ""))) known.add(w);
     // Places typed earlier in the conversation count too (one message at a time, so no rule spans two messages).
     for (const said of (facts.staffTyped ?? "").split("\n")) for (const w of Array.from(typedPlaceWords(said, { notBeforeQuestion: true }))) known.add(w);
@@ -659,6 +663,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // A person who exists nowhere is a truth problem, not a privacy one: layer 2
   // is given the reach list and judges claims about people. A draft for a
   // participant (no opts) keeps the full check below, unchanged.
+  // Words this turn's server reads returned (see fromTools above), both paths.
+  for (const w of Array.from(fromTools.words)) known.add(w);
   const flagged = new Set<string>();
   if (opts?.typedNamesInNoMatch) {
     const N = normName;

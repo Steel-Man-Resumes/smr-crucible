@@ -152,3 +152,21 @@ describe("review round 2 findings (2026-10-30)", () => {
     assert.deepEqual(check("You could also ask DeShawn.", "", f({ outOfReachNames: ["DeShawn Price"] })), [name("DeShawn")]);
   });
 });
+
+describe("harness ROOM-11 (2026-10-30): a check-in draft may name the participant's own saved employer", () => {
+  it("company words from this turn's read pass on the draft path, free text and job titles do not", async () => {
+    const { projectStaffToolEvidence } = await import("../staff-tool-evidence");
+    const ev = projectStaffToolEvidence("read_participant_overview", {
+      status: "ok", person: { firstName: "Marqus" },
+      applications: [{ jobTitle: "Forklift crew, Marcus Jones", company: "Market Square Distribution (fictional)", status: "saved" }],
+      recentNotes: [{ kind: "call", on: "2026-10-01", author: "Lupe", body: "Tasha from the shelter called." }],
+    })!;
+    const f: OrgFacts = { ...LUPE, staffToolEvidence: [ev] };
+    assert.deepEqual(checkOrgClaimsDeterministic("Hi Marqus, I saw you saved two jobs at Market Square Distribution.", f, ""), []);
+    const bad = checkOrgClaimsDeterministic("Hi Marqus, Marcus and Tasha asked about you.", f, "");
+    assert.ok(bad.includes(name("Marcus")) && bad.includes(name("Tasha")), JSON.stringify(bad));
+  });
+  it("a character count is not a figure", () => {
+    assert.deepEqual(check("Text message (under 320 characters): Hi Jean, checking in."), []);
+  });
+});

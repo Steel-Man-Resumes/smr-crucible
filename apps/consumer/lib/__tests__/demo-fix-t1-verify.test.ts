@@ -217,7 +217,9 @@ describe("T1: the draft path is origin/main's, byte for byte", () => {
   });
 
   it("the tool text a projection adds is new; every field origin had is unchanged", () => {
-    const { toolText, ...rest } = employers;
+    // orgText (2026-10-30) is the second new field: organization names a participant draft may repeat.
+    const { toolText, orgText, ...rest } = employers;
+    assert.ok(orgText && orgText.includes("Eaton Corporation") && !orgText.some((t) => t.includes("Kelly 33")), JSON.stringify(orgText));
     assert.ok(toolText && toolText.some((t) => t.includes("Kelly 33")));
     assert.ok(!toolText!.some((t) => t === "MI"), "the state the staff member asked for is not tool text");
     assert.deepEqual(Object.keys(rest).sort(), ["facts", "labels", "names", "numbers", "phrases", "tool"]);
