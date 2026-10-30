@@ -172,6 +172,11 @@ export async function POST(request: Request) {
   // Full names of the people in reach, server-side only, for resolving a
   // surname the staff member typed (W08). Never put in a prompt.
   let staffPeople: import("@/lib/staff-skill-run").ReachPerson[] = [];
+  // Full names of this organization's people who are NOT in this staff
+  // member's reach (reach "assigned" only). Server-side only, for layer 1 of
+  // the output check (lib/org-output-verify.ts). Never put in a prompt, a
+  // response or a log.
+  let staffOutOfReach: string[] = [];
   let toolOptions: import("@/lib/tools/assistant-tools").AssistantToolOptions = {
     userId: userId ?? null,
     surface: (userId ? "refinery" : "forge") as "refinery" | "forge",
@@ -223,6 +228,16 @@ export async function POST(request: Request) {
         const staff = await (await import("@crucible/core")).getOrgStaff(actor.orgId);
         staffActor = actor;
         staffPeople = cohort.clients.map((c) => ({ id: c.userId, name: c.name }));
+        if (actor.reach === "assigned") {
+          // The same org read with no assignment filter, minus this caseload.
+          // A name that matches someone in reach is never treated as out of reach.
+          const inReach = new Set(cohort.clients.map((c) => c.userId));
+          const inReachNames = new Set(cohort.clients.map((c) => (c.name ?? "").trim().toLowerCase()));
+          const orgWide = await getPartnerCohort(userId, { accessCodeId: actor.orgId });
+          staffOutOfReach = orgWide.clients
+            .filter((c) => !inReach.has(c.userId) && (c.name ?? "").trim() && !inReachNames.has((c.name ?? "").trim().toLowerCase()))
+            .map((c) => (c.name ?? "").trim());
+        }
         context.audience = "org_staff";
         context.org = {
           orgName: actor.orgName,
@@ -470,6 +485,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       // Server-signed lookup records of earlier answers, result lines only (demo fix T1 round 3).
       priorToolRecords: staffPriorRecords,
       staffNames: context.org.staffNames ?? [],
+      outOfReachNames: staffOutOfReach,
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,
       quietDays: context.org.quietDays,

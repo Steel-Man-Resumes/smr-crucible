@@ -49,6 +49,14 @@ export interface OrgFacts {
   /** Staff names in this org, which staff may legitimately mention. */
   staffNames: string[];
   /**
+   * Full names of this organization's people who are NOT in this viewer's
+   * reach (reach "assigned" only; empty when the viewer sees everyone). Built
+   * on the server from the org's own cohort (assistant route). Used ONLY by
+   * layer 1 on the answer path. Never given to the second model, the browser
+   * or a log: knowing who is out of reach is itself out of reach.
+   */
+  outOfReachNames?: string[];
+  /**
    * Name words the staff member typed that the server matched to exactly one
    * person in this viewer's reach (W08: "Valjean" for Jean Valjean). Built
    * from server-side full names, never from the answer, so a name outside
@@ -585,19 +593,65 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     // Places typed earlier in the conversation count too (one message at a time, so no rule spans two messages).
     for (const said of (facts.staffTyped ?? "").split("\n")) for (const w of Array.from(typedPlaceWords(said, { notBeforeQuestion: true }))) known.add(w);
   }
+  // THE ANSWER PATH CHECKS REAL PEOPLE (2026-10-30, Troy's idea after the
+  // 10/28-29 demo rounds). The old rule flagged every capitalized word it
+  // could not account for, so towns, employers, programs and statuses
+  // ("Jackson", "Eastside", "Retention") kept reaching staff as "could not
+  // match", and every fix was one more word on an allow-list. What layer 1
+  // exists to stop is a real person outside this viewer's reach. So on the
+  // answer path a word is a candidate only when it is the first name of
+  // someone in this organization this viewer cannot see, or a full name of
+  // theirs appears. A person who does not exist at all is a truth problem,
+  // not a privacy one: layer 2 is given the reach list and judges claims
+  // about people. A draft for a participant (no opts) keeps the full check
+  // below, unchanged.
+  const answerPath = !!opts?.typedNamesInNoMatch;
+  const outFull = (facts.outOfReachNames ?? []).map((n) => n.trim()).filter(Boolean);
+  const outFirst = new Set(outFull.map((n) => n.split(/\s+/)[0].toLowerCase()));
+  // A surname alone is a candidate only when that person's first name is in
+  // the answer or in what the staff member typed ("Michael Shaw ... and Shaw
+  // starts Monday"). Alone it is too often a town or a company ("Jackson").
+  const context = `${text}\n${userSaid ?? ""}`.toLowerCase();
+  const outLast = new Set(
+    outFull
+      .map((n) => n.split(/\s+/))
+      .filter((p) => p.length >= 2 && new RegExp(`\\b${p[0].toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(context))
+      .map((p) => p[p.length - 1].toLowerCase())
+  );
+
+  const flagged = new Set<string>();
+  // A full name of someone out of reach, anywhere in the answer (sentence
+  // start included), flagged once as the whole name, even when their first
+  // name is shared with someone in reach. Every occurrence is looked at: the
+  // name the staff member typed, repeated only to say the person is not on
+  // their list, is allowed, and a later sentence making a claim is not.
+  if (answerPath) {
+    for (const full of outFull) {
+      const parts = full.split(/\s+/);
+      if (parts.length < 2) continue;
+      const first = parts[0];
+      const re = new RegExp(`\\b${parts.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")}\\b`, "gi");
+      for (const hit of text.matchAll(re)) {
+        if (typed.has(first.toLowerCase()) && NO_MATCH_CLAUSE.test(clauseAt(text, hit.index ?? 0))) continue;
+        if (newPerson.has(first.toLowerCase()) && prefillSentenceOk(sentenceAt(text, hit.index ?? 0), newPerson)) continue;
+        for (const part of hit[0].split(/\s+/)) flagged.add(part);
+        problems.push(`I could not match "${hit[0]}" to anyone on your list`);
+        break;
+      }
+    }
+  }
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.
-  const flagged = new Set<string>();
   for (const m of text.matchAll(/(?<=[a-z,;:]\s)[A-Z][a-z]{2,}/g)) {
     const c = m[0];
     const low = c.toLowerCase();
     if (STOPWORDS.has(low) || known.has(low) || flagged.has(c)) continue;
+    if (answerPath && !outFirst.has(low) && !outLast.has(low)) continue;
     if (typed.has(low) && NO_MATCH_CLAUSE.test(clauseAt(text, m.index ?? 0))) continue;
     if (newPerson.has(low) && prefillSentenceOk(sentenceAt(text, m.index ?? 0), newPerson)) continue;
     flagged.add(c);
     problems.push(`I could not match "${c}" to anyone on your list`);
   }
-
   return problems;
 }
 

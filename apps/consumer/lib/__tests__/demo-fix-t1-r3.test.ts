@@ -90,7 +90,7 @@ describe("T1 round 3: what must still be flagged", () => {
       const msgs = [{ role: "user", content: "hi" }, { role: "assistant", content: "x", annotations: [{ [TOOL_RECORD_KEY]: list }] }, { role: "user", content: "what can you do?" }];
       const prior = priorToolRecordResults(msgs, check);
       assert.ok(!prior.some((r) => r.includes("Michael")), JSON.stringify(prior));
-      assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", { ...LUPE, priorToolRecords: prior }, "", answer), [name("Michael"), name("Shaw")]);
+      assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", { ...LUPE, priorToolRecords: prior }, "", answer), [name("Michael Shaw")]);
     }
   });
 
@@ -98,7 +98,7 @@ describe("T1 round 3: what must still be flagged", () => {
     const msgs = conversation("find_employers", { state: "MI", q: "Michael Shaw" }, { ...EMPLOYERS_RESULT, q: "Michael Shaw" }, ["find employers for Michael Shaw", "what can you do?"]);
     const prior = priorToolRecordResults(msgs, check);
     assert.ok(!prior.some((r) => r.includes("Michael")), JSON.stringify(prior));
-    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", { ...LUPE, priorToolRecords: prior }, "what can you do?", answer), [name("Michael"), name("Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", { ...LUPE, priorToolRecords: prior }, "what can you do?", answer), [name("Michael Shaw")]);
   });
 
   it("the newest message and user messages never count as records", () => {
@@ -109,7 +109,7 @@ describe("T1 round 3: what must still be flagged", () => {
 
   it("Michael Shaw typed as a person still flags, beside a state name and a station word", () => {
     const facts: OrgFacts = { ...LUPE, staffTyped: "talk to Michael Shaw\nwhat can you do?" };
-    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw in Michigan is at Find work.", facts, "what can you do?", answer), [name("Michael"), name("Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw in Michigan is at Find work.", facts, "what can you do?", answer), [name("Michael Shaw")]);
   });
 
   it("the draft path does not mask state names or read records", () => {

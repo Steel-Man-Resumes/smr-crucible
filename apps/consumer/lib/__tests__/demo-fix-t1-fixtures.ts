@@ -10,6 +10,9 @@ import type { OrgFacts } from "../org-output-verify";
 export const LUPE: OrgFacts = {
   caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
   visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+  // 2026-10-30: the answer path flags only people of this org outside reach, so the
+  // out-of-reach people these tests name are listed (Michael Shaw, Priya, Mason).
+  outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
 };
 
 export const EMPLOYERS_RESULT = {

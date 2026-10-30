@@ -49,15 +49,18 @@ describe("T1: the live false warnings are gone on the answer path", () => {
     // A failed read gives nothing.
     const failed = createStaffEvidenceCollector();
     failed.record("find_employers", { ...EMPLOYERS_RESULT, status: "unavailable" });
-    assert.ok(checkOrgClaimsDeterministic(ANSWERS.jackson, withTools(...failed.items), "Jackson, Michigan.", answer).includes(name("Hydraulics")));
+    // 2026-10-30: a failed read lends no words, and layer 1 no longer reads employer words as people
+    // on the answer path; layer 2 gets no evidence from a failed read and judges the claims.
+    assert.deepEqual(checkOrgClaimsDeterministic(ANSWERS.jackson, withTools(...failed.items), "Jackson, Michigan.", answer).filter((p) => p.includes("Hydraulics")), []);
+    assert.ok(checkOrgClaimsDeterministic(ANSWERS.jackson, withTools(...failed.items), "Jackson, Michigan.").includes(name("Hydraulics")), "draft path: still checked");
   });
 });
 
 describe("T1: what must still be flagged", () => {
   it("an out-of-reach person not in the tool output and not typed as a place", () => {
     const said = "Find employers in Jackson that hire people with records";
-    assert.deepEqual(checkOrgClaimsDeterministic("Jackson said Michael Shaw called on Oct 27.", withTools(employers), said, answer), [name("Michael"), name("Shaw")]);
-    assert.deepEqual(checkOrgClaimsDeterministic("In Jackson, Michael Shaw called on Oct 27.", withTools(employers), said, answer), [name("Michael"), name("Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("Jackson said Michael Shaw called on Oct 27.", withTools(employers), said, answer), [name("Michael Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("In Jackson, Michael Shaw called on Oct 27.", withTools(employers), said, answer), [name("Michael Shaw")]);
   });
 
   it("a name the staff member typed into the search box is not tool output", () => {
@@ -66,13 +69,13 @@ describe("T1: what must still be flagged", () => {
     // find_local_help echoes the place asked for: that is not tool text either.
     const help = projectStaffToolEvidence("find_local_help", { status: "ok", place: { state: "MI", city: "Michael Shaw" }, resources: [{ organization: "Jackson Food Share", city: "Jackson" }] })!;
     assert.deepEqual(help.toolText, ["ok", "Jackson Food Share", "Jackson"]);
-    assert.deepEqual(checkOrgClaimsDeterministic("I looked, and Michael Shaw starts Monday.", withTools(echoed), "find employers for Michael Shaw", answer), [name("Michael"), name("Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I looked, and Michael Shaw starts Monday.", withTools(echoed), "find employers for Michael Shaw", answer), [name("Michael Shaw")]);
   });
 
   it("a person after to or from is not a place, and a possessive is not a place", () => {
     for (const said of ["write to Michael Shaw", "a note from Michael Shaw", "anything in Michael Shaw's file", "talk to Michael Shaw, ok?"]) {
       assert.deepEqual([...typedPlaceWords(said)], [], said);
-      assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", LUPE, said, answer), [name("Michael"), name("Shaw")], said);
+      assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", LUPE, said, answer), [name("Michael Shaw")], said);
     }
     assert.deepEqual([...typedPlaceWords("employers at Lansing, MI")], ["lansing"]);
     assert.deepEqual([...typedPlaceWords("jobs near battle creek")], ["battle", "creek"]);
@@ -102,12 +105,13 @@ describe("T1 follow-up: places typed earlier in the conversation", () => {
   it("Lansing typed two turns earlier, then a turn with no tool read: no flag", () => {
     const facts: OrgFacts = { ...LUPE, staffTyped: typed("find employers in Lansing that hire people with records", "put my tasks first on Today", "what can you do?") };
     assert.deepEqual(checkOrgClaimsDeterministic("I can run a real Lansing search if you want one, and you can press Undo.", facts, "what can you do?", answer), []);
-    assert.deepEqual(checkOrgClaimsDeterministic("I can run a real Lansing search if you want one.", LUPE, "what can you do?", answer), [name("Lansing")], "without the earlier message it is still checked");
+    // 2026-10-30: a town is never read as a person on the answer path, earlier message or not.
+    assert.deepEqual(checkOrgClaimsDeterministic("I can run a real Lansing search if you want one.", LUPE, "what can you do?", answer), []);
   });
 
   it("Michael Shaw typed earlier as a person still flags", () => {
     const facts: OrgFacts = { ...LUPE, staffTyped: typed("talk to Michael Shaw", "find employers in Lansing", "what can you do?") };
-    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job in Lansing.", facts, "what can you do?", answer), [name("Michael"), name("Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job in Lansing.", facts, "what can you do?", answer), [name("Michael Shaw")]);
   });
 
   it("the draft path ignores earlier messages", () => {
@@ -121,11 +125,16 @@ describe("T1 round 2 (review S1 to S4)", () => {
     const leaky = JSON.parse(JSON.stringify(OVERVIEW_RESULT));
     leaky.recentNotes.push({ author: "Lupe", on: "2026-10-26", body: "Rode to the job fair with Marcus Delgado from the Tuesday group; his PO Dana Whitfield says 14 people from his unit got hired. Address 1234 Main St." });
     const today = { status: "ok", readAt: "2026-10-28T20:00:00Z", asOf: "2026-10-28", items: [{ section: "tasks", firstName: "Jean", reason: "Call Rosa Quintero back about the Ogden shift", when: "2026-10-29", action: "Open" }], total: 1 };
-    const facts = withTools(projectStaffToolEvidence("read_participant_overview", leaky)!, projectStaffToolEvidence("read_today_queue", today)!);
-    assert.ok(checkOrgClaimsDeterministic("Marcus Delgado also got hired at Ogden last week.", facts, "", answer).includes(name("Delgado")));
-    const po = checkOrgClaimsDeterministic("Jean's PO, Dana Whitfield, wants him at the Ogden shift.", facts, "", answer);
+    // 2026-10-30: Marcus Delgado is in this org but not Lupe's: flagged even though a note she can see names him.
+    const facts: OrgFacts = { ...withTools(projectStaffToolEvidence("read_participant_overview", leaky)!, projectStaffToolEvidence("read_today_queue", today)!), outOfReachNames: ["Marcus Delgado"] };
+    assert.ok(checkOrgClaimsDeterministic("Marcus Delgado also got hired at Ogden last week.", facts, "", answer).includes(name("Marcus Delgado")));
+    assert.ok(checkOrgClaimsDeterministic("Jean saw Marcus at the fair.", facts, "", answer).includes(name("Marcus")));
+    // People outside the organization (a PO, an employer contact) are not anyone's caseload: layer 1 leaves
+    // them to layer 2 on the answer path, and the draft path still checks them.
+    assert.deepEqual(checkOrgClaimsDeterministic("Jean's PO, Dana Whitfield, wants him at the Ogden shift.", facts, "", answer), []);
+    const po = checkOrgClaimsDeterministic("Jean's PO, Dana Whitfield, wants him at the Ogden shift.", facts, "");
     assert.ok(po.includes(name("Dana")) && po.includes(name("Whitfield")), JSON.stringify(po));
-    assert.ok(checkOrgClaimsDeterministic("Rosa Quintero said the Ogden shift is open to Jean.", facts, "", answer).includes(name("Quintero")));
+    assert.ok(checkOrgClaimsDeterministic("Rosa Quintero said the Ogden shift is open to Jean.", facts, "").includes(name("Quintero")));
     assert.ok(checkOrgClaimsDeterministic("Of your caseload, 1234 people got hired.", facts, "", answer).includes(fig("1234")));
   });
 
@@ -148,8 +157,8 @@ describe("T1 round 2 (review S1 to S4)", () => {
     assert.deepEqual([...typedPlaceWords("Michael Shaw, ME")], []);
     assert.deepEqual([...typedPlaceWords("Lansing, Michigan")], ["lansing"]);
     const facts: OrgFacts = { ...LUPE, staffTyped: "any news in Michael Shaw?\nwhat can you do?" };
-    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", facts, "what can you do?", answer), [name("Michael"), name("Shaw")]);
-    assert.deepEqual(checkOrgClaimsDeterministic("I found Michael Shaw on your list; he was hired.", { ...LUPE, staffTyped: "talk to Michael Shaw, OK?" }, "", answer), [name("Michael"), name("Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", facts, "what can you do?", answer), [name("Michael Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I found Michael Shaw on your list; he was hired.", { ...LUPE, staffTyped: "talk to Michael Shaw, OK?" }, "", answer), [name("Michael Shaw")]);
   });
 });
 

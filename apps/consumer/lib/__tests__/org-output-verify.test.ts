@@ -15,6 +15,9 @@ const FACTS: OrgFacts = {
   unassigned: 0,
   visibleNames: ["Terrell", "Wes", "Colton"],
   staffNames: ["Russ", "Alma", "Dana"],
+  // 2026-10-30: the answer path flags only people of this org outside reach, so the
+  // out-of-reach people these tests name are listed (Michael Shaw, Priya, Mason).
+  outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
 };
 
 const problems = (t: string) => checkOrgClaimsDeterministic(t, FACTS);
@@ -79,14 +82,14 @@ describe("people must be inside reach", () => {
     assert.deepEqual(checkOrgClaimsDeterministic("I can't add people, but Michael Shaw isn't on your list yet.", FACTS, said, answer), []);
     // The same typed name in any other sentence is still a person outside reach.
     const claim = checkOrgClaimsDeterministic("I can help, and Michael Shaw got the job last week.", FACTS, said, answer);
-    assert.deepEqual(claim, ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list']);
+    assert.deepEqual(claim, ['I could not match "Michael Shaw" to anyone on your list']);
     // Curly apostrophes and the "I couldn't find" form are the same statement.
     assert.deepEqual(checkOrgClaimsDeterministic("Michael Shaw isn\u2019t on your list yet.", FACTS, said, answer), []);
     assert.deepEqual(checkOrgClaimsDeterministic("Sorry, I couldn't find Michael Shaw on your list.", FACTS, said, answer), []);
     // A claim riding in the same sentence as the no-match phrase is still caught (review round 2).
     assert.equal(checkOrgClaimsDeterministic("Michael isn't on your list, but he got the job at the plant.", FACTS, "is michael on my list", answer).length, 0, "sentence-initial name and a pronoun claim: layer 1 never parsed those; layer 2 checks the claim");
     assert.ok(checkOrgClaimsDeterministic("I couldn't find a listing nearby, and Michael was hired last week.", FACTS, said, answer).some((p) => p.includes('"Michael"')));
-    assert.ok(checkOrgClaimsDeterministic("I checked, and Michael Shaw isn't on your list but Michael Shaw got the job.", FACTS, said, answer).some((p) => p.includes('"Michael"')));
+    assert.ok(checkOrgClaimsDeterministic("I checked, and Michael Shaw isn't on your list but Michael Shaw got the job.", FACTS, said, answer).some((p) => p.includes('"Michael Shaw"')));
     // A draft for a participant never gets the allowance (review 2026-10-27).
     assert.equal(checkOrgClaimsDeterministic("Good news, and Michael Shaw isn't on your list.", FACTS, said).length, 2);
     // An untyped name is flagged with the plain wording.
@@ -123,6 +126,7 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
   const LUPE: OrgFacts = {
     caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
     visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+    outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
   };
   const answer = { typedNamesInNoMatch: true };
   const said = "Prep me for my next conversation with Jean Valjean.";
@@ -158,15 +162,19 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
   it("(a) a surname the server resolved to someone in reach is not flagged", () => {
     const resolved: OrgFacts = { ...LUPE, resolvedNames: ["Valjean"] };
     assert.deepEqual(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", resolved, said, answer), []);
-    assert.ok(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", LUPE, said, answer).some((p) => p.includes('"Valjean"')), "without the server match it is still checked");
+    // 2026-10-30: on the answer path a word that matches nobody out of reach is not flagged (layer 2
+    // judges people); the draft path still checks it without the server match.
+    assert.deepEqual(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", LUPE, said, answer), []);
+    assert.ok(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", LUPE, said).some((p) => p.includes('"Valjean"')), "draft path: still checked");
   });
 
   it("REGRESSION: an out-of-reach name is still flagged beside a date and a job word, on both paths", () => {
     const t = "Jean met Michael Shaw on Oct 27 for a Forklift Driver opening.";
-    const expected = ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list'];
+    const expected = ['I could not match "Michael Shaw" to anyone on your list'];
     assert.deepEqual(checkOrgClaimsDeterministic(t, { ...LUPE, resolvedNames: ["Valjean"] }, said, answer), expected);
+    // The draft path is unchanged (2026-10-30): it still flags each unknown word.
     const draft = checkOrgClaimsDeterministic(t, LUPE, said);
-    for (const e of expected) assert.ok(draft.includes(e), `draft path: ${e}`);
+    for (const e of ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list']) assert.ok(draft.includes(e), `draft path: ${e}`);
     // A name right after a date is still mid-sentence once the date is read as a date.
     assert.deepEqual(
       checkOrgClaimsDeterministic("Jean has an interview on Oct 27 and Michael set it up for him.", LUPE, said, answer),
@@ -185,6 +193,7 @@ describe("W08 review round 2", () => {
   const LUPE: OrgFacts = {
     caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
     visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+    outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
   };
   const answer = { typedNamesInNoMatch: true };
 
@@ -220,6 +229,7 @@ describe("W08 review round 3: dates never hide a count; drafts match origin/main
   const LUPE: OrgFacts = {
     caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
     visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+    outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
   };
   const answer = { typedNamesInNoMatch: true };
   const fig = (n: string) => `the figure "${n}" is not one of this caseload's numbers`;
@@ -272,6 +282,7 @@ describe("W08 review round 4: dates as t.ROY writes them", () => {
   const LUPE: OrgFacts = {
     caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
     visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+    outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
   };
   const answer = { typedNamesInNoMatch: true };
 
