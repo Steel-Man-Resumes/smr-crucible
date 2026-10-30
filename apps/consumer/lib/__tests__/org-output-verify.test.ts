@@ -261,14 +261,16 @@ describe("W08 review round 3: dates never hide a count; drafts match origin/main
     ["In October 22 graduates got jobs.", [fig("22")]],
     ["In September 19 young adults enrolled.", [fig("19")]],
     ["Since Sept 1, 1800 meals were served.", [fig("1800")]],
-    ["Jean was last active Sun Oct 25 at noon.", [fig("25")]],
+    // 2026-10-30 (review N10-4): written dates are read as dates on the draft path too, so these
+    // date-only flags are gone on purpose; a name after a date is now checked as mid-sentence.
+    ["Jean was last active Sun Oct 25 at noon.", []],
     ["Jean joined October 25, 2026.", []],
-    ["Jean was active Oct 31 and Nov 1.", [fig("31")]],
+    ["Jean was active Oct 31 and Nov 1.", []],
     ["Jean was last active Oct 24 at 6 PM.", []],
     ["Jean met Michael Shaw on Oct 27 about a Forklift Driver opening.", [fig("27"), 'I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list', 'I could not match "Forklift" to anyone on your list', 'I could not match "Driver" to anyone on your list']],
     ["Hi Jean, I saw the Forklift Driver opening you saved.", ['I could not match "Forklift" to anyone on your list', 'I could not match "Driver" to anyone on your list']],
-    ["Jean was last active 2026-10-25 by his sharing.", [fig("2026")]],
-    ["Oct 27 Marcus called about 27 people.", [fig("27"), fig("27")]],
+    ["Jean was last active 2026-10-25 by his sharing.", []],
+    ["Oct 27 Marcus called about 27 people.", [fig("27"), 'I could not match "Marcus" to anyone on your list']],
   ];
   it("parity: the draft path gives origin/main's output for every sentence", () => {
     for (const [t, expected] of ORIGIN_DRAFT) assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, ""), expected, t);

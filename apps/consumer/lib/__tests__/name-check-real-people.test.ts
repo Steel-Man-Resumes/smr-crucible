@@ -20,7 +20,7 @@ describe("answer path: places, employers, agencies and statuses are not people",
     "Here are employers near Kalamazoo, Battle Creek and Grand Rapids that hire people with records.",
     "For housing help in Marquette, try the Upper Peninsula offices; MSHDA lists them too.",
     "Your Offender Success contact in Region 4 works with MDOC parole agents in Muskegon.",
-    "Eaton Corporation in Jackson runs Hydraulics and Aerospace plants, and Kelly Services runs Kelly 33.",
+    "Eaton Corporation in Jackson runs Hydraulics and Aerospace plants, and Kelly Services runs a second-chance program.",
     "Jean moved from Interviewing to Offered, and Marqus is still at Applied.",
     "The Eastside Fish Fry and Grill listing in Lansing was checked Oct 22.",
     "Michigan Works in Traverse City and Goodwill in Flint both list Second Chance hiring.",
@@ -249,5 +249,33 @@ describe("staff prompt review (2026-10-30): crisis lines and years are not figur
   it("F8: a year after a time word is a date", () => {
     for (const t of ["In 2026 the team grew.", "Since 2024, Jean has worked nights.", "This covers FY 2026.", "From 2025 to 2026 the program ran twice."]) assert.deepEqual(check(t), [], t);
     assert.ok(check("2026 people got hired.").some((p) => p.includes('"2026"')));
+  });
+});
+
+describe("review round 10 findings (2026-10-30)", () => {
+  const fig = (n: string) => `the figure "${n}" is not one of this caseload's numbers`;
+  it("N10-1: a help line followed by a count is a count", () => {
+    for (const [t, n] of [["Text 211 participants about Friday.", "211"], ["Call 988 clients this week.", "988"], ["You could call 911 people today.", "911"], ["Call or text 211 of your participants.", "211"]] as const) assert.ok(check(t).includes(fig(n)), t);
+  });
+  it("N10-2: a year followed by a count noun, or a short range end, is a count", () => {
+    for (const [t, n] of [["For 2026 participants we have a plan.", "2026"], ["By 2030 hires the program doubles.", "2030"], ["Of 2049 applicants, 12 were hired.", "2049"], ["Placements grew from 2025 to 40 this year.", "40"], ["Hires went from 2024 to 35.", "35"]] as const) assert.ok(check(t).includes(fig(n)), t);
+    for (const t of ["The 2025-26 cohort starts in January.", "From 2025 to 2026 the program ran twice.", "In 2026."]) assert.deepEqual(check(t), [], t);
+  });
+  it("N10-3: the exemptions never change name results", () => {
+    const d = checkOrgClaimsDeterministic("Since 2024 Eaton has hired from the program.", LUPE, "");
+    assert.ok(!d.some((p) => p.includes("Eaton")), JSON.stringify(d));
+    assert.ok(checkOrgClaimsDeterministic("Good news, Dial 911 Meijer!", LUPE, "").some((p) => p.includes('"Dial"')));
+  });
+  it("N10-4: a number before a period or a comma is checked", () => {
+    for (const [t, n] of [["Your caseload has 17.", "17"], ["Total hired this year: 23.", "23"], ["Hires: 23, placements: 41.", "41"]] as const) assert.ok(check(t).includes(fig(n)), t);
+    for (const t of ["About 3.5 hours.", "Your 1,000-mile drive is long.", "Region 9 covers the Upper Peninsula.", "Go to Room 204, then Step 3."]) assert.deepEqual(check(t), [], t);
+  });
+});
+
+describe("harness TRAP-NUMBER-02 (2026-10-30)", () => {
+  it("a supported rate written as 'percent' is not also flagged as a figure", () => {
+    const f3: OrgFacts = { caseload: 3, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jean", "Marqus", "Circe"], staffNames: ["Lupe"], orgName: "Southside Bridge" };
+    assert.deepEqual(check("Right now all 3 people on your caseload were active in the last two weeks. That's 100 percent, 3 of 3, and 0 are not active.", "", f3), []);
+    assert.ok(check("That's 62 percent of your caseload.", "", f3).some((p) => p.includes("62")));
   });
 });

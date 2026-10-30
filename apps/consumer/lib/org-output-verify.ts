@@ -104,7 +104,7 @@ export interface OrgVerdict {
   modelChecked: boolean;
 }
 
-/** Numbers that are always safe: years, small ordinals in prose, percentages of nothing. */
+/** Numbers that are always safe: small numbers in prose. (Years are handled by the dated-year rule.) */
 const ALWAYS_FINE = new Set(["0", "1", "2", "3", "4", "5", "6", "7", "10", "12", "14", "24", "30"]);
 
 /**
@@ -585,13 +585,27 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // A template's blanks are not claims. "[Your Name]" names nobody and "[X] min"
   // counts nothing; both were being reported to the reader as unsupported.
   text = text.replace(/\[[^\]\n]{0,80}\]/g, " ");
-  // Crisis and help lines are not counts (staff prompt review B1, 2026-10-30): 911, 988 and 211 next to
-  // call, text or dial, or followed by "(call or text)", are taken out before the number scan.
-  // "211 people were served" stays a figure.
-  text = text.replace(/\b(?:call(?:\s+or\s+text)?|text|dial)\s+(?:911|988|211)\b|\b(?:911|988|211)\b(?=\s*\((?:call|text))/gi, " a help line ");
-  // A year after a time word is a date, not a count (staff prompt review F8): "In 2026", "since 2024",
-  // "FY 2026", "2025-2026". "2026 people" stays a figure.
-  text = text.replace(/\b(?:in|since|during|by|for|through|from|until|of|FY|fiscal year)\s+(?:20[0-4]\d)(?:\s*(?:-|to|through)\s*(?:20)?[0-4]\d)?\b/gi, (m) => m.replace(/\d+/g, "the year"));
+  // Crisis and help lines are not counts (staff prompt review B1, 2026-10-30; review N10-1, N10-3): 911,
+  // 988 and 211 after call / call or text / text / dial, only when the sentence ends or a joining word
+  // follows ("call 911.", "call or text 988 or", "dial 211 for"), or before "(call or text". The digits
+  // become HELPLINE (all capitals, so the name check reads nothing new); the verb stays.
+  // "Text 211 participants" and "211 people were served" stay figures.
+  text = text
+    .replace(/\b(call(?:\s+or\s+text)?|text|dial)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any|anytime|now|today|24\/7)\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
+    .replace(/\b(?:911|988|211)\b(?=\s*\((?:call|text))/gi, "HELPLINE");
+  // A year after a time word is a date, not a count (staff prompt review F8; review N10-2, N10-3): "In
+  // 2026", "since 2024", "FY 2026", "2025-26", "from 2025 to 2026". Never when a count noun follows
+  // ("for 2026 participants"); a two-digit range end only attached ("2025-26"); a "to/through" range
+  // only with a full year ("from 2025 to 40" keeps 40). Digits become YEAR (all capitals).
+  text = text.replace(
+    /\b(in|since|during|by|for|through|from|until|of|FY|fiscal year)(\s+)(20[0-4]\d)((?:-\d{2}(?!\d))|(?:\s+(?:to|through)\s+20[0-4]\d))?\b(?!\s*(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served|of)\b)/gi,
+    (_m, head: string, sp: string, _y: string, range: string | undefined) => `${head}${sp}YEAR${range ? range.replace(/\d+/g, "YEAR") : ""}`
+  );
+  // A written year range is a date wherever it stands ("the 2025-26 cohort", "2025-2026"), unless a count
+  // noun follows ("2024-45 participants").
+  text = text.replace(/\b20[0-4]\d-(?:20[0-4]\d|\d{2})(?!\d)(?!\s*(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served|of)\b)/gi, "YEAR-YEAR");
+  // A number that labels a place or a step is not a count ("Region 9.", "Room 204", "Step 3", "Exit 12").
+  text = text.replace(/\b(Region|Room|Suite|Unit|Floor|Building|Step|Station|Exit|Highway|Route|Grade|Level|Tier|Chapter|Section|Form|Line|Bus|Ward|District|Zone|Apt|Apartment)(\s+)\d{1,4}\b/g, (_m, w: string, sp: string) => `${w}${sp}LABELNUM`);
   // A phone number is contact detail, not a count (review C4 B1): skip it
   // rather than letting its digit groups into the allowed numbers.
   text = text.replace(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}\b/g, " ");
@@ -625,7 +639,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
 
   // A written date is not a count (W08). Replaced with words, not a blank, so a
   // capitalized name right after it is still read as mid-sentence and checked.
-  if (opts?.typedNamesInNoMatch) text = text.replace(ANSWER_DATE, "the date");
+  // Both paths since 2026-10-30 (review N10-4): once a number before a period or comma is checked, a
+  // participant draft with "Your interview is Oct 27." would be held back on its date.
+  text = text.replace(ANSWER_DATE, "the date");
 
   // A length limit is not a headcount, but only in limit wording ("under 320 characters", "up to 50
   // words", "a 160-character text") or at 100 and above (review R4-6: "17 characters got hired" stays a figure).
@@ -633,6 +649,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     .replace(/\b(?:under|up to|max(?:imum)?|limit(?: of)?|less than|fewer than|at most|no more than)\s+\d{1,5}\s*(?:characters?|chars?|words?)\b/gi, " ")
     .replace(/\b\d{1,5}-(?:characters?|chars?|words?)\b/gi, " ")
     .replace(/\b\d{3,5}\s*(?:characters?|chars?|words?)\b/gi, " ");
+  // A rate written "100 percent" is checked by the rate rule above, never again as a figure (harness
+  // TRAP-NUMBER-02: "That's 100 percent, 3 of 3" was flagged).
   // Every standalone integer must be one we can account for. Money, dates and
   // percentages are skipped -- they are reported elsewhere and are not the
   // class of claim that gets copied into a headcount.
@@ -640,7 +658,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // "a 2-minute check-in", "by 9am", "the 3rd".
   const numbers =
     text.match(
-      /(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/]|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
+      /(?<![$\d.,%/-])\b\d{1,4}\b(?!\.\d|,\d{3}\b|[\d%/]|\s?percent\b|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
     ) ?? [];
   for (const n of numbers) {
     if (!allowed.has(n) && !fromTools.numbers.has(n)) {
