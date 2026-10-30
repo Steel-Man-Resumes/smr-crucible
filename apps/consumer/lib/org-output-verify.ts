@@ -297,7 +297,11 @@ function prefillSentenceOk(sentence: string, newPerson: ReadonlySet<string>): bo
   if (!m) return false;
   const name = m.slice(1).find((g) => g !== undefined);
   if (!name) return false;
-  return name.split(/[\s'\u2019-]+/).filter(Boolean).every((w) => newPerson.has(w.toLowerCase()) || NAME_PARTICLES.has(w));
+  // A token passes whole ("O'Brien" by its key, review R4-4) or piece by piece, as before.
+  const keys = new Set(Array.from(newPerson).map(nameKey));
+  return name.split(/\s+/).filter(Boolean).every((t) =>
+    NAME_PARTICLES.has(t) || newPerson.has(t.toLowerCase()) || keys.has(nameKey(t)) ||
+    t.split(/['\u2019-]+/).filter(Boolean).every((w) => newPerson.has(w.toLowerCase()) || NAME_PARTICLES.has(w)));
 }
 
 /** The whole sentence (or line) of `text` around index `i`. The prefill allowance needs the whole sentence, not one clause. */
@@ -370,6 +374,11 @@ export function normName(w: string): string {
   return w.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
+/** A whole name token as one key, apostrophes and hyphens dropped ("D'Andre" is "dandre"). Review R4-4. */
+function nameKey(w: string): string {
+  return normName(w).replace(/[^\p{L}]/gu, "");
+}
+
 /**
  * The words of a text, normalized, plus spelled-out names joined: letters split
  * by dashes or dots inside one word ("C-e-c-i"), and runs of single-letter
@@ -397,14 +406,18 @@ function nameWords(t: string): string[] {
 export function conversationWords(messages: readonly unknown[]): string[] {
   // Every string anywhere in the messages: content, parts, toolInvocations,
   // attachments (review R3-2: the model's input is built from parts too).
+  // Newest message first, capped by total characters, so a long tool-heavy
+  // session never drops the latest names (review R4-3). No depth limit: a
+  // request body is plain JSON.
   const texts: string[] = [];
-  const walk = (v: unknown, depth: number): void => {
-    if (depth > 8 || texts.length > 5000) return;
-    if (typeof v === "string") texts.push(v);
-    else if (Array.isArray(v)) for (const x of v) walk(x, depth + 1);
-    else if (v && typeof v === "object") for (const x of Object.values(v as Record<string, unknown>)) walk(x, depth + 1);
+  let chars = 0;
+  const walk = (v: unknown): void => {
+    if (chars > 2_000_000) return;
+    if (typeof v === "string") { texts.push(v); chars += v.length; }
+    else if (Array.isArray(v)) for (const x of v) walk(x);
+    else if (v && typeof v === "object") for (const x of Object.values(v as Record<string, unknown>)) walk(x);
   };
-  walk(messages, 0);
+  for (let i = messages.length - 1; i >= 0; i--) walk(messages[i]);
   return Array.from(new Set(nameWords(texts.join("\n"))));
 }
 
@@ -413,6 +426,14 @@ const PLACE_AFTER = /^(?:\s+(?:County|City|Township|Parish|Bank|Street|St\b|Aven
 
 const STATE_CODE_AFTER = new RegExp(`^,\\s*(?:${US_STATE_CODES})\\b`);
 const STATE_NAME_AFTER = new RegExp(`^,\\s*(?:${US_STATE_NAMES})\\b`, "i");
+/**
+ * Like stateAfter, but a state followed by another capitalized word is an
+ * organization ("Ceci, Michigan Works can help"), not a town's state (review R4-7).
+ */
+const townState = (after: string): boolean => {
+  const m = after.match(STATE_CODE_AFTER) ?? after.match(STATE_NAME_AFTER);
+  return !!m && !/^\s+\p{Lu}/u.test(after.slice(m[0].length));
+};
 /** True when `after` starts with a comma and a US state ("Jackson, MI", "Jackson, Michigan"). */
 const stateAfter = (after: string) => STATE_CODE_AFTER.test(after) || STATE_NAME_AFTER.test(after);
 
@@ -520,7 +541,18 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // organization names this turn's reads returned (orgText), never free text, job titles or figures.
   const fromTools = opts?.typedNamesInNoMatch
     ? toolTextKnown(facts.staffToolEvidence ?? [], facts.priorToolRecords ?? [])
-    : { words: new Set((facts.staffToolEvidence ?? []).flatMap((e) => e.orgText ?? []).flatMap((t) => t.toLowerCase().match(/[a-z]{3,}/g) ?? [])), numbers: new Set<string>() };
+    : { words: new Set<string>(), numbers: new Set<string>() };
+  // Draft path (harness ROOM-11, review R4-5): an organization name this turn's reads returned is removed
+  // from the draft as a whole phrase, with a parenthetical and a trailing LLC/Inc/Corp/Co dropped
+  // ("Market Square Distribution (fictional)" matches "Market Square Distribution"). Never loose words:
+  // "Ceci Ayala Cleaning LLC" removes that phrase, not "Ceci" or "Ayala".
+  if (!opts?.typedNamesInNoMatch) {
+    const cores = (facts.staffToolEvidence ?? []).flatMap((e) => e.orgText ?? [])
+      .map((o) => o.replace(/\([^)]*\)/g, " ").replace(/[,.]?\s+(?:LLC|L\.L\.C\.|Inc|Corp|Co|Ltd)\.?\s*$/i, "").replace(/\s+/g, " ").trim())
+      .filter((o) => o.length >= 3)
+      .sort((a, b) => b.length - a.length);
+    for (const core of cores) text = text.replace(new RegExp(`(?<![A-Za-z])${core.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/ /g, "\\s+")}(?![A-Za-z])`, "gi"), " ");
+  }
   // Review S2: tool-text figures are their own set, accepted only as a plain number, never as a rate.
 
   // t.ROY reads and drafts; it cannot send, save, file or book (house build
@@ -581,6 +613,12 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // capitalized name right after it is still read as mid-sentence and checked.
   if (opts?.typedNamesInNoMatch) text = text.replace(ANSWER_DATE, "the date");
 
+  // A length limit is not a headcount, but only in limit wording ("under 320 characters", "up to 50
+  // words", "a 160-character text") or at 100 and above (review R4-6: "17 characters got hired" stays a figure).
+  text = text
+    .replace(/\b(?:under|up to|max(?:imum)?|limit(?: of)?|less than|fewer than|at most|no more than|about|around)\s+\d{1,5}\s*(?:characters?|chars?|words?)\b/gi, " ")
+    .replace(/\b\d{1,5}-(?:characters?|chars?|words?)\b/gi, " ")
+    .replace(/\b\d{3,5}\s*(?:characters?|chars?|words?)\b/gi, " ");
   // Every standalone integer must be one we can account for. Money, dates and
   // percentages are skipped -- they are reported elsewhere and are not the
   // class of claim that gets copied into a headcount.
@@ -588,7 +626,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // "a 2-minute check-in", "by 9am", "the 3rd".
   const numbers =
     text.match(
-      /(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/]|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m|characters?|chars?|words?)\b|(?:st|nd|rd|th)\b|:\d)/gi
+      /(?<![$\d.,%/-])\b\d{1,4}\b(?![\d.,%/]|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi
     ) ?? [];
   for (const n of numbers) {
     if (!allowed.has(n) && !fromTools.numbers.has(n)) {
@@ -672,7 +710,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   const flagged = new Set<string>();
   if (opts?.typedNamesInNoMatch) {
     const N = normName;
-    const typedAll = new Set([...nameWords(userSaid ?? ""), ...nameWords(facts.staffTyped ?? "")]);
+    const newPersonKeys = new Set(Array.from(newPerson).map(nameKey));
+    const tokenKeys = (t: string) => t.split(/\s+/).map(nameKey).filter((k) => k.length >= 2);
+    const typedAll = new Set([...nameWords(userSaid ?? ""), ...nameWords(facts.staffTyped ?? ""), ...tokenKeys(userSaid ?? ""), ...tokenKeys(facts.staffTyped ?? "")]);
     // Names of people this viewer may see never switch the out-of-reach scan off (review R2-2).
     const inReach = new Set([...facts.visibleNames, ...facts.staffNames, ...(facts.resolvedNames ?? [])].flatMap((n) => nameWords(n)));
     const saidAll = new Set([...typedAll, ...(facts.conversationWords ?? [])]);
@@ -680,13 +720,13 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     const midSentence = (i: number) => i >= 2 && /\s/u.test(text[i - 1]) && /[\p{Ll},;:]/u.test(text[i - 2]);
     const flag = (shown: string) => {
       const clean = shown.replace(/\s+/g, " ").trim();
-      for (const part of clean.split(/[\s-]+/)) flagged.add(N(part));
+      for (const part of clean.split(/\s+/)) { flagged.add(nameKey(part)); for (const w of nameWords(part)) flagged.add(w); }
       problems.push(`I could not match "${clean}" to anyone on your list`);
     };
     // The record's own text, normalized, single-spaced: a whole name found
     // in it is repeating the record (F8, review R2-3: a phrase, not a bag of words).
     const recordText = ` ${nameWords([...(facts.staffToolEvidence ?? []).flatMap((e) => [...(e.toolText ?? []), ...(e.phrases ?? [])]), ...(facts.priorToolRecords ?? [])].join("\n")).join(" ")} `;
-    const answerWords = new Set(nameWords(text));
+    const answerWords = new Set([...nameWords(text), ...text.split(/\s+/).map(nameKey)]);
     const people = (facts.outOfReachNames ?? [])
       .map((n) => n.trim().split(/\s+/).filter(Boolean))
       .filter((parts) => parts.length > 0)
@@ -694,12 +734,15 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
       // Removed when a part that is not an in-reach name was said, or when EVERY part was said, in-reach
       // words included ("Michael Thomas" built from two in-reach names; review R3-1). "Tom" alone said,
       // with the model writing "Tom Jackson", is still scanned (R2-2).
-      .filter((parts) => { const ws = parts.flatMap((p) => nameWords(p)); return !(ws.some((x) => said.has(x)) || ws.every((x) => saidAll.has(x))); })
+      .filter((parts) => {
+        const ws = parts.flatMap((p) => [...nameWords(p), nameKey(p)]);
+        return !(ws.some((x) => said.has(x)) || parts.every((p) => saidAll.has(nameKey(p)) || nameWords(p).every((x) => saidAll.has(x))));
+      })
       // A person the record this viewer can read names in full (a note, a Today
       // reason) is repeating the record; claims about them are layer 2's (F8, R2-3).
       .filter((parts) => !recordText.includes(` ${parts.map((p) => nameWords(p).join(" ")).join(" ")} `))
       // Only people whose first name is in the answer can be in it (speed, review R2).
-      .filter((parts) => nameWords(parts[0]).some((f) => answerWords.has(f)));
+      .filter((parts) => [...nameWords(parts[0]), nameKey(parts[0])].some((f) => answerWords.has(f)));
     // Normalized per character with a map back to the original, so a flag quotes the answer's own
     // spelling ("José Ruiz", never "Jose Ruiz"; review R3-5). Curly apostrophes compare as straight.
     const plain = (p: string) => p.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC").replace(/[\u2018\u2019]/g, "'");
@@ -739,15 +782,17 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     const outFirst = new Set<string>();
     const outLater = new Set<string>();
     for (const parts of people) {
-      for (const f of nameWords(parts[0])) outFirst.add(f);
-      for (const p of parts.slice(1)) for (const x of nameWords(p)) outLater.add(x);
+      for (const f of [...nameWords(parts[0]), nameKey(parts[0])]) outFirst.add(f);
+      for (const p of parts.slice(1)) for (const x of [...nameWords(p), nameKey(p)]) outLater.add(x);
     }
     // Three letters or more, an inner capital allowed ("DeShawn"); review R2-5, R2-6.
     // Not after an apostrophe: "O'Brien" is one name, never a flag on "Brien" (review R3-5).
-    for (const m of text.matchAll(/(?<![\p{L}'\u2019])\p{Lu}\p{Ll}+(?:\p{Lu}\p{Ll}+)*(?!\p{L})/gu)) {
+    // One token per name: inner capitals ("DeShawn") and inner apostrophes ("D'Andre", "Ja'Mya",
+    // "O'Brien") stay whole (review R3-5, R4-4). Compared by nameKey.
+    for (const m of text.matchAll(/(?<![\p{L}'\u2019])\p{Lu}\p{Ll}*(?:['\u2019]\p{Lu}?\p{Ll}+|\p{Lu}\p{Ll}+)*(?!\p{L})/gu)) {
       const c = m[0];
       if (c.length < 3) continue;
-      const low = N(c);
+      const low = nameKey(c);
       if (STOPWORDS.has(low) || known.has(low) || known.has(c.toLowerCase()) || flagged.has(low)) continue;
       const at = m.index ?? 0;
       if (typedAll.has(low)) {
@@ -755,13 +800,14 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
         // state name they typed is a place, never a person.
         if (!midSentence(at) || STATE_WORDS.has(low)) continue;
         if (NO_MATCH_CLAUSE.test(clauseAt(text, at))) continue;
-        if (newPerson.has(low) && prefillSentenceOk(sentenceAt(text, at), newPerson)) continue;
+        const isNew = newPerson.has(low) || newPersonKeys.has(low) || c.split(/['\u2019-]+/).filter(Boolean).every((w) => newPerson.has(w.toLowerCase()));
+        if (isNew && prefillSentenceOk(sentenceAt(text, at), newPerson)) continue;
         flag(c);
         continue;
       }
       if (!outFirst.has(low) && !outLater.has(low)) continue;
       // ", MI" or ", Michigan" after it is a town; stateAfter leaves out OK, HI and ME (review R3-3).
-      if (STATE_WORDS.has(low) || PLACE_AFTER.test(text.slice(at + c.length)) || stateAfter(text.slice(at + c.length))) continue;
+      if (STATE_WORDS.has(low) || PLACE_AFTER.test(text.slice(at + c.length)) || townState(text.slice(at + c.length))) continue;
       flag(c);
     }
     return problems;

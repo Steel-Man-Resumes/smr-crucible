@@ -502,7 +502,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       staffNames: context.org.staffNames ?? [],
       outOfReachNames: staffOutOfReach,
       // Every word of this request's conversation, all roles, full length (review R2-1). Layer 1 only.
-      conversationWords: conversationWords([...(staffInput?.messages ?? []), ...(messages as unknown[])]),
+      // The request as sent, once (review R4-3); the gated copy only withholds record text, never adds names.
+      conversationWords: conversationWords(messages as unknown[]),
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,
       quietDays: context.org.quietDays,

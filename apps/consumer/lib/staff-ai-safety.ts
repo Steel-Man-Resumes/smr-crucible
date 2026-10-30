@@ -84,7 +84,7 @@ const RECORD_WORDS = new RegExp(
 const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.|BOP|RRC|UA|UAs|PSI|DOJ|ICE)(?=\W|$)|\bCorrections?\b|\bEM\b|\bPO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))|\b(?:[Mm]y|[Hh]is|[Hh]er|[Tt]heir|[Tt]he|[Aa]|[Ww]ith|[Tt]o|[Ss]ee|[Ss]aw|[Cc]all|[Cc]alled|[Mm]eets?|[Mm]et)\s+PO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))/;
 // "no" and "num" must be whole words: "case notes" is the workspace's own term, not "case no. tes"
 // (2026-10-30, harness TRAP-ACT-04: "Save that to her case notes." reached t.ROY as a withheld blank).
-const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no\b\.?|num(?:ber)?\b)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
+const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no(?![a-z])\.?|num(?:ber)?(?![a-z])\.?)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
 
 let plannerLines: string[] | null = null;
 /** The planner's forbidden lines that name a record subject (header, detector 1). Lower case. */
@@ -198,14 +198,22 @@ export function withholdRecordSentences(text: string): { text: string; withheld:
   let withheld = false;
   const lines = String(text ?? "").split("\n").map((line) => {
     if (!hasStaffRecordWords(line)) return line;
-    // "case no. 24-CF-1182" is one sentence: never split after an abbreviated "no." (2026-10-30).
-    const sentences = line.split(/(?<=[.!?;])(?<!\b[Nn]o\.)\s+/).map((s) => {
+    // "case no. 24-CF-1182" is one sentence: never split after an abbreviated
+    // "no.", "num." or "nr.", in any case (2026-10-30, review R4-1).
+    let lineHit = false;
+    const sentences = line.split(/(?<=[.!?;])(?<!\b(?:no|num|nr)\.)\s+/i).map((s) => {
       if (!hasStaffRecordWords(s)) return s;
       withheld = true;
+      lineHit = true;
       return RECORD_WITHHELD;
     });
+    // The line names a record but no single sentence does (the label and the number split apart): the
+    // whole line is withheld (review R4-1).
+    if (!lineHit) { withheld = true; return RECORD_WITHHELD; }
     return sentences.join(" ");
   });
+  // A record number split across a line break ("case no.\n24-CF-1182"): the whole text is withheld.
+  if (!withheld && RECORD_NUMBERS.test(String(text ?? "").replace(/\s*\n\s*/g, " "))) return { text: RECORD_WITHHELD, withheld: true };
   return { text: lines.join("\n"), withheld };
 }
 

@@ -196,3 +196,32 @@ describe("review round 3 findings (2026-10-30)", () => {
   });
   function f2(out: string[]): OrgFacts { return { ...LUPE, outOfReachNames: out }; }
 });
+
+describe("review round 4 findings (2026-10-30)", () => {
+  const f3 = (out: string[], extra: Partial<OrgFacts> = {}): OrgFacts => ({ ...LUPE, outOfReachNames: out, ...extra });
+  it("R4-3: the newest messages always count, however long the session", () => {
+    const filler = Array.from({ length: 400 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: "x".repeat(1400), toolInvocations: [{ result: { a: { b: { c: { d: { e: { f: { g: { h: { i: { j: "deep" } } } } } } } } } } }] }));
+    const words = conversationWords([...filler, { role: "assistant", content: "Earlier you asked about Ceci Ayala." }]);
+    assert.ok(words.includes("ceci") && words.includes("deep"));
+  });
+  it("R4-4: apostrophe first names are one name and still checked", () => {
+    assert.deepEqual(check("Good news, D'Andre got hired.", "", f3(["D'Andre Price"])), [name("D'Andre")]);
+    assert.deepEqual(check("Good news, Ja’Mya got hired.", "", f3(["Ja'Mya Bell"])), [name("Ja’Mya")]);
+    assert.deepEqual(check("It's here, and that's fine.", "", f3(["D'Andre Price"])), []);
+  });
+  it("R4-5: an org name is a phrase on the draft path, never loose words", () => {
+    const ev = { tool: "read_participant_overview", facts: {}, numbers: [], names: [], labels: [], phrases: [], orgText: ["Ceci Ayala Cleaning LLC", "Market Square Distribution (fictional)"] } as never;
+    const g = f3([], { staffToolEvidence: [ev] });
+    assert.deepEqual(checkOrgClaimsDeterministic("Hi Marqus, Ceci Ayala Cleaning has a shift, and so does Market Square Distribution.", g, ""), []);
+    const bad = checkOrgClaimsDeterministic("Hi Marqus, Ceci Ayala called about you.", g, "");
+    assert.ok(bad.includes(name("Ceci")) && bad.includes(name("Ayala")), JSON.stringify(bad));
+  });
+  it("R4-6: a count before characters or words is a figure unless it is a limit", () => {
+    assert.ok(check("17 characters on your caseload got hired.").some((p) => p.includes('"17"')));
+    assert.deepEqual(check("Keep it under 50 words, and the text is a 160-character limit, 320 characters at most."), []);
+  });
+  it("R4-7: a state name followed by another capitalized word is an organization", () => {
+    assert.ok(check("Good news, Ceci, Michigan Works can help.").includes(name("Ceci")));
+    assert.deepEqual(check("There is help near Ceci, MI and Jackson, Michigan."), []);
+  });
+});

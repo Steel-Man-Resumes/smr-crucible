@@ -13,3 +13,11 @@ it("real case and docket numbers are still withheld", () => {
     assert.equal(withholdRecordSentences(t).withheld, true, t);
   }
 });
+it("review R4-1 and R4-2: capitals, abbreviations, line breaks and jammed labels are withheld", () => {
+  for (const t of ["CASE NO. 2024CF001182", "Her CASE NO. 24-CF-1182 is open.", "Case Num. 24-CF-1182 is open.", "case num. 1182", "BOOKING NO. B-445566", "case no.\n24-CF-1182", "case no24-CF-1182", "case num1182", "Case Number1182"]) {
+    assert.equal(withholdRecordSentences(t).withheld, true, JSON.stringify(t));
+  }
+  const docket = withholdRecordSentences("DOCKET NO. 2026-445");
+  assert.ok(!docket.text.includes("2026-445"), docket.text);
+  assert.equal(withholdRecordSentences("Did he call? No. He did not.").withheld, false);
+});
