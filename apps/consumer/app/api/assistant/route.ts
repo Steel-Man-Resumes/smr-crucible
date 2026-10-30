@@ -406,7 +406,13 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
       `SELECT coach_language FROM users WHERE id = $1`,
       [userId]
     ).catch(() => null);
-    if (langRow?.coach_language === "es") {
+    if (langRow?.coach_language === "es" && staffActor) {
+      // Staff (prompt review F10): answers in Spanish, records stay in English, and the output check reads
+      // English, so the never-sent rule is restated for every language.
+      localizedSystemPrompt = `${systemPrompt}
+
+LANGUAGE: Answer in Spanish (plain, Latin American neutral). Case notes, outcome notes and funder narratives stay in English. Write a message to a participant in the language the staff member asks for. Refer to pages and buttons by their English labels. Never say you sent, saved or added anything, in any language.`;
+    } else if (langRow?.coach_language === "es") {
       localizedSystemPrompt = `${systemPrompt}
 
 LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface stays in English, so refer to pages and buttons by their English labels. Any resume or cover letter text stays in the language of the job posting (English unless stated otherwise); only your coaching and conversation are in Spanish.`;
