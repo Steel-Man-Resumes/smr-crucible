@@ -297,3 +297,16 @@ describe("review round 11 findings (2026-10-31)", () => {
     assert.deepEqual(checkOrgClaimsDeterministic("If anyone is in danger, call 911 right away.", big, "", { typedNamesInNoMatch: true }), []);
   });
 });
+
+describe("review round 12 findings (2026-10-31)", () => {
+  const fig = (n: string) => `the figure "${n}" is not one of this caseload's numbers`;
+  const big: OrgFacts = { ...LUPE, caseload: 40 };
+  const a = (t: string) => checkOrgClaimsDeterministic(t, big, "", { typedNamesInNoMatch: true });
+  it("N12-1: '<label> X of Y people' is a count", () => {
+    for (const [t, n] of [["Step 3 of 41 participants finished.", "41"], ["Unit 2 of 300 residents moved.", "300"], ["Page 2 of 15 people signed.", "15"]] as const) assert.ok(a(t).includes(fig(n)), t);
+    assert.deepEqual(a("See page 2 of 15."), []);
+  });
+  it("N12-2: more count nouns", () => {
+    for (const [t, n] of [["Level 57 trainees passed.", "57"], ["Building 43 tenants signed.", "43"], ["Of 2025 employees, 12 got jobs.", "2025"]] as const) assert.ok(a(t).includes(fig(n)), t);
+  });
+});
