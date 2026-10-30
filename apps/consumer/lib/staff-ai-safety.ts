@@ -86,15 +86,18 @@ const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.|BOP|RRC|UA|UAs|PSI|DOJ|
 // (2026-10-30, harness TRAP-ACT-04: "Save that to her case notes." reached t.ROY as a withheld blank).
 // Production's pattern (crude on purpose: "case number ..." always matches, the "ber" read as the id),
 // with only "case notes" excluded (review R5-1: requiring the id right after the label let "Her case
-// number is 24-CF-1182." through).
-const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no(?!tes?\b)\.?|num(?:ber)?)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
-/**
- * An identifier near a record label, the label and the id possibly split by
- * punctuation, a few short words or a line break ("Her case number. 24-CF-1182",
- * "docket number is below. 2026-445", "case no.\n24-CF-1182"). Group 1 is the
- * id: three or more characters with a digit. Review R5-2.
- */
-const RECORD_ID_NEAR_LABEL = /\b(?:case|docket|booking|inmate|offender|cause)(?:\s*(?:#|no(?!tes?\b)\.?|nos?\.?|num(?:ber)?s?\.?|id))?(?:[\s:=.,;?!"'()\-\u2010-\u2015]+(?:is|was|are|were|below|here|reads|of|the|her|his|their)?){0,4}[\s:=."'(]*([A-Za-z0-9][A-Za-z0-9\-\u2010\u2011]*\d[A-Za-z0-9\-\u2010\u2011]*|\d[A-Za-z0-9\-\u2010\u2011]{2,})/gi;
+// number is 24-CF-1182." through). "\s*(?::\s*)?" instead of "\s*:?\s*": the same matches without the
+// quadratic split of a long run of spaces (review G6-1).
+const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no(?!tes?\b)\.?|num(?:ber)?\.?)\s*(?::\s*)?[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
+/** A record-number label ("case no.", "docket number", "booking #", "case notes:"). Linear: no nested repeats. */
+const RECORD_LABEL = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|nos?\b\.?|num(?:ber)?s?\b\.?|id\b|notes?\s*[:#-])/i;
+/** A token shaped like a record number: letters and digits with a hyphen ("24-CF-1182", "B-44556", "2026-445"), or 5+ digits. Whole tokens only. */
+const recordShapedToken = (t: string): boolean => {
+  const w = t.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+  return w.length >= 5 && /^[A-Za-z0-9-]+$/.test(w) && /\d/.test(w) && (w.includes("-") || /^\d+$/.test(w));
+};
+/** "case notes: CR-99812": the notes label with a record-shaped id after it (review G6-3). */
+const NOTES_WITH_ID = /\b(?:case|docket|booking|inmate|offender|cause)\s*notes?\s*[:#-]\s*\S+/i;
 
 let plannerLines: string[] | null = null;
 /** The planner's forbidden lines that name a record subject (header, detector 1). Lower case. */
@@ -205,34 +208,33 @@ export const STAFF_INPUT_NOTICE = "Record details were left out of what t.ROY sa
  * bullets still works on everything else.
  */
 export function withholdRecordSentences(text: string): { text: string; withheld: boolean } {
-  let withheld = false;
-  const lines = String(text ?? "").split("\n").map((line) => {
-    if (!hasStaffRecordWords(line)) return line;
+  const source = String(text ?? "");
+  // Every sentence of every line, in order, so a label and its number can be
+  // matched across a sentence end or a line break.
+  const segs: { line: number; s: string; hit: boolean }[] = [];
+  source.split("\n").forEach((line, li) => {
     // "case no. 24-CF-1182" is one sentence: never split after an abbreviated
-    // "no.", "num." or "nr.", in any case (2026-10-30, review R4-1).
-    let lineHit = false;
-    const sentences = line.split(/(?<=[.!?;])(?<!\b(?:no|num|nr)\.)\s+/i).map((s) => {
-      if (!hasStaffRecordWords(s)) return s;
-      withheld = true;
-      lineHit = true;
-      return RECORD_WITHHELD;
-    });
-    // The line names a record but no single sentence does (the label and the number split apart): the
-    // whole line is withheld (review R4-1).
-    if (!lineHit) { withheld = true; return RECORD_WITHHELD; }
-    return sentences.join(" ");
+    // "no.", "num." or "nr.", in any case (review R4-1).
+    for (const s of line.split(/(?<=[.!?;])(?<!\b(?:no|num|nr)\.)\s+/i)) segs.push({ line: li, s, hit: hasStaffRecordWords(s) || (NOTES_WITH_ID.test(s) && s.split(/\s+/).some(recordShapedToken)) });
   });
-  // A record number split across a line break ("case no.\n24-CF-1182"): the whole text is withheld.
-  if (!withheld && RECORD_NUMBERS.test(String(text ?? "").replace(/\s*\n\s*/g, " "))) return { text: RECORD_WITHHELD, withheld: true };
-  // An id near a record label that survived the sentence pass (label and id in different sentences or
-  // lines) is withheld wherever it still appears, whatever else was withheld (review R5-2).
-  let out = lines.join("\n");
-  const joined = String(text ?? "").normalize("NFKC").replace(/\s*\n\s*/g, " ");
-  for (const m of joined.matchAll(RECORD_ID_NEAR_LABEL)) {
-    const id = m[1];
-    if (id && id.length >= 3 && out.includes(id)) { out = out.split(id).join(RECORD_WITHHELD); withheld = true; }
+  // A label in one sentence and a record-shaped number in the next ("Her case
+  // number. 24-CF-1182", "case no.\n24-CF-1182"): both are withheld (review R5-2).
+  for (let i = 0; i + 1 < segs.length; i++) {
+    if (RECORD_LABEL.test(segs[i].s) && segs[i + 1].s.split(/\s+/).some(recordShapedToken)) { segs[i].hit = true; segs[i + 1].hit = true; }
   }
-  return { text: out, withheld };
+  // A line that names a record when no single sentence does (the label and the number split apart) is
+  // withheld whole (review R4-1).
+  const lineCount = source.split("\n").length;
+  for (let li = 0; li < lineCount; li++) {
+    const mine = segs.filter((g) => g.line === li);
+    if (!mine.some((g) => g.hit) && hasStaffRecordWords(mine.map((g) => g.s).join(" "))) for (const g of mine) g.hit = true;
+  }
+  let withheld = segs.some((g) => g.hit);
+  const lines: string[] = [];
+  for (let li = 0; li < lineCount; li++) lines.push(segs.filter((g) => g.line === li).map((g) => (g.hit ? RECORD_WITHHELD : g.s)).join(" "));
+  // A record number split across a line break that nothing above caught: the whole text is withheld.
+  if (!withheld && RECORD_NUMBERS.test(source.replace(/\n/g, " "))) return { text: RECORD_WITHHELD, withheld: true };
+  return { text: lines.join("\n"), withheld };
 }
 
 /** Every string inside a value (tool args and results from the client), record sentences withheld. */

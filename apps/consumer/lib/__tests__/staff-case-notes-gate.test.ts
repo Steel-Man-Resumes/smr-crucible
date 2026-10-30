@@ -28,3 +28,17 @@ it("review R5-1 and R5-2: case numbers after 'number', or split from their label
   }
   for (const t of ["Save that to her case notes.", "In case 2 people come, call me.", "Just in case, bring 3 copies of the resume."]) assert.equal(withholdRecordSentences(t).withheld, false, t);
 });
+it("review G6-1, G6-2, G6-3: no freeze on pasted forms, ordinary numbers untouched, notes with an id withheld", () => {
+  for (const [lab, unit] of [["case", ". "], ["CASE NO.", " "], ["Case Number:", "\t"], ["case", " "], ["docket", "."]] as const) {
+    const t = lab + unit.repeat(10_000) + "____";
+    const start = performance.now();
+    withholdRecordSentences(t);
+    assert.ok(performance.now() - start < 50, `${lab} ${JSON.stringify(unit)} took ${(performance.now() - start).toFixed(1)} ms`);
+  }
+  for (const t of ["In case 100 people come, we need 100 chairs and $1000 in snacks.", "Just in case. The 2026 grant report is due.", "In any case, 120 employers answered.", "a case of 100 gloves", "Booking 200 seats for the fair.", "Booking the 3pm slot", "In case her 10am interview runs long, call me."]) {
+    const r = withholdRecordSentences(t);
+    assert.equal(r.withheld, false, t);
+    assert.equal(r.text, t);
+  }
+  for (const t of ["Her case notes: CR-99812", "Add to her case notes: 24-CF-1182 dismissed."]) assert.equal(withholdRecordSentences(t).withheld, true, t);
+});
