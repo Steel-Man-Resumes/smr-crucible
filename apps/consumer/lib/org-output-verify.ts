@@ -254,6 +254,9 @@ const NO_MATCH_CLAUSE = new RegExp(
     `${NAME_PART}\\s+(?:is\\s+not|isn['\u2019]t)\\s+(?:yet\\s+)?(?:on|in)\\s+your\\s+(?:list|caseload)(?:\\s+(?:here|yet))?` +
     "|" +
     `I\\s+(?:could\\s+not|couldn['\u2019]t|cannot|can['\u2019]t)\\s+(?:find|match|see)\\s+${NAME_PART}\\s+(?:on|in)\\s+your\\s+(?:list|caseload)(?:\\s+(?:here|yet))?` +
+    "|" +
+    // 2026-10-30 (review F1): "I don't have a Ceci Ayala among the people I can see."
+    `I\\s+(?:do\\s+not|don['\u2019]t)\\s+(?:have|see)\\s+(?:an?\\s+|anyone\\s+(?:named|called)\\s+)?${NAME_PART}\\s+(?:(?:on|in)\\s+your\\s+(?:list|caseload)|among\\s+the\\s+people\\s+I\\s+can\\s+see)(?:\\s+(?:here|yet))?` +
   ")\\s*[.!?]?\\s*$"
 );
 
@@ -349,16 +352,8 @@ const UI_WORDS: readonly string[] = [
 const US_STATE_NAMES = "alabama|alaska|arizona|arkansas|california|colorado|connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|nebraska|nevada|new hampshire|new jersey|new mexico|new york|north carolina|north dakota|ohio|oklahoma|oregon|pennsylvania|rhode island|south carolina|south dakota|tennessee|texas|utah|vermont|virginia|washington|west virginia|wisconsin|wyoming|district of columbia";
 /** Two-letter codes are matched in capitals only ("in", "or" are ordinary words); OK, HI and ME are left out because "Michael Shaw, OK?" is a person (review S4). The full names still match. */
 const US_STATE_CODES = "AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|ID|IL|IN|IA|KS|KY|LA|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY";
-/**
- * Demo fix T1 round 3: a written US state name ("Michigan", "North
- * Carolina", "District of Columbia") is a place, never a person, on the
- * answer path. Whole names only, capitalized as written. The trade: a person
- * named Georgia or Virginia is not caught by layer 1 in an answer.
- */
-const STATE_NAME_TEXT = new RegExp(
-  `\\b(?:${US_STATE_NAMES.split("|").sort((a, b) => b.length - a.length).map((n) => n.split(" ").map((w) => (w === "of" ? w : w[0].toUpperCase() + w.slice(1))).join("\\s+")).join("|")}|D\\.?C\\.?)\\b`,
-  "g"
-);
+/** Every word of a US state name, lowercase ("new", "york", "michigan"), for typed words on the answer path. */
+const STATE_WORDS: ReadonlySet<string> = new Set(US_STATE_NAMES.split(/[|\s]+/).filter((w) => w !== "of"));
 const STATE_CODE_AFTER = new RegExp(`^,\\s*(?:${US_STATE_CODES})\\b`);
 const STATE_NAME_AFTER = new RegExp(`^,\\s*(?:${US_STATE_NAMES})\\b`, "i");
 /** True when `after` starts with a comma and a US state ("Jackson, MI", "Jackson, Michigan"). */
@@ -585,8 +580,10 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     for (const w of ["invite", "send", "add", "open", "press", "button", "page", "form", "directory", "employers", "employer", "hires", "records", "reported"]) STOPWORDS.add(w);
     // Demo fix T1: sidebar, view and Today section words ("press Undo", "Retention check-ins due").
     for (const w of UI_WORDS) STOPWORDS.add(w);
-    // Demo fix T1 round 3: state names are places ("your organization is in Michigan").
-    text = text.replace(STATE_NAME_TEXT, "the state");
+    // State names: since 2026-10-30 the answer path never reads an untyped word
+    // as a person unless it is an out-of-reach name, and a typed state name is
+    // skipped below (STATE_WORDS). Not swapped out of the text any more, so a
+    // person named Georgia Smith is still found (review F4).
     // Demo fix T1: words from this turn's tool reads, and places the staff member typed this turn.
     for (const w of Array.from(fromTools.words)) known.add(w);
     for (const w of Array.from(typedPlaceWords(userSaid ?? ""))) known.add(w);
@@ -597,48 +594,77 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // 10/28-29 demo rounds). The old rule flagged every capitalized word it
   // could not account for, so towns, employers, programs and statuses
   // ("Jackson", "Eastside", "Retention") kept reaching staff as "could not
-  // match", and every fix was one more word on an allow-list. What layer 1
-  // exists to stop is a real person outside this viewer's reach. So on the
-  // answer path a word is a candidate only when it is the first name of
-  // someone in this organization this viewer cannot see, or a full name of
-  // theirs appears. A person who does not exist at all is a truth problem,
-  // not a privacy one: layer 2 is given the reach list and judges claims
-  // about people. A draft for a participant (no opts) keeps the full check
-  // below, unchanged.
-  const answerPath = !!opts?.typedNamesInNoMatch;
-  const outFull = (facts.outOfReachNames ?? []).map((n) => n.trim()).filter(Boolean);
-  const outFirst = new Set(outFull.map((n) => n.split(/\s+/)[0].toLowerCase()));
-  // A surname alone is a candidate only when that person's first name is in
-  // the answer or in what the staff member typed ("Michael Shaw ... and Shaw
-  // starts Monday"). Alone it is too often a town or a company ("Jackson").
-  const context = `${text}\n${userSaid ?? ""}`.toLowerCase();
-  const outLast = new Set(
-    outFull
-      .map((n) => n.split(/\s+/))
-      .filter((p) => p.length >= 2 && new RegExp(`\\b${p[0].toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`).test(context))
-      .map((p) => p[p.length - 1].toLowerCase())
-  );
-
+  // match", and every fix was one more word on an allow-list. On the answer
+  // path a word is now a candidate in exactly two cases:
+  //   (1) the staff member typed it (this turn or earlier) and it is not
+  //       known: checked the same way whether or not such a person exists, so
+  //       the flag can never tell anyone who is enrolled (review F1);
+  //   (2) it belongs to a person in this organization outside this viewer's
+  //       reach (facts.outOfReachNames, server-built): their full name, their
+  //       first name, or a later part of their name when their first name is
+  //       in the answer. Names they typed are left to (1) only.
+  // A person who exists nowhere is a truth problem, not a privacy one: layer 2
+  // is given the reach list and judges claims about people. A draft for a
+  // participant (no opts) keeps the full check below, unchanged.
   const flagged = new Set<string>();
-  // A full name of someone out of reach, anywhere in the answer (sentence
-  // start included), flagged once as the whole name, even when their first
-  // name is shared with someone in reach. Every occurrence is looked at: the
-  // name the staff member typed, repeated only to say the person is not on
-  // their list, is allowed, and a later sentence making a claim is not.
-  if (answerPath) {
-    for (const full of outFull) {
-      const parts = full.split(/\s+/);
+  if (opts?.typedNamesInNoMatch) {
+    const L = (w: string) => w.toLocaleLowerCase("en-US");
+    const words = (t: string) => (t.match(/\p{L}+/gu) ?? []).map(L);
+    const typedAll = new Set([...words(userSaid ?? ""), ...words(facts.staffTyped ?? "")]);
+    const midSentence = (i: number) => i >= 2 && /\s/u.test(text[i - 1]) && /[\p{Ll},;:]/u.test(text[i - 2]);
+    const flag = (shown: string) => {
+      const clean = shown.replace(/\s+/g, " ").trim();
+      for (const part of clean.split(/[\s-]+/)) flagged.add(L(part));
+      problems.push(`I could not match "${clean}" to anyone on your list`);
+    };
+    const people = (facts.outOfReachNames ?? [])
+      .map((n) => n.trim().split(/\s+/).filter(Boolean))
+      .filter((parts) => parts.length > 0)
+      // Left to (1): anyone whose name the staff member typed (F1).
+      .filter((parts) => !parts.some((p) => p.split("-").some((x) => typedAll.has(L(x)))));
+    const cap = (p: string) => p.charAt(0).toLocaleUpperCase("en-US") + p.slice(1);
+    const esc = (p: string) => cap(p).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // (2a) Full names, and first plus last without a middle name (F2), in any
+    // position. Case-sensitive on the capital (F6: "I will hunt" is not Will
+    // Hunt). A name the record itself shows this viewer is repeating the
+    // record (F8): every part known, not flagged.
+    for (const parts of people) {
       if (parts.length < 2) continue;
-      const first = parts[0];
-      const re = new RegExp(`\\b${parts.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")}\\b`, "gi");
-      for (const hit of text.matchAll(re)) {
-        if (typed.has(first.toLowerCase()) && NO_MATCH_CLAUSE.test(clauseAt(text, hit.index ?? 0))) continue;
-        if (newPerson.has(first.toLowerCase()) && prefillSentenceOk(sentenceAt(text, hit.index ?? 0), newPerson)) continue;
-        for (const part of hit[0].split(/\s+/)) flagged.add(part);
-        problems.push(`I could not match "${hit[0]}" to anyone on your list`);
-        break;
+      if (parts.every((p) => known.has(L(p)))) continue;
+      // The whole name first, then the first name with each later part ("Circe Ayala", "Circe Solano").
+      const variants = [parts, ...(parts.length > 2 ? parts.slice(1).map((p) => [parts[0], p]) : [])];
+      for (const v of variants) {
+        const hit = new RegExp(`(?<!\\p{L})${v.map(esc).join("\\s+")}(?!\\p{L})`, "u").exec(text);
+        if (hit) { flag(hit[0]); break; }
       }
     }
+    // (2b) First names in any position; later name parts when that person's
+    // first name is in the answer. Hyphenated parts count on their own (F3).
+    const inText = new Set(words(text));
+    const outFirst = new Set<string>();
+    const outLater = new Set<string>();
+    for (const parts of people) {
+      const firsts = parts[0].split("-").map(L);
+      for (const f of firsts) outFirst.add(f);
+      if (firsts.some((f) => inText.has(f))) for (const p of parts.slice(1)) for (const x of p.split("-")) outLater.add(L(x));
+    }
+    for (const m of text.matchAll(/(?<!\p{L})\p{Lu}\p{Ll}+(?!\p{L})/gu)) {
+      const c = m[0];
+      const low = L(c);
+      if (STOPWORDS.has(low) || known.has(low) || flagged.has(low)) continue;
+      const at = m.index ?? 0;
+      if (typedAll.has(low)) {
+        // (1) A word they typed, mid-sentence, as the old check read it. A
+        // state name they typed is a place, never a person.
+        if (!midSentence(at) || STATE_WORDS.has(low)) continue;
+        if (NO_MATCH_CLAUSE.test(clauseAt(text, at))) continue;
+        if (newPerson.has(low) && prefillSentenceOk(sentenceAt(text, at), newPerson)) continue;
+        flag(c);
+        continue;
+      }
+      if (outFirst.has(low) || outLater.has(low)) flag(c);
+    }
+    return problems;
   }
   // Capitalized words mid-sentence are the candidates; sentence-initial words
   // are excluded because capitalization there means nothing.
@@ -646,7 +672,6 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     const c = m[0];
     const low = c.toLowerCase();
     if (STOPWORDS.has(low) || known.has(low) || flagged.has(c)) continue;
-    if (answerPath && !outFirst.has(low) && !outLast.has(low)) continue;
     if (typed.has(low) && NO_MATCH_CLAUSE.test(clauseAt(text, m.index ?? 0))) continue;
     if (newPerson.has(low) && prefillSentenceOk(sentenceAt(text, m.index ?? 0), newPerson)) continue;
     flagged.add(c);

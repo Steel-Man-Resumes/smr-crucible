@@ -69,13 +69,13 @@ describe("T1: what must still be flagged", () => {
     // find_local_help echoes the place asked for: that is not tool text either.
     const help = projectStaffToolEvidence("find_local_help", { status: "ok", place: { state: "MI", city: "Michael Shaw" }, resources: [{ organization: "Jackson Food Share", city: "Jackson" }] })!;
     assert.deepEqual(help.toolText, ["ok", "Jackson Food Share", "Jackson"]);
-    assert.deepEqual(checkOrgClaimsDeterministic("I looked, and Michael Shaw starts Monday.", withTools(echoed), "find employers for Michael Shaw", answer), [name("Michael Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I looked, and Michael Shaw starts Monday.", withTools(echoed), "find employers for Michael Shaw", answer), [name("Michael"), name("Shaw")]);
   });
 
   it("a person after to or from is not a place, and a possessive is not a place", () => {
     for (const said of ["write to Michael Shaw", "a note from Michael Shaw", "anything in Michael Shaw's file", "talk to Michael Shaw, ok?"]) {
       assert.deepEqual([...typedPlaceWords(said)], [], said);
-      assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", LUPE, said, answer), [name("Michael Shaw")], said);
+      assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", LUPE, said, answer), [name("Michael"), name("Shaw")], said);
     }
     assert.deepEqual([...typedPlaceWords("employers at Lansing, MI")], ["lansing"]);
     assert.deepEqual([...typedPlaceWords("jobs near battle creek")], ["battle", "creek"]);
@@ -111,7 +111,7 @@ describe("T1 follow-up: places typed earlier in the conversation", () => {
 
   it("Michael Shaw typed earlier as a person still flags", () => {
     const facts: OrgFacts = { ...LUPE, staffTyped: typed("talk to Michael Shaw", "find employers in Lansing", "what can you do?") };
-    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job in Lansing.", facts, "what can you do?", answer), [name("Michael Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job in Lansing.", facts, "what can you do?", answer), [name("Michael"), name("Shaw")]);
   });
 
   it("the draft path ignores earlier messages", () => {
@@ -157,8 +157,8 @@ describe("T1 round 2 (review S1 to S4)", () => {
     assert.deepEqual([...typedPlaceWords("Michael Shaw, ME")], []);
     assert.deepEqual([...typedPlaceWords("Lansing, Michigan")], ["lansing"]);
     const facts: OrgFacts = { ...LUPE, staffTyped: "any news in Michael Shaw?\nwhat can you do?" };
-    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", facts, "what can you do?", answer), [name("Michael Shaw")]);
-    assert.deepEqual(checkOrgClaimsDeterministic("I found Michael Shaw on your list; he was hired.", { ...LUPE, staffTyped: "talk to Michael Shaw, OK?" }, "", answer), [name("Michael Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw got the job.", facts, "what can you do?", answer), [name("Michael"), name("Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I found Michael Shaw on your list; he was hired.", { ...LUPE, staffTyped: "talk to Michael Shaw, OK?" }, "", answer), [name("Michael"), name("Shaw")]);
   });
 });
 

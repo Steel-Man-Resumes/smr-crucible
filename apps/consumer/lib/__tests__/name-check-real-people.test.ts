@@ -42,7 +42,10 @@ describe("answer path: real people outside reach are flagged", () => {
   });
   it("a surname alone, when the first name is in the answer or typed", () => {
     assert.deepEqual(check("Jean and Tom both applied, and Jackson starts Monday."), [name("Tom"), name("Jackson")]);
-    assert.deepEqual(check("Jean starts Monday, and Jackson starts Tuesday.", "how is tom doing"), [name("Jackson")]);
+    // A person whose name the staff member typed is checked only by the words they typed, the same for a
+    // real person and an unknown one, so the flag never tells anyone who is enrolled (review F1).
+    assert.deepEqual(check("Jean starts Monday, and Jackson starts Tuesday.", "how is tom doing"), []);
+    assert.deepEqual(check("Jean starts Monday, and Tom starts Tuesday.", "how is tom doing"), [name("Tom")]);
     assert.deepEqual(check("Jean starts Monday, and Jackson has two openings."), []);
   });
   it("a full name whose first name is shared with someone in reach", () => {
@@ -54,7 +57,7 @@ describe("answer path: real people outside reach are flagged", () => {
     assert.deepEqual(check("Ceci Ayala isn't on your list.", "how is ceci ayala doing"), []);
     // A pronoun claim after it is layer 2's (as before); the name repeated in a claim is layer 1's.
     assert.deepEqual(check("Ceci Ayala isn't on your list, but she got the job.", "how is ceci ayala doing"), []);
-    assert.deepEqual(check("Ceci Ayala isn't on your list, but Ceci Ayala got the job.", "how is ceci ayala doing"), [name("Ceci Ayala")]);
+    assert.deepEqual(check("Ceci Ayala isn't on your list, but Ceci Ayala got the job.", "how is ceci ayala doing"), [name("Ceci"), name("Ayala")]);
     assert.deepEqual(check("Ceci Ayala isn't on your list."), [name("Ceci Ayala")], "not typed: no allowance");
   });
 });
@@ -80,5 +83,39 @@ describe("draft path: unchanged", () => {
 describe("numbers: unchanged on the answer path", () => {
   it("an invented count is still flagged", () => {
     assert.ok(check("17 people on your caseload got hired in Kalamazoo.").some((p) => p.includes('"17"')));
+  });
+});
+
+describe("review round 1 findings (2026-10-30)", () => {
+  const f = (out: string[]): OrgFacts => ({ ...LUPE, outOfReachNames: out });
+  it("F1: a typed name gets the same result whether or not the person exists", () => {
+    const real = check("Sorry, but a Ceci Ayala is someone I can't speak to.", "how is Ceci Ayala doing");
+    const fake = check("Sorry, but a Zelda Quark is someone I can't speak to.", "how is Zelda Quark doing", f([]));
+    assert.deepEqual(real.map((p) => p.replace(/Ceci|Ayala/, "X")), fake.map((p) => p.replace(/Zelda|Quark/, "X")));
+    assert.equal(real.length, 2);
+    // and the honest no-match wording passes for both
+    assert.deepEqual(check("I don't have a Ceci Ayala among the people I can see.", "how is Ceci Ayala doing"), []);
+    assert.deepEqual(check("I don't have a Zelda Quark among the people I can see.", "how is Zelda Quark doing", f([])), []);
+  });
+  it("F2: middle names", () => {
+    assert.deepEqual(check("Good news, Circe Ayala got hired at Meijer.", "", f(["Circe Ayala Solano"])), [name("Circe Ayala")]);
+  });
+  it("F3: accented and hyphenated names", () => {
+    assert.deepEqual(check("Yesterday José got hired.", "", f(["José Ruiz"])), [name("José")]);
+    assert.deepEqual(check("Remember that Mary-Jane started at Goodwill.", "", f(["Mary-Jane Cole"])), [name("Mary"), name("Jane")]);
+  });
+  it("F4: a first name that is a state name", () => {
+    assert.deepEqual(check("Good news: Georgia Smith got hired.", "", f(["Georgia Smith"])), [name("Georgia Smith")]);
+  });
+  it("F6: case-sensitive, so ordinary words are not a name", () => {
+    assert.deepEqual(check("I will hunt for listings in Flint.", "", f(["Will Hunt"])), []);
+  });
+  it("F8: a name the record shows this viewer is repeating the record", () => {
+    const withRecord: OrgFacts = { ...LUPE, staffToolEvidence: [{ tool: "read_participant_overview", facts: {}, numbers: [], names: [], labels: [], phrases: [], toolText: ["Jean was referred by Ceci Ayala"] } as never] };
+    assert.deepEqual(check("Jean was referred by Ceci Ayala last month.", "", withRecord), []);
+  });
+  it("F9: no raw newline inside a flag", () => {
+    const out = check("Update:\nCeci\nAyala got the job.");
+    assert.ok(out.every((p) => !p.includes("\n")), JSON.stringify(out));
   });
 });

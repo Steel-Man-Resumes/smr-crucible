@@ -109,7 +109,7 @@ describe("T1 round 3: what must still be flagged", () => {
 
   it("Michael Shaw typed as a person still flags, beside a state name and a station word", () => {
     const facts: OrgFacts = { ...LUPE, staffTyped: "talk to Michael Shaw\nwhat can you do?" };
-    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw in Michigan is at Find work.", facts, "what can you do?", answer), [name("Michael Shaw")]);
+    assert.deepEqual(checkOrgClaimsDeterministic("I checked, and Michael Shaw in Michigan is at Find work.", facts, "what can you do?", answer), [name("Michael"), name("Shaw")]);
   });
 
   it("the draft path does not mask state names or read records", () => {

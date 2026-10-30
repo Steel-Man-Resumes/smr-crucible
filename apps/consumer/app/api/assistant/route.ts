@@ -226,18 +226,25 @@ export async function POST(request: Request) {
         const rollup = summarizeStaffPerformance(cohort.clients, { stalledAfterDays: quietDays });
         const firstName = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "someone";
         const staff = await (await import("@crucible/core")).getOrgStaff(actor.orgId);
-        staffActor = actor;
-        staffPeople = cohort.clients.map((c) => ({ id: c.userId, name: c.name }));
         if (actor.reach === "assigned") {
           // The same org read with no assignment filter, minus this caseload.
           // A name that matches someone in reach is never treated as out of reach.
+          // Read BEFORE staffActor is set, so a failure here can never leave a
+          // staff turn running without its output check (review F5).
           const inReach = new Set(cohort.clients.map((c) => c.userId));
           const inReachNames = new Set(cohort.clients.map((c) => (c.name ?? "").trim().toLowerCase()));
           const orgWide = await getPartnerCohort(userId, { accessCodeId: actor.orgId });
+          // The org read must contain this caseload; an empty or short read would
+          // silently check nobody, so it fails closed instead.
+          if (cohort.clients.some((c) => !orgWide.clients.some((o) => o.userId === c.userId))) {
+            throw new Error("org-wide cohort read is missing people in reach");
+          }
           staffOutOfReach = orgWide.clients
             .filter((c) => !inReach.has(c.userId) && (c.name ?? "").trim() && !inReachNames.has((c.name ?? "").trim().toLowerCase()))
             .map((c) => (c.name ?? "").trim());
         }
+        staffActor = actor;
+        staffPeople = cohort.clients.map((c) => ({ id: c.userId, name: c.name }));
         context.audience = "org_staff";
         context.org = {
           orgName: actor.orgName,
@@ -270,6 +277,13 @@ export async function POST(request: Request) {
       }
     } catch (err) {
       console.error("org assistant context failed:", err);
+      // Nothing half-built survives: a staff actor without context.org would get
+      // staff tools on the unchecked participant path (review F5).
+      staffActor = null;
+      staffPeople = [];
+      staffOutOfReach = [];
+      delete context.org;
+      if (context.audience === "org_staff") context.audience = undefined;
       // A participant loses nothing here, so their conversation carries on. A
       // STAFF MEMBER must not: falling through would hand a case manager the
       // job-seeker coach, offering to build the resume of somebody who asked
