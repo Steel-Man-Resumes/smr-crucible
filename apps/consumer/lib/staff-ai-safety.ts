@@ -82,7 +82,9 @@ const RECORD_WORDS = new RegExp(
 );
 // Case-sensitive on purpose: "doc" is a document and "po" is not a word.
 const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.|BOP|RRC|UA|UAs|PSI|DOJ|ICE)(?=\W|$)|\bCorrections?\b|\bEM\b|\bPO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))|\b(?:[Mm]y|[Hh]is|[Hh]er|[Tt]heir|[Tt]he|[Aa]|[Ww]ith|[Tt]o|[Ss]ee|[Ss]aw|[Cc]all|[Cc]alled|[Mm]eets?|[Mm]et)\s+PO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))/;
-const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no\.?|num(?:ber)?)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
+// "no" and "num" must be whole words: "case notes" is the workspace's own term, not "case no. tes"
+// (2026-10-30, harness TRAP-ACT-04: "Save that to her case notes." reached t.ROY as a withheld blank).
+const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no\b\.?|num(?:ber)?\b)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
 
 let plannerLines: string[] | null = null;
 /** The planner's forbidden lines that name a record subject (header, detector 1). Lower case. */
@@ -196,7 +198,8 @@ export function withholdRecordSentences(text: string): { text: string; withheld:
   let withheld = false;
   const lines = String(text ?? "").split("\n").map((line) => {
     if (!hasStaffRecordWords(line)) return line;
-    const sentences = line.split(/(?<=[.!?;])\s+/).map((s) => {
+    // "case no. 24-CF-1182" is one sentence: never split after an abbreviated "no." (2026-10-30).
+    const sentences = line.split(/(?<=[.!?;])(?<!\b[Nn]o\.)\s+/).map((s) => {
       if (!hasStaffRecordWords(s)) return s;
       withheld = true;
       return RECORD_WITHHELD;
