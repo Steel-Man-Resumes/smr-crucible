@@ -371,7 +371,8 @@ const STATE_WORDS: ReadonlySet<string> = new Set(US_STATE_NAMES.split(/[|\s]+/).
  * NFD accents and "José"/"Jose" all compare equal).
  */
 export function normName(w: string): string {
-  return w.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC").toLocaleLowerCase("en-US");
+  // Every apostrophe-like mark compares as one (review R5-6: U+02BC is a letter, so it would stay in keys).
+  return w.replace(/[\u2018\u2019\u02BC`]/g, "'").normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
 /** A whole name token as one key, apostrophes and hyphens dropped ("D'Andre" is "dandre"). Review R4-4. */
@@ -417,7 +418,13 @@ export function conversationWords(messages: readonly unknown[]): string[] {
     else if (Array.isArray(v)) for (const x of v) walk(x);
     else if (v && typeof v === "object") for (const x of Object.values(v as Record<string, unknown>)) walk(x);
   };
-  for (let i = messages.length - 1; i >= 0; i--) walk(messages[i]);
+  // Only what the model is built from: content, parts, tool invocations and attachments, never ids or
+  // annotations (review R5-3: a padded id must not push older names out of the cap).
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i] as Record<string, unknown> | null;
+    if (!m || typeof m !== "object") continue;
+    for (const k of ["content", "parts", "toolInvocations", "experimental_attachments"]) walk(m[k]);
+  }
   return Array.from(new Set(nameWords(texts.join("\n"))));
 }
 
@@ -616,7 +623,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // A length limit is not a headcount, but only in limit wording ("under 320 characters", "up to 50
   // words", "a 160-character text") or at 100 and above (review R4-6: "17 characters got hired" stays a figure).
   text = text
-    .replace(/\b(?:under|up to|max(?:imum)?|limit(?: of)?|less than|fewer than|at most|no more than|about|around)\s+\d{1,5}\s*(?:characters?|chars?|words?)\b/gi, " ")
+    .replace(/\b(?:under|up to|max(?:imum)?|limit(?: of)?|less than|fewer than|at most|no more than)\s+\d{1,5}\s*(?:characters?|chars?|words?)\b/gi, " ")
     .replace(/\b\d{1,5}-(?:characters?|chars?|words?)\b/gi, " ")
     .replace(/\b\d{3,5}\s*(?:characters?|chars?|words?)\b/gi, " ");
   // Every standalone integer must be one we can account for. Money, dates and
@@ -789,7 +796,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     // Not after an apostrophe: "O'Brien" is one name, never a flag on "Brien" (review R3-5).
     // One token per name: inner capitals ("DeShawn") and inner apostrophes ("D'Andre", "Ja'Mya",
     // "O'Brien") stay whole (review R3-5, R4-4). Compared by nameKey.
-    for (const m of text.matchAll(/(?<![\p{L}'\u2019])\p{Lu}\p{Ll}*(?:['\u2019]\p{Lu}?\p{Ll}+|\p{Lu}\p{Ll}+)*(?!\p{L})/gu)) {
+    for (const m of text.matchAll(/(?<![\p{L}'\u2019\u02BC`])\p{Lu}\p{Ll}*(?:['\u2019\u02BC`]\p{Lu}?\p{Ll}+|\p{Lu}\p{Ll}+)*(?![\p{L}\u02BC])/gu)) {
       const c = m[0];
       if (c.length < 3) continue;
       const low = nameKey(c);

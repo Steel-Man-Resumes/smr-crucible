@@ -225,3 +225,18 @@ describe("review round 4 findings (2026-10-30)", () => {
     assert.deepEqual(check("There is help near Ceci, MI and Jackson, Michigan."), []);
   });
 });
+
+describe("review round 5 findings (2026-10-30)", () => {
+  it("R5-3: a padded id never pushes older names out", () => {
+    const words = conversationWords([{ role: "user", content: "how is Ceci Ayala doing" }, { role: "assistant", id: "x".repeat(2_100_000), content: "ok" }]);
+    assert.ok(words.includes("ceci"));
+  });
+  it("R5-5: 'about N words' is a figure", () => {
+    assert.ok(check("Your caseload has about 17 words.").some((p) => p.includes('"17"')));
+  });
+  it("R5-6: other apostrophe marks keep a name whole", () => {
+    const g: OrgFacts = { ...LUPE, outOfReachNames: ["D'Andre Price"] };
+    assert.deepEqual(check("Good news, DʼAndre got hired.", "", g), [name("DʼAndre")]);
+    assert.deepEqual(check("Good news, D`Andre got hired.", "", g), [name("D`Andre")]);
+  });
+});

@@ -84,7 +84,17 @@ const RECORD_WORDS = new RegExp(
 const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.|BOP|RRC|UA|UAs|PSI|DOJ|ICE)(?=\W|$)|\bCorrections?\b|\bEM\b|\bPO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))|\b(?:[Mm]y|[Hh]is|[Hh]er|[Tt]heir|[Tt]he|[Aa]|[Ww]ith|[Tt]o|[Ss]ee|[Ss]aw|[Cc]all|[Cc]alled|[Mm]eets?|[Mm]et)\s+PO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))/;
 // "no" and "num" must be whole words: "case notes" is the workspace's own term, not "case no. tes"
 // (2026-10-30, harness TRAP-ACT-04: "Save that to her case notes." reached t.ROY as a withheld blank).
-const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no(?![a-z])\.?|num(?:ber)?(?![a-z])\.?)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
+// Production's pattern (crude on purpose: "case number ..." always matches, the "ber" read as the id),
+// with only "case notes" excluded (review R5-1: requiring the id right after the label let "Her case
+// number is 24-CF-1182." through).
+const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no(?!tes?\b)\.?|num(?:ber)?)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
+/**
+ * An identifier near a record label, the label and the id possibly split by
+ * punctuation, a few short words or a line break ("Her case number. 24-CF-1182",
+ * "docket number is below. 2026-445", "case no.\n24-CF-1182"). Group 1 is the
+ * id: three or more characters with a digit. Review R5-2.
+ */
+const RECORD_ID_NEAR_LABEL = /\b(?:case|docket|booking|inmate|offender|cause)(?:\s*(?:#|no(?!tes?\b)\.?|nos?\.?|num(?:ber)?s?\.?|id))?(?:[\s:=.,;?!"'()\-\u2010-\u2015]+(?:is|was|are|were|below|here|reads|of|the|her|his|their)?){0,4}[\s:=."'(]*([A-Za-z0-9][A-Za-z0-9\-\u2010\u2011]*\d[A-Za-z0-9\-\u2010\u2011]*|\d[A-Za-z0-9\-\u2010\u2011]{2,})/gi;
 
 let plannerLines: string[] | null = null;
 /** The planner's forbidden lines that name a record subject (header, detector 1). Lower case. */
@@ -214,7 +224,15 @@ export function withholdRecordSentences(text: string): { text: string; withheld:
   });
   // A record number split across a line break ("case no.\n24-CF-1182"): the whole text is withheld.
   if (!withheld && RECORD_NUMBERS.test(String(text ?? "").replace(/\s*\n\s*/g, " "))) return { text: RECORD_WITHHELD, withheld: true };
-  return { text: lines.join("\n"), withheld };
+  // An id near a record label that survived the sentence pass (label and id in different sentences or
+  // lines) is withheld wherever it still appears, whatever else was withheld (review R5-2).
+  let out = lines.join("\n");
+  const joined = String(text ?? "").normalize("NFKC").replace(/\s*\n\s*/g, " ");
+  for (const m of joined.matchAll(RECORD_ID_NEAR_LABEL)) {
+    const id = m[1];
+    if (id && id.length >= 3 && out.includes(id)) { out = out.split(id).join(RECORD_WITHHELD); withheld = true; }
+  }
+  return { text: out, withheld };
 }
 
 /** Every string inside a value (tool args and results from the client), record sentences withheld. */
