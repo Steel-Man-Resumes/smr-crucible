@@ -395,17 +395,21 @@ function nameWords(t: string): string[] {
  * OrgFacts.conversationWords.
  */
 export function conversationWords(messages: readonly unknown[]): string[] {
+  // Every string anywhere in the messages: content, parts, toolInvocations,
+  // attachments (review R3-2: the model's input is built from parts too).
   const texts: string[] = [];
-  for (const m of messages) {
-    const c = (m as { content?: unknown } | null)?.content;
-    if (typeof c === "string") texts.push(c);
-    else if (Array.isArray(c)) for (const part of c) { const t = (part as { text?: unknown } | null)?.text; if (typeof t === "string") texts.push(t); }
-  }
+  const walk = (v: unknown, depth: number): void => {
+    if (depth > 8 || texts.length > 5000) return;
+    if (typeof v === "string") texts.push(v);
+    else if (Array.isArray(v)) for (const x of v) walk(x, depth + 1);
+    else if (v && typeof v === "object") for (const x of Object.values(v as Record<string, unknown>)) walk(x, depth + 1);
+  };
+  walk(messages, 0);
   return Array.from(new Set(nameWords(texts.join("\n"))));
 }
 
 /** A word that is a place or a business by what follows it ("Lincoln County", "Chase Bank", "Austin, TX"). Review R2-4. */
-const PLACE_AFTER = /^(?:\s+(?:County|City|Township|Parish|Bank|Street|St\b|Avenue|Ave\b|Road|Rd\b|Lake|River|Falls|Park|Heights|Springs|Valley|Center|Centre|Corporation|Company|Inc\b|LLC\b)|,\s*[A-Z]{2}\b)/;
+const PLACE_AFTER = /^(?:\s+(?:County|City|Township|Parish|Bank|Street|St\b|Avenue|Ave\b|Road|Rd\b|Lake|River|Falls|Park|Heights|Springs|Valley|Center|Centre|Corporation|Company|Inc\b|LLC\b))/;
 
 const STATE_CODE_AFTER = new RegExp(`^,\\s*(?:${US_STATE_CODES})\\b`);
 const STATE_NAME_AFTER = new RegExp(`^,\\s*(?:${US_STATE_NAMES})\\b`, "i");
@@ -671,7 +675,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     const typedAll = new Set([...nameWords(userSaid ?? ""), ...nameWords(facts.staffTyped ?? "")]);
     // Names of people this viewer may see never switch the out-of-reach scan off (review R2-2).
     const inReach = new Set([...facts.visibleNames, ...facts.staffNames, ...(facts.resolvedNames ?? [])].flatMap((n) => nameWords(n)));
-    const said = new Set([...typedAll, ...(facts.conversationWords ?? [])].filter((w) => !inReach.has(w)));
+    const saidAll = new Set([...typedAll, ...(facts.conversationWords ?? [])]);
+    const said = new Set(Array.from(saidAll).filter((w) => !inReach.has(w)));
     const midSentence = (i: number) => i >= 2 && /\s/u.test(text[i - 1]) && /[\p{Ll},;:]/u.test(text[i - 2]);
     const flag = (shown: string) => {
       const clean = shown.replace(/\s+/g, " ").trim();
@@ -686,14 +691,31 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
       .map((n) => n.trim().split(/\s+/).filter(Boolean))
       .filter((parts) => parts.length > 0)
       // Anyone named anywhere in this conversation is left to the typed-word check (F1, R2-1).
-      .filter((parts) => !parts.some((p) => nameWords(p).some((x) => said.has(x))))
+      // Removed when a part that is not an in-reach name was said, or when EVERY part was said, in-reach
+      // words included ("Michael Thomas" built from two in-reach names; review R3-1). "Tom" alone said,
+      // with the model writing "Tom Jackson", is still scanned (R2-2).
+      .filter((parts) => { const ws = parts.flatMap((p) => nameWords(p)); return !(ws.some((x) => said.has(x)) || ws.every((x) => saidAll.has(x))); })
       // A person the record this viewer can read names in full (a note, a Today
       // reason) is repeating the record; claims about them are layer 2's (F8, R2-3).
       .filter((parts) => !recordText.includes(` ${parts.map((p) => nameWords(p).join(" ")).join(" ")} `))
       // Only people whose first name is in the answer can be in it (speed, review R2).
       .filter((parts) => nameWords(parts[0]).some((f) => answerWords.has(f)));
-    const normText = text.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC");
-    const plain = (p: string) => p.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC");
+    // Normalized per character with a map back to the original, so a flag quotes the answer's own
+    // spelling ("José Ruiz", never "Jose Ruiz"; review R3-5). Curly apostrophes compare as straight.
+    const plain = (p: string) => p.normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC").replace(/[\u2018\u2019]/g, "'");
+    let normText = "";
+    const origAt: number[] = [];
+    for (let i = 0; i < text.length; ) {
+      const ch = String.fromCodePoint(text.codePointAt(i)!);
+      for (const unit of plain(ch)) { for (let k = 0; k < unit.length; k++) origAt.push(i); normText += unit; }
+      i += ch.length;
+    }
+    origAt.push(text.length);
+    const original = (h: RegExpExecArray) => {
+      const end = h.index + h[0].length;
+      const last = origAt[end - 1];
+      return text.slice(origAt[h.index], last + String.fromCodePoint(text.codePointAt(last)!).length);
+    };
     const esc = (p: string) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const cap = (p: string) => p.charAt(0).toLocaleUpperCase("en-US") + p.slice(1);
     // (2a) Full names, and first name with each later part (F2), in any
@@ -709,7 +731,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
         }
         if (hit) break;
       }
-      if (hit) flag(hit[0]);
+      if (hit) flag(original(hit));
     }
     // (2b) First names in any position; later name parts when that person's
     // first name is in the answer (F3: hyphenated parts count on their own).
@@ -721,7 +743,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
       for (const p of parts.slice(1)) for (const x of nameWords(p)) outLater.add(x);
     }
     // Three letters or more, an inner capital allowed ("DeShawn"); review R2-5, R2-6.
-    for (const m of text.matchAll(/(?<!\p{L})\p{Lu}\p{Ll}+(?:\p{Lu}\p{Ll}+)*(?!\p{L})/gu)) {
+    // Not after an apostrophe: "O'Brien" is one name, never a flag on "Brien" (review R3-5).
+    for (const m of text.matchAll(/(?<![\p{L}'\u2019])\p{Lu}\p{Ll}+(?:\p{Lu}\p{Ll}+)*(?!\p{L})/gu)) {
       const c = m[0];
       if (c.length < 3) continue;
       const low = N(c);
@@ -737,7 +760,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
         continue;
       }
       if (!outFirst.has(low) && !outLater.has(low)) continue;
-      if (STATE_WORDS.has(low) || PLACE_AFTER.test(text.slice(at + c.length))) continue;
+      // ", MI" or ", Michigan" after it is a town; stateAfter leaves out OK, HI and ME (review R3-3).
+      if (STATE_WORDS.has(low) || PLACE_AFTER.test(text.slice(at + c.length)) || stateAfter(text.slice(at + c.length))) continue;
       flag(c);
     }
     return problems;

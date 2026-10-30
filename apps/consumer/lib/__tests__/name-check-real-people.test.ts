@@ -170,3 +170,29 @@ describe("harness ROOM-11 (2026-10-30): a check-in draft may name the participan
     assert.deepEqual(check("Text message (under 320 characters): Hi Jean, checking in."), []);
   });
 });
+
+describe("review round 3 findings (2026-10-30)", () => {
+  const g = (extra: Partial<OrgFacts>): OrgFacts => ({ ...LUPE, visibleNames: ["Jean", "Marqus", "Michael", "Thomas"], ...extra });
+  it("R3-1: a full name built only from in-reach words gives the same result for a real and an invented person", () => {
+    const real = check("Michael Thomas got hired at Meijer.", "how is Michael Thomas doing", g({ outOfReachNames: ["Michael Thomas"] }));
+    const fake = check("Marqus Thomas got hired at Meijer.", "how is Marqus Thomas doing", g({ outOfReachNames: [] }));
+    assert.deepEqual(real, []);
+    assert.deepEqual(fake, []);
+    // "Tom" said alone, the model writing the out-of-reach Tom Jackson, is still caught.
+    assert.deepEqual(check("Good news, Tom Jackson got hired.", "how is Tom doing", g({ visibleNames: ["Jean", "Tom"] })), [name("Tom Jackson")]);
+  });
+  it("R3-2: a name only in a message's parts or tool results still counts as said", () => {
+    const words = conversationWords([{ role: "user", content: "hi", parts: [{ type: "text", text: "how is Ceci Ayala doing" }] }, { role: "assistant", toolInvocations: [{ result: { note: "Ceci Ayala" } }] }]);
+    assert.ok(words.includes("ceci") && words.includes("ayala"), JSON.stringify(words));
+  });
+  // Accepted: ", ID" is Idaho as written ("Ceci, ID in hand" is not flagged); a real code is a real place.
+  it("R3-3: a comma and two capitals is not always a state", () => {
+    for (const t of ["Tell Ceci, HR needs her form.", "Ask Ceci, OK?", "Ceci, RSVP by Friday."]) assert.ok(check(t).includes(name("Ceci")), t);
+    assert.deepEqual(check("There is help in Jackson, MI, and in Ceci, MI too.", "", f2(["Ceci Ayala"])), []);
+  });
+  it("R3-5: a flag quotes the answer's own spelling", () => {
+    assert.deepEqual(check("Good news, José Ruiz got hired.", "", f2(["Jose Ruiz"])), [name("José Ruiz")]);
+    assert.deepEqual(check("Good news, Ana O’Brien got hired.", "", f2(["Ana O'Brien"])), [name("Ana O’Brien")]);
+  });
+  function f2(out: string[]): OrgFacts { return { ...LUPE, outOfReachNames: out }; }
+});
