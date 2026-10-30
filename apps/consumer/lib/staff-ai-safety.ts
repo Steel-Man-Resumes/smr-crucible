@@ -217,10 +217,19 @@ export const STAFF_INPUT_NOTICE = "Record details were left out of what t.ROY sa
 export function withholdRecordSentences(text: string): { text: string; withheld: boolean } {
   const source = String(text ?? "");
   const shaped = (sentence: string) => sentence.split(/\s+/).some(recordShapedToken);
+  // Inside a "<label> notes" sentence the bar is lower (review G8-1): any token with 4+ digits that is
+  // not an ISO date or a slash date ("A1234", "123-4567"), or a spaced court number ("24 CF 1182").
+  const notesShaped = (sentence: string) =>
+    shaped(sentence) ||
+    /\b\d{2,4}\s?[A-Za-z]{2}\s?\d{3,7}\b/.test(sentence) ||
+    sentence.split(/\s+/).some((t) => {
+      const w = t.normalize("NFKC").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+      return /^[A-Za-z0-9-]+$/.test(w) && !/^\d{4}-\d{2}-\d{2}$/.test(w) && (w.match(/\d/g) ?? []).length >= 4;
+    });
   // Sentences grouped by line in one pass (review G7-2: linear in the number of lines). "case no.
   // 24-CF-1182" is one sentence: never split after an abbreviated "no.", "num." or "nr." (R4-1).
   const lines = source.split("\n").map((line) => {
-    const segs = line.split(/(?<=[.!?;])(?<!\b(?:no|num|nr)\.)\s+/i).map((s) => ({ s, hit: hasStaffRecordWords(s) || (NOTES_LABEL.test(s) && shaped(s)) }));
+    const segs = line.split(/(?<=[.!?;])(?<!\b(?:no|num|nr)\.)\s+/i).map((s) => ({ s, hit: hasStaffRecordWords(s) || (NOTES_LABEL.test(s) && notesShaped(s)) }));
     return { line, segs };
   });
   // A label in one sentence and a record-shaped number in the next ("Her case number. 24-CF-1182",

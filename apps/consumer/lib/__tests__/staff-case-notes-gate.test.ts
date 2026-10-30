@@ -57,3 +57,7 @@ it("review G7-1 to G7-3: notes with any record-shaped id, linear in lines, untou
     assert.ok(performance.now() - start < 1000, `${JSON.stringify(t.slice(0, 20))} x50000 took ${(performance.now() - start).toFixed(0)} ms`);
   }
 });
+it("review G8-1: short, spaced and phone-shaped ids inside a case notes sentence", () => {
+  for (const t of ["Her case notes: A1234", "case notes say 24 CF 1182 is closed", "case notes: 123-4567"]) assert.equal(withholdRecordSentences(t).withheld, true, t);
+  for (const t of ["Save that to her case notes.", "case notes from 10/27", "case notes from 2026-10-27", "Her case notes - see below. Meeting moved to 2026-11-03."]) assert.equal(withholdRecordSentences(t).withheld, false, t);
+});
