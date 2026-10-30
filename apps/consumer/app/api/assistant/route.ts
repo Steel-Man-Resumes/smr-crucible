@@ -411,7 +411,7 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
       // English, so the never-sent rule is restated for every language.
       localizedSystemPrompt = `${systemPrompt}
 
-LANGUAGE: Answer in Spanish (plain, Latin American neutral). Case notes, outcome notes and funder narratives stay in English. Write a message to a participant in the language the staff member asks for. Refer to pages and buttons by their English labels. Never say you sent, saved or added anything, in any language.`;
+LANGUAGE: Answer in Spanish (plain, Latin American neutral). Case notes, outcome notes and funder narratives stay in English. Write a message to a participant in the language the staff member asks for. Refer to pages and buttons by their English labels. Keep these in English, word for word: the "isn't on your list" sentence, the part-of-list sentence, the safety and legal-help lines, and each skill's closing line. Never say you sent, saved or added anything, in any language.`;
     } else if (langRow?.coach_language === "es") {
       localizedSystemPrompt = `${systemPrompt}
 
