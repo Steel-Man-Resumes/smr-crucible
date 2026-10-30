@@ -240,3 +240,14 @@ describe("review round 5 findings (2026-10-30)", () => {
     assert.deepEqual(check("Good news, D`Andre got hired.", "", g), [name("D`Andre")]);
   });
 });
+
+describe("staff prompt review (2026-10-30): crisis lines and years are not figures", () => {
+  it("B1: 911, 988, 211 as help lines pass; as counts they are figures", () => {
+    for (const t of ["Follow your organization's safety protocol first. If anyone is in danger now, call 911. For a mental health crisis, call or text 988. For local help, dial 211.", "Call 988 (call or text) or call 911 if it is an emergency.", "Jean can text 988 any time."]) assert.deepEqual(check(t), [], t);
+    assert.ok(check("This year 211 people were served.").some((p) => p.includes('"211"')));
+  });
+  it("F8: a year after a time word is a date", () => {
+    for (const t of ["In 2026 the team grew.", "Since 2024, Jean has worked nights.", "This covers FY 2026.", "From 2025 to 2026 the program ran twice."]) assert.deepEqual(check(t), [], t);
+    assert.ok(check("2026 people got hired.").some((p) => p.includes('"2026"')));
+  });
+});

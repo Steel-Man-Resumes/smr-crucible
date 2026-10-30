@@ -585,6 +585,13 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // A template's blanks are not claims. "[Your Name]" names nobody and "[X] min"
   // counts nothing; both were being reported to the reader as unsupported.
   text = text.replace(/\[[^\]\n]{0,80}\]/g, " ");
+  // Crisis and help lines are not counts (staff prompt review B1, 2026-10-30): 911, 988 and 211 next to
+  // call, text or dial, or followed by "(call or text)", are taken out before the number scan.
+  // "211 people were served" stays a figure.
+  text = text.replace(/\b(?:call(?:\s+or\s+text)?|text|dial)\s+(?:911|988|211)\b|\b(?:911|988|211)\b(?=\s*\((?:call|text))/gi, " a help line ");
+  // A year after a time word is a date, not a count (staff prompt review F8): "In 2026", "since 2024",
+  // "FY 2026", "2025-2026". "2026 people" stays a figure.
+  text = text.replace(/\b(?:in|since|during|by|for|through|from|until|of|FY|fiscal year)\s+(?:20[0-4]\d)(?:\s*(?:-|to|through)\s*(?:20)?[0-4]\d)?\b/gi, (m) => m.replace(/\d+/g, "the year"));
   // A phone number is contact detail, not a count (review C4 B1): skip it
   // rather than letting its digit groups into the allowed numbers.
   text = text.replace(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}\b/g, " ");
