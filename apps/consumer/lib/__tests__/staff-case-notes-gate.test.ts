@@ -42,3 +42,18 @@ it("review G6-1, G6-2, G6-3: no freeze on pasted forms, ordinary numbers untouch
   }
   for (const t of ["Her case notes: CR-99812", "Add to her case notes: 24-CF-1182 dismissed."]) assert.equal(withholdRecordSentences(t).withheld, true, t);
 });
+it("review G7-1 to G7-3: notes with any record-shaped id, linear in lines, untouched lines verbatim", () => {
+  for (const t of ["His case notes is B-445566", "In CASE notes  CR-99812 is closed.", "Just in CASE notes: 2024CF001182.", "Case notes: 1:24-cr-00123", "case notes: 24‐CF‐1182"]) {
+    assert.equal(withholdRecordSentences(t).withheld, true, t);
+  }
+  for (const t of ["Save that to her case notes.", "case notes from 10/27", "case notes from 2026-10-27", "Case ID field is blank. Her phone is 555-0142.", "Monday.  She called.\tThen left."]) {
+    const r = withholdRecordSentences(t);
+    assert.equal(r.withheld, false, t);
+    assert.equal(r.text, t, "a line with nothing withheld comes back exactly as typed");
+  }
+  for (const t of ["x\n".repeat(50_000), "case no.\n".repeat(50_000), "court. 24-CF-1182\n".repeat(50_000)]) {
+    const start = performance.now();
+    withholdRecordSentences(t);
+    assert.ok(performance.now() - start < 1000, `${JSON.stringify(t.slice(0, 20))} x50000 took ${(performance.now() - start).toFixed(0)} ms`);
+  }
+});
