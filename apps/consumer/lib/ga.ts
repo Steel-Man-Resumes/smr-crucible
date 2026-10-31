@@ -13,6 +13,8 @@
  * GA on preview deploys). Excluded from /mini-forge/* by AnalyticsWrapper.
  */
 
+import { isAnalyticsExcluded } from "./analytics-exclusions";
+
 export const GA_ID = process.env.NEXT_PUBLIC_GA_ID || "G-0FFVQ6SQ0L";
 
 declare global {
@@ -21,9 +23,36 @@ declare global {
   }
 }
 
-/** Fire a GA4 event if gtag is loaded. No-op server-side or before load. */
-export function trackGA(name: string, params?: Record<string, unknown>): void {
-  if (typeof window === "undefined") return;
-  if (typeof window.gtag !== "function") return;
+/** Preview and development traffic must not enter production acquisition data. */
+export function isProductionAnalyticsHost(hostname: string): boolean {
+  return hostname === "forge.steelmanresumes.com" || hostname === "refinery.steelmanresumes.com";
+}
+
+/** True means queued to gtag, not delivered or accepted by Google. */
+export function trackGA(name: string, params?: Record<string, unknown>): boolean {
+  if (typeof window === "undefined") return false;
+  if (!isProductionAnalyticsHost(window.location.hostname)) return false;
+  if (isAnalyticsExcluded(window.location.pathname)) return false;
+  if ((window as unknown as Record<string, unknown>)[`ga-disable-${GA_ID}`]) return false;
+  if (typeof window.gtag !== "function") return false;
   window.gtag("event", name, params || {});
+  return true;
+}
+
+/** Mark only after queueing. A missing tag can be retried when its script is ready. */
+export function trackAcquisitionOnce(
+  name: "forge_started" | "forge_completed",
+  params: Record<string, unknown>,
+): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const key = `ga_${name}`;
+    if (window.sessionStorage.getItem(key)) return false;
+    if (!trackGA(name, params)) return false;
+    window.sessionStorage.setItem(key, "1");
+    return true;
+  } catch {
+    // Storage can be unavailable. Never break the participant's page.
+    return false;
+  }
 }
