@@ -56,3 +56,11 @@ it("prompt review R2-3: a page with line breaks never adds lines to the prompt",
 it("prompt review R3-1: clock times carry AM or PM", () => {
   assert.match(staff("today"), /Write every clock time with AM or PM/);
 });
+
+it("harness 2026-10-31 (ROOM-10, ROOM-13, TRUE-PASS-01, TRAP-ACT-01/02): refused buttons, fewer fields, draft placement", () => {
+  const p = staff("today");
+  assert.match(p, /A button that comes back refused or unavailable is not your answer/);
+  assert.match(p, /Never say you are correcting an earlier message because a button did not open/);
+  assert.match(p, /fewer details than an earlier read is not a contradiction/);
+  assert.match(p, /A draft is on their page only after they press "Put this draft on their page"/);
+});

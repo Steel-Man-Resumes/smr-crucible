@@ -32,7 +32,18 @@ export function staffAnswerText(steps: readonly Step[], finalText: string): stri
   const clean = (s: string) => (keepNudge ? s : withoutNudge(s).replace(/[ \t]{2,}/g, " ").trim());
   const final = clean(String(finalText ?? "").trim());
   const toolsRan = steps.some((s) => (s.toolCalls?.length ?? 0) > 0);
-  if (withoutNudge(final)) return final;
+  if (withoutNudge(final)) {
+    // Harness TRAP-ACT-02 (2026-10-31): the model wrote both drafts in the step that called
+    // offer_staff_draft, then closed with a short note in the last step; only the note reached the
+    // staff member. Substantive earlier words (a draft, a list) that the last step does not repeat
+    // come first; short working lines ("Looking that up") stay dropped.
+    const substantive = steps
+      .slice(0, -1)
+      .map((s) => clean(String(s.text ?? "")))
+      .filter((t) => t.length >= 160 && !final.includes(t));
+    const kept = [...new Set(substantive)];
+    return kept.length ? `${kept.join("\n\n")}\n\n${final}` : final;
+  }
   const earlier = steps.map((s) => withoutNudge(String(s.text ?? ""))).filter(Boolean);
   // The last step's text is in steps too; it is nudge-only here, so it was dropped above.
   const body = [...new Set(earlier)].join("\n\n");

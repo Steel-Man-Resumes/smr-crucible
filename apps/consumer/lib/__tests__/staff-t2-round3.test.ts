@@ -111,3 +111,14 @@ it("review R3 S2: the nudge line is cut unless the nudge tool answered ok this t
   const ok = staffAnswerText([answerStep, { text: LISTING_NUDGE_LINE, toolCalls: [{}], toolResults: [{ toolName: "listing_check_nudge", result: { status: "ok" } }] }], LISTING_NUDGE_LINE);
   assert.ok(ok.endsWith(LISTING_NUDGE_LINE) && ok.includes("Eastside"));
 });
+
+it("harness TRAP-ACT-02 (2026-10-31): drafts written in an earlier step reach the staff member", async () => {
+  const { staffAnswerText } = await import("../staff-answer-text");
+  const drafts = "Text message (under 320 characters):\n\nHi Marqus, it's Lupe. Your two saved jobs at Market Square are still open on your list. What help would you like with the next step?\n\nEmail\n\nSubject: Checking in\n\nHi Marqus,\n\nI saw your two saved jobs. What would help most right now?\n\nLupe";
+  const note = "I signed both drafts \"Lupe\" because that is the case manager on Marqus's page. This is a draft. Nothing was saved or sent.";
+  const out = staffAnswerText([{ text: drafts, toolCalls: [{}], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only" } }] }, { text: note, toolCalls: [] }], note);
+  assert.ok(out.startsWith(drafts) && out.endsWith(note), out);
+  // A short working line before a tool call stays dropped; a final answer that already repeats the earlier text is not doubled.
+  assert.equal(staffAnswerText([{ text: "Looking that up.", toolCalls: [{}] }, { text: note, toolCalls: [] }], note), note);
+  assert.equal(staffAnswerText([{ text: drafts, toolCalls: [{}] }, { text: `${drafts}\n\n${note}`, toolCalls: [] }], `${drafts}\n\n${note}`), `${drafts}\n\n${note}`);
+});

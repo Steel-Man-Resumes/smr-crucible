@@ -375,9 +375,14 @@ export function normName(w: string): string {
   return w.replace(/[\u2018\u2019\u02BC`]/g, "'").normalize("NFKD").replace(/[\p{M}\p{Cf}]/gu, "").normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
-/** A whole name token as one key, apostrophes and hyphens dropped ("D'Andre" is "dandre"). Review R4-4. */
+/**
+ * A whole name token as one key, apostrophes and hyphens dropped ("D'Andre" is "dandre"). Review R4-4.
+ * A trailing possessive is not part of the name ("Marqus's page", "Hopkins' file"): harness TRAP-NUMBER-03
+ * (2026-10-31) flagged "Marqus's" as unmatched because its key was "marquss". Only the ending comes off;
+ * an inner apostrophe stays part of the key.
+ */
 function nameKey(w: string): string {
-  return normName(w).replace(/[^\p{L}]/gu, "");
+  return normName(w).replace(/'s?$/u, "").replace(/[^\p{L}]/gu, "");
 }
 
 /**

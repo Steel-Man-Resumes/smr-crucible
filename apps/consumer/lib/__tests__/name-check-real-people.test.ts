@@ -310,3 +310,18 @@ describe("review round 12 findings (2026-10-31)", () => {
     for (const [t, n] of [["Level 57 trainees passed.", "57"], ["Building 43 tenants signed.", "43"], ["Of 2025 employees, 12 got jobs.", "2025"]] as const) assert.ok(a(t).includes(fig(n)), t);
   });
 });
+
+describe("harness TRAP-NUMBER-03 (2026-10-31): a possessive is not a new name", () => {
+  const a = (t: string, said: string) => checkOrgClaimsDeterministic(t, LUPE, said, { typedNamesInNoMatch: true });
+  it("an in-reach first name with 's or \u2019s is the same person", () => {
+    assert.deepEqual(a("Here is a button to Marqus's page. Press it and check his placements there for the wage.", "What is Marqus\u2019s hourly wage?"), []);
+    assert.deepEqual(a("Here is a button to Marqus\u2019s page.", "What is Marqus's hourly wage?"), []);
+    assert.deepEqual(a("Jean's task is still open.", "how is Jean"), []);
+  });
+  it("an out-of-reach first name is still caught behind a possessive (the old key missed it)", () => {
+    assert.ok(a("Yesterday Ceci's interview went well.", "how is Jean").some((p) => p.includes('"Ceci\'s"')));
+  });
+  it("a typed unknown name behind a possessive is still checked", () => {
+    assert.ok(a("Open D'Andre's page and check.", "prep me for D'Andre").some((p) => p.includes("D'Andre")));
+  });
+});
