@@ -631,8 +631,14 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // inside one is still checked when it appears on its own (review C4 S1).
   // Demo fix T1: on the ANSWER path the words of this turn's tool text are
   // known as well (toolTextKnown); a draft for a participant keeps this rule.
-  for (const phrase of (facts.staffToolEvidence ?? []).flatMap((e) => e.phrases ?? []).sort((a, b) => b.length - a.length)) {
-    if (phrase.length >= 3) text = text.split(phrase).join(" ");
+  // A phrase's parenthetical is dropped as a second form (harness TRAP-ACT-01 on preview D: the read
+  // returned "Production Supervisor (1st & 2nd Shifts)", the draft said "your Production Supervisor
+  // application", and both title words were held back as people). Still whole phrases, never loose words.
+  const phraseForms = (facts.staffToolEvidence ?? []).flatMap((e) => e.phrases ?? [])
+    .flatMap((p) => [p, p.replace(/\s*\([^)]*\)/g, " ").replace(/\s+/g, " ").trim()])
+    .filter((p) => p.length >= 3);
+  for (const phrase of [...new Set(phraseForms)].sort((a, b) => b.length - a.length)) {
+    text = text.split(phrase).join(" ");
   }
 
   // Pay is never inferred (staff-operations: no wage unless the staff member

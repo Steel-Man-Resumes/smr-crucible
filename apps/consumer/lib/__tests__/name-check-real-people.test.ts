@@ -325,3 +325,15 @@ describe("harness TRAP-NUMBER-03 (2026-10-31): a possessive is not a new name", 
     assert.ok(a("Open D'Andre's page and check.", "prep me for D'Andre").some((p) => p.includes("D'Andre")));
   });
 });
+
+describe("harness TRAP-ACT-01 on preview D (2026-11-01): a job title the read returned is a phrase on the draft path, parenthetical or not", () => {
+  const ev = { tool: "read_participant_overview", facts: {}, numbers: [], names: [], labels: [], phrases: ["Production Supervisor (1st & 2nd Shifts)", "STS Technical Services"], toolText: [] } as never;
+  const g: OrgFacts = { ...LUPE, staffToolEvidence: [ev] };
+  it("the title without its parenthetical is the record's own text, not two people", () => {
+    assert.deepEqual(checkOrgClaimsDeterministic("Hi Jean, it's Lupe. I saw your Production Supervisor application with STS Technical Services is marked interviewing. One open item is bringing your ID to STS.", g, ""), []);
+  });
+  it("a name that only shares a word with the title is still checked", () => {
+    const bad = checkOrgClaimsDeterministic("Hi Jean, Supervisor Dana Price asked about you.", g, "");
+    assert.ok(bad.some((p) => p.includes("Dana")), JSON.stringify(bad));
+  });
+});

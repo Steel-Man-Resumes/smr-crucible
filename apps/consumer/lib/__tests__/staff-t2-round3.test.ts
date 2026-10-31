@@ -2,7 +2,7 @@
 // "Find employers in Lansing that hire people with records" and got only
 // "Did this place still check out? Called them lately?" with the listing
 // buttons. No employer search result was shown.
-import { it } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { generateText } from "ai";
@@ -137,7 +137,65 @@ it("review C2 (2026-11-01): a short real draft the tool was given reaches the st
   const disclaimer = "This is a draft. Nothing was saved or sent.";
   // Written in the draft step: kept by provenance.
   assert.equal(staffAnswerText([{ text: body, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body } }] }, { text: disclaimer, toolCalls: [] }], disclaimer), `${body}\n\n${disclaimer}`);
-  // Never written as text at all: the tool body is shown as the draft.
+  // Never written as text at all: the prose is the disclaimer alone; the draft card carries the body
+  // (review D2, 2026-11-01: copying bodies into the prose resurfaced a draft the final step withdrew).
   const out = staffAnswerText([{ text: "", toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body } }] }, { text: disclaimer, toolCalls: [] }], disclaimer);
-  assert.ok(out.includes(`Draft (unsaved, in this reply):\n\n${body}`) && out.endsWith(disclaimer), out);
+  assert.equal(out, disclaimer);
+});
+
+describe("review D (2026-11-01): the answer is kept by step kind, never by length or draft provenance", () => {
+  const triage = "Jean needs attention first: the STS application says interviewing (Jean's report, updated Oct 24) and the task \"Bring your ID to STS\" has no due date. Marqus is active and has nothing open. Your step: open Jean's page, check the interview details, and remind Jean about the ID yourself.";
+  const nav = "You can open Jean from People.";
+  const refusedOpen = { toolName: "open_staff_page", result: { status: "refused" } };
+  it("D4 / ROOM-10 / DEMO-09: a triage written in the step whose button was refused is kept, the nav note last", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const steps = [
+      { text: "Let me look at your caseload.", toolCalls: [{ toolName: "read_caseload_digest" }], toolResults: [{ toolName: "read_caseload_digest", result: { status: "ok" } }] },
+      { text: triage, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [refusedOpen] },
+      { text: nav, toolCalls: [] },
+    ];
+    assert.equal(staffAnswerText(steps, nav), `${triage}\n\n${nav}`);
+    // The same with the button allowed: kept too, and a successful open changes nothing in the words.
+    const okSteps = [steps[0], { text: triage, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] }, steps[2]];
+    assert.equal(staffAnswerText(okSteps, nav), `${triage}\n\n${nav}`);
+  });
+  it("read-step words are narration and are dropped, whatever their length", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const long = "I will read the caseload now and then the overview for each person on it so that the triage covers everyone, including the people with nothing open today, before I answer you in full.";
+    assert.equal(staffAnswerText([{ text: long, toolCalls: [{ toolName: "read_caseload_digest" }] }, { text: nav, toolCalls: [] }], nav), nav);
+    // An action step BEFORE a later read is before the facts too: dropped.
+    const steps = [
+      { text: "Opening Jean.", toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] },
+      { text: "Now the overview.", toolCalls: [{ toolName: "read_participant_overview" }], toolResults: [{ toolName: "read_participant_overview", result: { status: "ok" } }] },
+      { text: triage, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body: "Hi Jean." } }] },
+      { text: nav, toolCalls: [] },
+    ];
+    assert.equal(staffAnswerText(steps, nav), `${triage}\n\n${nav}`);
+  });
+  it("D1: from a refused action step, only the sentences that say it happened are cut; a refused draft offer keeps its real words", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const words = `${triage} I have opened Jean's page and placed the draft there for you. You can review it on that page.`;
+    const fix = "Correction: I did not open a page or place a draft. The draft is unsaved, in this reply.";
+    const out = staffAnswerText([{ text: words, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "refused" } }] }, { text: fix, toolCalls: [] }], fix);
+    assert.equal(out, `${triage}\n\n${fix}`);
+    assert.ok(!out.includes("placed") && !out.includes("on that page"), out);
+  });
+  it("D2: a draft body the final step withdrew is not copied into the prose", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const body = "Hi Marqus, your supervisor role at Market Square starts Oct 27.";
+    const withdraw = "Discard that earlier draft. It used an unsupported fact. No draft should be used.";
+    assert.equal(staffAnswerText([{ text: "", toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body } }] }, { text: withdraw, toolCalls: [] }], withdraw), withdraw);
+  });
+  it("D3: a draft offered with no words at all gets a reply that says where the draft is, not the search fallback", async () => {
+    const { staffAnswerText, STAFF_DRAFT_ONLY_TEXT, STAFF_TOOLS_NO_TEXT } = await import("../staff-answer-text");
+    const steps = [{ text: "", toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body: "Hi Jean, it's Lupe." } }] }, { text: "", toolCalls: [] }];
+    assert.equal(staffAnswerText(steps, ""), STAFF_DRAFT_ONLY_TEXT);
+    assert.equal(staffAnswerText([{ text: "", toolCalls: [{ toolName: "read_caseload_digest" }] }, { text: "", toolCalls: [] }], ""), STAFF_TOOLS_NO_TEXT);
+  });
+  it("D5 / D6: the header note certifies no earlier read, and the focus refusal keeps one person's facts to that person", () => {
+    const tools = read("../tools/assistant-staff-tools.ts");
+    assert.doesNotMatch(tools, /come from read_participant_overview earlier in this conversation/);
+    assert.match(tools, /A smaller result does not contradict a fuller read of this same person from this conversation/);
+    assert.match(tools, /What you read belongs to the person this conversation is about and answers nothing about anyone else/);
+  });
 });

@@ -489,6 +489,14 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // send a staff member an empty answer; say it plainly instead.
     // Every step's words, never a card line alone (lib/staff-answer-text.ts; demo fix T2 round 3).
     const answer = replyOrFallback(staffAnswerText(generated.steps, generated.text));
+    // The shape of the model's steps, no content: how long each step's text was, which tools it
+    // called, each result's status. Tells a model refusal apart from text the assembler dropped
+    // (Codex D review, 2026-11-01: ROOM-10 and DEMO-09 could not be placed without this).
+    console.info("[staff-steps]", JSON.stringify(generated.steps.map((s) => ({
+      text: String(s.text ?? "").length,
+      calls: (s.toolCalls ?? []).map((c) => (c as { toolName?: string }).toolName ?? "?"),
+      results: (s.toolResults ?? []).map((r) => `${(r as { toolName?: string }).toolName ?? "?"}:${String(((r as { result?: { status?: unknown } }).result)?.status ?? "-")}`),
+    }))));
 
     const facts = {
       staffToolEvidence: staffEvidence.items,
