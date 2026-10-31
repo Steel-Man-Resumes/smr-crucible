@@ -266,17 +266,19 @@ export default function WalkthroughPage() {
       {/* Guided tour */}
       <section id="tour" data-chapter="tour" className="scroll-mt-16 px-3 pb-14 pt-4 sm:px-6 sm:pb-20 sm:pt-6">
         <div className="mx-auto max-w-6xl">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
             <div>
               <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#dbc173]">Guided tour · about 3 minutes</p>
-              <h1 className="mt-1 text-xl font-bold leading-tight text-[#f4efe2] sm:text-4xl">A resume is one move in the hiring game.</h1>
+              <h1 className="mt-1 text-xl font-bold leading-tight text-[#f4efe2] sm:text-2xl">A resume is one move in the hiring game.</h1>
             </div>
             <a href="#forge" className="hidden text-sm text-[#b9b2a0] underline underline-offset-4 hover:text-white sm:inline">
               Rather read it at your own pace?
             </a>
           </div>
-          {/* Keep the whole player, controls included, on one screen. */}
-          <div className="mx-auto" style={{ maxWidth: "max(320px, calc((100svh - 290px) * 1.6))" }}>
+          {/* Keep the whole player, controls included, on one screen: header 57 + heading ~70 + controls and
+              chapter bar ~90 + note ~30 above and below a 16:10 stage. Checked at 1093x614 (a 1366x768 laptop
+              at 125% scaling), 1229x691, 1366x768 and 1920x1080 (2026-11-01). */}
+          <div className="mx-auto" style={{ maxWidth: "max(320px, calc((100svh - 285px) * 1.6))" }}>
             <TourPlayer />
           </div>
           <p className="mt-4 text-xs text-[#8f897a]">
@@ -518,7 +520,6 @@ export default function WalkthroughPage() {
       )}
 
       <style jsx global>{`
-        html { scroll-behavior: smooth; }
         .wt-reveal { opacity: 0; transform: translateY(12px); transition: opacity 340ms cubic-bezier(.16,1,.3,1), transform 440ms cubic-bezier(.16,1,.3,1); }
         .wt-reveal.wt-in { opacity: 1; transform: none; }
         .wt-step { opacity: 0.12; transform: translateX(-6px); transition: opacity 360ms ease, transform 420ms cubic-bezier(.16,1,.3,1); }
@@ -528,7 +529,6 @@ export default function WalkthroughPage() {
         .wt-noscroll { scrollbar-width: none; }
         .wt-noscroll::-webkit-scrollbar { display: none; }
         @media (prefers-reduced-motion: reduce) {
-          html { scroll-behavior: auto; }
           .wt-reveal, .wt-step { opacity: 1; transform: none; transition: none; }
           .wt-line { animation: none; }
         }

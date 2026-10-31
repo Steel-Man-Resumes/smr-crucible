@@ -139,6 +139,9 @@ export function TourPlayer() {
   const stageRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState({ w: 0, h: 0 });
+  /* The phone layout (square stage, caption below) follows the WINDOW, not the stage: on a laptop at 125% scaling the
+     height cap makes the stage narrow and the old rule turned it square, taller than the screen (Troy, 2026-11-01). */
+  const [vw, setVw] = useState(0);
   const [i, setI] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -155,7 +158,7 @@ export function TourPlayer() {
   const scene = SCENES[step.scene];
   const hold = holdMs(step);
   const last = i === STEPS.length - 1;
-  const narrow = stage.w > 0 && stage.w < 640;
+  const narrow = vw > 0 && vw < 640;
   const overlayCaption = !narrow;
   const chapterIndex = CHAPTERS.findIndex((c) => c.id === step.chapter);
 
@@ -166,6 +169,13 @@ export function TourPlayer() {
     const ro = new ResizeObserver(([e]) => setStage({ w: e.contentRect.width, h: e.contentRect.height }));
     ro.observe(el);
     return () => ro.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const read = () => setVw(window.innerWidth);
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
   }, []);
 
   useEffect(() => {
