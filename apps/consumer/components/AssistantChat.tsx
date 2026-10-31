@@ -902,19 +902,21 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                   const label = TOOL_ACTIVITY[inv?.toolName ?? ""] ?? "Working on it";
                   const done = inv?.state === "result";
                   const failed = done && (inv?.result?.ok === false || ["unavailable", "blocked", "refused"].includes(String(inv?.result?.status)));
+                  // A button t.ROY may not show is not a failed step for the staff member to worry about (harness ROOM-10/13).
+                  const noButton = failed && ["open_staff_page", "open_add_person"].includes(String(inv?.toolName)) && String(inv?.result?.status) === "refused";
                   return (
                     <div
                       key={i}
                       className="flex items-center gap-2 pl-1 text-xs text-muted"
                       role="status"
                     >
-                      {failed ? <span className="text-amber-700" aria-label="Could not complete">!</span> : done ? (
+                      {noButton ? <span className="text-muted" aria-hidden="true">·</span> : failed ? <span className="text-amber-700" aria-label="Could not complete">!</span> : done ? (
                         <Check size={14} className="text-sage-600" aria-hidden="true" />
                       ) : (
                         <TroyWork compact decorative />
                       )}
                       <span>
-                        {failed ? "Could not complete this step" : label}
+                        {noButton ? "No button for that here" : failed ? "Could not complete this step" : label}
                         {done ? "" : "..."}
                       </span>
                     </div>

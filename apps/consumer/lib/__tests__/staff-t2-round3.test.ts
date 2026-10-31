@@ -116,9 +116,28 @@ it("harness TRAP-ACT-02 (2026-10-31): drafts written in an earlier step reach th
   const { staffAnswerText } = await import("../staff-answer-text");
   const drafts = "Text message (under 320 characters):\n\nHi Marqus, it's Lupe. Your two saved jobs at Market Square are still open on your list. What help would you like with the next step?\n\nEmail\n\nSubject: Checking in\n\nHi Marqus,\n\nI saw your two saved jobs. What would help most right now?\n\nLupe";
   const note = "I signed both drafts \"Lupe\" because that is the case manager on Marqus's page. This is a draft. Nothing was saved or sent.";
-  const out = staffAnswerText([{ text: drafts, toolCalls: [{}], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only" } }] }, { text: note, toolCalls: [] }], note);
+  const out = staffAnswerText([{ text: drafts, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body: "Hi Marqus, it's Lupe." } }] }, { text: note, toolCalls: [] }], note);
   assert.ok(out.startsWith(drafts) && out.endsWith(note), out);
   // A short working line before a tool call stays dropped; a final answer that already repeats the earlier text is not doubled.
   assert.equal(staffAnswerText([{ text: "Looking that up.", toolCalls: [{}] }, { text: note, toolCalls: [] }], note), note);
-  assert.equal(staffAnswerText([{ text: drafts, toolCalls: [{}] }, { text: `${drafts}\n\n${note}`, toolCalls: [] }], `${drafts}\n\n${note}`), `${drafts}\n\n${note}`);
+  assert.equal(staffAnswerText([{ text: drafts, toolCalls: [{ toolName: "offer_staff_draft" }] }, { text: `${drafts}\n\n${note}`, toolCalls: [] }], `${drafts}\n\n${note}`), `${drafts}\n\n${note}`);
+});
+
+it("review C1 (2026-11-01): a corrected earlier claim is never resurrected by length", async () => {
+  const { staffAnswerText } = await import("../staff-answer-text");
+  const claim = "I have opened the participant page and placed the draft there for you. You can now review the check-in on that page before using it. There is no other action required to put it on the page.";
+  const fix = "Correction: the navigation tool refused. I did not open a page or place a draft there. The draft is unsaved in this reply.";
+  const out = staffAnswerText([{ text: claim, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "refused" } }] }, { text: fix, toolCalls: [] }], fix);
+  assert.equal(out, fix);
+});
+
+it("review C2 (2026-11-01): a short real draft the tool was given reaches the staff member", async () => {
+  const { staffAnswerText } = await import("../staff-answer-text");
+  const body = "Hi Marqus, want to pick a next step on your saved jobs? Let me know what would help. Lupe";
+  const disclaimer = "This is a draft. Nothing was saved or sent.";
+  // Written in the draft step: kept by provenance.
+  assert.equal(staffAnswerText([{ text: body, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body } }] }, { text: disclaimer, toolCalls: [] }], disclaimer), `${body}\n\n${disclaimer}`);
+  // Never written as text at all: the tool body is shown as the draft.
+  const out = staffAnswerText([{ text: "", toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body } }] }, { text: disclaimer, toolCalls: [] }], disclaimer);
+  assert.ok(out.includes(`Draft (unsaved, in this reply):\n\n${body}`) && out.endsWith(disclaimer), out);
 });

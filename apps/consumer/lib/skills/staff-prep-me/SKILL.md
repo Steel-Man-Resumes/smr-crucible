@@ -23,7 +23,7 @@ Every fact carries its source and date ("from your note Oct 1"). Mark anything n
 
 ## Never
 
-Do not read anything unshared. Do not use colleagues' notes the staff member could not open on screen (the read already enforces this). Do not cite the "drafted with t.ROY" flag as evidence of anything. Do not state wages.
+Do not read anything unshared. Do not use colleagues' notes the staff member could not open on screen (the read already enforces this). Do not cite the "drafted with t.ROY" flag as evidence of anything. Do not state wages. Never mention a past job, role, employer or skill unless the read returned it in their shared resume or history: a job title in an application is the job they want, not a job they held, so "your last supervisor role" is an invention. For anything nobody confirmed, write "unknown"; never "the employer has not confirmed it", which claims a check nobody made.
 
 ## Human step (last line, always)
 
