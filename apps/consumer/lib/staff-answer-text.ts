@@ -259,13 +259,29 @@ function cardWords(steps: readonly Step[], clean: (s: string) => string): string
   return out;
 }
 
+/**
+ * Card-step words that say the final answer again (preview H, TRAP-NUMBER-03, 2026-11-01: the model wrote
+ * "Marqus's hourly wage is not on file for me..." in the button step and again, reworded, in the final,
+ * and both were shown). Same opening sentence, or most of its words already in the final: dropped.
+ */
+const wordsOf = (t: string) => (t.toLowerCase().match(/[a-z0-9']+/g) ?? []);
+const firstSentence = (t: string) => wordsOf(t.split(/(?<=[.!?])\s+/)[0] ?? "").join(" ");
+export function repeatsFinal(text: string, final: string): boolean {
+  if (final.includes(text)) return true;
+  const a = wordsOf(text);
+  if (!a.length) return true;
+  if (firstSentence(text) && firstSentence(text) === firstSentence(final)) return true;
+  const b = new Set(wordsOf(final));
+  return a.filter((w) => b.has(w)).length / a.length >= 0.75;
+}
+
 export function staffAnswerText(steps: readonly Step[], finalText: string): string {
   const keepNudge = nudgeOk(steps);
   const clean = (s: string) => (keepNudge ? s : withoutNudge(s).replace(/[ \t]{2,}/g, " ").trim());
   const final = clean(String(finalText ?? "").trim());
   const toolsRan = steps.some((s) => (s.toolCalls?.length ?? 0) > 0);
   if (withoutNudge(final)) {
-    const kept = finalWithdraws(final) ? [] : cardWords(steps, clean).filter((t) => !final.includes(t));
+    const kept = finalWithdraws(final) ? [] : cardWords(steps, clean).filter((t) => !repeatsFinal(t, final));
     return [...kept, final].join("\n\n");
   }
   // Nothing said in the last step beyond the nudge line: the card steps' words, else any step's words,

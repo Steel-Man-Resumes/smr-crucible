@@ -573,3 +573,20 @@ describe("review U (2026-11-01, fourth pass on round ten)", () => {
     for (const no of ["Send it to Public Defender.", "Send it to Officer Javert.", "Send it to Victim Services."]) assert.equal(actionOnlyRequest(no), false, no);
   });
 });
+
+describe("preview H (5083e0b, 2026-11-01): a button step that says the final again is not shown twice", () => {
+  it("TRAP-NUMBER-03 on H: same answer in the button step and the final -> once", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const card = "Marqus's hourly wage is not on file for me. I don't read pay from any tool, and the staff member has to type an amount for me to use it. If your team recorded a wage on a placement, it lives on Marqus's page. Open him from People to see it. Human step: open Marqus from People and check the placement entry there.";
+    const fin = "Marqus's hourly wage is not on file for me. I never read pay from any tool. I can only use an amount you type in this conversation. Here is a button to Marqus's page. If your team recorded a wage on a placement, you would see it there. Human step: press the button and check the placement entry on his page.";
+    const steps = [{ text: card, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] }, { text: fin, toolCalls: [] }];
+    assert.equal(staffAnswerText(steps, fin), fin);
+  });
+  it("different words in the button step still come first", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const card = "Jean's ID task is open and his STS interview has no date on file.";
+    const fin = "Here is a button to Jean's page. Your next step is to open it and check the interview date.";
+    const steps = [{ text: card, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] }, { text: fin, toolCalls: [] }];
+    assert.equal(staffAnswerText(steps, fin), `${card}\n\n${fin}`);
+  });
+});
