@@ -207,7 +207,12 @@ export const actionOnlyRequest = (said: string) => {
 const RETRACTS = new RegExp([
   WITHDRAWS.source,
   String.raw`\bI (?:also |now )?(?:need|have|want) to correct\b`,
-  String.raw`\b(?:didn['’]t|did not|doesn['’]t|does not|don['’]t|do not) (?:show|support|include|list|mention)\b`,
+  String.raw`\b(?:didn['’]t|did not|doesn['’]t|does not|don['’]t|do not) (?:show|support|include|list|mention|say|come from|contain|have)\b`,
+  // Preview J r3 (2026-11-01): "One correction to my last answer:", "the lookup showed only ...", "Check those
+  // details on Jean's page before you send." This cut runs only on an action-only turn that read nothing.
+  String.raw`\bcorrections?\b`,
+  String.raw`\b(?:showed|shows|had|has|returned) only\b`,
+  String.raw`\bcheck (?:those|these|the) (?:details|facts|dates)\b`,
   String.raw`\bnot in (?:what|the records?|the results?) I (?:read|saw)\b`,
   String.raw`\b(?:send|use) it as written\b`,
   String.raw`\bcheck or remove\b`,

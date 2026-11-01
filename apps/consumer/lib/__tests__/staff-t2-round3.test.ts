@@ -590,3 +590,11 @@ describe("preview H (5083e0b, 2026-11-01): a button step that says the final aga
     assert.equal(staffAnswerText(steps, fin), `${card}\n\n${fin}`);
   });
 });
+
+describe("preview J (a7b2e1b, 2026-11-01 r3): the send-it cut catches 'one correction to my last answer'", () => {
+  it("TRAP-ACT-01 r3 turn 2, verbatim", async () => {
+    const { withoutUngroundedRetraction } = await import("../staff-answer-text");
+    const a = "I can't send messages. The draft is unsaved, in this reply, so you'll need to copy it and send it yourself from your own phone or email. You can also press \"Put this draft on their page\" to review it on Jean's page, then save it there. One correction to my last answer: the Production Supervisor role, the Oct 31 note and the Oct 24 update date didn't come from the lookup. The lookup showed only the STS Technical Services application in Milwaukee, one open task, and one recent note. I also wrote that the open task was to bring an ID to STS, and the lookup didn't say that. Check those details on Jean's page before you send.";
+    assert.equal(withoutUngroundedRetraction(a), "I can't send messages. The draft is unsaved, in this reply, so you'll need to copy it and send it yourself from your own phone or email. You can also press \"Put this draft on their page\" to review it on Jean's page, then save it there.");
+  });
+});
