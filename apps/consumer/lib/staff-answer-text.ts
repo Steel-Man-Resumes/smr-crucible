@@ -69,9 +69,18 @@ const draftOffered = (steps: readonly Step[]) => steps.some((s) => (s.toolResult
  * A first-person sentence that says a card tool completed something it never does: I opened the page,
  * I placed/put the draft on their page, I added/invited the person, the draft is now on their page.
  * Review E1 (2026-11-01): only the model's own completion claims; "Jean opened the handoff" and
- * "review the ID task on his page" are not matched.
+ * "review the ID task on his page" are not matched. Review F2: the verb has to take the card's own
+ * object (a page, a draft, a person), so "I added the source date to this draft" stays; any run of
+ * qualifiers ("I've already opened his page") and the curly apostrophe are matched. Case-sensitive on
+ * purpose: "I" is the model, and a person's name is the capitalised object of "added" or "invited".
  */
-const COMPLETED_CLAIM = /\bI(?:'ve| have| just| already)?\s+(?:now\s+)?(?:opened|placed|put|added|invited|navigated)\b|\b(?:the |this |that |your )?(?:draft|note|check-in|message)\s+(?:is|has been|was)\s+(?:now\s+)?(?:placed|put)?\s*on\s+(?:his|her|their|the|that)\s+page\b|\b(?:his|her|their|the)\s+page\s+(?:is|has been|was)\s+(?:now\s+)?opened?\b/i;
+const FIRST_PERSON = String.raw`\bI(?:['’]ve| have|\s+(?:just|already|now))*\s+`;
+const OPENED_PAGE = String.raw`(?:opened|navigated to|went to)\s+(?:[A-Z]\w*['’]s\s+|(?:his|her|their|the|that|this)\s+)?(?:participant\s+)?page\b`;
+const PLACED_DRAFT = String.raw`(?:placed|put)\s+(?:(?:the|this|that|your|a)\s+)?(?:draft|note|check-in|message)\b`;
+const ADDED_PERSON = String.raw`(?:added|invited)\s+(?:him|her|them|the person|a person|the participant|[A-Z][\w'’-]*)\b`;
+const DRAFT_ON_PAGE = String.raw`\b(?:[Tt]he |[Tt]his |[Tt]hat |[Yy]our )?(?:draft|note|check-in|message)\s+(?:is|has been|was)\s+(?:now\s+)?(?:placed|put)?\s*on\s+(?:his|her|their|the|that)\s+page\b`;
+const PAGE_OPENED = String.raw`\b(?:[Hh]is|[Hh]er|[Tt]heir|[Tt]he)\s+page\s+(?:is|has been|was)\s+(?:now\s+)?opened?\b`;
+const COMPLETED_CLAIM = new RegExp(`${FIRST_PERSON}(?:${OPENED_PAGE}|${PLACED_DRAFT}|${ADDED_PERSON})|${DRAFT_ON_PAGE}|${PAGE_OPENED}`);
 export function withoutCompletedClaims(text: string): string {
   return text
     .split(/\n/)
@@ -81,9 +90,37 @@ export function withoutCompletedClaims(text: string): string {
     .trim();
 }
 
-/** The final step takes back what came before it: nothing earlier is shown (review E5). */
-const WITHDRAWS = /\b(?:discard|disregard|ignore|scrap|forget|do not use|don't use|please don't send|do not send)\b[^.!?\n]*\b(?:that|the|this|my|earlier|previous|above|prior)\b[^.!?\n]*\b(?:draft|answer|version|message|text|reply)\b|\b(?:I (?:need|have) to|let me) correct\b|\bcorrection:|\bI was wrong\b|\bI (?:must|should) take (?:that|this) back\b/i;
+/**
+ * The final step takes back what came before it: nothing earlier is shown (review E5). Review F3: a
+ * withdrawal names the thing withdrawn right after the verb ("discard that draft"), "do not send" counts
+ * only with a supersession word ("don't send the earlier draft"; "do not send this draft until you have
+ * reviewed it" is an instruction), "forget" is out ("don't forget the draft is unsaved"), and "that draft
+ * was wrong" / "use this replacement" are in. A regex is still a heuristic; the card side is gated by
+ * draftsAfterFinal below, so a wrong call here costs prose, never an action.
+ */
+const SUPERSEDED = String.raw`(?:earlier|previous|prior|above|first|old|original)`;
+const THING = String.raw`(?:draft|answer|version|message|text|reply)`;
+const WITHDRAWS = new RegExp([
+  String.raw`\b(?:discard|disregard|ignore|scrap|do not use|don['’]t use)\s+(?:(?:that|the|this|my|${SUPERSEDED})\s+)+${THING}\b`,
+  String.raw`\b(?:do not send|don['’]t send|never send)\s+(?:(?:that|the|this|my)\s+)*${SUPERSEDED}\s+${THING}\b`,
+  String.raw`\b(?:that|the|this|my|${SUPERSEDED})\s+${THING}\s+(?:was|is)\s+(?:wrong|incorrect|mistaken|not right)\b`,
+  String.raw`\buse (?:this|the) (?:replacement|corrected|revised|new)\b`,
+  String.raw`\b(?:I (?:need|have) to|let me) correct\b`,
+  String.raw`\bcorrection:`,
+  String.raw`\bI was wrong\b`,
+  String.raw`\bI (?:must|should) take (?:that|this) back\b`,
+].join("|"), "i");
 export const finalWithdraws = (final: string) => WITHDRAWS.test(final);
+
+/**
+ * The drafts the staff member may act on once the final step has spoken (review F5). When the final
+ * withdraws, the drafts offered before it are not cards any more: with two offers the later one is the
+ * replacement and stays, with one offer nothing stays. Otherwise every checked draft stays.
+ */
+export function draftsAfterFinal<T>(drafts: readonly T[], finalText: string): T[] {
+  if (!finalWithdraws(String(finalText ?? ""))) return [...drafts];
+  return drafts.length > 1 ? [drafts[drafts.length - 1]] : [];
+}
 
 /** The nudge line stays only when the nudge tool itself answered ok this turn (its buttons render then); otherwise it is cut (review R3 S2). */
 function nudgeOk(steps: readonly Step[]): boolean {
@@ -113,9 +150,13 @@ export function staffAnswerText(steps: readonly Step[], finalText: string): stri
     return [...kept, final].join("\n\n");
   }
   // Nothing said in the last step beyond the nudge line: the card steps' words, else any step's words,
-  // with the same first-person cut (review E3: this path used to skip every rule).
+  // with the same first-person cut (review E3: this path used to skip every rule). Review F4: a read step
+  // whose result was not ok (locked, refused, unchanged) wrote its words before that result and they stay
+  // out; an ok read keeps them here (the original T2 case, a search answered in its own step), and the
+  // output check still reads every name and figure against the evidence.
   const fromCards = cardWords(steps, clean);
-  const fromAny = [...new Set(steps.map((s) => withoutCompletedClaims(withoutNudge(String(s.text ?? "")))).filter(Boolean))];
+  const readFailed = (s: Step) => isReadStep(s) && (s.toolResults ?? []).some((r) => status(r) !== "ok");
+  const fromAny = [...new Set(steps.filter((s) => !readFailed(s)).map((s) => withoutCompletedClaims(withoutNudge(String(s.text ?? "")))).filter(Boolean))];
   const body = (fromCards.length ? fromCards : fromAny).join("\n\n");
   const nudged = keepNudge && (final.includes(LISTING_NUDGE_LINE) || steps.some((s) => String(s.text ?? "").includes(LISTING_NUDGE_LINE)));
   if (body) return nudged ? `${body}\n\n${LISTING_NUDGE_LINE}` : body;

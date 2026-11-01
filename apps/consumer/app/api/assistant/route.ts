@@ -38,7 +38,7 @@ import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
 import { priorToolRecordResults } from "@/lib/staff-prior-records";
 import { staffHomeStatePrompt } from "@/lib/staff-org-place";
-import { staffAnswerText, CARD_TOOLS as STAFF_CARD_TOOLS } from "@/lib/staff-answer-text";
+import { staffAnswerText, draftsAfterFinal, CARD_TOOLS as STAFF_CARD_TOOLS } from "@/lib/staff-answer-text";
 
 /** The one-line ask that follows a refused card when the model made the refusal its answer (see FINISH THE ANSWER below). */
 const FINISH_THE_ANSWER = "The button was refused; that is not the answer and nothing to correct. Answer my question in full from the results you already read in this conversation: who, the reason, the action to take. Call no tools. End with one clause saying I can open the person from People.";
@@ -507,27 +507,41 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // and the words are that short, the model is asked once more, with its own steps in front of it and
     // no tools, to answer the question from what it read. One extra call, only in that shape.
     const statusOf = (r: unknown) => String((r as { result?: { status?: unknown } } | null)?.result?.status ?? "");
-    const cardRefused = generated.steps.some((s) => (s.toolResults ?? []).some((r) => /^(refused|unavailable)$/.test(statusOf(r))));
-    const readOk = generated.steps.some((s) => (s.toolResults ?? []).some((r) => statusOf(r) === "ok" && !STAFF_CARD_TOOLS.has(String((r as { toolName?: string }).toolName))));
+    const nameOf = (r: unknown) => String((r as { toolName?: string } | null)?.toolName ?? "");
+    // Only a CARD tool's refusal counts (review F6): a refused participant read is a scope boundary the
+    // model must respect, not a button to answer around.
+    const cardRefused = generated.steps.some((s) => (s.toolResults ?? []).some((r) => STAFF_CARD_TOOLS.has(nameOf(r)) && /^(refused|unavailable)$/.test(statusOf(r))));
+    const readOk = generated.steps.some((s) => (s.toolResults ?? []).some((r) => statusOf(r) === "ok" && !STAFF_CARD_TOOLS.has(nameOf(r))));
+    let retried = false;
     if (staffActor && cardRefused && readOk && answer.length < 200) {
-      const finished = await generateText({
-        model: troyChatModel(),
-        system: localizedSystemPrompt,
-        messages: [...((staffInput?.messages ?? messages) as never[]), ...(generated.response.messages as never[]), { role: "user", content: FINISH_THE_ANSWER }] as never,
-        maxTokens: responseMaxTokens,
-        tools,
-        toolChoice: "none",
-        maxSteps: 1,
-        async onStepFinish({ usage, providerMetadata }) {
-          await operation.run(async () => {
-          const { recordTokenUsage } = await import("@/lib/ai-usage-log");
-          await recordTokenUsage("anthropic", MODEL_TROY, assistantStepUsage(usage, providerMetadata), { userId: userId ?? null, endpoint: "assistant" });
-          });
-        },
-      });
-      console.info("[staff-steps] finish", stepShape(finished.steps));
-      const fuller = finished.text.trim();
-      if (fuller.length > answer.length) answer = replyOrFallback(fuller);
+      // The conversation so far is UI messages (parts, toolInvocations); the model's own steps come back
+      // as CoreMessages, some with role "tool". The SDK converts an array as one kind or the other, so the
+      // history is converted to CoreMessages first (review F1: ROOM-10 on preview F threw
+      // "Unsupported role: tool" before the provider was called). A failure here keeps the first answer.
+      try {
+        const { convertToCoreMessages } = await import("ai");
+        const history = convertToCoreMessages((staffInput?.messages ?? messages) as never, { tools });
+        const finished = await generateText({
+          model: troyChatModel(),
+          system: localizedSystemPrompt,
+          messages: [...history, ...generated.response.messages, { role: "user", content: FINISH_THE_ANSWER }],
+          maxTokens: responseMaxTokens,
+          tools,
+          toolChoice: "none",
+          maxSteps: 1,
+          async onStepFinish({ usage, providerMetadata }) {
+            await operation.run(async () => {
+            const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+            await recordTokenUsage("anthropic", MODEL_TROY, assistantStepUsage(usage, providerMetadata), { userId: userId ?? null, endpoint: "assistant" });
+            });
+          },
+        });
+        console.info("[staff-steps] finish", stepShape(finished.steps));
+        const fuller = finished.text.trim();
+        if (fuller.length > answer.length) { answer = replyOrFallback(fuller); retried = true; }
+      } catch (err) {
+        console.error("[staff-steps] finish failed, first answer kept:", err instanceof Error ? err.message : err);
+      }
     }
 
     const facts = {
@@ -589,13 +603,16 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
           explanation: `Org staff assistant (${context.org.role}, reach ${context.org.reach}) on ${context.currentPage}. Verified before send: ${
             verdict.ok ? "clean" : `${verdict.problems.length} unsupported claim(s) flagged to the reader`
           }; second pass ${verdict.modelChecked ? "ran" : "did NOT run"}.`,
+          // The answer actually sent, which may be the finish pass's text (review F7); its usage is
+          // in ai_token_usage through onStepFinish, the first call's total is what tokenCount records.
           outputSummary: {
-            response_length: generated.text.length,
-            word_count: generated.text.split(/\s+/).length,
+            response_length: answer.length,
+            word_count: answer.split(/\s+/).length,
             verify_ok: verdict.ok,
             verify_problem_count: verdict.problems.length,
             verify_model_checked: verdict.modelChecked,
             finish_reason: generated.finishReason,
+            finish_pass_used: retried,
           },
           tokenCount: usage?.totalTokens ?? null,
           latencyMs: Date.now() - startTime,
@@ -609,8 +626,10 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // answer (fix round 1, B3). One that fails is held back, and the reason is
     // shown where the staff member reads it.
     const { checkOrgClaimsDeterministic } = await import("@/lib/org-output-verify");
+    // A draft the final step withdrew is no card either (review F5): the prose rule and the card rule
+    // read the same final words, so "discard that draft" removes the button with the sentence.
     const draftCheck = checkStaffDrafts(
-      offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])),
+      draftsAfterFinal(offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])), generated.text),
       (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
     );
     if (draftCheck.notice) out += draftCheck.notice;

@@ -133,7 +133,7 @@ it("B3: a draft that claims it was sent, or names a wage nobody gave, is held ba
   // The same wage the staff member typed passes.
   assert.equal(checkStaffDrafts([mk("d", "Dana starts at $18.50 an hour.")], (b) => checkOrgClaimsDeterministic(b, facts, "hired at $18.50 an hour")).kept.length, 1);
   const route = read("../../app/api/assistant/route.ts");
-  assert.match(route, /checkStaffDrafts\(\s*offeredDrafts\(/);
+  assert.match(route, /checkStaffDrafts\(\s*draftsAfterFinal\(offeredDrafts\(/);
   assert.match(route, /staffAnswerStreamLines\(out, draftCheck\.kept, skillRunId,/);
 });
 

@@ -253,10 +253,95 @@ describe("review E (2026-11-01): completed-action claims, supersession, every fi
   });
   it("E0: the draft card shows the draft's words, and the route finishes a refusal-shaped answer without tools", () => {
     const chat = read("../../components/AssistantChat.tsx");
-    assert.match(chat, /data-staff-draft-body=""[\s\S]{0,400}\{draftText\}/);
+    assert.match(chat, /data-staff-draft-body=""[\s\S]{0,400}\{draftFor\.body\}/);
     const route = read("../../app/api/assistant/route.ts");
     assert.match(route, /cardRefused && readOk && answer\.length < 200/);
     assert.match(route, /toolChoice: "none"/);
     assert.match(route, /FINISH_THE_ANSWER = "The button was refused; that is not the answer/);
+  });
+});
+
+describe("review F (2026-11-01): the finish pass at the SDK boundary, narrower cuts, withdrawn cards", () => {
+  // The conversation as the client sends it: UI messages, the last assistant turn carrying a tool invocation.
+  const uiHistory = [
+    { role: "user", content: "Who on my caseload needs attention?", parts: [{ type: "text", text: "Who on my caseload needs attention?" }] },
+    {
+      role: "assistant", content: "", parts: [
+        { type: "tool-invocation", toolInvocation: { state: "result", toolCallId: "c1", toolName: "read_my_view", args: {}, result: { status: "ok" } } },
+        { type: "text", text: "Your view is Today first." },
+      ],
+    },
+    { role: "user", content: "Go on.", parts: [{ type: "text", text: "Go on." }] },
+  ];
+  // What generateText's response.messages look like after a read and a refused button: CoreMessages, one with role "tool".
+  const responseCore = [
+    { role: "assistant", content: [{ type: "tool-call", toolCallId: "c2", toolName: "read_today_queue", args: {} }] },
+    { role: "tool", content: [{ type: "tool-result", toolCallId: "c2", toolName: "read_today_queue", result: { status: "ok" } }] },
+    { role: "assistant", content: [{ type: "tool-call", toolCallId: "c3", toolName: "open_staff_page", args: { participantId: "x" } }] },
+    { role: "tool", content: [{ type: "tool-result", toolCallId: "c3", toolName: "open_staff_page", result: { status: "refused" } }] },
+    { role: "assistant", content: [{ type: "text", text: "You can open Jean from People." }] },
+  ];
+  const finish = { role: "user", content: "Answer in full." };
+  const model = () => new MockLanguageModelV1({
+    doGenerate: async () => ({ rawCall: { rawPrompt: null, rawSettings: {} }, finishReason: "stop", usage: { promptTokens: 1, completionTokens: 1 }, text: "Jean needs a call today: the ID task is open." }),
+  });
+  it("F1: UI history mixed with the model's CoreMessages throws before the provider; converted first, it runs", async () => {
+    await assert.rejects(
+      generateText({ model: model(), messages: [...uiHistory, ...responseCore, finish] as never, maxSteps: 1 }),
+      (err: Error) => /Unsupported role: tool/.test(err.message),
+    );
+    const { convertToCoreMessages } = await import("ai");
+    const out = await generateText({ model: model(), messages: [...convertToCoreMessages(uiHistory as never), ...responseCore, finish] as never, maxSteps: 1 });
+    assert.equal(out.text, "Jean needs a call today: the ID task is open.");
+    const route = read("../../app/api/assistant/route.ts");
+    assert.match(route, /const history = convertToCoreMessages\(\(staffInput\?\.messages \?\? messages\) as never, \{ tools \}\)/);
+    assert.match(route, /messages: \[\.\.\.history, \.\.\.generated\.response\.messages, \{ role: "user", content: FINISH_THE_ANSWER \}\]/);
+    // A failure in the finish pass keeps the first answer instead of failing the reply.
+    assert.match(route, /finish failed, first answer kept/);
+  });
+  it("F2: only a card's own object makes a completion claim; qualifier runs and curly apostrophes are matched", async () => {
+    const { withoutCompletedClaims } = await import("../staff-answer-text");
+    for (const keep of ["I added the source date to this draft.", "I put the two open tasks at the top of this answer.", "Jean opened the handoff yesterday.", "Review the ID task on his page before calling him."]) {
+      assert.equal(withoutCompletedClaims(keep), keep, keep);
+    }
+    for (const cut of ["I've already opened his page.", "I’ve opened his page.", "I have now placed the draft on Jean's page.", "I added Jean to your caseload.", "I invited him.", "I just navigated to the participant page.", "The check-in is now on his page.", "Once I opened the page yesterday, I saw the ID task."]) {
+      assert.equal(withoutCompletedClaims(`${cut} Jean needs a call today.`), "Jean needs a call today.", cut);
+    }
+  });
+  it("F3: instructions about the draft are not withdrawals; a wrong-draft correction is", async () => {
+    const { finalWithdraws } = await import("../staff-answer-text");
+    for (const no of ["Don't forget the draft is unsaved.", "Please do not send this draft until you have reviewed it.", "Ignore the employer's message about parking.", "This is a draft. Nothing was saved or sent."]) {
+      assert.equal(finalWithdraws(no), false, no);
+    }
+    for (const yes of ["That draft was wrong; use this replacement.", "Discard that draft.", "Please don't send the earlier draft.", "Disregard my previous answer.", "Correction: the dates were not in what I read."]) {
+      assert.equal(finalWithdraws(yes), true, yes);
+    }
+  });
+  it("F4: the empty-final fallback never restores words a read step wrote before a result that was not ok", async () => {
+    const { staffAnswerText, STAFF_TOOLS_NO_TEXT } = await import("../staff-answer-text");
+    for (const st of ["locked", "refused", "unchanged", "error"]) {
+      const steps = [{ text: "Your tasks are now first on Today.", toolCalls: [{ toolName: "change_my_view" }], toolResults: [{ toolName: "change_my_view", result: { status: st } }] }, { text: "", toolCalls: [] }];
+      assert.equal(staffAnswerText(steps, ""), STAFF_TOOLS_NO_TEXT, st);
+    }
+    // An ok read that carried the answer (the original T2 shape) still reaches the staff member.
+    const found = "I found one Lansing employer: Eastside Fish Fry & Grill.";
+    assert.equal(staffAnswerText([{ text: found, toolCalls: [{ toolName: "find_employers" }], toolResults: [{ toolName: "find_employers", result: { status: "ok" } }] }, { text: "", toolCalls: [] }], ""), found);
+  });
+  it("F5: a draft the final step withdrew is no card; with two offers the later one is the replacement", async () => {
+    const { draftsAfterFinal } = await import("../staff-answer-text");
+    const a = { toolCallId: "a" }, b = { toolCallId: "b" };
+    assert.deepEqual(draftsAfterFinal([a], "Discard that draft. I need to correct my answer."), []);
+    assert.deepEqual(draftsAfterFinal([a, b], "Discard the earlier draft; the second one stands."), [b]);
+    assert.deepEqual(draftsAfterFinal([a, b], "Both drafts are unsaved, in this reply."), [a, b]);
+    const route = read("../../app/api/assistant/route.ts");
+    assert.match(route, /draftsAfterFinal\(offeredDrafts\([\s\S]{0,200}\), generated\.text\)/);
+    const chat = read("../../components/AssistantChat.tsx");
+    assert.match(chat, /staffDrafts\.map\(\(draftFor, draftIdx\)/);
+  });
+  it("F6 / F7: only a card tool's refusal starts the finish pass, and the decision log records the answer sent", () => {
+    const route = read("../../app/api/assistant/route.ts");
+    assert.match(route, /STAFF_CARD_TOOLS\.has\(nameOf\(r\)\) && \/\^\(refused\|unavailable\)\$\/\.test\(statusOf\(r\)\)/);
+    assert.match(route, /response_length: answer\.length/);
+    assert.match(route, /finish_pass_used: retried/);
   });
 });
