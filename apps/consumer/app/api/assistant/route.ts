@@ -38,7 +38,7 @@ import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
 import { priorToolRecordResults } from "@/lib/staff-prior-records";
 import { staffHomeStatePrompt } from "@/lib/staff-org-place";
-import { staffAnswerText, draftsAfterFinal, actionOnlyRequest, withoutUngroundedRetraction, CARD_TOOLS as STAFF_CARD_TOOLS } from "@/lib/staff-answer-text";
+import { staffAnswerText, draftsAfterFinal, draftChoiceWithdrawn, STAFF_DRAFTS_WITHDRAWN_NOTICE, actionOnlyRequest, withoutUngroundedRetraction, CARD_TOOLS as STAFF_CARD_TOOLS } from "@/lib/staff-answer-text";
 
 /** The one-line ask that follows a refused card when the model made the refusal its answer (see FINISH THE ANSWER below). */
 const FINISH_THE_ANSWER = "The button was refused; that is not the answer and nothing to correct. Answer my question in full from the results you already read in this conversation: who, the reason, the action to take. Call no tools. End with one clause saying I can open the person from People.";
@@ -647,6 +647,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
     );
     if (draftCheck.notice) out += draftCheck.notice;
+    // Two or more drafts and the answer chose between them: no card, said plainly (review T1).
+    if (draftChoiceWithdrawn(offeredNow.length, answer)) out += STAFF_DRAFTS_WITHDRAWN_NOTICE;
     // Lane S1: the registry's buttons and cards (Go to, filled-in Add people,
     // later lanes' cards). Any that carries a model-written draftBody passes the
     // same draft check first and is held back on a failure (review round 1, S8).

@@ -331,7 +331,7 @@ describe("review F (2026-11-01): the finish pass at the SDK boundary, narrower c
     const { draftsAfterFinal } = await import("../staff-answer-text");
     const a = { toolCallId: "a" }, b = { toolCallId: "b" };
     assert.deepEqual(draftsAfterFinal([a], "Discard that draft. I need to correct my answer."), []);
-    assert.deepEqual(draftsAfterFinal([a, b], "Discard the earlier draft; the second one stands."), [b]);
+    assert.deepEqual(draftsAfterFinal([a, b], "Discard the earlier draft; the second one stands."), []);
     assert.deepEqual(draftsAfterFinal([a, b], "Both drafts are unsaved, in this reply."), [a, b]);
     const route = read("../../app/api/assistant/route.ts");
     assert.match(route, /draftsAfterFinal\(offeredNow, answer\)/);
@@ -354,16 +354,16 @@ describe("review G (2026-11-01): withdrawn drafts, the cap after selection, name
     assert.deepEqual(draftsAfterFinal([a, b], "Discard the first draft and the second draft."), []);
     assert.deepEqual(draftsAfterFinal([a, b], "Discard both drafts."), []);
     assert.deepEqual(draftsAfterFinal([a, b], "I need to correct my answer. Neither draft should be used."), []);
-    assert.deepEqual(draftsAfterFinal([a, b], "Keep the first draft. Discard the revised draft."), [a]);
+    assert.deepEqual(draftsAfterFinal([a, b], "Keep the first draft. Discard the revised draft."), []);
     assert.deepEqual(draftsAfterFinal([a, b], "Don't use either draft."), []);
-    assert.deepEqual(draftsAfterFinal([a, b], "Discard the first draft but keep the second."), [b]);
+    assert.deepEqual(draftsAfterFinal([a, b], "Discard the first draft but keep the second."), []);
     // A withdrawal with no draft kept leaves no card, even with two offers (they may be independent).
     assert.deepEqual(draftsAfterFinal([a, b], "I need to correct my answer: the dates were not in what I read."), []);
     assert.deepEqual(draftsAfterFinal([a, b], "That draft was wrong."), []);
     // A real replacement: the earlier one named as withdrawn, or the later one kept.
-    assert.deepEqual(draftsAfterFinal([a, b], "Discard the earlier draft; the second one stands."), [b]);
-    assert.deepEqual(draftsAfterFinal([a, b], "That draft was wrong; use this replacement."), [b]);
-    assert.deepEqual(draftsAfterFinal([a, b, c], "Discard the earlier draft; use this replacement."), [c]);
+    assert.deepEqual(draftsAfterFinal([a, b], "Discard the earlier draft; the second one stands."), []);
+    assert.deepEqual(draftsAfterFinal([a, b], "That draft was wrong; use this replacement."), []);
+    assert.deepEqual(draftsAfterFinal([a, b, c], "Discard the earlier draft; use this replacement."), []);
     // Two independent offers and no withdrawal: both stay.
     assert.deepEqual(draftsAfterFinal([a, b], "Two versions are below, one short and one longer. Both are unsaved."), [a, b]);
     assert.deepEqual(draftsAfterFinal([a, b], "Use whichever reads better; neither is saved or sent."), [a, b]);
@@ -377,7 +377,8 @@ describe("review G (2026-11-01): withdrawn drafts, the cap after selection, name
     const P = "11111111-1111-4111-8111-111111111111";
     const offers = ["first", "second", "final-replacement"].map((toolCallId) => ({ toolCallId, toolName: "offer_staff_draft", args: {}, result: { status: "draft_only", saved: false, sent: false, participantId: P, body: toolCallId } }));
     assert.equal(offeredDrafts(offers).length, 3);
-    assert.deepEqual(draftsAfterFinal(offeredDrafts(offers), "Discard the earlier draft; use this replacement.").slice(0, MAX_STAFF_DRAFT_CARDS).map((d) => d.toolCallId), ["final-replacement"]);
+    assert.deepEqual(draftsAfterFinal(offeredDrafts(offers), "Discard the earlier draft; use this replacement.").slice(0, MAX_STAFF_DRAFT_CARDS).map((d) => d.toolCallId), []);
+    // Review T1: with two or more offers, a choice between them leaves no card (the route says so).
     assert.deepEqual(draftsAfterFinal(offeredDrafts(offers), "Three drafts, all unsaved.").slice(0, MAX_STAFF_DRAFT_CARDS).map((d) => d.toolCallId), ["first", "second"]);
     const route = read("../../app/api/assistant/route.ts");
     assert.match(route, /draftsAfterFinal\(offeredNow, answer\)\.slice\(0, MAX_STAFF_DRAFT_CARDS\)/);
@@ -462,15 +463,15 @@ describe("review R (2026-11-01, independent pass on rounds six and seven)", () =
   });
   it("R4/R5: withdrawals by name and order; advice and read reports are not withdrawals", async () => {
     const { draftsAfterFinal, finalWithdraws } = await import("../staff-answer-text");
-    assert.deepEqual(draftsAfterFinal([A, B], "Disregard the second one; use the first."), [A]);
-    assert.deepEqual(draftsAfterFinal([A, B], "Delete the earlier draft and keep the new one."), [B]);
-    assert.deepEqual(draftsAfterFinal([A, B], "Do not place the earlier draft on his page. The second one stands."), [B]);
-    assert.deepEqual(draftsAfterFinal([A, B], "Discard this one and use the other one."), [A]);
-    assert.deepEqual(draftsAfterFinal([A, B], "Do not place the earlier draft on his page. Place the corrected one."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Disregard the second one; use the first."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "Delete the earlier draft and keep the new one."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "Do not place the earlier draft on his page. The second one stands."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "Discard this one and use the other one."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "Do not place the earlier draft on his page. Place the corrected one."), []);
     assert.deepEqual(draftsAfterFinal([A, B, C], "Discard the second draft."), []);
-    assert.deepEqual(draftsAfterFinal([A, B, C], "Discard the first two drafts; use the third."), [C]);
+    assert.deepEqual(draftsAfterFinal([A, B, C], "Discard the first two drafts; use the third."), []);
     assert.deepEqual(draftsAfterFinal([A, B], "Discard that draft because it lists his previous employer."), []);
-    assert.deepEqual(draftsAfterFinal([A, B], "Discard the first draft and use the second one."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Discard the first draft and use the second one."), []);
     assert.deepEqual(draftsAfterFinal([A], "Use this revised version; it is shorter."), [A]);
     assert.deepEqual(draftsAfterFinal([A], "That draft was wrong; use this replacement."), []);
     for (const no of ["Tell him to ignore any texts that ask for his SSN.", "Neither one has a phone on file.", "Both drafts are unsaved, in this reply."]) assert.equal(finalWithdraws(no), false, no);
@@ -498,12 +499,12 @@ describe("review S (2026-11-01, confirm pass on round eight)", () => {
   });
   it("S3: negation keeps, an unnamed take-back removes, 'and ignore' splits", async () => {
     const { draftsAfterFinal } = await import("../staff-answer-text");
-    assert.deepEqual(draftsAfterFinal([A, B], "Don't discard the first draft. Discard the second."), [A]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Don't discard the first draft. Discard the second."), []);
     assert.deepEqual(draftsAfterFinal([A, B], "Discard the first draft. That one is wrong too."), []);
-    assert.deepEqual(draftsAfterFinal([A, B], "Use the second draft and ignore the other one."), [B]);
-    assert.deepEqual(draftsAfterFinal([A, B], "Only the second draft is right; the first has an old date."), [B]);
-    assert.deepEqual(draftsAfterFinal([A, B], "Don't go with the first draft."), [B]);
-    assert.deepEqual(draftsAfterFinal([A, B], "That draft was wrong. Discard the earlier draft; here is the corrected one."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Use the second draft and ignore the other one."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "Only the second draft is right; the first has an old date."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "Don't go with the first draft."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "That draft was wrong. Discard the earlier draft; here is the corrected one."), []);
   });
   it("S5: drafting prose about other things is not a withdrawal", async () => {
     const { finalWithdraws } = await import("../staff-answer-text");
@@ -515,5 +516,39 @@ describe("review S (2026-11-01, confirm pass on round eight)", () => {
       assert.equal(withoutCompletedClaims(`${cut} Jean needs a call today.`), "Jean needs a call today.", cut);
     }
     for (const keep of ["Hi Jean, I sent a message to STS about your ID on Monday.", "A note is on his page from Oct 24 saying he has his ID.", "I put the check-in in the record format your org uses.", "I added Housing to the program list in the draft."]) assert.equal(withoutCompletedClaims(keep), keep, keep);
+  });
+});
+
+describe("review T (2026-11-01, third pass on round nine)", () => {
+  const A = { toolCallId: "A" }, B = { toolCallId: "B" };
+  it("T1: two offers and any choice between them leave no card; the route says so", async () => {
+    const { draftsAfterFinal } = await import("../staff-answer-text");
+    for (const t of ["Don't discard the first draft, discard the second draft.", "Do not send the second draft.", "Don't send the revised version; the first one is right.", "That version is wrong; you can send a corrected one after you check the date.", "Use the second draft, not the first.", "Replace the first draft with this one.", "Go with the second one."]) {
+      assert.deepEqual(draftsAfterFinal([A, B], t), [], t);
+    }
+    // Two plain offers stay.
+    assert.deepEqual(draftsAfterFinal([A, B], "One for text and one for email. Neither is saved or sent."), [A, B]);
+    const route = read("../../app/api/assistant/route.ts");
+    assert.match(route, /if \(draftChoiceWithdrawn\(offeredNow\.length, answer\)\) out \+= STAFF_DRAFTS_WITHDRAWN_NOTICE;/);
+  });
+  it("T2: ordinary drafting prose keeps the one card", async () => {
+    const { draftsAfterFinal, finalWithdraws } = await import("../staff-answer-text");
+    for (const t of ["It asks him to delete the old version of his resume from the tracker.", "It tells him he can skip the first one and start with the STS form.", "It asks him to drop the new one in the STS drop box.", "It asks him to use the new version of his resume for STS."]) {
+      assert.equal(finalWithdraws(t), false, t);
+      assert.deepEqual(draftsAfterFinal([A], t), [A], t);
+    }
+    assert.deepEqual(draftsAfterFinal([A], "Use this revised draft; it is shorter."), [A]);
+    assert.deepEqual(draftsAfterFinal([A], "Discard that draft."), []);
+  });
+  it("T3: 'was invited/added' without a destination is a read report", async () => {
+    const { withoutCompletedClaims } = await import("../staff-answer-text");
+    for (const keep of ["Jean was invited to interview at STS on Oct 24.", "Marqus was added to the waitlist at the shelter.", "Housing was added to his goals list on Oct 20."]) assert.equal(withoutCompletedClaims(keep), keep, keep);
+    assert.equal(withoutCompletedClaims("Jean has been added to your caseload. Call him."), "Call him.");
+  });
+  it("T4/T5: crisis words in the name are not a person; a risk sentence survives the cut", async () => {
+    const { actionOnlyRequest, withoutUngroundedRetraction } = await import("../staff-answer-text");
+    for (const no of ["Send it to Suicide Hotline.", "Send it to Legal Aid Society."]) assert.equal(actionOnlyRequest(no), false, no);
+    assert.equal(actionOnlyRequest("Send it to O’Neil."), true);
+    assert.equal(withoutUngroundedRetraction("I can't send messages. I need to correct my last answer. He may be at risk tonight, so call him before anything else."), "I can't send messages. He may be at risk tonight, so call him before anything else.");
   });
 });
