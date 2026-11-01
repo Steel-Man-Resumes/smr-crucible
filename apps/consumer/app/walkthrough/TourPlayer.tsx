@@ -465,7 +465,7 @@ export function TourPlayer() {
 
         {/* Caption over a wide stage */}
         {overlayCaption && step.scene !== "title" && step.scene !== "close" && (
-          <div key={`cap-${i}`} className={`wt-cap pointer-events-none absolute ${cornerClass} max-w-[min(460px,60%)] rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/92 px-5 py-4 shadow-2xl backdrop-blur`}>
+          <div key={`cap-${i}`} className={`wt-cap pointer-events-none absolute ${cornerClass} max-w-[min(460px,60%)] rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/95 px-5 py-4 shadow-2xl backdrop-blur`}>
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#dbc173]">{CHAPTERS[chapterIndex].label}</p>
             <p className="mt-1 text-xl font-bold leading-snug text-[#f4efe2]">{step.title}</p>
             <p className="mt-1 text-[15px] leading-relaxed text-[#cfc8b6]">{step.body}</p>
