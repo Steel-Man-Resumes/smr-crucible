@@ -25,7 +25,7 @@ it("the draft tool always reports saved: false and sent: false, and never writes
 it("the chat places only the draft body offer_staff_draft returned, unsaved, never the whole reply", () => {
   const chat = read("../../components/AssistantChat.tsx");
   assert.match(chat, /inv\?\.toolName !== "offer_staff_draft" \|\| inv\.state !== "result" \|\| r\?\.status !== "draft_only" \|\| r\.saved !== false \|\| r\.sent !== false/);
-  assert.match(chat, /const draftText = draftFor\?\.body \?\? "";/);
+  assert.match(chat, /body: draftFor\.body\.slice\(0, 8000\), purpose: draftFor\.purpose/);
   assert.match(chat, /sessionStorage\.setItem\(/);
   assert.doesNotMatch(chat.slice(chat.indexOf("draftFor")), /action: "add_note"/);
   const tools = read("../tools/assistant-staff-tools.ts");

@@ -133,7 +133,8 @@ it("B3: a draft that claims it was sent, or names a wage nobody gave, is held ba
   // The same wage the staff member typed passes.
   assert.equal(checkStaffDrafts([mk("d", "Dana starts at $18.50 an hour.")], (b) => checkOrgClaimsDeterministic(b, facts, "hired at $18.50 an hour")).kept.length, 1);
   const route = read("../../app/api/assistant/route.ts");
-  assert.match(route, /checkStaffDrafts\(\s*offeredDrafts\(/);
+  assert.match(route, /checkStaffDrafts\(\s*draftsAfterFinal\(offeredNow, answer\)/);
+  assert.match(route, /const offeredNow = retractionCut \? \[\] : offeredDrafts\(/);
   assert.match(route, /staffAnswerStreamLines\(out, draftCheck\.kept, skillRunId,/);
 });
 
@@ -142,7 +143,7 @@ it("fix round 1: the route sends gated staff words to the models and tells the s
   // Demo fix T2: earlier answers get their tool record back first; the gate still runs over all of it.
   assert.match(route, /const staffInput = staffActor \? gateStaffMessages\(withStaffToolRecords\(messages, \{ userId: staffActor\.userId, tools: await staffToolNameSet\(\) \}\)\) : null;/);
   assert.match(route, /messages: \(staffInput\?\.messages \?\? messages\) as never,/);
-  assert.match(route, /verifyOrgOutput\(answer, facts, userSaid \|\| undefined\)/);
+  assert.match(route, /verifyOrgOutput\(answer, facts, userSaid \|\| undefined, \{ timeoutMs:/);
   assert.match(route, /if \(staffInput\?\.withheld\) out \+= `\\n\\n_\$\{STAFF_INPUT_NOTICE\}_`;/);
 });
 

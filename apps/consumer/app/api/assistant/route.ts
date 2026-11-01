@@ -33,12 +33,15 @@ import { loadSelectedWork, readWorkSelection, selectedWorkPrompt } from "@/lib/a
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
 import { getClientIp } from "@/lib/auth-rate-limit";
-import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
+import { recordStaffSkillRun, offeredDrafts, MAX_STAFF_DRAFT_CARDS, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
 import { priorToolRecordResults } from "@/lib/staff-prior-records";
 import { staffHomeStatePrompt } from "@/lib/staff-org-place";
-import { staffAnswerText } from "@/lib/staff-answer-text";
+import { staffAnswerText, draftsAfterFinal, draftChoiceWithdrawn, STAFF_DRAFTS_WITHDRAWN_NOTICE, actionOnlyRequest, withoutUngroundedRetraction, CARD_TOOLS as STAFF_CARD_TOOLS } from "@/lib/staff-answer-text";
+
+/** The one-line ask that follows a refused card when the model made the refusal its answer (see FINISH THE ANSWER below). */
+const FINISH_THE_ANSWER = "The button was refused; that is not the answer and nothing to correct. Answer my question in full from the results you already read in this conversation: who, the reason, the action to take. Call no tools. End with one clause saying I can open the person from People.";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
@@ -71,7 +74,8 @@ import {
 
 // Tool round-trips (job search + enrichment can take 10-20s cold) need more
 // than the old 30s ceiling.
-export const maxDuration = 60;
+// 120 s (was 60): the staff answer, its finish pass and a 30 s checker must all fit (Troy 11/01: no timeouts).
+export const maxDuration = 120;
 
 const RATE_LIMIT_MESSAGE =
   "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more.";
@@ -80,6 +84,8 @@ const ORG_RATE_LIMIT_MESSAGE =
   "You've reached today's assistant limit for your account. It resets at midnight. If your team regularly needs more, tell us and we will raise it.";
 
 export async function POST(request: Request) {
+  // The route deadline the staff answer check budgets against (maxDuration above; pre-merge review F5).
+  const requestStartedAt = Date.now();
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength, 10) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -172,6 +178,11 @@ export async function POST(request: Request) {
   // Full names of the people in reach, server-side only, for resolving a
   // surname the staff member typed (W08). Never put in a prompt.
   let staffPeople: import("@/lib/staff-skill-run").ReachPerson[] = [];
+  // Full names of this organization's people who are NOT in this staff
+  // member's reach (reach "assigned" only). Server-side only, for layer 1 of
+  // the output check (lib/org-output-verify.ts). Never put in a prompt, a
+  // response or a log.
+  let staffOutOfReach: string[] = [];
   let toolOptions: import("@/lib/tools/assistant-tools").AssistantToolOptions = {
     userId: userId ?? null,
     surface: (userId ? "refinery" : "forge") as "refinery" | "forge",
@@ -221,6 +232,24 @@ export async function POST(request: Request) {
         const rollup = summarizeStaffPerformance(cohort.clients, { stalledAfterDays: quietDays });
         const firstName = (n: string | null) => (n ?? "").trim().split(/\s+/)[0] || "someone";
         const staff = await (await import("@crucible/core")).getOrgStaff(actor.orgId);
+        if (actor.reach === "assigned") {
+          // The same org read with no assignment filter, minus this caseload.
+          // A name that matches someone in reach is never treated as out of reach.
+          // Read BEFORE staffActor is set, so a failure here can never leave a
+          // staff turn running without its output check (review F5).
+          const inReach = new Set(cohort.clients.map((c) => c.userId));
+          const inReachNames = new Set(cohort.clients.map((c) => (c.name ?? "").trim().toLowerCase()));
+          const orgWide = await getPartnerCohort(userId, { accessCodeId: actor.orgId });
+          // The org read must contain this caseload; an empty or short read would
+          // silently check nobody, so it fails closed instead.
+          const orgIds = new Set(orgWide.clients.map((o) => o.userId));
+          if (cohort.clients.some((c) => !orgIds.has(c.userId))) {
+            throw new Error("org-wide cohort read is missing people in reach");
+          }
+          staffOutOfReach = orgWide.clients
+            .filter((c) => !inReach.has(c.userId) && (c.name ?? "").trim() && !inReachNames.has((c.name ?? "").trim().toLowerCase()))
+            .map((c) => (c.name ?? "").trim());
+        }
         staffActor = actor;
         staffPeople = cohort.clients.map((c) => ({ id: c.userId, name: c.name }));
         context.audience = "org_staff";
@@ -255,6 +284,13 @@ export async function POST(request: Request) {
       }
     } catch (err) {
       console.error("org assistant context failed:", err);
+      // Nothing half-built survives: a staff actor without context.org would get
+      // staff tools on the unchecked participant path (review F5).
+      staffActor = null;
+      staffPeople = [];
+      staffOutOfReach = [];
+      delete context.org;
+      if (context.audience === "org_staff") context.audience = undefined;
       // A participant loses nothing here, so their conversation carries on. A
       // STAFF MEMBER must not: falling through would hand a case manager the
       // job-seeker coach, offering to build the resume of somebody who asked
@@ -376,7 +412,13 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
       `SELECT coach_language FROM users WHERE id = $1`,
       [userId]
     ).catch(() => null);
-    if (langRow?.coach_language === "es") {
+    if (langRow?.coach_language === "es" && staffActor) {
+      // Staff (prompt review F10): answers in Spanish, records stay in English, and the output check reads
+      // English, so the never-sent rule is restated for every language.
+      localizedSystemPrompt = `${systemPrompt}
+
+LANGUAGE: Answer in Spanish (plain, Latin American neutral). Case notes, outcome notes and funder narratives stay in English. Write a message to a participant in the language the staff member asks for. Refer to pages and buttons by their English labels. Keep these in English, word for word: the "isn't on your list" sentence, the part-of-list sentence, the safety and legal-help lines, and each skill's closing line. Never say you sent, saved or added anything, in any language.`;
+    } else if (langRow?.coach_language === "es") {
       localizedSystemPrompt = `${systemPrompt}
 
 LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface stays in English, so refer to pages and buttons by their English labels. Any resume or cover letter text stays in the language of the job posting (English unless stated otherwise); only your coaching and conversation are in Spanish.`;
@@ -432,7 +474,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
   // and only then streamed -- slower by a second, and never confidently wrong.
   if (context.org) {
     const { generateText } = await import("ai");
-    const { verifyOrgOutput, orgFlagNotice } = await import("@/lib/org-output-verify");
+    const { verifyOrgOutput, orgFlagNotice, conversationWords } = await import("@/lib/org-output-verify");
 
     operation.markProviderAttempted();
     const generated = await generateText({
@@ -452,7 +494,69 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // A safety decline comes back as finishReason "unknown" with no text. Never
     // send a staff member an empty answer; say it plainly instead.
     // Every step's words, never a card line alone (lib/staff-answer-text.ts; demo fix T2 round 3).
-    const answer = replyOrFallback(staffAnswerText(generated.steps, generated.text));
+    let answer = replyOrFallback(staffAnswerText(generated.steps, generated.text));
+    // The shape of the model's steps, no content: how long each step's text was, which tools it
+    // called, each result's status. Tells a model refusal apart from text the assembler dropped
+    // (Codex D review, 2026-11-01: ROOM-10 and DEMO-09 could not be placed without this).
+    const stepShape = (steps: typeof generated.steps) => JSON.stringify(steps.map((s) => ({
+      text: String(s.text ?? "").length,
+      calls: (s.toolCalls ?? []).map((c) => (c as { toolName?: string }).toolName ?? "?"),
+      results: (s.toolResults ?? []).map((r) => `${(r as { toolName?: string }).toolName ?? "?"}:${String(((r as { result?: { status?: unknown } }).result)?.status ?? "-")}`),
+    })));
+    console.info("[staff-steps]", stepShape(generated.steps));
+    // FINISH THE ANSWER (preview E step log, 2026-11-01). ROOM-10 and ROOM-13 were a model that read
+    // the queue, asked for a button that was refused, and wrote only "open Jean from People" (steps of
+    // 0, 0 and 49 characters): the refusal became the answer. When a read returned ok, a card was refused
+    // and the words are that short, the model is asked once more, with its own steps in front of it and
+    // no tools, to answer the question from what it read. One extra call, only in that shape.
+    const statusOf = (r: unknown) => String((r as { result?: { status?: unknown } } | null)?.result?.status ?? "");
+    const nameOf = (r: unknown) => String((r as { toolName?: string } | null)?.toolName ?? "");
+    // Only a CARD tool's refusal counts (review F6): a refused participant read is a scope boundary the
+    // model must respect, not a button to answer around.
+    const cardRefused = generated.steps.some((s) => (s.toolResults ?? []).some((r) => STAFF_CARD_TOOLS.has(nameOf(r)) && /^(refused|unavailable)$/.test(statusOf(r))));
+    const readOk = generated.steps.some((s) => (s.toolResults ?? []).some((r) => statusOf(r) === "ok" && !STAFF_CARD_TOOLS.has(nameOf(r))));
+    let retried = false;
+    if (staffActor && cardRefused && readOk && answer.length < 200) {
+      // The conversation so far is UI messages (parts, toolInvocations); the model's own steps come back
+      // as CoreMessages, some with role "tool". The SDK converts an array as one kind or the other, so the
+      // history is converted to CoreMessages first (review F1: ROOM-10 on preview F threw
+      // "Unsupported role: tool" before the provider was called). A failure here keeps the first answer.
+      try {
+        const { convertToCoreMessages } = await import("ai");
+        const history = convertToCoreMessages((staffInput?.messages ?? messages) as never, { tools });
+        const finished = await generateText({
+          model: troyChatModel(),
+          system: localizedSystemPrompt,
+          messages: [...history, ...generated.response.messages, { role: "user", content: FINISH_THE_ANSWER }],
+          maxTokens: responseMaxTokens,
+          tools,
+          toolChoice: "none",
+          maxSteps: 1,
+          async onStepFinish({ usage, providerMetadata }) {
+            await operation.run(async () => {
+            const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+            await recordTokenUsage("anthropic", MODEL_TROY, assistantStepUsage(usage, providerMetadata), { userId: userId ?? null, endpoint: "assistant" });
+            });
+          },
+        });
+        console.info("[staff-steps] finish", stepShape(finished.steps));
+        const fuller = finished.text.trim();
+        if (fuller.length > answer.length) { answer = replyOrFallback(fuller); retried = true; }
+      } catch (err) {
+        console.error("[staff-steps] finish failed, first answer kept:", err instanceof Error ? err.message : err);
+      }
+    }
+
+    // An action-only turn that read nothing has no new result to correct from (ACT-01/02 on F and G):
+    // its answer ends before the first sentence that takes back or rewrites the earlier one.
+    // The cut keeps the safety, legal-help and human-step sentences (review R1). A draft offered in a turn
+    // that was cut is an unrequested rewrite: no card for it (review R3); the earlier card still stands.
+    const readThisTurn = generated.steps.some((s) => (s.toolResults ?? []).some((r) => !STAFF_CARD_TOOLS.has(nameOf(r))));
+    let retractionCut = false;
+    if (staffActor && !readThisTurn && actionOnlyRequest(staffSaid)) {
+      const cut = withoutUngroundedRetraction(answer);
+      if (cut !== answer) { console.info("[staff-steps] retraction cut on an action-only turn"); answer = cut; retractionCut = true; }
+    }
 
     const facts = {
       staffToolEvidence: staffEvidence.items,
@@ -470,12 +574,19 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       // Server-signed lookup records of earlier answers, result lines only (demo fix T1 round 3).
       priorToolRecords: staffPriorRecords,
       staffNames: context.org.staffNames ?? [],
+      outOfReachNames: staffOutOfReach,
+      // Every word of this request's conversation, all roles, full length (review R2-1). Layer 1 only.
+      // The request as sent, once (review R4-3); the gated copy only withholds record text, never adds names.
+      conversationWords: conversationWords(messages as unknown[]),
       needsAttention: context.org.needsAttention ?? [],
       orgName: context.org.orgName,
       quietDays: context.org.quietDays,
     };
     const userSaid = staffInput ? staffSaid : lastUserText(messages);
-    const verdict = await verifyOrgOutput(answer, facts, userSaid || undefined);
+    // Layer 2 gets up to 30 s, never past the route's maxDuration less a 10 s margin for the rest of the
+    // reply; with too little left it does not run and the answer says so (pre-merge review F5).
+    const checkBudgetMs = Math.min(30_000, maxDuration * 1000 - (Date.now() - requestStartedAt) - 10_000);
+    const verdict = await verifyOrgOutput(answer, facts, userSaid || undefined, { timeoutMs: checkBudgetMs < 3_000 ? 0 : checkBudgetMs });
 
     // Dash sweep on the model-written answer only, before any notice is added.
     let out = plainPunctuation(answer, logDashSwaps("assistant-org"));
@@ -509,13 +620,16 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
           explanation: `Org staff assistant (${context.org.role}, reach ${context.org.reach}) on ${context.currentPage}. Verified before send: ${
             verdict.ok ? "clean" : `${verdict.problems.length} unsupported claim(s) flagged to the reader`
           }; second pass ${verdict.modelChecked ? "ran" : "did NOT run"}.`,
+          // The answer actually sent, which may be the finish pass's text (review F7); its usage is
+          // in ai_token_usage through onStepFinish, the first call's total is what tokenCount records.
           outputSummary: {
-            response_length: generated.text.length,
-            word_count: generated.text.split(/\s+/).length,
+            response_length: answer.length,
+            word_count: answer.split(/\s+/).length,
             verify_ok: verdict.ok,
             verify_problem_count: verdict.problems.length,
             verify_model_checked: verdict.modelChecked,
             finish_reason: generated.finishReason,
+            finish_pass_used: retried,
           },
           tokenCount: usage?.totalTokens ?? null,
           latencyMs: Date.now() - startTime,
@@ -529,11 +643,18 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // answer (fix round 1, B3). One that fails is held back, and the reason is
     // shown where the staff member reads it.
     const { checkOrgClaimsDeterministic } = await import("@/lib/org-output-verify");
+    // A draft the answer withdrew is no card either (review F5): the cards read the words the staff member
+    // sees, the assembled answer (card-step words, the finish pass, the cut; reviews G4 and R2), so
+    // "discard that draft" removes the button with the sentence wherever the model wrote it. The card cap
+    // comes after the withdrawal so a replacement offered third still reaches it (review G2).
+    const offeredNow = retractionCut ? [] : offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[]));
     const draftCheck = checkStaffDrafts(
-      offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])),
+      draftsAfterFinal(offeredNow, answer).slice(0, MAX_STAFF_DRAFT_CARDS),
       (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
     );
     if (draftCheck.notice) out += draftCheck.notice;
+    // Two or more drafts and the answer chose between them: no card, said plainly (review T1).
+    if (draftChoiceWithdrawn(offeredNow.length, answer)) out += STAFF_DRAFTS_WITHDRAWN_NOTICE;
     // Lane S1: the registry's buttons and cards (Go to, filled-in Add people,
     // later lanes' cards). Any that carries a model-written draftBody passes the
     // same draft check first and is held back on a failure (review round 1, S8).

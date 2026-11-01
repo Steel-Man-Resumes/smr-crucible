@@ -815,7 +815,9 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           // nothing. Offer to put the words on the participant's page as an
           // UNSAVED draft, so the staff member reads, changes and saves it
           // themselves, or throws it away.
-          const draftFor = staff ? parts.flatMap((part) => {
+          // Every draft the server kept gets its own card (review F5: the first of two used to be the only
+          // one shown; the server already drops a draft the final step withdrew).
+          const staffDrafts = staff ? parts.flatMap((part) => {
             if (part.type !== "tool-invocation") return [];
             const inv = part.toolInvocation as { toolName?: string; state?: string; result?: Record<string, unknown> } | undefined;
             const r = inv?.result;
@@ -825,8 +827,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             if (inv?.toolName !== "offer_staff_draft" || inv.state !== "result" || r?.status !== "draft_only" || r.saved !== false || r.sent !== false) return [];
             return typeof r.participantId === "string" && /^[0-9a-f-]{36}$/i.test(r.participantId) && typeof r.body === "string" && r.body.trim()
               ? [{ id: r.participantId, purpose: r.purpose === "case_note" ? "case_note" : "check_in", body: r.body.trim() }] : [];
-          })[0] : undefined;
-          const draftText = draftFor?.body ?? "";
+          }) : [];
           // Lane S1: a filled-in Add people form. Nothing was added or sent; the
           // button opens the form and the staff member presses Send invite.
           const addPerson = staff ? parts.flatMap((part) => {
@@ -902,19 +903,21 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                   const label = TOOL_ACTIVITY[inv?.toolName ?? ""] ?? "Working on it";
                   const done = inv?.state === "result";
                   const failed = done && (inv?.result?.ok === false || ["unavailable", "blocked", "refused"].includes(String(inv?.result?.status)));
+                  // A button t.ROY may not show is not a failed step for the staff member to worry about (harness ROOM-10/13).
+                  const noButton = failed && ["open_staff_page", "open_add_person"].includes(String(inv?.toolName)) && String(inv?.result?.status) === "refused";
                   return (
                     <div
                       key={i}
                       className="flex items-center gap-2 pl-1 text-xs text-muted"
                       role="status"
                     >
-                      {failed ? <span className="text-amber-700" aria-label="Could not complete">!</span> : done ? (
+                      {noButton ? <span className="text-muted" aria-hidden="true">·</span> : failed ? <span className="text-amber-700" aria-label="Could not complete">!</span> : done ? (
                         <Check size={14} className="text-sage-600" aria-hidden="true" />
                       ) : (
                         <TroyWork compact decorative />
                       )}
                       <span>
-                        {failed ? "Could not complete this step" : label}
+                        {noButton ? "No button for that here" : failed ? "Could not complete this step" : label}
                         {done ? "" : "..."}
                       </span>
                     </div>
@@ -922,13 +925,20 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                 }
                 return null;
               })}
-              {!replyStillComing && draftFor && draftText && (
-                <div className="flex flex-col items-start gap-1 pl-1">
+              {!replyStillComing && staffDrafts.map((draftFor, draftIdx) => (
+                <div key={`${draftFor.id}-${draftIdx}`} className="flex flex-col items-start gap-1 pl-1">
+                  {/* The draft's own words, readable here (Codex E0, 2026-11-01: the card used to be a button
+                      alone, so a draft the model gave only to the tool was never seen). Same body the check
+                      passed and the button carries. */}
+                  <div data-staff-draft-body="" className="mb-1 w-full whitespace-pre-wrap rounded-[5px] border border-[#e2ddd0] bg-[#faf8f3] px-3 py-2 text-[13px] leading-relaxed text-[#2b2a27]">
+                    <span className="mb-1 block font-mono text-[10px] uppercase tracking-[0.1em] text-muted">{draftFor.purpose === "case_note" ? "Case note, unsaved" : "Check-in, unsaved"}</span>
+                    {draftFor.body}
+                  </div>
                   <button
                     type="button"
                     onClick={() => {
                       try {
-                        if (accountId) sessionStorage.setItem(orgNoteDraftKey(accountId, draftFor.id), JSON.stringify({ body: draftText.slice(0, 8000), purpose: draftFor.purpose, skillRunId: skillRunId ?? undefined, at: new Date().toISOString() }));
+                        if (accountId) sessionStorage.setItem(orgNoteDraftKey(accountId, draftFor.id), JSON.stringify({ body: draftFor.body.slice(0, 8000), purpose: draftFor.purpose, skillRunId: skillRunId ?? undefined, at: new Date().toISOString() }));
                       } catch { /* storage blocked: the words are still in this reply */ }
                       router.push(`/dashboard/clients/${draftFor.id}`);
                     }}
@@ -938,7 +948,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                   </button>
                   <span className="text-[11px] text-muted">Nothing is saved or sent until you do it.</span>
                 </div>
-              )}
+              ))}
               {!replyStillComing && addPerson && (
                 <div className="flex flex-col items-start gap-1 pl-1">
                   <button

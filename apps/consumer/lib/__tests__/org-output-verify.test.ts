@@ -15,6 +15,9 @@ const FACTS: OrgFacts = {
   unassigned: 0,
   visibleNames: ["Terrell", "Wes", "Colton"],
   staffNames: ["Russ", "Alma", "Dana"],
+  // 2026-10-30: the answer path flags only people of this org outside reach, so the
+  // out-of-reach people these tests name are listed (Michael Shaw, Priya, Mason).
+  outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
 };
 
 const problems = (t: string) => checkOrgClaimsDeterministic(t, FACTS);
@@ -123,6 +126,7 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
   const LUPE: OrgFacts = {
     caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
     visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+    outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
   };
   const answer = { typedNamesInNoMatch: true };
   const said = "Prep me for my next conversation with Jean Valjean.";
@@ -158,15 +162,18 @@ describe("W08: dates, job words, panel labels and a resolved surname are not cla
   it("(a) a surname the server resolved to someone in reach is not flagged", () => {
     const resolved: OrgFacts = { ...LUPE, resolvedNames: ["Valjean"] };
     assert.deepEqual(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", resolved, said, answer), []);
-    assert.ok(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", LUPE, said, answer).some((p) => p.includes('"Valjean"')), "without the server match it is still checked");
+    // Without the server match, a surname the staff member typed is still checked (as before), on both paths.
+    assert.ok(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", LUPE, said, answer).some((p) => p.includes('"Valjean"')));
+    assert.ok(checkOrgClaimsDeterministic("Here is where Jean Valjean is this week.", LUPE, said).some((p) => p.includes('"Valjean"')), "draft path: still checked");
   });
 
   it("REGRESSION: an out-of-reach name is still flagged beside a date and a job word, on both paths", () => {
     const t = "Jean met Michael Shaw on Oct 27 for a Forklift Driver opening.";
-    const expected = ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list'];
+    const expected = ['I could not match "Michael Shaw" to anyone on your list'];
     assert.deepEqual(checkOrgClaimsDeterministic(t, { ...LUPE, resolvedNames: ["Valjean"] }, said, answer), expected);
+    // The draft path is unchanged (2026-10-30): it still flags each unknown word.
     const draft = checkOrgClaimsDeterministic(t, LUPE, said);
-    for (const e of expected) assert.ok(draft.includes(e), `draft path: ${e}`);
+    for (const e of ['I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list']) assert.ok(draft.includes(e), `draft path: ${e}`);
     // A name right after a date is still mid-sentence once the date is read as a date.
     assert.deepEqual(
       checkOrgClaimsDeterministic("Jean has an interview on Oct 27 and Michael set it up for him.", LUPE, said, answer),
@@ -185,6 +192,7 @@ describe("W08 review round 2", () => {
   const LUPE: OrgFacts = {
     caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
     visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+    outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
   };
   const answer = { typedNamesInNoMatch: true };
 
@@ -220,6 +228,7 @@ describe("W08 review round 3: dates never hide a count; drafts match origin/main
   const LUPE: OrgFacts = {
     caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
     visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+    outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
   };
   const answer = { typedNamesInNoMatch: true };
   const fig = (n: string) => `the figure "${n}" is not one of this caseload's numbers`;
@@ -252,14 +261,16 @@ describe("W08 review round 3: dates never hide a count; drafts match origin/main
     ["In October 22 graduates got jobs.", [fig("22")]],
     ["In September 19 young adults enrolled.", [fig("19")]],
     ["Since Sept 1, 1800 meals were served.", [fig("1800")]],
-    ["Jean was last active Sun Oct 25 at noon.", [fig("25")]],
+    // 2026-10-30 (review N10-4): written dates are read as dates on the draft path too, so these
+    // date-only flags are gone on purpose; a name after a date is now checked as mid-sentence.
+    ["Jean was last active Sun Oct 25 at noon.", []],
     ["Jean joined October 25, 2026.", []],
-    ["Jean was active Oct 31 and Nov 1.", [fig("31")]],
+    ["Jean was active Oct 31 and Nov 1.", []],
     ["Jean was last active Oct 24 at 6 PM.", []],
     ["Jean met Michael Shaw on Oct 27 about a Forklift Driver opening.", [fig("27"), 'I could not match "Michael" to anyone on your list', 'I could not match "Shaw" to anyone on your list', 'I could not match "Forklift" to anyone on your list', 'I could not match "Driver" to anyone on your list']],
     ["Hi Jean, I saw the Forklift Driver opening you saved.", ['I could not match "Forklift" to anyone on your list', 'I could not match "Driver" to anyone on your list']],
-    ["Jean was last active 2026-10-25 by his sharing.", [fig("2026")]],
-    ["Oct 27 Marcus called about 27 people.", [fig("27"), fig("27")]],
+    ["Jean was last active 2026-10-25 by his sharing.", []],
+    ["Oct 27 Marcus called about 27 people.", [fig("27"), 'I could not match "Marcus" to anyone on your list']],
   ];
   it("parity: the draft path gives origin/main's output for every sentence", () => {
     for (const [t, expected] of ORIGIN_DRAFT) assert.deepEqual(checkOrgClaimsDeterministic(t, LUPE, ""), expected, t);
@@ -272,6 +283,7 @@ describe("W08 review round 4: dates as t.ROY writes them", () => {
   const LUPE: OrgFacts = {
     caseload: 2, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0,
     visibleNames: ["Jean", "Marqus"], staffNames: ["Lupe"], orgName: "Southside Bridge",
+    outOfReachNames: ["Michael Shaw", "Priya Nair", "Mason Reed"],
   };
   const answer = { typedNamesInNoMatch: true };
 

@@ -9,6 +9,8 @@ export function verificationUsage(value: unknown): VerificationUsage {
 }
 interface Dependencies {
   fetch: typeof fetch;
+  /** Time this call may take; the route passes what is left before its deadline (default 30 s). */
+  timeoutMs?: number;
   record(usage: VerificationUsage, meta: {outcome: "failed" | "succeeded"; usageMissing: boolean}): Promise<unknown>;
 }
 export async function runOrgVerificationCall(model: string, prompt: string, key: string, deps: Dependencies): Promise<string[] | null> {
@@ -17,7 +19,9 @@ export async function runOrgVerificationCall(model: string, prompt: string, key:
     const res = await deps.fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST", headers: {"Content-Type": "application/json", Authorization: `Bearer ${key}`},
       body: JSON.stringify({model, messages: [{role: "user", content: prompt}], temperature: 0, max_tokens: 900, response_format: {type: "json_object"}}),
-      signal: AbortSignal.timeout(12_000),
+      // No user-facing timeouts (Troy 11/01): a slow check waits behind the working state, up to 30 s or the
+      // time the route has left before maxDuration, whichever is less (pre-merge review F5).
+      signal: AbortSignal.timeout(Math.max(1_000, Math.min(30_000, deps.timeoutMs ?? 30_000))),
     });
     const data = await res.json();
     const usage = verificationUsage(data?.usage);

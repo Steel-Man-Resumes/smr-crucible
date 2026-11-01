@@ -82,7 +82,29 @@ const RECORD_WORDS = new RegExp(
 );
 // Case-sensitive on purpose: "doc" is a document and "po" is not a word.
 const RECORD_ABBREVIATIONS = /\b(?:DOC|D\.O\.C\.?|P\.O\.|BOP|RRC|UA|UAs|PSI|DOJ|ICE)(?=\W|$)|\bCorrections?\b|\bEM\b|\bPO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))|\b(?:[Mm]y|[Hh]is|[Hh]er|[Tt]heir|[Tt]he|[Aa]|[Ww]ith|[Tt]o|[Ss]ee|[Ss]aw|[Cc]all|[Cc]alled|[Mm]eets?|[Mm]et)\s+PO\b(?!\s*(?:[Bb]ox|#|[Nn]umber))/;
-const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no\.?|num(?:ber)?)\s*:?\s*[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
+// "no" and "num" must be whole words: "case notes" is the workspace's own term, not "case no. tes"
+// (2026-10-30, harness TRAP-ACT-04: "Save that to her case notes." reached t.ROY as a withheld blank).
+// Production's pattern (crude on purpose: "case number ..." always matches, the "ber" read as the id),
+// with only "case notes" excluded (review R5-1: requiring the id right after the label let "Her case
+// number is 24-CF-1182." through). "\s*(?::\s*)?" instead of "\s*:?\s*": the same matches without the
+// quadratic split of a long run of spaces (review G6-1).
+const RECORD_NUMBERS = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|no(?!tes?\b)\.?|num(?:ber)?\.?)\s*(?::\s*)?[A-Za-z0-9][A-Za-z0-9-]{2,}/i;
+/** A record-number label ("case no.", "docket number", "booking #", "case notes:"). Linear: no nested repeats. */
+const RECORD_LABEL = /\b(?:case|docket|booking|inmate|offender|cause)\s*(?:#|nos?\b\.?|num(?:ber)?s?\b\.?|id\b|notes?\s*[:#-])/i;
+/**
+ * A token shaped like a record number, whole tokens only: compatibility-normalized, Unicode dashes as
+ * "-". Letters and digits with a hyphen or colon ("24-CF-1182", "B-445566", "1:24-cr-00123"), 5+ digits,
+ * or 6+ letters and digits with at least 2 digits ("2024CF001182", "CR99812"). Never an ISO date or a
+ * phone number (review G7-1, G7 over-withholding).
+ */
+const recordShapedToken = (t: string): boolean => {
+  const w = t.normalize("NFKC").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+  if (w.length < 5 || !/^[A-Za-z0-9:-]+$/.test(w) || !/\d/.test(w)) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(w) || /^(?:\d{3}-)?\d{3}-\d{4}$/.test(w)) return false;
+  return /[-:]/.test(w) || /^\d+$/.test(w) || (w.length >= 6 && (w.match(/\d/g) ?? []).length >= 2);
+};
+/** "case notes ... CR-99812": a notes label in a sentence that also holds a record-shaped token (review G6-3, G7-1). */
+const NOTES_LABEL = /\b(?:case|docket|booking|inmate|offender|cause)\s*notes?\b/i;
 
 let plannerLines: string[] | null = null;
 /** The planner's forbidden lines that name a record subject (header, detector 1). Lower case. */
@@ -193,17 +215,38 @@ export const STAFF_INPUT_NOTICE = "Record details were left out of what t.ROY sa
  * bullets still works on everything else.
  */
 export function withholdRecordSentences(text: string): { text: string; withheld: boolean } {
-  let withheld = false;
-  const lines = String(text ?? "").split("\n").map((line) => {
-    if (!hasStaffRecordWords(line)) return line;
-    const sentences = line.split(/(?<=[.!?;])\s+/).map((s) => {
-      if (!hasStaffRecordWords(s)) return s;
-      withheld = true;
-      return RECORD_WITHHELD;
+  const source = String(text ?? "");
+  const shaped = (sentence: string) => sentence.split(/\s+/).some(recordShapedToken);
+  // Inside a "<label> notes" sentence the bar is lower (review G8-1): any token with 4+ digits that is
+  // not an ISO date or a slash date ("A1234", "123-4567"), or a spaced court number ("24 CF 1182").
+  const notesShaped = (sentence: string) =>
+    shaped(sentence) ||
+    /\b\d{2,4}\s?[A-Za-z]{2}\s?\d{3,7}\b/.test(sentence) ||
+    sentence.split(/\s+/).some((t) => {
+      const w = t.normalize("NFKC").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, "");
+      return /^[A-Za-z0-9-]+$/.test(w) && !/^\d{4}-\d{2}-\d{2}$/.test(w) && (w.match(/\d/g) ?? []).length >= 4;
     });
-    return sentences.join(" ");
+  // Sentences grouped by line in one pass (review G7-2: linear in the number of lines). "case no.
+  // 24-CF-1182" is one sentence: never split after an abbreviated "no.", "num." or "nr." (R4-1).
+  const lines = source.split("\n").map((line) => {
+    const segs = line.split(/(?<=[.!?;])(?<!\b(?:no|num|nr)\.)\s+/i).map((s) => ({ s, hit: hasStaffRecordWords(s) || (NOTES_LABEL.test(s) && notesShaped(s)) }));
+    return { line, segs };
   });
-  return { text: lines.join("\n"), withheld };
+  // A label in one sentence and a record-shaped number in the next ("Her case number. 24-CF-1182",
+  // "case no.\n24-CF-1182"): both are withheld (review R5-2).
+  let prev: { s: string; hit: boolean } | null = null;
+  for (const l of lines) for (const g of l.segs) {
+    if (prev && RECORD_LABEL.test(prev.s) && shaped(g.s)) { prev.hit = true; g.hit = true; }
+    prev = g;
+  }
+  // A line that names a record when no single sentence does (the label and the number split apart) is
+  // withheld whole (review R4-1).
+  for (const l of lines) if (!l.segs.some((g) => g.hit) && hasStaffRecordWords(l.line)) for (const g of l.segs) g.hit = true;
+  const withheld = lines.some((l) => l.segs.some((g) => g.hit));
+  // A record number split across a line break that nothing above caught: the whole text is withheld.
+  if (!withheld && RECORD_NUMBERS.test(source.replace(/\n/g, " "))) return { text: RECORD_WITHHELD, withheld: true };
+  // A line with nothing withheld comes back exactly as it was (review G7-3).
+  return { text: lines.map((l) => (l.segs.some((g) => g.hit) ? l.segs.map((g) => (g.hit ? RECORD_WITHHELD : g.s)).join(" ") : l.line)).join("\n"), withheld };
 }
 
 /** Every string inside a value (tool args and results from the client), record sentences withheld. */

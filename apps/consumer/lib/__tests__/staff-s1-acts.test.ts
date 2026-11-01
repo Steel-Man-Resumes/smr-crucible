@@ -64,6 +64,9 @@ function toolsFor(actor: OrgActor, words: string, extra: { focus?: string; selec
 
 const facts = (evidence: ReturnType<typeof createStaffEvidenceCollector>): OrgFacts => ({
   caseload: 1, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Alma"], staffNames: ["Pat"], staffToolEvidence: evidence.items, orgName: "Lakeshore Works (Demo)",
+  // 2026-10-30: the answer path flags only this org's people outside reach. A Michael Shaw already in the
+  // org on someone else's caseload is the case the filled-in-form allowance must not open.
+  outOfReachNames: ["Michael Shaw"],
 });
 
 /* --------------------------------------------------------------- pages -- */
