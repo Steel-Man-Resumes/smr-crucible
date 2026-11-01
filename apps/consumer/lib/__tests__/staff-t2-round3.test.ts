@@ -622,6 +622,18 @@ describe("pre-merge review (2026-11-01): F3 sentence-level repeats, F4 tied send
     const steps = [{ text: card, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] }, { text: fin, toolCalls: [] }];
     assert.ok(staffAnswerText(steps, fin).includes(card));
   });
+  it("R2-F1: lowercase time words and swapped negations are new facts, not repeats", async () => {
+    const { withoutFinalRepeats } = await import("../staff-answer-text");
+    const cases: [string, string][] = [
+      ["His interview at STS is tomorrow morning, so call him tonight.", "His interview at STS is in the morning, so call him."],
+      ["Marqus needs a bed tonight at the shelter.", "Marqus needs a bed at the shelter."],
+      ["Jean has no ride and no phone this week.", "Jean has a ride and no phone this week."],
+      ["He starts at the mill, not the warehouse, on Monday.", "He starts at the warehouse, not the mill, on Monday."],
+    ];
+    for (const [card, fin] of cases) assert.equal(withoutFinalRepeats(card, fin), card, card);
+    assert.equal(withoutFinalRepeats("Marqus's hourly wage is not on file for me.", "Marqus's hourly wage is not on file for me. Open his page."), "");
+    const t = performance.now(); withoutFinalRepeats("Jean has a task open. ".repeat(5000), "Jean has a task open today. ".repeat(5000)); assert.ok(performance.now() - t < 1000);
+  });
   it("F4: ordinary send-it replies are not cut", async () => {
     const { withoutUngroundedRetraction } = await import("../staff-answer-text");
     for (const a of ["I can't send messages. I don't have a send button. Copy it and send it yourself.", "I can't send messages. Marqus doesn't have an email on file, so text it yourself.", "I can't send messages. The Department of Corrections office prefers a call; send it yourself.", "I can't send messages. Jean has only a landline, so call him or send it yourself.", "I can't send messages. Check the details on his page, then send it yourself."]) {

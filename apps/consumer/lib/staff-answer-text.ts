@@ -272,30 +272,32 @@ function cardWords(steps: readonly Step[], clean: (s: string) => string): string
  * when the final already says it (same words, or nearly all its words in one final sentence with every
  * number and capitalised word there too). Any sentence with a fact the final lacks stays.
  */
-const wordsOf = (t: string) => (t.toLowerCase().match(/[a-z0-9']+/g) ?? []);
+const wordsOf = (t: string) => (t.toLowerCase().replace(/[’]/g, "'").match(/[a-z0-9']+/g) ?? []);
 const sentencesOf = (t: string) => t.split(/\n+|(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
-const keyTokens = (t: string) => (t.match(/\b(?:\d[\d:/.,-]*|[A-Z][A-Za-z'’-]+)\b/g) ?? []).map((x) => x.toLowerCase()).filter((x) => !["i", "the", "a", "an", "if", "your", "here", "this", "that", "you", "it", "he", "she", "they"].includes(x));
-function sentenceRepeated(sentence: string, finalSentences: string[], finalText: string): boolean {
-  const a = wordsOf(sentence);
-  // A label or a sign-off ("Email", "Lupe") is not a repeat, even when the final contains the word.
-  if (a.length < 4) return false;
-  if (finalText.includes(sentence)) return true;
-  const keys = keyTokens(sentence);
-  // A negation the final sentence does not share (or the reverse) is a different claim, never a repeat.
-  const negated = (t: string) => /\b(?:not|no|never|none|nothing|nobody|without)\b|n['’]t\b/i.test(t);
-  return finalSentences.some((f) => {
-    if (negated(sentence) !== negated(f)) return false;
-    const b = new Set(wordsOf(f));
-    const fKeys = new Set(keyTokens(f));
-    return a.filter((w) => b.has(w)).length / a.length >= 0.8 && keys.every((k) => fKeys.has(k));
-  });
-}
-/** The card-step text with the sentences the final already says removed ("" when all of it repeats). */
+const STOP = new Set(["a", "an", "the", "and", "or", "of", "to", "in", "on", "at", "for", "with", "is", "are", "was", "were", "be", "it", "its", "this", "that", "here", "there", "i", "you", "your", "he", "his", "she", "her", "they", "their", "me", "my", "so", "can", "will", "has", "have", "had", "from", "by", "as", "if"]);
+const NEG = new Set(["not", "no", "never", "none", "nothing", "nobody", "without", "can't", "don't", "doesn't", "didn't", "isn't", "aren't", "wasn't", "won't", "cannot"]);
+/** The word after each negation, in order ("no ride and no phone" -> ride, phone): two sentences that negate different things differ. */
+const negTargets = (w: string[]) => w.flatMap((x, i) => (NEG.has(x) ? [w.slice(i + 1).find((y) => !STOP.has(y)) ?? ""] : [])).sort().join("|");
+/**
+ * A button-step sentence repeats the final only when the final already says it: it appears there word for
+ * word, or one final sentence holds every content word of it with the same negations on the same words
+ * (pre-merge review R2-F1: "tomorrow", "tonight", "no ride" vs "a ride", "mill, not the warehouse" vs
+ * "warehouse, not the mill" are all new facts). Labels and sign-offs (under 4 words) are never repeats.
+ */
 export function withoutFinalRepeats(text: string, final: string): string {
   if (final.includes(text.trim())) return "";
-  const finals = sentencesOf(final);
+  // The final's sentences are read once (review R2-N2: rebuilding them per sentence was quadratic).
+  const finals = sentencesOf(final).map((f) => { const w = wordsOf(f); return { set: new Set(w), neg: negTargets(w) }; });
+  const repeated = (sentence: string) => {
+    const w = wordsOf(sentence);
+    if (w.length < 4) return false;
+    if (final.includes(sentence)) return true;
+    const content = w.filter((x) => !STOP.has(x));
+    const neg = negTargets(w);
+    return finals.some((f) => f.neg === neg && content.every((x) => f.set.has(x)));
+  };
   // Line by line, so a draft's line breaks survive when nothing in it repeats.
-  return text.split("\n").map((line) => line.split(/(?<=[.!?])\s+/).filter((x) => !x.trim() || !sentenceRepeated(x.trim(), finals, final)).join(" "))
+  return text.split("\n").map((line) => line.split(/(?<=[.!?])\s+/).filter((x) => !x.trim() || !repeated(x.trim())).join(" "))
     .join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 export const repeatsFinal = (text: string, final: string) => withoutFinalRepeats(text, final) === "";
