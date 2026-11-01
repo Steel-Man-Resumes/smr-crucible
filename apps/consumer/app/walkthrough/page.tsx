@@ -269,7 +269,7 @@ export default function WalkthroughPage() {
         <div className="mx-auto max-w-[1500px]">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
             <div>
-              <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#dbc173]">Guided tour · about 3 minutes</p>
+              <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#dbc173]">Guided tour · about 4 minutes</p>
               <h1 className="mt-1 text-xl font-bold leading-tight text-[#f4efe2] sm:text-2xl">A resume is one move in the hiring game.</h1>
             </div>
             <a href="#forge" className="hidden text-sm text-[#b9b2a0] underline underline-offset-4 hover:text-white sm:inline">
