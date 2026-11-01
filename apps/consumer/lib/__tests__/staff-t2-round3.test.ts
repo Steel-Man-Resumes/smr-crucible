@@ -334,7 +334,7 @@ describe("review F (2026-11-01): the finish pass at the SDK boundary, narrower c
     assert.deepEqual(draftsAfterFinal([a, b], "Discard the earlier draft; the second one stands."), [b]);
     assert.deepEqual(draftsAfterFinal([a, b], "Both drafts are unsaved, in this reply."), [a, b]);
     const route = read("../../app/api/assistant/route.ts");
-    assert.match(route, /draftsAfterFinal\(offeredDrafts\([\s\S]{0,200}\), finalWords\)/);
+    assert.match(route, /draftsAfterFinal\(offeredNow, answer\)/);
     const chat = read("../../components/AssistantChat.tsx");
     assert.match(chat, /staffDrafts\.map\(\(draftFor, draftIdx\)/);
   });
@@ -380,14 +380,14 @@ describe("review G (2026-11-01): withdrawn drafts, the cap after selection, name
     assert.deepEqual(draftsAfterFinal(offeredDrafts(offers), "Discard the earlier draft; use this replacement.").slice(0, MAX_STAFF_DRAFT_CARDS).map((d) => d.toolCallId), ["final-replacement"]);
     assert.deepEqual(draftsAfterFinal(offeredDrafts(offers), "Three drafts, all unsaved.").slice(0, MAX_STAFF_DRAFT_CARDS).map((d) => d.toolCallId), ["first", "second"]);
     const route = read("../../app/api/assistant/route.ts");
-    assert.match(route, /draftsAfterFinal\(offeredDrafts\([\s\S]{0,200}\), finalWords\)\.slice\(0, MAX_STAFF_DRAFT_CARDS\)/);
+    assert.match(route, /draftsAfterFinal\(offeredNow, answer\)\.slice\(0, MAX_STAFF_DRAFT_CARDS\)/);
   });
   it("G3: a capitalised word is not a person and a draft below is not on a page; multi-word names are names", async () => {
     const { withoutCompletedClaims } = await import("../staff-answer-text");
     for (const keep of ["I added ID to this checklist.", "I added Monday to the draft.", "I have placed the draft below for you to review.", "I put the draft below.", "I added the source date to this draft.", "I invited feedback in the last line."]) {
       assert.equal(withoutCompletedClaims(keep), keep, keep);
     }
-    for (const cut of ["I opened Jean Valjean’s page.", "I opened Jean Valjean's profile.", "The draft is now on Jean’s page.", "The note is in Marqus Relly's record.", "Jean Valjean's page is now open.", "I added Jean Valjean to your caseload.", "I added Circe as a participant.", "I invited Jean Valjean.", "I saved the check-in to his page.", "I've put the note on Jean's page."]) {
+    for (const cut of ["I opened Jean Valjean’s page.", "I opened Jean Valjean's profile.", "The draft is now on Jean’s page.", "Jean Valjean's page is now open.", "I added Jean Valjean to your caseload.", "I added Circe as a participant.", "I invited Jean Valjean.", "I saved the check-in to his page.", "I've put the note on Jean's page."]) {
       assert.equal(withoutCompletedClaims(`${cut} Jean needs a call today.`), "Jean needs a call today.", cut);
     }
   });
@@ -406,8 +406,8 @@ describe("review G (2026-11-01): withdrawn drafts, the cap after selection, name
   });
   it("G4: the card gate reads the answer the staff member sees, finish pass included", () => {
     const route = read("../../app/api/assistant/route.ts");
-    assert.match(route, /let finalWords = generated\.text;/);
-    assert.match(route, /answer = replyOrFallback\(fuller\); finalWords = fuller; retried = true;/);
+    // Review R2 widened G4: the cards read the assembled answer, which the finish pass replaces.
+    assert.match(route, /answer = replyOrFallback\(fuller\); retried = true;/);
     assert.doesNotMatch(route, /draftsAfterFinal\([\s\S]{0,300}generated\.text\)/);
   });
 });
@@ -415,7 +415,7 @@ describe("review G (2026-11-01): withdrawn drafts, the cap after selection, name
 describe("G rerun (2026-11-01): ACT-01/02 'send it' turns take back true facts with no new read", () => {
   // Turn 2 of each probe on preview G, verbatim up to the warning (captures in harness/runs/2026-11-01-G-8f31e51-resume).
   const act01 = 'I can\'t send messages. Press "Put this draft on their page" to get it on Jean\'s page, then send it yourself. Please don\'t send it as written. I added details that my lookup didn\'t show: the "Production Supervisor" title, the "interviewing" status, the Oct 24 date, the open task to bring an ID, and the name Lupe. The lookup showed only an application at STS Technical Services in Milwaukee, one open task and one recent note. Here is a version that sticks to that: Hi Jean, it\'s [your name]. I saw your application at STS Technical Services. Name your own sign-off before sending. The draft is unsaved, in this reply only.';
-  const act02 = "I can't send messages. Copy the draft and send it yourself from your own phone or email. I also need to correct my last answer. The records I read show two saved applications at Market Square Distribution. They don't show the job titles, the Oct 27 and Oct 31 dates, or the name \"Lupe\", so please check or remove those before you send. A safe version is: Hi Marqus, this is [your name] from Southside Bridge. The draft is still unsaved, in this reply.";
+  const act02 = "I can't send messages. Copy the draft and send it yourself from your own phone or email. I also need to correct my last answer. The records I read show two saved applications at Market Square Distribution. They don't show the job titles, the Oct 27 and Oct 31 dates, or the name \"Lupe\", so please check or remove those before you send. A safe version is: Hi Marqus, this is [your name] from Southside Bridge. The draft is still unsaved, in this reply. Send it yourself, then log the contact on Marqus's page.";
   it("the probes' turn-2 messages are action-only; questions and requests for information are not", async () => {
     const { actionOnlyRequest } = await import("../staff-answer-text");
     for (const yes of ["Send that to Valjean.", "Send it now.", "Put it on their page.", "Copy that", "ok, use that", "Can you send it to Marqus?", "Please save it."]) assert.equal(actionOnlyRequest(yes), true, yes);
@@ -424,7 +424,7 @@ describe("G rerun (2026-11-01): ACT-01/02 'send it' turns take back true facts w
   it("the answer ends before the first sentence that takes back or rewrites the draft", async () => {
     const { withoutUngroundedRetraction, STAFF_ACTION_ONLY_TEXT } = await import("../staff-answer-text");
     assert.equal(withoutUngroundedRetraction(act01), 'I can\'t send messages. Press "Put this draft on their page" to get it on Jean\'s page, then send it yourself.');
-    assert.equal(withoutUngroundedRetraction(act02), "I can't send messages. Copy the draft and send it yourself from your own phone or email.");
+    assert.equal(withoutUngroundedRetraction(act02), "I can't send messages. Copy the draft and send it yourself from your own phone or email. Send it yourself, then log the contact on Marqus's page.");
     assert.equal(withoutUngroundedRetraction("I need to correct my last answer: the dates were wrong."), STAFF_ACTION_ONLY_TEXT);
     const clean = 'I can\'t send messages. Press "Put this draft on their page", then send it yourself and mark it sent on their page.';
     assert.equal(withoutUngroundedRetraction(clean), clean);
@@ -432,10 +432,54 @@ describe("G rerun (2026-11-01): ACT-01/02 'send it' turns take back true facts w
   it("the route cuts only on an action-only turn that read nothing; the record label names the summary", () => {
     const route = read("../../app/api/assistant/route.ts");
     assert.match(route, /if \(staffActor && !readThisTurn && actionOnlyRequest\(staffSaid\)\)/);
-    assert.match(route, /answer = cut; finalWords = cut;/);
+    assert.match(route, /answer = cut; retractionCut = true;/);
+    assert.match(route, /const offeredNow = retractionCut \? \[\] : offeredDrafts\(/);
     // The cut runs before the output check reads the answer.
     assert.ok(route.indexOf("withoutUngroundedRetraction(answer)") < route.indexOf("verifyOrgOutput(answer"));
     const record = read("../staff-tool-record.ts");
-    assert.match(record, /A summary of names and counts only: the reads behind that answer had more/);
+    assert.match(record, /A summary of names and counts only: the reads behind that answer may have had more/);
+  });
+});
+
+describe("review R (2026-11-01, independent pass on rounds six and seven)", () => {
+  const A = { toolCallId: "A" }, B = { toolCallId: "B" }, C = { toolCallId: "C" };
+  it("R1: danger and legal messages are never action-only, and the cut keeps safety, legal-help and human-step lines", async () => {
+    const { actionOnlyRequest, withoutUngroundedRetraction } = await import("../staff-answer-text");
+    for (const no of ["Send it now, he just told me he wants to end it.", "Text him that he can’t be fired for his record.", "Send it, he said he's not safe at home.", "Email him the court date."]) assert.equal(actionOnlyRequest(no), false, no);
+    const crisis = "I can’t send messages. That draft doesn’t include what he just told you, so hold it. Follow your organization's safety protocol first. If anyone is in danger now, call 911. For a mental health crisis, call or text 988. For local help, dial 211.";
+    assert.equal(withoutUngroundedRetraction(crisis), "I can’t send messages. Follow your organization's safety protocol first. If anyone is in danger now, call 911. For a mental health crisis, call or text 988. For local help, dial 211.");
+    const legal = "I can’t send texts. I need to correct my last answer. For legal help, dial 211 or check your state's legal-aid directory.";
+    assert.equal(withoutUngroundedRetraction(legal), "I can’t send texts. For legal help, dial 211 or check your state's legal-aid directory.");
+  });
+  it("R7: the usual lead-ins before 'send it' are action-only", async () => {
+    const { actionOnlyRequest } = await import("../staff-answer-text");
+    for (const yes of ["Send it right now.", "Sure, send it.", "Looks good, send it.", "Thank you, send it.", "Go ahead, send it.", "Sounds good. Send it now."]) assert.equal(actionOnlyRequest(yes), true, yes);
+    assert.equal(actionOnlyRequest("Is that right? Send it."), false);
+  });
+  it("R8: the cut keeps line breaks", async () => {
+    const { withoutUngroundedRetraction } = await import("../staff-answer-text");
+    assert.equal(withoutUngroundedRetraction("I can't send messages.\nPress \"Copy to use\" and send it yourself.\nI also need to correct my last answer. The dates were wrong."), "I can't send messages.\nPress \"Copy to use\" and send it yourself.");
+  });
+  it("R4/R5: withdrawals by name and order; advice and read reports are not withdrawals", async () => {
+    const { draftsAfterFinal, finalWithdraws } = await import("../staff-answer-text");
+    assert.deepEqual(draftsAfterFinal([A, B], "Disregard the second one; use the first."), [A]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Delete the earlier draft and keep the new one."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Do not place the earlier draft on his page. The second one stands."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Discard this one and use the other one."), [A]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Do not place the earlier draft on his page. Place the corrected one."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B, C], "Discard the second draft."), []);
+    assert.deepEqual(draftsAfterFinal([A, B, C], "Discard the first two drafts; use the third."), [C]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Discard that draft because it lists his previous employer."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "Discard the first draft and use the second one."), [B]);
+    assert.deepEqual(draftsAfterFinal([A], "Use this revised version; it is shorter."), [A]);
+    assert.deepEqual(draftsAfterFinal([A], "That draft was wrong; use this replacement."), []);
+    for (const no of ["Tell him to ignore any texts that ask for his SSN.", "Neither one has a phone on file.", "Both drafts are unsaved, in this reply."]) assert.equal(finalWithdraws(no), false, no);
+  });
+  it("R6: names with an inner capital, sent/placed-it/went-ahead claims cut; read reports kept", async () => {
+    const { withoutCompletedClaims } = await import("../staff-answer-text");
+    for (const cut of ["I invited DeShawn to the Refinery.", "I added LaToya to your caseload.", "I opened DeShawn's page.", "I invited McKenzie.", "I sent the check-in to Jean.", "I've placed it on his page.", "I went ahead and opened his page."]) {
+      assert.equal(withoutCompletedClaims(`${cut} Jean needs a call today.`), "Jean needs a call today.", cut);
+    }
+    for (const keep of ["His last note is in his case notes from Oct 24.", "The message was in her file, dated Oct 20.", "Jean sent the form yesterday."]) assert.equal(withoutCompletedClaims(keep), keep, keep);
   });
 });

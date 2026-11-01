@@ -513,8 +513,6 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     const cardRefused = generated.steps.some((s) => (s.toolResults ?? []).some((r) => STAFF_CARD_TOOLS.has(nameOf(r)) && /^(refused|unavailable)$/.test(statusOf(r))));
     const readOk = generated.steps.some((s) => (s.toolResults ?? []).some((r) => statusOf(r) === "ok" && !STAFF_CARD_TOOLS.has(nameOf(r))));
     let retried = false;
-    // The words that decide the cards: the final step's, or the finish pass's when it replaced the answer (review G4).
-    let finalWords = generated.text;
     if (staffActor && cardRefused && readOk && answer.length < 200) {
       // The conversation so far is UI messages (parts, toolInvocations); the model's own steps come back
       // as CoreMessages, some with role "tool". The SDK converts an array as one kind or the other, so the
@@ -540,7 +538,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
         });
         console.info("[staff-steps] finish", stepShape(finished.steps));
         const fuller = finished.text.trim();
-        if (fuller.length > answer.length) { answer = replyOrFallback(fuller); finalWords = fuller; retried = true; }
+        if (fuller.length > answer.length) { answer = replyOrFallback(fuller); retried = true; }
       } catch (err) {
         console.error("[staff-steps] finish failed, first answer kept:", err instanceof Error ? err.message : err);
       }
@@ -548,10 +546,13 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
 
     // An action-only turn that read nothing has no new result to correct from (ACT-01/02 on F and G):
     // its answer ends before the first sentence that takes back or rewrites the earlier one.
+    // The cut keeps the safety, legal-help and human-step sentences (review R1). A draft offered in a turn
+    // that was cut is an unrequested rewrite: no card for it (review R3); the earlier card still stands.
     const readThisTurn = generated.steps.some((s) => (s.toolResults ?? []).some((r) => !STAFF_CARD_TOOLS.has(nameOf(r))));
+    let retractionCut = false;
     if (staffActor && !readThisTurn && actionOnlyRequest(staffSaid)) {
       const cut = withoutUngroundedRetraction(answer);
-      if (cut !== answer) { console.info("[staff-steps] retraction cut on an action-only turn"); answer = cut; finalWords = cut; }
+      if (cut !== answer) { console.info("[staff-steps] retraction cut on an action-only turn"); answer = cut; retractionCut = true; }
     }
 
     const facts = {
@@ -636,12 +637,13 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // answer (fix round 1, B3). One that fails is held back, and the reason is
     // shown where the staff member reads it.
     const { checkOrgClaimsDeterministic } = await import("@/lib/org-output-verify");
-    // A draft the final step withdrew is no card either (review F5): the prose rule and the card rule
-    // read the same final words, so "discard that draft" removes the button with the sentence. Those
-    // words are the answer the staff member sees (finish pass included, review G4), and the card cap
+    // A draft the answer withdrew is no card either (review F5): the cards read the words the staff member
+    // sees, the assembled answer (card-step words, the finish pass, the cut; reviews G4 and R2), so
+    // "discard that draft" removes the button with the sentence wherever the model wrote it. The card cap
     // comes after the withdrawal so a replacement offered third still reaches it (review G2).
+    const offeredNow = retractionCut ? [] : offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[]));
     const draftCheck = checkStaffDrafts(
-      draftsAfterFinal(offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])), finalWords).slice(0, MAX_STAFF_DRAFT_CARDS),
+      draftsAfterFinal(offeredNow, answer).slice(0, MAX_STAFF_DRAFT_CARDS),
       (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
     );
     if (draftCheck.notice) out += draftCheck.notice;

@@ -45,7 +45,7 @@ export const TOOL_RECORD_KEY = "staffToolRecord";
 /** The words in front of a record, so the model (and its prompt rule) can tell it from an answer. */
 // ACT-01/02 (previews F, G): the model read this summary as the whole result and took back true facts
 // from its own earlier draft. The label says what the record is: names and counts only.
-export const TOOL_RECORD_LABEL = "[t.ROY lookup record for this answer, written by the server, not shown to the staff member. A summary of names and counts only: the reads behind that answer had more (titles, statuses, dates, tasks, notes), so a detail missing here is not a mistake in that answer:";
+export const TOOL_RECORD_LABEL = "[t.ROY lookup record for this answer, written by the server, not shown to the staff member. A summary of names and counts only: the reads behind that answer may have had more (titles, statuses, dates, tasks, notes), so a detail missing here does not show that answer was wrong:";
 
 export interface ToolRecordEntry { tool: string; args: string; result: string; sig?: string }
 

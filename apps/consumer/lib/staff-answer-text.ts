@@ -77,22 +77,28 @@ const draftOffered = (steps: readonly Step[]) => steps.some((s) => (s.toolResult
  * put somewhere it never goes (on his page, in her record), so "I have placed the draft below" stays;
  * and a name can be two or three words ("I opened Jean Valjean's page", "the draft is now on Jean's page").
  */
-const FIRST_PERSON = String.raw`\bI(?:['’]ve| have|\s+(?:just|already|now))*\s+`;
+// Review R6: "I went ahead and opened his page" is a qualifier run too.
+const FIRST_PERSON = String.raw`\bI(?:['’]ve| have|\s+(?:just|already|now|went ahead and|also))*\s+`;
 // A name: up to three capitalised words, each with a lowercase letter after the capital (not "ID", "SSN"),
 // "O’Neil" and "Jean-Luc" included. Each word is a fixed shape, so a long run of capitals or apostrophes
 // is read once (timing check 2026-11-01: the looser [\w'’-]* was quadratic on 100k characters).
-const NAME_WORD = String.raw`[A-Z](?:[a-z]+|['’][A-Z][a-z]+)(?:-[A-Z][a-z]+)?`;
+// Review R6: an inner capital is a name too (DeShawn, LaToya, McKenzie), still fixed-shape.
+const NAME_WORD = String.raw`[A-Z](?:[a-z]+|['’][A-Z][a-z]+)(?:[A-Z][a-z]+)?(?:-[A-Z][a-z]+)?`;
 const NAME = String.raw`(?:${NAME_WORD} ){0,2}${NAME_WORD}`;
 const WHOSE = String.raw`(?:his|her|their|the|that|this|${NAME}['’]s)`;
 const PAGE = String.raw`(?:participant\s+)?(?:page|profile|record|file|case notes)\b`;
 const OPENED_PAGE = String.raw`(?:opened|navigated to|went to)\s+(?:${WHOSE}\s+)?(?:participant\s+)?(?:page|profile)\b`;
-const PLACED_DRAFT = String.raw`(?:placed|put|saved|posted|added)\s+(?:(?:the|this|that|your|a)\s+)?(?:draft|note|check-in|message)\s+(?:on|in|into|to)\s+(?:${WHOSE}\s+)?${PAGE}`;
+const PLACED_DRAFT = String.raw`(?:placed|put|saved|posted|added)\s+(?:it|(?:(?:the|this|that|your|a)\s+)?(?:draft|note|check-in|message))\s+(?:on|in|into|to)\s+(?:${WHOSE}\s+)?${PAGE}`;
+// Review R6: "I sent the check-in to Jean." No tool sends, texts, emails or schedules anything.
+const SENT_DRAFT = String.raw`(?:sent|texted|emailed|scheduled|mailed)\s+(?:it\b|(?:(?:the|this|that|your|a|my)\s+)?(?:draft|note|check-in|message|text|email)\b)`;
 const PERSON_PRONOUN = String.raw`(?:him|her|them|the person|a person|the participant)\b`;
 const WHERE_ADDED = String.raw`\s+(?:to|as|into|onto)\s+(?:(?:your|the|their|our|this|my|a|an)\s+)?(?:caseload|org|organi[sz]ation|team|people|roster|program|participants?|Refinery)\b`;
 const ADDED_PERSON = String.raw`(?:(?:added|invited)\s+${PERSON_PRONOUN}|invited\s+${NAME}\b|added\s+${NAME}${WHERE_ADDED})`;
-const DRAFT_ON_PAGE = String.raw`\b(?:[Tt]he |[Tt]his |[Tt]hat |[Yy]our )?(?:draft|note|check-in|message)\s+(?:is|has been|was)\s+(?:now\s+)?(?:(?:placed|put|saved)\s+)?(?:on|in)\s+${WHOSE}\s+${PAGE}`;
+// Review R6: only a draft or check-in on a page or profile; "His last note is in his case notes" and
+// "the message was in her file" are what a read found, not a completion claim.
+const DRAFT_ON_PAGE = String.raw`\b(?:[Tt]he |[Tt]his |[Tt]hat |[Yy]our )?(?:draft|check-in)\s+(?:is|has been|was)\s+(?:now\s+)?(?:(?:placed|put|saved)\s+)?(?:on|in)\s+${WHOSE}\s+(?:participant\s+)?(?:page|profile)\b`;
 const PAGE_OPENED = String.raw`\b(?:[Hh]is|[Hh]er|[Tt]heir|[Tt]he|${NAME}['’]s)\s+page\s+(?:is|has been|was)\s+(?:now\s+)?open(?:ed)?\b`;
-const COMPLETED_CLAIM = new RegExp(`${FIRST_PERSON}(?:${OPENED_PAGE}|${PLACED_DRAFT}|${ADDED_PERSON})|${DRAFT_ON_PAGE}|${PAGE_OPENED}`);
+const COMPLETED_CLAIM = new RegExp(`${FIRST_PERSON}(?:${OPENED_PAGE}|${PLACED_DRAFT}|${SENT_DRAFT}|${ADDED_PERSON})|${DRAFT_ON_PAGE}|${PAGE_OPENED}`);
 export function withoutCompletedClaims(text: string): string {
   return text
     .split(/\n/)
@@ -112,16 +118,23 @@ export function withoutCompletedClaims(text: string): string {
  * cards as well as the prose (draftsAfterFinal), so draftsAfterFinal leans to no card when unsure.
  */
 const SUPERSEDED = String.raw`(?:earlier|previous|prior|above|first|old|original)`;
-const WHICH = String.raw`(?:that|the|this|my|both|all|either|any|each|every|second|last|latest|later|revised|new|${SUPERSEDED})`;
-const THING = String.raw`(?:draft|answer|version|message|text|reply)s?`;
+// Which draft, after a withdrawal verb. Review R5: "any", "each" and "every" are out ("tell him to ignore
+// any texts that ask for his SSN" is advice); "both"/"all"/"either" count only with draft words.
+const WHICH = String.raw`(?:that|the|this|my|second|third|last|latest|later|revised|new|two|three|${SUPERSEDED})`;
+const THING = String.raw`(?:draft|answer|version|message|text|reply|one)s?`;
+const DRAFTS = String.raw`(?:drafts|versions|answers|ones)`;
 const WITHDRAWS = new RegExp([
-  String.raw`\b(?:discard|disregard|ignore|scrap|do not use|don['’]t use)\s+(?:(?:${WHICH}|of)\s+)+${THING}\b`,
-  String.raw`\b(?:do not send|don['’]t send|never send)\s+(?:(?:that|the|this|my)\s+)*(?:${SUPERSEDED}|both|either|any)\s+${THING}\b`,
+  // Review R4: delete, remove, drop, "do not place/put" are withdrawals too.
+  String.raw`\b(?:discard|disregard|ignore|scrap|delete|remove|drop|do not use|don['’]t use|do not place|don['’]t place|do not put|don['’]t put)\s+(?:${WHICH}\s+)+${THING}\b`,
+  String.raw`\b(?:discard|disregard|ignore|scrap|delete|remove|drop|do not use|don['’]t use|do not send|don['’]t send)\s+(?:both|all|either)(?:\s+of)?(?:\s+(?:the|my|these|those))?(?:\s+two)?\s+(?:draft|version|answer|one)s?\b`,
+  String.raw`\b(?:discard|disregard|ignore|scrap|delete|remove|drop)\s+(?:both|them|them both)\b`,
+  String.raw`\b(?:do not send|don['’]t send|never send)\s+(?:(?:that|the|this|my)\s+)*${SUPERSEDED}\s+${THING}\b`,
   String.raw`\b(?:that|the|this|my|${SUPERSEDED})\s+${THING}\s+(?:was|is|were|are)\s+(?:wrong|incorrect|mistaken|not right)\b`,
-  String.raw`\bneither\s+(?:draft|version|one)\b`,
+  // Review R5: "neither one has a phone on file" is not about the drafts.
+  String.raw`\bneither\s+(?:draft|version)\b|\bneither of (?:the|my|these|those) (?:drafts|versions)\b`,
   String.raw`\bnone of (?:the|these|those|my) (?:drafts|versions)\b`,
   String.raw`\buse (?:this|the) (?:replacement|corrected|revised|new)\b`,
-  String.raw`\b(?:I (?:need|have) to|let me) correct\b`,
+  String.raw`\b(?:I (?:also )?(?:need|have) to|let me) correct\b`,
   String.raw`\bcorrection:`,
   String.raw`\bI was wrong\b`,
   String.raw`\bI (?:must|should) take (?:that|this) back\b`,
@@ -130,10 +143,15 @@ export const finalWithdraws = (final: string) => WITHDRAWS.test(final);
 
 // Per clause of the final: does it take something back or keep something, and which drafts does it name?
 const TAKES_BACK = /\b(?:discard|disregard|ignore|scrap|drop|delete|do not use|don['’]t use|do not send|don['’]t send|never send|wrong|incorrect|mistaken|not right|neither|none of)\b/i;
-const KEEPS = /\b(?:use|keep|send|stands|is right|is correct|go with)\b/i;
-const NAMES_ALL = /\b(?:both|all|either|any|each|every|neither|none)\b/i;
-const NAMES_EARLIER = new RegExp(String.raw`\b(?:${SUPERSEDED}|initial)\b`, "i");
-const NAMES_LATER = /\b(?:second|last|latest|later|revised|new|replacement|corrected|updated|this one)\b/i;
+const KEEPS = /\b(?:use|keep|send|place|put|stands|is right|is correct|go with)\b/i;
+const NAMES_ALL = new RegExp(String.raw`\b(?:both|all|either|neither|none)\b(?:\s+(?:of\s+)?(?:the|my|these|those|them))?(?:\s+two)?\s*(?:${DRAFTS}|draft|version|one)?\b|\b(?:both|them)\s*[.!;]?$`, "i");
+// Review R4: the ordinal has to name a draft ("the first draft", "the second one", "the first two drafts"),
+// so "it lists his previous employer" names no draft.
+const NAMES_EARLIER = new RegExp(String.raw`\b(?:${SUPERSEDED}|initial)\s+(?:(?:two|three)\s+)?${THING}\b|\bfirst two\b`, "i");
+// A clause that KEEPS may name the draft by its ordinal alone ("use the first", "keep the second").
+const KEEPS_EARLIER = new RegExp(String.raw`\b(?:${SUPERSEDED}|initial)\b`, "i");
+const KEEPS_LATER = /\b(?:second|third|last|latest|later|revised|new|corrected|updated|replacement|this one)\b/i;
+const NAMES_LATER = new RegExp(String.raw`\b(?:second|third|last|latest|later|revised|new|corrected|updated)\s+${THING}\b|\breplacement\b|\bthis one\b`, "i");
 
 /**
  * The drafts the staff member may act on once the final step has spoken (reviews F5, G1). A draft is a
@@ -150,18 +168,26 @@ export function draftsAfterFinal<T>(drafts: readonly T[], finalText: string): T[
   if (!finalWithdraws(final)) return [...drafts];
   if (drafts.length === 0) return [];
   let backAll = false, backEarlier = false, backLater = false, keepEarlier = false, keepLater = false;
-  for (const clause of final.split(/(?<=[.!?;:])\s+|\s*;\s*|,?\s+but\s+/i)) {
+  let backUnnamed = false;
+  // Review R5: "Discard the first draft and use the second one" is two clauses.
+  for (const clause of final.split(/(?<=[.!?;:])\s+|\s*;\s*|,?\s+but\s+|,?\s+and\s+(?=(?:then\s+)?(?:use|keep|send|go with)\b)/i)) {
     if (TAKES_BACK.test(clause)) {
       if (NAMES_ALL.test(clause)) backAll = true;
       if (NAMES_EARLIER.test(clause)) backEarlier = true;
       if (NAMES_LATER.test(clause)) backLater = true;
+      if (!NAMES_ALL.test(clause) && !NAMES_EARLIER.test(clause) && !NAMES_LATER.test(clause)) backUnnamed = true;
     } else if (KEEPS.test(clause)) {
-      if (NAMES_EARLIER.test(clause)) keepEarlier = true;
-      if (NAMES_LATER.test(clause)) keepLater = true;
+      if (KEEPS_EARLIER.test(clause)) keepEarlier = true;
+      if (KEEPS_LATER.test(clause)) keepLater = true;
     }
   }
-  if (backAll || (backEarlier && backLater) || drafts.length === 1) return [];
-  if (backLater) return drafts.length === 2 && keepEarlier ? [drafts[0]] : [];
+  if (backAll || (backEarlier && backLater)) return [];
+  // One offer this turn (review R5): a rewrite turn ("use this revised version") keeps it, because what it
+  // replaces is from an earlier turn; any withdrawal that does not name an earlier draft removes it.
+  if (drafts.length === 1) return keepLater && !backLater && !backUnnamed ? [...drafts] : [];
+  // Two offers and the later one taken back: the first stays. With three or more, "the second" may not be
+  // the last, so nothing stays.
+  if (backLater) return drafts.length === 2 && !backUnnamed ? [drafts[0]] : [];
   if (backEarlier || keepLater) return [drafts[drafts.length - 1]];
   return [];
 }
@@ -176,10 +202,16 @@ export function draftsAfterFinal<T>(drafts: readonly T[], finalText: string): T[
  * corrects, re-audits or rewrites the earlier answer. With nothing left, the plain action line is used.
  */
 export const STAFF_ACTION_ONLY_TEXT = 'I can’t send, save or schedule anything. Press "Put this draft on their page" to review it there, or "Copy to use" and send it yourself, then mark it sent on their page.';
-// A message that also questions, checks or changes the draft is not action-only: the model may reread then.
-const ACTION_ONLY = /^(?![^\n]*\b(?:check|right|correct|wrong|sure|accurate|true|verify|confirm|fix|change|edit|update|but)\b)(?:(?:ok(?:ay)?|yes|yeah|great|thanks|good|perfect|cool)[,.!]?\s+)*(?:please\s+)?(?:(?:go ahead and|can you|could you|would you|just)\s+)?(?:send|text|email|put|place|post|save|copy|use|schedule|log|file|forward)\b(?!\s+me\b)[^?\n]{0,60}[.!?]?$/i;
+// Review R1: danger, crisis and legal words are never action-only: the model must answer those in full.
+const NOT_ACTION_ONLY = /\b(?:check|correct|wrong|sure it|accurate|true|verify|confirm|fix|change|edit|update|but|danger|unsafe|hurt|harm|kill|suicid\w*|die|dead|end it|end his|end her|overdos\w*|weapon|gun|threat\w*|abuse\w*|crisis|emergency|police|arrest\w*|warrant|fired|legal|law|lawyer|attorney|court|rights?\s+(?:to|as)|can['’]t be|illegal|scared|afraid|safe)\b|\b(?:is|are|was)\s+(?:that|this|it)\s+right\b|\b(?:that|this|it)['’]s\s+right\b|\bright\s*\?|911|988/i;
+// Review R7: the usual ways to say yes before "send it".
+const LEAD_IN = String.raw`(?:(?:ok(?:ay)?|yes|yeah|yep|sure|great|thanks|thank you|good|perfect|cool|alright|all right|looks good|sounds good|go ahead|that works|nice|love it)[,.!]*\s+)*`;
+const ACTION_ONLY = new RegExp(String.raw`^${LEAD_IN}(?:please\s+)?(?:(?:go ahead and|can you|could you|would you|just)\s+)?(?:send|text|email|put|place|post|save|copy|use|schedule|log|file|forward)\b(?!\s+me\b)[^?\n]{0,60}[.!?]?$`, "i");
 /** The staff member's latest message only asks t.ROY to act on what it already gave ("Send it now."). */
-export const actionOnlyRequest = (said: string) => ACTION_ONLY.test(String(said ?? "").trim());
+export const actionOnlyRequest = (said: string) => {
+  const t = String(said ?? "").trim();
+  return !NOT_ACTION_ONLY.test(t) && ACTION_ONLY.test(t);
+};
 const RETRACTS = new RegExp([
   WITHDRAWS.source,
   String.raw`\bI (?:also |now )?(?:need|have|want) to correct\b`,
@@ -191,12 +223,25 @@ const RETRACTS = new RegExp([
   String.raw`\bsticks? to (?:that|what)\b`,
   String.raw`\b(?:safe|safer|corrected|revised|accurate) version\b`,
 ].join("|"), "i");
-/** The answer up to its first sentence that corrects or rewrites the earlier one; the action line if nothing is left. */
+/** Sentences that always stay: the safety and legal-help lines, and the human step (review R1, R8). */
+const ALWAYS_KEEP = /\b911\b|\b988\b|\b211\b|safety protocol|legal help|legal-aid|in danger|send it yourself|mark it sent|log the contact/i;
+/**
+ * The answer up to its first sentence that corrects or rewrites the earlier one, line breaks kept, plus
+ * any later safety, legal-help or human-step sentence; the action line if nothing is left.
+ */
 export function withoutUngroundedRetraction(answer: string): string {
-  const sentences = String(answer ?? "").split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
-  const at = sentences.findIndex((x) => RETRACTS.test(x));
-  if (at < 0) return answer;
-  return sentences.slice(0, at).join(" ").trim() || STAFF_ACTION_ONLY_TEXT;
+  const text = String(answer ?? "");
+  let cut = false, changed = false;
+  const lines = text.split("\n").map((line) => line.split(/(?<=[.!?])\s+/).filter((sentence) => {
+    if (!sentence.trim()) return true;
+    if (!cut && RETRACTS.test(sentence) && !ALWAYS_KEEP.test(sentence)) cut = true;
+    const keep = !cut || ALWAYS_KEEP.test(sentence);
+    if (!keep) changed = true;
+    return keep;
+  }).join(" "));
+  if (!changed) return answer;
+  const out = lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return out || STAFF_ACTION_ONLY_TEXT;
 }
 
 /** The nudge line stays only when the nudge tool itself answered ok this turn (its buttons render then); otherwise it is cut (review R3 S2). */
