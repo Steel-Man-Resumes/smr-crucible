@@ -272,6 +272,8 @@ export function TourPlayer() {
 
   /* The caption card's real size, measured once it is on the stage (its text decides its height). */
   const sceneNoteOn = Boolean(scene.note);
+  /* A small stage (a laptop at 125% scaling gives 526x329) gets a smaller card, or there is no clear place for it. */
+  const compactCap = stage.w > 0 && stage.w < 720;
   const capRef = useRef<HTMLDivElement>(null);
   const [capSize, setCapSize] = useState<{ w: number; h: number }>({ w: 460, h: 150 });
   useLayoutEffect(() => {
@@ -497,10 +499,10 @@ export function TourPlayer() {
 
         {/* Caption over a wide stage */}
         {overlayCaption && step.scene !== "title" && step.scene !== "close" && (
-          <div key={`cap-${i}`} ref={capRef} data-cap-fit={place.fitScale} style={{ left: place.x, top: place.y }} className="wt-cap pointer-events-none absolute max-w-[min(460px,60%)] rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/95 px-5 py-4 shadow-2xl backdrop-blur">
-            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#dbc173]">{CHAPTERS[chapterIndex].label}</p>
-            <p className="mt-1 text-xl font-bold leading-snug text-[#f4efe2]">{step.title}</p>
-            <p className="mt-1 text-[15px] leading-relaxed text-[#cfc8b6]">{step.body}</p>
+          <div key={`cap-${i}`} ref={capRef} data-cap-fit={place.fitScale} style={{ left: place.x, top: place.y }} className={`wt-cap pointer-events-none absolute rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/95 shadow-2xl backdrop-blur ${compactCap ? "max-w-[52%] px-3.5 py-2.5" : "max-w-[min(460px,60%)] px-5 py-4"}`}>
+            <p className={`font-mono uppercase tracking-[0.14em] text-[#dbc173] ${compactCap ? "text-[9px]" : "text-[11px]"}`}>{CHAPTERS[chapterIndex].label}</p>
+            <p className={`mt-1 font-bold leading-snug text-[#f4efe2] ${compactCap ? "text-[15px]" : "text-xl"}`}>{step.title}</p>
+            <p className={`mt-1 leading-relaxed text-[#cfc8b6] ${compactCap ? "text-[12px] leading-snug" : "text-[15px]"}`}>{step.body}</p>
           </div>
         )}
         {sceneNote && (
