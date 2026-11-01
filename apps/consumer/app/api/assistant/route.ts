@@ -557,6 +557,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     }
 
     const facts = {
+      // The drafts offered in this answer: each has its own check; a model flag on their words is not an answer claim (preview K).
+      offeredDraftBodies: retractionCut ? [] : offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])).map((d) => String(d.result.body ?? "")),
       staffToolEvidence: staffEvidence.items,
       caseload: context.org.caseload,
       stalled: context.org.stalled,

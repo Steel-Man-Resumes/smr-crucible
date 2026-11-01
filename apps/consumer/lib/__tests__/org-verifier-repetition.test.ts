@@ -72,3 +72,15 @@ it('keeps a compound assertion under the interview label flagged', () => {
   const compound = reason.slice(0, -1) + ' and has already been hired.';
   assert.deepEqual(check(`- Interview: ${compound}`, [reason]), [reason]);
 });
+
+it('preview K: drops only a pure priority judgment about a caseload name, and flags inside an offered draft', async () => {
+  const { filterJudgmentAndDraftFlags } = await import('../org-output-verify');
+  const f: OrgFacts = { ...facts, visibleNames: ['Jean', 'Marqus'], offeredDraftBodies: ["Hi Jean, it's Lupe. Congratulations on getting that far. How is the ID going?"] };
+  const dropped = ['Jean is the one who needs attention (from your Today queue, read Nov 1)', '- Who: Jean', 'Jean is the one who needs you today.', 'Congratulations on getting that far'];
+  assert.deepEqual(filterJudgmentAndDraftFlags(dropped, f), []);
+  const kept = ['Jean is the one who needs you because he was hired yesterday', 'Robin is the one who needs attention', 'Jean needs attention because his interview is Monday', 'Jean was hired', 'Congratulations on the new job', 'Jean'.repeat(1) + ' is overdue'];
+  assert.deepEqual(filterJudgmentAndDraftFlags(kept, f), kept);
+  assert.equal(filterJudgmentAndDraftFlags(null, f), null);
+  // No offered draft: draft words are checked like any answer words.
+  assert.deepEqual(filterJudgmentAndDraftFlags(['Congratulations on getting that far'], { ...f, offeredDraftBodies: [] }), ['Congratulations on getting that far']);
+});

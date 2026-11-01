@@ -35,6 +35,12 @@ import { STATIONS } from "./refinery-nav";
 
 /** The only facts an org-facing answer is allowed to assert. */
 export interface OrgFacts {
+  /**
+   * Preview K (2026-11-01): the bodies of the drafts offered in this answer (offer_staff_draft results that
+   * are real drafts). Each body has its own check on the draft path; a layer-2 flag on words inside one is
+   * dropped from the answer check (filterJudgmentAndDraftFlags). Answer path only.
+   */
+  offeredDraftBodies?: string[];
   /** Successful current-request server tool reads, never browser-provided history. */
   staffToolEvidence?: readonly StaffToolEvidence[];
   caseload: number;
@@ -902,7 +908,7 @@ export async function checkOrgClaimsWithModel(
       await recordTokenUsage("openai", model, usage, { endpoint: "assistant-org-verify", ...result });
     },
   });
-  return filterRecordRepetitionFlags(problems, text, facts);
+  return filterJudgmentAndDraftFlags(filterRecordRepetitionFlags(problems, text, facts), facts);
 }
 
 /**
@@ -935,6 +941,33 @@ export function filterRecordRepetitionFlags(problems: string[] | null, text: str
     }
   }
   return problems.filter((problem) => !supported.has(normalize(problem)));
+}
+
+/**
+ * Preview K (2026-11-01, gpt-4.1-mini): the prompt says priority judgments and draft wording are "other",
+ * and the model still flagged "Jean is the one who needs attention (from your Today queue, read Nov 1)",
+ * "- Who: Jean" and "Congratulations on getting that far" (a line of the offered check-in). Two narrow
+ * drops, model flags only:
+ *   - a flag that is ONLY a caseload first name, or "NAME is the one who needs you/attention" with an
+ *     optional time word and a source parenthetical, NAME on this viewer's caseload. Any other word
+ *     (a reason, a date, an outcome) keeps the flag;
+ *   - a flag whose whole text sits inside a draft body offered in this answer (the draft path checks it).
+ */
+export function filterJudgmentAndDraftFlags(problems: string[] | null, facts: OrgFacts): string[] | null {
+  if (problems === null) return null;
+  const names = new Set(facts.visibleNames.map((n) => n.trim().split(/\s+/)[0]?.toLowerCase()).filter(Boolean));
+  const squash = (s: string) => s.toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, " ").trim();
+  const bodies = (facts.offeredDraftBodies ?? []).map(squash).filter((b) => b.length > 0);
+  const judgment = (p: string) => {
+    const t = p.trim().replace(/^[-*]\s+/, "").replace(/\s*\((?:from|as of|read)[^()]{0,60}\)\s*/gi, " ").replace(/[.\s]+$/, "").trim();
+    const m = t.match(/^(?:who:\s*)?([A-Za-z][A-Za-z'’-]{1,30})(?:\s+is the one (?:who|that) needs (?:you|attention|your attention|a call|you most)(?:\s+(?:today|first|now|this week|most))?)?$/i);
+    return !!m && names.has(m[1].toLowerCase());
+  };
+  const inDraft = (p: string) => {
+    const t = squash(p).replace(/[.!?]+$/, "");
+    return t.length >= 12 && bodies.some((b) => b.includes(t));
+  };
+  return problems.filter((p) => !judgment(p) && !inDraft(p));
 }
 
 /** Exposed for deterministic evidence-boundary tests; no network or model needed. */
