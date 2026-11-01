@@ -41,6 +41,9 @@ export function RecordDemo({
   const before = SAMPLE_PAGE.split("\n");
   const after = pass.resume.split("\n");
   const afterSet = new Set(after);
+  // In the player, show a readable excerpt from the actual transformed document.
+  // The reading section below the player retains the whole page.
+  const displayed = fixed ? after.slice(3, after.indexOf("", 4) === -1 ? 8 : after.indexOf("", 4)) : after;
 
   return (
     <div className={`grid gap-6 ${fixed ? "grid-cols-[5fr_6fr]" : "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]"}`}>
@@ -61,13 +64,13 @@ export function RecordDemo({
       </div>
       <div data-tour="record-page" className="rounded-lg border border-white/10 bg-white p-5 text-[#1c1e1b] shadow-[0_20px_60px_-30px_rgba(0,0,0,0.9)] sm:p-7">
         <div className="mb-3 flex items-center justify-between gap-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#54594f]">Sample page · Kevin Talbot is fictional</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#54594f]">{fixed ? "Sample resume excerpt · fictional person" : "Sample page · Kevin Talbot is fictional"}</p>
           <p className="font-mono text-[11px] uppercase tracking-[0.1em] text-[#9b6d1d]" aria-live="polite">
             {choice === "off" ? "Left off" : choice === "state" ? "Named as the state" : "As written"}
           </p>
         </div>
-        <pre className="whitespace-pre-wrap font-serif text-[13px] leading-relaxed sm:text-sm">
-          {after.map((line, i) => {
+        <pre className={fixed ? "whitespace-pre-wrap font-serif text-[29px] leading-relaxed" : "whitespace-pre-wrap font-serif text-[13px] leading-relaxed sm:text-sm"}>
+          {displayed.map((line, i) => {
             const changed = line.trim() !== "" && !before.includes(line);
             const isHead = /^[A-Z][A-Z &]+$/.test(line.trim()) || i === 0;
             return (
@@ -76,7 +79,7 @@ export function RecordDemo({
                 data-tour={changed ? "record-changed" : i === 4 ? "record-first-job" : undefined}
                 className={`wt-line block ${changed ? "bg-[#f6e7c4] text-[#5a3d0c]" : ""} ${isHead ? "font-bold" : ""}`}
               >
-                {line || " "}
+                {(fixed ? line.replaceAll(" | ", "\n") : line) || " "}
               </span>
             );
           })}
