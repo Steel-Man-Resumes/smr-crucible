@@ -905,7 +905,7 @@ export async function checkOrgClaimsWithModel(
 }
 
 /**
- * Only a complete, standalone repetition of a server-generated interview
+ * Only a complete sentence repeating a server-generated interview
  * reason can bypass a model false flag. Never flatten names, titles, numbers
  * or negation into a bag of words; task titles and notes are not outcomes.
  * Keep punctuation inside the record and require the entire reason, including
@@ -914,7 +914,12 @@ export async function checkOrgClaimsWithModel(
 export function filterRecordRepetitionFlags(problems: string[] | null, text: string, facts: OrgFacts): string[] | null {
   if (problems === null) return null;
   const normalize = (s: string) => s.trim().replace(/\s+/g, " ").replace(/[.]$/, "");
-  const lines = text.split(/\r?\n/).map((s) => normalize(s.replace(/^\s*[-*]\s+/, "")));
+  const segmenter = new Intl.Segmenter("en", { granularity: "sentence" });
+  const sentences = text.split(/\r?\n/).flatMap((line) => {
+    // Only presentation labels, never arbitrary prefixes such as "Not true:".
+    const content = line.replace(/^\s*[-*]\s+/, "").replace(/^\s*(?:Interview|Reason):\s*/i, "");
+    return Array.from(segmenter.segment(content), ({ segment }) => normalize(segment));
+  });
   const supported = new Set<string>();
   for (const evidence of facts.staffToolEvidence ?? []) {
     if (evidence.tool !== "read_today_queue" || evidence.facts.status !== "ok" || !Array.isArray(evidence.facts.items)) continue;
@@ -924,8 +929,8 @@ export function filterRecordRepetitionFlags(problems: string[] | null, text: str
       if (row.section !== "interviews" || typeof row.firstName !== "string" || typeof row.reason !== "string") continue;
       if (!row.reason.startsWith(`${row.firstName} is interviewing for `)) continue;
       const sentence = normalize(row.reason);
-      // One complete answer line, not a substring of a longer assertion.
-      if (lines.filter((line) => line === sentence).length === 1) supported.add(sentence);
+      // One complete sentence, not a prefix of a longer assertion.
+      if (sentences.filter((candidate) => candidate === sentence).length === 1) supported.add(sentence);
     }
   }
   return problems.filter((problem) => !supported.has(normalize(problem)));

@@ -21,13 +21,14 @@ it('does not accept a matching prefix of an unsupported longer assertion', () =>
   const text = reason.slice(0, -1) + ' and has already been hired.';
   assert.deepEqual(check(text, [reason]), [reason]);
 });
-it('keeps dates, shortened flags and compound sentences for model review', () => {
+it('keeps dates and shortened flags for model review', () => {
   assert.deepEqual(check(reason, ['Robin is interviewing']), ['Robin is interviewing']);
   const dated: OrgFacts = {...facts, staffToolEvidence: [projectStaffToolEvidence('read_today_queue', {
     status: 'ok', items: [{section: 'interviews', firstName: 'Robin', reason: reason.slice(0, -1) + ', next date Nov 5.'}]
   })!]};
   assert.deepEqual(check(reason, [reason], dated), [reason]);
-  assert.deepEqual(check(reason + ' The job pays $45 an hour.', [reason]), [reason]);
+  const wage = 'The job pays $45 an hour.';
+  assert.deepEqual(check(reason + ' ' + wage, [reason, wage]), [wage]);
 });
 it('never upgrades a task, a note, user text or an unavailable read to interview evidence', () => {
   for (const evidence of [
@@ -44,4 +45,30 @@ it('distinguishes priority judgments from their factual reasons in the prompt', 
   const prompt = buildOrgVerificationPrompt('I would start with Robin.', facts);
   assert.match(prompt, /Still check every factual reason separately/);
   assert.match(prompt, /missing interview date does not invalidate/);
+});
+
+it('accepts the preview I shape with an unknown-time sentence on the same line', () => {
+  assert.deepEqual(check(`- ${reason} The date and time are unknown.`, [reason.slice(0, -1)]), []);
+});
+it('accepts the preview H shape with a short presentation label', () => {
+  for (const label of ['Interview', 'Reason'])
+    assert.deepEqual(check(`- ${label}: ${reason} The queue gives no date or time, so the timing is unknown.`, [reason]), []);
+});
+it('keeps a following negation and unsupported claim flagged independently', () => {
+  const denial = 'Robin is not interviewing there.';
+  assert.deepEqual(check(`${reason} ${denial}`, [reason, denial]), [denial]);
+  const hired = 'Robin has already been hired.';
+  assert.deepEqual(check(`- Interview: ${reason} ${hired}`, [reason, hired]), [hired]);
+});
+it('does not strip arbitrary or nested labels that could change meaning', () => {
+  for (const prefix of ['Not true:', 'Interview: Not true:', 'Rumor:', 'Alex said:'])
+    assert.deepEqual(check(`- ${prefix} ${reason}`, [reason]), [reason]);
+});
+it('does not clear ambiguous repeated sentences, even on the same line', () => {
+  assert.deepEqual(check(`${reason} ${reason}`, [reason]), [reason]);
+  assert.deepEqual(check(`- ${reason}\n- Interview: ${reason}`, [reason]), [reason]);
+});
+it('keeps a compound assertion under the interview label flagged', () => {
+  const compound = reason.slice(0, -1) + ' and has already been hired.';
+  assert.deepEqual(check(`- Interview: ${compound}`, [reason]), [reason]);
 });
