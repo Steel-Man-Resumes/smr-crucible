@@ -65,7 +65,7 @@ it("harness 2026-10-31 (ROOM-10, ROOM-13, TRUE-PASS-01, TRAP-ACT-01/02): refused
   // G rerun (2026-11-01): ACT-01/02 still retracted on "Send it"; the record is named as a summary.
   assert.match(p, /A lookup record in front of an earlier answer is a summary, never the full result/);
   assert.match(p, /keep any safety or legal-help line that applies, and do not re-check, rewrite or offer a new version of the draft/);
-  assert.match(p, /When they ask you to repeat words they gave exactly, return just those words, with no offer or next step/);
+  assert.match(p, /When they ask you to repeat words they gave exactly, return just those words, with no offer\./);
   // Codex D rerun (2026-11-01): TRAP-ACT-02 turn 2 retracted true facts on "Send it now"; TRAP-NUMBER-03
   // answered a wage question with a button; DEMO-06 turned "confirmation unknown" into "has not confirmed".
   assert.match(p, /A fact from an earlier answer stays until a new read contradicts it/);

@@ -483,3 +483,37 @@ describe("review R (2026-11-01, independent pass on rounds six and seven)", () =
     for (const keep of ["His last note is in his case notes from Oct 24.", "The message was in her file, dated Oct 20.", "Jean sent the form yesterday."]) assert.equal(withoutCompletedClaims(keep), keep, keep);
   });
 });
+
+describe("review S (2026-11-01, confirm pass on round eight)", () => {
+  const A = { toolCallId: "A" }, B = { toolCallId: "B" };
+  it("S1/S7: action-only is a closed shape; anything said beyond it leaves the whole answer", async () => {
+    const { actionOnlyRequest } = await import("../staff-answer-text");
+    for (const no of ["Send it, he said he wants to take his life.", "Send it now, he says he is going to jump.", "Text him, he has a knife and is outside.", "Send it, he ODed last night.", "Send it, ICE picked him up this morning.", "Send it to his lawyer.", "Send it before his court date.", "Can you text him and tell him the meeting moved?"]) assert.equal(actionOnlyRequest(no), false, no);
+    for (const yes of ["Send that to Valjean.", "Send it to Jean Valjean.", "Alright, send it to him.", "Send it now.", "Put it on their page.", "Copy that"]) assert.equal(actionOnlyRequest(yes), true, yes);
+  });
+  it("S2: a retraction that mentions the human step is still cut; a clean human step after a cut stays", async () => {
+    const { withoutUngroundedRetraction } = await import("../staff-answer-text");
+    assert.equal(withoutUngroundedRetraction("I can't send messages. I added details my lookup didn’t show, so check them before you send it yourself."), "I can't send messages.");
+    assert.equal(withoutUngroundedRetraction("I can't send messages. Don’t send it as written: the lookup didn’t show the title. Send it yourself and mark it sent."), "I can't send messages. Send it yourself and mark it sent.");
+  });
+  it("S3: negation keeps, an unnamed take-back removes, 'and ignore' splits", async () => {
+    const { draftsAfterFinal } = await import("../staff-answer-text");
+    assert.deepEqual(draftsAfterFinal([A, B], "Don't discard the first draft. Discard the second."), [A]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Discard the first draft. That one is wrong too."), []);
+    assert.deepEqual(draftsAfterFinal([A, B], "Use the second draft and ignore the other one."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Only the second draft is right; the first has an old date."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B], "Don't go with the first draft."), [B]);
+    assert.deepEqual(draftsAfterFinal([A, B], "That draft was wrong. Discard the earlier draft; here is the corrected one."), [B]);
+  });
+  it("S5: drafting prose about other things is not a withdrawal", async () => {
+    const { finalWithdraws } = await import("../staff-answer-text");
+    for (const no of ["It asks him to drop them off at the STS front desk on Monday.", "It asks him to delete the old text with his SSN in it.", "It tells him to ignore the previous message from the clinic about the time.", "It reminds him to remove the old one from his tracker.", "It reminds him he can drop the first one off at STS.", "Please do not send this draft until you have reviewed it."]) assert.equal(finalWithdraws(no), false, no);
+  });
+  it("S4/S8: completion claims both ways", async () => {
+    const { withoutCompletedClaims } = await import("../staff-answer-text");
+    for (const cut of ["Your note is now on Jean’s page.", "The message is now on his page.", "I have successfully placed the draft on his page.", "I invited Ángel Ruiz.", "I've pulled up Jean's page for you.", "Jean has been added to your caseload."]) {
+      assert.equal(withoutCompletedClaims(`${cut} Jean needs a call today.`), "Jean needs a call today.", cut);
+    }
+    for (const keep of ["Hi Jean, I sent a message to STS about your ID on Monday.", "A note is on his page from Oct 24 saying he has his ID.", "I put the check-in in the record format your org uses.", "I added Housing to the program list in the draft."]) assert.equal(withoutCompletedClaims(keep), keep, keep);
+  });
+});
