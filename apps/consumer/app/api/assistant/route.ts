@@ -38,7 +38,7 @@ import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
 import { priorToolRecordResults } from "@/lib/staff-prior-records";
 import { staffHomeStatePrompt } from "@/lib/staff-org-place";
-import { staffAnswerText, draftsAfterFinal, CARD_TOOLS as STAFF_CARD_TOOLS } from "@/lib/staff-answer-text";
+import { staffAnswerText, draftsAfterFinal, actionOnlyRequest, withoutUngroundedRetraction, CARD_TOOLS as STAFF_CARD_TOOLS } from "@/lib/staff-answer-text";
 
 /** The one-line ask that follows a refused card when the model made the refusal its answer (see FINISH THE ANSWER below). */
 const FINISH_THE_ANSWER = "The button was refused; that is not the answer and nothing to correct. Answer my question in full from the results you already read in this conversation: who, the reason, the action to take. Call no tools. End with one clause saying I can open the person from People.";
@@ -544,6 +544,14 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       } catch (err) {
         console.error("[staff-steps] finish failed, first answer kept:", err instanceof Error ? err.message : err);
       }
+    }
+
+    // An action-only turn that read nothing has no new result to correct from (ACT-01/02 on F and G):
+    // its answer ends before the first sentence that takes back or rewrites the earlier one.
+    const readThisTurn = generated.steps.some((s) => (s.toolResults ?? []).some((r) => !STAFF_CARD_TOOLS.has(nameOf(r))));
+    if (staffActor && !readThisTurn && actionOnlyRequest(staffSaid)) {
+      const cut = withoutUngroundedRetraction(answer);
+      if (cut !== answer) { console.info("[staff-steps] retraction cut on an action-only turn"); answer = cut; finalWords = cut; }
     }
 
     const facts = {

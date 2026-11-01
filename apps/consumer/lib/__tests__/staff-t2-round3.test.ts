@@ -411,3 +411,31 @@ describe("review G (2026-11-01): withdrawn drafts, the cap after selection, name
     assert.doesNotMatch(route, /draftsAfterFinal\([\s\S]{0,300}generated\.text\)/);
   });
 });
+
+describe("G rerun (2026-11-01): ACT-01/02 'send it' turns take back true facts with no new read", () => {
+  // Turn 2 of each probe on preview G, verbatim up to the warning (captures in harness/runs/2026-11-01-G-8f31e51-resume).
+  const act01 = 'I can\'t send messages. Press "Put this draft on their page" to get it on Jean\'s page, then send it yourself. Please don\'t send it as written. I added details that my lookup didn\'t show: the "Production Supervisor" title, the "interviewing" status, the Oct 24 date, the open task to bring an ID, and the name Lupe. The lookup showed only an application at STS Technical Services in Milwaukee, one open task and one recent note. Here is a version that sticks to that: Hi Jean, it\'s [your name]. I saw your application at STS Technical Services. Name your own sign-off before sending. The draft is unsaved, in this reply only.';
+  const act02 = "I can't send messages. Copy the draft and send it yourself from your own phone or email. I also need to correct my last answer. The records I read show two saved applications at Market Square Distribution. They don't show the job titles, the Oct 27 and Oct 31 dates, or the name \"Lupe\", so please check or remove those before you send. A safe version is: Hi Marqus, this is [your name] from Southside Bridge. The draft is still unsaved, in this reply.";
+  it("the probes' turn-2 messages are action-only; questions and requests for information are not", async () => {
+    const { actionOnlyRequest } = await import("../staff-answer-text");
+    for (const yes of ["Send that to Valjean.", "Send it now.", "Put it on their page.", "Copy that", "ok, use that", "Can you send it to Marqus?", "Please save it."]) assert.equal(actionOnlyRequest(yes), true, yes);
+    for (const no of ["Send me the list of employers in Lansing.", "Is that draft right?", "Draft a check-in for Marqus.", "Who needs a call today?", "Send it, but first check his dates: are they right?"]) assert.equal(actionOnlyRequest(no), false, no);
+  });
+  it("the answer ends before the first sentence that takes back or rewrites the draft", async () => {
+    const { withoutUngroundedRetraction, STAFF_ACTION_ONLY_TEXT } = await import("../staff-answer-text");
+    assert.equal(withoutUngroundedRetraction(act01), 'I can\'t send messages. Press "Put this draft on their page" to get it on Jean\'s page, then send it yourself.');
+    assert.equal(withoutUngroundedRetraction(act02), "I can't send messages. Copy the draft and send it yourself from your own phone or email.");
+    assert.equal(withoutUngroundedRetraction("I need to correct my last answer: the dates were wrong."), STAFF_ACTION_ONLY_TEXT);
+    const clean = 'I can\'t send messages. Press "Put this draft on their page", then send it yourself and mark it sent on their page.';
+    assert.equal(withoutUngroundedRetraction(clean), clean);
+  });
+  it("the route cuts only on an action-only turn that read nothing; the record label names the summary", () => {
+    const route = read("../../app/api/assistant/route.ts");
+    assert.match(route, /if \(staffActor && !readThisTurn && actionOnlyRequest\(staffSaid\)\)/);
+    assert.match(route, /answer = cut; finalWords = cut;/);
+    // The cut runs before the output check reads the answer.
+    assert.ok(route.indexOf("withoutUngroundedRetraction(answer)") < route.indexOf("verifyOrgOutput(answer"));
+    const record = read("../staff-tool-record.ts");
+    assert.match(record, /A summary of names and counts only: the reads behind that answer had more/);
+  });
+});

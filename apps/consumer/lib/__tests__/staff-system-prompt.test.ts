@@ -61,7 +61,11 @@ it("harness 2026-10-31 (ROOM-10, ROOM-13, TRUE-PASS-01, TRAP-ACT-01/02): refused
   const p = staff("today");
   assert.match(p, /A button that comes back refused or unavailable is not your answer/);
   assert.match(p, /take back is a claim you made that a page opened or a draft was placed when it was not/);
-  assert.match(p, /or when you said something no result in that answer's turn supported/);
+  assert.match(p, /Correct yourself only from what you read in this turn: when a result contradicts what you said, or when something you said in this answer has no result behind it/);
+  // G rerun (2026-11-01): ACT-01/02 still retracted on "Send it"; the record is named as a summary.
+  assert.match(p, /A lookup record in front of an earlier answer is a summary, never the full result/);
+  assert.match(p, /and stop\. Do not re-check, rewrite or offer a new version of the draft/);
+  assert.match(p, /When they ask you to repeat or rewrite words they gave, return just those words/);
   // Codex D rerun (2026-11-01): TRAP-ACT-02 turn 2 retracted true facts on "Send it now"; TRAP-NUMBER-03
   // answered a wage question with a button; DEMO-06 turned "confirmation unknown" into "has not confirmed".
   assert.match(p, /A fact from an earlier answer stays until a new read contradicts it/);
@@ -70,7 +74,7 @@ it("harness 2026-10-31 (ROOM-10, ROOM-13, TRUE-PASS-01, TRAP-ACT-01/02): refused
   assert.match(p, /a button never stands in for it/);
   assert.match(p, /Unknown stays unknown/);
   assert.match(p, /Never "has not confirmed", "not confirmed" or "did not confirm"/);
-  assert.match(p, /fewer details than an earlier read is neither/);
+  assert.match(p, /fewer details than an earlier read is not a contradiction either/);
   assert.match(p, /three states/);
   assert.match(p, /call change_my_view and report the screen change/);
 });

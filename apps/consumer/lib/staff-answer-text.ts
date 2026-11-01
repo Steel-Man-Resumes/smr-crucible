@@ -166,6 +166,39 @@ export function draftsAfterFinal<T>(drafts: readonly T[], finalText: string): T[
   return [];
 }
 
+/**
+ * ACT-01/02 (previews F and G, 2026-11-01): after a checked draft, "Send that to Valjean." / "Send it now."
+ * ran no tool at all, and the model took back true facts from its own draft ("I added details that my
+ * lookup didn't show: the title, the status, the Oct 24 date", "I also need to correct my last answer").
+ * It had no new result, only the one-line lookup record of the earlier turn, which is a summary. A prompt
+ * rule against this did not hold on two previews, so the route also cuts it: on a turn that only asks to
+ * act on what was already given and reads nothing, the answer ends before its first sentence that
+ * corrects, re-audits or rewrites the earlier answer. With nothing left, the plain action line is used.
+ */
+export const STAFF_ACTION_ONLY_TEXT = 'I can’t send, save or schedule anything. Press "Put this draft on their page" to review it there, or "Copy to use" and send it yourself, then mark it sent on their page.';
+// A message that also questions, checks or changes the draft is not action-only: the model may reread then.
+const ACTION_ONLY = /^(?![^\n]*\b(?:check|right|correct|wrong|sure|accurate|true|verify|confirm|fix|change|edit|update|but)\b)(?:(?:ok(?:ay)?|yes|yeah|great|thanks|good|perfect|cool)[,.!]?\s+)*(?:please\s+)?(?:(?:go ahead and|can you|could you|would you|just)\s+)?(?:send|text|email|put|place|post|save|copy|use|schedule|log|file|forward)\b(?!\s+me\b)[^?\n]{0,60}[.!?]?$/i;
+/** The staff member's latest message only asks t.ROY to act on what it already gave ("Send it now."). */
+export const actionOnlyRequest = (said: string) => ACTION_ONLY.test(String(said ?? "").trim());
+const RETRACTS = new RegExp([
+  WITHDRAWS.source,
+  String.raw`\bI (?:also |now )?(?:need|have|want) to correct\b`,
+  String.raw`\b(?:didn['’]t|did not|doesn['’]t|does not|don['’]t|do not) (?:show|support|include|list|mention)\b`,
+  String.raw`\bnot in (?:what|the records?|the results?) I (?:read|saw)\b`,
+  String.raw`\b(?:send|use) it as written\b`,
+  String.raw`\bcheck or remove\b`,
+  String.raw`\bI added (?:details|facts|things|words)\b`,
+  String.raw`\bsticks? to (?:that|what)\b`,
+  String.raw`\b(?:safe|safer|corrected|revised|accurate) version\b`,
+].join("|"), "i");
+/** The answer up to its first sentence that corrects or rewrites the earlier one; the action line if nothing is left. */
+export function withoutUngroundedRetraction(answer: string): string {
+  const sentences = String(answer ?? "").split(/(?<=[.!?])\s+|\n+/).map((x) => x.trim()).filter(Boolean);
+  const at = sentences.findIndex((x) => RETRACTS.test(x));
+  if (at < 0) return answer;
+  return sentences.slice(0, at).join(" ").trim() || STAFF_ACTION_ONLY_TEXT;
+}
+
 /** The nudge line stays only when the nudge tool itself answered ok this turn (its buttons render then); otherwise it is cut (review R3 S2). */
 function nudgeOk(steps: readonly Step[]): boolean {
   return steps.some((s) => (s.toolResults ?? []).some((r) => r?.toolName === "listing_check_nudge" && status(r) === "ok"));
