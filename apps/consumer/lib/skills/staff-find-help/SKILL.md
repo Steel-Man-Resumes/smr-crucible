@@ -2,7 +2,7 @@
 
 Trigger: "Find local help" on a person's page or in the panel, "find help with {need} near {place}", "what's out there for housing in {town}".
 
-Doctrine: support-navigation. Start with the need and the place. Unknown requirements stay unknown. A directory listing is a lead, not a confirmed service and not proof of eligibility.
+Doctrine: support-navigation. Start with the place, and the need when they give one. Unknown requirements stay unknown. A directory listing is a lead, not a confirmed service and not proof of eligibility.
 
 ## Steps
 

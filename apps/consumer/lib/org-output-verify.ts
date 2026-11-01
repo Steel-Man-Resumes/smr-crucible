@@ -548,8 +548,12 @@ export function orgFlagNotice(problems: readonly string[]): string {
 export function withoutListMarkers(text: string): string {
   let expected = 1;
   // Line starts only (a markdown list): inline "has 12. Call them" after a list is never a position.
-  return text.replace(/^([ \t]*)(\d{1,2})([.)])(?=[ \t]+["“*_(]?[A-Za-z])/gm, (all, lead: string, num: string) => {
-    if (Number(num) !== expected) return all;
+  // Review F1: bold, italic or code items ("1. **Your tasks**"); F3: only "\n" starts a line (no "m" flag, so a
+  // lone \r or U+2028 is not one); F4: a "1." starts a new list.
+  return text.replace(/(?<=^|\n)([ \t]*)(\d{1,2})([.)])(?=[ \t]+(?:\*\*?|__?|`)?["“(]?[A-Za-z])/g, (all, lead: string, num: string) => {
+    const n = Number(num);
+    if (n === 1) expected = 1;
+    if (n !== expected) return all;
     expected += 1;
     return `${lead}#.`;
   });

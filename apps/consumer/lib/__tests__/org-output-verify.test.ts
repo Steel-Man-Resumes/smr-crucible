@@ -317,6 +317,15 @@ describe("production db4c4f9 DEMO-02 (2026-11-01): list positions are not figure
       assert.ok(checkOrgClaimsDeterministic(t, facts).some((p: string) => /figure/.test(p)), t);
     }
     assert.equal(withoutListMarkers("1. A\n2. B\n2. C"), "#. A\n#. B\n2. C");
+    // Review F1: bold, italic and code items; F3: a lone \r is not a line start; F4: a second list restarts at 1.
+    const bold = Array.from({ length: 11 }, (_, i) => `${i + 1}. **Section ${String.fromCharCode(65 + i)}**`).join("\n");
+    assert.deepEqual(checkOrgClaimsDeterministic(bold, facts).filter((p: string) => /figure/.test(p)), []);
+    const code = Array.from({ length: 9 }, (_, i) => `${i + 1}. \`Area ${String.fromCharCode(65 + i)}\``).join("\n");
+    assert.deepEqual(checkOrgClaimsDeterministic(code, facts).filter((p: string) => /figure/.test(p)), []);
+    const seven = Array.from({ length: 7 }, (_, i) => `${i + 1}. Item`).join("\n");
+    assert.ok(checkOrgClaimsDeterministic(`${seven}\nPlaced:\r8. people hired`, facts).some((p: string) => /figure/.test(p)));
+    const nine = Array.from({ length: 9 }, (_, i) => `${i + 1}. Item`).join("\n");
+    assert.deepEqual(checkOrgClaimsDeterministic(`${nine}\n\nNext list:\n${nine}`, facts).filter((p: string) => /figure/.test(p)), []);
     const t0 = performance.now(); withoutListMarkers("1. A\n".repeat(30000) + " 9".repeat(30000)); assert.ok(performance.now() - t0 < 200);
   });
 });

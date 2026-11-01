@@ -9,6 +9,7 @@ const read = (rel: string) => readFileSync(new URL(rel, import.meta.url), "utf8"
 
 it("a place with no need searches shelter, food and jobs; a missing place is still asked for", () => {
   const skill = read("../skills/staff-find-help/SKILL.md");
+  assert.match(skill, /Start with the place, and the need when they give one/);
   assert.match(skill, /If the place is missing, ask for it in one short question/);
   assert.match(skill, /If they gave a place but no need[\s\S]{0,80}do not ask: search the three most common areas, "shelter", "food" and "jobs"/);
   const tools = read("../tools/assistant-staff-tools.ts");
