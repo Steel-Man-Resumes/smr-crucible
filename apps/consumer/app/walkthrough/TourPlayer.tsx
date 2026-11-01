@@ -40,6 +40,8 @@ function frame(
   spot: Box | null,
   overlayCaption: boolean,
   zoomOverride?: number,
+  /** Below 1, the spotlight is framed smaller so the caption card has a clear place to sit (see placeCaption). */
+  fitScale = 1,
 ): Omit<Cam, "ms" | "ease"> {
   const base = Math.min(stage.w / content.w, stage.h / content.h);
   // Leave room for the caption card at the bottom of a wide stage.
@@ -56,18 +58,20 @@ function frame(
     }
   } else if (spot) {
     const [x, y, w, h] = spot;
-    z = Math.min((0.74 * stage.w) / (w * content.w * base), (0.72 * usableH) / (h * content.h * base));
-    z = Math.max(1, Math.min(z, 2.6));
+    z = Math.min((0.74 * stage.w) / (w * content.w * base), (0.72 * usableH) / (h * content.h * base)) * fitScale;
+    z = Math.max(fitScale < 1 ? fitScale : 1, Math.min(z, 2.6));
     cx = (x + w / 2) * content.w;
     cy = (y + h / 2) * content.h;
   }
   const s = base * z;
-  const fit = (size: number, view: number, centre: number, c: number) => {
+  // Content smaller than the stage used to be centred, which put a tall spotlight in the caption's
+  // band; now it slides up so the spotlight sits at centreY, within the stage (2026-11-01).
+  const fit = (size: number, view: number, centre: number, c: number, slide: boolean) => {
     const scaled = size * s;
-    if (scaled <= view) return (view - scaled) / 2;
+    if (scaled <= view) return slide ? Math.max(0, Math.min(view - scaled, centre - c * s)) : (view - scaled) / 2;
     return Math.min(0, Math.max(view - scaled, centre - c * s));
   };
-  return { s, tx: fit(content.w, stage.w, stage.w / 2, cx), ty: fit(content.h, stage.h, centreY, cy) };
+  return { s, tx: fit(content.w, stage.w, stage.w / 2, cx, false), ty: fit(content.h, stage.h, centreY, cy, overlayCaption && !!spot) };
 }
 
 /* ── Live scenes ──────────────────────────────────────────────────────── */
@@ -266,49 +270,77 @@ export function TourPlayer() {
 
   const spot: Box | null = Array.isArray(step.spot) ? (step.spot as Box) : domSpot;
 
-  /* Put the caption in the corner that covers the least of the spotlight. */
-  const corner = useMemo(() => {
-    if (!spot || !stage.w) return "bl";
-    const t = frame(stage, scene, step, spot, true);
-    const sx = t.tx + spot[0] * scene.w * t.s;
-    const sy = t.ty + spot[1] * scene.h * t.s;
-    const sw = spot[2] * scene.w * t.s;
-    const sh = spot[3] * scene.h * t.s;
-    const cw = Math.min(460, stage.w * 0.6) + 20;
-    const ch = 150;
-    const rects: Record<string, [number, number]> = { bl: [0, stage.h - ch], tl: [0, 0], br: [stage.w - cw, stage.h - ch], tr: [stage.w - cw, 0] };
-    let best = "bl";
-    let bestA = Infinity;
-    for (const k of ["bl", "br", "tl", "tr"]) {
-      const [x, y] = rects[k];
-      const ox = Math.max(0, Math.min(x + cw, sx + sw) - Math.max(x, sx));
-      const oy = Math.max(0, Math.min(y + ch, sy + sh) - Math.max(y, sy));
-      const a = ox * oy;
-      if (a < bestA - 1) {
-        bestA = a;
-        best = k;
+  /* The caption card's real size, measured once it is on the stage (its text decides its height). */
+  const sceneNoteOn = Boolean(scene.note);
+  const capRef = useRef<HTMLDivElement>(null);
+  const [capSize, setCapSize] = useState<{ w: number; h: number }>({ w: 460, h: 150 });
+  useLayoutEffect(() => {
+    const el = capRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    if (r.width && r.height) setCapSize((c) => (Math.abs(c.w - r.width) < 1 && Math.abs(c.h - r.height) < 1 ? c : { w: r.width, h: r.height }));
+  }, [i, stage.w, stage.h, step.title, step.body]);
+
+  /*
+   * Where the caption sits, and how tight the camera frames the spotlight.
+   * The card must never cover the thing the spotlight is showing (Troy, 2026-11-01).
+   * Candidates in order: the four corners, then the middle of the bottom, top,
+   * left and right edges. The first with no overlap wins. If every place
+   * overlaps at the normal zoom, the camera backs off a step at a time (0.85,
+   * 0.72, 0.6 of the fit) until one is clear; if none ever is, the least overlap.
+   */
+  const place = useMemo(() => {
+    const m = 20;
+    if (!spot || !stage.w) return { x: m, y: stage.h - capSize.h - m, fitScale: 1 };
+    const cw = capSize.w;
+    const ch = capSize.h;
+    const topY = sceneNoteOn ? 48 : m;
+    const candidates = (): [number, number][] => [
+      [m, stage.h - ch - m], // bottom left
+      [stage.w - cw - m, stage.h - ch - m], // bottom right
+      [m, topY], // top left
+      [stage.w - cw - m, topY], // top right
+      [(stage.w - cw) / 2, stage.h - ch - m], // bottom middle
+      [(stage.w - cw) / 2, topY], // top middle
+      [m, (stage.h - ch) / 2], // left middle
+      [stage.w - cw - m, (stage.h - ch) / 2], // right middle
+    ];
+    let least: { x: number; y: number; fitScale: number; a: number } | null = null;
+    for (const fitScale of [1, 0.85, 0.72, 0.6]) {
+      const t = frame(stage, scene, step, spot, true, undefined, fitScale);
+      // The ring and its glow reach past the box: 16px of air around the spotlight counts as covered.
+      const air = 16;
+      const sx = t.tx + spot[0] * scene.w * t.s - air;
+      const sy = t.ty + spot[1] * scene.h * t.s - air;
+      const sw = spot[2] * scene.w * t.s + 2 * air;
+      const sh = spot[3] * scene.h * t.s + 2 * air;
+      for (const [x, y] of candidates()) {
+        const ox = Math.max(0, Math.min(x + cw, sx + sw) - Math.max(x, sx));
+        const oy = Math.max(0, Math.min(y + ch, sy + sh) - Math.max(y, sy));
+        const a = ox * oy;
+        if (a <= 0) return { x, y, fitScale };
+        if (!least || a < least.a - 1) least = { x, y, fitScale, a };
       }
     }
-    return best;
-  }, [spot, stage, scene, step]);
-  const cornerClass = { bl: "bottom-5 left-5", br: "bottom-5 right-5", tl: "top-5 left-5", tr: "top-12 right-5" }[corner];
+    return least ? { x: least.x, y: least.y, fitScale: least.fitScale } : { x: m, y: stage.h - ch - m, fitScale: 1 };
+  }, [spot, stage, scene, step, capSize, sceneNoteOn]);
 
   /* Camera */
   useEffect(() => {
     if (!stage.w) return;
     const sceneChanged = prevScene.current !== step.scene;
     prevScene.current = step.scene;
-    const target = frame(stage, scene, step, spot, overlayCaption);
+    const target = frame(stage, scene, step, spot, overlayCaption, undefined, place.fitScale);
     const ms = reduced || sceneChanged ? 0 : CAM_MS;
     setCam({ ...target, ms, ease: EASE });
     if (step.drift && !reduced) {
       const t = setTimeout(() => {
-        const d = frame(stage, scene, step, spot, overlayCaption, step.drift);
+        const d = frame(stage, scene, step, spot, overlayCaption, step.drift, place.fitScale);
         setCam({ ...d, ms: hold, ease: "cubic-bezier(.4,0,.6,1)" });
       }, 60);
       return () => clearTimeout(t);
     }
-  }, [i, stage, spot?.[0], spot?.[1], spot?.[2], spot?.[3]]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [i, stage, spot?.[0], spot?.[1], spot?.[2], spot?.[3], place.fitScale]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Cursor: settle the camera, glide to the target, click. */
   useEffect(() => {
@@ -465,7 +497,7 @@ export function TourPlayer() {
 
         {/* Caption over a wide stage */}
         {overlayCaption && step.scene !== "title" && step.scene !== "close" && (
-          <div key={`cap-${i}`} className={`wt-cap pointer-events-none absolute ${cornerClass} max-w-[min(460px,60%)] rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/95 px-5 py-4 shadow-2xl backdrop-blur`}>
+          <div key={`cap-${i}`} ref={capRef} data-cap-fit={place.fitScale} style={{ left: place.x, top: place.y }} className="wt-cap pointer-events-none absolute max-w-[min(460px,60%)] rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/95 px-5 py-4 shadow-2xl backdrop-blur">
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#dbc173]">{CHAPTERS[chapterIndex].label}</p>
             <p className="mt-1 text-xl font-bold leading-snug text-[#f4efe2]">{step.title}</p>
             <p className="mt-1 text-[15px] leading-relaxed text-[#cfc8b6]">{step.body}</p>
