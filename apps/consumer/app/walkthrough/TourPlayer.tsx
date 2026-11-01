@@ -18,6 +18,8 @@ import { CHAPTERS, SCENES, STEPS, TOOLS, holdMs, toolKey, type Box, type Step } 
 
 const EASE = "cubic-bezier(.65,0,.3,1)";
 const CAM_MS = 1100;
+/** The caption arrives this long after the beat starts: the camera move plus a breath. */
+const CAPTION_DELAY = CAM_MS + 300;
 const SITE = "https://www.steelmanresumes.com";
 
 type Cam = { s: number; tx: number; ty: number; ms: number; ease: string };
@@ -160,10 +162,14 @@ export function TourPlayer() {
 
   const step = STEPS[i];
   const scene = SCENES[step.scene];
-  const hold = holdMs(step);
+  // The screen settles first, then the caption arrives (Troy, 2026-11-01: "the screen is one focal
+  // point, the text box another"); the hold grows by the same delay so reading time is unchanged.
+  const hold = holdMs(step) + CAPTION_DELAY;
   const last = i === STEPS.length - 1;
   const narrow = vw > 0 && vw < 640;
-  const overlayCaption = !narrow;
+  /* The caption never sits on the stage: beside it on a wide window, under it on a narrow one. */
+  const overlayCaption = false;
+  const sideCaption = !narrow;
   const chapterIndex = CHAPTERS.findIndex((c) => c.id === step.chapter);
 
   /* Stage size */
@@ -270,79 +276,22 @@ export function TourPlayer() {
 
   const spot: Box | null = Array.isArray(step.spot) ? (step.spot as Box) : domSpot;
 
-  /* The caption card's real size, measured once it is on the stage (its text decides its height). */
-  const sceneNoteOn = Boolean(scene.note);
-  /* A small stage (a laptop at 125% scaling gives 526x329) gets a smaller card, or there is no clear place for it. */
-  const compactCap = stage.w > 0 && stage.w < 720;
-  const capRef = useRef<HTMLDivElement>(null);
-  const [capSize, setCapSize] = useState<{ w: number; h: number }>({ w: 460, h: 150 });
-  useLayoutEffect(() => {
-    const el = capRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    if (r.width && r.height) setCapSize((c) => (Math.abs(c.w - r.width) < 1 && Math.abs(c.h - r.height) < 1 ? c : { w: r.width, h: r.height }));
-  }, [i, stage.w, stage.h, step.title, step.body]);
-
-  /*
-   * Where the caption sits, and how tight the camera frames the spotlight.
-   * The card must never cover the thing the spotlight is showing (Troy, 2026-11-01).
-   * Candidates in order: the four corners, then the middle of the bottom, top,
-   * left and right edges. The first with no overlap wins. If every place
-   * overlaps at the normal zoom, the camera backs off a step at a time (0.85,
-   * 0.72, 0.6 of the fit) until one is clear; if none ever is, the least overlap.
-   */
-  const place = useMemo(() => {
-    const m = 20;
-    if (!spot || !stage.w) return { x: m, y: stage.h - capSize.h - m, fitScale: 1 };
-    const cw = capSize.w;
-    const ch = capSize.h;
-    const topY = sceneNoteOn ? 48 : m;
-    const candidates = (): [number, number][] => [
-      [m, stage.h - ch - m], // bottom left
-      [stage.w - cw - m, stage.h - ch - m], // bottom right
-      [m, topY], // top left
-      [stage.w - cw - m, topY], // top right
-      [(stage.w - cw) / 2, stage.h - ch - m], // bottom middle
-      [(stage.w - cw) / 2, topY], // top middle
-      [m, (stage.h - ch) / 2], // left middle
-      [stage.w - cw - m, (stage.h - ch) / 2], // right middle
-    ];
-    let least: { x: number; y: number; fitScale: number; a: number } | null = null;
-    for (const fitScale of [1, 0.85, 0.72, 0.6]) {
-      const t = frame(stage, scene, step, spot, true, undefined, fitScale);
-      // The ring and its glow reach past the box: 16px of air around the spotlight counts as covered.
-      const air = 16;
-      const sx = t.tx + spot[0] * scene.w * t.s - air;
-      const sy = t.ty + spot[1] * scene.h * t.s - air;
-      const sw = spot[2] * scene.w * t.s + 2 * air;
-      const sh = spot[3] * scene.h * t.s + 2 * air;
-      for (const [x, y] of candidates()) {
-        const ox = Math.max(0, Math.min(x + cw, sx + sw) - Math.max(x, sx));
-        const oy = Math.max(0, Math.min(y + ch, sy + sh) - Math.max(y, sy));
-        const a = ox * oy;
-        if (a <= 0) return { x, y, fitScale };
-        if (!least || a < least.a - 1) least = { x, y, fitScale, a };
-      }
-    }
-    return least ? { x: least.x, y: least.y, fitScale: least.fitScale } : { x: m, y: stage.h - ch - m, fitScale: 1 };
-  }, [spot, stage, scene, step, capSize, sceneNoteOn]);
-
   /* Camera */
   useEffect(() => {
     if (!stage.w) return;
     const sceneChanged = prevScene.current !== step.scene;
     prevScene.current = step.scene;
-    const target = frame(stage, scene, step, spot, overlayCaption, undefined, place.fitScale);
+    const target = frame(stage, scene, step, spot, overlayCaption);
     const ms = reduced || sceneChanged ? 0 : CAM_MS;
     setCam({ ...target, ms, ease: EASE });
     if (step.drift && !reduced) {
       const t = setTimeout(() => {
-        const d = frame(stage, scene, step, spot, overlayCaption, step.drift, place.fitScale);
+        const d = frame(stage, scene, step, spot, overlayCaption, step.drift);
         setCam({ ...d, ms: hold, ease: "cubic-bezier(.4,0,.6,1)" });
       }, 60);
       return () => clearTimeout(t);
     }
-  }, [i, stage, spot?.[0], spot?.[1], spot?.[2], spot?.[3], place.fitScale]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [i, stage, spot?.[0], spot?.[1], spot?.[2], spot?.[3]]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* Cursor: settle the camera, glide to the target, click. */
   useEffect(() => {
@@ -416,14 +365,15 @@ export function TourPlayer() {
       aria-label="Guided tour of Steel Man Resumes. Space to pause, arrows to step."
       className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#dbc173]"
     >
-      {/* Stage */}
+      {/* Stage, with the caption beside it on a wide window */}
+      <div className={sideCaption ? "flex items-center gap-5" : ""}>
       <div
         ref={stageRef}
         onClick={(e) => {
           // The tour clicks live components itself; only a viewer's click pauses.
           if (e.isTrusted && step.scene !== "close") toggle();
         }}
-        className={`relative w-full overflow-hidden rounded-xl border border-white/10 bg-[#0d0c0b] ${narrow ? "aspect-square" : "aspect-[16/10]"} ${step.scene === "close" ? "" : "cursor-pointer"}`}
+        className={`relative w-full min-w-0 overflow-hidden rounded-xl border border-white/10 bg-[#0d0c0b] ${narrow ? "aspect-square" : "flex-1 aspect-[16/10]"} ${step.scene === "close" ? "" : "cursor-pointer"}`}
       >
         <div
           className="absolute left-0 top-0 origin-top-left will-change-transform"
@@ -497,14 +447,6 @@ export function TourPlayer() {
           )}
         </div>
 
-        {/* Caption over a wide stage */}
-        {overlayCaption && step.scene !== "title" && step.scene !== "close" && (
-          <div key={`cap-${i}`} ref={capRef} data-cap-fit={place.fitScale} style={{ left: place.x, top: place.y }} className={`wt-cap pointer-events-none absolute rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/95 shadow-2xl backdrop-blur ${compactCap ? "max-w-[52%] px-3.5 py-2.5" : "max-w-[min(460px,60%)] px-5 py-4"}`}>
-            <p className={`font-mono uppercase tracking-[0.14em] text-[#dbc173] ${compactCap ? "text-[9px]" : "text-[11px]"}`}>{CHAPTERS[chapterIndex].label}</p>
-            <p className={`mt-1 font-bold leading-snug text-[#f4efe2] ${compactCap ? "text-[15px]" : "text-xl"}`}>{step.title}</p>
-            <p className={`mt-1 leading-relaxed text-[#cfc8b6] ${compactCap ? "text-[12px] leading-snug" : "text-[15px]"}`}>{step.body}</p>
-          </div>
-        )}
         {sceneNote && (
           <p className={`pointer-events-none absolute rounded bg-black/70 px-2 py-1 font-mono uppercase tracking-[0.08em] text-[#b0aa98] ${narrow ? "bottom-2 right-2 text-[8px]" : "right-3 top-3 text-[10px]"}`}>
             {sceneNote}
@@ -519,9 +461,24 @@ export function TourPlayer() {
         )}
       </div>
 
+      {/* Caption beside a wide stage: glass on the dark page, in after the spotlight settles. Always
+          present so the stage does not jump on the title and close beats. */}
+      {sideCaption && (
+        <div className="w-[300px] shrink-0 self-center lg:w-[340px]" aria-live="polite">
+          {step.scene !== "title" && step.scene !== "close" && (
+            <div key={`caps-${i}`} className="wt-cap rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/60 px-5 py-4 shadow-2xl backdrop-blur" style={{ animationDelay: `${CAPTION_DELAY}ms` }}>
+              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#dbc173]">{CHAPTERS[chapterIndex].label}</p>
+              <p className="mt-1 text-2xl font-bold leading-snug text-[#f4efe2]">{step.title}</p>
+              <p className="mt-2 text-[17px] leading-relaxed text-[#cfc8b6]">{step.body}</p>
+            </div>
+          )}
+        </div>
+      )}
+      </div>
+
       {/* Caption under a narrow stage */}
-      {!overlayCaption && step.scene !== "title" && step.scene !== "close" && (
-        <div key={`capn-${i}`} className="wt-cap mt-3 min-h-[6.5rem] border-l-[3px] border-l-[#dbc173] pl-4">
+      {!sideCaption && step.scene !== "title" && step.scene !== "close" && (
+        <div key={`capn-${i}`} className="wt-cap mt-3 min-h-[6.5rem] border-l-[3px] border-l-[#dbc173] pl-4" style={{ animationDelay: `${CAPTION_DELAY}ms` }}>
           <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#dbc173]">{CHAPTERS[chapterIndex].label}</p>
           <p className="mt-1 text-lg font-bold leading-snug text-[#f4efe2]">{step.title}</p>
           <p className="mt-1 text-[15px] leading-relaxed text-[#cfc8b6]">{step.body}</p>

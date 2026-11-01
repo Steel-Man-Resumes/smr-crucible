@@ -265,7 +265,8 @@ export default function WalkthroughPage() {
 
       {/* Guided tour */}
       <section id="tour" data-chapter="tour" className="scroll-mt-16 px-3 pb-14 pt-4 sm:px-6 sm:pb-20 sm:pt-6">
-        <div className="mx-auto max-w-6xl">
+        {/* Wider than the reading chapters: the caption sits beside the stage, so the stage keeps its size. */}
+        <div className="mx-auto max-w-[1500px]">
           <div className="mb-3 flex flex-wrap items-end justify-between gap-x-6 gap-y-1">
             <div>
               <p className="font-mono text-xs uppercase tracking-[0.14em] text-[#dbc173]">Guided tour · about 3 minutes</p>
@@ -278,7 +279,7 @@ export default function WalkthroughPage() {
           {/* Keep the whole player, controls included, on one screen: header 57 + heading ~70 + controls and
               chapter bar ~90 + note ~30 above and below a 16:10 stage. Checked at 1093x614 (a 1366x768 laptop
               at 125% scaling), 1229x691, 1366x768 and 1920x1080 (2026-11-01). */}
-          <div className="mx-auto" style={{ maxWidth: "max(320px, calc((100svh - 285px) * 1.6))" }}>
+          <div className="mx-auto" style={{ maxWidth: "max(320px, calc((100svh - 285px) * 1.6 + 360px))" }}>
             <TourPlayer />
           </div>
           <p className="mt-4 text-xs text-[#8f897a]">
