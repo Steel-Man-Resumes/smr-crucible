@@ -20,6 +20,8 @@ const EASE = "cubic-bezier(.65,0,.3,1)";
 const CAM_MS = 1100;
 /** The caption arrives this long after the beat starts: the camera move plus a breath. */
 const CAPTION_DELAY = CAM_MS + 300;
+/** Space between the stage and the caption column (the row's gap, in px). */
+const SIDE_GAP = 20;
 const SITE = "https://www.steelmanresumes.com";
 
 type Cam = { s: number; tx: number; ty: number; ms: number; ease: string };
@@ -276,6 +278,40 @@ export function TourPlayer() {
 
   const spot: Box | null = Array.isArray(step.spot) ? (step.spot as Box) : domSpot;
 
+  /*
+   * The caption card beside the stage follows the point it talks about (Troy, 2026-11-01: placement
+   * should not repeat, and motion should draw the eye to the main point). Each beat: the spotlight's
+   * box in stage pixels, the card's height, and from those the card's top, so the card lines up with
+   * the spotlight and glides there; a leader line then draws from the card to the spotlight's edge.
+   */
+  const capRef = useRef<HTMLDivElement>(null);
+  const [capH, setCapH] = useState(160);
+  useLayoutEffect(() => {
+    const el = capRef.current;
+    if (!el) return;
+    const h = el.getBoundingClientRect().height;
+    if (h && Math.abs(h - capH) > 1) setCapH(h);
+  }, [i, stage.w, step.title, step.body]); // eslint-disable-line react-hooks/exhaustive-deps
+  const callout = useMemo(() => {
+    if (!sideCaption || !stage.w) return null;
+    const pad = 8;
+    if (!spot) return { top: Math.max(pad, (stage.h - capH) / 2), line: null };
+    const t = frame(stage, scene, step, spot, false);
+    const sx = t.tx + spot[0] * scene.w * t.s;
+    const sy = t.ty + spot[1] * scene.h * t.s;
+    const sw = spot[2] * scene.w * t.s;
+    const sh = spot[3] * scene.h * t.s;
+    const cy = sy + sh / 2;
+    const top = Math.round(Math.max(pad, Math.min(stage.h - capH - pad, cy - capH / 2)));
+    // From the card's left edge, level with its middle, to the spotlight's right edge at its middle.
+    const x1 = stage.w + SIDE_GAP;
+    const y1 = top + capH / 2;
+    const x2 = Math.min(stage.w - 2, sx + sw + 6);
+    const y2 = Math.max(0, Math.min(stage.h, cy));
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    return { top, line: { x1, y1, x2, y2, len } };
+  }, [sideCaption, stage, spot, scene, step, capH]);
+
   /* Camera */
   useEffect(() => {
     if (!stage.w) return;
@@ -366,7 +402,7 @@ export function TourPlayer() {
       className="rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-[#dbc173]"
     >
       {/* Stage, with the caption beside it on a wide window */}
-      <div className={sideCaption ? "flex items-center gap-5" : ""}>
+      <div className={sideCaption ? "relative flex items-center gap-5" : ""}>
       <div
         ref={stageRef}
         onClick={(e) => {
@@ -464,15 +500,37 @@ export function TourPlayer() {
       {/* Caption beside a wide stage: glass on the dark page, in after the spotlight settles. Always
           present so the stage does not jump on the title and close beats. */}
       {sideCaption && (
-        <div className="w-[300px] shrink-0 self-center lg:w-[340px]" aria-live="polite">
-          {step.scene !== "title" && step.scene !== "close" && (
-            <div key={`caps-${i}`} className="wt-cap rounded-lg border border-white/10 border-l-[3px] border-l-[#dbc173] bg-[#121110]/60 px-5 py-4 shadow-2xl backdrop-blur" style={{ animationDelay: `${CAPTION_DELAY}ms` }}>
-              <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-[#dbc173]">{CHAPTERS[chapterIndex].label}</p>
-              <p className="mt-1 text-2xl font-bold leading-snug text-[#f4efe2]">{step.title}</p>
-              <p className="mt-2 text-[17px] leading-relaxed text-[#cfc8b6]">{step.body}</p>
+        <div className="relative w-[300px] shrink-0 self-stretch lg:w-[340px]" aria-live="polite">
+          {step.scene !== "title" && step.scene !== "close" && callout && (
+            <div ref={capRef} className="absolute left-0 right-0" style={{ top: callout.top, transition: reduced ? "none" : "top 700ms cubic-bezier(.16,1,.3,1)" }}>
+              <div key={`caps-${i}`} className="wt-card relative rounded-lg border border-white/10 bg-[#121110]/60 px-5 py-4 shadow-2xl backdrop-blur" style={{ animationDelay: `${CAPTION_DELAY}ms` }}>
+                {/* The gold bar draws down the left edge as the card lands. */}
+                <span aria-hidden="true" className="wt-bar absolute bottom-0 left-0 top-0 w-[3px] origin-top rounded-l-lg bg-[#dbc173]" style={{ animationDelay: `${CAPTION_DELAY + 80}ms` }} />
+                <p className="wt-text font-mono text-[11px] uppercase tracking-[0.14em] text-[#dbc173]" style={{ animationDelay: `${CAPTION_DELAY + 120}ms` }}>{CHAPTERS[chapterIndex].label}</p>
+                <p className="wt-text mt-1 text-2xl font-bold leading-snug text-[#f4efe2]" style={{ animationDelay: `${CAPTION_DELAY + 240}ms` }}>
+                  <span className="relative inline">
+                    {step.title}
+                    {/* The main point gets its line: a gold underline draws beneath the title. */}
+                    <span aria-hidden="true" className="wt-underline absolute -bottom-0.5 left-0 h-[2px] w-full origin-left bg-[#dbc173]/80" style={{ animationDelay: `${CAPTION_DELAY + 620}ms` }} />
+                  </span>
+                </p>
+                <p className="wt-text mt-2 text-[17px] leading-relaxed text-[#cfc8b6]" style={{ animationDelay: `${CAPTION_DELAY + 420}ms` }}>{step.body}</p>
+              </div>
             </div>
           )}
         </div>
+      )}
+      {/* The leader line: from the card to the spotlight, drawn once the card is up. Over both, under nothing a viewer clicks. */}
+      {sideCaption && step.scene !== "title" && step.scene !== "close" && callout?.line && !reduced && (
+        <svg key={`lead-${i}`} aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 overflow-visible" width="100%" height="100%">
+          <line
+            className="wt-lead"
+            x1={callout.line.x1} y1={callout.line.y1} x2={callout.line.x2} y2={callout.line.y2}
+            stroke="#dbc173" strokeWidth="1.5" strokeLinecap="round" strokeOpacity="0.85"
+            style={{ strokeDasharray: callout.line.len, strokeDashoffset: callout.line.len, animationDelay: `${CAPTION_DELAY + 300}ms` }}
+          />
+          <circle className="wt-dot" cx={callout.line.x2} cy={callout.line.y2} r="3.5" fill="#dbc173" style={{ animationDelay: `${CAPTION_DELAY + 720}ms` }} />
+        </svg>
       )}
       </div>
 
@@ -540,12 +598,25 @@ export function TourPlayer() {
         @keyframes wtCap { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
         .wt-rise { opacity: 0; animation: wtRise 700ms cubic-bezier(.16,1,.3,1) forwards; }
         @keyframes wtRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+        .wt-card { opacity: 0; animation: wtCard 520ms cubic-bezier(.16,1,.3,1) forwards; }
+        @keyframes wtCard { from { opacity: 0; transform: translateX(14px) scale(.97); } to { opacity: 1; transform: none; } }
+        .wt-bar { transform: scaleY(0); animation: wtBar 420ms cubic-bezier(.16,1,.3,1) forwards; }
+        @keyframes wtBar { to { transform: scaleY(1); } }
+        .wt-text { opacity: 0; animation: wtText 460ms cubic-bezier(.16,1,.3,1) forwards; }
+        @keyframes wtText { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+        .wt-underline { transform: scaleX(0); animation: wtUnderline 480ms cubic-bezier(.16,1,.3,1) forwards; }
+        @keyframes wtUnderline { to { transform: scaleX(1); } }
+        .wt-lead { animation: wtLead 480ms cubic-bezier(.4,0,.2,1) forwards; }
+        @keyframes wtLead { to { stroke-dashoffset: 0; } }
+        .wt-dot { opacity: 0; transform-box: fill-box; transform-origin: center; animation: wtDot 320ms ease-out forwards; }
+        @keyframes wtDot { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: none; } }
         .wt-ripple { animation: wtRipple 650ms ease-out forwards; }
         .wt-flash { animation: wtFlash 900ms ease forwards; }
         @keyframes wtFlash { 0%,40% { opacity: 1; } 100% { opacity: 0; } }
         @keyframes wtRipple { from { opacity: 1; transform: scale(.4); } to { opacity: 0; transform: scale(1.9); } }
         @media (prefers-reduced-motion: reduce) {
-          .wt-cut, .wt-cap, .wt-rise, .wt-ripple { animation: none; opacity: 1; }
+          .wt-cut, .wt-cap, .wt-rise, .wt-ripple, .wt-card, .wt-text, .wt-dot { animation: none; opacity: 1; }
+          .wt-bar, .wt-underline { animation: none; transform: none; }
         }
       `}</style>
     </div>
