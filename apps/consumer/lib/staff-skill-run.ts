@@ -62,14 +62,20 @@ export async function recordStaffSkillRun(
 
 export interface OfferedDraft { toolCallId: string; args: unknown; result: Record<string, unknown> }
 
-/** The offer_staff_draft results that are real drafts: unsaved, unsent, with a body. */
+/** At most this many draft cards per answer, applied after the final step's withdrawals (review G2). */
+export const MAX_STAFF_DRAFT_CARDS = 2;
+
+/**
+ * The offer_staff_draft results that are real drafts: unsaved, unsent, with a body. Every offer, in
+ * order: a cap here would cut a replacement before draftsAfterFinal could pick it (review G2).
+ */
 export function offeredDrafts(toolResults: readonly { toolCallId: string; toolName: string; args: unknown; result: unknown }[]): OfferedDraft[] {
   return toolResults.flatMap((r) => {
     const res = r.result as Record<string, unknown> | null;
     if (r.toolName !== "offer_staff_draft" || !res || res.status !== "draft_only" || res.saved !== false || res.sent !== false) return [];
     if (typeof res.body !== "string" || !res.body.trim() || typeof res.participantId !== "string") return [];
     return [{ toolCallId: String(r.toolCallId), args: r.args, result: res }];
-  }).slice(0, 2);
+  });
 }
 
 /**

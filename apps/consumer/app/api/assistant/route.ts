@@ -33,7 +33,7 @@ import { loadSelectedWork, readWorkSelection, selectedWorkPrompt } from "@/lib/a
 import { buildStaffTools } from "@/lib/tools/assistant-staff-tools";
 import { isStaffSkill, isParticipantId, staffSkillFromText } from "@/lib/staff-troy";
 import { getClientIp } from "@/lib/auth-rate-limit";
-import { recordStaffSkillRun, offeredDrafts, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
+import { recordStaffSkillRun, offeredDrafts, MAX_STAFF_DRAFT_CARDS, staffAnswerStreamLines, checkStaffDrafts, namedParticipantIds, resolveTypedNames, staffSubjectPrompt, streamedStaffResults, checkStreamedDrafts, staffTypedWords } from "@/lib/staff-skill-run";
 import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
 import { priorToolRecordResults } from "@/lib/staff-prior-records";
@@ -513,6 +513,8 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     const cardRefused = generated.steps.some((s) => (s.toolResults ?? []).some((r) => STAFF_CARD_TOOLS.has(nameOf(r)) && /^(refused|unavailable)$/.test(statusOf(r))));
     const readOk = generated.steps.some((s) => (s.toolResults ?? []).some((r) => statusOf(r) === "ok" && !STAFF_CARD_TOOLS.has(nameOf(r))));
     let retried = false;
+    // The words that decide the cards: the final step's, or the finish pass's when it replaced the answer (review G4).
+    let finalWords = generated.text;
     if (staffActor && cardRefused && readOk && answer.length < 200) {
       // The conversation so far is UI messages (parts, toolInvocations); the model's own steps come back
       // as CoreMessages, some with role "tool". The SDK converts an array as one kind or the other, so the
@@ -538,7 +540,7 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
         });
         console.info("[staff-steps] finish", stepShape(finished.steps));
         const fuller = finished.text.trim();
-        if (fuller.length > answer.length) { answer = replyOrFallback(fuller); retried = true; }
+        if (fuller.length > answer.length) { answer = replyOrFallback(fuller); finalWords = fuller; retried = true; }
       } catch (err) {
         console.error("[staff-steps] finish failed, first answer kept:", err instanceof Error ? err.message : err);
       }
@@ -627,9 +629,11 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // shown where the staff member reads it.
     const { checkOrgClaimsDeterministic } = await import("@/lib/org-output-verify");
     // A draft the final step withdrew is no card either (review F5): the prose rule and the card rule
-    // read the same final words, so "discard that draft" removes the button with the sentence.
+    // read the same final words, so "discard that draft" removes the button with the sentence. Those
+    // words are the answer the staff member sees (finish pass included, review G4), and the card cap
+    // comes after the withdrawal so a replacement offered third still reaches it (review G2).
     const draftCheck = checkStaffDrafts(
-      draftsAfterFinal(offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])), generated.text),
+      draftsAfterFinal(offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])), finalWords).slice(0, MAX_STAFF_DRAFT_CARDS),
       (body) => checkOrgClaimsDeterministic(body, facts, userSaid || undefined),
     );
     if (draftCheck.notice) out += draftCheck.notice;

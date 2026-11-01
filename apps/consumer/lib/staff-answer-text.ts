@@ -68,18 +68,30 @@ const draftOffered = (steps: readonly Step[]) => steps.some((s) => (s.toolResult
 /**
  * A first-person sentence that says a card tool completed something it never does: I opened the page,
  * I placed/put the draft on their page, I added/invited the person, the draft is now on their page.
- * Review E1 (2026-11-01): only the model's own completion claims; "Jean opened the handoff" and
- * "review the ID task on his page" are not matched. Review F2: the verb has to take the card's own
- * object (a page, a draft, a person), so "I added the source date to this draft" stays; any run of
- * qualifiers ("I've already opened his page") and the curly apostrophe are matched. Case-sensitive on
- * purpose: "I" is the model, and a person's name is the capitalised object of "added" or "invited".
+ * None of the card tools has that effect (navigate.ts returns navigated:false, drafts are unsaved), so the
+ * claim is false whatever the tool returned. Review E1 (2026-11-01): only the model's own completion
+ * claims; "Jean opened the handoff" and "review the ID task on his page" are not matched. Review F2: the
+ * verb has to take the card's own object (a page, a draft, a person). Review G3: a capitalised word is
+ * not a person ("I added ID to this checklist", "I added Monday to the draft" stay), so "added" counts
+ * only with where the person went (to your caseload, as a participant); a draft counts only when it is
+ * put somewhere it never goes (on his page, in her record), so "I have placed the draft below" stays;
+ * and a name can be two or three words ("I opened Jean Valjean's page", "the draft is now on Jean's page").
  */
 const FIRST_PERSON = String.raw`\bI(?:['’]ve| have|\s+(?:just|already|now))*\s+`;
-const OPENED_PAGE = String.raw`(?:opened|navigated to|went to)\s+(?:[A-Z]\w*['’]s\s+|(?:his|her|their|the|that|this)\s+)?(?:participant\s+)?page\b`;
-const PLACED_DRAFT = String.raw`(?:placed|put)\s+(?:(?:the|this|that|your|a)\s+)?(?:draft|note|check-in|message)\b`;
-const ADDED_PERSON = String.raw`(?:added|invited)\s+(?:him|her|them|the person|a person|the participant|[A-Z][\w'’-]*)\b`;
-const DRAFT_ON_PAGE = String.raw`\b(?:[Tt]he |[Tt]his |[Tt]hat |[Yy]our )?(?:draft|note|check-in|message)\s+(?:is|has been|was)\s+(?:now\s+)?(?:placed|put)?\s*on\s+(?:his|her|their|the|that)\s+page\b`;
-const PAGE_OPENED = String.raw`\b(?:[Hh]is|[Hh]er|[Tt]heir|[Tt]he)\s+page\s+(?:is|has been|was)\s+(?:now\s+)?opened?\b`;
+// A name: up to three capitalised words, each with a lowercase letter after the capital (not "ID", "SSN"),
+// "O’Neil" and "Jean-Luc" included. Each word is a fixed shape, so a long run of capitals or apostrophes
+// is read once (timing check 2026-11-01: the looser [\w'’-]* was quadratic on 100k characters).
+const NAME_WORD = String.raw`[A-Z](?:[a-z]+|['’][A-Z][a-z]+)(?:-[A-Z][a-z]+)?`;
+const NAME = String.raw`(?:${NAME_WORD} ){0,2}${NAME_WORD}`;
+const WHOSE = String.raw`(?:his|her|their|the|that|this|${NAME}['’]s)`;
+const PAGE = String.raw`(?:participant\s+)?(?:page|profile|record|file|case notes)\b`;
+const OPENED_PAGE = String.raw`(?:opened|navigated to|went to)\s+(?:${WHOSE}\s+)?(?:participant\s+)?(?:page|profile)\b`;
+const PLACED_DRAFT = String.raw`(?:placed|put|saved|posted|added)\s+(?:(?:the|this|that|your|a)\s+)?(?:draft|note|check-in|message)\s+(?:on|in|into|to)\s+(?:${WHOSE}\s+)?${PAGE}`;
+const PERSON_PRONOUN = String.raw`(?:him|her|them|the person|a person|the participant)\b`;
+const WHERE_ADDED = String.raw`\s+(?:to|as|into|onto)\s+(?:(?:your|the|their|our|this|my|a|an)\s+)?(?:caseload|org|organi[sz]ation|team|people|roster|program|participants?|Refinery)\b`;
+const ADDED_PERSON = String.raw`(?:(?:added|invited)\s+${PERSON_PRONOUN}|invited\s+${NAME}\b|added\s+${NAME}${WHERE_ADDED})`;
+const DRAFT_ON_PAGE = String.raw`\b(?:[Tt]he |[Tt]his |[Tt]hat |[Yy]our )?(?:draft|note|check-in|message)\s+(?:is|has been|was)\s+(?:now\s+)?(?:(?:placed|put|saved)\s+)?(?:on|in)\s+${WHOSE}\s+${PAGE}`;
+const PAGE_OPENED = String.raw`\b(?:[Hh]is|[Hh]er|[Tt]heir|[Tt]he|${NAME}['’]s)\s+page\s+(?:is|has been|was)\s+(?:now\s+)?open(?:ed)?\b`;
 const COMPLETED_CLAIM = new RegExp(`${FIRST_PERSON}(?:${OPENED_PAGE}|${PLACED_DRAFT}|${ADDED_PERSON})|${DRAFT_ON_PAGE}|${PAGE_OPENED}`);
 export function withoutCompletedClaims(text: string): string {
   return text
@@ -95,15 +107,19 @@ export function withoutCompletedClaims(text: string): string {
  * withdrawal names the thing withdrawn right after the verb ("discard that draft"), "do not send" counts
  * only with a supersession word ("don't send the earlier draft"; "do not send this draft until you have
  * reviewed it" is an instruction), "forget" is out ("don't forget the draft is unsaved"), and "that draft
- * was wrong" / "use this replacement" are in. A regex is still a heuristic; the card side is gated by
- * draftsAfterFinal below, so a wrong call here costs prose, never an action.
+ * was wrong" / "use this replacement" are in. Review G1: "discard both drafts", "neither draft should be
+ * used" and "discard the revised draft" are in too. A regex is still a heuristic, and it decides the
+ * cards as well as the prose (draftsAfterFinal), so draftsAfterFinal leans to no card when unsure.
  */
 const SUPERSEDED = String.raw`(?:earlier|previous|prior|above|first|old|original)`;
-const THING = String.raw`(?:draft|answer|version|message|text|reply)`;
+const WHICH = String.raw`(?:that|the|this|my|both|all|either|any|each|every|second|last|latest|later|revised|new|${SUPERSEDED})`;
+const THING = String.raw`(?:draft|answer|version|message|text|reply)s?`;
 const WITHDRAWS = new RegExp([
-  String.raw`\b(?:discard|disregard|ignore|scrap|do not use|don['’]t use)\s+(?:(?:that|the|this|my|${SUPERSEDED})\s+)+${THING}\b`,
-  String.raw`\b(?:do not send|don['’]t send|never send)\s+(?:(?:that|the|this|my)\s+)*${SUPERSEDED}\s+${THING}\b`,
-  String.raw`\b(?:that|the|this|my|${SUPERSEDED})\s+${THING}\s+(?:was|is)\s+(?:wrong|incorrect|mistaken|not right)\b`,
+  String.raw`\b(?:discard|disregard|ignore|scrap|do not use|don['’]t use)\s+(?:(?:${WHICH}|of)\s+)+${THING}\b`,
+  String.raw`\b(?:do not send|don['’]t send|never send)\s+(?:(?:that|the|this|my)\s+)*(?:${SUPERSEDED}|both|either|any)\s+${THING}\b`,
+  String.raw`\b(?:that|the|this|my|${SUPERSEDED})\s+${THING}\s+(?:was|is|were|are)\s+(?:wrong|incorrect|mistaken|not right)\b`,
+  String.raw`\bneither\s+(?:draft|version|one)\b`,
+  String.raw`\bnone of (?:the|these|those|my) (?:drafts|versions)\b`,
   String.raw`\buse (?:this|the) (?:replacement|corrected|revised|new)\b`,
   String.raw`\b(?:I (?:need|have) to|let me) correct\b`,
   String.raw`\bcorrection:`,
@@ -112,14 +128,42 @@ const WITHDRAWS = new RegExp([
 ].join("|"), "i");
 export const finalWithdraws = (final: string) => WITHDRAWS.test(final);
 
+// Per clause of the final: does it take something back or keep something, and which drafts does it name?
+const TAKES_BACK = /\b(?:discard|disregard|ignore|scrap|drop|delete|do not use|don['’]t use|do not send|don['’]t send|never send|wrong|incorrect|mistaken|not right|neither|none of)\b/i;
+const KEEPS = /\b(?:use|keep|send|stands|is right|is correct|go with)\b/i;
+const NAMES_ALL = /\b(?:both|all|either|any|each|every|neither|none)\b/i;
+const NAMES_EARLIER = new RegExp(String.raw`\b(?:${SUPERSEDED}|initial)\b`, "i");
+const NAMES_LATER = /\b(?:second|last|latest|later|revised|new|replacement|corrected|updated|this one)\b/i;
+
 /**
- * The drafts the staff member may act on once the final step has spoken (review F5). When the final
- * withdraws, the drafts offered before it are not cards any more: with two offers the later one is the
- * replacement and stays, with one offer nothing stays. Otherwise every checked draft stays.
+ * The drafts the staff member may act on once the final step has spoken (reviews F5, G1). A draft is a
+ * card only if the final did not take it back. The final is read clause by clause: "discard both" /
+ * "neither draft" takes back every draft; "discard the earlier draft" takes back all but the last;
+ * "discard the revised draft" takes back the last. With more than one offer the last stays only when no
+ * clause took it back and either an earlier one was named as withdrawn or a clause keeps the later one
+ * ("use this replacement", "the second one stands"); the first of two stays only when a clause keeps it
+ * and the last is taken back. Anything else that withdraws ("I need to correct my answer", "that draft
+ * was wrong" with nothing kept) leaves no card: a missing card costs a retype, a wrong one an action.
  */
 export function draftsAfterFinal<T>(drafts: readonly T[], finalText: string): T[] {
-  if (!finalWithdraws(String(finalText ?? ""))) return [...drafts];
-  return drafts.length > 1 ? [drafts[drafts.length - 1]] : [];
+  const final = String(finalText ?? "");
+  if (!finalWithdraws(final)) return [...drafts];
+  if (drafts.length === 0) return [];
+  let backAll = false, backEarlier = false, backLater = false, keepEarlier = false, keepLater = false;
+  for (const clause of final.split(/(?<=[.!?;:])\s+|\s*;\s*|,?\s+but\s+/i)) {
+    if (TAKES_BACK.test(clause)) {
+      if (NAMES_ALL.test(clause)) backAll = true;
+      if (NAMES_EARLIER.test(clause)) backEarlier = true;
+      if (NAMES_LATER.test(clause)) backLater = true;
+    } else if (KEEPS.test(clause)) {
+      if (NAMES_EARLIER.test(clause)) keepEarlier = true;
+      if (NAMES_LATER.test(clause)) keepLater = true;
+    }
+  }
+  if (backAll || (backEarlier && backLater) || drafts.length === 1) return [];
+  if (backLater) return drafts.length === 2 && keepEarlier ? [drafts[0]] : [];
+  if (backEarlier || keepLater) return [drafts[drafts.length - 1]];
+  return [];
 }
 
 /** The nudge line stays only when the nudge tool itself answered ok this turn (its buttons render then); otherwise it is cut (review R3 S2). */

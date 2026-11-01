@@ -334,7 +334,7 @@ describe("review F (2026-11-01): the finish pass at the SDK boundary, narrower c
     assert.deepEqual(draftsAfterFinal([a, b], "Discard the earlier draft; the second one stands."), [b]);
     assert.deepEqual(draftsAfterFinal([a, b], "Both drafts are unsaved, in this reply."), [a, b]);
     const route = read("../../app/api/assistant/route.ts");
-    assert.match(route, /draftsAfterFinal\(offeredDrafts\([\s\S]{0,200}\), generated\.text\)/);
+    assert.match(route, /draftsAfterFinal\(offeredDrafts\([\s\S]{0,200}\), finalWords\)/);
     const chat = read("../../components/AssistantChat.tsx");
     assert.match(chat, /staffDrafts\.map\(\(draftFor, draftIdx\)/);
   });
@@ -343,5 +343,71 @@ describe("review F (2026-11-01): the finish pass at the SDK boundary, narrower c
     assert.match(route, /STAFF_CARD_TOOLS\.has\(nameOf\(r\)\) && \/\^\(refused\|unavailable\)\$\/\.test\(statusOf\(r\)\)/);
     assert.match(route, /response_length: answer\.length/);
     assert.match(route, /finish_pass_used: retried/);
+  });
+});
+
+describe("review G (2026-11-01): withdrawn drafts, the cap after selection, names that are names, the selected answer", () => {
+  const a = { toolCallId: "a" }, b = { toolCallId: "b" }, c = { toolCallId: "c" };
+  it("G1: a draft the final takes back is never a card; a replacement stays only when nothing took it back", async () => {
+    const { draftsAfterFinal, finalWithdraws } = await import("../staff-answer-text");
+    // Codex's repros: both withdrawn, neither used, the later one withdrawn.
+    assert.deepEqual(draftsAfterFinal([a, b], "Discard the first draft and the second draft."), []);
+    assert.deepEqual(draftsAfterFinal([a, b], "Discard both drafts."), []);
+    assert.deepEqual(draftsAfterFinal([a, b], "I need to correct my answer. Neither draft should be used."), []);
+    assert.deepEqual(draftsAfterFinal([a, b], "Keep the first draft. Discard the revised draft."), [a]);
+    assert.deepEqual(draftsAfterFinal([a, b], "Don't use either draft."), []);
+    assert.deepEqual(draftsAfterFinal([a, b], "Discard the first draft but keep the second."), [b]);
+    // A withdrawal with no draft kept leaves no card, even with two offers (they may be independent).
+    assert.deepEqual(draftsAfterFinal([a, b], "I need to correct my answer: the dates were not in what I read."), []);
+    assert.deepEqual(draftsAfterFinal([a, b], "That draft was wrong."), []);
+    // A real replacement: the earlier one named as withdrawn, or the later one kept.
+    assert.deepEqual(draftsAfterFinal([a, b], "Discard the earlier draft; the second one stands."), [b]);
+    assert.deepEqual(draftsAfterFinal([a, b], "That draft was wrong; use this replacement."), [b]);
+    assert.deepEqual(draftsAfterFinal([a, b, c], "Discard the earlier draft; use this replacement."), [c]);
+    // Two independent offers and no withdrawal: both stay.
+    assert.deepEqual(draftsAfterFinal([a, b], "Two versions are below, one short and one longer. Both are unsaved."), [a, b]);
+    assert.deepEqual(draftsAfterFinal([a, b], "Use whichever reads better; neither is saved or sent."), [a, b]);
+    for (const no of ["Don't forget the draft is unsaved.", "Please do not send this draft until you have reviewed it.", "Both drafts are unsaved, in this reply."]) {
+      assert.equal(finalWithdraws(no), false, no);
+    }
+  });
+  it("G2: every offer reaches the selector; the card cap comes after it", async () => {
+    const { offeredDrafts, MAX_STAFF_DRAFT_CARDS } = await import("../staff-skill-run");
+    const { draftsAfterFinal } = await import("../staff-answer-text");
+    const P = "11111111-1111-4111-8111-111111111111";
+    const offers = ["first", "second", "final-replacement"].map((toolCallId) => ({ toolCallId, toolName: "offer_staff_draft", args: {}, result: { status: "draft_only", saved: false, sent: false, participantId: P, body: toolCallId } }));
+    assert.equal(offeredDrafts(offers).length, 3);
+    assert.deepEqual(draftsAfterFinal(offeredDrafts(offers), "Discard the earlier draft; use this replacement.").slice(0, MAX_STAFF_DRAFT_CARDS).map((d) => d.toolCallId), ["final-replacement"]);
+    assert.deepEqual(draftsAfterFinal(offeredDrafts(offers), "Three drafts, all unsaved.").slice(0, MAX_STAFF_DRAFT_CARDS).map((d) => d.toolCallId), ["first", "second"]);
+    const route = read("../../app/api/assistant/route.ts");
+    assert.match(route, /draftsAfterFinal\(offeredDrafts\([\s\S]{0,200}\), finalWords\)\.slice\(0, MAX_STAFF_DRAFT_CARDS\)/);
+  });
+  it("G3: a capitalised word is not a person and a draft below is not on a page; multi-word names are names", async () => {
+    const { withoutCompletedClaims } = await import("../staff-answer-text");
+    for (const keep of ["I added ID to this checklist.", "I added Monday to the draft.", "I have placed the draft below for you to review.", "I put the draft below.", "I added the source date to this draft.", "I invited feedback in the last line."]) {
+      assert.equal(withoutCompletedClaims(keep), keep, keep);
+    }
+    for (const cut of ["I opened Jean Valjean’s page.", "I opened Jean Valjean's profile.", "The draft is now on Jean’s page.", "The note is in Marqus Relly's record.", "Jean Valjean's page is now open.", "I added Jean Valjean to your caseload.", "I added Circe as a participant.", "I invited Jean Valjean.", "I saved the check-in to his page.", "I've put the note on Jean's page."]) {
+      assert.equal(withoutCompletedClaims(`${cut} Jean needs a call today.`), "Jean needs a call today.", cut);
+    }
+  });
+  it("G timing: every cut and the withdrawal reader stay linear on hostile input", async () => {
+    const { withoutCompletedClaims, finalWithdraws, draftsAfterFinal } = await import("../staff-answer-text");
+    const hostile = [
+      "I opened " + "Abc ".repeat(20000) + "page", "I added " + "Jean-Jean'".repeat(10000) + " to", "I" + " just".repeat(20000) + " x",
+      "discard " + "the ".repeat(20000) + "x", "discard " + "of the ".repeat(10000) + "x", "The draft is " + " ".repeat(50000) + "on",
+      "I opened " + "A’".repeat(20000), "Discard the first draft; ".repeat(5000),
+    ];
+    for (const v of hostile) {
+      const t = performance.now();
+      withoutCompletedClaims(v); finalWithdraws(v); draftsAfterFinal([a, b], v);
+      assert.ok(performance.now() - t < 250, `${v.slice(0, 30)}... took ${(performance.now() - t).toFixed(0)}ms`);
+    }
+  });
+  it("G4: the card gate reads the answer the staff member sees, finish pass included", () => {
+    const route = read("../../app/api/assistant/route.ts");
+    assert.match(route, /let finalWords = generated\.text;/);
+    assert.match(route, /answer = replyOrFallback\(fuller\); finalWords = fuller; retried = true;/);
+    assert.doesNotMatch(route, /draftsAfterFinal\([\s\S]{0,300}generated\.text\)/);
   });
 });
