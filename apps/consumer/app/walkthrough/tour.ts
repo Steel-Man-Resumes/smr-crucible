@@ -14,8 +14,10 @@ import type { RecordChoice } from "@/lib/record-choice";
 export type Box = [number, number, number, number];
 
 export type SceneId =
+  | "employer-proof" | "program-intro" | "program-today" | "program-consent" | "program-outcome" | "program-proof"
   | "title"
   | "forge-intro"
+  | "forge-line"
   | "finish-page"
   | "finish-story"
   | "finish-checks"
@@ -39,11 +41,18 @@ export type DomScene = { kind: "dom"; w: number; h: number; note?: string };
 const IMG = (src: string, w: number, h: number, note: string): ImgScene => ({ kind: "img", src: `/walkthrough/${src}.webp`, w, h, note });
 const LIVE = "Captured from the live site, Oct 19, 2026";
 const FINISH = "Forge test run, Oct 14, 2026 · fictional person";
-const ORG = "Demo program workspace · sample data, fictional people";
+const ORG = "Demo capture, Oct 5, 2026 · fictional people";
 const ART = "Illustration from steelmanresumes.com";
 
 export const SCENES: Record<SceneId, ImgScene | DomScene> = {
+  "employer-proof": { kind: "dom", w: 1280, h: 800, note: LIVE },
+  "program-intro": { kind: "dom", w: 1280, h: 800, note: ORG },
+  "program-today": { kind: "dom", w: 1280, h: 800, note: ORG },
+  "program-consent": { kind: "dom", w: 1280, h: 800, note: ORG },
+  "program-outcome": { kind: "dom", w: 1280, h: 800, note: ORG },
+  "program-proof": { kind: "dom", w: 1280, h: 800, note: ORG },
   title: { kind: "dom", w: 1280, h: 800 },
+  "forge-line": { kind: "dom", w: 1280, h: 800, note: "Live site capture, Oct 19, 2026 · fictional example" },
   "forge-intro": IMG("forge-intro", 1600, 1600, LIVE),
   "finish-page": IMG("finish-page", 1103, 926, FINISH),
   "finish-story": IMG("finish-story", 1103, 240, FINISH),
@@ -92,58 +101,52 @@ export type Step = {
   body: string;
   /** Extra time on screen, ms. */
   extra?: number;
+  /** Complete beat duration, including the reveal and reading hold. */
+  duration?: number;
 };
 
 export const STEPS: Step[] = [
-  { chapter: "idea", scene: "title", title: "A resume is one move in the hiring game.", body: "Hiring is a process, and most of it was built to serve the employer. With a record it cuts harder. Here is how Steel Man helps you play it smart.", extra: 800 },
+  { chapter: "idea", scene: "title", title: "A resume is one move in the hiring game.", body: "Hiring is a process, and most of it was built to serve the employer. With a record it cuts harder. Here is how Steel Man helps you play it smart.", duration: 6000 },
 
-  { chapter: "forge", scene: "forge-intro", zoom: 1, title: "Start in the Forge", body: "Free. You sign in first, so your work is saved." },
-  { chapter: "forge", scene: "forge-intro", spot: [0.17, 0.08, 0.64, 0.24], title: "Meet t.ROY, the coach", body: "It listens while you tell it what you did, then helps write a resume you can stand behind." },
-  { chapter: "forge", scene: "forge-intro", spot: [0.17, 0.375, 0.6, 0.17], click: [0.5, 0.425], title: "Bring what you have", body: "Upload an old resume, snap a photo, paste it, or start from nothing." },
-  { chapter: "forge", scene: "forge-intro", spot: [0.225, 0.5911, 0.55, 0.3543], title: "A rough line gives us a question", body: "Watch one line get stronger." },
-  { chapter: "forge", scene: "forge-intro", spot: [0.225, 0.6693, 0.55, 0.0522], title: "The old line", body: "Did safety audits." },
-  { chapter: "forge", scene: "forge-intro", spot: [0.225, 0.7215, 0.55, 0.0522], title: "t.ROY asks", body: "What did you check?" },
-  { chapter: "forge", scene: "forge-intro", spot: [0.225, 0.7737, 0.55, 0.0522], title: "The person answers", body: "In their own words. The detail comes from them." },
-  { chapter: "forge", scene: "forge-intro", spot: [0.225, 0.8259, 0.55, 0.0848], title: "The stronger line", body: "Checked exit routes each shift. Nothing invented to fill a gap." },
-  { chapter: "forge", scene: "finish-page", zoom: 1, title: "What comes out", body: "The resume, and beside it a short list of fixes." },
-  { chapter: "forge", scene: "finish-page", spot: [0.645, 0.06, 0.35, 0.19], click: [0.69, 0.205], title: "Every change is named", body: "Anything t.ROY changed is shown, with what was not on the person's page." },
-  { chapter: "forge", scene: "finish-page", spot: [0.645, 0.45, 0.35, 0.39], title: "Numbers only if you know them", body: "A number sticks with the reader. Only add one you know. Skipping never stops you from finishing." },
-  { chapter: "forge", scene: "finish-story", spot: [0.01, 0.12, 0.98, 0.68], title: "The story behind the resume", body: "t.ROY's reading of the work. You decide whether it sounds like you." },
-  { chapter: "forge", scene: "finish-checks", spot: [0.0, 0.11, 1.0, 0.8], title: "Checked before it goes out", body: "Hard rules, dates and wording, a second check, keywords and page length." },
+  { chapter: "forge", scene: "forge-intro", zoom: 1, title: "Start in the Forge", body: "Bring what you have. Start with the work you remember.", duration: 5000 },
+  { chapter: "forge", scene: "forge-intro", spot: [0.17, 0.08, 0.64, 0.24], title: "Meet t.ROY, the coach", body: "Tell it what you did. It helps you put the work into words.", duration: 5500 },
+  { chapter: "forge", scene: "forge-intro", spot: [0.17, 0.375, 0.6, 0.17], click: [0.5, 0.425], title: "Bring what you have", body: "An old resume, a photo, or just what you remember.", duration: 5000 },
+  { chapter: "forge", scene: "forge-line", title: "The detail comes from you", body: "Your answer gives the line its detail. Nothing added to fill a gap.", duration: 11500 },
+
+  { chapter: "forge", scene: "finish-page", zoom: 1, title: "What comes out", body: "The resume, and beside it a short list of fixes.", duration: 5000 },
+  { chapter: "forge", scene: "finish-page", spot: [0.645, 0.06, 0.35, 0.19], click: [0.69, 0.205], title: "Every change is named", body: "Anything t.ROY changed is shown, with what was not on the person's page.", duration: 7000 },
+  { chapter: "forge", scene: "finish-page", spot: [0.645, 0.45, 0.35, 0.39], title: "Numbers only if you know them", body: "Only add a number you know. Skipping never stops you from finishing.", duration: 7000 },
+  { chapter: "forge", scene: "finish-checks", spot: [0.0, 0.11, 1.0, 0.8], title: "Checked before it goes out", body: "The checks run before you download. Read what they found.", duration: 7000 },
 
   { chapter: "record", scene: "record", zoom: 1, title: "Your record, your call", body: "If some of the work happened inside, the person chooses how it shows. This is the real card from the Forge.", extra: 400 },
-  { chapter: "record", scene: "record", spot: "record-card", click: "[data-testid=record-choice-state]", action: "state", title: "Show the work, name the state", body: "The job stays. The employer reads as the State of Pennsylvania, not the facility.", extra: 600 },
-  { chapter: "record", scene: "record", spot: "record-changed", title: "The page follows the choice", body: "The rewrite runs on the written page, so it can never say one thing and print another." },
-  { chapter: "record", scene: "record", spot: "record-page", action: "off", click: "[data-testid=record-choice-off]", title: "Or leave it off", body: "The usual Steel Man move. You bring it up in person, at the right time.", extra: 600 },
+  { chapter: "record", scene: "record", zoom: 1, click: "[data-testid=record-choice-state]", action: "state", title: "Show the work, name the state", body: "The job stays. The employer reads as the State of Pennsylvania, not the facility.", extra: 600 },
+  { chapter: "record", scene: "record", zoom: 1, action: "off", click: "[data-testid=record-choice-off]", title: "Or leave it off", body: "The usual Steel Man move. You bring it up in person, at the right time.", extra: 600 },
   { chapter: "record", scene: "record", spot: "confidence", action: "why", click: "[data-testid=confidence-meter] button", title: "How sure is each line?", body: "Source confidence says how much of the page rests on the person's own words, and why.", extra: 600 },
 
-  { chapter: "refinery", scene: "art-tailor", zoom: 1.04, drift: 1.14, focus: [0.4, 0.45], title: "The Refinery: one free account", body: "Everything from the Forge comes along. The Application Tailor aims the resume and a cover letter at one job, from the person's own history." },
-  { chapter: "refinery", scene: "art-disclosure", zoom: 1.04, drift: 1.14, focus: [0.45, 0.4], title: "Disclosure Planner", body: "When to bring up the record, what to say, and what to say next. Coaching, not legal advice." },
-  { chapter: "refinery", scene: "art-practice", zoom: 1.04, drift: 1.14, focus: [0.4, 0.45], title: "Interview Practice", body: "By text, or out loud with a live voice interviewer, with feedback on what landed." },
-  { chapter: "refinery", scene: "tools", zoom: 1, title: "And the rest of the job search", body: "Every tool in one place, with t.ROY on every page." },
-  { chapter: "refinery", scene: "tools", spot: "tool-job-board", title: "Job Board", body: "If a job source is down, it says so, instead of telling you there are no jobs." },
-  { chapter: "refinery", scene: "tools", spot: "tool-employers-that-hire", title: "Employers That Hire", body: "Dated public evidence, and a mark that expires unless someone checks it again." },
-  { chapter: "refinery", scene: "tools", spot: "tool-applications", title: "Applications", body: "Saved to offer, with follow-ups that come due on time." },
+  { chapter: "refinery", scene: "art-tailor", zoom: 1, focus: [0.4, 0.45], title: "Put the resume to work", body: "Everything from the Forge comes along. The Application Tailor aims the resume and a cover letter at one job, from the person's own history." },
+  { chapter: "refinery", scene: "art-disclosure", zoom: 1, focus: [0.45, 0.4], title: "Disclosure Planner", body: "When to bring up the record, what to say, and what to say next. Coaching, not legal advice." },
+  { chapter: "refinery", scene: "art-practice", zoom: 1, focus: [0.4, 0.45], title: "Interview Practice", body: "By text, or out loud with a live voice interviewer, with feedback on what landed." },
+  { chapter: "refinery", scene: "tools", zoom: 1, title: "Pick what you need next", body: "Find the tools below the tour. Take them one at a time.", duration: 5000 },
 
   { chapter: "help", scene: "map", zoom: 1, title: "Who hires, state by state", body: "Pick a state: the law in plain words, employers we checked, and local help." },
   { chapter: "help", scene: "state-montana", spot: [0.0085, 0.0758, 0.7747, 0.1934], title: "Straight talk about the law", body: "Each state page says what the law does, and does not, do for you." },
-  { chapter: "help", scene: "state-montana", spot: [0.0222, 0.7022, 0.9659, 0.2907], title: "Employers, with proof", body: "Each employer mark rests on dated public evidence." },
-  { chapter: "help", scene: "state-montana", spot: [0.0222, 0.925, 0.96, 0.034], title: "Checked, and it expires", body: "The day we checked and the day the mark expires. Read the source yourself." },
+  { chapter: "help", scene: "employer-proof", title: "Employers, with proof", body: "Read the source, the date we checked, and when the mark expires.", duration: 10500 },
   { chapter: "help", scene: "local-help", spot: [0.0, 0.255, 1.0, 0.105], title: "Help near you", body: "A ride, a meal, ID, a place to stay. Search by place and need." },
   { chapter: "help", scene: "local-help", spot: [0.0192, 0.4857, 0.2316, 0.0424], title: "Honestly labeled", body: "A means we checked the page ourselves. B means it is listed and we have not finished checking." },
   { chapter: "help", scene: "local-help", spot: [0.1583, 0.929, 0.2137, 0.0448], click: true, title: "Keep it with the plan", body: "Save a listing to the Refinery and it stays with the person's plan." },
 
-  { chapter: "programs", scene: "org-13", spot: [0.19, 0.11, 0.79, 0.045], title: "For programs: Crucible", body: "A staff workspace beside each person. This is the demo workspace with sample data." },
-  { chapter: "programs", scene: "org-13", spot: [0.28, 0.36, 0.61, 0.57], title: "Today, sorted by why", body: "Interviews coming up, people gone quiet, people who never started." },
-  { chapter: "programs", scene: "org-14", spot: [0.2, 0.725, 0.76, 0.07], title: "Consent first", body: "Staff see only what each person chose to share, one item at a time. Never disclosure plans or interview answers." },
-  { chapter: "programs", scene: "org-15", spot: [0.28, 0.5, 0.605, 0.42], title: "Record the outcome", body: "A placement goes on file with the date and the employer, and the person can see it." },
-  { chapter: "programs", scene: "org-16", spot: [0.235, 0.24, 0.69, 0.235], title: "Proof for funders", body: "Counted only over what participants agreed to share, and ready to download." },
+  { chapter: "programs", scene: "program-intro", duration: 7500, title: "For programs: Crucible", body: "A staff workspace beside each person. This is the demo workspace with sample data." },
+  { chapter: "programs", scene: "program-today", duration: 10500, title: "Today, sorted by why", body: "Interviews coming up, people gone quiet, people who never started." },
+  { chapter: "programs", scene: "program-consent", duration: 10500, title: "Consent first", body: "Staff see only what each person chose to share, one item at a time. Never disclosure plans or interview answers." },
+  { chapter: "programs", scene: "program-outcome", duration: 10000, title: "Record the outcome", body: "A placement goes on file with the date and the employer, and the person can see it." },
+  { chapter: "programs", scene: "program-proof", duration: 10000, title: "Proof for funders", body: "Counted only over what participants agreed to share, and ready to download." },
 
-  { chapter: "programs", scene: "close", title: "And then what?", body: "Here's the whole road. Free for the person using it.", extra: 2500 },
+  { chapter: "programs", scene: "close", title: "Your next move", body: "Start with the work you know.", duration: 8000 },
 ];
 
 /** Reading pace: a beat stays long enough to read its caption, never less than 3.2 s. */
 export function holdMs(s: Step): number {
+  if (s.duration) return s.duration;
   const words = `${s.title} ${s.body}`.split(/\s+/).length;
   return Math.min(8000, Math.max(3200, 1500 + words * 200)) + (s.extra ?? 0);
 }
