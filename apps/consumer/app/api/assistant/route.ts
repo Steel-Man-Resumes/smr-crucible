@@ -74,7 +74,8 @@ import {
 
 // Tool round-trips (job search + enrichment can take 10-20s cold) need more
 // than the old 30s ceiling.
-export const maxDuration = 60;
+// 120 s (was 60): the staff answer, its finish pass and a 30 s checker must all fit (Troy 11/01: no timeouts).
+export const maxDuration = 120;
 
 const RATE_LIMIT_MESSAGE =
   "You've used all your free AI calls for today. Come back tomorrow, or enter a partner code in Settings for more.";

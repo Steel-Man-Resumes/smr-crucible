@@ -892,7 +892,8 @@ export async function checkOrgClaimsWithModel(
   if (!key) return null;
   const prompt = buildOrgVerificationPrompt(text, facts, userSaid);
 
-  const model = process.env.ORG_VERIFY_MODEL || "gpt-4.1";
+  // Lite model by default (Troy 11/01, DECISIONS.md): gpt-4.1 only through ORG_VERIFY_MODEL after a measured, dramatic gain.
+  const model = process.env.ORG_VERIFY_MODEL || "gpt-4.1-mini";
   const { runOrgVerificationCall } = await import("./org-verification-call");
   const problems = await runOrgVerificationCall(model, prompt, key, {
     fetch,
