@@ -38,7 +38,10 @@ import { gateStaffMessages, STAFF_INPUT_NOTICE } from "@/lib/staff-ai-safety";
 import { withStaffToolRecords, buildToolRecord, withToolRecordLine, staffToolNameSet, dropToolRecordEcho } from "@/lib/staff-tool-record";
 import { priorToolRecordResults } from "@/lib/staff-prior-records";
 import { staffHomeStatePrompt } from "@/lib/staff-org-place";
-import { staffAnswerText } from "@/lib/staff-answer-text";
+import { staffAnswerText, CARD_TOOLS as STAFF_CARD_TOOLS } from "@/lib/staff-answer-text";
+
+/** The one-line ask that follows a refused card when the model made the refusal its answer (see FINISH THE ANSWER below). */
+const FINISH_THE_ANSWER = "The button was refused; that is not the answer and nothing to correct. Answer my question in full from the results you already read in this conversation: who, the reason, the action to take. Call no tools. End with one clause saying I can open the person from People.";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
 import { streamText } from "ai";
@@ -488,15 +491,44 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     // A safety decline comes back as finishReason "unknown" with no text. Never
     // send a staff member an empty answer; say it plainly instead.
     // Every step's words, never a card line alone (lib/staff-answer-text.ts; demo fix T2 round 3).
-    const answer = replyOrFallback(staffAnswerText(generated.steps, generated.text));
+    let answer = replyOrFallback(staffAnswerText(generated.steps, generated.text));
     // The shape of the model's steps, no content: how long each step's text was, which tools it
     // called, each result's status. Tells a model refusal apart from text the assembler dropped
     // (Codex D review, 2026-11-01: ROOM-10 and DEMO-09 could not be placed without this).
-    console.info("[staff-steps]", JSON.stringify(generated.steps.map((s) => ({
+    const stepShape = (steps: typeof generated.steps) => JSON.stringify(steps.map((s) => ({
       text: String(s.text ?? "").length,
       calls: (s.toolCalls ?? []).map((c) => (c as { toolName?: string }).toolName ?? "?"),
       results: (s.toolResults ?? []).map((r) => `${(r as { toolName?: string }).toolName ?? "?"}:${String(((r as { result?: { status?: unknown } }).result)?.status ?? "-")}`),
-    }))));
+    })));
+    console.info("[staff-steps]", stepShape(generated.steps));
+    // FINISH THE ANSWER (preview E step log, 2026-11-01). ROOM-10 and ROOM-13 were a model that read
+    // the queue, asked for a button that was refused, and wrote only "open Jean from People" (steps of
+    // 0, 0 and 49 characters): the refusal became the answer. When a read returned ok, a card was refused
+    // and the words are that short, the model is asked once more, with its own steps in front of it and
+    // no tools, to answer the question from what it read. One extra call, only in that shape.
+    const statusOf = (r: unknown) => String((r as { result?: { status?: unknown } } | null)?.result?.status ?? "");
+    const cardRefused = generated.steps.some((s) => (s.toolResults ?? []).some((r) => /^(refused|unavailable)$/.test(statusOf(r))));
+    const readOk = generated.steps.some((s) => (s.toolResults ?? []).some((r) => statusOf(r) === "ok" && !STAFF_CARD_TOOLS.has(String((r as { toolName?: string }).toolName))));
+    if (staffActor && cardRefused && readOk && answer.length < 200) {
+      const finished = await generateText({
+        model: troyChatModel(),
+        system: localizedSystemPrompt,
+        messages: [...((staffInput?.messages ?? messages) as never[]), ...(generated.response.messages as never[]), { role: "user", content: FINISH_THE_ANSWER }] as never,
+        maxTokens: responseMaxTokens,
+        tools,
+        toolChoice: "none",
+        maxSteps: 1,
+        async onStepFinish({ usage, providerMetadata }) {
+          await operation.run(async () => {
+          const { recordTokenUsage } = await import("@/lib/ai-usage-log");
+          await recordTokenUsage("anthropic", MODEL_TROY, assistantStepUsage(usage, providerMetadata), { userId: userId ?? null, endpoint: "assistant" });
+          });
+        },
+      });
+      console.info("[staff-steps] finish", stepShape(finished.steps));
+      const fuller = finished.text.trim();
+      if (fuller.length > answer.length) answer = replyOrFallback(fuller);
+    }
 
     const facts = {
       staffToolEvidence: staffEvidence.items,

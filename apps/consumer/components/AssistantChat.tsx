@@ -926,6 +926,13 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
               })}
               {!replyStillComing && draftFor && draftText && (
                 <div className="flex flex-col items-start gap-1 pl-1">
+                  {/* The draft's own words, readable here (Codex E0, 2026-11-01: the card used to be a button
+                      alone, so a draft the model gave only to the tool was never seen). Same body the check
+                      passed and the button carries. */}
+                  <div data-staff-draft-body="" className="mb-1 w-full whitespace-pre-wrap rounded-[5px] border border-[#e2ddd0] bg-[#faf8f3] px-3 py-2 text-[13px] leading-relaxed text-[#2b2a27]">
+                    <span className="mb-1 block font-mono text-[10px] uppercase tracking-[0.1em] text-muted">{draftFor.purpose === "case_note" ? "Case note, unsaved" : "Check-in, unsaved"}</span>
+                    {draftText}
+                  </div>
                   <button
                     type="button"
                     onClick={() => {

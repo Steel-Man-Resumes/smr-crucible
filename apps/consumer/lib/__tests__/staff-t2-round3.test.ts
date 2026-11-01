@@ -88,7 +88,7 @@ it("through the model loop: a search answered in the tool step still reaches the
 
 it("the route uses every step's words; the skill and the tool say search first, nudge last", () => {
   const route = read("../../app/api/assistant/route.ts");
-  assert.match(route, /const answer = replyOrFallback\(staffAnswerText\(generated\.steps, generated\.text\)\);/);
+  assert.match(route, /let answer = replyOrFallback\(staffAnswerText\(generated\.steps, generated\.text\)\);/);
   const ops = read("../skills/staff-operations/SKILL.md");
   assert.match(ops, /A search request is always answered with the search results first\. Never answer a search with a question about a listing\./);
   assert.match(ops, /call find_employers with the state from the rule above and q set to the town/);
@@ -175,10 +175,13 @@ describe("review D (2026-11-01): the answer is kept by step kind, never by lengt
   it("D1: from a refused action step, only the sentences that say it happened are cut; a refused draft offer keeps its real words", async () => {
     const { staffAnswerText } = await import("../staff-answer-text");
     const words = `${triage} I have opened Jean's page and placed the draft there for you. You can review it on that page.`;
+    const note = "The draft is unsaved, in this reply; the page did not open.";
+    const out = staffAnswerText([{ text: words, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "refused" } }] }, { text: note, toolCalls: [] }], note);
+    // The first-person completion claim is cut; the instruction that mentions the page stays (review E1).
+    assert.equal(out, `${triage} You can review it on that page.\n\n${note}`);
+    // A final that corrects what came before stands alone (review E5).
     const fix = "Correction: I did not open a page or place a draft. The draft is unsaved, in this reply.";
-    const out = staffAnswerText([{ text: words, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "refused" } }] }, { text: fix, toolCalls: [] }], fix);
-    assert.equal(out, `${triage}\n\n${fix}`);
-    assert.ok(!out.includes("placed") && !out.includes("on that page"), out);
+    assert.equal(staffAnswerText([{ text: words, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "refused" } }] }, { text: fix, toolCalls: [] }], fix), fix);
   });
   it("D2: a draft body the final step withdrew is not copied into the prose", async () => {
     const { staffAnswerText } = await import("../staff-answer-text");
@@ -197,5 +200,63 @@ describe("review D (2026-11-01): the answer is kept by step kind, never by lengt
     assert.doesNotMatch(tools, /come from read_participant_overview earlier in this conversation/);
     assert.match(tools, /A smaller result does not contradict a fuller read of this same person from this conversation/);
     assert.match(tools, /What you read belongs to the person this conversation is about and answers nothing about anyone else/);
+  });
+});
+
+describe("review E (2026-11-01): completed-action claims, supersession, every final path", () => {
+  const nav = "You can open Jean from People.";
+  it("E1: other people's actions and instructions that mention a page are not cut", async () => {
+    const { withoutCompletedClaims, staffAnswerText } = await import("../staff-answer-text");
+    const history = "Jean opened the handoff yesterday. His ID task remains open.";
+    assert.equal(withoutCompletedClaims(history), history);
+    const instruction = "Review the ID task on his page before calling him.";
+    assert.equal(withoutCompletedClaims(instruction), instruction);
+    const refused = { toolName: "open_staff_page", result: { status: "refused" } };
+    assert.equal(staffAnswerText([{ text: history, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [refused] }, { text: nav, toolCalls: [] }], nav), `${history}\n\n${nav}`);
+    assert.equal(staffAnswerText([{ text: instruction, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [refused] }, { text: nav, toolCalls: [] }], nav), `${instruction}\n\n${nav}`);
+  });
+  it("E2: a successful button never opened anything, so 'I opened the page' is cut even on status ok; a view change is a read step", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const ok = { toolName: "open_staff_page", result: { status: "ok", navigated: false, buttonShown: true } };
+    const fin = "The button is available; I did not open the page.";
+    assert.equal(staffAnswerText([{ text: "I opened the participant page for you. Jean's ID task is open.", toolCalls: [{ toolName: "open_staff_page" }], toolResults: [ok] }, { text: fin, toolCalls: [] }], fin), `Jean's ID task is open.\n\n${fin}`);
+    for (const st of ["locked", "refused", "unchanged"]) {
+      const fin2 = "Nothing changed: the view is locked by policy.";
+      const out = staffAnswerText([{ text: "Your tasks are now first on Today.", toolCalls: [{ toolName: "change_my_view" }], toolResults: [{ toolName: "change_my_view", result: { status: st } }] }, { text: fin2, toolCalls: [] }], fin2);
+      assert.equal(out, fin2, st);
+    }
+  });
+  it("E3: the empty-final path applies the same cut", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const out = staffAnswerText([{ text: "I opened the participant page for you. Jean needs a call today.", toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "refused" } }] }, { text: "", toolCalls: [] }], "");
+    assert.equal(out, "Jean needs a call today.");
+  });
+  it("E4: a later, narrower read does not drop a draft already written in a card step", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const body = "Hi Marqus, want to pick a next step on your saved jobs? Let me know what would help. Lupe";
+    const disclaimer = "This is a draft. Nothing was saved or sent.";
+    const steps = [
+      { text: "", toolCalls: [{ toolName: "read_participant_overview" }], toolResults: [{ toolName: "read_participant_overview", result: { status: "ok" } }] },
+      { text: body, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body } }] },
+      { text: "", toolCalls: [{ toolName: "draft_staff_check_in" }], toolResults: [{ toolName: "draft_staff_check_in", result: { status: "draft_only" } }] },
+      { text: disclaimer, toolCalls: [] },
+    ];
+    assert.equal(staffAnswerText(steps, disclaimer), `${body}\n\n${disclaimer}`);
+  });
+  it("E5: a final that withdraws or corrects stands alone", async () => {
+    const { staffAnswerText, finalWithdraws } = await import("../staff-answer-text");
+    const prose = "Hi Marqus, your supervisor role starts tomorrow.";
+    const withdraw = "Discard that draft. No prior supervisor role is established.";
+    assert.ok(finalWithdraws(withdraw) && finalWithdraws("I need to correct my last answer: the dates were not in what I read.") && finalWithdraws("Please don't send the earlier draft."));
+    assert.ok(!finalWithdraws("You can open Jean from People.") && !finalWithdraws("This is a draft. Nothing was saved or sent."));
+    assert.equal(staffAnswerText([{ text: prose, toolCalls: [{ toolName: "offer_staff_draft" }], toolResults: [{ toolName: "offer_staff_draft", result: { status: "draft_only", body: prose } }] }, { text: withdraw, toolCalls: [] }], withdraw), withdraw);
+  });
+  it("E0: the draft card shows the draft's words, and the route finishes a refusal-shaped answer without tools", () => {
+    const chat = read("../../components/AssistantChat.tsx");
+    assert.match(chat, /data-staff-draft-body=""[\s\S]{0,400}\{draftText\}/);
+    const route = read("../../app/api/assistant/route.ts");
+    assert.match(route, /cardRefused && readOk && answer\.length < 200/);
+    assert.match(route, /toolChoice: "none"/);
+    assert.match(route, /FINISH_THE_ANSWER = "The button was refused; that is not the answer/);
   });
 });
