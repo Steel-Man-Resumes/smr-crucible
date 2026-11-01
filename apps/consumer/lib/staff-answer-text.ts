@@ -207,12 +207,13 @@ export const actionOnlyRequest = (said: string) => {
 const RETRACTS = new RegExp([
   WITHDRAWS.source,
   String.raw`\bI (?:also |now )?(?:need|have|want) to correct\b`,
-  String.raw`\b(?:didn['’]t|did not|doesn['’]t|does not|don['’]t|do not) (?:show|support|include|list|mention|say|come from|contain|have)\b`,
-  // Preview J r3 (2026-11-01): "One correction to my last answer:", "the lookup showed only ...", "Check those
-  // details on Jean's page before you send." This cut runs only on an action-only turn that read nothing.
-  String.raw`\bcorrections?\b`,
-  String.raw`\b(?:showed|shows|had|has|returned) only\b`,
-  String.raw`\bcheck (?:those|these|the) (?:details|facts|dates)\b`,
+  String.raw`\b(?:didn['’]t|did not|doesn['’]t|does not|don['’]t|do not) (?:show|support|include|list|mention)\b`,
+  // Preview J r3 (2026-11-01): "One correction to my last answer:", "didn't come from the lookup", "The
+  // lookup showed only ...". Tied to the earlier answer or the lookup (pre-merge review F4): "Department of
+  // Corrections", "Jean has only a landline", "check the details on his page" are ordinary replies.
+  String.raw`\bcorrections? (?:to|on|about|in) (?:my|the) (?:last|earlier|previous|first) (?:answer|reply|draft|message)\b`,
+  String.raw`\b(?:didn['’]t|did not|doesn['’]t|does not) (?:come from|say|contain) (?:the|my|that) (?:lookup|read|records?|results?)\b|\b(?:the|my) (?:lookup|read|records?|results?) (?:didn['’]t|did not|doesn['’]t|does not) (?:say|show|support|include|list|mention|contain)\b`,
+  String.raw`\b(?:the|my) (?:lookup|read|records?|results?) (?:showed|shows|had|has|returned) only\b`,
   String.raw`\bnot in (?:what|the records?|the results?) I (?:read|saw)\b`,
   String.raw`\b(?:send|use) it as written\b`,
   String.raw`\bcheck or remove\b`,
@@ -267,18 +268,37 @@ function cardWords(steps: readonly Step[], clean: (s: string) => string): string
 /**
  * Card-step words that say the final answer again (preview H, TRAP-NUMBER-03, 2026-11-01: the model wrote
  * "Marqus's hourly wage is not on file for me..." in the button step and again, reworded, in the final,
- * and both were shown). Same opening sentence, or most of its words already in the final: dropped.
+ * and both were shown). Sentence by sentence (pre-merge review F3): a card-step sentence is dropped only
+ * when the final already says it (same words, or nearly all its words in one final sentence with every
+ * number and capitalised word there too). Any sentence with a fact the final lacks stays.
  */
 const wordsOf = (t: string) => (t.toLowerCase().match(/[a-z0-9']+/g) ?? []);
-const firstSentence = (t: string) => wordsOf(t.split(/(?<=[.!?])\s+/)[0] ?? "").join(" ");
-export function repeatsFinal(text: string, final: string): boolean {
-  if (final.includes(text)) return true;
-  const a = wordsOf(text);
-  if (!a.length) return true;
-  if (firstSentence(text) && firstSentence(text) === firstSentence(final)) return true;
-  const b = new Set(wordsOf(final));
-  return a.filter((w) => b.has(w)).length / a.length >= 0.75;
+const sentencesOf = (t: string) => t.split(/\n+|(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
+const keyTokens = (t: string) => (t.match(/\b(?:\d[\d:/.,-]*|[A-Z][A-Za-z'’-]+)\b/g) ?? []).map((x) => x.toLowerCase()).filter((x) => !["i", "the", "a", "an", "if", "your", "here", "this", "that", "you", "it", "he", "she", "they"].includes(x));
+function sentenceRepeated(sentence: string, finalSentences: string[], finalText: string): boolean {
+  const a = wordsOf(sentence);
+  // A label or a sign-off ("Email", "Lupe") is not a repeat, even when the final contains the word.
+  if (a.length < 4) return false;
+  if (finalText.includes(sentence)) return true;
+  const keys = keyTokens(sentence);
+  // A negation the final sentence does not share (or the reverse) is a different claim, never a repeat.
+  const negated = (t: string) => /\b(?:not|no|never|none|nothing|nobody|without)\b|n['’]t\b/i.test(t);
+  return finalSentences.some((f) => {
+    if (negated(sentence) !== negated(f)) return false;
+    const b = new Set(wordsOf(f));
+    const fKeys = new Set(keyTokens(f));
+    return a.filter((w) => b.has(w)).length / a.length >= 0.8 && keys.every((k) => fKeys.has(k));
+  });
 }
+/** The card-step text with the sentences the final already says removed ("" when all of it repeats). */
+export function withoutFinalRepeats(text: string, final: string): string {
+  if (final.includes(text.trim())) return "";
+  const finals = sentencesOf(final);
+  // Line by line, so a draft's line breaks survive when nothing in it repeats.
+  return text.split("\n").map((line) => line.split(/(?<=[.!?])\s+/).filter((x) => !x.trim() || !sentenceRepeated(x.trim(), finals, final)).join(" "))
+    .join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+export const repeatsFinal = (text: string, final: string) => withoutFinalRepeats(text, final) === "";
 
 export function staffAnswerText(steps: readonly Step[], finalText: string): string {
   const keepNudge = nudgeOk(steps);
@@ -286,7 +306,7 @@ export function staffAnswerText(steps: readonly Step[], finalText: string): stri
   const final = clean(String(finalText ?? "").trim());
   const toolsRan = steps.some((s) => (s.toolCalls?.length ?? 0) > 0);
   if (withoutNudge(final)) {
-    const kept = finalWithdraws(final) ? [] : cardWords(steps, clean).filter((t) => !repeatsFinal(t, final));
+    const kept = finalWithdraws(final) ? [] : cardWords(steps, clean).map((t) => withoutFinalRepeats(t, final)).filter(Boolean);
     return [...kept, final].join("\n\n");
   }
   // Nothing said in the last step beyond the nudge line: the card steps' words, else any step's words,

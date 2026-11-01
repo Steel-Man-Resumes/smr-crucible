@@ -35,12 +35,6 @@ import { STATIONS } from "./refinery-nav";
 
 /** The only facts an org-facing answer is allowed to assert. */
 export interface OrgFacts {
-  /**
-   * Preview K (2026-11-01): the bodies of the drafts offered in this answer (offer_staff_draft results that
-   * are real drafts). Each body has its own check on the draft path; a layer-2 flag on words inside one is
-   * dropped from the answer check (filterJudgmentAndDraftFlags). Answer path only.
-   */
-  offeredDraftBodies?: string[];
   /** Successful current-request server tool reads, never browser-provided history. */
   staffToolEvidence?: readonly StaffToolEvidence[];
   caseload: number;
@@ -892,8 +886,11 @@ export async function checkOrgClaimsWithModel(
   text: string,
   facts: OrgFacts,
   /** What the staff member just said. Things THEY told us are not our claims. */
-  userSaid?: string
+  userSaid?: string,
+  /** How long layer 2 may take (pre-merge review F5: the route's deadline, not a fixed 30 s). 0 or less: skip. */
+  opts?: { timeoutMs?: number }
 ): Promise<string[] | null> {
+  if (opts?.timeoutMs !== undefined && opts.timeoutMs <= 0) return null;
   const key = process.env.OPENAI_API_KEY;
   if (!key) return null;
   const prompt = buildOrgVerificationPrompt(text, facts, userSaid);
@@ -903,12 +900,13 @@ export async function checkOrgClaimsWithModel(
   const { runOrgVerificationCall } = await import("./org-verification-call");
   const problems = await runOrgVerificationCall(model, prompt, key, {
     fetch,
+    timeoutMs: opts?.timeoutMs,
     async record(usage, result) {
       const { recordTokenUsage } = await import("./ai-usage-log");
       await recordTokenUsage("openai", model, usage, { endpoint: "assistant-org-verify", ...result });
     },
   });
-  return filterJudgmentAndDraftFlags(filterRecordRepetitionFlags(problems, text, facts), facts);
+  return filterJudgmentFlags(filterRecordRepetitionFlags(problems, text, facts), facts);
 }
 
 /**
@@ -944,30 +942,25 @@ export function filterRecordRepetitionFlags(problems: string[] | null, text: str
 }
 
 /**
- * Preview K (2026-11-01, gpt-4.1-mini): the prompt says priority judgments and draft wording are "other",
- * and the model still flagged "Jean is the one who needs attention (from your Today queue, read Nov 1)",
- * "- Who: Jean" and "Congratulations on getting that far" (a line of the offered check-in). Two narrow
- * drops, model flags only:
- *   - a flag that is ONLY a caseload first name, or "NAME is the one who needs you/attention" with an
- *     optional time word and a source parenthetical, NAME on this viewer's caseload. Any other word
- *     (a reason, a date, an outcome) keeps the flag;
- *   - a flag whose whole text sits inside a draft body offered in this answer (the draft path checks it).
+ * Preview K (2026-11-01, gpt-4.1-mini): the prompt calls priority judgments "other", and the model still
+ * flagged "Jean is the one who needs attention (from your Today queue, read Nov 1)" and "- Who: Jean".
+ * One narrow drop, model flags only: a flag that is ONLY an in-reach caseload first name, or "NAME is the
+ * one who needs you/attention" with an optional time word and at most one SOURCE note of a fixed shape
+ * ("(from your Today queue, read Nov 1)", "(as of Nov 1)"). Any other words, including any other
+ * parenthetical, keep the flag (pre-merge review F2: "(from his PO: he has a warrant)" must stay flagged).
+ * A draft's words are never dropped here: the draft path is layer 1 only (pre-merge review F1).
  */
-export function filterJudgmentAndDraftFlags(problems: string[] | null, facts: OrgFacts): string[] | null {
+const SOURCE_NOTE = String.raw`\((?:(?:from|read from) (?:your|the) (?:Today queue|Today screen|caseload digest|Today)(?:, read [A-Z][a-z]{2} \d{1,2})?|as of [A-Z][a-z]{2} \d{1,2})\)`;
+const JUDGMENT = new RegExp(String.raw`^(?:[-*] )?(?:Who: ?)?([A-Za-z][A-Za-z'’-]{1,30})(?: is the one (?:who|that) needs (?:you|attention|your attention|a call|you most)(?: (?:today|first|now|this week|most))?)?(?: ${SOURCE_NOTE})?\.?$`, "i");
+export function filterJudgmentFlags(problems: string[] | null, facts: OrgFacts): string[] | null {
   if (problems === null) return null;
   const names = new Set(facts.visibleNames.map((n) => n.trim().split(/\s+/)[0]?.toLowerCase()).filter(Boolean));
-  const squash = (s: string) => s.toLowerCase().replace(/[’]/g, "'").replace(/\s+/g, " ").trim();
-  const bodies = (facts.offeredDraftBodies ?? []).map(squash).filter((b) => b.length > 0);
   const judgment = (p: string) => {
-    const t = p.trim().replace(/^[-*]\s+/, "").replace(/\s*\((?:from|as of|read)[^()]{0,60}\)\s*/gi, " ").replace(/[.\s]+$/, "").trim();
-    const m = t.match(/^(?:who:\s*)?([A-Za-z][A-Za-z'’-]{1,30})(?:\s+is the one (?:who|that) needs (?:you|attention|your attention|a call|you most)(?:\s+(?:today|first|now|this week|most))?)?$/i);
+    if (p.length > 160) return false; // a judgment is short; also keeps the match linear (review N2)
+    const m = p.trim().replace(/\s+/g, " ").match(JUDGMENT);
     return !!m && names.has(m[1].toLowerCase());
   };
-  const inDraft = (p: string) => {
-    const t = squash(p).replace(/[.!?]+$/, "");
-    return t.length >= 12 && bodies.some((b) => b.includes(t));
-  };
-  return problems.filter((p) => !judgment(p) && !inDraft(p));
+  return problems.filter((p) => !judgment(p));
 }
 
 /** Exposed for deterministic evidence-boundary tests; no network or model needed. */
@@ -1021,10 +1014,11 @@ Reply with JSON only: {"sentences":[{"text":"...","kind":"claim","supported":tru
 export async function verifyOrgOutput(
   text: string,
   facts: OrgFacts,
-  userSaid?: string
+  userSaid?: string,
+  opts?: { timeoutMs?: number }
 ): Promise<OrgVerdict> {
   const deterministic = checkOrgClaimsDeterministic(text, facts, userSaid, { typedNamesInNoMatch: true });
-  const model = await checkOrgClaimsWithModel(text, facts, userSaid);
+  const model = await checkOrgClaimsWithModel(text, facts, userSaid, opts);
   return {
     ok: deterministic.length === 0 && (model?.length ?? 0) === 0,
     problems: [...deterministic, ...(model ?? [])],

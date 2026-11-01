@@ -84,6 +84,8 @@ const ORG_RATE_LIMIT_MESSAGE =
   "You've reached today's assistant limit for your account. It resets at midnight. If your team regularly needs more, tell us and we will raise it.";
 
 export async function POST(request: Request) {
+  // The route deadline the staff answer check budgets against (maxDuration above; pre-merge review F5).
+  const requestStartedAt = Date.now();
   const contentLength = request.headers.get("content-length");
   if (contentLength && parseInt(contentLength, 10) > 1_000_000) {
     return NextResponse.json({ error: "Request too large" }, { status: 413 });
@@ -557,8 +559,6 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
     }
 
     const facts = {
-      // The drafts offered in this answer: each has its own check; a model flag on their words is not an answer claim (preview K).
-      offeredDraftBodies: retractionCut ? [] : offeredDrafts(generated.steps.flatMap((step) => step.toolResults as { toolCallId: string; toolName: string; args: unknown; result: unknown }[])).map((d) => String(d.result.body ?? "")),
       staffToolEvidence: staffEvidence.items,
       caseload: context.org.caseload,
       stalled: context.org.stalled,
@@ -583,7 +583,10 @@ LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface st
       quietDays: context.org.quietDays,
     };
     const userSaid = staffInput ? staffSaid : lastUserText(messages);
-    const verdict = await verifyOrgOutput(answer, facts, userSaid || undefined);
+    // Layer 2 gets up to 30 s, never past the route's maxDuration less a 10 s margin for the rest of the
+    // reply; with too little left it does not run and the answer says so (pre-merge review F5).
+    const checkBudgetMs = Math.min(30_000, maxDuration * 1000 - (Date.now() - requestStartedAt) - 10_000);
+    const verdict = await verifyOrgOutput(answer, facts, userSaid || undefined, { timeoutMs: checkBudgetMs < 3_000 ? 0 : checkBudgetMs });
 
     // Dash sweep on the model-written answer only, before any notice is added.
     let out = plainPunctuation(answer, logDashSwaps("assistant-org"));

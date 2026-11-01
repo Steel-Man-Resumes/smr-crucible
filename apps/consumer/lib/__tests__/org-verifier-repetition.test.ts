@@ -73,14 +73,30 @@ it('keeps a compound assertion under the interview label flagged', () => {
   assert.deepEqual(check(`- Interview: ${compound}`, [reason]), [reason]);
 });
 
-it('preview K: drops only a pure priority judgment about a caseload name, and flags inside an offered draft', async () => {
-  const { filterJudgmentAndDraftFlags } = await import('../org-output-verify');
-  const f: OrgFacts = { ...facts, visibleNames: ['Jean', 'Marqus'], offeredDraftBodies: ["Hi Jean, it's Lupe. Congratulations on getting that far. How is the ID going?"] };
-  const dropped = ['Jean is the one who needs attention (from your Today queue, read Nov 1)', '- Who: Jean', 'Jean is the one who needs you today.', 'Congratulations on getting that far'];
-  assert.deepEqual(filterJudgmentAndDraftFlags(dropped, f), []);
-  const kept = ['Jean is the one who needs you because he was hired yesterday', 'Robin is the one who needs attention', 'Jean needs attention because his interview is Monday', 'Jean was hired', 'Congratulations on the new job', 'Jean'.repeat(1) + ' is overdue'];
-  assert.deepEqual(filterJudgmentAndDraftFlags(kept, f), kept);
-  assert.equal(filterJudgmentAndDraftFlags(null, f), null);
-  // No offered draft: draft words are checked like any answer words.
-  assert.deepEqual(filterJudgmentAndDraftFlags(['Congratulations on getting that far'], { ...f, offeredDraftBodies: [] }), ['Congratulations on getting that far']);
+it('preview K + pre-merge review F1/F2: drops only a pure priority judgment; never a draft line, never a hidden parenthetical', async () => {
+  const { filterJudgmentFlags } = await import('../org-output-verify');
+  const f: OrgFacts = { ...facts, visibleNames: ['Jean', 'Marqus'] };
+  const dropped = ['Jean is the one who needs attention (from your Today queue, read Nov 1)', '- Who: Jean', 'Jean is the one who needs you today.', 'Jean is the one who needs attention (as of Nov 1)'];
+  assert.deepEqual(filterJudgmentFlags(dropped, f), []);
+  const kept = [
+    'Jean is the one who needs attention (from his PO: he violated parole and has a warrant)',
+    'Jean is the one who needs attention (read: he relapsed last week)',
+    'Jean is the one who needs attention (as of his arrest on Oct 30)',
+    'Jean is the one who needs you because he was hired yesterday', 'Robin is the one who needs attention',
+    'Jean needs attention because his interview is Monday', 'Jean was hired',
+    'Congratulations on getting hired at the warehouse', 'Congratulations on getting that far',
+  ];
+  assert.deepEqual(filterJudgmentFlags(kept, f), kept);
+  assert.equal(filterJudgmentFlags(null, f), null);
+  const t = performance.now(); filterJudgmentFlags(['Jean is the one who needs attention (from ' + ' '.repeat(100000) + ')', 'Jean' + '.'.repeat(100000)], f);
+  assert.ok(performance.now() - t < 100);
+});
+
+it('pre-merge review F5: layer 2 is skipped, not run past the route deadline', async () => {
+  const { checkOrgClaimsWithModel } = await import('../org-output-verify');
+  assert.equal(await checkOrgClaimsWithModel('Jean was hired.', facts, undefined, { timeoutMs: 0 }), null);
+  const { readFileSync } = await import('node:fs');
+  const route = readFileSync(new URL('../../app/api/assistant/route.ts', import.meta.url), 'utf8');
+  assert.match(route, /const checkBudgetMs = Math\.min\(30_000, maxDuration \* 1000 - \(Date\.now\(\) - requestStartedAt\) - 10_000\);/);
+  assert.doesNotMatch(route, /offeredDraftBodies/);
 });

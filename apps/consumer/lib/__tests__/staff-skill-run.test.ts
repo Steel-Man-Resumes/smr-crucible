@@ -143,7 +143,7 @@ it("fix round 1: the route sends gated staff words to the models and tells the s
   // Demo fix T2: earlier answers get their tool record back first; the gate still runs over all of it.
   assert.match(route, /const staffInput = staffActor \? gateStaffMessages\(withStaffToolRecords\(messages, \{ userId: staffActor\.userId, tools: await staffToolNameSet\(\) \}\)\) : null;/);
   assert.match(route, /messages: \(staffInput\?\.messages \?\? messages\) as never,/);
-  assert.match(route, /verifyOrgOutput\(answer, facts, userSaid \|\| undefined\)/);
+  assert.match(route, /verifyOrgOutput\(answer, facts, userSaid \|\| undefined, \{ timeoutMs:/);
   assert.match(route, /if \(staffInput\?\.withheld\) out \+= `\\n\\n_\$\{STAFF_INPUT_NOTICE\}_`;/);
 });
 

@@ -580,7 +580,11 @@ describe("preview H (5083e0b, 2026-11-01): a button step that says the final aga
     const card = "Marqus's hourly wage is not on file for me. I don't read pay from any tool, and the staff member has to type an amount for me to use it. If your team recorded a wage on a placement, it lives on Marqus's page. Open him from People to see it. Human step: open Marqus from People and check the placement entry there.";
     const fin = "Marqus's hourly wage is not on file for me. I never read pay from any tool. I can only use an amount you type in this conversation. Here is a button to Marqus's page. If your team recorded a wage on a placement, you would see it there. Human step: press the button and check the placement entry on his page.";
     const steps = [{ text: card, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] }, { text: fin, toolCalls: [] }];
-    assert.equal(staffAnswerText(steps, fin), fin);
+    // Pre-merge review F3: sentence by sentence, so reworded sentences may stay; the identical one never repeats
+    // and no sentence carrying a fact the final lacks is lost.
+    const out = staffAnswerText(steps, fin);
+    assert.equal(out.split("Marqus's hourly wage is not on file for me.").length - 1, 1);
+    assert.ok(out.endsWith(fin));
   });
   it("different words in the button step still come first", async () => {
     const { staffAnswerText } = await import("../staff-answer-text");
@@ -596,5 +600,34 @@ describe("preview J (a7b2e1b, 2026-11-01 r3): the send-it cut catches 'one corre
     const { withoutUngroundedRetraction } = await import("../staff-answer-text");
     const a = "I can't send messages. The draft is unsaved, in this reply, so you'll need to copy it and send it yourself from your own phone or email. You can also press \"Put this draft on their page\" to review it on Jean's page, then save it there. One correction to my last answer: the Production Supervisor role, the Oct 31 note and the Oct 24 update date didn't come from the lookup. The lookup showed only the STS Technical Services application in Milwaukee, one open task, and one recent note. I also wrote that the open task was to bring an ID to STS, and the lookup didn't say that. Check those details on Jean's page before you send.";
     assert.equal(withoutUngroundedRetraction(a), "I can't send messages. The draft is unsaved, in this reply, so you'll need to copy it and send it yourself from your own phone or email. You can also press \"Put this draft on their page\" to review it on Jean's page, then save it there.");
+  });
+});
+
+describe("pre-merge review (2026-11-01): F3 sentence-level repeats, F4 tied send-it phrases", () => {
+  it("F3: a button-step sentence with a fact the final lacks stays", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const card = "Here is what I found. Marqus missed his PO check-in on Oct 30.";
+    const fin = "Here is what I found. You can open Marqus from People.";
+    const steps = [{ text: card, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] }, { text: fin, toolCalls: [] }];
+    assert.equal(staffAnswerText(steps, fin), `Marqus missed his PO check-in on Oct 30.\n\n${fin}`);
+    const card2 = "Jean's interview moved to Thursday. Here is a button to his page.";
+    const fin2 = "Here is a button to his page. Open it to check the ID task.";
+    const steps2 = [{ text: card2, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] }, { text: fin2, toolCalls: [] }];
+    assert.equal(staffAnswerText(steps2, fin2), `Jean's interview moved to Thursday.\n\n${fin2}`);
+  });
+  it("F3: a negated button-step sentence is never treated as a repeat of the opposite final", async () => {
+    const { staffAnswerText } = await import("../staff-answer-text");
+    const card = "Marqus has not started work at the mill and did not show up Monday.";
+    const fin = "Marqus has started work at the mill and did show up Monday. Here is his page.";
+    const steps = [{ text: card, toolCalls: [{ toolName: "open_staff_page" }], toolResults: [{ toolName: "open_staff_page", result: { status: "ok" } }] }, { text: fin, toolCalls: [] }];
+    assert.ok(staffAnswerText(steps, fin).includes(card));
+  });
+  it("F4: ordinary send-it replies are not cut", async () => {
+    const { withoutUngroundedRetraction } = await import("../staff-answer-text");
+    for (const a of ["I can't send messages. I don't have a send button. Copy it and send it yourself.", "I can't send messages. Marqus doesn't have an email on file, so text it yourself.", "I can't send messages. The Department of Corrections office prefers a call; send it yourself.", "I can't send messages. Jean has only a landline, so call him or send it yourself.", "I can't send messages. Check the details on his page, then send it yourself."]) {
+      assert.equal(withoutUngroundedRetraction(a), a, a);
+    }
+    assert.equal(withoutUngroundedRetraction("I can't send messages. One correction to my last answer: the dates didn't come from the lookup."), "I can't send messages.");
+    assert.equal(withoutUngroundedRetraction("I can't send messages. The lookup showed only one task."), "I can't send messages.");
   });
 });
