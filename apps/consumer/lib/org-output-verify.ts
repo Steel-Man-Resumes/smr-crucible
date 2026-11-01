@@ -539,6 +539,23 @@ export function orgFlagNotice(problems: readonly string[]): string {
 }
 
 /**
+ * Production db4c4f9, DEMO-02 (2026-11-01): a numbered list of Today's sections ("1. Your tasks ... 8. Waiting
+ * ... 11. ...") had its positions 8, 9 and 11 flagged as caseload figures. A list position is not a count.
+ * Walked in text order: a number is a position only when it starts a line (a markdown list item) and is the
+ * NEXT one expected (1, then 2, then 3 ...), followed by "." or ")" and a word. Inline numbers stay checked. "Your caseload has 17." is
+ * never a position, before or after a list, so it stays checked (review N10-4).
+ */
+export function withoutListMarkers(text: string): string {
+  let expected = 1;
+  // Line starts only (a markdown list): inline "has 12. Call them" after a list is never a position.
+  return text.replace(/^([ \t]*)(\d{1,2})([.)])(?=[ \t]+["“*_(]?[A-Za-z])/gm, (all, lead: string, num: string) => {
+    if (Number(num) !== expected) return all;
+    expected += 1;
+    return `${lead}#.`;
+  });
+}
+
+/**
  * `opts.typedNamesInNoMatch`: answer path only. A name the staff member typed
  * may be repeated in a sentence that says the person is NOT on their list
  * ("Michael Shaw isn't on your list"). Anywhere else, and always in a draft
@@ -673,6 +690,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // class of claim that gets copied into a headcount.
   // Durations, clock times and ordinals are not headcounts: "first 15 minutes",
   // "a 2-minute check-in", "by 9am", "the 3rd".
+  text = withoutListMarkers(text);
   const numbers =
     text.match(
       /(?<![$\d.,%/:-])\b\d{1,4}\b(?!\.\d|,\d{3}\b|[\d%/]|\s?percent\b|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi

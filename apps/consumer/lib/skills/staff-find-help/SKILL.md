@@ -6,8 +6,8 @@ Doctrine: support-navigation. Start with the need and the place. Unknown require
 
 ## Steps
 
-1. You need two things from the staff member: the need, and the place (a town, county or ZIP, plus the state). If either is missing, ask for it in one short question. Do not pull the participant's address or saved help list; you have no tool for either, and the participant chose what they share.
-2. Map the need to one to three directory areas (housing is "shelter", food is "food", an ID is "id_documents", a ride is "transportation", legal help is "legal_aid" or "expungement", work is "jobs" or "training", recovery is "recovery", mental health is "mental").
+1. You need the place from the staff member (a town, county or ZIP, plus the state). If the place is missing, ask for it in one short question. If they gave a place but no need ("Find local help in Kalamazoo, Michigan"), do not ask: search the three most common areas, "shelter", "food" and "jobs", and say in one short line that you searched housing, food and work and can narrow it to another need. Do not pull the participant's address or saved help list; you have no tool for either, and the participant chose what they share.
+2. When they named a need, map it to one to three directory areas (housing is "shelter", food is "food", an ID is "id_documents", a ride is "transportation", legal help is "legal_aid" or "expungement", work is "jobs" or "training", recovery is "recovery", mental health is "mental").
 3. Call find_local_help once with the place exactly as given and those areas.
 4. If it returns needs_place, ask for the state. If it returns nothing, say the directory has no listing for that place and need, that this is a gap in our directory and not proof there is no help, and suggest one other area to try.
 
