@@ -132,6 +132,11 @@ const WITHDRAWS = new RegExp([
   String.raw`\b(?:do not send|don['’]t send|never send)\s+(?:(?:that|the|this|my)\s+)*${SUPERSEDED}\s+(?:drafts?|answer|reply)\b`,
   String.raw`\b(?:that|the|this|my|${SUPERSEDED})\s+(?:drafts?|answer|reply)\s+(?:was|is|were|are)\s+(?:wrong|incorrect|mistaken|not right)\b`,
   String.raw`\b(?:disregard|ignore|scrap)\s+(?:my\s+)?(?:previous|earlier|last)\s+(?:answer|reply)\b`,
+  // Review U1: "that version is wrong", "scrap this one", "don't send this one", "ignore that check-in",
+  // "don't use it:" (not "don't send it until you have checked the date").
+  String.raw`\b(?:that|this)\s+(?:one|version|check-in)\s+(?:was|is)\s+(?:wrong|incorrect|mistaken|not right)\b`,
+  String.raw`\b(?:${VERB}|do not send|don['’]t send)\s+(?:this|that)\s+(?:one|version|check-in)\b(?!\s+(?:off|at|by|until|yet|before)\b)`,
+  String.raw`\b(?:do not|don['’]t)\s+(?:use|send)\s+it\b(?!\s+(?:until|yet|before|without)\b)(?=\s*[:;.,])`,
   String.raw`\bneither\s+draft\b|\bneither of (?:the|my|these|those) drafts\b|\bnone of (?:the|these|those|my) drafts\b`,
   String.raw`\buse (?:this|the) (?:replacement|(?:corrected|revised|new) (?:draft|one))\b`,
   String.raw`\b(?:I (?:also )?(?:need|have) to|let me) correct\b`,
@@ -147,9 +152,10 @@ export const finalWithdraws = (final: string) => WITHDRAWS.test(final);
  * second draft, not the first", "don't discard the first draft, discard the second", "go with the second
  * one"). The route says so in one line. One turn with two offers is rare; a wrong card is an action.
  */
-const CHOOSES = /\b(?:discard\w*|disregard\w*|ignor\w*|scrap\w*|delet\w*|remov\w*|drop\w*|skip\w*|throw out|replac\w*|instead|not the|go with|only the|use the|use this|keep the|keep this|don['’]t use|do not use|don['’]t send|do not send|wrong|incorrect|mistaken|correct\w*|stands|take (?:it|that|this) back|changed my mind|revised|replacement)\b/i;
+const CHOOSES = /\b(?:forget|never mind|scratch|mistake\w*|(?:one|draft|version) is better|error|discard\w*|disregard\w*|ignor\w*|scrap\w*|delet\w*|remov\w*|drop\w*|skip\w*|throw out|replac\w*|instead|not the|go with|only the|use the|use this|keep the|keep this|don['’]t use|do not use|don['’]t send|do not send|wrong|incorrect|mistaken|correct\w*|stands|take (?:it|that|this) back|changed my mind|revised|replacement)\b/i;
 export const draftChoiceWithdrawn = (drafts: number, text: string) => drafts >= 2 && (CHOOSES.test(String(text ?? "")) || WITHDRAWS.test(String(text ?? "")));
-export const STAFF_DRAFTS_WITHDRAWN_NOTICE = "\n\n_No draft card this time: I offered more than one version and changed which one to use. Ask for the draft again._";
+// Review U4: says only what is true (it also fires on ordinary two-draft prose like "change the sign-off").
+export const STAFF_DRAFTS_WITHDRAWN_NOTICE = "\n\n_No draft card this time. Ask for the draft again._";
 
 /**
  * The drafts the staff member may act on once the answer has spoken (reviews F5, G1, R4, S3, T1). Two or
@@ -164,7 +170,7 @@ export function draftsAfterFinal<T>(drafts: readonly T[], finalText: string): T[
   if (drafts.length >= 2) return draftChoiceWithdrawn(drafts.length, final) ? [] : [...drafts];
   if (!finalWithdraws(final)) return [...drafts];
   const keeps = /\buse (?:this|the) (?:replacement|(?:corrected|revised|new) (?:draft|one))\b|\bhere(?: is|['’]s) the (?:corrected|revised|new|replacement)\b/i.test(final);
-  const backNotEarlier = final.split(/(?<=[.!?;:])\s+|;/).some((c) => WITHDRAWS.test(c) && !new RegExp(String.raw`\b(?:${SUPERSEDED}|initial)\s+(?:drafts?|answer|reply)\b|\b(?:use|here)\b`, "i").test(c));
+  const backNotEarlier = final.split(/(?<=[.!?;:])\s+|;/).some((c) => WITHDRAWS.test(c) && !new RegExp(String.raw`\b(?:${SUPERSEDED}|initial)\s+(?:drafts?|answer|reply)\b|(?<!(?:don['’]t|do not|never)\s)\b(?:use|here)\b`, "i").test(c));
   return keeps && !backNotEarlier ? [...drafts] : [];
 }
 
@@ -195,7 +201,7 @@ export const actionOnlyRequest = (said: string) => {
   const t = String(said ?? "").trim();
   if (t.length > 120 || t.includes("\u0000")) return false;
   // Review T4: "Send it to Suicide Hotline" / "to Legal Aid Society" is not a person on their list.
-  if ((t.match(TO_NAME) ?? []).some((n) => /suicid|hotline|crisis|legal|aid\b|law|court|police|jail|hospital|shelter|hurt|kill|die|danger|emergency/i.test(n))) return false;
+  if ((t.match(TO_NAME) ?? []).some((n) => /\b(?:suicid\w*|hotline|crisis|legal|aid|law|lawyer|court|police|jail|hospital|shelter|hurt|kill|die|danger|emergency|defender|officer|victim\w*|probation|parole)\b/i.test(n))) return false;
   return ACTION_ONLY.test(t.replace(TO_NAME, "\u0000"));
 };
 const RETRACTS = new RegExp([

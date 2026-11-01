@@ -552,3 +552,24 @@ describe("review T (2026-11-01, third pass on round nine)", () => {
     assert.equal(withoutUngroundedRetraction("I can't send messages. I need to correct my last answer. He may be at risk tonight, so call him before anything else."), "I can't send messages. He may be at risk tonight, so call him before anything else.");
   });
 });
+
+describe("review U (2026-11-01, fourth pass on round ten)", () => {
+  const A = { toolCallId: "A" }, B = { toolCallId: "B" };
+  it("U1/U2: one draft taken back without the word 'draft' loses its card; instructions keep it", async () => {
+    const { draftsAfterFinal } = await import("../staff-answer-text");
+    for (const t of ["That version is wrong. I will redo it once you check the date.", "Don’t send this one, it has the wrong interview date.", "Ignore that check-in; the date in it is wrong.", "Scrap this one.", "Don’t use it: the Oct 24 date is not on his page.", "Don’t use this draft. Use the corrected one I write once you check the date."]) {
+      assert.deepEqual(draftsAfterFinal([A], t), [], t);
+    }
+    for (const t of ["Don't send it until you have checked the date.", "Please do not send this draft until you have reviewed it.", "It asks him to delete the old version of his resume."]) assert.deepEqual(draftsAfterFinal([A], t), [A], t);
+  });
+  it("U3: more ways to choose between two drafts leave no card", async () => {
+    const { draftsAfterFinal } = await import("../staff-answer-text");
+    for (const t of ["Forget the first draft.", "Never mind the first draft; send the second.", "Scratch the first draft.", "The first draft has a mistake in the date. Send the second.", "The second one is better."]) assert.deepEqual(draftsAfterFinal([A, B], t), [], t);
+  });
+  it("U4/U6: the notice says only what is true; names are not crisis words by substring", async () => {
+    const { STAFF_DRAFTS_WITHDRAWN_NOTICE, actionOnlyRequest } = await import("../staff-answer-text");
+    assert.equal(STAFF_DRAFTS_WITHDRAWN_NOTICE.trim(), "_No draft card this time. Ask for the draft again._");
+    for (const yes of ["Send it to Diego.", "Send it to Courtney.", "Send it to Lawrence.", "Send it to Sadie."]) assert.equal(actionOnlyRequest(yes), true, yes);
+    for (const no of ["Send it to Public Defender.", "Send it to Officer Javert.", "Send it to Victim Services."]) assert.equal(actionOnlyRequest(no), false, no);
+  });
+});
