@@ -14,6 +14,7 @@ import type { RecordChoice } from "@/lib/record-choice";
 export type Box = [number, number, number, number];
 
 export type SceneId =
+  | "employer-proof" | "program-intro" | "program-today" | "program-consent" | "program-outcome" | "program-proof"
   | "title"
   | "forge-intro"
   | "forge-line"
@@ -44,6 +45,12 @@ const ORG = "Demo capture, Oct 5, 2026 · fictional people";
 const ART = "Illustration from steelmanresumes.com";
 
 export const SCENES: Record<SceneId, ImgScene | DomScene> = {
+  "employer-proof": { kind: "dom", w: 1280, h: 800, note: LIVE },
+  "program-intro": { kind: "dom", w: 1280, h: 800, note: ORG },
+  "program-today": { kind: "dom", w: 1280, h: 800, note: ORG },
+  "program-consent": { kind: "dom", w: 1280, h: 800, note: ORG },
+  "program-outcome": { kind: "dom", w: 1280, h: 800, note: ORG },
+  "program-proof": { kind: "dom", w: 1280, h: 800, note: ORG },
   title: { kind: "dom", w: 1280, h: 800 },
   "forge-line": { kind: "dom", w: 1280, h: 800, note: "Live site capture, Oct 19, 2026 · fictional example" },
   "forge-intro": IMG("forge-intro", 1600, 1600, LIVE),
@@ -123,16 +130,16 @@ export const STEPS: Step[] = [
 
   { chapter: "help", scene: "map", zoom: 1, title: "Who hires, state by state", body: "Pick a state: the law in plain words, employers we checked, and local help." },
   { chapter: "help", scene: "state-montana", spot: [0.0085, 0.0758, 0.7747, 0.1934], title: "Straight talk about the law", body: "Each state page says what the law does, and does not, do for you." },
-  { chapter: "help", scene: "state-montana", spot: [0.0222, 0.7022, 0.9659, 0.2907], title: "Employers, with proof", body: "Read the source, the date we checked, and when the mark expires.", duration: 8000 },
+  { chapter: "help", scene: "employer-proof", title: "Employers, with proof", body: "Read the source, the date we checked, and when the mark expires.", duration: 10500 },
   { chapter: "help", scene: "local-help", spot: [0.0, 0.255, 1.0, 0.105], title: "Help near you", body: "A ride, a meal, ID, a place to stay. Search by place and need." },
   { chapter: "help", scene: "local-help", spot: [0.0192, 0.4857, 0.2316, 0.0424], title: "Honestly labeled", body: "A means we checked the page ourselves. B means it is listed and we have not finished checking." },
   { chapter: "help", scene: "local-help", spot: [0.1583, 0.929, 0.2137, 0.0448], click: true, title: "Keep it with the plan", body: "Save a listing to the Refinery and it stays with the person's plan." },
 
-  { chapter: "programs", scene: "org-13", spot: [0.19, 0.11, 0.79, 0.045], title: "For programs: Crucible", body: "A staff workspace beside each person. This is the demo workspace with sample data." },
-  { chapter: "programs", scene: "org-13", spot: [0.28, 0.36, 0.61, 0.57], title: "Today, sorted by why", body: "Interviews coming up, people gone quiet, people who never started." },
-  { chapter: "programs", scene: "org-14", spot: [0.2, 0.725, 0.76, 0.07], title: "Consent first", body: "Staff see only what each person chose to share, one item at a time. Never disclosure plans or interview answers." },
-  { chapter: "programs", scene: "org-15", spot: [0.28, 0.5, 0.605, 0.42], title: "Record the outcome", body: "A placement goes on file with the date and the employer, and the person can see it." },
-  { chapter: "programs", scene: "org-16", spot: [0.235, 0.24, 0.69, 0.235], title: "Proof for funders", body: "Counted only over what participants agreed to share, and ready to download." },
+  { chapter: "programs", scene: "program-intro", duration: 7500, title: "For programs: Crucible", body: "A staff workspace beside each person. This is the demo workspace with sample data." },
+  { chapter: "programs", scene: "program-today", duration: 10500, title: "Today, sorted by why", body: "Interviews coming up, people gone quiet, people who never started." },
+  { chapter: "programs", scene: "program-consent", duration: 10500, title: "Consent first", body: "Staff see only what each person chose to share, one item at a time. Never disclosure plans or interview answers." },
+  { chapter: "programs", scene: "program-outcome", duration: 10000, title: "Record the outcome", body: "A placement goes on file with the date and the employer, and the person can see it." },
+  { chapter: "programs", scene: "program-proof", duration: 10000, title: "Proof for funders", body: "Counted only over what participants agreed to share, and ready to download." },
 
   { chapter: "programs", scene: "close", title: "Your next move", body: "Start with the work you know.", duration: 8000 },
 ];

@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Pause, Play, RotateCcw } from "lucide-react";
 import type { RecordChoice } from "@/lib/record-choice";
+import { EvidenceScene, type EvidenceId } from "./EvidenceScene";
 import { RecordDemo } from "./record-demo";
 import { CHAPTERS, SCENES, STEPS, TOOLS, holdMs, toolKey, type Box, type Step } from "./tour";
 
@@ -136,29 +137,29 @@ function ChapterCue({ chapter, time }: { chapter: string; time: number }) {
   return <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-[#0b0a09]" style={{ opacity: 1 - progress(time, 900, 600) }}><svg width="110" height="110" viewBox="0 0 120 120" fill="none" stroke="#dbc173" strokeWidth="2"><path d={paths[chapter]} pathLength="1" strokeDasharray="1" strokeDashoffset={1 - progress(time, 0, 850)} /></svg></div>;
 }
 
-function ToolsScene() {
+function ToolsScene({ time }: { time: number }) {
   return (
-    <div className="grid h-full grid-cols-3 content-center gap-5 px-14">
-      {TOOLS.map((t) => (
-        <article key={t.name} data-tour={toolKey(t.name)} className="flex h-[220px] overflow-hidden rounded-lg border border-white/10 bg-[#1a1815]">
-          {t.art && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={t.art} alt="" className="h-full w-[150px] shrink-0 object-cover" />
-          )}
-          <div className="p-6">
-            <p className="font-mono text-[13px] uppercase tracking-[0.12em] text-[#8f897a]">{t.group}</p>
-            <p className="mt-1 text-[24px] font-bold text-[#f4efe2]">{t.name}</p>
-            <p className="mt-2 line-clamp-4 text-[15px] leading-relaxed text-[#b9b2a0]">{t.body}</p>
+    <div className="flex h-full flex-col justify-center px-20">
+      <p className="font-mono text-[19px] uppercase tracking-[.18em] text-[#dbc173]">The Refinery</p>
+      <p className="mt-5 text-[64px] font-bold text-[#f4efe2]">Pick what you need next.</p>
+      <div className="mt-14 grid grid-cols-3 gap-8">
+        {["Build", "Find work", "My stuff"].map((group, n) => (
+          <div key={group} className="border-t-2 border-[#dbc173]/60 pt-7" style={reveal(time, n * 650 + 700)}>
+            <p className="mb-7 font-mono text-[22px] uppercase tracking-[.08em] text-[#dbc173]">{group}</p>
+            {TOOLS.filter(t => t.group === group).map(t => <p key={t.name} data-tour={toolKey(t.name)} className="mb-5 text-[29px] leading-tight text-[#f4efe2]">{t.name}</p>)}
           </div>
-        </article>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }
 
 function CloseScene({ time }: { time: number }) {
   return (
-    <div className="flex h-full flex-col justify-center px-20">
+    <div className="relative flex h-full flex-col justify-center overflow-hidden px-20">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/images/t-roy-figure.png" alt="" className="pointer-events-none absolute bottom-0 right-0 h-[740px] w-[470px] object-contain object-bottom" style={{ opacity: .28 * progress(time, 500, 1400) }} />
+      <div className="relative z-10">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/brand/steel-man-mark-light.svg" alt="" className="mb-12 h-20 w-auto self-start" style={reveal(time, 0)} />
       <p className="text-[90px] font-bold leading-tight text-[#f4efe2]" style={reveal(time, 300)}>Your next <span className="text-[#dbc173]">move.</span></p>
@@ -166,6 +167,7 @@ function CloseScene({ time }: { time: number }) {
       <div className="mt-12 flex gap-5" style={reveal(time, 1600)}>
         <a href="/" className="rounded-[6px] bg-[#dbc173] px-9 py-5 text-[24px] font-semibold text-[#121110] hover:bg-[#f0dda0]" style={{ boxShadow: `0 0 0 ${Math.sin(progress(time, 2400, 1200) * Math.PI) * 12}px rgba(219,193,115,.12)` }}>Start free in the Forge</a>
         <a href={`${SITE}/organizations`} className="rounded-[6px] border border-white/30 px-9 py-5 text-[24px] text-[#f4efe2] hover:bg-white/10">For organizations</a>
+      </div>
       </div>
     </div>
   );
@@ -201,7 +203,7 @@ export function TourPlayer() {
   const still = reduced || manual;
   const time = still ? hold : elapsed;
   const chapterOpening = i > 0 && STEPS[i - 1].chapter !== step.chapter;
-  const captionDelay = step.scene === "forge-line" ? 7600 : CAPTION_DELAY;
+  const captionDelay = step.scene === "forge-line" ? 7600 : step.scene === "employer-proof" || step.scene.startsWith("program-") ? 3000 : CAPTION_DELAY;
   const last = i === STEPS.length - 1;
   const narrow = vw > 0 && vw < 640;
   /* The caption never sits on the stage: beside it on a wide window, under it on a narrow one. */
@@ -469,14 +471,29 @@ export function TourPlayer() {
         >
           <div key={step.scene} ref={sceneRef} className="wt-cut relative h-full w-full" style={{ pointerEvents: step.scene === "close" ? "auto" : "none" }}>
             {isImg ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={(scene as { src: string }).src} alt={`${step.title}. ${step.body}`} className="block h-full w-full select-none" draggable={false} style={step.scene === "art-tailor" ? { clipPath: `circle(${15 + progress(time, 0, 1300) * 90}% at 45% 45%)` } : undefined} />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={(scene as { src: string }).src} alt={`${step.title}. ${step.body}`} className="block h-full w-full select-none" draggable={false} style={step.scene === "art-tailor" ? { clipPath: `circle(${15 + progress(time, 0, 1300) * 90}% at 45% 45%)` } : undefined} />
+                {step.scene.startsWith("art-") && (
+                  <div aria-hidden="true" className="absolute bg-[#0d0c0b]" style={{
+                    inset: step.scene === "art-disclosure" ? "65% 0 0 0" : "0 0 0 53%",
+                    opacity: .94 * (1 - progress(time, step.scene === "art-tailor" ? 2300 : 1500, 1000)),
+                  }} />
+                )}
+                {step.scene === "map" && (
+                  <div aria-hidden="true" className="absolute text-[#f4efe2]" style={{ left: "20.6%", top: "29.7%", opacity: progress(time, 1600), transform: `translate(-50%, calc(-100% - ${(1 - progress(time, 1600)) * 60}px))` }}>
+                    <svg width="54" height="70" viewBox="0 0 54 70" fill="#0d0c0b" stroke="#dbc173" strokeWidth="3"><path d="M27 66C20 53 5 38 5 25a22 22 0 1 1 44 0c0 13-15 28-22 41Z" /><circle cx="27" cy="25" r="8" /></svg>
+                  </div>
+                )}
+              </>
             ) : step.scene === "title" ? (
               <TitleScene time={time} />
             ) : step.scene === "forge-line" ? (
               <ConversationScene time={time} />
+            ) : step.scene === "employer-proof" || step.scene.startsWith("program-") ? (
+              <EvidenceScene id={step.scene as EvidenceId} time={time} />
             ) : step.scene === "tools" ? (
-              <ToolsScene />
+              <ToolsScene time={time} />
             ) : step.scene === "close" ? (
               <CloseScene time={time} />
             ) : (
