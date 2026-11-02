@@ -351,3 +351,13 @@ describe("production c225fa7 (2026-11-02): listing phone numbers in every shape 
     const t = performance.now(); fig("313-962-".repeat(20000) + "WORK"); assert.ok(performance.now() - t < 500);
   });
 });
+
+describe("production b81a1db (2026-11-02): 'search 211 for Kent County' is the help line; capital Ext. is a phone extension", () => {
+  it("help-line verbs search/contact/try; counts stay figures", async () => {
+    const { checkOrgClaimsDeterministic } = await import("../org-output-verify");
+    const facts = { caseload: 3, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jean"], staffNames: [] } as never;
+    const fig = (t: string) => checkOrgClaimsDeterministic(t, facts).filter((p: string) => /figure/.test(p));
+    for (const ok of ["For housing, try searching shelter on its own, or search 211 for Kent County.", "Contact 211 for local help.", "Try 211 or a county office.", "Phone (734) 971-9781 Ext. 378."]) assert.deepEqual(fig(ok), [], ok);
+    for (const bad of ["We searched 211 participants' records.", "Contact 211 people this week.", "Trying 211 placements was the goal.", "313-962-9675\nx 45 people hired"]) assert.ok(fig(bad).length > 0, bad);
+  });
+});
