@@ -340,3 +340,14 @@ describe("follow-up preview 8f2280c (2026-11-02): 'dialing 211 is ...' is a help
     for (const ok of ["Call or text 988 to talk to someone.", "Dial 211 to reach local help.", "Dialling 988 connects them to a counselor.", "Texting 988 can help."]) assert.deepEqual(fig(ok), [], ok);
   });
 });
+
+describe("production c225fa7 (2026-11-02): listing phone numbers in every shape are contact details, not figures", () => {
+  it("word numbers, a leading 1, extensions; a count next to a phone stays a figure", async () => {
+    const { checkOrgClaimsDeterministic } = await import("../org-output-verify");
+    const facts = { caseload: 3, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jean"], staffNames: [] } as never;
+    const fig = (t: string) => checkOrgClaimsDeterministic(t, facts).filter((p: string) => /figure/.test(p));
+    for (const ok of ["Phone 800-285-WORKS (9675). Hours vary.", "Phone 313-962-WORK (9675). The listing is old.", "Phone (734) 971-9781 ext. 378. The office is in Ann Arbor.", "Phone (313) 305-0311.", "Call 1-800-285-9675 today.", "Phone 517-485-4722, extension 12."]) assert.deepEqual(fig(ok), [], ok);
+    for (const bad of ["Phone 313-962-WORK (9675). They placed 37 people.", "We called 313 people.", "Phone (313) 305-0311. 45 participants got jobs."]) assert.ok(fig(bad).length > 0, bad);
+    const t = performance.now(); fig("313-962-".repeat(20000) + "WORK"); assert.ok(performance.now() - t < 500);
+  });
+});
