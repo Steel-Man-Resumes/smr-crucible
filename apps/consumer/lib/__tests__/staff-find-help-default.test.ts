@@ -12,6 +12,7 @@ it("a place with no need searches shelter, food and jobs; a missing place is sti
   assert.match(skill, /Start with the place, and the need when they give one/);
   assert.match(skill, /If the place is missing, ask for it in one short question/);
   assert.match(skill, /If they gave a place but no need[\s\S]{0,80}do not ask: search the three most common areas, "shelter", "food" and "jobs"/);
+  assert.match(skill, /never the area key like id_documents/);
   const tools = read("../tools/assistant-staff-tools.ts");
   assert.match(tools, /A place with no need \(Troy 11\/01\): search needs 'shelter', 'food' and 'jobs'/);
   for (const a of ["shelter", "food", "jobs"]) assert.ok((RESOURCE_AREAS as readonly string[]).includes(a), a);

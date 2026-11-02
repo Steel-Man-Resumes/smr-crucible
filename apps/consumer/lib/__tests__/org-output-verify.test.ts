@@ -329,3 +329,13 @@ describe("production db4c4f9 DEMO-02 (2026-11-01): list positions are not figure
     const t0 = performance.now(); withoutListMarkers("1. A\n".repeat(30000) + " 9".repeat(30000)); assert.ok(performance.now() - t0 < 200);
   });
 });
+
+describe("follow-up preview 8f2280c (2026-11-02): 'dialing 211 is ...' is a help line, not a figure", () => {
+  it("help-line verbs in -ing form; a count after 'text' stays a figure", async () => {
+    const { checkOrgClaimsDeterministic } = await import("../org-output-verify");
+    const facts = { caseload: 3, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jean"], staffNames: [] } as never;
+    const fig = (t: string) => checkOrgClaimsDeterministic(t, facts).filter((p: string) => /figure/.test(p));
+    for (const ok of ["For any need, dialing 211 is a reasonable way to reach local services.", "Calling 988 connects them to a counselor.", "Texting 988 is free.", "Dial 211 to reach local help."]) assert.deepEqual(fig(ok), [], ok);
+    for (const bad of ["Text 211 participants today.", "Calling 211 people this week is the goal.", "Dialing 211 numbers took all day."]) assert.ok(fig(bad).length > 0, bad);
+  });
+});
