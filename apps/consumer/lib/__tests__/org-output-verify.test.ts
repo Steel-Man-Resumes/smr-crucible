@@ -336,6 +336,7 @@ describe("follow-up preview 8f2280c (2026-11-02): 'dialing 211 is ...' is a help
     const facts = { caseload: 3, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jean"], staffNames: [] } as never;
     const fig = (t: string) => checkOrgClaimsDeterministic(t, facts).filter((p: string) => /figure/.test(p));
     for (const ok of ["For any need, dialing 211 is a reasonable way to reach local services.", "Calling 988 connects them to a counselor.", "Texting 988 is free.", "Dial 211 to reach local help."]) assert.deepEqual(fig(ok), [], ok);
-    for (const bad of ["Text 211 participants today.", "Calling 211 people this week is the goal.", "Dialing 211 numbers took all day."]) assert.ok(fig(bad).length > 0, bad);
+    for (const bad of ["Text 211 participants today.", "Calling 211 people this week is the goal.", "Dialing 211 numbers took all day.", "This quarter we finished calling 211 to confirm their jobs.", "Our team is texting 211 to remind them of the job fair.", "Calling 211 is how many we placed.", "Texting 211 is how many we reached."]) assert.ok(fig(bad).length > 0, bad);
+    for (const ok of ["Call or text 988 to talk to someone.", "Dial 211 to reach local help.", "Dialling 988 connects them to a counselor.", "Texting 988 can help."]) assert.deepEqual(fig(ok), [], ok);
   });
 });

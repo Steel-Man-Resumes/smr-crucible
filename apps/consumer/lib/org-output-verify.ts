@@ -618,8 +618,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // "Text 211 participants" and "211 people were served" stay figures.
   text = text
     // Follow-up preview 8f2280c (2026-11-02): "dialing 211 is a reasonable way to reach local services" was flagged.
-    // -ing forms and "is/to/will/can/connects/reaches/line" after the number; "text 211 participants" stays a figure.
-    .replace(/\b(call(?:ing)?(?:\s+or\s+text(?:ing)?)?|text(?:ing)?|dial(?:l?ing)?)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any ?time|now|today|right away|immediately|24\/7|is|to|will|can|connects|reaches|line|helpline|hotline)\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
+    // -ing forms; after the number "will/can/connects/reaches/line", "is a/the/free...", "to talk/reach/find..."
+    // (review H1/H2: "calling 211 to confirm their jobs", "Calling 211 is how many we placed" stay figures).
+    .replace(/\b(call(?:ing)?(?:\s+or\s+text(?:ing)?)?|text(?:ing)?|dial(?:l?ing)?)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any ?time|now|today|right away|immediately|24\/7|will|can|connects|reaches|line|helpline|hotline|is (?:a|an|the|free|one|open|available|confidential)|to (?:talk|speak|reach|find|get|ask|connect|be connected))\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
     .replace(/\b(?:911|988|211)\b(?=\s*\((?:call|text))/gi, "HELPLINE");
   // A year after a time word is a date, not a count (staff prompt review F8; review N10-2, N10-3): "In
   // 2026", "since 2024", "FY 2026", "2025-26", "from 2025 to 2026". Never when a count noun follows
