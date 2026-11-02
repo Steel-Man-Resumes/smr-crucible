@@ -620,7 +620,8 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
     // Follow-up preview 8f2280c (2026-11-02): "dialing 211 is a reasonable way to reach local services" was flagged.
     // -ing forms; after the number "will/can/connects/reaches/line", "is a/the/free...", "to talk/reach/find..."
     // (review H1/H2: "calling 211 to confirm their jobs", "Calling 211 is how many we placed" stay figures).
-    .replace(/\b(call(?:ing)?(?:\s+or\s+text(?:ing)?)?|text(?:ing)?|dial(?:l?ing)?)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any ?time|now|today|right away|immediately|24\/7|will|can|connects|reaches|line|helpline|hotline|is (?:a|an|the|free|one|open|available|confidential)|to (?:talk|speak|reach|find|get|ask|connect|be connected))\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
+    // Production b81a1db (2026-11-02): "search 211 for Kent County" is the help line too (search/contact/try).
+    .replace(/\b(call(?:ing)?(?:\s+or\s+text(?:ing)?)?|text(?:ing)?|dial(?:l?ing)?|search(?:ing)?|contact(?:ing)?|try(?:ing)?)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any ?time|now|today|right away|immediately|24\/7|will|can|connects|reaches|line|helpline|hotline|is (?:a|an|the|free|one|open|available|confidential)|to (?:talk|speak|reach|find|get|ask|connect|be connected))\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
     .replace(/\b(?:911|988|211)\b(?=\s*\((?:call|text))/gi, "HELPLINE");
   // A year after a time word is a date, not a count (staff prompt review F8; review N10-2, N10-3): "In
   // 2026", "since 2024", "FY 2026", "2025-26", "from 2025 to 2026". Never when a count noun follows
@@ -645,7 +646,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // rather than letting its digit groups into the allowed numbers.
   // Production c225fa7 (2026-11-02, local help listings): word numbers "313-962-WORK (9675)", "800-285-WORKS
   // (9675)", a leading "1-" and extensions "(734) 971-9781 ext. 378" were read as figures.
-  text = text.replace(/(?:\b1[\s.-])?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-](?:\d{4}\b|[A-Z]{4,7}\b(?:\s*\(\d{4,7}\))?)(?:,?\s*(?:ext\.?|extension|x)\s*\d{1,6}\b)?/g, " ");
+  text = text.replace(/(?:\b1[\s.-])?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-](?:\d{4}\b|[A-Z]{4,7}\b(?:\s*\(\d{4,7}\))?)(?:,?[ \t]*(?:[Ee]xt\.?|[Ee]xtension|[xX])[ \t]*\d{1,6}\b)?/g, " ");
   // An email address is contact detail too (lane S1, review round 2): it is
   // read as "their email", so its parts are never counts or names, and the
   // sentence it sits in stays whole for the prefill rule.
