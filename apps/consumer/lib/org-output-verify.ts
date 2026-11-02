@@ -643,7 +643,9 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   text = text.replace(/\bLABELNUM\s+of\s+\d{1,4}\b(?!\s+(?:[A-Za-z]+\s+){0,2}(?:people|persons|participants|clients|hires|hired|placements|placed|applicants|referrals|members|staff|employers|jobs|graduates|students|residents|individuals|cases|families|youth|adults|men|women|served|employees|workers|trainees|tenants|customers|patients|kids|children|veterans|volunteers|interns|apprentices|attendees|enrollees|guests|visitors|mentees|seniors|teens|candidates|folks)\b)/g, "LABELNUM of LABELNUM");
   // A phone number is contact detail, not a count (review C4 B1): skip it
   // rather than letting its digit groups into the allowed numbers.
-  text = text.replace(/\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-]\d{4}\b/g, " ");
+  // Production c225fa7 (2026-11-02, local help listings): word numbers "313-962-WORK (9675)", "800-285-WORKS
+  // (9675)", a leading "1-" and extensions "(734) 971-9781 ext. 378" were read as figures.
+  text = text.replace(/(?:\b1[\s.-])?\(?\b\d{3}\)?[\s.-]?\d{3}[\s.-](?:\d{4}\b|[A-Z]{4,7}\b(?:\s*\(\d{4,7}\))?)(?:,?\s*(?:ext\.?|extension|x)\s*\d{1,6}\b)?/g, " ");
   // An email address is contact detail too (lane S1, review round 2): it is
   // read as "their email", so its parts are never counts or names, and the
   // sentence it sits in stays whole for the prefill rule.
