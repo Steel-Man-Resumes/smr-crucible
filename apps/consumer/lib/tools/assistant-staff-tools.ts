@@ -254,7 +254,7 @@ export function buildStaffTools(initial: OrgActor, onEvidence?: (tool: string, r
       }),
     }),
     find_local_help: tool({
-      description: "Search Steel Man's public help directory for a place and need the STAFF MEMBER named. Public listings only; it reads nothing about the participant (not their address, not their saved help list). If no place was given, ask for a town, county or ZIP and the state. Returns up to five listings with how sure we are, the date last checked, phone, hours and link.",
+      description: "Search Steel Man's public help directory for a place and need the STAFF MEMBER named. Public listings only; it reads nothing about the participant (not their address, not their saved help list). If no place was given, ask for a town, county or ZIP and the state. A place with no need (Troy 11/01): search needs 'shelter', 'food' and 'jobs' and say you searched housing, food and work. Returns up to five listings with how sure we are, the date last checked, phone, hours and link.",
       parameters: jsonSchema<{place: string; needs: string[]}>({ type: "object", properties: { place: { type: "string", minLength: 2, maxLength: 120 }, needs: { type: "array", items: { type: "string", enum: [...RESOURCE_AREAS] }, minItems: 1, maxItems: 3 } }, required: ["place", "needs"], additionalProperties: false }),
       execute: safe(async ({ place, needs }) => {
         // Directory text is written by others and can carry an id (fix round 2).

@@ -539,6 +539,27 @@ export function orgFlagNotice(problems: readonly string[]): string {
 }
 
 /**
+ * Production db4c4f9, DEMO-02 (2026-11-01): a numbered list of Today's sections ("1. Your tasks ... 8. Waiting
+ * ... 11. ...") had its positions 8, 9 and 11 flagged as caseload figures. A list position is not a count.
+ * Walked in text order: a number is a position only when it starts a line (a markdown list item) and is the
+ * NEXT one expected (1, then 2, then 3 ...), followed by "." or ")" and a word. Inline numbers stay checked. "Your caseload has 17." is
+ * never a position, before or after a list, so it stays checked (review N10-4).
+ */
+export function withoutListMarkers(text: string): string {
+  let expected = 1;
+  // Line starts only (a markdown list): inline "has 12. Call them" after a list is never a position.
+  // Review F1: bold, italic or code items ("1. **Your tasks**"); F3: only "\n" starts a line (no "m" flag, so a
+  // lone \r or U+2028 is not one); F4: a "1." starts a new list.
+  return text.replace(/(?<=^|\n)([ \t]*)(\d{1,2})([.)])(?=[ \t]+(?:\*\*?|__?|`)?["“(]?[A-Za-z])/g, (all, lead: string, num: string) => {
+    const n = Number(num);
+    if (n === 1) expected = 1;
+    if (n !== expected) return all;
+    expected += 1;
+    return `${lead}#.`;
+  });
+}
+
+/**
  * `opts.typedNamesInNoMatch`: answer path only. A name the staff member typed
  * may be repeated in a sentence that says the person is NOT on their list
  * ("Michael Shaw isn't on your list"). Anywhere else, and always in a draft
@@ -596,7 +617,10 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // become HELPLINE (all capitals, so the name check reads nothing new); the verb stays.
   // "Text 211 participants" and "211 people were served" stay figures.
   text = text
-    .replace(/\b(call(?:\s+or\s+text)?|text|dial)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any ?time|now|today|right away|immediately|24\/7)\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
+    // Follow-up preview 8f2280c (2026-11-02): "dialing 211 is a reasonable way to reach local services" was flagged.
+    // -ing forms; after the number "will/can/connects/reaches/line", "is a/the/free...", "to talk/reach/find..."
+    // (review H1/H2: "calling 211 to confirm their jobs", "Calling 211 is how many we placed" stay figures).
+    .replace(/\b(call(?:ing)?(?:\s+or\s+text(?:ing)?)?|text(?:ing)?|dial(?:l?ing)?)(\s+)(?:911|988|211)\b(?=\s*(?:$|[.,;:!?)(]|(?:for|or|if|and|any ?time|now|today|right away|immediately|24\/7|will|can|connects|reaches|line|helpline|hotline|is (?:a|an|the|free|one|open|available|confidential)|to (?:talk|speak|reach|find|get|ask|connect|be connected))\b))/gi, (_m, v: string, sp: string) => `${v}${sp}HELPLINE`)
     .replace(/\b(?:911|988|211)\b(?=\s*\((?:call|text))/gi, "HELPLINE");
   // A year after a time word is a date, not a count (staff prompt review F8; review N10-2, N10-3): "In
   // 2026", "since 2024", "FY 2026", "2025-26", "from 2025 to 2026". Never when a count noun follows
@@ -673,6 +697,7 @@ export function checkOrgClaimsDeterministic(text: string, facts: OrgFacts, userS
   // class of claim that gets copied into a headcount.
   // Durations, clock times and ordinals are not headcounts: "first 15 minutes",
   // "a 2-minute check-in", "by 9am", "the 3rd".
+  text = withoutListMarkers(text);
   const numbers =
     text.match(
       /(?<![$\d.,%/:-])\b\d{1,4}\b(?!\.\d|,\d{3}\b|[\d%/]|\s?percent\b|-?\s?(?:minutes?|mins?|hours?|hrs?|seconds?|secs?|am|pm|a\.m|p\.m)\b|(?:st|nd|rd|th)\b|:\d)/gi

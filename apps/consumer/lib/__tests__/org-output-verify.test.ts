@@ -303,3 +303,40 @@ describe("W08 review round 4: dates as t.ROY writes them", () => {
     assert.deepEqual(checkOrgClaimsDeterministic("Since Oct 25 you have 27 people waiting on you.", LUPE, "", answer), ['the figure "27" is not one of this caseload\'s numbers']);
   });
 });
+
+describe("production db4c4f9 DEMO-02 (2026-11-01): list positions are not figures", () => {
+  it("a numbered list longer than 7 is not flagged; a count in a sentence still is", async () => {
+    const { checkOrgClaimsDeterministic, withoutListMarkers } = await import("../org-output-verify");
+    const facts = { caseload: 3, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jean", "Marqus", "Circe"], staffNames: [] } as never;
+    const inline = "Your tasks is already first, so I changed nothing. The order is now: 1. Your tasks 2. Retention check-ins due 3. Referrals past due 4. Interviews coming up 5. Interviews stalled 6. Follow-ups due 7. They answered you 8. Waiting on you 9. New this week 10. Quiet 11. Never started";
+    // Inline numbers are never positions: they stay checked (conservative; the model writes markdown lists).
+    assert.ok(checkOrgClaimsDeterministic(inline, facts).some((p: string) => /figure/.test(p)));
+    const lines = Array.from({ length: 11 }, (_, i) => `${i + 1}. Section ${String.fromCharCode(65 + i)}`).join("\n");
+    assert.deepEqual(checkOrgClaimsDeterministic(lines, facts).filter((p: string) => /figure/.test(p)), []);
+    for (const t of ["Your caseload has 17. Call them today.", `${lines}\nYour caseload has 17. Call them.`, `${lines} Your caseload has 17. Call them.`, "Your caseload has 9.\n1. A\n2. B", "8. Waiting on you", "Jean has 11) Open tasks"]) {
+      assert.ok(checkOrgClaimsDeterministic(t, facts).some((p: string) => /figure/.test(p)), t);
+    }
+    assert.equal(withoutListMarkers("1. A\n2. B\n2. C"), "#. A\n#. B\n2. C");
+    // Review F1: bold, italic and code items; F3: a lone \r is not a line start; F4: a second list restarts at 1.
+    const bold = Array.from({ length: 11 }, (_, i) => `${i + 1}. **Section ${String.fromCharCode(65 + i)}**`).join("\n");
+    assert.deepEqual(checkOrgClaimsDeterministic(bold, facts).filter((p: string) => /figure/.test(p)), []);
+    const code = Array.from({ length: 9 }, (_, i) => `${i + 1}. \`Area ${String.fromCharCode(65 + i)}\``).join("\n");
+    assert.deepEqual(checkOrgClaimsDeterministic(code, facts).filter((p: string) => /figure/.test(p)), []);
+    const seven = Array.from({ length: 7 }, (_, i) => `${i + 1}. Item`).join("\n");
+    assert.ok(checkOrgClaimsDeterministic(`${seven}\nPlaced:\r8. people hired`, facts).some((p: string) => /figure/.test(p)));
+    const nine = Array.from({ length: 9 }, (_, i) => `${i + 1}. Item`).join("\n");
+    assert.deepEqual(checkOrgClaimsDeterministic(`${nine}\n\nNext list:\n${nine}`, facts).filter((p: string) => /figure/.test(p)), []);
+    const t0 = performance.now(); withoutListMarkers("1. A\n".repeat(30000) + " 9".repeat(30000)); assert.ok(performance.now() - t0 < 200);
+  });
+});
+
+describe("follow-up preview 8f2280c (2026-11-02): 'dialing 211 is ...' is a help line, not a figure", () => {
+  it("help-line verbs in -ing form; a count after 'text' stays a figure", async () => {
+    const { checkOrgClaimsDeterministic } = await import("../org-output-verify");
+    const facts = { caseload: 3, stalled: 0, neverStarted: 0, hired: 0, unassigned: 0, visibleNames: ["Jean"], staffNames: [] } as never;
+    const fig = (t: string) => checkOrgClaimsDeterministic(t, facts).filter((p: string) => /figure/.test(p));
+    for (const ok of ["For any need, dialing 211 is a reasonable way to reach local services.", "Calling 988 connects them to a counselor.", "Texting 988 is free.", "Dial 211 to reach local help."]) assert.deepEqual(fig(ok), [], ok);
+    for (const bad of ["Text 211 participants today.", "Calling 211 people this week is the goal.", "Dialing 211 numbers took all day.", "This quarter we finished calling 211 to confirm their jobs.", "Our team is texting 211 to remind them of the job fair.", "Calling 211 is how many we placed.", "Texting 211 is how many we reached."]) assert.ok(fig(bad).length > 0, bad);
+    for (const ok of ["Call or text 988 to talk to someone.", "Dial 211 to reach local help.", "Dialling 988 connects them to a counselor.", "Texting 988 can help."]) assert.deepEqual(fig(ok), [], ok);
+  });
+});
