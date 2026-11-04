@@ -13,7 +13,7 @@
  */
 
 import { parseJobLine, parseResume, parseSkillsLine } from "./resume-render/model";
-import { isBulletLine, isSectionHeader, splitResumeHeader, stripBulletMarker } from "@crucible/core/src/pageFitShared";
+import { bodyHeadlineIndex, isBulletLine, isSectionHeader, splitResumeHeader, stripBulletMarker } from "@crucible/core/src/pageFitShared";
 
 interface Doc {
   formatVersion: 3;
@@ -29,7 +29,8 @@ interface Doc {
 
 const EMAIL_RE = /[^\s|,]+@[^\s|,]+\.[a-z]{2,}/i;
 const PHONE_RE = /(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
-const CITY_STATE_RE = /^([A-Za-z .'-]+),\s*([A-Z]{2})$/;
+// A ZIP after the state ("Milwaukee, WI 53206") is still the city line (Forge run 11/4: the city was dropped).
+const CITY_STATE_RE = /^([A-Za-z .'-]+),\s*([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?$/;
 
 function contactOf(line: string) {
   const out = { phone: "", email: "", city: "", state: "" };
@@ -64,7 +65,18 @@ export function resumeTextToDocument(text: string, base?: { meta?: { targetJob?:
   // rebuild identically, including when two saves run in different workers.
   let seq = 0;
   const nid = (p: string) => `${p}-rev-${(++seq).toString(36)}`;
-  const { header, bodyLines } = splitResumeHeader(text);
+  const split = splitResumeHeader(text);
+  const header = split.header;
+  const bodyLines = [...split.bodyLines];
+  // The writer puts its headline after a blank line, between the contact line and the first heading. The
+  // renderer and the page-fit estimator already read it there (bodyHeadlineIndex); the document must too, or
+  // the title lands in the summary ("Warehouse Shift Lead and Forklift Operator Warehouse worker who ...",
+  // Forge run 11/4).
+  const hl = bodyHeadlineIndex(bodyLines, header);
+  if (hl >= 0) {
+    header.headlineLine = bodyLines[hl].trim();
+    bodyLines.splice(hl, 1);
+  }
   const name = header.nameLine.trim();
   const c = contactOf(header.contactLine || "");
   const doc: Doc = {
