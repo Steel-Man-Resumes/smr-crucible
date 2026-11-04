@@ -15,6 +15,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { mainActionLabel, type FinishView } from "@/lib/finish-gate";
 import type { DownloadFormat } from "@/lib/resume-download";
 import { DRAFT_BADGE, SOMETHING_ELSE_LABEL, type NextAction } from "@/lib/lane-task";
@@ -123,8 +124,18 @@ export function LaneDownloadBox({
   );
 }
 
-export function LaneNextAction({ action, children, onFinish, checking = false }: { action: NextAction; children: ReactNode; onFinish?: () => void; checking?: boolean }) {
+export function LaneNextAction({ action, children, onFinish, checking = false, onBefore }: { action: NextAction; children: ReactNode; onFinish?: () => void; checking?: boolean; onBefore?: () => Promise<void> }) {
   const internal = action.href.startsWith("/");
+  const router = useRouter();
+  const [leaving, setLeaving] = useState(false);
+  // Michigan run 11/4: "Use this resume" is the person's approval of the finished page. The page does what it
+  // says before it leaves (pins the resume as current), so the Tailor builds from this page, not the old upload.
+  async function leave() {
+    if (leaving) return;
+    setLeaving(true);
+    try { await onBefore?.(); } catch {}
+    router.push(action.href);
+  }
   const cls = "t-focus inline-flex min-h-touch w-full items-center justify-center bg-t-amber px-6 py-3 text-base font-bold text-white hover:bg-t-amber-bright sm:w-auto";
   return (
     <section id="finish-next" aria-labelledby="finish-next-heading" className="scroll-mt-20 border-t border-t-line pt-8" data-testid="lane-next">
@@ -133,6 +144,8 @@ export function LaneNextAction({ action, children, onFinish, checking = false }:
       </h2>
       {action.href === "#fix-list" && onFinish ? (
         <button type="button" onClick={onFinish} disabled={checking} className={`${cls} disabled:opacity-60`} data-testid="lane-next-action">{checking ? "Finishing your checks..." : action.label}</button>
+      ) : internal && onBefore ? (
+        <button type="button" onClick={() => void leave()} disabled={leaving} className={`${cls} disabled:opacity-60`} data-testid="lane-next-action">{action.label}</button>
       ) : internal ? (
         <Link href={action.href} className={cls} data-testid="lane-next-action">
           {action.label}

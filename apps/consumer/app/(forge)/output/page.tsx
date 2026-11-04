@@ -1736,7 +1736,25 @@ function OutputPageInner() {
       ) : lanes ? (
         /* Lanes first (R2): one next action by route; the rest behind "Something else". */
         <div className="mt-12">
-          <LaneNextAction action={nextActionFor(session.laneTask, { signedIn, finished, seatless })} onFinish={goFix} checking={checking || settling || (mayAccount && saveShown === "saving")}>
+          <LaneNextAction
+            action={nextActionFor(session.laneTask, { signedIn, finished, seatless })}
+            onFinish={goFix}
+            checking={checking || settling || (mayAccount && saveShown === "saving")}
+            // "Use this resume" (finished, signed in, a seat): the tap is the person's approval of this page, so the
+            // saved resume is pinned as their current one before the Refinery opens. The Tailor then builds from this
+            // page and trusts its lines; without the pin it rebuilt from the old upload (Michigan run 2026-11-04).
+            onBefore={
+              finished && signedIn && !seatless && current?.status === "finished" && current.artifactId
+                ? async () => {
+                    await fetch(`/api/artifacts/${encodeURIComponent(current.artifactId)}`, {
+                      method: "PATCH",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ setCurrent: true }),
+                    });
+                  }
+                : undefined
+            }
+          >
             {parkedLetter && !coverLetterText && docState === "done" && (
               <div data-testid="letter-offer">
                 <p className="mb-2 text-sm text-t-phos">Applying somewhere that wants a cover letter? t.ROY wrote one from your story. t.ROY checks it line by line with you, like the resume.</p>
