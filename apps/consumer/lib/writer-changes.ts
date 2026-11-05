@@ -24,6 +24,7 @@
 
 import { plainPunctuationText } from "./legal-sanitize";
 import { isJusticeSensitive } from "./grounding-verify";
+import { isSectionHeader } from "@crucible/core/src/pageFitShared";
 
 /** The line that starts the writer's change list. */
 export const CHANGES_MARKER = "===CHANGES===";
@@ -191,6 +192,67 @@ export function splitWriterOutput(raw: string): { resume: string; changes: unkno
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   return { resume, changes };
+}
+
+/** Spacing collapsed, case dropped, for "is this line the person's name". */
+const squashName = (s: string) => s.replace(/[^A-Za-z]+/g, " ").trim().toLowerCase();
+/** A line that is a name on its own: two to five capitalised words, no digits, no pipes, not a heading. */
+const NAME_LINE_RE = /^(?:[A-Z][A-Za-z'.-]*\s+){1,4}[A-Z][A-Za-z'.-]*$/;
+/** A line that reads as the writer talking: a sentence of eight words or more, or one about itself ("I need to flag", "Note:", "Before finalizing"). */
+const PREFACE_LINE_RE = /^(?:note|before|i\b|i'|here is|here's|below is|this resume)|\b(?:i'll|i will|i need|i have|i am|i've|finaliz|let me|please note)\b|[.?!:]$/i;
+const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
+
+/**
+ * Cut what the writer said before the resume (Jean run, 2026-11-05: "I NEED TO FLAG ONE SCOPE QUESTION
+ * BEFORE FINALIZING, BUT I'LL WRITE THE STRONGEST TRUE RESUME THE FACTS SUPPORT NOW." sat above the name,
+ * so the parser took it as the name and the person's name slid into the headline slot).
+ *
+ * The person's name (the first line of their own page) decides: every line above the first line that is the
+ * name is a preface and goes. Without a known name, every leading line that reads as the writer talking goes,
+ * up to the first line shaped like a name or a heading. The resume itself is never changed below that point.
+ */
+export function stripWriterPreface(text: string, ownName?: string): { resume: string; preface: string } {
+  const lines = (text || "").replace(/\r\n?/g, "\n").split("\n");
+  const want = ownName ? squashName(ownName) : "";
+  const firstNonBlank = lines.findIndex((l) => l.trim());
+  if (firstNonBlank < 0) return { resume: text, preface: "" };
+  let cutTo = 0;
+  if (want) {
+    // The name is in the first ten non-blank lines, or nothing is cut.
+    let seen = 0;
+    for (let i = 0; i < lines.length && seen < 10; i++) {
+      const t = lines[i].trim();
+      if (!t) continue;
+      seen++;
+      if (squashName(t) === want) {
+        cutTo = i;
+        break;
+      }
+    }
+  }
+  if (!cutTo) {
+    // No known name, or the name was not found: drop leading lines that read as the writer talking.
+    let i = firstNonBlank;
+    while (i < lines.length) {
+      const t = lines[i].trim();
+      if (!t) { i++; continue; }
+      if (NAME_LINE_RE.test(t) || isSectionHeader(t) || !(wordCount(t) >= 8 || PREFACE_LINE_RE.test(t))) break;
+      i++;
+      if (i - firstNonBlank > 6) break;
+    }
+    cutTo = i;
+  }
+  if (cutTo <= 0) return { resume: text, preface: "" };
+  const preface = lines.slice(0, cutTo).join("\n").trim();
+  const resume = lines.slice(cutTo).join("\n").replace(/^\s+/, "");
+  return isUsableResume(resume) ? { resume, preface } : { resume: text, preface: "" };
+}
+
+/** The person's name as their own page gives it: its first non-blank line when that line is shaped like a name. */
+export function ownNameOf(resumeText?: string): string | undefined {
+  const first = (resumeText || "").split("\n").map((l) => l.trim()).find(Boolean) || "";
+  const words = first.replace(/[^A-Za-z'.-]+/g, " ").trim();
+  return first && !/\d|\||@/.test(first) && wordCount(words) >= 2 && wordCount(words) <= 5 && !isSectionHeader(first) ? words : undefined;
 }
 
 /** A resume worth checking and signing: a name line and some body, not a stray label or an empty reply (review M3). */

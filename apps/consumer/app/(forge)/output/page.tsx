@@ -921,6 +921,8 @@ function OutputPageInner() {
 
   const confirmedLineSet = new Set(confirmedCredentials.flatMap((c) => [c.text, ...(c.line ? [c.line] : [])]));
   const cardActions: CardActions = {
+    // Troy 2026-11-05 (Jean run): "click approve and keep the wording". One tap, the line stands as written.
+    onAsWritten: (group) => setDefendAnswers((a) => recordAnswer(a, group.line, group.line, "stands", "as_written")),
     onScopeYes: (group, typed) => {
       if (!group.scope) return "empty";
       const doc = group.target === "letter" ? { target: "letter" as const, text: coverLetterText } : { target: "resume" as const, text: resumeText };

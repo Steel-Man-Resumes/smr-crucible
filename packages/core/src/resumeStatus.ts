@@ -101,7 +101,8 @@ export interface DefendAnswer {
    * answer is never added to the source (no anchoring path, DEC-45).
    */
   /** An AI wording the person approved. It never adds words to sourceText. */
-  kind?: "rewrite" | "assisted" | "scope_yes" | "title_yes" | "job_ok";
+  /** "as_written" (Troy 2026-11-05): one tap, the line stands as written; nothing is added to the person's words. */
+  kind?: "rewrite" | "assisted" | "scope_yes" | "title_yes" | "job_ok" | "as_written";
   /** Round 13 (SF-4): a rewrite made by "Use my title" on a role in the summary or letter: the title they typed. */
   ownTitle?: string;
   /** Round 11: for "scope_yes", the scope family the typed words answer ("train"). */
@@ -316,6 +317,9 @@ export function answerMentions(answer: string, text: string): boolean {
 export function answerStands(a: DefendAnswer | undefined, line?: string, sourceText?: string): boolean {
   if (!a || a.verdict !== "stands") return false;
   const target = line ?? a.line;
+  // Troy 2026-11-05 (Jean run): "This is true as written" is one tap. The tap is the person's
+  // decision on that exact line; a plain typed answer that only pastes the line back still does not count.
+  if (a.kind === "as_written") return squash(stripBullet(a.answer)) === squash(stripBullet(target));
   if (a.kind === "assisted") {
     return sourceText !== undefined && squash(stripBullet(a.answer)) === squash(stripBullet(target)) && distanceFromSource(target, sourceText) === 0;
   }
