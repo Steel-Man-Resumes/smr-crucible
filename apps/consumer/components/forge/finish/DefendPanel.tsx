@@ -50,6 +50,7 @@ export function IdleActions({
   firstAction,
   onDraft,
   onAnswer,
+  onAnswerInWords,
   onChange,
   onCut,
 }: {
@@ -59,7 +60,10 @@ export function IdleActions({
   notice: string;
   firstAction?: React.Ref<HTMLButtonElement>;
   onDraft: () => void;
+  /** Troy 2026-11-05: one tap keeps the line as written; no sentence is asked for. */
   onAnswer: () => void;
+  /** The optional box for a person who wants to add a word of their own. */
+  onAnswerInWords?: () => void;
   onChange: () => void;
   onCut: () => void;
 }) {
@@ -71,7 +75,7 @@ export function IdleActions({
         </button>
       )}
       {answerable && (
-        <button ref={target === "skill" ? firstAction : undefined} onClick={onAnswer} className={BTN_SOFT}>
+        <button ref={target === "skill" ? firstAction : undefined} onClick={onAnswer} className={BTN_SOFT} data-testid="true-as-written">
           This is true as written
         </button>
       )}
@@ -87,6 +91,11 @@ export function IdleActions({
       {notice && !suggesting && (
         <p role="status" className="basis-full text-xs text-t-amber-bright" data-testid="suggest-fix-notice">{notice}</p>
       )}
+      {answerable && onAnswerInWords && (
+        <button type="button" onClick={onAnswerInWords} className="t-focus basis-full text-left text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white" data-testid="answer-in-words">
+          Or add a word in your own words
+        </button>
+      )}
     </div>
   );
 }
@@ -99,6 +108,8 @@ export type GroupHandler<R = void> = (group: LineGroup, text: string) => R;
 
 /** The finish-page decisions that are not answers: keep or cut an added skill (D3), confirm or drop a suggested credential (D4). */
 export interface CardActions {
+  /** Troy 2026-11-05: "This is true as written" in one tap; the line stands, nothing is typed. */
+  onAsWritten?: (group: LineGroup) => void;
   onKeepTerm: (term: string) => void;
   onCutTerm: (term: string) => void;
   /** "when": the year or status is not a real answer; "unchanged": nothing on the page changed. */
@@ -753,7 +764,7 @@ function GroupCard({
       {group.checked ? (
         <>
           {group.answer?.answer && (
-            <p className="mt-1 text-xs text-t-phos">{group.answer.kind === "assisted" ? "Wording you approved" : "Your words"}: {group.answer.answer}</p>
+            <p className="mt-1 text-xs text-t-phos">{group.answer.kind === "assisted" ? "Wording you approved" : group.answer.kind === "as_written" ? "Kept as written" : "Your words"}: {group.answer.answer}</p>
           )}
           {mode === "idle" && (
             <button ref={firstAction} onClick={() => setMode("answer")} className="t-focus mt-2 text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
@@ -827,7 +838,7 @@ function GroupCard({
                   Edit it
                 </button>
                 {group.answerable && (
-                  <button onClick={() => setMode("answer")} className={BTN_SOFT}>
+                  <button onClick={() => { setNotice(""); if (actions?.onAsWritten) actions.onAsWritten(group); else setMode("answer"); }} className={BTN_SOFT} data-testid="true-as-written">
                     It&apos;s right as written
                   </button>
                 )}
@@ -846,7 +857,10 @@ function GroupCard({
               notice={notice}
               firstAction={firstAction}
               onDraft={() => void askTroy()}
-              onAnswer={() => setMode("answer")}
+              // Troy 2026-11-05 (Jean run): "click approve and keep the wording". One tap records the line as
+              // standing in the person's words; the sentence box is a link for those who want it.
+              onAnswer={() => { setNotice(""); if (actions?.onAsWritten) actions.onAsWritten(group); else setMode("answer"); }}
+              onAnswerInWords={() => setMode("answer")}
               onChange={() => {
                 setNotice("");
                 setMode("change");

@@ -441,10 +441,11 @@ export function recordAnswer(
   answers: DefendAnswer[],
   line: string,
   answer: string,
-  verdict: DefendChoice
+  verdict: DefendChoice,
+  kind?: "as_written"
 ): DefendAnswer[] {
   const k = squash(line);
-  const next: DefendAnswer = { line, answer: answer.trim(), verdict };
+  const next: DefendAnswer = { line, answer: answer.trim(), verdict, ...(kind ? { kind } : {}) };
   // A rewrite and a "Yes, I did this" answer stay: they settle other items on the line (round 11).
   return [...answers.filter((a) => squash(a.line) !== k || a.kind === "rewrite" || a.kind === "scope_yes" || a.kind === "title_yes" || a.kind === "job_ok"), next];
 }

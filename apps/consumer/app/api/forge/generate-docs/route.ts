@@ -24,7 +24,7 @@ import { applyRecordChoice, keepSourceRecordLines, recordChoiceFrom, recordEntry
 import { letterClosingStyle } from "@/lib/letter-style";
 import { accountFlags } from "@/lib/grounding-accounting";
 import { readRunCookie, runCookieHeader, writerReceipt, writerSourceFrom } from "@/lib/writer-receipt";
-import { isUsableResume, splitWriterOutput, validateWriterChanges } from "@/lib/writer-changes";
+import { isUsableResume, ownNameOf, splitWriterOutput, stripWriterPreface, validateWriterChanges } from "@/lib/writer-changes";
 import { changesNotAwaitingCards } from "@/lib/changes-gate";
 import { buildFinishView } from "@/lib/finish-gate";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
@@ -157,7 +157,11 @@ async function generateDocuments(request: Request, progress?: (event: unknown) =
     // Phase 6 (S2): the writer's reply is the resume, then its CHANGES block.
     // The block is cut off here, before any check reads the resume, and is
     // never part of what ships as the resume.
-    const { resume: firstResume, changes: rawChanges } = splitWriterOutput(resumeReply);
+    const { resume: splitResume, changes: rawChanges } = splitWriterOutput(resumeReply);
+    // Jean run 2026-11-05: anything the writer said above the person's name
+    // (a caveat, a scope question) is cut before any check reads the page.
+    const { resume: firstResume, preface } = stripWriterPreface(splitResume, ownNameOf(sourceInput.resumeText));
+    if (preface) console.warn(`[generate-docs] writer preface cut (${preface.length} chars): ${preface.slice(0, 120)}`);
     let resumeRaw = firstResume;
     // Review M3: never check, sign or return an empty page. A reply that was
     // only a change list (or nothing) is an error the person can retry.
