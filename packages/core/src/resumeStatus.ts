@@ -573,6 +573,16 @@ function ownJobs(sourceText: string): OwnJob[] {
       out.push({ title: comma[0], employer: employerWords(comma[1]), ...yearSpan(l) });
       continue;
     }
+    // Round 18 (Michigan run 2026-11-04): "Shift Lead, Northgate Parts Distribution, Milwaukee, WI" with its years on
+    // the line under it is the same dated header. Without this the person's own pasted titles were "not a title in
+    // anything you told us".
+    if (
+      comma.length >= 2 && !hasYear(l) && YEAR_LINE.test(nextLine(i)) && !/[.!?;:]$/.test(l) &&
+      comma[0].split(/\s+/).length <= 5 && /[A-Za-z]/.test(comma[0]) && !NOT_A_TITLE.test(comma[0]) && /[A-Za-z]/.test(comma[1])
+    ) {
+      out.push({ title: comma[0], employer: employerWords(comma[1]), ...yearSpan(nextLine(i)) });
+      continue;
+    }
     // "Kroger" (or "Kroger, Toledo, OH") then "Cashier, 2016 - 2019": the employer is the line above, or the one
     // that opened this employer's block when the line above is a duty.
     const ty = l.match(TITLE_YEARS_LINE);

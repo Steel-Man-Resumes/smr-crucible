@@ -318,7 +318,7 @@ test("finish (lanes first): one next action by route; PDF the main download; Wor
   for (const f of ['"docx"', '"txt"', "format-package"]) assert.ok(more.includes(f), f);
   const page = read("app/(forge)/output/page.tsx");
   assert.match(page, /lanes \|\| checkMode \? \(\s*<LaneDownloadBox/);
-  assert.match(page, /<LaneNextAction action=\{nextActionFor\(session\.laneTask/);
+  assert.match(page, /<LaneNextAction\s+action=\{nextActionFor\(session\.laneTask/);
 });
 
 test("finish (lanes first): the cover letter belongs to the job route; elsewhere it is offered, never forced", () => {

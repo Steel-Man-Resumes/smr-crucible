@@ -461,6 +461,7 @@ RULES:
 - Encourage through evidence: show what they can already bring to work, without a redemption story, exaggerated praise or a promise of a job.
 - Frame strengths, not deficits.
 - Write at a 6th grade reading level.
+- Every sentence is complete, with its own subject. Never paste a resume bullet in as a sentence ("Was in charge of second shift, did cycle counts" is not a sentence here). Never leave a slot empty ("stepping into a role": name the role or drop the sentence).
 - Address the person consistently as "you" in the story, summary, reflection and strengths. Never alternate between first and third person.
 - Never judge, score, or grade.
 - The headline and summary should be RESUME-READY. They may appear on actual job applications. Therefore:

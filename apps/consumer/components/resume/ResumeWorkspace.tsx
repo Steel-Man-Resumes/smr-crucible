@@ -695,6 +695,50 @@ export function ResumeWorkspace() {
         // against the approved base on the server.
         contactInfo = tailoredContact(parentContact ?? baseDocContact, contactInfo);
 
+        // Save the job BEFORE the generator runs (Michigan demo 11/4): a typed
+        // or pasted posting with a company is a chosen job, so the guided step
+        // "Choose a job" is met by the posting itself and the Tailor is not
+        // refused with progression_locked on the first try. It also resolves the
+        // target application before the workspace renders, so the
+        // 5s autosave (which starts when the doc mounts) always sees the linked
+        // applicationId -- otherwise the first save could persist the resume
+        // unlinked, and unchanged content later blocks the re-save that would link
+        // it (Codex 11). Server dedups manual re-runs on title+company.
+        let applicationId = opts.existingApplicationId ?? null;
+        if (!applicationId) {
+          try {
+            const appRes = await fetch("/api/applications", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                job_title: job.title,
+                company: job.company,
+                location: job.location || "",
+                salary: job.salary || "",
+                description: job.description || "",
+                employment_type: job.employment_type || "",
+                source: job.source || "jsearch",
+                source_id: job.id || "",
+                apply_url: job.apply_url || null,
+                employer_website: job.employer_website || null,
+                // Phase 3.2: persist the full pasted/fetched JD as the snapshot
+                // (job.description is the unbounded text in this flow), with
+                // provenance so fit-check / interview auto-fill read one source.
+                jdFullText: job.description || "",
+                jdSourceProvider:
+                  job.jdSourceProvider ||
+                  (job.description ? "pasted" : job.source || "jsearch"),
+                jdSourceUrl: job.jdSourceUrl ?? job.apply_url ?? null,
+                jdFetchedAt: job.jdFetchedAt ?? null,
+                status: "saved",
+              }),
+            });
+            if (appRes.ok) {
+              const { application } = await appRes.json();
+              if (application?.id) applicationId = application.id;
+            }
+          } catch {}
+        }
         // Call the career package generation API
         const res = await fetch("/api/resume-generate-full", {
           method: "POST",
@@ -740,46 +784,6 @@ export function ResumeWorkspace() {
           finalResume.meta = { ...finalResume.meta, jobListingUrl: job.jobListingUrl };
         }
 
-        // Resolve the target application BEFORE rendering the workspace, so the
-        // 5s autosave (which starts when the doc mounts) always sees the linked
-        // applicationId -- otherwise the first save could persist the resume
-        // unlinked, and unchanged content later blocks the re-save that would link
-        // it (Codex 11). Server dedups manual re-runs on title+company.
-        let applicationId = opts.existingApplicationId ?? null;
-        if (!applicationId) {
-          try {
-            const appRes = await fetch("/api/applications", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                job_title: job.title,
-                company: job.company,
-                location: job.location || "",
-                salary: job.salary || "",
-                description: job.description || "",
-                employment_type: job.employment_type || "",
-                source: job.source || "jsearch",
-                source_id: job.id || "",
-                apply_url: job.apply_url || null,
-                employer_website: job.employer_website || null,
-                // Phase 3.2: persist the full pasted/fetched JD as the snapshot
-                // (job.description is the unbounded text in this flow), with
-                // provenance so fit-check / interview auto-fill read one source.
-                jdFullText: job.description || "",
-                jdSourceProvider:
-                  job.jdSourceProvider ||
-                  (job.description ? "pasted" : job.source || "jsearch"),
-                jdSourceUrl: job.jdSourceUrl ?? job.apply_url ?? null,
-                jdFetchedAt: job.jdFetchedAt ?? null,
-                status: "saved",
-              }),
-            });
-            if (appRes.ok) {
-              const { application } = await appRes.json();
-              if (application?.id) applicationId = application.id;
-            }
-          } catch {}
-        }
         if(epoch !== packageEpoch.current) return;
         if (applicationId) setTargetApplicationId(applicationId);
         // Remember where to apply so the Apply CTA (R8) can surface the moment

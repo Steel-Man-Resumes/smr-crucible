@@ -111,18 +111,20 @@ export async function sendFinishedPackage(
   if (rev.status !== "finished") return { sent: false, reason: "draft" };
   const input = inputFromRevision(rev);
   if (!input || computeRevision(input).status !== "finished") return { sent: false, reason: "draft" };
-  // Quick edits settle first, unless the person asked for it now.
-  const age = nowMs - Date.parse(rev.created_at);
-  if (!now && Number.isFinite(age) && age < AUTO_SETTLE_MS) {
-    return { sent: false, reason: "settling", retryInMs: Math.max(1000, AUTO_SETTLE_MS - age) };
-  }
-
-  // The recipient comes from the account, never from the request.
+  // The recipient comes from the account, never from the request. Read
+  // before the settle wait (Michigan run 11/4): an address with no proof yet
+  // is told so at once ("confirm your address first"), not after five
+  // minutes of "queued" for a package that would never go out.
   const t = await deps.target(userId);
   if (!t || !t.email) return { sent: false, reason: "no_address" };
   if (!t.on) return { sent: false, reason: "off" };
   if (!t.proven) return { sent: false, reason: "unproven" };
   const to = t.email;
+  // Quick edits settle first, unless the person asked for it now.
+  const age = nowMs - Date.parse(rev.created_at);
+  if (!now && Number.isFinite(age) && age < AUTO_SETTLE_MS) {
+    return { sent: false, reason: "settling", retryInMs: Math.max(1000, AUTO_SETTLE_MS - age), to };
+  }
   if (!deps.transport) return { sent: false, reason: "not_configured", to };
 
   // Never the same revision twice; at most one per resume per day.
