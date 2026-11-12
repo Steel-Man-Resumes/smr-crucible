@@ -159,7 +159,8 @@ test("L1: a header the writer split over two lines shows title, employer and dat
 
 test("L2: in a rebuild the no-marks walk line never says 'as you gave it'", () => {
   const walk = read("components/forge/markup/MarkupWalk.tsx");
-  assert.match(walk, /startingPage\s+\? "Here's the page we're starting from\."/);
+  assert.match(walk, /startingPage\s+\? t\("introStarting"\)/);
+  assert.equal(JSON.parse(read("messages/en/forge-finish.json")).markupWalk.introStarting, "Here's the page we're starting from.");
   assert.doesNotMatch(read("app/(forge)/output/page.tsx"), /<MarkupWalk/); // Do not replay the reading stage while writing.
 });
 

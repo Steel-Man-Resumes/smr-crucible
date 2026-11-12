@@ -11,16 +11,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
-import {
-  FIRST_SCREEN_SUBTITLE,
-  FIRST_SCREEN_TITLE,
-  HELP_LINK_LABEL,
-  MAIN_TASKS,
-  OTHER_TASKS,
-  SOMETHING_ELSE_LABEL,
-  TASK_COPY,
-  type LaneTask,
-} from "@/lib/lane-task";
+import { useTranslations } from "next-intl";
+import { MAIN_TASKS, OTHER_TASKS, type LaneTask } from "@/lib/lane-task";
 
 export function TaskPicker({
   current,
@@ -37,6 +29,8 @@ export function TaskPicker({
   headingLevel?: 1 | 2;
   tourTargetId?: string;
 }) {
+  const t = useTranslations("forgeEntry.taskPicker");
+  const tTask = useTranslations("forgeEntry.tasks");
   const [more, setMore] = useState<boolean>(!!current && (OTHER_TASKS as readonly string[]).includes(current));
   const H = headingLevel === 1 ? "h1" : "h2";
   const card = (task: LaneTask, quiet: boolean) => {
@@ -53,8 +47,8 @@ export function TaskPicker({
           quiet ? "px-4 py-3" : "px-5 py-4"
         } border ${on ? "border-t-amber bg-t-panel-2" : "border-t-line bg-t-panel hover:border-t-phos-dim"}`}
       >
-        <span className={`block font-semibold text-t-white ${quiet ? "text-sm" : "text-base"}`}>{TASK_COPY[task].label}</span>
-        <span className="mt-0.5 block text-sm text-t-phos-dim">{TASK_COPY[task].body}</span>
+        <span className={`block font-semibold text-t-white ${quiet ? "text-sm" : "text-base"}`}>{tTask(`${task}.label`)}</span>
+        <span className="mt-0.5 block text-sm text-t-phos-dim">{tTask(`${task}.body`)}</span>
       </button>
     );
   };
@@ -62,11 +56,11 @@ export function TaskPicker({
   return (
     <section aria-labelledby="first-screen-title" data-testid="task-picker" className="mx-auto w-full max-w-2xl">
       <header id={tourTargetId}><H id="first-screen-title" className="text-2xl font-bold text-t-white sm:text-3xl">
-        {FIRST_SCREEN_TITLE}
+        {t("title")}
       </H>
-      <p className="mt-1 text-sm text-t-phos-dim">{FIRST_SCREEN_SUBTITLE}</p></header>
+      <p className="mt-1 text-sm text-t-phos-dim">{t("subtitle")}</p></header>
 
-      <div className="mt-5 flex flex-col gap-3">{MAIN_TASKS.map((t) => card(t, false))}</div>
+      <div className="mt-5 flex flex-col gap-3">{MAIN_TASKS.map((id) => card(id, false))}</div>
 
       <div className="mt-4">
         <button
@@ -77,19 +71,19 @@ export function TaskPicker({
           data-testid="task-something-else"
           className="t-focus inline-flex min-h-touch items-center gap-1 px-1 text-sm font-medium text-t-phos hover:text-t-white"
         >
-          {SOMETHING_ELSE_LABEL}
+          {t("somethingElse")}
           <ChevronDown size={16} aria-hidden="true" className={more ? "rotate-180" : ""} />
         </button>
         {more && (
           <div id="something-else" className="mt-2 flex flex-col gap-2">
-            {OTHER_TASKS.map((t) => card(t, true))}
+            {OTHER_TASKS.map((id) => card(id, true))}
           </div>
         )}
       </div>
 
       <p className="mt-6 text-sm">
         <Link href={helpHref} className="t-focus text-t-phos-dim underline underline-offset-2 hover:text-t-white" data-testid="help-link">
-          {HELP_LINK_LABEL}
+          {t("help")}
         </Link>
       </p>
     </section>

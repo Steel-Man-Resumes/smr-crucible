@@ -3,6 +3,7 @@
 /** One collapsed check on the finish page: a plain one-line summary, details on tap. */
 
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 
 export function CheckSection({
   title,
@@ -20,6 +21,7 @@ export function CheckSection({
   children: ReactNode;
   testId?: string;
 }) {
+  const t = useTranslations("forgeFinish.checkSection");
   return (
     <details
       className={`group border bg-t-panel ${attention ? "border-t-amber" : "border-t-line"}`}
@@ -32,8 +34,8 @@ export function CheckSection({
           <span className={`block text-xs leading-relaxed ${attention ? "text-t-amber-bright" : "text-t-phos-dim"}`}>{summary}</span>
         </span>
         <span aria-hidden="true" className="mt-0.5 shrink-0 text-[11px] text-t-phos-dim">
-          <span className="group-open:hidden">Show</span>
-          <span className="hidden group-open:inline">Hide</span>
+          <span className="group-open:hidden">{t("show")}</span>
+          <span className="hidden group-open:inline">{t("hide")}</span>
         </span>
       </summary>
       <div className="border-t border-t-line px-4 py-3">{children}</div>

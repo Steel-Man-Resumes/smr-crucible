@@ -1,3 +1,12 @@
+## 2026-11-12: Spanish version of the Forge (local, unreleased)
+
+- One site language, English or Spanish, chosen with a switch in the Forge header, on the sign-in page, in Settings (Language / Idioma) and in the t.ROY panel. It lives in a cookie for everyone and in the account for a signed-in person. Existing links keep working: nothing moves to a new URL.
+- Every Forge screen on the participant path reads in Spanish: the front door, the first choice, the resume intake and guided build, goals and preferences, the story and support questions, the build screen, the finish page with its cards and the explain-every-line step, the quick rewrite and the free check, and the t.ROY chat around them. t.ROY answers in Spanish on those screens, signed in or not.
+- Resumes and cover letters stay in English. The checks that keep a page true are unchanged and still read English wording; a person writing their history in Spanish is told so and can ask t.ROY to help put it into plain English, adding nothing.
+- Spanish record words (cárcel, correccional, libertad condicional, penitenciaría and the like) are now held off the page the way their English counterparts are.
+- Catalog tests pin that every English line has a Spanish line with the same arguments and that every key a screen asks for exists.
+- No schema migration or production change in this local build.
+
 ## 2026-10-24: Check and finish reads what the person already gave (local, unreleased)
 
 - Check and finish reads the person's confirmed Master Draft details fresh on every check, in their own field, never in their saved words and never carried into a copy. A detail clears a claim only under the job it names, or in a letter sentence that names no other employer.

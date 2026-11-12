@@ -6,6 +6,7 @@
  */
 
 import React from "react";
+import { useTranslations } from "next-intl";
 import { changeListEntry, type DefendAnswer } from "@/lib/finish-gate";
 
 export function ApprovedChanges({
@@ -18,22 +19,23 @@ export function ApprovedChanges({
   cutHere: ReadonlySet<string> | null;
   changeNotes: Record<string, string>;
 }) {
+  const t = useTranslations("forgeFinish.approved");
   const shown = answers.filter((a) => a.replaced || a.verdict === "cut");
   if (!shown.length) return null;
   return (
     <details open className="mt-3 border border-t-line bg-t-panel px-4 py-3" data-testid="approved-changes">
-      <summary className="t-focus cursor-pointer text-sm font-semibold text-t-white">Your changes: before and after</summary>
+      <summary className="t-focus cursor-pointer text-sm font-semibold text-t-white">{t("summary")}</summary>
       <ul className="mt-3 space-y-4 text-sm text-t-phos">
         {shown.map((a, i) => {
           const entry = changeListEntry(a, cutHere);
           const why = changeNotes[a.line] || (a.replaced ? changeNotes[a.replaced] : "");
           return (
             <li key={`${a.line}-${i}`}>
-              <p className="text-xs text-t-phos-dim">Before</p>
+              <p className="text-xs text-t-phos-dim">{t("before")}</p>
               <p>{a.replaced || a.line}</p>
-              <p className="mt-2 text-xs text-t-phos-dim">After</p>
+              <p className="mt-2 text-xs text-t-phos-dim">{t("after")}</p>
               <p className="text-t-white">{entry.after}</p>
-              {why && <p className="mt-2 text-xs"><strong>What this addresses:</strong> {why}</p>}
+              {why && <p className="mt-2 text-xs"><strong>{t("addresses")}</strong> {why}</p>}
               <p className="mt-2 text-xs" data-testid="change-note">{entry.note}</p>
             </li>
           );

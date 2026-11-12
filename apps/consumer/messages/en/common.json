@@ -1,0 +1,26 @@
+{
+  "lang": {
+    "label": "Language",
+    "chooseAria": "Choose language",
+    "hint": "Changes every translated screen and the language your coach replies in. Resumes and cover letters stay in English.",
+    "settingsNote": "Some screens are still being translated. They show in English until they are ready."
+  },
+  "actions": {
+    "continue": "Continue",
+    "back": "Back",
+    "next": "Next",
+    "skip": "Skip",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "startOver": "Start over"
+  },
+  "errors": {
+    "couldNotSave": "Could not save. Check your connection and try again."
+  },
+  "errorPage": {
+    "title": "That step hiccuped.",
+    "body": "Nothing is lost. Your work is saved on this device. Try again, and if it keeps happening, reload the page.",
+    "tryAgain": "Try again"
+  }
+}

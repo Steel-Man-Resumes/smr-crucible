@@ -16,6 +16,7 @@
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { TYPOGRAPHY } from "./theme";
 import { TBtn } from "./terminal";
 
@@ -60,6 +61,8 @@ export function FlowPage({
   footer,
   loading,
 }: FlowPageProps) {
+  const t = useTranslations("ui.flowPage");
+  const tc = useTranslations("common.actions");
   const titleRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (!focusTitle) return;
@@ -96,10 +99,10 @@ export function FlowPage({
           <button
             onClick={onBack}
             className="t-focus inline-flex min-h-touch items-center gap-1 rounded-[4px] px-2 text-sm font-medium text-t-bone-dim transition-colors hover:text-t-amber-bright"
-            aria-label="Go back"
+            aria-label={t("goBack")}
           >
             <ChevronLeft size={18} aria-hidden="true" />
-            Back
+            {tc("back")}
           </button>
         </div>
       )}
@@ -125,7 +128,7 @@ export function FlowPage({
               disabled={actionDisabled || loading}
               className="w-full sm:w-auto sm:min-w-48"
             >
-              {loading ? "Working" : actionLabel}
+              {loading ? t("working") : actionLabel}
             </TBtn>
           )}
         </div>

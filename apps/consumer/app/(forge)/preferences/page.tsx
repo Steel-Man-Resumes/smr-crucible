@@ -10,6 +10,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -44,6 +45,9 @@ import {
 
 export default function PreferencesPage() {
   const router = useRouter();
+  const t = useTranslations("forgeGoals");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const { session, updateSession } = useForgeSession();
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
@@ -133,12 +137,13 @@ export default function PreferencesPage() {
       return (
         <Question
           key="environment"
-          title="Where and how do you want to work?"
-          hint="Pick as many as fit. Skip it if you're open to anything."
+          title={t("preferences.environmentTitle")}
+          hint={t("preferences.environmentHint")}
           testId="q-environment"
         >
           <ChoiceChips
-            label="Work environment"
+            label={t("preferences.environmentLabel")}
+            group="environment"
             options={ENVIRONMENT_OPTIONS}
             selected={environment}
             disabled={isDemo}
@@ -167,13 +172,13 @@ export default function PreferencesPage() {
       return (
         <div key="location" data-testid={`q-location-${q.variant}`}>
           <label htmlFor="location-input" className="mb-1 block font-medium text-t-white">
-            {confirm ? `Still in ${fromResume}?` : "Where are you located?"}{" "}
-            <span className="text-sm font-normal text-t-phos-dim">(optional)</span>
+            {confirm ? t("preferences.stillIn", { place: fromResume ?? "" }) : t("preferences.whereLocated")}{" "}
+            <span className="text-sm font-normal text-t-phos-dim">{t("optional")}</span>
           </label>
           <p id="location-hint" className="mb-2 text-sm text-t-phos-dim">
             {confirm
-              ? "This came from your resume. Change it if you've moved."
-              : "Start typing a city or ZIP and pick from the list. Not listed? Type it anyway."}
+              ? t("preferences.confirmHint")
+              : t("preferences.typeHint")}
           </p>
           <LocationCombobox
             id="location-input"
@@ -190,9 +195,9 @@ export default function PreferencesPage() {
 
   return (
     <FlowPage
-      title="A few quick preferences"
-      subtitle="This helps us find the right fit. You can change any of these later."
-      actionLabel={isDemo ? "Next" : offerStory ? "Build my page" : "Continue"}
+      title={t("preferences.title")}
+      subtitle={t("preferences.subtitle")}
+      actionLabel={isDemo ? tc("actions.next") : offerStory ? t("preferences.buildMyPage") : tc("actions.continue")}
       onAction={handleContinue}
       showBack
       onBack={() => {
@@ -202,7 +207,7 @@ export default function PreferencesPage() {
       }}
     >
       <GhostGuide
-        message={getOpusMessage("preferences", audience, isDemo)}
+        message={getOpusMessage("preferences", audience, isDemo, locale)}
         pageId="preferences"
       />
 
@@ -211,7 +216,7 @@ export default function PreferencesPage() {
       {isDemo && (
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode: sample preferences pre-selected
+            {t("preferences.demoBanner")}
           </p>
         </div>
       )}
@@ -219,16 +224,16 @@ export default function PreferencesPage() {
 
       {offerStory && (
         <div className="mt-8 border border-dashed border-t-line bg-t-panel px-4 py-4" data-testid="offer-story">
-          <p className="font-medium text-t-white">Anything in your way? (optional)</p>
+          <p className="font-medium text-t-white">{t("preferences.offerStoryTitle")}</p>
           <p className="mt-1 text-sm text-t-phos-dim">
-            A record, a gap, no ride. Tell me before I build and I can look up the laws and help that fit. Or skip it and build now.
+            {t("preferences.offerStoryBody")}
           </p>
           <button
             type="button"
             onClick={handleAddStory}
             className="t-focus mt-3 min-h-touch border border-t-line px-4 py-2 text-sm font-medium text-t-amber-bright hover:border-t-amber"
           >
-            Add that first
+            {t("preferences.offerStoryButton")}
           </button>
         </div>
       )}

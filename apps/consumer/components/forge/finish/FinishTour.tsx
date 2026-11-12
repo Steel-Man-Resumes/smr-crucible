@@ -12,6 +12,7 @@
  */
 
 import { TroyMark } from "@crucible/consumer-ui";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export interface TourStep {
@@ -65,6 +66,8 @@ export function FinishTour({
   steps: TourStep[];
   onClose: () => void;
 }) {
+  const t = useTranslations("forgeFinish.tour");
+  const tc = useTranslations("common.actions");
   const live = steps.filter((s) => typeof document !== "undefined" && document.getElementById(s.target));
   const [i, setI] = useState(0);
   const [box, setBox] = useState<Box | null>(null);
@@ -176,7 +179,7 @@ export function FinishTour({
         ref={cardRef}
         role="dialog"
         aria-modal="false"
-        aria-label="Tour of this page"
+        aria-label={t("aria")}
         data-testid="finish-tour"
         className="fixed z-[60] border border-t-amber bg-t-panel-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)]"
         style={{ top: pos.top, left: pos.left, width: w, transition: reduced || drag ? "none" : "top 420ms ease, left 420ms ease" }}
@@ -200,9 +203,9 @@ export function FinishTour({
           data-testid="tour-drag"
         >
           <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">
-            t.ROY &middot; {i + 1} of {live.length} &middot; drag to move
+            {t("progress", { current: i + 1, total: live.length })}
           </p>
-          <button onClick={close} aria-label="Close the tour" className="t-focus min-h-touch px-1 text-sm text-t-phos-dim hover:text-t-white">
+          <button onClick={close} aria-label={t("closeAria")} className="t-focus min-h-touch px-1 text-sm text-t-phos-dim hover:text-t-white">
             &times;
           </button>
         </div>
@@ -217,12 +220,12 @@ export function FinishTour({
         </div>
         <div className="flex items-center justify-between gap-2 border-t border-t-line px-3 py-2">
           <button onClick={close} className="t-focus min-h-touch px-2 text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
-            Skip
+            {tc("skip")}
           </button>
           <div className="flex items-center gap-2">
             {i > 0 && (
               <button onClick={() => setI((n) => Math.max(0, n - 1))} className="t-focus min-h-touch border border-t-line px-3 py-2 text-sm text-t-phos hover:text-t-white">
-                Back
+                {tc("back")}
               </button>
             )}
             <button
@@ -230,7 +233,7 @@ export function FinishTour({
               onClick={() => (last ? close() : setI((n) => n + 1))}
               className="t-focus min-h-touch bg-t-amber px-4 py-2 text-sm font-bold text-white hover:bg-t-amber-bright"
             >
-              {last ? "Got it" : "Next"}
+              {last ? t("gotIt") : tc("next")}
             </button>
           </div>
         </div>

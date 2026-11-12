@@ -249,9 +249,10 @@ describe("create-account form: a required yes or no", () => {
     assert.match(handler, /\.\.\.forgeFields, turnstileToken/);
   });
   it("the copy: two plain choices, no name, no 'tick', no missing button", () => {
-    const src = read(...LOGIN);
+    // The page's words live in its catalog (messages/en/auth.json) since the Spanish version.
+    const src = read(...LOGIN) + "\n" + read("messages", "en", "auth.json");
     assert.match(src, /Yes, this is my resume\. Save it to my new account\./);
-    assert.match(src, /No, this isn&apos;t mine\. Erase it from this computer\./);
+    assert.match(src, /No, this isn(?:&apos;|')t mine\. Erase it from this computer\./);
     // The terms-checkbox helper's names (lib/terms-ticked.ts) are code, not copy.
     const copy = src.replace(/TERMS_TICKED_KEY|tickedMark|terms-ticked/g, "");
     assert.doesNotMatch(copy, /forgeRunName|started by|\b(un)?tick(ed)?\b|Clear this computer/i);

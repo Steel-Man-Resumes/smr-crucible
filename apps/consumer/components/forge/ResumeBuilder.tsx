@@ -15,6 +15,7 @@
  */
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   type ResumeDocument,
   formatResumeDownload,
@@ -31,13 +32,9 @@ interface ResumeBuilderProps {
   onBack: () => void;
 }
 
-/** Coaching self-check (never scored -- doctrine). Owning the story is half the job. */
-const READINESS_ITEMS = [
-  "I can explain every bullet on this resume out loud.",
-  "I have a real story behind my strongest experience.",
-  "I know why this resume fits the jobs I'm going for.",
-  "I know my next step (apply, gather proof, or pick a better-fit role).",
-];
+/** Coaching self-check (never scored -- doctrine). Owning the story is half the job.
+ *  The words live in the catalog (forgeResume.builder.readiness.<key>). */
+const READINESS_KEYS = ["explain", "story", "fit", "next"] as const;
 
 /** Heuristic triage: flag thin jobs + weak/unquantified bullets so we can nudge
  *  the workshop where it's most needed -- "most attention to those who need it
@@ -56,6 +53,8 @@ function assessResume(doc: ResumeDocument): { weak: number; thin: number; show: 
 }
 
 export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderProps) {
+  const t = useTranslations("forgeResume.builder");
+  const tc = useTranslations("common");
   const [doc, setDoc] = useState<ResumeDocument>(initialDoc);
   const [generating, setGenerating] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
@@ -145,27 +144,22 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
           onClick={onBack}
           className="t-focus text-sm text-t-phos-dim hover:text-t-amber-bright transition-colors mb-4 inline-flex items-center gap-1 min-h-touch"
         >
-          &larr; Start over
+          &larr; {tc("actions.startOver")}
         </button>
         <h1 className="text-2xl font-bold text-t-white mb-2">
-          Here&apos;s your resume. Let&apos;s make it strong.
+          {t("title")}
         </h1>
         <p className="text-base text-t-phos-dim mb-6 max-w-2xl">
-          We organized what you gave us. Check every section and fix anything
-          that&apos;s off. It&apos;s all yours to edit. This becomes your base resume: the one we
-          aim at specific jobs later.
+          {t("intro")}
         </p>
 
         {assessment.show && (
           <div className="mb-5 bg-t-panel border border-t-line p-4">
             <p className="text-sm font-medium text-t-amber-bright mb-0.5">
-              A few lines could be stronger.
+              {t("weakTitle")}
             </p>
             <p className="text-xs text-t-phos-dim leading-relaxed">
-              The best resumes show what you did, with real numbers. Tap{" "}
-              <span className="font-medium text-t-phos">Strengthen with help</span> under any
-              bullet. We ask a few questions and turn your answer into a strong
-              line. We only ever use what you tell us.
+              {t.rich("weakBody", { b: (chunks) => <span className="font-medium text-t-phos">{chunks}</span> })}
             </p>
           </div>
         )}
@@ -186,7 +180,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                 onClick={() => onComplete(doc)}
                 className="t-focus px-5 py-3 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
               >
-                Looks good, continue
+                {t("continue")}
               </button>
               {/* Downloading here is premature: the Forge makes this resume
                   stronger in the next steps. It stays available, as a small
@@ -199,18 +193,16 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                   aria-expanded={showDownloads}
                   className="t-focus min-h-touch text-sm text-t-phos-dim underline decoration-dotted underline-offset-4 transition-colors hover:text-t-white"
                 >
-                  {showDownloads ? "Hide the quick download" : "Need to download it now?"}
+                  {showDownloads ? t("hideDownload") : t("showDownload")}
                 </button>
                 <p className="text-xs text-t-phos-dim">
-                  The full version comes after the next steps, and it is stronger.
+                  {t("fullLater")}
                 </p>
               </div>
               {showDownloads && (
                 <div className="w-full bg-t-panel-2 border border-t-line p-3 mt-1">
                   <p className="text-xs text-t-phos-dim leading-relaxed mb-2">
-                    This is the <strong className="text-t-phos">before</strong> version. If
-                    you need a copy today (an appointment, a program requirement), grab one,
-                    then come back and finish.
+                    {t.rich("beforeNote", { b: (chunks) => <strong className="text-t-phos">{chunks}</strong> })}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -218,27 +210,27 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                       disabled={downloading}
                       className="t-focus px-3 py-2 bg-transparent border border-t-amber text-t-amber-bright font-bold hover:bg-t-amber/10 transition-colors text-xs disabled:opacity-50"
                     >
-                      {downloading ? "Preparing..." : ".docx (opens in Word)"}
+                      {downloading ? t("preparing") : t("docx")}
                     </button>
                     <button
                       onClick={() => printResumePdf(doc)}
                       className="t-focus px-3 py-2 bg-transparent border border-t-steel text-t-steel font-bold hover:bg-t-steel/10 transition-colors text-xs"
                     >
-                      PDF (keeps formatting)
+                      {t("pdf")}
                     </button>
                     <button
                       onClick={downloadTxt}
-                      title="Plain text is the safest format for online application boxes"
+                      title={t("txtTitle")}
                       className="t-focus px-3 py-2 bg-transparent border border-t-line text-t-phos-dim font-bold hover:text-t-white hover:border-t-phos-dim transition-colors text-xs"
                     >
-                      .txt (for online forms)
+                      {t("txt")}
                     </button>
                   </div>
                 </div>
               )}
             </>
           }
-          actionsHint="Continue when it looks right."
+          actionsHint={t("actionsHint")}
         />
 
         {/* Parser preview -- "what a machine reads", the honest ATS view. */}
@@ -247,14 +239,13 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
         {/* User Readiness -- a coaching checklist, never a score (doctrine). */}
         <div className="mt-8 bg-t-panel border border-t-line p-5 max-w-2xl">
           <h2 className="font-semibold text-t-white mb-1">
-            Before you go: are you ready to use this?
+            {t("readinessTitle")}
           </h2>
           <p className="text-xs text-t-phos-dim mb-3">
-            A gut check, and nothing here is scored. The resume is half of it;
-            owning it is the other half.
+            {t("readinessNote")}
           </p>
           <div className="space-y-2">
-            {READINESS_ITEMS.map((item, i) => (
+            {READINESS_KEYS.map((key, i) => (
               <label key={i} className="flex items-start gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -262,7 +253,7 @@ export function ResumeBuilder({ initialDoc, onComplete, onBack }: ResumeBuilderP
                   onChange={() => setReady((r) => ({ ...r, [i]: !r[i] }))}
                   className="mt-0.5 accent-t-amber w-4 h-4 flex-shrink-0"
                 />
-                <span className="text-sm text-t-phos">{item}</span>
+                <span className="text-sm text-t-phos">{t(`readiness.${key}`)}</span>
               </label>
             ))}
           </div>

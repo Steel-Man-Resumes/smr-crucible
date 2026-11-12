@@ -1,0 +1,31 @@
+{
+  "shell": {
+    "skipToContent": "Skip to content",
+    "privateByDesign": "Private by design",
+    "leave": "Leave",
+    "leaveAria": "Leave The Forge"
+  },
+  "accumulator": {
+    "building": "building your story",
+    "readiness": {
+      "precontemplation": "Exploring",
+      "contemplation": "Thinking about it",
+      "preparation": "Getting ready",
+      "action": "Ready to go"
+    },
+    "goals": {
+      "stability": "Stability",
+      "growth": "Growth",
+      "meaning": "Meaningful work",
+      "immediate": "Immediate income",
+      "independence": "My own boss someday",
+      "community": "Give back",
+      "flexibility": "Flexible schedule",
+      "back_to_my_trade": "Back to my trade"
+    },
+    "resumeReceived": "Resume received",
+    "resumeBuilt": "Resume (built together)",
+    "hurdles": "{count, plural, =1 {# hurdle noted} other {# hurdles noted}}",
+    "preferencesSet": "Preferences set"
+  }
+}

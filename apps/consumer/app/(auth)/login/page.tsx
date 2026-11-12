@@ -11,6 +11,8 @@
  */
 
 import { Suspense, useState, useEffect, useRef } from "react";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
+import { useTranslations } from "next-intl";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { confirmedSignOut } from "@/lib/confirmed-sign-out";
 import { clearAccountBrowserState } from "@/lib/account-browser-state";
@@ -20,7 +22,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { TBtn } from "@crucible/consumer-ui";
 import { trackGA } from "@/lib/ga";
-import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
+import { passwordProblem, PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
 import { isSafeRelativePath } from "@/lib/safe-path";
 import { safeLoginReturn } from "@/lib/session-policy";
 import { isForgeSignInPage } from "@/lib/forge-access";
@@ -57,14 +59,25 @@ export default function LoginPage() {
 
 type Mode = "sign-in" | "create" | "magic-link";
 
-const FORGE_CHOICE_HINT =
-  "Pick yes or no above to create your account. This keeps another person's resume out of your account.";
+// passwordProblem() (lib/password-policy.ts) words its answer in English. The
+// four answers it can give are shown in the page's language (auth.password
+// in the catalog); any other text shows as it came.
+const PASSWORD_PROBLEM_KEYS: ReadonlyMap<string, string> = new Map([
+  [`Use at least ${PASSWORD_MIN_LENGTH} characters.`, "tooShort"],
+  ["That password is too long. Use fewer characters; some letters and symbols take more space.", "tooLong"],
+  ["Include at least one letter and one number.", "needsLetterAndNumber"],
+  ["That password is too common. Pick something only you would know.", "tooCommon"],
+]);
 
 // Same-origin relative path only (lib/safe-path.ts). Keeps an honored
 // callbackUrl from ever becoming an open redirect. Auth.js also rejects
 // cross-origin callback URLs on its side; this is the client half.
 
 function LoginForm() {
+  const t = useTranslations("auth.login");
+  const tRoutes = useTranslations("auth.routes");
+  const tPassword = useTranslations("auth.password");
+  const tc = useTranslations("common.actions");
   const searchParams = useSearchParams();
   const { data: currentSession } = useSession();
   const isDev = process.env.NODE_ENV === "development";
@@ -157,20 +170,16 @@ function LoginForm() {
     const urlError = searchParams.get("error");
     if (urlError) {
       const msgs: Record<string, string> = {
-        Configuration: "Login is temporarily unavailable. Please contact Troy.",
-        AccessDenied: "Access denied. Check your email and try again.",
-        Verification: "That link has expired. Request a new one below.",
-        CredentialsSignin: "Invalid email or password.",
-        OAuthAccountNotLinked:
-          "You're signed in as a different account already. Sign out below, then try Google again.",
-        GoogleEmailUnverified:
-          "Google has not confirmed that email address yet. Sign in with your password or an email link instead.",
-        GoogleEmailMismatch:
-          "That Google account uses a different email than the account it is linked to. Sign in with your password or an email link instead.",
-        SessionNotUsable:
-          "This browser is still holding an old or unfinished sign-in. Sign out below, then try Google again.",
+        Configuration: t("urlErrors.Configuration"),
+        AccessDenied: t("urlErrors.AccessDenied"),
+        Verification: t("urlErrors.Verification"),
+        CredentialsSignin: t("urlErrors.CredentialsSignin"),
+        OAuthAccountNotLinked: t("urlErrors.OAuthAccountNotLinked"),
+        GoogleEmailUnverified: t("urlErrors.GoogleEmailUnverified"),
+        GoogleEmailMismatch: t("urlErrors.GoogleEmailMismatch"),
+        SessionNotUsable: t("urlErrors.SessionNotUsable"),
       };
-      setError(msgs[urlError] || "Sign-in did not finish. Try again, or use an email sign-in link.");
+      setError(msgs[urlError] || t("errors.signInIncomplete"));
     }
   }, [searchParams]);
 
@@ -197,7 +206,7 @@ function LoginForm() {
       clearAccountBrowserState();
       window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
     } catch {
-      setError("We couldn't sign you out. Try again.");
+      setError(t("errors.signOutFailed"));
       setSending(false);
     }
   }
@@ -209,7 +218,7 @@ function LoginForm() {
     try {
       await signIn("google", { callbackUrl }, { prompt: "select_account" });
     } catch {
-      setError("Google sign-in did not open. Try again, or use your password or an email sign-in link.");
+      setError(t("errors.googleNotOpened"));
       setSending(false);
     }
   }
@@ -286,6 +295,11 @@ function LoginForm() {
     }
   }
 
+  function passwordProblemText(problem: string): string {
+    const key = PASSWORD_PROBLEM_KEYS.get(problem);
+    return key ? tPassword(`problems.${key}`, { min: PASSWORD_MIN_LENGTH }) : problem;
+  }
+
   // ─── Sign In ──────────────────────────────────────────────────────────
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
@@ -304,13 +318,13 @@ function LoginForm() {
         }).catch(() => null);
         // A rate-limited precheck is not a wrong password. Say what happened.
         if (preRes && preRes.status === 429) {
-          setError("Too many sign-in attempts. Wait a few minutes and try again.");
+          setError(t("errors.tooManyAttempts"));
           setSending(false);
           return;
         }
         const pre = preRes ? await preRes.json().catch(() => null) : null;
         if (pre && pre.ok === false) {
-          setError("Invalid email or password.");
+          setError(t("errors.invalidCredentials"));
           setSending(false);
           return;
         }
@@ -331,18 +345,18 @@ function LoginForm() {
       if (result?.error) {
         setError(
           twoFactorStep
-            ? "That code didn't match. Try again, or use a backup code."
-            : "Invalid email or password."
+            ? t("errors.codeMismatch")
+            : t("errors.invalidCredentials")
         );
         setSending(false);
       } else if (result?.url) {
         window.location.href = result.url;
       } else {
-        setError("Sign-in did not finish. Try again, or use an email sign-in link.");
+        setError(t("errors.signInIncomplete"));
         setSending(false);
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t("errors.generic"));
       setSending(false);
     }
   }
@@ -351,11 +365,11 @@ function LoginForm() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim() || !password || !confirmPassword) return;
-    if (password !== confirmPassword) { setError("Passwords don't match."); return; }
-    { const problem = passwordProblem(password); if (problem) { setError(problem); return; } }
-    if (!name.trim() || !phone.trim()) { setError("Please add your name and phone. They go on the resumes you build."); return; }
-    if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to create your account."); return; }
-    if (!forgeChoiceComplete(forgeRunOffered, forgeChoice)) { setError(FORGE_CHOICE_HINT); return; }
+    if (password !== confirmPassword) { setError(tPassword("mismatch")); return; }
+    { const problem = passwordProblem(password); if (problem) { setError(passwordProblemText(problem)); return; } }
+    if (!name.trim() || !phone.trim()) { setError(t("errors.nameAndPhone")); return; }
+    if (!acceptedTerms) { setError(t("errors.agreeCreate")); return; }
+    if (!forgeChoiceComplete(forgeRunOffered, forgeChoice)) { setError(t("forgeRun.hint")); return; }
     setError(""); setSending(true); storeCode();
 
     // Carry the Forge work onto the new account server-side, ONLY when the
@@ -389,7 +403,7 @@ function LoginForm() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error || "Could not create account.");
+        setError(data.error || t("errors.createFailed"));
         setSending(false);
         return;
       }
@@ -424,17 +438,17 @@ function LoginForm() {
       });
       if (result?.error) {
         changeMode("sign-in");
-        setError("Account created. Try signing in.");
+        setError(t("errors.createdTrySignIn"));
         setSending(false);
       } else if (result?.url) {
         window.location.href = result.url;
       } else {
         changeMode("sign-in");
-        setError("Account created. Sign in to continue.");
+        setError(t("errors.createdSignIn"));
         setSending(false);
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t("errors.generic"));
       setSending(false);
     }
   }
@@ -443,7 +457,7 @@ function LoginForm() {
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
-    if (!acceptedTerms) { setError("Please agree to the Terms and Privacy Policy to continue."); return; }
+    if (!acceptedTerms) { setError(t("errors.agreeContinue")); return; }
     setError(""); setSending(true); storeCode();
     // The box checked here is recorded once the link signs them in, on this
     // browser only (app/(auth)/login/terms).
@@ -458,17 +472,17 @@ function LoginForm() {
         email: email.trim(), callbackUrl, redirect: false,
       });
       if (result?.error) {
-        setError("Could not send magic link. Try again or use a password.");
+        setError(t("errors.magicLinkFailed"));
         setSending(false);
       } else if (result?.url) {
         setMagicLinkSent(true);
         setSending(false);
       } else {
-        setError("We couldn't confirm the request. Try again.");
+        setError(t("errors.requestNotConfirmed"));
         setSending(false);
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t("errors.generic"));
       setSending(false);
     }
   }
@@ -484,16 +498,18 @@ function LoginForm() {
               <path d="M2 6l7 4 7-4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold text-t-white mb-2">Check your email</h1>
+          <h1 className="text-2xl font-bold text-t-white mb-2">{t("checkEmail.title")}</h1>
           <p className="text-base text-t-phos-dim mb-6">
-            We sent a sign-in link to <span className="font-medium text-t-white">{email}</span>.
-            Click the link in the email to sign in. It expires in 24 hours.
+            {t.rich("checkEmail.body", {
+              address: email,
+              email: (chunks) => <span className="font-medium text-t-white">{chunks}</span>,
+            })}
           </p>
           <button
             onClick={() => { setMagicLinkSent(false); changeMode("sign-in"); }}
             className="text-sm text-t-amber-bright hover:text-t-amber"
           >
-            Back to sign in
+            {t("checkEmail.back")}
           </button>
         </div>
       </main>
@@ -516,36 +532,41 @@ function LoginForm() {
     <main className="forge-workshop flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
       <div className="w-full max-w-md border border-t-line bg-t-panel p-6 shadow-[4px_4px_0_#000] sm:p-8">
         <div className="mb-6">
-          <p className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">
-            {forgeReturn ? "/forge" : "/refinery"}
-          </p>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="font-term text-[11px] font-bold uppercase text-t-amber-bright">
+              {forgeReturn ? "/forge" : "/refinery"}
+            </p>
+            {/* Site language, one tap (i18n/locale.ts). */}
+            <LanguageSwitch variant="compact" tone="dark" />
+          </div>
           <h1 className="font-display text-2xl font-bold uppercase text-t-white" data-testid="login-heading">
             {forgeReturn
               ? mode === "create"
-                ? "Make your free account"
-                : "Sign in to keep building"
+                ? t("heading.forgeCreate")
+                : t("heading.forgeSignIn")
               : mode === "create"
-                ? "Create your Refinery account"
-                : (ACCOUNT_ROUTES.find((r) => r.id === accountRoute)?.heading ??
-                   "Sign in to The Refinery")}
+                ? t("heading.create")
+                : (ACCOUNT_ROUTES.some((r) => r.id === accountRoute)
+                    ? tRoutes(`${accountRoute}.heading`)
+                    : t("heading.signInRefinery"))}
           </h1>
           <p className="mt-2 text-sm text-t-bone-dim">
             {forgeReturn
-              ? "It's free. One account for the Forge and the Refinery. You come right back to where you were."
+              ? t("subheading.forge")
               : mode === "create"
-                ? "Save your Forge work and continue with the full toolset."
+                ? t("subheading.create")
                 : mode === "magic-link"
-                  ? "Sign in with a magic link"
-                  : "Continue your career work where you left off."}
+                  ? t("subheading.magicLink")
+                  : t("subheading.default")}
           </p>
         </div>
 
         {currentSession?.user?.email && (
           <div className="mb-4 border border-t-line p-3 text-sm text-t-white">
-            <p className="break-words">Signed in as {currentSession.user.email}.</p>
-            <Link href={callbackUrl} className="t-focus mr-4 inline-block py-2 text-t-amber-bright underline">Continue</Link>
+            <p className="break-words">{t("signedInAs", { email: currentSession.user.email })}</p>
+            <Link href={callbackUrl} className="t-focus mr-4 inline-block py-2 text-t-amber-bright underline">{tc("continue")}</Link>
             <button type="button" onClick={() => void switchAccount()} disabled={sending} className="t-focus py-2 text-t-amber-bright underline disabled:opacity-50">
-              Sign out to switch accounts
+              {t("switchAccount")}
             </button>
           </div>
         )}
@@ -557,33 +578,38 @@ function LoginForm() {
         <AccountRouteNote route={accountRoute}>
           {accountRoute === "agency" && (
             <p className="mt-2 text-xs leading-relaxed text-t-bone-dim">
-              <a
-                href="https://forge.steelmanresumes.com"
-                className="font-medium text-t-amber-bright underline underline-offset-2"
-              >
-                Open The Forge
-              </a>{" "}
-              to run one end to end, or email{" "}
-              <a
-                href="mailto:hmu@themidnightgarden.club?subject=Agency%20evaluation"
-                className="font-medium text-t-amber-bright underline underline-offset-2"
-              >
-                hmu@themidnightgarden.club
-              </a>{" "}
-              to talk about what running it would involve.
+              {t.rich("agencyNote", {
+                forge: (chunks) => (
+                  <a
+                    href="https://forge.steelmanresumes.com"
+                    className="font-medium text-t-amber-bright underline underline-offset-2"
+                  >
+                    {chunks}
+                  </a>
+                ),
+                mail: (chunks) => (
+                  <a
+                    href="mailto:hmu@themidnightgarden.club?subject=Agency%20evaluation"
+                    className="font-medium text-t-amber-bright underline underline-offset-2"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
             </p>
           )}
           {accountRoute === "org" && (
             <p className="mt-2 text-xs leading-relaxed text-t-bone-dim">
-              Organization not set up yet? Email{" "}
-              <a
-                href="mailto:hmu@themidnightgarden.club?subject=Organization%20access"
-                className="font-medium text-t-amber-bright underline underline-offset-2"
-              >
-                hmu@themidnightgarden.club
-              </a>{" "}
-              with your organization name and program type. Free for nonprofits
-              and community organizations.
+              {t.rich("orgNote", {
+                mail: (chunks) => (
+                  <a
+                    href="mailto:hmu@themidnightgarden.club?subject=Organization%20access"
+                    className="font-medium text-t-amber-bright underline underline-offset-2"
+                  >
+                    {chunks}
+                  </a>
+                ),
+              })}
             </p>
           )}
         </AccountRouteNote>
@@ -604,11 +630,11 @@ function LoginForm() {
                 <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 010-4.2V7.06H2.18a11 11 0 000 9.88l3.66-2.84z" />
                 <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15A11 11 0 002.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
               </svg>
-              Continue with Google
+              {t("google")}
             </button>
             <div className="flex items-center gap-3 mt-4">
               <div className="flex-1 h-px bg-t-line" />
-              <span className="text-[11px] text-t-phos-dim">or</span>
+              <span className="text-[11px] text-t-phos-dim">{t("or")}</span>
               <div className="flex-1 h-px bg-t-line" />
             </div>
           </div>
@@ -618,14 +644,14 @@ function LoginForm() {
           {/* Email — always visible, autoComplete for saved credentials */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-t-white mb-1">
-              Email
+              {t("fields.email")}
             </label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => { setEmail(e.target.value); resetSecondStep(); }}
-              placeholder="you@example.com"
+              placeholder={t("fields.emailPlaceholder")}
               required
               autoComplete="email"
               autoFocus
@@ -638,14 +664,14 @@ function LoginForm() {
           {mode !== "magic-link" && (
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-t-white mb-1">
-                Password
+                {t("fields.password")}
               </label>
               <PasswordInput
                 key={mode}
                 id="password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); resetSecondStep(); }}
-                placeholder={mode === "create" ? `Create a password (${PASSWORD_HINT})` : "Your password"}
+                placeholder={mode === "create" ? t("fields.createPasswordPlaceholder", { hint: tPassword("hint", { min: PASSWORD_MIN_LENGTH }) }) : t("fields.passwordPlaceholder")}
                 required
                 autoComplete={mode === "create" ? "new-password" : "current-password"}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
@@ -658,7 +684,7 @@ function LoginForm() {
           {mode === "sign-in" && twoFactorStep && (
             <div>
               <label htmlFor="totp" className="block text-sm font-medium text-t-white mb-1">
-                Authentication code
+                {t("fields.authCode")}
               </label>
               <input
                 id="totp"
@@ -667,13 +693,13 @@ function LoginForm() {
                 autoComplete="one-time-code"
                 value={totp}
                 onChange={(e) => setTotp(e.target.value.replace(/[^0-9a-zA-Z-]/g, ""))}
-                placeholder="6-digit code (or a backup code)"
+                placeholder={t("fields.authCodePlaceholder")}
                 autoFocus
                 className="w-full px-4 py-3 border border-t-amber text-sm bg-t-panel text-t-white tracking-widest focus:border-t-amber-bright focus:outline-none transition-colors min-h-touch"
                 disabled={sending}
               />
               <p className="text-[11px] text-t-phos-dim mt-1">
-                Open your authenticator app for the current code, or use a backup code.
+                {t("fields.authCodeHelp")}
               </p>
             </div>
           )}
@@ -682,13 +708,13 @@ function LoginForm() {
           {mode === "create" && (
             <div>
               <label htmlFor="confirm" className="block text-sm font-medium text-t-white mb-1">
-                Confirm Password
+                {t("fields.confirmPassword")}
               </label>
               <PasswordInput
                 id="confirm"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirm your password"
+                placeholder={t("fields.confirmPasswordPlaceholder")}
                 required
                 autoComplete="new-password"
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
@@ -707,14 +733,14 @@ function LoginForm() {
             <>
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-t-white mb-1">
-                  Your name
+                  {t("fields.name")}
                 </label>
                 <input
                   id="name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="First and last name"
+                  placeholder={t("fields.namePlaceholder")}
                   autoComplete="name"
                   className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                   disabled={sending}
@@ -722,7 +748,7 @@ function LoginForm() {
               </div>
               <div>
                 <label htmlFor="phone" className="block text-sm font-medium text-t-white mb-1">
-                  Phone
+                  {t("fields.phone")}
                 </label>
                 <input
                   id="phone"
@@ -734,7 +760,7 @@ function LoginForm() {
                   className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                   disabled={sending}
                 />
-                <p className="text-[11px] text-t-phos-dim mt-1">These go on the resumes you build. You can change them anytime.</p>
+                <p className="text-[11px] text-t-phos-dim mt-1">{t("fields.phoneHelp")}</p>
               </div>
             </>
           )}
@@ -746,14 +772,14 @@ function LoginForm() {
               onClick={() => setShowCode(!showCode)}
               className="text-xs text-t-amber-bright hover:text-t-amber transition-colors"
             >
-              {showCode ? "Hide partner code" : "Have a partner code?"}
+              {showCode ? t("partnerCode.hide") : t("partnerCode.show")}
             </button>
             {showCode && (
               <input
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="e.g., PARTNER123"
+                placeholder={t("partnerCode.placeholder")}
                 className="mt-2 w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch uppercase"
                 disabled={sending}
               />
@@ -765,7 +791,7 @@ function LoginForm() {
           {mode === "create" && forgeRunOffered && (
             <fieldset className="border border-t-line px-4 py-3">
               <legend className="px-1 text-sm font-semibold text-t-white">
-                There&apos;s a resume in progress on this computer. Is it yours?
+                {t("forgeRun.legend")}
               </legend>
               <label className="mt-1 flex items-start gap-2 text-sm text-t-white">
                 <input
@@ -777,7 +803,7 @@ function LoginForm() {
                   disabled={sending}
                   className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
                 />
-                <span>Yes, this is my resume. Save it to my new account.</span>
+                <span>{t("forgeRun.yes")}</span>
               </label>
               <label className="mt-2 flex items-start gap-2 text-sm text-t-white">
                 <input
@@ -789,10 +815,10 @@ function LoginForm() {
                   disabled={sending}
                   className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
                 />
-                <span>No, this isn&apos;t mine. Erase it from this computer.</span>
+                <span>{t("forgeRun.no")}</span>
               </label>
               {forgeChoice === null && (
-                <p className="mt-2 text-sm text-t-bone-dim">{FORGE_CHOICE_HINT}</p>
+                <p className="mt-2 text-sm text-t-bone-dim">{t("forgeRun.hint")}</p>
               )}
             </fieldset>
           )}
@@ -811,11 +837,14 @@ function LoginForm() {
                 className="mt-0.5 h-4 w-4 flex-shrink-0 accent-t-amber"
               />
               <span>
-                I agree to the{" "}
-                <a href="https://steelmanresumes.com/terms" target="_blank" rel="noopener noreferrer" className="text-t-amber-bright hover:text-t-amber underline">Terms</a>{" "}
-                and{" "}
-                <a href="https://steelmanresumes.com/privacy" target="_blank" rel="noopener noreferrer" className="text-t-amber-bright hover:text-t-amber underline">Privacy Policy</a>,
-                and I understand my information is processed with AI to build my resume and career tools.
+                {t.rich("terms", {
+                  terms: (chunks) => (
+                    <a href="https://steelmanresumes.com/terms" target="_blank" rel="noopener noreferrer" className="text-t-amber-bright hover:text-t-amber underline">{chunks}</a>
+                  ),
+                  privacy: (chunks) => (
+                    <a href="https://steelmanresumes.com/privacy" target="_blank" rel="noopener noreferrer" className="text-t-amber-bright hover:text-t-amber underline">{chunks}</a>
+                  ),
+                })}
               </span>
             </label>
           )}
@@ -832,7 +861,7 @@ function LoginForm() {
                     disabled={sending}
                     className="underline hover:no-underline"
                   >
-                    Sign out
+                    {t("signOut")}
                   </button>
                 </>
               )}
@@ -842,14 +871,14 @@ function LoginForm() {
           {/* Submit */}
           <TBtn type="submit" disabled={submitDisabled} className="w-full !text-[#14100a]">
             {sending
-              ? "Working..."
+              ? t("submit.working")
               : mode === "create"
-                ? "Create account"
+                ? t("submit.create")
                 : mode === "magic-link"
-                  ? "Send magic link"
+                  ? t("submit.magicLink")
                   : twoFactorStep
-                    ? "Verify code"
-                    : "Sign in"}
+                    ? t("submit.verify")
+                    : t("submit.signIn")}
           </TBtn>
         </form>
 
@@ -863,7 +892,7 @@ function LoginForm() {
                 disabled={sending}
                 className="text-sm text-t-amber-bright hover:text-t-amber transition-colors block mx-auto"
               >
-                New here? Create a free account
+                {t("switchers.newHere")}
               </button>
               <div className="flex items-center justify-center gap-3 text-xs text-t-phos-dim">
                 <button
@@ -872,7 +901,7 @@ function LoginForm() {
                   disabled={sending}
                   className="hover:text-t-amber-bright transition-colors"
                 >
-                  Forgot password?
+                  {t("switchers.forgot")}
                 </button>
                 <span>·</span>
                 <button
@@ -881,7 +910,7 @@ function LoginForm() {
                   disabled={sending}
                   className="hover:text-t-amber-bright transition-colors"
                 >
-                  Email me a sign-in link
+                  {t("switchers.emailLink")}
                 </button>
               </div>
             </>
@@ -894,14 +923,14 @@ function LoginForm() {
               disabled={sending}
               className="text-sm text-t-amber-bright hover:text-t-amber transition-colors"
             >
-              Already have an account? Sign in
+              {t("switchers.haveAccount")}
             </button>
           )}
 
           {mode === "magic-link" && (
             <>
               <p className="text-xs text-t-phos-dim">
-                We&apos;ll email a one-time link. It signs you in without changing your password.
+                {t("switchers.linkNote")}
               </p>
               <button
                 type="button"
@@ -909,7 +938,7 @@ function LoginForm() {
                 disabled={sending}
                 className="text-sm text-t-amber-bright hover:text-t-amber transition-colors"
               >
-                Back to password sign-in
+                {t("switchers.backToPassword")}
               </button>
             </>
           )}
@@ -967,14 +996,19 @@ function LoginForm() {
 
         <div className="mt-6 text-center">
           <p className="text-xs text-t-phos-dim">
-            No credit card. No spam. Your data stays yours.
+            {t("footer.free")}
           </p>
           <p className="text-xs text-t-phos-dim mt-2">
-            Haven&apos;t started yet?{" "}
-            <a href="/intro" className="text-t-amber-bright hover:text-t-amber font-medium">
-              Try The Forge
-            </a>
-            {wall === null ? "." : wall === "up" ? ". It's free." : ". It's free, and you don't need an account."}
+            {t.rich(
+              wall === null ? "footer.notStartedPlain" : wall === "up" ? "footer.notStartedUp" : "footer.notStartedOpen",
+              {
+                link: (chunks) => (
+                  <a href="/intro" className="text-t-amber-bright hover:text-t-amber font-medium">
+                    {chunks}
+                  </a>
+                ),
+              },
+            )}
           </p>
         </div>
       </div>

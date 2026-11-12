@@ -11,8 +11,9 @@ it("the buttons say draft and who acts", () => {
   assert.match(actions, /label: "Draft a case note for your review"/);
   assert.match(actions, /label: "Draft a check-in for you to send"/);
   assert.doesNotMatch(actions, /label: "Write a case note"|label: "Draft a check-in email"/);
-  const chat = read("../../components/AssistantChat.tsx");
-  assert.match(chat, /"Draft a check-in for you to send",\s*"Draft a case note for your review"/);
+  const prompts = JSON.parse(read("../../messages/en/assistant.json")).prompts.staff;
+  assert.equal(prompts.checkIn, "Draft a check-in for you to send");
+  assert.equal(prompts.caseNote, "Draft a case note for your review");
 });
 
 it("the draft tool always reports saved: false and sent: false, and never writes", () => {

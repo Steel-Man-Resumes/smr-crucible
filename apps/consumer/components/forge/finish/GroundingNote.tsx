@@ -7,6 +7,8 @@
  * not be taken out.
  */
 
+import { useTranslations } from "next-intl";
+
 export type GroundingOutcome = {
   claim: string;
   doc: "resume" | "cover_letter";
@@ -42,44 +44,45 @@ export function groundingOpenCount(n: GroundingSummary): number {
 }
 
 export function GroundingNote({ groundingNote }: { groundingNote: GroundingSummary }) {
+    const t = useTranslations("forgeFinish.grounding");
     const credentialCount = groundingNote.outcomes.filter((o) => o.status === "credential").length;
     const open = groundingNote.residual + groundingNote.unmatched + groundingNote.unnamed.length + credentialCount;
-    const docName = (d: "resume" | "cover_letter") => (d === "cover_letter" ? "letter" : d);
+    const docName = (d: "resume" | "cover_letter") => (d === "cover_letter" ? t("docLetter") : t("docResume"));
     const label = (o: { status: string; doc: "resume" | "cover_letter" }) =>
       o.status === "credential"
-        ? `A line in your ${docName(o.doc)} may say more about a card, license or certification than you told us. Check it: `
+        ? t("labelCredential", { doc: docName(o.doc) })
         : o.status === "removed"
-        ? `Taken out of your ${docName(o.doc)}: `
+        ? t("labelRemoved", { doc: docName(o.doc) })
         : o.status === "changed"
-          ? `Reworded in your ${docName(o.doc)}. Find the new wording and check it. It used to say: `
+          ? t("labelChanged", { doc: docName(o.doc) })
           : o.status === "also_in"
-          ? `Something like this is also in your ${docName(o.doc)}, check it: `
+          ? t("labelAlsoIn", { doc: docName(o.doc) })
           : o.status === "still_there"
-            ? `Still in your ${docName(o.doc)}, check it: `
-            : `We couldn't find these exact words in your ${docName(o.doc)}. Look for anything like them: `;
+            ? t("labelStillThere", { doc: docName(o.doc) })
+            : t("labelUnmatched", { doc: docName(o.doc) });
     return (
       <div className="bg-t-panel border border-t-amber px-4 py-3">
         <p className="text-xs font-bold text-t-amber-bright uppercase mb-1">
-          {open > 0 ? "Check these before you send" : "What the check found"}
+          {open > 0 ? t("headingOpen") : t("headingDone")}
         </p>
         <p className="text-xs text-t-phos leading-relaxed">
           {groundingNote.removed > 0 &&
-            `We took out ${groundingNote.removed} ${groundingNote.removed === 1 ? "detail" : "details"} we couldn't match to what you told us. `}
+            t("removedCount", { count: groundingNote.removed })}
           {groundingNote.residual > 0 &&
-            `${groundingNote.residual === 1 ? "One thing" : `${groundingNote.residual} things`} we flagged may still be in there, maybe reworded. `}
+            t("residualCount", { count: groundingNote.residual })}
           {credentialCount > 0 &&
-            `${credentialCount === 1 ? "One line" : `${credentialCount} lines`} may say more about a card, license or certification than you told us. `}
+            t("credentialCount", { count: credentialCount })}
           {groundingNote.unmatched > 0 &&
-            `The check quoted ${groundingNote.unmatched === 1 ? "words" : "some words"} we couldn't find in your documents. `}
-          {groundingNote.unnamed.map((d) => `We found something in your ${docName(d)} we couldn't match to what you told us, but couldn't point to the exact words. `)}
+            t("unmatchedCount", { count: groundingNote.unmatched })}
+          {groundingNote.unnamed.map((d) => t("unnamed", { doc: docName(d) }))}
           {open > 0
-            ? "Read these closely before you send anything."
-            : "The check can also reword lines it didn't flag. Read it once before you send it. You know your history best."}
+            ? t("tailOpen")
+            : t("tailDone")}
         </p>
         {groundingNote.outcomes.length > 0 && (
           <details className="mt-2" open={open > 0}>
             <summary className="t-focus cursor-pointer text-[11px] text-t-phos-dim underline decoration-dotted underline-offset-2">
-              See what we flagged
+              {t("seeFlagged")}
             </summary>
             <ul className="mt-1.5 space-y-1">
               {groundingNote.outcomes.map((o, i) => (

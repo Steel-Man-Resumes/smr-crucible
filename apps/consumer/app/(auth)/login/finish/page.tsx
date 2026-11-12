@@ -14,6 +14,7 @@
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { TBtn } from "@crucible/consumer-ui";
 import { EMAIL_LINK_PAGE, emailCallbackTarget } from "@/lib/sign-in-link";
 
@@ -29,6 +30,7 @@ export default function FinishSignInPage() {
 }
 
 function FinishSignIn() {
+  const t = useTranslations("auth.finish");
   const searchParams = useSearchParams();
   const [going, setGoing] = useState(false);
   // undefined while checking (first render), null when the link is not valid.
@@ -70,10 +72,10 @@ function FinishSignIn() {
   return (
     <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-start bg-t-bg px-4 py-10 font-body sm:justify-center sm:py-14">
       <div className="app-panel w-full max-w-md p-6 sm:p-8">
-        <p className="app-eyebrow mb-2 text-[#4f6b57]">Private career workspace</p>
+        <p className="app-eyebrow mb-2 text-[#4f6b57]">{t("eyebrow")}</p>
         {target !== null ? (
           <>
-            <h1 className="text-2xl font-semibold text-t-white">Finish signing in</h1>
+            <h1 className="text-2xl font-semibold text-t-white">{t("title")}</h1>
             {(() => {
               // The FULL address the link signs in to (round 2: a masked one
               // looks the same for a lookalike address). The person holding the
@@ -88,12 +90,12 @@ function FinishSignIn() {
                 <div className="mt-2 mb-6 text-sm text-t-bone-dim" data-testid="finish-sign-in-as">
                   {who ? (
                     <>
-                      <p>This link signs you in as</p>
+                      <p>{t("signsYouInAs")}</p>
                       <p className="mt-1 break-all text-base font-semibold text-t-white" data-testid="finish-email">{who}</p>
-                      <p className="mt-3">Not you? Don&apos;t continue. Close this page.</p>
+                      <p className="mt-3">{t("notYou")}</p>
                     </>
                   ) : (
-                    <p>Press the button to finish signing in to Steel Man Resumes.</p>
+                    <p>{t("pressButton")}</p>
                   )}
                 </div>
               );
@@ -113,17 +115,17 @@ function FinishSignIn() {
               }}
               className="w-full !border-[#4f6b57] !bg-[#4f6b57] hover:!bg-[#3d5745]"
             >
-              {going ? "Signing you in..." : "Finish signing in"}
+              {going ? t("going") : t("button")}
             </TBtn>
           </>
         ) : (
           <>
-            <h1 className="text-2xl font-semibold text-t-white">This link is not complete</h1>
+            <h1 className="text-2xl font-semibold text-t-white">{t("incompleteTitle")}</h1>
             <p className="mt-2 mb-6 text-sm text-t-bone-dim">
-              Part of the sign-in link is missing. Ask for a new one on the sign-in page.
+              {t("incompleteBody")}
             </p>
             <Link href="/login" className="text-sm text-t-amber-bright underline underline-offset-2">
-              Go to sign in
+              {t("goToSignIn")}
             </Link>
           </>
         )}

@@ -4,8 +4,19 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PasswordInput } from "@/components/auth/PasswordInput";
 import { useSearchParams } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { TBtn } from "@crucible/consumer-ui";
-import { passwordProblem, PASSWORD_HINT } from "@/lib/password-policy";
+import { passwordProblem, PASSWORD_MIN_LENGTH } from "@/lib/password-policy";
+
+// passwordProblem() (lib/password-policy.ts) words its answer in English. The
+// four answers it can give are shown in the page's language (auth.password
+// in the catalog); any other text shows as it came.
+const PASSWORD_PROBLEM_KEYS: ReadonlyMap<string, string> = new Map([
+  [`Use at least ${PASSWORD_MIN_LENGTH} characters.`, "tooShort"],
+  ["That password is too long. Use fewer characters; some letters and symbols take more space.", "tooLong"],
+  ["Include at least one letter and one number.", "needsLetterAndNumber"],
+  ["That password is too common. Pick something only you would know.", "tooCommon"],
+]);
 
 export default function ResetPasswordPage() {
   return (
@@ -28,6 +39,8 @@ function validLink(email: unknown, token: unknown): ResetLink | null {
 }
 
 function ResetPasswordForm() {
+  const t = useTranslations("auth.reset");
+  const tPassword = useTranslations("auth.password");
   const searchParams = useSearchParams();
   // undefined while reading (first render), null when the link is not valid.
   const [link, setLink] = useState<ResetLink | null | undefined>(undefined);
@@ -80,12 +93,13 @@ function ResetPasswordForm() {
     event.preventDefault();
     if (invalidLink || !password || !confirmPassword) return;
     if (password !== confirmPassword) {
-      setError("Passwords don't match.");
+      setError(tPassword("mismatch"));
       return;
     }
     const problem = passwordProblem(password);
     if (problem) {
-      setError(problem);
+      const key = PASSWORD_PROBLEM_KEYS.get(problem);
+      setError(key ? tPassword(`problems.${key}`, { min: PASSWORD_MIN_LENGTH }) : problem);
       return;
     }
 
@@ -100,7 +114,7 @@ function ResetPasswordForm() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "Could not reset password.");
+        setError(data.error || t("errors.resetFailed"));
         setStatus("idle");
         return;
       }
@@ -113,7 +127,7 @@ function ResetPasswordForm() {
       setConfirmPassword("");
       setStatus("done");
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError(t("errors.generic"));
       setStatus("idle");
     }
   }
@@ -130,14 +144,13 @@ function ResetPasswordForm() {
       <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
         <div className="app-panel w-full max-w-md p-6 text-center sm:p-8">
           <h1 className="text-2xl font-bold text-t-white mb-2">
-            Invalid reset link
+            {t("invalidTitle")}
           </h1>
           <p className="text-base text-t-phos-dim mb-6">
-            This link is missing required information. Request a new password
-            reset email.
+            {t("invalidBody")}
           </p>
           <Link href="/forgot-password" className="text-sm text-t-amber-bright hover:text-t-amber">
-            Request a new link
+            {t("requestNew")}
           </Link>
         </div>
       </main>
@@ -149,13 +162,13 @@ function ResetPasswordForm() {
       <main className="flex min-h-[calc(100vh-72px)] flex-col items-center justify-center bg-t-bg px-4 py-10 font-body">
         <div className="app-panel w-full max-w-md p-6 text-center sm:p-8">
           <h1 className="text-2xl font-bold text-t-white mb-2">
-            Password reset
+            {t("doneTitle")}
           </h1>
           <p className="text-base text-t-phos-dim mb-6">
-            Your password has been updated. Sign in with your new password. If you use two-step verification, we&apos;ll ask for your code too.
+            {t("doneBody")}
           </p>
           <Link href={`/login?email=${encodeURIComponent(email)}`} className="t-focus inline-block px-4 py-3 text-t-amber-bright underline">
-            Go to sign in
+            {t("goToSignIn")}
           </Link>
         </div>
       </main>
@@ -167,23 +180,23 @@ function ResetPasswordForm() {
       <div className="app-panel w-full max-w-md p-6 sm:p-8">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-t-white">
-            Choose a new password
+            {t("title")}
           </h1>
           <p className="text-sm text-t-phos-dim mt-1">
-            This will update the password for {email}.
+            {t("forEmail", { email })}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-t-white mb-1">
-              New password
+              {t("newPassword")}
             </label>
             <PasswordInput
               id="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder={`New password (${PASSWORD_HINT})`}
+              placeholder={t("newPasswordPlaceholder", { hint: tPassword("hint", { min: PASSWORD_MIN_LENGTH }) })}
               required
               autoComplete="new-password"
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
@@ -193,13 +206,13 @@ function ResetPasswordForm() {
 
           <div>
             <label htmlFor="confirm" className="block text-sm font-medium text-t-white mb-1">
-              Confirm password
+              {t("confirmPassword")}
             </label>
             <PasswordInput
               id="confirm"
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
-              placeholder="Confirm password"
+              placeholder={t("confirmPasswordPlaceholder")}
               required
               autoComplete="new-password"
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
@@ -214,7 +227,7 @@ function ResetPasswordForm() {
             disabled={status === "saving" || !password || !confirmPassword}
             className="w-full"
           >
-            {status === "saving" ? "Saving..." : "Reset password"}
+            {status === "saving" ? t("saving") : t("submit")}
           </TBtn>
         </form>
       </div>

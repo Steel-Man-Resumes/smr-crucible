@@ -15,6 +15,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -28,6 +29,7 @@ import {
   credentialRowsAsText,
   emptyCredentialRow,
   readCredentialRows,
+  type CredentialKind,
   type CredentialRowDraft,
 } from "@/lib/credential-rows";
 import {
@@ -40,26 +42,39 @@ import {
 } from "@/lib/forge-path";
 
 // The ids are unchanged (stored answers and forge-path R5 read them); the
-// words name the help, not the person.
+// words name the help, not the person. The words live in the forgeStory
+// catalog (story.options.<id>).
 const CHALLENGE_OPTIONS = [
-  { id: "transportation", label: "Getting to work" },
+  { id: "transportation" },
   // Brings the shift question to the top of preferences (forge-path R5).
-  { id: "childcare", label: "Childcare or family care" },
-  { id: "housing", label: "A place to stay" },
-  { id: "criminal_record", label: "A record (jobs and help for people with records)" },
-  { id: "employment_gap", label: "A gap in work" },
-  { id: "recovery", label: "Recovery" },
-  { id: "health", label: "Health" },
-  { id: "no_degree", label: "No diploma or degree" },
-  { id: "career_change", label: "Changing careers" },
-  { id: "other", label: "Something else" },
+  { id: "childcare" },
+  { id: "housing" },
+  { id: "criminal_record" },
+  { id: "employment_gap" },
+  { id: "recovery" },
+  { id: "health" },
+  { id: "no_degree" },
+  { id: "career_change" },
+  { id: "other" },
 ];
+
+// The kind buttons show a translated word; the stored value stays the kind itself.
+const KIND_KEYS: Record<CredentialKind, string> = {
+  license: "license",
+  certification: "certification",
+  card: "card",
+  "training course": "trainingCourse",
+  permit: "permit",
+};
 
 /** Options that ask nothing more when ticked: the record never gets a text box. */
 const NO_FOLLOW_UP = new Set(["criminal_record"]);
 
 export default function StoryPage() {
   const router = useRouter();
+  const t = useTranslations("forgeStory");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const { session, updateSession } = useForgeSession();
   const isDemo = session.isDemo === true;
   const audience = session.audience || "client";
@@ -161,13 +176,11 @@ export default function StoryPage() {
       return (
         <div key="credentials" className="mb-6" data-testid={`q-credentials-${q.variant}`}>
           <p className="mb-1.5 block text-sm font-medium text-t-white" id="credentials-label">
-            {trade
-              ? "Getting back into your trade: do you hold a license, certificate or card for it?"
-              : "Any training, certificate or license you have, or are working on?"}{" "}
-            <span className="font-normal text-t-phos-dim">(optional)</span>
+            {trade ? t("story.credentials.promptTrade") : t("story.credentials.promptDefault")}{" "}
+            <span className="font-normal text-t-phos-dim">{t("story.optional")}</span>
           </p>
           <p className="mb-3 text-xs text-t-phos-dim">
-            One per line. Pick what kind it is, then the year you got it or whether it&apos;s current, expired or in progress.
+            {t("story.credentials.hint")}
           </p>
           <ul className="space-y-3" aria-labelledby="credentials-label">
             {credRows.map((row, i) => {
@@ -175,17 +188,17 @@ export default function StoryPage() {
               return (
                 <li key={i} className="border border-t-line bg-t-panel p-3" data-testid="credential-row">
                   <label htmlFor={`cred-name-${i}`} className="block text-xs font-semibold text-t-white">
-                    Name
+                    {t("story.credentials.name")}
                   </label>
                   <input
                     id={`cred-name-${i}`}
                     value={row.name}
                     onChange={(e) => setRow(i, { name: e.target.value })}
-                    placeholder={trade ? "e.g., Forklift" : "e.g., Food handler"}
+                    placeholder={trade ? t("story.credentials.namePlaceholderTrade") : t("story.credentials.namePlaceholderOther")}
                     className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
                   />
                   <p className="mt-2 text-xs font-semibold text-t-white" id={`cred-kind-${i}`}>
-                    What kind is it?
+                    {t("story.credentials.kind")}
                   </p>
                   <div className="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-labelledby={`cred-kind-${i}`}>
                     {CREDENTIAL_KINDS.map((k) => (
@@ -197,38 +210,38 @@ export default function StoryPage() {
                         onClick={() => setRow(i, { kind: k })}
                         className={`border px-3 py-1.5 text-xs ${row.kind === k ? "border-t-amber bg-t-amber text-t-bg" : "border-t-line text-t-white"}`}
                       >
-                        {k.charAt(0).toUpperCase() + k.slice(1)}
+                        {t(`story.credentials.kinds.${KIND_KEYS[k]}`)}
                       </button>
                     ))}
                   </div>
                   <label htmlFor={`cred-when-${i}`} className="mt-2 block text-xs font-semibold text-t-white">
-                    When did you get it, or is it current?
+                    {t("story.credentials.when")}
                   </label>
                   <input
                     id={`cred-when-${i}`}
                     value={row.when}
                     onChange={(e) => setRow(i, { when: e.target.value })}
-                    placeholder="The year, or current, expired, in progress"
+                    placeholder={t("story.credentials.whenPlaceholder")}
                     className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
                   />
                   {needs === "when" && row.when.trim() !== "" && (
                     <p role="status" className="mt-1 text-xs text-t-amber-bright">
-                      Add the year you got it, or say if it&apos;s current, expired, in progress or completed.
+                      {t("story.credentials.needsWhen")}
                     </p>
                   )}
                   {needs === "name" && (
                     <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="credential-name-notice">
-                      Keep the name to just the name. Put expired, lapsed, suspended or the year in the box below.
+                      {t("story.credentials.needsName")}
                     </p>
                   )}
                   {needs === "kind-name" && (
                     <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="credential-kind-notice">
-                      The name says what kind it is. Pick that kind, or take the word out of the name.
+                      {t("story.credentials.needsKind")}
                     </p>
                   )}
                   {needs === "permit" && (
                     <p role="status" className="mt-1 text-xs text-t-amber-bright" data-testid="credential-permit-notice">
-                      That sounds like a permit. Pick Permit as the kind.
+                      {t("story.credentials.needsPermit")}
                     </p>
                   )}
                   {credRows.length > 1 && (
@@ -237,7 +250,7 @@ export default function StoryPage() {
                       onClick={() => setCredRows((rows) => rows.filter((_, k) => k !== i))}
                       className="mt-2 text-xs text-t-phos-dim underline"
                     >
-                      Remove
+                      {t("story.credentials.remove")}
                     </button>
                   )}
                 </li>
@@ -250,7 +263,7 @@ export default function StoryPage() {
             className="mt-3 border border-t-line px-3 py-1.5 text-xs text-t-white"
             data-testid="credential-add"
           >
-            Add another
+            {t("story.credentials.addAnother")}
           </button>
         </div>
       );
@@ -261,9 +274,9 @@ export default function StoryPage() {
   void tone;
   return (
     <FlowPage
-      title="Want help with something getting in the way?"
-      subtitle="Tick what would help. Skip anything. You don't have to explain any of it."
-      actionLabel={isDemo ? "Next" : (selected.length > 0 || goalPrompts.length > 0 ? "Continue" : "Nothing right now, skip")}
+      title={t("story.title")}
+      subtitle={t("story.subtitle")}
+      actionLabel={isDemo ? tc("actions.next") : (selected.length > 0 || goalPrompts.length > 0 ? tc("actions.continue") : t("story.skipNothing"))}
       onAction={handleContinue}
       showBack
       onBack={() => {
@@ -271,16 +284,11 @@ export default function StoryPage() {
         router.push(isDemo ? "/goals" : previousPath(plan, "story", session));
       }}
       footer={
-        <p>
-          What you share here helps t.ROY build your resume and find
-          resources. To do that, it goes to the AI services we use, and if you
-          sign in or make an account, it&apos;s saved there. It&apos;s never used to
-          judge you. Skip anything you don&apos;t want to share.
-        </p>
+        <p>{t("story.footer")}</p>
       }
     >
       <GhostGuide
-        message={getOpusMessage("story", audience, isDemo)}
+        message={getOpusMessage("story", audience, isDemo, locale)}
         pageId="story"
       />
 
@@ -289,8 +297,7 @@ export default function StoryPage() {
       {!isDemo && (
         <div className="bg-t-panel px-4 py-3 mb-4 border border-t-line">
           <p className="text-sm text-t-phos leading-relaxed">
-            We never ask what a charge was. If a record is in the way, tick it, and
-            t.ROY points you to employers and help for people with records.
+            {t("story.recordNote")}
           </p>
         </div>
       )}
@@ -298,7 +305,7 @@ export default function StoryPage() {
       {isDemo && (
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode: sample barriers pre-filled
+            {t("story.demoBanner")}
           </p>
         </div>
       )}
@@ -342,7 +349,7 @@ export default function StoryPage() {
                     </svg>
                   )}
                 </div>
-                <span className="font-medium text-t-white">{opt.label}</span>
+                <span className="font-medium text-t-white">{t(`story.options.${opt.id}`)}</span>
               </div>
             </button>
           );
@@ -358,15 +365,15 @@ export default function StoryPage() {
           return (
             <div key={id} className="mb-4">
               <label className="text-sm font-medium text-t-white block mb-1.5">
-                {opt.label}: what kind of help would make a difference?{" "}
-                <span className="font-normal text-t-phos-dim">(optional)</span>
+                {t("story.narrativeLabel", { label: t(`story.options.${opt.id}`) })}{" "}
+                <span className="font-normal text-t-phos-dim">{t("story.optional")}</span>
               </label>
               <textarea
                 value={narratives[id] || ""}
                 onChange={(e) =>
                   setNarratives({ ...narratives, [id]: e.target.value })
                 }
-                placeholder="For example: a ride to early shifts."
+                placeholder={t("story.narrativePlaceholder")}
                 rows={2}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y"
               />
@@ -377,7 +384,7 @@ export default function StoryPage() {
       {/* What the goals brought here, in the order the goals were picked */}
       {goalPrompts.length > 0 && (
         <div className="mt-8" data-testid="story-goal-prompts">
-          <p className="mb-3 text-sm text-t-phos-dim">From the goals you picked:</p>
+          <p className="mb-3 text-sm text-t-phos-dim">{t("story.goalsHeading")}</p>
           {goalPrompts.map((q) => renderGoalPrompt(q))}
         </div>
       )}

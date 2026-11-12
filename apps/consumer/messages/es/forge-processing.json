@@ -1,0 +1,150 @@
+{
+  "title": "Armando tu historia",
+  "workFocusTitle": "Leyendo tu experiencia",
+  "troySays": "t.ROY dice: ",
+  "intro": {
+    "tourSteps": "Esto es lo que veo en tu página ahora, de arriba hacia abajo.",
+    "tourNone": "Revisé tu página.",
+    "jobsBuilding": "Estos son los trabajos que me diste. Los leo junto con tus metas para encontrar tus fortalezas y los caminos que te quedan bien. Tu página nueva viene justo después.",
+    "jobsStopped": "Estos son los trabajos que me diste.",
+    "answersBuilding": "Ahora estoy leyendo tus respuestas. Tu página nueva viene justo después.",
+    "answersStopped": "Tus respuestas siguen aquí."
+  },
+  "demo": {
+    "note": "Esto es una demostración con una página de ejemplo. No se envía nada a t.ROY.",
+    "seeResults": "Ver los resultados de ejemplo"
+  },
+  "failure": {
+    "tryAgain": "Intentar de nuevo",
+    "backToAnswers": "Volver a mis respuestas",
+    "countsToward": "Cada intento cuenta para el límite de hoy.",
+    "limit": {
+      "title": "Se acabó el límite de hoy",
+      "bodyToday": "Llegaste al límite de hoy para armar con t.ROY. Puedes volver a intentarlo hoy, después de {time}. Tus respuestas se quedan en este navegador hasta entonces, a menos que borres esta computadora.",
+      "bodyTomorrow": "Llegaste al límite de hoy para armar con t.ROY. Puedes volver a intentarlo mañana, después de {time}. Tus respuestas se quedan en este navegador hasta entonces, a menos que borres esta computadora."
+    },
+    "tooBig": {
+      "title": "Era demasiado para enviar de una vez",
+      "body": "Tus respuestas son demasiado largas para enviarlas juntas. Regresa, acorta la más larga y vuelve a intentarlo."
+    },
+    "timeout": {
+      "title": "t.ROY tardó demasiado",
+      "body": "Esta vez no terminó. Tus respuestas siguen aquí. Vuelve a intentarlo en un minuto."
+    },
+    "network": {
+      "title": "No se pudo conectar con t.ROY",
+      "body": "Revisa que tengas conexión a internet y vuelve a intentarlo. Tus respuestas siguen aquí."
+    },
+    "other": {
+      "title": "Algo salió mal de nuestro lado",
+      "body": "t.ROY no pudo terminar de armar tu página esta vez. No fue nada de lo que hiciste. Tus respuestas siguen aquí. Inténtalo de nuevo."
+    }
+  },
+  "status": {
+    "aria": "Estado del armado",
+    "sent": "Enviado a t.ROY",
+    "working": "Trabajando en ello",
+    "done": "Listo",
+    "secondsSoFar": "{seconds, plural, =1 {1 segundo hasta ahora} other {# segundos hasta ahora}}",
+    "live": {
+      "sending": "Enviando tus respuestas a t.ROY.",
+      "working": "Trabajando en ello. Suele tardar como un minuto.",
+      "long": "Está tardando más de lo normal. Sigue trabajando, así que quédate en esta página.",
+      "done": "Listo. Abriendo tus resultados."
+    }
+  },
+  "jobs": {
+    "aria": "Los trabajos que me diste",
+    "heading": "Los trabajos que me diste",
+    "noDates": "Aún no hay fechas",
+    "present": "Actualidad",
+    "about": "alrededor de {year}"
+  },
+  "tour": {
+    "pageNow": "Tu página ahora",
+    "checkedHere": "Revisada aquí mismo, en tu navegador.",
+    "pageAria": "Tu página, línea por línea",
+    "seesAria": "Lo que ve t.ROY",
+    "notesAria": "Notas de t.ROY sobre tu página",
+    "noteLabel": "Nota {number}, en la línea “{line}”: ",
+    "done": "Eso es lo que veo en esta página. Toca una nota para encontrar su línea.",
+    "reading": "Leyendo tu página...",
+    "pause": "Pausar",
+    "play": "Reproducir",
+    "showAll": "Ver todas las notas",
+    "readNote": "La leí de arriba hacia abajo. No me saltó nada grande. Tu página nueva viene en camino."
+  },
+  "notes": {
+    "truth": {
+      "blank": {
+        "first": "Todavía queda un espacio en blanco en esta línea. La página nueva no imprime espacios en blanco, y los busco antes de darla por terminada.",
+        "again": "Otro espacio en blanco aquí. Mismo arreglo: se quita o se llena con tu dato real."
+      },
+      "emptySection": {
+        "first": "Esta parte dice que no hay nada en ella. La página nueva simplemente deja fuera una sección cuando no hay nada que poner.",
+        "again": "Aquí pasa lo mismo. Una sección vacía se quita."
+      },
+      "missingTitle": {
+        "first": "A este trabajo le falta el puesto o el nombre de la empresa. Los empleadores buscan los dos. Si todavía falta uno en la página nueva, te lo marco para que lo completes.",
+        "again": "A este también le falta el puesto o la empresa. Lo marco igual."
+      },
+      "noDates": {
+        "first": "Este trabajo no tiene fechas. Los empleadores lo notan rápido. La página nueva no adivina fechas, y si falta una, te la marco para que la completes.",
+        "again": "Este trabajo tampoco tiene fechas. Igual: no adivino, y lo marco."
+      },
+      "datelessPage": {
+        "first": "No hay fechas en ninguna parte de esta página. Eso hace pensar que se está ocultando algo. La página nueva va por fechas, y usa solo las que tú me des.",
+        "again": "Aquí tampoco hay fechas. La página nueva va por fechas."
+      },
+      "toolMark": {
+        "first": "Esta línea nombra una herramienta para armar currículums. La página nueva se lee como tuya, sin el nombre de ninguna herramienta.",
+        "again": "Otro nombre de herramienta aquí. Se quita."
+      },
+      "dash": {
+        "first": "Las rayas largas como esta pueden hacer que una página parezca hecha por una máquina. La página nueva separa las ideas con puntos y con comas.",
+        "again": "Otra raya larga. Mismo arreglo en la página nueva."
+      },
+      "dashRange": {
+        "first": "Esa raya larga en las fechas puede parecer hecha por una máquina. La página nueva usa un guion normal.",
+        "again": "La misma raya larga en estas fechas. Guion normal en la página nueva."
+      },
+      "soleActor": {
+        "first": "Otra línea de esta página dice que ayudaste con este trabajo. Esta línea hace parecer que lo hiciste sin ayuda. La página nueva deja el trabajo compartido como compartido.",
+        "again": "Aquí pasa lo mismo: en la página nueva el trabajo compartido sigue siendo compartido."
+      },
+      "credentialStatus": {
+        "first": "Este no tiene año ni estado, así que quien lo lea no sabe si sigue vigente. La página nueva no adivina, así que ten esa respuesta lista.",
+        "again": "Igual con este: no tiene año ni estado. Ten la respuesta lista."
+      },
+      "generic": {
+        "first": "Vale la pena revisar esta línea otra vez. La página nueva se revisa línea por línea contra tus propias palabras.",
+        "again": "Esta también. Pasa por la misma revisión línea por línea."
+      }
+    },
+    "quality": {
+      "objective": "Un objetivo le dice al empleador lo que tú quieres. Ellos leen para ver lo que tú aportas, así que este lugar lleva unas líneas ciertas sobre tu trabajo.",
+      "summary": "No hay un resumen arriba. Dos o tres líneas ciertas sobre lo que haces y lo que aportas le dicen a quien lee por qué seguir leyendo.",
+      "genericSummary": "Esta línea podría estar en la página de cualquiera, así que no le dice nada de ti a quien la lee. Un resumen funciona cuando lleva datos que solo tú tienes.",
+      "softSkillList": "Cualquiera puede escribir estas palabras, así que quien lee las salta. Las habilidades son cosas en las que te podrían poner a prueba, como herramientas y máquinas; tus viñetas muestran lo demás.",
+      "weakBullet": "Esto nombra una tarea, pero no lo que hiciste con ella. Una viñeta empieza con la acción, así quien lee ve el trabajo.",
+      "gerund": "Esto empieza con una palabra en -ing, así que se lee como una lista de quehaceres. Una viñeta empieza con la acción misma, como Trained en vez de Training.",
+      "vague": "Esto podría ir bajo cualquier trabajo, así que no le dice nada a quien lo lee. Una viñeta nombra una cosa real que hiciste.",
+      "bullets": "Esto es un bloque de palabras, no viñetas. Quien contrata lee por encima, así que cada cosa que hiciste lleva su propia viñeta que empieza con la acción.",
+      "bare": "Estas son palabras sueltas bajo un trabajo, no viñetas. Quien lee no sabe qué hiciste con ellas.",
+      "headingMissing": "Tus trabajos están aquí sin un encabezado encima. Quien lee y el software de contratación buscan un encabezado sencillo, como EXPERIENCE, para encontrarlos.",
+      "headingOdd": "Quien lee y el software de contratación no conocen este encabezado. Los sencillos, como EXPERIENCE, SKILLS y EDUCATION, se encuentran rápido.",
+      "headingMixed": "Este encabezado se ve distinto a los demás. Los encabezados iguales se ven cuidados, y los mezclados se ven apurados.",
+      "did": "\"Did\" es un comienzo débil. Empieza con la acción misma para que quien lee vea el trabajo.",
+      "dutyLabel": "Una etiqueta de tareas convierte lo que viene debajo en una descripción del puesto. Quien lee quiere ver lo que hiciste, una viñeta a la vez.",
+      "dutyPosting": "\"{phrase}\" suena a la oferta de trabajo. El empleador ya sabe cuál era el trabajo; esta línea debe decir lo que hiciste tú en él."
+    },
+    "qualityAgain": {
+      "dutyPhrasing": "Aquí pasa lo mismo: esto dice cuál era el trabajo, no lo que hiciste.",
+      "weakBullet": "Igual aquí: esta línea necesita una acción real.",
+      "bullets": "Igual aquí: palabras bajo un trabajo, no viñetas.",
+      "genericSummary": "Esta también podría estar en la página de cualquiera.",
+      "heading": "Lo mismo con este encabezado.",
+      "default": "El mismo tipo de punto débil en esta línea."
+    }
+  }
+}

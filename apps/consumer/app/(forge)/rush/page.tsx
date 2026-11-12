@@ -16,6 +16,7 @@ import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useForgeSession } from "@/lib/forge-context";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { GhostGuide, TBtn } from "@crucible/consumer-ui";
@@ -35,12 +36,7 @@ interface RushResult {
   tips: string;
 }
 
-const PROCESSING_MESSAGES = [
-  "Reading your resume...",
-  "Identifying your strengths...",
-  "Rewriting for the target role...",
-  "Polishing the final draft...",
-];
+const PROCESSING_MESSAGES = ["reading", "strengths", "rewriting", "polishing"] as const;
 
 const ACCEPTED_TYPES = [
   "application/pdf",
@@ -50,6 +46,8 @@ const ACCEPTED_TYPES = [
 ].join(",");
 
 export default function RushPage() {
+  const t = useTranslations("forgeRush");
+  const locale = useLocale();
   const router = useRouter();
   const { session, updateSession } = useForgeSession();
   const audience = session.audience || "client";
@@ -81,12 +79,12 @@ export default function RushPage() {
       const res = await fetch("/api/parse", { method: "POST", body: formData });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Could not read that file.");
+        throw new Error(data.error || t("rush.errors.readFile"));
       }
       const data = await res.json();
       setResumeText(data.resumeText || "");
     } catch (err: any) {
-      setError(err.message || "File upload failed. Try pasting instead.");
+      setError(err.message || t("rush.errors.uploadFailed"));
     } finally {
       setUploading(false);
     }
@@ -121,7 +119,7 @@ export default function RushPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Something went wrong.");
+        throw new Error(data.error || t("rush.errors.generic"));
       }
 
       const data = await res.json();
@@ -129,7 +127,7 @@ export default function RushPage() {
       setStep("result");
     } catch (err: any) {
       clearInterval(msgInterval);
-      setError(err.message || "Something went wrong. Try again.");
+      setError(err.message || t("rush.errors.genericRetry"));
       setStep("input");
     }
   }
@@ -222,31 +220,32 @@ export default function RushPage() {
         <div className="w-full max-w-lg">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-t-white mb-2">
-              Rush Resume
+              {t("rush.intro.title")}
             </h1>
             <p className="text-base text-t-phos">
-              Rewrite your resume lines for one job, fast.
+              {t("rush.intro.subtitle")}
             </p>
           </div>
 
           {/* Disclaimer */}
           <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
             <p className="text-sm text-t-phos leading-relaxed">
-              <span className="font-semibold text-t-amber-bright">What this is:</span> Rush
-              works from the resume you already have and rewrites its lines. It
-              does not build a new resume or learn your story. The full{" "}
-              <Link
-                href="/intro"
-                className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber font-medium"
-              >
-                Forge
-              </Link>{" "}
-              takes longer and builds the real thing.
+              <span className="font-semibold text-t-amber-bright">{t("rush.intro.whatThisIsLead")}</span>{" "}
+              {t.rich("rush.intro.whatThisIsBody", {
+                link: (chunks) => (
+                  <Link
+                    href="/intro"
+                    className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber font-medium"
+                  >
+                    {chunks}
+                  </Link>
+                ),
+              })}
             </p>
           </div>
 
           <GhostGuide
-            message={getOpusMessage("rush", audience, isDemo)}
+            message={getOpusMessage("rush", audience, isDemo, locale)}
             pageId="rush"
           />
 
@@ -259,24 +258,24 @@ export default function RushPage() {
           {/* Resume input */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-t-white mb-1">
-              Your current resume
+              {t("rush.form.resumeLabel")}
             </label>
             <textarea
               value={resumeText}
               onChange={(e) => setResumeText(e.target.value)}
-              placeholder="Paste your resume text here..."
+              placeholder={t("rush.form.resumePlaceholder")}
               rows={8}
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-none"
             />
             <div className="flex items-center gap-3 mt-2">
-              <span className="text-xs text-t-phos-dim">or</span>
+              <span className="text-xs text-t-phos-dim">{t("rush.form.or")}</span>
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
                 className="text-xs text-t-amber-bright hover:text-t-amber underline underline-offset-2"
               >
-                {uploading ? "Reading file..." : "Upload a file (PDF, DOCX, TXT)"}
+                {uploading ? t("rush.form.readingFile") : t("rush.form.uploadFile")}
               </button>
               <input
                 ref={fileInputRef}
@@ -297,13 +296,13 @@ export default function RushPage() {
           {/* Target job */}
           <div className="mb-3">
             <label className="block text-sm font-medium text-t-white mb-1">
-              Target job title <span className="text-t-red">*</span>
+              {t("rush.form.jobLabel")} <span className="text-t-red">*</span>
             </label>
             <input
               type="text"
               value={targetJob}
               onChange={(e) => setTargetJob(e.target.value)}
-              placeholder='e.g., "Warehouse Associate" or "Customer Service Rep"'
+              placeholder={t("rush.form.jobPlaceholder")}
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
@@ -311,14 +310,14 @@ export default function RushPage() {
           {/* Target company (optional) */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-t-white mb-1">
-              Target company{" "}
-              <span className="text-xs text-t-phos-dim font-normal">(optional)</span>
+              {t("rush.form.companyLabel")}{" "}
+              <span className="text-xs text-t-phos-dim font-normal">{t("rush.form.optional")}</span>
             </label>
             <input
               type="text"
               value={targetCompany}
               onChange={(e) => setTargetCompany(e.target.value)}
-              placeholder='e.g., "Amazon" or "local restaurant"'
+              placeholder={t("rush.form.companyPlaceholder")}
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
             />
           </div>
@@ -326,13 +325,13 @@ export default function RushPage() {
           {/* Job description (optional) */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-t-white mb-1">
-              Paste the job description{" "}
-              <span className="text-xs text-t-phos-dim font-normal">(optional, but it makes it way better)</span>
+              {t("rush.form.descriptionLabel")}{" "}
+              <span className="text-xs text-t-phos-dim font-normal">{t("rush.form.descriptionHint")}</span>
             </label>
             <textarea
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
-              placeholder="Copy and paste the job posting here. The AI will tailor your resume to match what they're looking for."
+              placeholder={t("rush.form.descriptionPlaceholder")}
               rows={5}
               className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-none"
             />
@@ -343,7 +342,7 @@ export default function RushPage() {
             disabled={!resumeText.trim() || !targetJob.trim()}
             className="w-full text-lg"
           >
-            rewrite my lines
+            {t("rush.form.submit")}
           </TBtn>
         </div>
       </div>
@@ -355,12 +354,12 @@ export default function RushPage() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-t-bg">
         <div className="w-full max-w-md text-center">
-          <div className="my-4 flex justify-center"><TroyWork topic="resume" label="Working from the information you provided" /></div>
-          <h1 className="text-2xl font-bold mb-2 text-t-white">Rewriting your lines</h1>
+          <div className="my-4 flex justify-center"><TroyWork topic="resume" label={t("rush.processing.workLabel")} /></div>
+          <h1 className="text-2xl font-bold mb-2 text-t-white">{t("rush.processing.title")}</h1>
           <p className="text-base text-t-amber-bright transition-opacity duration-500">
-            {PROCESSING_MESSAGES[processingMsg]}
+            {t(`rush.processing.messages.${PROCESSING_MESSAGES[processingMsg]}`)}
           </p>
-          <p className="mt-5 text-xs text-t-phos-dim">This is still working. We will show the text before you download it.</p>
+          <p className="mt-5 text-xs text-t-phos-dim">{t("rush.processing.stillWorking")}</p>
         </div>
       </div>
     );
@@ -372,19 +371,19 @@ export default function RushPage() {
       <div className="max-w-2xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold text-t-white mb-2">
-            Your rewritten lines
+            {t("rush.result.title")}
           </h1>
           <p className="text-sm text-t-phos-dim">
-            For: {targetJob}
-            {targetCompany ? ` at ${targetCompany}` : ""}
+            {targetCompany
+              ? t("rush.result.forJobAtCompany", { job: targetJob, company: targetCompany })
+              : t("rush.result.forJob", { job: targetJob })}
           </p>
         </div>
 
         <div className="bg-t-panel px-4 py-3 mb-6 border border-t-amber">
           <p className="text-sm text-t-phos leading-relaxed">
-            <span className="font-semibold text-t-amber-bright">This is not a finished resume.</span>{" "}
-            It has no name, no employers and no dates. Paste each line into your own
-            resume under the job it came from, and read every line before you send it.
+            <span className="font-semibold text-t-amber-bright">{t("rush.result.notFinishedLead")}</span>{" "}
+            {t("rush.result.notFinishedBody")}
           </p>
         </div>
 
@@ -393,7 +392,7 @@ export default function RushPage() {
             {/* Professional Summary */}
             <section className="mb-6">
               <h2 className="text-lg font-bold text-t-white mb-2">
-                Professional Summary
+                {t("rush.result.summaryHeading")}
               </h2>
               <p className="text-base text-t-phos bg-t-panel p-5 border border-t-line leading-relaxed">
                 {result.summary}
@@ -403,7 +402,7 @@ export default function RushPage() {
             {/* Experience Bullets */}
             <section className="mb-6">
               <h2 className="text-lg font-bold text-t-white mb-2">
-                Experience
+                {t("rush.result.experienceHeading")}
               </h2>
               <div className="space-y-3">
                 {(result.bullets ?? []).map((b, i) => (
@@ -415,7 +414,7 @@ export default function RushPage() {
                       {b.text}
                     </p>
                     <p className="text-xs text-t-phos-dim mt-1 italic">
-                      Based on: &ldquo;{b.original}&rdquo;
+                      {t("rush.result.basedOn", { original: b.original })}
                     </p>
                   </div>
                 ))}
@@ -426,7 +425,7 @@ export default function RushPage() {
             {result.skills.length > 0 && (
               <section className="mb-6">
                 <h2 className="text-lg font-bold text-t-white mb-2">
-                  Skills
+                  {t("rush.result.skillsHeading")}
                 </h2>
                 <div className="flex flex-wrap gap-2">
                   {result.skills.map((skill, i) => (
@@ -446,7 +445,7 @@ export default function RushPage() {
               <section className="mb-8">
                 <div className="bg-t-panel p-4 border border-t-line">
                   <p className="text-sm text-t-phos">
-                    <span className="font-medium text-t-amber-bright">Tip: </span>
+                    <span className="font-medium text-t-amber-bright">{t("rush.result.tipLabel")}</span>
                     {result.tips}
                   </p>
                 </div>
@@ -454,8 +453,8 @@ export default function RushPage() {
             )}
 
             <section className="mb-8" aria-labelledby="rush-preview-title">
-              <h2 id="rush-preview-title" className="mb-2 text-lg font-bold text-t-white">Preview the download</h2>
-              <p className="mb-3 text-sm text-t-phos-dim">This shows the rewritten lines as a draft page. It is not a complete resume.</p>
+              <h2 id="rush-preview-title" className="mb-2 text-lg font-bold text-t-white">{t("rush.result.previewTitle")}</h2>
+              <p className="mb-3 text-sm text-t-phos-dim">{t("rush.result.previewNote")}</p>
               <div className="border border-t-line bg-t-bg p-3 sm:p-5" data-testid="rush-download-preview">
                 <ResumePage text={buildResumeText()} draft />
               </div>
@@ -468,19 +467,19 @@ export default function RushPage() {
                 disabled={downloading}
                 className="t-focus flex-1 px-6 py-4 bg-t-amber text-white font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright disabled:opacity-40 disabled:shadow-none transition-colors min-h-touch"
               >
-                {downloading ? "Preparing..." : "Download .docx"}
+                {downloading ? t("rush.result.preparing") : t("rush.result.downloadDocx")}
               </button>
               <button
                 onClick={handleCopy}
                 className="t-focus flex-1 px-6 py-4 bg-transparent border border-t-amber text-t-amber-bright font-bold hover:bg-t-amber/10 transition-colors min-h-touch"
               >
-                {copied ? "Copied!" : "Copy Text"}
+                {copied ? t("rush.result.copied") : t("rush.result.copyText")}
               </button>
               <button
                 onClick={handleDownloadTxt}
                 className="t-focus flex-1 px-6 py-4 bg-transparent border border-t-line text-t-phos-dim font-bold hover:text-t-white hover:border-t-phos-dim transition-colors min-h-touch"
               >
-                Download .txt
+                {t("rush.result.downloadTxt")}
               </button>
             </div>
 
@@ -495,28 +494,24 @@ export default function RushPage() {
               }}
               className="t-focus w-full px-6 py-3 bg-transparent border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors mb-4"
             >
-              Continue editing in the Application Tailor
+              {t("rush.result.continueTailor")}
             </button>
 
             {/* Interview Warning */}
             <div className="bg-t-panel px-4 py-3 mb-6 border border-t-line">
               <p className="text-sm text-t-phos leading-relaxed">
-                <span className="font-semibold text-t-amber-bright">This gets you in the door, not through the interview.</span>{" "}
-                Rush rewrites what you gave it and nothing more. It doesn&apos;t
-                know your strengths, your story, or what makes you different.
-                An interviewer will ask about all of that.
+                <span className="font-semibold text-t-amber-bright">{t("rush.result.interviewLead")}</span>{" "}
+                {t("rush.result.interviewBody")}
               </p>
             </div>
 
             {/* Save + Go Deeper CTA */}
             <div className="bg-t-panel-2 p-6 border border-t-amber text-center">
               <h3 className="font-bold text-t-white mb-2">
-                Ready to actually prepare?
+                {t("rush.result.ctaTitle")}
               </h3>
               <p className="text-sm text-t-phos-dim leading-relaxed mb-4">
-                The Forge builds your real narrative: strengths, career paths,
-                resources for your situation, and documents that hold up in an
-                interview.
+                {t("rush.result.ctaBody")}
               </p>
               <TBtn
                 onClick={() => {
@@ -529,7 +524,7 @@ export default function RushPage() {
                 }}
                 className="text-lg"
               >
-                go to The Forge
+                {t("rush.result.ctaButton")}
               </TBtn>
             </div>
           </>

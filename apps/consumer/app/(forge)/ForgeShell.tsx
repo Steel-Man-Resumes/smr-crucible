@@ -21,6 +21,8 @@ import { ForgeWelcomeTour } from "@/components/forge/ForgeWelcomeTour";
 import { SignInNotice } from "@/components/forge/SignInNotice";
 import { ForgeAccountBar } from "@/components/forge/ForgeAccountBar";
 import { ForgeLaneHeader } from "@/components/lanes/ForgeLaneHeader";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
+import { useTranslations } from "next-intl";
 
 /** Map pathname to page ID for assistant context */
 function getPageId(pathname: string): string {
@@ -91,6 +93,7 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
   const workshop = WORKSHOP_PATHS.includes(pathname);
   const { status: authStatus } = useSession();
   const screenWaits = isForgeSignInPage(pathname) && authStatus === "loading";
+  const t = useTranslations("forge.shell");
 
   return (
     <>
@@ -98,7 +101,7 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-[5px] focus:bg-white focus:px-4 focus:py-2.5 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-xl"
       >
-        Skip to content
+        {t("skipToContent")}
       </a>
       <header className="sticky top-0 z-30 border-b border-ws-bg/15 bg-ws-bone">
         {/* Workshop tape: the brass strip from the SMR site */}
@@ -109,18 +112,20 @@ function ForgeFrame({ children, quietProp }: { children: ReactNode; quietProp: b
             {chrome.privateNote && (
               <span className="hidden items-center gap-1.5 font-term text-[10px] text-t-bone-dim lg:flex">
                 <ShieldCheck size={14} aria-hidden="true" />
-                Private by design
+                {t("privateByDesign")}
               </span>
             )}
+            {/* Site language, one tap (i18n/locale.ts). */}
+            <LanguageSwitch variant="compact" />
             {chrome.clear && <ClearThisComputerButton />}
             {chrome.leave && (
               <a
                 href="https://steelmanresumes.com"
                 className="t-focus inline-flex min-h-touch items-center gap-2 rounded-[5px] border border-ws-bg/25 px-3 py-2 text-sm font-medium text-t-bone-dim transition-colors hover:border-ws-bg/60 hover:text-ws-bg"
-                aria-label="Leave The Forge"
+                aria-label={t("leaveAria")}
               >
                 <X size={17} aria-hidden="true" />
-                <span className="hidden sm:inline">Leave</span>
+                <span className="hidden sm:inline">{t("leave")}</span>
               </a>
             )}
           </div>

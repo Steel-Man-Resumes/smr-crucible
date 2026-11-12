@@ -1,0 +1,380 @@
+{
+  "drawer": {
+    "trigger": "Pregúntale a t.ROY",
+    "triggerSub": "Coach de carrera con IA",
+    "title": "t.ROY, tu coach de carrera con IA",
+    "openAria": "{label}, {sub}, abrir asistente",
+    "closeAria": "Cerrar asistente",
+    "staffTitle": "t.ROY, para tu trabajo con personas",
+    "staffSub": "para tu trabajo con personas"
+  },
+  "loading": "Cargando chat...",
+  "workingLabel": "t.ROY está trabajando en tu solicitud",
+  "goTo": "Ir a {label}",
+  "intro": {
+    "coach": "Soy t.ROY, tu coach de carrera con IA. Podemos trabajar en tu currículum, tu búsqueda de empleo, tu entrevista o tu próximo paso en el trabajo. ¿Qué necesita atención hoy?",
+    "staff": "Soy t.ROY, estoy aquí para tu trabajo con personas. Puedo ordenar tu Hoy, prepararte para una reunión, convertir tus apuntes en una nota o redactar un mensaje. Dime qué necesitas.",
+    "default": "Soy t.ROY, tu coach de carrera con IA. Dime qué necesitas hoy, o pídeme que te ayude a usar esta página.",
+    "noWrong": "No hay preguntas incorrectas.",
+    "tapToDo": "Toca para hacerlo conmigo",
+    "accept": "Sí, hagámoslo. Me sugeriste: \"{suggestion}\""
+  },
+  "staff": {
+    "title": "t.ROY, para tu trabajo con personas",
+    "about": "Sobre: {name}",
+    "thisPerson": "esta persona",
+    "them": "esa persona",
+    "askElse": "Preguntar sobre otra persona",
+    "skillsAria": "Lo que t.ROY puede hacer por ti",
+    "offersHeading": "Lo que puedo hacer aquí:",
+    "footer": "t.ROY redacta. Tú decides. No se guarda ni se envía nada hasta que tú lo hagas.",
+    "skills": {
+      "staff-prep-me": "Prepárame",
+      "staff-check-in": "Borrador de seguimiento",
+      "staff-find-help": "Buscar ayuda local",
+      "staff-what-changed": "Qué cambió",
+      "staff-outcome-note": "Escribir la nota de resultado",
+      "staff-note-from-bullets": "Nota a partir de mis apuntes",
+      "staff-timeline-summary": "Resumir su cronología",
+      "staff-outreach-draft": "Borrador de mensaje",
+      "staff-triage-today": "Ordenar mi Hoy",
+      "staff-caseload-digest": "Resumen semanal de casos",
+      "staff-stale-flags": "Marcar casos estancados",
+      "staff-funder-narrative": "Narrativa para financiadores"
+    }
+  },
+  "offers": {
+    "prep": {
+      "label": "{named, select, yes {Prepárame para {first}} other {Prepárame para esta persona}}",
+      "why": "Una sola lectura: dónde está, qué hay abierto, qué escribió tu equipo."
+    },
+    "changed": {
+      "label": "Qué cambió esta semana",
+      "why": "Cambios con fecha para {them}, los más recientes primero."
+    },
+    "bullets": {
+      "label": "Nota a partir de mis apuntes",
+      "why": "Escribe los apuntes; tú revisas y guardas la nota."
+    },
+    "checkin": {
+      "label": "Borrador de seguimiento",
+      "why": "Un mensaje corto que envías tú."
+    },
+    "personEmployers": {
+      "label": "Empleadores que contratan a personas con antecedentes",
+      "why": "Dime un estado y el tipo de trabajo; te muestro la marca y cuándo lo revisamos."
+    },
+    "addFill": {
+      "label": "Llenar esto con lo que te diga",
+      "why": "Dime su nombre y correo. Yo lleno el formulario; tú presionas Enviar invitación."
+    },
+    "addWelcome": {
+      "label": "Borrador de mensaje de bienvenida",
+      "why": "Palabras para tu primer mensaje cuando se unan. Tú lo envías."
+    },
+    "todayTriage": {
+      "label": "Ordenar mi Hoy",
+      "why": "Quién te necesita primero y por qué, según tu lista de Hoy."
+    },
+    "todayStale": {
+      "label": "¿Quién se está quedando atrás?",
+      "why": "Casos estancados, cada uno con una razón sencilla."
+    },
+    "todayAdd": {
+      "label": "Agregar a alguien nuevo",
+      "why": "Dime el nombre; abro Agregar personas ya llenado."
+    },
+    "peopleDigest": {
+      "label": "Resumen semanal de casos",
+      "why": "Todas las personas con las que trabajas, qué hay abierto, quién dejó de responder."
+    },
+    "peopleStale": {
+      "label": "Marcar casos estancados",
+      "why": "Razones para revisar, no juicios."
+    },
+    "peopleAdd": {
+      "label": "Agregar a alguien nuevo",
+      "why": "Dime el nombre; abro Agregar personas ya llenado."
+    },
+    "referralsOpen": {
+      "label": "¿Qué referidos me necesitan?",
+      "why": "Referidos abiertos, primero los atrasados."
+    },
+    "referralsHelp": {
+      "label": "Buscar ayuda local",
+      "why": "Primero los listados verificados, con la fecha de revisión."
+    },
+    "notesBullets": {
+      "label": "Convertir apuntes en una nota",
+      "why": "Abre primero a la persona y luego dame tus apuntes."
+    },
+    "asksTriage": {
+      "label": "Ordenar mi Hoy",
+      "why": "Las respuestas a tus solicitudes también aparecen ahí."
+    },
+    "insightsFunder": {
+      "label": "Narrativa para financiadores con estas cifras",
+      "why": "Solo cifras reales, con su fuente."
+    },
+    "dirEmployers": {
+      "label": "Empleadores para alguien",
+      "why": "Dime un estado y el tipo de trabajo."
+    },
+    "dirHelp": {
+      "label": "Ayuda local para una necesidad",
+      "why": "Dime el lugar y la necesidad."
+    },
+    "anyTriage": {
+      "label": "Ordenar mi Hoy",
+      "why": "Quién te necesita primero y por qué."
+    },
+    "anyGoto": {
+      "label": "Llévame a una página",
+      "why": "Dime a dónde; te muestro un botón."
+    }
+  },
+  "settings": {
+    "gear": "Ajustes del chat",
+    "length": "Longitud de las respuestas",
+    "short": "Corta",
+    "normal": "Completa",
+    "plainLanguage": "Lenguaje sencillo",
+    "readAloud": "Leer respuestas en voz alta",
+    "on": "Encendido",
+    "off": "Apagado",
+    "done": "Listo"
+  },
+  "support": {
+    "message": "Escribir a Troy",
+    "sent": "Enviado. Troy lee estos mensajes él mismo. Su respuesta llega a tu correo.",
+    "explain": "Esto le llega a Troy, una persona real. Tus últimos mensajes del chat van incluidos para que tenga el contexto.",
+    "placeholder": "¿Para qué necesitas a una persona?",
+    "error": "No se pudo enviar. Inténtalo de nuevo en un momento.",
+    "sending": "Enviando...",
+    "send": "Enviar a Troy"
+  },
+  "drafts": {
+    "caseNote": "Nota de caso, sin guardar",
+    "checkIn": "Seguimiento, sin guardar",
+    "putOnPage": "Poner este borrador en su página para revisarlo",
+    "notSavedOrSent": "No se guarda ni se envía nada hasta que tú lo hagas.",
+    "openAddPeople": "Abrir Agregar personas para {name}",
+    "addPeopleNote": "Ya está lleno, no se ha enviado. Tú lo revisas y presionas Enviar invitación.",
+    "directoryNote": "Un borrador, no enviado. Revísalo y presiona Enviar.",
+    "handoffThem": "Poner esto en su traspaso",
+    "handoffNamed": "Poner esto en el traspaso de {name}",
+    "handoffNote": "Un borrador, no enviado. Lo lees en su página y presionas Enviar.",
+    "copied": "Copiado",
+    "copy": "Copiar para usar",
+    "copyNote": "t.ROY no envía nada. Al copiar, se anota que usaste este borrador."
+  },
+  "tools": {
+    "working": "Trabajando en ello",
+    "noButton": "No hay botón para eso aquí",
+    "failed": "No se pudo completar este paso",
+    "failedAria": "No se pudo completar",
+    "activity": {
+      "read_owner_ai_costs": "Leyendo los costos de IA registrados",
+      "read_owner_directory_coverage": "Leyendo las sugerencias de cobertura",
+      "read_staff_tasks": "Leyendo tus tareas asignadas",
+      "read_participant_progress": "Leyendo el progreso compartido",
+      "read_participant_overview": "Leyendo lo que puedes ver sobre esa persona (queda registrado para ella)",
+      "read_recent_changes": "Leyendo lo que cambió (queda registrado para ella)",
+      "find_local_help": "Buscando en el directorio de ayuda",
+      "draft_staff_check_in": "Preparando un borrador",
+      "offer_staff_draft": "Preparando el borrador para su página",
+      "read_today_queue": "Leyendo tu Hoy",
+      "read_caseload_digest": "Leyendo tus casos",
+      "read_outcomes_summary": "Contando colocaciones y permanencia en el empleo",
+      "read_referrals_open": "Leyendo los referidos abiertos",
+      "read_person_timeline": "Leyendo su cronología (queda registrado para ella)",
+      "search_verified_employers": "Revisando la evidencia de los empleadores",
+      "get_verified_employer": "Leyendo los datos del empleador",
+      "search_verified_resources": "Buscando apoyo verificado",
+      "get_verified_resource": "Revisando los datos del servicio",
+      "search_resource_chains": "Buscando próximos pasos aprobados",
+      "read_saved_resources": "Actualizando tus recursos guardados",
+      "get_resource_chain": "Revisando los próximos pasos",
+      "save_resource_list": "Preparando la vista previa de lo que vas a guardar",
+      "preview_document_correction": "Preparando una vista previa de la corrección",
+      "contextual_handoff": "Preparando tu próximo paso",
+      "get_my_live_status": "Revisando tu avance real",
+      "search_jobs": "Buscando ofertas de trabajo actuales",
+      "save_job": "Guardando esa oferta",
+      "add_follow_up_reminder": "Creando tu recordatorio",
+      "take_me_there": "Llevándote ahí",
+      "highlight_element": "Señalándotelo",
+      "file_feedback": "Registrando tu mensaje confirmado",
+      "find_employers": "Buscando empleadores que contratan a personas con antecedentes",
+      "listing_check_nudge": "Revisando si conviene preguntar sobre este listado",
+      "draft_directory_contribution": "Preparando una actualización del directorio para que la revises",
+      "find_missed_connections": "Buscando conexiones que se les pudieron pasar",
+      "draft_handoff": "Preparando un traspaso para que lo envíes",
+      "open_staff_page": "Buscando esa página",
+      "open_add_person": "Preparando Agregar personas",
+      "read_my_view": "Revisando cómo están configuradas tus pantallas",
+      "change_my_view": "Cambiando tu vista",
+      "undo_my_view_change": "Deshaciendo ese cambio",
+      "propose_shared_view": "Preparando una vista para el equipo"
+    }
+  },
+  "errors": {
+    "access": "No pude revisar tu acceso al chat. Tu trabajo guardado está seguro. Inténtalo de nuevo en un rato; si sigue pasando, reporta un error de acceso al coach.",
+    "allowance": "Se usó tu cuota actual de IA. Puedes pedir más desde la barra de progreso o volver después del reinicio diario. Tu trabajo guardado sigue disponible.",
+    "generic": "El coach no pudo terminar esta respuesta. Tu trabajo guardado sigue disponible. Inténtalo de nuevo en un momento."
+  },
+  "input": {
+    "placeholder": "Escribe un mensaje...",
+    "sendAria": "Enviar mensaje",
+    "lineQueued": "Tu revisión de línea está en espera. Envía o borra tu borrador actual para cargarla aquí."
+  },
+  "pages": {
+    "ownerCosts": "controles de costos del propietario",
+    "ownerCoverage": "revisión de cobertura",
+    "start": "Inicio",
+    "dashboard": "Panel",
+    "creative": "Creativo",
+    "cv": "CV",
+    "performer": "Artista",
+    "documents": "Documentos",
+    "master": "Maestro",
+    "help": "Ayuda",
+    "jobs": "Empleos",
+    "paths": "Rutas",
+    "applications": "Solicitudes",
+    "application-tailor": "Adaptar solicitud",
+    "disclosure": "Qué decir",
+    "interview": "Entrevista",
+    "resources": "Recursos",
+    "next": "Lo que sigue",
+    "employers": "Empleadores",
+    "vault": "Bóveda",
+    "progress": "Progreso",
+    "settings": "Ajustes",
+    "from-your-case-manager": "De tu gestor de casos",
+    "welcome": "Bienvenida",
+    "resume": "Currículum",
+    "goals": "Metas",
+    "story": "Tu historia",
+    "preferences": "Preferencias",
+    "rush": "Currículum Rush"
+  },
+  "staffPages": {
+    "person": "su página",
+    "personNamed": "la página de {name}",
+    "today": "Hoy",
+    "people": "Personas",
+    "find-a-person": "Buscar a una persona",
+    "asks": "Solicitudes de compartir",
+    "referrals": "Referidos",
+    "case-notes": "Notas de caso",
+    "add-people": "Agregar personas",
+    "insights": "Resultados",
+    "activity-log": "Registro de actividad",
+    "team": "Equipo y acceso",
+    "sharing-policy": "Política de compartir",
+    "security": "Seguridad y privacidad",
+    "structure": "Estructura",
+    "set-up": "Configuración inicial",
+    "fields": "Campos",
+    "layouts": "Diseños",
+    "directory": "Directorio",
+    "employers": "Empleadores",
+    "local-help": "Ayuda local",
+    "my-setup": "Mi configuración",
+    "inbox": "Bandeja de entrada",
+    "change-requests": "Solicitudes de cambio",
+    "contribute": "Ayudar al directorio",
+    "wins": "Logros",
+    "connections": "Conexiones",
+    "settings": "Ajustes",
+    "help": "Ayuda"
+  },
+  "prompts": {
+    "next": "¿Qué debo hacer ahora?",
+    "explain": "Explícame esta página",
+    "takeMe": "Llévame ahí",
+    "doWithMe": "Hazlo conmigo",
+    "staff": {
+      "triage": "Ordena mi Hoy",
+      "checkIn": "Redáctame un seguimiento para enviar",
+      "caseNote": "Redáctame una nota de caso para revisar",
+      "caseload": "Resume mis casos"
+    },
+    "demo": {
+      "lookingAt": "¿Qué estoy viendo?",
+      "helpClients": "¿Cómo ayuda esto a mis clientes?",
+      "scenario": "Muéstrame otro escenario",
+      "research": "¿Qué investigación hay detrás de esto?"
+    },
+    "intro": {
+      "what": "¿Qué es esto?",
+      "free": "¿De verdad es gratis?",
+      "whoSees": "¿Quién ve mis datos?"
+    },
+    "welcome": {
+      "pick": "¿Qué debo elegir?",
+      "change": "¿Esto cambia mis resultados?",
+      "ready": "No sé si ya es mi momento"
+    },
+    "resume": {
+      "none": "No tengo currículum",
+      "photo": "¿Puedo usar una foto?",
+      "old": "Mi currículum es viejo"
+    },
+    "goals": {
+      "unsure": "No sé lo que quiero",
+      "matter": "¿Esto importa?",
+      "money": "Ahora mismo solo necesito dinero"
+    },
+    "story": {
+      "whoSees": "¿Quién ve esto?",
+      "share": "¿Tengo que contar mis antecedentes?",
+      "uncomfortable": "Esto me incomoda"
+    },
+    "preferences": {
+      "flexible": "Me adapto a todo",
+      "car": "No tengo auto",
+      "later": "¿Puedo cambiar esto después?"
+    },
+    "processing": {
+      "long": "¿Cuánto tarda esto?",
+      "doing": "¿Qué está haciendo ahora?"
+    },
+    "output": {
+      "whatDo": "¿Qué hago con esto?",
+      "accurate": "¿Esto es correcto?",
+      "refinery": "¿Qué es The Refinery?"
+    },
+    "rush": {
+      "asGood": "¿Esto es tan bueno como la versión completa?",
+      "bad": "¿Y si mi currículum es malo?",
+      "tomorrow": "Mañana tengo una entrevista"
+    },
+    "resources": {
+      "ride": "No tengo transporte",
+      "local": "Ayúdame a encontrar apoyo local",
+      "explain": "Explícame estos próximos pasos"
+    },
+    "employers": {
+      "near": "Busca empleadores cerca de mí",
+      "supports": "¿Qué respalda este listado?",
+      "help": "Ayúdame a ir por este trabajo"
+    },
+    "jobs": {
+      "fit": "Búscame trabajos que me queden bien"
+    },
+    "applications": {
+      "followUp": "¿Qué necesita seguimiento?"
+    },
+    "dashboard": {
+      "first": "¿Qué debo hacer primero?",
+      "build": "¿Cómo armo un currículum?",
+      "disclosure": "¿Qué es el planificador de qué decir?"
+    },
+    "fallback": {
+      "helpPage": "Ayúdame con esta página",
+      "human": "Hablar con una persona real"
+    }
+  }
+}

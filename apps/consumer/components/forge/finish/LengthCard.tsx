@@ -7,10 +7,10 @@
  * each with its own "Cut this line" button, and the one-page choice.
  */
 
+import { useTranslations } from "next-intl";
 import type { LengthChoice } from "@/lib/length-rule";
 
 const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
-const word = (n: number) => WORDS[n] ?? String(n);
 
 /** The resume's bullet lines, bottom first, at most `max`. */
 export function cuttableLines(resumeText: string, max = 12): string[] {
@@ -37,14 +37,16 @@ export function LengthCard({
   onCut: (line: string) => void;
   onChoice: (choice: LengthChoice) => void;
 }) {
-  const most = limit === 1 ? (choice === "one_page" ? "You chose one page." : "This kind of resume is one page.") : `${word(limit)[0].toUpperCase()}${word(limit).slice(1)} pages is the most.`;
+  const t = useTranslations("forgeFinish.length");
+  const word = (n: number) => (WORDS[n] ? t(`words.${WORDS[n]}`) : String(n));
+  const most = limit === 1 ? (choice === "one_page" ? t("choseOne") : t("kindOne")) : t("mostMany", { limit: `${word(limit)[0].toUpperCase()}${word(limit).slice(1)}` });
   return (
     <div className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="length-card" data-blocking="true">
       <p className="text-sm font-bold text-t-white">
-        Your resume runs {word(pages)} pages. {most}
+        {t("runs", { pages: word(pages) })} {most}
       </p>
       <p className="mt-1 text-xs leading-relaxed text-t-phos">
-        Pick the lines to cut. Nothing comes off by itself, and it stays a draft until it fits.
+        {t("pick")}
       </p>
       <ul className="mt-3 space-y-2">
         {lines.map((line) => (
@@ -56,7 +58,7 @@ export function LengthCard({
               className="t-focus min-h-touch shrink-0 border border-t-line bg-t-panel-2 px-3 py-1.5 text-xs font-medium text-t-white hover:border-t-phos-dim"
               data-testid="length-cut"
             >
-              Cut this line
+              {t("cut")}
             </button>
           </li>
         ))}
@@ -68,7 +70,7 @@ export function LengthCard({
           className="t-focus mt-3 min-h-touch text-xs text-t-phos underline underline-offset-2 hover:text-t-white"
           data-testid="length-two-pages"
         >
-          Two pages is fine for me
+          {t("twoPagesOk")}
         </button>
       )}
     </div>

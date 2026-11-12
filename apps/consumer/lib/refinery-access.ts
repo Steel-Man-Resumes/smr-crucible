@@ -90,6 +90,7 @@ export const SEAT_EXEMPT_API: Readonly<Record<string, string>> = {
   "/api/access-name": "the /access partner landing greets the organization; public, capped per IP, reads only an organization name",
   "/api/support-request": "ask for help",
   "/api/support-request/mine": "see your own help requests",
+  "/api/lang": "the site language switch (shared page chrome; a cookie, plus the person's own setting when signed in)",
 };
 
 /**

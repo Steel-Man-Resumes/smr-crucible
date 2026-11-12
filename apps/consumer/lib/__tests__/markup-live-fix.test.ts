@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { intlMarkup as renderToStaticMarkup } from "./helpers/intl";
 import { readChanges, planReveal, paceFor, pickForReplay, typedChars, stepMs, readMs, MAX_CHANGES, CHAR_MS, TYPE_MAX_MS, REPLAY_MAX, MIN_STEP_MS, type MarkupChange } from "../markup-changes";
 import { pageLines, buildResumeTour } from "../showstopper-tour";
 import { LiveFix } from "../../components/forge/markup/LiveFix";
@@ -21,6 +21,8 @@ import { MarkupWalk } from "../../components/forge/markup/MarkupWalk";
 
 const CONSUMER = join(import.meta.dirname, "..", "..");
 const read = (p: string) => readFileSync(join(CONSUMER, p), "utf8");
+/** A converted screen's English copy lives in its catalog (messages/en); read both for the claims below. */
+const withCatalog = (file: string, catalog: string) => read(file) + "\n" + read(`messages/en/${catalog}.json`);
 
 // The person's page, as sent to the writer.
 const PERSON = `Dana Whitfield
@@ -285,7 +287,7 @@ test("r1 L2: 'Show me around' is hidden while the live fix plays", () => {
 });
 
 test("r3 L1: the end line says where the list really is (above the page)", () => {
-  const live = read("components/forge/markup/LiveFix.tsx");
+  const live = withCatalog("components/forge/markup/LiveFix.tsx", "forge-finish");
   assert.match(live, /in the list above your page/);
   assert.doesNotMatch(live, /under your page/);
   const page = read("app/(forge)/output/page.tsx");

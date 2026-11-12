@@ -11,6 +11,7 @@
 "use client";
 
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 interface ExitButtonProps {
   /** Where to go when exiting. Defaults to "/" */
@@ -21,8 +22,10 @@ interface ExitButtonProps {
 
 export function ExitButton({
   href = "/",
-  label = "Leave this page",
+  label: labelProp,
 }: ExitButtonProps) {
+  const t = useTranslations("ui.exitButton");
+  const label = labelProp ?? t("leave");
   return (
     <div className="fixed top-4 right-4 z-50">
       <a

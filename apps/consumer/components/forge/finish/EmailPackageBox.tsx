@@ -9,6 +9,7 @@
  */
 
 import { useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { TurnstileWidget } from "@/components/TurnstileWidget";
 import { NEWSLETTER_DEFAULT_CHECKED, NEWSLETTER_LINE } from "@/lib/finish-gate";
 
@@ -26,6 +27,7 @@ export function EmailPackageBox({
   /** The finish page's whole state (lib/finish-payload.ts): the server decides finished from it. */
   finish: unknown;
 }) {
+  const t = useTranslations("forgeOutput.emailBox");
   const [email, setEmail] = useState("");
   const [letter, setLetter] = useState(NEWSLETTER_DEFAULT_CHECKED);
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -37,7 +39,7 @@ export function EmailPackageBox({
   async function send() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setState("error");
-      setMessage("That email doesn't look right. Check it and try again.");
+      setMessage(t("badEmail"));
       return;
     }
     setState("sending");
@@ -65,33 +67,33 @@ export function EmailPackageBox({
       setAttempt((n) => n + 1);
       if (res.ok && data.ok) {
         setState("sent");
-        setMessage("Sent. Check your inbox (and spam folder, just in case).");
+        setMessage(t("sent"));
       } else {
         setState("error");
-        setMessage(data.error || "We couldn't send that. Your download still works.");
+        setMessage(data.error || t("couldNotSend"));
       }
     } catch {
       setState("error");
-      setMessage("We couldn't reach the server. Your download still works.");
+      setMessage(t("noServer"));
     }
   }
 
   return (
     <div ref={boxRef} className="border border-t-line bg-t-panel p-4">
-      <p className="mb-1 text-sm font-semibold text-t-white">Email me my package</p>
+      <p className="mb-1 text-sm font-semibold text-t-white">{t("title")}</p>
       <p className="mb-3 text-xs text-t-phos-dim">
-        We&apos;ll send your story, resume and cover letter to your inbox so you have them anywhere, even without an account.
+        {t("intro")}
       </p>
       <div className="flex flex-col gap-2 sm:flex-row">
         <label htmlFor="finish-email" className="sr-only">
-          Your email
+          {t("emailLabel")}
         </label>
         <input
           id="finish-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@email.com"
+          placeholder={t("emailPlaceholder")}
           disabled={state === "sending" || state === "sent"}
           className="min-h-touch flex-1 border border-t-line bg-t-panel px-4 py-2.5 text-sm text-t-white transition-colors focus:border-t-amber focus:outline-none"
         />
@@ -100,7 +102,7 @@ export function EmailPackageBox({
           disabled={state === "sending" || state === "sent" || !email.trim()}
           className="t-focus min-h-touch bg-t-amber px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-t-amber-bright disabled:bg-t-line disabled:text-t-phos-dim"
         >
-          {state === "sending" ? "Sending..." : state === "sent" ? "Sent" : "Send it"}
+          {state === "sending" ? t("sending") : state === "sent" ? t("sentButton") : t("sendIt")}
         </button>
       </div>
       <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-t-phos-dim">

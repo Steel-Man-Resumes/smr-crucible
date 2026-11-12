@@ -85,7 +85,7 @@ it("acceptance is the staff member's own click: a saved draft or a copy; never u
   const chat = read("../../components/AssistantChat.tsx");
   assert.match(chat, /skillRunId: skillRunId \?\? undefined/);
   assert.match(chat, /JSON\.stringify\(\{ action: "accept", id: skillRunId \}\)/);
-  assert.match(chat, /t\.ROY sends nothing\./);
+  assert.match(chat + read("../../messages/en/assistant.json"), /t\.ROY sends nothing\./);
 });
 
 it("the panel shows person skills about a person and caseload skills without one; typed words pick the new skills", () => {

@@ -1,0 +1,189 @@
+{
+  "story": {
+    "heading": "La historia detrás de tu currículum",
+    "intro": "La lectura de t.ROY sobre el trabajo que nos diste. Tú decides si suena como tú.",
+    "draftNote": "Borrador de la historia: la verificación de datos está incompleta. Tu currículum y tus correcciones guardadas siguen aquí. Revisa la historia antes de exportarla.",
+    "retrying": "Revisando la historia...",
+    "retry": "Reintentar la revisión de la historia",
+    "headlineFallback": "Tu historia, reforjada",
+    "workAria": "El trabajo detrás de esta historia",
+    "fromWork": "De tu trabajo",
+    "firstDraft": "Este es tu primer borrador más sólido. En The Refinery puedes afinar la historia, adaptar el currículum a una vacante real y practicar cómo decirlo con confianza.",
+    "revisit": "Cambia con qué debe empezar t.ROY",
+    "skillsHeading": "Habilidades que encontramos",
+    "legendTechnical": "Técnicas",
+    "legendPeople": "Con personas",
+    "legendTransferable": "Transferibles",
+    "directions": "Posibles caminos y tus próximos pasos",
+    "checkLinesHeading": "Revisa estas líneas",
+    "checkLinesBody": "{count, plural, =1 {Esta línea puede decir} other {Estas líneas pueden decir}} más sobre una tarjeta, licencia o certificación de lo que nos contaste. Si la tienes, puedes ignorar esto. Si no la tienes, no le digas a un empleador que sí.",
+    "barriersTitle": "Trabaja los obstáculos en The Refinery",
+    "barriersBody": "Tu currículum se centra en tu trabajo. En The Refinery, t.ROY te ayuda a preparar qué decir sobre tus antecedentes, a pensar en el trabajo y en el empleador, y a practicar la conversación con tus propias palabras. También puedes encontrar apoyo local.",
+    "flagged": "Marcaste: {list}. Son temas para trabajar, no un juicio sobre lo que puedes hacer.",
+    "disclaimer": "La guía para hablar de tus antecedentes es orientación profesional, no asesoría legal.",
+    "nextSteps": "Próximos pasos",
+    "print": "Imprime o guarda tu historia como PDF",
+    "popupAlert": "Permite las ventanas emergentes en este sitio para guardar el PDF.",
+    "pdf": {
+      "docTitle": "Análisis de carrera (Steel Man Resumes)",
+      "subtitle": "Tu análisis de The Forge, de Steel Man Resumes",
+      "headlineFallback": "Tu perfil profesional",
+      "story": "Tu historia",
+      "strengths": "Tus fortalezas",
+      "skills": "Habilidades",
+      "catHard": "técnicas",
+      "catSoft": "con personas",
+      "catTransferable": "transferibles",
+      "careerPaths": "Caminos profesionales",
+      "flagged": "Marcaste: {list}.",
+      "planner": "Usa el Planificador de divulgación con t.ROY para preparar qué decir y comparar los requisitos de un trabajo real. Esto es orientación, no asesoría legal.",
+      "privateLead": "Documento privado de planificación.",
+      "privateBody": "Este análisis es para tu propio uso mientras planeas tus próximos pasos. Habla con franqueza de tu situación, tus obstáculos y tus recursos, así que guárdalo para ti. Tu currículum y tu carta de presentación son los documentos que puedes compartir con los empleadores.",
+      "footerPrint": "Archivo › Imprimir › Guardar como PDF para descargar"
+    }
+  },
+  "recordChoice": {
+    "options": {
+      "off": {
+        "label": "Déjalo fuera de la página",
+        "body": "Estos trabajos y sus tareas no aparecen en este currículum. Tu material guardado los conserva. Puedes volver a esta elección para otro trabajo."
+      },
+      "state": {
+        "label": "Muestra el trabajo, nombra el estado",
+        "body": "El trabajo se queda. El empleador aparece como el estado, no como el centro."
+      },
+      "facility": {
+        "label": "Nombra el centro como lo escribí",
+        "body": "Todo queda como lo escribiste."
+      }
+    },
+    "yourChoice": "Tu elección: {label}",
+    "updating": "Actualizando tus documentos...",
+    "change": "Cambiar esta elección",
+    "title": "Tus antecedentes en esta página",
+    "intro": "Parte de tu trabajo fue adentro. Tú decides cómo aparece. Sea cual sea tu elección, no se agrega nada sobre antecedentes.",
+    "radioAria": "Cómo aparece en la página tu trabajo de adentro",
+    "previewOff": "Fuera de la página",
+    "previewState": "En la página como",
+    "previewFacility": "En la página como lo escribiste",
+    "rebuilding": "Armando de nuevo tus documentos con esa elección..."
+  },
+  "grounding": {
+    "docResume": "currículum",
+    "docLetter": "carta",
+    "labelCredential": "Una línea de tu {doc} puede decir más sobre una tarjeta, licencia o certificación de lo que nos contaste. Revísala: ",
+    "labelRemoved": "Quitamos de tu {doc}: ",
+    "labelChanged": "Cambiamos la redacción en tu {doc}. Busca la versión nueva y revísala. Antes decía: ",
+    "labelAlsoIn": "Algo parecido también está en tu {doc}, revísalo: ",
+    "labelStillThere": "Sigue en tu {doc}, revísalo: ",
+    "labelUnmatched": "No encontramos estas palabras exactas en tu {doc}. Busca algo parecido: ",
+    "headingOpen": "Revisa esto antes de enviar",
+    "headingDone": "Lo que encontró la revisión",
+    "removedCount": "{count, plural, =1 {Quitamos # detalle que no pudimos relacionar con lo que nos contaste. } other {Quitamos # detalles que no pudimos relacionar con lo que nos contaste. }}",
+    "residualCount": "{count, plural, =1 {Una cosa que marcamos puede} other {# cosas que marcamos pueden}} seguir ahí, quizás con otras palabras. ",
+    "credentialCount": "{count, plural, =1 {Una línea puede decir} other {# líneas pueden decir}} más sobre una tarjeta, licencia o certificación de lo que nos contaste. ",
+    "unmatchedCount": "{count, plural, =1 {La revisión citó unas palabras que no encontramos en tus documentos. } other {La revisión citó algunas palabras que no encontramos en tus documentos. }}",
+    "unnamed": "Encontramos algo en tu {doc} que no pudimos relacionar con lo que nos contaste, pero no pudimos señalar las palabras exactas. ",
+    "tailOpen": "Revisa esto con cuidado antes de enviar nada.",
+    "tailDone": "La revisión también puede cambiar las palabras de líneas que no marcó. Léelo una vez antes de enviarlo. Tú conoces mejor tu historia.",
+    "seeFlagged": "Ver lo que marcamos"
+  },
+  "length": {
+    "words": {
+      "zero": "cero",
+      "one": "una",
+      "two": "dos",
+      "three": "tres",
+      "four": "cuatro",
+      "five": "cinco",
+      "six": "seis",
+      "seven": "siete",
+      "eight": "ocho",
+      "nine": "nueve",
+      "ten": "diez"
+    },
+    "choseOne": "Elegiste una página.",
+    "kindOne": "Este tipo de currículum es de una página.",
+    "mostMany": "{limit} páginas es el máximo.",
+    "runs": "Tu currículum tiene {pages} páginas.",
+    "pick": "Elige las líneas que quieres quitar. Nada se quita solo, y sigue siendo un borrador hasta que quepa.",
+    "cut": "Quitar esta línea",
+    "twoPagesOk": "Dos páginas está bien para mí"
+  },
+  "checkSection": {
+    "show": "Mostrar",
+    "hide": "Ocultar"
+  },
+  "confidence": {
+    "label": "Confianza en la fuente:",
+    "levels": {
+      "high": "Alta",
+      "medium": "Media",
+      "low": "Baja"
+    },
+    "hide": "Ocultar",
+    "why": "Por qué ({count})",
+    "allGood": "Cada línea está en tus palabras o la confirmaste tú."
+  },
+  "approved": {
+    "summary": "Tus cambios: antes y después",
+    "before": "Antes",
+    "after": "Después",
+    "addresses": "Qué resuelve esto:"
+  },
+  "tour": {
+    "aria": "Recorrido por esta página",
+    "progress": "t.ROY · {current} de {total} · arrastra para mover",
+    "closeAria": "Cerrar el recorrido",
+    "gotIt": "Entendido"
+  },
+  "changesList": {
+    "summary": "Lo que t.ROY cambió en tu página, y por qué ({count, plural, =1 {# línea} other {# líneas}})",
+    "before": "Antes: ",
+    "after": "Después: ",
+    "why": "Por qué: "
+  },
+  "markupWalk": {
+    "introSteps": "Mientras escribo tu página nueva, esto es lo que veo en esta, de arriba abajo.",
+    "introStarting": "Esta es la página de la que partimos.",
+    "introGiven": "Esta es tu página tal como la diste.",
+    "says": "t.ROY dice: ",
+    "writing": "Escribiendo tu página nueva ahora."
+  },
+  "reviewSteps": {
+    "aria": "Dónde estás",
+    "steps": {
+      "1": {
+        "name": "Escribiendo y revisando",
+        "note": "La lectura terminó. El redactor está usando tu historial de trabajo."
+      },
+      "2": {
+        "name": "Qué cambió",
+        "note": "Cada línea que corrigió, una por una."
+      },
+      "3": {
+        "name": "Tu primer borrador más sólido",
+        "note": "Descárgalo y luego sigue mejorándolo en The Refinery."
+      }
+    },
+    "stateDone": " (hecho)",
+    "stateNow": " (ahora)",
+    "stateNext": " (siguiente)"
+  },
+  "liveFix": {
+    "checking": "Revisando tus documentos...",
+    "doneSee": "Listo. Ver mi página terminada",
+    "mainOnes": "Esas son las principales. Hay {more} más en la lista arriba de tu página.",
+    "pendingChecked": "Esos cambios están revisados. Revisando el resto de tus documentos...",
+    "everyLine": "Esas son todas las líneas que cambié. Aquí está tu página terminada.",
+    "watching": "Mírame arreglar tu página, línea por línea.",
+    "counter": "{current} de {total}",
+    "counterMore": " (y {more} más)",
+    "skipAnimation": "Omitir animación",
+    "skipToFinished": "Ir a mi página terminada",
+    "srDonePending": "Cambios revisados. Las revisiones de los documentos siguen en curso.",
+    "srDone": "Listo. Lo que sigue es tu página terminada.",
+    "srChange": "Cambio {current} de {total}. Antes: {before}. Ahora: {after}. Por qué: {why}",
+    "alsoChanged": "Otros cambios"
+  }
+}

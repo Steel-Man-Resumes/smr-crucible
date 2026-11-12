@@ -9,7 +9,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { signIn, useSession } from "next-auth/react";
-import { autoResultLine, autoResultRetryable, type AutoResult } from "@/lib/email-package-auto-line";
+import { useTranslations } from "next-intl";
+import { autoResultRetryable, type AutoResult } from "@/lib/email-package-auto-line";
 
 /** How long after the last finished save the page asks for the email (the server holds the same wait). */
 export const AUTO_EMAIL_DELAY_MS = 5 * 60 * 1000;
@@ -24,6 +25,7 @@ export function FinishedEmailLine(props: {
   /** Checked by the page right before sending: the run is this account's. */
   mayUse: () => boolean;
 }) {
+  const t = useTranslations("forgeOutput.finishedEmail");
   const { data: authData } = useSession();
   const accountEmail = typeof authData?.user?.email === "string" ? authData.user.email : "";
   const [proofLink, setProofLink] = useState<"" | "sending" | "sent" | "failed">("");
@@ -74,11 +76,28 @@ export function FinishedEmailLine(props: {
     };
   }, [props.revisionId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The one line for a delivery result. Same cases and order as autoResultLine (lib/email-package-auto-line.ts), shown in the page's language.
+  const resultLine = (r: AutoResult | null): string | null => {
+    if (!r) return null;
+    if (r.sent) return t("result.sentTo", { to: r.to });
+    if (r.reason === "already") return r.to ? t("result.sentTo", { to: r.to }) : t("result.already");
+    if (r.reason === "already_today") return t("result.alreadyToday");
+    if (r.reason === "delivery_pending") return t("result.deliveryPending");
+    if (r.reason === "delivery_unknown") return t("result.deliveryUnknown");
+    if (r.reason === "settling") return t("result.settling");
+    if (r.reason === "unproven") return t("result.unproven");
+    if (r.reason === "limit") return t("result.limit");
+    if (r.reason === "failed") return t("result.failed");
+    if (r.reason === "not_configured") return t("result.notConfigured");
+    if (r.reason === "draft") return t("result.draft");
+    if (r.reason === "not_found") return t("result.notFound");
+    return null;
+  };
   const line = sending
-    ? "Sending your finished resume to your email..."
+    ? t("sending")
     : !props.revisionId
-      ? "Saving this version to your account first..."
-      : autoResultLine(result);
+      ? t("savingFirst")
+      : resultLine(result);
   const retry = !sending && autoResultRetryable(result) && !!props.revisionId;
   // "Email me the latest": at once, under the same caps (offered until it went out).
   const offerNow = !sending && !!props.revisionId && !(result && (result.sent || result.reason === "already" || result.reason === "already_today" || result.reason === "off" || result.reason === "unproven" || result.reason === "draft"));
@@ -102,7 +121,7 @@ export function FinishedEmailLine(props: {
   if (!sending && !line && !off) return null;
   return (
     <div className="border border-t-line bg-t-panel p-4" data-testid="finished-email">
-      <p className="mb-1 text-sm font-semibold text-t-white">Your package by email</p>
+      <p className="mb-1 text-sm font-semibold text-t-white">{t("title")}</p>
       {line && (
         <p role="status" className="text-sm text-t-phos" data-testid="finished-email-line">
           {line}
@@ -115,7 +134,7 @@ export function FinishedEmailLine(props: {
           className="t-focus mt-2 min-h-touch border border-t-line bg-t-panel-2 px-3 py-2 text-sm text-t-white hover:border-t-phos-dim"
           data-testid="finished-email-now"
         >
-          Email me the latest
+          {t("emailLatest")}
         </button>
       )}
       {retry && (
@@ -125,14 +144,14 @@ export function FinishedEmailLine(props: {
           className="t-focus mt-2 min-h-touch border border-t-line bg-t-panel-2 px-3 py-2 text-sm text-t-white hover:border-t-phos-dim"
           data-testid="finished-email-retry"
         >
-          Try again
+          {t("tryAgain")}
         </button>
       )}
-      {off && <p className="text-sm text-t-phos-dim">You turned off emailing your finished resume.</p>}
+      {off && <p className="text-sm text-t-phos-dim">{t("turnedOff")}</p>}
       {unproven && accountEmail && (
         <div className="mt-2" data-testid="finished-email-confirm">
           {proofLink === "sent" ? (
-            <p className="text-sm text-t-phos">Check {accountEmail} for the link. Open it, and your resume comes next.</p>
+            <p className="text-sm text-t-phos">{t("checkInbox", { email: accountEmail })}</p>
           ) : (
             <button
               type="button"
@@ -140,15 +159,15 @@ export function FinishedEmailLine(props: {
               disabled={proofLink === "sending"}
               className="t-focus min-h-touch border border-t-line bg-t-panel-2 px-3 py-2 text-sm text-t-white hover:border-t-phos-dim disabled:opacity-50"
             >
-              {proofLink === "sending" ? "Sending..." : `Email a confirm link to ${accountEmail}`}
+              {proofLink === "sending" ? t("sendingShort") : t("confirmLink", { email: accountEmail })}
             </button>
           )}
-          {proofLink === "failed" && <p className="mt-1 text-sm text-t-red">We couldn&apos;t send the link. Try again in a few minutes.</p>}
+          {proofLink === "failed" && <p className="mt-1 text-sm text-t-red">{t("linkFailed")}</p>}
         </div>
       )}
       <p className="mt-2 text-xs text-t-phos-dim">
         <a href="/dashboard/settings#package-email" className="underline underline-offset-2 hover:text-t-white">
-          Change this in Settings
+          {t("changeInSettings")}
         </a>
       </p>
     </div>

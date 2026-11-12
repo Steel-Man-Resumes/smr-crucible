@@ -7,17 +7,19 @@
  */
 
 import { useState } from "react";
-import { CONFIDENCE_LABEL, type ConfidenceLevel, type ConfidenceNote } from "@/lib/finish-gate";
+import { useTranslations } from "next-intl";
+import type { ConfidenceLevel, ConfidenceNote } from "@/lib/finish-gate";
 
 const TONE: Record<ConfidenceLevel, string> = { high: "text-t-phos", medium: "text-t-amber-bright", low: "text-t-red" };
 
 export function ConfidenceMeter({ level, notes }: { level: ConfidenceLevel; notes: ConfidenceNote[] }) {
+  const t = useTranslations("forgeFinish.confidence");
   const [open, setOpen] = useState(false);
   return (
     <div className="mb-3 border border-t-line bg-t-panel px-4 py-2.5" data-testid="confidence-meter" data-level={level}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-t-phos">
-          Source confidence: <span className={`font-bold ${TONE[level]}`}>{CONFIDENCE_LABEL[level]}</span>
+          {t("label")} <span className={`font-bold ${TONE[level]}`}>{t(`levels.${level}`)}</span>
         </p>
         {notes.length > 0 ? (
           <button
@@ -26,10 +28,10 @@ export function ConfidenceMeter({ level, notes }: { level: ConfidenceLevel; note
             aria-expanded={open}
             className="t-focus text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white"
           >
-            {open ? "Hide" : `Why (${notes.length})`}
+            {open ? t("hide") : t("why", { count: notes.length })}
           </button>
         ) : (
-          <p className="text-[11px] text-t-phos-dim">Every line is in your words or confirmed by you.</p>
+          <p className="text-[11px] text-t-phos-dim">{t("allGood")}</p>
         )}
       </div>
       {open && (

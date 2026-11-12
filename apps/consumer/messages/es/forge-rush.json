@@ -1,0 +1,109 @@
+{
+  "rush": {
+    "intro": {
+      "title": "Currículum Rush",
+      "subtitle": "Reescribe las líneas de tu currículum para un trabajo, rápido.",
+      "whatThisIsLead": "Qué es esto:",
+      "whatThisIsBody": "Rush trabaja con el currículum que ya tienes y reescribe sus líneas. No arma un currículum nuevo ni conoce tu historia. <link>The Forge</link> completo tarda más y arma el currículum de verdad."
+    },
+    "form": {
+      "resumeLabel": "Tu currículum actual",
+      "resumePlaceholder": "Pega aquí el texto de tu currículum...",
+      "or": "o",
+      "readingFile": "Leyendo el archivo...",
+      "uploadFile": "Subir un archivo (PDF, DOCX, TXT)",
+      "jobLabel": "Puesto que buscas",
+      "jobPlaceholder": "p. ej., \"Auxiliar de almacén\" o \"Representante de servicio al cliente\"",
+      "companyLabel": "Empresa a la que quieres aplicar",
+      "optional": "(opcional)",
+      "companyPlaceholder": "p. ej., \"Amazon\" o \"un restaurante local\"",
+      "descriptionLabel": "Pega la descripción del trabajo",
+      "descriptionHint": "(opcional, pero mejora mucho el resultado)",
+      "descriptionPlaceholder": "Copia y pega aquí la oferta de trabajo. La IA adaptará tu currículum a lo que buscan.",
+      "submit": "reescribir mis líneas"
+    },
+    "errors": {
+      "readFile": "No se pudo leer ese archivo.",
+      "uploadFailed": "No se pudo subir el archivo. Prueba pegando el texto.",
+      "generic": "Algo salió mal.",
+      "genericRetry": "Algo salió mal. Inténtalo de nuevo."
+    },
+    "processing": {
+      "workLabel": "Trabajando con la información que diste",
+      "title": "Reescribiendo tus líneas",
+      "messages": {
+        "reading": "Leyendo tu currículum...",
+        "strengths": "Identificando tus fortalezas...",
+        "rewriting": "Reescribiendo para el puesto que buscas...",
+        "polishing": "Puliendo el borrador final..."
+      },
+      "stillWorking": "Sigue en proceso. Te mostraremos el texto antes de que lo descargues."
+    },
+    "result": {
+      "title": "Tus líneas reescritas",
+      "forJob": "Para: {job}",
+      "forJobAtCompany": "Para: {job} en {company}",
+      "notFinishedLead": "Esto no es un currículum terminado.",
+      "notFinishedBody": "No tiene nombre, empleadores ni fechas. Pega cada línea en tu propio currículum, bajo el trabajo del que salió, y lee cada línea antes de enviarlo.",
+      "summaryHeading": "Resumen profesional",
+      "experienceHeading": "Experiencia",
+      "basedOn": "Basado en: “{original}”",
+      "skillsHeading": "Habilidades",
+      "tipLabel": "Consejo: ",
+      "previewTitle": "Vista previa de la descarga",
+      "previewNote": "Esto muestra las líneas reescritas como una página de borrador. No es un currículum completo.",
+      "preparing": "Preparando...",
+      "downloadDocx": "Descargar .docx",
+      "copied": "¡Copiado!",
+      "copyText": "Copiar texto",
+      "downloadTxt": "Descargar .txt",
+      "continueTailor": "Seguir editando en Application Tailor",
+      "interviewLead": "Esto te abre la puerta, pero no te lleva por la entrevista.",
+      "interviewBody": "Rush reescribe lo que le diste y nada más. No conoce tus fortalezas, tu historia ni lo que te hace diferente. En la entrevista te van a preguntar por todo eso.",
+      "ctaTitle": "¿Listo para prepararte de verdad?",
+      "ctaBody": "The Forge arma tu historia real: tus fortalezas, rutas de carrera, recursos para tu situación y documentos que se sostienen en una entrevista.",
+      "ctaButton": "ir a The Forge"
+    }
+  },
+  "check": {
+    "eyebrow": "Revisión gratuita de currículum",
+    "title": "Revisa tu currículum. Sin iniciar sesión.",
+    "intro": "Pégalo o sube el archivo. Lo revisamos con las reglas básicas y te decimos qué arreglar. No lo guardamos.",
+    "tabsAria": "Cómo darnos tu currículum",
+    "tabPaste": "Pegar el texto",
+    "tabUpload": "Subir el archivo",
+    "resumeLabel": "Tu currículum",
+    "pastePlaceholder": "Pega aquí tu currículum completo.",
+    "chooseFile": "Elige el archivo de tu currículum",
+    "fileHint": "PDF, Word, texto o una foto. Hasta 10 MB.",
+    "errors": {
+      "pasteFirst": "Primero pega tu currículum completo.",
+      "chooseFirst": "Primero elige el archivo de tu currículum.",
+      "rateLimited": "Ya usaste las revisiones gratuitas de hoy desde esta conexión. Inténtalo mañana, o pega el texto.",
+      "couldNotCheck": "No pudimos revisar ese archivo. Inténtalo de nuevo, o pega el texto.",
+      "couldNotReach": "No pudimos conectarnos con el revisor. Inténtalo de nuevo, o pega el texto."
+    },
+    "reading": "Leyendo tu archivo...",
+    "submit": "Revisar",
+    "resultsAria": "Tus resultados",
+    "pageLength": "Largo de la página",
+    "markedTitle": "Tu página, marcada",
+    "markedNote": "Estas son tus palabras. Marcamos las líneas que podemos relacionar con un hallazgo específico. La revisión completa está abajo. Todavía no se ha reescrito nada en la página.",
+    "checkLineAria": "Revisa esta línea: {title}",
+    "verdict": {
+      "good": "Bien",
+      "fix": "Vale la pena arreglar",
+      "mustFix": "Arreglar primero",
+      "note": "Nota"
+    },
+    "summary": {
+      "none": "No hay nada que arreglar en las revisiones que hicimos.",
+      "mustFix": "{count} por arreglar antes de enviarlo",
+      "toFix": "{count} que vale la pena arreglar"
+    },
+    "ctaNote": "Estas son las revisiones básicas. The Forge revisa línea por línea contigo y arma el currículum de verdad.",
+    "ctaSignedIn": "Arregla esto con t.ROY",
+    "ctaSignedOut": "Inicia sesión gratis para arreglar esto con t.ROY",
+    "checkAnother": "Revisar otro currículum"
+  }
+}

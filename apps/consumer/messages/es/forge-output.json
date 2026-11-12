@@ -1,0 +1,317 @@
+{
+  "laneFinish": {
+    "moreFormats": "Más formatos",
+    "gettingFile": "Preparando tu archivo...",
+    "downloadPdf": "Descargar tu currículum (PDF)",
+    "pdfNote": "El PDF se ve igual en cualquier computadora.",
+    "draftBadge": "Borrador: revísalo antes de enviarlo.",
+    "needItNow": "¿Lo necesitas ya? <draft>Descarga el borrador (PDF)</draft>. Lleva la marca DRAFT (borrador) y lista lo que falta por arreglar.",
+    "formats": {
+      "docx": "Word (.docx)",
+      "txt": "Texto sin formato (.txt)",
+      "html": "Página web (.html)"
+    },
+    "packageWithLetter": "El paquete: currículum y carta de presentación",
+    "packageZip": "El paquete (.zip)",
+    "print": "Imprimir",
+    "copied": "Copiado",
+    "copyPlain": "Copiar como texto sin formato",
+    "untilFinished": "Hasta que esté terminado, cada archivo lleva la marca DRAFT (borrador).",
+    "actions": {
+      "askSeat": "Pedir un lugar en The Refinery",
+      "downloadResume": "Descargar tu currículum",
+      "checkAndFinish": "Revisarlo y terminar",
+      "pickJob": "Elegir un trabajo al que postularte",
+      "practiceInterview": "Practicar para tu entrevista",
+      "useResume": "Usar este currículum"
+    },
+    "next": "Lo que sigue",
+    "finishingChecks": "Terminando tus revisiones...",
+    "somethingElse": "Otra cosa"
+  },
+  "downloadBox": {
+    "gettingFiles": "Preparando tus archivos...",
+    "readyToSend": "Tu currículum y tu carta de presentación, listos para enviar.",
+    "needItNow": "¿Lo necesitas ya? <draft>Descarga el borrador</draft>. Lleva la marca DRAFT (borrador) y lista lo que falta por arreglar.",
+    "oneFormat": "Solo el currículum, en un formato",
+    "formats": {
+      "pdf": "PDF",
+      "docx": "Word (.docx)",
+      "html": "Página web (.html)",
+      "txt": "Texto sin formato (.txt)"
+    },
+    "print": "Imprimir",
+    "copied": "Copiado",
+    "copyPlain": "Copiar como texto sin formato",
+    "untilFinished": "Hasta que esté terminado, cada archivo lleva la marca DRAFT (borrador)."
+  },
+  "nextStep": {
+    "heading": "Siguiente paso",
+    "partner": {
+      "title": "Esa es la experiencia del cliente, de principio a fin.",
+      "body": "Cada cliente que usa The Forge llega a The Refinery con todo esto ya cargado. Como socio, recibes un resumen estadístico anónimo de tu grupo. Nunca incluye el contenido de sus currículums.",
+      "back": "volver al resumen de socios",
+      "request": "Solicitar acceso como socio: {email}",
+      "signIn": "¿Ya lo tienes configurado? Inicia sesión en el panel de socios"
+    },
+    "refinery": {
+      "title": "The Refinery dirige tu currículum hacia trabajos reales.",
+      "body": "The Forge arma un currículum general. En The Refinery lo adaptas a un trabajo a la vez, practicas entrevistas, planeas qué decir sobre tus antecedentes y usas una bolsa de trabajo que marca a los empleadores que revisamos y que contratan a personas con antecedentes. Cuando creas tu cuenta gratis, tu historia y las respuestas que diste en The Forge se pueden guardar ahí junto con tu currículum corregido. Antes de salir, revisa que esta página diga que tu versión está guardada. También puedes descargar una copia.",
+      "seatlessNote": "The Refinery se abre con un lugar que te da una organización. Puedes pedir uno.",
+      "askSeat": "pedir un lugar en The Refinery"
+    },
+    "letter": "La carta de Troy sale los domingos y los miércoles. Es corta y práctica. <link>Léela aquí</link>.",
+    "review": {
+      "title": "¿Tienes tres minutos? Cuéntanos cómo te fue de verdad.",
+      "body": "Buena o mala, tu opinión sincera ayuda a otras personas a encontrar estas herramientas y nos ayuda a mejorarlas. También queremos que The Forge siga siendo gratis para la próxima persona.",
+      "note": "Tu trabajo se queda aquí. La reseña se abre en una pestaña nueva; vuelve aquí para seguir hacia The Refinery. Dejar una reseña es opcional.",
+      "leave": "Dejar una reseña",
+      "skip": "Continuar sin dejar reseña"
+    }
+  },
+  "emailBox": {
+    "badEmail": "Ese correo no parece correcto. Revísalo e inténtalo de nuevo.",
+    "sent": "Enviado. Revisa tu bandeja de entrada (y la carpeta de spam, por si acaso).",
+    "couldNotSend": "No pudimos enviarlo. Tu descarga sigue funcionando.",
+    "noServer": "No pudimos conectarnos con el servidor. Tu descarga sigue funcionando.",
+    "title": "Envíame mi paquete por correo",
+    "intro": "Te enviaremos tu historia, tu currículum y tu carta de presentación a tu bandeja de entrada para que los tengas en cualquier lugar, incluso sin una cuenta.",
+    "emailLabel": "Tu correo electrónico",
+    "emailPlaceholder": "tu@correo.com",
+    "sending": "Enviando...",
+    "sentButton": "Enviado",
+    "sendIt": "Enviar"
+  },
+  "finishedEmail": {
+    "title": "Tu paquete por correo",
+    "sending": "Enviando tu currículum terminado a tu correo...",
+    "savingFirst": "Primero estamos guardando esta versión en tu cuenta...",
+    "emailLatest": "Envíame la más reciente",
+    "tryAgain": "Intentar de nuevo",
+    "turnedOff": "Desactivaste el envío por correo de tu currículum terminado.",
+    "checkInbox": "Revisa {email} para encontrar el enlace. Ábrelo, y sigue tu currículum.",
+    "sendingShort": "Enviando...",
+    "confirmLink": "Enviar un enlace de confirmación a {email}",
+    "linkFailed": "No pudimos enviar el enlace. Inténtalo de nuevo en unos minutos.",
+    "changeInSettings": "Cambiar esto en Configuración",
+    "result": {
+      "sentTo": "Lo enviamos a {to}.",
+      "already": "Ya te enviamos este currículum por correo.",
+      "alreadyToday": "Ya enviamos este currículum por correo hoy. Tu descarga está aquí mismo.",
+      "deliveryPending": "Estamos revisando la entrega de tu paquete. Inténtalo de nuevo en un momento.",
+      "deliveryUnknown": "No pudimos confirmar la entrega. Revisa tu bandeja de entrada o descarga tus archivos aquí.",
+      "settling": "Tu paquete terminado está en cola. Puedes cerrar esta página; si hace falta, se volverá a intentar la entrega.",
+      "unproven": "¿Lo quieres por correo? Primero confirma tu dirección.",
+      "limit": "Tu dirección ya recibió su paquete hoy. Tu descarga está aquí mismo.",
+      "failed": "No pudimos enviarlo por correo en este momento. Tu descarga está aquí mismo.",
+      "notConfigured": "El correo no está funcionando aquí en este momento. Tu descarga está aquí mismo.",
+      "draft": "Aún no se envió: nuestra revisión dice que esta versión todavía tiene algo por arreglar. Tu lista está en esta página.",
+      "notFound": "Todavía no encontramos esta versión en tu cuenta. Tu descarga está aquí mismo."
+    }
+  },
+  "page": {
+    "numbers": {
+      "n0": "cero",
+      "n1": "uno",
+      "n2": "dos",
+      "n3": "tres",
+      "n4": "cuatro",
+      "n5": "cinco",
+      "n6": "seis",
+      "n7": "siete",
+      "n8": "ocho",
+      "n9": "nueve",
+      "n10": "diez"
+    },
+    "readiness": {
+      "precontemplation": {
+        "refineryCta": "Guardar mis resultados",
+        "refinerySubtext": "Gratis. Sin tarjeta de crédito. Vuelve cuando quieras.",
+        "careersHeading": "Caminos que vale la pena conocer",
+        "strengthsHeading": "Lo que aportas"
+      },
+      "contemplation": {
+        "refineryCta": "Guardar y explorar The Refinery",
+        "refinerySubtext": "Gratis. Sin tarjeta de crédito. Sin trampas.",
+        "careersHeading": "Caminos profesionales para considerar",
+        "strengthsHeading": "Tus fortalezas"
+      },
+      "preparation": {
+        "refineryCta": "Continuar a The Refinery",
+        "refinerySubtext": "Gratis. Sin tarjeta de crédito. Tu historia se traslada.",
+        "careersHeading": "Caminos profesionales que te quedan bien",
+        "strengthsHeading": "Tus fortalezas"
+      },
+      "action": {
+        "refineryCta": "Empezar a usar The Refinery",
+        "refinerySubtext": "Gratis. Sin tarjeta de crédito. Hecho para el punto exacto en el que estás ahora.",
+        "careersHeading": "Caminos profesionales que te quedan bien",
+        "strengthsHeading": "Tus ventajas competitivas"
+      }
+    },
+    "errors": {
+      "storyCheck": "No se pudo completar la revisión de tu historia. Tu trabajo guardado sigue aquí.",
+      "writingLimit": "Se alcanzó el límite de escritura de hoy. Tu trabajo sigue aquí. Inténtalo de nuevo cuando se reinicie el límite diario.",
+      "writingLimitShort": "Se alcanzó el límite de escritura de hoy.",
+      "writerStopped": "El escritor se detuvo antes de armar tu currículum. La página que subiste sigue aquí, en este navegador.",
+      "couldNotCheckResume": "No pudimos revisar ese currículum en este momento. Inténtalo de nuevo.",
+      "couldNotOpen": "No pudimos abrir ese currículum.",
+      "couldNotOpenRetry": "No pudimos abrir ese currículum. Inténtalo de nuevo.",
+      "tooBig": "Esta versión es demasiado grande para guardarla en tu cuenta.",
+      "locked": "Este currículum está bloqueado como versión base, así que no se puede cambiar aquí.",
+      "downloadFailed": "La descarga no funcionó. Inténtalo de nuevo.",
+      "saveBeforeRecheck": "Guarda esta versión antes de revisarla de nuevo. Intenta guardar una vez más.",
+      "couldNotCheck": "No pudimos revisarlo en este momento. Inténtalo de nuevo en un momento."
+    },
+    "tour": {
+      "storyTitle": "Tu historia",
+      "storyText": "t.ROY leyó el trabajo que nos diste y escribió esto. Es un primer relato, con sus palabras. Si el titular no se parece a ti, dilo y él lo rehace.",
+      "resumeTitle": "Tu currículum",
+      "resumeText": "Este es tu primer borrador más sólido, armado con tu experiencia. Léelo, hazlo tuyo y luego usa The Refinery para adaptarlo a un trabajo real y practicar tu historia.",
+      "didTitle": "Lo que hizo t.ROY",
+      "didText": "Cada arreglo que hizo y todo lo que dejó fuera porque necesitaba un dato que solo tú puedes dar. Ábrelo para ver cada uno. Nada de esto es un error que tengas que arreglar.",
+      "checkedTitle": "Tus líneas están revisadas",
+      "checkedText": "Cada línea sobre la que preguntamos está resuelta. Todavía puedes cambiar una respuesta.",
+      "openTitle": "Líneas que solo tú puedes responder",
+      "openText": "Para cada una: di que es verdad, cámbiala o quítala. Cuando termines, tu currículum queda listo.",
+      "downloadTitle": "Descárgalo",
+      "downloadFinished": "Descarga aquí tu currículum y tu carta de presentación, o envíatelos por correo. También se guardó una copia en tu cuenta.",
+      "downloadDraft": "Descarga aquí. Hasta que esté terminado, cada archivo lleva la marca DRAFT (borrador) para que nadie lo confunda con el final.",
+      "checksTitle": "Cómo se lee",
+      "checksText": "Estas revisiones leen tu página como lo hace quien filtra currículums. Abre una para ver el detalle. Son solo para tu información. No tienes que hacer nada con ellas.",
+      "nextTitle": "Siguiente: The Refinery",
+      "nextText": "Tu currículum se traslada. The Refinery lo adapta a trabajos reales, escribe cartas de presentación y te prepara para las entrevistas."
+    },
+    "checkMode": {
+      "signInTitle": "Inicia sesión para revisar este currículum",
+      "signIn": "Iniciar sesión"
+    },
+    "checkChoice": {
+      "title": "Aquí está tu currículum. t.ROY puede hacerlo más sólido.",
+      "subline": "t.ROY lo reescribe a partir de esta página, o tú lo revisas tal como está.",
+      "question": "¿Cómo quieres terminar este?",
+      "explain": "t.ROY escribe una versión nueva a partir de esta página, con palabras fuertes y sencillas, y tú revisas lo que escribió. Si lo revisas tal como está, cada línea se queda como está, y t.ROY te pregunta por las líneas que no puede relacionar con tus palabras.",
+      "rewrite": "Reescribirlo con t.ROY",
+      "asIs": "Revisarlo tal como está"
+    },
+    "status": {
+      "opening": "Abriendo tu currículum.",
+      "writing": "t.ROY está escribiendo tu currículum y tu carta de presentación.",
+      "paused": "La escritura está en pausa por hoy.",
+      "couldNotFinish": "No pudimos terminar de escribir tu currículum.",
+      "liveFix": "Tu página nueva está escrita. Esto es lo que cambió t.ROY.",
+      "checking": "Revisando: {title}. Responde cada tarjeta y se guarda como una versión nueva.",
+      "checkingFallback": "tu currículum",
+      "takesAMinute": "Esto suele tardar de 30 a 60 segundos.",
+      "limitSub": "Tu currículum subido y tus respuestas siguen aquí. El escritor no puede hacer otra versión hasta que se reinicie el límite diario.",
+      "errorSub": "Tu currículum subido y tus respuestas siguen aquí. Puedes volver a intentarlo desde esta página.",
+      "liveFixSub": "Cada línea anterior, la nueva y por qué. Puedes saltarlo cuando quieras.",
+      "finishedCheckSub": "Descárgalo abajo, o envíatelo por correo.",
+      "finishedSub": "Este es tu primer borrador más sólido. Descárgalo abajo, y luego mejóralo y adáptalo en The Refinery.",
+      "draftSub": "Respóndelas con t.ROY. Puedes descargar un borrador cuando quieras."
+    },
+    "backToResumes": "Volver a Mis currículums",
+    "empty": {
+      "title": "Primero armemos tu historia",
+      "body": "Parece que todavía no hemos analizado tu información.",
+      "start": "Empezar en The Forge"
+    },
+    "demo": {
+      "sample": "Esto es un resultado de muestra. Pruébalo con tus propios datos.",
+      "startOwn": "Empieza tu propia sesión en The Forge"
+    },
+    "secondCheckSkipped": "Nuestra segunda revisión no se ejecutó esta vez. Lee cada línea antes de enviarlo.",
+    "save": {
+      "saved": "Guardado en tu cuenta (versión {number}).",
+      "keptRefinery": "Tu currículum en The Refinery tiene cambios que hiciste ahí, así que lo dejamos como está. Esta versión terminada se guarda junto a él.",
+      "keptEarlier": "Se conserva la copia anterior de tu cuenta. Tu currículum en The Refinery ahora muestra esta versión terminada.",
+      "keptEarlierVersion": "Se conserva la copia anterior de tu cuenta como versión {number}. Tu currículum en The Refinery ahora muestra esta versión terminada.",
+      "failed": "Todavía no se guardó en tu cuenta. Tu trabajo sigue en esta página.",
+      "tryAgain": "Intentar de nuevo",
+      "saving": "Guardando en tu cuenta..."
+    },
+    "tourButton": "Dame un recorrido",
+    "workFocusTitle": "Armando tu primer borrador más sólido",
+    "workingLabel": "Trabajando con la información que diste",
+    "writing": {
+      "updating": "Actualizando tu currículum con tu elección...",
+      "aboutAMinute": "Cerca de un minuto. No tienes que hacer nada más.",
+      "changesChecked": "Cambios revisados. Revisando el resto de tus documentos...",
+      "fromHistory": "Escribiendo a partir de tu historial de trabajo...",
+      "readingComplete": "La lectura terminó. A continuación verás los cambios revisados frente a tu página original."
+    },
+    "writeError": {
+      "noNew": "No se hizo ningún currículum nuevo. Tu página original se conserva en este navegador.",
+      "retry": "Intentar escribir de nuevo",
+      "seeOriginal": "Ver el currículum que nos diste"
+    },
+    "resumeEmpty": "El currículum llegó vacío. Inténtalo de nuevo abajo.",
+    "repairs": {
+      "summary": "Lo que corregimos en tus documentos ({count})",
+      "job": "Cambiamos “{before}” por “{after}” para que coincida con tu página.",
+      "skill": "Dejamos “{before}” fuera de la lista de habilidades porque no estaba en lo que nos diste. Puedes agregarla después en The Refinery si la has usado.",
+      "claim": "Dejamos fuera “{before}” porque esa oración necesitaba un dato que no nos has dado. El resto del documento se queda como está.",
+      "headline": "Usamos el título que aparece en tu página, “{after}”, en lugar de “{before}”.",
+      "order": "Pusimos primero el trabajo más reciente que aparece en tu página: “{after}”."
+    },
+    "settle": {
+      "running": "t.ROY está terminando tu currículum.",
+      "runningNote": "Está revisando cada línea contra lo que le diste y arreglando lo que puede. No tienes que hacer nada.",
+      "summary": "Lo que hizo t.ROY en la última pasada ({count})",
+      "reworded": "Reformuló “{before}” como “{after}”, usando solo tus palabras.",
+      "leftOut": "Dejó fuera “{line}”. {why}",
+      "trimmed": "Recortó “{line}” para que tu currículum quede en dos páginas.",
+      "addBack": "Todo lo que se dejó fuera se puede volver a agregar en The Refinery cuando sea verdad y puedas respaldarlo."
+    },
+    "recheck": {
+      "line": "Necesitamos revisar esta versión de nuevo antes de que se pueda terminar.",
+      "note": "Esto revisa tu página otra vez, tal como está ahora. No se reescribe nada y tus respuestas se quedan.",
+      "checking": "Revisando...",
+      "button": "Revisarlo de nuevo"
+    },
+    "stillNeeds": {
+      "title": "Lo que todavía falta revisar",
+      "button": "Revisar esta versión con t.ROY"
+    },
+    "countedSeparately": "Las preguntas de los documentos de arriba se cuentan aparte de {what, select, both {la longitud de la página y la revisión final de los documentos} length {la longitud de la página} other {la revisión final de los documentos}}. La siguiente acción incluye estas revisiones pendientes.",
+    "emailLocked": {
+      "title": "Envíame mi paquete por correo",
+      "note": "Esto se abre cuando tu currículum esté terminado, para que la copia en tu bandeja de entrada sea la final."
+    },
+    "reviewDialogTitle": "¿Cómo te funcionó The Forge?",
+    "checks": {
+      "heading": "Revisiones",
+      "thingWord": "{count, plural, =1 {una cosa} other {{words} cosas}}",
+      "notFinished": "Aún no está listo: {things} por arreglar antes de enviarlo. Están en tu lista, arriba.",
+      "hardRulesTitle": "Reglas firmes",
+      "hardRulesClear": "Nada en esta página rompió una regla firme cuando la revisamos contra tus palabras.",
+      "datesTitle": "Fechas, credenciales y redacción",
+      "questions": "{count, plural, =1 {Una pregunta que vale la pena revisar} other {{words} preguntas que valen la pena revisar}} antes de enviarlo.",
+      "nothingFlagged": "No se marcó nada. Aun así, léelo tú una vez.",
+      "secondTitle": "La segunda revisión",
+      "secondSkipped": "No se ejecutó esta vez. Lee cada línea tú antes de enviarlo.",
+      "secondWorthALook": "{count, plural, =1 {Una cosa que vale la pena revisar} other {{words} cosas que valen la pena revisar}}. Ninguna te impide terminar.",
+      "secondClear": "Rastreó cada línea hasta lo que nos dijiste y arregló lo que pudo.",
+      "secondNotRunOne": "La segunda revisión, que rastrea cada línea hasta lo que nos dijiste, no se ejecutó en tu {doc}, y no se cambió nada. Lee el documento antes de enviarlo. Fíjate bien en cualquier dato específico, como un número, una fecha o una certificación.",
+      "secondNotRunBoth": "Tus documentos están aquí y no se cambió nada. La segunda revisión, que rastrea cada línea hasta lo que nos dijiste, no se pudo ejecutar esta vez, así que léelos con atención antes de enviarlos. Fíjate bien en cualquier dato específico, como un número, una fecha o una certificación.",
+      "docResume": "currículum",
+      "docLetter": "carta de presentación",
+      "atsTitle": "ATS y palabras clave",
+      "atsSummary": "Cómo lee tu página el software de selección. Pruébalo con una oferta de trabajo, o con una de nuestras muestras.",
+      "samplePosting": "Oferta de muestra escrita por SMR, no es un trabajo real.",
+      "pageLength": "Longitud de la página",
+      "onePage": "Lo quiero en una sola página"
+    },
+    "cover": {
+      "heading": "Carta de presentación",
+      "brackets": "Antes de enviarla, pon los nombres reales de la empresa y de quien contrata donde veas los corchetes.",
+      "download": "Descargar la carta (.docx)",
+      "copied": "Copiado",
+      "copy": "Copiar la carta"
+    },
+    "letterOffer": {
+      "text": "¿Vas a postularte a un lugar que pide carta de presentación? t.ROY escribió una a partir de tu historia. t.ROY la revisa contigo línea por línea, igual que el currículum.",
+      "add": "Agregar una carta de presentación"
+    }
+  }
+}

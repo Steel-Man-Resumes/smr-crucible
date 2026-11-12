@@ -50,10 +50,11 @@ import { ConfidenceMeter } from "@/components/forge/finish/ConfidenceMeter";
 import { sourceConfidence, confidenceLines } from "@/lib/finish-gate";
 import { keepSourceRecordLines, recordChoiceFrom, type RecordChoice, type RecordEntry } from "@/lib/record-choice";
 import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CREDENTIALS_KEY, isLanesFirst } from "@/lib/forge-path";
 import { LaneDownloadBox, LaneNextAction } from "@/components/forge/finish/LaneFinish";
-import { CARDS_PARAM, CHECK_AS_IS_LABEL, REWRITE_WITH_TROY_LABEL, nextActionFor, rebuildActive, rebuildHref } from "@/lib/lane-task";
+import { CARDS_PARAM, nextActionFor, rebuildActive, rebuildHref } from "@/lib/lane-task";
 import { useForgeSession } from "@/lib/forge-context";
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { DiscrepancyPanel } from "@/components/resume/DiscrepancyPanel";
@@ -78,7 +79,6 @@ import {
   recordScopeYes,
   scopeYesResult,
   cutScopeSentences,
-  countWord,
   cutLine,
   cutTerm,
   downloadMode,
@@ -103,13 +103,13 @@ import {
   optionalNumberPrompts,
   recordJobOk,
 } from "@/lib/finish-gate";
-import { SAMPLE_POSTING_LABEL, pickSamplePostings } from "@/lib/sample-postings";
+import { pickSamplePostings } from "@/lib/sample-postings";
 import { finishPayload, payloadMark, readRunEvidence, type RunEvidence } from "@/lib/finish-payload";
 import { isLengthChoice, lengthOk, pageLimitFor, type LengthChoice } from "@/lib/length-rule";
 import { LengthCard, cuttableLines } from "@/components/forge/finish/LengthCard";
 import { printFromServer } from "@/components/resume/resumePrint";
 import type { SavedRevisionSummary } from "@/lib/revision-save";
-import { RECHECK_LINE, needsRecheck } from "@/lib/recheck-copy";
+import { needsRecheck } from "@/lib/recheck-copy";
 import { withholdRecordLines } from "@/lib/record-lines";
 import { completeCredentialRows, readCredentialRows } from "@/lib/credential-rows";
 import { storyIsChecked } from "@/lib/story-verification";
@@ -142,40 +142,8 @@ import { ChangesList } from "@/components/forge/markup/ChangesList";
 
 type DocGenState = "idle" | "generating" | "done" | "error";
 
-/** Readiness-aware messaging for the output page */
-const READINESS_CONFIG: Record<string, {
-  refineryCta: string;
-  refinerySubtext: string;
-  careersHeading: string;
-  strengthsHeading: string;
-}> = {
-  precontemplation: {
-    refineryCta: "Save My Results",
-    refinerySubtext: "Free. No credit card. Come back anytime.",
-    careersHeading: "Paths Worth Knowing About",
-    strengthsHeading: "What You Bring",
-  },
-  contemplation: {
-    refineryCta: "Save & Explore The Refinery",
-    refinerySubtext: "Free. No credit card. No catch.",
-    careersHeading: "Career Paths to Consider",
-    strengthsHeading: "Your Strengths",
-  },
-  preparation: {
-    refineryCta: "Continue to The Refinery",
-    refinerySubtext: "Free. No credit card. Your story carries over.",
-    careersHeading: "Career Paths That Fit",
-    strengthsHeading: "Your Strengths",
-  },
-  action: {
-    refineryCta: "Start Using The Refinery",
-    refinerySubtext: "Free. No credit card. Built for exactly where you are right now.",
-    careersHeading: "Career Paths That Fit",
-    strengthsHeading: "Your Competitive Advantages",
-  },
-};
-
-const thingWord = (n: number) => `${countWord(n).toLowerCase()} ${n === 1 ? "thing" : "things"}`;
+/** Readiness-aware messaging for the output page: the stages that have their own words (catalog: readiness.<stage>). */
+const READINESS_STAGES: readonly string[] = ["precontemplation", "contemplation", "preparation", "action"];
 
 export default function OutputPage() {
   return (
@@ -186,6 +154,16 @@ export default function OutputPage() {
 }
 
 function OutputPageInner() {
+  const t = useTranslations("forgeOutput.page");
+  // Number words for the short counts ("two things"); past ten the digits show.
+  const numWord = (n: number) => (Number.isInteger(n) && n >= 0 && n <= 10 ? t(`numbers.n${n}`) : String(n));
+  const capFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const thingWord = (n: number) => t("checks.thingWord", { count: n, words: numWord(n) });
+  // The shared words of lib/lane-task.ts, lib/recheck-copy.ts and lib/sample-postings.ts (English there), shown in the page's language.
+  const REWRITE_WITH_TROY_LABEL = t("checkChoice.rewrite");
+  const CHECK_AS_IS_LABEL = t("checkChoice.asIs");
+  const RECHECK_LINE = t("recheck.line");
+  const SAMPLE_POSTING_LABEL = t("checks.samplePosting");
   const router = useRouter();
   const { session, updateSession, runIsMine } = useForgeSession();
   // Check and finish (R2): a saved resume opened here by id.
@@ -228,12 +206,18 @@ function OutputPageInner() {
       const next = await response.json();
       if (!runIsMine()) return;
       updateSession({ forgeOutput: next, ...(session.forgeFinish ? { forgeFinish: { ...session.forgeFinish, key: finishKey({ ...session, forgeOutput: next }, keepInsideLines, recordChoice) } } : {}) });
-    } catch { setStoryRetryError("Story check could not complete. Your saved work is still here."); }
+    } catch { setStoryRetryError(t("errors.storyCheck")); }
     finally { setStoryRetrying(false); }
   }
 
   const readiness = output.readiness_stage || session.readinessStage || "preparation";
-  const rc = READINESS_CONFIG[readiness] || READINESS_CONFIG.preparation;
+  const readinessKey = READINESS_STAGES.includes(readiness) ? readiness : "preparation";
+  const rc = {
+    refineryCta: t(`readiness.${readinessKey}.refineryCta`),
+    refinerySubtext: t(`readiness.${readinessKey}.refinerySubtext`),
+    careersHeading: t(`readiness.${readinessKey}.careersHeading`),
+    strengthsHeading: t(`readiness.${readinessKey}.strengthsHeading`),
+  };
   const narrative = output.narrative || {};
   const careerPaths = output.career_paths || [];
   // Report sentences that may say more about a credential than the person did.
@@ -433,7 +417,7 @@ function OutputPageInner() {
         if (response.status === 429) {
           limited = true;
           setWriterLimitReached(true);
-          throw new Error(typeof data.error === "string" ? data.error : "Today's writing limit has been reached. Your work is still here. Try again after the daily limit resets.");
+          throw new Error(typeof data.error === "string" ? data.error : t("errors.writingLimit"));
         }
         throw new Error(data.error || "Document generation failed");
       }
@@ -484,8 +468,8 @@ function OutputPageInner() {
       console.error("Doc generation error:", err);
       setQuiet(false);
       setDocError(limited
-        ? err instanceof Error ? err.message : "Today's writing limit has been reached."
-        : "The writer stopped before it made your resume. Your uploaded page is still here in this browser.");
+        ? err instanceof Error ? err.message : t("errors.writingLimitShort")
+        : t("errors.writerStopped"));
       setDocState("error");
       hasStarted.current = false;
     }
@@ -529,7 +513,7 @@ function OutputPageInner() {
           });
           if (!rc.ok) {
             const e = await rc.json().catch(() => null);
-            setOpenError(typeof e?.error === "string" ? e.error : "We couldn't check that resume just now. Try again.");
+            setOpenError(typeof e?.error === "string" ? e.error : t("errors.couldNotCheckResume"));
             setDocState("error");
             return;
           }
@@ -537,7 +521,7 @@ function OutputPageInner() {
         }
         const src = got.j?.source;
         if (!got.ok || !src || typeof src.resumeText !== "string") {
-          setOpenError(typeof got.j?.error === "string" ? got.j.error : "We couldn't open that resume.");
+          setOpenError(typeof got.j?.error === "string" ? got.j.error : t("errors.couldNotOpen"));
           setDocState("error");
           return;
         }
@@ -557,7 +541,7 @@ function OutputPageInner() {
         setRunEvidence(readRunEvidence(src.evidence) ?? { ownWords: "", credentialsAnswer: "", credentialRows: [], ownResumeText: "" });
         setDocState("done");
       } catch {
-        setOpenError("We couldn't open that resume. Try again.");
+        setOpenError(t("errors.couldNotOpenRetry"));
         setDocState("error");
       }
     })();
@@ -573,9 +557,9 @@ function OutputPageInner() {
       .then(async (r) => ({ ok: r.ok, j: (await r.json().catch(() => null)) as { pageText?: unknown; error?: unknown } | null }))
       .then(({ ok, j }) => {
         if (!live) return;
-        setChoicePage(ok && typeof j?.pageText === "string" ? { text: j.pageText } : { error: typeof j?.error === "string" ? j.error : "We couldn't open that resume." });
+        setChoicePage(ok && typeof j?.pageText === "string" ? { text: j.pageText } : { error: typeof j?.error === "string" ? j.error : t("errors.couldNotOpen") });
       })
-      .catch(() => live && setChoicePage({ error: "We couldn't open that resume. Try again." }));
+      .catch(() => live && setChoicePage({ error: t("errors.couldNotOpenRetry") }));
     return () => {
       live = false;
     };
@@ -661,12 +645,12 @@ function OutputPageInner() {
       const data = (await res.json().catch(() => null)) as { revision?: SavedRevisionSummary; error?: string } | null;
       if (mine !== saveSeq.current) return;
       if (res.status === 413) {
-        setTooLarge({ mark: forMark, message: data?.error || "This version is too big to save to your account." });
+        setTooLarge({ mark: forMark, message: data?.error || t("errors.tooBig") });
         return;
       }
       // Check and finish on a locked baseline (R2 review L4): said plainly, no retry loop.
       if (checkId && res.status === 409) {
-        setTooLarge({ mark: forMark, message: data?.error || "This resume is locked as a baseline, so it can't change here." });
+        setTooLarge({ mark: forMark, message: data?.error || t("errors.locked") });
         return;
       }
       if (!res.ok || !data?.revision?.id) throw new Error(String(res.status));
@@ -833,18 +817,18 @@ function OutputPageInner() {
   }, [ready, revealing, settling]);
 
   const tourSteps: TourStep[] = [
-    ...(!checkMode ? [{ target: "finish-story", title: "Your story", text: "t.ROY read the work you gave us and wrote this. It is a starting account in his words. If the headline misses you, say so and he redoes it." }] : []),
-    { target: "finish-resume", title: "Your resume", text: "This is your first stronger draft, built from your experience. Read it, make it yours, then use the Refinery to tailor it to a real job and practice your story." },
+    ...(!checkMode ? [{ target: "finish-story", title: t("tour.storyTitle"), text: t("tour.storyText") }] : []),
+    { target: "finish-resume", title: t("tour.resumeTitle"), text: t("tour.resumeText") },
     ...(autoFinish
-      ? [{ target: "auto-finish-notes", title: "What t.ROY did", text: "Every fix he made and anything he left out because it needed a fact only you could give. Open it to see each one. Nothing here is a mistake you have to fix." }]
+      ? [{ target: "auto-finish-notes", title: t("tour.didTitle"), text: t("tour.didText") }]
       : [
           view.state === "finished"
-            ? { target: "fix-list", title: "Your lines are checked", text: "Every line we asked about is settled. You can still change an answer." }
-            : { target: "fix-list", title: "Lines only you can answer", text: "For each one: say it's true, change it, or cut it. When they're done, your resume is finished." },
+            ? { target: "fix-list", title: t("tour.checkedTitle"), text: t("tour.checkedText") }
+            : { target: "fix-list", title: t("tour.openTitle"), text: t("tour.openText") },
         ]),
-    { target: "finish-download", title: "Download it", text: view.state === "finished" ? "Download your resume and cover letter here, or email them to yourself. A copy was also saved to your account." : "Download here. Until it is finished, every file is marked DRAFT so nobody mistakes it for the final one." },
-    { target: "finish-checks", title: "How it reads", text: "These checks read your page the way a screener does. Open one for the detail. They are for your information. You don't have to act on them." },
-    { target: "finish-next", title: "Next: the Refinery", text: "Your resume carries over. The Refinery tailors it to real jobs, writes cover letters, and prepares you for interviews." },
+    { target: "finish-download", title: t("tour.downloadTitle"), text: view.state === "finished" ? t("tour.downloadFinished") : t("tour.downloadDraft") },
+    { target: "finish-checks", title: t("tour.checksTitle"), text: t("tour.checksText") },
+    { target: "finish-next", title: t("tour.nextTitle"), text: t("tour.nextText") },
   ];
 
   // ---- actions -------------------------------------------------------------------
@@ -1035,7 +1019,7 @@ function OutputPageInner() {
       if (view.state === "finished") setFinishedDownloadDone(true);
     } catch (err) {
       console.error("Download error:", err);
-      setDownloadError(err instanceof Error && /popups/.test(err.message) ? err.message : "The download didn't work. Please try again.");
+      setDownloadError(err instanceof Error && /popups/.test(err.message) ? err.message : t("errors.downloadFailed"));
     } finally {
       setBusy(false);
     }
@@ -1068,7 +1052,7 @@ function OutputPageInner() {
       if (checkId) {
         const saved = await fetch("/api/revisions/check", { method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ artifactId: checkId, finish: payload }) });
-        if (!saved.ok) throw new Error("Save this version before checking it again. Try saving once more.");
+        if (!saved.ok) throw new Error(t("errors.saveBeforeRecheck"));
       }
       const res = await fetch("/api/forge/recheck", {
         signal: controller.signal,
@@ -1112,7 +1096,7 @@ function OutputPageInner() {
       // the server-held words the new receipt is bound to).
       if (!checkId) setRunEvidence(readRunEvidence(data.evidence));
     } catch (err) {
-      setCheckError(err instanceof Error && err.message !== "failed" ? err.message : "We couldn't check it just now. Try again in a moment.");
+      setCheckError(err instanceof Error && err.message !== "failed" ? err.message : t("errors.couldNotCheck"));
     } finally {
       clearTimeout(timeout);
       checkInFlight.current = false;
@@ -1166,12 +1150,12 @@ function OutputPageInner() {
   if (checkMode && authStatus !== "loading" && !signedIn) {
     return (
       <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center bg-t-bg px-4">
-        <h1 className="text-2xl font-bold mb-4 text-t-white">Sign in to check this resume</h1>
+        <h1 className="text-2xl font-bold mb-4 text-t-white">{t("checkMode.signInTitle")}</h1>
         <a
           href={`/login?callbackUrl=${encodeURIComponent(`/output?check=${checkId}`)}`}
           className="t-focus px-8 py-4 bg-t-amber text-white text-lg font-bold hover:bg-t-amber-bright min-h-touch"
         >
-          Sign in
+          {t("checkMode.signIn")}
         </a>
       </div>
     );
@@ -1186,20 +1170,20 @@ function OutputPageInner() {
           <TroyMark size={32} className="mt-0.5" />
           <div className="min-w-0 flex-1">
             <h1 className="text-lg font-bold leading-snug text-t-white" data-testid="status-line">
-              {choicePage && "error" in choicePage ? choicePage.error : "Here's your resume. t.ROY can make it stronger."}
+              {choicePage && "error" in choicePage ? choicePage.error : t("checkChoice.title")}
             </h1>
-            <p className="text-xs text-t-phos-dim">t.ROY rewrites it from this page, or you check it as it is.</p>
+            <p className="text-xs text-t-phos-dim">{t("checkChoice.subline")}</p>
           </div>
         </div>
         <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
           <div className="min-w-0 border border-t-line bg-t-bg p-3 sm:p-4" data-testid="finish-resume">
-            {choicePage && "text" in choicePage ? <ResumePage text={choicePage.text} draft /> : <p className="text-sm text-t-phos">{choicePage ? "" : "Opening your resume."}</p>}
+            {choicePage && "text" in choicePage ? <ResumePage text={choicePage.text} draft /> : <p className="text-sm text-t-phos">{choicePage ? "" : t("status.opening")}</p>}
           </div>
           <aside>
             <div className="border border-t-amber bg-t-panel p-4" data-testid="check-choice">
-              <p className="text-sm font-bold text-t-white">How do you want to finish this one?</p>
+              <p className="text-sm font-bold text-t-white">{t("checkChoice.question")}</p>
               <p className="mt-1 text-xs leading-relaxed text-t-phos">
-                t.ROY writes a new version from this page, in strong plain words, and you check what it wrote. Checking it as it is keeps every line as it stands, and t.ROY asks about the lines it can&apos;t match to your words.
+                {t("checkChoice.explain")}
               </p>
               <div className="mt-3 flex flex-col gap-2">
                 <button
@@ -1221,7 +1205,7 @@ function OutputPageInner() {
               </div>
             </div>
             <a href={seatAwareHref("/dashboard/vault", seatless)} className="t-focus mt-4 inline-flex min-h-touch items-center text-sm text-t-phos underline underline-offset-2">
-              Back to My resumes
+              {t("backToResumes")}
             </a>
           </aside>
         </div>
@@ -1234,16 +1218,16 @@ function OutputPageInner() {
     return (
       <div className="flow-center min-h-screen flex flex-col items-center justify-center text-center bg-t-bg">
         <h1 className="text-2xl font-bold mb-4 text-t-white">
-          Let&apos;s build your story first
+          {t("empty.title")}
         </h1>
         <p className="text-base text-t-phos-dim mb-6">
-          It looks like we haven&apos;t analyzed your information yet.
+          {t("empty.body")}
         </p>
         <button
           onClick={() => router.push("/start")}
           className="t-focus px-8 py-4 bg-t-amber text-white text-lg font-bold shadow-[0_3px_8px_rgba(22,26,21,0.15)] hover:bg-t-amber-bright transition-colors min-h-touch"
         >
-          Start The Forge
+          {t("empty.start")}
         </button>
       </div>
     );
@@ -1255,30 +1239,30 @@ function OutputPageInner() {
 
   const headline =
     checkMode && (docState === "generating" || docState === "idle")
-      ? "Opening your resume."
+      ? t("status.opening")
       : checkMode && docState === "error"
-        ? openError || "We couldn't open that resume."
+        ? openError || t("errors.couldNotOpen")
         : docState === "generating" || docState === "idle"
-      ? writeProgress || "t.ROY is writing your resume and cover letter."
+      ? writeProgress || t("status.writing")
       : docState === "error"
-        ? writerLimitReached ? "Writing paused for today." : "We couldn't finish writing your resume."
+        ? writerLimitReached ? t("status.paused") : t("status.couldNotFinish")
         : liveFixOn
-          ? "Your new page is written. Here's what t.ROY changed."
+          ? t("status.liveFix")
           : statusLine(view);
   const subline =
     checkMode && docState !== "done"
       ? ""
       : checkMode && view.state !== "finished"
-        ? `Checking: ${checkTitle || "your resume"}. Answer each card, and it saves as a new version.`
+        ? t("status.checking", { title: checkTitle || t("status.checkingFallback") })
         : docState === "generating" || docState === "idle"
-      ? "This usually takes 30 to 60 seconds."
+      ? t("status.takesAMinute")
       : docState === "error"
-        ? writerLimitReached ? "Your uploaded resume and answers are still here. The writer cannot make another version until the daily allowance resets." : "Your uploaded resume and answers are still here. You can retry from this page."
+        ? writerLimitReached ? t("status.limitSub") : t("status.errorSub")
         : liveFixOn
-          ? "Each old line, the new one, and why. Skip any time."
+          ? t("status.liveFixSub")
           : view.state === "finished"
-          ? checkMode ? "Download it below, or email it to yourself." : "This is your first stronger draft. Download it below, then improve and tailor it in the Refinery."
-          : "Answer them with t.ROY. You can download a draft any time.";
+          ? checkMode ? t("status.finishedCheckSub") : t("status.finishedSub")
+          : t("status.draftSub");
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-10 lg:max-w-6xl" data-testid="finish-page">
@@ -1298,12 +1282,12 @@ function OutputPageInner() {
 
       {isDemo && (
         <div className="mb-6 border border-t-amber bg-t-panel-2 px-5 py-4 text-center">
-          <p className="text-sm font-medium text-t-amber-bright">This is a sample output. Try it with your own data.</p>
+          <p className="text-sm font-medium text-t-amber-bright">{t("demo.sample")}</p>
           <button
             onClick={() => router.push("/start")}
             className="mt-2 text-sm text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
           >
-            Start your own Forge session
+            {t("demo.startOwn")}
           </button>
         </div>
       )}
@@ -1316,22 +1300,22 @@ function OutputPageInner() {
           <p className="text-xs text-t-phos-dim">{subline}</p>
           {ready && !verifierRan && (
             <p className="mt-1 text-xs text-t-amber-bright">
-              Our second check didn&apos;t run this time. Read every line before you send it.
+              {t("secondCheckSkipped")}
             </p>
           )}
           {ready && mayAccount && (
             <p role="status" className="mt-1 text-xs text-t-phos" data-testid="account-save" data-state={saveShown}>
               {current ? (
                 <>
-                  Saved to your account (version {current.number}).
+                  {t("save.saved", { number: current.number })}
                   {current.accountCopy === "kept_refinery" && (
                     <span className="block" data-testid="account-copy-note">
-                      Your resume in the Refinery has changes you made there, so we kept it as it is. This finished version is saved beside it.
+                      {t("save.keptRefinery")}
                     </span>
                   )}
                   {current.accountCopy === "kept_earlier" && (
                     <span className="block" data-testid="account-copy-note">
-                      Your account&apos;s earlier copy is kept{current.accountCopyRevision ? ` as version ${current.accountCopyRevision}` : ""}. Your resume in the Refinery now shows this finished version.
+                      {current.accountCopyRevision ? t("save.keptEarlierVersion", { number: current.accountCopyRevision }) : t("save.keptEarlier")}
                     </span>
                   )}
                 </>
@@ -1339,18 +1323,18 @@ function OutputPageInner() {
                 <>{tooLarge?.message}</>
               ) : saveShown === "failed" ? (
                 <>
-                  Not saved to your account yet. Your work is still on this page.{" "}
+                  {t("save.failed")}{" "}
                   <button
                     type="button"
                     onClick={() => void saveRevision()}
                     className="t-focus min-h-touch font-medium text-t-white underline underline-offset-2"
                     data-testid="account-save-retry"
                   >
-                    Try again
+                    {t("save.tryAgain")}
                   </button>
                 </>
               ) : (
-                "Saving to your account..."
+                t("save.saving")
               )}
             </p>
           )}
@@ -1361,28 +1345,28 @@ function OutputPageInner() {
             className="t-focus min-h-touch w-full shrink-0 border border-t-line px-3 py-2 text-xs font-medium text-t-phos hover:border-t-phos-dim hover:text-t-white sm:w-auto"
             data-testid="tour-button"
           >
-            Show me around
+            {t("tourButton")}
           </button>
         )}
       </div>
 
-      <WorkFocus active={!checkMode && !quiet && (docState === "generating" || docState === "idle" || liveFixOn)} title="Building your first stronger draft">
+      <WorkFocus active={!checkMode && !quiet && (docState === "generating" || docState === "idle" || liveFixOn)} title={t("workFocusTitle")}>
       {!checkMode && !quiet && (docState === "generating" || docState === "idle" || liveFixOn) && <ReviewSteps step={liveFixOn ? 2 : 1} />}
 
       {(docState === "generating" || docState === "idle") && !checkMode && !liveFixOn && (
         quiet ? (
           <div role="status" aria-live="polite" className="mt-6 border border-t-line bg-t-panel p-6 text-center" data-testid="quiet-rebuild">
-            <div className="my-4 flex justify-center"><TroyWork topic="resume" label="Working from the information you provided" /></div>
-            <p className="text-sm font-medium text-t-amber-bright">Updating your resume with your choice...</p>
-            <p className="mt-1 text-xs text-t-phos-dim">About a minute. Nothing else to do.</p>
+            <div className="my-4 flex justify-center"><TroyWork topic="resume" label={t("workingLabel")} /></div>
+            <p className="text-sm font-medium text-t-amber-bright">{t("writing.updating")}</p>
+            <p className="mt-1 text-xs text-t-phos-dim">{t("writing.aboutAMinute")}</p>
           </div>
         ) : changes.length > 0 ? (
-          <div className="mt-6"><p role="status">Changes checked. Checking the rest of your documents...</p><ChangesList changes={changes} open /></div>
+          <div className="mt-6"><p role="status">{t("writing.changesChecked")}</p><ChangesList changes={changes} open /></div>
         ) : (
           <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
-            <div className="my-4 flex justify-center"><TroyWork topic="resume" label="Working from the information you provided" /></div>
-            <p role="status" aria-live="polite" className="text-sm font-medium text-t-amber-bright">{writeProgress || "Writing from your work history..."}</p>
-            <p className="mt-3 text-sm text-t-phos">The reading is complete. Next you will see changes checked against your original page.</p>
+            <div className="my-4 flex justify-center"><TroyWork topic="resume" label={t("workingLabel")} /></div>
+            <p role="status" aria-live="polite" className="text-sm font-medium text-t-amber-bright">{writeProgress || t("writing.fromHistory")}</p>
+            <p className="mt-3 text-sm text-t-phos">{t("writing.readingComplete")}</p>
           </div>
         )
       )}
@@ -1395,7 +1379,7 @@ function OutputPageInner() {
       {docState === "error" && !checkMode && (
         <div className="mt-6 border border-t-red bg-t-panel p-6" role="alert">
           <p className="mb-3 text-sm text-t-phos">{docError}</p>
-          <p className="mb-4 text-sm text-t-phos-dim">No new resume was made. Your original page is preserved in this browser.</p>
+          <p className="mb-4 text-sm text-t-phos-dim">{t("writeError.noNew")}</p>
           {!writerLimitReached && (
             <button
               onClick={() => {
@@ -1404,12 +1388,12 @@ function OutputPageInner() {
               }}
               className="t-focus min-h-touch bg-t-amber px-6 py-3 text-sm font-bold text-white shadow-[0_3px_8px_rgba(22,26,21,0.15)] transition-colors hover:bg-t-amber-bright"
             >
-              Try writing again
+              {t("writeError.retry")}
             </button>
           )}
           {session.resumeText && (
             <details className="mt-5 border-t border-t-line pt-4">
-              <summary className="t-focus cursor-pointer text-sm font-medium text-t-white">See the resume you gave us</summary>
+              <summary className="t-focus cursor-pointer text-sm font-medium text-t-white">{t("writeError.seeOriginal")}</summary>
               <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-xs text-t-phos">{session.resumeText}</pre>
             </details>
           )}
@@ -1435,28 +1419,28 @@ function OutputPageInner() {
                 {resumeText ? (
                   <ResumePage text={resumeText} draft={view.state !== "finished" && !settling} />
                 ) : (
-                  <p className="text-sm text-t-phos">The resume came back empty. Try again below.</p>
+                  <p className="text-sm text-t-phos">{t("resumeEmpty")}</p>
                 )}
               </div>
               <ApprovedChanges answers={defendAnswers} cutHere={checkMode ? cutHere : null} changeNotes={changeNotes} />
               {forgeRepairs.length > 0 && (
                 <details className="mt-3 border border-t-line bg-t-panel px-4 py-3" data-testid="forge-repairs">
                   <summary className="cursor-pointer text-sm font-semibold text-t-white">
-                    What we corrected in your documents ({forgeRepairs.length})
+                    {t("repairs.summary", { count: forgeRepairs.length })}
                   </summary>
                   <ul className="mt-2 space-y-2 text-xs leading-relaxed text-t-phos">
                     {forgeRepairs.map((repair, i) => (
                       <li key={`${repair.kind}-${i}`}>
                         {repair.kind === "job" ? (
-                          <>We changed &ldquo;{repair.before}&rdquo; to &ldquo;{repair.after}&rdquo; to match your page.</>
+                          <>{t("repairs.job", { before: repair.before, after: repair.after })}</>
                         ) : repair.kind === "skill" ? (
-                          <>We left &ldquo;{repair.before}&rdquo; off the skills list because it wasn&apos;t in what you gave us. You can add it later in the Refinery if you have used it.</>
+                          <>{t("repairs.skill", { before: repair.before })}</>
                         ) : repair.kind === "claim" ? (
-                          <>We left out &ldquo;{repair.before}&rdquo; because that sentence needed a fact you haven&apos;t given us. The rest of the document stays in place.</>
+                          <>{t("repairs.claim", { before: repair.before })}</>
                         ) : repair.kind === "headline" ? (
-                          <>We used your listed title &ldquo;{repair.after}&rdquo; in place of &ldquo;{repair.before}&rdquo;.</>
+                          <>{t("repairs.headline", { before: repair.before, after: repair.after })}</>
                         ) : (
-                          <>We put your most recent listed work first: &ldquo;{repair.after}&rdquo;.</>
+                          <>{t("repairs.order", { after: repair.after })}</>
                         )}
                       </li>
                     ))}
@@ -1469,26 +1453,26 @@ function OutputPageInner() {
             <aside className="lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-1">
               {autoFinish && settling && (
                 <div role="status" aria-live="polite" className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="auto-finish-running">
-                  <p className="text-sm font-bold text-t-white">t.ROY is finishing your resume.</p>
-                  <p className="mt-1 text-xs leading-relaxed text-t-phos">He is checking every line against what you gave him and fixing what he can. You don&apos;t need to do anything.</p>
+                  <p className="text-sm font-bold text-t-white">{t("settle.running")}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-t-phos">{t("settle.runningNote")}</p>
                 </div>
               )}
               {autoFinish && !settling && settle.status === "done" && (settle.notes.length > 0 || settle.trimmed.length > 0) && (
                 <details id="auto-finish-notes" className="mb-4 border border-t-line bg-t-panel px-4 py-3" data-testid="auto-finish-notes">
                   <summary className="cursor-pointer text-sm font-semibold text-t-white">
-                    What t.ROY did on the last pass ({settle.notes.filter((n) => n.kind !== "confirmed").length + settle.trimmed.length})
+                    {t("settle.summary", { count: settle.notes.filter((n) => n.kind !== "confirmed").length + settle.trimmed.length })}
                   </summary>
                   <ul className="mt-2 space-y-2 text-xs leading-relaxed text-t-phos">
                     {settle.notes.filter((n) => n.kind === "rewritten").map((n, i) => (
-                      <li key={`w${i}`}>Reworded &ldquo;{n.kind === "rewritten" ? n.before : ""}&rdquo; to &ldquo;{n.kind === "rewritten" ? n.after : ""}&rdquo;, using only your words.</li>
+                      <li key={`w${i}`}>{t("settle.reworded", { before: n.kind === "rewritten" ? n.before : "", after: n.kind === "rewritten" ? n.after : "" })}</li>
                     ))}
                     {settle.notes.filter((n) => n.kind === "removed").map((n, i) => (
-                      <li key={`r${i}`}>Left out &ldquo;{n.kind === "removed" ? n.line : ""}&rdquo;. {n.kind === "removed" ? n.why : ""}</li>
+                      <li key={`r${i}`}>{t("settle.leftOut", { line: n.kind === "removed" ? n.line : "", why: n.kind === "removed" ? n.why : "" })}</li>
                     ))}
                     {settle.trimmed.map((line, i) => (
-                      <li key={`t${i}`}>Trimmed &ldquo;{line.replace(/^[-•*]\s+/, "")}&rdquo; to keep your resume to two pages.</li>
+                      <li key={`t${i}`}>{t("settle.trimmed", { line: line.replace(/^[-•*]\s+/, "") })}</li>
                     ))}
-                    <li className="text-t-phos-dim">Anything left out can be added back in the Refinery when it is true and you can back it up.</li>
+                    <li className="text-t-phos-dim">{t("settle.addBack")}</li>
                   </ul>
                 </details>
               )}
@@ -1496,7 +1480,7 @@ function OutputPageInner() {
                 <div id="finish-recheck" className="mb-4 border border-t-amber bg-t-panel p-4" data-testid="recheck-card" data-blocking="true">
                   <p className="text-sm font-bold text-t-white">{RECHECK_LINE}</p>
                   <p className="mt-1 text-xs leading-relaxed text-t-phos">
-                    This checks your page again, as it is now. Nothing on it is rewritten, and your answers stay.
+                    {t("recheck.note")}
                   </p>
                   <button
                     type="button"
@@ -1505,16 +1489,16 @@ function OutputPageInner() {
                     className="t-focus mt-3 min-h-touch bg-t-amber px-4 py-2 text-sm font-bold text-white hover:bg-t-amber-bright disabled:opacity-60"
                     data-testid="recheck-button"
                   >
-                    {checking ? "Checking..." : "Check it again"}
+                    {checking ? t("recheck.checking") : t("recheck.button")}
                   </button>
                   {checkError && <p role="status" className="mt-2 text-xs text-t-amber-bright">{checkError}</p>}
                 </div>
               )}
               {!finished && !settling && !needsCheck && !checking && gateView.fixCount === 0 && current && current.openItems.length > 0 && (
                 <div className="mb-4 border border-t-line bg-t-panel p-4" role="status">
-                  <p className="text-sm font-semibold text-t-white">What still needs checking</p>
+                  <p className="text-sm font-semibold text-t-white">{t("stillNeeds.title")}</p>
                   <ul className="mt-2 space-y-2 text-xs text-t-phos">{current.openItems.map((item, i) => <li key={i}>{item}</li>)}</ul>
-                  <button type="button" className="t-focus mt-3 min-h-touch text-sm underline" onClick={() => void checkAgain()}>Check this version with t.ROY</button>
+                  <button type="button" className="t-focus mt-3 min-h-touch text-sm underline" onClick={() => void checkAgain()}>{t("stillNeeds.button")}</button>
                 </div>
               )}
               {lengthOver && shownPages !== null && (
@@ -1545,7 +1529,7 @@ function OutputPageInner() {
             </aside>
           </div>
 
-          {!finished && (lengthOver || needsCheck) && <p className="mt-5 text-sm text-t-phos-dim" role="status">The document questions above are counted separately from {lengthOver && needsCheck ? "page length and the final document check" : lengthOver ? "page length" : "the final document check"}. The next action includes these remaining checks.</p>}
+          {!finished && (lengthOver || needsCheck) && <p className="mt-5 text-sm text-t-phos-dim" role="status">{t("countedSeparately", { what: lengthOver && needsCheck ? "both" : lengthOver ? "length" : "check" })}</p>}
 
           {/* 3. One main action, with the email box and the explainer beside it */}
           <div className="mt-8 grid gap-4 lg:grid-cols-2 lg:items-start">
@@ -1593,9 +1577,9 @@ function OutputPageInner() {
               />
             ) : !isDemo ? (
               <div className="border border-t-line bg-t-panel p-4" data-testid="email-locked">
-                <p className="mb-1 text-sm font-semibold text-t-white">Email me my package</p>
+                <p className="mb-1 text-sm font-semibold text-t-white">{t("emailLocked.title")}</p>
                 <p className="text-xs text-t-phos-dim">
-                  This opens when your resume is finished, so the copy in your inbox is the final one.
+                  {t("emailLocked.note")}
                 </p>
               </div>
             ) : null}
@@ -1604,21 +1588,21 @@ function OutputPageInner() {
           {/* The review ask sits where the person just downloaded: one line,
               after a finished download only, once per visit, with an optional focus dialog. */}
           {reviewVisible && (
-            <FocusDialog open={!tourOpen && !settling && !liveFixOn} title="How did the Forge work for you?" onClose={() => setReviewDismissed(true)}>
+            <FocusDialog open={!tourOpen && !settling && !liveFixOn} title={t("reviewDialogTitle")} onClose={() => setReviewDismissed(true)}>
               <ReviewAsk onDismiss={() => setReviewDismissed(true)} />
             </FocusDialog>
           )}
 
           {/* 4. Checks, collapsed, one plain line each */}
           <section id="finish-checks" aria-labelledby="finish-checks-heading" className="mt-10 scroll-mt-20">
-            <h2 id="finish-checks-heading" className="mb-3 text-xl font-bold text-t-white">Checks</h2>
+            <h2 id="finish-checks-heading" className="mb-3 text-xl font-bold text-t-white">{t("checks.heading")}</h2>
             <div className="space-y-2">
               <CheckSection
-                title="Hard rules"
+                title={t("checks.hardRulesTitle")}
                 summary={
                   mintBlocks > 0
-                    ? `Not finished yet: ${thingWord(mintBlocks)} to fix before you send it. They're in your list at the top.`
-                    : "Nothing on this page broke a hard rule when we checked it against your words."
+                    ? t("checks.notFinished", { things: thingWord(mintBlocks) })
+                    : t("checks.hardRulesClear")
                 }
                 attention={mintBlocks > 0}
                 testId="check-mint"
@@ -1627,11 +1611,11 @@ function OutputPageInner() {
               </CheckSection>
 
               <CheckSection
-                title="Dates, credentials and wording"
+                title={t("checks.datesTitle")}
                 summary={
                   discrepancies.length > 0
-                    ? `${countWord(discrepancies.length)} ${discrepancies.length === 1 ? "question" : "questions"} worth a look before you send it.`
-                    : "Nothing flagged. Still read it once yourself."
+                    ? t("checks.questions", { count: discrepancies.length, words: capFirst(numWord(discrepancies.length)) })
+                    : t("checks.nothingFlagged")
                 }
                 testId="check-discrepancy"
               >
@@ -1640,15 +1624,15 @@ function OutputPageInner() {
 
               {(groundingNote || !verifierRan) && (
                 <CheckSection
-                  title="The second check"
+                  title={t("checks.secondTitle")}
                   summary={
                     !verifierRan
-                      ? "It didn't run this time. Read every line yourself before you send it."
+                      ? t("checks.secondSkipped")
                       : traceBlocks > 0
-                        ? `Not finished yet: ${thingWord(traceBlocks)} to fix before you send it. They're in your list at the top.`
+                        ? t("checks.notFinished", { things: thingWord(traceBlocks) })
                         : groundingNote && groundingOpenCount(groundingNote) > 0
-                          ? `${countWord(groundingOpenCount(groundingNote))} ${groundingOpenCount(groundingNote) === 1 ? "thing" : "things"} worth a look. None of them stops you from finishing.`
-                          : "It traced every line back to what you told us and fixed what it could."
+                          ? t("checks.secondWorthALook", { count: groundingOpenCount(groundingNote), words: capFirst(numWord(groundingOpenCount(groundingNote))) })
+                          : t("checks.secondClear")
                   }
                   attention={!verifierRan || traceBlocks > 0}
                   testId="check-grounding"
@@ -1656,8 +1640,8 @@ function OutputPageInner() {
                   {!verifierRan && (
                     <p className="mb-2 text-xs leading-relaxed text-t-phos">
                       {uncheckedDoc
-                        ? `The second check that traces every line back to what you told us did not run on your ${uncheckedDoc}, and nothing in it was changed. Read it over before you send it. Look hard at anything specific, like a number, a date or a certification.`
-                        : "Your documents are here and nothing was changed. The second check that traces every line back to what you told us could not run this time, so read these over before you send them. Look hard at anything specific, like a number, a date or a certification."}
+                        ? t("checks.secondNotRunOne", { doc: uncheckedDoc === "resume" ? t("checks.docResume") : t("checks.docLetter") })
+                        : t("checks.secondNotRunBoth")}
                     </p>
                   )}
                   {groundingNote && <GroundingNote groundingNote={groundingNote} />}
@@ -1665,8 +1649,8 @@ function OutputPageInner() {
               )}
 
               <CheckSection
-                title="ATS and keywords"
-                summary="How screening software reads your page. Try it against a job posting, or one of our samples."
+                title={t("checks.atsTitle")}
+                summary={t("checks.atsSummary")}
                 testId="check-ats"
               >
                 <AtsScorePanel
@@ -1680,7 +1664,7 @@ function OutputPageInner() {
               </CheckSection>
 
               <div className="flex min-h-touch flex-wrap items-center justify-between gap-2 border border-t-line bg-t-panel px-4 py-3" data-testid="check-pagefit">
-                <span className="text-sm font-semibold text-t-white">Page length</span>
+                <span className="text-sm font-semibold text-t-white">{t("checks.pageLength")}</span>
                 <PageFitLine text={resumeText} onPages={setPages} />
                 <label className="flex min-h-touch w-full items-center gap-2 text-xs text-t-phos">
                   <input
@@ -1689,7 +1673,7 @@ function OutputPageInner() {
                     onChange={(e) => setLengthChoice(e.target.checked ? "one_page" : "auto")}
                     data-testid="length-one-page"
                   />
-                  I want it on one page
+                  {t("checks.onePage")}
                 </label>
               </div>
             </div>
@@ -1698,9 +1682,9 @@ function OutputPageInner() {
           {/* 5. Cover letter */}
           {coverLetterText && (
             <section id="finish-cover" aria-labelledby="finish-cover-heading" className="mt-10 scroll-mt-20">
-              <h2 id="finish-cover-heading" className="mb-1 text-xl font-bold text-t-white">Cover letter</h2>
+              <h2 id="finish-cover-heading" className="mb-1 text-xl font-bold text-t-white">{t("cover.heading")}</h2>
               {/\[[^\]]+\]/.test(coverLetterText) && (
-                <p className="mb-3 text-xs text-t-phos-dim">Put in the real company and hiring manager names where you see the brackets before you send it.</p>
+                <p className="mb-3 text-xs text-t-phos-dim">{t("cover.brackets")}</p>
               )}
               <div className="border border-t-line bg-t-panel">
                 <div className="max-h-96 overflow-y-auto p-5">
@@ -1712,14 +1696,14 @@ function OutputPageInner() {
                     disabled={busy}
                     className="t-focus min-h-touch border border-t-line bg-t-panel px-3 py-2 text-xs font-medium text-t-phos transition-colors hover:border-t-phos-dim disabled:opacity-60"
                   >
-                    Download the letter (.docx)
+                    {t("cover.download")}
                   </button>
                   {finished && (
                     <button
                       onClick={() => handleCopy(coverLetterText, "cover")}
                       className="t-focus min-h-touch border border-t-line bg-t-panel px-3 py-2 text-xs font-medium text-t-phos transition-colors hover:border-t-phos-dim"
                     >
-                      {copied === "cover" ? "Copied" : "Copy the letter"}
+                      {copied === "cover" ? t("cover.copied") : t("cover.copy")}
                     </button>
                   )}
                 </div>
@@ -1732,7 +1716,7 @@ function OutputPageInner() {
       {checkMode ? (
         <div className="mt-12 border-t border-t-line pt-8" data-testid="check-next">
           <a href={seatAwareHref("/dashboard/vault", seatless)} className="t-focus inline-flex min-h-touch items-center text-sm font-medium text-t-amber-bright underline underline-offset-2">
-            Back to My resumes
+            {t("backToResumes")}
           </a>
         </div>
       ) : lanes ? (
@@ -1759,14 +1743,14 @@ function OutputPageInner() {
           >
             {parkedLetter && !coverLetterText && docState === "done" && (
               <div data-testid="letter-offer">
-                <p className="mb-2 text-sm text-t-phos">Applying somewhere that wants a cover letter? t.ROY wrote one from your story. t.ROY checks it line by line with you, like the resume.</p>
+                <p className="mb-2 text-sm text-t-phos">{t("letterOffer.text")}</p>
                 <button
                   type="button"
                   onClick={() => setCoverLetterText(parkedLetter)}
                   className="t-focus min-h-touch border border-t-line bg-t-panel px-4 py-2 text-sm font-medium text-t-white hover:border-t-phos-dim"
                   data-testid="add-letter"
                 >
-                  Add a cover letter
+                  {t("letterOffer.add")}
                 </button>
               </div>
             )}

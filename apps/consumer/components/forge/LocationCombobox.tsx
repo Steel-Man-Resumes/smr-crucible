@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useId, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   LOCATION_DATA_URL,
   buildLocationIndex,
@@ -46,7 +47,7 @@ export function LocationCombobox({
   value,
   onChange,
   disabled,
-  placeholder = "City, state or ZIP",
+  placeholder,
   describedBy,
 }: {
   id: string;
@@ -56,6 +57,7 @@ export function LocationCombobox({
   placeholder?: string;
   describedBy?: string;
 }) {
+  const t = useTranslations("forgeGoals");
   const listId = useId();
   const statusId = useId();
   const [index, setIndex] = useState<LocationIndex | null>(null);
@@ -149,7 +151,7 @@ export function LocationCombobox({
         spellCheck={false}
         value={value}
         disabled={disabled}
-        placeholder={placeholder}
+        placeholder={placeholder ?? t("location.placeholder")}
         onFocus={() => {
           ensureLoaded();
           setOpen(true);
@@ -165,7 +167,7 @@ export function LocationCombobox({
       <ul
         id={listId}
         role="listbox"
-        aria-label="Places that match"
+        aria-label={t("location.listLabel")}
         hidden={!expanded}
         className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-y-auto border border-t-line-strong bg-t-panel shadow-lg"
       >
@@ -185,16 +187,16 @@ export function LocationCombobox({
           >
             <span>{s.label}</span>
             {(s.detail || s.kind === "county") && (
-              <span className="shrink-0 text-xs text-t-phos-dim">{s.detail ?? "county"}</span>
+              <span className="shrink-0 text-xs text-t-phos-dim">{s.detail ?? t("location.county")}</span>
             )}
           </li>
         ))}
       </ul>
       <p id={statusId} className="sr-only" aria-live="polite">
-        {expanded ? `${results.length} suggestion${results.length === 1 ? "" : "s"}. Use the arrow keys to choose.` : ""}
+        {expanded ? t("location.suggestions", { count: results.length }) : ""}
       </p>
       {failed && (
-        <p className="mt-1 text-xs text-t-phos-dim">Suggestions didn&apos;t load. Type your city and state, like Lansing, MI.</p>
+        <p className="mt-1 text-xs text-t-phos-dim">{t("location.failed")}</p>
       )}
     </div>
   );

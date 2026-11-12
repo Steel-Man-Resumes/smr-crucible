@@ -9,6 +9,7 @@
 
 import { TroyWork } from "@crucible/consumer-ui";
 import { Check } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { elapsedLabel } from "@/lib/showstopper-tour";
 
 export type BuildPhase = "sending" | "working" | "done";
@@ -30,35 +31,36 @@ function Mark({ state }: { state: "done" | "active" | "waiting" }) {
 }
 
 export function BuildStatus({ phase, elapsed }: { phase: BuildPhase; elapsed: number }) {
+  const t = useTranslations("forgeProcessing");
   const long = phase === "working" && elapsed >= LONG_RUN_SECONDS;
   const working: "done" | "active" | "waiting" = phase === "done" ? "done" : phase === "working" ? "active" : "waiting";
 
   return (
     <div className="border border-t-line bg-t-panel px-4 py-3">
-      <ol className="flex flex-col gap-2 font-term text-sm sm:flex-row sm:items-center sm:gap-6" aria-label="Build status">
+      <ol className="flex flex-col gap-2 font-term text-sm sm:flex-row sm:items-center sm:gap-6" aria-label={t("status.aria")}>
         <li className="flex items-center gap-2 text-t-white">
           <Mark state={phase === "sending" ? "active" : "done"} />
-          <span>Sent to t.ROY</span>
+          <span>{t("status.sent")}</span>
         </li>
         <li className={`flex items-center gap-2 ${working === "waiting" ? "text-t-bone-dim" : "text-t-white"}`}>
           <Mark state={working} />
-          <span>Working on it</span>
+          <span>{t("status.working")}</span>
           {phase === "working" && (
-            <span role="timer" className="tabular-nums text-t-amber-bright" aria-label={`${Math.floor(elapsed)} seconds so far`}>
+            <span role="timer" className="tabular-nums text-t-amber-bright" aria-label={t("status.secondsSoFar", { seconds: Math.floor(elapsed) })}>
               {elapsedLabel(elapsed)}
             </span>
           )}
         </li>
         <li className={`flex items-center gap-2 ${phase === "done" ? "text-t-white" : "text-t-bone-dim"}`}>
           <Mark state={phase === "done" ? "done" : "waiting"} />
-          <span>Done</span>
+          <span>{t("status.done")}</span>
         </li>
       </ol>
       <p className="mt-2 text-sm text-t-bone-dim" aria-live="polite">
-        {phase === "sending" && "Sending your answers to t.ROY."}
-        {phase === "working" && !long && "Working on it. This usually takes about a minute."}
-        {long && "This is taking longer than usual. It's still working, so stay on this page."}
-        {phase === "done" && "Done. Opening your results."}
+        {phase === "sending" && t("status.live.sending")}
+        {phase === "working" && !long && t("status.live.working")}
+        {long && t("status.live.long")}
+        {phase === "done" && t("status.live.done")}
       </p>
     </div>
   );

@@ -16,11 +16,22 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { mainActionLabel, type FinishView } from "@/lib/finish-gate";
 import type { DownloadFormat } from "@/lib/resume-download";
-import { DRAFT_BADGE, SOMETHING_ELSE_LABEL, type NextAction } from "@/lib/lane-task";
+import type { NextAction } from "@/lib/lane-task";
 
 export const MORE_FORMATS_LABEL = "More formats";
+
+/** The one next action's label from lib/lane-task.ts (English), by the English text, to its catalog key. Unknown labels show as they are. */
+const NEXT_ACTION_KEYS: Record<string, string> = {
+  "Ask for a Refinery seat": "actions.askSeat",
+  "Download your resume": "actions.downloadResume",
+  "Check it and finish": "actions.checkAndFinish",
+  "Pick a job to go after": "actions.pickJob",
+  "Practice for your interview": "actions.practiceInterview",
+  "Use this resume": "actions.useResume",
+};
 
 export function LaneDownloadBox({
   view,
@@ -45,6 +56,9 @@ export function LaneDownloadBox({
   copied: boolean;
   hasLetter: boolean;
 }) {
+  const t = useTranslations("forgeOutput.laneFinish");
+  // Shown name of the "More formats" summary; the module export above stays the English label.
+  const MORE_FORMATS_LABEL = t("moreFormats");
   const finished = view.state === "finished";
   const [open, setOpen] = useState(false);
   const small = "t-focus min-h-touch border border-t-line bg-t-panel px-3 py-2 text-xs font-medium text-t-phos transition-colors hover:border-t-phos-dim hover:text-t-white disabled:opacity-60";
@@ -58,9 +72,9 @@ export function LaneDownloadBox({
             className="t-focus min-h-touch w-full bg-t-amber px-5 py-3 text-base font-bold text-white transition-colors hover:bg-t-amber-bright disabled:opacity-60"
             data-testid="main-action"
           >
-            {busy ? "Getting your file ready..." : "Download your resume (PDF)"}
+            {busy ? t("gettingFile") : t("downloadPdf")}
           </button>
-          <p className="mt-2 text-center text-xs text-t-phos-dim">PDF keeps the look the same on any computer.</p>
+          <p className="mt-2 text-center text-xs text-t-phos-dim">{t("pdfNote")}</p>
         </>
       ) : (
         <>
@@ -72,19 +86,21 @@ export function LaneDownloadBox({
             {mainActionLabel(view)}
           </button>
           <p className="mt-2 text-center text-xs text-t-amber-bright" data-testid="draft-badge">
-            {DRAFT_BADGE}
+            {t("draftBadge")}
           </p>
           <p className="mt-1 text-center text-xs text-t-phos-dim">
-            Need it now?{" "}
-            <button
-              onClick={() => onDownloadFormat("pdf")}
-              disabled={busy}
-              className="t-focus underline underline-offset-2 hover:text-t-white disabled:opacity-60"
-              data-testid="draft-download"
-            >
-              {busy ? "Getting your file ready..." : "Download the draft (PDF)"}
-            </button>
-            . It&apos;s marked DRAFT and lists what&apos;s left to fix.
+            {t.rich("needItNow", {
+              draft: (chunks) => (
+                <button
+                  onClick={() => onDownloadFormat("pdf")}
+                  disabled={busy}
+                  className="t-focus underline underline-offset-2 hover:text-t-white disabled:opacity-60"
+                  data-testid="draft-download"
+                >
+                  {busy ? t("gettingFile") : chunks}
+                </button>
+              ),
+            })}
           </p>
         </>
       )}
@@ -95,9 +111,9 @@ export function LaneDownloadBox({
         <div className="mt-2 flex flex-wrap gap-2">
           {(
             [
-              ["docx", "Word (.docx)"],
-              ["txt", "Plain text (.txt)"],
-              ["html", "Web page (.html)"],
+              ["docx", t("formats.docx")],
+              ["txt", t("formats.txt")],
+              ["html", t("formats.html")],
             ] as [DownloadFormat, string][]
           ).map(([f, label]) => (
             <button key={f} onClick={() => onDownloadFormat(f)} disabled={busy} className={small} data-testid={`format-${f}`}>
@@ -105,26 +121,29 @@ export function LaneDownloadBox({
             </button>
           ))}
           <button onClick={onDownloadPackage} disabled={busy} className={small} data-testid="format-package">
-            {hasLetter ? "The package: resume and cover letter" : "The package (.zip)"}
+            {hasLetter ? t("packageWithLetter") : t("packageZip")}
           </button>
           {onPrint && (
             <button onClick={onPrint} disabled={busy} className={small} data-testid="finish-print">
-              Print
+              {t("print")}
             </button>
           )}
           {finished && (
             <button onClick={onCopy} className={small}>
-              {copied ? "Copied" : "Copy as plain text"}
+              {copied ? t("copied") : t("copyPlain")}
             </button>
           )}
         </div>
-        {!finished && <p className="mt-2 text-[11px] text-t-phos-dim">Until it&apos;s finished, every file is marked DRAFT.</p>}
+        {!finished && <p className="mt-2 text-[11px] text-t-phos-dim">{t("untilFinished")}</p>}
       </details>
     </div>
   );
 }
 
 export function LaneNextAction({ action, children, onFinish, checking = false, onBefore }: { action: NextAction; children: ReactNode; onFinish?: () => void; checking?: boolean; onBefore?: () => Promise<void> }) {
+  const t = useTranslations("forgeOutput.laneFinish");
+  const actionKey = NEXT_ACTION_KEYS[action.label];
+  const actionLabel = actionKey ? t(actionKey) : action.label;
   const internal = action.href.startsWith("/");
   const router = useRouter();
   const [leaving, setLeaving] = useState(false);
@@ -140,23 +159,23 @@ export function LaneNextAction({ action, children, onFinish, checking = false, o
   return (
     <section id="finish-next" aria-labelledby="finish-next-heading" className="scroll-mt-20 border-t border-t-line pt-8" data-testid="lane-next">
       <h2 id="finish-next-heading" className="mb-3 text-xl font-bold text-t-white">
-        Next
+        {t("next")}
       </h2>
       {action.href === "#fix-list" && onFinish ? (
-        <button type="button" onClick={onFinish} disabled={checking} className={`${cls} disabled:opacity-60`} data-testid="lane-next-action">{checking ? "Finishing your checks..." : action.label}</button>
+        <button type="button" onClick={onFinish} disabled={checking} className={`${cls} disabled:opacity-60`} data-testid="lane-next-action">{checking ? t("finishingChecks") : actionLabel}</button>
       ) : internal && onBefore ? (
-        <button type="button" onClick={() => void leave()} disabled={leaving} className={`${cls} disabled:opacity-60`} data-testid="lane-next-action">{action.label}</button>
+        <button type="button" onClick={() => void leave()} disabled={leaving} className={`${cls} disabled:opacity-60`} data-testid="lane-next-action">{actionLabel}</button>
       ) : internal ? (
         <Link href={action.href} className={cls} data-testid="lane-next-action">
-          {action.label}
+          {actionLabel}
         </Link>
       ) : (
         <a href={action.href} className={cls} data-testid="lane-next-action">
-          {action.label}
+          {actionLabel}
         </a>
       )}
       <details className="mt-6 border border-t-line bg-t-panel" data-testid="lane-something-else">
-        <summary className="t-focus cursor-pointer list-none px-4 py-3 text-sm font-medium text-t-white min-h-touch">{SOMETHING_ELSE_LABEL}</summary>
+        <summary className="t-focus cursor-pointer list-none px-4 py-3 text-sm font-medium text-t-white min-h-touch">{t("somethingElse")}</summary>
         <div className="space-y-8 border-t border-t-line px-4 py-4">{children}</div>
       </details>
     </section>

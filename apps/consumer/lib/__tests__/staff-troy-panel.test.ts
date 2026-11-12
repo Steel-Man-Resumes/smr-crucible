@@ -18,9 +18,11 @@ it("the panel fills the box and never submits; footer and About chip are there",
   assert.match(panel, /setInput\(skillRequest\(req\.skill, next\.firstName\)\)/);
   assert.doesNotMatch(panel, /requestSubmit|handleSubmit\(/);
   assert.match(panel, /staffSkill: focus\.skill, staffClientId: focus\.clientId/);
-  assert.match(chat, /t\.ROY drafts\. You decide\. Nothing is saved or sent until you do it\./);
-  assert.match(chat, /About: \{focus\.firstName \?\? "this person"\}/);
-  assert.match(chat, /t\.ROY, for your work with people/);
+  const copy = JSON.parse(read("../../messages/en/assistant.json")).staff;
+  assert.equal(copy.footer, "t.ROY drafts. You decide. Nothing is saved or sent until you do it.");
+  assert.match(chat, /t\("staff\.about", \{ name: focus\.firstName \?\? t\("staff\.thisPerson"\) \}\)|About: \{focus\.firstName \?\? t\("staff\.thisPerson"\)\}/);
+  assert.equal(copy.thisPerson, "this person");
+  assert.equal(copy.title, "t.ROY, for your work with people");
 });
 
 it("the server owns the skill and the focus: only a resolved staff member gets them", () => {

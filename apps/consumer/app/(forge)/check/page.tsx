@@ -12,12 +12,11 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { AlertTriangle, ArrowRight, CheckCircle2, Info, Upload, XCircle } from "lucide-react";
 import { PageFitLine } from "@/components/resume/PageFitLine";
 import {
-  FREE_CHECK_CTA,
   FREE_CHECK_MAX_CHARS,
-  freeCheckSummary,
   runFreeCheck,
   type CheckItem,
   type CheckRead,
@@ -28,11 +27,11 @@ import { sessionPending } from "@/lib/session-policy";
 
 type Mode = "paste" | "upload";
 
-const VERDICT_STYLE: Record<CheckItem["verdict"], { icon: typeof CheckCircle2; className: string; label: string }> = {
-  good: { icon: CheckCircle2, className: "text-t-phos", label: "Good" },
-  fix: { icon: AlertTriangle, className: "text-t-amber-bright", label: "Worth fixing" },
-  "must-fix": { icon: XCircle, className: "text-t-red", label: "Fix first" },
-  note: { icon: Info, className: "text-t-bone-dim", label: "Note" },
+const VERDICT_STYLE: Record<CheckItem["verdict"], { icon: typeof CheckCircle2; className: string; labelKey: "good" | "fix" | "mustFix" | "note" }> = {
+  good: { icon: CheckCircle2, className: "text-t-phos", labelKey: "good" },
+  fix: { icon: AlertTriangle, className: "text-t-amber-bright", labelKey: "fix" },
+  "must-fix": { icon: XCircle, className: "text-t-red", labelKey: "mustFix" },
+  note: { icon: Info, className: "text-t-bone-dim", labelKey: "note" },
 };
 
 function markedPage(text: string, result: FreeCheckResult) {
@@ -51,6 +50,7 @@ function markedPage(text: string, result: FreeCheckResult) {
 }
 
 export default function FreeCheckPage() {
+  const t = useTranslations("forgeRush");
   const { data: authSession, status } = useSession();
   const signedIn = status === "authenticated" && !sessionPending(authSession?.user as any);
   const [mode, setMode] = useState<Mode>("paste");
@@ -72,14 +72,14 @@ export default function FreeCheckPage() {
     if (mode === "paste") {
       const text = pasted.trim();
       if (text.length < 20) {
-        setError("Paste your whole resume first.");
+        setError(t("check.errors.pasteFirst"));
         return;
       }
       show(text, "pasted");
       return;
     }
     if (!file) {
-      setError("Choose your resume file first.");
+      setError(t("check.errors.chooseFirst"));
       return;
     }
     setBusy(true);
@@ -91,14 +91,14 @@ export default function FreeCheckPage() {
       if (!res.ok) {
         setError(
           res.status === 429
-            ? "You've used today's free checks from this connection. Try again tomorrow, or paste the text instead."
-            : data.error || "We couldn't check that file. Try again, or paste the text instead."
+            ? t("check.errors.rateLimited")
+            : data.error || t("check.errors.couldNotCheck")
         );
         return;
       }
       show(String(data.text || ""), (data.read as CheckRead) || "none");
     } catch {
-      setError("We couldn't reach the checker. Try again, or paste the text instead.");
+      setError(t("check.errors.couldNotReach"));
     } finally {
       setBusy(false);
     }
@@ -112,25 +112,34 @@ export default function FreeCheckPage() {
   }
 
   const ctaHref = signedIn ? "/start" : forgeSignInUrl("/start");
+
+  // Same sentence freeCheckSummary (lib/free-check.ts) builds, from the same counts.
+  function summaryLine(r: Pick<FreeCheckResult, "mustFix" | "toFix">): string {
+    if (r.mustFix === 0 && r.toFix === 0) return t("check.summary.none");
+    const parts: string[] = [];
+    if (r.mustFix) parts.push(t("check.summary.mustFix", { count: String(r.mustFix) }));
+    if (r.toFix) parts.push(t("check.summary.toFix", { count: String(r.toFix) }));
+    return parts.join(", ") + ".";
+  }
+
   const pageWithNotes = checked ? markedPage(checked.text, checked.result) : [];
 
   return (
     <div className="font-body">
       <div className="mx-auto w-full max-w-2xl px-4 pb-16 pt-8 sm:px-6 sm:pt-12">
         <p className="mb-3 font-term text-[11px] font-semibold uppercase tracking-[0.14em] text-t-amber-bright">
-          Free resume check
+          {t("check.eyebrow")}
         </p>
         <h1 className="text-3xl font-semibold leading-tight text-t-white sm:text-4xl">
-          Check your resume. No sign-in.
+          {t("check.title")}
         </h1>
         <p className="mt-3 text-base leading-relaxed text-t-bone-dim sm:text-lg">
-          Paste it or upload the file. We check it against the basic rules and tell you what to fix.
-          We don&apos;t save it.
+          {t("check.intro")}
         </p>
 
         {!checked && (
           <form onSubmit={handleCheck} className="mt-8 rounded-[5px] border border-t-line bg-t-panel p-4 sm:p-6">
-            <div role="tablist" aria-label="How to give us your resume" className="mb-4 grid grid-cols-2 gap-2">
+            <div role="tablist" aria-label={t("check.tabsAria")} className="mb-4 grid grid-cols-2 gap-2">
               {(["paste", "upload"] as const).map((m) => (
                 <button
                   key={m}
@@ -147,7 +156,7 @@ export default function FreeCheckPage() {
                       : "border-t-line text-t-bone-dim hover:border-t-line-strong hover:text-t-white"
                   }`}
                 >
-                  {m === "paste" ? "Paste the text" : "Upload the file"}
+                  {m === "paste" ? t("check.tabPaste") : t("check.tabUpload")}
                 </button>
               ))}
             </div>
@@ -155,14 +164,14 @@ export default function FreeCheckPage() {
             {mode === "paste" ? (
               <div>
                 <label htmlFor="resume-text" className="mb-1 block text-sm font-medium text-t-white">
-                  Your resume
+                  {t("check.resumeLabel")}
                 </label>
                 <textarea
                   id="resume-text"
                   value={pasted}
                   onChange={(e) => setPasted(e.target.value.slice(0, FREE_CHECK_MAX_CHARS))}
                   rows={12}
-                  placeholder="Paste your whole resume here."
+                  placeholder={t("check.pastePlaceholder")}
                   className="w-full resize-y border border-t-line bg-t-bg px-4 py-3 font-term text-sm text-t-white focus:border-t-amber focus:outline-none"
                 />
               </div>
@@ -174,9 +183,9 @@ export default function FreeCheckPage() {
                 >
                   <Upload size={24} aria-hidden="true" className="text-t-amber-bright" />
                   <span className="text-sm font-semibold text-t-white">
-                    {file ? file.name : "Choose your resume file"}
+                    {file ? file.name : t("check.chooseFile")}
                   </span>
-                  <span className="text-xs text-t-bone-dim">PDF, Word, text, or a photo. Up to 10 MB.</span>
+                  <span className="text-xs text-t-bone-dim">{t("check.fileHint")}</span>
                 </label>
                 <input
                   id="resume-file"
@@ -199,7 +208,7 @@ export default function FreeCheckPage() {
               disabled={busy}
               className="t-focus mt-4 flex min-h-[52px] w-full items-center justify-center gap-2 rounded-[5px] border border-ws-amber bg-ws-amber px-5 text-base font-semibold text-ws-bg transition-colors hover:bg-ws-amber-bright disabled:opacity-60"
             >
-              {busy ? "Reading your file..." : "Check it"}
+              {busy ? t("check.reading") : t("check.submit")}
             </button>
           </form>
         )}
@@ -208,30 +217,30 @@ export default function FreeCheckPage() {
           <section
             ref={resultsRef}
             tabIndex={-1}
-            aria-label="Your results"
+            aria-label={t("check.resultsAria")}
             data-testid="free-check-results"
             className="mt-8 outline-none"
           >
             <div className="rounded-[5px] border border-t-line bg-t-panel p-4 sm:p-5">
               <p className="text-lg font-semibold text-t-white" data-testid="free-check-summary">
-                {freeCheckSummary(checked.result)}
+                {summaryLine(checked.result)}
               </p>
               {checked.text.trim() && (
                 <div className="mt-2">
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-t-bone-dim">Page length</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-t-bone-dim">{t("check.pageLength")}</p>
                   <PageFitLine text={checked.text} className="mt-1" />
                 </div>
               )}
             </div>
 
             <div className="mt-6 border border-t-line bg-t-bg p-4 sm:p-5" data-testid="free-check-marked-page">
-              <h2 className="text-lg font-semibold text-t-white">Your page, marked up</h2>
-              <p className="mt-1 text-sm text-t-bone-dim">These are your words. We mark lines we can match to a specific finding. The full check is below. Nothing on the page has been rewritten yet.</p>
+              <h2 className="text-lg font-semibold text-t-white">{t("check.markedTitle")}</h2>
+              <p className="mt-1 text-sm text-t-bone-dim">{t("check.markedNote")}</p>
               <div className="mt-4 max-h-[34rem] space-y-1 overflow-y-auto border border-t-line bg-white p-3 font-term text-xs text-t-white sm:p-5">
                 {pageWithNotes.map(({ line, issue }, i) => (
                   <div key={i} className={`grid gap-1 border-l-2 px-2 py-1 sm:grid-cols-[minmax(0,1fr)_12rem] ${issue ? "border-t-amber bg-t-panel-2" : "border-transparent"}`}>
                     <span className="min-w-0 whitespace-pre-wrap break-words">{line || "\u00a0"}</span>
-                    {issue && <span className="text-t-amber-bright" aria-label={`Check this line: ${issue.title}`}>{issue.title}</span>}
+                    {issue && <span className="text-t-amber-bright" aria-label={t("check.checkLineAria", { title: issue.title })}>{issue.title}</span>}
                   </div>
                 ))}
               </div>
@@ -249,7 +258,7 @@ export default function FreeCheckPage() {
                         <Icon size={20} aria-hidden="true" className={`mt-0.5 flex-none ${v.className}`} />
                         <div className="min-w-0">
                           <p className="font-medium text-t-white">
-                            <span className="sr-only">{v.label}: </span>
+                            <span className="sr-only">{t(`check.verdict.${v.labelKey}`)}: </span>
                             {item.title}
                           </p>
                           {item.line && (
@@ -268,14 +277,14 @@ export default function FreeCheckPage() {
 
             <div className="mt-8 rounded-[5px] border border-t-amber bg-t-panel-2 p-5">
               <p className="text-base text-t-white">
-                These are the basic checks. The Forge goes line by line with you and builds the real thing.
+                {t("check.ctaNote")}
               </p>
               <Link
                 href={ctaHref}
                 className="t-focus group mt-4 flex min-h-[56px] w-full items-center justify-between gap-3 rounded-[5px] border border-ws-amber bg-ws-amber px-5 text-base font-semibold text-ws-bg transition-colors hover:bg-ws-amber-bright"
                 data-testid="free-check-cta"
               >
-                {signedIn ? "Fix these with t.ROY" : FREE_CHECK_CTA}
+                {signedIn ? t("check.ctaSignedIn") : t("check.ctaSignedOut")}
                 <ArrowRight size={20} aria-hidden="true" className="flex-none transition-transform group-hover:translate-x-1" />
               </Link>
               <button
@@ -283,7 +292,7 @@ export default function FreeCheckPage() {
                 onClick={startOver}
                 className="t-focus mt-3 inline-flex min-h-touch items-center text-sm font-medium text-t-bone-dim underline underline-offset-4 hover:text-t-white"
               >
-                Check another resume
+                {t("check.checkAnother")}
               </button>
             </div>
           </section>

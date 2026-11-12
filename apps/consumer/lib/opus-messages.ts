@@ -84,14 +84,44 @@ const OBSERVER_MESSAGES: Record<string, string> = { ...PARTNER_MESSAGES };
 /**
  * Get the appropriate Opus guidance message for a page.
  */
+/**
+ * Spanish version (2026-11-12): the job seeker's messages have a Spanish table
+ * (ES_CLIENT_MESSAGES). A page passes the site locale (next-intl useLocale);
+ * a page with no Spanish line yet falls back to English rather than to
+ * nothing. Partner, observer and demo lines stay English.
+ */
+export const ES_CLIENT_MESSAGES: Record<string, string> = {
+  // Forge pages (same keys and meaning as CLIENT_MESSAGES above)
+  rush:
+    "Pega tu currículum y dime cuál es el trabajo. Lo reescribo rápido para ese puesto, usando solo tu experiencia real.",
+  welcome:
+    "Aquí no hay respuestas incorrectas. Solo quiero saber desde dónde empiezas para poder ayudarte de la manera correcta.",
+  resume:
+    "No te preocupes si tu currículum no es perfecto. Puedo trabajar con lo que sea: una foto, un PDF, incluso solo una lista de los trabajos que has tenido.",
+  goals:
+    "Elige lo que sientas cierto ahora mismo. Nadie te está calificando. Solo quiero saber qué es importante para ti.",
+  story:
+    "Solo si te ayuda. Marca lo que te estorba y te señalo la ayuda que encaja. Nunca te pregunto por un delito.",
+  preferences:
+    "Ya casi terminamos esta parte. Estos datos me ayudan a encontrar oportunidades que de verdad funcionen para tu vida.",
+  processing:
+    "Estoy juntando todo. Esto toma un minuto porque lo estoy haciendo con cuidado. No hay ningún problema.",
+  output:
+    "Esto es tuyo. Léelo completo, guárdalo y, cuando quieras, The Refinery tiene herramientas para ayudarte a dar el siguiente paso.",
+};
+
 export function getOpusMessage(
   pageId: string,
   audience: Audience = "client",
-  isDemo: boolean = false
+  isDemo: boolean = false,
+  locale: string = "en"
 ): string {
   // Demo mode gets demo-specific messages regardless of audience
   if (isDemo) {
     return DEMO_MESSAGES[pageId] ?? CLIENT_MESSAGES[pageId] ?? "";
+  }
+  if (locale === "es" && audience === "client" && ES_CLIENT_MESSAGES[pageId]) {
+    return ES_CLIENT_MESSAGES[pageId];
   }
 
   switch (audience) {
