@@ -16,6 +16,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 import { TroyAttention } from "@crucible/consumer-ui";
 import type { BulletEvidence } from "./resumeModel";
 import { countPromptsFor, quantityFromCounts } from "@/lib/count-prompts";
@@ -95,6 +96,7 @@ export function BulletWorkshop({
   onClose,
 }: BulletWorkshopProps) {
   const t = useTranslations("refineryResume.resume.bullet");
+  const ts = useServerText();
   const oftenChips = chipList(t, "oftenChip", OFTEN_CHIP_COUNT);
   const improvedChips = chipList(t, "improvedChip", IMPROVED_CHIP_COUNT);
   const [saved] = useState(() => loadDraft(storageKey));
@@ -399,10 +401,10 @@ export function BulletWorkshop({
                       setQuantity(q);
                       setQuantitySource(q ? "typed" : undefined);
                     }}
-                    aria-label={t("countAria", { prompt })}
+                    aria-label={t("countAria", { prompt: ts(prompt) })}
                     className="t-focus min-h-touch w-20 shrink-0 border border-t-line bg-t-panel px-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
                   />
-                  <span>{prompt}</span>
+                  <span>{ts(prompt)}</span>
                 </label>
               ))}
               <button

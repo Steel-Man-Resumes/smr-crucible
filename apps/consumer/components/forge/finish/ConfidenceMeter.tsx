@@ -9,11 +9,13 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import type { ConfidenceLevel, ConfidenceNote } from "@/lib/finish-gate";
+import { useServerText } from "@/components/ServerTextProvider";
 
 const TONE: Record<ConfidenceLevel, string> = { high: "text-t-phos", medium: "text-t-amber-bright", low: "text-t-red" };
 
 export function ConfidenceMeter({ level, notes }: { level: ConfidenceLevel; notes: ConfidenceNote[] }) {
   const t = useTranslations("forgeFinish.confidence");
+  const ts = useServerText();
   const [open, setOpen] = useState(false);
   return (
     <div className="mb-3 border border-t-line bg-t-panel px-4 py-2.5" data-testid="confidence-meter" data-level={level}>
@@ -38,7 +40,7 @@ export function ConfidenceMeter({ level, notes }: { level: ConfidenceLevel; note
         <ul className="mt-2 space-y-1.5">
           {notes.map((n, i) => (
             <li key={i} className="text-[11px] leading-relaxed text-t-phos" data-testid="confidence-note">
-              &ldquo;{n.line}&rdquo; {n.why}
+              &ldquo;{n.line}&rdquo; {ts(n.why)}
             </li>
           ))}
         </ul>

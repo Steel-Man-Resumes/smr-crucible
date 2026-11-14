@@ -51,6 +51,7 @@ import { sourceConfidence, confidenceLines } from "@/lib/finish-gate";
 import { keepSourceRecordLines, recordChoiceFrom, type RecordChoice, type RecordEntry } from "@/lib/record-choice";
 import React, { Suspense, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CREDENTIALS_KEY, isLanesFirst } from "@/lib/forge-path";
 import { LaneDownloadBox, LaneNextAction } from "@/components/forge/finish/LaneFinish";
@@ -155,6 +156,7 @@ export default function OutputPage() {
 
 function OutputPageInner() {
   const t = useTranslations("forgeOutput.page");
+  const ts = useServerText();
   // Number words for the short counts ("two things"); past ten the digits show.
   const numWord = (n: number) => (Number.isInteger(n) && n >= 0 && n <= 10 ? t(`numbers.n${n}`) : String(n));
   const capFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -1243,12 +1245,12 @@ function OutputPageInner() {
       : checkMode && docState === "error"
         ? openError || t("errors.couldNotOpen")
         : docState === "generating" || docState === "idle"
-      ? writeProgress || t("status.writing")
+      ? (writeProgress ? ts(writeProgress) : t("status.writing"))
       : docState === "error"
         ? writerLimitReached ? t("status.paused") : t("status.couldNotFinish")
         : liveFixOn
           ? t("status.liveFix")
-          : statusLine(view);
+          : ts(statusLine(view));
   const subline =
     checkMode && docState !== "done"
       ? ""
@@ -1365,7 +1367,7 @@ function OutputPageInner() {
         ) : (
           <div className="mt-6 border border-t-line bg-t-panel p-8 text-center">
             <div className="my-4 flex justify-center"><TroyWork topic="resume" label={t("workingLabel")} /></div>
-            <p role="status" aria-live="polite" className="text-sm font-medium text-t-amber-bright">{writeProgress || t("writing.fromHistory")}</p>
+            <p role="status" aria-live="polite" className="text-sm font-medium text-t-amber-bright">{writeProgress ? ts(writeProgress) : t("writing.fromHistory")}</p>
             <p className="mt-3 text-sm text-t-phos">{t("writing.readingComplete")}</p>
           </div>
         )
@@ -1467,7 +1469,7 @@ function OutputPageInner() {
                       <li key={`w${i}`}>{t("settle.reworded", { before: n.kind === "rewritten" ? n.before : "", after: n.kind === "rewritten" ? n.after : "" })}</li>
                     ))}
                     {settle.notes.filter((n) => n.kind === "removed").map((n, i) => (
-                      <li key={`r${i}`}>{t("settle.leftOut", { line: n.kind === "removed" ? n.line : "", why: n.kind === "removed" ? n.why : "" })}</li>
+                      <li key={`r${i}`}>{t("settle.leftOut", { line: n.kind === "removed" ? n.line : "", why: n.kind === "removed" ? ts(n.why) : "" })}</li>
                     ))}
                     {settle.trimmed.map((line, i) => (
                       <li key={`t${i}`}>{t("settle.trimmed", { line: line.replace(/^[-•*]\s+/, "") })}</li>
@@ -1497,7 +1499,7 @@ function OutputPageInner() {
               {!finished && !settling && !needsCheck && !checking && gateView.fixCount === 0 && current && current.openItems.length > 0 && (
                 <div className="mb-4 border border-t-line bg-t-panel p-4" role="status">
                   <p className="text-sm font-semibold text-t-white">{t("stillNeeds.title")}</p>
-                  <ul className="mt-2 space-y-2 text-xs text-t-phos">{current.openItems.map((item, i) => <li key={i}>{item}</li>)}</ul>
+                  <ul className="mt-2 space-y-2 text-xs text-t-phos">{current.openItems.map((item, i) => <li key={i}>{ts(item)}</li>)}</ul>
                   <button type="button" className="t-focus mt-3 min-h-touch text-sm underline" onClick={() => void checkAgain()}>{t("stillNeeds.button")}</button>
                 </div>
               )}

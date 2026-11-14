@@ -12,6 +12,7 @@ import { isLaneTask } from "@/lib/lane-task";
 import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
 import { useProgression } from "@/components/progression/ProgressionProvider";
 import { safeProgressHref, progressPrimaryAction } from "@/lib/progression-ui";
+import { useServerText } from "@/components/ServerTextProvider";
 
 interface NextStepLite { action: string; href: string }
 
@@ -22,6 +23,7 @@ export function JourneyProgressBanner({ state, work, contextStatus, contextKey }
   contextKey: string;
 }) {
   const t = useTranslations("refineryShell.journey");
+  const ts = useServerText();
   const progression = useProgression();
   const pathname = usePathname();
   const key = `${pathname}:${contextKey}`;
@@ -56,9 +58,9 @@ export function JourneyProgressBanner({ state, work, contextStatus, contextKey }
     if (!progression.data) return <span role="status" className="text-xs text-t-bone-dim">{t("loadingProcess")}</span>;
     const primary = progressPrimaryAction(progression.data);
     const current = primary.current;
-    return <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"><span className="text-xs text-t-bone-dim">{primary.override ? t("today") : t("process")}: {primary.heading}</span>{primary.locked && current
+    return <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1"><span className="text-xs text-t-bone-dim">{primary.override ? t("today") : t("process")}: {ts(primary.heading)}</span>{primary.locked && current
       ? <button type="button" aria-haspopup="dialog" onClick={() => progression.ask(current)} className="t-focus min-h-touch text-sm font-semibold text-t-amber-bright underline">{t("askOpen")}</button>
-      : <NextLink href={safeProgressHref(progression.data.nextAction.href)} action={progression.data.nextAction.label} />}</div>;
+      : <NextLink href={safeProgressHref(progression.data.nextAction.href)} action={ts(progression.data.nextAction.label)} />}</div>;
   }
   if (state === "loading") return null;
   if (contextStatus === "error") return <span className="text-xs text-t-bone-dim">{t("nextUnavailable")}</span>;
@@ -70,5 +72,6 @@ export function JourneyProgressBanner({ state, work, contextStatus, contextKey }
 
 function NextLink({ href, action }: { href: string; action: string }) {
   const t = useTranslations("refineryShell.journey");
-  return <Link href={href} className="t-focus inline-flex min-h-touch items-center text-sm font-semibold text-t-amber-bright underline-offset-2 hover:underline"><span className="mr-1 text-t-bone-dim">{t("nextLabel")}</span> {action}</Link>;
+  const ts = useServerText();
+  return <Link href={href} className="t-focus inline-flex min-h-touch items-center text-sm font-semibold text-t-amber-bright underline-offset-2 hover:underline"><span className="mr-1 text-t-bone-dim">{t("nextLabel")}</span> {ts(action)}</Link>;
 }

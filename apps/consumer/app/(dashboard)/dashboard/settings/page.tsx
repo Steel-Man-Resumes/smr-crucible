@@ -14,6 +14,7 @@
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
 import { LeaveOrgButton } from "@/components/settings/LeaveOrgButton";
+import { useServerText } from "@/components/ServerTextProvider";
 import { DeleteDataControls } from "@/components/settings/DeleteDataControls";
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { useState, useEffect, FormEvent } from "react";
@@ -54,28 +55,29 @@ type UsageData = UsageView | { error: string };
 /** Settings -> Usage. The same allowance the tools spend from (lib/usage-view.ts). */
 function UsageCard({ usage, staff = false }: { usage: UsageData | null; staff?: boolean }) {
   const t = useTranslations("refineryAccount.settings.usage");
+  const ts = useServerText();
   if (!usage) return <p className="text-sm text-t-phos-dim">{t("loading")}</p>;
-  if ("error" in usage) return <p className="text-sm text-t-phos-dim">{usage.error}</p>;
+  if ("error" in usage) return <p className="text-sm text-t-phos-dim">{ts(usage.error)}</p>;
   const raw = usageWords(usage);
   const words = staff ? { ...raw, line: staffUsageLine(raw.line), bonusLine: raw.bonusLine ? staffUsageLine(raw.bonusLine) : null } : raw;
   const total = usage.kind === "allowance" ? (usage.base ?? 0) + usage.bonus : 0;
   return (
     <div>
-      <p className="text-sm font-medium text-t-white mb-2">{words.headline}</p>
+      <p className="text-sm font-medium text-t-white mb-2">{ts(words.headline)}</p>
       {usage.kind === "allowance" && total > 0 && (
         <div className="w-full bg-t-line h-2 mb-3" aria-hidden="true">
           <div className="bg-t-amber h-2 transition-all" style={{ width: `${Math.min(100, (Math.min(usage.used, total) / total) * 100)}%` }} />
         </div>
       )}
-      <p className="text-sm text-t-phos-dim">{words.line}</p>
-      {words.bonusLine && <p className="text-sm text-t-phos-dim mt-1">{words.bonusLine}</p>}
-      {usage.blockedReason && <p className="text-sm text-t-amber-bright mt-2">{usage.blockedReason}</p>}
+      <p className="text-sm text-t-phos-dim">{ts(words.line)}</p>
+      {words.bonusLine && <p className="text-sm text-t-phos-dim mt-1">{ts(words.bonusLine)}</p>}
+      {usage.blockedReason && <p className="text-sm text-t-amber-bright mt-2">{ts(usage.blockedReason)}</p>}
       {usage.ceilings.length > 0 && (
         <div className="mt-3">
           <p className="text-xs font-medium text-t-white mb-1">{usage.kind === "per-tool" ? t("usedToday") : t("lowerLimit")}</p>
           <ul className="text-xs text-t-phos-dim space-y-0.5">
             {usage.ceilings.map((c) => (
-              <li key={c.tool}>{c.label}: {c.paused ? t("paused") : t("leftToday", { count: c.left })}</li>
+              <li key={c.tool}>{ts(c.label)}: {c.paused ? t("paused") : t("leftToday", { count: c.left })}</li>
             ))}
           </ul>
         </div>
@@ -999,6 +1001,7 @@ function fmtWhen(s: string | null, locale?: string): string {
 
 function SecuritySection() {
   const t = useTranslations("refineryAccount.settings.security");
+  const ts = useServerText();
   const locale = useLocale();
   const [hasPassword, setHasPassword] = useState<boolean | null>(null);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
@@ -1136,7 +1139,7 @@ function SecuritySection() {
             className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
           />
 
-          {status === "error" && <p className="text-sm text-t-red">{errorMsg}</p>}
+          {status === "error" && <p className="text-sm text-t-red">{ts(errorMsg)}</p>}
           {status === "done" && (
             <p className="text-sm text-t-phos">
               {creating ? t("created") : t("updated")}

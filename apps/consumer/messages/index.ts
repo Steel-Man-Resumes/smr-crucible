@@ -47,6 +47,20 @@ import enRefineryShell from "./en/refinery-shell.json";
 import esRefineryShell from "./es/refinery-shell.json";
 import enRefineryResume from "./en/refinery-resume.json";
 import esRefineryResume from "./es/refinery-resume.json";
+import enServerTextApi from "./en/server-text-api.json";
+import esServerTextApi from "./es/server-text-api.json";
+import enServerTextFinish from "./en/server-text-finish.json";
+import esServerTextFinish from "./es/server-text-finish.json";
+import enServerTextProgress from "./en/server-text-progress.json";
+import esServerTextProgress from "./es/server-text-progress.json";
+import enServerTextPlans from "./en/server-text-plans.json";
+import esServerTextPlans from "./es/server-text-plans.json";
+import enServerTextJobs from "./en/server-text-jobs.json";
+import esServerTextJobs from "./es/server-text-jobs.json";
+import enServerTextHelp from "./en/server-text-help.json";
+import esServerTextHelp from "./es/server-text-help.json";
+import enServerTextExtras from "./en/server-text-extras.json";
+import esServerTextExtras from "./es/server-text-extras.json";
 
 export const MESSAGES = {
   en: {
@@ -70,6 +84,7 @@ export const MESSAGES = {
     refineryAccount: enRefineryAccount,
     refineryShell: enRefineryShell,
     refineryResume: enRefineryResume,
+    serverText: { ...enServerTextApi, ...enServerTextFinish, ...enServerTextProgress, ...enServerTextPlans, ...enServerTextJobs, ...enServerTextHelp, ...enServerTextExtras },
   },
   es: {
     common: esCommon,
@@ -92,6 +107,7 @@ export const MESSAGES = {
     refineryAccount: esRefineryAccount,
     refineryShell: esRefineryShell,
     refineryResume: esRefineryResume,
+    serverText: { ...esServerTextApi, ...esServerTextFinish, ...esServerTextProgress, ...esServerTextPlans, ...esServerTextJobs, ...esServerTextHelp, ...esServerTextExtras },
   },
 } as const;
 

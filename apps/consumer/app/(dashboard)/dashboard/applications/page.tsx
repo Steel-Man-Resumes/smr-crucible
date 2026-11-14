@@ -15,6 +15,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { NEXT_STEP_CHANGED_EVENT } from "@/lib/guidedTour";
 import { TierGate } from "@/components/TierGate";
+import { useServerText } from "@/components/ServerTextProvider";
 import { ApplyActions } from "@/components/apply/ApplyActions";
 import { StatusBadges } from "@/components/apply/StatusBadges";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
@@ -143,6 +144,7 @@ export default function ApplicationsPageWrapper() {
 
 function ApplicationsPage() {
   const t = useTranslations("refineryResume.applications");
+  const ts = useServerText();
   // Shared-computer rule: only a local run marked as this user's is read.
   const ownerUid = useSession().data?.user?.id;
   const [apps, setApps] = useState<Application[]>([]);
@@ -207,7 +209,7 @@ function ApplicationsPage() {
     const cost = t("cost.base");
     if (!r) return { line: cost, canRun: true };
     if (r.paused) return { line: t("cost.paused"), canRun: false };
-    if (r.blockedReason) return { line: r.blockedReason, canRun: false };
+    if (r.blockedReason) return { line: ts(r.blockedReason), canRun: false };
     if (r.left === null) return { line: cost, canRun: true };
     if (r.left <= 0) return { line: `${cost} ${t("cost.none")}`, canRun: false };
     return { line: `${cost} ${t("cost.left", { left: r.left })}`, canRun: true };

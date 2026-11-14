@@ -8,6 +8,7 @@
  */
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
+import { useServerText } from '@/components/ServerTextProvider';
 import { Flag, LockKeyhole, LockKeyholeOpen, Mic, Search } from 'lucide-react';
 import { TroyLivingIcon } from '@crucible/consumer-ui';
 import { BOARD_STATIONS, type ChartPhase, type LockPhase, type StationId } from '@/lib/tour/beats';
@@ -22,6 +23,7 @@ export const rowText = (tr: Tr, id: string, field: 'need' | 'limit' | 'here', fa
 
 export function TitleScene({ title, body }: { title: string; body: string }) {
   const tr = useTranslations('refineryAccount.tour');
+  const ts = useServerText();
   const { w, h } = SCENE_SIZE.title;
   return <div className="sc" style={{ width: w, height: h }}>
     <div className="sc-grid" />
@@ -29,8 +31,8 @@ export function TitleScene({ title, body }: { title: string; body: string }) {
       <div className="sc-rise" style={{ animationDelay: '80ms' }}><TroyLivingIcon size={170} attention /></div>
       <div>
         <p className="sc-title__k sc-rise" style={{ animationDelay: '260ms' }}>{tr('kicker')}</p>
-        <p className="sc-title__h sc-rise" style={{ animationDelay: '480ms' }}>{title}</p>
-        <p className="sc-title__b sc-rise" style={{ animationDelay: '1200ms' }}>{body}</p>
+        <p className="sc-title__h sc-rise" style={{ animationDelay: '480ms' }}>{ts(title)}</p>
+        <p className="sc-title__b sc-rise" style={{ animationDelay: '1200ms' }}>{ts(body)}</p>
       </div>
     </div>
   </div>;

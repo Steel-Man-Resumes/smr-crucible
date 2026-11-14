@@ -18,6 +18,7 @@ import { FORGE_READING_LABEL, type CareerFact, type ForgeReading } from "@/lib/c
 import { INITIAL_PLANNER_STATE, QUESTIONS, TEXT_MAX, nextQuestion, plannerReducer, progressOf, type Question } from "@/lib/career-plan/questions";
 import type { CareerPlan, CareerPlanNote, PlanDirection } from "@/lib/career-plan/plan";
 import { chooseCareerDirection } from "@/lib/career-plan/handoff";
+import { useServerText } from "@/components/ServerTextProvider";
 
 const btn = "t-focus inline-flex min-h-touch items-center justify-center border px-4 py-2 text-sm font-semibold disabled:opacity-50";
 const primary = `${btn} border-t-amber bg-t-amber text-white hover:bg-t-amber-bright`;
@@ -26,6 +27,7 @@ const quiet = `${btn} border-t-line text-t-phos hover:border-t-phos-dim hover:te
 export function CareerPlanner() {
   const t = useTranslations("refineryJobs.careerPlanner");
   const tc = useTranslations("common.actions");
+  const ts = useServerText();
   const locale = useLocale();
   // The English label stays the one constant (lib/career-plan/facts.ts); Spanish reads the catalog.
   const readingLabel = locale === "en" ? FORGE_READING_LABEL : t("forgeReadingLabel");
@@ -127,8 +129,8 @@ export function CareerPlanner() {
         <p className="text-t-phos-dim">{t("intro")}</p>
       </header>
       <p className="sr-only" role="status" aria-live="polite">{status}</p>
-      {loadError && <p role="alert" className="border border-t-line p-3 text-sm text-t-phos">{loadError} {t("canStillAnswer")}</p>}
-      {error && <p role="alert" className="border border-t-amber p-3 text-sm text-t-phos">{error}</p>}
+      {loadError && <p role="alert" className="border border-t-line p-3 text-sm text-t-phos">{ts(loadError)} {t("canStillAnswer")}</p>}
+      {error && <p role="alert" className="border border-t-amber p-3 text-sm text-t-phos">{ts(error)}</p>}
 
       {!plan && question && (
         <div className="border border-t-line bg-t-panel p-4 sm:p-6 space-y-4" data-testid={`planner-q-${question.id}`}>
@@ -208,13 +210,13 @@ export function CareerPlanner() {
         <div className="space-y-4" aria-busy={busy}>
           <h2 ref={headingRef} tabIndex={-1} className="text-xl font-bold text-t-white outline-none">{t("threeTitle")}</h2>
           <p className="text-sm text-t-phos-dim">{plan.method === "ai" ? t("methodAi") : t("methodRules")}{plan.ruledOut > 0 ? ` ${t("ruledOut",{count:plan.ruledOut})}` : ""}</p>
-          {plan.notes.map((n) => <p key={n} role="note" className="border-l-2 border-t-amber pl-3 text-sm text-t-phos">{n}</p>)}
+          {plan.notes.map((n) => <p key={n} role="note" className="border-l-2 border-t-amber pl-3 text-sm text-t-phos">{ts(n)}</p>)}
           <ol className="space-y-4">
             {plan.directions.map((d, i) => (
               <li key={d.id}>
                 <article aria-labelledby={`dir-${d.id}`} className={`border bg-t-panel p-4 sm:p-5 space-y-3 ${chosen?.id === d.id ? "border-t-amber" : "border-t-line"}`}>
-                  <h3 id={`dir-${d.id}`} className="text-lg font-bold text-t-white"><span className="text-t-phos-dim">{i + 1}. </span>{d.title}</h3>
-                  <p className="text-sm text-t-phos">{d.plain}</p>
+                  <h3 id={`dir-${d.id}`} className="text-lg font-bold text-t-white"><span className="text-t-phos-dim">{i + 1}. </span>{ts(d.title)}</h3>
+                  <p className="text-sm text-t-phos">{ts(d.plain)}</p>
                   <div className="text-sm text-t-phos space-y-1">
                     <p className="font-semibold text-t-white">{t("whyFit")}</p>
                     {d.quotes.length ? d.quotes.map((q) => (
@@ -224,20 +226,20 @@ export function CareerPlanner() {
                     {d.link && <p>{d.link}</p>}
                   </div>
                   <dl className="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[max-content_1fr]">
-                    <dt className="text-t-phos-dim">{t("firstJob")}</dt><dd className="text-t-phos">{d.firstJob}</dd>
-                    <dt className="text-t-phos-dim">{t("laterOn")}</dt><dd className="text-t-phos">{d.laterJob}</dd>
-                    <dt className="text-t-phos-dim">{t("pay")}</dt><dd className="text-t-phos">{d.pay ? `${d.pay.text} (${d.pay.source}, ${d.pay.asOf})` : d.payNote}</dd>
-                    <dt className="text-t-phos-dim">{t("record")}</dt><dd className="text-t-phos">{d.record.note} <span className="text-xs text-t-phos-dim">({d.record.footer})</span>{d.record.source && <span className="text-xs text-t-phos-dim"> {t.rich("recordSource",{title:d.record.source.title,date:d.record.source.checkedAt,link:(chunks) => <a className="t-focus underline" href={d.record.source!.url} target="_blank" rel="noreferrer">{chunks}</a>})}</span>}</dd>
+                    <dt className="text-t-phos-dim">{t("firstJob")}</dt><dd className="text-t-phos">{ts(d.firstJob)}</dd>
+                    <dt className="text-t-phos-dim">{t("laterOn")}</dt><dd className="text-t-phos">{ts(d.laterJob)}</dd>
+                    <dt className="text-t-phos-dim">{t("pay")}</dt><dd className="text-t-phos">{d.pay ? `${d.pay.text} (${d.pay.source}, ${d.pay.asOf})` : ts(d.payNote)}</dd>
+                    <dt className="text-t-phos-dim">{t("record")}</dt><dd className="text-t-phos">{ts(d.record.note)} <span className="text-xs text-t-phos-dim">({ts(d.record.footer)})</span>{d.record.source && <span className="text-xs text-t-phos-dim"> {t.rich("recordSource",{title:ts(d.record.source.title),date:d.record.source.checkedAt,link:(chunks) => <a className="t-focus underline" href={d.record.source!.url} target="_blank" rel="noreferrer">{chunks}</a>})}</span>}</dd>
                   </dl>
-                  <p className="text-xs text-t-phos-dim">{t.rich("aboutWork",{title:d.source.title,date:d.source.reviewedAt,link:(chunks) => <a className="t-focus underline" href={d.source.url} target="_blank" rel="noreferrer">{chunks}<span className="sr-only"> {t("newTab")}</span></a>})}</p>
+                  <p className="text-xs text-t-phos-dim">{t.rich("aboutWork",{title:ts(d.source.title),date:d.source.reviewedAt,link:(chunks) => <a className="t-focus underline" href={d.source.url} target="_blank" rel="noreferrer">{chunks}<span className="sr-only"> {t("newTab")}</span></a>})}</p>
                   {chosen?.id === d.id ? (
                     <div role="status" className="space-y-2 border border-t-amber p-3 text-sm text-t-phos">
-                      <p>{t("laneNow",{title:d.title})}</p>
-                      <Link className={primary} href={chosen.href}>{chosen.label}</Link>
+                      <p>{t("laneNow",{title:ts(d.title)})}</p>
+                      <Link className={primary} href={chosen.href}>{ts(chosen.label)}</Link>
                     </div>
                   ) : confirming === d.id ? (
                     <div className="space-y-2 border border-t-amber p-3 text-sm text-t-phos">
-                      <p>{t("makeLane",{title:d.title,role:d.searchRole})}</p>
+                      <p>{t("makeLane",{title:ts(d.title),role:d.searchRole})}</p>
                       <div className="flex flex-wrap gap-2">
                         <button type="button" className={primary} disabled={choosing || !lanes.loaded} onClick={() => void choose(d)}>{choosing ? t("saving") : t("yesGo")}</button>
                         <button type="button" className={quiet} disabled={choosing} onClick={() => setConfirming(null)}>{t("notYet")}</button>
@@ -246,7 +248,7 @@ export function CareerPlanner() {
                   ) : (
                     <div className="flex flex-wrap gap-2">
                       <button type="button" className={primary} disabled={!!chosen || choosing} onClick={() => setConfirming(d.id)}>{t("pickThis")}</button>
-                      <Link className={quiet} href={d.firstMove.href}>{d.firstMove.label}</Link>
+                      <Link className={quiet} href={d.firstMove.href}>{ts(d.firstMove.label)}</Link>
                     </div>
                   )}
                 </article>
@@ -261,7 +263,7 @@ export function CareerPlanner() {
                 <div role="status" className="space-y-2 text-sm text-t-phos">
                   <p>{t("savedNote")}</p>
                   <p className="font-semibold text-t-white">{t("oneSmallStep")}</p>
-                  <Link className={primary} href={plan.nextSmallStep.href}>{plan.nextSmallStep.label}</Link>
+                  <Link className={primary} href={plan.nextSmallStep.href}>{ts(plan.nextSmallStep.label)}</Link>
                 </div>
               ) : (
                 <>
@@ -282,9 +284,9 @@ export function CareerPlanner() {
             {notes.map((n) => (
               <li key={n.id} className="border-t border-t-line pt-3 space-y-1">
                 <p className="text-xs text-t-phos-dim">{new Date(n.savedAt).toLocaleDateString()}</p>
-                <p>{t("lookedAt",{list:n.directions.map((d) => d.title).join(", ")})}</p>
-                {n.choices.length > 0 && <p className="text-t-phos-dim">{t("saidMatters",{list:n.choices.join("; ")})}</p>}
-                {n.nextStep && <p>{t("nextStep",{text:n.nextStep})}</p>}
+                <p>{t("lookedAt",{list:n.directions.map((d) => ts(d.title)).join(", ")})}</p>
+                {n.choices.length > 0 && <p className="text-t-phos-dim">{t("saidMatters",{list:n.choices.map(ts).join("; ")})}</p>}
+                {n.nextStep && <p>{t("nextStep",{text:ts(n.nextStep)})}</p>}
                 <button type="button" className={`${quiet} mt-1`} onClick={() => void deleteNote(n.id)}>{t("deleteNote")}</button>
               </li>
             ))}

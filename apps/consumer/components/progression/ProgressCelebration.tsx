@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 const seenThisSession = new Set<string>();
 
 /** Praise is backed by a server milestone ID; seeing a page never earns it. */
 export function ProgressCelebration({ accountId, celebration }: { accountId: string; celebration: { id: string; title: string; detail: string } }) {
   const t = useTranslations("refineryHome.celebration");
+  const ts = useServerText();
   const [visible, setVisible] = useState(false);
   const [quiet, setQuiet] = useState(true);
   const [hidden, setHidden] = useState(false);
@@ -47,7 +49,7 @@ export function ProgressCelebration({ accountId, celebration }: { accountId: str
   return <aside role="status" aria-live="polite" className={`progress-celebration ${quiet ? "progress-celebration-quiet" : ""}`} data-paused={hidden}>
     <button type="button" onClick={() => setVisible(false)} aria-label={t("dismissAria")} className="t-focus absolute right-2 top-1 min-h-touch px-2 text-sm text-t-phos-dim">{t("close")}</button>
     <p className="progress-celebration-mark" aria-hidden="true">{t("earned")}</p>
-    <h2 className="mt-2 pr-10 text-lg font-bold text-t-white">{celebration.title}</h2><p className="mt-2 text-sm leading-relaxed text-t-phos">{celebration.detail}</p>
+    <h2 className="mt-2 pr-10 text-lg font-bold text-t-white">{ts(celebration.title)}</h2><p className="mt-2 text-sm leading-relaxed text-t-phos">{ts(celebration.detail)}</p>
     <label className="mt-3 flex items-center gap-2 text-xs text-t-phos-dim"><input type="checkbox" className="t-focus" checked={quiet} onChange={(event) => { setQuiet(event.target.checked); try { localStorage.setItem("progress-celebrations-quiet", event.target.checked ? "1" : "0"); } catch {} }} />{t("keepStill")}</label>
   </aside>;
 }

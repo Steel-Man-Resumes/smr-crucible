@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { recordEntryLabel, type RecordChoice, type RecordEntry } from "@/lib/record-choice";
+import { useServerText } from "@/components/ServerTextProvider";
 
 const BTN = "t-focus min-h-touch border px-3 py-2 text-left text-xs transition-colors";
 
@@ -33,6 +34,7 @@ export function RecordChoiceCard({
   onChoose: (choice: RecordChoice) => void;
 }) {
   const t = useTranslations("forgeFinish.recordChoice");
+  const ts = useServerText();
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     if (!decisionKey) return;
@@ -90,7 +92,7 @@ export function RecordChoiceCard({
           <ul className="mt-1 space-y-1">
             {preview.map((line, i) => (
               <li key={i} className="text-[11px] leading-relaxed text-t-phos" data-testid="record-choice-preview">
-                &ldquo;{line}&rdquo;
+                &ldquo;{ts(line)}&rdquo;
               </li>
             ))}
           </ul>

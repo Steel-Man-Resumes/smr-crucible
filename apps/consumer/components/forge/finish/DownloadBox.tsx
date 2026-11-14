@@ -10,6 +10,7 @@
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { PDF_WORD_EXPLAINER, mainActionLabel, type FinishView } from "@/lib/finish-gate";
+import { useServerText } from "@/components/ServerTextProvider";
 import type { DownloadFormat } from "@/lib/resume-download";
 
 export function DownloadBox({
@@ -36,6 +37,7 @@ export function DownloadBox({
   copied: boolean;
 }) {
   const t = useTranslations("forgeOutput.downloadBox");
+  const ts = useServerText();
   const finished = view.state === "finished";
   const [showDraftOptions, setShowDraftOptions] = useState(false);
 
@@ -49,7 +51,7 @@ export function DownloadBox({
             className="t-focus min-h-touch w-full bg-t-amber px-5 py-3 text-base font-bold text-white transition-colors hover:bg-t-amber-bright disabled:opacity-60"
             data-testid="main-action"
           >
-            {busy ? t("gettingFiles") : mainActionLabel(view)}
+            {busy ? t("gettingFiles") : ts(mainActionLabel(view))}
           </button>
           <p className="mt-2 text-center text-xs text-t-phos-dim">{t("readyToSend")}</p>
         </>
@@ -60,7 +62,7 @@ export function DownloadBox({
             className="t-focus min-h-touch w-full bg-t-amber px-5 py-3 text-base font-bold text-white transition-colors hover:bg-t-amber-bright"
             data-testid="main-action"
           >
-            {mainActionLabel(view)}
+            {ts(mainActionLabel(view))}
           </button>
           <p className="mt-2 text-center text-xs text-t-phos-dim">
             {t.rich("needItNow", {
@@ -132,12 +134,12 @@ export function DownloadBox({
 
       <details className="mt-3 border-t border-t-line pt-3" data-testid="pdf-word-explainer">
         <summary className="t-focus cursor-pointer text-xs text-t-phos underline decoration-dotted underline-offset-2">
-          {PDF_WORD_EXPLAINER.heading}
+          {ts(PDF_WORD_EXPLAINER.heading)}
         </summary>
         <div className="mt-2 space-y-1.5">
           {PDF_WORD_EXPLAINER.lines.map((l) => (
             <p key={l} className="text-xs leading-relaxed text-t-phos">
-              {l}
+              {ts(l)}
             </p>
           ))}
         </div>

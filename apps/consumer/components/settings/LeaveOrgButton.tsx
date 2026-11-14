@@ -6,12 +6,14 @@
  */
 import { useState } from "react";
 import { useSession } from "next-auth/react";
+import { useServerText } from "@/components/ServerTextProvider";
 
 export const LEAVE_ORG_CONFIRM =
   "Leave this organization? They stop seeing anything you shared with them. Your own work stays yours. The seat is not handed back, and if this organization gave you your Refinery seat, you may need a new one to keep using the Refinery.";
 
 export function LeaveOrgButton({ orgId, orgName }: { orgId: string; orgName: string }) {
   const { update } = useSession();
+  const ts = useServerText();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -39,20 +41,20 @@ export function LeaveOrgButton({ orgId, orgName }: { orgId: string; orgName: str
   if (!asking) {
     return (
       <button type="button" onClick={() => setAsking(true)} className="t-focus min-h-touch text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
-        Leave this organization
+        {ts("Leave this organization")}
       </button>
     );
   }
   return (
-    <div role="alertdialog" aria-label={`Leave ${orgName}`} className="mt-2 border border-t-line bg-t-panel-2 p-3 text-sm text-t-phos">
-      <p>{LEAVE_ORG_CONFIRM}</p>
-      {error && <p role="alert" className="mt-2 text-t-red">{error}</p>}
+    <div role="alertdialog" aria-label={ts(`Leave ${orgName}`)} className="mt-2 border border-t-line bg-t-panel-2 p-3 text-sm text-t-phos">
+      <p>{ts(LEAVE_ORG_CONFIRM)}</p>
+      {error && <p role="alert" className="mt-2 text-t-red">{ts(error)}</p>}
       <div className="mt-3 flex gap-3">
         <button type="button" disabled={busy} onClick={() => void leave()} className="t-focus min-h-touch border border-t-red px-3 py-2 text-sm font-semibold text-t-red disabled:opacity-50">
-          {busy ? "Leaving..." : `Leave ${orgName}`}
+          {busy ? ts("Leaving...") : ts(`Leave ${orgName}`)}
         </button>
         <button type="button" disabled={busy} onClick={() => setAsking(false)} className="t-focus min-h-touch border border-t-line px-3 py-2 text-sm text-t-phos">
-          Stay
+          {ts("Stay")}
         </button>
       </div>
     </div>

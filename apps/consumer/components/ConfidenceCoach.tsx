@@ -23,6 +23,8 @@
 import { TroyWork } from "@crucible/consumer-ui";
 import { useEffect, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
+import { tsPlanLine } from "@/components/hurdles/HurdlePlanView";
 import {
   REHEARSAL_PERSONAS,
   GENTLENESS_LEVELS,
@@ -75,7 +77,13 @@ export function ConfidenceCoach({
   onBack,
 }: ConfidenceCoachProps) {
   const t = useTranslations("refineryInterview.coach");
+  const ts = useServerText();
   const locale = useLocale();
+  // The plan lines shown above come from lib/hurdles (system text with the person's own words inside).
+  const tsPrepared = (text: string) => text.split("\n").map((l) => {
+    const m = /^([^:"\n]{3,60}): (You .+)$/.exec(l);
+    return m ? `${tsPlanLine(m[1], ts)}: ${tsPlanLine(m[2], ts)}` : tsPlanLine(l, ts);
+  }).join("\n");
   const [personaId, setPersonaId] = useState("hiring_warm");
   const [askVariant, setAskVariant] = useState<"asks" | "does_not_ask">("asks");
   const [gentlenessId, setGentlenessId] = useState("balanced");
@@ -412,7 +420,7 @@ export function ConfidenceCoach({
         {(preparedScript || recordWords) && (
           <div className="bg-t-panel p-4 border border-t-line mb-4" data-testid="prepared-plan">
             <h2 className="font-semibold text-t-white mb-1">{t("setup.planTitle")}</h2>
-            <p className="text-sm text-t-phos whitespace-pre-line">{[recordWords, preparedScript].filter(Boolean).join("\n")}</p>
+            <p className="text-sm text-t-phos whitespace-pre-line">{tsPrepared([recordWords, preparedScript].filter(Boolean).join("\n"))}</p>
             <p className="text-xs text-t-phos-dim mt-2">{t("setup.planNote")}</p>
           </div>
         )}

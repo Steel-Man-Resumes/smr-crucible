@@ -548,7 +548,7 @@
         "blurb": "Tiempo entre trabajos, o un periodo sin trabajo en el papel."
       },
       "record": {
-        "label": "Antecedentes penales o verificación de antecedentes penales",
+        "label": "Antecedentes penales o verificación de antecedentes",
         "blurb": "Una pregunta en un formulario, una entrevista, o una verificación después de una oferta."
       },
       "schedule": {
@@ -1028,7 +1028,7 @@
         "c": {
           "ride": "Perdí o rechacé un trabajo por no tener cómo llegar",
           "papers": "Me pidieron una identificación o papeles que no tenía",
-          "check": "Me rechazaron después de una verificación de antecedentes penales",
+          "check": "Me rechazaron después de una verificación de antecedentes",
           "gap": "Me preguntaron por el tiempo entre trabajos",
           "hours": "Los hijos, la familia o los estudios me complicaron los horarios",
           "health": "La salud se atravesó",
@@ -1048,7 +1048,7 @@
         "c": {
           "form": "Una pregunta en una solicitud",
           "interview": "En una entrevista",
-          "check": "Una verificación de antecedentes penales después de una oferta",
+          "check": "Una verificación de antecedentes después de una oferta",
           "work": "Con un supervisor o Recursos Humanos en el trabajo",
           "not_sure": "No estoy seguro"
         }

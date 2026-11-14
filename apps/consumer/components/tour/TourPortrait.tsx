@@ -9,6 +9,7 @@
  */
 import type { CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
+import { useServerText } from '@/components/ServerTextProvider';
 import { Flag, LockKeyhole, LockKeyholeOpen, Mic, Search } from 'lucide-react';
 import { TroyLivingIcon } from '@crucible/consumer-ui';
 import { BOARD_STATIONS, type ChartPhase, type LockPhase, type StationId } from '@/lib/tour/beats';
@@ -22,13 +23,14 @@ type Tr = ReturnType<typeof useTranslations>;
 
 export function PortraitTitle({ title, body }: { title: string; body: string }) {
   const tr = useTranslations('refineryAccount.tour');
+  const ts = useServerText();
   const { w, h } = PORTRAIT_SIZE.title;
   return <div className="sc ps" style={{ width: w, height: h }}>
     <div className="ps-title">
       <div className="sc-rise" style={{ animationDelay: '80ms' }}><TroyLivingIcon size={92} attention /></div>
       <p className="ps-k sc-rise" style={{ animationDelay: '260ms' }}>{tr('kicker')}</p>
-      <p className="ps-title__h sc-rise" style={{ animationDelay: '480ms' }}>{title}</p>
-      <p className="ps-title__b sc-rise" style={{ animationDelay: '1100ms' }}>{body}</p>
+      <p className="ps-title__h sc-rise" style={{ animationDelay: '480ms' }}>{ts(title)}</p>
+      <p className="ps-title__b sc-rise" style={{ animationDelay: '1100ms' }}>{ts(body)}</p>
     </div>
   </div>;
 }

@@ -19,6 +19,7 @@ import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
+import { useServerText } from "@/components/ServerTextProvider";
 import { GhostGuide } from "@crucible/consumer-ui";
 import { getOpusMessage } from "@/lib/opus-messages";
 import { useUserContext } from "@/lib/use-user-context";
@@ -94,6 +95,7 @@ export default function JobBoardPageWrapper() {
 function JobBoardPage() {
   const t = useTranslations("refineryJobs.jobsPage");
   const tc = useTranslations("common.actions");
+  const ts = useServerText();
   const locale = useLocale();
   const tFilters = useTranslations("refineryJobs.searchFilters");
   const filterLabel = (key: string) => (FILTER_LABELS[key] ? t(`filterLabels.${key}`) : key);
@@ -715,7 +717,7 @@ function JobBoardPage() {
         </details>
         {hiddenEmployerError && <p role="alert">{hiddenEmployerError} <button type="button" onClick={() => setHiddenReload(value => value + 1)} className="t-focus min-h-touch underline">{t("reloadHidden")}</button></p>}
       </section>
-      {summary && !searching && preferencesReady && <section aria-label={t("resultsAria")} className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos-dim"><p>{t("summaryCounts",{matched:summary.matched,loaded:summary.loaded,excluded:summary.excluded,unknown:summary.unknownIncluded})}</p><p className="mt-1 text-xs">{t("bounded",{time:new Date(summary.fetchedAt).toLocaleString()})} {source === "cache" ? t("cached") : ""}</p>{summary.notices.map(line=><p key={line} className="mt-1 text-xs">{line}</p>)}{submittedFilters.current !== canonicalSearchFilters(filters) && <p className="mt-2 text-xs text-t-amber-bright">{t("choicesChanged")}</p>}</section>}
+      {summary && !searching && preferencesReady && <section aria-label={t("resultsAria")} className="mb-4 border border-t-line bg-t-panel p-4 text-sm text-t-phos-dim"><p>{t("summaryCounts",{matched:summary.matched,loaded:summary.loaded,excluded:summary.excluded,unknown:summary.unknownIncluded})}</p><p className="mt-1 text-xs">{t("bounded",{time:new Date(summary.fetchedAt).toLocaleString()})} {source === "cache" ? t("cached") : ""}</p>{summary.notices.map(line=><p key={line} className="mt-1 text-xs">{ts(line)}</p>)}{submittedFilters.current !== canonicalSearchFilters(filters) && <p className="mt-2 text-xs text-t-amber-bright">{t("choicesChanged")}</p>}</section>}
       {prioritizeRecordEvidence && <p className="mb-3 text-sm text-t-phos-dim">{t("prioritizeNote")}</p>}
       {summary && summary.excluded > 0 && <details className="mb-4 text-sm text-t-phos-dim"><summary className="cursor-pointer">{t("whyExcluded")}</summary><ul className="mt-2 space-y-1">{Object.entries(summary.excludedBy).map(([key, count]) => <li key={key}>{key === "personal" ? t("excludedPersonal") : key.startsWith("unknown_") ? t("missingField",{label:filterLabel(key.slice(8))}) : filterLabel(key)}: {count}</li>)}</ul><p className="mt-2">{t("excludedNote")}</p></details>}
       {/* Phase 4C: result filters -- refine the listings you already pulled */}
@@ -825,8 +827,8 @@ function JobBoardPage() {
               >
                 {job.filterAssessment && <div className="border-b border-t-line px-4 py-2 text-xs text-t-phos-dim">{job.filterAssessment.distanceMiles === null ? t("distanceUnverified") : t("aboutMiles",{miles:job.filterAssessment.distanceMiles.toFixed(1)})}{job.filterAssessment.unknown.length>0?` · ${t("check",{list:job.filterAssessment.unknown.map(key=>filterLabel(key)).join(", ")})}`:""}{job.filterAssessment.preferred.length>0?` · ${t("preferencesNotMatched",{list:job.filterAssessment.preferred.map(key=>filterLabel(key)).join(", ")})}`:""}</div>}
                 {job.evidence && <p className="px-4 pt-2 text-xs text-t-phos-dim">{t("evidenceLine",{source:job.evidence.source,posted:job.evidence.postedAt && Number.isFinite(Date.parse(job.evidence.postedAt)) ? new Date(job.evidence.postedAt).toLocaleDateString() : t("postedNotSupplied"),fetched:new Date(job.evidence.fetchedAt).toLocaleString()})}</p>}
-                {job.evidence?.warnings.map(warning=><p key={warning} className="px-4 pt-1 text-xs text-t-amber-bright">{warning}</p>)}
-                {job.relevance && <p className="px-4 pt-2 text-sm text-t-phos-dim">{job.relevance.reason}</p>}
+                {job.evidence?.warnings.map(warning=><p key={warning} className="px-4 pt-1 text-xs text-t-amber-bright">{ts(warning)}</p>)}
+                {job.relevance && <p className="px-4 pt-2 text-sm text-t-phos-dim">{ts(job.relevance.reason)}</p>}
                 <label className="flex min-h-touch items-center gap-3 px-4 pt-2 text-sm text-t-phos" data-testid="job-pick">
                   <input
                     type="checkbox"
@@ -868,7 +870,7 @@ function JobBoardPage() {
                       </div>
                       <p className="text-sm text-t-phos-dim">{job.company}</p>
                       <div className="flex items-center gap-3 mt-1 text-xs text-t-phos-dim flex-wrap">
-                        {job.location && <span>{job.location}</span>}
+                        {job.location && <span>{ts(job.location)}</span>}
                         {job.other_locations && job.other_locations.length > 0 && <span data-testid="job-location-count">{t("locations",{count:job.other_locations.length + 1})}</span>}
                         {job.salary && (
                           <span className="font-medium text-t-amber-bright">
@@ -876,9 +878,9 @@ function JobBoardPage() {
                           </span>
                         )}
                         {job.employment_type && (
-                          <span>{job.employment_type}</span>
+                          <span>{ts(job.employment_type)}</span>
                         )}
-                        {job.posted && <span>{job.posted}</span>}
+                        {job.posted && <span>{ts(job.posted)}</span>}
                       </div>
                     </div>
                     <svg
@@ -914,7 +916,7 @@ function JobBoardPage() {
                         <span className="text-t-amber-bright font-medium">{job.salary}</span>
                       )}
                       {job.employment_type && (
-                        <span className="text-t-phos-dim">{job.employment_type}</span>
+                        <span className="text-t-phos-dim">{ts(job.employment_type)}</span>
                       )}
                       {job.remote && <span className="text-t-steel font-medium">{t("remote")}</span>}
                     </div>
@@ -947,14 +949,14 @@ function JobBoardPage() {
                     {job.fair_chance_reason && (
                       <div className="bg-t-panel-2 px-3 py-2 border border-t-amber">
                         <p className="text-xs font-medium text-t-amber-bright">
-                          {job.fair_chance_reason}
+                          {ts(job.fair_chance_reason)}
                         </p>
                       </div>
                     )}
 
                     {!job.second_chance && job.marked_elsewhere && (
                       <div className="bg-t-panel-2 px-3 py-2 border border-t-amber">
-                        <p className="text-xs font-medium text-t-amber-bright">{job.marked_elsewhere.reason}</p>
+                        <p className="text-xs font-medium text-t-amber-bright">{ts(job.marked_elsewhere.reason)}</p>
                       </div>
                     )}
 

@@ -13,6 +13,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AiPolicyEditor } from "./AiPolicyEditor";
 import { labelForEndpoint } from "@/lib/ai-usage-labels";
+import { useServerText } from "@/components/ServerTextProvider";
 
 function usd(v: unknown): string {
   const n = Number(v || 0);
@@ -179,7 +180,8 @@ export function AiCostsAdminSection() {
 
 export function AiCostsOwnSection() {
   const tr = useTranslations("refineryAccount.aiCosts");
-  const endpointLabel = (key: string | null | undefined) => (key != null && tr.has(`endpoints.${String(key).trim()}`) ? tr(`endpoints.${String(key).trim()}`) : labelForEndpoint(key));
+  const ts = useServerText();
+  const endpointLabel = (key: string | null | undefined) => (key != null && tr.has(`endpoints.${String(key).trim()}`) ? tr(`endpoints.${String(key).trim()}`) : ts(labelForEndpoint(key)));
   const staff = !!useEffectiveRole()?.orgRole;
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState("");

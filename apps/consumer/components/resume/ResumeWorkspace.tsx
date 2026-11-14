@@ -13,6 +13,7 @@ import { SavedPackagePreview } from "./SavedPackagePreview";
 import { CheckAndFinish } from "@/components/lanes/CheckAndFinish";
 import { hasBaseContact, tailoredContact } from "@/lib/document-contact";
 import { tailorStartNotice } from "@/lib/tailor-readiness";
+import { useServerText } from "@/components/ServerTextProvider";
 import { useProgression } from "@/components/progression/ProgressionProvider";
 import { boardHandoff, loadJobHandoff, singleTailorCost, type PendingTailor } from "@/lib/tailor-handoff";
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -55,6 +56,7 @@ export function ResumeWorkspace() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const t = useTranslations("refineryResume.resume.workspace");
+  const ts = useServerText();
   // The local Forge run is read only when it is marked as this user's
   // (shared-computer rule, lib/forge-carry.ts readOwnForgeSession).
   const ownerUid = useSession().data?.user?.id;
@@ -1210,7 +1212,7 @@ export function ResumeWorkspace() {
               <h2 className="font-bold text-t-white">
                 {pendingTailor.job.company ? t("tailorForAt", { title: pendingTailor.job.title || t("thisJob"), company: pendingTailor.job.company }) : t("tailorFor", { title: pendingTailor.job.title || t("thisJob") })}
               </h2>
-              <p data-testid="tailor-pending-cost" className="mt-2 text-sm text-t-phos">{cost.line}</p>
+              <p data-testid="tailor-pending-cost" className="mt-2 text-sm text-t-phos">{ts(cost.line)}</p>
               <p className="mt-1 text-xs text-t-phos-dim">{t("nothingRuns")}</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 <button
@@ -1263,7 +1265,7 @@ export function ResumeWorkspace() {
           {t("tailorTitle")}
         </h1>
         <div className="bg-t-panel p-6 border border-t-red text-center mt-6">
-          <p className="text-sm text-t-phos mb-4">{genError}</p>
+          <p className="text-sm text-t-phos mb-4">{ts(genError)}</p>
           <div className="flex gap-3 justify-center">
             <button
               onClick={() => {
@@ -1296,7 +1298,7 @@ export function ResumeWorkspace() {
         className="border border-t-amber bg-t-panel p-4 text-left"
       >
         <p className="text-sm font-semibold text-t-white">{notice.kind === "error" ? t("notice.errorHeading") : t("notice.lockedHeading")}</p>
-        <p className="mt-1 text-sm text-t-phos">{notice.kind === "error" ? (/^[a-z0-9]+(_[a-z0-9]+)+$/.test((genError ?? "").trim()) || !(genError ?? "").trim() ? t("notice.errorBody") : notice.body) : notice.body}</p>
+        <p className="mt-1 text-sm text-t-phos">{notice.kind === "error" ? (/^[a-z0-9]+(_[a-z0-9]+)+$/.test((genError ?? "").trim()) || !(genError ?? "").trim() ? t("notice.errorBody") : ts(notice.body)) : ts(notice.body)}</p>
         {notice.kind === "locked" && tailorStep && progression ? (
           <>
             <button
@@ -1306,12 +1308,12 @@ export function ResumeWorkspace() {
               data-testid="tailor-ask-early"
               className="t-focus mt-3 min-h-touch bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright"
             >
-              {notice.action}
+              {ts(notice.action ?? "")}
             </button>
-            <p className="mt-1 text-xs text-t-phos-dim">{notice.hint}</p>
+            <p className="mt-1 text-xs text-t-phos-dim">{ts(notice.hint ?? "")}</p>
           </>
         ) : notice.kind === "locked" ? (
-          <p className="mt-2 text-xs text-t-phos-dim">{t("fromPath", { action: notice.action ?? "", hint: notice.hint ?? "" })}</p>
+          <p className="mt-2 text-xs text-t-phos-dim">{t("fromPath", { action: ts(notice.action ?? ""), hint: ts(notice.hint ?? "") })}</p>
         ) : null}
       </div>
     ) : null;
@@ -1682,7 +1684,7 @@ export function ResumeWorkspace() {
             {t("checkBefore")}
           </p>
           {truthCheck.blocked && truthCheck.notice && (
-            <p className="text-xs text-t-phos leading-relaxed mb-1">{truthCheck.notice}</p>
+            <p className="text-xs text-t-phos leading-relaxed mb-1">{ts(truthCheck.notice)}</p>
           )}
           {truthCheck.flags.length > 0 ? (
             <>

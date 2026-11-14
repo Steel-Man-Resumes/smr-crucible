@@ -4,6 +4,7 @@
 
 import { createContext, useContext, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 import { type CreativeDoc, type CreativeOpenItem, type CreativeStatus } from "@crucible/core/src/creativeChecks";
 
 /**
@@ -50,6 +51,7 @@ function AnswerButtons({ item }: { item: CreativeOpenItem }) {
 
 export function OpenItems({ status, doc, testId }: { status: CreativeStatus; doc: CreativeDoc; testId?: string }) {
   const t = useTranslations("refineryResume.creative.openItems");
+  const ts = useServerText();
   const items = status.openItems.filter((x) => x.doc === doc || (doc === "artist_resume" && x.doc === "record"));
   const blocks = items.filter((x) => x.severity === "BLOCK").length;
   if (!items.length) {
@@ -67,10 +69,10 @@ export function OpenItems({ status, doc, testId }: { status: CreativeStatus; doc
       <ul className="mt-2 space-y-2">
         {items.map((x, i) => (
           <li key={`${x.rule}-${i}`} className="text-sm" data-testid={x.answer ? `ask-${x.answer}` : undefined}>
-            <span className="block text-xs font-mono text-t-phos-dim break-words">{x.line}</span>
-            <span className="block text-t-white">{x.question}</span>
+            <span className="block text-xs font-mono text-t-phos-dim break-words">{ts(x.line)}</span>
+            <span className="block text-t-white">{ts(x.question)}</span>
             {x.phrase && <span className="block text-t-amber-bright break-words" data-testid="ask-phrase">&ldquo;{x.phrase}&rdquo;</span>}
-            <span className="block text-xs text-t-phos-dim">{x.why}</span>
+            <span className="block text-xs text-t-phos-dim">{ts(x.why)}</span>
             <AnswerButtons item={x} />
           </li>
         ))}

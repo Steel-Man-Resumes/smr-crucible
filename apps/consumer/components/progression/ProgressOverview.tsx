@@ -6,6 +6,7 @@ import { CheckCircle2, LockKeyhole } from "lucide-react";
 import { progressStateLabel, progressPrimaryAction, progressionAllowanceDisplay, safeProgressHref } from "@/lib/progression-ui";
 import { PROGRESSION_STEPS, STEP_COPY } from "@/lib/progression-policy";
 import { useProgression } from "./ProgressionProvider";
+import { useServerText } from "@/components/ServerTextProvider";
 
 /** The step lines and state words that lib/progression-policy.ts and lib/progression-ui.ts write, by their English text, so the screen can say them in the person's language. Anything else (a server's own wording) shows as it came. */
 const KNOWN: Record<string, string> = {
@@ -22,6 +23,7 @@ const KNOWN: Record<string, string> = {
 
 export function ProgressAllowance({ compact = false }: { compact?: boolean }) {
   const t = useTranslations("refineryHome.progressOverview");
+  const ts = useServerText();
   const progress = useProgression();
   const data = progress?.data;
   if (!progress || !data) return null;
@@ -32,8 +34,8 @@ export function ProgressAllowance({ compact = false }: { compact?: boolean }) {
   const expiryLabel = expiry && Number.isFinite(expiry.getTime()) ? expiry.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : null;
   return <div className={compact ? "text-xs text-t-phos-dim" : "border border-t-line bg-t-panel-2 p-4 text-sm text-t-phos"}>
     <p>{allowance.enabled && display.remaining !== null ? <><strong className="text-t-white">{display.remaining} {allowance.unit || t("aiActions")}</strong> {display.blockedReason ? t("leftToday") : t("availableCount")}{expiryLabel ? ` ${t("until", { when: expiryLabel })}` : ""}.</> : t("currentAllowance")}</p>
-    {!compact ? <p className="mt-1 text-xs leading-relaxed text-t-phos-dim">{allowance.description} {t("limitsApply")}</p> : null}
-    {display.blockedReason ? <p role="status" className="mt-2 text-xs text-t-amber-bright">{display.blockedReason}{!compact ? ` ${t("extraNoRemove")}` : ""}</p> : null}
+    {!compact ? <p className="mt-1 text-xs leading-relaxed text-t-phos-dim">{ts(allowance.description)} {t("limitsApply")}</p> : null}
+    {display.blockedReason ? <p role="status" className="mt-2 text-xs text-t-amber-bright">{ts(display.blockedReason)}{!compact ? ` ${t("extraNoRemove")}` : ""}</p> : null}
     {!compact && display.canAsk && step ? <button type="button" onClick={() => progress.ask(step, "ai_bonus")} className="t-focus mt-1 inline-flex min-h-touch items-center text-xs text-t-amber-bright underline underline-offset-2">{t("askExtra")}</button> : null}
   </div>;
 }
@@ -41,6 +43,7 @@ export function ProgressAllowance({ compact = false }: { compact?: boolean }) {
 /** Full process uses the same server response as navigation and the workspace bar. */
 export function ProgressOverview() {
   const t = useTranslations("refineryHome.progressOverview");
+  const ts = useServerText();
   const words = (text: string): string => (KNOWN[text] ? t(KNOWN[text]) : text);
   const progress = useProgression();
   if (!progress || progress.status === "inactive") return null;
@@ -65,7 +68,7 @@ export function ProgressOverview() {
       </li>)}
     </ol>
     {data.steps.some((step) => step.access === "existing") ? <p className="text-xs text-t-phos-dim">{t("existingAccess")}</p> : null}
-    {data.nextReward ? <div className="border-l-4 border-t-amber bg-t-panel-2 px-4 py-3"><p className="text-xs font-semibold text-t-phos-dim">{t("nextReward")}</p><p className="mt-1 text-sm font-semibold text-t-white">{data.nextReward.label}</p>{data.nextReward.requirement ? <p className="mt-1 text-xs text-t-phos-dim">{data.nextReward.requirement}</p> : null}</div> : null}
+    {data.nextReward ? <div className="border-l-4 border-t-amber bg-t-panel-2 px-4 py-3"><p className="text-xs font-semibold text-t-phos-dim">{t("nextReward")}</p><p className="mt-1 text-sm font-semibold text-t-white">{ts(data.nextReward.label)}</p>{data.nextReward.requirement ? <p className="mt-1 text-xs text-t-phos-dim">{ts(data.nextReward.requirement)}</p> : null}</div> : null}
     <ProgressAllowance />
     <p className="text-xs leading-relaxed text-t-phos-dim">{t("sooner")}</p>
     {current ? <div className="flex flex-wrap gap-4 text-xs"><button type="button" onClick={() => progress.ask(current, "feedback")} className="t-focus min-h-touch text-t-amber-bright underline">{t("shareFeedback")}</button><button type="button" onClick={() => progress.ask(current, "bug")} className="t-focus min-h-touch text-t-amber-bright underline">{t("reportProblem")}</button><p className="w-full text-t-phos-dim">{t("bonusNote")}</p></div> : null}

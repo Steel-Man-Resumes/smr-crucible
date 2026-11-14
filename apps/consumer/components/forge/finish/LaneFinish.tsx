@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { mainActionLabel, type FinishView } from "@/lib/finish-gate";
+import { useServerText } from "@/components/ServerTextProvider";
 import type { DownloadFormat } from "@/lib/resume-download";
 import type { NextAction } from "@/lib/lane-task";
 
@@ -57,6 +58,7 @@ export function LaneDownloadBox({
   hasLetter: boolean;
 }) {
   const t = useTranslations("forgeOutput.laneFinish");
+  const ts = useServerText();
   // Shown name of the "More formats" summary; the module export above stays the English label.
   const MORE_FORMATS_LABEL = t("moreFormats");
   const finished = view.state === "finished";
@@ -83,7 +85,7 @@ export function LaneDownloadBox({
             className="t-focus min-h-touch w-full bg-t-amber px-5 py-3 text-base font-bold text-white transition-colors hover:bg-t-amber-bright"
             data-testid="main-action"
           >
-            {mainActionLabel(view)}
+            {ts(mainActionLabel(view))}
           </button>
           <p className="mt-2 text-center text-xs text-t-amber-bright" data-testid="draft-badge">
             {t("draftBadge")}

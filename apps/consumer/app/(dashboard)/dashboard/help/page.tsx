@@ -31,6 +31,7 @@ import { findHelpArticle } from "@/lib/helpArticles";
 import { TOUR_HREF } from "@crucible/core/src/journeyStages";
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { StaffHelp } from "@/components/help/StaffHelp";
+import { useServerText } from "@/components/ServerTextProvider";
 import { staffTourAllowed } from "@/lib/tour/staff-tour";
 
 interface MineRow {
@@ -52,6 +53,7 @@ export default function HelpPage() {
 function HelpContent() {
   const t = useTranslations("refineryHome.help");
   const words = (key: string, fallback: string) => (t.has(key) ? t(key) : fallback);
+  const ts = useServerText();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { data: session } = useSession();
@@ -314,9 +316,9 @@ function HelpContent() {
         {/* Retrieval-only article answer */}
         {articleShown && (
           <div className="mt-4 border border-t-line bg-t-panel-2 p-4">
-            <h3 className="font-semibold text-t-white mb-1">{articleShown.title}</h3>
+            <h3 className="font-semibold text-t-white mb-1">{ts(articleShown.title)}</h3>
             <p className="text-sm text-t-phos-dim whitespace-pre-wrap">
-              {articleShown.body}
+              {ts(articleShown.body)}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button

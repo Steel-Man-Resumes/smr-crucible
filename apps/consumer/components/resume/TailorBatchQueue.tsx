@@ -18,6 +18,7 @@ import {
   type BatchJob, type BatchState, type TailorResult,
 } from "@/lib/tailor-batch";
 import { loadTailorContext, type TailorContext } from "@/lib/tailor-context";
+import { useServerText } from "@/components/ServerTextProvider";
 
 interface Allowance { remaining: number | null; blockedReason: string | null }
 
@@ -31,6 +32,7 @@ function newBatchId() {
 
 export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: string | null | undefined; currentArtifactId: string | null }) {
   const t = useTranslations("refineryResume.resume.batch");
+  const ts = useServerText();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [batch, setBatch] = useState<BatchState | null>(null);
@@ -109,7 +111,7 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
   // The same cost words admitBatch builds, in the person's language. A reason the server gave stays as it is.
   const costLine = (): string | null => {
     if (!admission || !allowance) return null;
-    if (admission.kind === "none" && (pending.length === 0 || allowance.blockedReason)) return admission.line;
+    if (admission.kind === "none" && (pending.length === 0 || allowance.blockedReason)) return ts(admission.line);
     const n = Math.max(0, Math.min(MAX_BATCH_JOBS, Math.floor(pending.length)));
     if (allowance.remaining === null) return t("costUnlimited", { count: n });
     const left = Math.max(0, Math.floor(allowance.remaining));
@@ -214,10 +216,10 @@ export function TailorBatchQueue({ ownerUid, currentArtifactId }: { ownerUid: st
                   <p className={`text-xs ${j.phase === "failed" ? "text-t-red" : j.phase === "saved" ? "text-t-amber-bright" : "text-t-phos-dim"}`}>
                     {busy ? `${t(`phase.${j.phase}`)}...` : t(`phase.${j.phase}`)}{isCurrent ? t("openNow") : ""}
                   </p>
-                  {j.error && j.phase !== "saved" && <p className="mt-1 text-xs text-t-phos" role={j.phase === "failed" ? "alert" : undefined}>{j.error}</p>}
+                  {j.error && j.phase !== "saved" && <p className="mt-1 text-xs text-t-phos" role={j.phase === "failed" ? "alert" : undefined}>{ts(j.error)}</p>}
                   {j.phase === "saved" && j.truth && (j.truth.blocked || j.truth.flags.length > 0) && (
                     <div className="mt-1 text-xs text-t-amber-bright" data-testid="batch-flags">
-                      {j.truth.notice && <p>{j.truth.notice}</p>}
+                      {j.truth.notice && <p>{ts(j.truth.notice)}</p>}
                       {j.truth.flags.length > 0 ? (
                         <>
                           <p>{j.truth.flags.length === 1 ? t("truthOne") : t("truthMany")}</p>

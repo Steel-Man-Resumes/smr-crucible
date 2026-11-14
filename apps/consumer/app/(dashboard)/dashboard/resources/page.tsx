@@ -18,6 +18,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { readOwnForgeSession } from "@/lib/forge-carry";
 import Link from "next/link";
 import { TierGate } from "@/components/TierGate";
+import { useServerText } from "@/components/ServerTextProvider";
 import { CrisisLine } from "@/components/CrisisLine";
 import { useServerSwitches } from "@/components/ServerSwitches";
 import { SupportSearch } from "@/components/lanes/SupportSearch";
@@ -295,6 +296,7 @@ function OpportunityCard({
   onToggle: () => void;
 }) {
   const t = useTranslations("refineryJobs.resourcesPage");
+  const ts = useServerText();
   const searchHref = `/dashboard/jobs?q=${encodeURIComponent(
     opportunity.searchTerm
   )}`;
@@ -311,7 +313,7 @@ function OpportunityCard({
         <div className="min-w-0">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <h3 className="font-semibold text-t-white">
-              {opportunity.title}
+              {ts(opportunity.title)}
             </h3>
             {matched && (
               <span className="border border-t-amber px-2 py-0.5 text-[10px] font-semibold text-t-amber-bright">
@@ -319,11 +321,11 @@ function OpportunityCard({
               </span>
             )}
             <span className="border border-t-line px-2 py-0.5 text-[10px] font-semibold text-t-phos-dim">
-              {opportunity.hiringSignal}
+              {ts(opportunity.hiringSignal)}
             </span>
           </div>
           <p className="text-sm text-t-phos-dim leading-relaxed">
-            {opportunity.whyItFits}
+            {ts(opportunity.whyItFits)}
           </p>
         </div>
       </div>
@@ -334,7 +336,7 @@ function OpportunityCard({
             key={role}
             className="border border-t-steel bg-t-panel-2 px-2.5 py-1 text-xs font-medium text-t-steel"
           >
-            {role}
+            {ts(role)}
           </span>
         ))}
       </div>
@@ -342,7 +344,7 @@ function OpportunityCard({
       <div className="mt-4 border border-t-amber bg-t-panel-2 px-3 py-2">
         <p className="text-xs text-t-amber-bright">
           <span className="font-semibold">{t("watchOut")} </span>
-          {opportunity.watchOut}
+          {ts(opportunity.watchOut)}
         </p>
       </div>
 
@@ -369,7 +371,7 @@ function OpportunityCard({
               {t("bestMove")}
             </h4>
             <p className="text-sm text-t-phos leading-relaxed">
-              {opportunity.bestMove}
+              {ts(opportunity.bestMove)}
             </p>
           </div>
 
@@ -378,7 +380,7 @@ function OpportunityCard({
               {t("sourceNote")}
             </h4>
             <p className="text-xs text-t-phos-dim leading-relaxed">
-              {opportunity.sourceNote}
+              {ts(opportunity.sourceNote)}
             </p>
           </div>
         </div>

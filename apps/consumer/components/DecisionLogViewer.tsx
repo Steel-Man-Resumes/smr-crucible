@@ -16,6 +16,7 @@
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { labelForContextPage } from "@/lib/ai-usage-labels";
+import { useServerText } from "@/components/ServerTextProvider";
 
 interface DecisionRow {
   contextPage: string;
@@ -39,12 +40,13 @@ function fmtWhen(iso: string, locale?: string): string {
 
 export function DecisionLogViewer() {
   const t = useTranslations("refineryAccount.decisionLog");
+  const ts = useServerText();
   const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<DecisionRow[] | null>(null);
   const [error, setError] = useState("");
 
-  const contextLabel = (key: string) => (t.has(`pages.${key}`) ? t(`pages.${key}`) : labelForContextPage(key));
+  const contextLabel = (key: string) => (t.has(`pages.${key}`) ? t(`pages.${key}`) : ts(labelForContextPage(key)));
 
   useEffect(() => {
     let cancelled = false;
@@ -100,7 +102,7 @@ export function DecisionLogViewer() {
                     </span>
                   </div>
                   <p className="text-xs text-t-phos leading-relaxed mt-1">
-                    {d.explanation}
+                    {ts(d.explanation)}
                   </p>
                   <p className="text-[10px] text-t-phos-dim mt-1">
                     {t("model", { provider: d.modelProvider, id: d.modelId })}

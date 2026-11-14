@@ -32,9 +32,10 @@ import { ConfidenceCoach } from "@/components/ConfidenceCoach";
 import { CheckCircle2 } from "lucide-react";
 import { RECORD_CHECK_COPY } from "@/lib/record-check/copy";
 import { useServerSwitches } from "@/components/ServerSwitches";
+import { useServerText } from "@/components/ServerTextProvider";
 import { HurdlePicker } from "@/components/hurdles/HurdlePicker";
 import { HurdleQuestion } from "@/components/hurdles/HurdleQuestion";
-import { HurdlePlanView, type WordingStatus } from "@/components/hurdles/HurdlePlanView";
+import { HurdlePlanView, tsPlanLine, type WordingStatus } from "@/components/hurdles/HurdlePlanView";
 import { HURDLES, type HurdleId } from "@/lib/hurdles/graph";
 import { INITIAL_STATE, hurdlesOf, plannerReducer, position, reachedAnswers } from "@/lib/hurdles/reducer";
 import { coverageOf } from "@/lib/hurdles/coverage";
@@ -78,6 +79,7 @@ function DisclosurePlannerPage() {
   const t = useTranslations("refineryInterview.disclosure");
   const th = useTranslations("refineryInterview.hurdles");
   const tc = useTranslations("common.actions");
+  const ts = useServerText();
   const locale = useLocale();
   const effectiveRole = useEffectiveRole();
   const searchParams = useSearchParams();
@@ -436,7 +438,7 @@ function DisclosurePlannerPage() {
           <h1 className="text-2xl font-bold text-t-white mb-2">{t("beforeRecord.title")}</h1>
           <p className="text-sm text-t-phos mb-4">{t("beforeRecord.body")}</p>
           {consentCard}
-          {recordStep && <p className="text-sm text-t-phos-dim mb-4">{RECORD_CHECK_COPY.entryQuestion} <a href="/dashboard/record-check" className="underline text-t-steel">{RECORD_CHECK_COPY.entryButton}</a></p>}
+          {recordStep && <p className="text-sm text-t-phos-dim mb-4">{ts(RECORD_CHECK_COPY.entryQuestion)} <a href="/dashboard/record-check" className="underline text-t-steel">{ts(RECORD_CHECK_COPY.entryButton)}</a></p>}
           <button onClick={() => dispatch({ type: "back" })} className="t-focus px-3 py-2.5 text-sm text-t-phos-dim hover:text-t-white min-h-touch">{tc("back")}</button>
         </div>
       );
@@ -455,7 +457,7 @@ function DisclosurePlannerPage() {
           onSkip={() => dispatch({ type: "skip", nodeId: planner.cursor! })}
           onBack={() => dispatch({ type: "back" })}
         />
-        <p className="text-xs text-t-phos-dim mt-3" aria-live="polite">{cov.line}</p>
+        <p className="text-xs text-t-phos-dim mt-3" aria-live="polite">{tsPlanLine(cov.line, ts)}</p>
       </div>
     );
   }
@@ -466,7 +468,7 @@ function DisclosurePlannerPage() {
     return (
       <div className="max-w-2xl">
         <h1 className="text-2xl font-bold text-t-white mb-2">{t("done.title")}</h1>
-        <p className="text-sm text-t-phos mb-4">{cov.line}</p>
+        <p className="text-sm text-t-phos mb-4">{tsPlanLine(cov.line, ts)}</p>
         <ul className="mb-6 space-y-1">
           {cov.byHurdle.map((c) => (
             <li key={c.hurdle} className="text-sm text-t-phos">
@@ -507,10 +509,10 @@ function DisclosurePlannerPage() {
 
       {isRecord && recordStep && (
         <div className="bg-t-panel p-5 border border-t-line mb-6" data-testid="record-check-entry">
-          <h3 className="font-semibold text-t-white mb-2">{RECORD_CHECK_COPY.entryQuestion}</h3>
-          <p className="text-sm text-t-phos-dim leading-relaxed mb-3">{RECORD_CHECK_COPY.entryBody}</p>
+          <h3 className="font-semibold text-t-white mb-2">{ts(RECORD_CHECK_COPY.entryQuestion)}</h3>
+          <p className="text-sm text-t-phos-dim leading-relaxed mb-3">{ts(RECORD_CHECK_COPY.entryBody)}</p>
           <a href="/dashboard/record-check" className="t-focus inline-block px-4 py-2.5 border border-t-steel text-t-steel text-sm font-bold min-h-touch">
-            {RECORD_CHECK_COPY.entryButton}
+            {ts(RECORD_CHECK_COPY.entryButton)}
           </a>
         </div>
       )}

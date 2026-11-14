@@ -11,6 +11,7 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useLanes } from "@/components/lanes/useLanes";
 import { TierGate } from "@/components/TierGate";
+import { useServerText } from "@/components/ServerTextProvider";
 
 interface Employer {
   id: string;
@@ -33,6 +34,7 @@ const PAGE_SIZE = 25;
 
 function EmployersList() {
   const t = useTranslations("refineryJobs.employers");
+  const ts = useServerText();
   const searchParams = useSearchParams();
   const lanes = useLanes();
   const [selectedEmployerId,setSelectedEmployerId]=useState(searchParams.get("employerId")||"");
@@ -255,7 +257,7 @@ function EmployersList() {
                   </p>
                 )}
                 {e.whyGoodFit && (
-                  <p className="text-sm text-t-phos mt-2 leading-relaxed">{e.whyGoodFit}</p>
+                  <p className="text-sm text-t-phos mt-2 leading-relaxed">{ts(e.whyGoodFit)}</p>
                 )}
                 {e.caveats && (
                   <p className="text-xs text-t-amber-bright bg-t-panel-2 border border-t-amber px-3 py-2 mt-3">

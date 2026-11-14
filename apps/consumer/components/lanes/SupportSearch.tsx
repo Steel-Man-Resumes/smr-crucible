@@ -18,6 +18,7 @@ import { readCoverageReceipt, type CoverageReceipt } from "@/lib/coverage-receip
 import { deepLinkCategory, deepLinkSearchPlace } from "@/lib/support-deep-link";
 import { parsePlace } from "@/lib/support-location";
 import { resourceEvidenceLabel } from "@/lib/directory-labels";
+import { useServerText } from "@/components/ServerTextProvider";
 import { SavedResources } from "./SavedResources";
 
 export const SUPPORT_CATEGORIES: { id: string; label: string }[] = [
@@ -101,6 +102,7 @@ export function readSupportResponse(j: unknown): { results: SupportResultView[];
 export function SupportSearch({ initialLocation = "", barriers = [] }: { initialLocation?: string; barriers?: string[] }) {
   const t = useTranslations("refineryJobs.supportSearch");
   const tc = useTranslations("common.actions");
+  const ts = useServerText();
   const accountId = useSession().data?.user?.id;
   const coverageController = useRef<AbortController | null>(null);
   const [coveragePreview, setCoveragePreview] = useState<{state: string; place: string; category: string; reason: "low_coverage"} | null>(null);
@@ -263,7 +265,7 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
 
       {error && (
         <p role="status" className="mt-3 text-sm text-t-amber-bright" data-testid="support-error">
-          {error}
+          {ts(error)}
         </p>
       )}
 
@@ -281,7 +283,7 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
         <div className="mt-5" data-testid="support-results">
           {answer.coverage?.line && (
             <p role="note" className="mb-3 border-l-2 border-t-amber pl-3 text-sm text-t-phos" data-testid="support-coverage">
-              {answer.coverage.line}
+              {ts(answer.coverage.line)}
             </p>
           )}
           {answer.results.length === 0 ? (
@@ -291,8 +293,8 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
               {answer.results.map((r) => (
                 <li key={r.id} className="border border-t-line bg-t-bg p-4" data-testid="support-result">
                   <p className="font-semibold text-t-white">{r.title}</p>
-                  {r.provider && r.provider !== r.title && <p className="text-sm text-t-phos-dim">{r.provider}</p>}
-                  {r.description && <p className="mt-1 text-sm text-t-phos">{r.description}</p>}
+                  {r.provider && r.provider !== r.title && <p className="text-sm text-t-phos-dim">{ts(r.provider)}</p>}
+                  {r.description && <p className="mt-1 text-sm text-t-phos">{ts(r.description)}</p>}
                   {r.eligibility && <p className="mt-2 text-sm text-t-phos">{t("whoCanUse",{text:r.eligibility})}</p>}
                   {r.fees && <p className="mt-1 text-sm text-t-phos">{t("fees",{text:r.fees})}</p>}
                   {r.whatToBring && <p className="mt-1 text-sm text-t-phos">{t("bring",{text:r.whatToBring})}</p>}
@@ -318,11 +320,11 @@ export function SupportSearch({ initialLocation = "", barriers = [] }: { initial
                         </a>
                       </p>
                     )}
-                    {r.area && <p className="text-t-phos-dim">{t("covers",{area:r.area})}</p>}
+                    {r.area && <p className="text-t-phos-dim">{t("covers",{area:ts(r.area)})}</p>}
                   </div>
                   {(r.checkedLine || r.sourceLabel) && (
                     <p className={`mt-2 text-xs ${r.mayBeOutOfDate ? "text-t-amber-bright" : "text-t-phos-dim"}`} data-testid="support-checked">
-                      {[r.checkedLine, r.sourceLabel ? t("sourceLine",{label:r.sourceLabel}) : ""].filter(Boolean).join(" ")}
+                      {[r.checkedLine ? ts(r.checkedLine) : "", r.sourceLabel ? t("sourceLine",{label:ts(r.sourceLabel)}) : ""].filter(Boolean).join(" ")}
                     </p>
                   )}
                 </li>

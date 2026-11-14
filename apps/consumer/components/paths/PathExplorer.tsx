@@ -8,6 +8,7 @@ import { EMPTY_PATH_INPUTS, pathJobsHref, type PathExploration, type PathInputs 
 import { PATH_INTERESTS, type PathInterest } from "@/lib/paths/occupations";
 import { LANES_CHANGED_EVENT } from "@/lib/lanes";
 import { choosePathDirection } from "@/lib/paths/choose";
+import { useServerText } from "@/components/ServerTextProvider";
 
 const field = "t-focus w-full border border-t-line bg-t-panel px-3 py-2 text-t-white";
 const button = "t-focus inline-flex min-h-touch items-center justify-center border border-t-amber px-4 py-2 font-semibold text-t-amber-bright disabled:opacity-50";
@@ -15,6 +16,7 @@ const button = "t-focus inline-flex min-h-touch items-center justify-center bord
 export function PathExplorer({ headingLevel = 1 }: { headingLevel?: 1 | 2 } = {}) {
   const t = useTranslations("refineryJobs.pathExplorer");
   const tc = useTranslations("common.actions");
+  const ts = useServerText();
   const Title = headingLevel === 1 ? "h1" : "h2";
   const lanes = useLanes();
   const [result, setResult] = useState<PathExploration | null>(null);
@@ -94,7 +96,7 @@ export function PathExplorer({ headingLevel = 1 }: { headingLevel?: 1 | 2 } = {}
         <h2 className="font-semibold text-t-white">{t("startingFrom")}</h2>
         <p className="text-sm text-t-phos-dim">{context.target ? `${t("currentGoal",{goal:context.target})} ` : `${t("noGoal")} `}{t("skillsEvidence")}</p>
         {context.savedSkills.length > 0 ? <div className="flex flex-wrap gap-2">{context.savedSkills.map((skill) => <span key={skill} className="border border-t-line px-2 py-1 text-sm text-t-phos">{skill}</span>)}</div> : <p className="text-sm text-t-phos-dim">{t("noSkills")}</p>}
-        {context.savedConstraints.length > 0 && <p className="text-sm text-t-phos">{t("keepingInMind",{list:context.savedConstraints.join("; ")})}</p>}
+        {context.savedConstraints.length > 0 && <p className="text-sm text-t-phos">{t("keepingInMind",{list:context.savedConstraints.map(ts).join("; ")})}</p>}
       </section>}
       <form onSubmit={compare} className="border border-t-line bg-t-panel p-4 sm:p-6 space-y-5">
         <h2 className="text-lg font-semibold text-t-white">{t("formTitle")}</h2>
@@ -110,22 +112,22 @@ export function PathExplorer({ headingLevel = 1 }: { headingLevel?: 1 | 2 } = {}
         <fieldset><legend className="mb-2 text-sm font-semibold text-t-phos">{t("interestsLegend")}</legend><div className="grid gap-2 sm:grid-cols-3">{Object.keys(PATH_INTERESTS).map((key) => <label key={key} className="flex items-center gap-2 text-sm text-t-phos"><input type="checkbox" className="t-focus" checked={inputs.interests.includes(key as PathInterest)} onChange={(e) => setInputs({ ...inputs, interests: e.target.checked ? [...inputs.interests, key as PathInterest] : inputs.interests.filter((i) => i !== key) })} />{t(`interests.${key}`)}</label>)}</div></fieldset>
         <details className="text-sm text-t-phos"><summary className="t-focus cursor-pointer">{t("avoidSummary")}</summary><div className="mt-3 grid gap-2 sm:grid-cols-3">{Object.keys(PATH_INTERESTS).map((key) => <label key={key} className="flex items-center gap-2"><input type="checkbox" className="t-focus" checked={inputs.avoid.includes(key as PathInterest)} onChange={(e) => setInputs({ ...inputs, avoid: e.target.checked ? [...inputs.avoid, key as PathInterest] : inputs.avoid.filter((i) => i !== key) })} />{t(`interests.${key}`)}</label>)}</div></details>
         <button className={`${button} bg-t-amber text-white`} disabled={busy || !context || !!lanes.error}>{busy ? t("comparing") : t("compare")}</button>
-        {error && <p role="alert" className="text-t-phos">{error} <button type="button" className={button} onClick={() => setReloadKey((key) => key + 1)}>{t("reloadContext")}</button></p>}
+        {error && <p role="alert" className="text-t-phos">{ts(error)} <button type="button" className={button} onClick={() => setReloadKey((key) => key + 1)}>{t("reloadContext")}</button></p>}
       </form>
       <section aria-busy={busy} aria-label={t("directionsAria")} className="space-y-4">
         <div className="space-y-1"><h2 className="text-xl font-bold text-t-white">{t("directionsTitle")}</h2><p className="text-sm text-t-phos-dim">{t("directionsIntro",{count:result?.occupationCount ?? 12})}</p></div>
-        {result?.missing.length ? <p className="text-sm text-t-phos">{t("missingHelp",{list:result.missing.join("; ")})}</p> : null}
-        {choiceError && <p role="alert" className="border border-t-line p-3 text-t-phos">{choiceError}</p>}
+        {result?.missing.length ? <p className="text-sm text-t-phos">{t("missingHelp",{list:result.missing.map(ts).join("; ")})}</p> : null}
+        {choiceError && <p role="alert" className="border border-t-line p-3 text-t-phos">{ts(choiceError)}</p>}
         {result && !result.candidates.length && <p role="status" className="border border-t-line p-5 text-t-phos">{t("noneLeft")}</p>}
         <div className="grid gap-4 lg:grid-cols-2">{result?.candidates.map((candidate) => <article key={candidate.id} className="border border-t-line bg-t-panel p-5 space-y-4">
-          <div><p className="text-xs text-t-amber-bright">{candidate.next}</p><h3 className="mt-1 text-xl font-bold text-t-white">{candidate.title}</h3></div>
-          <div className="text-sm text-t-phos space-y-2"><p>{candidate.explanation}</p>{candidate.matches.length > 0 && <p><strong>{t("startingEvidence")}</strong> {candidate.matches.map((match) => `${match.label} (${match.origin === "saved_profile" ? t("savedProfile") : t("youAdded")})`).join("; ")}.</p>}{candidate.interests.length > 0 && <p><strong>{t("yourInterests")}</strong> {candidate.interests.map((interest) => t(`interests.${interest}`)).join(", ")}.</p>}{candidate.targetMatch && <p>{t("relatedGoal")}</p>}</div>
-          <div className="space-y-2 text-sm text-t-phos"><p><strong>{t("theWork")}</strong> {candidate.tasks}</p><p><strong>{t("entryRoute")}</strong> {candidate.entry}</p></div>
-          <details className="text-sm text-t-phos"><summary className="t-focus cursor-pointer font-semibold">{t("needsChecking")}</summary><ul className="mt-2 list-disc pl-5 space-y-1">{candidate.unknowns.map((unknown) => <li key={unknown}>{unknown}</li>)}</ul></details>
-          <p className="text-xs text-t-phos-dim"><a className="t-focus underline" href={candidate.source.url} target="_blank" rel="noreferrer">{candidate.source.title}</a>. {t("sourceNote",{date:candidate.source.reviewedAt})}</p>
+          <div><p className="text-xs text-t-amber-bright">{ts(candidate.next)}</p><h3 className="mt-1 text-xl font-bold text-t-white">{ts(candidate.title)}</h3></div>
+          <div className="text-sm text-t-phos space-y-2"><p>{ts(candidate.explanation)}</p>{candidate.matches.length > 0 && <p><strong>{t("startingEvidence")}</strong> {candidate.matches.map((match) => `${match.label} (${match.origin === "saved_profile" ? t("savedProfile") : t("youAdded")})`).join("; ")}.</p>}{candidate.interests.length > 0 && <p><strong>{t("yourInterests")}</strong> {candidate.interests.map((interest) => t(`interests.${interest}`)).join(", ")}.</p>}{candidate.targetMatch && <p>{t("relatedGoal")}</p>}</div>
+          <div className="space-y-2 text-sm text-t-phos"><p><strong>{t("theWork")}</strong> {ts(candidate.tasks)}</p><p><strong>{t("entryRoute")}</strong> {ts(candidate.entry)}</p></div>
+          <details className="text-sm text-t-phos"><summary className="t-focus cursor-pointer font-semibold">{t("needsChecking")}</summary><ul className="mt-2 list-disc pl-5 space-y-1">{candidate.unknowns.map((unknown) => <li key={unknown}>{ts(unknown)}</li>)}</ul></details>
+          <p className="text-xs text-t-phos-dim"><a className="t-focus underline" href={candidate.source.url} target="_blank" rel="noreferrer">{ts(candidate.source.title)}</a>. {t("sourceNote",{date:candidate.source.reviewedAt})}</p>
           <div className="flex flex-wrap gap-2"><Link className={button} href={pathJobsHref(candidate.searchRole, result.location, selected?.id === candidate.id ? selected.laneId : undefined)}>{result.location ? t("findJobsIn",{location:result.location}) : t("findJobs")}</Link><button type="button" className={button} disabled={!!choosing || busy} onClick={() => { setPending(candidate.id); setChoiceError(""); }}>{t("chooseDirection")}</button></div>
           {pending === candidate.id && <div className="border border-t-amber p-3 space-y-2 text-sm text-t-phos"><p>{t("confirmPrompt",{role:candidate.searchRole})}</p><div className="flex gap-2"><button type="button" className={button} disabled={!!choosing} onClick={() => void choose(candidate)}>{choosing === candidate.id ? t("savingChoice") : t("confirmDirection")}</button><button type="button" className={button} disabled={!!choosing} onClick={() => setPending(null)}>{tc("cancel")}</button></div></div>}
-          {selected?.id === candidate.id && <p role="status" className="text-sm text-t-phos">{t("goalSaved",{title:selected.title})}</p>}
+          {selected?.id === candidate.id && <p role="status" className="text-sm text-t-phos">{t("goalSaved",{title:ts(selected.title)})}</p>}
         </article>)}</div>
         {context?.target && <Link className={button} href={pathJobsHref(context.target, inputs.location || context.location, context.laneId)}>{t("searchExisting",{goal:context.target})}</Link>}
       </section>

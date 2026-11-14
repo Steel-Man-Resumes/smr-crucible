@@ -49,6 +49,7 @@ import {
 import { CompletionConfetti } from "@/components/CompletionConfetti";
 import { SteelManMeter } from "@/components/steelman/SteelManMeter";
 import { SteelManStats } from "@/components/steelman/SteelManStats";
+import { useServerText } from "@/components/ServerTextProvider";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -115,6 +116,7 @@ const CELEBRATED_KEY = "celebrated_milestones";
 
 export default function ProgressPage() {
   const t = useTranslations("refineryHome.progress");
+  const ts = useServerText();
   const locale = useLocale();
   const [progress, setProgress] = useState<ProgressData>(DEFAULT_PROGRESS);
   const [barriers, setBarriers] = useState<string[]>([]);
@@ -359,11 +361,11 @@ export default function ProgressPage() {
             role="status"
           >
             <p className="text-sm font-semibold text-t-amber-bright mb-1">
-              {t("milestoneHit", { title: celebrate.title })}
+              {t("milestoneHit", { title: ts(celebrate.title) })}
             </p>
             {celebrate.fact && (
               <p className="text-sm text-t-phos leading-relaxed">
-                {celebrate.fact}
+                {ts(celebrate.fact)}
               </p>
             )}
           </div>
@@ -627,6 +629,7 @@ export default function ProgressPage() {
 // ─── Quick Win Card ─────────────────────────────────────────────────────────
 
 function QuickWinCard({ win }: { win: QuickWin }) {
+  const ts = useServerText();
   const categoryColors: Record<string, string> = {
     foundation: "border-l-t-amber",
     "skill-building": "border-l-t-steel",
@@ -640,23 +643,23 @@ function QuickWinCard({ win }: { win: QuickWin }) {
         categoryColors[win.category] || "border-l-t-amber"
       }`}
     >
-      <h3 className="font-semibold text-t-white mb-1">{win.title}</h3>
+      <h3 className="font-semibold text-t-white mb-1">{ts(win.title)}</h3>
       <p className="text-sm text-t-phos-dim leading-relaxed mb-3">
-        {win.description}
+        {ts(win.description)}
       </p>
       {win.action.type === "link" && win.action.href ? (
         <Link
           href={win.action.href}
           className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
         >
-          {win.action.label} &rarr;
+          {ts(win.action.label)} &rarr;
         </Link>
       ) : win.action.type === "phone" && win.action.phone ? (
         <a
           href={`tel:${win.action.phone}`}
           className="t-focus inline-flex items-center px-4 py-2 bg-t-amber text-white text-sm font-bold hover:bg-t-amber-bright transition-colors"
         >
-          {win.action.label}
+          {ts(win.action.label)}
         </a>
       ) : null}
     </div>
@@ -684,6 +687,7 @@ function toolKey(link?: string): string {
 
 function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
   const t = useTranslations("refineryHome.progress");
+  const ts = useServerText();
   const [open, setOpen] = useState(false);
   const panelId = `roadmap-panel-${node.id}`;
 
@@ -744,9 +748,9 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
                   : "text-t-phos-dim"
             }`}
           >
-            {node.title}
+            {ts(node.title)}
           </span>
-          <span className="text-xs text-t-phos-dim block">{node.description}</span>
+          <span className="text-xs text-t-phos-dim block">{ts(node.description)}</span>
         </div>
 
         {/* Expand chevron */}
@@ -777,7 +781,7 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
             <span className="font-semibold text-t-white">{t("nodeStatus")}</span> {status}
           </p>
           <p className="text-sm text-t-phos leading-relaxed mb-3">
-            {node.description}
+            {ts(node.description)}
           </p>
           {node.toolLink && (
             <Link
@@ -796,6 +800,7 @@ function RoadmapNodeCard({ node }: { node: RoadmapNode }) {
 // ─── Milestone Row ──────────────────────────────────────────────────────────
 
 function MilestoneRow({ milestone }: { milestone: Milestone }) {
+  const ts = useServerText();
   return (
     <div
       className={`flex items-start gap-3 p-4 border ${
@@ -827,20 +832,20 @@ function MilestoneRow({ milestone }: { milestone: Milestone }) {
             milestone.earned ? "text-t-amber-bright" : "text-t-white"
           }`}
         >
-          {milestone.title}
+          {ts(milestone.title)}
         </span>
         {milestone.earned ? (
           <>
             <p className="text-sm text-t-phos leading-relaxed mt-0.5">
-              {milestone.celebration}
+              {ts(milestone.celebration)}
             </p>
             {milestone.earnedFact && (
-              <p className="text-xs text-t-phos-dim mt-1">{milestone.earnedFact}</p>
+              <p className="text-xs text-t-phos-dim mt-1">{ts(milestone.earnedFact)}</p>
             )}
           </>
         ) : (
           <p className="text-sm text-t-phos-dim leading-relaxed mt-0.5">
-            {milestone.nextUp}
+            {ts(milestone.nextUp)}
           </p>
         )}
       </div>

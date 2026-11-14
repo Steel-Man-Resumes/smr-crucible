@@ -13,6 +13,7 @@ import { useLocale } from "next-intl";
 import { PROGRESSION_CHANGED_EVENT, safeProgressHref } from "@/lib/progression-ui";
 import { BANDS, MARKS, firstUnit } from "@/lib/steelman/score";
 import { COMPONENT_IDS, type SteelManPayload } from "@/lib/steelman/types";
+import { useServerText } from "@/components/ServerTextProvider";
 import { useSteelWords } from "./SteelManMeter";
 import { useSteelMan } from "./useSteelMan";
 
@@ -133,6 +134,7 @@ function Bands({ data }: { data: SteelManPayload }) {
 
 function Moments({ data, onReview }: { data: SteelManPayload; onReview: () => void }) {
   const w = useSteelWords(data);
+  const ts = useServerText();
   const locale = useLocale();
   const [busy, setBusy] = useState(false);
   return (
@@ -142,7 +144,7 @@ function Moments({ data, onReview }: { data: SteelManPayload; onReview: () => vo
       {data.moments.length ? (
         <ul className="space-y-2">
           {data.moments.map((m) => (
-            <li key={m.key} className="flex gap-3 border border-t-line bg-t-panel p-3 text-sm"><span className="w-14 shrink-0 text-xs text-t-phos-dim">{fmtDay(m.at, locale)}</span><span className="text-t-phos">{m.label}</span></li>
+            <li key={m.key} className="flex gap-3 border border-t-line bg-t-panel p-3 text-sm"><span className="w-14 shrink-0 text-xs text-t-phos-dim">{fmtDay(m.at, locale)}</span><span className="text-t-phos">{ts(m.label)}</span></li>
           ))}
         </ul>
       ) : <p className="text-sm text-t-phos-dim">{w.t("moments.first")}</p>}

@@ -19,6 +19,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useServerText } from "@/components/ServerTextProvider";
 import {
   findDiscrepancies,
   groupDiscrepancies,
@@ -55,6 +56,7 @@ export function DiscrepancyPanel({
   /** Omit to render read-only, with no route into the workshop. */
   onApply?: (nextText: string) => void;
 }) {
+  const ts = useServerText();
   const [open, setOpen] = useState(true);
   const [workshopFor, setWorkshopFor] = useState<Discrepancy | null>(null);
 
@@ -124,7 +126,7 @@ export function DiscrepancyPanel({
                   <p className="text-xs italic text-t-phos-dim">
                     &ldquo;{d.evidence}&rdquo;
                   </p>
-                  <p className="mt-1 text-sm text-t-phos">{d.question}</p>
+                  <p className="mt-1 text-sm text-t-phos">{ts(d.question)}</p>
                   {onApply && WORKSHOPPABLE.has(d.kind) && (
                     // Naming a weak line and leaving the person to fix it alone
                     // is only half the job. One tap goes straight into the

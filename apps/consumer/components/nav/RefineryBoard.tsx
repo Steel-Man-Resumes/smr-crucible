@@ -24,6 +24,7 @@ import {
 import type { UserTier } from "@/lib/useUserTier";
 import type { OnboardingState } from "@/lib/useOnboarding";
 import { SteelManMeter } from "@/components/steelman/SteelManMeter";
+import { useServerText } from "@/components/ServerTextProvider";
 // Styles: components/nav/refinery-board.css, imported by RefineryShell (keeps this file renderable in tests).
 
 export interface RefineryBoardProps {
@@ -77,6 +78,7 @@ interface Access {
 export function RefineryBoard(props: RefineryBoardProps) {
   const { userTier, pathname, steps, currentStepId, carryIds, onItemClick } = props;
   const t = useTranslations("refineryShell.nav");
+  const ts = useServerText();
   /** A nav label in the person's language; a label with no entry keeps its English. */
   const word = (english: string): string => {
     const key = `labels.${navSlug(english)}`;
@@ -102,7 +104,7 @@ export function RefineryBoard(props: RefineryBoardProps) {
     // Missing progress is not evidence that an existing user lost access.
     // Server APIs still decide whether the requested operation is allowed.
     const unlocked = client ? directAccess : props.isUnlocked(item);
-    const lockLine = step?.reason || lockedToolLine({ state: props.onboardingState, requiresDisclosure: item.requiresDisclosure, disclosureComplete: props.disclosureComplete });
+    const lockLine = ts(step?.reason || lockedToolLine({ state: props.onboardingState, requiresDisclosure: item.requiresDisclosure, disclosureComplete: props.disclosureComplete }));
     const previewId = !unlocked && !guidedLocked ? previewIdForHref(item.href) : null;
     return { step, guidedLocked, directAccess, unlocked, lockLine, previewId };
   }
@@ -132,7 +134,7 @@ export function RefineryBoard(props: RefineryBoardProps) {
       <span className="min-w-0 flex-1">
         <span className="block">{label}</span>
         {header && !stepLine && header.blurb ? <span className="board-sub">{t(`blurbs.${header.id}`)}</span> : null}
-        {stepLine ? <span className="board-sub">{a.guidedLocked && a.directAccess ? t("guidedStep") : ""}{header && opts.status?.named ? `${stepLine.label}: ` : ""}{stateWord(stepLine)}</span> : null}
+        {stepLine ? <span className="board-sub">{a.guidedLocked && a.directAccess ? t("guidedStep") : ""}{header && opts.status?.named ? `${ts(stepLine.label)}: ` : ""}{stateWord(stepLine)}</span> : null}
         {!a.unlocked ? <span className="board-sub board-lock-line">{a.lockLine}</span> : null}
         {a.guidedLocked && !a.directAccess ? <span className="board-sub board-ask-hint"><LockKeyhole size={10} aria-hidden="true" className="mr-1 inline" />{t("askAction")}. {t("askHint")}</span> : null}
       </span>

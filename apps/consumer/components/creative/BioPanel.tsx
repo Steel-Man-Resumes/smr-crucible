@@ -12,6 +12,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 import {
   BIO_LENGTHS,
   BIO_LIMITS,
@@ -50,6 +51,7 @@ export function BioPanel({
 }) {
   const t = useTranslations("refineryResume.creative.bio");
   const ts = useTranslations("refineryResume.creative.shared");
+  const sx = useServerText();
   const [bio, setBio] = useState<BioContent>(ctx.bio);
   const [len, setLen] = useState<BioLength>("short");
   const [busy, setBusy] = useState(false);
@@ -180,7 +182,7 @@ export function BioPanel({
                   </p>
                   {flagged.has(x.id) && (
                     <p className="text-xs text-t-amber-bright" data-testid="bio-sentence-issue">
-                      {flagged.get(x.id)}
+                      {sx(flagged.get(x.id) ?? "")}
                     </p>
                   )}
                   <div className="mt-1 flex flex-wrap gap-3 text-sm">

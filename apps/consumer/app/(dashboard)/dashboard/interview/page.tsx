@@ -12,6 +12,7 @@ import { TroyWork } from "@crucible/consumer-ui";
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 import { CardSelect, GhostGuide } from "@crucible/consumer-ui";
 import { TierGate } from "@/components/TierGate";
 import { PremiumGate, usePremium } from "@/components/premium/PremiumGate";
@@ -132,6 +133,7 @@ export default function InterviewPracticePageWrapper() {
 
 function InterviewPracticePage() {
   const t = useTranslations("refineryInterview.interview");
+  const ts = useServerText();
   const locale = useLocale();
   const interviewTypes = INTERVIEW_TYPE_IDS.map((id) => ({
     id,
@@ -791,7 +793,7 @@ ${userNotes.trim() ? `<h2>Your Notes</h2><p>${esc(userNotes).replace(/\n/g, "<br
               </select>
               {selectedApplicationId && jdMeta && (
                 <p className="text-xs text-t-amber-bright mt-1">
-                  {t("setup.usingJd", { age: jdMeta.age ? ` (${jdMeta.age})` : "" })}
+                  {t("setup.usingJd", { age: jdMeta.age ? ` (${ts(jdMeta.age)})` : "" })}
                   {jdMeta.truncated
                     ? t("setup.jdLong")
                     : ""}

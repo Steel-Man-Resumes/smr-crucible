@@ -3,6 +3,7 @@
 /** The finished hurdle plan: action plans for every hurdle, the record conversation plan if picked. */
 
 import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 import type { HurdlePlan } from "@/lib/hurdles/plan";
 import type { HurdleId } from "@/lib/hurdles/graph";
 import { hasConstraints } from "@/lib/hurdles/filters";
@@ -27,13 +28,65 @@ interface Props {
   copyNote: string;
 }
 
+/**
+ * Spanish for one system-built plan line (server-text list, keys plans_*).
+ * Most lines match whole. The rest are joined in lib/hurdles from several
+ * sentences, or are a lower-case decision phrase made into a sentence, so they
+ * are translated a piece at a time. A piece with no entry stays English, and in
+ * English (ts is the identity) the line comes back untouched.
+ */
+export function tsPlanLine(line: string, ts: (s: string) => string): string {
+  if (!line) return line;
+  const whole = ts(line);
+  if (whole !== line) return whole;
+  const open = /^([A-Z])([^"\n]*)\.$/.exec(line);
+  if (open) {
+    const low = open[1].toLowerCase() + open[2];
+    const es = ts(low);
+    if (es !== low) return es.charAt(0).toUpperCase() + es.slice(1) + ".";
+  }
+  const tail = /^(Then: "[\s\S]*") (If they ask for more: [^\n]*)$/.exec(line);
+  if (tail) {
+    const a = ts(tail[1]), b = ts(tail[2]);
+    return a !== tail[1] || b !== tail[2] ? `${a} ${b}` : line;
+  }
+  if (/^(I'd say: |The form asks: )/.test(line)) return line;
+  const piece = (span: string): string => {
+    const lead = /^Then turn to (.+), in one or two true sentences\.$/.exec(span);
+    if (lead) {
+      const es = ts(span);
+      return es === span ? span : es.replace(lead[1], lead[1].split(" and ").map((w) => ts(w)).join(" y "));
+    }
+    const stale = /^(These sources were|Some of these sources were)( last checked more than \d+ days ago\.)$/.exec(span);
+    if (stale) {
+      const a = ts(stale[1]), b = ts(stale[2]);
+      return a !== stale[1] && b !== stale[2] ? a + b : span;
+    }
+    return ts(span);
+  };
+  const parts = line.split(/(?<=[.!?])\s+(?=[A-Z0-9])/);
+  const out: string[] = [];
+  let changed = false;
+  for (let i = 0; i < parts.length; ) {
+    let hit = false;
+    for (let j = i + 1; j <= parts.length; j++) {
+      const span = parts.slice(i, j).join(" ");
+      const t = piece(span);
+      if (t !== span) { out.push(t); i = j; hit = true; changed = true; break; }
+    }
+    if (!hit) { out.push(parts[i]); i++; }
+  }
+  return changed ? out.join(" ") : line;
+}
+
 function List({ title, items }: { title: string; items: string[] }) {
+  const ts = useServerText();
   if (!items.length) return null;
   return (
     <div className="mt-3">
       <h4 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mb-1">{title}</h4>
       <ul className="space-y-1">
-        {items.map((x, i) => <li key={i} className="text-sm text-t-phos flex gap-2"><span aria-hidden="true" className="text-t-amber">&bull;</span>{x}</li>)}
+        {items.map((x, i) => <li key={i} className="text-sm text-t-phos flex gap-2"><span aria-hidden="true" className="text-t-amber">&bull;</span>{tsPlanLine(x, ts)}</li>)}
       </ul>
     </div>
   );
@@ -42,6 +95,7 @@ function List({ title, items }: { title: string; items: string[] }) {
 export function HurdlePlanView({ plan, wording, showReading, onToggleReading, save, jobFilter, onRetryWording, onRetrySave, onUseInJobSearch, onPractice, onEdit, onDownload, onCopyRecord, copyNote }: Props) {
   const t = useTranslations("refineryInterview.plan");
   const th = useTranslations("refineryInterview.hurdles");
+  const ts = useServerText();
   const c = plan.constraints;
   const constraintLines: string[] = [];
   if (c.shiftConflict) constraintLines.push(t("constraints.shiftConflict"));
@@ -53,7 +107,7 @@ export function HurdlePlanView({ plan, wording, showReading, onToggleReading, sa
   const saveText =
     save.status === "saved" ? t("save.saved")
     : save.status === "saving" ? t("save.saving")
-    : save.status === "failed" ? t("save.failed", { error: save.error })
+    : save.status === "failed" ? t("save.failed", { error: ts(save.error) })
     : t("save.idle");
   return (
     <div className="max-w-2xl">
@@ -112,7 +166,7 @@ export function HurdlePlanView({ plan, wording, showReading, onToggleReading, sa
       </div>}
 
       <div className="bg-t-panel px-4 py-3 border border-t-line mb-6" data-testid="plan-coverage">
-        <p className="text-sm text-t-phos">{plan.coverage.line}</p>
+        <p className="text-sm text-t-phos">{tsPlanLine(plan.coverage.line, ts)}</p>
       </div>
 
       {plan.record && (
@@ -121,9 +175,9 @@ export function HurdlePlanView({ plan, wording, showReading, onToggleReading, sa
           <List title={t("record.whenTitle")} items={plan.record.whenToBringItUp} />
           <div className="mt-4">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mb-1">{t("record.sayTitle")}</h4>
-            <blockquote className="text-sm text-t-white leading-relaxed border-l-2 border-t-amber pl-4">{plan.record.open}</blockquote>
+            <blockquote className="text-sm text-t-white leading-relaxed border-l-2 border-t-amber pl-4">{tsPlanLine(plan.record.open, ts)}</blockquote>
             <h4 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mt-3 mb-1">{t("record.nextTitle")}</h4>
-            <p className="text-sm text-t-phos">{plan.record.next}</p>
+            <p className="text-sm text-t-phos">{tsPlanLine(plan.record.next, ts)}</p>
             <p className="text-xs text-t-phos-dim mt-2">
               {plan.record.fromYou ? t("record.fromYou") : t("record.fillBlank")}
             </p>
@@ -138,17 +192,17 @@ export function HurdlePlanView({ plan, wording, showReading, onToggleReading, sa
           </div>
           <div className="mt-4">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-t-phos-dim mb-1">{t("record.lawTitle", { asOf: plan.record.legalFloor.asOf })}</h4>
-            <p className="text-xs text-t-phos-dim mb-2">{plan.record.legalFloor.note}</p>
-            {plan.record.legalFloor.staleNote && <p role="note" className="text-xs text-t-amber-bright mb-2">{plan.record.legalFloor.staleNote}</p>}
+            <p className="text-xs text-t-phos-dim mb-2">{tsPlanLine(plan.record.legalFloor.note, ts)}</p>
+            {plan.record.legalFloor.staleNote && <p role="note" className="text-xs text-t-amber-bright mb-2">{tsPlanLine(plan.record.legalFloor.staleNote, ts)}</p>}
             <ul className="space-y-1">
               {plan.record.legalFloor.sources.map((s) => (
                 <li key={s.id} className="text-sm text-t-phos">
                   <a href={s.url} target="_blank" rel="noopener noreferrer" className="underline text-t-amber-bright">{s.title}</a>
-                  <span className="text-xs text-t-phos-dim"> &middot; {t("record.sourceLine", { whatItIs: s.whatItIs, label: s.label, asOf: s.asOf })}</span>
+                  <span className="text-xs text-t-phos-dim"> &middot; {t("record.sourceLine", { whatItIs: ts(s.whatItIs), label: ts(s.label), asOf: s.asOf })}</span>
                 </li>
               ))}
             </ul>
-            <p className="text-xs text-t-phos mt-3 font-medium">{plan.record.disclaimer}</p>
+            <p className="text-xs text-t-phos mt-3 font-medium">{tsPlanLine(plan.record.disclaimer, ts)}</p>
           </div>
         </section>
       )}
@@ -178,7 +232,7 @@ export function HurdlePlanView({ plan, wording, showReading, onToggleReading, sa
           {s.hurdle !== "record" && s.hurdle !== "not_sure" && (
             <p className="text-sm text-t-phos mt-3">
               <span className="font-medium text-t-white">{t("section.tellEmployer")} </span>
-              {s.tell ?? t("section.notDecided")}
+              {s.tell !== null ? tsPlanLine(s.tell, ts) : t("section.notDecided")}
             </p>
           )}
         </section>

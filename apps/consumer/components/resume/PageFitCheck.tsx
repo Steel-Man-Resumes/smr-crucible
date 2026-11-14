@@ -16,6 +16,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useServerText } from "@/components/ServerTextProvider";
 
 interface LayoutResponse {
   pages: number;
@@ -33,6 +34,7 @@ export function PageFitCheck({
   getContent: () => string;
 }) {
   const t = useTranslations("refineryResume.resume.pageFit");
+  const ts = useServerText();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<LayoutResponse | null>(null);
@@ -89,7 +91,7 @@ export function PageFitCheck({
         {result && !error && (
           <div className="mt-1 border border-t-steel/30 bg-t-steel/5 p-3 text-sm text-t-white">
             <p className="font-bold" data-testid="page-fit-words">
-              {result.words}
+              {ts(result.words)}
             </p>
             {runsOver && (
               <p className="mt-1">
