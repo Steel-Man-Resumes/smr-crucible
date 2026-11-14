@@ -52,6 +52,19 @@ const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
 const STATE_OPTIONS = Object.entries(STATE_NAMES).sort((a, b) => a[1].localeCompare(b[1]));
 
+/**
+ * ts() for a system-built line that has a state name in it. The line is matched with the English state
+ * name; when it was translated, the state name in it is put into Spanish too (the last one, since the state
+ * comes after any typed job). English and untranslated lines come back unchanged.
+ */
+function tsWithState(ts: (s: string) => string, text: string, stateName: string): string {
+  const out = ts(text);
+  const es = ts(stateName);
+  if (out === text || es === stateName) return out;
+  const i = out.lastIndexOf(stateName);
+  return i < 0 ? out : out.slice(0, i) + es + out.slice(i + stateName.length);
+}
+
 export default function RecordCheckPageWrapper() {
   return (
     <TierGate requiredTier="client">
@@ -233,7 +246,7 @@ function RecordCheckPage() {
   }
 
   if (!consent) {
-    return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-t-phos-dim">Loading...</div>;
+    return <div className="max-w-2xl mx-auto px-4 py-10 text-sm text-t-phos-dim">{ts("Loading...")}</div>;
   }
 
   return (
@@ -308,10 +321,12 @@ function RecordCheckPage() {
                 onChange={(e) => setStateCode(e.target.value)}
                 className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel text-t-white min-h-touch"
               >
-                <option value="">Select...</option>
-                {STATE_OPTIONS.map(([code, name]) => (
-                  <option key={code} value={code}>{name}</option>
-                ))}
+                <option value="">{ts("Select...")}</option>
+                {STATE_OPTIONS.map(([code, name]) => [code, ts(name)] as const)
+                  .sort((a, b) => a[1].localeCompare(b[1]))
+                  .map(([code, name]) => (
+                    <option key={code} value={code}>{name}</option>
+                  ))}
               </select>
             </div>
             <div className="mb-4">
@@ -347,7 +362,7 @@ function RecordCheckPage() {
                 className="t-focus px-5 py-3 bg-t-amber text-white text-sm font-bold disabled:opacity-40 min-h-touch"
                 data-testid="rc-build"
               >
-                {busy ? "Working..." : ts(C.buildButton)}
+                {busy ? ts("Working...") : ts(C.buildButton)}
               </button>
               {(checklist || offense || job) && (
                 <button onClick={clearTyped} className="px-4 py-3 text-t-steel text-sm font-medium min-h-touch">
@@ -391,14 +406,14 @@ function RecordCheckPage() {
                   <li key={s.id} className="bg-t-panel border border-t-line p-4" data-testid="rc-saved-item">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="text-sm text-t-white">
-                        Checklist, {s.stateName}
+                        {tsWithState(ts, `Checklist, ${s.stateName}`, s.stateName)}
                         <span className="block text-xs text-t-phos-dim">
                           {new Date(s.createdAt).toLocaleDateString()} · {ts(s.keptTyped ? C.keptYes : C.keptNo)}
                         </span>
                       </p>
                       <div className="flex gap-2">
                         <button onClick={() => openSaved(s.id)} className="px-3 py-2 text-sm text-t-steel min-h-touch" data-testid="rc-saved-open">
-                          {C.openButton}
+                          {ts(C.openButton)}
                         </button>
                         <button
                           onClick={() => deleteSaved(s.id)}
@@ -460,14 +475,14 @@ function ChecklistBlock({ checklist }: { checklist: ChecklistView }) {
       <h2 className="font-bold text-t-white mb-2">{ts(C.stepsLabel)}</h2>
       <ol className="list-decimal ml-5 space-y-2 text-sm text-t-phos mb-6" data-testid="rc-steps">
         {checklist.steps.map((s) => (
-          <li key={s.id}>{ts(s.text)}</li>
+          <li key={s.id}>{tsWithState(ts, s.text, checklist.stateName)}</li>
         ))}
       </ol>
 
       <h2 className="font-bold text-t-white mb-2">{ts(C.questionsLabel)}</h2>
       <ul className="list-disc ml-5 space-y-2 text-sm text-t-phos mb-6" data-testid="rc-questions">
         {checklist.questions.map((q) => (
-          <li key={q.id}>{ts(q.text)}</li>
+          <li key={q.id}>{tsWithState(ts, q.text, checklist.stateName)}</li>
         ))}
       </ul>
 
@@ -481,11 +496,11 @@ function ChecklistBlock({ checklist }: { checklist: ChecklistView }) {
               {list.map((s) => (
                 <li key={s.id} className="text-sm">
                   <a href={s.url} target="_blank" rel="noopener noreferrer nofollow" className="text-t-amber-bright underline" data-testid="rc-source-link">
-                    {s.title}
+                    {ts(s.title)}
                   </a>
                   {s.kind === "reference_copy" && <span className="text-xs text-t-phos-dim"> ({ts(C.referenceCopy)})</span>}
                   <span className="block text-t-phos-dim text-xs">
-                    {ts(s.whatItIs)} {s.label}{s.asOf ? `, as of ${s.asOf}` : ""}.
+                    {ts(s.whatItIs)} {ts(s.label)}{s.asOf ? `, ${ts(`as of ${s.asOf}`)}` : ""}.
                   </span>
                 </li>
               ))}

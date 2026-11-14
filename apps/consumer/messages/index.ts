@@ -61,6 +61,8 @@ import enServerTextHelp from "./en/server-text-help.json";
 import esServerTextHelp from "./es/server-text-help.json";
 import enServerTextExtras from "./en/server-text-extras.json";
 import esServerTextExtras from "./es/server-text-extras.json";
+import enServerTextRecordcheck from "./en/server-text-recordcheck.json";
+import esServerTextRecordcheck from "./es/server-text-recordcheck.json";
 
 export const MESSAGES = {
   en: {
@@ -84,7 +86,7 @@ export const MESSAGES = {
     refineryAccount: enRefineryAccount,
     refineryShell: enRefineryShell,
     refineryResume: enRefineryResume,
-    serverText: { ...enServerTextApi, ...enServerTextFinish, ...enServerTextProgress, ...enServerTextPlans, ...enServerTextJobs, ...enServerTextHelp, ...enServerTextExtras },
+    serverText: { ...enServerTextApi, ...enServerTextFinish, ...enServerTextProgress, ...enServerTextPlans, ...enServerTextJobs, ...enServerTextHelp, ...enServerTextExtras, ...enServerTextRecordcheck },
   },
   es: {
     common: esCommon,
@@ -107,7 +109,7 @@ export const MESSAGES = {
     refineryAccount: esRefineryAccount,
     refineryShell: esRefineryShell,
     refineryResume: esRefineryResume,
-    serverText: { ...esServerTextApi, ...esServerTextFinish, ...esServerTextProgress, ...esServerTextPlans, ...esServerTextJobs, ...esServerTextHelp, ...esServerTextExtras },
+    serverText: { ...esServerTextApi, ...esServerTextFinish, ...esServerTextProgress, ...esServerTextPlans, ...esServerTextJobs, ...esServerTextHelp, ...esServerTextExtras, ...esServerTextRecordcheck },
   },
 } as const;
 

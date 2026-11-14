@@ -6,5 +6,6 @@ import enPlans from "./en/server-text-plans.json";
 import enJobs from "./en/server-text-jobs.json";
 import enHelp from "./en/server-text-help.json";
 import enExtras from "./en/server-text-extras.json";
+import enRecordcheck from "./en/server-text-recordcheck.json";
 
-export default { ...enApi, ...enFinish, ...enProgress, ...enPlans, ...enJobs, ...enHelp, ...enExtras } as Record<string, string>;
+export default { ...enApi, ...enFinish, ...enProgress, ...enPlans, ...enJobs, ...enHelp, ...enExtras, ...enRecordcheck } as Record<string, string>;
