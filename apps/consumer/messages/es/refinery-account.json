@@ -87,7 +87,7 @@
     },
     "research": {
       "title": "Investigación con datos sin identidad",
-      "body": "Permite que tus datos de avance, sin tu nombre, se incluyan en investigaciones sobre lo que ayuda a las personas a conseguir empleo. Está desactivado a menos que lo actives.",
+      "body": "Permite que tus datos de avance, anonimizados, se incluyan en investigaciones sobre lo que ayuda a las personas a conseguir empleo. Está desactivado a menos que lo actives.",
       "on": "Activado: tus datos sin identidad pueden usarse en investigación.",
       "off": "Desactivado: tus datos no se usan para investigación."
     },
@@ -242,7 +242,7 @@
       "leftToday": "quedan {count} hoy"
     },
     "page": {
-      "usageError": "Por ahora no pudimos leer tu límite diario.",
+      "usageError": "Por ahora no pudimos leer tu cupo.",
       "redeemError": "No se pudo canjear el código",
       "wentWrong": "Algo salió mal. Inténtalo de nuevo.",
       "exportFailed": "No se pudieron exportar tus datos. Inténtalo de nuevo.",
@@ -262,7 +262,7 @@
       "subtitle": "Tus datos, tu control. Administra tu información y tu privacidad.",
       "viewing": "Estás viendo la configuración de esta persona. Aquí no se puede cambiar nada.",
       "assisting": "Estás ayudando a esta persona con su configuración.",
-      "impersonatingNote": "Esta es su configuración, no la tuya. Los interruptores de compartir y de consentimiento, los códigos de programa y los recorridos solo ella puede cambiarlos. La seguridad, la foto, la exportación y la eliminación están ocultas.",
+      "impersonatingNote": "Esta es su configuración, no la tuya. Los interruptores de compartir y de consentimiento, los códigos de programa y los recorridos solo los puede cambiar esa persona. La seguridad, la foto, la exportación y la eliminación están ocultas.",
       "sectionsAria": "Secciones de la configuración",
       "programRequiresAria": "Lo que pide este programa",
       "joiningNote": "Unirte no abre nada por sí solo. Después de unirte, se te pedirá que confirmes que lo leíste, y puedes volver a leerlo antes.",
@@ -274,7 +274,7 @@
       "hiddenWhileViewing": "Oculto mientras ves o ayudas como esta persona.",
       "dailyUsage": "Uso diario",
       "getHelp": "Recibir ayuda",
-      "helpBody": "¿Te atoraste? Pregúntale a t.ROY en cualquier página, o abre Ayuda y comentarios para buscar una respuesta, reportar un problema o escribirle a Troy. Una persona real lee cada mensaje.",
+      "helpBody": "¿Necesitas ayuda con algo? Pregúntale a t.ROY en cualquier página, o abre Ayuda y comentarios para buscar una respuesta, reportar un problema o escribirle a Troy. Una persona real lee cada mensaje.",
       "openHelp": "Abrir Ayuda y comentarios",
       "trustQuestion": "¿Quieres saber exactamente cómo protegemos tus datos?",
       "trustLink": "Lee nuestra página de confianza",
@@ -326,7 +326,7 @@
     "accountExtras": {
       "joinTitle": "Únete a un programa con un código",
       "enterCode": "Escribe un código",
-      "enterCodeBody": "Si un programa (como un centro de empleo u organización sin fines de lucro) te dio un código, escríbelo aquí. El código te une a un lugar del programa. Si el programa tiene reglas para compartir, las ves antes de unirte, y unirte no comparte nada por sí solo. Si el código cambia tu límite de IA, Uso, más abajo, muestra el número nuevo.",
+      "enterCodeBody": "Si un programa (como un centro de empleo u organización sin fines de lucro) te dio un código, escríbelo aquí. El código te une a un lugar del programa. Si el programa tiene reglas para compartir, las ves antes de unirte, y unirte no comparte nada por sí solo. Si el código cambia tu cupo de IA, la sección Uso, más abajo, muestra el número nuevo.",
       "codePlaceholder": "Tu código",
       "codeAria": "Código del programa",
       "join": "unirme",
@@ -620,7 +620,7 @@
       "accessibility": {
         "title": "Hazlo más fácil de usar",
         "why": "Las preferencias de lectura y de movimiento deben ayudarte a seguir con la tarea.",
-        "body": "Explora el tamaño del texto, el diseño cómodo o compacto y el movimiento. La ayuda para leer incluye lenguaje sencillo, lectura en voz alta y el idioma de las respuestas del coach. Estos controles son independientes, así que puedes elegir lo que te ayude. Verifica un cambio cuando vuelvas a la página.",
+        "body": "Explora el tamaño del texto, el diseño cómodo o compacto y el movimiento. La ayuda para leer incluye lenguaje sencillo, lectura en voz alta y el idioma de las respuestas del coach. Las respuestas en español no traducen toda la interfaz. Estos controles son independientes, así que puedes elegir lo que te ayude. Verifica un cambio cuando vuelvas a la página.",
         "try": "Prueba un texto más grande o Reducir movimiento. Puedes volver atrás. El recorrido nunca cambia tus preferencias."
       },
       "privacy": {
@@ -643,9 +643,9 @@
       },
       "usage": {
         "title": "Entiende los límites",
-        "why": "Un límite claro te deja planear tu siguiente solicitud útil.",
+        "why": "Un cupo claro te deja planear tu siguiente solicitud útil.",
         "body": "Revisa el uso en vivo y los detalles de acceso. El acceso guiado, las acciones de IA y las herramientas patrocinadas son cosas distintas. Una recompensa de la orientación abre herramientas guiadas, mientras que los controles de uso y de gasto siguen igual. Tu trabajo guardado no se convierte en una solicitud de IA nueva solo porque lo leas.",
-        "try": "Usa la barra de progreso para ver tu límite actual. Pide ayuda si un límite te frena una preparación urgente."
+        "try": "Usa la barra de progreso para ver tu cupo actual. Pide ayuda si un límite te frena una preparación urgente."
       },
       "help": {
         "title": "Sigue aprendiendo, pide ayuda",
@@ -665,8 +665,8 @@
     "shareIt": "Compartirlo",
     "notNow": "Ahora no",
     "notNowOk": "Está bien decir que ahora no. No se les dice por qué.",
-    "confirmStop": "{org} pide esto.\n\n{stopping}\n\n¿Dejar de compartirlo?",
-    "requiredBy": "Lo pide {org}",
+    "confirmStop": "{org} lo exige.\n\n{stopping}\n\n¿Dejar de compartirlo?",
+    "requiredBy": "Exigido por {org}",
     "stopped": "Dejaste de compartir esto. {org} puede ver que lo hiciste.",
     "theySee": "Verían:",
     "staysPrivate": "Sigue siendo privado:",
@@ -756,7 +756,7 @@
       "record": "La mayoría de los pasos con IA dejan un registro corto: qué herramienta se usó, qué modelo de IA y una nota breve sobre el paso. La nota no incluye las palabras que escribiste, y el registro no guarda copia de lo que la IA te escribió.",
       "memory": "Cuando tienes la sesión iniciada y Mejor ayuda está activada, t.ROY recuerda tus chats recientes para retomar donde lo dejaste. Puedes borrar ese historial cuando quieras. Sin una cuenta, t.ROY no guarda tus chats.",
       "versions": "Cuando tienes la sesión iniciada, cada versión revisada de tu currículum se guarda en tu cuenta, con las respuestas que diste sobre sus líneas. Puedes descargarlas o borrarlas en Configuración.",
-      "recordStep": "La revisión de antecedentes penales es la única pantalla que te pide tu delito, y primero te pide tu sí. Lo que escribes ahí va a Anthropic, que elige elementos para tu lista de nuestra propia lista. Si escribes tus antecedentes penales en otro lugar, como el chat o el planificador de divulgación, la IA también los ve ahí. Una lista guardada conserva la lista y el estado, y conserva lo que escribiste solo si marcas la casilla para eso. Si retiras tu sí, se borran tus listas guardadas.",
+      "recordStep": "La revisión de antecedentes penales es la única pantalla que te pide tu delito, y primero te pide tu sí. Lo que escribes ahí va a Anthropic, que elige elementos de nuestra propia lista para armar tu lista de tareas. Si escribes tus antecedentes penales en otro lugar, como el chat o el planificador de divulgación, la IA también los ve ahí. Una lista guardada conserva la lista y el estado, y conserva lo que escribiste solo si marcas la casilla para eso. Si retiras tu sí, se borran tus listas guardadas.",
       "recordPlain": "Si escribes tus antecedentes penales en el chat o en el planificador de divulgación, la IA los ve ahí.",
       "never": "La IA nunca comparte tu información con otros usuarios"
     },
@@ -821,7 +821,7 @@
     },
     "tech": {
       "title": "Detalles técnicos",
-      "intro": "Para profesionales de seguridad y equipos de cumplimiento (el detalle está en inglés):"
+      "intro": "Para profesionales de seguridad y equipos de cumplimiento:"
     },
     "contact": {
       "question": "¿Preguntas sobre tus datos o tu privacidad?",

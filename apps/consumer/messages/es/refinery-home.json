@@ -29,13 +29,13 @@
     "more": "+ {count, plural, =1 {1 empleo guardado más} other {# empleos guardados más}}"
   },
   "mySharedTasks": {
-    "heading": "De tu administrador de casos",
-    "yourCaseManager": "Tu administrador de casos",
+    "heading": "De tu gestor de casos",
+    "yourCaseManager": "Tu gestor de casos",
     "by": "para el {day}"
   },
   "mySuggestions": {
-    "heading": "Sugerencias de tu administrador de casos",
-    "yourCaseManager": "Tu administrador de casos",
+    "heading": "Sugerencias de tu gestor de casos",
+    "yourCaseManager": "Tu gestor de casos",
     "jobAt": "{title} en {company}",
     "commentOn": "Un comentario sobre {label}",
     "aDocumentYouShared": "un documento que compartiste",
@@ -50,7 +50,7 @@
     "choiceNotSaved": "No se guardó tu elección. Intenta de nuevo.",
     "nudge": {
       "summary": "Agrega un número de teléfono al encabezado de tu currículum",
-      "hint": "Adaptar para un trabajo se abre cuando tu nombre y tu teléfono estén guardados. Los empleadores llaman a este número."
+      "hint": "La opción de adaptar tu currículum para un trabajo se habilita en cuanto se guarden tu nombre y tu teléfono. Los empleadores llaman a este número."
     },
     "overview": "Resumen",
     "applicationsHeading": "Solicitudes para seguir moviendo",
@@ -109,7 +109,7 @@
     "replayRefinery": "Volver a ver el recorrido de The Refinery",
     "replaySettings": "Volver a ver el recorrido de los ajustes",
     "learnSettings": "Conoce tus ajustes",
-    "orientationCheck": "Hacer la verificación de orientación",
+    "orientationCheck": "Hacer la prueba de orientación",
     "modes": {
       "bug": {
         "label": "Reportar un error",
@@ -182,10 +182,10 @@
     "troyReplied": "Troy respondió:"
   },
   "myHandoffs": {
-    "loadFailed": "No se pudo cargar lo que te envió tu administrador de casos. Intenta de nuevo.",
+    "loadFailed": "No se pudo cargar lo que te envió tu gestor de casos. Intenta de nuevo.",
     "retry": "Reintentar",
-    "empty": "No hay nada nuevo de tu administrador de casos en los últimos 30 días.",
-    "yourCaseManager": "Tu administrador de casos",
+    "empty": "No hay nada nuevo de tu gestor de casos en los últimos 30 días.",
+    "yourCaseManager": "Tu gestor de casos",
     "openIt": "{count, plural, =1 {Abrir (1 cosa)} other {Abrir (# cosas)}}",
     "by": "Para el {day}",
     "seeWhereToApply": "Ver dónde postularte",
@@ -196,7 +196,7 @@
     "saveFailedConnection": "No se guardó. Revisa tu conexión e intenta de nuevo.",
     "saveJobsFailed": "No se guardó en tus empleos. Intenta de nuevo.",
     "saveHelpFailed": "No se guardó en tu lista de ayuda. Intenta de nuevo.",
-    "noLongerListedCannotSave": "Ese lugar ya no aparece en la lista, así que no se puede guardar. Pregúntale a tu administrador de casos.",
+    "noLongerListedCannotSave": "Esa organización ya no aparece en la lista, así que no se puede guardar. Pregúntale a tu gestor de casos.",
     "listingCheckFailed": "No pudimos revisar este lugar ahora mismo.",
     "noLongerListed": "Ya no aparece en la lista.",
     "take": {
@@ -209,7 +209,7 @@
       "employer": "Guardado en tus empleos.",
       "job": "Guardado en tus empleos.",
       "resource": "Guardado en tu lista de ayuda.",
-      "next_step": "Agregado a tu lista de tu administrador de casos."
+      "next_step": "Agregado a tu lista desde lo que te envió tu gestor de casos."
     },
     "evidence": {
       "employer": {
@@ -227,10 +227,10 @@
       "resourceChecked": "Verificado el {when}",
       "resourceReviewed": "{line}, fuente revisada el {when}"
     },
-    "fromHeading": "De tu administrador de casos",
-    "foundHeading": "Tu administrador de casos encontró algo para ti",
-    "promise": "Son solo sugerencias. Tú decides qué hacer con cada una. Tu administrador de casos ve si la abriste y si la tomaste o la descartaste.",
-    "seeEverything": "Ver todo lo que te envió tu administrador de casos",
+    "fromHeading": "De tu gestor de casos",
+    "foundHeading": "Tu gestor de casos encontró algo para ti",
+    "promise": "Son solo sugerencias. Tú decides qué hacer con cada una. Tu gestor de casos ve si la abriste y si la tomaste o la descartaste.",
+    "seeEverything": "Ver todo lo que te envió tu gestor de casos",
     "loading": "Cargando..."
   },
   "laneHome": {
@@ -269,7 +269,7 @@
     "getSupport": "Conseguir apoyo",
     "action": {
       "reviewResume": "Revisar este currículum",
-      "findJob": "Buscar un trabajo al que ir",
+      "findJob": "Buscar un trabajo que quieras conseguir",
       "checkAndFinish": "Revisar y terminar",
       "buildWithTroy": "Armarlo con t.ROY",
       "saveProfile": "Guardar tu perfil",
@@ -280,7 +280,7 @@
       "practiceInterview": "Practicar para tu entrevista",
       "findHelp": "Buscar ayuda cerca de ti",
       "seePaths": "Ver caminos de trabajo",
-      "pickJob": "Elegir un trabajo al que ir",
+      "pickJob": "Elegir un trabajo que quieras conseguir",
       "openLaneDocs": "Abrir los documentos de esta ruta",
       "chooseDocs": "Elegir documentos en Mis currículums",
       "startResume": "Empezar tu currículum",
@@ -307,7 +307,7 @@
       },
       "legal": {
         "label": "Ayuda legal con antecedentes penales",
-        "line": "Asistencia legal, eliminación de antecedentes penales y ayuda con la corte."
+        "line": "Asistencia legal, ayuda para limpiar o sellar antecedentes penales y apoyo con trámites en la corte."
       },
       "mental_health": {
         "label": "Salud mental",
@@ -353,14 +353,14 @@
     "checked": "Revisado el {date}"
   },
   "orientation": {
-    "signIn": "Inicia sesión para hacer la verificación de orientación.",
+    "signIn": "Inicia sesión para hacer la prueba de orientación.",
     "kicker": "Conoce el proceso",
     "title": "Tu siguiente paso empieza aquí.",
     "intro": "Repasa las lecciones, comprueba lo que entendiste y luego usa las herramientas con un propósito claro.",
     "navAria": "Orientación",
     "tour": "Hacer el recorrido guiado",
     "settings": "Explorar los ajustes",
-    "review": "Repasa el proceso antes de la verificación",
+    "review": "Repasa el proceso antes de la prueba",
     "lessons": {
       "0": {
         "label": "Un proceso que puedes seguir usando",
@@ -425,13 +425,13 @@
       "10": {
         "label": "Tener acceso no es lo mismo que estar preparado",
         "idea": "Abrir una herramienta no significa que el trabajo esté terminado.",
-        "explanation": "La guía de progreso recomienda un orden, y tu acceso y tus acciones de IA restantes determinan lo que puedes usar. Puedes pedir que se abra antes una herramienta guiada. El apoyo y la práctica básica siguen disponibles. Los demás límites de herramientas, voz y gasto siguen aplicando.",
-        "example": "Pasar la verificación opcional abre de inmediato las herramientas guiadas para adaptar y postular. No envía ninguna solicitud, no agrega un plan de pago ni quita los límites de uso."
+        "explanation": "La guía de progreso recomienda un orden, y tu acceso y tu cupo de IA restante determinan lo que puedes usar. Puedes pedir que se abra antes una herramienta guiada. El apoyo y la práctica básica siguen disponibles. Los demás límites de herramientas, voz y gasto siguen aplicando.",
+        "example": "Aprobar la prueba opcional abre de inmediato las herramientas guiadas para adaptar documentos y preparar solicitudes. No envía ninguna solicitud, no agrega un plan de pago ni quita los límites de uso."
       },
       "11": {
         "label": "Llévalo a la práctica",
         "idea": "Ya viste el proceso. Ahora elige tu siguiente paso.",
-        "explanation": "Prueba la verificación opcional de seis preguntas que aparece abajo. Si respondes todas bien, obtienes acceso inmediato a las herramientas guiadas. No hay cronómetro, no hay límite de intentos y hay explicaciones de lo que falles. También puedes salir y volver desde Ayuda o Ajustes.",
+        "explanation": "Haz la prueba opcional de seis preguntas que aparece abajo. Si respondes todas bien, obtienes acceso inmediato a las herramientas guiadas. No hay cronómetro, no hay límite de intentos y hay explicaciones de lo que falles. También puedes salir y volver desde Ayuda o Ajustes.",
         "example": "Esto mide si entiendes las herramientas. No es una evaluación de contratación, ni una credencial, ni un juicio sobre tu capacidad."
       }
     }
@@ -448,10 +448,10 @@
     "passedAll": "Respondiste bien todas las preguntas. Las herramientas guiadas para adaptar y postular están abiertas en tu cuenta. El acceso que ya tenías se mantiene.",
     "tailorReal": "Adaptar para un trabajo real",
     "prepareApp": "Preparar mi solicitud",
-    "limitsUnchanged": "Tus límites de uso y las funciones patrocinadas no cambian. Tus logros de empleo siguen viniendo del trabajo que haces.",
+    "limitsUnchanged": "Tus límites de uso y las funciones patrocinadas no cambian. Tus avances profesionales reales siguen viniendo del trabajo que haces.",
     "allowMotion": "Permitir el movimiento de la celebración",
     "keepStill": "Celebración sin movimiento",
-    "checkAria": "Verificación de orientación opcional",
+    "checkAria": "Prueba de orientación opcional",
     "questionOf": "Pregunta {number} de {total}",
     "upgradeSaved": "Tu mejora está guardada. Practica otra vez si quieres.",
     "sixQuestions": "Seis preguntas cortas. Si respondes bien las seis, se abren las herramientas guiadas. Sin cronómetro. Reintenta las veces que quieras.",
@@ -466,7 +466,7 @@
     "checkRevised": "Revisar mis respuestas corregidas",
     "checkUnlock": "Revisar respuestas y desbloquear",
     "pauseResume": "Puedes pausar y seguir en esta pestaña. Si recargas, se borran las respuestas sin terminar.",
-    "leavingClears": "Si sales de esta verificación, se borran las respuestas sin terminar.",
+    "leavingClears": "Si sales de esta prueba, se borran las respuestas sin terminar.",
     "earnedStays": "El acceso que ganaste se queda en tu cuenta.",
     "questions": {
       "facts": {
@@ -502,7 +502,7 @@
         }
       },
       "limits": {
-        "prompt": "¿Qué hace pasar esta verificación?",
+        "prompt": "¿Qué efecto tiene aprobar esta prueba?",
         "choices": {
           "0": "Da IA ilimitada.",
           "1": "Abre las herramientas guiadas. Los límites de uso siguen aplicando.",
@@ -561,7 +561,7 @@
     "sendReply": "Enviar respuesta a Troy",
     "sendRequest": "Enviar solicitud a Troy",
     "askTroy": "Pedirle a t.ROY",
-    "allowanceUpdated": "Se actualizaron tus acciones disponibles.",
+    "allowanceUpdated": "Se actualizó tu cupo de IA.",
     "earlyOpen": "El acceso anticipado está abierto.",
     "savedForReview": "Tu solicitud quedó guardada para revisión.",
     "notGranted": "Esta solicitud no fue aprobada.",
@@ -579,7 +579,7 @@
     "leftToday": "restantes en el conteo de hoy",
     "availableCount": "disponibles",
     "until": "hasta el {when}",
-    "currentAllowance": "Tus acciones disponibles",
+    "currentAllowance": "Tu cupo de IA actual",
     "limitsApply": "Siguen aplicando los límites de la cuenta y de cada operación.",
     "extraNoRemove": "Las acciones extra no quitan este límite.",
     "askExtra": "Pedir más acciones de IA",
@@ -600,7 +600,7 @@
     "sooner": "¿Necesitas una herramienta guiada antes? Usa su candado para pedírselo a t.ROY. El apoyo, la práctica y tus documentos guardados siguen disponibles. Las reseñas públicas son opcionales y no dan créditos de IA.",
     "shareFeedback": "Cuéntanos tu opinión sincera",
     "reportProblem": "Reportar un problema",
-    "bonusNote": "Una opinión útil o un error que se pueda repetir puede dar un pequeño bono de IA después de revisarlo. Sea bueno o malo, cuéntanos qué pasó.",
+    "bonusNote": "Una opinión útil o un error que se pueda reproducir puede dar un pequeño bono de cupo de IA después de revisarlo. Ya sea buena o mala, cuéntanos qué pasó.",
     "yourRequests": "Tus solicitudes de acceso",
     "accountRequest": "Solicitud de la cuenta",
     "replyToTroy": "Responder a Troy",
@@ -647,9 +647,9 @@
     "title": "Tu progreso",
     "intro": "Cada paso cuenta. Aquí ves lo que has logrado y qué sigue.",
     "whatNext": "Qué hacer ahora",
-    "upcoming": "Próximamente",
+    "upcoming": "Próximos",
     "manageApps": "Administrar solicitudes",
-    "followUpWith": "Dar seguimiento con {company}",
+    "followUpWith": "Dar seguimiento a {company}",
     "followUp": "Dar seguimiento",
     "due": "vence",
     "noFollowUps": "Todavía no hay seguimientos programados. Guarda un trabajo y pon una fecha de seguimiento en Solicitudes, y aparecerá aquí.",
@@ -679,7 +679,7 @@
     "actionsTaken": "Acciones realizadas",
     "activityDetail": "Detalle de actividad",
     "resumesBuilt": "Currículums armados",
-    "disclosurePlans": "Planes de divulgación",
+    "disclosurePlans": "Planes para hablar de tus antecedentes penales",
     "practiceInterviews": "Entrevistas de práctica",
     "startedCount": "{count} empezadas",
     "jobSearches": "Búsquedas de trabajo",
@@ -699,8 +699,8 @@
       "forge": "The Forge",
       "dashboard": "tu panel",
       "resources": "Recursos",
-      "tailor": "el Adaptador de currículum",
-      "disclosure": "Divulgación",
+      "tailor": "Adaptador de currículum",
+      "disclosure": "Qué decir",
       "interview": "Práctica de entrevistas",
       "jobs": "la bolsa de empleos",
       "thisTool": "esta herramienta"
@@ -737,7 +737,7 @@
         "why": "Practicar en voz alta hace más pequeña la entrevista de verdad."
       },
       "disclosure": {
-        "label": "Divulgación lista",
+        "label": "Listo para hablar",
         "why": "Tener tus palabras listas para la pregunta sobre tus antecedentes penales te da el control."
       },
       "proof": {
@@ -791,7 +791,7 @@
         "more": "Practica una entrevista en voz alta"
       },
       "disclosure": {
-        "first": "Arma tu plan de divulgación",
+        "first": "Arma tu plan para hablar de tus antecedentes penales",
         "more": "Ensaya tus palabras en voz alta"
       },
       "proof": {
@@ -906,13 +906,13 @@
     },
     "strip": {
       "title": "Tus últimos 30 días",
-      "summary": "Agregaste trabajo en {days} de los últimos 30 días. Más el {day}: {units} {units, plural, =1 {elemento} other {elementos}}.",
+      "summary": "Agregaste trabajo en {days} de los últimos 30 días. El día con más trabajo fue el {day}: {units} {units, plural, =1 {elemento} other {elementos}}.",
       "none": "Todavía no hay trabajo con fecha en los últimos 30 días. Lo que agregues después aparecerá aquí.",
       "undated": "Los datos de trabajo confirmados antes de que se guardaran las fechas siguen contando en tu puntaje. Solo que no aparecen en esta tira."
     },
     "gains": {
       "title": "Lo que más te hace avanzar",
-      "sub": "Ordenado por puntos según el tiempo que suele tomar. Elige lo que le quede a tu día."
+      "sub": "Ordenado por puntos según el tiempo que suele tomar. Elige lo que mejor se ajuste a tu día."
     },
     "moments": {
       "title": "Momentos",

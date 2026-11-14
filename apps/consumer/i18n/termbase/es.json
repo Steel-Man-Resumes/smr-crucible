@@ -8,9 +8,9 @@
       "en": "record (criminal record)",
       "es": "antecedentes penales",
       "avoid": [
-        "(?<!verificaci[oó]n de )antecedentes(?!\\s+penales)"
+        "(?<!verificaci[oó]n de )(?<!verificaciones de )antecedentes(?!\\s+penales)"
       ],
-      "note": "\"antecedentes\" alone can read as work background. Found in 16 back-translation flags on 2026-11-13. Work history is \"historial laboral\". Exception (2026-11-14): \"verificación de antecedentes\" is the ordinary Spanish for a background check and is allowed as that exact phrase; do NOT write \"verificación de antecedentes penales\" for a plain background check, which narrows it to a criminal-record check (a job-title mismatch is caught by an employment check).",
+      "note": "\"antecedentes\" alone can read as work background. Found in 16 back-translation flags on 2026-11-13. Work history is \"historial laboral\". Exception (2026-11-14): \"verificación(es) de antecedentes\" is the ordinary Spanish for a background check and is allowed as that exact phrase; do NOT write \"verificación de antecedentes penales\" for a plain background check, which narrows it to a criminal-record check (a job-title mismatch is caught by an employment check).",
       "status": "locked"
     },
     {

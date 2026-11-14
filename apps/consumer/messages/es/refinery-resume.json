@@ -38,7 +38,7 @@
     "title": "Seguimiento de postulaciones",
     "intro": "Sigue tus postulaciones desde que las guardas hasta que te ofrecen el trabajo. Cada paso tiene herramientas para ayudarte a prepararte.",
     "prepInterview": "Prepárate para esta entrevista con t.ROY",
-    "practiceAnytime": "Puedes <link>practicar una entrevista cuando quieras</link>. Una invitación pasa esa vacante directo a la preparación.",
+    "practiceAnytime": "Puedes <link>practicar una entrevista cuando quieras</link>. Si te invitan a una entrevista, esa vacante pasa directo a la preparación.",
     "empty": "Todavía no hay postulaciones. Guarda vacantes del Tablero de empleos para empezar a seguirlas.",
     "findJobs": "Buscar empleos →",
     "gotInterview": "Me llamaron a entrevista",
@@ -61,8 +61,8 @@
     },
     "archived": "Archivadas ({count})",
     "archivedStatus": {
-      "declined": "rechazada",
-      "rejected": "descartada"
+      "declined": "la rechazaste",
+      "rejected": "rechazada por el empleador"
     },
     "ago": {
       "now": "justo ahora",
@@ -356,7 +356,7 @@
         "screening": "Proyección",
         "reading": "Lectura",
         "published": "Publicado",
-        "in_press": "En imprenta",
+        "in_press": "En prensa",
         "accepted": "Aceptado",
         "submitted": "Enviado",
         "award": "Premio",
@@ -401,7 +401,7 @@
         "ensemble": "Elenco",
         "understudy": "Suplente",
         "swing": "Reemplazo",
-        "background": "Fondo"
+        "background": "Extra"
       },
       "union": {
         "member": "Miembro",
@@ -494,7 +494,7 @@
           "label": "Experiencia en investigación",
           "title": "Proyecto o puesto",
           "venue": "Laboratorio, equipo u organización",
-          "example": "Estudio sobre vivienda tras la salida"
+          "example": "Estudio sobre vivienda y reinserción social"
         },
         "presentation": {
           "label": "Presentación o charla",
@@ -639,7 +639,7 @@
         "record": "Tu registro",
         "resume": "Currículum de artista",
         "bio": "Biografía",
-        "statement": "Declaración",
+        "statement": "Texto del artista",
         "samples": "Muestras de trabajo",
         "text": "Texto sin formato",
         "plan": "Dos caminos",
@@ -730,7 +730,7 @@
     "statement": {
       "fixed": "Se corrigió \"{word}\".",
       "saved": "Guardado. Es tuyo.",
-      "label": "Tu declaración",
+      "label": "Tu declaración de artista",
       "placeholder": "Empieza por donde quieras. Lo que haces, cómo lo haces, por qué.",
       "counts": "{chars} caracteres con espacios, {words} palabras",
       "over": "{over} por encima del límite.",
@@ -754,7 +754,7 @@
       },
       "spelling": "Ortografía",
       "saveFirst": "Primero guarda tus palabras y luego corrige la ortografía.",
-      "to": "por",
+      "to": "a",
       "fix": "Corregir",
       "ignore": "Ignorar",
       "versions": "Versiones guardadas ({count})",
@@ -813,7 +813,7 @@
       "pathDream": "Sueño",
       "pathNow": "Ahora",
       "ariaLane": "Ruta de intérprete {name}",
-      "troyLine": "Una página, armada con tu registro. Papeles y orden de crédito exactamente como aparecen. No se agrega nada.",
+      "troyLine": "Una página, armada con tu registro. Roles y orden de crédito exactamente como aparecen. No se agrega nada.",
       "toolsAria": "Herramientas de intérprete",
       "top": {
         "displayName": {
@@ -828,7 +828,7 @@
           "label": "Agente o representante (opcional, como quieren que aparezca)"
         },
         "basedIn": {
-          "label": "Dónde vives (opcional)",
+          "label": "Ciudad base (opcional)",
           "ph": "Chicago, Illinois"
         },
         "email": {
@@ -946,7 +946,7 @@
       },
       "certificate": {
         "label": "Certificados y credenciales",
-        "help": "Certificados de oficios, tarjetas OSHA, licencia comercial (CDL), montacargas, manejo de alimentos, diplomas, finalización de programas."
+        "help": "Certificados de oficios, tarjetas OSHA, licencia de conducir comercial (CDL), montacargas, manejo de alimentos, diplomas, finalización de programas."
       },
       "reference_letter": {
         "label": "Cartas de recomendación",
@@ -954,7 +954,7 @@
       },
       "record": {
         "label": "Registros y documentos legales",
-        "help": "Papeles de la corte, documentos de liberación, cartas de libertad condicional o de prueba, registros de eliminación de antecedentes penales."
+        "help": "Documentos judiciales, documentos de puesta en libertad, cartas de libertad condicional o de libertad a prueba (probation), constancias de cancelación de antecedentes penales."
       },
       "note": {
         "label": "Notas para ti",
@@ -1140,7 +1140,7 @@
       "formatTitle": "Formato del currículum",
       "formatChrono": {
         "label": "Primero las fechas",
-        "body": "Tus trabajos en orden, del más reciente al más antiguo, con los años en cada uno. Los empleadores y las verificaciones de antecedentes penales buscan fechas, así que esto le sirve a casi todos."
+        "body": "Tus trabajos en orden, del más reciente al más antiguo, con los años en cada uno. Los empleadores y las verificaciones de antecedentes buscan fechas, así que esto le sirve a casi todos."
       },
       "hybridComing": "El formato híbrido viene en camino: una lista corta de habilidades arriba y luego cada trabajo con sus años. Cuando esté listo, lo elegirás aquí.",
       "noFunctional": "¿Por qué no una página solo de habilidades y sin fechas? Una verificación de antecedentes muestra tus fechas de todos modos, y una página que las esconde parece que escondes algo. Esa no la armamos.",
@@ -1324,13 +1324,13 @@
         "failed": "No terminó",
         "skipped": "No se ejecutó"
       },
-      "openNow": ". Abierto ahora",
-      "truthOne": "La revisión de veracidad no pudo comparar esta línea con lo que nos dijiste. Asegúrate de que cada una sea cierta, o quítala, antes de enviar esto:",
-      "truthMany": "La revisión de veracidad no pudo comparar estas líneas con lo que nos dijiste. Asegúrate de que cada una sea cierta, o quítala, antes de enviar esto:",
+      "openNow": ". Abrir ahora",
+      "truthOne": "La revisión de veracidad no pudo relacionar esta línea con lo que nos dijiste. Asegúrate de que sea cierta, o quítala, antes de enviar esto:",
+      "truthMany": "La revisión de veracidad no pudo relacionar estas líneas con lo que nos dijiste. Asegúrate de que cada una sea cierta, o quítala, antes de enviar esto:",
       "needsCheck": "Algunas líneas necesitan tu revisión antes de terminar.",
       "notLinked": "Esta vacante ya está marcada como {status} en Postulaciones, así que conserva el currículum que tiene. El nuevo está en tu Biblioteca.",
-      "statusHeardBack": "con respuesta",
-      "statusPast": "más allá de guardada",
+      "statusHeardBack": "respondida",
+      "statusPast": "más avanzada que guardada",
       "letterNotSaved": "La carta de presentación no se guardó. El currículum sí. Puedes escribir una carta a partir del currículum.",
       "reviewThis": "Revisar esta",
       "retrySave": "Reintentar el guardado",
@@ -1412,7 +1412,7 @@
       "proofNote": "Opcional. Toca una respuesta o escribe una. Di solo lo que sabes que es cierto. Salta lo que no sepas con seguridad.",
       "countGroup": "¿Qué podrías contar aquí?",
       "countNote": "¿Qué podrías contar aquí? Escribe un número solo si lo sabes.",
-      "countAria": "Cuántos {prompt}",
+      "countAria": "Cantidad de {prompt}",
       "notSure": "No estoy seguro",
       "leaveOut": "Está bien. Dejaremos el número fuera. Una línea verdadera sin número igual sirve.",
       "attention": "Elige algo que contaste y escribe el número que sabes que es cierto.",
@@ -1582,9 +1582,9 @@
       "locked": "Base bloqueada. Los cambios no se guardan. Desbloquéala en Mis currículums para cambiarla.",
       "new": "+ Nuevo",
       "checkBefore": "Revisa esto antes de enviar",
-      "truthSome": "La revisión de veracidad encontró algunas cosas que no pudimos comparar con lo que nos dijiste. Busca cada una y asegúrate de que sea cierta antes de enviar esto:",
-      "truthOne": "La revisión de veracidad encontró algo que no pudimos comparar con lo que nos dijiste. Búscalo y asegúrate de que sea cierto antes de enviar esto:",
-      "truthNoWords": "La revisión de veracidad encontró algo en esta versión que no pudo comparar con lo que nos dijiste, pero no pudo señalar las palabras exactas. Lee cada línea antes de enviarla.",
+      "truthSome": "La revisión de veracidad encontró algunas cosas que no pudimos relacionar con lo que nos dijiste. Busca cada una y asegúrate de que sea cierta antes de enviar esto:",
+      "truthOne": "La revisión de veracidad encontró algo que no pudimos relacionar con lo que nos dijiste. Búscalo y asegúrate de que sea cierto antes de enviar esto:",
+      "truthNoWords": "La revisión de veracidad encontró algo en esta versión que no pudo relacionar con lo que nos dijiste, pero no pudo señalar las palabras exactas. Lee cada línea antes de enviarla.",
       "tailoredTitle": "Lo que adaptamos para esta vacante",
       "tailoredNote": "Usa estos puntos en tu divulgación y en la preparación de entrevista. Son donde tu perfil y esta vacante se conectan.",
       "tabResume": "Currículum",

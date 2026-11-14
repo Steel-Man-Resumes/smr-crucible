@@ -84,7 +84,7 @@
   "carry": {
     "yourAccount": "tu cuenta",
     "title": "Escribe tu código",
-    "lead": "El que anotaste antes de salir. Llena todo lo que ya contestaste para que no empieces de cero.",
+    "lead": "El que anotaste antes de salir. Con él se vuelve a llenar todo lo que ya contestaste, para que no empieces de cero.",
     "whereSignedIn": "Cuando agregues tu currículum, tus respuestas se guardan en la cuenta de {email}, para que puedas terminar en cualquier computadora.",
     "whereSignedOut": "Tus respuestas se quedan en esta computadora. Inicia sesión para guardarlas en una cuenta gratis.",
     "codeLabel": "Tu código",
@@ -302,12 +302,12 @@
         "time": "Una sola sesión",
         "name": "The Forge",
         "what": "Sube un currículum o cuenta tu historial laboral. Contesta unas preguntas sobre tus metas, obstáculos, preparación y antecedentes penales. The Forge te entrega un currículum, una carta de presentación, caminos de carrera que encajan con tu experiencia y un plan de recursos. Todo en lenguaje sencillo.",
-        "tech": "Claude Sonnet (Anthropic) con una estructura de instrucciones a la medida que hace cumplir las 10 reglas de conducta. El currículum se lee con OCR + NLP. El resultado se firma con un código y se registra."
+        "tech": "Claude Sonnet (Anthropic) con una estructura de instrucciones a la medida que hace cumplir las 10 reglas de conducta. El currículum se lee con OCR + NLP. Del resultado se genera una huella (hash) y se registra."
       },
       "j1": {
         "time": "5 minutos",
         "name": "Perfil y bolsa de trabajo",
-        "what": "Llena tus datos de contacto. Busca ofertas reales en varias fuentes de empleo. Los empleadores que verificamos que contratan a personas con antecedentes penales aparecen marcados, y cada marca indica dónde aplica.",
+        "what": "Llena tus datos de contacto. Busca ofertas reales en varias fuentes de empleo. Los empleadores que verificamos que contratan a personas con antecedentes penales aparecen marcados, y cada marca indica en qué lugares es válida.",
         "tech": "Cada marca se apoya en evidencia con fecha en el directorio de empleadores (Neon PostgreSQL) que vence sola, y solo aplica donde se encontró la evidencia. Ningún resumen de IA puede dar una marca."
       },
       "j2": {
@@ -407,12 +407,12 @@
       },
       "d6": {
         "us": "Creado por alguien que pasó por el mismo sistema en carne propia",
-        "them": "Herramientas diseñadas por personas que nunca estuvieron presas, para personas que sí"
+        "them": "Herramientas diseñadas por personas que nunca han estado en prisión, para personas que sí"
       }
     },
     "versus": "frente a {them}",
     "privacyTitle": "El modelo de privacidad",
-    "privacyLead": "El trauma de la vigilancia es real. Muchas personas afectadas por el sistema de justicia penal han sido vigiladas, grabadas e informadas sin saberlo ni dar su permiso durante años. Esta plataforma está diseñada para deshacer ese patrón.",
+    "privacyLead": "Muchas personas afectadas por el sistema de justicia penal han sido vigiladas, grabadas y objeto de informes durante años, sin saberlo y sin dar su consentimiento. Esta plataforma está diseñada para deshacer ese patrón.",
     "privacy": {
       "p0": {
         "title": "Las transcripciones de práctica se guardan solo si tú decides",
@@ -480,11 +480,11 @@
       "a4": "Airtable: fuente de datos de empleadores verificados (curada a mano, importada a PostgreSQL)"
     },
     "partnersTitle": "Para organizaciones aliadas",
-    "partnersLead": "Los programas de reinserción, las organizaciones de desarrollo laboral, las sociedades de ayuda legal y los centros de empleo pueden integrar Steel Man Resumes al trabajo con sus clientes. Los códigos de acceso desbloquean límites más altos de uso de IA y permiten dar seguimiento al avance con el permiso de la persona.",
+    "partnersLead": "Los programas de reinserción, las organizaciones de desarrollo laboral, las sociedades de ayuda legal y los centros de empleo pueden integrar Steel Man Resumes al trabajo con sus clientes. Los códigos de acceso desbloquean un cupo de IA mayor y permiten dar seguimiento al avance con el permiso de la persona.",
     "partners": {
       "n0": {
         "label": "Código de acceso",
-        "detail": "Un código por programa. Los clientes lo escriben al iniciar sesión para desbloquear límites más altos. Los códigos están vinculados a la cuenta de tu organización aliada."
+        "detail": "Un código por programa. Los clientes lo escriben al iniciar sesión para desbloquear un cupo de IA mayor. Los códigos están vinculados a la cuenta de tu organización aliada."
       },
       "n1": {
         "label": "Panel de la organización aliada",
@@ -504,7 +504,7 @@
     "funders": {
       "n0": {
         "label": "Resultados medibles",
-        "detail": "Cada The Forge terminado, currículum armado, plan para hablar de los antecedentes penales, sesión de entrevista y solicitud queda registrado, con el permiso del usuario y sin recoger datos personales en los informes agregados."
+        "detail": "Se registra cada vez que alguien termina The Forge, y también cada currículum armado, plan para hablar de los antecedentes penales, sesión de entrevista y solicitud, con el permiso del usuario y sin recoger datos personales en los informes agregados."
       },
       "n1": {
         "label": "Registro de auditoría",
@@ -520,15 +520,15 @@
       }
     },
     "livedTitle": "Hecho por alguien que lo vivió",
-    "lived1": "Steel Man Resumes lo creó Troy Carr, un defensor del trabajo afectado él mismo por el sistema de justicia penal, con una década de servicio directo recorriendo el mismo sistema que estas herramientas ayudan a las personas a sobrevivir.",
-    "lived2": "La plataforma refleja lo que él deseaba que existiera cuando estuvo adentro: un solo lugar que entendiera los antecedentes penales, que no tratara los vacíos como motivo de rechazo y que diera orientación en lenguaje sencillo en vez de consejos genéricos pensados para quienes nunca estuvieron presos.",
+    "lived1": "Steel Man Resumes lo creó Troy Carr, defensor de la inserción laboral que vivió el sistema de justicia penal en carne propia, con una década de servicio directo recorriendo el mismo sistema que estas herramientas ayudan a las personas a sobrevivir.",
+    "lived2": "La plataforma refleja lo que él deseaba que existiera cuando estaba dentro del sistema: un solo lugar que entendiera los antecedentes penales, que no tratara los períodos sin empleo como motivo de rechazo y que diera orientación en lenguaje sencillo en vez de consejos genéricos pensados para quienes nunca han estado en prisión.",
     "lived3": "La investigación es real. Las reglas de conducta son reales. Los empleadores están verificados. El modelo de privacidad se diseñó pensando en el trauma de la vigilancia porque Troy también lo ha vivido.",
     "licenseLine": "Steel Man Resumes · código abierto AGPL-3.0",
     "seeDemo": "ver The Forge en acción (modo de demostración)",
     "backIntro": "Volver a la introducción"
   },
   "policy": {
-    "banner": "{orgs} {count, plural, =1 {requiere} other {requieren}} que compartas algo como parte del programa. Todavía no se abre nada.",
+    "banner": "{orgs} {count, plural, =1 {requiere} other {requieren}} que compartas algo como parte del programa. Todavía no tienen acceso a nada.",
     "and": " y ",
     "read": "Lee lo que requieren"
   },
@@ -551,7 +551,7 @@
     "askNoteLabel": "Algo que quieras que Troy sepa (opcional)",
     "askRefLabel": "¿Quién te mandó aquí? (opcional)",
     "askButton": "Pedir un lugar",
-    "askPending": "Tu solicitud llegó. Troy las revisa él mismo.",
+    "askPending": "Tu solicitud llegó. Troy revisa cada una personalmente.",
     "alwaysHeading": "Esto siempre funciona",
     "backToForge": "Volver a The Forge",
     "settings": "Configuración",

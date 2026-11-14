@@ -15,7 +15,7 @@
     "processBody": "Compartes tu currículum (o armas uno), nos cuentas lo que te importa y describes lo que se te atraviesa. t.ROY está en cada página si necesitas ayuda.",
     "whatYouGet": "Lo que recibes",
     "whatYouGetBody": "Un texto personal sobre tus fortalezas, habilidades que encajan con trabajos reales y recursos para tu situación. Puedes descargarlo o seguir trabajando en The Refinery.",
-    "scienceTitle": "La ciencia detrás",
+    "scienceTitle": "La ciencia que lo respalda",
     "scienceNote": "Cada función se basa en investigación real. Abre cualquier sección para saber más.",
     "ws1": {
       "title": "Bases de las ciencias de la conducta",
@@ -95,8 +95,8 @@
       "yesNotSaved": "Tu sí no se guardó, así que tus respuestas sobre tus antecedentes penales siguen lejos de la IA. Inténtalo de nuevo.",
       "notSaved": "No se guardó. Inténtalo de nuevo.",
       "title": "Tus respuestas sobre antecedentes penales y la IA",
-      "p1": "Las preguntas sobre antecedentes penales piden saber dónde sale el tema, qué tipo de antecedentes penales son, hace cuánto, si estás bajo supervisión y tus propias palabras. Puedes saltarte cualquiera. Este plan nunca pregunta qué pasó.",
-      "p2": "Con tu sí, esas respuestas pueden ir a un servicio de IA (el principal, o uno de respaldo si el principal no funciona) para que te lea tu plan de vuelta, y tus propias palabras sobre tus antecedentes penales pasan a la práctica con t.ROY. La IA nunca reescribe tus líneas sobre tus antecedentes penales. Sin tu sí, ninguna respuesta sobre tus antecedentes penales va a ninguna IA.",
+      "p1": "Las preguntas sobre antecedentes penales piden saber en qué situaciones sale el tema, qué tipo de antecedentes penales tienes, hace cuánto tiempo, si estás bajo supervisión y tus propias palabras. Puedes saltarte cualquiera. Este plan nunca te pregunta qué pasó.",
+      "p2": "Con tu sí, esas respuestas pueden ir a un servicio de IA (el principal, o uno de respaldo si el principal no funciona) para que te vuelva a leer tu plan, y tus propias palabras sobre tus antecedentes penales se usan en la práctica con t.ROY. La IA nunca reescribe tus líneas sobre tus antecedentes penales. Sin tu sí, ninguna respuesta sobre tus antecedentes penales va a ninguna IA.",
       "p3": "Tu sí se guarda en tu cuenta con la fecha, y puedes retirarlo aquí cuando quieras.",
       "p4": "Tus respuestas y tus palabras sobre tus antecedentes penales nunca se guardan: ni en tu plan, ni en tu Biblioteca, ni con una solicitud de trabajo. Cópialas o descárgalas antes de salir de la página.",
       "yes": "Sí, un servicio de IA puede usarlas",
@@ -107,7 +107,7 @@
       "body": "Tus respuestas agregaron a tu plan la conversación sobre tus antecedentes penales. Primero, una pregunta."
     },
     "done": {
-      "title": "Eso es todo en tu camino",
+      "title": "Eso es todo lo que hay en tu camino",
       "answered": "{count} contestadas",
       "skipped": ", {count} saltadas",
       "notSure": ", {count} con \"no estoy seguro\"",
@@ -284,7 +284,7 @@
       },
       "behavioral": {
         "label": "Basada en tu experiencia (STAR)",
-        "description": "\"Cuéntame de una vez en que...\" Practica con situaciones reales."
+        "description": "\"Cuéntame de una ocasión en la que...\" Practica con situaciones reales."
       },
       "industry": {
         "label": "De tu sector",
@@ -414,7 +414,7 @@
       "errNoMic": "Este navegador no permite usar el micrófono.",
       "errStart": "No se pudo empezar la práctica de voz.",
       "errReserve": "No se pudo reservar la sesión de voz.",
-      "errOffer": "No se pudo crear la oferta de voz.",
+      "errOffer": "No se pudo iniciar la conexión de voz.",
       "errConnection": "Falló la conexión de voz en tiempo real.",
       "errStartShort": "No se pudo empezar la práctica de voz."
     },
@@ -453,7 +453,7 @@
     "coaching": {
       "lead": "Esto es orientación profesional, no asesoría legal.",
       "body": "Se arma con tus respuestas. Lo que no contestaste queda abierto. Aquí no se llena nada con una suposición.",
-      "saved": "Lo que se guarda en tu Biblioteca: el trabajo que nombraste y tu plan para los otros obstáculos (y se queda con un trabajo si llegaste aquí desde uno). Lo que no se guarda: la parte de tus antecedentes penales, cualquier otra cosa que escribiste y la lectura de t.ROY. La parte de tus antecedentes penales solo queda en esta pantalla hasta que la copies o la descargues."
+      "saved": "Lo que se guarda en tu Biblioteca: el trabajo que nombraste y tu plan para los otros obstáculos (y queda ligado a ese trabajo si llegaste aquí desde uno). Lo que no se guarda: la parte de tus antecedentes penales, cualquier otra cosa que escribiste y la lectura de t.ROY. La parte de tus antecedentes penales solo queda en esta pantalla hasta que la copies o la descargues."
     },
     "save": {
       "saved": "Guardado en tu Biblioteca, sin la parte de tus antecedentes penales. Puedes volver a verlo ahí.",
@@ -569,7 +569,7 @@
       },
       "documents": {
         "label": "Identificación, documentos y licencias",
-        "blurb": "Identificación estatal, tarjeta de Seguro Social, licencia de conducir o licencia de trabajo."
+        "blurb": "Identificación estatal, tarjeta de Seguro Social, licencia de conducir o licencia profesional."
       },
       "skills": {
         "label": "Habilidades, computadoras y acceso al teléfono",
@@ -748,7 +748,7 @@
         "c": {
           "family": "Cuidar a mi familia",
           "health": "Salud",
-          "inside": "Tiempo encarcelado",
+          "inside": "Tiempo en prisión o en la cárcel",
           "searching": "Buscar trabajo",
           "school": "Estudios o capacitación",
           "informal": "Trabajo informal o por dinero en efectivo",
@@ -1097,7 +1097,7 @@
         }
       },
       "record_supervision": {
-        "q": "¿Estás en libertad condicional u otra supervisión ahora?",
+        "q": "¿Estás en libertad a prueba (probation), en libertad condicional (parole) u otra forma de supervisión ahora?",
         "c": {
           "yes": "Sí",
           "no": "No",
@@ -1132,7 +1132,7 @@
         "c": {
           "work": "Mi trabajo actual o reciente",
           "training": "La capacitación o los estudios que terminé",
-          "showing_up": "Cómo me presento",
+          "showing_up": "Que cumplo y llego a trabajar",
           "reference": "Alguien que responderá por mí",
           "not_sure": "No estoy seguro"
         }
