@@ -1,14 +1,38 @@
 {
   "optional": "(opcional)",
   "goalOptions": {
-    "stability": { "label": "Algo estable", "description": "Horario constante, ingresos confiables, un lugar donde pueda quedarme." },
-    "growth": { "label": "Espacio para crecer", "description": "Quiero desarrollar habilidades y subir de puesto con el tiempo." },
-    "back_to_my_trade": { "label": "Volver a mi oficio", "description": "Trabajo que ya sé hacer: un oficio, una licencia, una habilidad que he usado." },
-    "meaning": { "label": "Un trabajo que me importe", "description": "Me importa lo que hago, no solo el sueldo." },
-    "immediate": { "label": "Algo para ahora mismo", "description": "Necesito ingresos rápido. Lo demás lo resuelvo después." },
-    "independence": { "label": "Ser mi propio jefe algún día", "description": "Quiero ir preparándome para manejar algo propio." },
-    "community": { "label": "Retribuir a mi comunidad", "description": "Yo ya pasé por eso. Quiero ayudar a otros que también lo están pasando." },
-    "flexibility": { "label": "Necesito un horario flexible", "description": "Citas, familia, programas. Mi trabajo tiene que adaptarse a mi vida." }
+    "stability": {
+      "label": "Algo estable",
+      "description": "Horario constante, ingresos confiables, un lugar donde pueda quedarme."
+    },
+    "growth": {
+      "label": "Espacio para crecer",
+      "description": "Quiero desarrollar habilidades y subir de puesto con el tiempo."
+    },
+    "back_to_my_trade": {
+      "label": "Volver a mi oficio",
+      "description": "Trabajo que ya sé hacer: un oficio, una licencia, una habilidad que he usado."
+    },
+    "meaning": {
+      "label": "Un trabajo que me importe",
+      "description": "Me importa lo que hago, no solo el sueldo."
+    },
+    "immediate": {
+      "label": "Algo para ahora mismo",
+      "description": "Necesito ingresos rápido. Lo demás lo resuelvo después."
+    },
+    "independence": {
+      "label": "Ser mi propio jefe algún día",
+      "description": "Quiero ir preparándome para manejar algo propio."
+    },
+    "community": {
+      "label": "Retribuir a mi comunidad",
+      "description": "Yo ya pasé por eso. Quiero ayudar a otros que también lo están pasando."
+    },
+    "flexibility": {
+      "label": "Necesito un horario flexible",
+      "description": "Citas, familia, programas. Mi trabajo tiene que adaptarse a mi vida."
+    }
   },
   "confidenceOptions": {
     "none": "Todavía no tengo uno",
@@ -87,7 +111,7 @@
     "confirmHint": "Esto salió de tu currículum. Cámbialo si te mudaste.",
     "typeHint": "Empieza a escribir una ciudad o un código postal y elige de la lista. ¿No aparece? Escríbelo de todos modos.",
     "offerStoryTitle": "¿Hay algo que se interponga en tu camino? (opcional)",
-    "offerStoryBody": "Antecedentes, un vacío en tu historial, no tener cómo llegar. Cuéntamelo antes de armar la página y puedo buscar las leyes y la ayuda que te correspondan. O sáltalo y armemos ya.",
+    "offerStoryBody": "Antecedentes penales, un vacío en tu historial, no tener transporte. Cuéntamelo antes de armar la página y puedo buscar las leyes y la ayuda que te correspondan. O sáltalo y armemos ya.",
     "offerStoryButton": "Agregar eso primero"
   },
   "schedule": {
@@ -101,7 +125,7 @@
     "steady": {
       "title": "Quieres un trabajo estable. ¿Qué horario te funciona?",
       "hint": "Elige todos los que apliquen. Solo pregunto esto una vez.",
-      "shifts": "¿Qué turnos puedes trabajar con seguridad? Omite esto si no importa."
+      "shifts": "¿Qué turnos puedes trabajar de forma constante? Omite esto si no importa."
     },
     "flexible": {
       "title": "Tu trabajo tiene que encajar con tu vida. ¿Qué horario te funciona?",

@@ -56,7 +56,7 @@
     "why": "<strong>Por qué este cambio:</strong> {why} Este texto sigue ligado a la experiencia que compartiste.",
     "onlyKeep": "Quédate con esto solo si dice lo que de verdad hiciste. Puedes cambiarlo otra vez después.",
     "useWording": "Usar este texto",
-    "editMyself": "Editarla yo",
+    "editMyself": "Lo edito yo",
     "tryAnother": "Probar otra",
     "earlierAria": "Opciones de texto anteriores",
     "option": "Opción {number}",
@@ -135,7 +135,7 @@
     "placeholderCredential": "Con tus palabras: el año en que lo obtuviste, o vigente, vencido, en curso",
     "whatSchool": "¿Qué escuela? Déjalo vacío para quitar la línea.",
     "pickKind": "Elige de qué tipo es.",
-    "facilityNotice": "Esto nombra una escuela de una cárcel o prisión. ¿La dejas, o escribes un nombre sin eso?",
+    "facilityNotice": "Este nombre menciona una escuela de una cárcel o prisión. ¿Lo dejas así, o escribes el nombre sin esa mención?",
     "whenDidNotFinishNotice": "Escribe solo los años que fuiste, por ejemplo 2011 - 2014, o déjalo vacío.",
     "whenEducationNotice": "Agrega el año en que lo obtuviste.",
     "whenCredentialNotice": "Agrega el año en que lo obtuviste, o di si está vigente, vencido, en curso o completado.",
@@ -148,7 +148,7 @@
     "intro": "Nombramos estos trabajos por ti. Toca los que estén bien, o dinos tu título.",
     "ownPlaceholder": "Tu título en este trabajo",
     "typeTitle": "Escribe tu título.",
-    "notATitle": "Si no recuerdas el título exacto, escribe lo que hacías ahí, como Warehouse worker.",
+    "notATitle": "Si no recuerdas el título exacto, escribe lo que hacías ahí, por ejemplo: Trabajador de almacén.",
     "right": "Es correcto",
     "useMine": "Usar mi título",
     "notFound": "No encontramos “{title}” en lo que nos diste. ¿Ese era tu título real en este trabajo?",
@@ -191,7 +191,7 @@
     "afterNote": "Revisa la lista de antes y después junto a tu currículum. Las preguntas que quedan están abajo.",
     "reviewRemaining": "Revisar las sugerencias restantes",
     "reviewNote": "Puedes responderlas con t.ROY una por una, o pedir otra pasada. Otra pasada usa parte de tu cupo de IA y aún podría necesitar tu respuesta.",
-    "explain": "Este número es de las correcciones sugeridas que t.ROY puede intentar juntas, no de todas las revisiones abiertas. Las preguntas sobre tus credenciales, títulos de trabajo, tareas y antecedentes siguen necesitándote a ti. No se inventan datos nuevos."
+    "explain": "Este número cuenta las correcciones sugeridas que t.ROY puede intentar juntas, no todas las revisiones abiertas. Las preguntas sobre tus credenciales, tus títulos de trabajo, tus responsabilidades y tus antecedentes penales todavía necesitan tu respuesta. No se inventan datos nuevos."
   },
   "panel": {
     "startWithSuggested": "Empieza con las correcciones sugeridas de abajo. t.ROY dejará las preguntas que necesitan tus datos, y te ayudará con ellas una por una.",

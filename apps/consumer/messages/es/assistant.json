@@ -61,11 +61,11 @@
       "why": "Un mensaje corto que envías tú."
     },
     "personEmployers": {
-      "label": "Empleadores que contratan a personas con antecedentes",
+      "label": "Empleadores que contratan a personas con antecedentes penales",
       "why": "Dime un estado y el tipo de trabajo; te muestro la marca y cuándo lo revisamos."
     },
     "addFill": {
-      "label": "Llenar esto con lo que te diga",
+      "label": "Llenar esto con lo que yo te diga",
       "why": "Dime su nombre y correo. Yo lleno el formulario; tú presionas Enviar invitación."
     },
     "addWelcome": {
@@ -82,7 +82,7 @@
     },
     "todayAdd": {
       "label": "Agregar a alguien nuevo",
-      "why": "Dime el nombre; abro Agregar personas ya llenado."
+      "why": "Dime el nombre; abro Agregar personas con los datos ya llenados."
     },
     "peopleDigest": {
       "label": "Resumen semanal de casos",
@@ -94,7 +94,7 @@
     },
     "peopleAdd": {
       "label": "Agregar a alguien nuevo",
-      "why": "Dime el nombre; abro Agregar personas ya llenado."
+      "why": "Dime el nombre; abro Agregar personas con los datos ya llenados."
     },
     "referralsOpen": {
       "label": "¿Qué referidos me necesitan?",
@@ -137,7 +137,7 @@
     "gear": "Ajustes del chat",
     "length": "Longitud de las respuestas",
     "short": "Corta",
-    "normal": "Completa",
+    "normal": "Normal",
     "plainLanguage": "Lenguaje sencillo",
     "readAloud": "Leer respuestas en voz alta",
     "on": "Encendido",
@@ -146,7 +146,7 @@
   },
   "support": {
     "message": "Escribir a Troy",
-    "sent": "Enviado. Troy lee estos mensajes él mismo. Su respuesta llega a tu correo.",
+    "sent": "Enviado. Troy lee estos mensajes personalmente. Su respuesta llegará a tu correo.",
     "explain": "Esto le llega a Troy, una persona real. Tus últimos mensajes del chat van incluidos para que tenga el contexto.",
     "placeholder": "¿Para qué necesitas a una persona?",
     "error": "No se pudo enviar. Inténtalo de nuevo en un momento.",
@@ -205,7 +205,7 @@
       "take_me_there": "Llevándote ahí",
       "highlight_element": "Señalándotelo",
       "file_feedback": "Registrando tu mensaje confirmado",
-      "find_employers": "Buscando empleadores que contratan a personas con antecedentes",
+      "find_employers": "Buscando empleadores que contratan a personas con antecedentes penales",
       "listing_check_nudge": "Revisando si conviene preguntar sobre este listado",
       "draft_directory_contribution": "Preparando una actualización del directorio para que la revises",
       "find_missed_connections": "Buscando conexiones que se les pudieron pasar",
@@ -315,7 +315,7 @@
     "welcome": {
       "pick": "¿Qué debo elegir?",
       "change": "¿Esto cambia mis resultados?",
-      "ready": "No sé si ya es mi momento"
+      "ready": "No sé si ya estoy preparado/a"
     },
     "resume": {
       "none": "No tengo currículum",
@@ -329,7 +329,7 @@
     },
     "story": {
       "whoSees": "¿Quién ve esto?",
-      "share": "¿Tengo que contar mis antecedentes?",
+      "share": "¿Tengo que compartir mis antecedentes penales?",
       "uncomfortable": "Esto me incomoda"
     },
     "preferences": {

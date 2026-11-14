@@ -81,21 +81,21 @@
   },
   "clearThisComputer": {
     "hint": "(si estás en una computadora pública o compartida)",
-    "groupAria": "Limpiar esta computadora",
+    "groupAria": "Borrar mis datos de esta computadora",
     "confirmYes": "Sí, borrarlo",
     "clearing": "Borrando...",
     "signOutError": "No pudimos cerrar tu sesión. Quédate aquí e inténtalo de nuevo antes de dejar esta computadora.",
     "buttonAria": "Limpiar esta computadora: borra tu trabajo de The Forge de este navegador {hint}",
     "buttonTitle": "Borra tu trabajo de The Forge de este navegador {hint}",
-    "short": "Limpiar",
-    "long": "Limpiar esta computadora",
+    "short": "Borrar",
+    "long": "Borrar mis datos de esta computadora",
     "panel": {
       "title": "¿Usas una computadora de biblioteca o compartida?",
       "signedInNote": "El trabajo guardado en tu cuenta se queda ahí. Al limpiar esta computadora se cierra tu sesión y se quita la copia de este navegador. Guarda tus cambios antes de irte.",
       "anonymousNote": "Este navegador guarda una copia de tu trabajo. Descárgala o guárdala en tu cuenta gratis antes de limpiar esta computadora. Quien se siente aquí después podría abrir la copia del navegador.",
       "confirmYes": "Sí, borrar mi trabajo de esta computadora",
       "notYet": "Todavía no",
-      "start": "Listo, limpiar esta computadora"
+      "start": "Listo, borrar mis datos de esta computadora"
     }
   }
 }

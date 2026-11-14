@@ -39,7 +39,7 @@ function placeholders(s: string): string[] {
 }
 
 /** Values allowed to be the same in both languages (names, numbers, symbols). */
-const SAME_OK = /^(?:The Forge|The Refinery|t\.ROY|Steel Man Resumes|Excel|PDF|Word|Word \(\.docx\)|OK|No|Rush|Tailor|[0-9%$.,:;\-\s()]+)$/;
+const SAME_OK = /^(?:The Forge|The Refinery|t\.ROY|Steel Man Resumes|Excel|PDF|Word|Word \(\.docx\)|OK|No|Normal|Rush|Tailor|[0-9%$.,:;\-\s()]+)$/;
 
 test("every English key exists in Spanish and the other way round", () => {
   const en = flatten(MESSAGES.en as unknown as Tree);

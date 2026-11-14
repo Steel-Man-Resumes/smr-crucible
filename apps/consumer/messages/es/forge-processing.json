@@ -20,8 +20,8 @@
     "countsToward": "Cada intento cuenta para el límite de hoy.",
     "limit": {
       "title": "Se acabó el límite de hoy",
-      "bodyToday": "Llegaste al límite de hoy para armar con t.ROY. Puedes volver a intentarlo hoy, después de {time}. Tus respuestas se quedan en este navegador hasta entonces, a menos que borres esta computadora.",
-      "bodyTomorrow": "Llegaste al límite de hoy para armar con t.ROY. Puedes volver a intentarlo mañana, después de {time}. Tus respuestas se quedan en este navegador hasta entonces, a menos que borres esta computadora."
+      "bodyToday": "Llegaste al límite de hoy para armar con t.ROY. Puedes volver a intentarlo hoy, después de {time}. Tus respuestas se quedan en este navegador hasta entonces, a menos que borres los datos de esta computadora.",
+      "bodyTomorrow": "Llegaste al límite de hoy para armar con t.ROY. Puedes volver a intentarlo mañana, después de {time}. Tus respuestas se quedan en este navegador hasta entonces, a menos que borres los datos de esta computadora."
     },
     "tooBig": {
       "title": "Era demasiado para enviar de una vez",
@@ -77,8 +77,8 @@
   "notes": {
     "truth": {
       "blank": {
-        "first": "Todavía queda un espacio en blanco en esta línea. La página nueva no imprime espacios en blanco, y los busco antes de darla por terminada.",
-        "again": "Otro espacio en blanco aquí. Mismo arreglo: se quita o se llena con tu dato real."
+        "first": "Todavía hay un hueco sin llenar en esta línea. La página nueva no imprime huecos vacíos, y los busco antes de darla por terminada.",
+        "again": "Otro hueco sin llenar aquí. Mismo arreglo: se quita o se llena con tu dato real."
       },
       "emptySection": {
         "first": "Esta parte dice que no hay nada en ella. La página nueva simplemente deja fuera una sección cuando no hay nada que poner.",

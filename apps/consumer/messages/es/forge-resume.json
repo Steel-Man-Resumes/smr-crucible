@@ -4,7 +4,7 @@
       "heading": "Tus trabajos",
       "at": "en {company}",
       "range": "{start} a {end}",
-      "now": "hoy"
+      "now": "actualidad"
     },
     "rebuild": {
       "failedTitle": "No se pudo abrir.",

@@ -18,9 +18,9 @@
     "checkLinesHeading": "Revisa estas líneas",
     "checkLinesBody": "{count, plural, =1 {Esta línea puede decir} other {Estas líneas pueden decir}} más sobre una tarjeta, licencia o certificación de lo que nos contaste. Si la tienes, puedes ignorar esto. Si no la tienes, no le digas a un empleador que sí.",
     "barriersTitle": "Trabaja los obstáculos en The Refinery",
-    "barriersBody": "Tu currículum se centra en tu trabajo. En The Refinery, t.ROY te ayuda a preparar qué decir sobre tus antecedentes, a pensar en el trabajo y en el empleador, y a practicar la conversación con tus propias palabras. También puedes encontrar apoyo local.",
+    "barriersBody": "Tu currículum se centra en tu trabajo. En The Refinery, t.ROY te ayuda a preparar qué decir sobre tus antecedentes penales, a pensar en el trabajo y en el empleador, y a practicar la conversación con tus propias palabras. También puedes encontrar apoyo local.",
     "flagged": "Marcaste: {list}. Son temas para trabajar, no un juicio sobre lo que puedes hacer.",
-    "disclaimer": "La guía para hablar de tus antecedentes es orientación profesional, no asesoría legal.",
+    "disclaimer": "La guía para hablar de tus antecedentes penales es orientación profesional, no asesoría legal.",
     "nextSteps": "Próximos pasos",
     "print": "Imprime o guarda tu historia como PDF",
     "popupAlert": "Permite las ventanas emergentes en este sitio para guardar el PDF.",
@@ -50,18 +50,18 @@
       },
       "state": {
         "label": "Muestra el trabajo, nombra el estado",
-        "body": "El trabajo se queda. El empleador aparece como el estado, no como el centro."
+        "body": "El trabajo se queda. El empleador aparece como el estado, no como la institución."
       },
       "facility": {
-        "label": "Nombra el centro como lo escribí",
+        "label": "Nombra la institución como la escribí",
         "body": "Todo queda como lo escribiste."
       }
     },
     "yourChoice": "Tu elección: {label}",
     "updating": "Actualizando tus documentos...",
     "change": "Cambiar esta elección",
-    "title": "Tus antecedentes en esta página",
-    "intro": "Parte de tu trabajo fue adentro. Tú decides cómo aparece. Sea cual sea tu elección, no se agrega nada sobre antecedentes.",
+    "title": "Tus antecedentes penales en esta página",
+    "intro": "Parte de tu trabajo fue adentro. Tú decides cómo aparece. Elijas lo que elijas, no se agrega nada sobre tus antecedentes penales.",
     "radioAria": "Cómo aparece en la página tu trabajo de adentro",
     "previewOff": "Fuera de la página",
     "previewState": "En la página como",
