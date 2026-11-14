@@ -194,3 +194,22 @@ test("Spanish figures are read as Spanish figures when the person answered in Sp
   assert.deepEqual(unsupportedNumbers("Loaded 1,200 boxes.", "Loaded 1,200 boxes"), []);
   assert.deepEqual(unsupportedNumbers("Moved 15 tons.", "Moved 1,5 tons"), []); // the English reading, as before
 });
+
+test("Spanish non-answers, bare yeses and denials are not explanations (answerLexicon)", async () => {
+  const { answerExplains } = await import("@crucible/core/src/resumeStatus");
+  const { ownTitleProblem } = await import("../finish-gate");
+  const line = "Operated a forklift and loaded trucks at Reed Logistics, 2018 - 2020";
+  for (const a of ["no sé", "No se.", "ni idea", "no me acuerdo", "no estoy seguro", "sí", "Sí, claro que sí lo hice", "claro", "por supuesto", "lo hice"]) {
+    assert.equal(answerExplains(a, line), false, a);
+  }
+  // A real Spanish explanation is still an answer.
+  assert.equal(answerExplains("Operé el montacargas y cargué camiones en el almacén de Reed Logistics durante dos años", line), true);
+  for (const a of ["no sé", "ni idea", "nada", "lo mismo", "no me acuerdo", "n/a"]) assert.equal(ownTitleProblem(a, "Forklift Operator"), "not_a_title", a);
+  assert.equal(ownTitleProblem("Operador de montacargas", "Forklift Operator"), undefined);
+});
+
+test("a Spanish denial of a line is a denial, not an answer", async () => {
+  const { isSpanishDenial } = await import("@crucible/core/src/answerLexicon");
+  for (const a of ["nunca", "Nunca lo hice", "yo no", "no fui yo", "jamás"]) assert.equal(isSpanishDenial(a), true, a);
+  for (const a of ["Sí lo hice en 2019", "Operé un montacargas"]) assert.equal(isSpanishDenial(a), false, a);
+});

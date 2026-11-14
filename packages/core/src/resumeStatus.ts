@@ -26,6 +26,7 @@
  * Pure: no I/O, safe in the browser and on the server.
  */
 
+import { isSpanishBareYes, isSpanishNoAnswer } from "./answerLexicon";
 import { RESUME_RULES_VERSION } from "./resumeRules";
 import {
   runMintCheck,
@@ -282,9 +283,9 @@ function hasConcreteDetail(answer: string): boolean {
  */
 export function answerExplains(answer: string, line: string): boolean {
   const text = (answer || "").trim();
-  if (!/[a-z0-9]/i.test(text) || NO_ANSWER_RE.test(text)) return false;
+  if (!/[a-z0-9]/i.test(text) || NO_ANSWER_RE.test(text) || isSpanishNoAnswer(text)) return false;
   const bare = text.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
-  if (BARE_YES_RE.test(bare)) return false;
+  if (BARE_YES_RE.test(bare) || isSpanishBareYes(text)) return false;
   const words = contentWords(text).filter((w) => !FILLER.has(w));
   if (words.length < 3) return false;
   const lineStems = new Set(contentWords(stripBullet(line)).filter((w) => !FILLER.has(w)).map(stemOf));
