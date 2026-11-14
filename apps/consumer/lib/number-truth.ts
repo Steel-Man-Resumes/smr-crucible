@@ -8,6 +8,8 @@
  * even when a prompt is ignored.
  */
 
+import { spanishAnswerToEnglish } from "@crucible/core/src/numberLexicon";
+
 const UNITS_WORDS: Record<string, number> = {
   two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
 };
@@ -93,7 +95,13 @@ function qualifiedPhrases(text: string): Qualified[] {
  * range or bound there ("about 6 to 10", "under 50") has to stay whole, so a
  * picked range can never turn into one exact figure.
  */
-export function unsupportedNumbers(output: string, source: string, quantity = ""): string[] {
+export function unsupportedNumbers(output: string, source: string, quantity = "", opts: { locale?: "en" | "es" } = {}): string[] {
+  // The person's answers may be in Spanish: read their numbers as Spanish numbers ("1.200" is 1200, "15,50" is 15.5).
+  // The model's bullet is English and is always read as English.
+  if (opts.locale === "es") {
+    source = spanishAnswerToEnglish(source);
+    quantity = spanishAnswerToEnglish(quantity);
+  }
   const free = new Set(numbersIn(source));
   const qualified = qualifiedPhrases(quantity);
   const inQualified = new Set(qualified.flatMap((q) => q.nums));

@@ -162,3 +162,35 @@ test("Spanish record words reach every record gate (recordLexicon)", async () =>
     assert.equal(isJusticeSensitive(s), false, `justice filter: ${s}`);
   }
 });
+
+test("Spanish figures are read as Spanish figures when the person answered in Spanish (numberLexicon)", async () => {
+  const { unsupportedNumbers } = await import("../number-truth");
+  const es = { locale: "es" as const };
+  // Dot groups thousands, comma is the decimal.
+  assert.deepEqual(unsupportedNumbers("Loaded 1,200 boxes.", "Cargué 1.200 cajas", "", es), []);
+  assert.deepEqual(unsupportedNumbers("Earned 15.50 an hour.", "Ganaba 15,50 la hora", "", es), []);
+  assert.deepEqual(unsupportedNumbers("Moved 1.5 tons.", "Moví 1,5 toneladas", "", es), []);
+  // The old reading let a made-up figure through: "1,5" read as 15.
+  assert.deepEqual(unsupportedNumbers("Moved 15 tons.", "Moví 1,5 toneladas", "", es), ["15"]);
+  assert.deepEqual(unsupportedNumbers("Earned 1550 an hour.", "Ganaba 15,50 la hora", "", es), ["1550"]);
+  // English-style "1,200" typed in a Spanish answer keeps both readings.
+  assert.deepEqual(unsupportedNumbers("Loaded 1200 boxes.", "Cargué 1,200 cajas", "", es), []);
+  // Number words.
+  assert.deepEqual(unsupportedNumbers("Trained 35 employees.", "Entrené a treinta y cinco empleados", "", es), []);
+  assert.deepEqual(unsupportedNumbers("Trained 53 employees.", "Entrené a treinta y cinco empleados", "", es), ["53"]);
+  assert.deepEqual(unsupportedNumbers("Handled 2500 orders.", "Manejé dos mil quinientos pedidos", "", es), []);
+  assert.deepEqual(unsupportedNumbers("Handled 5000 orders.", "Manejé 5 mil pedidos", "", es), []);
+  assert.deepEqual(unsupportedNumbers("Raised sales 20%.", "Subí las ventas 20 por ciento", "", es), []);
+  // A range or bound has to stay whole.
+  assert.deepEqual(unsupportedNumbers("Handled 6 to 10 orders.", "", "de 6 a 10", es), []);
+  assert.deepEqual(unsupportedNumbers("Handled 8 orders.", "", "de 6 a 10", es), ["8"]);
+  assert.deepEqual(unsupportedNumbers("Handled under 50 orders.", "", "menos de 50", es), []);
+  assert.deepEqual(unsupportedNumbers("Handled 50 orders.", "", "menos de 50", es), ["50"]);
+  assert.deepEqual(unsupportedNumbers("Handled 5 or more orders.", "", "5 o más", es), []);
+  // An amount word is a claim like a number.
+  assert.deepEqual(unsupportedNumbers("Doubled output.", "Dupliqué la producción", "", es), []);
+  assert.notDeepEqual(unsupportedNumbers("Doubled output.", "Mejoré la producción", "", es), []);
+  // English answers, and the default, are unchanged.
+  assert.deepEqual(unsupportedNumbers("Loaded 1,200 boxes.", "Loaded 1,200 boxes"), []);
+  assert.deepEqual(unsupportedNumbers("Moved 15 tons.", "Moved 1,5 tons"), []); // the English reading, as before
+});

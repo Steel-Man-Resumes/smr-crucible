@@ -27,6 +27,7 @@ import { isMockEnabled } from "@/lib/mock-ai";
 import { callAI, AI_PROVIDER } from "@/lib/ai-call";
 import { plainPunctuation, logDashSwaps } from "@/lib/legal-sanitize";
 import { unsupportedNumbers } from "@/lib/number-truth";
+import { localeFromCookieHeader } from "@/i18n/locale";
 import { MODEL_DEEP } from "@/lib/ai/models";
 import { getToolsForTitle } from "@/lib/onet";
 import { resumeRulesBlock } from "@crucible/core/src/resumeRules";
@@ -228,7 +229,9 @@ Write the single strongest TRUE bullet from ONLY these facts.${
       // checked strictly, so a picked range can never become one exact figure.
       const ownWords = [did, tools, often, improved].join("\n");
       let bullet = await writeBullet([{ role: "user", content: userMsg }]);
-      let invented = unsupportedNumbers(bullet, ownWords, quantity);
+      // The person may answer in Spanish: read their figures as Spanish figures ("1.200" is 1200). The bullet is English.
+      const numberLocale = localeFromCookieHeader(request.headers.get("cookie"));
+      let invented = unsupportedNumbers(bullet, ownWords, quantity, { locale: numberLocale });
       let numberCheck: "clean" | "rewritten" | "refused" = "clean";
       if (invented.length) {
         bullet = await writeBullet([
@@ -239,7 +242,7 @@ Write the single strongest TRUE bullet from ONLY these facts.${
             content: `That bullet uses a number the person never gave (${invented.join(", ")}). Write it again using only numbers from their own words above. If they gave no number, use none.`,
           },
         ]);
-        invented = unsupportedNumbers(bullet, ownWords, quantity);
+        invented = unsupportedNumbers(bullet, ownWords, quantity, { locale: numberLocale });
         numberCheck = invented.length ? "refused" : "rewritten";
       }
 
