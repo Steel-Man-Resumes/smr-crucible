@@ -239,7 +239,7 @@ describe("an admin's look is recorded as the admin, never as the staff member", 
   });
   it("Settings and the data export both use the one line", () => {
     // The sentence frame moved to the catalog ("{line} on {when}"); the line itself must still come from accessLogLine.
-    assert.match(code(read("components", "SharingControls.tsx")), /tr\("logLine", \{ line: accessLogLine\(e, label\), when: when\(e\.at, locale\) \}\)/);
+    assert.match(code(read("components", "SharingControls.tsx")), /tr\("logLine", \{ line: ts\(accessLogLine\(e, labelText\)\), when: when\(e\.at, locale\) \}\)/);
     assert.equal(MESSAGES.en.refineryAccount.sharing.logLine, "{line} on {when}");
     const exp = code(read("app", "api", "user", "export-data", "route.ts"));
     assert.match(exp, /what: accessLogLine\(e, scopeLabel\)/);

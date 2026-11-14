@@ -120,7 +120,7 @@ test("the generator runs only from the two buttons", () => {
 });
 
 test("the picked job shows the cost line and a Tailor now button", () => {
-  assert.match(code, /data-testid="tailor-pending-cost"[^>]*>\{cost\.line\}/);
+  assert.match(code, /data-testid="tailor-pending-cost"[^>]*>\{ts\(cost\.line\)\}/);
   assert.match(code, /data-testid="tailor-pending-run"[\s\S]{0,200}?onClick=\{tailorPendingNow\}[\s\S]{0,200}?disabled=\{!cost\.canRun/);
   // The button label now lives in the catalog (refineryResume.resume.workspace.tailorNow) and is rendered as the button's text.
   assert.equal((MESSAGES.en as any).refineryResume.resume.workspace.tailorNow, "Tailor now");

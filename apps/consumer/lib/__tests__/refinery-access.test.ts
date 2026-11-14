@@ -174,7 +174,8 @@ function forgeApiLiterals(): Map<string, string> {
   // The partner landing a seatless signed-in visitor can open (review 1, N-7).
   queue.push(path.join(APP, "app", "access", "page.tsx"));
   // The lists themselves name routes they do not call.
-  const lists = new Set(["session-policy.ts", "forge-access.ts", "refinery-access.ts"].map((f) => path.join(APP, "lib", f)));
+  // server-text-fetch.ts names the "/api/" PREFIX to know which responses to translate; it calls no route.
+  const lists = new Set(["session-policy.ts", "forge-access.ts", "refinery-access.ts", "server-text-fetch.ts"].map((f) => path.join(APP, "lib", f)));
   const seen = new Set<string>();
   const found = new Map<string, string>();
   while (queue.length) {

@@ -107,6 +107,11 @@ test("no wall-aware line shows before the browser knows the wall (no stale claim
 const PHRASE_CATALOG_EN = /\bno account\b|without (?:an|a) account|no login|requires no login|no sign[- ]?in|nothing to sign up/i;
 const PHRASE_ES = /sin (?:una )?cuenta|no (?:necesitas|necesita|requiere|hace falta|piden|pide) (?:una )?cuenta|sin (?:iniciar sesi[o\u00f3]n|registrarte|registro)|no hay que (?:iniciar|registr)|no hay nada para registrarse/i;
 
+// Reviewed: lines that match the phrase but are not a claim about needing an account.
+const CATALOG_NOT_ABOUT_THE_WALL = new Set([
+  "serverText.api_no_account_uses_that_7968", // an admin looking up a premium email: "No account uses that email."
+]);
+
 function* leaves(o: unknown, path: string[] = []): Generator<[string[], string]> {
   if (typeof o === "string") yield [path, o];
   else if (o && typeof o === "object") for (const [k, v] of Object.entries(o as Record<string, unknown>)) yield* leaves(v, [...path, k]);
@@ -122,6 +127,7 @@ test("every catalog 'no account' line is rendered by a file that follows the wal
     for (const [ns, tree] of Object.entries(MESSAGES[lang])) {
       for (const [path, value] of leaves(tree)) {
         if (!(lang === "en" ? PHRASE_CATALOG_EN : PHRASE_ES).test(value)) continue;
+        if (CATALOG_NOT_ABOUT_THE_WALL.has(`${ns}.${path.join(".")}`)) continue;
         seen++;
         // Who renders it: files that name the key's last two segments (or the last one when it is unique to the file).
         const last2 = path.slice(-2).join(".");
