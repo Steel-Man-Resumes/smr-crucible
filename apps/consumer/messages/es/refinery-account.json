@@ -326,7 +326,7 @@
     "accountExtras": {
       "joinTitle": "Únete a un programa con un código",
       "enterCode": "Escribe un código",
-      "enterCodeBody": "Si un programa (como un centro de empleo u organización sin fines de lucro) te dio un código, escríbelo aquí. El código te une a un cupo del programa. Si el programa tiene reglas para compartir, las ves antes de unirte, y unirte no comparte nada por sí solo. Si el código cambia tu límite de IA, Uso, más abajo, muestra el número nuevo.",
+      "enterCodeBody": "Si un programa (como un centro de empleo u organización sin fines de lucro) te dio un código, escríbelo aquí. El código te une a un lugar del programa. Si el programa tiene reglas para compartir, las ves antes de unirte, y unirte no comparte nada por sí solo. Si el código cambia tu límite de IA, Uso, más abajo, muestra el número nuevo.",
       "codePlaceholder": "Tu código",
       "codeAria": "Código del programa",
       "join": "unirme",
@@ -626,7 +626,7 @@
       "privacy": {
         "title": "Ten claro lo que compartes",
         "why": "Recibir apoyo y compartir información personal son decisiones distintas.",
-        "body": "Lee cada control de consentimiento y de compartir, incluyendo la información que se pide y la organización involucrada. Un programa puede tener requisitos; revísalos antes de aceptar. No supongas que un cupo patrocinado le da al personal acceso a todos tus documentos o conversaciones.",
+        "body": "Lee cada control de consentimiento y de compartir, incluyendo la información que se pide y la organización involucrada. Un programa puede tener requisitos; revísalos antes de aceptar. No supongas que un lugar patrocinado le da al personal acceso a todos tus documentos o conversaciones.",
         "try": "Revisa las opciones reales de compartir antes de dar acceso. Cambia una solo cuando entiendas su alcance."
       },
       "security": {

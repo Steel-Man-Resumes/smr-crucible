@@ -77,7 +77,7 @@
   "brand": {
     "tagline": "Informe de carrera",
     "lockupAlt": "{name} de Steel Man Resumes",
-    "seatTip": "Tu cupo viene a través de {name}. Lo que compartes con ellos es decisión tuya. Míralo o cámbialo en Configuración.",
+    "seatTip": "Tu lugar viene a través de {name}. Lo que compartes con ellos es decisión tuya. Míralo o cámbialo en Configuración.",
     "withAria": "Con {name}. {tip}",
     "with": "Con {name}"
   },
@@ -533,8 +533,8 @@
     "read": "Lee lo que requieren"
   },
   "seat": {
-    "title": "The Refinery abre con un cupo",
-    "intro": "Las organizaciones que trabajan con Steel Man Resumes les dan cupos a su gente. Tu currículum de The Forge es tuyo de todos modos, y queda guardado en tu cuenta.",
+    "title": "The Refinery abre con un lugar",
+    "intro": "Las organizaciones que trabajan con Steel Man Resumes les dan lugares a su gente. Tu currículum de The Forge es tuyo de todos modos, y queda guardado en tu cuenta.",
     "open": "The Refinery está abierto para ti.",
     "openButton": "Ir a The Refinery",
     "emailed": "Te enviamos tu paquete de The Forge al correo de tu cuenta.",
@@ -542,15 +542,15 @@
     "sendItHelp": "Envía tu currículum terminado de The Forge al correo de tu cuenta.",
     "download": "Descárgalo desde The Forge",
     "offerLead": "{org} te pidió que te unas.",
-    "offerBody": "Si te unes, solo ven el avance que tú elijas compartir desde Configuración. Nunca ven el texto de tu currículum, tus planes para hablar de tus antecedentes penales ni tus respuestas de práctica. Unirte usa uno de sus cupos.",
+    "offerBody": "Si te unes, solo ven el avance que tú elijas compartir desde Configuración. Nunca ven el texto de tu currículum, tus planes para hablar de tus antecedentes penales ni tus respuestas de práctica. Unirte usa uno de sus lugares.",
     "offerYes": "Unirme",
     "offerNo": "No, gracias",
     "codeHeading": "¿Tienes un código de una organización?",
     "codeButton": "Usar código",
-    "askHeading": "¿No tienes código? Pide un cupo.",
+    "askHeading": "¿No tienes código? Pide un lugar.",
     "askNoteLabel": "Algo que quieras que Troy sepa (opcional)",
     "askRefLabel": "¿Quién te mandó aquí? (opcional)",
-    "askButton": "Pedir un cupo",
+    "askButton": "Pedir un lugar",
     "askPending": "Tu solicitud llegó. Troy las revisa él mismo.",
     "alwaysHeading": "Esto siempre funciona",
     "backToForge": "Volver a The Forge",
@@ -558,7 +558,7 @@
     "myData": "Descargar o borrar mis datos",
     "pending": "Primero termina de iniciar sesión.",
     "signedOut": "Primero inicia sesión.",
-    "checkFailed": "No se pudo revisar tu cupo. Inténtalo de nuevo en un momento.",
+    "checkFailed": "No se pudo revisar tu lugar. Inténtalo de nuevo en un momento.",
     "codeFailed": "Ese código no funcionó.",
     "done": "Listo.",
     "answerFailed": "Tu respuesta no se guardó. Inténtalo de nuevo.",
@@ -569,7 +569,7 @@
     "stillDraft": "Tu currículum de The Forge sigue siendo un borrador. Termínalo primero en The Forge.",
     "notSent": "No se envió. Puedes descargarlo desde The Forge.",
     "goSignIn": "Ir a iniciar sesión",
-    "checking": "Revisando tu cupo...",
+    "checking": "Revisando tu lugar...",
     "saving": "Guardando...",
     "sending": "Enviando...",
     "troyAsked": "Troy preguntó: {note}"
@@ -614,7 +614,7 @@
     "careerWorkspace": "Espacio de carrera",
     "orgNav": {
       "overview": "Resumen de la organización",
-      "team": "Equipo y cupos",
+      "team": "Equipo y lugares",
       "add": "Agregar participantes",
       "security": "Seguridad y privacidad",
       "clients": "Mis clientes"
