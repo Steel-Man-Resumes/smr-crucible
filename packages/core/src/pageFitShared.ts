@@ -1,3 +1,4 @@
+import { hasSpanishRecordWords } from "./recordLexicon";
 /**
  * Phase 2.5 page-fit engine -- PURE, deterministic model of the exact DOCX
  * geometry produced by apps/consumer/app/api/forge/download/route.ts.
@@ -250,7 +251,7 @@ export function bodyHeadlineIndex(bodyLines: string[], header: Pick<ParsedResume
   const cand = lines[first];
   if (next < 0 || !isSectionHeader(lines[next])) return -1;
   if (isSectionHeader(cand) || isBulletLine(cand) || cand.includes("|") || cand.length > 120 || /[.!?;]$/.test(cand)) return -1;
-  if (isContactLike(cand) || JUSTICE_LIKE_RE.test(cand)) return -1;
+  if (isContactLike(cand) || JUSTICE_LIKE_RE.test(cand) || hasSpanishRecordWords(cand)) return -1;
   return first;
 }
 

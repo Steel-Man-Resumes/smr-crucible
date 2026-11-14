@@ -1,3 +1,4 @@
+import { ES_RECORD_SOURCE } from "@crucible/core/src/recordLexicon";
 /**
  * Record lines in a person's own resume text (Forge).
  *
@@ -11,7 +12,7 @@
 // English and Spanish (Spanish version, 2026-11-12): a person's own words come in
 // either language, and the record stays off the page in both. Unaccented
 // spellings are listed too (people type "carcel" and "prision").
-const RECORD_LINE_RE = /[^\n.]*\b(?:prison|jail|incarcerat(?:ed|ion)?|correctional|inmate|probation|parole|sentence[ds]?|conviction[s]?|convicted|detained|lockup|behind\s+bars|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon[y]?|c[a\u00e1]rcel|prisi[o\u00f3]n|encarcelad[oa]s?|encarcelamiento|correccional(?:es)?|penitenciar[i\u00ed]a[s]?|penal\s+(?:estatal|federal)|reclus[oa]s?|recluido|libertad\s+(?:condicional|vigilada|supervisada)|condenad[oa]s?|sentenciad[oa]s?|antecedentes\s+penales|reinserci[o\u00f3]n|delito\s+grave)\b[^.\n]*/gi;
+const RECORD_LINE_RE = new RegExp(String.raw`[^\n.]*\b(?:prison|jail|incarcerat(?:ed|ion)?|correctional|inmate|probation|parole|sentence[ds]?|conviction[s]?|convicted|detained|lockup|behind\s+bars|reentry|re-entry|justice[- ]involved|justice[- ]impacted|felon[y]?|c[a\u00e1]rcel|prisi[o\u00f3]n|encarcelad[oa]s?|encarcelamiento|correccional(?:es)?|penitenciar[i\u00ed]a[s]?|penal\s+(?:estatal|federal)|reclus[oa]s?|recluido|libertad\s+(?:condicional|vigilada|supervisada)|condenad[oa]s?|sentenciad[oa]s?|antecedentes\s+penales|reinserci[o\u00f3]n|delito\s+grave|${ES_RECORD_SOURCE})\b[^.\n]*`, "gi");
 const RECORD_PHRASE_RE = /(?:during|while|following|after)\s+(?:a\s+)?(?:period\s+of\s+)?(?:incarceration|imprisonment|detention|confinement)[^.\n]*/gi;
 
 // A line that starts a job, school or credential entry: it carries a year.

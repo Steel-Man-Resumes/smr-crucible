@@ -145,3 +145,20 @@ test("a Spanish credential status is accepted by the finish gate, a non-answer i
   for (const s of ["vigente", "vencida", "en curso", "completada", "2019"]) assert.equal(isConfirmWhen("certification", s), true, s);
   for (const s of ["nunca", "no sé", "ni idea"]) assert.equal(isConfirmWhen("certification", s), false, s);
 });
+
+test("Spanish record words reach every record gate (recordLexicon)", async () => {
+  const { hasStaffRecordWords } = await import("../staff-ai-safety");
+  const { looksLikeFacilityName } = await import("@crucible/core/src/practiceRecordShared");
+  for (const s of ["Estoy en libertad condicional", "Cumplí condena por cinco años", "Me arrestaron en 2015", "Hablé con mi oficial de libertad vigilada"]) {
+    assert.equal(hasStaffRecordWords(s), true, `staff: ${s}`);
+    assert.equal(hasRecordWords(s), true, `record lines: ${s}`);
+    assert.equal(isJusticeSensitive(s), true, `justice filter: ${s}`);
+  }
+  assert.equal(looksLikeFacilityName("Cocinero, Penitenciaría Estatal"), true);
+  assert.equal(looksLikeFacilityName("Cocinero, restaurante El Sol"), false);
+  for (const s of ["Operé un montacargas en un almacén", "Atendí a clientes y cerré la caja"]) {
+    assert.equal(hasStaffRecordWords(s), false, `staff: ${s}`);
+    assert.equal(hasRecordWords(s), false, `record lines: ${s}`);
+    assert.equal(isJusticeSensitive(s), false, `justice filter: ${s}`);
+  }
+});

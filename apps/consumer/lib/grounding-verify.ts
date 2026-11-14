@@ -1,3 +1,4 @@
+import { hasSpanishRecordWords } from "@crucible/core/src/recordLexicon";
 import { groundingSourceWindow } from "./grounding-source-window";
 /**
  * Grounding verifier -- the post-generation truth gate (F2, 2026-08-06).
@@ -597,7 +598,7 @@ ${items.map((i) => `[${i.id}] (${i.role}) ${i.text}`).join("\n")}`;
 const JUSTICE_RE =
   /incarcerat|prison|jail|parole|probat|convict|correct(?:ion|ional)|reentry|re-entry|justice[- ]involved|felon|penitentiary|reformatory|house of correction|department of correction|dept\.? of correction|c[a\u00e1]rcel|prisi[o\u00f3]n|encarcelad|correccional|penitenciar|reclus|libertad (?:condicional|vigilada)|condenad|antecedentes penales|reinserci/i;
 export function isJusticeSensitive(s?: string): boolean {
-  return !!s && JUSTICE_RE.test(s);
+  return !!s && (JUSTICE_RE.test(s) || hasSpanishRecordWords(s));
 }
 
 export interface StructuredEducation {
