@@ -11,6 +11,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 import { AnalyticsWrapper } from "@/components/AnalyticsWrapper";
 import { AccountLanguageSync } from "@/components/AccountLanguageSync";
 import { ServerTextProvider } from "@/components/ServerTextProvider";
+import { SpanishBetaNotice } from "@/components/SpanishBetaNotice";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 
@@ -67,6 +68,7 @@ export default async function RootLayout({
             <ServerTextProvider>
               {children}
               <DevToolbar />
+              <SpanishBetaNotice />
             </ServerTextProvider>
           </AuthProvider>
         </NextIntlClientProvider>
