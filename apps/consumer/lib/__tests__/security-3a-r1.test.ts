@@ -24,6 +24,7 @@ import {
   withinBudget,
 } from "../check-file-guard";
 import { extractTextForCheck } from "../text-extraction";
+import { MESSAGES } from "./helpers/intl";
 import { termsGateVerdict, revocationCheck } from "../session-policy";
 import { tickedFor, tickedMark } from "../terms-ticked";
 import { CONSENT_EVENT_SQL, CONSENT_UPSERT_SQL, TERMS_VERSION, consentMethodFor } from "../terms";
@@ -444,8 +445,13 @@ describe("L5: every Forge page is classified", () => {
 describe("L8: the carry page says what happens to the answers", () => {
   it("names the account they are saved to, or says they stay on this computer", () => {
     const page = read("app/(forge)/carry/page.tsx");
-    assert.match(page, /your answers are saved to the account for \$\{signedInEmail\}/);
-    assert.match(page, /Your answers stay on this computer\./);
+    // The sentences live in the catalog (refineryShell.carry); the page picks one by sign-in state and the English says the same thing.
+    assert.match(page, /data-testid="carry-where">\s*\{signedInEmail\s*\? t\("whereSignedIn", \{ email: signedInEmail \}\)\s*: t\("whereSignedOut"\)\}/);
+    const carry = MESSAGES.en.refineryShell.carry;
+    assert.equal(carry.whereSignedIn, "Once you add your resume, your answers are saved to the account for {email}, so you can finish on any computer.");
+    assert.equal(carry.whereSignedOut, "Your answers stay on this computer. Sign in to save them to a free account.");
+    assert.match(carry.whereSignedOut, /Your answers stay on this computer\./);
+    assert.equal(carry.yourAccount, "your account");
     assert.doesNotMatch(page, /does\s*\n?\s*\* not hand them to us/);
   });
 });

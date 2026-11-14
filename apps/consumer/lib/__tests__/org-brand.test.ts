@@ -14,6 +14,7 @@ import {
 } from "@crucible/core/src/orgBrandShared";
 import { OrgMark } from "../../components/org/OrgMark";
 import { MemberCoBrandChip } from "../../components/brand/BrandMarks";
+import { intlMarkup } from "./helpers/intl";
 
 // The components use the classic JSX runtime under tsx.
 (globalThis as { React?: unknown }).React = React;
@@ -89,7 +90,7 @@ describe("OrgMark", () => {
     assert.match(out, /<svg/);
   });
   it("the participant chip says With {name} and links to Settings", () => {
-    const out = renderToStaticMarkup(React.createElement(MemberCoBrandChip, { orgId: "o1", name: "Hope House (Demo)", hasLogo: false }));
+    const out = intlMarkup(React.createElement(MemberCoBrandChip, { orgId: "o1", name: "Hope House (Demo)", hasLogo: false }));
     assert.match(out, /With Hope House \(Demo\)/);
     assert.match(out, /href="\/dashboard\/settings"/);
     assert.doesNotMatch(out, /Powered by|>ORG<|Example partner/);

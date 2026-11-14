@@ -7,6 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { MESSAGES } from "../../messages";
 import { boardHandoff, jobHandoffFromApplications, loadJobHandoff, singleTailorCost } from "../tailor-handoff";
 
 const APP = "00000000-0000-4000-8000-0000000000a1";
@@ -121,7 +122,10 @@ test("the generator runs only from the two buttons", () => {
 test("the picked job shows the cost line and a Tailor now button", () => {
   assert.match(code, /data-testid="tailor-pending-cost"[^>]*>\{cost\.line\}/);
   assert.match(code, /data-testid="tailor-pending-run"[\s\S]{0,200}?onClick=\{tailorPendingNow\}[\s\S]{0,200}?disabled=\{!cost\.canRun/);
-  assert.match(code, />\s*Tailor now\s*</);
+  // The button label now lives in the catalog (refineryResume.resume.workspace.tailorNow) and is rendered as the button's text.
+  assert.equal((MESSAGES.en as any).refineryResume.resume.workspace.tailorNow, "Tailor now");
+  assert.match(code, /useTranslations\("refineryResume\.resume\.workspace"\)/);
+  assert.match(code, /data-testid="tailor-pending-run"[\s\S]{0,500}?>\s*\{t\("tailorNow"\)\}\s*<\/button>/);
 });
 
 test("indirection cannot start the tailor from an effect either", () => {

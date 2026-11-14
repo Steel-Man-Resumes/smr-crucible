@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { MESSAGES } from "../../messages";
 import {
   PREMIUM_ASK_ORG_LINE,
   PREMIUM_ASK_SENT_LINE,
@@ -175,7 +176,10 @@ describe("which routes are guarded, and in what order", () => {
     assert.ok(gateAt > 0);
     assert.ok(page.indexOf("<VoicePracticePanel", gateAt) > gateAt && page.indexOf("<VoicePracticePanel", gateAt) < page.indexOf("</PremiumGate>", gateAt));
     assert.ok(page.indexOf("<Suspense><InterviewPracticePage /></Suspense>") > 0);
-    assert.ok(page.indexOf("Start Practice Interview") > page.indexOf("</PremiumGate>", gateAt), "the text start button is outside the gate");
+    // The button label now lives in the catalog (refineryInterview.interview.setup.start); the button is the t("setup.start") call.
+    assert.equal(((MESSAGES.en as any).refineryInterview.interview.setup.start), "Start Practice Interview");
+    assert.match(page, /useTranslations\("refineryInterview\.interview"\)/);
+    assert.ok(page.indexOf('t("setup.start")') > page.indexOf("</PremiumGate>", gateAt), "the text start button is outside the gate");
     assert.match(read("components/apply/ApplyActions.tsx"), /toolIsOpen\(premium, "one_click_apply"\)/);
   });
 });

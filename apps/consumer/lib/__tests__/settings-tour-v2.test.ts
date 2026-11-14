@@ -22,9 +22,18 @@ import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SETTINGS_QUESTIONS, SETTINGS_QUIZ_VERSION, readSettingsQuizResult } from '../tour/settings-quiz';
 import { gradeSettingsQuiz } from '../tour/settings-quiz-grade';
+import { MESSAGES } from './helpers/intl';
 
 const ROOT = join(__dirname, '..', '..');
 const read = (f: string) => readFileSync(join(ROOT, f), 'utf8');
+/** The English catalog value for a dotted path (copy moved out of the components into messages/en). */
+const en = (path: string): string => {
+  const v = path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], MESSAGES.en);
+  assert.equal(typeof v, 'string', `English catalog has ${path}`);
+  return v as string;
+};
+/** Every English string the Settings page can show from the catalog (the page's words now live there, not in the source). */
+const leaves = (o: unknown): string[] => typeof o === 'string' ? [o] : o && typeof o === 'object' ? Object.values(o).flatMap(leaves) : [];
 const beat = (id: string) => SETTINGS_BEATS.find(b => b.id === id)!;
 const NON = { member: false, required: false, plainLanguage: false };
 const PAGE_SOURCES = [
@@ -210,18 +219,24 @@ test('scoping: every new style is .st-* or html[data-settings-tour]; the map sto
 });
 
 test('claims: every chip label and every control named on the map is the page\'s own text; the map leaves out the coach name and the premium list', () => {
-  const sources = PAGE_SOURCES.map(read).join('\n').replace(/&amp;/g, '&');
+  // The page's own text = the component sources plus the English Settings catalog they read from (refineryAccount).
+  const sources = [...PAGE_SOURCES.map(read), ...leaves(MESSAGES.en.refineryAccount)].join('\n').replace(/&amp;/g, '&');
   for (const b of SETTINGS_BEATS) for (const c of b.chips ?? []) if (b.where === 'page') assert.ok(sources.includes(c.label), `${b.id}: "${c.label}" is not on the page`);
   for (const t of MAP_TILES) { assert.ok(sources.includes(t.label), t.label); for (const c of t.controls) assert.ok(sources.includes(c), `${t.label}: "${c}"`); }
   const named = MAP_TILES.flatMap(t => t.controls).join('\n');
   assert.doesNotMatch(named, /Coach name|Your tools|premium/i);
   // The slider's two ends, as the page names them, are what the beat explains.
-  assert.match(read('components/CoachSettingsSection.tsx'), /Focused advice[\s\S]*More exploratory/);
+  // The slider's end labels live in the catalog now; the component must show the focused end first and the exploratory end last.
+  assert.match(read('components/CoachSettingsSection.tsx'), /t\("focusedAdvice"\)[\s\S]*t\("moreExploratory"\)/);
+  assert.equal(en('refineryAccount.coach.focusedAdvice'), 'Focused advice');
+  assert.equal(en('refineryAccount.coach.moreExploratory'), 'More exploratory');
   assert.match(read('lib/ai/troy-chat.ts'), /Stick to the most common, proven path[\s\S]*offer one less obvious option or angle next to the standard advice, and say which is which/);
   // The page order of the map is the page's own.
   const page = read('app/(dashboard)/dashboard/settings/page.tsx');
-  const order = [...page.slice(page.indexOf(': [\n        { id: "account"')).matchAll(/\{ id: "([a-z]+)", label: "([^"]+)" \}/g)].slice(0, 8);
+  // Labels are catalog keys now (t("sections.<id>")); each key must be its own id and have an English label.
+  const order = [...page.slice(page.indexOf(': [\n        { id: "account"')).matchAll(/\{ id: "([a-z]+)", label: t\("sections\.([a-zA-Z]+)"\) \}/g)].slice(0, 8);
   assert.deepEqual(order.map(m => m[1]), MAP_TILES.map(t => t.id));
+  for (const m of order) { assert.equal(m[1], m[2], `${m[1]} reads its own label`); assert.ok(en(`refineryAccount.settings.page.sections.${m[2]}`).length > 0); }
 });
 
 test('stage: eight tiles in the page order inside the scene; the phone list fits with the longest row open; the camera never shows past an edge', () => {
@@ -298,7 +313,8 @@ test('B2: someone who already holds the bonus is never promised it again: goal c
     assert.doesNotMatch(line, /wait for you/);
     assert.match(line, /Show me around at the top of Settings/, 'points at the header control, which every client has');
   }
-  assert.match(read('app/(dashboard)/dashboard/settings/page.tsx'), />\s*Show me around\s*</);
+  assert.match(read('app/(dashboard)/dashboard/settings/page.tsx'), />\s*\{t\("showMeAround"\)\}\s*</);
+  assert.equal(en('refineryAccount.settings.page.showMeAround'), 'Show me around');
   assert.match(read('components/tour/SettingsEnding.tsx'), /settingsRewardMessage\(skipped \? null : reward \?\? \{ status: 'unavailable', calls: 0 \}, claimed\)/);
   assert.match(SETTINGS_ENDING.quizBodyClaimed('October 25, 2026'), /nothing more is added/);
 });
@@ -355,8 +371,10 @@ test('SF1, SF2, N1 to N3: the page\'s own words', () => {
   assert.doesNotMatch(SETTINGS_BEATS.map(b => `${b.title} ${b.body} ${b.why ?? ''}`).join(' '), /\bExport\b/);
   assert.match(read('lib/export-plan.ts'), /OWN_DEVICE_LABEL = 'This is my own phone or computer'/);
   assert.match(s1.why!, /Press Revoke next to it in Active devices\./);
-  assert.match(read('app/(dashboard)/dashboard/settings/page.tsx'), /"Revoke"/);
-  assert.match(read('app/(dashboard)/dashboard/settings/page.tsx'), /"Sign out others"/);
+  assert.match(read('app/(dashboard)/dashboard/settings/page.tsx'), /t\("revoke"\)/);
+  assert.match(read('app/(dashboard)/dashboard/settings/page.tsx'), /t\("signOutOthers"\)/);
+  assert.equal(en('refineryAccount.settings.devices.revoke'), 'Revoke');
+  assert.equal(en('refineryAccount.settings.devices.signOutOthers'), 'Sign out others');
   assert.equal(SETTINGS_QUESTIONS.find(q => q.id === 'devices')!.choices[1], 'Active devices, then Revoke');
   assert.match(gradeSettingsQuiz({ version: 1, answers: { reading: 1, doors: 0, devices: 1, memory: 1, delete: 0 } })!.review.find(r => r.id === 'devices')!.explanation, /Press Revoke next to one, or Sign out others/);
   assert.match(applicableBeats({ member: true, required: true, plainLanguage: false }).find(b => b.id === 'p1m')!.why!, /^Required means your program asks for it\./);

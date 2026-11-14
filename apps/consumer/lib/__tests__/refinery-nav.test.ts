@@ -13,7 +13,7 @@ import { CURATED_CATEGORIES } from "../support-search";
 import { NEXT_CATEGORIES, NATIONAL_STARTING_POINTS, nextCategoryHref } from "../next-steps";
 import { OPEN_WITHOUT_RESUME } from "../lane-task";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { intlMarkup, MESSAGES } from "./helpers/intl";
 import { deepLinkCategory, deepLinkSearchPlace, savedSearchPlace } from "../support-deep-link";
 import { REFINERY_PAGES, TOUR_TARGETS } from "../tools/assistant-tool-defs";
 
@@ -164,6 +164,8 @@ test("copy on the board and the new page has no em dashes", () => {
   for (const rel of [["lib", "refinery-nav.ts"], ["lib", "next-steps.ts"], ["components", "nav", "RefineryBoard.tsx"], ["components", "nav", "StationStrip.tsx"], ["app", "(dashboard)", "dashboard", "next", "page.tsx"]]) {
     assert.ok(!readFileSync(join(ROOT, ...rel), "utf8").includes("—"), rel.join("/"));
   }
+  // The next page's English copy moved into the catalog; it stays free of em dashes too.
+  assert.ok(!JSON.stringify((MESSAGES.en as any).refineryHome.next).includes("—"), "messages/en refineryHome.next");
 });
 
 test("the record check is never linked while its switch is off", () => {
@@ -205,7 +207,7 @@ async function renderBoard(over: Record<string, unknown> = {}) {
     // The live meter reads the session; the shell provides it. Tests render a still placeholder.
     meter: React.createElement("span", { "data-testid": "meter-placeholder" }), ...over,
   } as never);
-  return renderToStaticMarkup(board);
+  return intlMarkup(board);
 }
 const count = (html: string, needle: string) => html.split(needle).length - 1;
 function toneOf(html: string, station: string): string | undefined {
@@ -279,9 +281,17 @@ test("deep link: category preselects only if offered; search runs with the saved
 test("What comes next promises no local results it may not have", () => {
   const page = readFileSync(join(ROOT, "app", "(dashboard)", "dashboard", "next", "page.tsx"), "utf8");
   const data = readFileSync(join(ROOT, "lib", "next-steps.ts"), "utf8");
-  for (const src of [page, data]) assert.doesNotMatch(src, /near you|close to home|show you who helps/i);
-  assert.match(page, /search local help by place and need/i);
-  for (const src of [page, data, readFileSync(join(ROOT, "lib", "refinery-nav.ts"), "utf8")]) assert.doesNotMatch(src, /\u2013| -- /, "no en dash or double hyphen in copy");
+  // The page's English copy now lives in the English catalog (refineryHome.next); the page asks for it by key.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const next = (MESSAGES.en as any).refineryHome.next as Record<string, unknown>;
+  const words: string[] = [];
+  (function collect(x: unknown) { if (typeof x === "string") words.push(x); else if (x && typeof x === "object") Object.values(x).forEach(collect); })(next);
+  assert.ok(words.length > 10, "the English catalog has the page's copy");
+  for (const src of [page, data, ...words]) assert.doesNotMatch(src, /near you|close to home|show you who helps/i);
+  assert.match(String(next.tip), /search local help by place and need/i);
+  assert.match(page, /useTranslations\("refineryHome\.next"\)/, "the page reads that namespace");
+  assert.match(page, /\{t\("tip"\)\}/, "and shows the tip line from it");
+  for (const src of [page, data, readFileSync(join(ROOT, "lib", "refinery-nav.ts"), "utf8"), ...words]) assert.doesNotMatch(src, /\u2013| -- /, "no en dash or double hyphen in copy");
 });
 
 test("t.ROY can point at every station and open What comes next", () => {

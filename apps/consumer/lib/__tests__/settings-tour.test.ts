@@ -19,9 +19,16 @@ import { readMs } from '../tour/settings-camera';
 import { SETTINGS_QUIZ_VERSION } from '../tour/settings-quiz';
 import { wordCount } from '../tour/timing';
 import { settingsVerdict } from '../settings-guard';
+import { MESSAGES } from './helpers/intl';
 
 const ROOT = join(__dirname, '..', '..');
 const read = (f: string) => readFileSync(join(ROOT, f), 'utf8');
+/** The English catalog value for a dotted path (copy moved out of the components into messages/en). */
+const en = (path: string): string => {
+  const v = path.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], MESSAGES.en);
+  assert.equal(typeof v, 'string', `English catalog has ${path}`);
+  return v as string;
+};
 const NON = { member: false, required: false, plainLanguage: false };
 const MEM = { member: true, required: false, plainLanguage: false };
 const REQ = { member: true, required: true, plainLanguage: true };
@@ -292,7 +299,8 @@ test('entry and controls: ?tour=settings on the Settings page, the header contro
   assert.equal(settingsTourRequested('/dashboard', new URLSearchParams('tour=settings')), false);
   assert.equal(settingsTourRequested('/dashboard/settings', new URLSearchParams('tour=1')), false, 'the entrance tour\'s request is not this tour\'s');
   assert.equal(settingsTourRequested('/dashboard/settings', null), false);
-  assert.match(read('app/(dashboard)/dashboard/help/page.tsx'), /href="\/dashboard\/settings\?tour=settings"[^>]*>\s*Replay the Settings tour/);
+  assert.match(read('app/(dashboard)/dashboard/help/page.tsx'), /href="\/dashboard\/settings\?tour=settings"[^>]*>\s*\{t\("replaySettings"\)\}/);
+  assert.equal(en('refineryHome.help.replaySettings'), 'Replay the Settings tour');
   const ctl = read('components/tour/SettingsTour.tsx');
   // N-3: under React strict mode the mount cleanup aborts the first load; forgetting the request key lets the load effect ask again.
   assert.match(ctl, /requestController\.current\?\.abort\(\);[\s\S]{0,400}previousRequest\.current = '';\s*\n\s*document\.removeEventListener\('input'/, 'the mount cleanup forgets the request key');

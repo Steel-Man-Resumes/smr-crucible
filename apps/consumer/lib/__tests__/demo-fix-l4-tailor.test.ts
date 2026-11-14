@@ -20,6 +20,10 @@ import {
 } from "../tailor-readiness";
 import { STEP_COPY } from "../progression-policy";
 import { ASK_TROY_ACTION, ASK_TROY_HINT } from "../refinery-nav";
+import { MESSAGES } from "../../messages";
+
+/** An English catalog value by dotted path (namespace first), for copy that moved out of the components. */
+const cat = (path: string): string => path.split(".").reduce<any>((o, k) => o?.[k], MESSAGES.en);
 
 const read = (rel: string) => readFileSync(join(__dirname, "..", "..", rel), "utf8");
 const code = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
@@ -75,7 +79,12 @@ test("W10: no saved link says so, and never claims the job has no online applica
   assert.match(NO_LINK_SAVED_LINE, /^No application link was saved for this job\./);
   const apply = read("components/apply/ApplyActions.tsx");
   assert.doesNotMatch(apply, /has no online application/);
-  assert.match(apply, /\{NO_LINK_SAVED_LINE\}/);
+  // ApplyActions now looks the line up in the catalog (refineryResume.apply.noLinkSaved) instead of importing the constant.
+  // The catalog English must equal the constant so the two cannot drift, and the component must render that key.
+  assert.equal(cat("refineryResume.apply.noLinkSaved"), NO_LINK_SAVED_LINE);
+  assert.doesNotMatch(cat("refineryResume.apply.noLinkSaved"), /has no online application/);
+  assert.match(apply, /useTranslations\("refineryResume\.apply"\)/);
+  assert.match(apply, /\{t\("noLinkSaved"\)\}/);
   const prompt = read("app/api/apply-email/route.ts");
   assert.doesNotMatch(prompt, /because the employer offers no online application/);
   assert.match(prompt, /no online application link was saved for this job/);

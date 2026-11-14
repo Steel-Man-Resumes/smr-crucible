@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { forgeAccountFact } from "../assistant-prompt";
+import { MESSAGES } from "./helpers/intl";
 
 const ROOT = join(__dirname, "..", "..");
 const PHRASE = /no account|without (?:an|a) account|no login|requires no login|no sign[- ]?in|nothing to sign up/i;
@@ -82,7 +83,13 @@ test("the partner FAQ no longer says nothing is shared with third parties (the A
 
 test("the security page card and the dashboard line have a signed-in version", () => {
   const sec = readFileSync(join(ROOT, "components", "SecurityContent.tsx"), "utf8");
-  assert.match(sec, /title="One Free Account"/);
+  // The card copy moved to the catalog: the signed-in card (up) reads its own keys, and the English is unchanged.
+  assert.match(sec, /up=\{\s*<ControlCard\s+title=\{t\("control\.oneAccount\.title"\)\}\s+description=\{t\("control\.oneAccount\.description"\)\}/);
+  assert.match(sec, /open=\{\s*<ControlCard\s+title=\{t\("control\.noAccount\.title"\)\}/);
+  const card = MESSAGES.en.refineryAccount.security.control;
+  assert.equal(card.oneAccount.title, "One Free Account");
+  assert.match(card.oneAccount.description, /sign in with a free account/);
+  assert.match(card.oneAccount.description, /free resume check works without signing in and saves nothing/);
   assert.match(sec, /<WallText/);
   const dash = readFileSync(join(ROOT, "app", "(dashboard)", "dashboard", "page.tsx"), "utf8");
   assert.doesNotMatch(dash, /No account needed/);
@@ -92,4 +99,44 @@ test("the security page card and the dashboard line have a signed-in version", (
 test("no wall-aware line shows before the browser knows the wall (no stale claim in pre-rendered HTML)", () => {
   const w = readFileSync(join(ROOT, "components", "forge", "WallText.tsx"), "utf8");
   assert.match(w, /if \(wall === null\) return null;/);
+});
+
+// The same rule for copy that lives in the message catalogs (English and Spanish): a catalog line that says
+// "no account" must be rendered by a file that follows the wall (or is on the reviewed list above), because
+// a catalog string is not scanned as source. The Spanish phrases below are the same claims in Spanish.
+const PHRASE_CATALOG_EN = /\bno account\b|without (?:an|a) account|no login|requires no login|no sign[- ]?in|nothing to sign up/i;
+const PHRASE_ES = /sin (?:una )?cuenta|no (?:necesitas|necesita|requiere|hace falta|piden|pide) (?:una )?cuenta|sin (?:iniciar sesi[o\u00f3]n|registrarte|registro)|no hay que (?:iniciar|registr)|no hay nada para registrarse/i;
+
+function* leaves(o: unknown, path: string[] = []): Generator<[string[], string]> {
+  if (typeof o === "string") yield [path, o];
+  else if (o && typeof o === "object") for (const [k, v] of Object.entries(o as Record<string, unknown>)) yield* leaves(v, [...path, k]);
+}
+
+test("every catalog 'no account' line is rendered by a file that follows the wall", async () => {
+  const { MESSAGES } = await import("../../messages");
+  const sources: Array<[string, string]> = [];
+  for (const dir of ["app", "components", "lib"]) for (const file of walk(join(ROOT, dir))) sources.push([relative(ROOT, file), readFileSync(file, "utf8")]);
+  const offenders: string[] = [];
+  let seen = 0;
+  for (const lang of ["en", "es"] as const) {
+    for (const [ns, tree] of Object.entries(MESSAGES[lang])) {
+      for (const [path, value] of leaves(tree)) {
+        if (!(lang === "en" ? PHRASE_CATALOG_EN : PHRASE_ES).test(value)) continue;
+        seen++;
+        // Who renders it: files that name the key's last two segments (or the last one when it is unique to the file).
+        const last2 = path.slice(-2).join(".");
+        const last1 = path[path.length - 1];
+        // The file must also read this namespace (useTranslations / getTranslations("<ns>...")), so a key name
+        // shared by two namespaces does not point at the wrong file.
+        const readsNs = (src: string) => src.includes(`"${ns}`) || src.includes(`'${ns}`);
+        let users = sources.filter(([, src]) => readsNs(src) && (src.includes(`"${last2}"`) || src.includes(`'${last2}'`)));
+        if (!users.length) users = sources.filter(([, src]) => readsNs(src) && new RegExp(`\\bt(?:r)?(?:\\.rich)?\\(\\s*["'\`]${last1}["'\`]`).test(src));
+        if (!users.length) users = sources.filter(([, src]) => readsNs(src) && src.includes(last1));
+        const ok = users.length > 0 && users.some(([rel, src]) => STAYS_TRUE[rel] || WALL_AWARE.test(src));
+        if (!ok) offenders.push(`${lang}:${ns}.${path.join(".")} (rendered by: ${users.map(([r]) => r).join(", ") || "nothing found"})`);
+      }
+    }
+  }
+  assert.ok(seen >= 8, "the scan found the catalog lines it should");
+  assert.deepEqual(offenders, [], "these catalog lines say 'no account' but no file that renders them follows the sign-in wall");
 });
