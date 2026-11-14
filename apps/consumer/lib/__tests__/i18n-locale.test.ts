@@ -1,7 +1,7 @@
 /** Site language resolution (i18n/locale.ts): allowlist, cookie reading, suggestions. */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_LOCALE, LANG_COOKIE, htmlLang, isLocale, langCookieValue, localeFromCookieHeader, resolveLocale, suggestedLocale } from "../../i18n/locale";
+import { DEFAULT_LOCALE, LANG_COOKIE, htmlLang, isLocale, langCookieDomain, langCookieValue, localeFromCookieHeader, resolveLocale, suggestedLocale } from "../../i18n/locale";
 
 test("only en and es are honored; anything else is English", () => {
   assert.equal(resolveLocale("es"), "es");
@@ -35,4 +35,12 @@ test("the browser language is only ever a suggestion", () => {
 test("html lang is the locale itself", () => {
   assert.equal(htmlLang("es"), "es");
   assert.equal(htmlLang("en"), "en");
+});
+
+test("the language cookie is shared across steelmanresumes.com only in production", () => {
+  assert.equal(langCookieDomain({ NODE_ENV: "production", VERCEL_ENV: "production" }), ".steelmanresumes.com");
+  // A Vercel preview (*.vercel.app) would have the cookie dropped by the browser, so it stays host-scoped.
+  assert.equal(langCookieDomain({ NODE_ENV: "production", VERCEL_ENV: "preview" }), undefined);
+  assert.equal(langCookieDomain({ NODE_ENV: "development" }), undefined);
+  assert.equal(langCookieDomain({}), undefined);
 });

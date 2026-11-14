@@ -15,11 +15,12 @@ import { effectiveAuth as auth } from "@/lib/effective-auth";
 import { settingsRefusal } from "@/lib/settings-guard";
 import { isSameOriginJsonPost } from "@/lib/same-origin";
 import { getOne, query } from "@crucible/core";
-import { LANG_COOKIE, LANG_COOKIE_MAX_AGE, isLocale, langCookieValue, resolveLocale, type Locale } from "@/i18n/locale";
+import { LANG_COOKIE, LANG_COOKIE_MAX_AGE, isLocale, langCookieDomain, langCookieValue, resolveLocale, type Locale } from "@/i18n/locale";
 
 export const maxDuration = 10;
 
 function cookieOptions() {
+  const domain = langCookieDomain();
   return {
     name: LANG_COOKIE,
     httpOnly: true,
@@ -27,6 +28,7 @@ function cookieOptions() {
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: LANG_COOKIE_MAX_AGE,
+    ...(domain ? { domain } : {}),
   };
 }
 
