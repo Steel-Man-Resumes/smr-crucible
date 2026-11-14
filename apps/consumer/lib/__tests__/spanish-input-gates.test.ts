@@ -139,3 +139,9 @@ test("accented words are not split into fragments the tracer could misread as na
   const facts = untracedFacts("- Cinco años de experiencia en preparación de alimentos.", "Tengo cinco años de experiencia en preparación de alimentos.");
   assert.deepEqual(facts, []);
 });
+
+test("a Spanish credential status is accepted by the finish gate, a non-answer is not", async () => {
+  const { isConfirmWhen } = await import("../finish-gate");
+  for (const s of ["vigente", "vencida", "en curso", "completada", "2019"]) assert.equal(isConfirmWhen("certification", s), true, s);
+  for (const s of ["nunca", "no sé", "ni idea"]) assert.equal(isConfirmWhen("certification", s), false, s);
+});
