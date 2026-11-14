@@ -1,0 +1,71 @@
+{
+  "language": "es",
+  "register": "Plain tu, neutral US Spanish, short sentences. Product names stay in English with their English article: The Forge, The Refinery, t.ROY. Documents stay English this pass.",
+  "how_to_use": "status=locked entries are enforced by lib/__tests__/i18n-termbase.test.ts: no Spanish catalog value may match an avoid pattern. status=proposed entries are machine suggestions that wait for a bilingual reader; they are not enforced. Add an entry when a back-translation check or a reader finds a recurring problem.",
+  "terms": [
+    {
+      "id": "criminal-record",
+      "en": "record (criminal record)",
+      "es": "antecedentes penales",
+      "avoid": ["antecedentes(?!\\s+penales)"],
+      "note": "\"antecedentes\" alone can read as work background. Found in 16 back-translation flags on 2026-11-13. Work history is \"historial laboral\".",
+      "status": "locked"
+    },
+    {
+      "id": "clear-this-computer",
+      "en": "clear this computer",
+      "es": "borrar los datos de esta computadora",
+      "avoid": ["\\b(?:limpiar|limpia|limpies|limpie)\\b[^.]{0,30}\\bcomputadora", "\\bborr(?:ar|a|es|e)\\s+esta\\s+computadora"],
+      "note": "The button erases saved work and signs the person out. \"Limpiar\" reads like cleaning the machine and \"borrar esta computadora\" like erasing the machine. Say what is erased: the data on it.",
+      "status": "locked"
+    },
+    {
+      "id": "settings-normal",
+      "en": "Normal (a setting)",
+      "es": "Normal",
+      "avoid": [],
+      "note": "Back-translation found it rendered as Completa. Normal is the same word in both languages.",
+      "status": "locked"
+    },
+    {
+      "id": "refinery-seat",
+      "en": "seat (a Refinery seat)",
+      "es": "cupo",
+      "avoid": [],
+      "note": "Strings use \"lugar\", which reads as a physical place. Needs a native reader to confirm \"cupo\".",
+      "status": "proposed"
+    },
+    {
+      "id": "partner-org",
+      "en": "partner (organization)",
+      "es": "organización aliada",
+      "avoid": [],
+      "note": "\"socio\" reads as a business partner or spouse. Proposed by the comparison pass.",
+      "status": "proposed"
+    },
+    {
+      "id": "facility",
+      "en": "facility (jail or prison)",
+      "es": "institución",
+      "avoid": [],
+      "note": "\"centro\" alone does not say jail or prison. Applied in the record-choice screen; confirm wording and region with a reader.",
+      "status": "proposed"
+    },
+    {
+      "id": "gig-work",
+      "en": "gig work",
+      "es": "(unchosen)",
+      "avoid": [],
+      "note": "\"por encargo\" was flagged as unclear. A native reader should pick the everyday word.",
+      "status": "proposed"
+    },
+    {
+      "id": "case-manager",
+      "en": "case manager",
+      "es": "(unchosen)",
+      "avoid": [],
+      "note": "\"gestor de casos\" versus \"administrador de casos\". Reader should choose what reentry programs actually say.",
+      "status": "proposed"
+    }
+  ]
+}

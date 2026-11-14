@@ -47,11 +47,11 @@
     "steps": {
       "one": {
         "title": "Dos herramientas. Una vida laboral.",
-        "body": "The Forge arma tu historia y tu primer currículum más fuerte. The Refinery es tu espacio de trabajo continuo: adapta ese currículum a una vacante, escribe una carta de presentación, practica una entrevista y prepara con t.ROY cómo hablar de tus antecedentes.",
+        "body": "The Forge arma tu historia y tu primer currículum más fuerte. The Refinery es tu espacio de trabajo continuo: adapta ese currículum a una vacante, escribe una carta de presentación, practica una entrevista y prepara con t.ROY cómo hablar de tus antecedentes penales.",
         "tools": {
           "a": "Un currículum para cada solicitud",
           "b": "Práctica de entrevistas",
-          "c": "Ayuda para hablar de tus antecedentes",
+          "c": "Ayuda para hablar de tus antecedentes penales",
           "d": "Búsqueda de empleo y apoyo local"
         }
       },
@@ -85,14 +85,14 @@
     "confirmYes": "Sí, borrarlo",
     "clearing": "Borrando...",
     "signOutError": "No pudimos cerrar tu sesión. Quédate aquí e inténtalo de nuevo antes de dejar esta computadora.",
-    "buttonAria": "Limpiar esta computadora: borra tu trabajo de The Forge de este navegador {hint}",
+    "buttonAria": "Borrar los datos de esta computadora: borra tu trabajo de The Forge de este navegador {hint}",
     "buttonTitle": "Borra tu trabajo de The Forge de este navegador {hint}",
     "short": "Borrar",
     "long": "Borrar mis datos de esta computadora",
     "panel": {
       "title": "¿Usas una computadora de biblioteca o compartida?",
-      "signedInNote": "El trabajo guardado en tu cuenta se queda ahí. Al limpiar esta computadora se cierra tu sesión y se quita la copia de este navegador. Guarda tus cambios antes de irte.",
-      "anonymousNote": "Este navegador guarda una copia de tu trabajo. Descárgala o guárdala en tu cuenta gratis antes de limpiar esta computadora. Quien se siente aquí después podría abrir la copia del navegador.",
+      "signedInNote": "El trabajo guardado en tu cuenta se queda ahí. Al borrar los datos de esta computadora se cierra tu sesión y se quita la copia de este navegador. Guarda tus cambios antes de irte.",
+      "anonymousNote": "Este navegador guarda una copia de tu trabajo. Descárgala o guárdala en tu cuenta gratis antes de borrar los datos de esta computadora. Quien se siente aquí después podría abrir la copia del navegador.",
       "confirmYes": "Sí, borrar mi trabajo de esta computadora",
       "notYet": "Todavía no",
       "start": "Listo, borrar mis datos de esta computadora"
