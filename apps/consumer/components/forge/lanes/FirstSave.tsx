@@ -22,12 +22,12 @@
 
 import { TroyWork } from "@crucible/consumer-ui";
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { FlowPage, TroyLivingIcon } from "@crucible/consumer-ui";
 import { ResumePage } from "@/components/resume/ResumePage";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { useForgeSession, type ForgeSessionData } from "@/lib/forge-context";
-import { applyFirstFix, checkFirstSection, firstSectionText, FIX_PROBLEM_COPY, pickFirstFix, type FirstSection } from "@/lib/first-fix";
-import { DRAFT_BADGE, HAVE_ONE_BUILD_LABEL } from "@/lib/lane-task";
+import { applyFirstFix, checkFirstSection, firstSectionText, pickFirstFix, type FirstSection } from "@/lib/first-fix";
 import type { SavedRevisionSummary } from "@/lib/revision-save";
 
 type Keep = "new" | "replace";
@@ -106,19 +106,20 @@ function useFirstSave(signedIn: boolean) {
 
 /** "Start a new resume, or replace your current one?" Asked before anything is written. */
 function KeepQuestion({ onChoose }: { onChoose: (k: Keep) => void }) {
+  const t = useTranslations("forgeStory");
   return (
     <div className="border border-t-amber bg-t-panel p-4" data-testid="keep-question">
-      <p className="text-base font-semibold text-t-white">You already have a saved resume.</p>
-      <p className="mt-1 text-sm text-t-phos">Start a new resume, or replace your current one?</p>
+      <p className="text-base font-semibold text-t-white">{t("keep.title")}</p>
+      <p className="mt-1 text-sm text-t-phos">{t("keep.question")}</p>
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
         <button type="button" onClick={() => onChoose("new")} className="t-focus min-h-touch bg-t-amber px-4 py-2.5 text-sm font-bold text-white hover:bg-t-amber-bright" data-testid="keep-new">
-          Start a new resume
+          {t("keep.startNew")}
         </button>
         <button type="button" onClick={() => onChoose("replace")} className="t-focus min-h-touch border border-t-line px-4 py-2.5 text-sm font-medium text-t-white hover:border-t-phos-dim" data-testid="keep-replace">
-          Replace my current one
+          {t("keep.replace")}
         </button>
       </div>
-      <p className="mt-2 text-xs text-t-phos-dim">New: your saved resume stays in My resumes, just as it is. Replace: the earlier version stays in its history, and you can bring it back from My resumes.</p>
+      <p className="mt-2 text-xs text-t-phos-dim">{t("keep.explain")}</p>
     </div>
   );
 }
@@ -143,11 +144,12 @@ function SavedFirst({
   onEditor?: () => void;
   onAnotherJob?: () => void;
 }) {
+  const t = useTranslations("forgeStory");
   const rev = state.kind === "saved" ? state.revision : null;
   const finished = rev?.status === "finished";
   if (state.kind === "ask") {
     return (
-      <FlowPage focusTitle title="Before we save it" subtitle="This won't change anything until you pick.">
+      <FlowPage focusTitle title={t("saved.askTitle")} subtitle={t("saved.askSubtitle")}>
         <KeepQuestion onChoose={onChoose} />
         <div className="mt-4 border border-t-line bg-t-bg p-3">
           <ResumePage text={text} draft />
@@ -156,34 +158,34 @@ function SavedFirst({
     );
   }
   return (
-    <FlowPage focusTitle title={state.kind === "failed" ? "Your section needs saving." : state.kind === "saving" ? "Saving your first section..." : "Saved. That's a real start."} subtitle="Here is your page as it stands." actionLabel="Build my full resume" onAction={onContinue}>
+    <FlowPage focusTitle title={state.kind === "failed" ? t("saved.titleFailed") : state.kind === "saving" ? t("saved.titleSaving") : t("saved.titleSaved")} subtitle={t("saved.subtitle")} actionLabel={t("saved.build")} onAction={onContinue}>
       <div className="mb-3 border border-t-line bg-t-panel px-4 py-3" data-testid="first-save-status" data-state={state.kind}>
-        {state.kind === "saving" && <p className="text-sm text-t-phos">Saving to your account...</p>}
+        {state.kind === "saving" && <p className="text-sm text-t-phos">{t("saved.savingToAccount")}</p>}
         {state.kind === "failed" && (
           <p className="text-sm text-t-amber-bright">
-            Not saved to your account yet. Your work is still on this page.{" "}
+            {t("saved.failed")}{" "}
             <button type="button" onClick={onRetry} className="t-focus min-h-touch font-medium text-t-white underline underline-offset-2" data-testid="first-save-retry">
-              Try again
+              {t("saved.retry")}
             </button>
           </p>
         )}
         {state.kind === "saved" && (
           <>
             <p className="text-sm font-semibold text-t-white" data-testid="first-save-saved">
-              {rev ? `Saved to your account (version ${rev.number}).` : "Saved on this computer. Sign in to keep it in your account."}
+              {rev ? t("saved.toAccount", { number: rev.number }) : t("saved.onComputer")}
             </p>
             {finished ? (
-              <p className="mt-1 text-sm text-t-phos">Checked: nothing left to fix.</p>
+              <p className="mt-1 text-sm text-t-phos">{t("saved.checked")}</p>
             ) : (
               <p className="mt-1 text-sm text-t-amber-bright" data-testid="draft-badge">
-                {DRAFT_BADGE}
+                {t("saved.draftBadge")}
               </p>
             )}
             {state.kept === "new" && (
-              <p className="mt-1 text-sm text-t-phos" data-testid="kept-line">Your earlier resume is in My resumes, just as it was.</p>
+              <p className="mt-1 text-sm text-t-phos" data-testid="kept-line">{t("saved.keptNew")}</p>
             )}
             {state.kept === "replace" && (
-              <p className="mt-1 text-sm text-t-phos" data-testid="kept-line">Your earlier version is in its history. You can bring it back from My resumes.</p>
+              <p className="mt-1 text-sm text-t-phos" data-testid="kept-line">{t("saved.keptReplace")}</p>
             )}
           </>
         )}
@@ -191,19 +193,19 @@ function SavedFirst({
       <div className="mb-4 border border-t-line bg-t-bg p-3" data-testid="first-save-page">
         <ResumePage text={text} draft={!finished} />
       </div>
-      <p className="mb-2 text-sm text-t-phos">{finished ? "First, tell t.ROY what to lead with. Then he builds the full page." : "First, tell t.ROY what to lead with. Then he builds the full page and checks every line with you. Until then it stays a draft."}</p>
+      <p className="mb-2 text-sm text-t-phos">{finished ? t("saved.nextFinished") : t("saved.nextDraft")}</p>
       <div className="flex flex-col gap-2 text-sm">
         {onAnotherJob && (
           <button type="button" onClick={onAnotherJob} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-save-another-job">
-            Add another job first
+            {t("saved.anotherJob")}
           </button>
         )}
         <button type="button" onClick={onDoMore} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="do-more">
-          Add job preferences too
+          {t("saved.addPreferences")}
         </button>
         {onEditor && (
           <button type="button" onClick={onEditor} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-save-editor">
-            Fix more lines in the editor
+            {t("saved.editor")}
           </button>
         )}
       </div>
@@ -244,12 +246,13 @@ export function FirstReward({
   onDoMore: () => void;
   onEditor: (text: string) => void;
 }) {
+  const t = useTranslations("forgeStory");
   const { updateSession } = useForgeSession();
   const fix = pickFirstFix(text);
   const needsContact = fix.kind === "add_contact";
   const [typed, setTyped] = useState("");
   const [working, setWorking] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
+  const [problem, setProblem] = useState<"empty" | "not_contact" | "unchanged" | null>(null);
   const started = useRef(false);
 
   /** The writer's source: their page, with the first fix made when it can be. */
@@ -267,7 +270,7 @@ export function FirstReward({
           else {
             started.current = false;
             setWorking(false);
-            setProblem(FIX_PROBLEM_COPY[r.problem]);
+            setProblem(r.problem);
             return;
           }
         }
@@ -308,10 +311,10 @@ export function FirstReward({
 
   if (working && !needsContact) {
     return (
-      <FlowPage title="Got your page." subtitle="t.ROY is tidying it and starting your resume." showBack onBack={onBack}>
+      <FlowPage title={t("reward.workingTitle")} subtitle={t("reward.workingSubtitle")} showBack onBack={onBack}>
         <div role="status" aria-live="polite" className="mt-4 border border-t-line bg-t-panel p-6 text-center" data-testid="first-reward-working">
-          <div className="my-4 flex justify-center"><TroyWork topic="resume" label="Working from the information you provided" /></div>
-          <p className="text-sm text-t-phos">One moment. You don&apos;t need to do anything.</p>
+          <div className="my-4 flex justify-center"><TroyWork topic="resume" label={t("reward.workingLabel")} /></div>
+          <p className="text-sm text-t-phos">{t("reward.workingNote")}</p>
         </div>
       </FlowPage>
     );
@@ -319,9 +322,9 @@ export function FirstReward({
 
   return (
     <FlowPage
-      title="Here's your page."
-      subtitle="t.ROY builds your resume from what is on it."
-      actionLabel={HAVE_ONE_BUILD_LABEL}
+      title={t("reward.title")}
+      subtitle={t("reward.subtitle")}
+      actionLabel={t("reward.build")}
       onAction={() => void go(needsContact ? typed : null, onBuild)}
       showBack
       onBack={onBack}
@@ -329,9 +332,9 @@ export function FirstReward({
       {needsContact && (
         <section className="mb-4 border border-t-line bg-t-panel p-4" data-testid="first-fix" data-kind={fix.kind}>
           <label htmlFor="first-fix-input" className="block text-sm font-semibold text-t-white">
-            A phone or email employers can reach you at <span className="font-normal text-t-phos-dim">(optional)</span>
+            {t("reward.contactLabel")} <span className="font-normal text-t-phos-dim">{t("reward.optional")}</span>
           </label>
-          <p className="mt-1 text-xs text-t-phos-dim">t.ROY can&apos;t make this one up. Add it now, or build without it.</p>
+          <p className="mt-1 text-xs text-t-phos-dim">{t("reward.contactHint")}</p>
           <input
             id="first-fix-input"
             value={typed}
@@ -341,7 +344,7 @@ export function FirstReward({
           />
           {problem && (
             <p role="status" className="mt-2 text-sm text-t-amber-bright" data-testid="first-fix-problem">
-              {problem}
+              {t(`reward.problem.${problem}`)}
             </p>
           )}
         </section>
@@ -351,10 +354,10 @@ export function FirstReward({
       </div>
       <div className="mt-3 flex flex-col gap-2 text-sm">
         <button type="button" onClick={() => void go(null, onDoMore)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="do-more">
-          Add job preferences too
+          {t("reward.addPreferences")}
         </button>
         <button type="button" onClick={() => onEditor(text)} className="t-focus min-h-touch self-start text-t-phos underline underline-offset-2 hover:text-t-white" data-testid="first-reward-editor">
-          Fix lines yourself first, in the editor
+          {t("reward.editor")}
         </button>
       </div>
     </FlowPage>
@@ -396,6 +399,7 @@ export function QuickBuild({
   onContinue: () => void;
   onDoMore: () => void;
 }) {
+  const t = useTranslations("forgeStory");
   const { session, updateSession } = useForgeSession();
   const [form, setForm] = useState<FirstSection>(session.quickBuildDraft ?? EMPTY);
   const touched = useRef(false);
@@ -460,7 +464,7 @@ export function QuickBuild({
   const field = (k: keyof FirstSection, label: string, opts: { optional?: boolean; placeholder?: string; type?: string } = {}) => (
     <div>
       <label htmlFor={`qb-${k}`} className="block text-sm font-medium text-t-white">
-        {label} {opts.optional && <span className="font-normal text-t-phos-dim">(optional)</span>}
+        {label} {opts.optional && <span className="font-normal text-t-phos-dim">{t("quick.optional")}</span>}
       </label>
       <input
         id={`qb-${k}`}
@@ -476,18 +480,18 @@ export function QuickBuild({
   );
 
   const nextPrompt = !form.name.trim() && !adding
-    ? "Start with the name you want on the page."
+    ? t("quick.promptName")
     : !form.title.trim()
-      ? "What did you call this work? A job, a gig, volunteer work, or work for family all count. Use your own title."
+      ? t("quick.promptTitle")
       : !form.duty.trim()
-        ? `At ${form.employer.trim() || "that place"}, what did you actually do? Say one thing out loud or type it as you would tell me.`
-        : "That's a real line to build from. Add the place and dates if you know them, then I'll organize what you gave me. You can add another job next.";
+        ? t("quick.promptDuty", { place: form.employer.trim() || t("quick.thatPlace") })
+        : t("quick.promptDone");
 
   return (
     <FlowPage
-      title={adding ? "Add another job." : "Start with one job."}
-      subtitle={adding ? "Same as before: the job, and one thing you did there." : "A job, a gig, or work you did for family. Then one thing you did there, in your words."}
-      actionLabel={adding ? "Save this job" : "Save my first section"}
+      title={adding ? t("quick.titleAdding") : t("quick.titleFirst")}
+      subtitle={adding ? t("quick.subtitleAdding") : t("quick.subtitleFirst")}
+      actionLabel={adding ? t("quick.saveAdding") : t("quick.saveFirst")}
       onAction={() => void saveSection()}
       showBack
       onBack={adding ? () => setAdding(false) : onBack}
@@ -496,42 +500,42 @@ export function QuickBuild({
         <div className="flex items-start gap-3">
           <TroyLivingIcon size={38} />
           <div className="min-w-0 flex-1">
-            <p className="font-term text-xs font-bold uppercase tracking-[0.14em] text-t-amber-bright">t.ROY is here with you</p>
+            <p className="font-term text-xs font-bold uppercase tracking-[0.14em] text-t-amber-bright">{t("quick.coachName")}</p>
             {helpMode === "full" && (
               <>
-                <p className="mt-2 text-sm text-t-white">I can do the organizing and writing. You tell me what happened. We can start small and build from there.</p>
+                <p className="mt-2 text-sm text-t-white">{t("quick.coachIntro")}</p>
                 <p className="mt-2 text-sm text-t-phos" aria-live="polite">{nextPrompt}</p>
               </>
             )}
             {helpMode === "short" && <p className="mt-2 text-sm text-t-phos" aria-live="polite">{nextPrompt}</p>}
-            {helpMode === "off" && <p className="mt-2 text-sm text-t-phos">Help is hidden. Your answers stay here.</p>}
+            {helpMode === "off" && <p className="mt-2 text-sm text-t-phos">{t("quick.helpHidden")}</p>}
             <div className="mt-2 flex flex-wrap gap-4 text-xs">
-              {helpMode !== "full" && <button type="button" onClick={() => setHelpMode("full")} className="t-focus min-h-touch text-t-amber-bright underline">More help</button>}
-              {helpMode === "full" && <button type="button" onClick={() => setHelpMode("short")} className="t-focus min-h-touch text-t-phos underline">Less help</button>}
-              {helpMode !== "off" && <button type="button" onClick={() => setHelpMode("off")} className="t-focus min-h-touch text-t-phos underline">Hide help</button>}
+              {helpMode !== "full" && <button type="button" onClick={() => setHelpMode("full")} className="t-focus min-h-touch text-t-amber-bright underline">{t("quick.moreHelp")}</button>}
+              {helpMode === "full" && <button type="button" onClick={() => setHelpMode("short")} className="t-focus min-h-touch text-t-phos underline">{t("quick.lessHelp")}</button>}
+              {helpMode !== "off" && <button type="button" onClick={() => setHelpMode("off")} className="t-focus min-h-touch text-t-phos underline">{t("quick.hideHelp")}</button>}
             </div>
           </div>
         </div>
       </div>
       <div className="space-y-4">
-        {!adding && field("name", "Your name")}
-        {!adding && field("contact", "Phone or email", { optional: true, placeholder: "So employers can reach you" })}
-        {field("title", "What did you do there? (your job title)", { placeholder: "For example: line cook" })}
-        {field("employer", "Where?", { optional: true, placeholder: "The place, or who you worked for" })}
-        {field("years", "When?", { optional: true, placeholder: "For example: 2019 to 2023" })}
+        {!adding && field("name", t("quick.fieldName"))}
+        {!adding && field("contact", t("quick.fieldContact"), { optional: true, placeholder: t("quick.fieldContactPlaceholder") })}
+        {field("title", t("quick.fieldTitle"), { placeholder: t("quick.fieldTitlePlaceholder") })}
+        {field("employer", t("quick.fieldEmployer"), { optional: true, placeholder: t("quick.fieldEmployerPlaceholder") })}
+        {field("years", t("quick.fieldYears"), { optional: true, placeholder: t("quick.fieldYearsPlaceholder") })}
         <div>
           <div className="flex items-end justify-between gap-2">
             <label htmlFor="qb-duty" className="block text-sm font-medium text-t-white">
-              One thing you did there
+              {t("quick.fieldDuty")}
             </label>
-            <SpeechInputButton compact onText={(t) => set("duty", form.duty ? `${form.duty.trim()} ${t}` : t)} />
+            <SpeechInputButton compact onText={(spoken) => set("duty", form.duty ? `${form.duty.trim()} ${spoken}` : spoken)} />
           </div>
           <textarea
             id="qb-duty"
             value={form.duty}
             onChange={(e) => set("duty", e.target.value)}
             rows={3}
-            placeholder="For example: I ran the grill on the breakfast line."
+            placeholder={t("quick.fieldDutyPlaceholder")}
             aria-invalid={missing.includes("duty") || undefined}
             className={`mt-1 w-full border bg-t-panel px-4 py-3 text-base text-t-white focus:border-t-amber focus:outline-none ${missing.includes("duty") ? "border-t-amber" : "border-t-line"}`}
             data-testid="qb-duty"
@@ -539,12 +543,12 @@ export function QuickBuild({
         </div>
         {missing.length > 0 && (
           <p role="status" className="text-sm text-t-amber-bright" data-testid="qb-missing">
-            {missing.includes("name") ? "Add your name. " : ""}
-            {missing.includes("title") ? "Add the job title or the place. " : ""}
-            {missing.includes("duty") ? "Add one thing you did there." : ""}
+            {missing.includes("name") ? t("quick.missingName") : ""}
+            {missing.includes("title") ? t("quick.missingTitle") : ""}
+            {missing.includes("duty") ? t("quick.missingDuty") : ""}
           </p>
         )}
-        {session.laneTarget && <p className="text-xs text-t-phos-dim">Going after: {session.laneTarget}. We build only what that job needs.</p>}
+        {session.laneTarget && <p className="text-xs text-t-phos-dim">{t("quick.goingAfter", { target: session.laneTarget })}</p>}
       </div>
     </FlowPage>
   );

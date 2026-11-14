@@ -1,0 +1,101 @@
+{
+  "flowPage": {
+    "goBack": "Go back",
+    "working": "Working"
+  },
+  "ghostGuide": {
+    "askMore": "Ask me more",
+    "showAria": "Show guidance from t.ROY",
+    "show": "Show t.ROY guidance",
+    "hideAria": "Hide guidance",
+    "hide": "Hide"
+  },
+  "exitButton": {
+    "leave": "Leave this page"
+  },
+  "progressIndicator": {
+    "label": "Progress"
+  },
+  "accountBar": {
+    "signedInAs": "Signed in as <email>{address}</email>.",
+    "yourAccount": "your account",
+    "notYou": "Not you?",
+    "signOut": "Sign out"
+  },
+  "signInNotice": {
+    "notice": "Starting {date}, the Forge asks you to sign in. It's still free. Your saved work comes with you."
+  },
+  "pathProgress": {
+    "ariaLabel": "Your steps",
+    "done": "(done)",
+    "then": ". Then {steps}",
+    "steps": {
+      "resume": "Resume",
+      "goals": "Goals",
+      "story": "Support",
+      "preferences": "Preferences",
+      "processing": "Build",
+      "output": "Results"
+    }
+  },
+  "welcomeTour": {
+    "open": "How Forge and Refinery work",
+    "dialogTitle": "Your Forge and Refinery tour",
+    "skipTour": "Skip tour",
+    "progress": "{step} of {total}",
+    "finish": "Let's build my resume",
+    "steps": {
+      "one": {
+        "title": "Two tools. One working life.",
+        "body": "The Forge builds your story and your first stronger resume. The Refinery is your ongoing workspace: tailor that resume to a job, write a cover letter, practice an interview and work through disclosure with t.ROY.",
+        "tools": {
+          "a": "A resume for each application",
+          "b": "Interview practice",
+          "c": "Disclosure coaching",
+          "d": "Job search and local support"
+        }
+      },
+      "two": {
+        "title": "First, give us something real to work with.",
+        "body": "Bring a resume, even a rough one, or build from your work history with t.ROY. Then tell us what you actually did, what people relied on you for and what you want next. Paid work, training and volunteer work all matter.",
+        "tools": {
+          "a": "Bring your resume",
+          "b": "Build one with t.ROY",
+          "c": "Tell the story behind the duties"
+        }
+      },
+      "three": {
+        "title": "The work you put in matters.",
+        "body": "Rebuilding your history can be hard. Specific details give t.ROY more to work with and give employers more reasons to take you seriously. Your resume is the foundation for tailored applications and interview practice. This first draft is the start; you keep improving it in the Refinery.",
+        "tools": {
+          "a": "Your experience",
+          "b": "Your skills, with evidence",
+          "c": "Your first stronger draft"
+        }
+      },
+      "four": {
+        "title": "Tools to compete. A voice in what comes next.",
+        "body": "The Forge is free. We want these tools to help you compete for real opportunities. When you have tried them, please take three minutes to tell us how it went, good or bad. Honest reviews help others find us and help us improve. Reviewing is optional and never changes your access."
+      }
+    }
+  },
+  "clearThisComputer": {
+    "hint": "(if you're on a public or shared computer)",
+    "groupAria": "Clear this computer",
+    "confirmYes": "Yes, erase it",
+    "clearing": "Clearing...",
+    "signOutError": "We couldn't sign you out. Stay here and try again before leaving this computer.",
+    "buttonAria": "Clear this computer: erase your Forge work from this browser {hint}",
+    "buttonTitle": "Erase your Forge work from this browser {hint}",
+    "short": "Clear",
+    "long": "Clear this computer",
+    "panel": {
+      "title": "Using a library or shared computer?",
+      "signedInNote": "Work saved to your account stays there. Clearing this computer signs you out and removes this browser's copy. Save any changes before you leave.",
+      "anonymousNote": "This browser keeps a copy of your work. Download it or save it to your free account before clearing this computer. Anyone who sits down here next could open the browser's copy.",
+      "confirmYes": "Yes, erase my work from this computer",
+      "notYet": "Not yet",
+      "start": "Done, clear this computer"
+    }
+  }
+}

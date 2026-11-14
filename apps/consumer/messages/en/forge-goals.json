@@ -1,0 +1,176 @@
+{
+  "optional": "(optional)",
+  "goalOptions": {
+    "stability": { "label": "Something stable", "description": "Consistent hours, reliable income, a place I can stay." },
+    "growth": { "label": "Room to grow", "description": "I want to build skills and move up over time." },
+    "back_to_my_trade": { "label": "Get back into my trade", "description": "Work I already know how to do: a trade, a license, a skill I've used." },
+    "meaning": { "label": "Work that matters to me", "description": "I care about what I do, not just the paycheck." },
+    "immediate": { "label": "Something right now", "description": "I need income fast. I'll figure out the rest later." },
+    "independence": { "label": "Be my own boss someday", "description": "I want to build toward running something of my own." },
+    "community": { "label": "Give back to my community", "description": "I've been through it. I want to help others who are going through it too." },
+    "flexibility": { "label": "I need a flexible schedule", "description": "Appointments, family, programs. My job has to work around my life." }
+  },
+  "confidenceOptions": {
+    "none": "I don't have one yet",
+    "rough": "It's rough",
+    "decent": "It's decent",
+    "strong": "It's strong"
+  },
+  "worryOptions": {
+    "gaps": "Gaps in my history",
+    "job_changes": "Job changes",
+    "little_experience": "Not much experience",
+    "nothing": "Nothing major"
+  },
+  "lanes": {
+    "title": "Tell the story behind your work",
+    "subtitle": "The work you gave us is the starting point. These answers help t.ROY decide what to lead with. Keep it short, or let him start with what you gave us.",
+    "action": "Build my best draft",
+    "footer": "You can correct the story and every resume line before you send it.",
+    "directionError": "Your direction is still on this page, but could not be saved. Try again.",
+    "guideScratch": "I have the work you told me about. Tell me where you want to go and one thing I should understand. A few words are enough. I will do the writing, then you decide what stays.",
+    "guideRead": "I read your page. Tell me what the page missed, then where you might want to go. A few words are enough. I will do the writing, then you decide what stays.",
+    "missedLabelScratch": "What should t.ROY understand about your work?",
+    "missedLabelPage": "What does your old resume miss about your work?",
+    "missedHint": "Tell us about a problem you handled, work people relied on you for, or something you learned to do well. What did you do, and what happened? A short real example helps more than a list of qualities.",
+    "missedPlaceholder": "I trained new people, but my resume only says I worked the line.",
+    "targetLabel": "What work do you want next?",
+    "targetPlaceholder": "A job title, a kind of work, or 'not sure yet'",
+    "targetHint": "No target yet? Leave it blank. t.ROY will build a strong base resume from your real work.",
+    "leadTitle": "Which job should t.ROY lead with?",
+    "leadHint": "Pick one if it best proves your next move. Your other jobs stay on the resume.",
+    "letDecide": "Let t.ROY decide",
+    "moreJobs": "More jobs from your page",
+    "mattersTitle": "What matters most in the next job?",
+    "mattersHint": "Pick any that fit. These give your story direction. The Refinery will help you judge specific jobs and work through what you cannot or do not want to do.",
+    "moreWays": "More ways to describe what you want"
+  },
+  "goals": {
+    "titleOpen": "What could work look like for you?",
+    "title": "What do you actually want?",
+    "subtitleOpen": "Pick anything that sounds right. Nothing here is locked in.",
+    "subtitle": "Pick as many as fit. This changes what jobs I recommend.",
+    "footer": "Not sure? Pick what feels closest. We'll figure it out.",
+    "whyWeAsk": "This isn't a form, it's a filter. “Stability” and “growth” lead to different jobs. I need to know what matters so I don't waste your time.",
+    "demoBanner": "Demo mode: sample goals pre-selected",
+    "pickOne": "Pick at least one, or describe what you're looking for below.",
+    "addMore": "Add more about what you want",
+    "addMoreOptional": "(optional). It helps, but you can skip it today.",
+    "confidenceTitle": "How strong is your resume right now?",
+    "worriesTitle": "Anything you're worried about?",
+    "worriesNote": "This just helps us build it right. We only ever use what's true about you.",
+    "practiceTitle": "Do you make art, perform, or freelance?",
+    "yes": "Yes",
+    "no": "No",
+    "practiceNext": "Good. Your shows, performances and creative work go in your practice record. It lives in the Refinery under Creative Work, once you sign in.",
+    "practiceOpen": "Open it in a new tab",
+    "sayMore": "Want to say more about what you're looking for?",
+    "narrativeLabelDemo": "Sample goal narrative",
+    "narrativeLabel": "Tell us more in your own words",
+    "narrativePlaceholder": "e.g., I want to work with my hands, or I'm interested in healthcare, or I want to start my own business someday...",
+    "hookButton": "What would make work feel like yours?",
+    "hookLabelDemo": "What would make work feel real to you?",
+    "hookLabel": "What would make work feel like yours?",
+    "hookHint": "A mentor, a mission, using your story to help others. Anything that would make getting up worth it.",
+    "hookPlaceholder": "e.g., I want to help people going through what I went through. Or: I want to build something I can show my kids."
+  },
+  "preferences": {
+    "title": "A few quick preferences",
+    "subtitle": "This helps us find the right fit. You can change any of these later.",
+    "buildMyPage": "Build my page",
+    "demoBanner": "Demo mode: sample preferences pre-selected",
+    "environmentTitle": "Where and how do you want to work?",
+    "environmentHint": "Pick as many as fit. Skip it if you're open to anything.",
+    "environmentLabel": "Work environment",
+    "stillIn": "Still in {place}?",
+    "whereLocated": "Where are you located?",
+    "confirmHint": "This came from your resume. Change it if you've moved.",
+    "typeHint": "Start typing a city or ZIP and pick from the list. Not listed? Type it anyway.",
+    "offerStoryTitle": "Anything in your way? (optional)",
+    "offerStoryBody": "A record, a gap, no ride. Tell me before I build and I can look up the laws and help that fit. Or skip it and build now.",
+    "offerStoryButton": "Add that first"
+  },
+  "schedule": {
+    "hoursLabel": "Hours",
+    "shiftsLabel": "Shifts",
+    "default": {
+      "title": "What schedule works for you?",
+      "hint": "Pick every one that fits.",
+      "shifts": "Any shifts you can or can't work? Skip this if it doesn't matter."
+    },
+    "steady": {
+      "title": "You want steady work. What schedule works for you?",
+      "hint": "Pick every one that fits. I only ask this once.",
+      "shifts": "Which shifts can you count on working? Skip this if it doesn't matter."
+    },
+    "flexible": {
+      "title": "Your job has to fit your life. What schedule works?",
+      "hint": "Pick every one that fits. I only ask this once.",
+      "shifts": "Which shifts work around your appointments and family? Skip what doesn't matter."
+    },
+    "family": {
+      "title": "What hours work around childcare or family care?",
+      "hint": "Pick every one that fits.",
+      "shifts": "Which shifts can you cover? Skip this if it doesn't matter."
+    }
+  },
+  "commute": {
+    "title": "How do you get to work, and how far can you go each day?",
+    "titleTransit": "How do you get around right now?",
+    "hint": "Pick every way you can get there.",
+    "hintTransit": "Pick every way you can get there. No car is fine.",
+    "modesLabel": "Ways to get to work",
+    "time": "About how long can the trip be, one way?",
+    "timeTransit": "About how long can the trip be, one way, by bus, on foot or with a ride?",
+    "distanceLabel": "One-way travel time"
+  },
+  "choices": {
+    "hours": {
+      "full-time": "Full-time (35+ hours)",
+      "part-time": "Part-time",
+      "flexible": "Flexible or gig work",
+      "any": "Open to anything"
+    },
+    "shifts": {
+      "days": "Days",
+      "evenings": "Evenings",
+      "overnight": "Overnight",
+      "weekends": "Weekends"
+    },
+    "environment": {
+      "physical": "Physical, hands-on",
+      "outdoors": "Outdoors",
+      "on-the-road": "On the road (driving, delivery)",
+      "public": "With the public",
+      "small-team": "With a small team",
+      "on-my-own": "Mostly on my own",
+      "office": "Office or desk",
+      "remote": "Remote, from home"
+    },
+    "transport": {
+      "walk": "Walk",
+      "bike": "Bike",
+      "bus": "Bus or transit",
+      "drive": "My own vehicle",
+      "ride": "A ride from someone"
+    },
+    "distance": {
+      "within-15": "Up to 15 minutes",
+      "within-30": "Up to 30 minutes",
+      "within-45": "Up to 45 minutes",
+      "within-60": "Up to an hour",
+      "further": "More than an hour is fine"
+    }
+  },
+  "location": {
+    "placeholder": "City, state or ZIP",
+    "listLabel": "Places that match",
+    "county": "county",
+    "suggestions": "{count, plural, one {# suggestion} other {# suggestions}}. Use the arrow keys to choose.",
+    "failed": "Suggestions didn't load. Type your city and state, like Lansing, MI."
+  },
+  "focus": {
+    "viewWithoutFocus": "View without focus",
+    "backToWork": "Back to my work"
+  }
+}

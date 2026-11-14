@@ -1,0 +1,204 @@
+{
+  "idle": {
+    "drafting": "t.ROY is drafting a fix...",
+    "draftFix": "Let t.ROY draft a fix",
+    "trueAsWritten": "This is true as written",
+    "changeIt": "Change it",
+    "cutIt": "Cut it",
+    "addWord": "Or add a word in your own words",
+    "noticeAnswerable": "t.ROY couldn't draft a safe fix for this line from what you gave us. Say it's true as written, change it, or cut it.",
+    "noticeNotAnswerable": "t.ROY couldn't draft a safe fix for this line from what you gave us. Change it or cut it."
+  },
+  "buttons": {
+    "keep": "Keep",
+    "cut": "Cut",
+    "change": "Change"
+  },
+  "inYourWords": "In your own words",
+  "intro": {
+    "checkJobs": "Check your jobs",
+    "checkJobsSub": "These are from your page. Check each one against your records: tap Looks right, or fix it.",
+    "fixThese": "Fix these with t.ROY",
+    "fixTheseSub": "We fixed what we could from your page. These still need your answer.",
+    "checksPassed": "Checks passed",
+    "checksPassedSub": "We checked the page against what you gave us.",
+    "everyLine": "Every line checked",
+    "everyLineSub": "You can explain every line we asked about. You can still change an answer."
+  },
+  "card": {
+    "fixBeforeSend": "Fix before you send",
+    "checked": "Checked",
+    "worthALook": "Worth a look (this one doesn't stop you)",
+    "worthALookDivider": "Worth a look (these don't stop you)",
+    "wordingApproved": "Wording you approved",
+    "keptAsWritten": "Kept as written",
+    "yourWords": "Your words",
+    "changeMyAnswer": "Change my answer",
+    "scopeOverYes": "Yes, I was over people",
+    "scopeOverNo": "No, I did the work",
+    "scopeYes": "Yes, I did this",
+    "scopeHelped": "I helped with it",
+    "takeItOff": "Take it off",
+    "sayItMyWay": "Say it my way"
+  },
+  "proposal": {
+    "heading": "t.ROY's fix, from your words",
+    "useThisFix": "Use this fix",
+    "editIt": "Edit it",
+    "rightAsWritten": "It's right as written",
+    "staleLine": "That line no longer matches your page. Edit it, or ask again."
+  },
+  "suggest": {
+    "heading": "t.ROY's proposed fix",
+    "checking": "Checking your original words...",
+    "before": "Before",
+    "after": "After",
+    "why": "<strong>Why this change:</strong> {why} This wording stays tied to the experience you shared.",
+    "onlyKeep": "Only keep this if it says what you really did. You can change it again later.",
+    "useWording": "Use this wording",
+    "editMyself": "Edit it myself",
+    "tryAnother": "Try another",
+    "earlierAria": "Earlier wording options",
+    "option": "Option {number}",
+    "keepDeciding": "Keep deciding",
+    "cutThisLine": "Cut this line",
+    "staleLine": "That line no longer matches your page. Ask t.ROY again or change it yourself."
+  },
+  "answer": {
+    "label": "Say it in your own words",
+    "placeholder": "One sentence, the way you'd tell an interviewer.",
+    "save": "Save my answer"
+  },
+  "scope": {
+    "chips": {
+      "myCrew": "My crew",
+      "myShift": "My shift",
+      "myTeam": "My team",
+      "wholeDepartment": "The whole department",
+      "newHires": "New hires",
+      "customers": "Customers"
+    },
+    "pickBelow": "Say who or what in the box below.",
+    "empty": "Say who or what, in a few words.",
+    "copy": "Say it in your own words.",
+    "denies": "Sounds like you didn't do this. Tap Take it off, or say who or what you did it for.",
+    "unmatched": "That doesn't match this line. Say who or what in your words, or pick another answer."
+  },
+  "change": {
+    "label": "Rewrite the line in your own words",
+    "onlyTrue": "Only write what's true. If you're not sure of a number or a year, leave it out. The line is still true without it.",
+    "sameAnswerable": "That's the same line. Change a word, or choose This is true as written.",
+    "sameCut": "That's the same line. Change a word, or cut it.",
+    "save": "Save the new line"
+  },
+  "cut": {
+    "sentenceLetter": "Take this sentence out of your cover letter?",
+    "lineLetter": "Take this line out of your cover letter?",
+    "skillResume": "Take this skill off your resume?",
+    "lineResume": "Take this line off your resume?",
+    "yes": "Yes, cut it",
+    "keep": "Keep it"
+  },
+  "skills": {
+    "cardText": "These skills were added for you. Keep the ones that are true.",
+    "keepAria": "Keep {term}",
+    "cutAria": "Cut {term}"
+  },
+  "education": {
+    "earned": "Yes, I earned it",
+    "inProgress": "Still working on it",
+    "didNotFinish": "I went but didn't finish"
+  },
+  "credentialKinds": {
+    "license": "License",
+    "certification": "Certification",
+    "card": "Card",
+    "trainingCourse": "Training course",
+    "permit": "Permit"
+  },
+  "credential": {
+    "yesIHold": "Yes, I hold it",
+    "noTakeOff": "No, take it off",
+    "changesHeading": "These lines change:",
+    "letterLabel": "Letter:",
+    "resumeLabel": "Resume:",
+    "becomes": "becomes \"{line}\"",
+    "comesOff": "comes off",
+    "takeItOff": "Take it off",
+    "keepForNow": "Keep it for now",
+    "whatKind": "What kind is it?",
+    "whenDidNotFinish": "What years did you go? You can leave this empty.",
+    "whenEducation": "What year did you earn it?",
+    "whenCredential": "When did you get it, or is it current?",
+    "placeholderDidNotFinish": "Like 2011 - 2014",
+    "placeholderEducation": "The year, like 2015",
+    "placeholderCredential": "In your words: the year you got it, or current, expired, in progress",
+    "whatSchool": "What school? Leave it empty to take the line off.",
+    "pickKind": "Pick what kind it is.",
+    "facilityNotice": "This names a jail or prison school. Keep it, or type a name without it?",
+    "whenDidNotFinishNotice": "Type only the years you went, like 2011 - 2014, or leave it empty.",
+    "whenEducationNotice": "Add the year you earned it.",
+    "whenCredentialNotice": "Add the year you got it, or say if it's current, expired, in progress or completed.",
+    "schoolNotice": "Type just the school's name, or leave it empty to take the line off.",
+    "unchangedNotice": "That didn't change the line. Cut it, or change it on your resume.",
+    "putItOnResume": "We put it on your resume the way you say it here.",
+    "keepOnResume": "Keep it on my resume"
+  },
+  "titles": {
+    "intro": "We named these jobs for you. Tap the ones that are right, or give us your title.",
+    "ownPlaceholder": "Your title at this job",
+    "typeTitle": "Type your title.",
+    "notATitle": "If you're not sure of the exact title, type what you did there, like Warehouse worker.",
+    "right": "Right",
+    "useMine": "Use my title",
+    "notFound": "We couldn't find “{title}” in what you gave us. Was that your actual job title for this work?",
+    "yes": "Yes, that was my title",
+    "useActual": "Use my actual title",
+    "label": "Your title at this job, in your words"
+  },
+  "job": {
+    "changed": "t.ROY changed this job",
+    "check": "Check this job",
+    "notOnPage": "Not on your page: {changes}.",
+    "yourPageSays": "Your page says: “{header}”",
+    "fromYourPage": "These are from your page. Check them against your records.",
+    "looksRight": "Looks right",
+    "useDetails": "Use the details from my page",
+    "notChanged": "That line did not change. Use Fix this to edit it.",
+    "fixThis": "Fix this",
+    "label": "Title | Employer | Dates, the way your records show them",
+    "typeJob": "Type the job the way it was.",
+    "nothingChanged": "Nothing changed. Fix the line, or tap Back and Looks right."
+  },
+  "numbers": {
+    "heading": "Optional: add a number?",
+    "intro": "A number sticks with the person reading. Only add one you know. These never stop you from finishing.",
+    "countHere": "Something you could count here: {count}.",
+    "label": "Put your number in the line",
+    "nothingChanged": "Nothing changed. Add your number to the line, or tap Back.",
+    "add": "Add a number"
+  },
+  "bulk": {
+    "working": "t.ROY is working... {done} of {total}",
+    "tryRemaining": "Try remaining suggestions ({count})",
+    "fixAll": "Fix all suggested items ({count})",
+    "lastPass": "Your last t.ROY pass",
+    "handle": "Let t.ROY handle the suggested fixes.",
+    "updated": "Updated {count} suggested {count, plural, =1 {item} other {items}}.",
+    "noneApplied": "No verified changes were applied.",
+    "left": "{count} could not be resolved in that pass.",
+    "complete": "That pass is complete.",
+    "afterNote": "Check the before-and-after list beside your resume. Remaining questions are below.",
+    "reviewRemaining": "Review remaining suggestions",
+    "reviewNote": "You can answer these with t.ROY one at a time, or request another pass. Another pass uses AI allowance and may still need your answer.",
+    "explain": "This count is the suggested fixes t.ROY can attempt together, not every open check. Questions about your credentials, job titles, responsibilities and record still need you. No new facts are guessed."
+  },
+  "panel": {
+    "startWithSuggested": "Start with the suggested fixes below. t.ROY will leave the questions that need your facts, and help you through them one at a time.",
+    "progress": "{done} of {total} {total, plural, =1 {line} other {lines}} checked",
+    "ownWords": "Every line here is in your own words.",
+    "checksToResolve": "Checks to resolve ({count})",
+    "skills": "Skills",
+    "coverLetter": "Your cover letter"
+  }
+}

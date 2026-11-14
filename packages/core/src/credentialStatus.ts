@@ -9,6 +9,8 @@
  * "finished the class", "good for") are never a status.
  */
 
+import { statusToEnglish } from "./statusLexicon";
+
 export type StatusFamily = "live" | "dead" | "progress" | "completed";
 
 const FAMILY_RE: Array<[RegExp, StatusFamily]> = [
@@ -60,7 +62,8 @@ const WHEN_ALLOWED = new Set([
  * expires), and nothing that is not a status.
  */
 export function isStrictCredentialWhen(when: string, now = new Date()): boolean {
-  const t = (when || "").toLowerCase().trim();
+  // A status typed in Spanish is read as its English words (statusLexicon); anything else is judged as before.
+  const t = statusToEnglish(when || "").toLowerCase().trim();
   if (!t) return false;
   for (const tok of t.match(/[a-z]+|\d+/g) ?? []) {
     if (/^\d+$/.test(tok)) {

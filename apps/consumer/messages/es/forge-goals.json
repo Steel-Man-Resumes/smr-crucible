@@ -1,0 +1,200 @@
+{
+  "optional": "(opcional)",
+  "goalOptions": {
+    "stability": {
+      "label": "Algo estable",
+      "description": "Horario constante, ingresos confiables, un lugar donde pueda quedarme."
+    },
+    "growth": {
+      "label": "Espacio para crecer",
+      "description": "Quiero desarrollar habilidades y subir de puesto con el tiempo."
+    },
+    "back_to_my_trade": {
+      "label": "Volver a mi oficio",
+      "description": "Trabajo que ya sé hacer: un oficio, una licencia, una habilidad que he usado."
+    },
+    "meaning": {
+      "label": "Un trabajo que me importe",
+      "description": "Me importa lo que hago, no solo el sueldo."
+    },
+    "immediate": {
+      "label": "Algo para ahora mismo",
+      "description": "Necesito ingresos rápido. Lo demás lo resuelvo después."
+    },
+    "independence": {
+      "label": "Ser mi propio jefe algún día",
+      "description": "Quiero ir preparándome para manejar algo propio."
+    },
+    "community": {
+      "label": "Retribuir a mi comunidad",
+      "description": "Yo ya pasé por eso. Quiero ayudar a otros que también lo están pasando."
+    },
+    "flexibility": {
+      "label": "Necesito un horario flexible",
+      "description": "Citas, familia, programas. Mi trabajo tiene que adaptarse a mi vida."
+    }
+  },
+  "confidenceOptions": {
+    "none": "Todavía no tengo uno",
+    "rough": "Está flojo",
+    "decent": "Está bien",
+    "strong": "Está sólido"
+  },
+  "worryOptions": {
+    "gaps": "Vacíos en mi historial",
+    "job_changes": "Cambios de trabajo",
+    "little_experience": "Poca experiencia",
+    "nothing": "Nada grave"
+  },
+  "lanes": {
+    "title": "Cuéntanos la historia detrás de tu trabajo",
+    "subtitle": "El trabajo que nos diste es el punto de partida. Estas respuestas ayudan a t.ROY a decidir con qué empezar. Sé breve, o deja que él empiece con lo que nos diste.",
+    "action": "Armar mi mejor borrador",
+    "footer": "Puedes corregir la historia y cada línea del currículum antes de enviarlo.",
+    "directionError": "Tu rumbo sigue en esta página, pero no se pudo guardar. Inténtalo de nuevo.",
+    "guideScratch": "Ya tengo el trabajo que me contaste. Dime hacia dónde quieres ir y una cosa que debo entender. Con unas pocas palabras basta. Yo escribo, y tú decides qué se queda.",
+    "guideRead": "Leí tu página. Dime qué le faltó y luego hacia dónde te gustaría ir. Con unas pocas palabras basta. Yo escribo, y tú decides qué se queda.",
+    "missedLabelScratch": "¿Qué debería entender t.ROY sobre tu trabajo?",
+    "missedLabelPage": "¿Qué no dice tu currículum anterior sobre tu trabajo?",
+    "missedHint": "Cuéntanos de un problema que resolviste, de un trabajo en el que la gente contaba contigo o de algo que aprendiste a hacer bien. ¿Qué hiciste y qué pasó? Un ejemplo real y corto ayuda más que una lista de cualidades.",
+    "missedPlaceholder": "Capacité a gente nueva, pero mi currículum solo dice que trabajé en la línea.",
+    "targetLabel": "¿Qué trabajo quieres después?",
+    "targetPlaceholder": "Un puesto, un tipo de trabajo, o 'todavía no sé'",
+    "targetHint": "¿Todavía no tienes una meta? Déjalo en blanco. t.ROY armará un currículum base sólido con tu trabajo real.",
+    "leadTitle": "¿Con qué trabajo debería empezar t.ROY?",
+    "leadHint": "Elige uno si es el que mejor respalda tu próximo paso. Tus otros trabajos se quedan en el currículum.",
+    "letDecide": "Que decida t.ROY",
+    "moreJobs": "Más trabajos de tu página",
+    "mattersTitle": "¿Qué es lo más importante en tu próximo trabajo?",
+    "mattersHint": "Elige los que apliquen. Esto le da rumbo a tu historia. The Refinery te ayudará a evaluar trabajos específicos y a pensar en lo que no puedes o no quieres hacer.",
+    "moreWays": "Más formas de describir lo que quieres"
+  },
+  "goals": {
+    "titleOpen": "¿Cómo podría ser el trabajo para ti?",
+    "title": "¿Qué quieres de verdad?",
+    "subtitleOpen": "Elige lo que te suene bien. Nada de esto queda definitivo.",
+    "subtitle": "Elige todas las que apliquen. Esto cambia los trabajos que te recomiendo.",
+    "footer": "¿No lo tienes claro? Elige lo que más se acerque. Lo resolvemos juntos.",
+    "whyWeAsk": "Esto no es un formulario, es un filtro. “Estabilidad” y “crecimiento” llevan a trabajos distintos. Necesito saber qué te importa para no hacerte perder el tiempo.",
+    "demoBanner": "Modo de demostración: metas de ejemplo ya elegidas",
+    "pickOne": "Elige al menos una, o describe abajo lo que buscas.",
+    "addMore": "Cuéntanos más sobre lo que quieres",
+    "addMoreOptional": "(opcional). Ayuda, pero puedes omitirlo hoy.",
+    "confidenceTitle": "¿Qué tan sólido es tu currículum ahora?",
+    "worriesTitle": "¿Hay algo que te preocupe?",
+    "worriesNote": "Esto solo nos ayuda a armarlo bien. Solo usamos lo que es verdad sobre ti.",
+    "practiceTitle": "¿Haces arte, te presentas en público o trabajas por tu cuenta?",
+    "yes": "Sí",
+    "no": "No",
+    "practiceNext": "Bien. Tus espectáculos, presentaciones y trabajo creativo van en tu registro de práctica. Está en The Refinery, en la sección Creative Work, cuando inicies sesión.",
+    "practiceOpen": "Ábrelo en una pestaña nueva",
+    "sayMore": "¿Quieres contar más sobre lo que buscas?",
+    "narrativeLabelDemo": "Ejemplo de relato de metas",
+    "narrativeLabel": "Cuéntanos más con tus propias palabras",
+    "narrativePlaceholder": "Por ejemplo: quiero trabajar con las manos, o me interesa la salud, o quiero tener mi propio negocio algún día...",
+    "hookButton": "¿Qué haría que el trabajo se sintiera tuyo?",
+    "hookLabelDemo": "¿Qué haría que el trabajo se sintiera real para ti?",
+    "hookLabel": "¿Qué haría que el trabajo se sintiera tuyo?",
+    "hookHint": "Un mentor, una misión, usar tu historia para ayudar a otros. Cualquier cosa que haga que valga la pena levantarte cada mañana.",
+    "hookPlaceholder": "Por ejemplo: quiero ayudar a personas que están pasando por lo que yo pasé. O: quiero construir algo que pueda mostrarles a mis hijos."
+  },
+  "preferences": {
+    "title": "Unas preferencias rápidas",
+    "subtitle": "Esto nos ayuda a encontrar lo que mejor te queda. Puedes cambiar cualquiera de estas respuestas después.",
+    "buildMyPage": "Armar mi página",
+    "demoBanner": "Modo de demostración: preferencias de ejemplo ya elegidas",
+    "environmentTitle": "¿Dónde y cómo quieres trabajar?",
+    "environmentHint": "Elige todas las que apliquen. Omítelo si cualquier opción te sirve.",
+    "environmentLabel": "Ambiente de trabajo",
+    "stillIn": "¿Sigues en {place}?",
+    "whereLocated": "¿En dónde te encuentras?",
+    "confirmHint": "Esto salió de tu currículum. Cámbialo si te mudaste.",
+    "typeHint": "Empieza a escribir una ciudad o un código postal y elige de la lista. ¿No aparece? Escríbelo de todos modos.",
+    "offerStoryTitle": "¿Hay algo que se interponga en tu camino? (opcional)",
+    "offerStoryBody": "Antecedentes penales, un vacío en tu historial, no tener transporte. Cuéntamelo antes de armar la página y puedo buscar las leyes y la ayuda que te correspondan. O sáltalo y armemos ya.",
+    "offerStoryButton": "Agregar eso primero"
+  },
+  "schedule": {
+    "hoursLabel": "Horas",
+    "shiftsLabel": "Turnos",
+    "default": {
+      "title": "¿Qué horario te funciona?",
+      "hint": "Elige todos los que apliquen.",
+      "shifts": "¿Hay turnos que puedes o no puedes trabajar? Omite esto si no importa."
+    },
+    "steady": {
+      "title": "Quieres un trabajo estable. ¿Qué horario te funciona?",
+      "hint": "Elige todos los que apliquen. Solo pregunto esto una vez.",
+      "shifts": "¿Qué turnos puedes trabajar de forma constante? Omite esto si no importa."
+    },
+    "flexible": {
+      "title": "Tu trabajo tiene que encajar con tu vida. ¿Qué horario te funciona?",
+      "hint": "Elige todos los que apliquen. Solo pregunto esto una vez.",
+      "shifts": "¿Qué turnos se acomodan a tus citas y a tu familia? Omite lo que no importe."
+    },
+    "family": {
+      "title": "¿Qué horas se acomodan al cuidado de los niños o de la familia?",
+      "hint": "Elige todos los que apliquen.",
+      "shifts": "¿Qué turnos puedes cubrir? Omite esto si no importa."
+    }
+  },
+  "commute": {
+    "title": "¿Cómo llegas al trabajo y qué tan lejos puedes ir cada día?",
+    "titleTransit": "¿Cómo te mueves ahora?",
+    "hint": "Elige todas las formas en que puedes llegar.",
+    "hintTransit": "Elige todas las formas en que puedes llegar. No tener carro está bien.",
+    "modesLabel": "Formas de llegar al trabajo",
+    "time": "¿Más o menos cuánto puede durar el viaje, solo de ida?",
+    "timeTransit": "¿Más o menos cuánto puede durar el viaje, solo de ida, en autobús, a pie o con alguien que te lleve?",
+    "distanceLabel": "Tiempo de viaje de ida"
+  },
+  "choices": {
+    "hours": {
+      "full-time": "Tiempo completo (35 horas o más)",
+      "part-time": "Medio tiempo",
+      "flexible": "Horario flexible o trabajos por encargo",
+      "any": "Cualquier opción me sirve"
+    },
+    "shifts": {
+      "days": "De día",
+      "evenings": "De tarde",
+      "overnight": "De noche",
+      "weekends": "Fines de semana"
+    },
+    "environment": {
+      "physical": "Físico, con las manos",
+      "outdoors": "Al aire libre",
+      "on-the-road": "En la carretera (manejar, repartos)",
+      "public": "Con el público",
+      "small-team": "Con un equipo pequeño",
+      "on-my-own": "Casi siempre por mi cuenta",
+      "office": "Oficina o escritorio",
+      "remote": "Remoto, desde casa"
+    },
+    "transport": {
+      "walk": "Caminar",
+      "bike": "Bicicleta",
+      "bus": "Autobús o transporte público",
+      "drive": "Mi propio vehículo",
+      "ride": "Que alguien me lleve"
+    },
+    "distance": {
+      "within-15": "Hasta 15 minutos",
+      "within-30": "Hasta 30 minutos",
+      "within-45": "Hasta 45 minutos",
+      "within-60": "Hasta una hora",
+      "further": "Más de una hora está bien"
+    }
+  },
+  "location": {
+    "placeholder": "Ciudad, estado o código postal",
+    "listLabel": "Lugares que coinciden",
+    "county": "condado",
+    "suggestions": "{count, plural, one {# sugerencia} other {# sugerencias}}. Usa las flechas para elegir.",
+    "failed": "Las sugerencias no cargaron. Escribe tu ciudad y estado, como Lansing, MI."
+  },
+  "focus": {
+    "viewWithoutFocus": "Ver sin enfoque",
+    "backToWork": "Volver a mi trabajo"
+  }
+}

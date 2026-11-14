@@ -1,0 +1,317 @@
+{
+  "laneFinish": {
+    "moreFormats": "More formats",
+    "gettingFile": "Getting your file ready...",
+    "downloadPdf": "Download your resume (PDF)",
+    "pdfNote": "PDF keeps the look the same on any computer.",
+    "draftBadge": "Draft: check it before you send it.",
+    "needItNow": "Need it now? <draft>Download the draft (PDF)</draft>. It's marked DRAFT and lists what's left to fix.",
+    "formats": {
+      "docx": "Word (.docx)",
+      "txt": "Plain text (.txt)",
+      "html": "Web page (.html)"
+    },
+    "packageWithLetter": "The package: resume and cover letter",
+    "packageZip": "The package (.zip)",
+    "print": "Print",
+    "copied": "Copied",
+    "copyPlain": "Copy as plain text",
+    "untilFinished": "Until it's finished, every file is marked DRAFT.",
+    "actions": {
+      "askSeat": "Ask for a Refinery seat",
+      "downloadResume": "Download your resume",
+      "checkAndFinish": "Check it and finish",
+      "pickJob": "Pick a job to go after",
+      "practiceInterview": "Practice for your interview",
+      "useResume": "Use this resume"
+    },
+    "next": "Next",
+    "finishingChecks": "Finishing your checks...",
+    "somethingElse": "Something else"
+  },
+  "downloadBox": {
+    "gettingFiles": "Getting your files ready...",
+    "readyToSend": "Your resume and cover letter, ready to send.",
+    "needItNow": "Need it now? <draft>Download the draft</draft>. It's marked DRAFT and lists what's left to fix.",
+    "oneFormat": "Just the resume, in one format",
+    "formats": {
+      "pdf": "PDF",
+      "docx": "Word (.docx)",
+      "html": "Web page (.html)",
+      "txt": "Plain text (.txt)"
+    },
+    "print": "Print",
+    "copied": "Copied",
+    "copyPlain": "Copy as plain text",
+    "untilFinished": "Until it's finished, every file is marked DRAFT."
+  },
+  "nextStep": {
+    "heading": "Next step",
+    "partner": {
+      "title": "That's the client experience, end to end.",
+      "body": "Every client who runs The Forge lands in The Refinery with all of this pre-loaded. As a partner, you get an anonymous statistical overview of your cohort. It never includes their resume content.",
+      "back": "back to the partner overview",
+      "request": "Request partner access: {email}",
+      "signIn": "Already set up? Sign in to the partner dashboard"
+    },
+    "refinery": {
+      "title": "The Refinery aims your resume at real jobs.",
+      "body": "The Forge makes one general resume. In The Refinery you tailor it to one job at a time, practice interviews, plan what to say about your record, and use a job board that marks employers we checked for hiring people with records. When you create your free account, your story and the answers you gave in the Forge can be saved there with your corrected resume. Check that this page says your version is saved before you leave. You can also download a copy.",
+      "seatlessNote": "The Refinery opens with a seat from an organization. You can ask for one.",
+      "askSeat": "ask for a refinery seat"
+    },
+    "letter": "Troy's letter comes out Sunday and Wednesday. It's short and practical. <link>Read it here</link>.",
+    "review": {
+      "title": "Got three minutes? Tell us how it really went.",
+      "body": "Good or bad, your honest review helps other people find these tools and helps us improve them. We want to keep the Forge free for the next person, too.",
+      "note": "Your work stays here. The review opens in a new tab; come back here to continue into the Refinery. Reviewing is optional.",
+      "leave": "Leave a review",
+      "skip": "Continue without reviewing"
+    }
+  },
+  "emailBox": {
+    "badEmail": "That email doesn't look right. Check it and try again.",
+    "sent": "Sent. Check your inbox (and spam folder, just in case).",
+    "couldNotSend": "We couldn't send that. Your download still works.",
+    "noServer": "We couldn't reach the server. Your download still works.",
+    "title": "Email me my package",
+    "intro": "We'll send your story, resume and cover letter to your inbox so you have them anywhere, even without an account.",
+    "emailLabel": "Your email",
+    "emailPlaceholder": "you@email.com",
+    "sending": "Sending...",
+    "sentButton": "Sent",
+    "sendIt": "Send it"
+  },
+  "finishedEmail": {
+    "title": "Your package by email",
+    "sending": "Sending your finished resume to your email...",
+    "savingFirst": "Saving this version to your account first...",
+    "emailLatest": "Email me the latest",
+    "tryAgain": "Try again",
+    "turnedOff": "You turned off emailing your finished resume.",
+    "checkInbox": "Check {email} for the link. Open it, and your resume comes next.",
+    "sendingShort": "Sending...",
+    "confirmLink": "Email a confirm link to {email}",
+    "linkFailed": "We couldn't send the link. Try again in a few minutes.",
+    "changeInSettings": "Change this in Settings",
+    "result": {
+      "sentTo": "We sent it to {to}.",
+      "already": "We already emailed you this resume.",
+      "alreadyToday": "We already emailed this resume today. Your download is right here.",
+      "deliveryPending": "Your package delivery is being checked. Try again shortly.",
+      "deliveryUnknown": "Delivery could not be confirmed. Check your inbox or download your files here.",
+      "settling": "Your finished package is queued. You can close this page; delivery will be retried if needed.",
+      "unproven": "Want it by email? Confirm your address first.",
+      "limit": "Your address already got its package today. Your download is right here.",
+      "failed": "We couldn't email it just now. Your download is right here.",
+      "notConfigured": "Email isn't working here right now. Your download is right here.",
+      "draft": "Not emailed yet: our check says this version still has something to fix. Your list is on this page.",
+      "notFound": "We couldn't find this version in your account yet. Your download is right here."
+    }
+  },
+  "page": {
+    "numbers": {
+      "n0": "zero",
+      "n1": "one",
+      "n2": "two",
+      "n3": "three",
+      "n4": "four",
+      "n5": "five",
+      "n6": "six",
+      "n7": "seven",
+      "n8": "eight",
+      "n9": "nine",
+      "n10": "ten"
+    },
+    "readiness": {
+      "precontemplation": {
+        "refineryCta": "Save My Results",
+        "refinerySubtext": "Free. No credit card. Come back anytime.",
+        "careersHeading": "Paths Worth Knowing About",
+        "strengthsHeading": "What You Bring"
+      },
+      "contemplation": {
+        "refineryCta": "Save & Explore The Refinery",
+        "refinerySubtext": "Free. No credit card. No catch.",
+        "careersHeading": "Career Paths to Consider",
+        "strengthsHeading": "Your Strengths"
+      },
+      "preparation": {
+        "refineryCta": "Continue to The Refinery",
+        "refinerySubtext": "Free. No credit card. Your story carries over.",
+        "careersHeading": "Career Paths That Fit",
+        "strengthsHeading": "Your Strengths"
+      },
+      "action": {
+        "refineryCta": "Start Using The Refinery",
+        "refinerySubtext": "Free. No credit card. Built for exactly where you are right now.",
+        "careersHeading": "Career Paths That Fit",
+        "strengthsHeading": "Your Competitive Advantages"
+      }
+    },
+    "errors": {
+      "storyCheck": "Story check could not complete. Your saved work is still here.",
+      "writingLimit": "Today's writing limit has been reached. Your work is still here. Try again after the daily limit resets.",
+      "writingLimitShort": "Today's writing limit has been reached.",
+      "writerStopped": "The writer stopped before it made your resume. Your uploaded page is still here in this browser.",
+      "couldNotCheckResume": "We couldn't check that resume just now. Try again.",
+      "couldNotOpen": "We couldn't open that resume.",
+      "couldNotOpenRetry": "We couldn't open that resume. Try again.",
+      "tooBig": "This version is too big to save to your account.",
+      "locked": "This resume is locked as a baseline, so it can't change here.",
+      "downloadFailed": "The download didn't work. Please try again.",
+      "saveBeforeRecheck": "Save this version before checking it again. Try saving once more.",
+      "couldNotCheck": "We couldn't check it just now. Try again in a moment."
+    },
+    "tour": {
+      "storyTitle": "Your story",
+      "storyText": "t.ROY read the work you gave us and wrote this. It is a starting account in his words. If the headline misses you, say so and he redoes it.",
+      "resumeTitle": "Your resume",
+      "resumeText": "This is your first stronger draft, built from your experience. Read it, make it yours, then use the Refinery to tailor it to a real job and practice your story.",
+      "didTitle": "What t.ROY did",
+      "didText": "Every fix he made and anything he left out because it needed a fact only you could give. Open it to see each one. Nothing here is a mistake you have to fix.",
+      "checkedTitle": "Your lines are checked",
+      "checkedText": "Every line we asked about is settled. You can still change an answer.",
+      "openTitle": "Lines only you can answer",
+      "openText": "For each one: say it's true, change it, or cut it. When they're done, your resume is finished.",
+      "downloadTitle": "Download it",
+      "downloadFinished": "Download your resume and cover letter here, or email them to yourself. A copy was also saved to your account.",
+      "downloadDraft": "Download here. Until it is finished, every file is marked DRAFT so nobody mistakes it for the final one.",
+      "checksTitle": "How it reads",
+      "checksText": "These checks read your page the way a screener does. Open one for the detail. They are for your information. You don't have to act on them.",
+      "nextTitle": "Next: the Refinery",
+      "nextText": "Your resume carries over. The Refinery tailors it to real jobs, writes cover letters, and prepares you for interviews."
+    },
+    "checkMode": {
+      "signInTitle": "Sign in to check this resume",
+      "signIn": "Sign in"
+    },
+    "checkChoice": {
+      "title": "Here's your resume. t.ROY can make it stronger.",
+      "subline": "t.ROY rewrites it from this page, or you check it as it is.",
+      "question": "How do you want to finish this one?",
+      "explain": "t.ROY writes a new version from this page, in strong plain words, and you check what it wrote. Checking it as it is keeps every line as it stands, and t.ROY asks about the lines it can't match to your words.",
+      "rewrite": "Rewrite it with t.ROY",
+      "asIs": "Check it as it is"
+    },
+    "status": {
+      "opening": "Opening your resume.",
+      "writing": "t.ROY is writing your resume and cover letter.",
+      "paused": "Writing paused for today.",
+      "couldNotFinish": "We couldn't finish writing your resume.",
+      "liveFix": "Your new page is written. Here's what t.ROY changed.",
+      "checking": "Checking: {title}. Answer each card, and it saves as a new version.",
+      "checkingFallback": "your resume",
+      "takesAMinute": "This usually takes 30 to 60 seconds.",
+      "limitSub": "Your uploaded resume and answers are still here. The writer cannot make another version until the daily allowance resets.",
+      "errorSub": "Your uploaded resume and answers are still here. You can retry from this page.",
+      "liveFixSub": "Each old line, the new one, and why. Skip any time.",
+      "finishedCheckSub": "Download it below, or email it to yourself.",
+      "finishedSub": "This is your first stronger draft. Download it below, then improve and tailor it in the Refinery.",
+      "draftSub": "Answer them with t.ROY. You can download a draft any time."
+    },
+    "backToResumes": "Back to My resumes",
+    "empty": {
+      "title": "Let's build your story first",
+      "body": "It looks like we haven't analyzed your information yet.",
+      "start": "Start The Forge"
+    },
+    "demo": {
+      "sample": "This is a sample output. Try it with your own data.",
+      "startOwn": "Start your own Forge session"
+    },
+    "secondCheckSkipped": "Our second check didn't run this time. Read every line before you send it.",
+    "save": {
+      "saved": "Saved to your account (version {number}).",
+      "keptRefinery": "Your resume in the Refinery has changes you made there, so we kept it as it is. This finished version is saved beside it.",
+      "keptEarlier": "Your account's earlier copy is kept. Your resume in the Refinery now shows this finished version.",
+      "keptEarlierVersion": "Your account's earlier copy is kept as version {number}. Your resume in the Refinery now shows this finished version.",
+      "failed": "Not saved to your account yet. Your work is still on this page.",
+      "tryAgain": "Try again",
+      "saving": "Saving to your account..."
+    },
+    "tourButton": "Show me around",
+    "workFocusTitle": "Building your first stronger draft",
+    "workingLabel": "Working from the information you provided",
+    "writing": {
+      "updating": "Updating your resume with your choice...",
+      "aboutAMinute": "About a minute. Nothing else to do.",
+      "changesChecked": "Changes checked. Checking the rest of your documents...",
+      "fromHistory": "Writing from your work history...",
+      "readingComplete": "The reading is complete. Next you will see changes checked against your original page."
+    },
+    "writeError": {
+      "noNew": "No new resume was made. Your original page is preserved in this browser.",
+      "retry": "Try writing again",
+      "seeOriginal": "See the resume you gave us"
+    },
+    "resumeEmpty": "The resume came back empty. Try again below.",
+    "repairs": {
+      "summary": "What we corrected in your documents ({count})",
+      "job": "We changed “{before}” to “{after}” to match your page.",
+      "skill": "We left “{before}” off the skills list because it wasn't in what you gave us. You can add it later in the Refinery if you have used it.",
+      "claim": "We left out “{before}” because that sentence needed a fact you haven't given us. The rest of the document stays in place.",
+      "headline": "We used your listed title “{after}” in place of “{before}”.",
+      "order": "We put your most recent listed work first: “{after}”."
+    },
+    "settle": {
+      "running": "t.ROY is finishing your resume.",
+      "runningNote": "He is checking every line against what you gave him and fixing what he can. You don't need to do anything.",
+      "summary": "What t.ROY did on the last pass ({count})",
+      "reworded": "Reworded “{before}” to “{after}”, using only your words.",
+      "leftOut": "Left out “{line}”. {why}",
+      "trimmed": "Trimmed “{line}” to keep your resume to two pages.",
+      "addBack": "Anything left out can be added back in the Refinery when it is true and you can back it up."
+    },
+    "recheck": {
+      "line": "We need to re-check this version before it can be finished.",
+      "note": "This checks your page again, as it is now. Nothing on it is rewritten, and your answers stay.",
+      "checking": "Checking...",
+      "button": "Check it again"
+    },
+    "stillNeeds": {
+      "title": "What still needs checking",
+      "button": "Check this version with t.ROY"
+    },
+    "countedSeparately": "The document questions above are counted separately from {what, select, both {page length and the final document check} length {page length} other {the final document check}}. The next action includes these remaining checks.",
+    "emailLocked": {
+      "title": "Email me my package",
+      "note": "This opens when your resume is finished, so the copy in your inbox is the final one."
+    },
+    "reviewDialogTitle": "How did the Forge work for you?",
+    "checks": {
+      "heading": "Checks",
+      "thingWord": "{count, plural, =1 {one thing} other {{words} things}}",
+      "notFinished": "Not finished yet: {things} to fix before you send it. They're in your list at the top.",
+      "hardRulesTitle": "Hard rules",
+      "hardRulesClear": "Nothing on this page broke a hard rule when we checked it against your words.",
+      "datesTitle": "Dates, credentials and wording",
+      "questions": "{count, plural, =1 {{words} question} other {{words} questions}} worth a look before you send it.",
+      "nothingFlagged": "Nothing flagged. Still read it once yourself.",
+      "secondTitle": "The second check",
+      "secondSkipped": "It didn't run this time. Read every line yourself before you send it.",
+      "secondWorthALook": "{count, plural, =1 {{words} thing} other {{words} things}} worth a look. None of them stops you from finishing.",
+      "secondClear": "It traced every line back to what you told us and fixed what it could.",
+      "secondNotRunOne": "The second check that traces every line back to what you told us did not run on your {doc}, and nothing in it was changed. Read it over before you send it. Look hard at anything specific, like a number, a date or a certification.",
+      "secondNotRunBoth": "Your documents are here and nothing was changed. The second check that traces every line back to what you told us could not run this time, so read these over before you send them. Look hard at anything specific, like a number, a date or a certification.",
+      "docResume": "resume",
+      "docLetter": "cover letter",
+      "atsTitle": "ATS and keywords",
+      "atsSummary": "How screening software reads your page. Try it against a job posting, or one of our samples.",
+      "samplePosting": "Sample posting written by SMR, not a real job.",
+      "pageLength": "Page length",
+      "onePage": "I want it on one page"
+    },
+    "cover": {
+      "heading": "Cover letter",
+      "brackets": "Put in the real company and hiring manager names where you see the brackets before you send it.",
+      "download": "Download the letter (.docx)",
+      "copied": "Copied",
+      "copy": "Copy the letter"
+    },
+    "letterOffer": {
+      "text": "Applying somewhere that wants a cover letter? t.ROY wrote one from your story. t.ROY checks it line by line with you, like the resume.",
+      "add": "Add a cover letter"
+    }
+  }
+}

@@ -9,6 +9,9 @@ import "./terminal.css";
 import { DevToolbar } from "@/components/DevToolbar";
 import { AuthProvider } from "@/components/AuthProvider";
 import { AnalyticsWrapper } from "@/components/AnalyticsWrapper";
+import { AccountLanguageSync } from "@/components/AccountLanguageSync";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale, getMessages } from "next-intl/server";
 
 export const metadata: Metadata = {
   title: {
@@ -45,18 +48,25 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Site language (i18n/locale.ts): from the cookie, per request. The <html lang>
+  // tells screen readers and the browser which language the page speaks.
+  const locale = await getLocale();
+  const messages = await getMessages();
   return (
-    <html lang="en">
+    <html lang={locale}>
       <body className="antialiased">
-        <AuthProvider>
-          {children}
-          <DevToolbar />
-        </AuthProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <AuthProvider>
+            <AccountLanguageSync />
+            {children}
+            <DevToolbar />
+          </AuthProvider>
+        </NextIntlClientProvider>
         <AnalyticsWrapper />
       </body>
     </html>

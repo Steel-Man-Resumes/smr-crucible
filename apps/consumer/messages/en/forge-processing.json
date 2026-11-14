@@ -1,0 +1,150 @@
+{
+  "title": "Building your story",
+  "workFocusTitle": "Reading your experience",
+  "troySays": "t.ROY says: ",
+  "intro": {
+    "tourSteps": "Here's what I see on your page now, top to bottom.",
+    "tourNone": "I looked over your page.",
+    "jobsBuilding": "These are the jobs you gave me. I'm reading them with your goals to find your strengths and the paths that fit. Your new page comes right after this.",
+    "jobsStopped": "These are the jobs you gave me.",
+    "answersBuilding": "I'm reading your answers now. Your new page comes right after this.",
+    "answersStopped": "Your answers are still here."
+  },
+  "demo": {
+    "note": "This is a demo with a sample page. Nothing is sent to t.ROY.",
+    "seeResults": "See the sample results"
+  },
+  "failure": {
+    "tryAgain": "Try again",
+    "backToAnswers": "Go back to my answers",
+    "countsToward": "Each try counts toward today's builds.",
+    "limit": {
+      "title": "Today's limit is used up",
+      "bodyToday": "You've hit today's limit for building with t.ROY. You can try again after {time} today. Your answers stay in this browser until then, unless you clear this computer.",
+      "bodyTomorrow": "You've hit today's limit for building with t.ROY. You can try again after {time} tomorrow. Your answers stay in this browser until then, unless you clear this computer."
+    },
+    "tooBig": {
+      "title": "That was too much to send at once",
+      "body": "Your answers are too long to send in one piece. Go back, shorten the longest one, and try again."
+    },
+    "timeout": {
+      "title": "t.ROY took too long",
+      "body": "It didn't finish this time. Your answers are still here. Try again in a minute."
+    },
+    "network": {
+      "title": "Couldn't reach t.ROY",
+      "body": "Check that you're online, then try again. Your answers are still here."
+    },
+    "other": {
+      "title": "Something went wrong on our end",
+      "body": "t.ROY couldn't finish building this time. It wasn't anything you did. Your answers are still here. Try again."
+    }
+  },
+  "status": {
+    "aria": "Build status",
+    "sent": "Sent to t.ROY",
+    "working": "Working on it",
+    "done": "Done",
+    "secondsSoFar": "{seconds} seconds so far",
+    "live": {
+      "sending": "Sending your answers to t.ROY.",
+      "working": "Working on it. This usually takes about a minute.",
+      "long": "This is taking longer than usual. It's still working, so stay on this page.",
+      "done": "Done. Opening your results."
+    }
+  },
+  "jobs": {
+    "aria": "The jobs you gave me",
+    "heading": "The jobs you gave me",
+    "noDates": "No dates given yet",
+    "present": "Present",
+    "about": "about {year}"
+  },
+  "tour": {
+    "pageNow": "Your page now",
+    "checkedHere": "Checked right here in your browser.",
+    "pageAria": "Your page, line by line",
+    "seesAria": "What t.ROY sees",
+    "notesAria": "t.ROY's notes on your page",
+    "noteLabel": "Note {number}, on the line “{line}”: ",
+    "done": "That's what I see on this page. Tap a note to find its line.",
+    "reading": "Reading your page...",
+    "pause": "Pause",
+    "play": "Play",
+    "showAll": "Show all notes",
+    "readNote": "I read it top to bottom. Nothing big jumped out. Your new page is coming."
+  },
+  "notes": {
+    "truth": {
+      "blank": {
+        "first": "There's a blank still sitting on this line. The new page won't print blanks, and I check for them before it's called done.",
+        "again": "Another blank here. Same fix: it comes off or gets your real detail."
+      },
+      "emptySection": {
+        "first": "This part says there's nothing in it. The new page just leaves a section off when there's nothing for it.",
+        "again": "Same here. An empty section comes off."
+      },
+      "missingTitle": {
+        "first": "This job is missing a title or a company name. Employers look for both. If one is still missing on the new page, I'll flag it so you can fill it in.",
+        "again": "This one is missing a title or a company too. I'll flag it the same way."
+      },
+      "noDates": {
+        "first": "This job has no dates on it. Employers notice that fast. The new page won't guess a date, and if one is missing I'll flag it for you to fill in.",
+        "again": "No dates on this job either. Same deal: no guessing, and I'll flag it."
+      },
+      "datelessPage": {
+        "first": "There are no dates anywhere on this page. That reads like something is being hidden. The new page goes by date, using only the dates you give.",
+        "again": "Still no dates here. The new page goes by date."
+      },
+      "toolMark": {
+        "first": "This line names a resume tool. The new page reads as yours, with no tool's name on it.",
+        "again": "Another tool name here. It comes off."
+      },
+      "dash": {
+        "first": "Long dashes like this one can make a page read as machine-made. The new page uses plain periods and commas.",
+        "again": "Another long dash. Same fix on the new page."
+      },
+      "dashRange": {
+        "first": "That long dash in the dates can read as machine-made. The new page uses a plain hyphen.",
+        "again": "Same long dash in these dates. Plain hyphen on the new page."
+      },
+      "soleActor": {
+        "first": "Another line on this page says you helped with this work. This line makes it sound like you did it alone. The new page keeps shared work shared.",
+        "again": "Same here: shared work stays shared on the new page."
+      },
+      "credentialStatus": {
+        "first": "This one has no year or status on it, so a reader can't tell if it's still good. The new page won't guess, so have that answer ready.",
+        "again": "Same with this one: no year or status. Have it ready."
+      },
+      "generic": {
+        "first": "This line is worth a second look. The new page gets checked line by line against your own words.",
+        "again": "This one too. It gets the same line-by-line check."
+      }
+    },
+    "quality": {
+      "objective": "An objective tells the employer what you want. They're reading to see what you bring, so this spot gets a few true lines about your work instead.",
+      "summary": "There's no summary up top. Two or three true lines about what you do and what you bring tell a reader why to keep going.",
+      "genericSummary": "This line could sit on anybody's page, so it tells a reader nothing about you. A summary works when it carries facts only you have.",
+      "softSkillList": "Anybody can type these words, so a reader skips right past them. Skills are things you could be tested on, like tools and machines; your bullets show the rest.",
+      "weakBullet": "This names a task but not what you did with it. A bullet starts with the action, so a reader sees the work.",
+      "gerund": "This starts with an -ing word, so it reads like a list of chores. A bullet starts with the action itself, like Trained instead of Training.",
+      "vague": "This could sit under any job, so it tells a reader nothing. A bullet names one real thing you did.",
+      "bullets": "This is a block of words, not bullets. A hiring manager skims, so each thing you did gets its own bullet that starts with the action.",
+      "bare": "These are bare words under a job, not bullets. A reader can't tell what you did with them.",
+      "headingMissing": "Your jobs sit here with no heading over them. A reader and the hiring software look for a plain heading like EXPERIENCE to find them.",
+      "headingOdd": "A reader and the hiring software don't know this heading. Plain ones like EXPERIENCE, SKILLS and EDUCATION get found fast.",
+      "headingMixed": "This heading looks different from your others. Matching headings read as careful, and mixed ones read as rushed.",
+      "did": "\"Did\" is a weak start. Lead with the action itself so a reader sees the work.",
+      "dutyLabel": "A duties label turns what's under it into a job description. A reader wants what you did, one bullet at a time.",
+      "dutyPosting": "\"{phrase}\" reads like the job posting. The employer already knows what the job was; this line should say what you did in it."
+    },
+    "qualityAgain": {
+      "dutyPhrasing": "Same thing here: this says what the job was, not what you did.",
+      "weakBullet": "Same here: this line needs a real action.",
+      "bullets": "Same here: words under a job, not bullets.",
+      "genericSummary": "This one could sit on anybody's page too.",
+      "heading": "Same with this heading.",
+      "default": "Same kind of weak spot on this line."
+    }
+  }
+}

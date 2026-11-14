@@ -27,6 +27,7 @@
 
 import type { ReactNode } from "react";
 import { useForgeWall } from "@/components/forge/useForgeWall";
+import { useTranslations } from "next-intl";
 
 export type AccountRoute = "seeker" | "participant" | "org" | "agency";
 
@@ -86,10 +87,13 @@ export function AccountTypeChooser({
   value: AccountRoute;
   onChange: (next: AccountRoute) => void;
 }) {
+  // Site language (i18n/locale.ts): the words by route id; ACCOUNT_ROUTES stays the English source.
+  const t = useTranslations("auth.routes");
+  const tc = useTranslations("auth.chooser");
   return (
     <fieldset className="mb-6">
       <legend className="mb-2 font-term text-[11px] font-bold uppercase text-t-amber-bright">
-        Who are you here as?
+        {tc("legend")}
       </legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {ACCOUNT_ROUTES.map((r) => {
@@ -107,18 +111,17 @@ export function AccountTypeChooser({
               }`}
             >
               <span className="block text-sm font-semibold text-t-white">
-                {r.label}
+                {t(`${r.id}.label`)}
               </span>
               <span className="mt-0.5 block text-xs leading-relaxed text-t-bone-dim">
-                {r.blurb}
+                {t(`${r.id}.blurb`)}
               </span>
             </button>
           );
         })}
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-t-bone-dim">
-        Same sign-in either way. This just decides where you land. Plenty of
-        people here hold more than one of these, and you can switch any time.
+        {tc("footnote")}
       </p>
     </fieldset>
   );
@@ -137,9 +140,10 @@ export function AccountRouteNote({
 }) {
   const spec = ACCOUNT_ROUTES.find((r) => r.id === route);
   const wall = useForgeWall();
+  const t = useTranslations("auth.routes");
   if (!spec?.needs) return null;
   // A line that depends on the sign-in wall waits until the browser knows it.
-  const needs = spec.needsUp === undefined ? spec.needs : wall === null ? "" : wall === "up" ? spec.needsUp : spec.needs;
+  const needs = spec.needsUp === undefined ? t(`${route}.needs`) : wall === null ? "" : wall === "up" ? t(`${route}.needsUp`) : t(`${route}.needs`);
   return (
     <section className="mb-6 border-l-[3px] border-t-amber bg-t-panel-2 py-3 pl-4 pr-3">
       <p className="text-xs leading-relaxed text-t-bone-dim">{needs}</p>

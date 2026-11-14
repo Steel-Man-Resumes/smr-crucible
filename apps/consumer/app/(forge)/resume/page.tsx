@@ -12,6 +12,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations, useLocale } from "next-intl";
 import { useForgeSession } from "@/lib/forge-context";
 import { DEMO_SESSION } from "@/lib/demo-data";
 import { getOpusMessage } from "@/lib/opus-messages";
@@ -22,20 +23,21 @@ import { ResumeBuilder } from "@/components/forge/ResumeBuilder";
 import { SpeechInputButton } from "@/components/SpeechInputButton";
 import { GroundingGauge } from "@/components/GroundingGauge";
 import { computeGrounding, jobsFromParsedProfile } from "@/lib/grounding";
-import { FORGE_UPLOAD_PICK_AGAIN_MESSAGE, forgeUploadAuthAction, forgeUploadErrorMessage, isUploadReturn } from "@/lib/forge-upload-error";
+import { FORGE_UPLOAD_SIGN_IN_MESSAGE, forgeUploadAuthAction, forgeUploadErrorMessage, isUploadReturn } from "@/lib/forge-upload-error";
 import { datedJobs, isLanesFirst, nextPath, planForgePath, resumeVariant, type ConfirmJob } from "@/lib/forge-path";
 import type { ForgeSessionData } from "@/lib/forge-context";
 import { useSession } from "next-auth/react";
 import { sessionPending } from "@/lib/session-policy";
 import { FirstReward, QuickBuild } from "@/components/forge/lanes/FirstSave";
 import { IntakeHelp, PasteInline } from "@/components/forge/lanes/IntakeExtras";
-import { INTAKE_BUILD, INTAKE_HAVE_ONE, INTAKE_TITLE, REBUILD_PARAM } from "@/lib/lane-task";
+import { REBUILD_PARAM } from "@/lib/lane-task";
 
 /**
  * "Is this right?": the jobs and dates we read, shown back so the person
  * confirms them instead of typing them again (lib/forge-path.ts, rule R3).
  */
 function JobsToConfirm({ jobs, heading }: { jobs: ConfirmJob[]; heading: string }) {
+  const t = useTranslations("forgeResume.intake");
   return (
     <section className="mb-4 border border-t-line bg-t-panel" aria-labelledby="jobs-to-confirm" data-testid="jobs-to-confirm">
       <h2 id="jobs-to-confirm" className="border-b border-t-line bg-t-panel-2 px-4 py-2.5 text-sm font-semibold text-t-white">
@@ -46,10 +48,10 @@ function JobsToConfirm({ jobs, heading }: { jobs: ConfirmJob[]; heading: string 
           <li key={i} className="px-4 py-3">
             <p className="font-medium text-t-white">
               {j.title || j.company}
-              {j.title && j.company && <span className="font-normal text-t-phos"> at {j.company}</span>}
+              {j.title && j.company && <span className="font-normal text-t-phos">{" "}{t("jobsToConfirm.at", { company: j.company })}</span>}
             </p>
             <p className="mt-0.5 font-term text-xs text-t-phos-dim">
-              {j.start} to {j.end || "now"}
+              {t("jobsToConfirm.range", { start: j.start, end: j.end || t("jobsToConfirm.now") })}
             </p>
           </li>
         ))}
@@ -74,6 +76,14 @@ const jobsFromDoc = (doc: ResumeDocument | undefined): ConfirmJob[] =>
   );
 
 type IntakePath = "upload" | "import" | "external" | "guided" | "paste" | "quick" | null;
+
+/**
+ * What forgeUploadErrorMessage (lib/forge-upload-error.ts) answers when the
+ * server sent no message of its own. Compared at the render site only, so the
+ * two client-made messages can be shown in the site language; a message that
+ * came from the server is shown as it came.
+ */
+const UPLOAD_GENERIC_ERROR_EN = "Something went wrong. Try again?";
 
 const ACCEPTED_TYPES = [
   ".pdf",
@@ -110,6 +120,9 @@ const ACCEPTED_TYPES = [
 
 export default function ResumeIntakePage() {
   const router = useRouter();
+  const t = useTranslations("forgeResume.intake");
+  const tc = useTranslations("common");
+  const locale = useLocale();
   const { session, updateSession } = useForgeSession();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isDemo = session.isDemo === true;
@@ -172,9 +185,9 @@ export default function ResumeIntakePage() {
   }, []);
   useEffect(() => {
     if (!rebuild || rebuild.error || authStatus === "loading") return;
-    const failed = "We couldn't open that resume. Open it from My resumes and try again.";
+    const failed = t("rebuild.couldNotOpen");
     if (!signedIn) {
-      setRebuild({ id: rebuild.id, error: "Sign in to build from a saved resume." });
+      setRebuild({ id: rebuild.id, error: t("rebuild.signInNeeded") });
       return;
     }
     let live = true;
@@ -264,12 +277,12 @@ export default function ResumeIntakePage() {
         setUploadSuccess(true);
         setPickAgain(false);
       } catch (err) {
-        setUploadError("Couldn't read that file. Try a different one?");
+        setUploadError(t("upload.couldNotRead"));
       } finally {
         setUploading(false);
       }
     },
-    [updateSession]
+    [updateSession, t]
   );
 
   const handleDrop = useCallback(
@@ -319,8 +332,8 @@ export default function ResumeIntakePage() {
   if (rebuild) {
     return (
       <FlowPage
-        title={rebuild.error ? "That didn't open." : "Getting your resume ready for t.ROY."}
-        subtitle={rebuild.error ?? "t.ROY builds a new version from it. You can always get the earlier one back from My resumes."}
+        title={rebuild.error ? t("rebuild.failedTitle") : t("rebuild.loadingTitle")}
+        subtitle={rebuild.error ?? t("rebuild.loadingSubtitle")}
         showBack={!!rebuild.error}
         onBack={() => router.push("/dashboard/vault")}
       >
@@ -375,9 +388,9 @@ export default function ResumeIntakePage() {
   if (isDemo) {
     return (
       <FlowPage
-        title="Resume received."
-        subtitle="We extracted experience, skills, and education from the sample resume."
-        actionLabel="Next"
+        title={t("demo.title")}
+        subtitle={t("demo.subtitle")}
+        actionLabel={tc("actions.next")}
         onAction={() =>
           continueWith({
             resumeText: DEMO_SESSION.resumeText,
@@ -390,16 +403,16 @@ export default function ResumeIntakePage() {
         onBack={() => router.push("/welcome")}
       >
         <GhostGuide
-          message={getOpusMessage("resume", audience, true)}
+          message={getOpusMessage("resume", audience, true, locale)}
           pageId="resume"
         />
         <div className="bg-t-panel-2 px-4 py-3 mb-4 border border-t-amber">
           <p className="text-sm text-t-amber-bright font-medium">
-            Demo mode: sample resume pre-loaded
+            {t("demo.banner")}
           </p>
         </div>
         <div className="bg-t-panel p-5 border border-t-line">
-          <p className="text-sm text-t-phos font-medium mb-2">Sample: Jordan Mitchell</p>
+          <p className="text-sm text-t-phos font-medium mb-2">{t("demo.sample")}</p>
           <p className="text-xs text-t-phos-dim whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
             {DEMO_SESSION.resumeText?.slice(0, 500)}...
           </p>
@@ -412,9 +425,9 @@ export default function ResumeIntakePage() {
   if (session.resumeMethod === "rush" && session.resumeText) {
     return (
       <FlowPage
-        title="We already have your resume."
-        subtitle="You pasted this in Rush Mode. We'll use it for the full Forge analysis, so you don't need to enter it again."
-        actionLabel="Continue"
+        title={t("rush.title")}
+        subtitle={t("rush.subtitle")}
+        actionLabel={tc("actions.continue")}
         onAction={() => continueWith({ lastPageVisited: "resume" })}
         showBack
         onBack={() => router.push("/welcome")}
@@ -425,17 +438,17 @@ export default function ResumeIntakePage() {
             }}
             className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
           >
-            I want to use a different resume
+            {t("rush.useDifferent")}
           </button>
         }
       >
         <GhostGuide
-          message={getOpusMessage("resume", audience, false)}
+          message={getOpusMessage("resume", audience, false, locale)}
           pageId="resume"
         />
         <div className="bg-t-panel p-5 border border-t-line">
           <p className="text-sm text-t-phos font-medium mb-2">
-            From Rush Mode
+            {t("rush.from")}
           </p>
           <p className="text-xs text-t-phos-dim whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto">
             {session.resumeText.slice(0, 500)}
@@ -491,13 +504,13 @@ export default function ResumeIntakePage() {
 
     return (
       <FlowPage
-        title={parsedName ? `Got it, ${parsedName}.` : "Got it."}
+        title={parsedName ? t("read.gotItName", { name: parsedName }) : t("read.gotIt")}
         subtitle={
           readJobs.length
-            ? "Is this right? These are the jobs and dates we read. You fix anything off on the next screen."
-            : "Check that we read it correctly before moving on."
+            ? t("read.subtitleJobs")
+            : t("read.subtitleNoJobs")
         }
-        actionLabel={readJobs.length ? "Yes, that's right" : "Looks good, continue"}
+        actionLabel={readJobs.length ? t("read.actionJobs") : t("read.actionNoJobs")}
         onAction={commitAndContinue}
         showBack
         onBack={() => {
@@ -506,7 +519,7 @@ export default function ResumeIntakePage() {
         }}
       >
         {/* The question this screen asks first: are these your jobs and dates? */}
-        {readJobs.length > 0 && <JobsToConfirm jobs={readJobs} heading="Your jobs" />}
+        {readJobs.length > 0 && <JobsToConfirm jobs={readJobs} heading={t("jobsToConfirm.heading")} />}
 
         {/* Grounding gauge -- the honest contract: how much true material we have. */}
         {parsedProfile && (
@@ -517,9 +530,9 @@ export default function ResumeIntakePage() {
         <div className="bg-t-panel border border-t-line mb-4 overflow-hidden">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
             <p className="text-xs font-semibold text-t-phos uppercase">
-              What we read from your file
+              {t("read.previewLabel")}
             </p>
-            <p className="text-xs text-t-phos-dim">{previewText.length} characters</p>
+            <p className="text-xs text-t-phos-dim">{t("read.characters", { count: previewText.length })}</p>
           </div>
           <div className="p-4 max-h-72 overflow-y-auto">
             <pre className="text-xs text-t-phos whitespace-pre-wrap leading-relaxed">
@@ -531,20 +544,20 @@ export default function ResumeIntakePage() {
         {/* Explicit re-do option */}
         <div className="bg-t-panel p-4 border border-t-line mb-4">
           <p className="text-sm text-t-phos mb-2">
-            Doesn&apos;t look right? Text garbled, cut off, or missing sections?
+            {t("read.doesntLookRight")}
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={() => { setUploadSuccess(false); setActivePath("upload"); }}
               className="t-focus flex-1 px-4 py-2.5 bg-transparent border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors"
             >
-              Re-upload a different file
+              {t("read.reupload")}
             </button>
             <button
               onClick={() => { setUploadSuccess(false); setActivePath("paste"); }}
               className="t-focus flex-1 px-4 py-2.5 bg-transparent border border-t-line text-t-phos text-sm font-medium hover:border-t-phos-dim hover:text-t-white transition-colors"
             >
-              Paste the text instead
+              {t("read.pasteInstead")}
             </button>
           </div>
         </div>
@@ -553,16 +566,16 @@ export default function ResumeIntakePage() {
         {(!parsedEmail || !parsedPhone) && (
           <div className="bg-t-panel p-5 border border-t-line">
             <p className="text-sm font-medium text-t-white mb-1">
-              Missing anything?
+              {t("read.missingTitle")}
             </p>
             <p className="text-xs text-t-phos-dim mb-3">
-              Not required, but these go on your resume when you download it.
+              {t("read.missingNote")}
             </p>
             <div className="space-y-3">
               {!parsedPhone && (
                 <div>
                   <label className="text-xs font-medium text-t-phos-dim block mb-1">
-                    Phone number
+                    {t("read.phone")}
                   </label>
                   <input
                     type="tel"
@@ -576,13 +589,13 @@ export default function ResumeIntakePage() {
               {!parsedEmail && (
                 <div>
                   <label className="text-xs font-medium text-t-phos-dim block mb-1">
-                    Email address
+                    {t("read.email")}
                   </label>
                   <input
                     type="email"
                     value={parsedEmail}
                     onChange={(e) => setParsedEmail(e.target.value)}
-                    placeholder="you@email.com"
+                    placeholder={t("read.emailPlaceholder")}
                     className="w-full px-4 py-3 border border-t-line text-sm bg-t-panel-2 text-t-white focus:border-t-amber focus:outline-none transition-colors min-h-touch"
                   />
                 </div>
@@ -599,9 +612,9 @@ export default function ResumeIntakePage() {
     const savedJobs = jobsFromDoc(session.resumeDoc);
     return (
       <FlowPage
-        title="We already have your resume."
-        subtitle={savedJobs.length ? "Is this still right?" : "No need to add it again."}
-        actionLabel="Yes, keep going"
+        title={t("rush.title")}
+        subtitle={savedJobs.length ? t("saved.subtitleJobs") : t("saved.subtitleNoJobs")}
+        actionLabel={t("saved.action")}
         onAction={() => continueWith({ lastPageVisited: "resume" })}
         showBack
         onBack={() => router.push(lanes ? "/start?change=1" : "/welcome")}
@@ -610,13 +623,13 @@ export default function ResumeIntakePage() {
             onClick={() => setReplacing(true)}
             className="text-t-amber-bright underline underline-offset-2 hover:text-t-amber"
           >
-            Use a different resume
+            {t("saved.useDifferent")}
           </button>
         }
       >
-        <GhostGuide message={getOpusMessage("resume", audience, false)} pageId="resume" />
+        <GhostGuide message={getOpusMessage("resume", audience, false, locale)} pageId="resume" />
         {savedJobs.length > 0 ? (
-          <JobsToConfirm jobs={savedJobs} heading="Your jobs" />
+          <JobsToConfirm jobs={savedJobs} heading={t("jobsToConfirm.heading")} />
         ) : (
           <div className="mb-4 border border-t-line bg-t-panel p-4">
             <p className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-t-phos-dim">
@@ -631,7 +644,7 @@ export default function ResumeIntakePage() {
             onClick={() => setBuilderDoc(session.resumeDoc!)}
             className="t-focus min-h-touch w-full border border-t-line bg-t-panel px-4 py-2.5 text-sm font-medium text-t-phos transition-colors hover:border-t-phos-dim hover:text-t-white"
           >
-            Something&apos;s off: open it in the editor
+            {t("saved.openEditor")}
           </button>
         )}
       </FlowPage>
@@ -642,8 +655,8 @@ export default function ResumeIntakePage() {
   if (!activePath && lanes) {
     return (
       <FlowPage
-        title={INTAKE_TITLE}
-        subtitle="Bring any version you have. It gives t.ROY more of your real history to work with."
+        title={t("choose.title")}
+        subtitle={t("choose.lanesSubtitle")}
         showBack
         onBack={() => (replacing ? setReplacing(false) : router.push("/start?change=1"))}
       >
@@ -653,19 +666,19 @@ export default function ResumeIntakePage() {
             className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
             data-testid="intake-have-one"
           >
-            <span className="font-medium text-t-white">{INTAKE_HAVE_ONE.label}</span>
-            <p className="text-sm text-t-phos-dim mt-0.5">{INTAKE_HAVE_ONE.body}</p>
+            <span className="font-medium text-t-white">{t("choose.haveOneLabel")}</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">{t("choose.haveOneBody")}</p>
           </button>
           <button
             onClick={() => setActivePath("quick")}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
             data-testid="intake-build"
           >
-            <span className="font-medium text-t-white">{INTAKE_BUILD.label}</span>
-            <p className="text-sm text-t-phos-dim mt-0.5">{INTAKE_BUILD.body}</p>
+            <span className="font-medium text-t-white">{t("choose.buildLabel")}</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">{t("choose.buildBody")}</p>
           </button>
         </div>
-        <p className="mt-5 text-sm text-t-phos-dim">PDF, Word, a phone photo, screenshot, copied email, pasted text, or your voice can get us started. Faxed copy? Photograph the page. Morse code? Translate it first, then paste it.</p>
+        <p className="mt-5 text-sm text-t-phos-dim">{t("choose.hint")}</p>
         <IntakeHelp />
       </FlowPage>
     );
@@ -675,13 +688,13 @@ export default function ResumeIntakePage() {
   if (!activePath) {
     return (
       <FlowPage
-        title="Do you have a resume?"
-        subtitle="Any format works, even a photo of a paper copy."
+        title={t("choose.title")}
+        subtitle={t("choose.subtitle")}
         showBack
         onBack={() => (replacing ? setReplacing(false) : router.push("/welcome"))}
       >
         <GhostGuide
-          message={getOpusMessage("resume", audience, false)}
+          message={getOpusMessage("resume", audience, false, locale)}
           pageId="resume"
         />
         <div className="flex flex-col gap-3">
@@ -689,9 +702,9 @@ export default function ResumeIntakePage() {
             onClick={() => setActivePath("paste")}
             className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">Paste your resume text</span>
+            <span className="font-medium text-t-white">{t("choose.pasteLabel")}</span>
             <p className="text-sm text-t-phos-dim mt-0.5">
-              Copy from an email, notes app, or anywhere and paste it here
+              {t("choose.pasteBody")}
             </p>
           </button>
 
@@ -699,9 +712,9 @@ export default function ResumeIntakePage() {
             onClick={() => setActivePath("upload")}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">Upload a file or image</span>
+            <span className="font-medium text-t-white">{t("choose.uploadLabel")}</span>
             <p className="text-sm text-t-phos-dim mt-0.5">
-              PDF, Word, photo of a paper copy, or phone camera screenshot
+              {t("choose.uploadBody")}
             </p>
           </button>
 
@@ -709,9 +722,9 @@ export default function ResumeIntakePage() {
             onClick={() => setActivePath("import")}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">Download from LinkedIn or Indeed</span>
+            <span className="font-medium text-t-white">{t("choose.importLabel")}</span>
             <p className="text-sm text-t-phos-dim mt-0.5">
-              We&apos;ll show you how to get your resume from these platforms
+              {t("choose.importBody")}
             </p>
           </button>
 
@@ -719,9 +732,9 @@ export default function ResumeIntakePage() {
             onClick={() => setActivePath("external")}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">Build one with a free tool first</span>
+            <span className="font-medium text-t-white">{t("choose.externalLabel")}</span>
             <p className="text-sm text-t-phos-dim mt-0.5">
-              Links to Canva, Google Docs, Indeed. Come back when you&apos;re done.
+              {t("choose.externalBody")}
             </p>
           </button>
 
@@ -731,7 +744,7 @@ export default function ResumeIntakePage() {
               <div className="w-full border-t border-t-line" />
             </div>
             <div className="relative flex justify-center">
-              <span className="bg-t-bg px-3 text-xs text-t-phos-dim">Starting from nothing?</span>
+              <span className="bg-t-bg px-3 text-xs text-t-phos-dim">{t("choose.divider")}</span>
             </div>
           </div>
 
@@ -739,20 +752,19 @@ export default function ResumeIntakePage() {
             onClick={handleNoResume}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">Build one from scratch, step by step</span>
+            <span className="font-medium text-t-white">{t("choose.scratchLabel")}</span>
             <p className="text-sm text-t-phos-dim mt-0.5">
-              15-20 minutes. We guide you through every section. Worth doing right.
+              {t("choose.scratchBody")}
             </p>
           </button>
 
           {/* Record-history recovery -- for users who can't recall employers/dates */}
           <div className="mt-2 bg-t-panel p-4 border border-t-line">
             <p className="text-sm font-medium text-t-white mb-1">
-              Can&apos;t remember where you worked, or when?
+              {t("choose.recallTitle")}
             </p>
             <p className="text-xs text-t-phos-dim mb-3">
-              These free, official sources can remind you. They open on the
-              provider&apos;s own site. We never see or store them.
+              {t("choose.recallNote")}
             </p>
             <div className="space-y-2">
               <a
@@ -761,7 +773,7 @@ export default function ResumeIntakePage() {
                 rel="noopener noreferrer"
                 className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
-                IRS Wage &amp; Income Transcript: every employer that reported your wages
+                {t("choose.recallIrs")}
               </a>
               <a
                 href="https://www.theworknumber.com/employees"
@@ -769,7 +781,7 @@ export default function ResumeIntakePage() {
                 rel="noopener noreferrer"
                 className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
-                The Work Number: your free annual Employment Data Report
+                {t("choose.recallWorkNumber")}
               </a>
               <a
                 href="https://www.credly.com/"
@@ -777,7 +789,7 @@ export default function ResumeIntakePage() {
                 rel="noopener noreferrer"
                 className="block text-sm text-t-steel hover:text-t-amber-bright underline underline-offset-2"
               >
-                Credly: digital badges and certifications you&apos;ve earned
+                {t("choose.recallCredly")}
               </a>
             </div>
           </div>
@@ -790,8 +802,8 @@ export default function ResumeIntakePage() {
   if (activePath === "upload") {
     return (
       <FlowPage
-        title="Upload your resume"
-        subtitle="Drag and drop, or tap to select a file. We accept PDF, Word, images, and screenshots."
+        title={t("upload.title")}
+        subtitle={t("upload.subtitle")}
         showBack
         onBack={() => setActivePath(null)}
       >
@@ -818,8 +830,8 @@ export default function ResumeIntakePage() {
                 <div className="h-1 w-5/6 bg-t-line" />
                 <div className="absolute -right-3 -top-3 flex h-7 w-7 items-center justify-center border border-t-amber bg-t-panel motion-safe:animate-pulse"><span className="h-3 w-3 border-b-2 border-r-2 border-t-amber" /></div>
               </div>
-              <p className="font-medium text-t-white">t.ROY is pulling the work off your page.</p>
-              <p className="text-sm text-t-phos-dim">Your jobs and dates are coming up for your review.</p>
+              <p className="font-medium text-t-white">{t("upload.reading")}</p>
+              <p className="text-sm text-t-phos-dim">{t("upload.readingSub")}</p>
             </>
           ) : (
             <>
@@ -847,10 +859,10 @@ export default function ResumeIntakePage() {
               </svg>
               <div>
                 <p className="font-medium text-t-white">
-                  Drop your file here, or tap to browse
+                  {t("upload.drop")}
                 </p>
                 <p className="text-sm text-t-phos-dim mt-1">
-                  PDF, Word, image, or screenshot
+                  {t("upload.dropTypes")}
                 </p>
               </div>
             </>
@@ -863,23 +875,29 @@ export default function ResumeIntakePage() {
           accept={ACCEPTED_TYPES}
           onChange={handleFileInput}
           className="hidden"
-          aria-label="Upload resume file"
+          aria-label={t("upload.inputAria")}
         />
 
         {pickAgain && !uploadError && !uploading && (
           <p role="status" className="mt-4 p-4 bg-t-panel border border-t-amber text-sm text-t-white" data-testid="upload-pick-again">
-            {FORGE_UPLOAD_PICK_AGAIN_MESSAGE}
+            {t("upload.pickAgain")}
           </p>
         )}
 
         {uploadError && (
           <div className="mt-4 p-4 bg-t-panel border border-t-red">
-            <p className="text-sm text-t-red">{uploadError}</p>
+            <p className="text-sm text-t-red">
+              {uploadError === FORGE_UPLOAD_SIGN_IN_MESSAGE
+                ? t("upload.signInMessage")
+                : uploadError === UPLOAD_GENERIC_ERROR_EN
+                  ? t("upload.genericError")
+                  : uploadError}
+            </p>
             <button
               onClick={lanes ? () => setActivePath("quick") : handleNoResume}
               className="text-sm text-t-amber-bright underline mt-2"
             >
-              Or build one with our help instead
+              {t("upload.buildInstead")}
             </button>
           </div>
         )}
@@ -894,31 +912,31 @@ export default function ResumeIntakePage() {
   if (activePath === "import") {
     return (
       <FlowPage
-        title="Download your resume"
-        subtitle="Follow these steps, then come back and upload the file."
+        title={t("import.title")}
+        subtitle={t("import.subtitle")}
         showBack
         onBack={() => setActivePath(null)}
-        actionLabel="Upload my file"
+        actionLabel={t("import.action")}
         onAction={() => setActivePath("upload")}
       >
         <div className="space-y-4">
           <div className="bg-t-panel p-5 border border-t-line">
-            <h3 className="font-semibold text-t-white mb-2">From LinkedIn</h3>
+            <h3 className="font-semibold text-t-white mb-2">{t("import.linkedinTitle")}</h3>
             <ol className="text-sm text-t-phos-dim space-y-1.5 list-decimal list-inside">
-              <li>Go to your LinkedIn profile</li>
+              <li>{t("import.linkedinStep1")}</li>
               <li>
-                Click the &quot;More&quot; button below your profile photo
+                {t("import.linkedinStep2")}
               </li>
-              <li>Select &quot;Save to PDF&quot;</li>
-              <li>Come back here and upload the PDF</li>
+              <li>{t("import.linkedinStep3")}</li>
+              <li>{t("import.linkedinStep4")}</li>
             </ol>
           </div>
 
           <div className="bg-t-panel p-5 border border-t-line">
-            <h3 className="font-semibold text-t-white mb-2">From Indeed</h3>
+            <h3 className="font-semibold text-t-white mb-2">{t("import.indeedTitle")}</h3>
             <ol className="text-sm text-t-phos-dim space-y-1.5 list-decimal list-inside">
               <li>
-                Go to{" "}
+                {t("import.indeedStep1")}{" "}
                 <a
                   href="https://profile.indeed.com/resume"
                   target="_blank"
@@ -928,9 +946,9 @@ export default function ResumeIntakePage() {
                   profile.indeed.com/resume
                 </a>
               </li>
-              <li>Click &quot;Download Resume&quot;</li>
-              <li>Choose PDF format</li>
-              <li>Come back here and upload the PDF</li>
+              <li>{t("import.indeedStep2")}</li>
+              <li>{t("import.indeedStep3")}</li>
+              <li>{t("import.indeedStep4")}</li>
             </ol>
           </div>
         </div>
@@ -942,41 +960,44 @@ export default function ResumeIntakePage() {
   if (activePath === "external") {
     return (
       <FlowPage
-        title="Free resume builders"
-        subtitle="Pick one, build your resume, then come back and upload it."
+        title={t("external.title")}
+        subtitle={t("external.subtitle")}
         showBack
         onBack={() => setActivePath(null)}
-        actionLabel="Upload my resume"
+        actionLabel={t("external.action")}
         onAction={() => setActivePath("upload")}
         footer={
           <button
             onClick={handleNoResume}
             className="text-t-amber-bright underline underline-offset-2"
           >
-            I&apos;d rather build one here with help
+            {t("external.footer")}
           </button>
         }
       >
         <div className="space-y-3">
           {[
             {
-              name: "Canva Resume Builder",
+              id: "canva",
+              name: t("external.canvaName"),
               url: "https://www.canva.com/resumes/",
-              note: "Free templates. Easy drag and drop.",
+              note: t("external.canvaNote"),
             },
             {
-              name: "Google Docs Resume Templates",
+              id: "docs",
+              name: t("external.docsName"),
               url: "https://docs.google.com/document/u/0/?tgif=d&ftv=1",
-              note: "Free with a Google account.",
+              note: t("external.docsNote"),
             },
             {
-              name: "Indeed Resume Builder",
+              id: "indeed",
+              name: t("external.indeedName"),
               url: "https://www.indeed.com/career-services/?collectorID=subnav",
-              note: "Step by step. Saves to your Indeed profile.",
+              note: t("external.indeedNote"),
             },
           ].map((builder) => (
             <a
-              key={builder.name}
+              key={builder.id}
               href={builder.url}
               target="_blank"
               rel="noopener noreferrer"
@@ -1044,6 +1065,8 @@ function GuidedBuilder({
   onBack: () => void;
 }) {
   const { updateSession } = useForgeSession();
+  const t = useTranslations("forgeResume.guided");
+  const tc = useTranslations("common");
   const [step, setStep] = useState<BuilderStep>("intro");
   // Work history is a dynamic list -- no cap. A long career is never stranded (F14).
   const [jobs, setJobs] = useState<JobEntry[]>([{ ...EMPTY_JOB }]);
@@ -1167,9 +1190,9 @@ function GuidedBuilder({
   if (step === "intro") {
     return (
       <FlowPage
-        title="Build your resume from scratch."
-        subtitle="We walk you through it, one section at a time."
-        actionLabel="I'm ready, let's go"
+        title={t("intro.title")}
+        subtitle={t("intro.subtitle")}
+        actionLabel={t("intro.action")}
         onAction={goNext}
         showBack
         onBack={goBack}
@@ -1177,23 +1200,16 @@ function GuidedBuilder({
         <div className="space-y-4">
           <div className="bg-t-panel p-5 border border-t-line">
             <p className="text-sm text-t-phos leading-relaxed mb-3">
-              This takes <strong className="text-t-white">15-20 minutes</strong> if you do it right. That&apos;s not a lot
-              of time to invest in something this important. But it only works if you take it
-              seriously.
+              {t.rich("intro.p1", { b: (chunks) => <strong className="text-t-white">{chunks}</strong> })}
             </p>
             <p className="text-sm text-t-phos-dim leading-relaxed">
-              We go section by section: contact info, work history, skills, education.
-              Answer each question in your own words. Don&apos;t try to make it sound
-              fancy. Just tell us what&apos;s true.
+              {t("intro.p2")}
             </p>
           </div>
           <div className="bg-t-panel-2 p-4 border border-t-line">
-            <p className="text-xs font-medium text-t-white mb-1">A note on gaps</p>
+            <p className="text-xs font-medium text-t-white mb-1">{t("intro.gapsTitle")}</p>
             <p className="text-xs text-t-phos-dim leading-relaxed">
-              You might have gaps in your history because of incarceration, family
-              obligations, health, or anything else. You don&apos;t need to hide or explain them here.
-              Just include what you have. The Forge helps you figure out how to
-              talk about the gaps later, on your terms.
+              {t("intro.gapsBody")}
             </p>
           </div>
         </div>
@@ -1205,9 +1221,9 @@ function GuidedBuilder({
   if (step === "name") {
     return (
       <FlowPage
-        title="What's your full name?"
-        subtitle="This goes at the top of your resume."
-        actionLabel="Next"
+        title={t("name.title")}
+        subtitle={t("name.subtitle")}
+        actionLabel={tc("actions.next")}
         actionDisabled={!answers.name.trim()}
         onAction={goNext}
         showBack
@@ -1216,7 +1232,7 @@ function GuidedBuilder({
         <input
           value={answers.name}
           onChange={(e) => set("name", e.target.value)}
-          placeholder="e.g., Marcus Johnson"
+          placeholder={t("name.placeholder")}
           className={inputClass}
           autoFocus
         />
@@ -1228,21 +1244,21 @@ function GuidedBuilder({
   if (step === "contact") {
     return (
       <FlowPage
-        title="Contact information"
-        subtitle="Goes on your resume. Add what you have. It's all optional."
-        actionLabel="Next"
+        title={t("contact.title")}
+        subtitle={t("contact.subtitle")}
+        actionLabel={tc("actions.next")}
         onAction={goNext}
         showBack
         onBack={goBack}
         footer={
           <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
-            Skip for now
+            {t("skipForNow")}
           </button>
         }
       >
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">Phone</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">{t("contact.phone")}</label>
             <input
               value={answers.phone}
               onChange={(e) => set("phone", e.target.value)}
@@ -1253,21 +1269,21 @@ function GuidedBuilder({
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">Email</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">{t("contact.email")}</label>
             <input
               value={answers.email}
               onChange={(e) => set("email", e.target.value)}
-              placeholder="you@email.com"
+              placeholder={t("contact.emailPlaceholder")}
               type="email"
               className={inputClass}
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">City, State</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">{t("contact.city")}</label>
             <input
               value={answers.city}
               onChange={(e) => set("city", e.target.value)}
-              placeholder="e.g., Milwaukee, WI"
+              placeholder={t("contact.cityPlaceholder")}
               className={inputClass}
             />
           </div>
@@ -1281,13 +1297,13 @@ function GuidedBuilder({
     const first = jobIdx === 0;
     return (
       <FlowPage
-        title={first ? "Your most recent job" : `Job ${jobIdx + 1}`}
+        title={first ? t("job.titleFirst") : t("job.titleNth", { number: jobIdx + 1 })}
         subtitle={
           first
-            ? "The last job you held. Full-time, part-time, temp, gig, or work program. All count."
-            : "Same as before: title, company, and when."
+            ? t("job.subtitleFirst")
+            : t("job.subtitleNth")
         }
-        actionLabel="Next"
+        actionLabel={tc("actions.next")}
         actionDisabled={!curJob.title.trim() && !curJob.company.trim()}
         onAction={goNext}
         showBack
@@ -1295,30 +1311,30 @@ function GuidedBuilder({
       >
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">Job title</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">{t("job.titleLabel")}</label>
             <input
               value={curJob.title}
               onChange={(e) => setJobField("title", e.target.value)}
-              placeholder="e.g., Warehouse Associate, Custodian, Cook"
+              placeholder={t("job.titlePlaceholder")}
               className={inputClass}
               autoFocus
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">Company or organization</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">{t("job.companyLabel")}</label>
             <input
               value={curJob.company}
               onChange={(e) => setJobField("company", e.target.value)}
-              placeholder="e.g., Amazon, City of Milwaukee, Self-employed"
+              placeholder={t("job.companyPlaceholder")}
               className={inputClass}
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-t-phos-dim block mb-1">When? (approximate is fine)</label>
+            <label className="text-xs font-medium text-t-phos-dim block mb-1">{t("job.whenLabel")}</label>
             <input
               value={curJob.dates}
               onChange={(e) => setJobField("dates", e.target.value)}
-              placeholder="e.g., 2019-2022"
+              placeholder={t("job.whenPlaceholder")}
               className={inputClass}
             />
           </div>
@@ -1331,22 +1347,22 @@ function GuidedBuilder({
   if (step === "job-duties") {
     return (
       <FlowPage
-        title="What did you do there?"
-        subtitle="Main responsibilities in your own words. Don't make it fancy. Just be honest."
-        actionLabel="Next"
+        title={t("duties.title")}
+        subtitle={t("duties.subtitle")}
+        actionLabel={tc("actions.next")}
         actionDisabled={!curJob.duties.trim()}
         onAction={goNext}
         showBack
         onBack={goBack}
         footer={
-          <p className="text-xs text-muted">Include accomplishments, things you were proud of, skills you used.</p>
+          <p className="text-xs text-muted">{t("duties.footer")}</p>
         }
       >
         <textarea
           id="forge-duties"
           value={curJob.duties}
           onChange={(e) => setJobField("duties", e.target.value)}
-          placeholder={"e.g., Operated forklift and pallet jack. Helped train 3 new employees on safety. Maintained 99% on-time order rate during peak season."}
+          placeholder={t("duties.placeholder")}
           rows={5}
           className={textareaClass}
           autoFocus
@@ -1358,7 +1374,7 @@ function GuidedBuilder({
           targetSelector="#forge-duties"
           surfaceId="forge-duties"
           enabled={!curJob.duties.trim()}
-          message="One number beats a paragraph here. How many, how often, how big. Whatever you actually remember."
+          message={t("duties.attention")}
         />
       </FlowPage>
     );
@@ -1369,14 +1385,14 @@ function GuidedBuilder({
     const count = jobs.filter((j) => j.title || j.company || j.duties).length;
     return (
       <FlowPage
-        title="Do you have another job to add?"
-        subtitle="More work history makes a stronger resume. Part-time, temp, and gig work all count."
+        title={t("more.title")}
+        subtitle={t("more.subtitle")}
         showBack
         onBack={goBack}
       >
         {count > 0 && (
           <p className="text-sm text-t-phos-dim mb-3">
-            {count} job{count === 1 ? "" : "s"} added so far.
+            {t("more.count", { count })}
           </p>
         )}
         <div className="flex flex-col gap-3">
@@ -1384,15 +1400,15 @@ function GuidedBuilder({
             onClick={addAnotherJob}
             className="t-focus w-full text-left px-5 py-4 border border-t-amber bg-t-panel-2 hover:border-t-amber-bright transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">Yes, add another job</span>
-            <p className="text-sm text-t-phos-dim mt-0.5">Full-time, part-time, temp, gig work, or work program</p>
+            <span className="font-medium text-t-white">{t("more.yesLabel")}</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">{t("more.yesBody")}</p>
           </button>
           <button
             onClick={finishJobs}
             className="t-focus w-full text-left px-5 py-4 border border-t-line bg-t-panel hover:border-t-phos-dim transition-all min-h-touch"
           >
-            <span className="font-medium text-t-white">No, that's my history</span>
-            <p className="text-sm text-t-phos-dim mt-0.5">Continue to skills and certifications</p>
+            <span className="font-medium text-t-white">{t("more.noLabel")}</span>
+            <p className="text-sm text-t-phos-dim mt-0.5">{t("more.noBody")}</p>
           </button>
         </div>
       </FlowPage>
@@ -1403,23 +1419,23 @@ function GuidedBuilder({
   if (step === "skills") {
     return (
       <FlowPage
-        title="What are your skills and certifications?"
-        subtitle="What are you good at? Technical skills, people skills, physical skills, licenses. Everything counts."
-        actionLabel="Next"
+        title={t("skills.title")}
+        subtitle={t("skills.subtitle")}
+        actionLabel={tc("actions.next")}
         actionDisabled={!answers.skills.trim()}
         onAction={goNext}
         showBack
         onBack={goBack}
         footer={
           <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
-            Skip for now
+            {t("skipForNow")}
           </button>
         }
       >
         <textarea
           value={answers.skills}
           onChange={(e) => set("skills", e.target.value)}
-          placeholder={"e.g., Forklift certified (OSHA), CDL Class A, Microsoft Excel, bilingual English/Spanish, team leadership, conflict de-escalation"}
+          placeholder={t("skills.placeholder")}
           rows={4}
           className={textareaClass}
           autoFocus
@@ -1432,22 +1448,22 @@ function GuidedBuilder({
   if (step === "education") {
     return (
       <FlowPage
-        title="Education and training"
-        subtitle="School, GED, trade programs, certifications, military. They all count. Include anything you completed, even programs from inside."
-        actionLabel="Next"
+        title={t("education.title")}
+        subtitle={t("education.subtitle")}
+        actionLabel={tc("actions.next")}
         onAction={goNext}
         showBack
         onBack={goBack}
         footer={
           <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
-            Skip for now
+            {t("skipForNow")}
           </button>
         }
       >
         <textarea
           value={answers.education}
           onChange={(e) => set("education", e.target.value)}
-          placeholder={"e.g., GED (2018), HVAC certification (ABC Training, 2020), OSHA 10-hour safety, US Army 2004-2008"}
+          placeholder={t("education.placeholder")}
           rows={4}
           className={textareaClass}
           autoFocus
@@ -1460,22 +1476,22 @@ function GuidedBuilder({
   if (step === "extras") {
     return (
       <FlowPage
-        title="Anything else?"
-        subtitle="Volunteer work, community roles, programs you've been part of, or anything that doesn't fit above."
-        actionLabel="Next"
+        title={t("extras.title")}
+        subtitle={t("extras.subtitle")}
+        actionLabel={tc("actions.next")}
         onAction={goNext}
         showBack
         onBack={goBack}
         footer={
           <button onClick={goNext} className="text-t-phos-dim text-sm underline underline-offset-2 hover:text-t-amber-bright">
-            Skip, that&apos;s everything
+            {t("extras.skip")}
           </button>
         }
       >
         <textarea
           value={answers.extras}
           onChange={(e) => set("extras", e.target.value)}
-          placeholder={"e.g., Volunteer at Milwaukee Rescue Mission 2023-present, peer mentor in reentry program, completed financial literacy and conflict resolution"}
+          placeholder={t("extras.placeholder")}
           rows={4}
           className={textareaClass}
           autoFocus
@@ -1492,9 +1508,9 @@ function GuidedBuilder({
       .map((j) => ({ employer: j.company, title: j.title, dates: j.dates, duties: j.duties }));
     return (
       <FlowPage
-        title="Here's what we have."
-        subtitle="Review before we start the analysis. Go back to fix anything."
-        actionLabel="Looks good, start the analysis"
+        title={t("review.title")}
+        subtitle={t("review.subtitle")}
+        actionLabel={t("review.action")}
         actionDisabled={!assembled.trim()}
         onAction={goNext}
         showBack
@@ -1506,9 +1522,9 @@ function GuidedBuilder({
         <div className="bg-t-panel border border-t-line overflow-hidden mb-4">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-t-line bg-t-panel-2">
             <p className="text-xs font-semibold text-t-phos uppercase">
-              Your resume draft
+              {t("review.draft")}
             </p>
-            <p className="text-xs text-t-phos-dim">{assembled.length} characters</p>
+            <p className="text-xs text-t-phos-dim">{t("review.characters", { count: assembled.length })}</p>
           </div>
           <div className="p-4 max-h-80 overflow-y-auto">
             <pre className="text-xs text-t-phos whitespace-pre-wrap leading-relaxed">
@@ -1517,8 +1533,7 @@ function GuidedBuilder({
           </div>
         </div>
         <p className="text-xs text-t-phos-dim">
-          This is the raw material for the Forge analysis. The AI transforms it
-          into a structured career narrative. You&apos;ll see the full output at the end.
+          {t("review.note")}
         </p>
       </FlowPage>
     );
@@ -1531,8 +1546,8 @@ function GuidedBuilder({
 
 // Prompt the user can hand to their own AI (ChatGPT/Claude/etc.), then paste
 // the reply back here. Server-side markdown stripping + AI parsing handles
-// whatever formatting their AI produces.
-const YOUR_AI_PROMPT = `Please write out my resume as plain text. Include my name, phone, email, and city. List every job I have held with the employer name, dates, and 2-4 bullet points describing what I actually did. Then list my skills and any education, certificates, or training. Do not invent anything. Only use what you know about me from our conversations or what I tell you now. Ask me questions first if you need more detail.`;
+// whatever formatting their AI produces. The prompt is what the person reads
+// and what they copy, so it comes from the catalog (forgeResume.paste.aiPrompt).
 
 function PasteResume({
   onComplete,
@@ -1546,6 +1561,8 @@ function PasteResume({
   onBack: () => void;
 }) {
   const { updateSession } = useForgeSession();
+  const t = useTranslations("forgeResume.paste");
+  const tc = useTranslations("common");
   const [text, setText] = useState("");
   const [parsing, setParsing] = useState(false);
   const [showAiHelp, setShowAiHelp] = useState(false);
@@ -1594,7 +1611,7 @@ function PasteResume({
 
   async function copyPrompt() {
     try {
-      await navigator.clipboard.writeText(YOUR_AI_PROMPT);
+      await navigator.clipboard.writeText(t("aiPrompt"));
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {}
@@ -1602,16 +1619,16 @@ function PasteResume({
 
   return (
     <FlowPage
-      title="Paste your resume"
-      subtitle="Copy your resume text from anywhere and paste it below. Don't worry about formatting."
-      actionLabel={parsing ? "Reading..." : "Continue"}
+      title={t("title")}
+      subtitle={t("subtitle")}
+      actionLabel={parsing ? t("reading") : tc("actions.continue")}
       actionDisabled={text.trim().length < 20 || parsing}
       onAction={handleSubmit}
       showBack
       onBack={onBack}
       footer={
         <p className="text-xs text-t-phos-dim">
-          Minimum 20 characters. Just get the basics in there.
+          {t("minimum")}
         </p>
       }
     >
@@ -1623,25 +1640,24 @@ function PasteResume({
           className="t-focus w-full flex items-center justify-between px-4 py-3 text-left min-h-touch"
         >
           <span className="text-sm font-medium text-t-white">
-            Already use ChatGPT or another AI? Have it write your resume, then paste it here.
+            {t("aiHelp")}
           </span>
-          <span className="text-t-phos-dim text-sm ml-2">{showAiHelp ? "Hide" : "Show"}</span>
+          <span className="text-t-phos-dim text-sm ml-2">{showAiHelp ? t("hide") : t("show")}</span>
         </button>
         {showAiHelp && (
           <div className="px-4 pb-4 border-t border-t-line pt-3">
             <p className="text-xs text-t-phos-dim mb-2">
-              Copy this prompt, give it to your AI, then paste its answer in the
-              box below. We handle the formatting.
+              {t("aiHelpNote")}
             </p>
             <div className="bg-t-panel-2 border border-t-line p-3 text-xs text-t-phos leading-relaxed mb-2">
-              {YOUR_AI_PROMPT}
+              {t("aiPrompt")}
             </div>
             <button
               type="button"
               onClick={copyPrompt}
               className="t-focus px-3 py-1.5 text-xs font-bold bg-t-amber text-white hover:bg-t-amber-bright transition-colors"
             >
-              {copied ? "Copied!" : "Copy this prompt"}
+              {copied ? t("copied") : t("copy")}
             </button>
           </div>
         )}
@@ -1656,14 +1672,14 @@ function PasteResume({
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={"Paste your resume here...\n\nExample:\nJohn Smith\nForklift Operator with 5 years experience\n\nWork History:\nWarehouse Associate, Amazon, 2019-2024\n- Operated forklift and pallet jack\n- Trained new team members"}
+        placeholder={t("placeholder")}
         rows={10}
         className="w-full px-4 py-3 border border-t-line text-base bg-t-panel text-t-white focus:border-t-amber focus:outline-none transition-colors resize-y min-h-[200px]"
         autoFocus
       />
       {text.length > 0 && text.trim().length < 20 && (
         <p className="text-xs text-t-amber-bright mt-2">
-          Keep going. We need a little more to work with.
+          {t("keepGoing")}
         </p>
       )}
     </FlowPage>

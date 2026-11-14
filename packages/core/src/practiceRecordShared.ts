@@ -1,3 +1,4 @@
+import { hasSpanishFacilityWords } from "./recordLexicon";
 /**
  * The practice record: the pure, client-safe half (no db import).
  *
@@ -315,7 +316,7 @@ const FACILITY_RE =
   /\b(prisons?|penitentiar(?:y|ies)|correctional|corrections|jails?|detention|reformator(?:y|ies)|incarcerat\w*|inmates?|lock-?up|work release|halfway house|juvenile hall|state pen|d\.?o\.?c\.?)\b/i;
 
 export function looksLikeFacilityName(...texts: Array<string | null | undefined>): boolean {
-  return texts.some((t) => typeof t === "string" && FACILITY_RE.test(t));
+  return texts.some((t) => typeof t === "string" && (FACILITY_RE.test(t) || hasSpanishFacilityWords(t)));
 }
 
 function oneOf<T extends readonly string[]>(list: T, v: unknown): T[number] | undefined {

@@ -79,7 +79,7 @@ export const OBJECTIVES: readonly { id: ObjectiveId; short: string; agenda: stri
 export const MAP_TILES: readonly { id: string; label: string; controls: readonly string[] }[] = [
   { id: 'account', label: 'Account', controls: ['Resume Contact Info', 'Your picture', 'Join a program with a code', 'Hidden Employers', 'Your finished resume by email'] },
   { id: 'coach', label: 'Coach & AI', controls: ['Coaching style', 'Response length', 'Focus', 'Advanced settings'] },
-  { id: 'accessibility', label: 'Accessibility', controls: ['Plain language', 'Read aloud', 'Spanish (Espanol)', 'Text size', 'Motion', 'Spacing'] },
+  { id: 'accessibility', label: 'Accessibility', controls: ['Plain language', 'Read aloud', 'Language / Idioma', 'Text size', 'Motion', 'Spacing'] },
   { id: 'privacy', label: 'Privacy & Consent', controls: ['Who can see what', 'AI memory and personalization', 'De-identified research', 'Share your success story'] },
   { id: 'security', label: 'Security', controls: ['Password', 'Two-step verification', 'Active devices'] },
   { id: 'data', label: 'Data', controls: ['Download your data', 'Delete my data', 'Delete my account'] },
@@ -110,7 +110,7 @@ export const SETTINGS_BEATS: readonly SettingsBeat[] = [
     chips: [
       { label: 'Plain language', targets: ['settings-plain-language'] },
       { label: 'Read aloud', targets: ['settings-read-aloud'] },
-      { label: 'Spanish (Espanol)', targets: ['settings-spanish'] },
+      { label: 'Language / Idioma', targets: ['settings-spanish'] },
       { label: 'Text size', targets: ['settings-text-size'] },
       { label: 'Motion', targets: ['settings-motion'] },
       { label: 'Spacing', targets: ['settings-spacing'] },

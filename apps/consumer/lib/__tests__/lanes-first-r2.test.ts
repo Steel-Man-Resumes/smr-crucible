@@ -45,6 +45,8 @@ import { CLIENT_PATH } from "../forge-front-door";
 
 const root = join(import.meta.dirname, "..", "..");
 const read = (p: string) => readFileSync(join(root, p), "utf8");
+/** A converted screen's English copy lives in its catalog (messages/en); read both for the claims below. */
+const withCatalog = (file: string, catalog: string) => read(file) + "\n" + read(`messages/en/${catalog}.json`);
 const UID = "00000000-0000-4000-8000-0000000000a1";
 
 // ---- the first screen -------------------------------------------------------------
@@ -113,7 +115,7 @@ test("routes: resume goes to intake; the job route has one small step; interview
 });
 
 test("Rush is the job route's 'short on time' branch, not its own entrance", () => {
-  const start = read("app/(forge)/start/page.tsx");
+  const start = withCatalog("app/(forge)/start/page.tsx", "forge-entry");
   assert.match(start, /data-testid="rush-branch"/);
   assert.match(start, /Job in mind and short on time\?/);
   assert.doesNotMatch(read("components/lanes/TaskPicker.tsx"), /rush/i);
@@ -148,7 +150,7 @@ test("intake: 'I have one' and 'Build with me' only; LinkedIn, Indeed, IRS, Work
   assert.equal((lanes.match(/data-testid="intake-(have-one|build)"/g) || []).length, 2);
   assert.doesNotMatch(lanes, /setActivePath\("(import|external|paste|guided)"\)/, "no third route");
   assert.match(lanes, /<IntakeHelp \/>/);
-  const help = read("components/forge/lanes/IntakeExtras.tsx");
+  const help = withCatalog("components/forge/lanes/IntakeExtras.tsx", "forge-story");
   for (const s of ["LinkedIn", "Indeed", "irs.gov", "theworknumber.com", "credly.com"]) assert.ok(help.includes(s), s);
   assert.doesNotMatch(help, /canva\.com|Free resume builders/i, "the outside-builder detour is gone from the main path");
 });
@@ -232,11 +234,13 @@ test("H2: the first save is DRAFT: the page is never its own evidence; only what
   const g = laneStore();
   const asIs = await saveFirstSection(UID, { text: RESUME, typed: "", keep: undefined }, g.store);
   assert.equal(asIs.ok && asIs.revision.status, "draft");
-  const comp = read("components/forge/lanes/FirstSave.tsx");
+  const comp = withCatalog("components/forge/lanes/FirstSave.tsx", "forge-story");
   assert.match(comp, /\/api\/lane-first/);
   assert.doesNotMatch(comp, /finishPayload/, "the client no longer builds the evidence");
   assert.match(comp, /Saved to your account \(version/);
-  assert.match(comp, /DRAFT_BADGE/);
+  // The draft badge is the same words as lib/lane-task.ts DRAFT_BADGE, now from the catalog.
+  assert.match(comp, /t\("saved\.draftBadge"\)/);
+  assert.ok(comp.includes(DRAFT_BADGE), "the catalog carries the badge words");
   assert.doesNotMatch(comp, /Every line on it is in your own words/);
 });
 
@@ -295,14 +299,14 @@ test("H3: 'Replace my current one' keeps the earlier version in its history, and
 // ---- the support step: never offense details, the privacy line stays true ---------
 
 test("support step: asks what would help, never for offense details; the privacy line says AI services and the account", () => {
-  const s = read("app/(forge)/story/page.tsx");
+  const s = withCatalog("app/(forge)/story/page.tsx", "forge-story");
   for (const gone of ["Type of charge", "Number of charges", "Most recent charge", "probation or parole", "crimRecord", "Here&apos;s the deal"]) {
     assert.ok(!s.includes(gone), `removed: ${gone}`);
   }
   assert.match(s, /Want help with something getting in the way\?/);
   assert.match(s, /criminalRecord: undefined/);
   assert.match(s, /goes to the AI services we use/);
-  assert.match(s, /it&apos;s saved there/);
+  assert.match(s, /it(?:&apos;|')s saved there/);
   assert.match(s, /NO_FOLLOW_UP = new Set\(\["criminal_record"\]\)/, "ticking a record asks nothing more");
 });
 

@@ -72,12 +72,13 @@ describe("M1: login CSRF through the email-link callback", () => {
     assert.equal(maskEmail("morgan@example.com"), "m***@example.com");
     assert.equal(maskEmail(""), null);
     // Round 2: the full address, not a mask.
-    assert.match(read("app/(auth)/login/finish/page.tsx"), /This link signs you in as/);
+    assert.match(read("app/(auth)/login/finish/page.tsx") + "\n" + read("messages/en/auth.json"), /This link signs you in as/);
   });
 
   it("the Forge header shows the signed-in address with a way out", () => {
     assert.match(read("app/(forge)/ForgeShell.tsx"), /<ForgeAccountBar \/>/);
-    const bar = read("components/forge/ForgeAccountBar.tsx");
+    // The bar's words live in its catalog (messages/en/ui.json) since the Spanish version.
+    const bar = read("components/forge/ForgeAccountBar.tsx") + "\n" + read("messages/en/ui.json");
     assert.match(bar, /Signed in as/);
     assert.match(bar, /Not you\?/);
   });

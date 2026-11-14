@@ -5,15 +5,14 @@
  * Then the finished page. Each step says what it is and what comes next.
  */
 
-const STEPS = [
-  { n: 1, name: "Writing and checking", note: "The reading is done. The writer is using your work history." },
-  { n: 2, name: "What changed", note: "Every line he fixed, one at a time." },
-  { n: 3, name: "Your first stronger draft", note: "Download it, then build on it in the Refinery." },
-] as const;
+import { useTranslations } from "next-intl";
+
+const STEPS = [{ n: 1 }, { n: 2 }, { n: 3 }] as const;
 
 export function ReviewSteps({ step }: { step: 1 | 2 | 3 }) {
+  const t = useTranslations("forgeFinish.reviewSteps");
   return (
-    <nav aria-label="Where you are" className="mt-6 border border-t-line bg-t-panel px-4 py-3" data-testid="review-steps" data-step={step}>
+    <nav aria-label={t("aria")} className="mt-6 border border-t-line bg-t-panel px-4 py-3" data-testid="review-steps" data-step={step}>
       <ol className="grid gap-2 sm:grid-cols-3">
         {STEPS.map((s) => {
           const state = s.n < step ? "done" : s.n === step ? "now" : "next";
@@ -29,11 +28,11 @@ export function ReviewSteps({ step }: { step: 1 | 2 | 3 }) {
                   {state === "done" ? "✓" : s.n}
                 </span>
                 <span className={`text-sm ${state === "now" ? "font-bold text-t-white" : "text-t-phos"}`}>
-                  {s.name}
-                  <span className="sr-only">{state === "done" ? " (done)" : state === "now" ? " (now)" : " (next)"}</span>
+                  {t(`steps.${s.n}.name`)}
+                  <span className="sr-only">{state === "done" ? t("stateDone") : state === "now" ? t("stateNow") : t("stateNext")}</span>
                 </span>
               </div>
-              {state === "now" && <p className="mt-1 pl-8 text-xs text-t-phos-dim">{s.note}</p>}
+              {state === "now" && <p className="mt-1 pl-8 text-xs text-t-phos-dim">{t(`steps.${s.n}.note`)}</p>}
             </li>
           );
         })}

@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import { useForgeSession } from "@/lib/forge-context";
 import { rebuildActive } from "@/lib/lane-task";
 import { DEMO_OUTPUT, DEMO_SESSION } from "@/lib/demo-data";
@@ -36,8 +37,36 @@ const HARD_STOP_MS = 180_000;
 /** A beat on "Done" so the person sees it finished before the page changes. */
 const DONE_PAUSE_MS = 1500;
 
+/**
+ * A build failure, plus which copy to say it with. buildFailure
+ * (lib/showstopper-tour.ts) words each failure in English; the screen says it
+ * from the catalog, so it keeps the cause (and when it happened, for the daily
+ * limit's reset time) next to buildFailure's `kind`, which still decides the buttons.
+ */
+type Failed = BuildFailure & {
+  copy: "limit" | "tooBig" | "timeout" | "network" | "other";
+  at: Date;
+};
+
+function failedWith(cause: Parameters<typeof buildFailure>[0]): Failed {
+  const at = new Date();
+  const copy =
+    cause === 429 ? "limit" : cause === 413 ? "tooBig" : cause === "timeout" || cause === 504 ? "timeout" : cause === "network" ? "network" : "other";
+  return { ...buildFailure(cause, at), copy, at };
+}
+
+/** When the daily limit opens again: same rule as limitResetLabel, in the site language. */
+function limitResetParts(now: Date, locale: string): { time: string; today: boolean } {
+  const reset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const time = reset.toLocaleTimeString(locale === "es" ? "es-US" : "en-US", { hour: "numeric", minute: "2-digit" });
+  const day = (d: Date) => d.toLocaleDateString("en-US", { year: "numeric", month: "numeric", day: "numeric" });
+  return { time, today: day(reset) === day(now) };
+}
+
 export default function ProcessingPage() {
   useQuietShell();
+  const t = useTranslations("forgeProcessing");
+  const locale = useLocale();
   const router = useRouter();
   const { session, updateSession, runIsMine, mayUseRun } = useForgeSession();
   const isDemo = session.isDemo === true;
@@ -46,7 +75,7 @@ export default function ProcessingPage() {
   const [runId, setRunId] = useState(0);
   const [phase, setPhase] = useState<BuildPhase>("sending");
   const [elapsed, setElapsed] = useState(0);
-  const [failure, setFailure] = useState<BuildFailure | null>(null);
+  const [failure, setFailure] = useState<Failed | null>(null);
   const startedRun = useRef(-1);
   const mounted = useRef(false);
 
@@ -86,7 +115,7 @@ export default function ProcessingPage() {
 
     const controller = new AbortController();
     const hardStop = setTimeout(() => controller.abort(), HARD_STOP_MS);
-    const fail = (f: BuildFailure) => {
+    const fail = (f: Failed) => {
       clearTimeout(hardStop);
       if (mounted.current) setFailure(f);
     };
@@ -116,14 +145,14 @@ export default function ProcessingPage() {
         setPhase("working");
         response = await pending;
       } catch {
-        return fail(buildFailure(controller.signal.aborted ? "timeout" : "network"));
+        return fail(failedWith(controller.signal.aborted ? "timeout" : "network"));
       }
-      if (!response.ok) return fail(buildFailure(response.status));
+      if (!response.ok) return fail(failedWith(response.status));
       let forgeOutput: Record<string, unknown>;
       try {
         forgeOutput = await response.json();
       } catch {
-        return fail(buildFailure("unreadable"));
+        return fail(failedWith("unreadable"));
       }
       clearTimeout(hardStop);
       updateSession({ forgeOutput, lastPageVisited: "processing" });
@@ -148,15 +177,21 @@ export default function ProcessingPage() {
   const building = isDemo || !failure;
   const intro = tour
     ? tour.steps.length
-      ? "Here's what I see on your page now, top to bottom."
-      : "I looked over your page."
+      ? t("intro.tourSteps")
+      : t("intro.tourNone")
     : jobs.length
       ? building
-        ? "These are the jobs you gave me. I'm reading them with your goals to find your strengths and the paths that fit. Your new page comes right after this."
-        : "These are the jobs you gave me."
+        ? t("intro.jobsBuilding")
+        : t("intro.jobsStopped")
       : building
-        ? "I'm reading your answers now. Your new page comes right after this."
-        : "Your answers are still here.";
+        ? t("intro.answersBuilding")
+        : t("intro.answersStopped");
+
+  const failureBody = (f: Failed) => {
+    if (f.copy !== "limit") return t(`failure.${f.copy}.body`);
+    const { time, today } = limitResetParts(f.at, locale);
+    return t(today ? "failure.limit.bodyToday" : "failure.limit.bodyTomorrow", { time });
+  };
 
   const openDemoResults = () => {
     updateSession({ forgeOutput: DEMO_OUTPUT, lastPageVisited: "processing" });
@@ -164,28 +199,28 @@ export default function ProcessingPage() {
   };
 
   return (
-    <WorkFocus active={!failure && phase !== "done"} title="Reading your experience">
+    <WorkFocus active={!failure && phase !== "done"} title={t("workFocusTitle")}>
     <div className="forge-workshop -mb-8 min-h-[calc(100vh-72px)] px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
       <div className="mx-auto w-full max-w-6xl">
-        <h1 className="mb-4 font-display text-2xl font-bold text-t-white sm:text-3xl">Building your story</h1>
+        <h1 className="mb-4 font-display text-2xl font-bold text-t-white sm:text-3xl">{t("title")}</h1>
 
         {/* What is really happening */}
         <div className="mb-6">
           {isDemo ? (
             <div className="flex flex-col gap-3 border border-t-line bg-t-panel px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-t-bone-dim">This is a demo with a sample page. Nothing is sent to t.ROY.</p>
+              <p className="text-sm text-t-bone-dim">{t("demo.note")}</p>
               <button
                 type="button"
                 onClick={openDemoResults}
                 className="t-focus min-h-touch bg-t-amber px-5 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright"
               >
-                See the sample results
+                {t("demo.seeResults")}
               </button>
             </div>
           ) : failure ? (
             <div role="alert" className="border border-ws-red-bright bg-t-panel px-4 py-4">
-              <p className="text-base font-bold text-t-white">{failure.title}</p>
-              <p className="mt-1 max-w-2xl text-sm text-t-bone-dim">{failure.body}</p>
+              <p className="text-base font-bold text-t-white">{t(`failure.${failure.copy}.title`)}</p>
+              <p className="mt-1 max-w-2xl text-sm text-t-bone-dim">{failureBody(failure)}</p>
               <div className="mt-3 flex flex-wrap gap-3">
                 {failure.kind === "retry" && (
                   <button
@@ -193,7 +228,7 @@ export default function ProcessingPage() {
                     onClick={() => setRunId((n) => n + 1)}
                     className="t-focus min-h-touch bg-t-amber px-6 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright"
                   >
-                    Try again
+                    {t("failure.tryAgain")}
                   </button>
                 )}
                 {failure.kind !== "retry" && (
@@ -201,12 +236,12 @@ export default function ProcessingPage() {
                     href="/preferences"
                     className="t-focus inline-flex min-h-touch items-center border border-t-line px-5 font-term text-sm text-t-white hover:border-ws-amber"
                   >
-                    Go back to my answers
+                    {t("failure.backToAnswers")}
                   </Link>
                 )}
               </div>
               {failure.kind === "retry" && (
-                <p className="mt-2 text-xs text-t-bone-dim">Each try counts toward today&apos;s builds.</p>
+                <p className="mt-2 text-xs text-t-bone-dim">{t("failure.countsToward")}</p>
               )}
             </div>
           ) : (
@@ -223,7 +258,7 @@ export default function ProcessingPage() {
           >
             <TroyArrival size={56} reduced={reduced} />
             <p className="text-base leading-relaxed text-t-white lg:pt-5">
-              <span className="sr-only">t.ROY says: </span>
+              <span className="sr-only">{t("troySays")}</span>
               {intro}
             </p>
           </div>

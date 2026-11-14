@@ -7,7 +7,9 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { fixPanelIntro, OWN_WORDS_LINE } from "@/lib/finish-copy";
+import { createTranslator, useTranslations } from "next-intl";
+import { fixPanelIntro } from "@/lib/finish-copy";
+import enDefend from "@/messages/en/forge-defend.json";
 import {
   editableLine,
   prefillRewrite,
@@ -15,7 +17,6 @@ import {
   type GateItem,
   CREDENTIAL_TYPES,
   EDUCATION_KINDS,
-  SKILLS_CARD_TEXT,
   type CredentialType,
   type FinishView,
   type LineGroup,
@@ -25,20 +26,49 @@ import {
 
 type Mode = "idle" | "answer" | "change" | "cut" | "scopeYes" | "suggest";
 
+/** The translator for the "forgeDefend" catalog (messages/<locale>/forge-defend.json). */
+type T = ReturnType<typeof useTranslations>;
+/** English, for a card drawn outside the intl provider (a render test, a preview). The app always passes its own. */
+function englishT(): T {
+  return createTranslator({ locale: "en", messages: { forgeDefend: enDefend }, namespace: "forgeDefend" }) as unknown as T;
+}
+/** "training course" -> "trainingCourse": the catalog key for a credential or education kind id. */
+const kindKey = (kind: string) => kind.replace(/ (\w)/g, (_m, c: string) => c.toUpperCase());
+
 const BTN =
   "t-focus min-h-touch border px-3 py-2 text-xs font-semibold transition-colors";
 const BTN_MAIN = `${BTN} border-t-amber bg-t-amber text-white hover:bg-t-amber-bright`;
 const BTN_SOFT = `${BTN} border-t-line bg-t-panel text-t-phos hover:border-t-phos-dim hover:text-t-white`;
 /** One tap answers for "who or what": the common true answers; the box takes anything else. */
 const SCOPE_CHIPS = ["My crew", "My shift", "My team", "The whole department", "New hires", "Customers"] as const;
+/** The chip's value goes to the gate (and onto an English resume) as written; only its label is translated. */
+const SCOPE_CHIP_KEYS: Record<(typeof SCOPE_CHIPS)[number], string> = {
+  "My crew": "myCrew",
+  "My shift": "myShift",
+  "My team": "myTeam",
+  "The whole department": "wholeDepartment",
+  "New hires": "newHires",
+  Customers: "customers",
+};
+/** finish-copy.ts hands the panel heading and subline back as English text; each known line is looked up here, an unknown one renders as it came. */
+const INTRO_KEYS: Record<string, string> = {
+  "Check your jobs": "intro.checkJobs",
+  "These are from your page. Check each one against your records: tap Looks right, or fix it.": "intro.checkJobsSub",
+  "Fix these with t.ROY": "intro.fixThese",
+  "We fixed what we could from your page. These still need your answer.": "intro.fixTheseSub",
+  "Checks passed": "intro.checksPassed",
+  "We checked the page against what you gave us.": "intro.checksPassedSub",
+  "Every line checked": "intro.everyLine",
+  "You can explain every line we asked about. You can still change an answer.": "intro.everyLineSub",
+};
 
 /**
  * The plain line a card shows when t.ROY could not draft a fix (a 422 or a
  * failed call): never silent. Review N2: it names only the buttons the card
  * shows ("This is true as written" only on a card that has it).
  */
-export function suggestFixNotice(card: { answerable: boolean }): string {
-  return `t.ROY couldn't draft a safe fix for this line from what you gave us. ${card.answerable ? "Say it's true as written, change it, or cut it." : "Change it or cut it."}`;
+export function suggestFixNotice(card: { answerable: boolean }, t: T = englishT()): string {
+  return card.answerable ? t("idle.noticeAnswerable") : t("idle.noticeNotAnswerable");
 }
 
 /** The idle card's buttons, and the notice under them (exported so a render test reads what the person sees). */
@@ -53,6 +83,7 @@ export function IdleActions({
   onAnswerInWords,
   onChange,
   onCut,
+  t: tIn,
 }: {
   target: LineGroup["target"];
   answerable: boolean;
@@ -66,26 +97,29 @@ export function IdleActions({
   onAnswerInWords?: () => void;
   onChange: () => void;
   onCut: () => void;
+  /** The card's translator; without one (a render outside the provider) the English catalog is used. */
+  t?: T;
 }) {
+  const t = tIn ?? englishT();
   return (
     <div className="mt-3 flex flex-wrap gap-2">
       {target !== "skill" && (
         <button ref={firstAction} onClick={onDraft} disabled={suggesting} className={`${BTN_MAIN} disabled:opacity-60`} data-testid="draft-fix">
-          {suggesting ? "t.ROY is drafting a fix..." : "Let t.ROY draft a fix"}
+          {suggesting ? t("idle.drafting") : t("idle.draftFix")}
         </button>
       )}
       {answerable && (
         <button ref={target === "skill" ? firstAction : undefined} onClick={onAnswer} className={BTN_SOFT} data-testid="true-as-written">
-          This is true as written
+          {t("idle.trueAsWritten")}
         </button>
       )}
       {target !== "skill" && (
         <button onClick={onChange} className={BTN_SOFT}>
-          Change it
+          {t("idle.changeIt")}
         </button>
       )}
       <button onClick={onCut} className={BTN_SOFT}>
-        Cut it
+        {t("idle.cutIt")}
       </button>
       {/* Fix lane check (Valjean defect 7): a draft t.ROY could not make is said on the card, never silent. */}
       {notice && !suggesting && (
@@ -93,7 +127,7 @@ export function IdleActions({
       )}
       {answerable && onAnswerInWords && (
         <button type="button" onClick={onAnswerInWords} className="t-focus basis-full text-left text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white" data-testid="answer-in-words">
-          Or add a word in your own words
+          {t("idle.addWord")}
         </button>
       )}
     </div>
@@ -132,21 +166,22 @@ export interface CardActions {
 
 /** D3: one card for every skill the person never said. One tap each. */
 function SkillsCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
+  const t = useTranslations("forgeDefend");
   const terms = group.terms ?? [];
   return (
     <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-target="skillset" data-blocking="true" className="border border-t-amber bg-t-panel px-3 py-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
-      <p className="mt-1 text-sm text-t-white" data-testid="skills-card-text">{SKILLS_CARD_TEXT}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{t("card.fixBeforeSend")}</p>
+      <p className="mt-1 text-sm text-t-white" data-testid="skills-card-text">{t("skills.cardText")}</p>
       <ul className="mt-2 space-y-1.5">
-        {terms.map((t) => (
-          <li key={t} className="flex flex-wrap items-center justify-between gap-2" data-testid="skills-card-term" data-term={t}>
-            <span className="text-sm text-t-phos">{t}</span>
+        {terms.map((term) => (
+          <li key={term} className="flex flex-wrap items-center justify-between gap-2" data-testid="skills-card-term" data-term={term}>
+            <span className="text-sm text-t-phos">{term}</span>
             <span className="flex gap-2">
-              <button onClick={() => actions.onKeepTerm(t)} className={BTN_MAIN} aria-label={`Keep ${t}`}>
-                Keep
+              <button onClick={() => actions.onKeepTerm(term)} className={BTN_MAIN} aria-label={t("skills.keepAria", { term })}>
+                {t("buttons.keep")}
               </button>
-              <button onClick={() => actions.onCutTerm(t)} className={BTN_SOFT} aria-label={`Cut ${t}`}>
-                Cut
+              <button onClick={() => actions.onCutTerm(term)} className={BTN_SOFT} aria-label={t("skills.cutAria", { term })}>
+                {t("buttons.cut")}
               </button>
             </span>
           </li>
@@ -156,15 +191,11 @@ function SkillsCard({ group, index, actions }: { group: LineGroup; index: number
   );
 }
 
-/** Round 10 (SF-1): the honest answers about school, in the person's words. */
-const EDUCATION_LABELS: Record<(typeof EDUCATION_KINDS)[number], string> = {
-  earned: "Yes, I earned it",
-  "in progress": "Still working on it",
-  "did not finish": "I went but didn't finish",
-};
+/* Round 10 (SF-1): the honest answers about school, in the person's words: catalog keys education.<kind>. */
 
 /** D4: a credential the person never mentioned, asked as a memory prompt. */
 function CredentialPromptCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
+  const t = useTranslations("forgeDefend");
   const [mode, setMode] = useState<"ask" | "yes" | "no">("ask");
   const kinds: readonly CredentialType[] = group.education ? EDUCATION_KINDS : CREDENTIAL_TYPES;
   const changes = mode === "no" && actions.onPreviewCut ? actions.onPreviewCut(group) : [];
@@ -183,84 +214,84 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
   }, [mode]);
   return (
     <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-target={group.target} data-blocking="true" data-credential-prompt="true" className="border border-t-amber bg-t-panel px-3 py-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{t("card.fixBeforeSend")}</p>
       <p className="mt-1 text-sm text-t-white">&ldquo;{editableLine(group.line)}&rdquo;</p>
       <p className="mt-1.5 text-sm text-t-phos">{prompt}</p>
       {mode === "ask" ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {group.education ? (
             // Round 10 (SF-1): every honest answer about school has its own way out.
-            EDUCATION_KINDS.map((t) => (
+            EDUCATION_KINDS.map((kind) => (
               <button
-                key={t}
+                key={kind}
                 onClick={() => {
-                  setType(t);
+                  setType(kind);
                   setMode("yes");
                 }}
-                className={t === "earned" ? BTN_MAIN : BTN_SOFT}
+                className={kind === "earned" ? BTN_MAIN : BTN_SOFT}
               >
-                {EDUCATION_LABELS[t]}
+                {t(`education.${kindKey(kind)}`)}
               </button>
             ))
           ) : (
             <button onClick={() => setMode("yes")} className={BTN_MAIN}>
-              Yes, I hold it
+              {t("credential.yesIHold")}
             </button>
           )}
           <button onClick={() => (actions.onPreviewCut ? setMode("no") : actions.onCutCredential(group))} className={BTN_SOFT}>
-            No, take it off
+            {t("credential.noTakeOff")}
           </button>
         </div>
       ) : mode === "no" ? (
         <div className="mt-3" data-testid="cut-preview">
-          <p className="text-xs font-semibold text-t-white">These lines change:</p>
+          <p className="text-xs font-semibold text-t-white">{t("credential.changesHeading")}</p>
           <ul className="mt-1 space-y-1 text-xs text-t-phos">
             {changes.map((c, k) => (
               <li key={k}>
-                <span className="text-t-phos-dim">{c.target === "letter" ? "Letter: " : "Resume: "}</span>
+                <span className="text-t-phos-dim">{`${c.target === "letter" ? t("credential.letterLabel") : t("credential.resumeLabel")} `}</span>
                 <span className="line-through">{editableLine(c.before)}</span>
-                {c.after ? <span>{` becomes "${editableLine(c.after)}"`}</span> : <span>{" comes off"}</span>}
+                {c.after ? <span>{` ${t("credential.becomes", { line: editableLine(c.after) })}`}</span> : <span>{` ${t("credential.comesOff")}`}</span>}
               </li>
             ))}
           </ul>
           <div className="mt-2 flex flex-wrap gap-2">
             <button onClick={() => actions.onCutCredential(group)} className={BTN_MAIN} data-testid="cut-confirm">
-              Take it off
+              {t("credential.takeItOff")}
             </button>
             <button onClick={() => setMode("ask")} className={BTN_SOFT}>
-              Keep it for now
+              {t("credential.keepForNow")}
             </button>
           </div>
         </div>
       ) : (
         <div className="mt-3">
           <p className="text-xs font-semibold text-t-white" id={`cred-type-${index}`}>
-            What kind is it?
+            {t("credential.whatKind")}
           </p>
           <div className="mt-1 flex flex-wrap gap-2" role="radiogroup" aria-labelledby={`cred-type-${index}`}>
-            {kinds.map((t, i) => (
+            {kinds.map((kind, i) => (
               <button
-                key={t}
+                key={kind}
                 ref={i === 0 ? firstType : undefined}
                 role="radio"
-                aria-checked={type === t}
-                onClick={() => setType(t)}
-                className={type === t ? BTN_MAIN : BTN_SOFT}
+                aria-checked={type === kind}
+                onClick={() => setType(kind)}
+                className={type === kind ? BTN_MAIN : BTN_SOFT}
               >
-                {group.education ? EDUCATION_LABELS[t as (typeof EDUCATION_KINDS)[number]] : t.charAt(0).toUpperCase() + t.slice(1)}
+                {group.education ? t(`education.${kindKey(kind)}`) : t(`credentialKinds.${kindKey(kind)}`)}
               </button>
             ))}
           </div>
           {type !== "in progress" && (
             <>
           <label htmlFor={`cred-when-${index}`} className="mt-3 block text-xs font-semibold text-t-white">
-            {type === "did not finish" ? "What years did you go? You can leave this empty." : group.education ? "What year did you earn it?" : "When did you get it, or is it current?"}
+            {type === "did not finish" ? t("credential.whenDidNotFinish") : group.education ? t("credential.whenEducation") : t("credential.whenCredential")}
           </label>
           <input
             id={`cred-when-${index}`}
             value={when}
             onChange={(e) => setWhen(e.target.value)}
-            placeholder={type === "did not finish" ? "Like 2011 - 2014" : group.education ? "The year, like 2015" : "In your words: the year you got it, or current, expired, in progress"}
+            placeholder={type === "did not finish" ? t("credential.placeholderDidNotFinish") : group.education ? t("credential.placeholderEducation") : t("credential.placeholderCredential")}
             className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
           />
             </>
@@ -269,7 +300,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
             // Round 11 (SF-3): a school the writer named never stays; the person says which school, or leaves it empty.
             <>
               <label htmlFor={`cred-school-${index}`} className="mt-3 block text-xs font-semibold text-t-white">
-                What school? Leave it empty to take the line off.
+                {t("credential.whatSchool")}
               </label>
               <input
                 id={`cred-school-${index}`}
@@ -279,7 +310,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
                   setSchool(e.target.value);
                   setFacility(false);
                 }}
-                placeholder="In your own words"
+                placeholder={t("inYourWords")}
                 className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
               />
             </>
@@ -292,7 +323,7 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
           {facility && (
             <div className="mt-2 flex flex-wrap gap-2" data-testid="facility-school">
               <button onClick={() => save(true)} className={BTN_SOFT}>
-                Keep
+                {t("buttons.keep")}
               </button>
               <button
                 onClick={() => {
@@ -302,20 +333,20 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
                 }}
                 className={BTN_SOFT}
               >
-                Change
+                {t("buttons.change")}
               </button>
             </div>
           )}
-          <p className="mt-1 text-[11px] text-t-phos-dim">We put it on your resume the way you say it here.</p>
+          <p className="mt-1 text-[11px] text-t-phos-dim">{t("credential.putItOnResume")}</p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               onClick={() => save(false)}
               className={BTN_MAIN}
             >
-              Keep it on my resume
+              {t("credential.keepOnResume")}
             </button>
             <button onClick={() => actions.onCutCredential(group)} className={BTN_SOFT}>
-              No, take it off
+              {t("credential.noTakeOff")}
             </button>
           </div>
         </div>
@@ -325,29 +356,29 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
   );
 
   function save(keepFacility: boolean) {
-    if (!type) return setNotice("Pick what kind it is.");
+    if (!type) return setNotice(t("credential.pickKind"));
     const result = actions.onConfirmCredential(group, type, type === "in progress" ? "in progress" : when, type === "did not finish" ? school : undefined, keepFacility);
     if (result === "facility") {
       setFacility(true);
-      setNotice("This names a jail or prison school. Keep it, or type a name without it?");
+      setNotice(t("credential.facilityNotice"));
       return;
     }
     if (result === "when") {
       setNotice(
         type === "did not finish"
-          ? "Type only the years you went, like 2011 - 2014, or leave it empty."
+          ? t("credential.whenDidNotFinishNotice")
           : group.education
-            ? "Add the year you earned it."
-            : "Add the year you got it, or say if it's current, expired, in progress or completed."
+            ? t("credential.whenEducationNotice")
+            : t("credential.whenCredentialNotice")
       );
       return;
     }
     if (result === "school") {
-      setNotice("Type just the school's name, or leave it empty to take the line off.");
+      setNotice(t("credential.schoolNotice"));
       return;
     }
     if (result === "unchanged") {
-      setNotice("That didn't change the line. Cut it, or change it on your resume.");
+      setNotice(t("credential.unchangedNotice"));
       return;
     }
     setFacility(false);
@@ -357,27 +388,29 @@ function CredentialPromptCard({ group, index, actions }: { group: LineGroup; ind
 
 /** Troy 2026-10-15: every job title the writer named sits on ONE card, one tap each. */
 function TitlesCard({ groups, index, actions }: { groups: LineGroup[]; index: number; actions: CardActions }) {
+  const t = useTranslations("forgeDefend");
+  const tc = useTranslations("common.actions");
   const [editing, setEditing] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const [notice, setNotice] = useState("");
   return (
     <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-titles-card="true" data-target="resume" data-blocking="true" className="border border-t-amber bg-t-panel px-3 py-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
-      <p className="mt-1 text-sm text-t-white">We named these jobs for you. Tap the ones that are right, or give us your title.</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{t("card.fixBeforeSend")}</p>
+      <p className="mt-1 text-sm text-t-white">{t("titles.intro")}</p>
       <ul className="mt-2 space-y-2">
         {groups.map((g) => (
           <li key={g.line} className="border-t border-t-line pt-2" data-testid="titles-card-row" data-line={g.line}>
             <p className="text-sm text-t-white">&ldquo;{editableLine(g.line)}&rdquo;</p>
             {editing === g.line ? (
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Your title at this job" className="min-w-[12rem] flex-1 border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none" />
-                <button onClick={() => { const r = actions.onOwnTitle?.(g, typed) ?? "empty"; if (r === "empty") return setNotice("Type your title."); if (r === "not_a_title") return setNotice("If you're not sure of the exact title, type what you did there, like Warehouse worker."); setNotice(""); setEditing(null); }} className={BTN_MAIN}>Save</button>
-                <button onClick={() => { setNotice(""); setEditing(null); }} className={BTN_SOFT}>Back</button>
+                <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={t("titles.ownPlaceholder")} className="min-w-[12rem] flex-1 border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none" />
+                <button onClick={() => { const r = actions.onOwnTitle?.(g, typed) ?? "empty"; if (r === "empty") return setNotice(t("titles.typeTitle")); if (r === "not_a_title") return setNotice(t("titles.notATitle")); setNotice(""); setEditing(null); }} className={BTN_MAIN}>{tc("save")}</button>
+                <button onClick={() => { setNotice(""); setEditing(null); }} className={BTN_SOFT}>{tc("back")}</button>
               </div>
             ) : (
               <div className="mt-1.5 flex flex-wrap gap-2">
-                <button onClick={() => actions.onTitleYes?.(g)} className={BTN_MAIN} data-testid="title-yes">Right</button>
-                <button onClick={() => { setNotice(""); setTyped(""); setEditing(g.line); }} className={BTN_SOFT}>Use my title</button>
+                <button onClick={() => actions.onTitleYes?.(g)} className={BTN_MAIN} data-testid="title-yes">{t("titles.right")}</button>
+                <button onClick={() => { setNotice(""); setTyped(""); setEditing(g.line); }} className={BTN_SOFT}>{t("titles.useMine")}</button>
               </div>
             )}
           </li>
@@ -394,6 +427,8 @@ function TitlesCard({ groups, index, actions }: { groups: LineGroup[]; index: nu
  * to this exact line; it does not approve other claims in the documents.
  */
 function TitleCard({ group, index, actions }: { group: LineGroup; index: number; actions: CardActions }) {
+  const t = useTranslations("forgeDefend");
+  const tc = useTranslations("common.actions");
   const [mode, setMode] = useState<"ask" | "own">("ask");
   const [typed, setTyped] = useState("");
   const [notice, setNotice] = useState("");
@@ -403,24 +438,24 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
   }, [mode]);
   return (
     <li id={`fix-item-${index}`} tabIndex={-1} data-testid="fix-item" data-title-card="true" data-target={group.target} data-blocking="true" className="border border-t-amber bg-t-panel px-3 py-3">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">Fix before you send</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{t("card.fixBeforeSend")}</p>
       <p className="mt-1 text-sm text-t-white">&ldquo;{editableLine(group.line)}&rdquo;</p>
       <p className="mt-1.5 text-sm text-t-phos">
-        We couldn&apos;t find &ldquo;{group.title?.current}&rdquo; in what you gave us. Was that your actual job title for this work?
+        {t("titles.notFound", { title: group.title?.current ?? "" })}
       </p>
       {mode === "ask" ? (
         <div className="mt-3 flex flex-wrap gap-2">
           <button type="button" onClick={() => actions.onTitleYes?.(group)} className={BTN_MAIN} data-testid="title-yes">
-            Yes, that was my title
+            {t("titles.yes")}
           </button>
           <button type="button" onClick={() => { setNotice(""); setTyped(""); setMode("own"); }} className={BTN_SOFT}>
-            Use my actual title
+            {t("titles.useActual")}
           </button>
         </div>
       ) : (
         <div className="mt-3">
           <label htmlFor={`title-${index}`} className="block text-xs font-semibold text-t-white">
-            Your title at this job, in your words
+            {t("titles.label")}
           </label>
           <input
             ref={field}
@@ -438,17 +473,17 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
             <button
               onClick={() => {
                 const r = actions.onOwnTitle?.(group, typed) ?? "empty";
-                if (r === "empty") return setNotice("Type your title.");
+                if (r === "empty") return setNotice(t("titles.typeTitle"));
                 // Round 13 (SF-5): not a title ("idk", "no", "I don't remember").
-                if (r === "not_a_title") return setNotice("If you're not sure of the exact title, type what you did there, like Warehouse worker.");
+                if (r === "not_a_title") return setNotice(t("titles.notATitle"));
                 setMode("ask");
               }}
               className={BTN_MAIN}
             >
-              Save
+              {tc("save")}
             </button>
             <button onClick={() => setMode("ask")} className={BTN_SOFT}>
-              Back
+              {tc("back")}
             </button>
           </div>
         </div>
@@ -463,6 +498,8 @@ function TitleCard({ group, index, actions }: { group: LineGroup; index: number;
  * the line to edit, only then.
  */
 function JobCard({ group, index, onChange, actions }: { group: LineGroup; index: number; onChange: GroupHandler<boolean>; actions: CardActions }) {
+  const t = useTranslations("forgeDefend");
+  const tc = useTranslations("common.actions");
   const [fixing, setFixing] = useState(false);
   const [text, setText] = useState(() => editableLine(group.line));
   const [notice, setNotice] = useState("");
@@ -486,40 +523,40 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
       data-blocking="true"
       className="border border-t-amber bg-t-panel px-3 py-3"
     >
-      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{changed ? "t.ROY changed this job" : "Check this job"}</p>
+      <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">{changed ? t("job.changed") : t("job.check")}</p>
       <p className="mt-1 text-sm font-semibold text-t-white">{job.title}</p>
       {job.rest.length > 0 && <p className="text-sm text-t-phos">{job.rest.join(" | ")}</p>}
       {changed ? (
         <>
           <p className="mt-1.5 text-xs text-t-amber-bright" data-testid="job-changes">
-            {group.items[0]?.why || `Not on your page: ${changes.map((c) => `"${c}"`).join(", ")}.`}
+            {group.items[0]?.why || t("job.notOnPage", { changes: changes.map((c) => `"${c}"`).join(", ") })}
           </p>
           {job.ownHeader && (
             <p className="mt-1.5 text-xs text-t-phos" data-testid="job-own-header">
-              Your page says: &ldquo;{job.ownHeader}&rdquo;
+              {t("job.yourPageSays", { header: job.ownHeader })}
             </p>
           )}
         </>
       ) : (
-        <p className="mt-1.5 text-xs text-t-phos-dim">These are from your page. Check them against your records.</p>
+        <p className="mt-1.5 text-xs text-t-phos-dim">{t("job.fromYourPage")}</p>
       )}
       {!fixing ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {!changed && (
             <button onClick={() => actions.onJobOk?.(group)} className={BTN_MAIN} data-testid="job-ok">
-              Looks right
+              {t("job.looksRight")}
             </button>
           )}
           {changed && job.ownHeader && (
             <button
               type="button"
               onClick={() => {
-                if (!onChange(group, job.ownHeader!)) setNotice("That line did not change. Use Fix this to edit it.");
+                if (!onChange(group, job.ownHeader!)) setNotice(t("job.notChanged"));
               }}
               className={BTN_MAIN}
               data-testid="job-use-own"
             >
-              Use the details from my page
+              {t("job.useDetails")}
             </button>
           )}
           <button
@@ -531,14 +568,14 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
             className={changed && !job.ownHeader ? BTN_MAIN : BTN_SOFT}
             data-testid="job-fix"
           >
-            Fix this
+            {t("job.fixThis")}
           </button>
           {notice && <p role="status" className="w-full text-xs text-t-amber-bright" data-testid="job-notice">{notice}</p>}
         </div>
       ) : (
         <div className="mt-3">
           <label htmlFor={`job-${index}`} className="block text-xs font-semibold text-t-white">
-            Title | Employer | Dates, the way your records show them
+            {t("job.label")}
           </label>
           <input
             ref={field}
@@ -555,16 +592,16 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
           <div className="mt-2 flex flex-wrap gap-2">
             <button
               onClick={() => {
-                if (!text.trim()) return setNotice("Type the job the way it was.");
-                if (!onChange(group, text)) return setNotice("Nothing changed. Fix the line, or tap Back and Looks right.");
+                if (!text.trim()) return setNotice(t("job.typeJob"));
+                if (!onChange(group, text)) return setNotice(t("job.nothingChanged"));
                 setFixing(false);
               }}
               className={BTN_MAIN}
             >
-              Save
+              {tc("save")}
             </button>
             <button onClick={() => setFixing(false)} className={BTN_SOFT}>
-              Back
+              {tc("back")}
             </button>
           </div>
         </div>
@@ -579,6 +616,8 @@ function JobCard({ group, index, onChange, actions }: { group: LineGroup; index:
  * never an open item, never a figure offered.
  */
 function NumberPrompts({ prompts, onChange, onSkip }: { prompts: NumberPrompt[]; onChange: GroupHandler<boolean>; onSkip?: (line: string) => void }) {
+  const t = useTranslations("forgeDefend");
+  const tc = useTranslations("common.actions");
   const [skipped, setSkipped] = useState<string[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [text, setText] = useState("");
@@ -587,17 +626,17 @@ function NumberPrompts({ prompts, onChange, onSkip }: { prompts: NumberPrompt[];
   if (!shown.length) return null;
   return (
     <div className="mt-4" data-testid="number-prompts">
-      <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Optional: add a number?</h3>
-      <p className="mb-2 text-xs text-t-phos-dim">A number sticks with the person reading. Only add one you know. These never stop you from finishing.</p>
+      <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-t-phos-dim">{t("numbers.heading")}</h3>
+      <p className="mb-2 text-xs text-t-phos-dim">{t("numbers.intro")}</p>
       <ol className="space-y-2">
         {shown.map((p, n) => (
           <li key={p.line} className="border border-t-line bg-t-panel px-3 py-3" data-testid="number-prompt">
             <p className="text-sm text-t-white">&ldquo;{editableLine(p.line)}&rdquo;</p>
-            <p className="mt-1 text-xs text-t-phos">Something you could count here: {p.count}.</p>
+            <p className="mt-1 text-xs text-t-phos">{t("numbers.countHere", { count: p.count })}</p>
             {open === p.line ? (
               <div className="mt-2">
                 <label htmlFor={`num-${n}`} className="block text-xs font-semibold text-t-white">
-                  Put your number in the line
+                  {t("numbers.label")}
                 </label>
                 <input
                   id={`num-${n}`}
@@ -614,15 +653,15 @@ function NumberPrompts({ prompts, onChange, onSkip }: { prompts: NumberPrompt[];
                   <button
                     onClick={() => {
                       const group: LineGroup = { line: p.line, target: "resume", items: [], blocking: false, answerable: false, checked: false };
-                      if (!onChange(group, text)) return setNotice("Nothing changed. Add your number to the line, or tap Back.");
+                      if (!onChange(group, text)) return setNotice(t("numbers.nothingChanged"));
                       setOpen(null);
                     }}
                     className={BTN_MAIN}
                   >
-                    Save
+                    {tc("save")}
                   </button>
                   <button onClick={() => setOpen(null)} className={BTN_SOFT}>
-                    Back
+                    {tc("back")}
                   </button>
                 </div>
               </div>
@@ -637,10 +676,10 @@ function NumberPrompts({ prompts, onChange, onSkip }: { prompts: NumberPrompt[];
                   className={BTN_SOFT}
                   data-testid="number-add"
                 >
-                  Add a number
+                  {t("numbers.add")}
                 </button>
                 <button onClick={() => { setSkipped((s) => [...s, p.line]); onSkip?.(p.line); }} className={BTN_SOFT}>
-                  Skip
+                  {tc("skip")}
                 </button>
               </div>
             )}
@@ -672,6 +711,8 @@ function GroupCard({
   onCut: (group: LineGroup) => void;
   actions?: CardActions;
 }) {
+  const t = useTranslations("forgeDefend");
+  const tc = useTranslations("common.actions");
   const [mode, setModeState] = useState<Mode>("idle");
   const [who, setWho] = useState("");
   const scope = group.scope && !group.checked && actions?.onScopeYes ? group.scope : undefined;
@@ -727,7 +768,7 @@ function GroupCard({
       setSuggestions((prev) => [...prev, suggestion]);
       setSuggestionIndex(suggestions.length);
     } catch (error) {
-      setNotice(suggestFixNotice({ answerable: group.answerable }));
+      setNotice(suggestFixNotice({ answerable: group.answerable }, t));
     } finally {
       setSuggesting(false);
     }
@@ -757,18 +798,18 @@ function GroupCard({
       className={`border px-3 py-3 ${group.checked ? "border-t-line bg-t-panel" : group.blocking ? "border-t-amber bg-t-panel" : "border-t-line bg-t-panel"}`}
     >
       <p className="text-[11px] font-bold uppercase tracking-wide text-t-phos-dim">
-        {group.checked ? "Checked" : group.blocking ? "Fix before you send" : "Worth a look (this one doesn't stop you)"}
+        {group.checked ? t("card.checked") : group.blocking ? t("card.fixBeforeSend") : t("card.worthALook")}
       </p>
       <p className="mt-1 text-sm text-t-white">&ldquo;{editableLine(group.line)}&rdquo;</p>
 
       {group.checked ? (
         <>
           {group.answer?.answer && (
-            <p className="mt-1 text-xs text-t-phos">{group.answer.kind === "assisted" ? "Wording you approved" : group.answer.kind === "as_written" ? "Kept as written" : "Your words"}: {group.answer.answer}</p>
+            <p className="mt-1 text-xs text-t-phos">{group.answer.kind === "assisted" ? t("card.wordingApproved") : group.answer.kind === "as_written" ? t("card.keptAsWritten") : t("card.yourWords")}: {group.answer.answer}</p>
           )}
           {mode === "idle" && (
             <button ref={firstAction} onClick={() => setMode("answer")} className="t-focus mt-2 text-xs text-t-phos-dim underline underline-offset-2 hover:text-t-white">
-              Change my answer
+              {t("card.changeMyAnswer")}
             </button>
           )}
         </>
@@ -787,11 +828,11 @@ function GroupCard({
                 // Phase 6: one tap. Yes keeps the line as their word for this job; No puts their own line back.
                 <>
                   <button ref={firstAction} onClick={() => actions?.onScopeYes?.(group, scope.overPeople!.yes)} className={BTN_MAIN} data-testid="scope-over-yes">
-                    Yes, I was over people
+                    {t("card.scopeOverYes")}
                   </button>
                   {scope.overPeople.noLine && (
                     <button onClick={() => actions?.onScopeNo?.(group)} className={BTN_SOFT} data-testid="scope-over-no">
-                      No, I did the work
+                      {t("card.scopeOverNo")}
                     </button>
                   )}
                 </>
@@ -804,16 +845,16 @@ function GroupCard({
                 }}
                 className={BTN_MAIN}
               >
-                Yes, I did this
+                {t("card.scopeYes")}
               </button>
               )}
               {scope.helped && (
                 <button onClick={() => actions?.onScopeHelped?.(group)} className={BTN_SOFT}>
-                  I helped with it
+                  {t("card.scopeHelped")}
                 </button>
               )}
               <button onClick={() => setMode("cut")} className={BTN_SOFT}>
-                Take it off
+                {t("card.takeItOff")}
               </button>
               <button
                 onClick={() => {
@@ -822,28 +863,28 @@ function GroupCard({
                 }}
                 className={BTN_SOFT}
               >
-                Say it my way
+                {t("card.sayItMyWay")}
               </button>
             </div>
           )}
           {mode === "idle" && !scope && suggestions[suggestionIndex] && (
             <div className="mt-3 border-l-2 border-t-amber bg-t-panel-2 p-3" data-testid="fix-proposal">
-              <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">t.ROY&apos;s fix, from your words</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">{t("proposal.heading")}</p>
               <p className="mt-1 text-sm font-medium text-t-white">{suggestions[suggestionIndex]}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button ref={firstAction} onClick={() => { if (onAssist(group, suggestions[suggestionIndex])) setMode("idle"); else setNotice("That line no longer matches your page. Edit it, or ask again."); }} className={BTN_MAIN} data-testid="use-fix">
-                  Use this fix
+                <button ref={firstAction} onClick={() => { if (onAssist(group, suggestions[suggestionIndex])) setMode("idle"); else setNotice(t("proposal.staleLine")); }} className={BTN_MAIN} data-testid="use-fix">
+                  {t("proposal.useThisFix")}
                 </button>
                 <button onClick={() => { setNotice(""); setRewrite(suggestions[suggestionIndex]); setMode("change"); }} className={BTN_SOFT}>
-                  Edit it
+                  {t("proposal.editIt")}
                 </button>
                 {group.answerable && (
                   <button onClick={() => { setNotice(""); if (actions?.onAsWritten) actions.onAsWritten(group); else setMode("answer"); }} className={BTN_SOFT} data-testid="true-as-written">
-                    It&apos;s right as written
+                    {t("proposal.rightAsWritten")}
                   </button>
                 )}
                 <button onClick={() => setMode("cut")} className={BTN_SOFT}>
-                  Cut it
+                  {t("idle.cutIt")}
                 </button>
               </div>
               {notice && <p role="status" className="mt-2 text-xs text-t-amber-bright">{notice}</p>}
@@ -855,6 +896,7 @@ function GroupCard({
               answerable={group.answerable}
               suggesting={suggesting}
               notice={notice}
+              t={t}
               firstAction={firstAction}
               onDraft={() => void askTroy()}
               // Troy 2026-11-05 (Jean run): "click approve and keep the wording". One tap records the line as
@@ -873,28 +915,28 @@ function GroupCard({
 
       {mode === "suggest" && (
         <div className="mt-3 border-l-2 border-t-amber bg-t-panel-2 p-3" data-testid="fix-suggestion">
-          <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">t.ROY&apos;s proposed fix</p>
-          {suggesting && <p role="status" className="mt-2 text-sm text-t-phos">Checking your original words...</p>}
+          <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">{t("suggest.heading")}</p>
+          {suggesting && <p role="status" className="mt-2 text-sm text-t-phos">{t("suggest.checking")}</p>}
           {suggestions[suggestionIndex] && (
             <>
-              <p className="mt-2 text-xs text-t-phos-dim">Before</p>
+              <p className="mt-2 text-xs text-t-phos-dim">{t("suggest.before")}</p>
               <p className="text-sm text-t-phos line-through">{editableLine(group.line)}</p>
-              <p className="mt-2 text-xs text-t-phos-dim">After</p>
+              <p className="mt-2 text-xs text-t-phos-dim">{t("suggest.after")}</p>
               <p className="text-sm font-medium text-t-white">{suggestions[suggestionIndex]}</p>
-              <p className="mt-2 text-xs text-t-phos"><strong>Why this change:</strong> {Array.from(new Set(group.items.map((item) => item.why))).join(" ")} This wording stays tied to the experience you shared.</p>
-              <p className="mt-2 text-xs text-t-phos-dim">Only keep this if it says what you really did. You can change it again later.</p>
+              <p className="mt-2 text-xs text-t-phos">{t.rich("suggest.why", { why: Array.from(new Set(group.items.map((item) => item.why))).join(" "), strong: (chunks) => <strong>{chunks}</strong> })}</p>
+              <p className="mt-2 text-xs text-t-phos-dim">{t("suggest.onlyKeep")}</p>
               <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={() => { if (onAssist(group, suggestions[suggestionIndex])) setMode("idle"); else setNotice("That line no longer matches your page. Ask t.ROY again or change it yourself."); }} className={BTN_MAIN} data-testid="use-fix">Use this wording</button>
-                <button onClick={() => { setRewrite(suggestions[suggestionIndex]); setMode("change"); }} className={BTN_SOFT}>Edit it myself</button>
-                <button onClick={() => void askTroy()} disabled={suggesting || suggestions.length >= 4} className={`${BTN_SOFT} disabled:opacity-50`}>Try another</button>
+                <button onClick={() => { if (onAssist(group, suggestions[suggestionIndex])) setMode("idle"); else setNotice(t("suggest.staleLine")); }} className={BTN_MAIN} data-testid="use-fix">{t("suggest.useWording")}</button>
+                <button onClick={() => { setRewrite(suggestions[suggestionIndex]); setMode("change"); }} className={BTN_SOFT}>{t("suggest.editMyself")}</button>
+                <button onClick={() => void askTroy()} disabled={suggesting || suggestions.length >= 4} className={`${BTN_SOFT} disabled:opacity-50`}>{t("suggest.tryAnother")}</button>
               </div>
-              {suggestions.length > 1 && <div className="mt-2 flex gap-2" aria-label="Earlier wording options">{suggestions.map((_, i) => <button key={i} onClick={() => setSuggestionIndex(i)} aria-pressed={suggestionIndex === i} className={`t-focus border px-2 py-1 text-xs ${suggestionIndex === i ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-phos"}`}>Option {i + 1}</button>)}</div>}
+              {suggestions.length > 1 && <div className="mt-2 flex gap-2" aria-label={t("suggest.earlierAria")}>{suggestions.map((_, i) => <button key={i} onClick={() => setSuggestionIndex(i)} aria-pressed={suggestionIndex === i} className={`t-focus border px-2 py-1 text-xs ${suggestionIndex === i ? "border-t-amber text-t-amber-bright" : "border-t-line text-t-phos"}`}>{t("suggest.option", { number: i + 1 })}</button>)}</div>}
             </>
           )}
           {notice && <p role="status" className="mt-2 text-xs text-t-amber-bright">{notice}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={() => setMode("idle")} className={BTN_SOFT}>Keep deciding</button>
-            <button onClick={() => setMode("cut")} className={BTN_SOFT}>Cut this line</button>
+            <button onClick={() => setMode("idle")} className={BTN_SOFT}>{t("suggest.keepDeciding")}</button>
+            <button onClick={() => setMode("cut")} className={BTN_SOFT}>{t("suggest.cutThisLine")}</button>
           </div>
         </div>
       )}
@@ -902,7 +944,7 @@ function GroupCard({
       {mode === "answer" && (
         <div className="mt-3">
           <label htmlFor={`${id}-answer`} className="block text-xs font-semibold text-t-white">
-            Say it in your own words
+            {t("answer.label")}
           </label>
           <textarea
             ref={field}
@@ -910,7 +952,7 @@ function GroupCard({
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             rows={2}
-            placeholder="One sentence, the way you'd tell an interviewer."
+            placeholder={t("answer.placeholder")}
             className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
           />
           <div className="mt-2 flex flex-wrap gap-2">
@@ -923,10 +965,10 @@ function GroupCard({
               disabled={!answer.trim()}
               className={`${BTN_MAIN} disabled:opacity-50`}
             >
-              Save my answer
+              {t("answer.save")}
             </button>
             <button onClick={() => setMode("idle")} className={BTN_SOFT}>
-              Cancel
+              {tc("cancel")}
             </button>
           </div>
         </div>
@@ -945,11 +987,11 @@ function GroupCard({
                 onClick={() => {
                   const r = actions?.onScopeYes?.(group, chip) ?? "empty";
                   if (r === "ok") setMode("idle");
-                  else setNotice("Say who or what in the box below.");
+                  else setNotice(t("scope.pickBelow"));
                 }}
                 className={`${BTN_SOFT} rounded-full`}
               >
-                {chip}
+                {t(`scope.chips.${SCOPE_CHIP_KEYS[chip]}`)}
               </button>
             ))}
           </div>
@@ -959,7 +1001,7 @@ function GroupCard({
             value={who}
             onChange={(e) => setWho(e.target.value)}
             rows={2}
-            placeholder="In your own words"
+            placeholder={t("inYourWords")}
             className="mt-1 w-full border border-t-line bg-t-bg px-3 py-2 text-sm text-t-white focus:border-t-amber focus:outline-none"
           />
           {notice && (
@@ -972,22 +1014,22 @@ function GroupCard({
               onClick={() => {
                 const r = actions?.onScopeYes?.(group, who) ?? "empty";
                 if (r === "empty") {
-                  setNotice("Say who or what, in a few words.");
+                  setNotice(t("scope.empty"));
                   field.current?.focus();
                   return;
                 }
                 if (r === "copy") {
-                  setNotice("Say it in your own words.");
+                  setNotice(t("scope.copy"));
                   field.current?.focus();
                   return;
                 }
                 if (r === "denies") {
-                  setNotice("Sounds like you didn't do this. Tap Take it off, or say who or what you did it for.");
+                  setNotice(t("scope.denies"));
                   field.current?.focus();
                   return;
                 }
                 if (r === "unmatched") {
-                  setNotice("That doesn't match this line. Say who or what in your words, or pick another answer.");
+                  setNotice(t("scope.unmatched"));
                   field.current?.focus();
                   return;
                 }
@@ -995,10 +1037,10 @@ function GroupCard({
               }}
               className={BTN_MAIN}
             >
-              Save
+              {tc("save")}
             </button>
             <button onClick={() => setMode("idle")} className={BTN_SOFT}>
-              Back
+              {tc("back")}
             </button>
           </div>
         </div>
@@ -1007,7 +1049,7 @@ function GroupCard({
       {mode === "change" && (
         <div className="mt-3">
           <label htmlFor={`${id}-rewrite`} className="block text-xs font-semibold text-t-white">
-            Rewrite the line in your own words
+            {t("change.label")}
           </label>
           <textarea
             ref={field}
@@ -1023,7 +1065,7 @@ function GroupCard({
             </p>
           )}
           <p className="mt-1 text-[11px] text-t-phos-dim">
-            Only write what&apos;s true. If you&apos;re not sure of a number or a year, leave it out. The line is still true without it.
+            {t("change.onlyTrue")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
@@ -1032,8 +1074,8 @@ function GroupCard({
                 if (!onChange(group, rewrite)) {
                   setNotice(
                     group.answerable
-                      ? "That's the same line. Change a word, or choose This is true as written."
-                      : "That's the same line. Change a word, or cut it."
+                      ? t("change.sameAnswerable")
+                      : t("change.sameCut")
                   );
                   field.current?.focus();
                   return;
@@ -1043,10 +1085,10 @@ function GroupCard({
               disabled={!rewrite.trim()}
               className={`${BTN_MAIN} disabled:opacity-50`}
             >
-              Save the new line
+              {t("change.save")}
             </button>
             <button onClick={() => setMode("idle")} className={BTN_SOFT}>
-              Cancel
+              {tc("cancel")}
             </button>
           </div>
         </div>
@@ -1056,10 +1098,12 @@ function GroupCard({
         <div className="mt-3">
           <p className="text-sm text-t-white">
             {scope && group.target === "letter"
-              ? "Take this sentence out of your cover letter?"
+              ? t("cut.sentenceLetter")
               : group.target === "letter"
-                ? "Take this line out of your cover letter?"
-                : `Take this ${noun} off your resume?`}
+                ? t("cut.lineLetter")
+                : noun === "skill"
+                  ? t("cut.skillResume")
+                  : t("cut.lineResume")}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
             <button
@@ -1070,10 +1114,10 @@ function GroupCard({
               }}
               className={BTN_MAIN}
             >
-              Yes, cut it
+              {t("cut.yes")}
             </button>
             <button onClick={() => setMode("idle")} className={BTN_SOFT}>
-              Keep it
+              {t("cut.keep")}
             </button>
           </div>
         </div>
@@ -1103,6 +1147,7 @@ function Groups({
   onCut: (group: LineGroup) => void;
   actions: CardActions;
 }) {
+  const t = useTranslations("forgeDefend");
   // Troy 2026-10-15: job titles the writer named go on one card; the first optional card gets a divider.
   const titleGroups = groups.filter((g) => g.title && !g.title.role && !g.checked && actions.onTitleYes);
   const combined = titleGroups.length >= 2;
@@ -1114,7 +1159,7 @@ function Groups({
       {shown.map((g, i) => [
         i === firstOptional && firstOptional > 0 ? (
           <li key="worth-a-look" className="pt-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim" data-testid="worth-a-look-divider">
-            Worth a look (these don&apos;t stop you)
+            {t("card.worthALookDivider")}
           </li>
         ) : null,
         g.target === "skillset" ? (
@@ -1202,6 +1247,7 @@ function BulkBar({
   actions: CardActions;
   onBulk: (picks: BulkPick[]) => number;
 }) {
+  const t = useTranslations("forgeDefend");
   const eligible = bulkEligible(view.groups, actions);
   const [state, setState] = useState<{ kind: "idle" } | { kind: "working"; done: number; total: number } | { kind: "done"; fixed: number; left: number }>({ kind: "idle" });
   const running = useRef(false);
@@ -1250,16 +1296,16 @@ function BulkBar({
     className={`${BTN_MAIN} mt-3 disabled:opacity-60`}
     data-testid="bulk-fix-button"
   >
-    {state.kind === "working" ? `t.ROY is working... ${state.done} of ${state.total}` : state.kind === "done" ? `Try remaining suggestions (${eligible.length})` : `Fix all suggested items (${eligible.length})`}
+    {state.kind === "working" ? t("bulk.working", { done: state.done, total: state.total }) : state.kind === "done" ? t("bulk.tryRemaining", { count: eligible.length }) : t("bulk.fixAll", { count: eligible.length })}
   </button>;
   return (
     <div className="mb-3 border border-t-amber bg-t-panel px-3 py-3" data-testid="bulk-fix">
-      <p className="text-sm font-semibold text-t-white">{state.kind === "done" ? "Your last t.ROY pass" : "Let t.ROY handle the suggested fixes."}</p>
+      <p className="text-sm font-semibold text-t-white">{state.kind === "done" ? t("bulk.lastPass") : t("bulk.handle")}</p>
       {state.kind === "done" ? <>
-        <p role="status" className="mt-1 text-xs text-t-phos">{state.fixed ? `Updated ${state.fixed} suggested ${state.fixed === 1 ? "item" : "items"}.` : "No verified changes were applied."} {state.left ? `${state.left} could not be resolved in that pass.` : "That pass is complete."} Check the before-and-after list beside your resume. Remaining questions are below.</p>
-        {eligible.length > 0 && <details className="mt-2"><summary className="t-focus cursor-pointer text-xs text-t-phos underline">Review remaining suggestions</summary><p className="mt-2 text-xs text-t-phos-dim">You can answer these with t.ROY one at a time, or request another pass. Another pass uses AI allowance and may still need your answer.</p>{button}</details>}
+        <p role="status" className="mt-1 text-xs text-t-phos">{state.fixed ? t("bulk.updated", { count: state.fixed }) : t("bulk.noneApplied")} {state.left ? t("bulk.left", { count: state.left }) : t("bulk.complete")} {t("bulk.afterNote")}</p>
+        {eligible.length > 0 && <details className="mt-2"><summary className="t-focus cursor-pointer text-xs text-t-phos underline">{t("bulk.reviewRemaining")}</summary><p className="mt-2 text-xs text-t-phos-dim">{t("bulk.reviewNote")}</p>{button}</details>}
       </> : <>
-        <p className="mt-1 text-xs text-t-phos">This count is the suggested fixes t.ROY can attempt together, not every open check. Questions about your credentials, job titles, responsibilities and record still need you. No new facts are guessed.</p>
+        <p className="mt-1 text-xs text-t-phos">{t("bulk.explain")}</p>
         {button}
       </>}
     </div>
@@ -1293,8 +1339,11 @@ export function DefendPanel({
   /** Apply every pick at once; returns how many landed. */
   onBulk?: (picks: BulkPick[]) => number;
 }) {
+  const t = useTranslations("forgeDefend");
   const progress = progressLine(view);
   const intro = fixPanelIntro(view);
+  // finish-copy.ts returns the heading and subline as English text; the known lines are looked up in the catalog.
+  const introText = (line: string) => (INTRO_KEYS[line] ? t(INTRO_KEYS[line]) : line);
   const suggestedCount = onBulk ? bulkEligible(view.groups, actions).length : 0;
   const resume = view.groups.filter((g) => g.target === "resume");
   const skills = view.groups.filter((g) => g.target === "skill" || g.target === "skillset");
@@ -1305,19 +1354,19 @@ export function DefendPanel({
     <section id="fix-list" aria-labelledby="fix-list-heading" className="scroll-mt-20" data-testid="fix-list">
       <div className="mb-3">
         <h2 id="fix-list-heading" className="text-base font-bold text-t-white">
-          {intro.heading}
+          {introText(intro.heading)}
         </h2>
         {intro.subline && (
           <p className="mt-0.5 text-xs text-t-phos-dim" data-testid="fix-panel-subline">
-            {suggestedCount ? "Start with the suggested fixes below. t.ROY will leave the questions that need your facts, and help you through them one at a time." : intro.subline}
+            {suggestedCount ? t("panel.startWithSuggested") : introText(intro.subline)}
           </p>
         )}
         <p role="status" aria-live="polite" className="mt-1 text-xs font-semibold text-t-phos" data-testid="defend-progress">
-          {progress}
+          {progress ? t("panel.progress", { done: view.defendDone, total: view.defendTotal }) : progress}
         </p>
         {intro.showOwnWords && (
           <p className="mt-1 text-xs text-t-phos" data-testid="all-own-words">
-            {OWN_WORDS_LINE}
+            {t("panel.ownWords")}
           </p>
         )}
       </div>
@@ -1338,21 +1387,21 @@ export function DefendPanel({
 
       {view.fixCount > 0 && (
         <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-amber-bright" data-testid="fix-before-heading">
-          Checks to resolve ({view.fixCount})
+          {t("panel.checksToResolve", { count: view.fixCount })}
         </h3>
       )}
       <Groups groups={resume.filter((g) => !g.checked)} offset={0} {...common} />
 
       {skills.length > 0 && (
         <div className="mt-4" data-testid="fix-skills">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Skills</h3>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">{t("panel.skills")}</h3>
           <Groups groups={skills.filter((g) => !g.checked)} offset={resume.length + view.checkedLines.length} {...common} />
         </div>
       )}
 
       {letter.length > 0 && (
         <div className="mt-4" data-testid="fix-letter">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">Your cover letter</h3>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-t-phos-dim">{t("panel.coverLetter")}</h3>
           <Groups groups={letter.filter((g) => !g.checked)} offset={resume.length + view.checkedLines.length + skills.length} {...common} />
         </div>
       )}

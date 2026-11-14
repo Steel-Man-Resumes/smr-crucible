@@ -1,0 +1,204 @@
+{
+  "idle": {
+    "drafting": "t.ROY está redactando una corrección...",
+    "draftFix": "Pídele una corrección a t.ROY",
+    "trueAsWritten": "Es cierta tal como está",
+    "changeIt": "Cambiarla",
+    "cutIt": "Quitarla",
+    "addWord": "O agrega algo con tus propias palabras",
+    "noticeAnswerable": "t.ROY no pudo redactar una corrección segura para esta línea con lo que nos diste. Di que es cierta tal como está, cámbiala o quítala.",
+    "noticeNotAnswerable": "t.ROY no pudo redactar una corrección segura para esta línea con lo que nos diste. Cámbiala o quítala."
+  },
+  "buttons": {
+    "keep": "Conservar",
+    "cut": "Quitar",
+    "change": "Cambiar"
+  },
+  "inYourWords": "Con tus propias palabras",
+  "intro": {
+    "checkJobs": "Revisa tus trabajos",
+    "checkJobsSub": "Esto viene de tu página. Compara cada uno con tus registros: toca Se ve bien, o corrígelo.",
+    "fixThese": "Corrige esto con t.ROY",
+    "fixTheseSub": "Corregimos lo que pudimos con tu página. Esto todavía necesita tu respuesta.",
+    "checksPassed": "Revisiones aprobadas",
+    "checksPassedSub": "Comparamos la página con lo que nos diste.",
+    "everyLine": "Todas las líneas revisadas",
+    "everyLineSub": "Puedes explicar cada línea sobre la que preguntamos. Todavía puedes cambiar una respuesta."
+  },
+  "card": {
+    "fixBeforeSend": "Corrige antes de enviar",
+    "checked": "Revisada",
+    "worthALook": "Vale la pena revisarla (esta no te detiene)",
+    "worthALookDivider": "Vale la pena revisarlas (estas no te detienen)",
+    "wordingApproved": "Texto que aprobaste",
+    "keptAsWritten": "Se dejó tal como está",
+    "yourWords": "Tus palabras",
+    "changeMyAnswer": "Cambiar mi respuesta",
+    "scopeOverYes": "Sí, estuve a cargo de personas",
+    "scopeOverNo": "No, yo hice el trabajo",
+    "scopeYes": "Sí, hice esto",
+    "scopeHelped": "Ayudé con esto",
+    "takeItOff": "Quitarla",
+    "sayItMyWay": "Decirlo a mi manera"
+  },
+  "proposal": {
+    "heading": "La corrección de t.ROY, con tus palabras",
+    "useThisFix": "Usar esta corrección",
+    "editIt": "Editarla",
+    "rightAsWritten": "Está bien como está",
+    "staleLine": "Esa línea ya no coincide con tu página. Edítala o pide otra."
+  },
+  "suggest": {
+    "heading": "La corrección que propone t.ROY",
+    "checking": "Revisando tus palabras originales...",
+    "before": "Antes",
+    "after": "Después",
+    "why": "<strong>Por qué este cambio:</strong> {why} Este texto sigue ligado a la experiencia que compartiste.",
+    "onlyKeep": "Quédate con esto solo si dice lo que de verdad hiciste. Puedes cambiarlo otra vez después.",
+    "useWording": "Usar este texto",
+    "editMyself": "Lo edito yo",
+    "tryAnother": "Probar otra",
+    "earlierAria": "Opciones de texto anteriores",
+    "option": "Opción {number}",
+    "keepDeciding": "Seguir decidiendo",
+    "cutThisLine": "Quitar esta línea",
+    "staleLine": "Esa línea ya no coincide con tu página. Pídele otra a t.ROY o cámbiala tú."
+  },
+  "answer": {
+    "label": "Dilo con tus propias palabras",
+    "placeholder": "Una oración, como se la dirías a quien te entrevista.",
+    "save": "Guardar mi respuesta"
+  },
+  "scope": {
+    "chips": {
+      "myCrew": "Mi cuadrilla",
+      "myShift": "Mi turno",
+      "myTeam": "Mi equipo",
+      "wholeDepartment": "Todo el departamento",
+      "newHires": "Personal nuevo",
+      "customers": "Clientes"
+    },
+    "pickBelow": "Escribe a quién o qué en el cuadro de abajo.",
+    "empty": "Escribe a quién o qué, en pocas palabras.",
+    "copy": "Dilo con tus propias palabras.",
+    "denies": "Parece que no hiciste esto. Toca Quitarla, o escribe para quién o para qué lo hiciste.",
+    "unmatched": "Eso no coincide con esta línea. Escribe a quién o qué con tus palabras, o elige otra respuesta."
+  },
+  "change": {
+    "label": "Reescribe la línea con tus propias palabras",
+    "onlyTrue": "Escribe solo lo que es cierto. Si no sabes con certeza un número o un año, déjalo fuera. La línea sigue siendo cierta sin él.",
+    "sameAnswerable": "Es la misma línea. Cambia una palabra o elige Es cierta tal como está.",
+    "sameCut": "Es la misma línea. Cambia una palabra o quítala.",
+    "save": "Guardar la línea nueva"
+  },
+  "cut": {
+    "sentenceLetter": "¿Quitar esta oración de tu carta de presentación?",
+    "lineLetter": "¿Quitar esta línea de tu carta de presentación?",
+    "skillResume": "¿Quitar esta habilidad de tu currículum?",
+    "lineResume": "¿Quitar esta línea de tu currículum?",
+    "yes": "Sí, quitarla",
+    "keep": "Conservarla"
+  },
+  "skills": {
+    "cardText": "Te agregamos estas habilidades. Conserva las que sean ciertas.",
+    "keepAria": "Conservar {term}",
+    "cutAria": "Quitar {term}"
+  },
+  "education": {
+    "earned": "Sí, lo obtuve",
+    "inProgress": "Todavía lo estoy haciendo",
+    "didNotFinish": "Fui, pero no lo terminé"
+  },
+  "credentialKinds": {
+    "license": "Licencia",
+    "certification": "Certificación",
+    "card": "Tarjeta",
+    "trainingCourse": "Curso de capacitación",
+    "permit": "Permiso"
+  },
+  "credential": {
+    "yesIHold": "Sí, lo tengo",
+    "noTakeOff": "No, quitarlo",
+    "changesHeading": "Estas líneas cambian:",
+    "letterLabel": "Carta:",
+    "resumeLabel": "Currículum:",
+    "becomes": "queda como \"{line}\"",
+    "comesOff": "se quita",
+    "takeItOff": "Quitarlo",
+    "keepForNow": "Dejarlo por ahora",
+    "whatKind": "¿De qué tipo es?",
+    "whenDidNotFinish": "¿Qué años fuiste? Puedes dejarlo vacío.",
+    "whenEducation": "¿En qué año lo obtuviste?",
+    "whenCredential": "¿Cuándo lo obtuviste, o está vigente?",
+    "placeholderDidNotFinish": "Por ejemplo, 2011 - 2014",
+    "placeholderEducation": "El año, por ejemplo 2015",
+    "placeholderCredential": "Con tus palabras: el año en que lo obtuviste, o vigente, vencido, en curso",
+    "whatSchool": "¿Qué escuela? Déjalo vacío para quitar la línea.",
+    "pickKind": "Elige de qué tipo es.",
+    "facilityNotice": "Este nombre menciona una escuela de una cárcel o prisión. ¿Lo dejas así, o escribes el nombre sin esa mención?",
+    "whenDidNotFinishNotice": "Escribe solo los años que fuiste, por ejemplo 2011 - 2014, o déjalo vacío.",
+    "whenEducationNotice": "Agrega el año en que lo obtuviste.",
+    "whenCredentialNotice": "Agrega el año en que lo obtuviste, o di si está vigente, vencido, en curso o completado.",
+    "schoolNotice": "Escribe solo el nombre de la escuela, o déjalo vacío para quitar la línea.",
+    "unchangedNotice": "Eso no cambió la línea. Quítala, o cámbiala en tu currículum.",
+    "putItOnResume": "Lo ponemos en tu currículum como lo dices aquí.",
+    "keepOnResume": "Dejarlo en mi currículum"
+  },
+  "titles": {
+    "intro": "Nombramos estos trabajos por ti. Toca los que estén bien, o dinos tu título.",
+    "ownPlaceholder": "Tu título en este trabajo",
+    "typeTitle": "Escribe tu título.",
+    "notATitle": "Si no recuerdas el título exacto, escribe lo que hacías ahí, por ejemplo: Trabajador de almacén.",
+    "right": "Es correcto",
+    "useMine": "Usar mi título",
+    "notFound": "No encontramos “{title}” en lo que nos diste. ¿Ese era tu título real en este trabajo?",
+    "yes": "Sí, ese era mi título",
+    "useActual": "Usar mi título real",
+    "label": "Tu título en este trabajo, con tus palabras"
+  },
+  "job": {
+    "changed": "t.ROY cambió este trabajo",
+    "check": "Revisa este trabajo",
+    "notOnPage": "No está en tu página: {changes}.",
+    "yourPageSays": "Tu página dice: “{header}”",
+    "fromYourPage": "Esto viene de tu página. Compáralo con tus registros.",
+    "looksRight": "Se ve bien",
+    "useDetails": "Usar los datos de mi página",
+    "notChanged": "Esa línea no cambió. Usa Corregir esto para editarla.",
+    "fixThis": "Corregir esto",
+    "label": "Título | Empleador | Fechas, como aparecen en tus registros",
+    "typeJob": "Escribe el trabajo como fue.",
+    "nothingChanged": "No cambió nada. Corrige la línea, o toca Atrás y Se ve bien."
+  },
+  "numbers": {
+    "heading": "Opcional: ¿agregar un número?",
+    "intro": "Un número se le queda grabado a quien lee. Agrega solo uno que sepas. Esto nunca te impide terminar.",
+    "countHere": "Algo que podrías contar aquí: {count}.",
+    "label": "Pon tu número en la línea",
+    "nothingChanged": "No cambió nada. Agrega tu número a la línea, o toca Atrás.",
+    "add": "Agregar un número"
+  },
+  "bulk": {
+    "working": "t.ROY está trabajando... {done} de {total}",
+    "tryRemaining": "Probar las sugerencias restantes ({count})",
+    "fixAll": "Aplicar todas las correcciones sugeridas ({count})",
+    "lastPass": "Tu última pasada de t.ROY",
+    "handle": "Deja que t.ROY se encargue de las correcciones sugeridas.",
+    "updated": "{count, plural, =1 {Se actualizó # corrección sugerida.} other {Se actualizaron # correcciones sugeridas.}}",
+    "noneApplied": "No se aplicó ningún cambio verificado.",
+    "left": "{count, plural, =1 {# no se pudo resolver en esa pasada.} other {# no se pudieron resolver en esa pasada.}}",
+    "complete": "Esa pasada está completa.",
+    "afterNote": "Revisa la lista de antes y después junto a tu currículum. Las preguntas que quedan están abajo.",
+    "reviewRemaining": "Revisar las sugerencias restantes",
+    "reviewNote": "Puedes responderlas con t.ROY una por una, o pedir otra pasada. Otra pasada usa parte de tu cupo de IA y aún podría necesitar tu respuesta.",
+    "explain": "Este número cuenta las correcciones sugeridas que t.ROY puede intentar juntas, no todas las revisiones abiertas. Las preguntas sobre tus credenciales, tus títulos de trabajo, tus responsabilidades y tus antecedentes penales todavía necesitan tu respuesta. No se inventan datos nuevos."
+  },
+  "panel": {
+    "startWithSuggested": "Empieza con las correcciones sugeridas de abajo. t.ROY dejará las preguntas que necesitan tus datos, y te ayudará con ellas una por una.",
+    "progress": "{done} de {total} {total, plural, =1 {línea revisada} other {líneas revisadas}}",
+    "ownWords": "Cada línea de aquí está en tus propias palabras.",
+    "checksToResolve": "Revisiones por resolver ({count})",
+    "skills": "Habilidades",
+    "coverLetter": "Tu carta de presentación"
+  }
+}

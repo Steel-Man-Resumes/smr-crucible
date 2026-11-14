@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { intlMarkup as renderToStaticMarkup } from "./helpers/intl";
 import { LiveFix } from "../../components/forge/markup/LiveFix";
 import { pageLines } from "../showstopper-tour";
 import { applyFirstFix, pickFirstFix } from "../first-fix";
@@ -18,6 +18,8 @@ import { applyFirstFix, pickFirstFix } from "../first-fix";
 (globalThis as { React?: unknown }).React = React;
 const CONSUMER = join(import.meta.dirname, "..", "..");
 const read = (p: string) => readFileSync(join(CONSUMER, p), "utf8");
+/** A converted screen's English copy lives in its catalog (messages/en); read both for the claims below. */
+const withCatalog = (file: string, catalog: string) => read(file) + "\n" + read(`messages/en/${catalog}.json`);
 
 const PAGE = `Morgan Sample
 morgan@example.com
@@ -34,7 +36,7 @@ test("first fix: the reward screen makes the fix itself and never waits on a but
   assert.match(reward, /AUTO_KEY/, "coming back from the writer does not loop forward");
   // Only a missing phone or email asks, and Build works with the box empty.
   assert.equal(pickFirstFix("Morgan Sample\nWork History\nLINE COOK | Harbor Street Diner | 2019 - 2023\n- Ran the grill.").kind, "add_contact");
-  assert.match(reward, /\(optional\)/);
+  assert.match(reward + read("messages/en/forge-story.json"), /\(optional\)/);
 });
 
 test("first fix: a draft that changes nothing is simply not applied, and a real one lands", () => {
@@ -51,9 +53,11 @@ test("finish page: one pass settles the cards t.ROY may settle and leaves record
   const eligible = panel.slice(panel.indexOf("function bulkEligible"), panel.indexOf("async function fetchSuggestion"));
   assert.match(eligible, /g\.credentialName \|\| g\.scope \|\| g\.terms/, "credential, scope and skills cards wait for the person");
   assert.match(eligible, /g\.title && actions\.onTitleYes/, "a title the page never used waits for the person");
-  assert.match(panel, /Fix all suggested items \(\$\{eligible\.length\}\)/);
-  assert.match(panel, /Your last t\.ROY pass/);
-  assert.match(panel, /Review remaining suggestions/);
+  const bulkCopy = JSON.parse(read("messages/en/forge-defend.json")).bulk;
+  assert.equal(bulkCopy.fixAll, "Fix all suggested items ({count})");
+  assert.match(panel, /t\("bulk\.fixAll", \{ count: eligible\.length \}\)/);
+  assert.equal(bulkCopy.lastPass, "Your last t.ROY pass");
+  assert.equal(bulkCopy.reviewRemaining, "Review remaining suggestions");
   assert.match(panel, /if \(running\.current \|\| !eligible\.length\) return/);
   const page = read("app/(forge)/output/page.tsx");
   const bulk = page.slice(page.indexOf("const onBulk"), page.indexOf("const onCut = (group"));

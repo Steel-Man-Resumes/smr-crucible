@@ -12,27 +12,15 @@
  */
 
 import { useForgeSession } from "@/lib/forge-context";
+import { useTranslations } from "next-intl";
 
-const READINESS_LABELS: Record<string, string> = {
-  precontemplation: "Exploring",
-  contemplation: "Thinking about it",
-  preparation: "Getting ready",
-  action: "Ready to go",
-};
-
-const GOAL_LABELS: Record<string, string> = {
-  stability: "Stability",
-  growth: "Growth",
-  meaning: "Meaningful work",
-  immediate: "Immediate income",
-  independence: "My own boss someday",
-  community: "Give back",
-  flexibility: "Flexible schedule",
-  back_to_my_trade: "Back to my trade",
-};
+// Labels by id live in the catalog (messages/<locale>/forge.json, "accumulator").
+const READINESS_IDS = ["precontemplation", "contemplation", "preparation", "action"];
+const GOAL_IDS = ["stability", "growth", "meaning", "immediate", "independence", "community", "flexibility", "back_to_my_trade"];
 
 export default function ForgeAccumulator() {
   const { session } = useForgeSession();
+  const t = useTranslations("forge.accumulator");
 
   // Don't show if nothing accumulated yet
   const hasResume = !!session.resumeText;
@@ -57,31 +45,31 @@ export default function ForgeAccumulator() {
           ))}
         </div>
         <span className="text-xs font-medium text-t-phos-dim">
-          building your story
+          {t("building")}
         </span>
       </div>
 
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-t-phos">
         {session.readinessStage && (
-          <span>{READINESS_LABELS[session.readinessStage] || session.readinessStage}</span>
+          <span>{READINESS_IDS.includes(session.readinessStage) ? t(`readiness.${session.readinessStage}`) : session.readinessStage}</span>
         )}
         {hasResume && (
           <span>
-            Resume {session.resumeMethod === "guided" ? "(built together)" : "received"}
+            {session.resumeMethod === "guided" ? t("resumeBuilt") : t("resumeReceived")}
           </span>
         )}
         {hasGoals && (
           <span>
-            {session.goals!.map((g) => GOAL_LABELS[g] || g).join(", ")}
+            {session.goals!.map((g) => (GOAL_IDS.includes(g) ? t(`goals.${g}`) : g)).join(", ")}
           </span>
         )}
         {hasChallenges && (
           <span>
-            {session.challenges!.length} {session.challenges!.length === 1 ? "hurdle" : "hurdles"} noted
+            {t("hurdles", { count: session.challenges!.length })}
           </span>
         )}
         {hasPreferences && (
-          <span>Preferences set</span>
+          <span>{t("preferencesSet")}</span>
         )}
       </div>
     </div>

@@ -294,3 +294,14 @@ describe("third pass: any sign of holding it wins", () => {
     assert.equal(flags("CDL suspended in 2019, trying to get it reinstated", "Your CDL is active, so apply now."), true));
   it("still caught: wanted", () => assert.equal(flags("I want to get my CDL", "You hold a CDL."), true));
 });
+
+describe("credential truth in Spanish words (statusLexicon)", () => {
+  it("a Spanish 'vencida' next to a credential is not current", () => {
+    const s = credentialStatuses("Licencia CDL vencida\nForklift certificado (vencido)");
+    assert.equal(s.get("CDL"), "not_current");
+    assert.equal(s.get("forklift"), "not_current");
+  });
+  it("'no está vigente' is not current", () => {
+    assert.equal(credentialStatuses("CDL, no está vigente").get("CDL"), "not_current");
+  });
+});

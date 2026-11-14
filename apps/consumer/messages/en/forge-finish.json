@@ -1,0 +1,189 @@
+{
+  "story": {
+    "heading": "The story behind your resume",
+    "intro": "t.ROY's reading of the work you gave us. You decide whether this sounds like you.",
+    "draftNote": "Story draft: its fact check is incomplete. Your resume and saved corrections are still here. Check the story before exporting it.",
+    "retrying": "Checking story...",
+    "retry": "Retry story check",
+    "headlineFallback": "Your Story, Reforged",
+    "workAria": "Work behind this story",
+    "fromWork": "From your work",
+    "firstDraft": "This is your first stronger draft. In the Refinery, you can sharpen the story, tailor the resume to a real job and practice saying it with confidence.",
+    "revisit": "Change what t.ROY should lead with",
+    "skillsHeading": "Skills We Found",
+    "legendTechnical": "Technical",
+    "legendPeople": "People",
+    "legendTransferable": "Transferable",
+    "directions": "Possible directions and your next steps",
+    "checkLinesHeading": "Check these lines",
+    "checkLinesBody": "{count, plural, =1 {This line} other {These lines}} may say more about a card, license or certification than you told us. If you hold it, you can ignore this. If you don't, don't tell an employer you do.",
+    "barriersTitle": "Work through hurdles in the Refinery",
+    "barriersBody": "Your resume stays focused on your work. In the Refinery, t.ROY helps you prepare what to say about your record, consider the job and employer, and practice the conversation in your own words. You can also find local support.",
+    "flagged": "You flagged: {list}. Those are topics to work through, not a judgment about what you can do.",
+    "disclaimer": "Disclosure guidance is career coaching, not legal advice.",
+    "nextSteps": "Next Steps",
+    "print": "Print or save your story as a PDF",
+    "popupAlert": "Please allow popups for this site to save the PDF.",
+    "pdf": {
+      "docTitle": "Career Analysis (Steel Man Resumes)",
+      "subtitle": "Your Forge Analysis from Steel Man Resumes",
+      "headlineFallback": "Your Career Profile",
+      "story": "Your Story",
+      "strengths": "Your Strengths",
+      "skills": "Skills",
+      "catHard": "hard",
+      "catSoft": "soft",
+      "catTransferable": "transferable",
+      "careerPaths": "Career Paths",
+      "flagged": "You flagged: {list}.",
+      "planner": "Use the Disclosure Planner with t.ROY to prepare what to say and compare the requirements of a real job. This is coaching, not legal advice.",
+      "privateLead": "Private planning document.",
+      "privateBody": "This analysis is for your own use as you plan your next steps. It speaks candidly about your situation, barriers, and resources, so keep it for yourself. Your resume and cover letter are the documents to share with employers.",
+      "footerPrint": "File › Print › Save as PDF to download"
+    }
+  },
+  "recordChoice": {
+    "options": {
+      "off": {
+        "label": "Leave it off the page",
+        "body": "These jobs and their duties stay out of this resume. Your saved source keeps them. You can revisit this choice for a different job."
+      },
+      "state": {
+        "label": "Show the work, name the state",
+        "body": "The job stays. The employer reads as the state, not the facility."
+      },
+      "facility": {
+        "label": "Name the facility as I wrote it",
+        "body": "Everything stays the way you wrote it."
+      }
+    },
+    "yourChoice": "Your choice: {label}",
+    "updating": "Updating your documents...",
+    "change": "Change this choice",
+    "title": "Your record on this page",
+    "intro": "Some of your work happened inside. You decide how it shows. Nothing about a record gets added either way.",
+    "radioAria": "How your inside work shows on the page",
+    "previewOff": "Left off the page",
+    "previewState": "On the page as",
+    "previewFacility": "On the page as you wrote it",
+    "rebuilding": "Rebuilding your documents with that choice..."
+  },
+  "grounding": {
+    "docResume": "resume",
+    "docLetter": "letter",
+    "labelCredential": "A line in your {doc} may say more about a card, license or certification than you told us. Check it: ",
+    "labelRemoved": "Taken out of your {doc}: ",
+    "labelChanged": "Reworded in your {doc}. Find the new wording and check it. It used to say: ",
+    "labelAlsoIn": "Something like this is also in your {doc}, check it: ",
+    "labelStillThere": "Still in your {doc}, check it: ",
+    "labelUnmatched": "We couldn't find these exact words in your {doc}. Look for anything like them: ",
+    "headingOpen": "Check these before you send",
+    "headingDone": "What the check found",
+    "removedCount": "{count, plural, =1 {We took out # detail we couldn't match to what you told us. } other {We took out # details we couldn't match to what you told us. }}",
+    "residualCount": "{count, plural, =1 {One thing} other {# things}} we flagged may still be in there, maybe reworded. ",
+    "credentialCount": "{count, plural, =1 {One line} other {# lines}} may say more about a card, license or certification than you told us. ",
+    "unmatchedCount": "{count, plural, =1 {The check quoted words we couldn't find in your documents. } other {The check quoted some words we couldn't find in your documents. }}",
+    "unnamed": "We found something in your {doc} we couldn't match to what you told us, but couldn't point to the exact words. ",
+    "tailOpen": "Read these closely before you send anything.",
+    "tailDone": "The check can also reword lines it didn't flag. Read it once before you send it. You know your history best.",
+    "seeFlagged": "See what we flagged"
+  },
+  "length": {
+    "words": {
+      "zero": "zero",
+      "one": "one",
+      "two": "two",
+      "three": "three",
+      "four": "four",
+      "five": "five",
+      "six": "six",
+      "seven": "seven",
+      "eight": "eight",
+      "nine": "nine",
+      "ten": "ten"
+    },
+    "choseOne": "You chose one page.",
+    "kindOne": "This kind of resume is one page.",
+    "mostMany": "{limit} pages is the most.",
+    "runs": "Your resume runs {pages} pages.",
+    "pick": "Pick the lines to cut. Nothing comes off by itself, and it stays a draft until it fits.",
+    "cut": "Cut this line",
+    "twoPagesOk": "Two pages is fine for me"
+  },
+  "checkSection": {
+    "show": "Show",
+    "hide": "Hide"
+  },
+  "confidence": {
+    "label": "Source confidence:",
+    "levels": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "hide": "Hide",
+    "why": "Why ({count})",
+    "allGood": "Every line is in your words or confirmed by you."
+  },
+  "approved": {
+    "summary": "Your changes: before and after",
+    "before": "Before",
+    "after": "After",
+    "addresses": "What this addresses:"
+  },
+  "tour": {
+    "aria": "Tour of this page",
+    "progress": "t.ROY · {current} of {total} · drag to move",
+    "closeAria": "Close the tour",
+    "gotIt": "Got it"
+  },
+  "changesList": {
+    "summary": "What t.ROY changed on your page, and why ({count, plural, =1 {# line} other {# lines}})",
+    "before": "Before: ",
+    "after": "After: ",
+    "why": "Why: "
+  },
+  "markupWalk": {
+    "introSteps": "While I write your new page, here's what I see on this one, top to bottom.",
+    "introStarting": "Here's the page we're starting from.",
+    "introGiven": "Here's your page as you gave it.",
+    "says": "t.ROY says: ",
+    "writing": "Writing your new page now."
+  },
+  "reviewSteps": {
+    "aria": "Where you are",
+    "steps": {
+      "1": {
+        "name": "Writing and checking",
+        "note": "The reading is done. The writer is using your work history."
+      },
+      "2": {
+        "name": "What changed",
+        "note": "Every line he fixed, one at a time."
+      },
+      "3": {
+        "name": "Your first stronger draft",
+        "note": "Download it, then build on it in the Refinery."
+      }
+    },
+    "stateDone": " (done)",
+    "stateNow": " (now)",
+    "stateNext": " (next)"
+  },
+  "liveFix": {
+    "checking": "Checking your documents...",
+    "doneSee": "Done. See my finished page",
+    "mainOnes": "{more, plural, =1 {Those are the main ones. # more is in the list above your page.} other {Those are the main ones. # more are in the list above your page.}}",
+    "pendingChecked": "Those changes are checked. Checking the rest of your documents...",
+    "everyLine": "That's every line I changed. Here's your finished page.",
+    "watching": "Watch me fix your page, line by line.",
+    "counter": "{current} of {total}",
+    "counterMore": " (and {more} more)",
+    "skipAnimation": "Skip animation",
+    "skipToFinished": "Skip to my finished page",
+    "srDonePending": "Changes checked. Document checks are still running.",
+    "srDone": "Done. Your finished page is next.",
+    "srChange": "Change {current} of {total}. Was: {before}. Now: {after}. Why: {why}",
+    "alsoChanged": "Also changed"
+  }
+}

@@ -20,6 +20,8 @@
  * left to the truth check and the prompts.
  */
 
+import { ES_NOT_CURRENT_SOURCE } from "@crucible/core/src/statusLexicon";
+
 type Status = "held" | "course" | "wanted" | "not_current" | "mentioned";
 
 /**
@@ -48,7 +50,7 @@ const CREDENTIALS: { key: string; re: RegExp; named: boolean; exam: boolean }[] 
 // Reading the person's words
 // ---------------------------------------------------------------------------
 
-const NOT_CURRENT_WORDS = String.raw`(?:expired|lapsed|out of date|suspended|revoked|cancell?ed|inactive|ran out|run out|no longer (?:valid|current|active|good)|not (?:valid|current|active)|pending reinstatement)`;
+const NOT_CURRENT_WORDS = String.raw`(?:expired|lapsed|out of date|suspended|revoked|cancell?ed|inactive|ran out|run out|no longer (?:valid|current|active|good)|not (?:valid|current|active)|pending reinstatement|${ES_NOT_CURRENT_SOURCE})`;
 const NOT_CURRENT_RE = new RegExp(String.raw`\b${NOT_CURRENT_WORDS}\b`, "i");
 const NEGATION = /\b(?:never|not|no|without|wasnt|isnt|hasnt|havent|didnt|werent|aint)\b|n['’]t\b/i;
 // Current again, said anywhere in the sentence.

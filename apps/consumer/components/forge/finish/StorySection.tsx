@@ -7,6 +7,7 @@
  */
 
 import React from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { storyIsChecked, type StoryVerification } from "@/lib/story-verification";
 import { escapeHtml as escHtml } from "@/lib/escape-html";
 import { formatSalaryRange } from "@/lib/metric-emphasis";
@@ -81,6 +82,8 @@ export function StorySection({
   /** Troy 2026-10-20: the page is already re-checking quietly; no draft note until that has failed twice. */
   quiet?: boolean;
 }) {
+  const t = useTranslations("forgeFinish.story");
+  const locale = useLocale();
   const checked = storyIsChecked(output);
   const narrative = output.narrative || {};
   // A claim the checker took off leaves an empty field: nothing blank is shown.
@@ -91,9 +94,9 @@ export function StorySection({
 
   function handlePrintAnalysisPdf() {
     if (!checked) return;
-    const html = analysisToStandaloneHtml(output, narrative);
+    const html = analysisToStandaloneHtml(output, narrative, t, locale);
     const w = window.open("", "_blank");
-    if (!w) { alert("Please allow popups for this site to save the PDF."); return; }
+    if (!w) { alert(t("popupAlert")); return; }
     w.document.write(html);
     w.document.close();
   }
@@ -101,20 +104,20 @@ export function StorySection({
   return (
     <section id="finish-story" aria-labelledby="finish-story-heading" className={`scroll-mt-20 ${spotlight ? "border border-t-amber bg-t-panel p-5 sm:p-6" : ""}`}>
       <h2 id="finish-story-heading" className="text-xl font-bold text-t-white">
-        The story behind your resume
+        {t("heading")}
       </h2>
       <p className="mb-6 mt-1 text-sm text-t-phos-dim">
-        t.ROY's reading of the work you gave us. You decide whether this sounds like you.
+        {t("intro")}
       </p>
 
       {!checked && !quiet && <div role="status" className="mb-4 border border-t-amber p-4 text-sm text-t-phos">
-        <p>Story draft: its fact check is incomplete. Your resume and saved corrections are still here. Check the story before exporting it.</p>
-        {onRetry && <button type="button" disabled={retrying} onClick={onRetry} className="t-focus mt-2 min-h-touch underline">{retrying ? "Checking story..." : "Retry story check"}</button>}
+        <p>{t("draftNote")}</p>
+        {onRetry && <button type="button" disabled={retrying} onClick={onRetry} className="t-focus mt-2 min-h-touch underline">{retrying ? t("retrying") : t("retry")}</button>}
       </div>}
       {/* Header / Narrative */}
       <div className={spotlight ? "mb-4" : "mb-10"}>
         <h3 className="mb-3 text-2xl font-bold text-t-white">
-          {narrative.headline || "Your Story, Reforged"}
+          {narrative.headline || t("headlineFallback")}
         </h3>
         {narrative.summary && (
           <p className="mb-3 whitespace-pre-line text-base leading-relaxed text-t-phos">
@@ -129,27 +132,27 @@ export function StorySection({
       </div>
 
       {spotlight && strengths.length > 0 && (
-        <div className="mb-5 grid gap-3 sm:grid-cols-2" aria-label="Work behind this story">
+        <div className="mb-5 grid gap-3 sm:grid-cols-2" aria-label={t("workAria")}>
           {strengths.slice(0, 6).map((strength, index) => (
             <div key={`${strength.title}-${index}`} className="border border-t-line bg-t-bg p-3">
-              <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">From your work</p>
+              <p className="text-xs font-bold uppercase tracking-wide text-t-amber-bright">{t("fromWork")}</p>
               <p className="mt-1 text-sm font-semibold text-t-white">{strength.title}</p>
               <p className="mt-1 text-xs leading-relaxed text-t-phos">{strength.evidence}</p>
             </div>
           ))}
         </div>
       )}
-      {spotlight && <p className="mb-4 text-xs text-t-phos-dim">This is your first stronger draft. In the Refinery, you can sharpen the story, tailor the resume to a real job and practice saying it with confidence.</p>}
+      {spotlight && <p className="mb-4 text-xs text-t-phos-dim">{t("firstDraft")}</p>}
       {spotlight && onRevisit && (
         <button type="button" onClick={onRevisit} className="t-focus mb-5 min-h-touch border border-t-line bg-t-bg px-4 py-2 text-sm font-semibold text-t-white hover:border-t-amber">
-          Change what t.ROY should lead with
+          {t("revisit")}
         </button>
       )}
         {/* Skills */}
         {skills.length > 0 && (
           <section id="skills" className="mb-10 scroll-mt-20">
             <h3 className="text-lg font-bold text-t-white mb-4">
-              Skills We Found
+              {t("skillsHeading")}
             </h3>
             <div className="flex flex-wrap gap-2">
               {skills.map((s, i) => {
@@ -183,7 +186,7 @@ export function StorySection({
                     borderColor: "var(--t-skill-hard)",
                   }}
                 />{" "}
-                Technical
+                {t("legendTechnical")}
               </span>
               <span className="flex items-center gap-1">
                 <span
@@ -193,7 +196,7 @@ export function StorySection({
                     borderColor: "var(--t-skill-soft)",
                   }}
                 />{" "}
-                People
+                {t("legendPeople")}
               </span>
               <span className="flex items-center gap-1">
                 <span
@@ -203,23 +206,23 @@ export function StorySection({
                     borderColor: "var(--t-skill-transfer)",
                   }}
                 />{" "}
-                Transferable
+                {t("legendTransferable")}
               </span>
             </div>
           </section>
         )}
 
       <details open={!spotlight} className={spotlight ? "border-t border-t-line pt-3" : ""}>
-        <summary className={spotlight ? "t-focus cursor-pointer text-sm font-semibold text-t-amber-bright" : "sr-only"}>Possible directions and your next steps</summary>
+        <summary className={spotlight ? "t-focus cursor-pointer text-sm font-semibold text-t-amber-bright" : "sr-only"}>{t("directions")}</summary>
         <div className={spotlight ? "pt-5" : ""}>
 
         {/* Report lines that may say more about a credential than the person did.
             Flagged, never removed: the person knows what they hold. */}
         {reportChecks.length > 0 && (
           <section className="mb-10 border border-t-amber bg-t-panel px-4 py-3">
-            <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">Check these lines</p>
+            <p className="mb-1 text-xs font-bold uppercase text-t-amber-bright">{t("checkLinesHeading")}</p>
             <p className="text-xs leading-relaxed text-t-phos">
-              {reportChecks.length === 1 ? "This line" : "These lines"} may say more about a card, license or certification than you told us. If you hold it, you can ignore this. If you don't, don't tell an employer you do.
+              {t("checkLinesBody", { count: reportChecks.length })}
             </p>
             <ul className="mt-1.5 space-y-1">
               {reportChecks.map((c, i) => (
@@ -250,10 +253,10 @@ export function StorySection({
         )}
 
         <section className="mb-8 border border-t-line bg-t-panel p-5">
-          <h3 className="text-lg font-semibold">Work through hurdles in the Refinery</h3>
-          <p className="mt-2 text-sm leading-relaxed text-t-phos">Your resume stays focused on your work. In the Refinery, t.ROY helps you prepare what to say about your record, consider the job and employer, and practice the conversation in your own words. You can also find local support.</p>
-          {barriers.length > 0 && <p className="mt-2 text-sm text-t-phos-dim">You flagged: {barriers.map((b) => b.type.replace(/_/g, " ")).join(", ")}. Those are topics to work through, not a judgment about what you can do.</p>}
-          <p className="mt-2 text-xs text-t-phos-dim">Disclosure guidance is career coaching, not legal advice.</p>
+          <h3 className="text-lg font-semibold">{t("barriersTitle")}</h3>
+          <p className="mt-2 text-sm leading-relaxed text-t-phos">{t("barriersBody")}</p>
+          {barriers.length > 0 && <p className="mt-2 text-sm text-t-phos-dim">{t("flagged", { list: barriers.map((b) => b.type.replace(/_/g, " ")).join(", ") })}</p>}
+          <p className="mt-2 text-xs text-t-phos-dim">{t("disclaimer")}</p>
         </section>
 
         {/* Career Paths */}
@@ -289,7 +292,7 @@ export function StorySection({
                   {(cp.next_steps?.length ?? 0) > 0 && (
                     <div className="mt-3">
                       <p className="text-xs font-medium text-t-phos-dim uppercase mb-1">
-                        Next Steps
+                        {t("nextSteps")}
                       </p>
                       <ol className="text-sm text-t-phos-dim space-y-1 list-decimal list-inside">
                         {(cp.next_steps ?? []).map((step, j) => (
@@ -309,7 +312,7 @@ export function StorySection({
         disabled={!checked}
         className="t-focus w-full border border-t-line bg-transparent px-4 py-3 text-sm font-medium text-t-phos-dim transition-colors hover:border-t-phos-dim hover:text-t-white"
       >
-        Print or save your story as a PDF
+        {t("print")}
       </button>
         </div>
       </details>
@@ -317,12 +320,16 @@ export function StorySection({
   );
 }
 
+type StoryT = (key: string, values?: Record<string, string | number>) => string;
+
 function analysisToStandaloneHtml(
   output: ForgeOutput,
-  narrative: Record<string, unknown>
+  narrative: Record<string, unknown>,
+  t: StoryT,
+  locale: string
 ): string {
-  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const headline = String(narrative.headline || "Your Career Profile");
+  const date = new Date().toLocaleDateString(locale === "es" ? "es" : "en-US", { year: "numeric", month: "long", day: "numeric" });
+  const headline = String(narrative.headline || t("pdf.headlineFallback"));
   const summary = String(narrative.summary || "");
   // P1.6 (Codex 3, Troy decision): the downloadable report SCRUBS the private
   // `reflection` line (it acknowledges the person's journey/record). Barriers,
@@ -330,10 +337,10 @@ function analysisToStandaloneHtml(
 
   let body = "";
 
-  if (summary) body += `<h2>Your Story</h2><p class="narrative">${escHtml(summary)}</p>`;
+  if (summary) body += `<h2>${t("pdf.story")}</h2><p class="narrative">${escHtml(summary)}</p>`;
 
   if (output.strengths?.length) {
-    body += `<h2>Your Strengths</h2>`;
+    body += `<h2>${t("pdf.strengths")}</h2>`;
     for (const s of output.strengths) {
       body += `<div class="strength"><p class="strength-title">${escHtml(s.title)}</p><p>${escHtml(s.evidence)}</p></div>`;
     }
@@ -345,14 +352,15 @@ function analysisToStandaloneHtml(
       if (!grouped[sk.category]) grouped[sk.category] = [];
       grouped[sk.category].push(sk.name);
     }
-    body += `<h2>Skills</h2>`;
+    const catLabel = (c: string) => (c === "hard" ? t("pdf.catHard") : c === "soft" ? t("pdf.catSoft") : c === "transferable" ? t("pdf.catTransferable") : c);
+    body += `<h2>${t("pdf.skills")}</h2>`;
     for (const [cat, names] of Object.entries(grouped)) {
-      body += `<p><strong>${escHtml(cat)}:</strong> ${names.map(escHtml).join(", ")}</p>`;
+      body += `<p><strong>${escHtml(catLabel(cat))}:</strong> ${names.map(escHtml).join(", ")}</p>`;
     }
   }
 
   if (output.career_paths?.length) {
-    body += `<h2>Career Paths</h2>`;
+    body += `<h2>${t("pdf.careerPaths")}</h2>`;
     for (const cp of output.career_paths) {
       body += `<div class="career-path">`;
       body += `<h3>${escHtml(cp.title)}${cp.salary_range ? ` <span style="font-weight:normal;color:#666;">${escHtml(formatSalaryRange(cp.salary_range))}</span>` : ""}</h3>`;
@@ -365,10 +373,10 @@ function analysisToStandaloneHtml(
   }
 
   if (output.barriers?.length) {
-    body += `<h2>Work through hurdles in the Refinery</h2><p>You flagged: ${output.barriers.map((b) => escHtml(b.type.replace(/_/g, " "))).join(", ")}.</p><p>Use the Disclosure Planner with t.ROY to prepare what to say and compare the requirements of a real job. This is coaching, not legal advice.</p>`;
+    body += `<h2>${t("barriersTitle")}</h2><p>${t("pdf.flagged", { list: output.barriers.map((b) => escHtml(b.type.replace(/_/g, " "))).join(", ") })}</p><p>${t("pdf.planner")}</p>`;
   }
 
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Career Analysis (Steel Man Resumes)</title>
+  return `<!DOCTYPE html><html${locale === "es" ? ' lang="es"' : ""}><head><meta charset="utf-8"><title>${t("pdf.docTitle")}</title>
 <style>
 body{font-family:Georgia,serif;max-width:8in;margin:0 auto;padding:.5in;color:#1a1a1a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .header{background:#1B2A4A;color:#fff;padding:24px;margin-bottom:28px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -387,10 +395,10 @@ ul{margin:4px 0;padding-left:18px}li{font-size:10pt;line-height:1.6}
 .footer{margin-top:32px;padding-top:12px;border-top:1px solid #ddd;font-size:9pt;color:#888;text-align:center}
 @media print{@page{margin:.5in;size:letter}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}}
 </style></head><body>
-<div class="header"><h1>${escHtml(headline)}</h1><p>Your Forge Analysis from Steel Man Resumes</p><p class="date">${date}</p></div>
-<div class="private-banner"><strong>Private planning document.</strong> This analysis is for your own use as you plan your next steps. It speaks candidly about your situation, barriers, and resources, so keep it for yourself. Your resume and cover letter are the documents to share with employers.</div>
+<div class="header"><h1>${escHtml(headline)}</h1><p>${t("pdf.subtitle")}</p><p class="date">${date}</p></div>
+<div class="private-banner"><strong>${t("pdf.privateLead")}</strong> ${t("pdf.privateBody")}</div>
 ${body}
-<div class="footer no-print"><p>Steel Man Resumes &middot; steelmanresumes.com</p><p>File &rsaquo; Print &rsaquo; Save as PDF to download</p></div>
+<div class="footer no-print"><p>Steel Man Resumes &middot; steelmanresumes.com</p><p>${t("pdf.footerPrint")}</p></div>
 <script>window.onload=function(){setTimeout(function(){window.print()},500)}</script>
 </body></html>`;
 }

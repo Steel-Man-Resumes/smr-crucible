@@ -1,0 +1,146 @@
+{
+  "intro": {
+    "eyebrow": "The Forge de Steel Man Resumes",
+    "heading": "Soy t.ROY.",
+    "about": "Soy un coach de carrera con IA. Puedo escucharte mientras me cuentas lo que hiciste, ayudarte a escribir un currículum que puedas respaldar y acompañarte en la búsqueda de empleo y en la práctica de entrevistas en The Refinery.",
+    "accountLineUp": "Es gratis. Primero inicias sesión, para que tu trabajo se guarde en tu cuenta.",
+    "accountLineOpen": "Es gratis empezar aquí. Inicia sesión para guardar tu trabajo en tu cuenta.",
+    "startLabel": "Armar mi currículum",
+    "startSubtitle": "De principio a fin en una sola sesión.",
+    "checkFirst": "¿Ya tienes un currículum? <link>Revísalo gratis</link>. Sin iniciar sesión, y no lo guardamos.",
+    "exampleKicker": "Mira el trabajo · ejemplo ficticio",
+    "exampleTitle": "Una línea floja nos da una pregunta.",
+    "oldLineLabel": "La línea anterior",
+    "oldLine": "Hice auditorías de seguridad.",
+    "askLabel": "t.ROY pregunta",
+    "ask": "¿Qué revisaste?",
+    "answerLabel": "La persona responde",
+    "answer": "Revisaba las rutas de salida en cada turno.",
+    "strongerLabel": "La línea más fuerte",
+    "stronger": "Revisé las rutas de salida en cada turno.",
+    "exampleNote": "El detalle viene de la persona. t.ROY se encarga de escribir; tú verificas los datos.",
+    "chatNote": "El botón de chat que está en cada página soy yo. Si te atascas, pregunta."
+  },
+  "start": {
+    "saveFailed": "No se guardó tu elección. Inténtalo de nuevo.",
+    "selectedJob": "Tu trabajo elegido",
+    "jobTitle": "¿Qué trabajo quieres conseguir?",
+    "jobHelp": "Escribe el nombre del puesto o pega la oferta de trabajo. ¿Aún no lo sabes? Déjalo en blanco.",
+    "jobLabel": "El trabajo",
+    "optional": "(opcional)",
+    "jobPlaceholder": "Por ejemplo: operador de montacargas",
+    "rushLink": "¿Tienes un trabajo en mente y poco tiempo? Haz primero una versión rápida.",
+    "findJob": "¿Todavía no tienes un trabajo en mente? Busca uno.",
+    "findJobNeedsSeat": "¿Todavía no tienes un trabajo en mente? Busca uno. (necesita un lugar en The Refinery)",
+    "seatlessNote": "Esta parte está en The Refinery, que se abre con un lugar que da una organización.",
+    "accountNote": "Esta parte funciona en tu cuenta gratuita, así que tu trabajo se guarda.",
+    "askSeat": "Pide un lugar en The Refinery",
+    "signInFree": "Inicia sesión gratis",
+    "welcomeBack": "Qué bueno verte de nuevo.",
+    "resumeSaved": "Tu currículum está guardado en tu cuenta (versión {number}).",
+    "resumeWaiting": "Tu currículum te está esperando.",
+    "resumeOnComputer": "Tu currículum está guardado en esta computadora.",
+    "pickUp": "Continúa donde lo dejaste.",
+    "draftBadge": "Borrador: revísalo antes de enviarlo.",
+    "keepGoing": "Seguir adelante",
+    "kicker": "The Forge · primera decisión",
+    "title": "¿Con qué podemos empezar?",
+    "intro": "The Forge arma tu currículum general con lo que realmente hiciste. Trae cualquier versión anterior si puedes. Incluso una mala te ahorra reconstruir tu historial de memoria.",
+    "haveKicker": "Recomendado · menos escritura",
+    "haveTitle": "Tengo un currículum, aunque esté a medias",
+    "haveBody": "Súbelo, tómale una foto o pega el texto. t.ROY lo lee, te pide que corrijas los datos dudosos y luego escribe la página general más sólida que pueda respaldar.",
+    "haveMeta": "Tiempo: menos · Esfuerzo: revisar y corregir · Resultado: currículum general",
+    "buildKicker": "Aún sin página · más conversación",
+    "buildTitle": "Armar uno con t.ROY",
+    "buildBody": "Empieza con un trabajo real y algo que hiciste ahí. Habla o escribe. t.ROY ayuda a armar una página, y tú verificas cada dato.",
+    "buildMeta": "Tiempo: más largo · Esfuerzo: cuéntanos tu historial · Resultado: currículum general",
+    "thenTitle": "Después viene The Refinery",
+    "thenBody": "Tu página general es la base. Las solicitudes para trabajos específicos, la investigación de empleadores y la práctica de entrevistas necesitan más de tu historial y pertenecen a The Refinery. Puedes tomar esas decisiones después de este primer paso.",
+    "lookFirst": "¿Quieres echar un vistazo primero? <link>Revisa un currículum gratis</link>. La revisión rápida está abierta para todos."
+  },
+  "documentLinks": {
+    "creative": {
+      "label": "Trabajo creativo",
+      "body": "Un currículum de artista, una biografía y tu propia declaración."
+    },
+    "cv": {
+      "label": "Un CV",
+      "body": "Para docencia, investigación o trabajo clínico."
+    },
+    "performer": {
+      "label": "Una página de intérprete",
+      "body": "Créditos, formación y habilidades en una sola página."
+    }
+  },
+  "tasks": {
+    "resume": {
+      "label": "Conseguir un currículum que pueda usar",
+      "body": "Arregla el que tienes o arma uno conmigo.",
+      "today": "tu currículum"
+    },
+    "job": {
+      "label": "Ir tras un trabajo",
+      "body": "Empieza con un trabajo que tengas en mente. Armamos solo lo que necesitas para ese trabajo.",
+      "today": "ir tras un trabajo"
+    },
+    "interview": {
+      "label": "Prepararme para una entrevista",
+      "body": "Practica las preguntas con tu historial de trabajo real.",
+      "today": "preparación para la entrevista"
+    },
+    "documents": {
+      "label": "Trabajo creativo, un CV o una página de intérprete",
+      "body": "Para arte, docencia e investigación, o actuación y música.",
+      "today": "tus documentos"
+    },
+    "explore": {
+      "label": "Todavía no sé lo que quiero",
+      "body": "Está bien. Empezamos con lo que has hecho y encontramos tres direcciones que valen la pena.",
+      "today": "encontrar una dirección"
+    },
+    "support": {
+      "label": "Conseguir apoyo",
+      "body": "Transporte, identificación, vivienda, comida y ayuda con tus antecedentes penales.",
+      "today": "conseguir apoyo"
+    }
+  },
+  "taskPicker": {
+    "title": "¿Qué necesitas hoy?",
+    "subtitle": "Elige una. Puedes cambiarla cuando quieras.",
+    "somethingElse": "Otra cosa",
+    "help": "¿Algo se interpone? Pide ayuda"
+  },
+  "laneHeader": {
+    "ariaLabel": "Tu ruta",
+    "workingToward": "Trabajando hacia:",
+    "today": "Hoy:",
+    "change": "Cambiar",
+    "aJob": "un trabajo",
+    "workspaceAria": "Espacio de trabajo actual",
+    "mainLane": "Principal",
+    "unavailable": "Espacio de trabajo no disponible",
+    "loading": "Cargando tu espacio de trabajo...",
+    "changeTask": "Cambiar la tarea de hoy",
+    "retry": "Reintentar",
+    "details": "Detalles del espacio de trabajo, progreso y recompensas",
+    "laneName": "Ruta: {name}",
+    "applicationLabel": "Solicitud:",
+    "jobAtCompany": "{title} en {company}",
+    "currentResume": "Currículum actual:",
+    "versionStatus": "Versión {number}, {status}",
+    "statusDraft": "borrador",
+    "statusFinished": "terminado",
+    "savedNoChecked": "guardado, aún sin versión verificada",
+    "laneDocTool": "Usa la herramienta de documentos de esta ruta en Mis currículums.",
+    "noResumeVersion": "No hay una versión guardada del currículum en este espacio de trabajo.",
+    "nextReward": "Próxima recompensa: {label}",
+    "masterDraft": "Arma tu Borrador maestro"
+  },
+  "laneIntro": {
+    "tailorNamed": "Esta es tu ruta de {lane}. La herramienta Tailor orienta tu currículum a un trabajo de {lane} a la vez. Los mismos datos, una puntería más precisa.",
+    "tailor": "La herramienta Tailor orienta tu currículum a un trabajo a la vez. ¿Quieres apuntar también a un segundo tipo de trabajo? Crea una ruta nueva.",
+    "libraryNamed": "Esto es todo lo que hiciste en tu ruta de {lane}. Elige \"Todas las rutas\" para ver el resto.",
+    "library": "Mis currículums guarda todos los currículums y cartas que hiciste, ordenados por ruta.",
+    "gotIt": "Entendido"
+  }
+}

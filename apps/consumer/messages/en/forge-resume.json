@@ -1,0 +1,253 @@
+{
+  "intake": {
+    "jobsToConfirm": {
+      "heading": "Your jobs",
+      "at": "at {company}",
+      "range": "{start} to {end}",
+      "now": "now"
+    },
+    "rebuild": {
+      "failedTitle": "That didn't open.",
+      "loadingTitle": "Getting your resume ready for t.ROY.",
+      "loadingSubtitle": "t.ROY builds a new version from it. You can always get the earlier one back from My resumes.",
+      "couldNotOpen": "We couldn't open that resume. Open it from My resumes and try again.",
+      "signInNeeded": "Sign in to build from a saved resume."
+    },
+    "demo": {
+      "title": "Resume received.",
+      "subtitle": "We extracted experience, skills, and education from the sample resume.",
+      "banner": "Demo mode: sample resume pre-loaded",
+      "sample": "Sample: Jordan Mitchell"
+    },
+    "rush": {
+      "title": "We already have your resume.",
+      "subtitle": "You pasted this in Rush Mode. We'll use it for the full Forge analysis, so you don't need to enter it again.",
+      "useDifferent": "I want to use a different resume",
+      "from": "From Rush Mode"
+    },
+    "read": {
+      "gotItName": "Got it, {name}.",
+      "gotIt": "Got it.",
+      "subtitleJobs": "Is this right? These are the jobs and dates we read. You fix anything off on the next screen.",
+      "subtitleNoJobs": "Check that we read it correctly before moving on.",
+      "actionJobs": "Yes, that's right",
+      "actionNoJobs": "Looks good, continue",
+      "previewLabel": "What we read from your file",
+      "characters": "{count} characters",
+      "doesntLookRight": "Doesn't look right? Text garbled, cut off, or missing sections?",
+      "reupload": "Re-upload a different file",
+      "pasteInstead": "Paste the text instead",
+      "missingTitle": "Missing anything?",
+      "missingNote": "Not required, but these go on your resume when you download it.",
+      "phone": "Phone number",
+      "email": "Email address",
+      "emailPlaceholder": "you@email.com"
+    },
+    "saved": {
+      "subtitleJobs": "Is this still right?",
+      "subtitleNoJobs": "No need to add it again.",
+      "action": "Yes, keep going",
+      "useDifferent": "Use a different resume",
+      "openEditor": "Something's off: open it in the editor"
+    },
+    "choose": {
+      "title": "Do you have a resume?",
+      "lanesSubtitle": "Bring any version you have. It gives t.ROY more of your real history to work with.",
+      "haveOneLabel": "I have one",
+      "haveOneBody": "Upload a file or a photo, or paste the text.",
+      "buildLabel": "Build with me",
+      "buildBody": "Start with one job and one thing you did there.",
+      "hint": "PDF, Word, a phone photo, screenshot, copied email, pasted text, or your voice can get us started. Faxed copy? Photograph the page. Morse code? Translate it first, then paste it.",
+      "subtitle": "Any format works, even a photo of a paper copy.",
+      "pasteLabel": "Paste your resume text",
+      "pasteBody": "Copy from an email, notes app, or anywhere and paste it here",
+      "uploadLabel": "Upload a file or image",
+      "uploadBody": "PDF, Word, photo of a paper copy, or phone camera screenshot",
+      "importLabel": "Download from LinkedIn or Indeed",
+      "importBody": "We'll show you how to get your resume from these platforms",
+      "externalLabel": "Build one with a free tool first",
+      "externalBody": "Links to Canva, Google Docs, Indeed. Come back when you're done.",
+      "divider": "Starting from nothing?",
+      "scratchLabel": "Build one from scratch, step by step",
+      "scratchBody": "15-20 minutes. We guide you through every section. Worth doing right.",
+      "recallTitle": "Can't remember where you worked, or when?",
+      "recallNote": "These free, official sources can remind you. They open on the provider's own site. We never see or store them.",
+      "recallIrs": "IRS Wage & Income Transcript: every employer that reported your wages",
+      "recallWorkNumber": "The Work Number: your free annual Employment Data Report",
+      "recallCredly": "Credly: digital badges and certifications you've earned"
+    },
+    "upload": {
+      "title": "Upload your resume",
+      "subtitle": "Drag and drop, or tap to select a file. We accept PDF, Word, images, and screenshots.",
+      "reading": "t.ROY is pulling the work off your page.",
+      "readingSub": "Your jobs and dates are coming up for your review.",
+      "drop": "Drop your file here, or tap to browse",
+      "dropTypes": "PDF, Word, image, or screenshot",
+      "inputAria": "Upload resume file",
+      "pickAgain": "You're back. Pick your file again and it will upload. Browsers can't hold on to a file while you sign in.",
+      "signInMessage": "Your file is fine. This browser still has an old or unfinished sign-in, and it stopped the upload. Sign in again or sign out, then try your file one more time.",
+      "genericError": "Something went wrong. Try again?",
+      "couldNotRead": "Couldn't read that file. Try a different one?",
+      "buildInstead": "Or build one with our help instead"
+    },
+    "import": {
+      "title": "Download your resume",
+      "subtitle": "Follow these steps, then come back and upload the file.",
+      "action": "Upload my file",
+      "linkedinTitle": "From LinkedIn",
+      "linkedinStep1": "Go to your LinkedIn profile",
+      "linkedinStep2": "Click the \"More\" button below your profile photo",
+      "linkedinStep3": "Select \"Save to PDF\"",
+      "linkedinStep4": "Come back here and upload the PDF",
+      "indeedTitle": "From Indeed",
+      "indeedStep1": "Go to",
+      "indeedStep2": "Click \"Download Resume\"",
+      "indeedStep3": "Choose PDF format",
+      "indeedStep4": "Come back here and upload the PDF"
+    },
+    "external": {
+      "title": "Free resume builders",
+      "subtitle": "Pick one, build your resume, then come back and upload it.",
+      "action": "Upload my resume",
+      "footer": "I'd rather build one here with help",
+      "canvaName": "Canva Resume Builder",
+      "canvaNote": "Free templates. Easy drag and drop.",
+      "docsName": "Google Docs Resume Templates",
+      "docsNote": "Free with a Google account.",
+      "indeedName": "Indeed Resume Builder",
+      "indeedNote": "Step by step. Saves to your Indeed profile."
+    }
+  },
+  "guided": {
+    "skipForNow": "Skip for now",
+    "intro": {
+      "title": "Build your resume from scratch.",
+      "subtitle": "We walk you through it, one section at a time.",
+      "action": "I'm ready, let's go",
+      "p1": "This takes <b>15-20 minutes</b> if you do it right. That's not a lot of time to invest in something this important. But it only works if you take it seriously.",
+      "p2": "We go section by section: contact info, work history, skills, education. Answer each question in your own words. Don't try to make it sound fancy. Just tell us what's true.",
+      "gapsTitle": "A note on gaps",
+      "gapsBody": "You might have gaps in your history because of incarceration, family obligations, health, or anything else. You don't need to hide or explain them here. Just include what you have. The Forge helps you figure out how to talk about the gaps later, on your terms."
+    },
+    "name": {
+      "title": "What's your full name?",
+      "subtitle": "This goes at the top of your resume.",
+      "placeholder": "e.g., Marcus Johnson"
+    },
+    "contact": {
+      "title": "Contact information",
+      "subtitle": "Goes on your resume. Add what you have. It's all optional.",
+      "phone": "Phone",
+      "email": "Email",
+      "emailPlaceholder": "you@email.com",
+      "city": "City, State",
+      "cityPlaceholder": "e.g., Milwaukee, WI"
+    },
+    "job": {
+      "titleFirst": "Your most recent job",
+      "titleNth": "Job {number}",
+      "subtitleFirst": "The last job you held. Full-time, part-time, temp, gig, or work program. All count.",
+      "subtitleNth": "Same as before: title, company, and when.",
+      "titleLabel": "Job title",
+      "titlePlaceholder": "e.g., Warehouse Associate, Custodian, Cook",
+      "companyLabel": "Company or organization",
+      "companyPlaceholder": "e.g., Amazon, City of Milwaukee, Self-employed",
+      "whenLabel": "When? (approximate is fine)",
+      "whenPlaceholder": "e.g., 2019-2022"
+    },
+    "duties": {
+      "title": "What did you do there?",
+      "subtitle": "Main responsibilities in your own words. Don't make it fancy. Just be honest.",
+      "footer": "Include accomplishments, things you were proud of, skills you used.",
+      "placeholder": "e.g., Operated forklift and pallet jack. Helped train 3 new employees on safety. Maintained 99% on-time order rate during peak season.",
+      "attention": "One number beats a paragraph here. How many, how often, how big. Whatever you actually remember."
+    },
+    "more": {
+      "title": "Do you have another job to add?",
+      "subtitle": "More work history makes a stronger resume. Part-time, temp, and gig work all count.",
+      "count": "{count, plural, =1 {# job added so far.} other {# jobs added so far.}}",
+      "yesLabel": "Yes, add another job",
+      "yesBody": "Full-time, part-time, temp, gig work, or work program",
+      "noLabel": "No, that's my history",
+      "noBody": "Continue to skills and certifications"
+    },
+    "skills": {
+      "title": "What are your skills and certifications?",
+      "subtitle": "What are you good at? Technical skills, people skills, physical skills, licenses. Everything counts.",
+      "placeholder": "e.g., Forklift certified (OSHA), CDL Class A, Microsoft Excel, bilingual English/Spanish, team leadership, conflict de-escalation"
+    },
+    "education": {
+      "title": "Education and training",
+      "subtitle": "School, GED, trade programs, certifications, military. They all count. Include anything you completed, even programs from inside.",
+      "placeholder": "e.g., GED (2018), HVAC certification (ABC Training, 2020), OSHA 10-hour safety, US Army 2004-2008"
+    },
+    "extras": {
+      "title": "Anything else?",
+      "subtitle": "Volunteer work, community roles, programs you've been part of, or anything that doesn't fit above.",
+      "skip": "Skip, that's everything",
+      "placeholder": "e.g., Volunteer at Milwaukee Rescue Mission 2023-present, peer mentor in reentry program, completed financial literacy and conflict resolution"
+    },
+    "review": {
+      "title": "Here's what we have.",
+      "subtitle": "Review before we start the analysis. Go back to fix anything.",
+      "action": "Looks good, start the analysis",
+      "draft": "Your resume draft",
+      "characters": "{count} characters",
+      "note": "This is the raw material for the Forge analysis. The AI transforms it into a structured career narrative. You'll see the full output at the end."
+    }
+  },
+  "paste": {
+    "title": "Paste your resume",
+    "subtitle": "Copy your resume text from anywhere and paste it below. Don't worry about formatting.",
+    "reading": "Reading...",
+    "minimum": "Minimum 20 characters. Just get the basics in there.",
+    "aiHelp": "Already use ChatGPT or another AI? Have it write your resume, then paste it here.",
+    "show": "Show",
+    "hide": "Hide",
+    "aiHelpNote": "Copy this prompt, give it to your AI, then paste its answer in the box below. We handle the formatting.",
+    "aiPrompt": "Please write out my resume as plain text. Include my name, phone, email, and city. List every job I have held with the employer name, dates, and 2-4 bullet points describing what I actually did. Then list my skills and any education, certificates, or training. Do not invent anything. Only use what you know about me from our conversations or what I tell you now. Ask me questions first if you need more detail.",
+    "copy": "Copy this prompt",
+    "copied": "Copied!",
+    "placeholder": "Paste your resume here...\n\nExample:\nJohn Smith\nForklift Operator with 5 years experience\n\nWork History:\nWarehouse Associate, Amazon, 2019-2024\n- Operated forklift and pallet jack\n- Trained new team members",
+    "keepGoing": "Keep going. We need a little more to work with."
+  },
+  "builder": {
+    "title": "Here's your resume. Let's make it strong.",
+    "intro": "We organized what you gave us. Check every section and fix anything that's off. It's all yours to edit. This becomes your base resume: the one we aim at specific jobs later.",
+    "weakTitle": "A few lines could be stronger.",
+    "weakBody": "The best resumes show what you did, with real numbers. Tap <b>Strengthen with help</b> under any bullet. We ask a few questions and turn your answer into a strong line. We only ever use what you tell us.",
+    "continue": "Looks good, continue",
+    "hideDownload": "Hide the quick download",
+    "showDownload": "Need to download it now?",
+    "fullLater": "The full version comes after the next steps, and it is stronger.",
+    "beforeNote": "This is the <b>before</b> version. If you need a copy today (an appointment, a program requirement), grab one, then come back and finish.",
+    "preparing": "Preparing...",
+    "docx": ".docx (opens in Word)",
+    "pdf": "PDF (keeps formatting)",
+    "txt": ".txt (for online forms)",
+    "txtTitle": "Plain text is the safest format for online application boxes",
+    "actionsHint": "Continue when it looks right.",
+    "readinessTitle": "Before you go: are you ready to use this?",
+    "readinessNote": "A gut check, and nothing here is scored. The resume is half of it; owning it is the other half.",
+    "readiness": {
+      "explain": "I can explain every bullet on this resume out loud.",
+      "story": "I have a real story behind my strongest experience.",
+      "fit": "I know why this resume fits the jobs I'm going for.",
+      "next": "I know my next step (apply, gather proof, or pick a better-fit role)."
+    }
+  },
+  "sync": {
+    "question": "There's a resume in progress on this computer. Is it yours?",
+    "note": "Nothing in it is used until you answer. If it isn't yours, we erase it from this computer.",
+    "yesEmail": "Yes, save it to {email}",
+    "yesAccount": "Yes, save it to my account",
+    "no": "No, erase it",
+    "notEmail": "Not {email}?",
+    "notAccount": "Not your account?",
+    "signOut": "Sign out",
+    "saved": "Your work so far is saved to your account.",
+    "failed": "We couldn't save your work to your account yet. It's still on this computer, and we'll try again.",
+    "dismissAria": "Dismiss",
+    "dismiss": "OK"
+  }
+}

@@ -3,11 +3,13 @@ import { containDialogTab } from "./dialog-keyboard";
 
 import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { useTranslations } from "next-intl";
 
 /** Native modal focus containment, Escape, and return focus. Never changes the run. */
-export function FocusDialog({ open, title, onClose, children, closeLabel = "Back to my work" }: {
+export function FocusDialog({ open, title, onClose, children, closeLabel }: {
   open: boolean; title: string; onClose: () => void; children: ReactNode; closeLabel?: string;
 }) {
+  const t = useTranslations("forgeGoals");
   const ref = useRef<HTMLDialogElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -30,7 +32,7 @@ export function FocusDialog({ open, title, onClose, children, closeLabel = "Back
       className="fixed inset-0 m-auto max-h-[94dvh] w-[min(96vw,1100px)] max-w-none overflow-y-auto overscroll-contain border border-t-amber bg-t-bg p-0 text-t-white shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm">
       <div className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b border-t-line bg-t-bg px-5 py-3">
         <h2 className="font-semibold">{title}</h2>
-        <button type="button" onClick={() => close.current()} className="t-focus min-h-touch shrink-0 px-3 text-sm underline underline-offset-4">{closeLabel}</button>
+        <button type="button" onClick={() => close.current()} className="t-focus min-h-touch shrink-0 px-3 text-sm underline underline-offset-4">{closeLabel ?? t("focus.backToWork")}</button>
       </div>
       <div className="p-5 sm:p-7">{children}</div>
     </dialog>, document.body,

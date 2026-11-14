@@ -1,0 +1,380 @@
+{
+  "drawer": {
+    "trigger": "Ask t.ROY",
+    "triggerSub": "AI career coach",
+    "title": "t.ROY, your AI career coach",
+    "openAria": "{label}, {sub}, open assistant",
+    "closeAria": "Close assistant",
+    "staffTitle": "t.ROY, for your work with people",
+    "staffSub": "for your work with people"
+  },
+  "loading": "Loading chat...",
+  "workingLabel": "t.ROY is working on your request",
+  "goTo": "Go to {label}",
+  "intro": {
+    "coach": "I'm t.ROY, your AI career coach. We can work on your resume, job search, interview, or next move at work. What needs attention today?",
+    "staff": "I'm t.ROY, here for your work with people. I can sort your Today, prep you for a meeting, turn your bullets into a note, or draft a message. Tell me what you need.",
+    "default": "I'm t.ROY, your AI career coach. Tell me what you need today, or ask me to help you use this page.",
+    "noWrong": "There are no wrong questions.",
+    "tapToDo": "Tap to do it with me",
+    "accept": "Yes, let's do that. You suggested: \"{suggestion}\""
+  },
+  "staff": {
+    "title": "t.ROY, for your work with people",
+    "about": "About: {name}",
+    "thisPerson": "this person",
+    "them": "them",
+    "askElse": "Ask about someone else",
+    "skillsAria": "What t.ROY can do for you",
+    "offersHeading": "What I can do here:",
+    "footer": "t.ROY drafts. You decide. Nothing is saved or sent until you do it.",
+    "skills": {
+      "staff-prep-me": "Prep me",
+      "staff-check-in": "Draft a check-in",
+      "staff-find-help": "Find local help",
+      "staff-what-changed": "What changed",
+      "staff-outcome-note": "Write the outcome note",
+      "staff-note-from-bullets": "Note from my bullets",
+      "staff-timeline-summary": "Summarize their timeline",
+      "staff-outreach-draft": "Draft a message",
+      "staff-triage-today": "Triage my Today",
+      "staff-caseload-digest": "Weekly caseload digest",
+      "staff-stale-flags": "Flag stale cases",
+      "staff-funder-narrative": "Funder narrative"
+    }
+  },
+  "offers": {
+    "prep": {
+      "label": "{named, select, yes {Prep me for {first}} other {Prep me for this person}}",
+      "why": "One read: where they are, what is open, what your team wrote."
+    },
+    "changed": {
+      "label": "What changed this week",
+      "why": "Dated changes for {them}, newest first."
+    },
+    "bullets": {
+      "label": "Note from my bullets",
+      "why": "Type the bullets; you review and save the note."
+    },
+    "checkin": {
+      "label": "Draft a check-in",
+      "why": "A short message you send yourself."
+    },
+    "personEmployers": {
+      "label": "Employers that hire people with records",
+      "why": "Name a state and the kind of work; I show the mark and when we checked."
+    },
+    "addFill": {
+      "label": "Fill this in from my words",
+      "why": "Tell me their name and email. I fill the form; you press Send invite."
+    },
+    "addWelcome": {
+      "label": "Draft a welcome message",
+      "why": "Words for your first message once they join. You send it."
+    },
+    "todayTriage": {
+      "label": "Triage my Today",
+      "why": "Who needs you first, and why, from your Today list."
+    },
+    "todayStale": {
+      "label": "Who is slipping?",
+      "why": "Stale cases with a plain reason each."
+    },
+    "todayAdd": {
+      "label": "Add someone new",
+      "why": "Tell me the name; I open Add people filled in."
+    },
+    "peopleDigest": {
+      "label": "Weekly caseload digest",
+      "why": "Everyone you work with, what is open, who went quiet."
+    },
+    "peopleStale": {
+      "label": "Flag stale cases",
+      "why": "Reasons to look, not judgments."
+    },
+    "peopleAdd": {
+      "label": "Add someone new",
+      "why": "Tell me the name; I open Add people filled in."
+    },
+    "referralsOpen": {
+      "label": "Which referrals need me?",
+      "why": "Open referrals, overdue first."
+    },
+    "referralsHelp": {
+      "label": "Find local help",
+      "why": "Checked listings first, with the date we checked."
+    },
+    "notesBullets": {
+      "label": "Turn bullets into a note",
+      "why": "Open the person first, then give me your bullets."
+    },
+    "asksTriage": {
+      "label": "Triage my Today",
+      "why": "Answers to your asks show there too."
+    },
+    "insightsFunder": {
+      "label": "Funder narrative from these numbers",
+      "why": "Only real numbers, with where each came from."
+    },
+    "dirEmployers": {
+      "label": "Employers for someone",
+      "why": "Name a state and the kind of work."
+    },
+    "dirHelp": {
+      "label": "Local help for a need",
+      "why": "Name the place and the need."
+    },
+    "anyTriage": {
+      "label": "Triage my Today",
+      "why": "Who needs you first, and why."
+    },
+    "anyGoto": {
+      "label": "Take me to a page",
+      "why": "Say where; I show a button to it."
+    }
+  },
+  "settings": {
+    "gear": "Chat settings",
+    "length": "Response length",
+    "short": "Short",
+    "normal": "Normal",
+    "plainLanguage": "Plain language",
+    "readAloud": "Read replies aloud",
+    "on": "On",
+    "off": "Off",
+    "done": "Done"
+  },
+  "support": {
+    "message": "Message Troy",
+    "sent": "Sent. Troy reads these himself. His reply goes to your email.",
+    "explain": "This goes to Troy, a real person. Your last few chat messages ride along so he has context.",
+    "placeholder": "What do you need a human for?",
+    "error": "That did not go through. Try again in a moment.",
+    "sending": "Sending...",
+    "send": "Send to Troy"
+  },
+  "drafts": {
+    "caseNote": "Case note, unsaved",
+    "checkIn": "Check-in, unsaved",
+    "putOnPage": "Put this draft on their page to review",
+    "notSavedOrSent": "Nothing is saved or sent until you do it.",
+    "openAddPeople": "Open Add people for {name}",
+    "addPeopleNote": "Filled in, not sent. You check it and press Send invite.",
+    "directoryNote": "A draft, not sent. Check it and press Send.",
+    "handoffThem": "Put this in their handoff",
+    "handoffNamed": "Put this in {name}'s handoff",
+    "handoffNote": "A draft, not sent. You read it on their page and press Send.",
+    "copied": "Copied",
+    "copy": "Copy to use",
+    "copyNote": "t.ROY sends nothing. Copying is noted as you using this draft."
+  },
+  "tools": {
+    "working": "Working on it",
+    "noButton": "No button for that here",
+    "failed": "Could not complete this step",
+    "failedAria": "Could not complete",
+    "activity": {
+      "read_owner_ai_costs": "Reading recorded AI costs",
+      "read_owner_directory_coverage": "Reading coverage suggestions",
+      "read_staff_tasks": "Reading your scoped tasks",
+      "read_participant_progress": "Reading shared progress",
+      "read_participant_overview": "Reading what you can see about them (logged for them)",
+      "read_recent_changes": "Reading what changed (logged for them)",
+      "find_local_help": "Searching the help directory",
+      "draft_staff_check_in": "Preparing a draft",
+      "offer_staff_draft": "Preparing the draft for their page",
+      "read_today_queue": "Reading your Today",
+      "read_caseload_digest": "Reading your caseload",
+      "read_outcomes_summary": "Counting placements and retention",
+      "read_referrals_open": "Reading open referrals",
+      "read_person_timeline": "Reading their timeline (logged for them)",
+      "search_verified_employers": "Checking employer evidence",
+      "get_verified_employer": "Reading employer details",
+      "search_verified_resources": "Finding checked support",
+      "get_verified_resource": "Checking service details",
+      "search_resource_chains": "Finding approved next steps",
+      "read_saved_resources": "Refreshing your saved resources",
+      "get_resource_chain": "Checking next steps",
+      "save_resource_list": "Preparing your save preview",
+      "preview_document_correction": "Preparing a correction preview",
+      "contextual_handoff": "Preparing your next step",
+      "get_my_live_status": "Checking your real progress",
+      "search_jobs": "Searching live jobs",
+      "save_job": "Saving that job",
+      "add_follow_up_reminder": "Setting your reminder",
+      "take_me_there": "Taking you there",
+      "highlight_element": "Pointing at it",
+      "file_feedback": "Recording your confirmed message",
+      "find_employers": "Searching employers that hire people with records",
+      "listing_check_nudge": "Checking whether to ask about this listing",
+      "draft_directory_contribution": "Drafting a directory update for you to check",
+      "find_missed_connections": "Looking for connections they may have missed",
+      "draft_handoff": "Drafting a handoff for you to send",
+      "open_staff_page": "Finding that page",
+      "open_add_person": "Getting Add people ready",
+      "read_my_view": "Looking at how your screens are set up",
+      "change_my_view": "Changing your view",
+      "undo_my_view_change": "Undoing that change",
+      "propose_shared_view": "Drafting a view for the team"
+    }
+  },
+  "errors": {
+    "access": "I couldn’t check your chat access. Your saved work is safe. Try again shortly; if this continues, report a coach access error.",
+    "allowance": "Your current AI allowance is used. You can request more through the progress bar or return after the daily reset. Your saved work is still available.",
+    "generic": "The coach couldn’t finish this reply. Your saved work is still available. Try again in a moment."
+  },
+  "input": {
+    "placeholder": "Type a message...",
+    "sendAria": "Send message",
+    "lineQueued": "Your line review is queued. Send or clear your current draft to load it here."
+  },
+  "pages": {
+    "ownerCosts": "owner cost controls",
+    "ownerCoverage": "coverage review",
+    "start": "Start",
+    "dashboard": "Dashboard",
+    "creative": "Creative",
+    "cv": "Cv",
+    "performer": "Performer",
+    "documents": "Documents",
+    "master": "Master",
+    "help": "Help",
+    "jobs": "Jobs",
+    "paths": "Paths",
+    "applications": "Applications",
+    "application-tailor": "Application tailor",
+    "disclosure": "Disclosure",
+    "interview": "Interview",
+    "resources": "Resources",
+    "next": "Next",
+    "employers": "Employers",
+    "vault": "Vault",
+    "progress": "Progress",
+    "settings": "Settings",
+    "from-your-case-manager": "From your case manager",
+    "welcome": "Welcome",
+    "resume": "Resume",
+    "goals": "Goals",
+    "story": "Story",
+    "preferences": "Preferences",
+    "rush": "Rush"
+  },
+  "staffPages": {
+    "person": "their page",
+    "personNamed": "{name}'s page",
+    "today": "Today",
+    "people": "People",
+    "find-a-person": "Find a person",
+    "asks": "Sharing asks",
+    "referrals": "Referrals",
+    "case-notes": "Case notes",
+    "add-people": "Add people",
+    "insights": "Insights",
+    "activity-log": "Activity log",
+    "team": "Team & access",
+    "sharing-policy": "Sharing policy",
+    "security": "Security & privacy",
+    "structure": "Structure",
+    "set-up": "Set up",
+    "fields": "Fields",
+    "layouts": "Layouts",
+    "directory": "Directory",
+    "employers": "Employers",
+    "local-help": "Local help",
+    "my-setup": "My setup",
+    "inbox": "Inbox",
+    "change-requests": "Change requests",
+    "contribute": "Help the directory",
+    "wins": "Wins",
+    "connections": "Connections",
+    "settings": "Settings",
+    "help": "Help"
+  },
+  "prompts": {
+    "next": "What should I do next?",
+    "explain": "Explain this page",
+    "takeMe": "Take me there",
+    "doWithMe": "Do it with me",
+    "staff": {
+      "triage": "Triage my Today",
+      "checkIn": "Draft a check-in for you to send",
+      "caseNote": "Draft a case note for your review",
+      "caseload": "Summarize my caseload"
+    },
+    "demo": {
+      "lookingAt": "What am I looking at?",
+      "helpClients": "How does this help my clients?",
+      "scenario": "Show me a different scenario",
+      "research": "What's the research behind this?"
+    },
+    "intro": {
+      "what": "What is this?",
+      "free": "Is it really free?",
+      "whoSees": "Who sees my data?"
+    },
+    "welcome": {
+      "pick": "What should I pick?",
+      "change": "Does this change my results?",
+      "ready": "I'm not sure I'm ready"
+    },
+    "resume": {
+      "none": "I don't have a resume",
+      "photo": "Can I use a photo?",
+      "old": "My resume is old"
+    },
+    "goals": {
+      "unsure": "I don't know what I want",
+      "matter": "Does this matter?",
+      "money": "I just need money right now"
+    },
+    "story": {
+      "whoSees": "Who sees this?",
+      "share": "Do I have to share my record?",
+      "uncomfortable": "I'm not comfortable with this"
+    },
+    "preferences": {
+      "flexible": "I'm flexible on everything",
+      "car": "I don't have a car",
+      "later": "Can I change this later?"
+    },
+    "processing": {
+      "long": "How long does this take?",
+      "doing": "What's it doing right now?"
+    },
+    "output": {
+      "whatDo": "What do I do with this?",
+      "accurate": "Is this accurate?",
+      "refinery": "What's The Refinery?"
+    },
+    "rush": {
+      "asGood": "Is this as good as the full version?",
+      "bad": "What if my resume is bad?",
+      "tomorrow": "I have an interview tomorrow"
+    },
+    "resources": {
+      "ride": "I have no ride",
+      "local": "Help me find local support",
+      "explain": "Explain these next steps"
+    },
+    "employers": {
+      "near": "Find employers near me",
+      "supports": "What supports this listing?",
+      "help": "Help me go after this job"
+    },
+    "jobs": {
+      "fit": "Find me jobs that fit me"
+    },
+    "applications": {
+      "followUp": "What needs a follow-up?"
+    },
+    "dashboard": {
+      "first": "What should I do first?",
+      "build": "How do I build a resume?",
+      "disclosure": "What's the disclosure planner?"
+    },
+    "fallback": {
+      "helpPage": "Help me with this page",
+      "human": "Talk to a real person"
+    }
+  }
+}

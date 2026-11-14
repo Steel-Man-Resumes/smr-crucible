@@ -7,13 +7,17 @@
  * never numbers or percentages.
  */
 
+import { useTranslations } from "next-intl";
 import type { ProgressStep } from "@/lib/forge-path";
 
 export function ForgePathProgress({ steps }: { steps: ProgressStep[] }) {
+  const t = useTranslations("ui.pathProgress");
+  // Step labels come from lib/forge-path.ts SCREENS in English; translate by screen id here.
+  const label = (s: ProgressStep) => t(`steps.${s.id}`);
   const current = steps.find((s) => s.state === "current");
   const left = steps.filter((s) => s.state === "todo");
   return (
-    <nav aria-label="Your steps" className="w-full" data-testid="forge-path-progress">
+    <nav aria-label={t("ariaLabel")} className="w-full" data-testid="forge-path-progress">
       <ol className="flex h-1 w-full gap-[3px]" aria-hidden="true">
         {steps.map((s) => (
           <li
@@ -30,15 +34,15 @@ export function ForgePathProgress({ steps }: { steps: ProgressStep[] }) {
             <li key={s.id} className="flex items-center gap-2" aria-current={s.state === "current" ? "step" : undefined}>
               {i > 0 && <span aria-hidden="true">/</span>}
               <span className={s.state === "current" ? "font-semibold text-t-white" : s.state === "done" ? "text-t-phos" : ""}>
-                {s.label}
-                {s.state === "done" && <span className="sr-only"> (done)</span>}
+                {label(s)}
+                {s.state === "done" && <span className="sr-only"> {t("done")}</span>}
               </span>
             </li>
           ))}
         </ol>
         <p className="sm:hidden" data-testid="forge-path-progress-phone">
-          <span className="font-semibold text-t-white">{current?.label}</span>
-          {left.length > 0 && <span>. Then {left.map((s) => s.label).join(", ")}</span>}
+          <span className="font-semibold text-t-white">{current ? label(current) : undefined}</span>
+          {left.length > 0 && <span>{t("then", { steps: left.map((s) => label(s)).join(", ") })}</span>}
         </p>
       </div>
     </nav>

@@ -15,6 +15,7 @@
  * - Defend answers are stored per line, never pooled into the source.
  */
 
+import { isSpanishDenial, isSpanishNotATitle } from "@crucible/core/src/answerLexicon";
 import { untracedFacts } from "./fact-trace";
 import { CREDENTIALS_KEY } from "./forge-path";
 import {
@@ -1419,7 +1420,7 @@ export function scopeYesResult(
   job?: string
 ): "ok" | "empty" | "unmatched" | "copy" | "denies" {
   // "No", "never", "not me": the honest move is Take it off, not a who-answer.
-  if (/^\s*(?:no|nope|never|not me|nobody|no one|i did(?: not|n't)|didn't|i never)\b/i.test(typed || "")) return "denies";
+  if (/^\s*(?:no|nope|never|not me|nobody|no one|i did(?: not|n't)|didn't|i never)\b/i.test(typed || "") || isSpanishDenial(typed || "")) return "denies";
   if (!isScopeWhoAnswer(typed)) return "empty";
   // Round 12: the line pasted back is not their words.
   if (isScopeCopy(typed, line) || splitSentences(line).some((sent) => isScopeCopy(typed, sent))) return "copy";
@@ -1484,6 +1485,7 @@ export function ownTitleProblem(typed: string, current: string): "empty" | "not_
   if ((t.match(/[A-Za-z]/g) ?? []).length < 2) return "not_a_title";
   if (/[|\d]/.test(t)) return "not_a_title";
   const plain = t.toLowerCase().replace(/[^a-z' ]+/g, " ").replace(/\s+/g, " ").trim();
+  if (isSpanishNotATitle(t)) return "not_a_title";
   if (
     /^(?:idk|i\s?dk|dk|no|nope|nah|na|n a|none|nothing|nobody|ok|okay|k|yes|yeah|yep|ya|sure|maybe|unsure|not sure|i'?m not sure|dunno|no idea|forgot|i forgot|unknown|whatever|same|n\/a|i don'?t know|i do not know|don'?t know|i don'?t remember|i do not remember|don'?t remember|i can'?t remember|can'?t remember|i don'?t recall|don'?t recall|not sure what it was|i don'?t know my title|no title|there wasn'?t one|didn'?t have one|i didn'?t have one|none really)$/i.test(
       plain

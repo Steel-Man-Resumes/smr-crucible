@@ -19,6 +19,8 @@ import { applyUiPrefs, UI_PREFS_EVENT } from "@/lib/ui-prefs-apply";
 import { readSaveError } from "@/lib/save-error";
 import { SaveError } from "./SaveError";
 import type { UiPrefs, FontScale, Density } from "@crucible/core";
+import { LanguageSwitch } from "./LanguageSwitch";
+import { useTranslations } from "next-intl";
 
 interface CoachA11y {
   coachPlainLanguage: boolean;
@@ -46,6 +48,7 @@ export function AccessibilitySettingsSection() {
   // Staff have t.ROY, not a career coach (staff pass S2, walk T03).
   const helper = useEffectiveRole()?.orgRole ? "t.ROY" : "your coach";
   const Helper = helper === "t.ROY" ? "t.ROY" : "Your coach";
+  const tLang = useTranslations("common.lang");
   const [coach, setCoach] = useState<CoachA11y | null>(null);
   const [prefs, setPrefs] = useState<UiPrefs | null>(null);
   const [error, setError] = useState<{ part: "coach" | "prefs"; message: string } | null>(null);
@@ -145,17 +148,17 @@ export function AccessibilitySettingsSection() {
             on={!!coach?.coachVoice}
             onToggle={() => saveCoach({ coachVoice: !coach?.coachVoice })}
           />
-          <ToggleRow
-            id="settings-spanish"
-            label="Spanish (Espanol)"
-            hint={`${Helper} replies in Spanish.`}
-            on={coach?.coachLanguage === "es"}
-            onToggle={() =>
-              saveCoach({ coachLanguage: coach?.coachLanguage === "es" ? "en" : "es" })
-            }
-          />
         </div>
         <SaveError message={error?.part === "coach" ? error.message : null} />
+      </div>
+
+      {/* Site language: one setting for every translated screen and the coach (i18n/locale.ts). */}
+      <div id="settings-spanish" className="border-t border-t-line pt-5">
+        {/* Bilingual on purpose: a person who landed in the wrong language can find it. */}
+        <label className="text-sm font-medium text-t-white block mb-1">Language / Idioma</label>
+        <p className="text-sm text-t-phos-dim mb-2">{tLang("hint")}</p>
+        <LanguageSwitch variant="pills" />
+        <p className="mt-2 text-xs text-t-phos-dim">{tLang("settingsNote")}</p>
       </div>
 
       {/* Text size and motion: one block for the Settings tour (settings-display) */}

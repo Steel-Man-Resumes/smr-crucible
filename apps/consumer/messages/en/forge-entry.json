@@ -1,0 +1,146 @@
+{
+  "intro": {
+    "eyebrow": "The Forge by Steel Man Resumes",
+    "heading": "I'm t.ROY.",
+    "about": "I'm an AI career coach. I can listen while you tell me what you did, help write a resume you can stand behind, and stay with you for job search and interview practice in The Refinery.",
+    "accountLineUp": "It's free. You sign in first, so your work is saved to your account.",
+    "accountLineOpen": "It's free to start here. Sign in to keep your work with your account.",
+    "startLabel": "Build my resume",
+    "startSubtitle": "Start to finish in one sitting.",
+    "checkFirst": "Already have a resume? <link>Check it free</link>. No sign-in, and we don't save it.",
+    "exampleKicker": "See the work · fictional example",
+    "exampleTitle": "A rough line gives us a question.",
+    "oldLineLabel": "The old line",
+    "oldLine": "Did safety audits.",
+    "askLabel": "t.ROY asks",
+    "ask": "What did you check?",
+    "answerLabel": "The person answers",
+    "answer": "I checked exit routes every shift.",
+    "strongerLabel": "The stronger line",
+    "stronger": "Checked exit routes each shift.",
+    "exampleNote": "The detail comes from the person. t.ROY does the writing; you check the facts.",
+    "chatNote": "The chat button on every page is me. If you get stuck, ask."
+  },
+  "start": {
+    "saveFailed": "Your choice wasn't saved. Try again.",
+    "selectedJob": "Your selected job",
+    "jobTitle": "What job are you going after?",
+    "jobHelp": "Type the job title, or paste the posting. Not sure yet? Leave it empty.",
+    "jobLabel": "The job",
+    "optional": "(optional)",
+    "jobPlaceholder": "For example: forklift driver",
+    "rushLink": "Job in mind and short on time? Do a quick version first.",
+    "findJob": "No job in mind yet? Find one.",
+    "findJobNeedsSeat": "No job in mind yet? Find one. (needs a Refinery seat)",
+    "seatlessNote": "This part is in the Refinery, which opens with a seat from an organization.",
+    "accountNote": "This part works in your free account, so your work is saved.",
+    "askSeat": "Ask for a Refinery seat",
+    "signInFree": "Sign in free",
+    "welcomeBack": "Welcome back.",
+    "resumeSaved": "Your resume is saved to your account (version {number}).",
+    "resumeWaiting": "Your resume is waiting for you.",
+    "resumeOnComputer": "Your resume is saved on this computer.",
+    "pickUp": "Pick up where you left off.",
+    "draftBadge": "Draft: check it before you send it.",
+    "keepGoing": "Keep going",
+    "kicker": "The Forge · first decision",
+    "title": "What can we start with?",
+    "intro": "The Forge builds your general resume from what you actually did. Bring any old version if you can. Even a bad one saves you from rebuilding your history from memory.",
+    "haveKicker": "Recommended · less typing",
+    "haveTitle": "I have a resume, even a rough one",
+    "haveBody": "Upload, photograph, or paste it. t.ROY reads it, asks you to fix uncertain facts, then writes the strongest general page it can support.",
+    "haveMeta": "Time: shorter · Effort: review and correct · Output: general resume",
+    "buildKicker": "No page yet · more talking",
+    "buildTitle": "Build one with t.ROY",
+    "buildBody": "Start with one real job and something you did there. Speak or type. t.ROY helps assemble a page, and you check every fact.",
+    "buildMeta": "Time: longer · Effort: tell us your history · Output: general resume",
+    "thenTitle": "Then comes The Refinery",
+    "thenBody": "Your general page is the foundation. Job-specific applications, employer research, and interview practice need more of your history and belong in The Refinery. You can make those decisions after this first step.",
+    "lookFirst": "Want to look first? <link>Check a resume for free</link>. The quick check is open to everyone."
+  },
+  "documentLinks": {
+    "creative": {
+      "label": "Creative work",
+      "body": "An artist resume, a bio, and your own statement."
+    },
+    "cv": {
+      "label": "A CV",
+      "body": "For teaching, research or clinical work."
+    },
+    "performer": {
+      "label": "A performer page",
+      "body": "Credits, training and skills on one page."
+    }
+  },
+  "tasks": {
+    "resume": {
+      "label": "Get a resume I can use",
+      "body": "Fix the one you have, or build one with me.",
+      "today": "your resume"
+    },
+    "job": {
+      "label": "Go after a job",
+      "body": "Start from a job you have in mind. We build only what you need for it.",
+      "today": "going after a job"
+    },
+    "interview": {
+      "label": "Get ready for an interview",
+      "body": "Practice the questions with your real work history.",
+      "today": "interview prep"
+    },
+    "documents": {
+      "label": "Creative work, a CV, or a performer page",
+      "body": "For art, teaching and research, or acting and music.",
+      "today": "your documents"
+    },
+    "explore": {
+      "label": "I don't know what I want yet",
+      "body": "That's fine. We start from what you've done and find three directions worth a look.",
+      "today": "finding a direction"
+    },
+    "support": {
+      "label": "Get support",
+      "body": "Rides, ID, housing, food, and help with a record.",
+      "today": "getting support"
+    }
+  },
+  "taskPicker": {
+    "title": "What do you need today?",
+    "subtitle": "Pick one. You can change it any time.",
+    "somethingElse": "Something else",
+    "help": "Something getting in the way? Get help"
+  },
+  "laneHeader": {
+    "ariaLabel": "Your lane",
+    "workingToward": "Working toward:",
+    "today": "Today:",
+    "change": "Change",
+    "aJob": "a job",
+    "workspaceAria": "Current workspace",
+    "mainLane": "Main",
+    "unavailable": "Workspace unavailable",
+    "loading": "Loading your workspace...",
+    "changeTask": "Change today's task",
+    "retry": "Retry",
+    "details": "Workspace details, progress & rewards",
+    "laneName": "Lane: {name}",
+    "applicationLabel": "Application:",
+    "jobAtCompany": "{title} at {company}",
+    "currentResume": "Current resume:",
+    "versionStatus": "Version {number}, {status}",
+    "statusDraft": "draft",
+    "statusFinished": "finished",
+    "savedNoChecked": "saved, no checked version yet",
+    "laneDocTool": "Use this lane’s document tool in My resumes.",
+    "noResumeVersion": "No saved resume version in this workspace.",
+    "nextReward": "Next reward: {label}",
+    "masterDraft": "Build your Master Draft"
+  },
+  "laneIntro": {
+    "tailorNamed": "This is your {lane} lane. The Tailor aims your resume at one {lane} job at a time. Same facts, sharper aim.",
+    "tailor": "The Tailor aims your resume at one job at a time. Want to aim at a second kind of work too? Start a new lane.",
+    "libraryNamed": "This is everything you made in your {lane} lane. Pick \"All lanes\" to see the rest.",
+    "library": "My resumes keeps every resume and letter you made, sorted by lane.",
+    "gotIt": "Got it"
+  }
+}

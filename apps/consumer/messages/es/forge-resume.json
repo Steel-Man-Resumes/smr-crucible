@@ -1,0 +1,253 @@
+{
+  "intake": {
+    "jobsToConfirm": {
+      "heading": "Tus trabajos",
+      "at": "en {company}",
+      "range": "{start} a {end}",
+      "now": "actualidad"
+    },
+    "rebuild": {
+      "failedTitle": "No se pudo abrir.",
+      "loadingTitle": "Preparando tu currículum para t.ROY.",
+      "loadingSubtitle": "t.ROY arma una versión nueva a partir de él. Siempre puedes recuperar la anterior en Mis currículums.",
+      "couldNotOpen": "No pudimos abrir ese currículum. Ábrelo desde Mis currículums e inténtalo de nuevo.",
+      "signInNeeded": "Inicia sesión para armar uno a partir de un currículum guardado."
+    },
+    "demo": {
+      "title": "Currículum recibido.",
+      "subtitle": "Sacamos la experiencia, las habilidades y la educación del currículum de ejemplo.",
+      "banner": "Modo demostración: currículum de ejemplo ya cargado",
+      "sample": "Ejemplo: Jordan Mitchell"
+    },
+    "rush": {
+      "title": "Ya tenemos tu currículum.",
+      "subtitle": "Lo pegaste en Modo Rush. Lo usaremos para el análisis completo de The Forge, así que no tienes que ponerlo otra vez.",
+      "useDifferent": "Quiero usar otro currículum",
+      "from": "Desde Modo Rush"
+    },
+    "read": {
+      "gotItName": "Listo, {name}.",
+      "gotIt": "Listo.",
+      "subtitleJobs": "¿Es correcto? Estos son los trabajos y las fechas que leímos. Corriges lo que esté mal en la siguiente pantalla.",
+      "subtitleNoJobs": "Revisa que lo hayamos leído bien antes de seguir.",
+      "actionJobs": "Sí, es correcto",
+      "actionNoJobs": "Se ve bien, continuar",
+      "previewLabel": "Lo que leímos de tu archivo",
+      "characters": "{count} caracteres",
+      "doesntLookRight": "¿No se ve bien? ¿Texto ilegible, cortado o con secciones que faltan?",
+      "reupload": "Subir otro archivo",
+      "pasteInstead": "Mejor pega el texto",
+      "missingTitle": "¿Falta algo?",
+      "missingNote": "No es obligatorio, pero esto se agrega a tu currículum cuando lo descargas.",
+      "phone": "Número de teléfono",
+      "email": "Correo electrónico",
+      "emailPlaceholder": "tu@correo.com"
+    },
+    "saved": {
+      "subtitleJobs": "¿Sigue siendo correcto?",
+      "subtitleNoJobs": "No hace falta agregarlo otra vez.",
+      "action": "Sí, seguir",
+      "useDifferent": "Usar otro currículum",
+      "openEditor": "Algo no está bien: ábrelo en el editor"
+    },
+    "choose": {
+      "title": "¿Tienes un currículum?",
+      "lanesSubtitle": "Trae cualquier versión que tengas. Le da a t.ROY más de tu historia real para trabajar.",
+      "haveOneLabel": "Tengo uno",
+      "haveOneBody": "Sube un archivo o una foto, o pega el texto.",
+      "buildLabel": "Arma uno conmigo",
+      "buildBody": "Empieza con un trabajo y algo que hiciste ahí.",
+      "hint": "Con un PDF, un Word, una foto del celular, una captura de pantalla, un correo copiado, texto pegado o tu voz podemos empezar. ¿Una copia de fax? Fotografía la página. ¿Código Morse? Tradúcelo primero y luego pégalo.",
+      "subtitle": "Cualquier formato sirve, incluso una foto de una copia en papel.",
+      "pasteLabel": "Pega el texto de tu currículum",
+      "pasteBody": "Cópialo de un correo, de una app de notas o de donde sea y pégalo aquí",
+      "uploadLabel": "Sube un archivo o una imagen",
+      "uploadBody": "PDF, Word, foto de una copia en papel o captura de pantalla del celular",
+      "importLabel": "Descárgalo de LinkedIn o Indeed",
+      "importBody": "Te mostramos cómo sacar tu currículum de estas plataformas",
+      "externalLabel": "Arma uno primero con una herramienta gratis",
+      "externalBody": "Enlaces a Canva, Google Docs, Indeed. Vuelve cuando termines.",
+      "divider": "¿Empezando desde cero?",
+      "scratchLabel": "Arma uno desde cero, paso a paso",
+      "scratchBody": "15-20 minutos. Te guiamos en cada sección. Vale la pena hacerlo bien.",
+      "recallTitle": "¿No recuerdas dónde trabajaste, o cuándo?",
+      "recallNote": "Estas fuentes oficiales y gratis pueden ayudarte a recordar. Se abren en el sitio del proveedor. Nosotros nunca las vemos ni las guardamos.",
+      "recallIrs": "Transcripción de salarios e ingresos del IRS: todos los empleadores que reportaron tus sueldos",
+      "recallWorkNumber": "The Work Number: tu Informe anual de datos de empleo, gratis",
+      "recallCredly": "Credly: insignias digitales y certificaciones que has obtenido"
+    },
+    "upload": {
+      "title": "Sube tu currículum",
+      "subtitle": "Arrastra y suelta, o toca para elegir un archivo. Aceptamos PDF, Word, imágenes y capturas de pantalla.",
+      "reading": "t.ROY está sacando tu trabajo de la página.",
+      "readingSub": "Tus trabajos y fechas aparecerán enseguida para que los revises.",
+      "drop": "Suelta tu archivo aquí, o toca para buscarlo",
+      "dropTypes": "PDF, Word, imagen o captura de pantalla",
+      "inputAria": "Subir archivo del currículum",
+      "pickAgain": "Ya volviste. Elige tu archivo otra vez y se subirá. Los navegadores no pueden guardar un archivo mientras inicias sesión.",
+      "signInMessage": "Tu archivo está bien. Este navegador todavía tiene un inicio de sesión viejo o sin terminar, y detuvo la subida. Inicia sesión de nuevo o cierra sesión, y luego intenta subir tu archivo una vez más.",
+      "genericError": "Algo salió mal. ¿Intentamos de nuevo?",
+      "couldNotRead": "No pudimos leer ese archivo. ¿Probamos con otro?",
+      "buildInstead": "O mejor arma uno con nuestra ayuda"
+    },
+    "import": {
+      "title": "Descarga tu currículum",
+      "subtitle": "Sigue estos pasos, luego vuelve y sube el archivo.",
+      "action": "Subir mi archivo",
+      "linkedinTitle": "Desde LinkedIn",
+      "linkedinStep1": "Entra a tu perfil de LinkedIn",
+      "linkedinStep2": "Haz clic en el botón \"Más\" (More) debajo de tu foto de perfil",
+      "linkedinStep3": "Elige \"Guardar en PDF\" (Save to PDF)",
+      "linkedinStep4": "Vuelve aquí y sube el PDF",
+      "indeedTitle": "Desde Indeed",
+      "indeedStep1": "Ve a",
+      "indeedStep2": "Haz clic en \"Descargar currículum\" (Download Resume)",
+      "indeedStep3": "Elige el formato PDF",
+      "indeedStep4": "Vuelve aquí y sube el PDF"
+    },
+    "external": {
+      "title": "Creadores de currículum gratis",
+      "subtitle": "Elige uno, arma tu currículum y vuelve para subirlo.",
+      "action": "Subir mi currículum",
+      "footer": "Prefiero armarlo aquí con ayuda",
+      "canvaName": "Creador de currículums de Canva",
+      "canvaNote": "Plantillas gratis. Fácil de arrastrar y soltar.",
+      "docsName": "Plantillas de currículum de Google Docs",
+      "docsNote": "Gratis con una cuenta de Google.",
+      "indeedName": "Creador de currículums de Indeed",
+      "indeedNote": "Paso a paso. Se guarda en tu perfil de Indeed."
+    }
+  },
+  "guided": {
+    "skipForNow": "Omitir por ahora",
+    "intro": {
+      "title": "Arma tu currículum desde cero.",
+      "subtitle": "Te guiamos paso a paso, una sección a la vez.",
+      "action": "Listo, vamos",
+      "p1": "Esto toma <b>15-20 minutos</b> si lo haces bien. No es mucho tiempo para algo tan importante. Pero solo funciona si lo tomas en serio.",
+      "p2": "Vamos sección por sección: datos de contacto, historial de trabajo, habilidades, educación. Responde cada pregunta con tus propias palabras. No trates de que suene elegante. Solo cuéntanos lo que es verdad.",
+      "gapsTitle": "Una nota sobre los vacíos",
+      "gapsBody": "Puede que tengas vacíos en tu historial por encarcelamiento, obligaciones familiares, salud o cualquier otra razón. No tienes que ocultarlos ni explicarlos aquí. Solo incluye lo que tienes. The Forge te ayuda a ver cómo hablar de esos vacíos más adelante, a tu manera."
+    },
+    "name": {
+      "title": "¿Cuál es tu nombre completo?",
+      "subtitle": "Va en la parte de arriba de tu currículum.",
+      "placeholder": "p. ej., Marcus Johnson"
+    },
+    "contact": {
+      "title": "Datos de contacto",
+      "subtitle": "Van en tu currículum. Agrega lo que tengas. Todo es opcional.",
+      "phone": "Teléfono",
+      "email": "Correo electrónico",
+      "emailPlaceholder": "tu@correo.com",
+      "city": "Ciudad, estado",
+      "cityPlaceholder": "p. ej., Milwaukee, WI"
+    },
+    "job": {
+      "titleFirst": "Tu trabajo más reciente",
+      "titleNth": "Trabajo {number}",
+      "subtitleFirst": "El último trabajo que tuviste. Tiempo completo, medio tiempo, temporal, por encargo o programa de trabajo. Todo cuenta.",
+      "subtitleNth": "Igual que antes: puesto, empresa y cuándo.",
+      "titleLabel": "Puesto",
+      "titlePlaceholder": "p. ej., Auxiliar de almacén, Conserje, Cocinero",
+      "companyLabel": "Empresa u organización",
+      "companyPlaceholder": "p. ej., Amazon, Ciudad de Milwaukee, Por cuenta propia",
+      "whenLabel": "¿Cuándo? (aproximado está bien)",
+      "whenPlaceholder": "p. ej., 2019-2022"
+    },
+    "duties": {
+      "title": "¿Qué hacías ahí?",
+      "subtitle": "Tus responsabilidades principales con tus propias palabras. No lo adornes. Solo di la verdad.",
+      "footer": "Incluye logros, cosas que te dieron orgullo y habilidades que usaste.",
+      "placeholder": "p. ej., Manejé montacargas y patín hidráulico. Ayudé a capacitar a 3 empleados nuevos en seguridad. Mantuve 99% de pedidos a tiempo en temporada alta.",
+      "attention": "Un número vale más que un párrafo aquí. Cuántos, con qué frecuencia, de qué tamaño. Lo que de verdad recuerdes."
+    },
+    "more": {
+      "title": "¿Tienes otro trabajo que agregar?",
+      "subtitle": "Más historial de trabajo hace un currículum más fuerte. El medio tiempo, el temporal y los trabajos por encargo también cuentan.",
+      "count": "{count, plural, =1 {# trabajo agregado hasta ahora.} other {# trabajos agregados hasta ahora.}}",
+      "yesLabel": "Sí, agregar otro trabajo",
+      "yesBody": "Tiempo completo, medio tiempo, temporal, por encargo o programa de trabajo",
+      "noLabel": "No, ese es mi historial",
+      "noBody": "Seguir con habilidades y certificaciones"
+    },
+    "skills": {
+      "title": "¿Cuáles son tus habilidades y certificaciones?",
+      "subtitle": "¿Qué se te da bien? Habilidades técnicas, con las personas, físicas, licencias. Todo cuenta.",
+      "placeholder": "p. ej., Certificado en montacargas (OSHA), CDL clase A, Microsoft Excel, bilingüe inglés/español, liderazgo de equipos, manejo de conflictos"
+    },
+    "education": {
+      "title": "Educación y capacitación",
+      "subtitle": "Escuela, GED, programas de oficios, certificaciones, servicio militar. Todo cuenta. Incluye cualquier cosa que completaste, incluso los programas que hiciste adentro.",
+      "placeholder": "p. ej., GED (2018), certificación de HVAC (ABC Training, 2020), seguridad OSHA de 10 horas, Ejército de EE. UU. 2004-2008"
+    },
+    "extras": {
+      "title": "¿Algo más?",
+      "subtitle": "Trabajo voluntario, cargos en tu comunidad, programas en los que has participado, o cualquier cosa que no encaje arriba.",
+      "skip": "Omitir, eso es todo",
+      "placeholder": "p. ej., Voluntariado en Milwaukee Rescue Mission 2023-presente, mentoría entre compañeros en un programa de reinserción, completé educación financiera y resolución de conflictos"
+    },
+    "review": {
+      "title": "Esto es lo que tenemos.",
+      "subtitle": "Revísalo antes de empezar el análisis. Regresa para corregir lo que sea.",
+      "action": "Se ve bien, empezar el análisis",
+      "draft": "Tu borrador del currículum",
+      "characters": "{count} caracteres",
+      "note": "Esta es la materia prima para el análisis de The Forge. La IA la convierte en una historia profesional estructurada. Verás el resultado completo al final."
+    }
+  },
+  "paste": {
+    "title": "Pega tu currículum",
+    "subtitle": "Copia el texto de tu currículum de donde sea y pégalo abajo. No te preocupes por el formato.",
+    "reading": "Leyendo...",
+    "minimum": "Mínimo 20 caracteres. Solo pon lo básico.",
+    "aiHelp": "¿Ya usas ChatGPT u otra IA? Pídele que escriba tu currículum y pégalo aquí.",
+    "show": "Mostrar",
+    "hide": "Ocultar",
+    "aiHelpNote": "Copia este mensaje, dáselo a tu IA y pega su respuesta en el cuadro de abajo. Nosotros nos encargamos del formato.",
+    "aiPrompt": "Por favor escribe mi currículum en inglés, como texto sin formato. Incluye mi nombre, teléfono, correo electrónico y ciudad. Enumera cada trabajo que he tenido con el nombre del empleador, las fechas y 2-4 viñetas que describan lo que de verdad hice. Después enumera mis habilidades y cualquier educación, certificado o capacitación. No inventes nada. Usa solo lo que sabes de mí por nuestras conversaciones o lo que te diga ahora. Hazme preguntas primero si necesitas más detalle.",
+    "copy": "Copiar este mensaje",
+    "copied": "¡Copiado!",
+    "placeholder": "Pega tu currículum aquí...\n\nEjemplo:\nJohn Smith\nOperador de montacargas con 5 años de experiencia\n\nHistorial de trabajo:\nAuxiliar de almacén, Amazon, 2019-2024\n- Operé montacargas y patín hidráulico\n- Capacité a miembros nuevos del equipo",
+    "keepGoing": "Sigue. Necesitamos un poco más para trabajar."
+  },
+  "builder": {
+    "title": "Aquí está tu currículum. Hagámoslo fuerte.",
+    "intro": "Organizamos lo que nos diste. Revisa cada sección y corrige lo que esté mal. Todo es tuyo para editar. Este será tu currículum base: el que después apuntamos a trabajos específicos.",
+    "weakTitle": "Algunas líneas podrían ser más fuertes.",
+    "weakBody": "Los mejores currículums muestran lo que hiciste, con números reales. Toca <b>Fortalecer con ayuda</b> debajo de cualquier viñeta. Te hacemos unas preguntas y convertimos tu respuesta en una línea fuerte. Solo usamos lo que tú nos dices.",
+    "continue": "Se ve bien, continuar",
+    "hideDownload": "Ocultar la descarga rápida",
+    "showDownload": "¿Necesitas descargarlo ahora?",
+    "fullLater": "La versión completa viene después de los siguientes pasos, y es más fuerte.",
+    "beforeNote": "Esta es la versión de <b>antes</b>. Si necesitas una copia hoy (una cita, un requisito de un programa), llévate una y luego regresa a terminar.",
+    "preparing": "Preparando...",
+    "docx": ".docx (se abre en Word)",
+    "pdf": "PDF (conserva el formato)",
+    "txt": ".txt (para formularios en línea)",
+    "txtTitle": "El texto sin formato es el más seguro para los cuadros de solicitud en línea",
+    "actionsHint": "Continúa cuando se vea bien.",
+    "readinessTitle": "Antes de irte: ¿ya puedes usar esto con confianza?",
+    "readinessNote": "Un chequeo rápido, y nada aquí se califica. El currículum es la mitad; hacerlo tuyo es la otra mitad.",
+    "readiness": {
+      "explain": "Puedo explicar en voz alta cada viñeta de este currículum.",
+      "story": "Tengo una historia real detrás de mi experiencia más fuerte.",
+      "fit": "Sé por qué este currículum encaja con los trabajos que busco.",
+      "next": "Sé cuál es mi siguiente paso (postular, reunir pruebas o elegir un puesto que me quede mejor)."
+    }
+  },
+  "sync": {
+    "question": "Hay un currículum en proceso en esta computadora. ¿Es tuyo?",
+    "note": "Nada de lo que contiene se usa hasta que respondas. Si no es tuyo, lo borramos de esta computadora.",
+    "yesEmail": "Sí, guardarlo en {email}",
+    "yesAccount": "Sí, guardarlo en mi cuenta",
+    "no": "No, borrarlo",
+    "notEmail": "¿No eres {email}?",
+    "notAccount": "¿No es tu cuenta?",
+    "signOut": "Cerrar sesión",
+    "saved": "Tu trabajo hasta ahora quedó guardado en tu cuenta.",
+    "failed": "Todavía no pudimos guardar tu trabajo en tu cuenta. Sigue en esta computadora y lo intentaremos de nuevo.",
+    "dismissAria": "Descartar",
+    "dismiss": "OK"
+  }
+}

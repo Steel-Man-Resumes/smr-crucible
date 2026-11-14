@@ -1,0 +1,26 @@
+{
+  "lang": {
+    "label": "Idioma",
+    "chooseAria": "Elegir idioma",
+    "hint": "Cambia todas las pantallas traducidas y el idioma en que responde tu coach. Los currículums y las cartas de presentación se quedan en inglés.",
+    "settingsNote": "Algunas pantallas todavía se están traduciendo. Se muestran en inglés hasta que estén listas."
+  },
+  "actions": {
+    "continue": "Continuar",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "skip": "Omitir",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "close": "Cerrar",
+    "startOver": "Empezar de nuevo"
+  },
+  "errors": {
+    "couldNotSave": "No se pudo guardar. Revisa tu conexión e inténtalo de nuevo."
+  },
+  "errorPage": {
+    "title": "Ese paso falló.",
+    "body": "No se perdió nada. Tu trabajo está guardado en este dispositivo. Inténtalo de nuevo y, si sigue pasando, recarga la página.",
+    "tryAgain": "Intentar de nuevo"
+  }
+}

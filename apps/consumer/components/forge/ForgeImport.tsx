@@ -14,14 +14,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { useForgeSession } from "@/lib/forge-context";
 import {
   LAST_SYNCED_RUN_KEY,
   afterSave,
   importDecision,
   importPayload,
-  IMPORT_QUESTION,
-  importYesLabel,
   runHasAnswers,
   runLevel,
   signedOutDecision,
@@ -35,6 +34,7 @@ import { useImpersonating } from "./useImpersonating";
 const MAX_TRIES_PER_PAGE = 2;
 
 export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
+  const t = useTranslations("forgeResume.sync");
   const { data, status } = useSession();
   // The raw run (whoever's it is): this component is the one place that reads
   // it, in order to ask. Every page reads the owned view instead.
@@ -172,10 +172,10 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
       <div className="mx-auto w-full max-w-2xl px-4 pt-4 sm:px-6" data-testid="forge-import-ask">
         <div role="dialog" aria-labelledby="forge-import-title" className="rounded-[5px] border border-t-amber bg-t-panel p-4 sm:p-5">
           <p id="forge-import-title" className="text-base font-semibold text-t-white">
-            {IMPORT_QUESTION}
+            {t("question")}
           </p>
           <p className="mt-1 text-sm leading-relaxed text-t-bone-dim">
-            Nothing in it is used until you answer. If it isn&apos;t yours, we erase it from this computer.
+            {t("note")}
           </p>
           <div className="mt-4 flex flex-col gap-2 sm:flex-row">
             <button
@@ -188,7 +188,7 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
               }}
               className="t-focus min-h-touch break-all rounded-[5px] border border-ws-amber bg-ws-amber px-4 text-sm font-semibold text-ws-bg hover:bg-ws-amber-bright"
             >
-              {importYesLabel(user.email)}
+              {user.email ? t("yesEmail", { email: user.email }) : t("yesAccount")}
             </button>
             <button
               type="button"
@@ -199,18 +199,18 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
               }}
               className="t-focus min-h-touch rounded-[5px] border border-t-line px-4 text-sm font-medium text-t-white hover:border-t-line-strong"
             >
-              No, erase it
+              {t("no")}
             </button>
           </div>
           <p className="mt-3 text-sm text-t-bone-dim">
-            {user.email ? `Not ${user.email}? ` : "Not your account? "}
+            {user.email ? t("notEmail", { email: user.email }) : t("notAccount")}{" "}
             <button
               type="button"
               onClick={() => void signOutOfForge({ clearRun: true })}
               className="t-focus min-h-touch font-medium text-t-white underline underline-offset-4"
               data-testid="forge-import-sign-out"
             >
-              Sign out
+              {t("signOut")}
             </button>
           </p>
         </div>
@@ -223,15 +223,15 @@ export function ForgeImport({ showPrompt = true }: { showPrompt?: boolean }) {
       <div className="mx-auto w-full max-w-2xl px-4 pt-4 sm:px-6">
         <p role="status" data-testid="forge-import-note" className="flex items-center justify-between gap-3 rounded-[5px] border border-t-line bg-t-panel px-4 py-2 text-sm text-t-white">
           {note === "saved"
-            ? "Your work so far is saved to your account."
-            : "We couldn't save your work to your account yet. It's still on this computer, and we'll try again."}
+            ? t("saved")
+            : t("failed")}
           <button
             type="button"
             onClick={() => setNote("")}
             className="t-focus min-h-touch px-2 text-sm text-t-bone-dim hover:text-t-white"
-            aria-label="Dismiss"
+            aria-label={t("dismissAria")}
           >
-            OK
+            {t("dismiss")}
           </button>
         </p>
       </div>

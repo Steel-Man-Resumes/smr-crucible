@@ -1,0 +1,31 @@
+{
+  "shell": {
+    "skipToContent": "Ir al contenido",
+    "privateByDesign": "Privado por diseño",
+    "leave": "Salir",
+    "leaveAria": "Salir de The Forge"
+  },
+  "accumulator": {
+    "building": "armando tu historia",
+    "readiness": {
+      "precontemplation": "Explorando",
+      "contemplation": "Pensándolo",
+      "preparation": "Preparándome",
+      "action": "Listo para empezar"
+    },
+    "goals": {
+      "stability": "Estabilidad",
+      "growth": "Crecimiento",
+      "meaning": "Trabajo con sentido",
+      "immediate": "Ingresos inmediatos",
+      "independence": "Mi propio jefe algún día",
+      "community": "Retribuir a mi comunidad",
+      "flexibility": "Horario flexible",
+      "back_to_my_trade": "Volver a mi oficio"
+    },
+    "resumeReceived": "Currículum recibido",
+    "resumeBuilt": "Currículum (armado juntos)",
+    "hurdles": "{count, plural, =1 {# obstáculo anotado} other {# obstáculos anotados}}",
+    "preferencesSet": "Preferencias listas"
+  }
+}

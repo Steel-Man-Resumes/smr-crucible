@@ -15,7 +15,9 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pause, Play, SkipForward } from "lucide-react";
-import type { ResumeTour } from "@/lib/showstopper-tour";
+import { useTranslations } from "next-intl";
+import type { ResumeTour, TourStep } from "@/lib/showstopper-tour";
+import enCatalog from "@/messages/en/forge-processing.json";
 
 /** How long a note stays current before the pointer reads on. */
 const STEP_MS = 5200;
@@ -25,7 +27,68 @@ const FIRST_NOTE_MS = 1400;
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
+// ---- t.ROY's notes in the site language --------------------------------------
+// lib/showstopper-tour.ts (and the quality rules in @crucible/core) hand over
+// each note as English text. Here each one is found again by the checker's own
+// id and said from the catalog; a note this file cannot place is shown as it
+// came, so a person never sees a wrong note, at worst an English one.
+
+/** The truth check's note keys (lib/showstopper-tour.ts NOTES) to catalog ids. */
+const TRUTH_NOTE_IDS: Record<string, string> = {
+  "STD-F05": "blank",
+  "STD-F02:empty_section": "emptySection",
+  "STD-F02:missing_title": "missingTitle",
+  "STD-F01": "noDates",
+  "STD-F01:dateless_page": "datelessPage",
+  "STD-F06": "toolMark",
+  dash: "dash",
+  dash_range: "dashRange",
+  "STD-T01:sole_actor": "soleActor",
+  "STD-T03:credential_status": "credentialStatus",
+};
+
+/** Quality rules that have a short follow-up (QUALITY_AGAIN) to catalog ids. */
+const QUALITY_AGAIN_IDS: Record<string, string> = {
+  duty_phrasing: "dutyPhrasing",
+  weak_bullet: "weakBullet",
+  bullets: "bullets",
+  generic_summary: "genericSummary",
+  heading: "heading",
+};
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * The first-time quality notes are the rule's own English sentence. The English
+ * catalog holds those sentences word for word, so the English text names the id.
+ */
+const QUALITY_MATCHERS = Object.entries(enCatalog.notes.quality).map(([id, text]) => ({
+  id,
+  re: new RegExp(`^${escapeRe(text).replace("\\{phrase\\}", "(.+)")}$`),
+}));
+
+/** A step id is `${lineIndex}-${key}`; the key says which kind of note it is. */
+const noteKindOf = (s: TourStep) => s.id.slice(s.id.indexOf("-") + 1);
+
+/** The catalog key (and values) for step i's note, or null to show the note as it came. */
+function noteCopy(steps: TourStep[], i: number): { key: string; values?: Record<string, string> } | null {
+  const s = steps[i];
+  const kind = noteKindOf(s);
+  // The tour says the long version the first time a kind shows up, then a short one.
+  const again = steps.slice(0, i).some((o) => noteKindOf(o) === kind);
+  if (s.source === "truth") {
+    return { key: `notes.truth.${TRUTH_NOTE_IDS[kind] ?? "generic"}.${again ? "again" : "first"}` };
+  }
+  if (again) return { key: `notes.qualityAgain.${QUALITY_AGAIN_IDS[kind.replace(/^q:/, "")] ?? "default"}` };
+  for (const m of QUALITY_MATCHERS) {
+    const hit = m.re.exec(s.note);
+    if (hit) return { key: `notes.quality.${m.id}`, values: { phrase: hit[1] ?? "" } };
+  }
+  return null;
+}
+
 export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; reduced: boolean | null }) {
+  const t = useTranslations("forgeProcessing");
   // Until the motion preference is known, nothing plays and no pointer shows.
   const known = motionPref !== null;
   const reduced = motionPref !== false;
@@ -116,16 +179,16 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
   return (
     <>
       {/* The page as it reads now */}
-      <section aria-label="Your page now" className="min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
+      <section aria-label={t("tour.pageNow")} className="min-w-0 lg:col-start-1 lg:row-span-2 lg:row-start-1">
         <div className="mb-2 flex items-baseline justify-between gap-3">
-          <h2 className="font-term text-xs uppercase tracking-wider text-t-amber-bright">Your page now</h2>
-          <p className="text-xs text-t-bone-dim">Checked right here in your browser.</p>
+          <h2 className="font-term text-xs uppercase tracking-wider text-t-amber-bright">{t("tour.pageNow")}</h2>
+          <p className="text-xs text-t-bone-dim">{t("tour.checkedHere")}</p>
         </div>
         <div
           ref={scrollRef}
           className="relative max-h-[46vh] overflow-y-auto border border-ws-bg/40 bg-ws-bone shadow-[6px_6px_0_#000] lg:max-h-[68vh]"
           tabIndex={0}
-          aria-label="Your page, line by line"
+          aria-label={t("tour.pageAria")}
         >
           <div className="relative py-5 pl-12 pr-4 sm:pr-6">
             {/* The pointer. Hidden when motion is reduced: lines are marked instead. */}
@@ -183,16 +246,17 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
       </section>
 
       {/* t.ROY's notes, in reading order */}
-      <section aria-label="What t.ROY sees" className="min-w-0 lg:col-start-2 lg:row-start-2">
+      <section aria-label={t("tour.seesAria")} className="min-w-0 lg:col-start-2 lg:row-start-2">
         {tour.readNote ? (
           <p className="border-l-4 border-ws-amber bg-t-panel-2 px-4 py-3 text-base text-t-white" role="status">
-            {tour.readNote}
+            {t("tour.readNote")}
           </p>
         ) : (
           <>
-            <ol className="space-y-2" aria-live="polite" aria-label="t.ROY's notes on your page">
+            <ol className="space-y-2" aria-live="polite" aria-label={t("tour.notesAria")}>
               {steps.slice(0, revealed).map((s, i) => {
                 const isCurrent = i === current;
+                const copy = noteCopy(steps, i);
                 return (
                   <li key={s.id} className="animate-fadeIn">
                     <button
@@ -218,8 +282,8 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
                         {i + 1}
                       </span>
                       <span className={`text-[15px] leading-snug ${isCurrent || showAll ? "" : "line-clamp-1 sm:line-clamp-none"}`}>
-                        <span className="sr-only">Note {i + 1}, on the line &ldquo;{s.line}&rdquo;: </span>
-                        {s.note}
+                        <span className="sr-only">{t("tour.noteLabel", { number: i + 1, line: s.line })}</span>
+                        {copy ? t(copy.key, copy.values) : s.note}
                       </span>
                     </button>
                   </li>
@@ -228,11 +292,11 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
             </ol>
             {finished && (
               <p className="mt-3 text-sm text-t-bone-dim">
-                That&apos;s what I see on this page. Tap a note to find its line.
+                {t("tour.done")}
               </p>
             )}
             {!finished && revealed === 0 && !reduced && (
-              <p className="text-sm text-t-bone-dim">Reading your page...</p>
+              <p className="text-sm text-t-bone-dim">{t("tour.reading")}</p>
             )}
             {!reduced && !finished && (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -242,7 +306,7 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
                   className="t-focus inline-flex min-h-touch items-center gap-2 border border-t-line px-3 font-term text-xs text-t-white hover:border-ws-amber"
                 >
                   {playing ? <Pause size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
-                  {playing ? "Pause" : "Play"}
+                  {playing ? t("tour.pause") : t("tour.play")}
                 </button>
                 <button
                   type="button"
@@ -250,7 +314,7 @@ export function OldPageTour({ tour, reduced: motionPref }: { tour: ResumeTour; r
                   className="t-focus inline-flex min-h-touch items-center gap-2 border border-t-line px-3 font-term text-xs text-t-white hover:border-ws-amber"
                 >
                   <SkipForward size={14} aria-hidden="true" />
-                  Show all notes
+                  {t("tour.showAll")}
                 </button>
               </div>
             )}

@@ -177,7 +177,7 @@ test("Q3 copy: only job taps left says so plainly", () => {
   assert.equal(v.fixCount, 2);
   assert.equal(statusLine(v), "Check your two jobs, one tap each, and it's ready.");
   assert.equal(mainActionLabel(v), "Check your 2 jobs");
-  const ui = read("components/forge/finish/DefendPanel.tsx");
+  const ui = read("components/forge/finish/DefendPanel.tsx") + "\n" + read("messages/en/forge-defend.json");
   assert.match(ui, /Looks right/);
   assert.match(ui, /Fix this/);
   assert.match(ui, /data-job-card="true"/);

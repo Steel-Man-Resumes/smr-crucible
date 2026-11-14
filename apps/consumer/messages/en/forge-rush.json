@@ -1,0 +1,109 @@
+{
+  "rush": {
+    "intro": {
+      "title": "Rush Resume",
+      "subtitle": "Rewrite your resume lines for one job, fast.",
+      "whatThisIsLead": "What this is:",
+      "whatThisIsBody": "Rush works from the resume you already have and rewrites its lines. It does not build a new resume or learn your story. The full <link>Forge</link> takes longer and builds the real thing."
+    },
+    "form": {
+      "resumeLabel": "Your current resume",
+      "resumePlaceholder": "Paste your resume text here...",
+      "or": "or",
+      "readingFile": "Reading file...",
+      "uploadFile": "Upload a file (PDF, DOCX, TXT)",
+      "jobLabel": "Target job title",
+      "jobPlaceholder": "e.g., \"Warehouse Associate\" or \"Customer Service Rep\"",
+      "companyLabel": "Target company",
+      "optional": "(optional)",
+      "companyPlaceholder": "e.g., \"Amazon\" or \"local restaurant\"",
+      "descriptionLabel": "Paste the job description",
+      "descriptionHint": "(optional, but it makes it way better)",
+      "descriptionPlaceholder": "Copy and paste the job posting here. The AI will tailor your resume to match what they're looking for.",
+      "submit": "rewrite my lines"
+    },
+    "errors": {
+      "readFile": "Could not read that file.",
+      "uploadFailed": "File upload failed. Try pasting instead.",
+      "generic": "Something went wrong.",
+      "genericRetry": "Something went wrong. Try again."
+    },
+    "processing": {
+      "workLabel": "Working from the information you provided",
+      "title": "Rewriting your lines",
+      "messages": {
+        "reading": "Reading your resume...",
+        "strengths": "Identifying your strengths...",
+        "rewriting": "Rewriting for the target role...",
+        "polishing": "Polishing the final draft..."
+      },
+      "stillWorking": "This is still working. We will show the text before you download it."
+    },
+    "result": {
+      "title": "Your rewritten lines",
+      "forJob": "For: {job}",
+      "forJobAtCompany": "For: {job} at {company}",
+      "notFinishedLead": "This is not a finished resume.",
+      "notFinishedBody": "It has no name, no employers and no dates. Paste each line into your own resume under the job it came from, and read every line before you send it.",
+      "summaryHeading": "Professional Summary",
+      "experienceHeading": "Experience",
+      "basedOn": "Based on: “{original}”",
+      "skillsHeading": "Skills",
+      "tipLabel": "Tip: ",
+      "previewTitle": "Preview the download",
+      "previewNote": "This shows the rewritten lines as a draft page. It is not a complete resume.",
+      "preparing": "Preparing...",
+      "downloadDocx": "Download .docx",
+      "copied": "Copied!",
+      "copyText": "Copy Text",
+      "downloadTxt": "Download .txt",
+      "continueTailor": "Continue editing in the Application Tailor",
+      "interviewLead": "This gets you in the door, not through the interview.",
+      "interviewBody": "Rush rewrites what you gave it and nothing more. It doesn't know your strengths, your story, or what makes you different. An interviewer will ask about all of that.",
+      "ctaTitle": "Ready to actually prepare?",
+      "ctaBody": "The Forge builds your real narrative: strengths, career paths, resources for your situation, and documents that hold up in an interview.",
+      "ctaButton": "go to The Forge"
+    }
+  },
+  "check": {
+    "eyebrow": "Free resume check",
+    "title": "Check your resume. No sign-in.",
+    "intro": "Paste it or upload the file. We check it against the basic rules and tell you what to fix. We don't save it.",
+    "tabsAria": "How to give us your resume",
+    "tabPaste": "Paste the text",
+    "tabUpload": "Upload the file",
+    "resumeLabel": "Your resume",
+    "pastePlaceholder": "Paste your whole resume here.",
+    "chooseFile": "Choose your resume file",
+    "fileHint": "PDF, Word, text, or a photo. Up to 10 MB.",
+    "errors": {
+      "pasteFirst": "Paste your whole resume first.",
+      "chooseFirst": "Choose your resume file first.",
+      "rateLimited": "You've used today's free checks from this connection. Try again tomorrow, or paste the text instead.",
+      "couldNotCheck": "We couldn't check that file. Try again, or paste the text instead.",
+      "couldNotReach": "We couldn't reach the checker. Try again, or paste the text instead."
+    },
+    "reading": "Reading your file...",
+    "submit": "Check it",
+    "resultsAria": "Your results",
+    "pageLength": "Page length",
+    "markedTitle": "Your page, marked up",
+    "markedNote": "These are your words. We mark lines we can match to a specific finding. The full check is below. Nothing on the page has been rewritten yet.",
+    "checkLineAria": "Check this line: {title}",
+    "verdict": {
+      "good": "Good",
+      "fix": "Worth fixing",
+      "mustFix": "Fix first",
+      "note": "Note"
+    },
+    "summary": {
+      "none": "Nothing to fix in the checks we ran.",
+      "mustFix": "{count} to fix before you send it",
+      "toFix": "{count} worth fixing"
+    },
+    "ctaNote": "These are the basic checks. The Forge goes line by line with you and builds the real thing.",
+    "ctaSignedIn": "Fix these with t.ROY",
+    "ctaSignedOut": "Sign in free to fix these with t.ROY",
+    "checkAnother": "Check another resume"
+  }
+}

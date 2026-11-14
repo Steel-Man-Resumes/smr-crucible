@@ -28,6 +28,7 @@ import { linesOf, isSectionEnd, isEntryHeader, skillTermsOf, CONTACT_LINE_RE, ST
 import { isCredentialTerm, namedCredentialRe, credentialInitialsRe, isShortInitialTerm } from "./credentialWords";
 import { isWorkAcronym, needsHoldingWord } from "./workAcronyms";
 import { isStrictCredentialWhen } from "./credentialStatus";
+import { ES_NAME_STATUS_SOURCE, statusToEnglish } from "./statusLexicon";
 import { titleWords } from "./scopeWords";
 
 export interface CredentialMention {
@@ -939,13 +940,15 @@ export function bareCredentialName(name: string): string {
 
 /** The line a credential is written as from the person's own answer: the name, the kind they picked, and their own year or status. */
 export function credentialLineText(name: string, kind: string, when: string): string {
-  return `${bareCredentialName(name)} ${kind}, ${when.trim().replace(/[.\s]+$/, "")}`;
+  return `${bareCredentialName(name)} ${kind}, ${statusToEnglish(when).trim().replace(/[.\s]+$/, "")}`;
 }
 
 // Round 8: a row's name is the person's, exactly as typed. A status, a "not held" word or a year belongs
 // in the status box, so a name holding one is refused at entry (and is never a complete row).
-const ROW_NAME_STATUS_RE =
-  /\b(?:current|currently|active|valid|expired|expires|expiring|inactive|lapsed|lapse|suspended|revoked|in progress|enrolled|pending|renewed|never|not|failed|retake|studying|working on|no longer|lost|denied)\b|\b(?:19|20)\d{2}\b/i;
+const ROW_NAME_STATUS_RE = new RegExp(
+  String.raw`\b(?:current|currently|active|valid|expired|expires|expiring|inactive|lapsed|lapse|suspended|revoked|in progress|enrolled|pending|renewed|never|not|failed|retake|studying|working on|no longer|lost|denied|${ES_NAME_STATUS_SOURCE})\b|\b(?:19|20)\d{2}\b`,
+  "i",
+);
 const ROW_TYPE_WORD_RE = /\b(?:license|licence|licensed|certification|certificate|certified|card|permit|course|training|endorsement)\b/i;
 const PERMIT_WORD_RE = /\b(?:permit|learner'?s?|instruction)\b/i;
 
@@ -1045,7 +1048,7 @@ const DEAD_WHEN_RE = /\b(?:expired|lapsed|suspended|revoked|inactive|in progress
 
 /** The keys of credentials the person's rows mark expired, lapsed, suspended or not yet held. */
 function deadRowKeys(rows: ReadonlyArray<CredentialRow> | undefined): Set<string> {
-  return new Set((rows ?? []).filter((r) => r.kind === "permit" || r.kind === "training course" || DEAD_WHEN_RE.test(r.when)).map((r) => credentialFamilyKey(r.name)));
+  return new Set((rows ?? []).filter((r) => r.kind === "permit" || r.kind === "training course" || DEAD_WHEN_RE.test(statusToEnglish(r.when))).map((r) => credentialFamilyKey(r.name)));
 }
 
 // ---- round 9: a live credential covers its plain mentions in sentences --------------------
@@ -1057,6 +1060,7 @@ const LIVE_WHEN_RE = /\b(?:current|currently|active|valid|in good standing|good 
 export function isLiveCredential(kind: string, when: string, yearOnly = false): boolean {
   // Round 10 (open question 2): for a structured row, a year-only answer ("certification, 2019") counts too;
   // liveCredentialCovers then takes only a mention that shows that same year, or no status and no year at all.
+  when = statusToEnglish(when);
   const dated = yearOnly && /\b(?:19|20)\d{2}\b/.test(when) && !/[a-z]/i.test(when.replace(/\b(?:in|since|earned|got|passed)\b/gi, ""));
   return kind !== "permit" && kind !== "training course" && (LIVE_WHEN_RE.test(when) || dated) && !DEAD_WHEN_RE.test(when);
 }

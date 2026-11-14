@@ -1,0 +1,7 @@
+{
+  "es": {
+    "default": "machine-written, machine-checked 2026-11-13 (blind back-translation, high and medium fixes applied)",
+    "person_reviewed": {},
+    "note": "Add a key to person_reviewed (with reviewer role and date) only when a person has read it. Nothing may be described as reviewed until it is listed here."
+  }
+}

@@ -42,9 +42,9 @@ describe("M1: the email callback is reached only by a same-origin GET", () => {
   });
 
   it("the button page shows the full address, with a way out", () => {
-    const page = read("app/(auth)/login/finish/page.tsx");
+    const page = read("app/(auth)/login/finish/page.tsx") + "\n" + read("messages/en/auth.json");
     assert.match(page, /This link signs you in as/);
-    assert.match(page, /Not you\? Don&apos;t continue\./);
+    assert.match(page, /Not you\? Don(?:&apos;|')t continue\./);
     assert.doesNotMatch(code(page), /maskEmail\(/);
     assert.match(read("middleware.ts"), /NextResponse\.redirect\(interstitialUrlFor\(req\.nextUrl\.toString\(\)\), 303\)/);
   });

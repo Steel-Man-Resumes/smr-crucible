@@ -44,6 +44,7 @@ import { staffAnswerText, draftsAfterFinal, draftChoiceWithdrawn, STAFF_DRAFTS_W
 const FINISH_THE_ANSWER = "The button was refused; that is not the answer and nothing to correct. Answer my question in full from the results you already read in this conversation: who, the reason, the action to take. Call no tools. End with one clause saying I can open the person from People.";
 import { recordStepOn } from "@/lib/server-switch";
 import { NextResponse } from "next/server";
+import { localeFromCookieHeader } from "@/i18n/locale";
 import { streamText } from "ai";
 import { auth } from "@/auth";
 import { forgeUserId } from "@/lib/session-policy";
@@ -406,22 +407,29 @@ ${sanitizeForPrompt(systemOverride, 4_000)}
   // Bug fix: the "Reply in Spanish" toggle writes users.coach_language, but this
   // t.ROY route never read it, so the toggle was a no-op on this surface. Honor it
   // for authenticated users. Resumes/cover letters stay in the application language.
+  // Site language (i18n/locale.ts): the cookie speaks for everyone, signed in
+  // or not, and the account column still counts for a signed-in person whose
+  // browser never chose.
   let localizedSystemPrompt = systemPrompt;
-  if (userId) {
-    const langRow = await getOne<{ coach_language: string | null }>(
-      `SELECT coach_language FROM users WHERE id = $1`,
-      [userId]
-    ).catch(() => null);
-    if (langRow?.coach_language === "es" && staffActor) {
+  const siteLocale = localeFromCookieHeader(request.headers.get("cookie"));
+  const langRow = userId && siteLocale !== "es"
+    ? await getOne<{ coach_language: string | null }>(
+        `SELECT coach_language FROM users WHERE id = $1`,
+        [userId]
+      ).catch(() => null)
+    : null;
+  const wantsSpanish = siteLocale === "es" || langRow?.coach_language === "es";
+  {
+    if (wantsSpanish && staffActor) {
       // Staff (prompt review F10): answers in Spanish, records stay in English, and the output check reads
       // English, so the never-sent rule is restated for every language.
       localizedSystemPrompt = `${systemPrompt}
 
 LANGUAGE: Answer in Spanish (plain, Latin American neutral). Case notes, outcome notes and funder narratives stay in English. Write a message to a participant in the language the staff member asks for. Refer to pages and buttons by their English labels. Keep these in English, word for word: the "isn't on your list" sentence, the part-of-list sentence, the safety and legal-help lines, and each skill's closing line. Never say you sent, saved or added anything, in any language.`;
-    } else if (langRow?.coach_language === "es") {
+    } else if (wantsSpanish) {
       localizedSystemPrompt = `${systemPrompt}
 
-LANGUAGE: Reply in Spanish (plain, Latin American neutral). The app interface stays in English, so refer to pages and buttons by their English labels. Any resume or cover letter text stays in the language of the job posting (English unless stated otherwise); only your coaching and conversation are in Spanish.`;
+LANGUAGE: Reply in Spanish (plain, Latin American neutral, "tú"). ${siteLocale === "es" ? "The person sees the app in Spanish where a screen is translated and in English elsewhere: name pages and buttons the way they appear on the person's screen, and give the English label in parentheses when a screen is still English." : "The app interface is in English, so refer to pages and buttons by their English labels."} Any resume or cover letter text stays in the language of the job posting (English unless stated otherwise); only your coaching and conversation are in Spanish. If the person writes their work history in Spanish and asks, help them say it in plain English, keeping every fact exactly as they gave it and adding nothing.`;
     }
   }
 

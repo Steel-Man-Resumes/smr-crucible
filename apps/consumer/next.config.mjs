@@ -1,4 +1,8 @@
 import { releaseCheck, formatReleaseCheck } from "./lib/release-check.mjs";
+import createNextIntlPlugin from "next-intl/plugin";
+
+// Site language (Spanish version): the request config reads the language cookie.
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 /**
  * The extraction worker (lib/extract-worker.ts) loads mammoth and pdf.js by
@@ -202,5 +206,5 @@ export default function config(phase) {
     }
     console.log(text);
   }
-  return nextConfig;
+  return withNextIntl(nextConfig);
 }

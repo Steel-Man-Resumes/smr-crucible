@@ -37,6 +37,7 @@
  * treated as sensitive even when it is not marked. Every other value still
  * passes the record-word gate.
  */
+import { hasSpanishRecordWords } from "@crucible/core/src/recordLexicon";
 import { recordAndSensitiveText } from "./hurdles/plan";
 
 /** What the model sees in place of withheld text. Plain, and tells the staff member where the words are. */
@@ -121,7 +122,7 @@ function plannerRecordLines(): string[] {
 export function hasStaffRecordWords(text: string | null | undefined): boolean {
   const t = String(text ?? "");
   if (!t.trim()) return false;
-  if (RECORD_WORDS.test(t) || RECORD_ABBREVIATIONS.test(t) || RECORD_NUMBERS.test(t)) return true;
+  if (RECORD_WORDS.test(t) || RECORD_ABBREVIATIONS.test(t) || RECORD_NUMBERS.test(t) || hasSpanishRecordWords(t)) return true;
   const low = t.toLowerCase();
   return plannerRecordLines().some((line) => low.includes(line));
 }

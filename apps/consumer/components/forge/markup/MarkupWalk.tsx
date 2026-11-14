@@ -8,16 +8,18 @@
  * nothing is sent anywhere for them.
  */
 
+import { useTranslations } from "next-intl";
 import type { ResumeTour } from "@/lib/showstopper-tour";
 import { OldPageTour } from "@/components/forge/showstopper/OldPageTour";
 import { TroyArrival } from "@/components/forge/showstopper/TroyArrival";
 
 export function MarkupWalk({ tour, reduced, startingPage = false }: { tour: ResumeTour; reduced: boolean | null; /** A rebuild's saved page: not necessarily the page the person gave. */ startingPage?: boolean }) {
+  const t = useTranslations("forgeFinish.markupWalk");
   const intro = tour.steps.length
-    ? "While I write your new page, here's what I see on this one, top to bottom."
+    ? t("introSteps")
     : startingPage
-      ? "Here's the page we're starting from."
-      : "Here's your page as you gave it.";
+      ? t("introStarting")
+      : t("introGiven");
   return (
     <div className="mt-6 border border-t-line bg-t-panel p-4 sm:p-6" data-testid="markup-walk">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:gap-x-8 lg:gap-y-5">
@@ -25,12 +27,12 @@ export function MarkupWalk({ tour, reduced, startingPage = false }: { tour: Resu
           <TroyArrival size={48} reduced={reduced} />
           <div className="lg:pt-3">
             <p className="text-base leading-relaxed text-t-white">
-              <span className="sr-only">t.ROY says: </span>
+              <span className="sr-only">{t("says")}</span>
               {intro}
             </p>
             <p className="mt-1 flex items-center gap-2 text-xs text-t-phos-dim" role="status">
               <span aria-hidden="true" className={`inline-block h-2 w-2 bg-t-amber ${reduced === false ? "animate-pulse" : ""}`} />
-              Writing your new page now.
+              {t("writing")}
             </p>
           </div>
         </div>

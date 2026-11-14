@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { SkipForward } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { TroyMark } from "@crucible/consumer-ui";
 import { planReveal, paceFor, pickForReplay, typedChars, type MarkupChange } from "@/lib/markup-changes";
 import { ChangesList } from "./ChangesList";
@@ -35,6 +36,7 @@ export function LiveFix({
   pending?: boolean;
   onDone: () => void;
 }) {
+  const t = useTranslations("forgeFinish.liveFix");
   // At most a dozen play, at a pace a person can read, covering each kind of
   // fix top to bottom. The rest are in the list under the finished page.
   const steps = useMemo(() => pickForReplay(planReveal(lines, changes)), [lines, changes]);
@@ -106,7 +108,7 @@ export function LiveFix({
           className="t-focus min-h-touch bg-t-amber px-6 font-term text-sm font-bold text-ws-bg hover:bg-t-amber-bright disabled:cursor-wait disabled:opacity-60"
           data-testid="live-fix-done"
         >
-          {pending ? "Checking your documents..." : "Done. See my finished page"}
+          {pending ? t("checking") : t("doneSee")}
         </button>
       </div>
     );
@@ -168,15 +170,15 @@ export function LiveFix({
         <p className="text-base text-t-white">
           {done
             ? more > 0
-              ? `Those are the main ones. ${more} more ${more === 1 ? "is" : "are"} in the list above your page.`
-              : pending ? "Those changes are checked. Checking the rest of your documents..." : "That's every line I changed. Here's your finished page."
-            : "Watch me fix your page, line by line."}
+              ? t("mainOnes", { more })
+              : pending ? t("pendingChecked") : t("everyLine")
+            : t("watching")}
         </p>
         <div className="flex items-center gap-3">
           {!done && (
             <span className="font-term text-xs text-t-phos-dim" aria-hidden="true">
-              {i + 1} of {steps.length}
-              {more > 0 ? ` (and ${more} more)` : ""}
+              {t("counter", { current: i + 1, total: steps.length })}
+              {more > 0 ? t("counterMore", { more }) : ""}
             </span>
           )}
           <button
@@ -187,7 +189,7 @@ export function LiveFix({
             data-testid="live-fix-skip"
           >
             <SkipForward size={16} aria-hidden="true" />
-            {pending ? (done ? "Checking your documents..." : "Skip animation") : done ? "Done. See my finished page" : "Skip to my finished page"}
+            {pending ? (done ? t("checking") : t("skipAnimation")) : done ? t("doneSee") : t("skipToFinished")}
           </button>
         </div>
       </div>
@@ -195,8 +197,8 @@ export function LiveFix({
       {/* What changed, for screen readers, one change at a time. */}
       <p className="sr-only" aria-live="polite">
         {done
-          ? pending ? "Changes checked. Document checks are still running." : "Done. Your finished page is next."
-          : `Change ${i + 1} of ${steps.length}. Was: ${cur.change.old}. Now: ${cur.change.new}. Why: ${cur.change.why}`}
+          ? pending ? t("srDonePending") : t("srDone")
+          : t("srChange", { current: i + 1, total: steps.length, before: cur.change.old, after: cur.change.new, why: cur.change.why })}
       </p>
 
       <div
@@ -224,7 +226,7 @@ export function LiveFix({
         })}
         {loose.length > 0 && (
           <div className="mt-4 border-t border-ws-bg/30 pt-3">
-            <p className="px-1.5 font-term text-[11px] uppercase tracking-wider text-ws-bg/70">Also changed</p>
+            <p className="px-1.5 font-term text-[11px] uppercase tracking-wider text-ws-bg/70">{t("alsoChanged")}</p>
             {loose.map(({ k }) => (
               <div
                 key={steps[k].id}

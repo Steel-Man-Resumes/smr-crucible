@@ -1,0 +1,101 @@
+{
+  "flowPage": {
+    "goBack": "Volver atrás",
+    "working": "Trabajando"
+  },
+  "ghostGuide": {
+    "askMore": "Pregúntame más",
+    "showAria": "Mostrar la guía de t.ROY",
+    "show": "Mostrar la guía de t.ROY",
+    "hideAria": "Ocultar la guía",
+    "hide": "Ocultar"
+  },
+  "exitButton": {
+    "leave": "Salir de esta página"
+  },
+  "progressIndicator": {
+    "label": "Progreso"
+  },
+  "accountBar": {
+    "signedInAs": "Iniciaste sesión como <email>{address}</email>.",
+    "yourAccount": "tu cuenta",
+    "notYou": "¿No eres tú?",
+    "signOut": "Cerrar sesión"
+  },
+  "signInNotice": {
+    "notice": "A partir del {date}, The Forge te pide iniciar sesión. Sigue siendo gratis. Tu trabajo guardado va contigo."
+  },
+  "pathProgress": {
+    "ariaLabel": "Tus pasos",
+    "done": "(listo)",
+    "then": ". Después: {steps}",
+    "steps": {
+      "resume": "Currículum",
+      "goals": "Metas",
+      "story": "Apoyo",
+      "preferences": "Preferencias",
+      "processing": "Armar",
+      "output": "Resultados"
+    }
+  },
+  "welcomeTour": {
+    "open": "Cómo funcionan The Forge y The Refinery",
+    "dialogTitle": "Tu recorrido por The Forge y The Refinery",
+    "skipTour": "Omitir recorrido",
+    "progress": "{step} de {total}",
+    "finish": "Armemos mi currículum",
+    "steps": {
+      "one": {
+        "title": "Dos herramientas. Una vida laboral.",
+        "body": "The Forge arma tu historia y tu primer currículum más fuerte. The Refinery es tu espacio de trabajo continuo: adapta ese currículum a una vacante, escribe una carta de presentación, practica una entrevista y prepara con t.ROY cómo hablar de tus antecedentes penales.",
+        "tools": {
+          "a": "Un currículum para cada solicitud",
+          "b": "Práctica de entrevistas",
+          "c": "Ayuda para hablar de tus antecedentes penales",
+          "d": "Búsqueda de empleo y apoyo local"
+        }
+      },
+      "two": {
+        "title": "Primero, danos algo real con qué trabajar.",
+        "body": "Trae un currículum, aunque sea uno a medias, o arma uno desde tu historial de trabajo con t.ROY. Luego cuéntanos lo que de verdad hiciste, en qué contaba la gente contigo y qué quieres después. El trabajo pagado, la capacitación y el trabajo voluntario cuentan.",
+        "tools": {
+          "a": "Trae tu currículum",
+          "b": "Arma uno con t.ROY",
+          "c": "Cuenta la historia detrás de tus tareas"
+        }
+      },
+      "three": {
+        "title": "El esfuerzo que le pones cuenta.",
+        "body": "Reconstruir tu historial puede ser difícil. Los detalles concretos le dan a t.ROY más con qué trabajar y les dan a los empleadores más razones para tomarte en serio. Tu currículum es la base para solicitudes a la medida y para practicar entrevistas. Este primer borrador es el comienzo; lo sigues mejorando en The Refinery.",
+        "tools": {
+          "a": "Tu experiencia",
+          "b": "Tus habilidades, con pruebas",
+          "c": "Tu primer borrador más fuerte"
+        }
+      },
+      "four": {
+        "title": "Herramientas para competir. Voz en lo que viene.",
+        "body": "The Forge es gratis. Queremos que estas herramientas te ayuden a competir por oportunidades reales. Cuando las hayas probado, dedica tres minutos a contarnos cómo te fue, bueno o malo. Las opiniones sinceras ayudan a otros a encontrarnos y a nosotros a mejorar. Opinar es opcional y nunca cambia tu acceso."
+      }
+    }
+  },
+  "clearThisComputer": {
+    "hint": "(si estás en una computadora pública o compartida)",
+    "groupAria": "Borrar mis datos de esta computadora",
+    "confirmYes": "Sí, borrarlo",
+    "clearing": "Borrando...",
+    "signOutError": "No pudimos cerrar tu sesión. Quédate aquí e inténtalo de nuevo antes de dejar esta computadora.",
+    "buttonAria": "Borrar los datos de esta computadora: borra tu trabajo de The Forge de este navegador {hint}",
+    "buttonTitle": "Borra tu trabajo de The Forge de este navegador {hint}",
+    "short": "Borrar",
+    "long": "Borrar mis datos de esta computadora",
+    "panel": {
+      "title": "¿Usas una computadora de biblioteca o compartida?",
+      "signedInNote": "El trabajo guardado en tu cuenta se queda ahí. Al borrar los datos de esta computadora se cierra tu sesión y se quita la copia de este navegador. Guarda tus cambios antes de irte.",
+      "anonymousNote": "Este navegador guarda una copia de tu trabajo. Descárgala o guárdala en tu cuenta gratis antes de borrar los datos de esta computadora. Quien se siente aquí después podría abrir la copia del navegador.",
+      "confirmYes": "Sí, borrar mi trabajo de esta computadora",
+      "notYet": "Todavía no",
+      "start": "Listo, borrar mis datos de esta computadora"
+    }
+  }
+}

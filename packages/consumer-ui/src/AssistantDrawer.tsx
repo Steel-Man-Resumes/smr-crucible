@@ -16,6 +16,7 @@
 import { useState, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { TroyLivingIcon } from "./TroyLivingIcon";
 
 interface AssistantDrawerProps {
@@ -23,7 +24,7 @@ interface AssistantDrawerProps {
   children: ReactNode;
   /** Whether the assistant is available (requires core consent) */
   enabled?: boolean;
-  /** Optional label for the trigger button */
+  /** Optional label for the trigger button (default: the catalog's assistant.drawer.trigger) */
   triggerLabel?: string;
   /** Small line under the trigger label: who t.ROY is for on this surface. */
   triggerSubLabel?: string;
@@ -39,11 +40,16 @@ interface AssistantDrawerProps {
 export function AssistantDrawer({
   children,
   enabled = true,
-  triggerLabel = "Ask t.ROY",
-  triggerSubLabel = "AI career coach",
+  triggerLabel: triggerLabelProp,
+  triggerSubLabel: triggerSubLabelProp,
   attention = false,
-  title = "t.ROY, your AI career coach",
+  title: titleProp,
 }: AssistantDrawerProps) {
+  // Defaults come from the catalog so the open button and the dialog follow the site language.
+  const t = useTranslations("assistant.drawer");
+  const triggerLabel = triggerLabelProp ?? t("trigger");
+  const triggerSubLabel = triggerSubLabelProp ?? t("triggerSub");
+  const title = titleProp ?? t("title");
   const [isOpen, setIsOpen] = useState(false);
   // First-visit nudge: t.ROY glows for a few seconds to say "I'm here and alive."
   // Once per browser session, and never while the drawer is open.
@@ -147,7 +153,7 @@ export function AssistantDrawer({
           style={isOpen ? { display: "none" } : undefined}
           onClick={() => setIsOpen(true)}
           className="t-focus group relative my-3 ml-auto mr-7 z-30 flex min-h-touch items-center gap-1 rounded-full bg-transparent p-1 sm:fixed sm:bottom-5 sm:right-7 sm:z-40 sm:m-0"
-          aria-label={`${triggerLabel}, ${triggerSubLabel}, open assistant`}
+          aria-label={t("openAria", { label: triggerLabel, sub: triggerSubLabel })}
         >
           <span className="pointer-events-none rounded-xl border border-[#e4d9ff] bg-white/95 px-3 py-2 text-left text-sm font-semibold leading-tight text-[#4c1d95] shadow-sm">
             <span className="block">{triggerLabel}</span>
@@ -187,7 +193,7 @@ export function AssistantDrawer({
           <button
             onClick={() => setIsOpen(false)}
             className="t-focus flex min-h-touch min-w-[3rem] items-center justify-center rounded-[4px] p-2 text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
-            aria-label="Close assistant"
+            aria-label={t("closeAria")}
           >
             <X size={20} aria-hidden="true" />
           </button>

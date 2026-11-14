@@ -13,10 +13,12 @@
 "use client";
 
 import { orgNoteDraftKey } from "@/lib/org-note-draft";
+import { LanguageSwitch } from "@/components/LanguageSwitch";
 import { staffSkillsFor, skillRunIdOf, STAFF_TROY_EVENT, takePendingStaffTroy, skillRequest, type StaffTroyRequest } from "@/lib/staff-troy";
 import { TroyWork } from "@crucible/consumer-ui";
 import { assistantErrorMessage } from "@/lib/assistant-error-message";
 import { Suspense, useRef, useEffect, useState, useCallback } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { readAssistantArrival, waitForAssistantArrival } from "@/lib/assistant-arrival";
@@ -37,7 +39,7 @@ import { offersFor, staffScreenOf, personOnScreen, type StaffOffer } from "@/lib
 import { useEffectiveRole } from "@/components/RoleProvider";
 import { StaffTroyDiscovery } from "./StaffTroyDiscovery";
 import { viewToolCards } from "@/components/org/TroyViewCards";
-import { isHandoffDraftResult, applyHandoffDraft, draftButtonLabel, trayOwner } from "@/lib/handoff-tray";
+import { isHandoffDraftResult, applyHandoffDraft, trayOwner } from "@/lib/handoff-tray";
 import { ContributeForm, initialFromDraft } from "@/components/org/directory/ContributeForm";
 import { ListingContributeMenu } from "@/components/org/directory/ListingContributeMenu";
 
@@ -94,137 +96,149 @@ const TOOL_ACTIVITY: Record<string, string> = {
   ...staffToolActivity(),
 };
 
+/** Error lines for the canned messages in lib/assistant-error-message.ts, keyed by that module's own output so its wording rules stay in one place. */
+const ERROR_KEYS: Record<string, string> = {
+  [assistantErrorMessage("")]: "generic",
+  [assistantErrorMessage("429")]: "allowance",
+  [assistantErrorMessage("Chat access could not be checked")]: "access",
+};
+
 /** Page-aware quick prompts — buttons users can tap instead of typing */
-function getQuickPrompts(context: AssistantContext, coach?: boolean, staff?: boolean): string[] {
+function getQuickPrompts(t: (key: string) => string, context: AssistantContext, coach?: boolean, staff?: boolean): string[] {
   const page = context.currentPage;
   const isDemo = context.isDemo;
 
   if (staff) {
     return [
-      "Triage my Today",
-      "Draft a check-in for you to send",
-      "Draft a case note for your review",
-      "Summarize my caseload",
+      t("prompts.staff.triage"),
+      t("prompts.staff.checkIn"),
+      t("prompts.staff.caseNote"),
+      t("prompts.staff.caseload"),
     ];
   }
 
   if (isDemo) {
     return [
-      "What am I looking at?",
-      "How does this help my clients?",
-      "Show me a different scenario",
-      "What's the research behind this?",
+      t("prompts.demo.lookingAt"),
+      t("prompts.demo.helpClients"),
+      t("prompts.demo.scenario"),
+      t("prompts.demo.research"),
     ];
   }
 
   switch (page) {
     case "intro":
       return [
-        "What is this?",
-        "Is it really free?",
-        "Who sees my data?",
+        t("prompts.intro.what"),
+        t("prompts.intro.free"),
+        t("prompts.intro.whoSees"),
       ];
     case "welcome":
       return [
-        "What should I pick?",
-        "Does this change my results?",
-        "I'm not sure I'm ready",
+        t("prompts.welcome.pick"),
+        t("prompts.welcome.change"),
+        t("prompts.welcome.ready"),
       ];
     case "resume":
       return [
-        "I don't have a resume",
-        "Can I use a photo?",
-        "My resume is old",
+        t("prompts.resume.none"),
+        t("prompts.resume.photo"),
+        t("prompts.resume.old"),
       ];
     case "goals":
       return [
-        "I don't know what I want",
-        "Does this matter?",
-        "I just need money right now",
+        t("prompts.goals.unsure"),
+        t("prompts.goals.matter"),
+        t("prompts.goals.money"),
       ];
     case "story":
       return [
-        "Who sees this?",
-        "Do I have to share my record?",
-        "I'm not comfortable with this",
+        t("prompts.story.whoSees"),
+        t("prompts.story.share"),
+        t("prompts.story.uncomfortable"),
       ];
     case "preferences":
       return [
-        "I'm flexible on everything",
-        "I don't have a car",
-        "Can I change this later?",
+        t("prompts.preferences.flexible"),
+        t("prompts.preferences.car"),
+        t("prompts.preferences.later"),
       ];
     case "processing":
       return [
-        "How long does this take?",
-        "What's it doing right now?",
+        t("prompts.processing.long"),
+        t("prompts.processing.doing"),
       ];
     case "output":
       return [
-        "What do I do with this?",
-        "Is this accurate?",
-        "What's The Refinery?",
+        t("prompts.output.whatDo"),
+        t("prompts.output.accurate"),
+        t("prompts.output.refinery"),
       ];
     case "rush":
       return [
-        "Is this as good as the full version?",
-        "What if my resume is bad?",
-        "I have an interview tomorrow",
+        t("prompts.rush.asGood"),
+        t("prompts.rush.bad"),
+        t("prompts.rush.tomorrow"),
       ];
     case "resources":
-      return ["I have no ride", "Help me find local support", "Explain these next steps"];
+      return [t("prompts.resources.ride"), t("prompts.resources.local"), t("prompts.resources.explain")];
     case "employers":
-      return ["Find employers near me", "What supports this listing?", "Help me go after this job"];
+      return [t("prompts.employers.near"), t("prompts.employers.supports"), t("prompts.employers.help")];
     case "jobs":
       return [
-        "Find me jobs that fit me",
-        "What should I do next?",
-        "Explain this page",
+        t("prompts.jobs.fit"),
+        t("prompts.next"),
+        t("prompts.explain"),
       ];
     case "applications":
       return [
-        "What needs a follow-up?",
-        "What should I do next?",
-        "Explain this page",
+        t("prompts.applications.followUp"),
+        t("prompts.next"),
+        t("prompts.explain"),
       ];
     case "application-tailor":
       return [
-        "Do it with me",
-        "What should I do next?",
-        "Explain this page",
+        t("prompts.doWithMe"),
+        t("prompts.next"),
+        t("prompts.explain"),
       ];
     case "dashboard":
       return coach
         ? [
-            "What should I do next?",
-            "Take me there",
-            "Do it with me",
+            t("prompts.next"),
+            t("prompts.takeMe"),
+            t("prompts.doWithMe"),
           ]
         : [
-            "What should I do first?",
-            "How do I build a resume?",
-            "What's the disclosure planner?",
+            t("prompts.dashboard.first"),
+            t("prompts.dashboard.build"),
+            t("prompts.dashboard.disclosure"),
           ];
     default:
       return coach
         ? [
-            "What should I do next?",
-            "Take me there",
-            "Explain this page",
+            t("prompts.next"),
+            t("prompts.takeMe"),
+            t("prompts.explain"),
           ]
         : [
-            "Help me with this page",
-            "What should I do next?",
-            "Talk to a real person",
+            t("prompts.fallback.helpPage"),
+            t("prompts.next"),
+            t("prompts.fallback.human"),
           ];
   }
 }
 
 export function AssistantChat(props: AssistantChatProps) {
-  return <Suspense fallback={<p className="p-4 text-sm" role="status">Loading chat...</p>}><AssistantChatContent {...props} /></Suspense>;
+  const t = useTranslations("assistant");
+  return <Suspense fallback={<p className="p-4 text-sm" role="status">{t("loading")}</p>}><AssistantChatContent {...props} /></Suspense>;
 }
 
 function AssistantChatContent({ context, sessionId, coach, staff }: AssistantChatProps) {
+  const t = useTranslations("assistant");
+  const tc = useTranslations("common.actions");
+  // The site language (i18n/locale.ts): read-aloud and the message area follow it.
+  const siteLocale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const accountId = useSession().data?.user?.id;
@@ -323,6 +337,25 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
   const currentOrgId = effectiveRole?.orgId ?? null;
   const screenPerson = focus?.clientId ? { id: focus.clientId, firstName: focus.firstName } : (personOnScreen(pathname) ? { id: personOnScreen(pathname)! } : null);
   const staffOffers = staff ? offersFor({ screen: staffScreenOf(pathname), person: screenPerson, capabilities }) : [];
+  // Words for the chips and buttons below. Each falls back to the English the lib module gave when the catalog has no entry.
+  const offerFirst = (screenPerson?.firstName ?? "").trim().split(/\s+/)[0] || "";
+  const offerText = (o: StaffOffer, part: "label" | "why"): string => {
+    const key = `offers.${o.id.replace(/:[0-9a-f-]{36}$/i, "").replace(/:(\w)/g, (_m, c: string) => c.toUpperCase())}.${part}`;
+    return t.has(key) ? t(key, { named: offerFirst ? "yes" : "no", first: offerFirst, them: offerFirst || t("staff.them") }) : o[part];
+  };
+  const pageName = (page: string): string => (page && t.has(`pages.${page}`) ? t(`pages.${page}`) : pageLabel(page));
+  const staffName = (page: unknown, firstName?: string | null): string => {
+    if (page === "person") {
+      const first = (firstName ?? "").trim().split(/\s+/)[0];
+      return first ? t("staffPages.personNamed", { name: first }) : t("staffPages.person");
+    }
+    return typeof page === "string" && t.has(`staffPages.${page}`) ? t(`staffPages.${page}`) : staffPageLabel(page);
+  };
+  const errorText = (message: string): string => {
+    const english = assistantErrorMessage(message);
+    const key = ERROR_KEYS[english];
+    return key ? t(`errors.${key}`) : english;
+  };
   const inputRef = useRef<HTMLInputElement>(null);
   /** applyOffer never sends: a skill is opened about the person, or the words go in the box. (An empty-panel chip with a complete request is sent by sendQuickPrompt instead, on the tap.) */
   const applyOffer = useCallback((o: StaffOffer) => {
@@ -493,9 +526,9 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
     spokenRef.current = key;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.lang = chatSettings?.coachLanguage === "es" ? "es-US" : "en-US";
+    utterance.lang = siteLocale === "es" ? "es-US" : "en-US";
     window.speechSynthesis.speak(utterance);
-  }, [messages, isLoading, voiceOn, chatSettings?.coachLanguage]);
+  }, [messages, isLoading, voiceOn, siteLocale]);
 
   // Stop speaking when voice is switched off or the chat unmounts
   useEffect(() => {
@@ -515,21 +548,21 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
     [setInput]
   );
 
-  const quickPrompts = getQuickPrompts(context, coach, staff);
+  const quickPrompts = getQuickPrompts(t, context, coach, staff);
   const showQuickPrompts = messages.length === 0 && !isLoading;
 
   return (
     <div className="flex flex-col h-full">
       {staff && (
         <div className="mb-3 flex-shrink-0 space-y-2" data-staff-troy-panel="">
-          <p className="text-sm font-semibold text-[#4c1d95]">t.ROY, for your work with people</p>
+          <p className="text-sm font-semibold text-[#4c1d95]">{t("staff.title")}</p>
           {focus?.clientId && (
             <p className="flex items-center gap-2 text-xs">
-              <span className="rounded-full border border-[#d8ccff] bg-[#f6f2ff] px-2 py-1 font-medium text-[#4c1d95]">About: {focus.firstName ?? "this person"}</span>
-              <button type="button" onClick={clearFocus} className="t-focus min-h-touch underline text-muted">Ask about someone else</button>
+              <span className="rounded-full border border-[#d8ccff] bg-[#f6f2ff] px-2 py-1 font-medium text-[#4c1d95]">{t("staff.about", { name: focus.firstName ?? t("staff.thisPerson") })}</span>
+              <button type="button" onClick={clearFocus} className="t-focus min-h-touch underline text-muted">{t("staff.askElse")}</button>
             </p>
           )}
-          <div className="flex flex-wrap gap-2" role="group" aria-label="What t.ROY can do for you">
+          <div className="flex flex-wrap gap-2" role="group" aria-label={t("staff.skillsAria")}>
             {staffSkillsFor(!!focus?.clientId).map((k) => (
               <button
                 key={k.id}
@@ -543,7 +576,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                 }}
                 className={`t-focus min-h-touch rounded-[5px] border px-3 py-2 text-xs font-medium transition-colors ${focus?.skill === k.id ? "border-[#7c5cd6] bg-[#efe9ff] text-[#4c1d95]" : "border-[#d8ccff] bg-white text-[#4c1d95] hover:bg-[#f6f2ff]"}`}
               >
-                {k.label}
+                {t.has(`staff.skills.${k.id}`) ? t(`staff.skills.${k.id}`) : k.label}
               </button>
             ))}
           </div>
@@ -556,11 +589,11 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             type="button"
             onClick={() => setShowSettings((v) => !v)}
             className="flex items-center gap-1.5 rounded-[5px] px-2 py-1.5 text-xs text-muted transition-colors hover:bg-gray-100 hover:text-foreground"
-            aria-label="Chat settings"
+            aria-label={t("settings.gear")}
             aria-expanded={showSettings}
           >
             <Settings2 size={14} aria-hidden="true" />
-            <span>Chat settings</span>
+            <span>{t("settings.gear")}</span>
           </button>
         </div>
       )}
@@ -568,7 +601,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
       {coach && showSettings && chatSettings && (
         <div className="mb-3 flex-shrink-0 space-y-3 rounded-[7px] border border-border bg-[#fafbf9] p-4 text-sm">
           <div className="flex items-center justify-between gap-3">
-            <span className="text-foreground">Response length</span>
+            <span className="text-foreground">{t("settings.length")}</span>
             <div className="flex gap-1">
               {(["brief", "full"] as const).map((len) => (
                 <button
@@ -581,15 +614,15 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                       : "border-border bg-white text-foreground hover:bg-gray-50"
                   }`}
                 >
-                  {len === "brief" ? "Short" : "Normal"}
+                  {len === "brief" ? t("settings.short") : t("settings.normal")}
                 </button>
               ))}
             </div>
           </div>
           {(
             [
-              ["Plain language", "coachPlainLanguage"],
-              ["Read replies aloud", "coachVoice"],
+              [t("settings.plainLanguage"), "coachPlainLanguage"],
+              [t("settings.readAloud"), "coachVoice"],
             ] as const
           ).map(([label, key]) => (
             <div key={key} className="flex items-center justify-between gap-3">
@@ -605,29 +638,14 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     : "border-border bg-white text-foreground hover:bg-gray-50"
                 }`}
               >
-                {chatSettings[key] ? "On" : "Off"}
+                {chatSettings[key] ? t("settings.on") : t("settings.off")}
               </button>
             </div>
           ))}
+          {/* Site language (i18n/locale.ts): the whole product and the coach's replies together. */}
           <div className="flex items-center justify-between gap-3">
-            <span className="text-foreground">Reply in Spanish</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={chatSettings.coachLanguage === "es"}
-              onClick={() =>
-                saveSettings({
-                  coachLanguage: chatSettings.coachLanguage === "es" ? "en" : "es",
-                })
-              }
-              className={`rounded-[5px] border px-3 py-1.5 text-xs font-medium transition-colors ${
-                chatSettings.coachLanguage === "es"
-                  ? "border-sage-600 bg-sage-600 text-white"
-                  : "border-border bg-white text-foreground hover:bg-gray-50"
-              }`}
-            >
-              {chatSettings.coachLanguage === "es" ? "On" : "Off"}
-            </button>
+            <span className="text-foreground">Language / <span lang="es">Idioma</span></span>
+            <LanguageSwitch variant="pills" />
           </div>
           {/* Escalate to a human */}
           <div className="border-t border-border pt-3">
@@ -640,29 +658,28 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                 }}
                 className="w-full rounded-[5px] border border-[#b9cdbd] bg-white px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
               >
-                Message Troy
+                {t("support.message")}
               </button>
             ) : supportStatus === "sent" ? (
               <p className="text-xs text-[#344b38]">
-                Sent. Troy reads these himself. His reply goes to your email.
+                {t("support.sent")}
               </p>
             ) : (
               <div className="space-y-2">
                 <p className="text-xs text-muted">
-                  This goes to Troy, a real person. Your last few chat messages
-                  ride along so he has context.
+                  {t("support.explain")}
                 </p>
                 <textarea
                   value={supportText}
                   onChange={(e) => setSupportText(e.target.value)}
                   maxLength={2000}
                   rows={3}
-                  placeholder="What do you need a human for?"
+                  placeholder={t("support.placeholder")}
                   className="w-full rounded-[6px] border border-border px-3 py-2 text-sm transition-colors focus:border-sage-600"
                 />
                 {supportStatus === "error" && (
                   <p className="text-xs text-amber-800">
-                    That did not go through. Try again in a moment.
+                    {t("support.error")}
                   </p>
                 )}
                 <div className="flex gap-2">
@@ -672,14 +689,14 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     disabled={!supportText.trim() || supportStatus === "sending"}
                     className="rounded-[5px] bg-sage-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-sage-700 disabled:bg-gray-300"
                   >
-                    {supportStatus === "sending" ? "Sending..." : "Send to Troy"}
+                    {supportStatus === "sending" ? t("support.sending") : t("support.send")}
                   </button>
                   <button
                     type="button"
                     onClick={() => setSupportOpen(false)}
                     className="rounded-[5px] border border-border bg-white px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-gray-50"
                   >
-                    Cancel
+                    {tc("cancel")}
                   </button>
                 </div>
               </div>
@@ -691,7 +708,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
             onClick={() => setShowSettings(false)}
             className="w-full rounded-[5px] border border-[#b9cdbd] bg-white px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
           >
-            Done
+            {t("settings.done")}
           </button>
         </div>
       )}
@@ -704,7 +721,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
       {/* Messages — min-h-0 lets flex-1 actually shrink so overflow scrolls */}
       <div
         className="flex-1 min-h-0 overflow-y-auto space-y-4 pb-4"
-        lang={chatSettings?.coachLanguage === "es" ? "es" : undefined}
+        lang={siteLocale === "es" ? "es" : undefined}
       >
         {messages.length === 0 && coach &&
           (proactive ? (
@@ -716,22 +733,21 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                 type="button"
                 onClick={() =>
                   sendQuickPrompt(
-                    `Yes, let's do that. You suggested: "${proactive}"`
+                    t("intro.accept", { suggestion: proactive })
                   )
                 }
                 className="max-w-[85%] rounded-[7px] rounded-bl-sm border border-[#b9cdbd] bg-[#f5f6f4] px-4 py-3 text-left text-sm leading-relaxed text-foreground transition-colors hover:bg-[#e3ede5]"
               >
                 {proactive}
                 <span className="mt-2 block text-xs font-medium text-[#344b38]">
-                  Tap to do it with me
+                  {t("intro.tapToDo")}
                 </span>
               </button>
             </div>
           ) : (
             <div className="text-muted text-sm">
               <p className="mb-2">
-                I&apos;m t.ROY, your AI career coach. We can work on your resume,
-                job search, interview, or next move at work. What needs attention today?
+                {t("intro.coach")}
               </p>
             </div>
           ))}
@@ -740,17 +756,14 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           <div className="text-muted text-sm">
             {staff ? (
               <p className="mb-2">
-                I&apos;m t.ROY, here for your work with people. I can sort your Today,
-                prep you for a meeting, turn your bullets into a note, or draft a message.
-                Tell me what you need.
+                {t("intro.staff")}
               </p>
             ) : (
               <p className="mb-2">
-                I&apos;m t.ROY, your AI career coach. Tell me what you need today,
-                or ask me to help you use this page.
+                {t("intro.default")}
               </p>
             )}
-            <p>There are no wrong questions.</p>
+            <p>{t("intro.noWrong")}</p>
           </div>
         )}
 
@@ -789,26 +802,26 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
               | { toolName?: string; state?: string; args?: unknown; result?: unknown }
               | undefined;
             if (inv?.state === "result" && (inv.result as { status?: string })?.status === "ok") {
-              if (inv.toolName === "read_owner_ai_costs") return [{ key: i, href: "/dashboard/admin", label: "owner cost controls" }];
-              if (inv.toolName === "read_owner_directory_coverage") return [{ key: i, href: "/dashboard/admin/directory-coverage", label: "coverage review" }];
+              if (inv.toolName === "read_owner_ai_costs") return [{ key: i, href: "/dashboard/admin", label: t("pages.ownerCosts") }];
+              if (inv.toolName === "read_owner_directory_coverage") return [{ key: i, href: "/dashboard/admin/directory-coverage", label: t("pages.ownerCoverage") }];
             }
             // Lane S1: a page this staff member's own nav shows. The href comes from
             // our table (lib/staff-pages.ts), never from the model.
             if (staff && inv?.toolName === "open_staff_page" && inv.state === "result" && (inv.result as { status?: string })?.status === "ok") {
               const r = inv.result as { page?: string; clientId?: string; label?: string };
               const href = staffPageHref(r.page, r.clientId);
-              return href ? [{ key: i, href, label: r.page === "person" ? staffPageLabel("person", (r.label ?? "").replace(/'s page$/, "")) : staffPageLabel(r.page) }] : [];
+              return href ? [{ key: i, href, label: staffName(r.page, r.page === "person" ? (r.label ?? "").replace(/'s page$/, "") : undefined) }] : [];
             }
             if (inv?.toolName === "contextual_handoff" && inv.state === "result") {
               const result = inv.result as { page?: string; selection?: { applicationId?: string; laneId?: string | null; artifactId?: string; revisionId?: string } };
               const href = result.page ? resolveAssistantPage(result.page, result.selection?.applicationId, result.selection) : null;
-              return href ? [{ key: i, href, label: pageLabel(result.page!) }] : [];
+              return href ? [{ key: i, href, label: pageName(result.page!) }] : [];
             }
             if (inv?.toolName !== "take_me_there" || inv.state !== "result") return [];
             if (!(inv.result as { buttonShown?: unknown } | undefined)?.buttonShown) return [];
             const args = (inv.args ?? {}) as { page?: string; jobApplicationId?: string };
             const href = args.page ? resolveAssistantPage(args.page, args.jobApplicationId) : null;
-            return href ? [{ key: i, href, label: pageLabel(args.page ?? "") }] : [];
+            return href ? [{ key: i, href, label: pageName(args.page ?? "") }] : [];
           });
           const replyStillComing = isLoading && message.id === messages[messages.length - 1]?.id;
           // A staff draft (check-in or case note): t.ROY saved and sent
@@ -900,7 +913,9 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                   }
                   // A deferred move shows its button below instead of "Taking you there".
                   if (goTo.some((g) => g.key === i)) return null;
-                  const label = TOOL_ACTIVITY[inv?.toolName ?? ""] ?? "Working on it";
+                  const activityName = inv?.toolName ?? "";
+                  const known = TOOL_ACTIVITY[activityName];
+                  const label = known === undefined ? t("tools.working") : t.has(`tools.activity.${activityName}`) ? t(`tools.activity.${activityName}`) : known;
                   const done = inv?.state === "result";
                   const failed = done && (inv?.result?.ok === false || ["unavailable", "blocked", "refused"].includes(String(inv?.result?.status)));
                   // A button t.ROY may not show is not a failed step for the staff member to worry about (harness ROOM-10/13).
@@ -911,13 +926,13 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                       className="flex items-center gap-2 pl-1 text-xs text-muted"
                       role="status"
                     >
-                      {noButton ? <span className="text-muted" aria-hidden="true">·</span> : failed ? <span className="text-amber-700" aria-label="Could not complete">!</span> : done ? (
+                      {noButton ? <span className="text-muted" aria-hidden="true">·</span> : failed ? <span className="text-amber-700" aria-label={t("tools.failedAria")}>!</span> : done ? (
                         <Check size={14} className="text-sage-600" aria-hidden="true" />
                       ) : (
                         <TroyWork compact decorative />
                       )}
                       <span>
-                        {noButton ? "No button for that here" : failed ? "Could not complete this step" : label}
+                        {noButton ? t("tools.noButton") : failed ? t("tools.failed") : label}
                         {done ? "" : "..."}
                       </span>
                     </div>
@@ -931,7 +946,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                       alone, so a draft the model gave only to the tool was never seen). Same body the check
                       passed and the button carries. */}
                   <div data-staff-draft-body="" className="mb-1 w-full whitespace-pre-wrap rounded-[5px] border border-[#e2ddd0] bg-[#faf8f3] px-3 py-2 text-[13px] leading-relaxed text-[#2b2a27]">
-                    <span className="mb-1 block font-mono text-[10px] uppercase tracking-[0.1em] text-muted">{draftFor.purpose === "case_note" ? "Case note, unsaved" : "Check-in, unsaved"}</span>
+                    <span className="mb-1 block font-mono text-[10px] uppercase tracking-[0.1em] text-muted">{draftFor.purpose === "case_note" ? t("drafts.caseNote") : t("drafts.checkIn")}</span>
                     {draftFor.body}
                   </div>
                   <button
@@ -944,9 +959,9 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     }}
                     className="min-h-touch rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
                   >
-                    Put this draft on their page to review
+                    {t("drafts.putOnPage")}
                   </button>
-                  <span className="text-[11px] text-muted">Nothing is saved or sent until you do it.</span>
+                  <span className="text-[11px] text-muted">{t("drafts.notSavedOrSent")}</span>
                 </div>
               ))}
               {!replyStillComing && addPerson && (
@@ -960,16 +975,16 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     }}
                     className="min-h-touch rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
                   >
-                    Open Add people for {prefillFullName(addPerson)}
+                    {t("drafts.openAddPeople", { name: prefillFullName(addPerson) })}
                   </button>
-                  <span className="text-[11px] text-muted">Filled in, not sent. You check it and press Send invite.</span>
+                  <span className="text-[11px] text-muted">{t("drafts.addPeopleNote")}</span>
                 </div>
               )}
               {!replyStillComing && viewCards.map((c) => <div key={`view-${c.key}`} className="pl-1">{c.node}</div>)}
               {!replyStillComing && s6.map((c, i) => c.kind === "draft" ? (
                 <div key={`s6-${i}`} className="pl-1" data-staff-contribution-draft="">
                   <ContributeForm initial={initialFromDraft(c.r as unknown as Parameters<typeof initialFromDraft>[0])} />
-                  <span className="text-[11px] text-muted">A draft, not sent. Check it and press Send.</span>
+                  <span className="text-[11px] text-muted">{t("drafts.directoryNote")}</span>
                 </div>
               ) : (
                 <div key={`s6-${i}`} className="pl-1" data-staff-listing-nudge="">
@@ -987,9 +1002,9 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     }}
                     className="min-h-touch rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
                   >
-                    {draftButtonLabel(handoffDraft)}
+                    {handoffDraft.firstName === "them" ? t("drafts.handoffThem") : t("drafts.handoffNamed", { name: handoffDraft.firstName })}
                   </button>
-                  <span className="text-[11px] text-muted">A draft, not sent. You read it on their page and press Send.</span>
+                  <span className="text-[11px] text-muted">{t("drafts.handoffNote")}</span>
                 </div>
               )}
               {staff && !replyStillComing && answerText && (
@@ -1004,9 +1019,9 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                     }}
                     className="t-focus min-h-touch rounded-[5px] border border-[#d8ccff] bg-white px-3 py-2 text-xs font-medium text-[#4c1d95] transition-colors hover:bg-[#f6f2ff]"
                   >
-                    {copiedId === message.id ? "Copied" : "Copy to use"}
+                    {copiedId === message.id ? t("drafts.copied") : t("drafts.copy")}
                   </button>
-                  <span className="text-[11px] text-muted">t.ROY sends nothing. Copying is noted as you using this draft.</span>
+                  <span className="text-[11px] text-muted">{t("drafts.copyNote")}</span>
                 </div>
               )}
               {!replyStillComing &&
@@ -1017,7 +1032,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
                       onClick={() => router.push(g.href)}
                       className="min-h-touch rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
                     >
-                      Go to {g.label}
+                      {t("goTo", { label: g.label })}
                     </button>
                   </div>
                 ))}
@@ -1028,14 +1043,14 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
         {error && (
           <div className="bg-amber-50 rounded-[6px] p-3 border border-amber-200">
             <p className="text-sm text-amber-800">
-              {assistantErrorMessage(error.message || "")}
+              {errorText(error.message || "")}
             </p>
           </div>
         )}
 
         {isLoading && (
           <div className="flex justify-start">
-            <TroyWork topic={context.currentPage.includes("interview") ? "interview" : context.currentPage.includes("resume") || context.currentPage.includes("tailor") || context.currentPage === "vault" ? "resume" : context.currentPage.includes("job") ? "jobs" : context.currentPage.includes("resource") || context.currentPage.includes("disclosure") ? "support" : "coach"} label="t.ROY is working on your request" />
+            <TroyWork topic={context.currentPage.includes("interview") ? "interview" : context.currentPage.includes("resume") || context.currentPage.includes("tailor") || context.currentPage === "vault" ? "resume" : context.currentPage.includes("job") ? "jobs" : context.currentPage.includes("resource") || context.currentPage.includes("disclosure") ? "support" : "coach"} label={t("workingLabel")} />
           </div>
         )}
 
@@ -1047,17 +1062,17 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           their words goes in the box. */}
       {staff && showQuickPrompts && staffOffers.length > 0 && (
         <div className="pb-3 flex-shrink-0" data-staff-troy-offers="">
-          <p className="pb-2 text-xs text-muted">What I can do here:</p>
+          <p className="pb-2 text-xs text-muted">{t("staff.offersHeading")}</p>
           <div className="flex flex-wrap gap-2">
             {staffOffers.map((o) => (
               <button
                 key={o.id}
                 type="button"
-                title={o.why}
+                title={offerText(o, "why")}
                 onClick={() => (o.skill || /[\s:]$/.test(o.prompt) ? applyOffer(o) : sendQuickPrompt(o.prompt))}
                 className="rounded-[5px] border border-[#b9cdbd] bg-[#f5f6f4] px-3 py-2 text-xs font-medium text-[#344b38] transition-colors hover:bg-[#e3ede5]"
               >
-                {o.label}
+                {offerText(o, "label")}
               </button>
             ))}
           </div>
@@ -1092,11 +1107,11 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
 
       {pendingLineHelp.length > 0 && (
         <p role="status" className="pb-2 text-xs text-foreground">
-          Your line review is queued. Send or clear your current draft to load it here.
+          {t("input.lineQueued")}
         </p>
       )}
       {staff && (
-        <p className="pb-2 text-xs text-muted" data-staff-troy-footer="">t.ROY drafts. You decide. Nothing is saved or sent until you do it.</p>
+        <p className="pb-2 text-xs text-muted" data-staff-troy-footer="">{t("staff.footer")}</p>
       )}
       {/* Input — shrink-0 keeps it pinned at bottom always */}
       <form ref={formRef} onSubmit={handleSubmit} className="flex gap-2 pt-4 border-t border-border flex-shrink-0">
@@ -1104,7 +1119,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Type a message..."
+          placeholder={t("input.placeholder")}
           className="min-h-touch min-w-0 flex-1 rounded-[6px] border border-border px-4 py-3 text-sm transition-colors focus:border-sage-600"
           disabled={isLoading}
         />
@@ -1118,7 +1133,7 @@ function AssistantChatContent({ context, sessionId, coach, staff }: AssistantCha
           type="submit"
           disabled={isLoading || !input.trim()}
           className="px-4 py-3 bg-sage-600 text-white rounded-[6px] hover:bg-sage-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors min-h-touch"
-          aria-label="Send message"
+          aria-label={t("input.sendAria")}
         >
           <Send size={20} aria-hidden="true" />
         </button>

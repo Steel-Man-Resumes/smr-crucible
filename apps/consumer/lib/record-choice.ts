@@ -22,6 +22,7 @@
  * through recordChoiceWords, which both the page and the server derive from
  * the same source text, so receipts stay consistent.
  */
+import { hasSpanishFacilityWords } from "@crucible/core/src/recordLexicon";
 import { jobsIn } from "@crucible/core/src/jobResolver";
 import { hasRecordWords } from "./record-lines";
 
@@ -74,8 +75,8 @@ export function stateSubstituteIn(text: string): string | null {
 }
 
 const linesOf = (text: string) => (text || "").replace(/\r\n?/g, "\n").split("\n");
-const namesFacility = (line: string) => FACILITY_RE.test(line);
-const namesRecord = (line: string) => FACILITY_RE.test(line) || hasRecordWords(line);
+const namesFacility = (line: string) => FACILITY_RE.test(line) || hasSpanishFacilityWords(line);
+const namesRecord = (line: string) => namesFacility(line) || hasRecordWords(line);
 
 /**
  * The employer names the person's choice would put on the page, derived from

@@ -15,6 +15,7 @@
 
 import { TroyMark } from "./TroyMark";
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 
 interface GhostGuideProps {
   /** The contextual hint (1-2 sentences max) */
@@ -33,10 +34,11 @@ function getCollapseKey(pageId: string) {
 
 export function GhostGuide({
   message,
-  expandLabel = "Ask me more",
+  expandLabel,
   onExpand,
   pageId,
 }: GhostGuideProps) {
+  const t = useTranslations("ui.ghostGuide");
   const [collapsed, setCollapsed] = useState(false);
 
   // Load collapse state from localStorage
@@ -69,11 +71,11 @@ export function GhostGuide({
         <button
           onClick={toggleCollapse}
           className="t-focus flex w-full items-center gap-2 px-4 py-3 text-sm text-t-bone-dim transition-colors hover:bg-t-panel-2 hover:text-t-white"
-          aria-label="Show guidance from t.ROY"
+          aria-label={t("showAria")}
         >
           {/* t.ROY icon */}
           <TroyMark size={16} />
-          <span>Show t.ROY guidance</span>
+          <span>{t("show")}</span>
         </button>
       ) : (
         <div className="px-4 py-3">
@@ -90,15 +92,15 @@ export function GhostGuide({
                     onClick={onExpand}
                     className="t-focus min-h-0 text-xs font-semibold text-t-amber-bright underline underline-offset-2 transition-colors hover:text-t-amber"
                   >
-                    {expandLabel}
+                    {expandLabel ?? t("askMore")}
                   </button>
                 )}
                 <button
                   onClick={toggleCollapse}
                   className="t-focus min-h-0 text-xs text-t-bone-dim transition-colors hover:text-t-white"
-                  aria-label="Hide guidance"
+                  aria-label={t("hideAria")}
                 >
-                  Hide
+                  {t("hide")}
                 </button>
               </div>
             </div>

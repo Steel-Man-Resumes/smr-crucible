@@ -9,6 +9,7 @@
 
 import type React from "react";
 import { Check } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   HOURS_OPTIONS,
   SHIFT_OPTIONS,
@@ -28,6 +29,7 @@ export const idsOf = (opts: PrefOption[]) => opts.map((o) => o.id);
  */
 export function ChoiceChips({
   label,
+  group,
   options,
   selected,
   onToggle,
@@ -35,6 +37,8 @@ export function ChoiceChips({
   single,
 }: {
   label: string;
+  /** Which option list this is; the words live in the forgeGoals catalog under choices.<group>.<id>. */
+  group: "hours" | "shifts" | "environment" | "transport" | "distance";
   options: PrefOption[];
   selected: string[];
   onToggle: (id: string) => void;
@@ -42,6 +46,7 @@ export function ChoiceChips({
   /** One pick at most: a radio group (arrow keys move the pick; tap the pick again to clear it). */
   single?: boolean;
 }) {
+  const t = useTranslations("forgeGoals");
   // Radio group keyboard behavior: one tab stop (the pick, or the first chip
   // when nothing is picked), arrow keys move and select.
   const focusable = single
@@ -91,7 +96,7 @@ export function ChoiceChips({
               >
                 {on && <Check size={13} strokeWidth={2.4} className="text-white" aria-hidden="true" />}
               </span>
-              {o.label}
+              {t(`choices.${group}.${o.id}`)}
             </span>
           </button>
         );
@@ -121,29 +126,11 @@ export function Question({
   );
 }
 
-/** Wording per variant (forge-path rules R4 and R5). */
-const SCHEDULE_WORDING: Record<string, { title: string; hint: string; shifts: string }> = {
-  default: {
-    title: "What schedule works for you?",
-    hint: "Pick every one that fits.",
-    shifts: "Any shifts you can or can't work? Skip this if it doesn't matter.",
-  },
-  steady: {
-    title: "You want steady work. What schedule works for you?",
-    hint: "Pick every one that fits. I only ask this once.",
-    shifts: "Which shifts can you count on working? Skip this if it doesn't matter.",
-  },
-  flexible: {
-    title: "Your job has to fit your life. What schedule works?",
-    hint: "Pick every one that fits. I only ask this once.",
-    shifts: "Which shifts work around your appointments and family? Skip what doesn't matter.",
-  },
-  family: {
-    title: "What hours work around childcare or family care?",
-    hint: "Pick every one that fits.",
-    shifts: "Which shifts can you cover? Skip this if it doesn't matter.",
-  },
-};
+/**
+ * Wording per variant (forge-path rules R4 and R5). The words live in the
+ * forgeGoals catalog under schedule.<variant>; an unknown variant uses default.
+ */
+const SCHEDULE_VARIANTS = ["default", "steady", "flexible", "family"];
 
 export function ScheduleQuestion({
   variant,
@@ -160,12 +147,14 @@ export function ScheduleQuestion({
   setShifts: (fn: (prev: string[]) => string[]) => void;
   disabled?: boolean;
 }) {
-  const w = SCHEDULE_WORDING[variant] ?? SCHEDULE_WORDING.default;
+  const t = useTranslations("forgeGoals");
+  const w = SCHEDULE_VARIANTS.includes(variant) ? variant : "default";
   return (
-    <Question title={w.title} hint={w.hint} testId={`q-schedule-${variant}`}>
+    <Question title={t(`schedule.${w}.title`)} hint={t(`schedule.${w}.hint`)} testId={`q-schedule-${variant}`}>
       <div className="space-y-4">
         <ChoiceChips
-          label="Hours"
+          label={t("schedule.hoursLabel")}
+          group="hours"
           options={HOURS_OPTIONS}
           selected={hours}
           disabled={disabled}
@@ -174,9 +163,10 @@ export function ScheduleQuestion({
           }
         />
         <div>
-          <p className="mb-2 text-sm text-t-phos-dim">{w.shifts}</p>
+          <p className="mb-2 text-sm text-t-phos-dim">{t(`schedule.${w}.shifts`)}</p>
           <ChoiceChips
-            label="Shifts"
+            label={t("schedule.shiftsLabel")}
+            group="shifts"
             options={SHIFT_OPTIONS}
             selected={shifts}
             disabled={disabled}
@@ -206,19 +196,21 @@ export function CommuteQuestion({
   setDistance: (fn: (prev: string | null) => string | null) => void;
   disabled?: boolean;
 }) {
+  const t = useTranslations("forgeGoals");
   const transit = variant === "transit";
   const options = transit
     ? [...TRANSPORT_OPTIONS].sort((a, b) => TRANSIT_ORDER.indexOf(a.id) - TRANSIT_ORDER.indexOf(b.id))
     : TRANSPORT_OPTIONS;
   return (
     <Question
-      title={transit ? "How do you get around right now?" : "How do you get to work, and how far can you go each day?"}
-      hint={transit ? "Pick every way you can get there. No car is fine." : "Pick every way you can get there."}
+      title={transit ? t("commute.titleTransit") : t("commute.title")}
+      hint={transit ? t("commute.hintTransit") : t("commute.hint")}
       testId={`q-commute-${variant}`}
     >
       <div className="space-y-4">
         <ChoiceChips
-          label="Ways to get to work"
+          label={t("commute.modesLabel")}
+          group="transport"
           options={options}
           selected={modes}
           disabled={disabled}
@@ -226,12 +218,11 @@ export function CommuteQuestion({
         />
         <div>
           <p className="mb-2 text-sm text-t-phos-dim">
-            {transit
-              ? "About how long can the trip be, one way, by bus, on foot or with a ride?"
-              : "About how long can the trip be, one way?"}
+            {transit ? t("commute.timeTransit") : t("commute.time")}
           </p>
           <ChoiceChips
-            label="One-way travel time"
+            label={t("commute.distanceLabel")}
+            group="distance"
             single
             options={DISTANCE_OPTIONS}
             selected={distance ? [distance] : []}

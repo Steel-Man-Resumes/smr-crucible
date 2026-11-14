@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { intlMarkup as renderToStaticMarkup } from "./helpers/intl";
 import { buildFinishView, changeListEntry, cutTerm, finishedLineWhy, TITLE_CHECK_WARNING, CUT_BY_YOU_NOTE, CUT_EARLIER_NOTE, type DefendAnswer } from "../finish-gate";
 import { editInput, inputFromRevision, type RevisionInput } from "../revision-status";
 import { finishedLinesOf, personEvidenceFrom } from "../person-evidence";

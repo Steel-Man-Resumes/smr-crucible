@@ -13,6 +13,7 @@
  */
 
 import { signOut, useSession } from "next-auth/react";
+import { useTranslations } from "next-intl";
 import { sessionPending } from "@/lib/session-policy";
 import { IMPERSONATION_SEEN_KEY } from "@/lib/refinery-guards";
 
@@ -39,6 +40,7 @@ export async function signOutOfForge(opts: { clearRun: boolean } = { clearRun: t
 }
 
 export function ForgeAccountBar() {
+  const t = useTranslations("ui.accountBar");
   const { data, status } = useSession();
   const user = data?.user as { email?: string | null; mfa?: unknown; claim?: unknown } | undefined;
   if (status !== "authenticated" || !user || sessionPending(user)) return null;
@@ -46,16 +48,19 @@ export function ForgeAccountBar() {
     <div className="border-t border-ws-bg/15 bg-ws-bone" data-testid="forge-account-bar">
       <p className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-2 gap-y-1 px-4 py-1.5 text-xs text-t-bone-dim sm:px-6">
         <span className="min-w-0 break-all">
-          Signed in as <span className="font-semibold text-ws-bg" data-testid="forge-account-email">{user.email || "your account"}</span>.
+          {t.rich("signedInAs", {
+            address: user.email || t("yourAccount"),
+            email: (chunks) => <span className="font-semibold text-ws-bg" data-testid="forge-account-email">{chunks}</span>,
+          })}
         </span>
         <span>
-          Not you?{" "}
+          {t("notYou")}{" "}
           <button
             type="button"
             onClick={() => void signOutOfForge({ clearRun: true })}
             className="t-focus min-h-[32px] font-semibold text-ws-bg underline underline-offset-2"
           >
-            Sign out
+            {t("signOut")}
           </button>
         </span>
       </p>
